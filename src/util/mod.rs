@@ -1,8 +1,8 @@
 //! Utility types and functions
 
-pub mod span;
-pub mod diagnostic;
 pub mod cache;
+pub mod diagnostic;
+pub mod span;
 
 /// Spanned value wrapper
 #[derive(Debug, Clone, Copy)]

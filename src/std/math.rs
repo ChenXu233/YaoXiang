@@ -7,12 +7,20 @@ pub fn abs(n: i128) -> i128 {
 
 /// Maximum of two values
 pub fn max<T: PartialOrd>(a: T, b: T) -> T {
-    if a > b { a } else { b }
+    if a > b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Minimum of two values
 pub fn min<T: PartialOrd>(a: T, b: T) -> T {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Clamp value to range

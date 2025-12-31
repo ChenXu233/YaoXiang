@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use yaoxiang::{run, run_file, VERSION, NAME};
+use yaoxiang::{run, run_file, NAME, VERSION};
 
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]

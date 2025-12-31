@@ -3,8 +3,8 @@
 //! This module contains the lexer, parser, and type checker.
 //! The frontend transforms source code into an intermediate representation (IR).
 
-use thiserror::Error;
 use crate::middle;
+use thiserror::Error;
 
 pub mod lexer;
 pub mod parser;
@@ -27,12 +27,10 @@ impl Compiler {
     /// Compile source code to IR
     pub fn compile(&mut self, source: &str) -> Result<middle::ModuleIR, CompileError> {
         // Lexical analysis
-        let tokens = lexer::tokenize(source)
-            .map_err(|e| CompileError::LexError(e.to_string()))?;
+        let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
 
         // Parsing
-        let ast = parser::parse(&tokens)
-            .map_err(|e| CompileError::ParseError(e.to_string()))?;
+        let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
 
         // Type checking
         let module = typecheck::check_module(&ast, &mut self.type_env)

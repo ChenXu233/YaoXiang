@@ -51,7 +51,11 @@ impl Heap {
     /// Write a value to the heap
     pub fn write<T>(&mut self, offset: usize, value: &T) {
         unsafe {
-            std::ptr::copy(value as *const T as *const u8, self.buffer.as_mut_ptr().add(offset), mem::size_of::<T>());
+            std::ptr::copy(
+                value as *const T as *const u8,
+                self.buffer.as_mut_ptr().add(offset),
+                mem::size_of::<T>(),
+            );
         }
     }
 

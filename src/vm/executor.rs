@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::middle::{ConstValue, ModuleIR};
-use crate::runtime::gc::{GC, GCConfig};
+use crate::runtime::gc::{GCConfig, GC};
 use crate::runtime::memory::Heap;
 use crate::runtime::scheduler::Scheduler;
 use std::collections::HashMap;
@@ -209,4 +209,3 @@ impl TryFrom<u8> for Opcode {
         }
     }
 }
-

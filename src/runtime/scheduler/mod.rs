@@ -1,7 +1,7 @@
 //! Task scheduler for concurrent execution
 
-use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -208,7 +208,8 @@ impl Scheduler {
 
     /// Shutdown the scheduler
     pub fn shutdown(&mut self) {
-        self.running.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
 
         for worker in self.workers.drain(..) {
             worker.join().unwrap();

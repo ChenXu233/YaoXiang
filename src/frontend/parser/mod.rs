@@ -2,9 +2,9 @@
 
 pub mod ast;
 
-use ast::*;
 use crate::frontend::lexer::tokens::*;
 use crate::util::span::Span;
+use ast::*;
 
 /// Parse tokens into AST
 pub fn parse(_tokens: &[Token]) -> Result<Module, ParseError> {

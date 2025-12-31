@@ -116,12 +116,16 @@ mod tokenizer {
         fn skip_whitespace_and_comments(&mut self) {
             while let Some(&c) = self.peek() {
                 match c {
-                    ' ' | '\t' | '\r' => { self.advance(); }
+                    ' ' | '\t' | '\r' => {
+                        self.advance();
+                    }
                     '/' if self.peek_next() == Some('/') => {
                         self.advance();
                         self.advance();
                         while let Some(&c) = self.peek() {
-                            if c == '\n' { break; }
+                            if c == '\n' {
+                                break;
+                            }
                             self.advance();
                         }
                     }
@@ -138,7 +142,9 @@ mod tokenizer {
                                     self.advance();
                                     depth -= 1;
                                 }
-                            } else { break; }
+                            } else {
+                                break;
+                            }
                         }
                     }
                     _ => break,
@@ -149,7 +155,9 @@ mod tokenizer {
         fn next_token(&mut self) -> Option<Token> {
             self.skip_whitespace_and_comments();
 
-            if self.peek().is_none() { return None; }
+            if self.peek().is_none() {
+                return None;
+            }
 
             self.start_offset = self.offset;
             self.start_line = self.line;
@@ -219,7 +227,11 @@ mod tokenizer {
                         Some(self.make_token(TokenKind::And))
                     } else {
                         self.error = Some(LexError::UnexpectedChar('&'));
-                        Some(self.make_token(TokenKind::Error("Unexpected character: &".to_string())))
+                        Some(
+                            self.make_token(TokenKind::Error(
+                                "Unexpected character: &".to_string(),
+                            )),
+                        )
                     }
                 }
                 '|' => {
@@ -260,7 +272,11 @@ mod tokenizer {
             }
 
             if let Some(kind) = self.keyword_from_str(&value) {
-                Some(Token { kind, span: self.span(), literal: None })
+                Some(Token {
+                    kind,
+                    span: self.span(),
+                    literal: None,
+                })
             } else {
                 Some(Token {
                     kind: TokenKind::Identifier(value.clone()),
@@ -290,9 +306,14 @@ mod tokenizer {
                 if next.map(is_digit).unwrap_or(false) || next == Some('_') {
                     value.push(self.advance().unwrap());
                     while let Some(&c) = self.peek() {
-                        if is_digit(c) { value.push(c); self.advance(); }
-                        else if c == '_' { self.advance(); }
-                        else { break; }
+                        if is_digit(c) {
+                            value.push(c);
+                            self.advance();
+                        } else if c == '_' {
+                            self.advance();
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
@@ -304,12 +325,20 @@ mod tokenizer {
                 }
                 let mut has_digits = false;
                 while let Some(&c) = self.peek() {
-                    if is_digit(c) { value.push(c); self.advance(); has_digits = true; }
-                    else if c == '_' { self.advance(); }
-                    else { break; }
+                    if is_digit(c) {
+                        value.push(c);
+                        self.advance();
+                        has_digits = true;
+                    } else if c == '_' {
+                        self.advance();
+                    } else {
+                        break;
+                    }
                 }
                 if !has_digits {
-                    self.error = Some(LexError::InvalidNumber("Expected digits in exponent".to_string()));
+                    self.error = Some(LexError::InvalidNumber(
+                        "Expected digits in exponent".to_string(),
+                    ));
                 }
             }
 
@@ -318,13 +347,27 @@ mod tokenizer {
 
             if num_str.contains('.') || num_str.contains('e') || num_str.contains('E') {
                 match num_str.parse::<f64>() {
-                    Ok(n) => Some(Token { kind: TokenKind::FloatLiteral(n), span: self.span(), literal: Some(Literal::Float(n)) }),
-                    Err(_) => { self.error = Some(LexError::InvalidNumber(value)); Some(self.make_token(TokenKind::Error("Invalid float".to_string()))) }
+                    Ok(n) => Some(Token {
+                        kind: TokenKind::FloatLiteral(n),
+                        span: self.span(),
+                        literal: Some(Literal::Float(n)),
+                    }),
+                    Err(_) => {
+                        self.error = Some(LexError::InvalidNumber(value));
+                        Some(self.make_token(TokenKind::Error("Invalid float".to_string())))
+                    }
                 }
             } else {
                 match num_str.parse::<i128>() {
-                    Ok(n) => Some(Token { kind: TokenKind::IntLiteral(n), span: self.span(), literal: Some(Literal::Int(n)) }),
-                    Err(_) => { self.error = Some(LexError::InvalidNumber(value)); Some(self.make_token(TokenKind::Error("Invalid integer".to_string()))) }
+                    Ok(n) => Some(Token {
+                        kind: TokenKind::IntLiteral(n),
+                        span: self.span(),
+                        literal: Some(Literal::Int(n)),
+                    }),
+                    Err(_) => {
+                        self.error = Some(LexError::InvalidNumber(value));
+                        Some(self.make_token(TokenKind::Error("Invalid integer".to_string())))
+                    }
                 }
             }
         }
@@ -340,7 +383,11 @@ mod tokenizer {
                         return Some(Token {
                             kind: TokenKind::StringLiteral(value.clone()),
                             span: Span::new(
-                                Position::with_offset(self.start_line, self.start_column, self.start_offset),
+                                Position::with_offset(
+                                    self.start_line,
+                                    self.start_column,
+                                    self.start_offset,
+                                ),
                                 self.position(),
                             ),
                             literal: Some(Literal::String(value.clone())),
@@ -357,7 +404,11 @@ mod tokenizer {
                                 '"' => value.push('"'),
                                 '\'' => value.push('\''),
                                 '0' => value.push('\0'),
-                                c => { self.error = Some(LexError::InvalidEscape { sequence: c.to_string() }); }
+                                c => {
+                                    self.error = Some(LexError::InvalidEscape {
+                                        sequence: c.to_string(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -365,16 +416,27 @@ mod tokenizer {
                         self.error = Some(LexError::UnterminatedString {
                             position: format!("{}:{}", start_pos.line, start_pos.column),
                         });
-                        return Some(Token { kind: TokenKind::Error("Unterminated string".to_string()), span: self.span(), literal: None });
+                        return Some(Token {
+                            kind: TokenKind::Error("Unterminated string".to_string()),
+                            span: self.span(),
+                            literal: None,
+                        });
                     }
-                    c => { value.push(c); self.advance(); }
+                    c => {
+                        value.push(c);
+                        self.advance();
+                    }
                 }
             }
 
             self.error = Some(LexError::UnterminatedString {
                 position: format!("{}:{}", start_pos.line, start_pos.column),
             });
-            Some(Token { kind: TokenKind::Error("Unterminated string".to_string()), span: self.span(), literal: None })
+            Some(Token {
+                kind: TokenKind::Error("Unterminated string".to_string()),
+                span: self.span(),
+                literal: None,
+            })
         }
 
         fn scan_char(&mut self) -> Option<Token> {
@@ -392,13 +454,21 @@ mod tokenizer {
                                     position: format!("{}:{}", start_pos.line, start_pos.column),
                                     message: "Empty character literal".to_string(),
                                 });
-                                return Some(Token { kind: TokenKind::Error("Empty character literal".to_string()), span: self.span(), literal: None });
+                                return Some(Token {
+                                    kind: TokenKind::Error("Empty character literal".to_string()),
+                                    span: self.span(),
+                                    literal: None,
+                                });
                             }
                         };
                         return Some(Token {
                             kind: TokenKind::CharLiteral(ch),
                             span: Span::new(
-                                Position::with_offset(self.start_line, self.start_column, self.start_offset),
+                                Position::with_offset(
+                                    self.start_line,
+                                    self.start_column,
+                                    self.start_offset,
+                                ),
                                 self.position(),
                             ),
                             literal: Some(Literal::Char(ch)),
@@ -408,8 +478,13 @@ mod tokenizer {
                         self.advance();
                         if let Some(escaped) = self.advance() {
                             match escaped {
-                                'n' => value.push('\n'), 't' => value.push('\t'), 'r' => value.push('\r'),
-                                '\\' => value.push('\\'), '\'' => value.push('\''), '"' => value.push('"'), '0' => value.push('\0'),
+                                'n' => value.push('\n'),
+                                't' => value.push('\t'),
+                                'r' => value.push('\r'),
+                                '\\' => value.push('\\'),
+                                '\'' => value.push('\''),
+                                '"' => value.push('"'),
+                                '0' => value.push('\0'),
                                 c => value.push(c),
                             }
                         }
@@ -419,9 +494,16 @@ mod tokenizer {
                             position: format!("{}:{}", start_pos.line, start_pos.column),
                             message: "Unterminated character literal".to_string(),
                         });
-                        return Some(Token { kind: TokenKind::Error("Unterminated char".to_string()), span: self.span(), literal: None });
+                        return Some(Token {
+                            kind: TokenKind::Error("Unterminated char".to_string()),
+                            span: self.span(),
+                            literal: None,
+                        });
                     }
-                    c => { value.push(c); self.advance(); }
+                    c => {
+                        value.push(c);
+                        self.advance();
+                    }
                 }
             }
 
@@ -429,24 +511,41 @@ mod tokenizer {
                 position: format!("{}:{}", start_pos.line, start_pos.column),
                 message: "Unterminated character literal".to_string(),
             });
-            Some(Token { kind: TokenKind::Error("Unterminated char".to_string()), span: self.span(), literal: None })
+            Some(Token {
+                kind: TokenKind::Error("Unterminated char".to_string()),
+                span: self.span(),
+                literal: None,
+            })
         }
 
         fn make_token(&self, kind: TokenKind) -> Token {
-            Token { kind, span: self.span(), literal: None }
+            Token {
+                kind,
+                span: self.span(),
+                literal: None,
+            }
         }
 
         fn keyword_from_str(&self, s: &str) -> Option<TokenKind> {
             match s {
-                "type" => Some(TokenKind::KwType), "fn" => Some(TokenKind::KwFn),
-                "pub" => Some(TokenKind::KwPub), "mod" => Some(TokenKind::KwMod),
-                "use" => Some(TokenKind::KwUse), "spawn" => Some(TokenKind::KwSpawn),
-                "ref" => Some(TokenKind::KwRef), "mut" => Some(TokenKind::KwMut),
-                "if" => Some(TokenKind::KwIf), "elif" => Some(TokenKind::KwElif),
-                "else" => Some(TokenKind::KwElse), "match" => Some(TokenKind::KwMatch),
-                "while" => Some(TokenKind::KwWhile), "for" => Some(TokenKind::KwFor),
-                "return" => Some(TokenKind::KwReturn), "break" => Some(TokenKind::KwBreak),
-                "continue" => Some(TokenKind::KwContinue), "as" => Some(TokenKind::KwAs),
+                "type" => Some(TokenKind::KwType),
+                "fn" => Some(TokenKind::KwFn),
+                "pub" => Some(TokenKind::KwPub),
+                "mod" => Some(TokenKind::KwMod),
+                "use" => Some(TokenKind::KwUse),
+                "spawn" => Some(TokenKind::KwSpawn),
+                "ref" => Some(TokenKind::KwRef),
+                "mut" => Some(TokenKind::KwMut),
+                "if" => Some(TokenKind::KwIf),
+                "elif" => Some(TokenKind::KwElif),
+                "else" => Some(TokenKind::KwElse),
+                "match" => Some(TokenKind::KwMatch),
+                "while" => Some(TokenKind::KwWhile),
+                "for" => Some(TokenKind::KwFor),
+                "return" => Some(TokenKind::KwReturn),
+                "break" => Some(TokenKind::KwBreak),
+                "continue" => Some(TokenKind::KwContinue),
+                "as" => Some(TokenKind::KwAs),
                 "true" => Some(TokenKind::BoolLiteral(true)),
                 "false" => Some(TokenKind::BoolLiteral(false)),
                 _ => None,
@@ -454,9 +553,15 @@ mod tokenizer {
         }
     }
 
-    fn is_identifier_start(c: char) -> bool { c.is_ascii_alphabetic() || c == '_' }
-    fn is_identifier_char(c: char) -> bool { c.is_ascii_alphanumeric() || c == '_' }
-    fn is_digit(c: char) -> bool { c.is_ascii_digit() }
+    fn is_identifier_start(c: char) -> bool {
+        c.is_ascii_alphabetic() || c == '_'
+    }
+    fn is_identifier_char(c: char) -> bool {
+        c.is_ascii_alphanumeric() || c == '_'
+    }
+    fn is_digit(c: char) -> bool {
+        c.is_ascii_digit()
+    }
 }
 
 #[cfg(test)]
@@ -465,12 +570,26 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let cases = [("type", TokenKind::KwType), ("fn", TokenKind::KwFn), ("pub", TokenKind::KwPub),
-            ("mod", TokenKind::KwMod), ("use", TokenKind::KwUse), ("spawn", TokenKind::KwSpawn),
-            ("ref", TokenKind::KwRef), ("mut", TokenKind::KwMut), ("if", TokenKind::KwIf),
-            ("elif", TokenKind::KwElif), ("else", TokenKind::KwElse), ("match", TokenKind::KwMatch),
-            ("while", TokenKind::KwWhile), ("for", TokenKind::KwFor), ("return", TokenKind::KwReturn),
-            ("break", TokenKind::KwBreak), ("continue", TokenKind::KwContinue), ("as", TokenKind::KwAs)];
+        let cases = [
+            ("type", TokenKind::KwType),
+            ("fn", TokenKind::KwFn),
+            ("pub", TokenKind::KwPub),
+            ("mod", TokenKind::KwMod),
+            ("use", TokenKind::KwUse),
+            ("spawn", TokenKind::KwSpawn),
+            ("ref", TokenKind::KwRef),
+            ("mut", TokenKind::KwMut),
+            ("if", TokenKind::KwIf),
+            ("elif", TokenKind::KwElif),
+            ("else", TokenKind::KwElse),
+            ("match", TokenKind::KwMatch),
+            ("while", TokenKind::KwWhile),
+            ("for", TokenKind::KwFor),
+            ("return", TokenKind::KwReturn),
+            ("break", TokenKind::KwBreak),
+            ("continue", TokenKind::KwContinue),
+            ("as", TokenKind::KwAs),
+        ];
         for (source, expected) in cases {
             let tokens = tokenize(source).unwrap();
             assert_eq!(tokens.len(), 2, "Failed for: {}", source);
@@ -481,18 +600,32 @@ mod tests {
     #[test]
     fn test_identifiers() {
         let tokens = tokenize("myVariable _foo bar123").unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Identifier("myVariable".to_string()));
+        assert_eq!(
+            tokens[0].kind,
+            TokenKind::Identifier("myVariable".to_string())
+        );
         assert_eq!(tokens[1].kind, TokenKind::Identifier("_foo".to_string()));
         assert_eq!(tokens[2].kind, TokenKind::Identifier("bar123".to_string()));
     }
 
     #[test]
     fn test_operators() {
-        let cases = [("+", TokenKind::Plus), ("-", TokenKind::Minus), ("*", TokenKind::Star),
-            ("/", TokenKind::Slash), ("%", TokenKind::Percent), ("!=", TokenKind::Neq),
-            ("<", TokenKind::Lt), ("<=", TokenKind::Le), (">", TokenKind::Gt),
-            (">=", TokenKind::Ge), ("&&", TokenKind::And), ("||", TokenKind::Or),
-            ("!", TokenKind::Not), ("==", TokenKind::Eq)];
+        let cases = [
+            ("+", TokenKind::Plus),
+            ("-", TokenKind::Minus),
+            ("*", TokenKind::Star),
+            ("/", TokenKind::Slash),
+            ("%", TokenKind::Percent),
+            ("!=", TokenKind::Neq),
+            ("<", TokenKind::Lt),
+            ("<=", TokenKind::Le),
+            (">", TokenKind::Gt),
+            (">=", TokenKind::Ge),
+            ("&&", TokenKind::And),
+            ("||", TokenKind::Or),
+            ("!", TokenKind::Not),
+            ("==", TokenKind::Eq),
+        ];
         for (source, expected) in cases {
             let tokens = tokenize(source).unwrap();
             assert_eq!(tokens[0].kind, expected, "Failed for: {}", source);
@@ -501,10 +634,20 @@ mod tests {
 
     #[test]
     fn test_delimiters() {
-        let cases = [("(", TokenKind::LParen), (")", TokenKind::RParen), ("[", TokenKind::LBracket),
-            ("]", TokenKind::RBracket), ("{", TokenKind::LBrace), ("}", TokenKind::RBrace),
-            (",", TokenKind::Comma), (";", TokenKind::Semicolon), (":", TokenKind::Colon),
-            ("|", TokenKind::Pipe), ("=>", TokenKind::FatArrow), ("->", TokenKind::Arrow)];
+        let cases = [
+            ("(", TokenKind::LParen),
+            (")", TokenKind::RParen),
+            ("[", TokenKind::LBracket),
+            ("]", TokenKind::RBracket),
+            ("{", TokenKind::LBrace),
+            ("}", TokenKind::RBrace),
+            (",", TokenKind::Comma),
+            (";", TokenKind::Semicolon),
+            (":", TokenKind::Colon),
+            ("|", TokenKind::Pipe),
+            ("=>", TokenKind::FatArrow),
+            ("->", TokenKind::Arrow),
+        ];
         for (source, expected) in cases {
             let tokens = tokenize(source).unwrap();
             assert_eq!(tokens[0].kind, expected, "Failed for: {}", source);
@@ -514,13 +657,19 @@ mod tests {
     #[test]
     fn test_string_literal() {
         let tokens = tokenize(r#""hello world""#).unwrap();
-        match &tokens[0].kind { TokenKind::StringLiteral(s) => assert_eq!(s, "hello world"), _ => panic!("Expected string") }
+        match &tokens[0].kind {
+            TokenKind::StringLiteral(s) => assert_eq!(s, "hello world"),
+            _ => panic!("Expected string"),
+        }
     }
 
     #[test]
     fn test_character_literal() {
         let tokens = tokenize("'a'").unwrap();
-        match &tokens[0].kind { TokenKind::CharLiteral(c) => assert_eq!(*c, 'a'), _ => panic!("Expected char") }
+        match &tokens[0].kind {
+            TokenKind::CharLiteral(c) => assert_eq!(*c, 'a'),
+            _ => panic!("Expected char"),
+        }
     }
 
     #[test]

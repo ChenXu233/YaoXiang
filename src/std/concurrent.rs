@@ -1,7 +1,7 @@
 //! Standard Concurrent library
 
-use std::thread;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 /// Spawn a new thread
@@ -54,7 +54,10 @@ impl AtomicBool {
 
     /// Store value
     pub fn store(&self, value: bool) {
-        self.value.store(if value { 1 } else { 0 }, std::sync::atomic::Ordering::SeqCst);
+        self.value.store(
+            if value { 1 } else { 0 },
+            std::sync::atomic::Ordering::SeqCst,
+        );
     }
 }
 
@@ -83,6 +86,7 @@ impl AtomicUsize {
 
     /// Add and return old value
     pub fn fetch_add(&self, delta: usize) -> usize {
-        self.value.fetch_add(delta, std::sync::atomic::Ordering::SeqCst)
+        self.value
+            .fetch_add(delta, std::sync::atomic::Ordering::SeqCst)
     }
 }

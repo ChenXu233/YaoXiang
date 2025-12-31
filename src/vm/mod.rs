@@ -2,10 +2,10 @@
 //!
 //! This module contains the bytecode interpreter.
 
-pub use executor::{VM, VMConfig, Value, Opcode, VMStatus};
 pub use errors::{VMError, VMResult};
+pub use executor::{Opcode, VMConfig, VMStatus, Value, VM};
 
-mod executor;
-mod instructions;
-mod frames;
 mod errors;
+mod executor;
+mod frames;
+mod instructions;

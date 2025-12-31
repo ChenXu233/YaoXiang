@@ -21,9 +21,9 @@
 // Public modules
 pub mod frontend;
 pub mod middle;
-pub mod vm;
 pub mod runtime;
 pub mod std;
+pub mod vm;
 
 // Utility modules
 mod util;

@@ -17,19 +17,31 @@ impl Position {
     /// Create a new position
     #[inline]
     pub fn new(line: usize, column: usize) -> Self {
-        Self { line, column, offset: 0 }
+        Self {
+            line,
+            column,
+            offset: 0,
+        }
     }
 
     /// Create a new position with offset
     #[inline]
     pub fn with_offset(line: usize, column: usize, offset: usize) -> Self {
-        Self { line, column, offset }
+        Self {
+            line,
+            column,
+            offset,
+        }
     }
 
     /// Create a dummy position
     #[inline]
     pub fn dummy() -> Self {
-        Self { line: 0, column: 0, offset: 0 }
+        Self {
+            line: 0,
+            column: 0,
+            offset: 0,
+        }
     }
 }
 
@@ -135,8 +147,18 @@ impl SourceFile {
 
     /// Get source text for a span
     pub fn source_text(&self, span: Span) -> Option<&str> {
-        let start = self.line_offsets[span.start.line.saturating_sub(1)] + (span.start.column - 1).min(self.line_offsets[span.start.line.saturating_sub(1) + 1].saturating_sub(self.line_offsets[span.start.line.saturating_sub(1)]) - 1);
-        let end = self.line_offsets[span.end.line.saturating_sub(1)] + (span.end.column - 1).min(self.line_offsets[span.end.line.saturating_sub(1) + 1].saturating_sub(self.line_offsets[span.end.line.saturating_sub(1)]) - 1);
+        let start = self.line_offsets[span.start.line.saturating_sub(1)]
+            + (span.start.column - 1).min(
+                self.line_offsets[span.start.line.saturating_sub(1) + 1]
+                    .saturating_sub(self.line_offsets[span.start.line.saturating_sub(1)])
+                    - 1,
+            );
+        let end = self.line_offsets[span.end.line.saturating_sub(1)]
+            + (span.end.column - 1).min(
+                self.line_offsets[span.end.line.saturating_sub(1) + 1]
+                    .saturating_sub(self.line_offsets[span.end.line.saturating_sub(1)])
+                    - 1,
+            );
         self.content.get(start..end)
     }
 }

@@ -1,7 +1,7 @@
 //! Abstract Syntax Tree types
 
-use crate::util::span::Span;
 use super::super::lexer::tokens::Literal;
+use crate::util::span::Span;
 
 /// Expression
 #[derive(Debug, Clone)]
@@ -74,15 +74,26 @@ pub enum Expr {
 /// Binary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, Mod,
-    Eq, Neq, Lt, Le, Gt, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Neq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
 }
 
 /// Unary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
-    Neg, Not,
+    Neg,
+    Not,
 }
 
 /// Statement

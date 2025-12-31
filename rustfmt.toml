@@ -2,23 +2,9 @@
 
 # Basic settings
 edition = "2021"
-group_imports = "StdExternalCrate"
 
 # Line width
 max_width = 100
 
 # Indentation
 tab_spaces = 4
-
-# Line breaks
-fn_single_line = false
-
-# Comments
-normalize_comments = true
-
-# Imports
-reorder_imports = true
-reorder_modules = true
-
-# Other
-match_block_trailing_comma = true

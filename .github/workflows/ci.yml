@@ -125,7 +125,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --all-features -- --output-dir coverage --html
+        run: cargo tarpaulin --all-features -- -o html
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4

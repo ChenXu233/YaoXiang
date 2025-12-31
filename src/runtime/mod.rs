@@ -4,5 +4,5 @@
 //! and concurrency scheduling.
 
 pub mod gc;
-pub mod scheduler;
 pub mod memory;
+pub mod scheduler;
