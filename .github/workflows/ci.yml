@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --check --all
+
+      - name: Clippy
+        run: cargo clippy --all --all-features -- -D warnings
+
+      - name: Check docs
+        run: cargo doc --all --no-deps
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Run tests
+        run: cargo test --all --all-features
+
+      - name: Run tests with nextest
+        uses: taiki-e/install-action@nextest
+        if: false  # Disable for now
+        run: cargo nextest run --all --all-features
+
+  test-msrv:
+    name: Test MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.75
+        with:
+          toolchain: 1.75
+
+      - name: Check MSRV compatibility
+        run: cargo check --all-features
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build release
+        run: cargo build --release --all-features
+
+      - name: Build WASM
+        if: false  # Disable for now
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: wasm32-unknown-unknown
+        run: cargo build --release --features wasm --target wasm32-unknown-unknown
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yaoxiang-binary
+          path: target/release/yaoxiang
+
+  bench:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Run benchmarks
+        run: cargo bench --all-features
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: llvm-tools
+
+      - name: Install tarpaulin
+        uses: taiki-e/install-action@tarpaulin
+
+      - name: Generate coverage
+        run: cargo tarpaulin --all-features --output-dir coverage --html
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/

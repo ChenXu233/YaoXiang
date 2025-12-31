@@ -1,0 +1,45 @@
+# YaoXiang Rust Code Style Configuration
+
+# Basic settings
+edition = "2024"
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"
+
+# Line width
+max_width = 100
+ideal_width = 80
+
+# Indentation
+indent_style = "Block"
+tab_spaces = 4
+
+# Line breaks
+fn_single_line = false
+blank_lines_upper_bound = 2
+blank_lines_lower_bound = 1
+
+# Comments
+normalize_comments = true
+wrap_comments = true
+comment_width = 80
+
+# Patterns
+force_multiline_blocks = true
+fn_args_layout = "Compressed"
+
+# Expressions
+binary_assignment_style = "Align"
+unstable_features = true
+
+# Enums
+enum_struct_variant_width = 100
+
+# Imports
+reorder_imports = true
+reorder_modules = true
+
+# Other
+match_block_trailing_comma = true
+trailing_comma = "Vertical"
+overflow_delimited_expr = true
+enum_discrim_align_threshold = 20

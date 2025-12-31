@@ -1,0 +1,25 @@
+# Generated files
+target/
+Cargo.lock
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.roomodes
+.spec-workflow
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+coverage/
+
+# Profiling
+*.perf
+
+# Temporary files
+*.tmp
+*.bak

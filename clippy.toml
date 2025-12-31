@@ -1,0 +1,21 @@
+# YaoXiang Clippy Configuration
+
+# Allow some lints for specific use cases
+allow-equal-interval-floating-point-constant = true
+
+# Disallow some lints
+disallowed-methods = [
+    { path = "std::process::exit", reason = "Use Result/Error handling instead" },
+]
+
+# Lower the thresholds for some lints
+cognitive-complexity-threshold = 25
+max-struct-bounds = 4
+max-nested-closures = 5
+min-struct-hint-characters = 6
+
+# Allowed lints for performance
+allow-deref-in-loops = true
+
+# Module-specific exceptions
+msrv = "1.75"
