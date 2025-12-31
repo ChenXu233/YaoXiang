@@ -22,3 +22,5 @@ coverage/
 # Temporary files
 *.tmp
 *.bak
+
+tarpaulin-report.html
