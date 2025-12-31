@@ -1,7 +1,6 @@
 //! Standard Network library (placeholder)
 
 /// HTTP client (placeholder)
-
 pub fn http_get(url: &str) -> String {
     // TODO: Implement actual HTTP client
     format!("GET {}", url)

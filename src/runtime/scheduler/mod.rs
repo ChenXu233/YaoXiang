@@ -135,7 +135,7 @@ impl Scheduler {
 
         let mut workers = Vec::with_capacity(config.num_workers);
 
-        for i in 0..config.num_workers {
+        for (i, _) in (0..config.num_workers).enumerate() {
             let global_queue = global_queue.clone();
             let local_queue = local_queues[i].clone();
             let running = running.clone();

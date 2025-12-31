@@ -28,7 +28,7 @@ mod tokenizer {
     use std::iter::Peekable;
     use std::str::Chars;
 
-    pub fn tokenize<'a>(source: &'a str) -> Result<Vec<Token>, LexError> {
+    pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
 
@@ -155,9 +155,7 @@ mod tokenizer {
         fn next_token(&mut self) -> Option<Token> {
             self.skip_whitespace_and_comments();
 
-            if self.peek().is_none() {
-                return None;
-            }
+            self.peek()?;
 
             self.start_offset = self.offset;
             self.start_line = self.line;

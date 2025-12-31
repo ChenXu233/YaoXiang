@@ -13,36 +13,39 @@ pub fn list_with_capacity<T>(capacity: usize) -> Vec<T> {
 }
 
 /// Get list length
-pub fn list_len<T>(list: &Vec<T>) -> usize {
+pub fn list_len<T>(list: &[T]) -> usize {
     list.len()
 }
 
 /// Check if list is empty
-pub fn list_is_empty<T>(list: &Vec<T>) -> bool {
+pub fn list_is_empty<T>(list: &[T]) -> bool {
     list.is_empty()
 }
 
 /// Get element at index
-pub fn list_get<T>(list: &Vec<T>, index: usize) -> Option<&T> {
+pub fn list_get<T>(list: &[T], index: usize) -> Option<&T> {
     list.get(index)
 }
 
 /// Get mutable element at index
-pub fn list_get_mut<T>(list: &mut Vec<T>, index: usize) -> Option<&mut T> {
+pub fn list_get_mut<T>(list: &mut [T], index: usize) -> Option<&mut T> {
     list.get_mut(index)
 }
 
 /// Push element to list
+#[allow(clippy::ptr_arg)]
 pub fn list_push<T>(list: &mut Vec<T>, value: T) {
     list.push(value);
 }
 
 /// Pop element from list
+#[allow(clippy::ptr_arg)]
 pub fn list_pop<T>(list: &mut Vec<T>) -> Option<T> {
     list.pop()
 }
 
 /// Insert element at index
+#[allow(clippy::ptr_arg)]
 pub fn list_insert<T>(list: &mut Vec<T>, index: usize, value: T) -> bool {
     if index <= list.len() {
         list.insert(index, value);
@@ -53,6 +56,7 @@ pub fn list_insert<T>(list: &mut Vec<T>, index: usize, value: T) -> bool {
 }
 
 /// Remove element at index
+#[allow(clippy::ptr_arg)]
 pub fn list_remove<T>(list: &mut Vec<T>, index: usize) -> Option<T> {
     if index < list.len() {
         Some(list.remove(index))
@@ -62,6 +66,7 @@ pub fn list_remove<T>(list: &mut Vec<T>, index: usize) -> Option<T> {
 }
 
 /// Clear list
+#[allow(clippy::ptr_arg)]
 pub fn list_clear<T>(list: &mut Vec<T>) {
     list.clear()
 }
