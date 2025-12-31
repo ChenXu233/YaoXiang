@@ -69,6 +69,16 @@ pub enum Expr {
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Span),
     Dict(Vec<(Expr, Expr)>, Span),
+    Index {
+        expr: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
+    FieldAccess {
+        expr: Box<Expr>,
+        field: String,
+        span: Span,
+    },
 }
 
 /// Binary operators
@@ -87,12 +97,14 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    Assign,
 }
 
 /// Unary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
     Neg,
+    Pos,
     Not,
 }
 

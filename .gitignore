@@ -8,6 +8,7 @@ target/
 *.swo
 .roomodes
 .spec-workflow
+.claude
 
 # OS files
 .DS_Store
@@ -24,3 +25,4 @@ coverage/
 *.bak
 
 tarpaulin-report.html
+

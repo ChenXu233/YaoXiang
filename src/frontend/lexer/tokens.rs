@@ -5,28 +5,39 @@ use crate::util::span::Span;
 /// Token kind
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords (18 total)
+    // Keywords (30 total)
     KwType,
     KwFn,
+    KwAsync,
     KwPub,
     KwMod,
     KwUse,
     KwSpawn,
     KwRef,
     KwMut,
+    KwLet,
     KwIf,
     KwElif,
     KwElse,
     KwMatch,
     KwWhile,
     KwFor,
+    KwIn,
     KwReturn,
     KwBreak,
     KwContinue,
     KwAs,
+    KwVoid,
+    KwBool,
+    KwChar,
+    KwString,
+    KwBytes,
+    KwInt,
+    KwFloat,
 
     // Identifiers
     Identifier(String),
+    Underscore,
 
     // Literals
     IntLiteral(i128),
@@ -50,6 +61,8 @@ pub enum TokenKind {
     And,
     Or,
     Not,
+    ColonColon,
+    DotDotDot,
 
     // Delimiters
     LParen,
@@ -62,6 +75,7 @@ pub enum TokenKind {
     Colon,
     Semicolon,
     Pipe,
+    Dot,
     Arrow,
     FatArrow,
 

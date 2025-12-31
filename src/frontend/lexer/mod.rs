@@ -164,6 +164,7 @@ mod tokenizer {
             let c = self.advance().unwrap();
 
             match c {
+                '_' => Some(self.make_token(TokenKind::Underscore)),
                 c if is_identifier_start(c) => self.scan_identifier(c),
                 c if is_digit(c) => self.scan_number(c),
                 '"' => self.scan_string(),
@@ -241,11 +242,24 @@ mod tokenizer {
                     }
                 }
                 ':' => {
-                    if self.peek() == Some(&'>') {
+                    if self.peek() == Some(&':') {
                         self.advance();
-                        Some(self.make_token(TokenKind::Arrow))
+                        Some(self.make_token(TokenKind::ColonColon))
                     } else {
                         Some(self.make_token(TokenKind::Colon))
+                    }
+                }
+                '.' => {
+                    if self.peek() == Some(&'.') {
+                        self.advance();
+                        if self.peek() == Some(&'.') {
+                            self.advance();
+                            Some(self.make_token(TokenKind::DotDotDot))
+                        } else {
+                            Some(self.make_token(TokenKind::Dot))
+                        }
+                    } else {
+                        Some(self.make_token(TokenKind::Dot))
                     }
                 }
                 '/' => Some(self.make_token(TokenKind::Slash)),
@@ -528,22 +542,32 @@ mod tokenizer {
             match s {
                 "type" => Some(TokenKind::KwType),
                 "fn" => Some(TokenKind::KwFn),
+                "async" => Some(TokenKind::KwAsync),
                 "pub" => Some(TokenKind::KwPub),
                 "mod" => Some(TokenKind::KwMod),
                 "use" => Some(TokenKind::KwUse),
                 "spawn" => Some(TokenKind::KwSpawn),
                 "ref" => Some(TokenKind::KwRef),
                 "mut" => Some(TokenKind::KwMut),
+                "let" => Some(TokenKind::KwLet),
                 "if" => Some(TokenKind::KwIf),
                 "elif" => Some(TokenKind::KwElif),
                 "else" => Some(TokenKind::KwElse),
                 "match" => Some(TokenKind::KwMatch),
                 "while" => Some(TokenKind::KwWhile),
                 "for" => Some(TokenKind::KwFor),
+                "in" => Some(TokenKind::KwIn),
                 "return" => Some(TokenKind::KwReturn),
                 "break" => Some(TokenKind::KwBreak),
                 "continue" => Some(TokenKind::KwContinue),
                 "as" => Some(TokenKind::KwAs),
+                "void" => Some(TokenKind::KwVoid),
+                "bool" => Some(TokenKind::KwBool),
+                "char" => Some(TokenKind::KwChar),
+                "string" => Some(TokenKind::KwString),
+                "bytes" => Some(TokenKind::KwBytes),
+                "int" => Some(TokenKind::KwInt),
+                "float" => Some(TokenKind::KwFloat),
                 "true" => Some(TokenKind::BoolLiteral(true)),
                 "false" => Some(TokenKind::BoolLiteral(false)),
                 _ => None,
