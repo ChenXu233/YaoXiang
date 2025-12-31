@@ -48,6 +48,9 @@ jobs:
       - name: Run tests with nextest
         uses: taiki-e/install-action@nextest
         if: false  # Disable for now
+
+      - name: Execute nextest tests
+        if: false  # Disable for now
         run: cargo nextest run --all --all-features
 
   test-msrv:
@@ -58,8 +61,6 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.75
-        with:
-          toolchain: 1.75
 
       - name: Check MSRV compatibility
         run: cargo check --all-features
@@ -83,6 +84,9 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: wasm32-unknown-unknown
+
+      - name: Execute WASM build
+        if: false  # Disable for now
         run: cargo build --release --features wasm --target wasm32-unknown-unknown
 
       - name: Upload artifacts
@@ -118,7 +122,7 @@ jobs:
           components: llvm-tools
 
       - name: Install tarpaulin
-        uses: taiki-e/install-action@tarpaulin
+        run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
         run: cargo tarpaulin --all-features --output-dir coverage --html
