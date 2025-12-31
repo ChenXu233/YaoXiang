@@ -1,7 +1,7 @@
 [package]
 name = "yaoxiang"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
