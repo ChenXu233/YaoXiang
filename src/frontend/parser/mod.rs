@@ -7,7 +7,7 @@ use crate::frontend::lexer::tokens::*;
 use crate::util::span::Span;
 
 /// Parse tokens into AST
-pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
+pub fn parse(_tokens: &[Token]) -> Result<Module, ParseError> {
     // TODO: Implement parser
     Ok(Module {
         items: vec![],

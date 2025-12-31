@@ -1,7 +1,6 @@
 //! Intermediate Representation
 
 use crate::frontend::parser::ast::Type;
-use crate::util::span::Span;
 
 /// Instruction operand
 #[derive(Debug, Clone)]

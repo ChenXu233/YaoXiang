@@ -78,7 +78,7 @@ fn main() -> Result<()> {
             run_file(&file).with_context(|| format!("Failed to check: {}", file.display()))?;
             eprintln!("Check passed!");
         }
-        Commands::Format { file, check } => {
+        Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter
             eprintln!("Formatter not implemented yet");
         }

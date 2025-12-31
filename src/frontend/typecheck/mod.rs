@@ -3,7 +3,6 @@
 use super::parser::ast;
 use crate::middle;
 use std::collections::HashMap;
-use crate::util::span::Span;
 
 /// Type environment
 #[derive(Debug, Default)]

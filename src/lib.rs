@@ -15,7 +15,7 @@
 //! - `wasm`: Enable WebAssembly support
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
-#![warn(missing_docs, rust_2018_idioms)]
+#![warn(rust_2018_idioms)]
 #![allow(dead_code)]
 
 // Public modules
