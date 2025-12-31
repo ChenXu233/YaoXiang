@@ -1,6 +1,5 @@
 # Generated files
 target/
-Cargo.lock
 
 # IDE files
 .idea/
