@@ -1,6 +1,7 @@
 //! Intermediate Representation
 
 use crate::frontend::parser::ast::Type;
+use crate::frontend::typecheck::MonoType;
 
 /// Instruction operand
 #[derive(Debug, Clone)]
@@ -139,10 +140,10 @@ pub struct BasicBlock {
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub name: String,
-    pub params: Vec<Type>,
-    pub return_type: Type,
+    pub params: Vec<MonoType>,
+    pub return_type: MonoType,
     pub is_async: bool,
-    pub locals: Vec<Type>,
+    pub locals: Vec<MonoType>,
     pub blocks: Vec<BasicBlock>,
     pub entry: usize,
 }

@@ -12,8 +12,6 @@ impl<'a> ParserState<'a> {
         let start_span = self.span();
 
         match self.current().map(|t| &t.kind) {
-            // let statement
-            Some(TokenKind::KwLet) => self.parse_let_stmt(start_span),
             // type definition
             Some(TokenKind::KwType) => self.parse_type_stmt(start_span),
             // module definition
@@ -30,16 +28,29 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwContinue) => self.parse_continue_stmt(start_span),
             // block as statement
             Some(TokenKind::LBrace) => self.parse_block_stmt(start_span),
+            // variable declaration: [mut] identifier [: type] [= expr]
+            Some(TokenKind::KwMut) => self.parse_var_stmt(start_span),
+            Some(TokenKind::Identifier(_)) => {
+                // Check if this might be a variable declaration: identifier followed by : or =
+                self.parse_var_or_expr_stmt(start_span)
+            }
             // expression statement
             Some(_) => self.parse_expr_stmt(start_span),
             None => None,
         }
     }
 
-    /// Parse let statement: `let name: Type = expr;`
-    fn parse_let_stmt(&mut self, span: Span) -> Option<Stmt> {
-        self.bump(); // consume 'let'
+    /// Parse variable declaration: `[mut] name[: type] [= expr];`
+    /// New syntax: `x: int = 42` or `mut y: int = 10`
+    fn parse_var_stmt(&mut self, span: Span) -> Option<Stmt> {
+        // Check for mutability
+        let is_mut = if self.skip(&TokenKind::KwMut) {
+            true
+        } else {
+            false
+        };
 
+        // Parse variable name (identifier)
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
@@ -65,24 +76,72 @@ impl<'a> ParserState<'a> {
             None
         };
 
-        // Check for mutability (must come after initializer)
-        let _is_mut = if self.skip(&TokenKind::KwMut) {
-            true
-        } else {
-            false
-        };
-
         self.skip(&TokenKind::Semicolon);
 
         Some(Stmt {
-            kind: StmtKind::Let {
+            kind: StmtKind::Var {
                 name,
                 type_annotation,
                 initializer,
-                is_mut: false,
+                is_mut,
             },
             span,
         })
+    }
+
+    /// Try to parse as variable declaration, fall back to expression
+    fn parse_var_or_expr_stmt(&mut self, span: Span) -> Option<Stmt> {
+        let start_span = self.span();
+        let name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => return self.parse_expr_stmt(start_span),
+        };
+
+        // Peek ahead to check if this looks like a variable declaration
+        // Pattern: identifier followed by : or =
+        // We need to check the next non-whitespace token
+        self.bump(); // consume identifier
+
+        // Check next token for : or =
+        let next_is_decl = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Colon) | Some(TokenKind::Eq) => true,
+            _ => false,
+        };
+
+        if next_is_decl {
+            // This is a variable declaration without 'mut'
+            // We're at : or =, need to backtrack and call parse_var_stmt
+            // But since we've already consumed the identifier, we need to handle this differently
+
+            // For simplicity, reconstruct the logic here
+            let type_annotation = if self.skip(&TokenKind::Colon) {
+                self.parse_type_anno()
+            } else {
+                None
+            };
+
+            let initializer = if self.skip(&TokenKind::Eq) {
+                Some(Box::new(self.parse_expression(BP_LOWEST)?))
+            } else {
+                None
+            };
+
+            self.skip(&TokenKind::Semicolon);
+
+            return Some(Stmt {
+                kind: StmtKind::Var {
+                    name,
+                    type_annotation,
+                    initializer,
+                    is_mut: false,
+                },
+                span,
+            });
+        }
+
+        // Not a variable declaration, parse as expression
+        // Put the identifier back and parse as expression
+        self.parse_expr_stmt(start_span)
     }
 
     /// Parse type definition: `type Name = Type;`

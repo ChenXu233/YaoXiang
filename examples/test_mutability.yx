@@ -1,0 +1,7 @@
+// 不可变变量（默认）
+x: int = 10
+y = 20
+
+// 可变变量（需要 mut 关键字）
+mut counter: int = 0
+mut result = 100

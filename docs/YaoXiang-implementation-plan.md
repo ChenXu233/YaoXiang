@@ -427,6 +427,38 @@ pub trait CodeGenerator {
 
 ---
 
+## 九、待实现特性提醒 ⚠️
+
+> ⚠️ **重要提醒**：以下特性尚未实现，实现时请参考本提醒避免遗漏！
+
+### 9.1 不可变性检查
+
+**功能描述**：编译时检查，确保不可变变量（默认）不会被重新赋值。
+
+```yaoxiang
+// ✅ 正确 - 可变变量
+mut x = 10
+x = 20  // 允许
+
+// ❌ 错误 - 不可变变量
+x = 10
+x = 20  // 应该报错：cannot assign to immutable variable
+```
+
+**实现位置**：`src/frontend/typecheck/`
+
+**实现要求**：
+1. 在 `TypeEnvironment` 中存储变量的可变性信息
+2. 在赋值表达式检查时，验证目标变量是否可变
+3. 错误类型建议：`ImmutableAssignError { name: String, span: Span }`
+
+**参考代码位置**：
+- AST 中已有 `StmtKind::Var { is_mut: bool }` 字段
+- `src/frontend/typecheck/check.rs` 中的 `check_var` 函数
+- `src/frontend/typecheck/infer.rs` 中的 `infer_var_decl` 函数
+
+---
+
 ## 附录A：指令集
 
 ### A.1 指令编码

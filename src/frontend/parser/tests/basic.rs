@@ -205,20 +205,28 @@ fn test_parse_index() {
     assert!(result.is_ok());
 }
 
-/// Test parsing let statement
+/// Test parsing variable declaration statement
 #[test]
-fn test_parse_let_statement() {
-    let tokens = tokenize("let x: Int = 42;").unwrap();
+fn test_parse_var_statement() {
+    let tokens = tokenize("x: int = 42;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
     let module = result.unwrap();
     assert_eq!(module.items.len(), 1);
 }
 
-/// Test parsing let statement without type
+/// Test parsing variable declaration without type
 #[test]
-fn test_parse_let_statement_no_type() {
-    let tokens = tokenize("let y = 10;").unwrap();
+fn test_parse_var_statement_no_type() {
+    let tokens = tokenize("y = 10;").unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok());
+}
+
+/// Test parsing mutable variable declaration
+#[test]
+fn test_parse_mut_var_statement() {
+    let tokens = tokenize("mut z: int = 0;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }

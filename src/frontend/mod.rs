@@ -33,8 +33,8 @@ impl Compiler {
         let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
 
         // Type checking
-        let module = typecheck::check_module(&ast, &mut self.type_env)
-            .map_err(|e| CompileError::TypeError(e.to_string()))?;
+        let module = typecheck::check_module(&ast, Some(&mut self.type_env))
+            .map_err(|e| CompileError::TypeError(format!("{:?}", e)))?;
 
         Ok(module)
     }

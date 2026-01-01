@@ -19,6 +19,7 @@ coverage/
 
 # Profiling
 *.perf
+*.profraw
 
 # Temporary files
 *.tmp
@@ -26,3 +27,4 @@ coverage/
 
 tarpaulin-report.html
 
+proptest-regressions/

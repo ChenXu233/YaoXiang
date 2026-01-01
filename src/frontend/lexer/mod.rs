@@ -17,8 +17,8 @@ pub enum LexError {
     InvalidEscape { sequence: String },
     #[error("Invalid number literal: {0}")]
     InvalidNumber(String),
-    #[error("Unexpected character: {0}")]
-    UnexpectedChar(char),
+    #[error("Unexpected character: '{ch}'")]
+    UnexpectedChar { ch: char },
 }
 
 /// Tokenize source code
@@ -116,7 +116,7 @@ mod tokenizer {
         fn skip_whitespace_and_comments(&mut self) {
             while let Some(&c) = self.peek() {
                 match c {
-                    ' ' | '\t' | '\r' => {
+                    ' ' | '\t' | '\r' | '\n' => {
                         self.advance();
                     }
                     '/' if self.peek_next() == Some('/') => {
@@ -155,7 +155,10 @@ mod tokenizer {
         fn next_token(&mut self) -> Option<Token> {
             self.skip_whitespace_and_comments();
 
-            self.peek()?;
+            // 检查是否到达文件末尾
+            if self.peek().is_none() {
+                return None;
+            }
 
             self.start_offset = self.offset;
             self.start_line = self.line;
@@ -164,7 +167,15 @@ mod tokenizer {
             let c = self.advance().unwrap();
 
             match c {
-                '_' => Some(self.make_token(TokenKind::Underscore)),
+                '_' => {
+                    // Check if next char is part of identifier (e.g., _foo)
+                    // Only treat standalone _ as Underscore token
+                    if self.peek().map(|&c| is_identifier_char(c)).unwrap_or(false) {
+                        self.scan_identifier(c)
+                    } else {
+                        Some(self.make_token(TokenKind::Underscore))
+                    }
+                }
                 c if is_identifier_start(c) => self.scan_identifier(c),
                 c if is_digit(c) => self.scan_number(c),
                 '"' => self.scan_string(),
@@ -225,7 +236,7 @@ mod tokenizer {
                         self.advance();
                         Some(self.make_token(TokenKind::And))
                     } else {
-                        self.error = Some(LexError::UnexpectedChar('&'));
+                        self.error = Some(LexError::UnexpectedChar { ch: '&' });
                         Some(
                             self.make_token(TokenKind::Error(
                                 "Unexpected character: &".to_string(),
@@ -264,7 +275,7 @@ mod tokenizer {
                 }
                 '/' => Some(self.make_token(TokenKind::Slash)),
                 c => {
-                    self.error = Some(LexError::UnexpectedChar(c));
+                    self.error = Some(LexError::UnexpectedChar { ch: c });
                     Some(self.make_token(TokenKind::Error(format!("Unexpected character: {}", c))))
                 }
             }
@@ -549,7 +560,6 @@ mod tokenizer {
                 "spawn" => Some(TokenKind::KwSpawn),
                 "ref" => Some(TokenKind::KwRef),
                 "mut" => Some(TokenKind::KwMut),
-                "let" => Some(TokenKind::KwLet),
                 "if" => Some(TokenKind::KwIf),
                 "elif" => Some(TokenKind::KwElif),
                 "else" => Some(TokenKind::KwElse),

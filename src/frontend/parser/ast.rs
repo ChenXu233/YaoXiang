@@ -119,7 +119,8 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Expr(Box<Expr>),
-    Let {
+    /// Variable declaration: [mut] name[: type] [= expr]
+    Var {
         name: String,
         type_annotation: Option<Type>,
         initializer: Option<Box<Expr>>,

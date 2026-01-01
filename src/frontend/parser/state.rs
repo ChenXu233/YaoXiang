@@ -6,7 +6,7 @@ use crate::util::span::Span;
 /// Synchronization points for error recovery
 const SYNC_POINTS: &[TokenKind] = &[
     TokenKind::KwFn,
-    TokenKind::KwLet,
+    TokenKind::KwMut,
     TokenKind::KwType,
     TokenKind::KwMod,
     TokenKind::KwUse,
@@ -198,7 +198,7 @@ impl<'a> ParserState<'a> {
         self.can_start_expr()
             || matches!(
                 self.current().map(|t| &t.kind),
-                Some(TokenKind::KwLet)
+                Some(TokenKind::KwMut)
                     | Some(TokenKind::KwFn)
                     | Some(TokenKind::KwType)
                     | Some(TokenKind::KwMod)
@@ -211,6 +211,8 @@ impl<'a> ParserState<'a> {
                     | Some(TokenKind::KwBreak)
                     | Some(TokenKind::KwContinue)
                     | Some(TokenKind::LBrace)
+                    // Identifier can start variable declaration (without mut)
+                    | Some(TokenKind::Identifier(_))
             )
     }
 
