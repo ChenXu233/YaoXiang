@@ -14,8 +14,6 @@ impl<'a> ParserState<'a> {
         match self.current().map(|t| &t.kind) {
             // type definition
             Some(TokenKind::KwType) => self.parse_type_stmt(start_span),
-            // module definition
-            Some(TokenKind::KwMod) => self.parse_module_stmt(start_span),
             // use import
             Some(TokenKind::KwUse) => self.parse_use_stmt(start_span),
             // function definition
@@ -286,7 +284,6 @@ impl<'a> ParserState<'a> {
 
     /// Parse function definition
     fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
-        let _is_async = self.skip(&TokenKind::KwAsync);
         if !self.expect(&TokenKind::KwFn) {
             return None;
         }

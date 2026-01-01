@@ -8,7 +8,6 @@ const SYNC_POINTS: &[TokenKind] = &[
     TokenKind::KwFn,
     TokenKind::KwMut,
     TokenKind::KwType,
-    TokenKind::KwMod,
     TokenKind::KwUse,
     TokenKind::KwIf,
     TokenKind::KwWhile,
@@ -201,7 +200,6 @@ impl<'a> ParserState<'a> {
                 Some(TokenKind::KwMut)
                     | Some(TokenKind::KwFn)
                     | Some(TokenKind::KwType)
-                    | Some(TokenKind::KwMod)
                     | Some(TokenKind::KwUse)
                     | Some(TokenKind::KwIf)
                     | Some(TokenKind::KwWhile)

@@ -519,6 +519,11 @@ mod fuzz_tests {
 
         #[test]
         fn fuzz_parse_identifier(s in "[a-zA-Z][a-zA-Z0-9_]*") {
+            // Skip reserved keywords
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
+            if reserved.iter().any(|&k| s == k) {
+                return Ok(());
+            }
             let tokens = tokenize(&s).unwrap();
             let result = parse_expression(&tokens);
             prop_assert!(result.is_ok(), "Failed to parse identifier: {}", s);
@@ -558,6 +563,11 @@ mod fuzz_tests {
             arg1 in "[0-9]+",
             arg2 in "[0-9]+"
         ) {
+            // Skip reserved keywords
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
+            if reserved.iter().any(|&k| func == k) {
+                return Ok(());
+            }
             let code = format!("{}({}, {})", func, arg1, arg2);
             let tokens = tokenize(&code).unwrap();
             let result = parse_expression(&tokens);
@@ -569,6 +579,11 @@ mod fuzz_tests {
             obj in "[a-z][a-z0-9]*",
             field in "[a-z][a-z0-9]*"
         ) {
+            // Skip reserved keywords
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
+            if reserved.iter().any(|&k| obj == k || field == k) {
+                return Ok(());
+            }
             let code = format!("{}.{}", obj, field);
             let tokens = tokenize(&code).unwrap();
             let result = parse_expression(&tokens);
@@ -581,7 +596,7 @@ mod fuzz_tests {
             idx in "[0-9]+"
         ) {
             // Skip reserved keywords
-            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "mod", "use", "return", "break", "continue", "in"];
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
             if reserved.iter().any(|&k| arr == k) {
                 return Ok(());
             }
@@ -633,7 +648,7 @@ mod fuzz_tests {
             arg in "[0-9]+"
         ) {
             // Skip reserved keywords
-            let reserved = ["as", "if", "for", "while", "match", "fn"];
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
             if reserved.iter().any(|&k| func1 == k || func2 == k) {
                 return Ok(());
             }
@@ -649,7 +664,7 @@ mod fuzz_tests {
             arg in "[0-9]+"
         ) {
             // Skip reserved keywords
-            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "mod", "use", "return", "break", "continue", "in"];
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
             if reserved.iter().any(|&k| param == k) {
                 return Ok(());
             }
@@ -689,7 +704,7 @@ mod fuzz_tests {
             body in "[0-9]+"
         ) {
             // Skip reserved keywords
-            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "mod", "use", "return", "break", "continue", "in"];
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
             if reserved.iter().any(|&k| var == k || iterable == k) {
                 return Ok(());
             }
@@ -708,7 +723,7 @@ mod fuzz_tests {
             val2 in "[a-z]+"
         ) {
             // Skip reserved keywords
-            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "mod", "use", "return", "break", "continue", "in"];
+            let reserved = ["as", "if", "for", "while", "match", "fn", "let", "type", "pub", "use", "return", "break", "continue", "in", "spawn", "ref", "mut", "elif", "else"];
             if reserved.iter().any(|&k| var == k || val1 == k || val2 == k) {
                 return Ok(());
             }

@@ -90,14 +90,15 @@ pub struct Token {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // 关键字
-    KwType, KwFn, KwPub, KwMod, KwUse,
+    // 关键字（18个核心关键字，不可覆盖）
+    KwType, KwFn, KwPub, KwUse,
     KwSpawn, KwRef, KwMut,
     KwIf, KwElif, KwElse, KwMatch,
-    KwWhile, KwFor, KwReturn, KwBreak, KwContinue, KwAs,
+    KwWhile, KwFor, KwIn, KwReturn, KwBreak, KwContinue, KwAs,
 
     // 标识符和字面量
     Identifier(String),
+    Underscore,
     IntLiteral(i128),
     FloatLiteral(f64),
     BoolLiteral(bool),
@@ -105,18 +106,28 @@ pub enum TokenKind {
     StringLiteral(String),
 
     // 运算符和分隔符
-    Plus, Minus, Star, Slash,
+    Plus, Minus, Star, Slash, Percent,
     Eq, Neq, Lt, Le, Gt, Ge,
     And, Or, Not,
+    ColonColon, DotDotDot,
     LParen, RParen, LBracket, RBracket, LBrace, RBrace,
     Comma, Colon, Semicolon, Pipe,
-    Arrow, FatArrow,
+    Dot, Arrow, FatArrow,
 
     // 特殊
     Eof,
     Error(String),
 }
 ```
+
+> **📝 设计说明**：
+> - **模块设计**：采用多文件模块系统，通过 `use` 导入文件。不支持单文件 `mod { ... }` 语法，避免代码膨胀
+> - **类型关键字**（可覆盖）：`void`, `bool`, `char`, `string`, `bytes`, `int`, `float` - 当前作为普通 `Identifier` 处理，解析器在类型上下文中识别
+> - **布尔字面量**：`true`, `false` - 当前作为普通 `Identifier` 处理，解析器在表达式上下文中识别为 `BoolLiteral`
+> - **`in` 关键字**：支持 Python 风格的列表推导式语法糖
+>   ```yaoxiang
+>   [x * 2 for x in range(10) if x % 2 == 0]  // 生成 [0, 4, 8, 12, 16]
+>   ```
 
 ### 3.2 语法分析器
 

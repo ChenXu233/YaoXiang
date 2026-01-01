@@ -23,37 +23,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::LParen) => self.parse_tuple_or_parens_type(start_span),
             // List type: [Type]
             Some(TokenKind::LBracket) => self.parse_list_type(start_span),
-            // Named type or generic type
+            // Named type or generic type (including: void, bool, char, string, bytes, int, float)
             Some(TokenKind::Identifier(_)) => self.parse_named_or_generic_type(start_span),
-            // Void type
-            Some(TokenKind::KwVoid) => {
-                self.bump();
-                Some(Type::Void)
-            }
-            // Bool type
-            Some(TokenKind::KwBool) => {
-                self.bump();
-                Some(Type::Bool)
-            }
-            // Char type
-            Some(TokenKind::KwChar) => {
-                self.bump();
-                Some(Type::Char)
-            }
-            // String type
-            Some(TokenKind::KwString) => {
-                self.bump();
-                Some(Type::String)
-            }
-            // Bytes type
-            Some(TokenKind::KwBytes) => {
-                self.bump();
-                Some(Type::Bytes)
-            }
-            // Integer type with bit width
-            Some(TokenKind::KwInt) => self.parse_int_type(),
-            // Float type with bit width
-            Some(TokenKind::KwFloat) => self.parse_float_type(),
             _ => None,
         }
     }
@@ -155,13 +126,21 @@ impl<'a> ParserState<'a> {
             return Some(Type::Generic { name, args });
         }
 
-        Some(Type::Name(name))
+        // Built-in type name mapping (can be shadowed by user-defined types)
+        match name.as_str() {
+            "void" => Some(Type::Void),
+            "bool" => Some(Type::Bool),
+            "char" => Some(Type::Char),
+            "string" => Some(Type::String),
+            "bytes" => Some(Type::Bytes),
+            "int" => self.parse_int_type_from_name(),
+            "float" => self.parse_float_type_from_name(),
+            _ => Some(Type::Name(name)),
+        }
     }
 
-    /// Parse integer type with optional bit width
-    fn parse_int_type(&mut self) -> Option<Type> {
-        self.bump(); // consume 'Int'
-
+    /// Parse integer type with optional bit width (called from parse_named_or_generic_type)
+    fn parse_int_type_from_name(&mut self) -> Option<Type> {
         // Check for bit width: Int<32>, Int<64>
         if self.at(&TokenKind::Lt) {
             self.bump(); // consume '<'
@@ -189,10 +168,8 @@ impl<'a> ParserState<'a> {
         Some(Type::Int(64)) // default to 64-bit
     }
 
-    /// Parse float type with optional bit width
-    fn parse_float_type(&mut self) -> Option<Type> {
-        self.bump(); // consume 'Float'
-
+    /// Parse float type with optional bit width (called from parse_named_or_generic_type)
+    fn parse_float_type_from_name(&mut self) -> Option<Type> {
         // Check for bit width: Float<32>, Float<64>
         if self.at(&TokenKind::Lt) {
             self.bump(); // consume '<'
@@ -205,7 +182,7 @@ impl<'a> ParserState<'a> {
                 }
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
-                        self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                        self.current().map(|t: &Token| t.kind.clone()).unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Float(64)); // default
                 }

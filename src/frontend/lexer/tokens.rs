@@ -5,12 +5,10 @@ use crate::util::span::Span;
 /// Token kind
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords (29 total)
+    // Keywords (18 total)
     KwType,
     KwFn,
-    KwAsync,
     KwPub,
-    KwMod,
     KwUse,
     KwSpawn,
     KwRef,
@@ -26,13 +24,6 @@ pub enum TokenKind {
     KwBreak,
     KwContinue,
     KwAs,
-    KwVoid,
-    KwBool,
-    KwChar,
-    KwString,
-    KwBytes,
-    KwInt,
-    KwFloat,
 
     // Identifiers
     Identifier(String),

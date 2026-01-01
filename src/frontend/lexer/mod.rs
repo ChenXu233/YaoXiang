@@ -553,9 +553,7 @@ mod tokenizer {
             match s {
                 "type" => Some(TokenKind::KwType),
                 "fn" => Some(TokenKind::KwFn),
-                "async" => Some(TokenKind::KwAsync),
                 "pub" => Some(TokenKind::KwPub),
-                "mod" => Some(TokenKind::KwMod),
                 "use" => Some(TokenKind::KwUse),
                 "spawn" => Some(TokenKind::KwSpawn),
                 "ref" => Some(TokenKind::KwRef),
@@ -571,15 +569,6 @@ mod tokenizer {
                 "break" => Some(TokenKind::KwBreak),
                 "continue" => Some(TokenKind::KwContinue),
                 "as" => Some(TokenKind::KwAs),
-                "void" => Some(TokenKind::KwVoid),
-                "bool" => Some(TokenKind::KwBool),
-                "char" => Some(TokenKind::KwChar),
-                "string" => Some(TokenKind::KwString),
-                "bytes" => Some(TokenKind::KwBytes),
-                "int" => Some(TokenKind::KwInt),
-                "float" => Some(TokenKind::KwFloat),
-                "true" => Some(TokenKind::BoolLiteral(true)),
-                "false" => Some(TokenKind::BoolLiteral(false)),
                 _ => None,
             }
         }
@@ -606,7 +595,6 @@ mod tests {
             ("type", TokenKind::KwType),
             ("fn", TokenKind::KwFn),
             ("pub", TokenKind::KwPub),
-            ("mod", TokenKind::KwMod),
             ("use", TokenKind::KwUse),
             ("spawn", TokenKind::KwSpawn),
             ("ref", TokenKind::KwRef),
@@ -617,6 +605,7 @@ mod tests {
             ("match", TokenKind::KwMatch),
             ("while", TokenKind::KwWhile),
             ("for", TokenKind::KwFor),
+            ("in", TokenKind::KwIn),
             ("return", TokenKind::KwReturn),
             ("break", TokenKind::KwBreak),
             ("continue", TokenKind::KwContinue),
@@ -705,9 +694,10 @@ mod tests {
     }
 
     #[test]
-    fn test_bool_literals() {
+    fn test_bool_literals_are_identifiers() {
+        // true/false are now treated as regular identifiers (not reserved keywords)
         let tokens = tokenize("true false").unwrap();
-        assert!(matches!(tokens[0].kind, TokenKind::BoolLiteral(true)));
-        assert!(matches!(tokens[1].kind, TokenKind::BoolLiteral(false)));
+        assert!(matches!(&tokens[0].kind, TokenKind::Identifier(s) if s == "true"));
+        assert!(matches!(&tokens[1].kind, TokenKind::Identifier(s) if s == "false"));
     }
 }
