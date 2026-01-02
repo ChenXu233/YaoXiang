@@ -126,7 +126,7 @@ identity<T>(T) -> T = (x) => x
 # 编译为直接返回，无额外开销
 
 # 类型层面的优化
-type Nat = struct { n: Int }
+type Nat = { n: Int }
 # 编译为普通整型，无额外包装
 ```
 
@@ -238,7 +238,7 @@ display_user(Int) -> String = (id) => {
 # 无需定义，直接使用
 
 # 结构体类型
-type Point = struct {
+type Point = {
     x: Float
     y: Float
 }
@@ -257,13 +257,13 @@ type Color = enum {
 }
 
 # 泛型类型
-type List[T] = struct {
+type List[T] = {
     elements: [T]
     length: Int
 }
 
 # 依赖类型
-type Vector[T, n: Nat] = struct {
+type Vector[T, n: Nat] = {
     data: [T; n]  # 固定长度数组
 }
 
@@ -279,7 +279,7 @@ MyInt = Int
 MyList = List(Int)
 
 # 类型组合
-type Pair[T, U] = struct {
+type Pair[T, U] = {
     first: T
     second: U
 }
@@ -288,8 +288,8 @@ type Pair[T, U] = struct {
 type Number = Int | Float
 
 # 类型交集
-type Printable = struct { to_string: fn() -> String }
-type Serializable = struct { to_json: fn() -> String }
+type Printable = { to_string: fn() -> String }
+type Serializable = { to_json: fn() -> String }
 type Versatile = Printable & Serializable
 
 # 类型条件
@@ -500,7 +500,7 @@ YaoXiang 共定义 17 个关键字，这些关键字是保留的，不能用作�
 
 | # | 关键字 | 作用 | 示例 |
 |---|--------|------|------|
-| 1 | `type` | 类型定义 | `type Point = struct { x: Int, y: Int }` |
+| 1 | `type` | 类型定义 | `type Point = { x: Int, y: Int }` |
 | 2 | `pub` | 公共导出 | `pub add(Int, Int) -> Int = ...` |
 | 3 | `use` | 导入模块 | `use std.io` |
 | 4 | `spawn` | 异步标记 | `fetch(String) -> T spawn = ...` |
@@ -738,7 +738,7 @@ for item in items {
 }
 
 # 类型定义 - 明确的字段列表
-type MyType = struct {
+type MyType = {
     field1: Type1
     field2: Type2
 }
@@ -781,7 +781,7 @@ complex_function(ref List[Int], mut Config, (Result) -> Void) -> Result[Data] = 
 }
 
 # 类型定义完整
-type APIResponse = struct {
+type APIResponse = {
     status: Int
     message: String
     data: option[List[DataItem]]
@@ -795,7 +795,7 @@ type APIResponse = struct {
 # 1. 类型定义位置明确
 # type 关键字开头
 
-type User = struct {
+type User = {
     id: Int
     name: String
 }

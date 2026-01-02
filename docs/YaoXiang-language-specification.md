@@ -199,12 +199,12 @@ Field       ::= Identifier ':' TypeExpr
 ```
 
 ```yaoxiang
-type Point = struct {
+type Point = {
     x: Float
     y: Float
 }
 
-type Person = struct {
+type Person = {
     name: String
     age: Int
 }
@@ -280,8 +280,8 @@ TypeArgList ::= TypeExpr (',' TypeExpr)* ','?
 ```
 
 ```yaoxiang
-type List[T] = struct { elements: [T], length: Int }
-type Map[K, V] = struct { keys: [K], values: [V] }
+type List[T] = { elements: [T], length: Int }
+type Map[K, V] = { keys: [K], values: [V] }
 
 # 使用
 numbers: List[Int] = [1, 2, 3]
@@ -295,7 +295,7 @@ TypeParamList ::= Identifier ':' TypeExpr (',' Identifier ':' TypeExpr)*
 ```
 
 ```yaoxiang
-type Vector[T, n: Nat] = struct {
+type Vector[T, n: Nat] = {
     data: [T; n]  # 固定长度数组
 }
 ```
@@ -317,8 +317,8 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 ```
 
 ```yaoxiang
-type Printable = struct { to_string: fn() -> String }
-type Serializable = struct { to_json: fn() -> String }
+type Printable = { to_string: fn() -> String }
+type Serializable = { to_json: fn() -> String }
 type Versatile = Printable & Serializable
 ```
 
@@ -507,10 +507,10 @@ fn classify(x: Int) -> String {
 }
 
 # 解构
-type Point = struct { x: Float, y: Float }
+type Point = { x: Float, y: Float }
 match point {
-    struct { x: 0, y: 0 } -> "origin"
-    struct { x, y } -> "point"
+    Point { x: 0, y: 0 } -> "origin"
+    Point { x, y } -> "point"
 }
 ```
 

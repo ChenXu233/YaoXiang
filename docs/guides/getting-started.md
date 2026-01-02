@@ -78,7 +78,7 @@ result = add(1, 2)        # result = 3
 ### 类型定义
 
 ```yaoxiang
-type Point = struct {
+type Point = {
     x: Float
     y: Float
 }

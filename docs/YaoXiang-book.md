@@ -15,8 +15,9 @@
 4. [内存管理](#四内存管理)
 5. [异步编程](#五异步编程)
 6. [模块系统](#六模块系统)
-7. [AI友好设计](#七ai友好设计)
-8. [快速入门](#八快速入门)
+7. [方法绑定与柯里化](#七方法绑定与柯里化)
+8. [AI友好设计](#八ai友好设计)
+9. [快速入门](#九快速入门)
 
 ---
 
@@ -71,7 +72,7 @@ x = 20                           # 编译错误！
 add(Int, Int) -> Int = (a, b) => a + b
 
 # 类型定义
-type Point = struct {
+type Point = {
     x: Float
     y: Float
 }
@@ -127,7 +128,7 @@ YaoXiang 的类型系统基于类型论和范畴论，提供了：
 
 ```yaoxiang
 # 依赖类型：固定长度向量
-type Vector[T, n: Nat] = struct {
+type Vector[T, n: Nat] = {
     data: [T; n]  # 固定长度数组
 }
 
@@ -135,8 +136,8 @@ type Vector[T, n: Nat] = struct {
 type Number = Int | Float
 
 # 类型交集
-type Printable = struct { to_string: fn() -> String }
-type Serializable = struct { to_json: fn() -> String }
+type Printable = { to_string: fn() -> String }
+type Serializable = { to_json: fn() -> String }
 type Versatile = Printable & Serializable
 ```
 
@@ -228,7 +229,7 @@ YaoXiang 的类型系统是层次化的：
 
 ```yaoxiang
 # 结构体类型
-type Point = struct {
+type Point = {
     x: Float
     y: Float
 }
@@ -247,13 +248,13 @@ type Color = enum {
 }
 
 # 泛型类型
-type List[T] = struct {
+type List[T] = {
     elements: [T]
     length: Int
 }
 
 # 依赖类型
-type Vector[T, n: Nat] = struct {
+type Vector[T, n: Nat] = {
     data: [T; n]  # 固定长度数组
 }
 ```
@@ -266,7 +267,7 @@ MyInt = Int
 MyList = List(Int)
 
 # 类型组合
-type Pair[T, U] = struct {
+type Pair[T, U] = {
     first: T
     second: U
 }
@@ -465,11 +466,106 @@ use std.io.{ read_file, write_file }
 
 ---
 
-## 七、AI友好设计
+## 七、方法绑定与柯里化
+
+YaoXiang 采用纯函数式设计，通过柯里化实现类似对象方法调用的语法糖，无需引入 `struct`、`class` 等关键字。
+
+### 7.1 核心函数定义
+
+类型的所有操作都通过普通函数实现，第一个参数约定为操作的主体：
+
+```yaoxiang
+# === Point.yx (模块) ===
+
+type Point = {
+    x: Float
+    y: Float
+}
+
+# 核心函数：欧几里得距离
+# 第一个参数是操作的主体（a）
+distance(Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 曼哈顿距离
+manhattan(Point, Point) -> Float = (a, b) => {
+    (a.x - b.x).abs() + (a.y - b.y).abs()
+}
+```
+
+### 7.2 方法语法糖绑定
+
+通过部分应用（柯里化）实现 `.method()` 语法糖：
+
+```yaoxiang
+# 方法语法糖绑定
+# Point.distance(_) = distance(self, _)
+# 表示：Point.distance 是将 self 作为第一个参数的柯里化函数
+Point.distance(_) = distance(self, _)
+Point.manhattan(_) = manhattan(self, _)
+```
+
+### 7.3 调用方式
+
+```yaoxiang
+# === main.yx ===
+
+use Point
+
+main() -> Void = () => {
+    p1 = Point(x: 3.0, y: 4.0)
+    p2 = Point(x: 1.0, y: 2.0)
+
+    # 两种调用方式完全等价
+    d1 = distance(p1, p2)           # 直接调用核心函数
+    d2 = p1.distance(p2)            # 方法语法糖
+
+    print(d1)  # ≈ 2.828
+    print(d2)  # ≈ 2.828
+
+    # 函数式用法：预先绑定第一个参数
+    dist_from_origin = Point.distance(Point(x: 0.0, y: 0.0))
+    result = dist_from_origin(p1)   # 5.0
+
+    # 柯里化用法：延迟求值
+    get_dist_to_p2 = p2.distance(_)
+    d3 = get_dist_to_p2(p1)         # 2.828
+}
+```
+
+### 7.4 设计优势
+
+| 特性 | 说明 |
+|------|------|
+| **签名一致** | 定义时 `distance(Point, Point)`，调用时传递 2 个参数，无隐藏的 `self` |
+| **函数即值** | `Point.distance` 是可以直接赋值、传递的函数值 |
+| **无额外关键字** | 不需要 `struct`、`class`、`method` 等关键字 |
+| **纯函数式** | 所有操作都是纯函数，易于测试和推理 |
+| **灵活组合** | 柯里化使得函数组合自然流畅 |
+
+### 7.5 模式匹配解构
+
+类型同样支持模式匹配解构：
+
+```yaoxiang
+# 解构
+type Point = { x: Float, y: Float }
+match point {
+    Point { x: 0, y: 0 } -> "origin"
+    Point { x, y } -> "point"
+}
+```
+
+---
+
+## 八、AI友好设计
 
 YaoXiang 的语法设计特别考虑了 AI 代码生成和修改的需求：
 
-### 7.1 设计原则
+### 8.1 设计原则
 
 ```yaoxiang
 # AI友好设计目标：
@@ -480,7 +576,7 @@ YaoXiang 的语法设计特别考虑了 AI 代码生成和修改的需求：
 # 5. 类型信息完整
 ```
 
-### 7.2 严格缩进规则
+### 8.2 严格缩进规则
 
 ```yaoxiang
 # 必须使用 4 空格缩进
@@ -503,7 +599,7 @@ do_something()
 }
 ```
 
-### 7.3 明确的代码块边界
+### 8.3 明确的代码块边界
 
 ```yaoxiang
 # 函数定义 - 明确的开始和结束
@@ -517,13 +613,13 @@ if condition {
 }
 
 # 类型定义 - 明确的字段列表
-type MyType = struct {
+type MyType = {
     field1: Type1
     field2: Type2
 }
 ```
 
-### 7.4 无歧义语法
+### 8.4 无歧义语法
 
 ```yaoxiang
 # 禁止省略括号
@@ -538,9 +634,9 @@ my_list = [1 2 3]       # 列表元素必须有逗号
 
 ---
 
-## 八、快速入门
+## 九、快速入门
 
-### 8.1 Hello World
+### 9.1 Hello World
 
 ```yaoxiang
 # hello.yx
@@ -558,7 +654,7 @@ main() -> Void = () => {
 Hello, YaoXiang!
 ```
 
-### 8.2 基本语法
+### 9.2 基本语法
 
 ```yaoxiang
 # 变量与类型
@@ -584,7 +680,7 @@ for i in 0..10 {
 }
 ```
 
-### 8.3 下一步
+### 9.3 下一步
 
 - 阅读 [语言规范](./YaoXiang-language-specification.md) 了解完整语法
 - 查看 [示例代码](./examples/) 学习常用模式
