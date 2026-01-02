@@ -74,6 +74,7 @@ yaoxiang your_program.yx
 - [快速入门](docs/guides/getting-started.md) - 5 分钟上手
 - [语言指南](docs/YaoXiang-book.md) - 系统学习
 - [语言规范](docs/YaoXiang-language-specification.md) - 完整参考
+- [设计宣言](docs/YaoXiang-design-manifesto.md) - 核心理念与路线图
 - [实现计划](docs/YaoXiang-implementation-plan.md) - 技术细节
 
 ## 项目结构

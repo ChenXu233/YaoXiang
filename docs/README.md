@@ -8,6 +8,7 @@ YaoXiang 编程语言的官方文档。
 docs/
 ├── YaoXiang-book.md                    # 语言指南（入门教程）
 ├── YaoXiang-language-specification.md  # 语言规范（权威参考）
+├── YaoXiang-design-manifesto.md        # 设计宣言（核心理念与路线图）
 ├── YaoXiang-implementation-plan.md     # 实现计划（技术细节）
 ├── guides/                             # 用户指南
 │   └── getting-started.md              # 快速入门
