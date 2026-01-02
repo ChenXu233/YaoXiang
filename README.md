@@ -28,22 +28,25 @@ x = 42
 name = "YaoXiang"
 
 # 函数定义
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
-# 类型定义
-type Point = struct {
-    x: Float
-    y: Float
-}
+# 统一类型语法：只有构造器，没有 enum/struct/union 关键字
+# 规则：用 | 分隔的都是构造器，构造器名(参数) 就是类型
+type Point = Point(x: Float, y: Float)          # 单构造器（结构体风格）
+type Result[T, E] = ok(T) | err(E)              # 多构造器（联合风格）
+type Color = red | green | blue                  # 零参构造器（枚举风格）
+
+# 值构造：与函数调用完全相同
+p = Point(3.0, 4.0)
+r = ok("success")
+c = green
 
 # 无感异步
-fn fetch_data(url: String) -> JSON spawn {
+fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-fn main() {
+main() -> Void = () => {
     data = fetch_data("https://api.example.com")
     print(data.name)
 }
@@ -118,7 +121,7 @@ Python语法 → 自然语言感 → 可读性 → 新手友好
 | 零成本抽象 | ✅ | ✅ | ❌ | ❌ |
 | 无GC | ✅ | ✅ | ❌ | ❌ |
 | AI友好语法 | ✅ | ❌ | ✅ | ❌ |
-| 关键字数量 | 18 | 51+ | 35 | 64+ |
+| 关键字数量 | 17 | 51+ | 35 | 64+ |
 
 ## 路线图
 

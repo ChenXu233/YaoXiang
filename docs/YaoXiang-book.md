@@ -71,11 +71,9 @@ x = 20                           # 编译错误！
 # 函数定义
 add(Int, Int) -> Int = (a, b) => a + b
 
-# 类型定义
-type Point = {
-    x: Float
-    y: Float
-}
+# 统一类型语法：构造器即类型
+type Point = Point(x: Float, y: Float)
+type Result[T, E] = ok(T) | err(E)
 
 # 无感异步
 fetch_data(String) -> JSON spawn = (url) => {
@@ -83,6 +81,10 @@ fetch_data(String) -> JSON spawn = (url) => {
 }
 
 main() -> Void = () => {
+    # 值构造：与函数调用完全相同
+    p = Point(3.0, 4.0)
+    r = ok("success")
+
     data = fetch_data("https://api.example.com")
     # 自动等待，无需 await
     print(data.name)
@@ -128,16 +130,14 @@ YaoXiang 的类型系统基于类型论和范畴论，提供了：
 
 ```yaoxiang
 # 依赖类型：固定长度向量
-type Vector[T, n: Nat] = {
-    data: [T; n]  # 固定长度数组
-}
+type Vector[T, n: Nat] = vector(T, n)
 
 # 类型联合
 type Number = Int | Float
 
 # 类型交集
-type Printable = { to_string: fn() -> String }
-type Serializable = { to_json: fn() -> String }
+type Printable = printable(fn() -> String)
+type Serializable = serializable(fn() -> String)
 type Versatile = Printable & Serializable
 ```
 
@@ -203,11 +203,11 @@ YaoXiang 的类型系统是层次化的：
 │    │   ├── Int, Uint, Float                                 │
 │    │   ├── Char, String, Bytes                              │
 │    │                                                        │
-│    ├── 复合类型 (Composite Types)                           │
-│    │   ├── struct { fields }                               │
-│    │   ├── union { variants }                              │
-│    │   ├── enum { variants }                               │
-│    │   ├── tuple (T1, T2, ...)                             │
+│    ├── 构造器类型 (Constructor Types)                        │
+│    │   ├── Name(args)              # 单构造器（结构体）      │
+│    │   ├── A(T) | B(U)             # 多构造器（联合/枚举）   │
+│    │   ├── A | B | C               # 零参构造器（枚举）      │
+│    │   ├── tuple (T1, T2, ...)                            │
 │    │   ├── list [T], dict [K->V]                           │
 │    │                                                        │
 │    ├── 函数类型 (Function Types)                            │
@@ -217,10 +217,10 @@ YaoXiang 的类型系统是层次化的：
 │    │   List[T], Map[K, V], etc.                            │
 │    │                                                        │
 │    ├── 依赖类型 (Dependent Types)                           │
-│    │   type { n: Nat } -> type                             │
+│    │   type [n: Nat] -> type                               │
 │    │                                                        │
 │    └── 模块类型 (Module Types)                              │
-│        mod { exports }                                      │
+│        文件即模块                                            │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -228,35 +228,26 @@ YaoXiang 的类型系统是层次化的：
 ### 3.2 类型定义
 
 ```yaoxiang
-# 结构体类型
-type Point = {
-    x: Float
-    y: Float
-}
+# 统一类型语法：只有构造器，没有 enum/struct/union 关键字
+# 规则：用 | 分隔的都是构造器，构造器名(参数) 就是类型
 
-# 联合类型
-type Result[T, E] = union {
-    ok: T
-    err: E
-}
+# === 零参数构造器（枚举风格）===
+type Color = red | green | blue              # 等价于 red() | green() | blue()
 
-# 枚举类型
-type Color = enum {
-    red
-    green
-    blue
-}
+# === 多参数构造器（结构体风格）===
+type Point = Point(x: Float, y: Float)       # 构造器就是类型
 
-# 泛型类型
-type List[T] = {
-    elements: [T]
-    length: Int
-}
+# === 泛型构造器 ===
+type Result[T, E] = ok(T) | err(E)           # 泛型联合
 
-# 依赖类型
-type Vector[T, n: Nat] = {
-    data: [T; n]  # 固定长度数组
-}
+# === 混合构造器 ===
+type Shape = circle(Float) | rect(Float, Float)
+
+# === 值构造（与函数调用完全相同）===
+c: Color = green                              # 等价于 green()
+p: Point = Point(1.0, 2.0)
+r: Result[Int, String] = ok(42)
+s: Shape = circle(5.0)
 ```
 
 ### 3.3 类型操作
@@ -266,20 +257,12 @@ type Vector[T, n: Nat] = {
 MyInt = Int
 MyList = List(Int)
 
-# 类型组合
-type Pair[T, U] = {
-    first: T
-    second: U
-}
-
-# 类型联合
-type Number = Int | Float
-
-# 类型反射
+# 类型反射（构造器模式匹配）
 describe_type(type) -> String = (t) => {
     match t {
-        struct { fields } -> "Struct with " + fields.length + " fields"
-        union { variants } -> "Union with " + variants.length + " variants"
+        Point(x, y) -> "Point with x=" + x + ", y=" + y
+        red -> "Red color"
+        ok(value) -> "Ok value"
         _ -> "Other type"
     }
 }
@@ -477,10 +460,8 @@ YaoXiang 采用纯函数式设计，通过柯里化实现类似对象方法调�
 ```yaoxiang
 # === Point.yx (模块) ===
 
-type Point = {
-    x: Float
-    y: Float
-}
+# 统一语法：构造器就是类型
+type Point = Point(x: Float, y: Float)
 
 # 核心函数：欧几里得距离
 # 第一个参数是操作的主体（a）
@@ -516,8 +497,9 @@ Point.manhattan(_) = manhattan(self, _)
 use Point
 
 main() -> Void = () => {
-    p1 = Point(x: 3.0, y: 4.0)
-    p2 = Point(x: 1.0, y: 2.0)
+    # 值构造：与函数调用完全相同
+    p1 = Point(3.0, 4.0)
+    p2 = Point(1.0, 2.0)
 
     # 两种调用方式完全等价
     d1 = distance(p1, p2)           # 直接调用核心函数
@@ -527,7 +509,7 @@ main() -> Void = () => {
     print(d2)  # ≈ 2.828
 
     # 函数式用法：预先绑定第一个参数
-    dist_from_origin = Point.distance(Point(x: 0.0, y: 0.0))
+    dist_from_origin = Point.distance(Point(0.0, 0.0))
     result = dist_from_origin(p1)   # 5.0
 
     # 柯里化用法：延迟求值
@@ -542,20 +524,19 @@ main() -> Void = () => {
 |------|------|
 | **签名一致** | 定义时 `distance(Point, Point)`，调用时传递 2 个参数，无隐藏的 `self` |
 | **函数即值** | `Point.distance` 是可以直接赋值、传递的函数值 |
-| **无额外关键字** | 不需要 `struct`、`class`、`method` 等关键字 |
+| **无额外关键字** | 不需要 `enum`、`struct`、`union`、`class`、`method` 等关键字 |
 | **纯函数式** | 所有操作都是纯函数，易于测试和推理 |
 | **灵活组合** | 柯里化使得函数组合自然流畅 |
 
 ### 7.5 模式匹配解构
 
-类型同样支持模式匹配解构：
+类型同样支持构造器模式匹配：
 
 ```yaoxiang
 # 解构
-type Point = { x: Float, y: Float }
 match point {
-    Point { x: 0, y: 0 } -> "origin"
-    Point { x, y } -> "point"
+    Point(0.0, 0.0) -> "origin"
+    Point(x, y) -> "point at (" + x + ", " + y + ")"
 }
 ```
 
