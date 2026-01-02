@@ -17,12 +17,14 @@ impl<'a> ParserState<'a> {
         match self.current().map(|t| &t.kind) {
             // Assignment
             Some(TokenKind::Eq) => Some((BP_ASSIGN, BP_ASSIGN + 1, Self::parse_assign)),
+            // Range
+            Some(TokenKind::DotDot) => Some((BP_RANGE, BP_RANGE + 1, Self::parse_binary)),
             // Logical OR
             Some(TokenKind::Or) => Some((BP_OR, BP_OR + 1, Self::parse_binary)),
             // Logical AND
             Some(TokenKind::And) => Some((BP_AND, BP_AND + 1, Self::parse_binary)),
             // Equality
-            Some(TokenKind::Neq) => {
+            Some(TokenKind::EqEq) | Some(TokenKind::Neq) => {
                 Some((BP_EQ, BP_EQ + 1, Self::parse_binary))
             }
             // Comparison
@@ -73,7 +75,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Star) => BinOp::Mul,
             Some(TokenKind::Slash) => BinOp::Div,
             Some(TokenKind::Percent) => BinOp::Mod,
-            Some(TokenKind::Eq) => BinOp::Eq,
+            Some(TokenKind::EqEq) => BinOp::Eq,
             Some(TokenKind::Neq) => BinOp::Neq,
             Some(TokenKind::Lt) => BinOp::Lt,
             Some(TokenKind::Le) => BinOp::Le,
@@ -81,6 +83,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Ge) => BinOp::Ge,
             Some(TokenKind::And) => BinOp::And,
             Some(TokenKind::Or) => BinOp::Or,
+            Some(TokenKind::DotDot) => BinOp::Range,
             _ => {
                 self.error(super::ParseError::InvalidExpression);
                 return None;
@@ -135,12 +138,12 @@ impl<'a> ParserState<'a> {
                     }
                 };
 
-                // Peek ahead to see if next token is colon (named arg)
+                // Peek ahead to see if next token is '=' (named arg)
                 if let Some(next) = self.peek() {
-                    if matches!(next.kind, TokenKind::Colon) {
+                    if matches!(next.kind, TokenKind::Eq) {
                         // Named argument
                         self.bump(); // consume identifier
-                        self.bump(); // consume ':'
+                        self.bump(); // consume '='
 
                         let value = self.parse_expression(BP_LOWEST)?;
                         args.push(Expr::BinOp {

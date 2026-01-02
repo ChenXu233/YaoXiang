@@ -3,7 +3,7 @@
 use super::state::*;
 use super::ast::*;
 use super::super::lexer::tokens::*;
-
+use crate::util::span::Span;
 /// Extension trait for prefix parsing
 pub trait PrefixParser {
     /// Parse prefix expression at current position
@@ -29,6 +29,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => Some((BP_HIGHEST, Self::parse_identifier)),
             // Grouped expression or tuple
             Some(TokenKind::LParen) => Some((BP_HIGHEST, Self::parse_group_or_tuple)),
+            // List literal
+            Some(TokenKind::LBracket) => Some((BP_HIGHEST, Self::parse_list_literal)),
             // Block expression
             Some(TokenKind::LBrace) => Some((BP_HIGHEST, Self::parse_block)),
             // If expression
@@ -39,8 +41,6 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwWhile) => Some((BP_HIGHEST, Self::parse_while)),
             // For expression
             Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
-            // Lambda expression
-            Some(TokenKind::Pipe) => Some((BP_HIGHEST, Self::parse_lambda)),
             _ => None,
         }
     }
@@ -139,6 +139,10 @@ impl<'a> ParserState<'a> {
 
         // Empty tuple: ()
         if self.skip(&TokenKind::RParen) {
+            // Check for lambda: () => body
+            if self.at(&TokenKind::FatArrow) {
+                return self.parse_lambda_body(vec![], start_span);
+            }
             return Some(Expr::Tuple(vec![], start_span));
         }
 
@@ -146,25 +150,112 @@ impl<'a> ParserState<'a> {
         let first = self.parse_expression(BP_LOWEST)?;
 
         // Tuple with multiple elements: (a, b, c)
+        let mut elements = vec![first];
         if self.skip(&TokenKind::Comma) {
-            let mut elements = vec![first];
             while !self.at(&TokenKind::RParen) && !self.at_end() {
                 elements.push(self.parse_expression(BP_LOWEST)?);
                 if !self.skip(&TokenKind::Comma) {
                     break;
                 }
             }
-            if !self.expect(&TokenKind::RParen) {
-                return None;
+        }
+
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Check for lambda: (params) => body
+        if self.at(&TokenKind::FatArrow) {
+            // Convert expressions to params
+            let mut params = Vec::new();
+            for expr in elements {
+                // We only support simple identifiers as params for now in this syntax
+                // TODO: Support type annotations in lambda params if needed, e.g. (x: Int) => ...
+                // But that would require parsing as Type or special handling.
+                // For now, assume untyped params or simple identifiers.
+                match expr {
+                    Expr::Var(name, span) => {
+                        params.push(Param {
+                            name,
+                            ty: None,
+                            span,
+                        });
+                    }
+                    _ => {
+                        // Invalid lambda parameter
+                        self.error(super::ParseError::InvalidExpression);
+                        return None;
+                    }
+                }
             }
+            return self.parse_lambda_body(params, start_span);
+        }
+
+        // If multiple elements, it's a tuple
+        if elements.len() > 1 {
             return Some(Expr::Tuple(elements, start_span));
         }
 
         // Just grouped expression: (expr)
-        if !self.expect(&TokenKind::RParen) {
+        Some(elements.into_iter().next().unwrap())
+    }
+
+    /// Parse list literal: [expr, expr, ...]
+    fn parse_list_literal(&mut self) -> Option<Expr> {
+        let start_span = self.span();
+        self.bump(); // consume '['
+
+        let mut elements = Vec::new();
+        while !self.at(&TokenKind::RBracket) && !self.at_end() {
+            elements.push(self.parse_expression(BP_LOWEST)?);
+            if !self.skip(&TokenKind::Comma) {
+                break;
+            }
+        }
+
+        if !self.expect(&TokenKind::RBracket) {
             return None;
         }
-        Some(first)
+
+        Some(Expr::List(elements, start_span))
+    }
+
+    fn parse_lambda_body(&mut self, params: Vec<Param>, span: Span) -> Option<Expr> {
+        self.bump(); // consume '=>'
+
+        // Lambda body can be a block or single expression
+        let body = if self.at(&TokenKind::LBrace) {
+            // We need to parse block expression but return Block struct
+            // parse_block returns Expr::Block
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let (stmts, expr) = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            Block {
+                stmts,
+                expr,
+                span: self.span(),
+            }
+        } else {
+            let expr = self.parse_expression(BP_LOWEST)?;
+            Block {
+                stmts: vec![],
+                expr: Some(Box::new(expr)),
+                span: self.span(),
+            }
+        };
+
+        Some(Expr::FnDef {
+            name: String::new(), // Anonymous function
+            params,
+            return_type: None,
+            body: Box::new(body),
+            is_async: false,
+            span,
+        })
     }
 
     /// Parse block expression
@@ -512,87 +603,6 @@ impl<'a> ParserState<'a> {
         } else {
             None
         }
-    }
-
-    /// Parse lambda expression
-    fn parse_lambda(&mut self) -> Option<Expr> {
-        let start_span = self.span();
-        self.bump(); // consume '|'
-
-        let params = self.parse_lambda_params()?;
-
-        if !self.expect(&TokenKind::FatArrow) {
-            return None;
-        }
-
-        // Lambda body can be a block or single expression
-        let body = if self.at(&TokenKind::LBrace) {
-            self.parse_block_expression()?
-        } else {
-            let expr = self.parse_expression(BP_LOWEST)?;
-            Block {
-                stmts: vec![],
-                expr: Some(Box::new(expr)),
-                span: self.span(),
-            }
-        };
-
-        Some(Expr::FnDef {
-            name: String::new(), // Anonymous function
-            params,
-            return_type: None,
-            body: Box::new(body),
-            is_async: false,
-            span: start_span,
-        })
-    }
-
-    /// Parse lambda parameters
-    fn parse_lambda_params(&mut self) -> Option<Vec<Param>> {
-        // Empty params: || expr
-        if self.at(&TokenKind::FatArrow) {
-            return Some(vec![]);
-        }
-
-        if self.at(&TokenKind::Pipe) {
-            return Some(vec![]);
-        }
-
-        let mut params = Vec::new();
-
-        while !self.at(&TokenKind::Pipe) && !self.at_end() {
-            // Skip leading comma
-            if !params.is_empty() {
-                if !self.expect(&TokenKind::Comma) {
-                    return None;
-                }
-            }
-
-            let param_span = self.span();
-            let name = match self.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => n.clone(),
-                _ => break,
-            };
-            self.bump();
-
-            // Optional type annotation
-            let ty = if self.skip(&TokenKind::Colon) {
-                self.parse_type()
-            } else {
-                None
-            };
-
-            params.push(Param {
-                name,
-                ty,
-                span: param_span,
-            });
-        }
-
-        if !self.expect(&TokenKind::Pipe) {
-            return None;
-        }
-        Some(params)
     }
 
     /// Parse a block and return it as an expression

@@ -97,6 +97,7 @@ pub enum BinOp {
     Ge,
     And,
     Or,
+    Range,
     Assign,
 }
 
@@ -148,6 +149,14 @@ pub enum StmtKind {
     },
 }
 
+/// Variant constructor definition (for variant types)
+#[derive(Debug, Clone)]
+pub struct VariantDef {
+    pub name: String,
+    pub params: Vec<(Option<String>, Type)>,
+    pub span: Span,
+}
+
 /// Type
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -160,8 +169,14 @@ pub enum Type {
     Bool,
     Void,
     Struct(Vec<(String, Type)>),
+    NamedStruct {
+        name: String,
+        fields: Vec<(String, Type)>,
+    },
     Union(Vec<(String, Option<Type>)>),
     Enum(Vec<String>),
+    /// Variant type: `type Color = red | green | blue` or `type Result = ok(T) | err(E)`
+    Variant(Vec<VariantDef>),
     Tuple(Vec<Type>),
     List(Box<Type>),
     Dict(Box<Type>, Box<Type>),
@@ -176,6 +191,7 @@ pub enum Type {
         name: String,
         args: Vec<Type>,
     },
+    Sum(Vec<Type>),
 }
 
 /// Block

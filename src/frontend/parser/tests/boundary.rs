@@ -34,9 +34,12 @@ fn test_deeply_nested_blocks() {
 /// Test many function parameters
 #[test]
 fn test_many_params() {
-    let expr = "fn foo(a, b, c, d, e, f, g, h, i, j) -> Int { 0 }";
+    let expr = "foo(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Int = (a, b, c, d, e, f, g, h, i, j) => { 0 }";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
+    if let Err(e) = &result {
+        println!("Parse error: {:?}", e);
+    }
     assert!(result.is_ok());
 }
 
@@ -108,7 +111,7 @@ fn test_complex_field_chain() {
 /// Test deeply nested lambdas
 #[test]
 fn test_deeply_nested_lambdas() {
-    let expr = "|x| => |y| => |z| => x + y + z";
+    let expr = "(x) => (y) => (z) => x + y + z";
     let tokens = tokenize(expr).unwrap();
     let result = parse_expression(&tokens);
     assert!(result.is_ok());
@@ -117,7 +120,7 @@ fn test_deeply_nested_lambdas() {
 /// Test lambda with many parameters
 #[test]
 fn test_lambda_many_params() {
-    let expr = "|a, b, c, d, e| => a + b + c + d + e";
+    let expr = "(a, b, c, d, e) => a + b + c + d + e";
     let tokens = tokenize(expr).unwrap();
     let result = parse_expression(&tokens);
     assert!(result.is_ok());
@@ -152,7 +155,7 @@ fn test_single_element_tuple() {
 /// Test type with tuple
 #[test]
 fn test_tuple_type() {
-    let expr = "let x: (Int, String, Bool) = (1, \"hello\", true);";
+    let expr = "x: (Int, String, Bool) = (1, \"hello\", true);";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
@@ -161,7 +164,7 @@ fn test_tuple_type() {
 /// Test optional type parameters
 #[test]
 fn test_optional_type_params() {
-    let expr = "fn foo(x: Int,) -> Int { x }";
+    let expr = "foo(Int,) -> Int = (x) => { x }";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
@@ -179,7 +182,7 @@ fn test_type_cast() {
 /// Test complex destructuring in let
 #[test]
 fn test_tuple_destructuring() {
-    let expr = "let (a, b, c) = (1, 2, 3);";
+    let expr = "(a, b, c) = (1, 2, 3);";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
@@ -242,7 +245,7 @@ fn test_block_trailing_expression() {
 /// Test named arguments in function call
 #[test]
 fn test_named_arguments() {
-    let expr = "foo(x: 1, y: 2, z: 3)";
+    let expr = "foo(x=1, y=2, z=3)";
     let tokens = tokenize(expr).unwrap();
     let result = parse_expression(&tokens);
     assert!(result.is_ok());
@@ -264,4 +267,138 @@ fn test_for_loop() {
     let tokens = tokenize(expr).unwrap();
     let result = parse_expression(&tokens);
     assert!(result.is_ok());
+}
+
+// === 类型定义测试 (Type Definition Tests) ===
+
+/// Test simple type definition without parameters -> Type::Name
+#[test]
+fn test_parse_simple_type_no_param() {
+    let code = "type Color = red";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}\nError: {:?}", code, result.err());
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test union type definition with two variants -> Type::Variant
+#[test]
+fn test_parse_union_type_two_variants() {
+    let code = "type Color = red | green";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test union type definition with three variants -> Type::Variant
+#[test]
+fn test_parse_union_type_three_variants() {
+    let code = "type Color = red | green | blue";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test struct type definition with parameters -> Type::Struct
+#[test]
+fn test_parse_struct_type_with_params() {
+    let code = "type Point = Point(x: Float, y: Float)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test generic union type definition
+#[test]
+fn test_parse_generic_union_type() {
+    let code = "type Result[T, E] = ok(T) | err(E)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test generic type with angle brackets
+#[test]
+fn test_parse_generic_type_with_angle_brackets() {
+    let code = "type Result<T, E> = ok(T) | err(E)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test single parameter constructor
+#[test]
+fn test_parse_single_param_constructor() {
+    let code = "type Box[T] = Box(value: T)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test type with builtin type parameter
+#[test]
+fn test_parse_type_with_builtin_type() {
+    let code = "type IntBox = Box(Int)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test type definition with semicolon
+#[test]
+fn test_parse_type_with_semicolon() {
+    let code = "type Color = red;";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test multiple type definitions
+#[test]
+fn test_parse_multiple_type_definitions() {
+    let code = "type Color = red | green | blue; type Point = Point(x: Float, y: Float)";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 2);
+}
+
+/// Test enum-like type definition
+#[test]
+fn test_parse_enum_like_type() {
+    let code = "type Day = Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
+}
+
+/// Test mixed constructor types (with and without params)
+#[test]
+fn test_parse_mixed_constructor_types() {
+    let code = "type Shape = circle(Float) | rect(Float, Float) | point";
+    let tokens = tokenize(code).unwrap();
+    let result = parse(&tokens);
+    assert!(result.is_ok(), "Failed to parse: {}", code);
+    let module = result.unwrap();
+    assert_eq!(module.items.len(), 1);
 }

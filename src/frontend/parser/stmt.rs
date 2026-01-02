@@ -89,6 +89,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse type definition: `type Name = Type;`
+    /// Supports:
+    /// - Simple type: `type Color = red`
+    /// - Union type: `type Color = red | green | blue`
+    /// - Generic union: `type Result[T, E] = ok(T) | err(E)`
+    /// - Struct type: `type Point = Point(x: Float, y: Float)`
     fn parse_type_stmt(&mut self, span: Span) -> Option<Stmt> {
         self.bump(); // consume 'type'
 
@@ -103,11 +108,14 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
+        // Parse generic parameters: type Result[T, E] = ...
+        let _generic_params = self.parse_type_generic_params()?;
+
         if !self.expect(&TokenKind::Eq) {
             return None;
         }
 
-        let definition = self.parse_type_anno()?;
+        let definition = self.parse_type_definition()?;
 
         self.skip(&TokenKind::Semicolon);
 
@@ -115,6 +123,190 @@ impl<'a> ParserState<'a> {
             kind: StmtKind::TypeDef { name, definition },
             span,
         })
+    }
+
+    /// Parse generic parameters for type definition: [T, E] or <T, E>
+    fn parse_type_generic_params(&mut self) -> Option<Vec<String>> {
+        let open = if self.at(&TokenKind::LBracket) {
+            self.bump();
+            TokenKind::RBracket
+        } else if self.at(&TokenKind::Lt) {
+            self.bump();
+            TokenKind::Gt
+        } else {
+            return Some(Vec::new());
+        };
+
+        let mut params = Vec::new();
+        while !self.at(&open) && !self.at_end() {
+            if let Some(TokenKind::Identifier(n)) = self.current().map(|t| &t.kind) {
+                params.push(n.clone());
+                self.bump();
+                self.skip(&TokenKind::Comma);
+            } else {
+                break;
+            }
+        }
+
+        if !self.expect(&open) {
+            return None;
+        }
+
+        Some(params)
+    }
+
+    /// Parse type definition (handles union types with |)
+    fn parse_type_definition(&mut self) -> Option<Type> {
+        let first_type = self.parse_type_anno()?;
+
+        if self.at(&TokenKind::Pipe) {
+            let mut types = vec![first_type];
+            while self.skip(&TokenKind::Pipe) {
+                types.push(self.parse_type_anno()?);
+            }
+
+            // Check if all types are variant-like (Name, Generic, or NamedStruct)
+            let all_variants = types.iter().all(|t| matches!(t, Type::Name(_) | Type::Generic { .. } | Type::NamedStruct { .. }));
+
+            if all_variants {
+                // Try to convert to VariantDef
+                let mut variants = Vec::new();
+                for ty in types.iter() {
+                     match ty {
+                        Type::Generic { name, args } => {
+                            let params = args.iter().map(|a| (None, a.clone())).collect();
+                            variants.push(VariantDef {
+                                name: name.clone(),
+                                params,
+                                span: self.span(),
+                            });
+                        }
+                        Type::NamedStruct { name, fields } => {
+                            let params = fields.iter().map(|(n, t)| (Some(n.clone()), t.clone())).collect();
+                            variants.push(VariantDef {
+                                name: name.clone(),
+                                params,
+                                span: self.span(),
+                            });
+                        }
+                        Type::Name(name) => {
+                            variants.push(VariantDef {
+                                name: name.clone(),
+                                params: Vec::new(),
+                                span: self.span(),
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                return Some(Type::Variant(variants));
+            } else {
+                // Otherwise return Sum type
+                return Some(Type::Sum(types));
+            }
+        }
+
+        Some(first_type)
+    }
+
+    /// Parse a constructor: `Name` or `Name(params)`
+    fn parse_constructor(&mut self) -> Option<VariantDef> {
+        let name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                self.error(super::ParseError::UnexpectedToken(
+                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                ));
+                return None;
+            }
+        };
+        self.bump();
+
+        // Check for constructor params: Point(x: Float, y: Float) or Box(Int)
+        let params = if self.at(&TokenKind::LParen) {
+            self.parse_constructor_params()?
+        } else {
+            Vec::new()
+        };
+
+        Some(VariantDef {
+            name,
+            params,
+            span: self.span(),
+        })
+    }
+
+    /// Parse constructor parameters: (x: Type, y: Type) or generic args: (Type1, Type2)
+    fn parse_constructor_params(&mut self) -> Option<Vec<(Option<String>, Type)>> {
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+
+        // Check if first element has a name (identifier followed by colon)
+        // or is just a type (identifier followed by comma or rparen)
+        let has_named_params = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(_)) => {
+                // Look ahead to see if next token is Colon
+                matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Colon))
+            }
+            _ => false,
+        };
+
+        let mut params = Vec::new();
+
+        if has_named_params {
+            // Parse named fields: (x: Type, y: Type)
+            while !self.at(&TokenKind::RParen) && !self.at_end() {
+                // Parse parameter name
+                let name = match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(n)) => n.clone(),
+                    _ => break,
+                };
+                self.bump();
+
+                // Expect colon
+                if !self.expect(&TokenKind::Colon) {
+                    return None;
+                }
+
+                // Parse parameter type
+                let ty = match self.parse_type_anno() {
+                    Some(t) => t,
+                    None => break,
+                };
+
+                params.push((Some(name), ty));
+
+                // Expect comma or RParen
+                if !self.skip(&TokenKind::Comma) {
+                    break;
+                }
+            }
+        } else {
+            // Parse type arguments: (Type1, Type2)
+            // These are generic type arguments without names (None for name)
+            while !self.at(&TokenKind::RParen) && !self.at_end() {
+                // Parse type
+                let ty = match self.parse_type_anno() {
+                    Some(t) => t,
+                    None => break,
+                };
+
+                // No name for type arguments
+                params.push((None, ty));
+
+                // Expect comma or RParen
+                if !self.skip(&TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        Some(params)
     }
 
     /// Parse module definition: `mod Name { ... }`
@@ -213,7 +405,7 @@ impl<'a> ParserState<'a> {
         while let Some(TokenKind::Identifier(n)) = self.current().map(|t| &t.kind) {
             parts.push(n.clone());
             self.bump();
-            if !self.skip(&TokenKind::ColonColon) {
+            if !self.skip(&TokenKind::Dot) {
                 break;
             }
         }
@@ -274,12 +466,12 @@ impl<'a> ParserState<'a> {
             }
 
             // Check what's after the RParen
-            let after_rparen = self.peek_nth(pos);
+            let after_rparen = self.peek_nth(pos + 1);
 
             // If after RParen comes -> or =, this is a function definition
             if matches!(after_rparen.map(|t| &t.kind), Some(TokenKind::Arrow) | Some(TokenKind::Eq)) {
                 // This is a function definition - parse as expression
-                return self.parse_expr_stmt(span);
+                return self.parse_fn_stmt(span);
             }
 
             // Otherwise, this is a function call or other expression
@@ -287,20 +479,21 @@ impl<'a> ParserState<'a> {
             return self.parse_expr_stmt(span);
         }
 
-        // Consume the identifier first
-        let name = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(n)) => n.clone(),
-            _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
-                ));
-                return None;
-            }
-        };
-        self.bump();
+        // Check if this is a variable declaration: name: type or name = expr
+        // We check next token (peek) because current is identifier
+        if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon) | Some(TokenKind::Eq)) {
+            // Consume the identifier first
+            let name = match self.current().map(|t| &t.kind) {
+                Some(TokenKind::Identifier(n)) => n.clone(),
+                _ => {
+                    self.error(super::ParseError::UnexpectedToken(
+                        self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    ));
+                    return None;
+                }
+            };
+            self.bump();
 
-        // After identifier, check for : or =
-        if self.at(&TokenKind::Colon) || self.at(&TokenKind::Eq) {
             // This is a variable declaration (without mut)
 
             // Optional type annotation
@@ -332,14 +525,7 @@ impl<'a> ParserState<'a> {
 
         // This is an expression starting with identifier
         // Parse the full expression starting with the identifier
-        let expr = self.parse_expression(BP_LOWEST)?;
-
-        self.skip(&TokenKind::Semicolon);
-
-        Some(Stmt {
-            kind: StmtKind::Expr(Box::new(expr)),
-            span,
-        })
+        self.parse_expr_stmt(span)
     }
 
     /// Parse function definition: `name(types) -> type = (params) => body`
@@ -401,7 +587,11 @@ impl<'a> ParserState<'a> {
             if !self.expect(&TokenKind::LBrace) {
                 return None;
             }
-            self.parse_block_body()?
+            let body = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            body
         } else {
             // Single expression body
             let expr = self.parse_expression(BP_LOWEST)?;
@@ -434,6 +624,11 @@ impl<'a> ParserState<'a> {
                 if !self.expect(&TokenKind::Comma) {
                     return None;
                 }
+            }
+
+            // Check for trailing comma
+            if self.at(&TokenKind::RParen) {
+                break;
             }
 
             let param_span = self.span();

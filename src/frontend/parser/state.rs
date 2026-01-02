@@ -19,6 +19,7 @@ const SYNC_POINTS: &[TokenKind] = &[
 /// Binding power levels for Pratt parser
 pub const BP_LOWEST: u8 = 0;
 pub const BP_ASSIGN: u8 = 10;
+pub const BP_RANGE: u8 = 15;
 pub const BP_OR: u8 = 20;
 pub const BP_AND: u8 = 30;
 pub const BP_EQ: u8 = 40;

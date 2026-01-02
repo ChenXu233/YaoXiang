@@ -234,7 +234,7 @@ fn test_parse_mut_var_statement() {
 /// Test parsing function definition
 #[test]
 fn test_parse_function_definition() {
-    let tokens = tokenize("fn add(a: Int, b: Int) -> Int { a + b }").unwrap();
+    let tokens = tokenize("add(Int, Int) -> Int = (a, b) => a + b").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
     let module = result.unwrap();
@@ -268,7 +268,7 @@ fn test_parse_match_expression() {
 /// Test parsing lambda expression
 #[test]
 fn test_parse_lambda() {
-    let tokens = tokenize("|x| => x + 1").unwrap();
+    let tokens = tokenize("(x) => x + 1").unwrap();
     let result = parse_expression(&tokens);
     assert!(result.is_ok());
 }
@@ -316,7 +316,7 @@ fn test_parse_continue() {
 /// Test parsing type definition
 #[test]
 fn test_parse_type_definition() {
-    let tokens = tokenize("type MyInt = Int;").unwrap();
+    let tokens = tokenize("type MyInt = int;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
@@ -324,7 +324,7 @@ fn test_parse_type_definition() {
 /// Test parsing type annotation
 #[test]
 fn test_parse_type_annotation() {
-    let tokens = tokenize("let x: Int<32> = 42;").unwrap();
+    let tokens = tokenize("x: int = 42;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
@@ -332,7 +332,7 @@ fn test_parse_type_annotation() {
 /// Test parsing generic type
 #[test]
 fn test_parse_generic_type() {
-    let tokens = tokenize("let list: List<Int> = [];").unwrap();
+    let tokens = tokenize("list: List<Int> = [];").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
@@ -340,7 +340,7 @@ fn test_parse_generic_type() {
 /// Test parsing function type
 #[test]
 fn test_parse_fn_type() {
-    let tokens = tokenize("let f: fn(Int) -> Int = |x| => x;").unwrap();
+    let tokens = tokenize("f: (Int) -> Int = (x) => x;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
@@ -368,7 +368,7 @@ fn test_parse_nested_parens() {
 /// Test parsing labeled break
 #[test]
 fn test_parse_labeled_break() {
-    let tokens = tokenize("::label break;").unwrap();
+    let tokens = tokenize("break ::label;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
@@ -376,15 +376,8 @@ fn test_parse_labeled_break() {
 /// Test parsing use statement
 #[test]
 fn test_parse_use() {
-    let tokens = tokenize("use std::io;").unwrap();
+    let tokens = tokenize("use std.io;").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }
 
-/// Test parsing module statement
-#[test]
-fn test_parse_module() {
-    let tokens = tokenize("mod foo { let x = 1; }").unwrap();
-    let result = parse(&tokens);
-    assert!(result.is_ok());
-}
