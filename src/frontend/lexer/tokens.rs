@@ -42,6 +42,7 @@ pub enum TokenKind {
     Slash,
     Percent,
     Eq,
+    EqEq,
     Neq,
     Lt,
     Le,
@@ -52,6 +53,7 @@ pub enum TokenKind {
     Not,
     ColonColon,
     DotDotDot,
+    DotDot,
 
     // Delimiters
     LParen,

@@ -203,6 +203,9 @@ mod tokenizer {
                     if self.peek() == Some(&'>') {
                         self.advance();
                         Some(self.make_token(TokenKind::FatArrow))
+                    } else if self.peek() == Some(&'=') {
+                        self.advance();
+                        Some(self.make_token(TokenKind::EqEq))
                     } else {
                         Some(self.make_token(TokenKind::Eq))
                     }
@@ -267,7 +270,7 @@ mod tokenizer {
                             self.advance();
                             Some(self.make_token(TokenKind::DotDotDot))
                         } else {
-                            Some(self.make_token(TokenKind::Dot))
+                            Some(self.make_token(TokenKind::DotDot))
                         }
                     } else {
                         Some(self.make_token(TokenKind::Dot))
@@ -643,7 +646,7 @@ mod tests {
             ("&&", TokenKind::And),
             ("||", TokenKind::Or),
             ("!", TokenKind::Not),
-            ("==", TokenKind::Eq),
+            ("==", TokenKind::EqEq),
         ];
         for (source, expected) in cases {
             let tokens = tokenize(source).unwrap();
