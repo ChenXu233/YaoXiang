@@ -68,9 +68,7 @@ x = 10
 x = 20                           # 编译错误！
 
 # 函数定义
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
 # 类型定义
 type Point = struct {
@@ -79,11 +77,11 @@ type Point = struct {
 }
 
 # 无感异步
-fn fetch_data(url: String) -> JSON spawn {
+fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-fn main() {
+main() -> Void = () => {
     data = fetch_data("https://api.example.com")
     # 自动等待，无需 await
     print(data.name)
@@ -111,15 +109,12 @@ x: Int = 42
 MyList: type = List(Int)
 
 # 函数是类型之间的映射
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
-# 模块是类型的组合
-mod Math {
-    pi: Float = 3.14159
-    fn sin(x: Float) -> Float { ... }
-}
+# 模块是类型的组合（使用文件作为模块）
+# Math.yx
+pi: Float = 3.14159
+sqrt(Float) -> Float = (x) => { ... }
 ```
 
 ### 2.2 数学抽象
@@ -155,13 +150,11 @@ YaoXiang 保证零成本抽象，即高层次的抽象不会带来运行时的�
 
 ```yaoxiang
 # 泛型展开（单态化）
-fn identity[T](x: T) -> T {
-    x
-}
+identity<T>(T) -> T = (x) => x
 
 # 使用
-int_val = identity(42)      # 展开为 fn identity_int(Int) -> Int
-str_val = identity("hello") # 展开为 fn identity_str(String) -> String
+int_val = identity(42)      # 展开为 identity(Int) -> Int
+str_val = identity("hello") # 展开为 identity(String) -> String
 
 # 编译后无额外开销
 ```
@@ -176,12 +169,10 @@ x = 42
 name = "YaoXiang"
 
 # 简洁的函数定义
-fn greet(name: String) -> String {
-    "Hello, " + name
-}
+greet(String) -> String = (name) => "Hello, " + name
 
 # 模式匹配
-fn classify(n: Int) -> String {
+classify(Int) -> String = (n) => {
     match n {
         0 -> "zero"
         1 -> "one"
@@ -284,7 +275,7 @@ type Pair[T, U] = struct {
 type Number = Int | Float
 
 # 类型反射
-fn describe_type(t: type) -> String {
+describe_type(type) -> String = (t) => {
     match t {
         struct { fields } -> "Struct with " + fields.length + " fields"
         union { variants } -> "Union with " + variants.length + " variants"
@@ -304,12 +295,10 @@ y = 3.14                  # 推断为 Float
 z = "hello"               # 推断为 String
 
 # 函数返回值推断
-fn add(a: Int, b: Int) {
-    a + b                 # 推断返回类型为 Int
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
 # 泛型推断
-fn first[T](list: List[T]) -> option[T] {
+first<T>(List[T]) -> Option[T] = (list) => {
     if list.length > 0 { some(list[0]) } else { none }
 }
 ```
@@ -324,42 +313,38 @@ YaoXiang 采用 Rust 风格的所有权模型：
 
 ```yaoxiang
 # 默认不可变引用
-fn process(data: ref Data) {
+process(ref Data) -> Void = (data) => {
     # data 是只读的
     # 不能修改 data 的字段
     # 不能转移 data 的所有权
 }
 
 # 可变引用
-fn modify(data: mut Data) {
+modify(mut Data) -> Void = (data) => {
     # 可以修改 data 的字段
     # 不能有其他活跃的引用
 }
 
 # 转移所有权
-fn consume(data: Data) {
+consume(Data) -> Void = (data) => {
     # data 的所有权转移进来
     # 函数结束后 data 被销毁
 }
 
 # 借用返回
-fn borrow_field(data: ref Data) -> ref Field {
-    ref data.field
-}
+borrow_field(ref Data) -> ref Field = (data) => ref data.field
 ```
 
 ### 4.2 生命周期
 
 ```yaoxiang
 # 显式生命周期标注（复杂情况）
-fn longest<'a>(s1: &'a str, s2: &'a str) -> &'a str {
+longest<'a>(&'a str, &'a str) -> &'a str = (s1, s2) => {
     if s1.length > s2.length { s1 } else { s2 }
 }
 
 # 自动生命周期推断
-fn first[T](list: ref List[T]) -> ref T {
-    ref list[0]
-}
+first<T>(ref List[T]) -> ref T = (list) => ref list[0]
 ```
 
 ### 4.3 智能指针
@@ -379,7 +364,7 @@ thread_safe: Arc[Data] = Arc.new(data)
 
 ```yaoxiang
 # RAII 自动释放
-fn with_file(path: String) -> String {
+with_file(String) -> String = (path) => {
     file = File.open(path)  # 自动打开
     content = file.read_all()
     # 函数结束，file 自动关闭
@@ -397,12 +382,12 @@ YaoXiang 采用了创新的**无感异步**机制：
 
 ```yaoxiang
 # 使用 spawn 标记异步函数
-fn fetch_api(url: String) -> JSON spawn {
+fetch_api(String) -> JSON spawn = (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
-fn calculate-heavy(n: Int) -> Int spawn {
+calculate_heavy(Int) -> Int spawn = (n) => {
     result = 0
     for i in 0..n {
         result += i

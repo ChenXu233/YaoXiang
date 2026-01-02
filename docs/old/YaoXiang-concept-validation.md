@@ -508,30 +508,29 @@ fn parallel_example() {
 
 ## 6. 语法设计
 
-### 6.1 关键字（18个）
+### 6.1 关键字（17个）
 
-YaoXiang 共定义 18 个关键字，这些关键字是保留的，不能用作标识符。
+YaoXiang 共定义 17 个关键字，这些关键字是保留的，不能用作标识符。
 
 | # | 关键字 | 作用 | 示例 |
 |---|--------|------|------|
 | 1 | `type` | 类型定义 | `type Point = struct { x: Int, y: Int }` |
-| 2 | `fn` | 函数定义 | `fn add(a, b) -> a + b` |
-| 3 | `pub` | 公共导出 | `pub fn main() { ... }` |
-| 4 | `use` | 导入模块 | `use std.io` |
-| 5 | `spawn` | 异步标记 | `fn fetch() -> T spawn { ... }` |
-| 6 | `ref` | 不可变引用 | `fn foo(x: ref T) { ... }` |
-| 7 | `mut` | 可变引用 | `fn bar(x: mut T) { ... }` |
-| 8 | `if` | 条件分支 | `if x > 0 { ... }` |
-| 9 | `elif` | 多重条件 | `elif x == 0 { ... }` |
-| 10 | `else` | 默认分支 | `else { ... }` |
-| 11 | `match` | 模式匹配 | `match x { 0 -> "zero" }` |
-| 12 | `while` | 条件循环 | `while i < 10 { ... }` |
-| 13 | `for` | 迭代循环 | `for item in items { ... }` |
-| 14 | `return` | 返回值 | `return result` |
-| 15 | `break` | 跳出循环 | `break` |
-| 16 | `continue` | 继续循环 | `continue` |
-| 17 | `as` | 类型转换 | `x as Float` |
-| 18 | `in` | 包含关系-成员检测 | `if x in [1, 2, 3] { ... }` |
+| 2 | `pub` | 公共导出 | `pub fn main() { ... }` |
+| 3 | `use` | 导入模块 | `use std.io` |
+| 4 | `spawn` | 异步标记 | `fn fetch() -> T spawn { ... }` |
+| 5 | `ref` | 不可变引用 | `fn foo(x: ref T) { ... }` |
+| 6 | `mut` | 可变引用 | `fn bar(x: mut T) { ... }` |
+| 7 | `if` | 条件分支 | `if x > 0 { ... }` |
+| 8 | `elif` | 多重条件 | `elif x == 0 { ... }` |
+| 9 | `else` | 默认分支 | `else { ... }` |
+| 10 | `match` | 模式匹配 | `match x { 0 -> "zero" }` |
+| 11 | `while` | 条件循环 | `while i < 10 { ... }` |
+| 12 | `for` | 迭代循环 | `for item in items { ... }` |
+| 13 | `return` | 返回值 | `return result` |
+| 14 | `break` | 跳出循环 | `break` |
+| 15 | `continue` | 继续循环 | `continue` |
+| 16 | `as` | 类型转换 | `x as Float` |
+| 17 | `in` | 包含关系-成员检测 | `if x in [1, 2, 3] { ... }` |
 
 **无限循环替代方案：**
 

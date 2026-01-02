@@ -126,6 +126,13 @@ pub enum StmtKind {
         initializer: Option<Box<Expr>>,
         is_mut: bool,
     },
+    /// For loop: `for item in iterable { body }`
+    For {
+        var: String,
+        iterable: Box<Expr>,
+        body: Box<Block>,
+        label: Option<String>,
+    },
     TypeDef {
         name: String,
         definition: Type,

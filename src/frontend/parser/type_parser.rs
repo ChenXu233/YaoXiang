@@ -17,9 +17,7 @@ impl<'a> ParserState<'a> {
         let start_span = self.span();
 
         match self.current().map(|t| &t.kind) {
-            // Function type: fn(params) -> return_type
-            Some(TokenKind::KwFn) => self.parse_fn_type(start_span),
-            // Parenthesized type or tuple type: (Type1, Type2)
+            // Function type: (param_types) -> return_type (using parentheses without fn keyword)
             Some(TokenKind::LParen) => self.parse_tuple_or_parens_type(start_span),
             // List type: [Type]
             Some(TokenKind::LBracket) => self.parse_list_type(start_span),
@@ -215,7 +213,7 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse a list of types (for function parameters)
-    fn parse_type_list(&mut self) -> Option<Vec<Type>> {
+    pub(crate) fn parse_type_list(&mut self) -> Option<Vec<Type>> {
         let mut types = Vec::new();
 
         while !self.at(&TokenKind::RParen) && !self.at_end() {

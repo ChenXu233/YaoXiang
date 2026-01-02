@@ -5,7 +5,6 @@ use crate::util::span::Span;
 
 /// Synchronization points for error recovery
 const SYNC_POINTS: &[TokenKind] = &[
-    TokenKind::KwFn,
     TokenKind::KwMut,
     TokenKind::KwType,
     TokenKind::KwUse,
@@ -82,6 +81,12 @@ impl<'a> ParserState<'a> {
     #[inline]
     pub fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos + 1)
+    }
+
+    /// Peek at nth token ahead
+    #[inline]
+    pub fn peek_nth(&self, n: usize) -> Option<&Token> {
+        self.tokens.get(self.pos + n)
     }
 
     /// Advance to next token
@@ -198,7 +203,6 @@ impl<'a> ParserState<'a> {
             || matches!(
                 self.current().map(|t| &t.kind),
                 Some(TokenKind::KwMut)
-                    | Some(TokenKind::KwFn)
                     | Some(TokenKind::KwType)
                     | Some(TokenKind::KwUse)
                     | Some(TokenKind::KwIf)
@@ -209,7 +213,7 @@ impl<'a> ParserState<'a> {
                     | Some(TokenKind::KwBreak)
                     | Some(TokenKind::KwContinue)
                     | Some(TokenKind::LBrace)
-                    // Identifier can start variable declaration (without mut)
+                    // Identifier can start variable/function declaration
                     | Some(TokenKind::Identifier(_))
             )
     }

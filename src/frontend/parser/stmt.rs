@@ -16,21 +16,22 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwType) => self.parse_type_stmt(start_span),
             // use import
             Some(TokenKind::KwUse) => self.parse_use_stmt(start_span),
-            // function definition
-            Some(TokenKind::KwFn) => self.parse_fn_stmt(start_span),
             // return statement
             Some(TokenKind::KwReturn) => self.parse_return_stmt(start_span),
             // break statement
             Some(TokenKind::KwBreak) => self.parse_break_stmt(start_span),
             // continue statement
             Some(TokenKind::KwContinue) => self.parse_continue_stmt(start_span),
+            // for loop
+            Some(TokenKind::KwFor) => self.parse_for_stmt(start_span),
             // block as statement
             Some(TokenKind::LBrace) => self.parse_block_stmt(start_span),
             // variable declaration: [mut] identifier [: type] [= expr]
             Some(TokenKind::KwMut) => self.parse_var_stmt(start_span),
             Some(TokenKind::Identifier(_)) => {
-                // Check if this might be a variable declaration: identifier followed by : or =
-                self.parse_var_or_expr_stmt(start_span)
+                // Check if this is a function definition: name(types) -> type = (params) => body
+                // Or a simple assignment/expression: name = expr or just name expr
+                self.parse_identifier_stmt(start_span)
             }
             // expression statement
             Some(_) => self.parse_expr_stmt(start_span),
@@ -85,61 +86,6 @@ impl<'a> ParserState<'a> {
             },
             span,
         })
-    }
-
-    /// Try to parse as variable declaration, fall back to expression
-    fn parse_var_or_expr_stmt(&mut self, span: Span) -> Option<Stmt> {
-        let start_span = self.span();
-        let name = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(n)) => n.clone(),
-            _ => return self.parse_expr_stmt(start_span),
-        };
-
-        // Peek ahead to check if this looks like a variable declaration
-        // Pattern: identifier followed by : or =
-        // We need to check the next non-whitespace token
-        self.bump(); // consume identifier
-
-        // Check next token for : or =
-        let next_is_decl = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Colon) | Some(TokenKind::Eq) => true,
-            _ => false,
-        };
-
-        if next_is_decl {
-            // This is a variable declaration without 'mut'
-            // We're at : or =, need to backtrack and call parse_var_stmt
-            // But since we've already consumed the identifier, we need to handle this differently
-
-            // For simplicity, reconstruct the logic here
-            let type_annotation = if self.skip(&TokenKind::Colon) {
-                self.parse_type_anno()
-            } else {
-                None
-            };
-
-            let initializer = if self.skip(&TokenKind::Eq) {
-                Some(Box::new(self.parse_expression(BP_LOWEST)?))
-            } else {
-                None
-            };
-
-            self.skip(&TokenKind::Semicolon);
-
-            return Some(Stmt {
-                kind: StmtKind::Var {
-                    name,
-                    type_annotation,
-                    initializer,
-                    is_mut: false,
-                },
-                span,
-            });
-        }
-
-        // Not a variable declaration, parse as expression
-        // Put the identifier back and parse as expression
-        self.parse_expr_stmt(start_span)
     }
 
     /// Parse type definition: `type Name = Type;`
@@ -282,12 +228,66 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// Parse function definition
-    fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
-        if !self.expect(&TokenKind::KwFn) {
-            return None;
+    /// Parse statement starting with identifier: function definition or expression
+    fn parse_identifier_stmt(&mut self, span: Span) -> Option<Stmt> {
+        // Look ahead to determine what kind of statement this is
+        // 1. Function definition: name(types) -> type = (params) => body
+        // 2. Variable declaration: name[: type] [= expr]
+        // 3. Expression statement: name expr...
+
+        // Use peek_nth to look ahead without consuming tokens
+        let next = self.peek();
+
+        // Check for potential function definition: identifier followed by LParen
+        if matches!(next.map(|t| &t.kind), Some(TokenKind::LParen)) {
+            // Look ahead to find matching RParen, then check what's after it
+            // For function definition: name(types) -> type = ...
+            // For function call: name(args) ...
+
+            // Count depth to find matching RParen
+            let mut depth = 1;
+            let mut pos = 2; // Start after identifier and LParen
+
+            while depth > 0 {
+                match self.peek_nth(pos).map(|t| &t.kind) {
+                    Some(TokenKind::LParen) => {
+                        depth += 1;
+                        pos += 1;
+                    }
+                    Some(TokenKind::RParen) => {
+                        depth -= 1;
+                        if depth > 0 {
+                            pos += 1;
+                        }
+                    }
+                    Some(TokenKind::Comma) => {
+                        pos += 1;
+                    }
+                    Some(_) => {
+                        pos += 1;
+                    }
+                    None => {
+                        // Reached end of tokens
+                        break;
+                    }
+                }
+            }
+
+            // Check what's after the RParen
+            let after_rparen = self.peek_nth(pos);
+
+            // If after RParen comes -> or =, this is a function definition
+            if matches!(after_rparen.map(|t| &t.kind), Some(TokenKind::Arrow) | Some(TokenKind::Eq)) {
+                // This is a function definition - parse as expression
+                return self.parse_expr_stmt(span);
+            }
+
+            // Otherwise, this is a function call or other expression
+            // Just parse as expression (the Pratt parser will handle it)
+            return self.parse_expr_stmt(span);
         }
 
+        // Consume the identifier first
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
@@ -299,7 +299,89 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
-        // Parse function parameters
+        // After identifier, check for : or =
+        if self.at(&TokenKind::Colon) || self.at(&TokenKind::Eq) {
+            // This is a variable declaration (without mut)
+
+            // Optional type annotation
+            let type_annotation = if self.skip(&TokenKind::Colon) {
+                self.parse_type_anno()
+            } else {
+                None
+            };
+
+            // Optional initializer
+            let initializer = if self.skip(&TokenKind::Eq) {
+                Some(Box::new(self.parse_expression(BP_LOWEST)?))
+            } else {
+                None
+            };
+
+            self.skip(&TokenKind::Semicolon);
+
+            return Some(Stmt {
+                kind: StmtKind::Var {
+                    name,
+                    type_annotation,
+                    initializer,
+                    is_mut: false,
+                },
+                span,
+            });
+        }
+
+        // This is an expression starting with identifier
+        // Parse the full expression starting with the identifier
+        let expr = self.parse_expression(BP_LOWEST)?;
+
+        self.skip(&TokenKind::Semicolon);
+
+        Some(Stmt {
+            kind: StmtKind::Expr(Box::new(expr)),
+            span,
+        })
+    }
+
+    /// Parse function definition: `name(types) -> type = (params) => body`
+    /// Example: `add(Int, Int) -> Int = (a, b) => a + b`
+    fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
+        // Parse function name
+        let name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                self.error(super::ParseError::UnexpectedToken(
+                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                ));
+                return None;
+            }
+        };
+        self.bump();
+
+        // Parse parameter types in parentheses: (Int, String)
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+        let _param_types = self.parse_type_list()?;
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Parse return type: -> ReturnType
+        let return_type = if self.skip(&TokenKind::Arrow) {
+            self.parse_type_anno()
+        } else {
+            None
+        };
+
+        // Expect equals sign
+        if !self.skip(&TokenKind::Eq) {
+            self.error(super::ParseError::UnexpectedToken(
+                self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+            ));
+            return None;
+        }
+
+        // Parse implementation: (params) => body
         if !self.expect(&TokenKind::LParen) {
             return None;
         }
@@ -308,21 +390,23 @@ impl<'a> ParserState<'a> {
             return None;
         }
 
-        // Parse return type
-        let return_type = if self.skip(&TokenKind::Arrow) {
-            self.parse_type_anno()
-        } else {
-            None
-        };
+        // Expect fat arrow
+        if !self.expect(&TokenKind::FatArrow) {
+            return None;
+        }
 
-        // Parse function body
-        if !self.expect(&TokenKind::LBrace) {
-            return None;
-        }
-        let (stmts, expr) = self.parse_block_body()?;
-        if !self.expect(&TokenKind::RBrace) {
-            return None;
-        }
+        // Parse body (expression or block)
+        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+            // Block body
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            self.parse_block_body()?
+        } else {
+            // Single expression body
+            let expr = self.parse_expression(BP_LOWEST)?;
+            (Vec::new(), Some(Box::new(expr)))
+        };
 
         Some(Stmt {
             kind: StmtKind::Expr(Box::new(Expr::FnDef {
@@ -436,6 +520,57 @@ impl<'a> ParserState<'a> {
 
         Some(Stmt {
             kind: StmtKind::Expr(Box::new(Expr::Continue(label, span))),
+            span,
+        })
+    }
+
+    /// Parse for loop: `for item in iterable { body }`
+    fn parse_for_stmt(&mut self, span: Span) -> Option<Stmt> {
+        self.bump(); // consume 'for'
+
+        // Parse loop variable
+        let var = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                self.error(super::ParseError::UnexpectedToken(
+                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                ));
+                return None;
+            }
+        };
+        self.bump();
+
+        // Expect 'in' keyword
+        if !self.expect(&TokenKind::KwIn) {
+            return None;
+        }
+
+        // Parse iterable expression
+        let iterable = Box::new(self.parse_expression(BP_LOWEST)?);
+
+        // Parse body
+        let body = if self.at(&TokenKind::LBrace) {
+            self.parse_block_expression()
+        } else {
+            // Single expression as body - use a default span since Expr doesn't expose span directly
+            let expr = self.parse_expression(BP_LOWEST)?;
+            let span = self.span();
+            Some(Block {
+                stmts: Vec::new(),
+                expr: Some(Box::new(expr)),
+                span,
+            })
+        };
+
+        self.skip(&TokenKind::Semicolon);
+
+        Some(Stmt {
+            kind: StmtKind::For {
+                var,
+                iterable,
+                body: Box::new(body?),
+                label: None,
+            },
             span,
         })
     }

@@ -118,6 +118,21 @@ impl<'a> TypeChecker<'a> {
                 initializer,
                 is_mut: _,
             } => self.check_var(name, type_annotation.as_ref(), initializer.as_deref(), stmt.span),
+            ast::StmtKind::For { var, iterable, body, .. } => {
+                // 类型检查 for 循环
+                // 1. 推断 iterable 的类型（应该是可迭代的）
+                let _iter_ty = self.inferrer.infer_expr(iterable)?;
+
+                // 2. 在循环体中，var 的类型取决于 iterable 的元素类型
+                // 暂时添加一个类型变量
+                let var_ty = self.inferrer.solver().new_var();
+                let poly = PolyType::mono(var_ty);
+                self.inferrer.add_var(var.clone(), poly);
+
+                // 3. 类型检查循环体
+                let _body_ty = self.inferrer.infer_block(body)?;
+                Ok(())
+            }
             ast::StmtKind::TypeDef { name, definition } => {
                 self.check_type_def(name, definition, stmt.span)
             }

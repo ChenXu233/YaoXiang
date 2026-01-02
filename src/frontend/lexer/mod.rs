@@ -552,7 +552,6 @@ mod tokenizer {
         fn keyword_from_str(&self, s: &str) -> Option<TokenKind> {
             match s {
                 "type" => Some(TokenKind::KwType),
-                "fn" => Some(TokenKind::KwFn),
                 "pub" => Some(TokenKind::KwPub),
                 "use" => Some(TokenKind::KwUse),
                 "spawn" => Some(TokenKind::KwSpawn),
@@ -593,7 +592,6 @@ mod tests {
     fn test_keywords() {
         let cases = [
             ("type", TokenKind::KwType),
-            ("fn", TokenKind::KwFn),
             ("pub", TokenKind::KwPub),
             ("use", TokenKind::KwUse),
             ("spawn", TokenKind::KwSpawn),
