@@ -182,6 +182,11 @@ impl From<ast::Type> for MonoType {
                 name: String::new(),
                 variants,
             }),
+            // New variant type: `type Color = red | green | blue`
+            ast::Type::Variant(variants) => MonoType::Enum(EnumType {
+                name: String::new(),
+                variants: variants.into_iter().map(|v| v.name).collect(),
+            }),
             ast::Type::Tuple(types) => MonoType::Tuple(types.into_iter().map(MonoType::from).collect()),
             ast::Type::List(t) => MonoType::List(Box::new(MonoType::from(*t))),
             ast::Type::Dict(k, v) => MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v))),
@@ -208,6 +213,21 @@ impl From<ast::Type> for MonoType {
                     "{}<{}>",
                     name,
                     args.iter().map(|t| MonoType::from(t.clone()).type_name()).collect::<Vec<_>>().join(", ")
+                ))
+            }
+            // NamedStruct and Sum types (placeholder implementations)
+            ast::Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
+                name,
+                fields: fields
+                    .into_iter()
+                    .map(|(n, t)| (n, MonoType::from(t)))
+                    .collect(),
+            }),
+            ast::Type::Sum(types) => {
+                // Sum type - treat as union for now
+                MonoType::TypeRef(format!(
+                    "({})",
+                    types.iter().map(|t| MonoType::from(t.clone()).type_name()).collect::<Vec<_>>().join(" | ")
                 ))
             }
         }

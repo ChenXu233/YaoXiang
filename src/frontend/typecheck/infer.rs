@@ -172,6 +172,15 @@ impl<'a> TypeInferrer<'a> {
                 self.solver.add_constraint(left_ty, right_ty, span);
                 Ok(MonoType::Void)
             }
+
+            // 范围运算
+            BinOp::Range => {
+                // 返回一个范围类型，暂时使用动态类型
+                let range_ty = self.solver.new_var();
+                self.solver.add_constraint(left_ty, range_ty.clone(), span);
+                self.solver.add_constraint(right_ty, range_ty.clone(), span);
+                Ok(range_ty)
+            }
         }
     }
 

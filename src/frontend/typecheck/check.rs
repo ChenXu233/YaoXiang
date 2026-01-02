@@ -109,8 +109,21 @@ impl<'a> TypeChecker<'a> {
     pub fn check_stmt(&mut self, stmt: &ast::Stmt) -> TypeResult<()> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
-                self.inferrer.infer_expr(expr)?;
-                Ok(())
+                if let ast::Expr::FnDef {
+                    name,
+                    params,
+                    return_type,
+                    body,
+                    is_async,
+                    span: _,
+                } = expr.as_ref()
+                {
+                    self.check_fn_def(name, params, return_type.as_ref(), body, *is_async)?;
+                    Ok(())
+                } else {
+                    self.inferrer.infer_expr(expr)?;
+                    Ok(())
+                }
             }
             ast::StmtKind::Var {
                 name,
@@ -423,6 +436,7 @@ pub fn binop_result_type(op: &ast::BinOp, left: &MonoType, right: &MonoType) -> 
             }
         }
         ast::BinOp::Assign => Some(MonoType::Void),
+        ast::BinOp::Range => None, // 范围运算暂时不支持类型检查
     }
 }
 
