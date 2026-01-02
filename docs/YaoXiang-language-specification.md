@@ -30,20 +30,20 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 | 类别 | 说明 | 示例 |
 |------|------|------|
 | 标识符 | 以字母或下划线开头 | `x`, `_private`, `my_var` |
-| 关键字 | 语言预定义保留词 | `fn`, `type`, `mod` |
+| 关键字 | 语言预定义保留词 | `type`, `pub`, `use` |
 | 字面量 | 固定值 | `42`, `"hello"`, `true` |
 | 运算符 | 运算符号 | `+`, `-`, `*`, `/` |
 | 分隔符 | 语法分隔符 | `(`, `)`, `{`, `}`, `,` |
 
 ### 2.3 关键字
 
-YaoXiang 共定义 18 个关键字：
+YaoXiang 共定义 17 个关键字：
 
 ```
-type   fn     pub    mod    use
-spawn  ref    mut    if     elif
+type   pub    use    spawn
+ref    mut    if     elif
 else   match  while  for    return
-break  continue as
+break  continue as     in
 ```
 
 ### 2.4 保留字
@@ -97,6 +97,49 @@ Unicode     ::= 'u' '{' HexDigit+ '}'
 List        ::= '[' Expr (',' Expr)* ']'
 Dict        ::= '{' String ':' Expr (',' String ':' Expr)* '}'
 Set         ::= '{' Expr (',' Expr)* '}'
+```
+
+#### 列表推导式
+
+`in` 关键字用于列表推导式，支持声明式的数据转换和过滤：
+
+```
+ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
+```
+
+```yaoxiang
+# 基本列表推导式
+evens = [x * 2 for x in 0..10]          # [0, 4, 8, 12, 16]
+
+# 带条件的列表推导式
+squares = [x * x for x in 1..10 if x % 2 == 1]  # [1, 9, 25, 49, 81]
+
+# 嵌套推导式
+matrix = [[i * j for j in 1..4] for i in 1..3]
+# [[1, 2, 3], [2, 4, 6], [3, 6, 9]]
+```
+
+#### 成员检测
+
+`in` 关键字用于检测值是否存在于集合中：
+
+```
+Membership  ::= Expr 'in' Expr
+```
+
+```yaoxiang
+# 成员检测
+if x in [1, 2, 3] {
+    print("x is in the list")
+}
+
+# 与条件表达式结合
+result = if name in ["Alice", "Bob"] { "known" } else { "unknown" }
+
+# 字典键检测
+if "key" in {"a": 1, "b": 2} {
+    print("key exists")
+}
 ```
 
 ### 2.7 注释
@@ -216,14 +259,17 @@ Triple = (Int, String, Bool)
 ### 3.7 函数类型
 
 ```
-FnType      ::= 'fn' '(' ParamList? ')' '->' TypeExpr
-ParamList   ::= Param (',' Param)*
-Param       ::= Identifier ':' TypeExpr
+FnType      ::= '(' ParamList? ')' '->' TypeExpr
+ParamList   ::= TypeExpr (',' TypeExpr)*
 ```
 
 ```yaoxiang
-type Adder = fn(Int, Int) -> Int
-type Callback = fn(T) -> Void
+# 函数类型
+type Adder = (Int, Int) -> Int
+type Callback = (T) -> Void
+
+# 函数类型作为值
+add: (Int, Int) -> Int = (a, b) => a + b
 ```
 
 ### 3.8 泛型类型
@@ -482,15 +528,24 @@ result = {
 }
 ```
 
-### 4.16 Lambda 表达式
+### 4.16 Lambda 表达式（箭头函数）
 
 ```
-Lambda      ::= 'fn' Params? ('->' TypeExpr)? Block
+Lambda      ::= '(' ParamList? ')' '->' Expr
+            |  '(' ParamList? ')' '->' Block
 ```
 
 ```yaoxiang
-double = fn(x: Int) -> Int { x * 2 }
-numbers.map(fn(x) { x * 2 })
+# 简单箭头函数
+double: (Int) -> Int = (x) => x * 2
+
+# 多行箭头函数
+add(Int, Int) -> Int = (a, b) => {
+    a + b
+}
+
+# 在高阶函数中使用
+numbers.map((x) => x * 2)
 ```
 
 ---
@@ -540,7 +595,7 @@ ReturnStmt  ::= 'return' Expr?
 ```
 
 ```yaoxiang
-fn add(a: Int, b: Int) -> Int {
+add(Int, Int) -> Int = (a, b) => {
     return a + b
 }
 ```
@@ -654,111 +709,90 @@ for key, value in {"a": 1, "b": 2} {
 ### 6.1 函数定义
 
 ```
-FunctionDef ::= 'fn' Identifier Params? ('->' TypeExpr)? Block
-Params      ::= '(' ParamList? ')'
-ParamList   ::= Param (',' Param)*
-Param       ::= Identifier (':' TypeExpr)?
+FunctionDef ::= Identifier GenericParams? '(' ParamTypes? ')' '->' TypeExpr '=' Lambda
+GenericParams::= '<' Identifier (',' Identifier)* '>'
+ParamTypes  ::= TypeExpr (',' TypeExpr)*
+Lambda      ::= '(' ParamNames? ')' '->' Expr
+            |  '(' ParamNames? ')' '->' Block
+ParamNames  ::= Identifier (',' Identifier)*
 ```
 
 ```yaoxiang
-fn greet(name: String) -> String {
-    "Hello, " + name
+# 基本函数
+greet(String) -> String = (name) => "Hello, " + name
+
+# 多参数函数
+add(Int, Int) -> Int = (a, b) => a + b
+
+# 泛型函数
+identity<T>(T) -> T = (x) => x
+
+# 多行函数
+fact(Int) -> Int = (n) => {
+    if n == 0 { 1 } else { n * fact(n - 1) }
 }
 
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+# 返回函数的函数
+adder(Int) -> (Int) -> Int = (x) => (y) => x + y
 
-fn identity[T](x: T) -> T {
-    x
-}
+# 使用
+add5: (Int) -> Int = adder(5)
+result = add5(3)  # 8
 ```
 
 ### 6.2 参数类型
 
 ```yaoxiang
 # 位置参数
-fn add(a: Int, b: Int) -> Int { a + b }
+add(Int, Int) -> Int = (a, b) => a + b
 
-# 命名参数
-fn create_point(x: Float, y: Float) -> Point {
-    Point(x, y)
-}
-pt = create_point(x: 3.0, y: 4.0)
+# 函数类型参数
+apply((Int) -> Int, Int) -> Int = (f, x) => f(x)
 
-# 默认参数值
-fn greet(name: String, formal: Bool = false) -> String {
-    if formal { "Good day, " + name } else { "Hi, " + name }
-}
-
-# 可变参数
-fn sum(numbers: [Int]) -> Int {
-    total = 0
-    for n in numbers { total += n }
-    total
-}
+# 泛型参数
+identity<T>(T) -> T = (x) => x
 ```
 
-### 6.3 泛型函数
+### 6.3 高阶函数
 
 ```yaoxiang
-fn first[T](list: List[T]) -> option[T] {
-    if list.length > 0 { some(list[0]) } else { none }
-}
+# 接受函数作为参数
+apply((T) -> U, T) -> U = (f, value) => f(value)
 
-fn pair[T, U](a: T, b: U) -> (T, U) {
-    (a, b)
-}
+# 返回函数
+create_multiplier(Int) -> (Int) -> Int = (factor) => (x) => x * factor
+
+# 使用
+double = create_multiplier(2)
+result = double(5)  # 10
 ```
 
-### 6.4 类型约束
+### 6.4 闭包
 
 ```yaoxiang
-fn max[T: Comparable](a: T, b: T) -> T {
-    if a > b { a } else { b }
-}
-
-fn process_items[T](items: [T]) where T: Printable {
-    for item in items { print(item) }
-}
-```
-
-### 6.5 高阶函数
-
-```yaoxiang
-fn apply[T, U](value: T, f: fn(T) -> U) -> U {
-    f(value)
-}
-
-fn create_multiplier(factor: Int) -> fn(Int) -> Int {
-    fn(x: Int) -> Int { x * factor }
-}
-```
-
-### 6.6 闭包
-
-```yaoxiang
-fn create_counter() -> fn() -> Int {
+# 捕获外部变量
+create_counter() -> () -> Int = () => {
     mut count = 0
-    fn() -> Int {
+    () => {
         count += 1
         count
     }
 }
 ```
 
-### 6.7 spawn 函数
+### 6.5 spawn 函数
 
 ```
-SpawnFn     ::= 'fn' Identifier Params? '->' TypeExpr 'spawn' Block
+SpawnFn     ::= Identifier Params? '->' TypeExpr 'spawn' Block
 ```
 
 ```yaoxiang
-fn fetch_data(url: String) -> JSON spawn {
+# 异步函数
+fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-fn main() {
+main() -> Void = () => {
     data = fetch_data("https://api.example.com")
     # 自动等待
     print(data)
@@ -771,18 +805,16 @@ fn main() {
 
 ### 7.1 模块定义
 
-```
-ModuleDef   ::= 'mod' Identifier '{' ModuleBody '}'
-ModuleBody  ::= (Import | FnDef | TypeDef | VarDecl)*
-```
+模块使用文件作为边界。每个 `.yx` 文件就是一个模块。
 
-```yaoxiang
-mod Math {
-    pub fn sqrt(x: Float) -> Float { ... }
-    pub pi = 3.14159
+```
+# 文件名即为模块名
+# Math.yx
+pub pi: Float = 3.14159
+pub sqrt(Float) -> Float = (x) => { ... }
 
-    fn internal_helper() { ... }
-}
+# internal_helper 不使用 pub，是模块私有的
+internal_helper() -> Void = () => { ... }
 ```
 
 ### 7.2 模块导入
@@ -799,26 +831,6 @@ use std.io
 use std.io as IO
 use std.io.{ read_file, write_file, File }
 use std.list as ListLib
-```
-
-### 7.3 重新导出
-
-```yaoxiang
-mod MyMath {
-    pub use std.math.{ sin, cos }
-}
-```
-
-### 7.4 可见性
-
-```yaoxiang
-mod MyModule {
-    pub fn public_function() { ... }
-    fn private_function() { ... }
-
-    pub type PublicType = struct { ... }
-    type PrivateType = struct { ... }
-}
 ```
 
 ---
@@ -928,13 +940,14 @@ TypeDef ::= 'type' Identifier '=' TypeExpr
 ### A.2 函数定义
 
 ```
-FunctionDef ::= 'fn' Identifier Params? ('->' TypeExpr)? Block
+FunctionDef ::= Identifier GenericParams? '(' ParamTypes? ')' '->' TypeExpr '=' Lambda
 ```
 
 ### A.3 模块
 
 ```
-ModuleDef ::= 'mod' Identifier '{' ... '}'
+# 模块即文件
+# 文件名.yx 即为模块名
 Import ::= 'use' ModuleRef
 ```
 
@@ -945,7 +958,6 @@ if Expr Block (elif Expr Block)* (else Block)?
 match Expr { MatchArm+ }
 while Expr Block
 for Identifier in Expr Block
-loop Block
 ```
 
 ---

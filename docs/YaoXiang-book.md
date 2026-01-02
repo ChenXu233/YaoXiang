@@ -400,7 +400,7 @@ calculate_heavy(Int) -> Int spawn = (n) => {
 
 ```yaoxiang
 # 调用 spawn 函数的代码自动等待
-fn main() {
+main() -> Void = () => {
     # fetch_api 是异步的，但调用时自动等待
     data = fetch_api("https://api.example.com/data")
     # data 在这里已经就绪
@@ -419,7 +419,7 @@ fn main() {
 
 ```yaoxiang
 # 并行执行多个异步任务
-fn parallel_example() {
+parallel_example() -> Void = () => {
     tasks = [
         fetch_api("https://api1.com"),
         fetch_api("https://api2.com"),
@@ -444,12 +444,10 @@ fn parallel_example() {
 ### 6.1 模块定义
 
 ```yaoxiang
-mod Math {
-    pub fn sqrt(x: Float) -> Float { ... }
-    pub pi = 3.14159
-
-    fn internal_helper() { ... }  # 私有
-}
+# 模块使用文件作为边界
+# Math.yx 文件
+pub pi: Float = 3.14159
+pub sqrt(Float) -> Float = (x) => { ... }
 ```
 
 ### 6.2 模块导入
@@ -463,12 +461,6 @@ use std.io as IO
 
 # 导入具体函数
 use std.io.{ read_file, write_file }
-
-# 重新导出
-mod MyMath {
-    use std.math
-    pub use std.math.{ sin, cos }
-}
 ```
 
 ---
@@ -495,7 +487,7 @@ YaoXiang 的语法设计特别考虑了 AI 代码生成和修改的需求：
 # 禁止使用 Tab
 
 # 正确示例
-fn example() {
+example() -> Void = () => {
     if condition {
         do_something()
     } else {
@@ -504,7 +496,7 @@ fn example() {
 }
 
 # 错误示例（禁止）
-fn example() {
+example() -> Void = () => {
 if condition {    # 缩进不足
 do_something()
   }                 # 缩进不一致
@@ -515,7 +507,7 @@ do_something()
 
 ```yaoxiang
 # 函数定义 - 明确的开始和结束
-fn function_name(params) -> ReturnType {
+function_name(Params) -> ReturnType = (params) => {
     # 函数体
 }
 
@@ -536,12 +528,12 @@ type MyType = struct {
 ```yaoxiang
 # 禁止省略括号
 # 正确
-fn foo(x) { x }
+foo(T) -> T = (x) => x
 my_list = [1, 2, 3]
 
 # 错误（禁止）
-fn foo x { x }           # 函数参数必须有括号
-my_list = [1 2 3]        # 列表元素必须有逗号
+foo T { T }             # 函数参数必须有括号
+my_list = [1 2 3]       # 列表元素必须有逗号
 ```
 
 ---
@@ -554,7 +546,7 @@ my_list = [1 2 3]        # 列表元素必须有逗号
 # hello.yx
 use std.io
 
-fn main() {
+main() -> Void = () => {
     println("Hello, YaoXiang!")
 }
 ```
@@ -575,9 +567,7 @@ name = "YaoXiang"         # 自动推断为 String
 pi = 3.14159              # 自动推断为 Float
 
 # 函数
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
 # 条件
 if x > 0 {
@@ -609,9 +599,7 @@ for i in 0..10 {
 | 关键字 | 作用 |
 |--------|------|
 | `type` | 类型定义 |
-| `fn` | 函数定义 |
 | `pub` | 公共导出 |
-| `mod` | 模块定义 |
 | `use` | 导入模块 |
 | `spawn` | 异步标记 |
 | `ref` | 不可变引用 |
@@ -621,6 +609,7 @@ for i in 0..10 {
 | `while/for` | 循环 |
 | `return/break/continue` | 控制流 |
 | `as` | 类型转换 |
+| `in` | 成员访问 |
 
 ### B. 设计灵感
 

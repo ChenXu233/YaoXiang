@@ -91,16 +91,13 @@ MyList: type = List(Int)
 # MyList 是 type（元类型）的实例
 
 # 函数是类型之间的映射
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 # add 是 (Int, Int) -> Int 类型的实例
 
-# 模块是类型的组合
-mod Math {
-    pi: Float = 3.14159
-    fn sin(x: Float) -> Float { ... }
-}
+# 模块是类型的组合（使用文件作为模块）
+# Math.yx
+pi: Float = 3.14159
+sqrt(Float) -> Float = (x) => { ... }
 # Math 模块是一种命名空间类型
 ```
 
@@ -125,9 +122,7 @@ mod Math {
 # 运行时类型信息按需加载
 
 # 零成本抽象保证
-fn identity[T](x: T) -> T {
-    x
-}
+identity<T>(T) -> T = (x) => x
 # 编译为直接返回，无额外开销
 
 # 类型层面的优化
@@ -158,11 +153,11 @@ type Nat = struct { n: Int }
 # 函数调用时，编译器自动检测异步依赖
 # 并插入适当的同步屏障
 
-fn fetch_user(id: Int) -> User spawn {
+fetch_user(Int) -> User spawn = (id) => {
     database.query("SELECT * FROM users WHERE id = ?", id)
 }
 
-fn display_user(id: Int) -> String {
+display_user(Int) -> String = (id) => {
     user = fetch_user(id)  # 自动等待结果
     "User: " + user.name   # 确保user已就绪
 }
@@ -349,47 +344,38 @@ fn safe_cast[T, U](value: T, target: type) -> option[U] {
 
 ```yaoxiang
 # 默认不可变引用
-fn process(data: ref Data) {
+process(ref Data) -> Void = (data) => {
     # data 是只读的
     # 不能修改 data 的字段
     # 不能转移 data 的所有权
 }
 
 # 可变引用
-fn modify(data: mut Data) {
+modify(mut Data) -> Void = (data) => {
     # 可以修改 data 的字段
     # 不能有其他活跃的引用
 }
 
 # 转移所有权
-fn consume(data: Data) {
+consume(Data) -> Void = (data) => {
     # data 的所有权转移进来
     # 函数结束后 data 被销毁
 }
 
 # 借用返回
-fn borrow_field(data: ref Data) -> ref Field {
-    # 返回引用，不转移所有权
-    ref data.field
-}
+borrow_field(ref Data) -> ref Field = (data) => ref data.field
 ```
 
 ### 4.2 生命周期
 
 ```yaoxiang
 # 显式生命周期标注（复杂情况）
-fn longest<'a>(s1: &'a str, s2: &'a str) -> &'a str {
-    if s1.length > s2.length {
-        s1
-    } else {
-        s2
-    }
+longest<'a>(&'a str, &'a str) -> &'a str = (s1, s2) => {
+    if s1.length > s2.length { s1 } else { s2 }
 }
 
 # 自动生命周期推断
-fn first[T](list: ref List[T]) -> ref T {
-    ref list[0]
-}
+first<T>(ref List[T]) -> ref T = (list) => ref list[0]
 ```
 
 ### 4.3 智能指针
@@ -412,7 +398,7 @@ internal_mut: RefCell[Data] = RefCell.new(data)
 
 ```yaoxiang
 # 编译期检查
-fn unsafe_example() {
+unsafe_example() -> Void = () => {
     data: Data = ...
     ref1 = ref data
     ref2 = ref data  # 编译错误！多个活跃引用
@@ -431,12 +417,12 @@ fn unsafe_example() {
 
 ```yaoxiang
 # 使用 spawn 标记异步函数
-fn fetch_api(url: String) -> JSON spawn {
+fetch_api(String) -> JSON spawn = (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
-fn calculate-heavy(n: Int) -> Int spawn {
+calculate_heavy(Int) -> Int spawn = (n) => {
     # 耗时计算
     result = 0
     for i in 0..n {
@@ -450,7 +436,7 @@ fn calculate-heavy(n: Int) -> Int spawn {
 
 ```yaoxiang
 # 调用 spawn 函数的代码自动等待
-fn main() {
+main() -> Void = () => {
     # fetch_api 是异步的，但调用时自动等待
     data = fetch_api("https://api.example.com/data")
     # data 在这里已经就绪
@@ -486,7 +472,7 @@ fn main() {
 
 ```yaoxiang
 # 并行执行多个异步任务
-fn parallel_example() {
+parallel_example() -> Void = () => {
     tasks = [
         fetch_api("https://api1.com"),
         fetch_api("https://api2.com"),
@@ -515,11 +501,11 @@ YaoXiang 共定义 17 个关键字，这些关键字是保留的，不能用作�
 | # | 关键字 | 作用 | 示例 |
 |---|--------|------|------|
 | 1 | `type` | 类型定义 | `type Point = struct { x: Int, y: Int }` |
-| 2 | `pub` | 公共导出 | `pub fn main() { ... }` |
+| 2 | `pub` | 公共导出 | `pub add(Int, Int) -> Int = ...` |
 | 3 | `use` | 导入模块 | `use std.io` |
-| 4 | `spawn` | 异步标记 | `fn fetch() -> T spawn { ... }` |
-| 5 | `ref` | 不可变引用 | `fn foo(x: ref T) { ... }` |
-| 6 | `mut` | 可变引用 | `fn bar(x: mut T) { ... }` |
+| 4 | `spawn` | 异步标记 | `fetch(String) -> T spawn = ...` |
+| 5 | `ref` | 不可变引用 | `process(ref Data) -> Void = ...` |
+| 6 | `mut` | 可变引用 | `modify(mut Data) -> Void = ...` |
 | 7 | `if` | 条件分支 | `if x > 0 { ... }` |
 | 8 | `elif` | 多重条件 | `elif x == 0 { ... }` |
 | 9 | `else` | 默认分支 | `else { ... }` |
@@ -530,7 +516,7 @@ YaoXiang 共定义 17 个关键字，这些关键字是保留的，不能用作�
 | 14 | `break` | 跳出循环 | `break` |
 | 15 | `continue` | 继续循环 | `continue` |
 | 16 | `as` | 类型转换 | `x as Float` |
-| 17 | `in` | 包含关系-成员检测 | `if x in [1, 2, 3] { ... }` |
+| 17 | `in` | 成员检测/列表推导式 | `x in [1, 2, 3]`, `[x * 2 for x in list]` |
 
 **无限循环替代方案：**
 
@@ -605,34 +591,24 @@ modifier = mut mutable  # 可变引用
 
 ```yaoxiang
 # 基本函数
-fn greet(name: String) -> String {
-    "Hello, " + name
-}
+greet(String) -> String = (name) => "Hello, " + name
 
 # 返回类型推断
-fn add(a: Int, b: Int) {
-    a + 1  # 最后表达式作为返回值
-}
+add(Int, Int) -> Int = (a, b) => a + 1  # 最后表达式作为返回值
 
 # 多返回值
-fn divmod(a: Int, b: Int) -> (Int, Int) {
-    (a / b, a % b)
-}
+divmod(Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)
 
 # 泛型函数
-fn identity[T](x: T) -> T {
-    x
-}
+identity<T>(T) -> T = (x) => x
 
 # 高阶函数
-fn apply[T, U](value: T, f: fn(T) -> U) -> U {
-    f(value)
-}
+apply<T, U>((T) -> U, T) -> U = (f, value) => f(value)
 
 # 闭包
-fn create_counter() -> fn() -> Int {
-    count = mut 0
-    fn() -> Int {
+create_counter() -> () -> Int = () => {
+    mut count = 0
+    () => {
         count += 1
         count
     }
@@ -652,7 +628,7 @@ if x > 0 {
 }
 
 # 模式匹配
-fn classify(n: Int) -> String {
+classify(Int) -> String = (n) => {
     match n {
         0 -> "zero"
         1 -> "one"
@@ -687,13 +663,11 @@ loop {
 ### 6.5 模块系统
 
 ```yaoxiang
-# 模块定义
-mod math {
-    pub fn sqrt(x: Float) -> Float { ... }
-    pub pi = 3.14159
-
-    fn internal_helper() { ... }  # 私有
-}
+# 模块定义（使用文件作为模块）
+# math.yx
+pub pi: Float = 3.14159
+pub sqrt(Float) -> Float = (x) => { ... }
+internal_helper() -> Void = () => { ... }  # 私有
 
 # 导入模块
 use std.io
@@ -729,7 +703,7 @@ result = M.sqrt(4.0)
 # 禁止使用 Tab
 
 # 正确示例
-fn example() {
+example() -> Void = () => {
     if condition {
         do_something()
     } else {
@@ -738,7 +712,7 @@ fn example() {
 }
 
 # 错误示例（禁止）
-fn example() {
+example() -> Void = () => {
 if condition {
 do_something()  # 缩进不足
   }               # 缩进不一致
@@ -749,7 +723,7 @@ do_something()  # 缩进不足
 
 ```yaoxiang
 # 函数定义 - 明确的开始和结束
-fn function_name(params) -> ReturnType {
+function_name(Params) -> ReturnType = (params) => {
     # 函数体
 }
 
@@ -775,17 +749,17 @@ type MyType = struct {
 ```yaoxiang
 # 禁止省略括号
 # 正确
-fn foo(x) { x }
+foo(T) -> T = (x) => x
 my_list = [1, 2, 3]
 
 # 错误（禁止）
-fn foo x { x }          # 函数参数必须有括号
+foo T { x }             # 函数参数必须有括号
 my_list = [1 2 3]       # 列表元素必须有逗号
 
 # 禁止行尾冒号的特殊含义
 # 冒号仅用于类型注解和字典
 my_dict = { "key": "value" }
-fn foo() -> Int { 42 }
+foo() -> Int = () => 42
 ```
 
 ### 7.5 类型信息完整
@@ -798,11 +772,11 @@ fn foo() -> Int { 42 }
 # 4. 模块的导出接口
 
 # 类型注解提供完整信息
-fn complex_function(
-    data: ref List[Int],
-    config: mut Config,
-    callback: fn(Result) -> Void
-) -> Result[Data] {
+complex_function(ref List[Int], mut Config, (Result) -> Void) -> Result[Data] = (
+    data,
+    config,
+    callback
+) => {
     # 函数签名完整，AI 可以准确理解
 }
 
@@ -828,18 +802,17 @@ type User = struct {
 # ↑ 类型定义从这里开始
 
 # 2. 函数定义位置明确
-# fn 关键字开头
+# 函数名开头
 
-pub fn process_user(user: ref User) -> Result {
+pub process_user(ref User) -> Result = (user) => {
     # ↑ 函数从这里开始
 }
 
 # 3. 模块边界明确
-# mod 关键字开头
+# 文件即模块，文件名即为模块名
 
-mod Database {
-    # ↑ 模块从这里开始
-}
+# Database.yx
+# ↑ 模块从这里开始
 
 # 4. 导入语句位置明确
 # use 关键字开头
@@ -857,13 +830,11 @@ use std.database
 
 ```yaoxiang
 # 泛型展开（单态化）
-fn identity[T](x: T) -> T {
-    x
-}
+identity<T>(T) -> T = (x) => x
 
 # 使用
-int_val = identity(42)      # 展开为 fn identity_int(Int) -> Int
-str_val = identity("hello") # 展开为 fn identity_str(String) -> String
+int_val = identity(42)      # 展开为 identity(Int) -> Int
+str_val = identity("hello") # 展开为 identity(String) -> String
 
 # 编译后无额外开销
 ```
@@ -872,7 +843,7 @@ str_val = identity("hello") # 展开为 fn identity_str(String) -> String
 
 ```yaoxiang
 # RAII 自动释放
-fn with_file(path: String) -> String {
+with_file(String) -> String = (path) => {
     file = File.open(path)  # 自动打开
     # 使用 file
     content = file.read_all()
@@ -881,11 +852,11 @@ fn with_file(path: String) -> String {
 }
 
 # 所有权转移释放
-fn create_resource() -> Resource {
+create_resource() -> Resource = () => {
     Resource.new()  # 创建
 }  # 返回时转移所有权
 
-fn use_resource(res: Resource) {
+use_resource(Resource) -> Void = (res) => {
     # 使用 res
 }  # res 在此销毁
 ```
@@ -894,15 +865,13 @@ fn use_resource(res: Resource) {
 
 ```yaoxiang
 # 内联优化
-inline fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+inline add(Int, Int) -> Int = (a, b) => a + b
 
 # 循环展开
 # 编译器自动优化简单循环
 
 # 逃逸分析
-fn create_large_object() {
+create_large_object() -> List[Int] = () => {
     large_data = [0; 1000000]  # 大数组
     if need_return(large_data) {
         return large_data  # 堆分配
@@ -917,7 +886,7 @@ fn create_large_object() {
 # 绿色线程模型
 # 轻量级线程，高并发
 
-fn main() {
+main() -> Void = () => {
     # 启动 10,000 个并发任务
     for i in 0..10000 {
         spawn process_item(i)
@@ -943,7 +912,7 @@ fn main() {
 | 零成本抽象 | ✅ | ✅ | ❌ | ❌ | ❌ |
 | 无GC | ✅ | ✅ | ❌ | ❌ | ✅ |
 | AI友好语法 | ✅ | ❌ | ✅ | ❌ | ❌ |
-| 关键字数量 | 18 | 51+ | 35 | 64+ | 30+ |
+| 关键字数量 | 16 | 51+ | 35 | 64+ | 30+ |
 
 ### 9.2 详细对比
 

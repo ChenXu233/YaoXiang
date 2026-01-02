@@ -26,7 +26,7 @@ cargo build --release
 # hello.yx
 use std.io
 
-fn main() {
+main() -> Void = () => {
     println("Hello, YaoXiang!")
 }
 ```
@@ -69,9 +69,7 @@ counter = counter + 1     # OK
 ### 函数
 
 ```yaoxiang
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
+add(Int, Int) -> Int = (a, b) => a + b
 
 # 调用
 result = add(1, 2)        # result = 3
@@ -105,6 +103,32 @@ if x > 0 {
 for i in 0..5 {
     print(i)
 }
+```
+
+### 列表推导式
+
+使用 `in` 关键字可以创建简洁的列表推导式：
+
+```yaoxiang
+# 基本列表推导式
+evens = [x * 2 for x in 0..10]          # [0, 4, 8, 12, 16]
+
+# 带条件的列表推导式
+squares = [x * x for x in 1..10 if x % 2 == 1]  # [1, 9, 25, 49, 81]
+```
+
+### 成员检测
+
+使用 `in` 关键字可以检测值是否存在于集合中：
+
+```yaoxiang
+# 成员检测
+if x in [1, 2, 3] {
+    print("x is in the list")
+}
+
+# 与条件表达式结合
+result = if name in ["Alice", "Bob"] { "known" } else { "unknown" }
 ```
 
 ## 下一步
