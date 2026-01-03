@@ -119,34 +119,6 @@ mod tokenizer {
                     ' ' | '\t' | '\r' | '\n' => {
                         self.advance();
                     }
-                    '/' if self.peek_next() == Some('/') => {
-                        self.advance();
-                        self.advance();
-                        while let Some(&c) = self.peek() {
-                            if c == '\n' {
-                                break;
-                            }
-                            self.advance();
-                        }
-                    }
-                    '/' if self.peek_next() == Some('*') => {
-                        self.advance();
-                        self.advance();
-                        let mut depth = 1;
-                        while depth > 0 {
-                            if let Some(c) = self.advance() {
-                                if c == '/' && self.peek_next() == Some('*') {
-                                    self.advance();
-                                    depth += 1;
-                                } else if c == '*' && self.peek_next() == Some('/') {
-                                    self.advance();
-                                    depth -= 1;
-                                }
-                            } else {
-                                break;
-                            }
-                        }
-                    }
                     _ => break,
                 }
             }
@@ -276,7 +248,43 @@ mod tokenizer {
                         Some(self.make_token(TokenKind::Dot))
                     }
                 }
-                '/' => Some(self.make_token(TokenKind::Slash)),
+                '/' => {
+                    if self.peek_next() == Some('/') {
+                        // Single line comment
+                        self.advance();
+                        self.advance();
+                        while let Some(&c) = self.peek() {
+                            if c == '\n' {
+                                break;
+                            }
+                            self.advance();
+                        }
+                        // Continue to get next token
+                        return self.next_token();
+                    } else if self.peek_next() == Some('*') {
+                        // Multi-line comment
+                        self.advance();
+                        self.advance();
+                        let mut depth = 1;
+                        while depth > 0 {
+                            if let Some(c) = self.advance() {
+                                if c == '/' && self.peek_next() == Some('*') {
+                                    self.advance();
+                                    depth += 1;
+                                } else if c == '*' && self.peek_next() == Some('/') {
+                                    self.advance();
+                                    depth -= 1;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                        // Continue to get next token
+                        return self.next_token();
+                    } else {
+                        Some(self.make_token(TokenKind::Slash))
+                    }
+                }
                 c => {
                     self.error = Some(LexError::UnexpectedChar { ch: c });
                     Some(self.make_token(TokenKind::Error(format!("Unexpected character: {}", c))))
@@ -588,117 +596,4 @@ mod tokenizer {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_keywords() {
-        let cases = [
-            ("type", TokenKind::KwType),
-            ("pub", TokenKind::KwPub),
-            ("use", TokenKind::KwUse),
-            ("spawn", TokenKind::KwSpawn),
-            ("ref", TokenKind::KwRef),
-            ("mut", TokenKind::KwMut),
-            ("if", TokenKind::KwIf),
-            ("elif", TokenKind::KwElif),
-            ("else", TokenKind::KwElse),
-            ("match", TokenKind::KwMatch),
-            ("while", TokenKind::KwWhile),
-            ("for", TokenKind::KwFor),
-            ("in", TokenKind::KwIn),
-            ("return", TokenKind::KwReturn),
-            ("break", TokenKind::KwBreak),
-            ("continue", TokenKind::KwContinue),
-            ("as", TokenKind::KwAs),
-        ];
-        for (source, expected) in cases {
-            let tokens = tokenize(source).unwrap();
-            assert_eq!(tokens.len(), 2, "Failed for: {}", source);
-            assert_eq!(tokens[0].kind, expected, "Failed for: {}", source);
-        }
-    }
-
-    #[test]
-    fn test_identifiers() {
-        let tokens = tokenize("myVariable _foo bar123").unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::Identifier("myVariable".to_string())
-        );
-        assert_eq!(tokens[1].kind, TokenKind::Identifier("_foo".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::Identifier("bar123".to_string()));
-    }
-
-    #[test]
-    fn test_operators() {
-        let cases = [
-            ("+", TokenKind::Plus),
-            ("-", TokenKind::Minus),
-            ("*", TokenKind::Star),
-            ("/", TokenKind::Slash),
-            ("%", TokenKind::Percent),
-            ("!=", TokenKind::Neq),
-            ("<", TokenKind::Lt),
-            ("<=", TokenKind::Le),
-            (">", TokenKind::Gt),
-            (">=", TokenKind::Ge),
-            ("&&", TokenKind::And),
-            ("||", TokenKind::Or),
-            ("!", TokenKind::Not),
-            ("==", TokenKind::EqEq),
-        ];
-        for (source, expected) in cases {
-            let tokens = tokenize(source).unwrap();
-            assert_eq!(tokens[0].kind, expected, "Failed for: {}", source);
-        }
-    }
-
-    #[test]
-    fn test_delimiters() {
-        let cases = [
-            ("(", TokenKind::LParen),
-            (")", TokenKind::RParen),
-            ("[", TokenKind::LBracket),
-            ("]", TokenKind::RBracket),
-            ("{", TokenKind::LBrace),
-            ("}", TokenKind::RBrace),
-            (",", TokenKind::Comma),
-            (";", TokenKind::Semicolon),
-            (":", TokenKind::Colon),
-            ("|", TokenKind::Pipe),
-            ("=>", TokenKind::FatArrow),
-            ("->", TokenKind::Arrow),
-        ];
-        for (source, expected) in cases {
-            let tokens = tokenize(source).unwrap();
-            assert_eq!(tokens[0].kind, expected, "Failed for: {}", source);
-        }
-    }
-
-    #[test]
-    fn test_string_literal() {
-        let tokens = tokenize(r#""hello world""#).unwrap();
-        match &tokens[0].kind {
-            TokenKind::StringLiteral(s) => assert_eq!(s, "hello world"),
-            _ => panic!("Expected string"),
-        }
-    }
-
-    #[test]
-    fn test_character_literal() {
-        let tokens = tokenize("'a'").unwrap();
-        match &tokens[0].kind {
-            TokenKind::CharLiteral(c) => assert_eq!(*c, 'a'),
-            _ => panic!("Expected char"),
-        }
-    }
-
-    #[test]
-    fn test_bool_literals_are_identifiers() {
-        // true/false are now treated as regular identifiers (not reserved keywords)
-        let tokens = tokenize("true false").unwrap();
-        assert!(matches!(&tokens[0].kind, TokenKind::Identifier(s) if s == "true"));
-        assert!(matches!(&tokens[1].kind, TokenKind::Identifier(s) if s == "false"));
-    }
-}
+mod tests;
