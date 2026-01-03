@@ -9,6 +9,7 @@ target/
 .roomodes
 .spec-workflow
 .claude
+.serena
 
 # OS files
 .DS_Store

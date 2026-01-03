@@ -13,7 +13,7 @@
 2. [核心特性](#二核心特性)
 3. [类型系统](#三类型系统)
 4. [内存管理](#四内存管理)
-5. [异步编程](#五异步编程)
+5. [异步编程与并发](#五异步编程与并发)
 6. [模块系统](#六模块系统)
 7. [方法绑定与柯里化](#七方法绑定与柯里化)
 8. [AI友好设计](#八ai友好设计)
@@ -358,66 +358,306 @@ with_file(String) -> String = (path) => {
 
 ---
 
-## 五、异步编程
+## 五、异步编程与并发
 
-### 5.1 spawn 标记函数
+> 「万物并作，吾以观复。」——《易·复卦》
+>
+> YaoXiang 采用**并作模型**，一种基于**惰性求值**的无感异步并发范式。其核心设计理念是：**让开发者以同步、顺序的思维描述逻辑，而语言运行时令其中的计算单元如万物并作般自动、高效地并发执行，并在最终统一协同**。
 
-YaoXiang 采用了创新的**无感异步**机制：
+> 详见 [《并作模型白皮书》](YaoXiang-async-whitepaper.md) 和 [异步实现方案](YaoXiang-async-implementation.md)。
+
+### 5.1 并作模型核心概念
+
+#### 5.1.1 并作图：万物并作的舞台
+
+所有程序在编译时被转化为一个**有向无环计算图(DAG)**，称为**并作图**。节点代表表达式计算，边代表数据依赖。此图是惰性的，即节点仅在其输出被**真正需要**时才被求值。
 
 ```yaoxiang
-# 使用 spawn 标记异步函数
+# 编译器自动构建并作图
+fetch_user() -> User spawn = (id) => { ... }
+fetch_posts(User) -> Posts spawn = (user) => { ... }
+
+main() -> Void = () => {
+    user = fetch_user(1)     # 节点 A (Async[User])
+    posts = fetch_posts(user) # 节点 B (Async[Posts])，依赖 A
+
+    # 节点 C 需要 A 和 B 的结果
+    print(posts.title)       # 自动等待：先确保 A 和 B 完成
+}
+```
+
+#### 5.1.2 并作值：Async[T]
+
+任何标记为 `spawn fn` 的函数调用会立即返回一个 `Async[T]` 类型的值，称为**并作值**。这是一个轻量级代理，它并非实际结果，而代表一个**正在并作中的未来值**。
+
+**核心特性**：
+- **类型透明**：`Async[T]` 在类型系统中是 `T` 的子类型，可在任何期望 `T` 的上下文中使用
+- **自动等待**：当程序执行到必须使用 `T` 类型具体值的操作时，运行时自动挂起当前任务，等待计算完成
+- **零传染**：异步代码与同步代码在语法和类型签名上无区别
+
+```yaoxiang
+# 并作值使用示例
+fetch_data(String) -> JSON spawn = (url) => { ... }
+
+main() -> Void = () => {
+    data = fetch_data("url")  # Async[JSON]
+
+    # Async[JSON] 可直接当作 JSON 使用
+    # 自动等待在字段访问时发生
+    print(data.name)          # 等价于 data.await().name
+}
+```
+
+### 5.2 并作语法体系
+
+`spawn` 关键字具有三重语义，是连接同步思维与异步实现的唯一桥梁：
+
+| 官方术语 | 语法形式 | 语义 | 运行时行为 |
+|----------|----------|------|------------|
+| **并作函数** | `spawn fn` | 定义可参与并作执行的计算单元 | 其调用返回 `Async[T]` |
+| **并作块** | `spawn { a(), b() }` | 显式声明的并发疆域 | 块内任务强制并行执行 |
+| **并作循环** | `spawn for x in xs { ... }` | 数据并行范式 | 循环体在所有元素上并作执行 |
+
+#### 5.2.1 并作函数
+
+```yaoxiang
+# 使用 spawn 标记并作函数
+# 语法与普通函数完全一致，无额外负担
+
 fetch_api(String) -> JSON spawn = (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
-calculate_heavy(Int) -> Int spawn = (n) => {
-    result = 0
-    for i in 0..n {
-        result += i
+# 嵌套并作调用
+process_user(Int) -> Report spawn = (user_id) => {
+    user = fetch_user(user_id)     # Async[User]
+    profile = fetch_profile(user)  # Async[Profile]，依赖 user
+    generate_report(user, profile) # 依赖 profile
+}
+```
+
+#### 5.2.2 并作块
+
+```yaoxiang
+# spawn { } - 显式并行构造
+# 块内所有表达式作为独立任务并发执行
+
+compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
+    # 三个独立计算并行执行
+    (x, y, z) = spawn {
+        heavy_calc(a),        # 任务 1
+        heavy_calc(b),        # 任务 2
+        another_calc(a, b)    # 任务 3
+    }
+    (x, y, z)
+}
+```
+
+#### 5.2.3 并作循环
+
+```yaoxiang
+# spawn for - 数据并行循环
+# 每次迭代作为独立任务并行执行
+
+parallel_sum(Int) -> Int spawn = (n) => {
+    total = spawn for i in 0..n {
+        fibonacci(i)          # 每次迭代并行
+    }
+    total
+}
+```
+
+#### 5.2.4 数据并行循环
+
+```yaoxiang
+# spawn for - 数据并行循环
+# 每次迭代作为独立任务并行执行
+
+parallel_sum(Int) -> Int spawn = (n) => {
+    total = spawn for i in 0..n {
+        fibonacci(i)          # 每次迭代并行
+    }
+    total
+}
+
+# 矩阵乘法并行化
+matmul[[A: Matrix], [B: Matrix]] -> Matrix spawn = (A, B) => {
+    result = spawn for i in 0..A.rows {
+        row = spawn for j in 0..B.cols {
+            dot_product(A.row(i), B.col(j))
+        }
+        row
     }
     result
 }
 ```
 
-### 5.2 自动等待
+### 5.3 自动等待机制
 
 ```yaoxiang
-# 调用 spawn 函数的代码自动等待
+# 无需显式 await，编译器自动插入等待点
+
 main() -> Void = () => {
-    # fetch_api 是异步的，但调用时自动等待
-    data = fetch_api("https://api.example.com/data")
-    # data 在这里已经就绪
-    print(data.value)
+    # 自动并行：两个独立请求并行执行
+    users = fetch_users()      # Async[List[User]]
+    posts = fetch_posts()      # Async[List[Post]]
 
-    # 多个异步调用可以并行
-    users = fetch_api("https://api.example.com/users")
-    posts = fetch_api("https://api.example.com/posts")
+    # 等待点在"+"操作处自动插入
+    count = users.length + posts.length
 
-    # users 和 posts 可能并行执行
-    print(users.length + posts.length)
+    # 字段访问触发等待
+    first_user = users[0]      # 等待 users 就绪
+    print(first_user.name)
+}
+
+# 条件分支中的等待
+process_data() -> Void spawn = () => {
+    data = fetch_data()        # Async[Data]
+
+    if data.is_valid {         # 等待 data 就绪
+        process(data)
+    } else {
+        log("Invalid data")
+    }
 }
 ```
 
-### 5.3 并发控制
+### 5.4 并发控制工具
 
 ```yaoxiang
-# 并行执行多个异步任务
-parallel_example() -> Void = () => {
-    tasks = [
-        fetch_api("https://api1.com"),
-        fetch_api("https://api2.com"),
-        fetch_api("https://api3.com")
-    ]
+# 等待所有任务完成
+await_all[List[T]](List[Async[T]]) -> List[T] = (tasks) => {
+    # Barrier 等待
+}
 
-    # 显式并行
-    results = parallel(tasks)
+# 等待任意一个完成
+await_any[List[T]](List[Async[T]]) -> T = (tasks) => {
+    # 返回第一个完成的结果
+}
 
-    # 或者等待全部完成
-    all_results = await_all(tasks)
+# 超时控制
+with_timeout[T](Async[T], Duration) -> Option[T] = (task, timeout) => {
+    # 超时返回 None
+}
+```
 
-    # 或者任意一个完成即可
-    first_result = await_any(tasks)
+### 5.5 线程安全：Send/Sync 约束
+
+YaoXiang 采用类似 Rust 的 **Send/Sync 类型约束**来保证线程安全，在编译时消除数据竞争。
+
+#### 5.5.1 Send 约束
+
+**Send**：类型可以安全地跨线程**转移所有权**。
+
+```yaoxiang
+# 基本类型自动满足 Send
+# Int, Float, Bool, String 都是 Send
+
+# 结构体自动派生 Send
+type Point = Point(x: Int, y: Float)
+# Point 是 Send，因为 Int 和 Float 都是 Send
+
+# 包含非 Send 字段的类型不是 Send
+type NonSend = NonSend(data: Rc[Int])
+# Rc 不是 Send（引用计数非原子），因此 NonSend 不是 Send
+```
+
+#### 5.5.2 Sync 约束
+
+**Sync**：类型可以安全地跨线程**共享引用**。
+
+```yaoxiang
+# 基本类型都是 Sync
+type Point = Point(x: Int, y: Float)
+# &Point 是 Sync，因为 &Int 和 &Float 都是 Sync
+
+# 包含内部可变性的类型
+type Counter = Counter(value: Int, mutex: Mutex[Int])
+# &Counter 是 Sync，因为 Mutex 提供内部可变性
+```
+
+#### 5.5.3 spawn 与线程安全
+
+```yaoxiang
+# spawn 要求参数和返回值满足 Send
+
+# 有效：Data 是 Send
+type Data = Data(value: Int)
+task = spawn(|| => Data(42))
+
+# 无效：Rc 不是 Send
+type SharedData = SharedData(rc: Rc[Int])
+# task = spawn(|| => SharedData(Rc.new(42))  # 编译错误！
+
+# 解决方案：使用 Arc（原子引用计数）
+type SafeData = SafeData(value: Arc[Int])
+task = spawn(|| => SafeData(Arc.new(42)))  # Arc 是 Send + Sync
+```
+
+#### 5.5.4 线程安全类型派生规则
+
+```yaoxiang
+# 结构体类型
+type Struct[T1, T2] = Struct(f1: T1, f2: T2)
+
+# Send 派生
+Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
+
+# Sync 派生
+Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
+
+# 联合类型
+type Result[T, E] = ok(T) | err(E)
+
+# Send 派生
+Result[T, E]: Send ⇐ T: Send 且 E: Send
+```
+
+#### 5.5.5 标准库线程安全实现
+
+| 类型 | Send | Sync | 说明 |
+|------|:----:|:----:|------|
+| `Int`, `Float`, `Bool` | ✅ | ✅ | 原类型 |
+| `Arc[T]` | ✅ | ✅ | T: Send + Sync |
+| `Mutex[T]` | ✅ | ✅ | T: Send |
+| `RwLock[T]` | ✅ | ✅ | T: Send |
+| `Channel[T]` | ✅ | ❌ | 只发送端 Send |
+| `Rc[T]` | ❌ | ❌ | 非原子引用计数 |
+| `RefCell[T]` | ❌ | ❌ | 运行时借用检查 |
+
+```yaoxiang
+# 线程安全计数器示例
+type SafeCounter = SafeCounter(mutex: Mutex[Int])
+
+main() -> Void = () => {
+    counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
+
+    # 并发更新
+    spawn(|| => {
+        guard = counter.mutex.lock()  # Mutex 提供线程安全
+        guard.value = guard.value + 1
+    })
+
+    spawn(|| => {
+        guard = counter.mutex.lock()
+        guard.value = guard.value + 1
+    })
+}
+```
+
+### 5.6 阻塞操作
+
+```yaoxiang
+# 使用 @blocking 注解标记会阻塞 OS 线程的操作
+# 运行时会将其分配到专用阻塞线程池
+
+@blocking
+read_large_file(String) -> String = (path) => {
+    # 此调用不会阻塞核心调度器
+    file = File.open(path)
+    content = file.read_all()
+    content
 }
 ```
 
@@ -671,14 +911,14 @@ for i in 0..10 {
 
 ## 附录
 
-### A. 关键字
+### A. 关键字与注解
 
 | 关键字 | 作用 |
 |--------|------|
 | `type` | 类型定义 |
 | `pub` | 公共导出 |
 | `use` | 导入模块 |
-| `spawn` | 异步标记 |
+| `spawn` | 异步标记（函数/块/循环） |
 | `ref` | 不可变引用 |
 | `mut` | 可变引用 |
 | `if/elif/else` | 条件分支 |
@@ -687,6 +927,13 @@ for i in 0..10 {
 | `return/break/continue` | 控制流 |
 | `as` | 类型转换 |
 | `in` | 成员访问 |
+
+| 注解 | 作用 |
+|------|------|
+| `@blocking` | 标记阻塞操作，分配到阻塞线程池 |
+| `@eager` | 标记需急切求值的表达式 |
+| `@Send` | 显式声明满足 Send 约束 |
+| `@Sync` | 显式声明满足 Sync 约束 |
 
 ### B. 设计灵感
 

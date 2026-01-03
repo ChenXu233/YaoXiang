@@ -1,9 +1,9 @@
 # YaoXiang（爻象）设计宣言
 
-> **版本**：v1.0.0
+> **版本**：v1.1.0
 > **状态**：正式发布
 > **作者**：晨煦 + YaoXiang 社区
-> **日期**：2025-01-02
+> **日期**：2025-01-03
 
 ---
 
@@ -228,40 +228,92 @@ main() -> Void = () => {
 
 **创新价值**：纯函数式设计，无隐藏的 `self` 参数，函数即值可以自由传递和组合。
 
-### 3.4 创新四：无感异步
+### 3.4 创新四：并作模型
 
-使用 `spawn` 标记异步函数，调用时自动等待，无需显式 `await`。
+> 「万物并作，吾以观复。」——《易·复卦》
+>
+> 并作模型取意于此，描述了一种编程范式：开发者以同步、顺序的思维描述逻辑，而语言运行时令其中的计算单元如万物并作般自动、高效地并发执行，并在最终统一协同。
+
+**核心三原则**：
+
+| 原则 | 说明 |
+|------|------|
+| **同步语法** | 所见即所得的顺序代码 |
+| **并发本质** | 运行时自动提取并行性 |
+| **统一协同** | 结果在需要时自动汇聚，保证逻辑正确 |
+
+**术语体系**：
+
+| 官方术语 | 对应语法 | 阐释 |
+|----------|----------|------|
+| **并作函数** | `spawn fn` | 定义可参与并作执行的计算单元 |
+| **并作块** | `spawn { a(), b() } | 显式声明的并发疆域，块内任务并作执行 |
+| **并作循环** | `spawn for x in xs { ... } | 数据并行，循环体在所有元素上并作执行 |
+| **并作值** | `Async[T]` | 正在并作中的未来值，使用时自动等待 |
+| **并作图** | 惰性计算图(DAG) | 并作发生的舞台，描述依赖与并行关系 |
+| **并作调度器** | 运行时任务调度器 | 协调万物，让它们在正确时机并作的智能中枢 |
 
 ```yaoxiang
-# 异步函数标记
+# === 并作函数 ===
+# spawn 标记的函数返回 Async[T]，语法与普通函数一致
 fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-calculate_heavy(Int) -> Int spawn = (n) => {
-    result = 0
-    for i in 0..n {
-        result += i
+# === 并作块 ===
+# spawn { } 内的表达式强制并行执行
+compute_all() -> (Int, Int, Int) spawn = () => {
+    (a, b, c) = spawn {
+        heavy_calc(1),    # 任务 1
+        heavy_calc(2),    # 任务 2
+        another_calc(3)   # 任务 3
     }
-    result
+    (a, b, c)
 }
 
-# 调用 spawn 函数自动等待
-main() -> Void = () => {
-    # 自动等待结果
-    data = fetch_data("https://api.example.com/data")
-    print(data.value)
+# === 并作循环 ===
+# spawn for 标记的循环自动并行化
+parallel_sum(Int) -> Int spawn = (n) => {
+    total = spawn for i in 0..n {
+        fibonacci(i)  # 每次迭代并行执行
+    }
+    total
+}
 
-    # 多个异步调用并行执行
+# === 自动等待 ===
+main() -> Void = () => {
+    # 两个独立请求自动并行执行
     users = fetch_data("https://api.example.com/users")
     posts = fetch_data("https://api.example.com/posts")
 
-    # users 和 posts 并行获取
-    print(users.length + posts.length)
+    # 等待点在需要结果时自动插入
+    print(users.length + posts.length)  # 自动等待 users 和 posts
 }
 ```
 
-**创新价值**：异步编程的认知负担降为零，代码可读性与同步代码完全相同。
+**线程安全**：
+
+```yaoxiang
+# Send/Sync 约束保证编译时线程安全
+type SafeCounter = SafeCounter(mutex: Mutex[Int])
+
+main() -> Void = () => {
+    counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
+
+    # spawn 自动检查 Send 约束
+    spawn(|| => {
+        guard = counter.mutex.lock()
+        guard.value = guard.value + 1
+    })
+}
+```
+
+**技术文档**：
+- 详见 [《并作模型白皮书》](YaoXiang-async-whitepaper.md)
+- 详见 [异步实现方案](YaoXiang-async-implementation.md)
+- 详见 [线程安全设计](works/plans/async/yaoxiang-threading-safety-design.md)
+
+**创新价值**：异步编程的认知负担降为零，代码可读性与同步代码完全相同，同时获得高性能并行的执行效率。
 
 ### 3.5 创新五：依赖类型支持
 
@@ -416,7 +468,7 @@ process() -> Result[Int, String] = () => {
 }
 ```
 
-### 4.7 并发编程
+### 4.7 并发编程（SeamlessAsync）
 
 ```yaoxiang
 # spawn 标记异步函数
@@ -425,15 +477,33 @@ fetch_api(String) -> JSON spawn = (url) => {
     JSON.parse(response.body)
 }
 
-# 并行执行
-parallel_example() -> Void = () => {
-    tasks = [
-        fetch_api("https://api1.com"),
-        fetch_api("https://api2.com"),
-        fetch_api("https://api3.com")
-    ]
+# 并发构造块：显式并行
+process_all() -> (JSON, JSON, JSON) spawn = () => {
+    (a, b, c) = spawn {
+        fetch_api("https://api1.com/data"),
+        fetch_api("https://api2.com/data"),
+        fetch_api("https://api3.com/data")
+    }
+    (a, b, c)
+}
 
-    results = parallel(tasks)
+# 数据并行循环
+parallel_process(Int) -> Int spawn = (n) => {
+    total = spawn for i in 0..n {
+        compute(i)
+    }
+    total
+}
+
+# 线程安全示例
+type ThreadSafeCounter = ThreadSafeCounter(value: Mutex[Int])
+
+main() -> Void = () => {
+    counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(Mutex.new(0)))
+
+    # 自动并行执行
+    spawn(|| => counter.value.lock().value = counter.value.lock().value + 1)
+    spawn(|| => counter.value.lock().value = counter.value.lock().value + 2)
 }
 ```
 
@@ -453,10 +523,11 @@ parallel_example() -> Void = () => {
 | **关键字** | 17个核心关键字 | 如上表所列 |
 | **函数语法** | 箭头函数语法 | `fn_name(Type1, Type2) -> Type = (params) => body` |
 | **方法绑定** | 柯里化实现 | `Type.method(_) = func(self, _)` |
-| **异步模型** | spawn 标记 | 自动等待，无需 await |
+| **异步模型** | 并作模型 | 并作模型，惰性求值，自动并行 |
 | **内存管理** | 所有权模型 | 无 GC，编译期安全保证 |
 | **文件即模块** | 模块系统 | 每个 `.yx` 文件是一个模块 |
 | **主函数** | `main() -> Void` | 程序入口点 |
+| **线程安全** | Send/Sync 约束 | 编译时消除数据竞争 |
 
 ### 5.2 待讨论的设计议题
 
@@ -480,11 +551,11 @@ parallel_example() -> Void = () => {
 │                              YaoXiang 实现路线图                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  v0.1: Rust 解释器 ────────→ v0.5: Rust JIT 编译器 ────────→ v1.0: Rust AOT │
-│        (当前阶段)                        │                      编译器       │
-│                                           │                                  │
-│                                           ▼                                  │
-│  v0.6: YaoXiang 解释器 ←─────── v1.0: YaoXiang JIT 编译器 ←──── v2.0:       │
+│  v0.1: Rust 解释器 ────────→ v0.5: Rust 编译器 ────────→ v1.0: Rust AOT    │
+│        ✅ 已完成                    │ (当前阶段)               编译器          │
+│                                      │                                      │
+│                                      ▼                                      │
+│  v0.6: YaoXiang 解释器 ←─────── v1.0: YaoXiang JIT 编译器 ←──── v2.0:      │
 │        （自举）                     （自举）                      YaoXiang AOT │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -492,29 +563,55 @@ parallel_example() -> Void = () => {
 
 **里程碑详情**：
 
-| 版本 | 时间 | 目标 | 交付物 |
+| 版本 | 状态 | 目标 | 交付物 |
 |------|------|------|--------|
-| **v0.1** | 第 1-2 个月 | 解释器原型 | 基本解释器、词法分析、语法分析、基础类型 |
-| **v0.2** | 第 3-4 个月 | 完整解释器 | 类型检查、模式匹配、模块系统、标准库 IO |
-| **v0.3** | 第 5-6 个月 | 字节码生成 | AST 到字节码转换、字节码序列化 |
-| **v0.4** | 第 7-8 个月 | 字节码虚拟机 | 解释器优化、内存管理、垃圾回收 |
-| **v0.5** | 第 9-10 个月 | JIT 编译器 | 基线编译、优化编译、profiling 支持 |
-| **v1.0** | 第 11-14 个月 | AOT 编译器 | 完整优化、本地代码生成、静态链接 |
-| **v2.0** | 第 15-18 个月 | 自举编译器 | YaoXiang 编写的新编译器 |
+| **v0.1** | ✅ 完成 | 解释器原型 | 基本解释器、词法分析、语法分析、基础类型 |
+| **v0.2** | ✅ 完成 | 完整解释器 | 类型检查、模式匹配、模块系统 |
+| **v0.3** | 🔄 进行中 | 字节码生成 | IR 中间表示、字节码生成、闭包优化 |
+| **v0.4** | 🔄 进行中 | 字节码虚拟机 | VM 核心、指令执行、调用帧管理 |
+| **v0.5** | ⏳ 待开始 | 运行时系统 | GC、调度器、标准库 IO |
+| **v1.0** | ⏳ 待开始 | AOT 编译器 | 完整优化、本地代码生成 |
+| **v2.0** | ⏳ 待开始 | 自举编译器 | 用 YaoXiang 编写的新编译器 |
 
 ### 5.4 当前实现状态
 
-| 模块 | 状态 | 完成度 |
-|------|------|--------|
-| 词法分析器 | ✅ 完成 | 100% |
-| 语法分析器 | ✅ 完成 | 100% |
-| 类型检查器 | 🔄 进行中 | 80% |
-| 字节码生成 | ⏳ 待开始 | 0% |
-| 字节码虚拟机 | ⏳ 待开始 | 0% |
-| 运行时系统 | ⏳ 待开始 | 0% |
-| 标准库 | ⏳ 待开始 | 10% |
-| JIT 编译器 | ⏳ 待开始 | 0% |
-| AOT 编译器 | ⏳ 待开始 | 0% |
+| 模块 | 状态 | 完成度 | 说明 |
+|------|------|--------|------|
+| **词法分析器** | ✅ 完成 | 100% | Token 定义、关键字识别、测试用例 |
+| **语法分析器** | ✅ 完成 | 100% | AST 定义、表达式/语句解析、边界测试 |
+| **类型检查器** | ✅ 完成 | 95% | 类型推断、单态化、泛型特化、错误处理 |
+| **IR 中间表示** | ✅ 完成 | 90% | IR 指令定义、类型表示、控制流图 |
+| **字节码生成** | ✅ 完成 | 85% | 表达式/语句/控制流字节码、闭包转换 |
+| **字节码虚拟机** | ✅ 完成 | 80% | VM 核心、指令执行、调用帧、内联缓存 |
+| **运行时调度器** | 🔄 进行中 | 60% | 任务描述符、工作窃取队列、等待队列 |
+| **运行时内存** | 🔄 进行中 | 50% | 内存分配器、GC 框架 |
+| **标准库** | 🔄 进行中 | 30% | IO、String、List、Dict、Math、Concurrent |
+| **JIT 编译器** | ⏳ 待开始 | 0% | 待集成 Cranelift/LLVM |
+| **AOT 编译器** | ⏳ 待开始 | 0% | 待实现 |
+
+**代码生成模块详情**：
+
+| 子模块 | 状态 | 关键特性 |
+|--------|------|----------|
+| 表达式生成 | ✅ 完成 | 算术、比较、逻辑、函数调用 |
+| 语句生成 | ✅ 完成 | 赋值、返回、条件、循环 |
+| 控制流生成 | ✅ 完成 | Switch 模式匹配、循环展开 |
+| 闭包处理 | ✅ 完成 | 环境捕获、闭包转换 |
+| 字节码序列化 | ✅ 完成 | 字节码读写、测试用例 |
+| 集成测试 | ✅ 完成 | 端到端编译执行测试 |
+
+**异步实现状态（并作模型）**：
+
+| 子模块 | 状态 | 说明 |
+|--------|------|------|
+| spawn 关键字解析 | ✅ 完成 | 词法/语法分析支持 |
+| is_async 标志 | ✅ 完成 | AST/类型系统支持 |
+| Async[T] 类型设计 | ✅ 完成 | 设计文档完成 |
+| 调度器框架 | ✅ 完成 | 基础工作窃取实现 |
+| Send/Sync 约束 | ✅ 完成 | 类型约束设计文档 |
+| IR 扩展 | 🔄 进行中 | CallAsync 指令已定义 |
+| VM 异步指令 | 🔄 进行中 | 指令框架已定义 |
+| 完整实现 | ⏳ 待开始 | v0.5 里程碑 |
 
 ---
 
@@ -554,11 +651,11 @@ YaoXiang 是一门诞生于社区、成长于社区、服务于社区的语言�
 
 | 优先级 | 模块 | 说明 | 难度 |
 |--------|------|------|------|
-| P0 | 字节码生成 | AST → IR → 字节码 | 中 |
-| P0 | 字节码虚拟机 | 指令解释执行 | 中 |
-| P1 | 垃圾回收器 | 分代 GC 实现 | 高 |
-| P1 | 并发调度器 | M:N 线程模型 | 高 |
-| P2 | JIT 编译器 | Cranelift 集成 | 高 |
+| P0 | **字节码虚拟机** | VM 指令完善、性能优化 | 中 |
+| P0 | **运行时内存** | GC 实现、内存分配器 | 高 |
+| P0 | **异步运行时** | 并作模型完整实现 | 高 |
+| P1 | 标准库 | IO、String、List、Concurrent | 中 |
+| P1 | JIT 编译器 | Cranelift 集成 | 高 |
 | P2 | AOT 编译器 | LLVM/ Cranelift 后端 | 高 |
 | P3 | 自举编译器 | 用 YaoXiang 重写 | 极高 |
 
@@ -726,7 +823,7 @@ docs(readme): update installation instructions
 | `type` | 类型定义 |
 | `pub` | 公共导出 |
 | `use` | 导入模块 |
-| `spawn` | 异步标记 |
+| `spawn` | 异步标记（函数/块/循环） |
 | `ref` | 不可变引用 |
 | `mut` | 可变引用 |
 | `if/elif/else` | 条件分支 |
@@ -736,7 +833,16 @@ docs(readme): update installation instructions
 | `as` | 类型转换 |
 | `in` | 成员检测/列表推导 |
 
-### A.2 原类型
+### A.2 注解
+
+| 注解 | 作用 |
+|------|------|
+| `@blocking` | 标记阻塞操作，分配到阻塞线程池 |
+| `@eager` | 标记需急切求值的表达式 |
+| `@Send` | 显式声明满足 Send 约束 |
+| `@Sync` | 显式声明满足 Sync 约束 |
+
+### A.3 原类型
 
 | 类型 | 描述 | 默认大小 |
 |------|------|----------|
@@ -749,7 +855,7 @@ docs(readme): update installation instructions
 | `Char` | Unicode 字符 | 4 字节 |
 | `Bytes` | 原始字节 | 可变 |
 
-### A.3 运算符优先级
+### A.4 运算符优先级
 
 | 优先级 | 运算符 | 结合性 |
 |--------|--------|--------|
@@ -787,7 +893,7 @@ YaoXiang 的设计借鉴了以下语言和项目的优秀思想：
 
 **Q: YaoXiang 与 Rust 相比有什么优势？**
 
-A: YaoXiang 保留了 Rust 的内存安全和零成本抽象，但采用更简单的语法和更低的认知负担。`spawn` 异步模型比 Rust 的 `async/await` 更简洁。统一类型语法消除了 `enum`/`struct`/`union` 的概念碎片。
+A: YaoXiang 保留了 Rust 的内存安全和零成本抽象，但采用更简单的语法和更低的认知负担。**并作模型**比 Rust 的 `async/await` 更简洁——只需一个 `spawn` 标记，无需手动管理 Future 和 Pin。「万物并作，吾以观复」，让并发编程如同描述自然规律般直观。Send/Sync 约束提供同等的线程安全保证。统一类型语法消除了 `enum`/`struct`/`union` 的概念碎片。
 
 **Q: YaoXiang 适合做什么类型的开发？**
 
@@ -807,9 +913,9 @@ A: 通过 GitHub Discussions 或 Discord 社区频道。核心团队成员会定
 
 ---
 
-> **最后更新**：2025-01-02
+> **最后更新**：2025-01-03
 >
-> **文档版本**：v1.0.0
+> **文档版本**：v1.1.0
 >
 > **许可证**：[MIT](LICENSE)
 

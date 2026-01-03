@@ -1,6 +1,8 @@
 # YaoXiang（爻象）编程语言
 
 > 一门实验性的通用编程语言，融合类型论、所有权模型和自然语法的力量。
+>
+> 基于《并作模型：万物并作，吾以观复》
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-v1.0.0--draft-blue.svg)]()
@@ -17,7 +19,8 @@ YaoXiang（爻象）是一门实验性的通用编程语言，其设计理念源
 | **数学抽象** | 基于类型论的统一抽象框架 |
 | **零成本抽象** | 高性能，无 GC，所有权模型保证内存安全 |
 | **自然语法** | Python 般的可读性，接近自然语言 |
-| **无感异步** | 无需显式 await，编译器自动处理 |
+| **并作模型** | 同步语法，异步本质；「万物并作，吾以观复」 |
+| **线程安全** | Send/Sync 类型约束，编译时保证并发安全 |
 | **AI 友好** | 严格结构化，AST 清晰，易于解析和修改 |
 
 ### 代码示例
@@ -41,14 +44,59 @@ p = Point(3.0, 4.0)
 r = ok("success")
 c = green
 
-# 无感异步
+# === 并作模型：同步语法，异步本质 ===
+
+# 使用 spawn 标记异步函数 - 语法与普通函数完全一致
 fetch_data(String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
+# 自动并行：多个 spawn 调用自动并行执行
+process_users_and_posts() -> Void spawn = () => {
+    users = fetch_data("https://api.example.com/users")  # Async[JSON]
+    posts = fetch_data("https://api.example.com/posts")  # Async[JSON]
+
+    # users 和 posts 自动并行执行，无需 await
+    print("Users: " + users.length.to_string())
+    print("Posts: " + posts.length.to_string())
+}
+
+# 并发构造块：显式并行
+compute_all() -> (Int, Int, Int) spawn = () => {
+    # spawn { } 内的表达式强制并行执行
+    (a, b, c) = spawn {
+        heavy_calc(1),    # 独立任务 1
+        heavy_calc(2),    # 独立任务 2
+        heavy_calc(3)     # 独立任务 3
+    }
+    (a, b, c)
+}
+
+# 数据并行循环
+parallel_sum(Int) -> Int spawn = (n) => {
+    # spawn for 标记的循环自动并行化
+    total = spawn for i in 0..n {
+        fibonacci(i)  # 每次迭代并行执行
+    }
+    total
+}
+
+# === 线程安全：Send/Sync 约束 ===
+
+# Arc：原子引用计数（线程安全）
+type ThreadSafeCounter = ThreadSafeCounter(value: Int)
+
 main() -> Void = () => {
-    data = fetch_data("https://api.example.com")
-    print(data.name)
+    # Arc 实现 Send + Sync
+    counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(0))
+
+    # spawn 自动检查 Send 约束
+    spawn(|| => {
+        guard = counter.value.lock()  # Mutex 提供内部可变性
+        guard.value = guard.value + 1
+    })
+
+    # ...
 }
 ```
 
@@ -74,8 +122,9 @@ yaoxiang your_program.yx
 - [快速入门](docs/guides/getting-started.md) - 5 分钟上手
 - [语言指南](docs/YaoXiang-book.md) - 系统学习
 - [语言规范](docs/YaoXiang-language-specification.md) - 完整参考
-- [设计宣言](docs/YaoXiang-design-manifesto.md) - 核心理念与路线图
-- [实现计划](docs/YaoXiang-implementation-plan.md) - 技术细节
+- [并作模型白皮书](docs/YaoXiang-async-whitepaper.md) - 无感异步设计
+- [异步实现方案](docs/YaoXiang-async-implementation.md) - 技术实现细节
+- [线程安全设计](docs/works/plans/async/yaoxiang-threading-safety-design.md) - Send/Sync 约束
 
 ## 项目结构
 
@@ -100,29 +149,32 @@ yaoxiang/
 
 ## 设计理念
 
-YaoXiang 的设计哲学可以用四句话概括：
+YaoXiang 的设计哲学可以用五句话概括：
 
 ```
 一切皆类型 → 统一抽象 → 类型即数据 → 运行时可用
 所有权模型 → 零成本抽象 → 无GC → 高性能
 Python语法 → 自然语言感 → 可读性 → 新手友好
-自动推断 → 极简关键字 → 简洁表达 → AI友好
+并作模型 → 惰性求值 → 自动并行 → 无感并发
+Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 ```
 
 ## 与现有语言的对比
 
-| 特性 | YaoXiang | Rust | Python | TypeScript |
-|------|----------|------|--------|------------|
-| 一切皆类型 | ✅ | ❌ | ❌ | ❌ |
-| 自动类型推断 | ✅ | ✅ | ✅ | ✅ |
-| 默认不可变 | ✅ | ✅ | ❌ | ❌ |
-| 所有权模型 | ✅ | ✅ | ❌ | ❌ |
-| 无感异步 | ✅ | ❌ | ❌ | ❌ |
-| 依赖类型 | ✅ | ❌ | ❌ | ❌ |
-| 零成本抽象 | ✅ | ✅ | ❌ | ❌ |
-| 无GC | ✅ | ✅ | ❌ | ❌ |
-| AI友好语法 | ✅ | ❌ | ✅ | ❌ |
-| 关键字数量 | 17 | 51+ | 35 | 64+ |
+| 特性 | YaoXiang | Rust | Python | TypeScript | Go |
+|------|----------|------|--------|------------|-----|
+| 一切皆类型 | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 自动类型推断 | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 默认不可变 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 所有权模型 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 并作模型 | ✅ | ❌ | ❌ | ❌ | ⚠️ |
+| 零成本抽象 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 无GC | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 编译时线程安全 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| AI友好语法 | ✅ | ❌ | ✅ | ❌ | ❌ |
+| 关键字数量 | 17 | 51+ | 35 | 64+ | 25 |
+
+> **并作模型** = 同步语法 + 惰性求值 + 自动并行 + 无感异步
 
 ## 路线图
 
@@ -157,6 +209,12 @@ YaoXiang 的设计灵感来自以下项目和语言：
 - **Idris/Agda** - 依赖类型、类型驱动开发
 - **TypeScript** - 类型注解、运行时类型
 - **MoonBit** - AI 友好设计
+
+
+## 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
+
+- [爻象设计宣言WTF版](docs/YaoXiang-WTF.md) - DeepSeek锐评
+
 
 ---
 
