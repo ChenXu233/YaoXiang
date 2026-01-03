@@ -4,7 +4,7 @@ use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
 
 /// Instruction operand
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operand {
     Const(ConstValue),
     Local(usize),
@@ -12,6 +12,7 @@ pub enum Operand {
     Temp(usize),
     Global(usize),
     Label(usize),
+    Register(u8), // Added for codegen
 }
 
 /// Instruction
@@ -126,6 +127,18 @@ pub enum Instruction {
     },
     Await(Operand),
     Yield,
+    // Phase 5 additions
+    HeapAlloc {
+        dst: Operand,
+        type_id: usize,
+    },
+    MakeClosure {
+        dst: Operand,
+        func: usize,
+        env: Vec<Operand>,
+    },
+    Retain(Operand),
+    Release(Operand),
 }
 
 /// Basic block
@@ -160,6 +173,38 @@ pub enum ConstValue {
     Bytes(Vec<u8>),
 }
 
+impl PartialEq for ConstValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Void, Self::Void) => true,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::Int(l0), Self::Int(r0)) => l0 == r0,
+            (Self::Float(l0), Self::Float(r0)) => l0.to_bits() == r0.to_bits(),
+            (Self::Char(l0), Self::Char(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Bytes(l0), Self::Bytes(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConstValue {}
+
+impl std::hash::Hash for ConstValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Void => {},
+            Self::Bool(b) => b.hash(state),
+            Self::Int(i) => i.hash(state),
+            Self::Float(f) => f.to_bits().hash(state),
+            Self::Char(c) => c.hash(state),
+            Self::String(s) => s.hash(state),
+            Self::Bytes(b) => b.hash(state),
+        }
+    }
+}
+
 /// Module IR
 #[derive(Debug, Clone)]
 pub struct ModuleIR {
@@ -167,4 +212,15 @@ pub struct ModuleIR {
     pub constants: Vec<ConstValue>,
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
+}
+
+impl Default for ModuleIR {
+    fn default() -> Self {
+        Self {
+            types: Vec::new(),
+            constants: Vec::new(),
+            globals: Vec::new(),
+            functions: Vec::new(),
+        }
+    }
 }
