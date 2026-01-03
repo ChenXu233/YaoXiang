@@ -228,3 +228,7 @@ impl Drop for Scheduler {
         self.shutdown();
     }
 }
+
+
+#[cfg(test)]
+mod tests;

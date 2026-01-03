@@ -86,6 +86,16 @@ impl VM {
         Self::default()
     }
 
+    /// Get VM status
+    pub fn status(&self) -> VMStatus {
+        self.status
+    }
+
+    /// Get VM error
+    pub fn error(&self) -> Option<&VMError> {
+        self.error.as_ref()
+    }
+
     /// Execute a module
     ///
     /// # Arguments
@@ -209,3 +219,6 @@ impl TryFrom<u8> for Opcode {
         }
     }
 }
+
+
+

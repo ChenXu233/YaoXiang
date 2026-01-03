@@ -96,3 +96,8 @@ impl Default for GC {
         Self::new(GCConfig::default())
     }
 }
+
+
+
+#[cfg(test)]
+mod tests;

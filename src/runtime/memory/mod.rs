@@ -75,3 +75,7 @@ impl Default for Heap {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests;
+

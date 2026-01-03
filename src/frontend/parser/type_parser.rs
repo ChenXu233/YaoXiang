@@ -186,7 +186,7 @@ impl<'a> ParserState<'a> {
         }
 
         // Check for generic arguments or struct fields
-        let (open, close) = if self.at(&TokenKind::Lt) {
+        let (_open, close) = if self.at(&TokenKind::Lt) {
             (TokenKind::Lt, TokenKind::Gt)
         } else if self.at(&TokenKind::LBracket) {
             (TokenKind::LBracket, TokenKind::RBracket)
