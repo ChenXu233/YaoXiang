@@ -1,6 +1,6 @@
 //! 控制流代码生成测试
 
-use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 
 /// 测试 if 语句标签生成

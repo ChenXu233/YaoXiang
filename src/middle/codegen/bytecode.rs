@@ -58,6 +58,22 @@ pub struct BytecodeInstruction {
     pub operands: Vec<u8>,
 }
 
+impl BytecodeInstruction {
+    pub fn new(opcode: crate::vm::opcode::TypedOpcode, operands: Vec<u8>) -> Self {
+        Self {
+            opcode: opcode as u8,
+            operands,
+        }
+    }
+
+    /// 编码为字节序列
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = vec![self.opcode];
+        bytes.extend(&self.operands);
+        bytes
+    }
+}
+
 impl BytecodeFile {
     /// 从 IR 模块构建字节码文件
     pub fn from_ir(module: &ModuleIR) -> Self {

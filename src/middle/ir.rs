@@ -63,7 +63,32 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
     },
-    Cmp {
+    Eq {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Ne {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Lt {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Le {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Gt {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Ge {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
@@ -137,8 +162,8 @@ pub enum Instruction {
         func: usize,
         env: Vec<Operand>,
     },
-    Retain(Operand),
-    Release(Operand),
+    /// Drop a value (ownership-based cleanup)
+    Drop(Operand),
 }
 
 /// Basic block

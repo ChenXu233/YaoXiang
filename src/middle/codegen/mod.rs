@@ -394,7 +394,7 @@ impl CodegenContext {
     }
 
     /// 生成函数指令
-    fn generate_instructions(&self, func: &FunctionIR) -> Result<Vec<BytecodeInstruction>, CodegenError> {
+    fn generate_instructions(&mut self, func: &FunctionIR) -> Result<Vec<BytecodeInstruction>, CodegenError> {
         let mut instructions = Vec::new();
 
         for block in &func.blocks {
@@ -408,9 +408,282 @@ impl CodegenContext {
     }
 
     /// 翻译 IR 指令为字节码指令
-    fn translate_instruction(&self, _instr: &Instruction) -> Result<BytecodeInstruction, CodegenError> {
-        // 简化实现：返回空指令
-        Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+    fn translate_instruction(&mut self, instr: &Instruction) -> Result<BytecodeInstruction, CodegenError> {
+        use Instruction::*;
+
+        match instr {
+            // =====================
+            // 移动和加载
+            // =====================
+            Move { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![dst_reg, src_reg]))
+            }
+
+            Load { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                // src 可以是常量或寄存器
+                match src {
+                    Operand::Const(const_val) => {
+                        let const_idx = self.add_constant(const_val.clone());
+                        Ok(BytecodeInstruction::new(TypedOpcode::LoadConst, vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8]))
+                    }
+                    _ => {
+                        let src_reg = self.operand_to_reg(src)?;
+                        Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![dst_reg, src_reg]))
+                    }
+                }
+            }
+
+            Store { dst: _, src } => {
+                // Store 指令 dst 是存储目标，src 是源
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![src_reg])) // 简化
+            }
+
+            // =====================
+            // 整数运算 (I64)
+            // =====================
+            Add { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Add, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Sub { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Sub, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Mul { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Mul, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Div { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Div, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Mod { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Rem, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Neg { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Neg, vec![dst_reg, src_reg]))
+            }
+
+            // =====================
+            // 比较指令
+            // =====================
+            Eq { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Eq, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Ne { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Ne, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Lt { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Lt, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Le { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Le, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Gt { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Gt, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            Ge { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::I64Ge, vec![dst_reg, lhs_reg, rhs_reg]))
+            }
+
+            // =====================
+            // 控制流
+            // =====================
+            Jmp(target) => {
+                let offset = *target as i32;
+                let bytes = offset.to_le_bytes();
+                Ok(BytecodeInstruction::new(TypedOpcode::Jmp, bytes.to_vec()))
+            }
+
+            JmpIf(cond, target) => {
+                let cond_reg = self.operand_to_reg(cond)?;
+                let offset = *target as i32;
+                let offset_bytes = (offset as i16).to_le_bytes();
+                Ok(BytecodeInstruction::new(TypedOpcode::JmpIf, vec![cond_reg, offset_bytes[0], offset_bytes[1]]))
+            }
+
+            JmpIfNot(cond, target) => {
+                let cond_reg = self.operand_to_reg(cond)?;
+                let offset = *target as i32;
+                let offset_bytes = (offset as i16).to_le_bytes();
+                Ok(BytecodeInstruction::new(TypedOpcode::JmpIfNot, vec![cond_reg, offset_bytes[0], offset_bytes[1]]))
+            }
+
+            Ret(value) => {
+                if let Some(v) = value {
+                    let reg = self.operand_to_reg(v)?;
+                    Ok(BytecodeInstruction::new(TypedOpcode::ReturnValue, vec![reg]))
+                } else {
+                    Ok(BytecodeInstruction::new(TypedOpcode::Return, vec![]))
+                }
+            }
+
+            // =====================
+            // 函数调用
+            // =====================
+            Call { dst, func: _, args: _ } => {
+                // 简化实现：返回 Nop
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
+
+            CallAsync { dst: _, func: _, args: _ } => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
+            }
+
+            TailCall { func: _, args: _ } => {
+                Ok(BytecodeInstruction::new(TypedOpcode::TailCall, vec![]))
+            }
+
+            // =====================
+            // 内存操作
+            // =====================
+            Alloc { dst, size: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::StackAlloc, vec![dst_reg]))
+            }
+
+            Free(_) => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
+
+            AllocArray { dst, size: _, elem_size: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::NewListWithCap, vec![dst_reg, 0, 0]))
+            }
+
+            // =====================
+            // 字段操作
+            // =====================
+            LoadField { dst, src: _, field: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::GetField, vec![dst_reg, 0, 0, 0]))
+            }
+
+            StoreField { dst: _, field: _, src: _ } => {
+                Ok(BytecodeInstruction::new(TypedOpcode::SetField, vec![0, 0, 0]))
+            }
+
+            LoadIndex { dst, src: _, index: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::LoadElement, vec![dst_reg, 0, 0]))
+            }
+
+            StoreIndex { dst: _, index: _, src: _ } => {
+                Ok(BytecodeInstruction::new(TypedOpcode::StoreElement, vec![0, 0, 0]))
+            }
+
+            // =====================
+            // 类型操作
+            // =====================
+            Cast { dst, src, target_type: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Cast, vec![dst_reg, src_reg, 0, 0]))
+            }
+
+            TypeTest(_, _) => {
+                Ok(BytecodeInstruction::new(TypedOpcode::TypeCheck, vec![0, 0, 0]))
+            }
+
+            // =====================
+            // 异步操作
+            // =====================
+            Spawn { func: _ } => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
+
+            Await(_) => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
+            }
+
+            Yield => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
+            }
+
+            // =====================
+            // 内存管理
+            // =====================
+            HeapAlloc { dst, type_id: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::HeapAlloc, vec![dst_reg, 0, 0]))
+            }
+
+            MakeClosure { dst, func: _, env: _ } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::MakeClosure, vec![dst_reg, 0, 0, 0]))
+            }
+
+            Drop(operand) => {
+                let reg = self.operand_to_reg(operand)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Drop, vec![reg]))
+            }
+
+            // =====================
+            // 栈操作
+            // =====================
+            Push(operand) => {
+                let reg = self.operand_to_reg(operand)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
+            }
+
+            Pop(operand) => {
+                let reg = self.operand_to_reg(operand)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
+            }
+
+            Dup => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
+
+            Swap => {
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
+        }
     }
 
     /// 将操作数转换为寄存器编号
@@ -429,7 +702,7 @@ impl CodegenContext {
             magic: YAOXIANG_MAGIC,
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
-            entry_point: self.find_entry_point(),
+            entry_point: self.find_entry_point() as u32,
             section_count: 4,
             file_size: 0,
             checksum: 0,
@@ -508,96 +781,11 @@ impl CodegenContext {
     }
 }
 
-/// 字节码文件
-#[derive(Debug, Clone)]
-pub struct BytecodeFile {
-    /// 文件头
-    pub header: BytecodeHeader,
-
-    /// 类型表
-    pub type_table: Vec<MonoType>,
-
-    /// 常量池
-    pub const_pool: Vec<ConstValue>,
-
-    /// 代码段
-    pub code_section: CodeSection,
-}
-
-/// 文件头
-#[derive(Debug, Clone)]
-pub struct BytecodeHeader {
-    /// 魔术数
-    pub magic: u32,
-
-    /// 版本
-    pub version: u32,
-
-    /// 标志
-    pub flags: u32,
-
-    /// 入口点
-    pub entry_point: usize,
-
-    /// 节数量
-    pub section_count: u16,
-
-    /// 文件大小
-    pub file_size: u32,
-
-    /// 校验和
-    pub checksum: u32,
-}
-
-/// 代码段
-#[derive(Debug, Clone)]
-pub struct CodeSection {
-    /// 函数列表
-    pub functions: Vec<FunctionCode>,
-}
-
-/// 函数代码
-#[derive(Debug, Clone)]
-pub struct FunctionCode {
-    /// 函数名
-    pub name: String,
-
-    /// 参数类型
-    pub params: Vec<MonoType>,
-
-    /// 返回类型
-    pub return_type: MonoType,
-
-    /// 指令列表
-    pub instructions: Vec<BytecodeInstruction>,
-
-    /// 局部变量数量
-    pub local_count: usize,
-}
-
-/// 字节码指令
-#[derive(Debug, Clone)]
-pub struct BytecodeInstruction {
-    /// 操作码
-    pub opcode: TypedOpcode,
-
-    /// 操作数
-    pub operands: Vec<u8>,
-}
-
-impl BytecodeInstruction {
-    /// 创建新指令
-    pub fn new(opcode: TypedOpcode, operands: Vec<u8>) -> Self {
-        BytecodeInstruction { opcode, operands }
-    }
-
-    /// 编码为字节序列
-    pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = vec![self.opcode as u8];
-        bytes.extend(&self.operands);
-        bytes
-    }
-}
+pub use bytecode::BytecodeFile;
+pub use bytecode::FileHeader as BytecodeHeader;
+pub use bytecode::CodeSection;
+pub use bytecode::FunctionCode;
+pub use bytecode::BytecodeInstruction;
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;
@@ -659,3 +847,6 @@ impl SymbolTable {
         self.scopes.last_mut().unwrap()
     }
 }
+
+#[cfg(test)]
+mod tests;

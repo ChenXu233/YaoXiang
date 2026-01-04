@@ -1,5 +1,6 @@
 //! 语句代码生成测试
 
+use crate::middle::codegen::CodegenContext;
 use crate::middle::ir::{FunctionIR, ModuleIR};
 use crate::vm::opcode::TypedOpcode;
 

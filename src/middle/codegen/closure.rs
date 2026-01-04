@@ -209,6 +209,15 @@ impl CodegenContext {
                 }
             }
             StmtKind::Use { .. } => {}
+            StmtKind::Fn { body, .. } => {
+                let (stmts, expr) = body;
+                for stmt in stmts {
+                    self.collect_captures_stmt(stmt, var_positions, captures);
+                }
+                if let Some(e) = expr {
+                    self.collect_captures(e, var_positions, captures);
+                }
+            }
         }
     }
 

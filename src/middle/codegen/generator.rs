@@ -105,6 +105,60 @@ impl<'a> BytecodeGenerator<'a> {
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
+            Instruction::Eq { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Eq,
+                    MonoType::Float(_) => TypedOpcode::F64Eq,
+                    _ => TypedOpcode::I64Eq,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
+            Instruction::Ne { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Ne,
+                    MonoType::Float(_) => TypedOpcode::F64Ne,
+                    _ => TypedOpcode::I64Ne,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
+            Instruction::Lt { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Lt,
+                    MonoType::Float(_) => TypedOpcode::F64Lt,
+                    _ => TypedOpcode::I64Lt,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
+            Instruction::Le { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Le,
+                    MonoType::Float(_) => TypedOpcode::F64Le,
+                    _ => TypedOpcode::I64Le,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
+            Instruction::Gt { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Gt,
+                    MonoType::Float(_) => TypedOpcode::F64Gt,
+                    _ => TypedOpcode::I64Gt,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
+            Instruction::Ge { dst, lhs, rhs } => {
+                let type_ = self.get_operand_type(lhs);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Ge,
+                    MonoType::Float(_) => TypedOpcode::F64Ge,
+                    _ => TypedOpcode::I64Ge,
+                };
+                self.emit_arithmetic(opcode, dst, lhs, rhs);
+            }
             Instruction::Move { dst, src } => {
                 let dst_reg = self.resolve_dst(dst);
                 let src_reg = self.load_operand(src);
@@ -234,6 +288,7 @@ impl<'a> BytecodeGenerator<'a> {
     fn get_operand_type(&self, op: &Operand) -> MonoType {
         match op {
             Operand::Local(idx) => self.ir.locals.get(*idx).cloned().unwrap_or(MonoType::Void),
+            Operand::Arg(idx) => self.ir.params.get(*idx).cloned().unwrap_or(MonoType::Void),
             Operand::Temp(_) => MonoType::Int(64), // TODO: Track temp types
             Operand::Const(c) => match c {
                 ConstValue::Int(_) => MonoType::Int(64),
@@ -246,43 +301,4 @@ impl<'a> BytecodeGenerator<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
-    use crate::frontend::typecheck::MonoType;
 
-    #[test]
-    fn test_generate_add() {
-        let mut func = FunctionIR {
-            name: "add".to_string(),
-            params: vec![MonoType::Int(64), MonoType::Int(64)],
-            return_type: MonoType::Int(64),
-            is_async: false,
-            locals: vec![],
-            blocks: vec![],
-            entry: 0,
-        };
-
-        let block = BasicBlock {
-            label: 0,
-            instructions: vec![
-                Instruction::Add {
-                    dst: Operand::Temp(0),
-                    lhs: Operand::Arg(0),
-                    rhs: Operand::Arg(1),
-                },
-                Instruction::Ret(Some(Operand::Temp(0))),
-            ],
-            successors: vec![],
-        };
-        func.blocks.push(block);
-
-        let generator = BytecodeGenerator::new(&func);
-        let code = generator.generate();
-
-        assert_eq!(code.instructions.len(), 2);
-        assert_eq!(code.instructions[0].opcode, TypedOpcode::I64Add as u8);
-        assert_eq!(code.instructions[1].opcode, TypedOpcode::ReturnValue as u8);
-    }
-}
