@@ -453,9 +453,7 @@ impl FlowScheduler {
     /// Add a node to the DAG and schedule it if ready.
     pub fn schedule_node(&self, kind: DAGNodeKind, dependencies: &[NodeId]) -> NodeId {
         let mut dag = self.dag.lock().unwrap();
-        let node_id = dag
-            .add_node(kind)
-            .expect("Failed to add node to DAG");
+        let node_id = dag.add_node(kind).expect("Failed to add node to DAG");
 
         for &dependency in dependencies {
             dag.add_edge(dependency, node_id)
