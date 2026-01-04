@@ -31,7 +31,10 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => {
                 // Check if this is a function definition: name(types) -> type = (params) => body
                 // Or a simple assignment/expression: name = expr or just name expr
-                self.parse_identifier_stmt(start_span)
+                eprintln!("[DEBUG] parse_stmt: calling parse_identifier_stmt, current: {:?}", self.current().map(|t| &t.kind));
+                let result = self.parse_identifier_stmt(start_span);
+                eprintln!("[DEBUG] parse_stmt: parse_identifier_stmt returned: {:?}", result.is_some());
+                result
             }
             // expression statement
             Some(_) => self.parse_expr_stmt(start_span),
@@ -466,13 +469,22 @@ impl<'a> ParserState<'a> {
             }
 
             // Check what's after the RParen
+            let rparen = self.peek_nth(pos);
             let after_rparen = self.peek_nth(pos + 1);
 
-            // If after RParen comes -> or =, this is a function definition
-            if matches!(after_rparen.map(|t| &t.kind), Some(TokenKind::Arrow) | Some(TokenKind::Eq)) {
+            eprintln!("[DEBUG] parse_identifier_stmt: pos={}, rparen={:?}, after_rparen={:?}",
+                     pos, rparen.map(|t| &t.kind), after_rparen.map(|t| &t.kind));
+
+            // If current pos is RParen AND after it comes -> or =, this is a function definition
+            if matches!(rparen.map(|t| &t.kind), Some(TokenKind::RParen))
+                && matches!(after_rparen.map(|t| &t.kind), Some(TokenKind::Arrow) | Some(TokenKind::Eq))
+            {
+                eprintln!("[DEBUG] parse_identifier_stmt: Detected function definition!");
                 // This is a function definition - parse as expression
                 return self.parse_fn_stmt(span);
             }
+
+            eprintln!("[DEBUG] parse_identifier_stmt: Falling through to expression statement");
 
             // Otherwise, this is a function call or other expression
             // Just parse as expression (the Pratt parser will handle it)
@@ -503,21 +515,22 @@ impl<'a> ParserState<'a> {
                 None
             };
 
-            // Check if this is actually a function definition: `name: Type = (params) => body`
-            // After parsing type annotation, if we see `=` followed by `(`, check if it's a lambda
-            // Function definition: `= (identifier, ...) =>` (params are identifiers)
-            // Tuple init: `= (expr, ...)` (params are expressions)
-            if self.at(&TokenKind::Eq) {
-                // Peek ahead to check if this is a function definition (lambda)
-                // Function definition: `name: Type = (param_name, ...) => body`
-                // Variable init: `name: Type = (expr, ...)` or `name: Type = expr`
+            // Check if this is a function definition: `name[: Type] = (params) => body`
+            // Both with and without type annotation can be function definitions
+            // Key difference from variable init:
+            // - Function def: `= (identifier, ...) => body` (lambda with identifier params)
+            // - Variable init: `= (expr, ...)` or `= expr` (not a lambda or tuple)
+            let next_after_type = self.peek_nth(0);
+            if matches!(next_after_type.map(|t| &t.kind), Some(TokenKind::Eq)) {
+                // Check if this is a function definition (lambda)
+                // Look ahead: `= (identifier, ...) => body`
                 let next_after_eq = self.peek_nth(1);
                 if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::LParen)) {
                     // Check if the first thing in the parens is an identifier (parameter name)
                     // For function def: `(x, y) =>`
                     // For tuple init: `(1, 2)` or `("hello", true)`
                     let first_in_paren = self.peek_nth(2);
-                    
+
                     let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
                         true
                     } else if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::RParen)) {
@@ -527,10 +540,7 @@ impl<'a> ParserState<'a> {
                         false
                     };
 
-                    if !is_fn_def {
-                        // Not an identifier, so this is NOT a function definition
-                        // Fall through to normal variable initializer handling
-                    } else {
+                    if is_fn_def {
                         // This is a function definition!
                         let fn_span = span;
 
@@ -577,6 +587,7 @@ impl<'a> ParserState<'a> {
                             span: fn_span,
                         });
                     }
+                    // Not a function definition, fall through to variable initializer handling
                 }
             }
 
@@ -716,6 +727,7 @@ impl<'a> ParserState<'a> {
     /// Example: `add(Int, Int) -> Int = (a, b) => a + b`
     /// Also supports: `name() = (params) => body` (inferred types)
     fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
+        eprintln!("[DEBUG] parse_fn_stmt called, current token: {:?}", self.current().map(|t| &t.kind));
         // Parse function name
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
@@ -726,21 +738,28 @@ impl<'a> ParserState<'a> {
                 return None;
             }
         };
+        eprintln!("[DEBUG] parse_fn_stmt: function name = {}", name);
         self.bump();
 
         // Parse parameter types in parentheses: (Int, String) or ()
+        eprintln!("[DEBUG] parse_fn_stmt: expecting LParen, current: {:?}", self.current().map(|t| &t.kind));
         if !self.expect(&TokenKind::LParen) {
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen");
             return None;
         }
-        
+
         // Check if it's empty parens `()`
         let param_types = if self.at(&TokenKind::RParen) {
             Vec::new()
         } else {
+            eprintln!("[DEBUG] parse_fn_stmt: parsing type list");
             self.parse_type_list()?
         };
-        
+
+        eprintln!("[DEBUG] parse_fn_stmt: param_types = {:?}", param_types);
+
         if !self.expect(&TokenKind::RParen) {
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect RParen");
             return None;
         }
 
@@ -751,25 +770,32 @@ impl<'a> ParserState<'a> {
             None
         };
 
+        eprintln!("[DEBUG] parse_fn_stmt: return_type = {:?}", return_type);
+
         // Expect equals sign
         if !self.skip(&TokenKind::Eq) {
             self.error(super::ParseError::UnexpectedToken(
                 self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
             ));
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect Eq");
             return None;
         }
 
         // Parse implementation: (params) => body
+        eprintln!("[DEBUG] parse_fn_stmt: expecting LParen for params, current: {:?}", self.current().map(|t| &t.kind));
         if !self.expect(&TokenKind::LParen) {
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen for params");
             return None;
         }
         let params = self.parse_fn_params()?;
         if !self.expect(&TokenKind::RParen) {
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect RParen for params");
             return None;
         }
 
         // Expect fat arrow
         if !self.expect(&TokenKind::FatArrow) {
+            eprintln!("[DEBUG] parse_fn_stmt: failed to expect FatArrow");
             return None;
         }
 
@@ -789,6 +815,8 @@ impl<'a> ParserState<'a> {
             let expr = self.parse_expression(BP_LOWEST)?;
             (Vec::new(), Some(Box::new(expr)))
         };
+
+        eprintln!("[DEBUG] parse_fn_stmt: success!");
 
         // Validate function definition rules
         // Note: Parser is lenient. Type checking will handle type inference.

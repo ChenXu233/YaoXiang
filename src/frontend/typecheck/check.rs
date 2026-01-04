@@ -125,6 +125,49 @@ impl<'a> TypeChecker<'a> {
                     Ok(())
                 }
             }
+            ast::StmtKind::Fn {
+                name,
+                type_annotation,
+                params,
+                body: (stmts, expr),
+            } => {
+                // 新语法函数定义：name[: Type] = (params) => body
+                // 需要构造 return_type 和 body
+                eprintln!("[CHECK] check_stmt: processing Fn for '{}'", name);
+                // type_annotation 是 Option<Type>，需要借用为 Option<&Type>
+                let return_type = type_annotation.as_ref().map(|t| t as &ast::Type);
+
+                // 先创建函数类型并注册到作用域（支持递归调用）
+                let param_types: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| {
+                        if let Some(ty) = &p.ty {
+                            MonoType::from(ty.clone())
+                        } else {
+                            self.inferrer.solver().new_var()
+                        }
+                    })
+                    .collect();
+                let return_ty = if let Some(ty) = return_type {
+                    MonoType::from(ty.clone())
+                } else {
+                    self.inferrer.solver().new_var()
+                };
+                let fn_type = PolyType::mono(MonoType::Fn {
+                    params: param_types,
+                    return_type: Box::new(return_ty),
+                    is_async: false,
+                });
+                self.inferrer.add_var(name.clone(), fn_type);
+
+                let body = ast::Block {
+                    stmts: stmts.clone(),
+                    expr: expr.clone(),
+                    span: stmt.span,
+                };
+                self.check_fn_def(name, params, return_type, &body, false)?;
+                Ok(())
+            }
             ast::StmtKind::Var {
                 name,
                 type_annotation,
@@ -256,15 +299,6 @@ impl<'a> TypeChecker<'a> {
         // 保存当前返回类型
         let prev_return_type = self.current_return_type.take();
 
-        // 跟踪未类型化的参数
-        let mut untyped_params: Vec<(String, usize, MonoType)> = Vec::new();
-        for (i, param) in params.iter().enumerate() {
-            if param.ty.is_none() {
-                let ty = self.inferrer.solver().new_var();
-                untyped_params.push((param.name.clone(), i, ty.clone()));
-            }
-        }
-
         // 创建参数类型列表
         let param_types: Vec<MonoType> = params
             .iter()
@@ -276,6 +310,15 @@ impl<'a> TypeChecker<'a> {
                 }
             })
             .collect();
+
+        // 跟踪未类型化的参数（使用 param_types 中对应位置的类型变量）
+        let mut untyped_params: Vec<(String, usize, MonoType)> = Vec::new();
+        for (i, param) in params.iter().enumerate() {
+            if param.ty.is_none() {
+                // 直接使用 param_types 中对应位置的类型变量
+                untyped_params.push((param.name.clone(), i, param_types[i].clone()));
+            }
+        }
 
         // 处理返回类型
         let (return_ty, inferred_return_ty) = if let Some(ty) = return_type {
@@ -294,8 +337,9 @@ impl<'a> TypeChecker<'a> {
         self.inferrer.enter_scope();
 
         // 添加参数到作用域
+        // 注意：不要使用 generalize/instantiate，因为参数类型需要在函数体内被约束
         for (param, param_ty) in params.iter().zip(param_types.iter()) {
-            let poly = self.inferrer.solver().generalize(param_ty);
+            let poly = PolyType::mono(param_ty.clone());
             self.inferrer.add_var(param.name.clone(), poly);
         }
 
@@ -343,15 +387,26 @@ impl<'a> TypeChecker<'a> {
                 .add_constraint(body_ty, return_ty.clone(), body.span);
         }
 
+        // 注意：不在这里求解约束，而是在 check_module 中统一求解
+        // 这样可以确保所有函数的约束一起被求解
+
         // 参数类型推断规则：检查未类型化参数是否被使用
+        // 检查参数类型变量是否出现在约束中（被使用）
         for (param_name, param_idx, param_ty) in &untyped_params {
-            if self.is_unconstrained_var(param_ty) {
-                // 参数类型无法推断（没有被使用），添加错误
-                self.add_error(TypeError::CannotInferParamType {
-                    name: param_name.clone(),
-                    span: params[*param_idx].span,
-                });
+            let solver = self.inferrer.solver_ref();
+            let in_constraints = solver.appears_in_constraints(match param_ty {
+                MonoType::TypeVar(id) => *id,
+                _ => panic!("Expected TypeVar"),
+            });
+            if in_constraints {
+                // 参数类型变量出现在约束中，说明它被使用了，可以推断
+                continue;
             }
+            // 不在约束中，参数类型无法推断
+            self.add_error(TypeError::CannotInferParamType {
+                name: param_name.clone(),
+                span: params[*param_idx].span,
+            });
         }
 
         // 退出函数体作用域
@@ -375,11 +430,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查类型变量是否未约束（未被使用）
+    ///
+    /// 如果类型变量仍然是 Unbound 状态，返回 true
     fn is_unconstrained_var(&self, ty: &MonoType) -> bool {
         match ty {
             MonoType::TypeVar(id) => {
-                // 检查这个类型变量是否有任何约束
-                self.inferrer.solver().is_unconstrained(*id)
+                self.inferrer.solver_ref().is_unconstrained(*id)
             }
             _ => false,
         }

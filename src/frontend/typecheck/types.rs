@@ -766,6 +766,31 @@ impl TypeConstraintSolver {
             false
         }
     }
+
+    /// 检查类型变量是否出现在任何未求解的约束中
+    ///
+    /// 如果类型变量出现在约束中，说明它被使用了
+    pub fn appears_in_constraints(&self, var: TypeVar) -> bool {
+        self.constraints.iter().any(|c| {
+            Self::type_contains_var(&c.left, var) || Self::type_contains_var(&c.right, var)
+        })
+    }
+
+    /// 检查类型是否包含指定的类型变量
+    fn type_contains_var(ty: &MonoType, var: TypeVar) -> bool {
+        match ty {
+            MonoType::TypeVar(v) => *v == var,
+            MonoType::Tuple(types) => types.iter().any(|t| Self::type_contains_var(t, var)),
+            MonoType::List(t) => Self::type_contains_var(t, var),
+            MonoType::Dict(k, v) => Self::type_contains_var(k, var) || Self::type_contains_var(v, var),
+            MonoType::Set(t) => Self::type_contains_var(t, var),
+            MonoType::Fn { params, return_type, .. } => {
+                params.iter().any(|p| Self::type_contains_var(p, var))
+                    || Self::type_contains_var(return_type, var)
+            }
+            _ => false,
+        }
+    }
 }
 
 /// 类型不匹配错误

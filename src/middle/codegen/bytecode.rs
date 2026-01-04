@@ -9,6 +9,7 @@ use crate::middle::codegen::generator::BytecodeGenerator;
 
 /// 字节码文件头魔数 (YaoXiang ByteCode: YXBC)
 /// 0x59584243 = 'Y' 'X' 'B' 'C' = YaoXiang ByteCode
+/// 文件格式采用混合端序：魔数大端序（方便调试），其他数据小端序（性能优化）
 const MAGIC: u32 = 0x59584243;
 /// 版本号
 const VERSION: u32 = 2;
@@ -136,8 +137,10 @@ impl BytecodeFile {
     }
 
     /// 序列化到 Writer
+    /// 格式设计：魔数大端序（方便调试），其他数据小端序（x86 性能优化）
     pub fn write_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writer.write_all(&self.header.magic.to_le_bytes())?;
+        // 文件头：魔数大端序，其他小端序
+        writer.write_all(&self.header.magic.to_be_bytes())?;  // YXBC 方便调试
         writer.write_all(&self.header.version.to_le_bytes())?;
         writer.write_all(&self.header.flags.to_le_bytes())?;
         writer.write_all(&self.header.entry_point.to_le_bytes())?;
@@ -145,13 +148,13 @@ impl BytecodeFile {
         writer.write_all(&self.header.file_size.to_le_bytes())?;
         writer.write_all(&self.header.checksum.to_le_bytes())?;
 
-        // 类型表
+        // 类型表 (小端序，性能优化)
         writer.write_all(&(self.type_table.len() as u32).to_le_bytes())?;
         for ty in &self.type_table {
             writer.write_all(&ty.to_type_id().to_le_bytes())?;
         }
 
-        // 常量池
+        // 常量池 (小端序，性能优化)
         writer.write_all(&(self.const_pool.len() as u32).to_le_bytes())?;
         for const_val in &self.const_pool {
             match const_val {
@@ -165,7 +168,7 @@ impl BytecodeFile {
             }
         }
 
-        // 代码段
+        // 代码段 (小端序，性能优化)
         writer.write_all(&(self.code_section.functions.len() as u32).to_le_bytes())?;
         for func in &self.code_section.functions {
             writer.write_all(&(func.name.len() as u32).to_le_bytes())?;

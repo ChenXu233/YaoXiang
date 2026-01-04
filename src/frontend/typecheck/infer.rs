@@ -32,9 +32,14 @@ impl<'a> TypeInferrer<'a> {
         }
     }
 
-    /// 获取求解器引用
+    /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         &mut self.solver
+    }
+
+    /// 获取求解器引用（不可变）
+    pub fn solver_ref(&self) -> &TypeConstraintSolver {
+        &self.solver
     }
 
     // =========================================================================
@@ -413,6 +418,7 @@ impl<'a> TypeInferrer<'a> {
         for stmt in &block.stmts {
             match &stmt.kind {
                 ast::StmtKind::Expr(expr) => {
+                    // Expr 可能包含 While, For, Return, Break, Continue 等
                     let _ty = self.infer_expr(expr)?;
                 }
                 ast::StmtKind::Var {
@@ -423,6 +429,17 @@ impl<'a> TypeInferrer<'a> {
                 } => {
                     self.infer_var_decl(name, type_annotation.as_ref(), initializer.as_deref(), block.span)?;
                 }
+                ast::StmtKind::For {
+                    var,
+                    iterable,
+                    body,
+                    label: _,
+                } => {
+                    // 推断 for 循环
+                    self.infer_for(var, iterable, body, block.span)?;
+                }
+                // Fn, TypeDef, Use 等已在 check_stmt 中处理
+                // While, Return, Break, Continue 作为 Expr 的一部分处理
                 _ => {}
             }
         }
