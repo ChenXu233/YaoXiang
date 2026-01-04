@@ -1,7 +1,7 @@
 //! 类型系统核心数据结构测试
 
-use crate::frontend::typecheck::types::*;
 use crate::frontend::parser::ast;
+use crate::frontend::typecheck::types::*;
 use crate::util::span::Span;
 
 fn create_dummy_span() -> Span {
@@ -150,10 +150,7 @@ fn test_mono_type_list() {
 
 #[test]
 fn test_mono_type_dict() {
-    let ty = MonoType::Dict(
-        Box::new(MonoType::String),
-        Box::new(MonoType::Int(64)),
-    );
+    let ty = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(64)));
     assert!(matches!(ty, MonoType::Dict(_, _)));
     assert!(ty.is_indexable());
 }
@@ -379,10 +376,7 @@ fn test_mono_type_type_name_list() {
 
 #[test]
 fn test_mono_type_type_name_dict() {
-    let ty = MonoType::Dict(
-        Box::new(MonoType::String),
-        Box::new(MonoType::Int(64)),
-    );
+    let ty = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(64)));
     assert_eq!(ty.type_name(), "Dict<string, int64>");
 }
 
@@ -561,10 +555,7 @@ fn test_from_ast_type_bytes() {
 
 #[test]
 fn test_from_ast_type_tuple() {
-    let ast_type = ast::Type::Tuple(vec![
-        ast::Type::Int(64),
-        ast::Type::String,
-    ]);
+    let ast_type = ast::Type::Tuple(vec![ast::Type::Int(64), ast::Type::String]);
     let mono: MonoType = ast_type.into();
     assert!(matches!(mono, MonoType::Tuple(t) if t.len() == 2));
 }
@@ -578,10 +569,7 @@ fn test_from_ast_type_list() {
 
 #[test]
 fn test_from_ast_type_dict() {
-    let ast_type = ast::Type::Dict(
-        Box::new(ast::Type::String),
-        Box::new(ast::Type::Int(64)),
-    );
+    let ast_type = ast::Type::Dict(Box::new(ast::Type::String), Box::new(ast::Type::Int(64)));
     let mono: MonoType = ast_type.into();
     assert!(matches!(mono, MonoType::Dict(_, _)));
 }

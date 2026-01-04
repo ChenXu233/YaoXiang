@@ -219,7 +219,7 @@ impl std::hash::Hash for ConstValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         core::mem::discriminant(self).hash(state);
         match self {
-            Self::Void => {},
+            Self::Void => {}
             Self::Bool(b) => b.hash(state),
             Self::Int(i) => i.hash(state),
             Self::Float(f) => f.to_bits().hash(state),

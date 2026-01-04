@@ -21,17 +21,11 @@ pub enum TypeError {
 
     /// 未知变量错误
     #[error("Unknown variable: {name}")]
-    UnknownVariable {
-        name: String,
-        span: Span,
-    },
+    UnknownVariable { name: String, span: Span },
 
     /// 未知类型错误
     #[error("Unknown type: {name}")]
-    UnknownType {
-        name: String,
-        span: Span,
-    },
+    UnknownType { name: String, span: Span },
 
     /// 参数数量不匹配错误
     #[error("Arity mismatch: expected {expected} arguments, found {found}")]
@@ -43,24 +37,15 @@ pub enum TypeError {
 
     /// 递归类型定义错误
     #[error("Recursive type definition: {name}")]
-    RecursiveType {
-        name: String,
-        span: Span,
-    },
+    RecursiveType { name: String, span: Span },
 
     /// 不支持的操作错误
     #[error("Unsupported operation: {op}")]
-    UnsupportedOp {
-        op: String,
-        span: Span,
-    },
+    UnsupportedOp { op: String, span: Span },
 
     /// 泛型约束违反错误
     #[error("Generic constraint violated: {constraint}")]
-    GenericConstraint {
-        constraint: String,
-        span: Span,
-    },
+    GenericConstraint { constraint: String, span: Span },
 
     /// 无限类型错误
     #[error("Infinite type: {var} = {ty}")]
@@ -72,17 +57,11 @@ pub enum TypeError {
 
     /// 未实例化的类型变量错误
     #[error("Unbound type variable: {var}")]
-    UnboundTypeVar {
-        var: String,
-        span: Span,
-    },
+    UnboundTypeVar { var: String, span: Span },
 
     /// 未知标签错误（break/continue）
     #[error("Unknown label: {name}")]
-    UnknownLabel {
-        name: String,
-        span: Span,
-    },
+    UnknownLabel { name: String, span: Span },
 
     /// 未知字段错误
     #[error("Unknown field: {field_name} in {struct_name}")]
@@ -102,31 +81,19 @@ pub enum TypeError {
 
     /// 函数调用错误
     #[error("Call error: {message}")]
-    CallError {
-        message: String,
-        span: Span,
-    },
+    CallError { message: String, span: Span },
 
     /// 赋值错误
     #[error("Assignment error: {message}")]
-    AssignmentError {
-        message: String,
-        span: Span,
-    },
+    AssignmentError { message: String, span: Span },
 
     /// 类型推断错误
     #[error("Inference error: {message}")]
-    InferenceError {
-        message: String,
-        span: Span,
-    },
+    InferenceError { message: String, span: Span },
 
     /// 无法推断参数类型错误
     #[error("Cannot infer type for parameter '{name}': parameter has no type annotation and is not used in a way that allows inference")]
-    CannotInferParamType {
-        name: String,
-        span: Span,
-    },
+    CannotInferParamType { name: String, span: Span },
 }
 
 impl TypeError {
@@ -271,29 +238,19 @@ impl ErrorCollector {
 pub enum Warning {
     /// 未使用的变量
     #[error("Unused variable: {name}")]
-    UnusedVariable {
-        name: String,
-        span: Span,
-    },
+    UnusedVariable { name: String, span: Span },
 
     /// 未使用的导入
     #[error("Unused import: {path}")]
-    UnusedImport {
-        path: String,
-        span: Span,
-    },
+    UnusedImport { path: String, span: Span },
 
     /// 类型推断可能不准确
     #[error("Type inference may be imprecise")]
-    ImpreciseInference {
-        span: Span,
-    },
+    ImpreciseInference { span: Span },
 
     /// 可能的空指针解引用
     #[error("Potential null dereference")]
-    PotentialNullDereference {
-        span: Span,
-    },
+    PotentialNullDereference { span: Span },
 }
 
 /// 诊断信息
@@ -515,10 +472,7 @@ impl ErrorFormatter {
 
     /// 格式化所有错误
     pub fn format_errors(&self, errors: &[TypeError]) -> Vec<String> {
-        errors
-            .iter()
-            .map(|e| self.format_error(e))
-            .collect()
+        errors.iter().map(|e| self.format_error(e)).collect()
     }
 }
 
@@ -527,86 +481,54 @@ impl From<TypeError> for Diagnostic {
     fn from(error: TypeError) -> Self {
         let span = error.span();
         match &error {
-            TypeError::TypeMismatch { .. } => Diagnostic::error(
-                "E0001".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnknownVariable { .. } => Diagnostic::error(
-                "E0002".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnknownType { .. } => Diagnostic::error(
-                "E0003".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::ArityMismatch { .. } => Diagnostic::error(
-                "E0004".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::RecursiveType { .. } => Diagnostic::error(
-                "E0005".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnsupportedOp { .. } => Diagnostic::error(
-                "E0006".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::GenericConstraint { .. } => Diagnostic::error(
-                "E0007".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::InfiniteType { .. } => Diagnostic::error(
-                "E0008".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnboundTypeVar { .. } => Diagnostic::error(
-                "E0009".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnknownLabel { .. } => Diagnostic::error(
-                "E0010".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::UnknownField { .. } => Diagnostic::error(
-                "E0011".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::IndexOutOfBounds { .. } => Diagnostic::error(
-                "E0012".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::CallError { .. } => Diagnostic::error(
-                "E0013".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::AssignmentError { .. } => Diagnostic::error(
-                "E0014".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::InferenceError { .. } => Diagnostic::error(
-                "E0015".to_string(),
-                format!("{}", error),
-                span,
-            ),
-            TypeError::CannotInferParamType { .. } => Diagnostic::error(
-                "E0016".to_string(),
-                format!("{}", error),
-                span,
-            ),
+            TypeError::TypeMismatch { .. } => {
+                Diagnostic::error("E0001".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnknownVariable { .. } => {
+                Diagnostic::error("E0002".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnknownType { .. } => {
+                Diagnostic::error("E0003".to_string(), format!("{}", error), span)
+            }
+            TypeError::ArityMismatch { .. } => {
+                Diagnostic::error("E0004".to_string(), format!("{}", error), span)
+            }
+            TypeError::RecursiveType { .. } => {
+                Diagnostic::error("E0005".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnsupportedOp { .. } => {
+                Diagnostic::error("E0006".to_string(), format!("{}", error), span)
+            }
+            TypeError::GenericConstraint { .. } => {
+                Diagnostic::error("E0007".to_string(), format!("{}", error), span)
+            }
+            TypeError::InfiniteType { .. } => {
+                Diagnostic::error("E0008".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnboundTypeVar { .. } => {
+                Diagnostic::error("E0009".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnknownLabel { .. } => {
+                Diagnostic::error("E0010".to_string(), format!("{}", error), span)
+            }
+            TypeError::UnknownField { .. } => {
+                Diagnostic::error("E0011".to_string(), format!("{}", error), span)
+            }
+            TypeError::IndexOutOfBounds { .. } => {
+                Diagnostic::error("E0012".to_string(), format!("{}", error), span)
+            }
+            TypeError::CallError { .. } => {
+                Diagnostic::error("E0013".to_string(), format!("{}", error), span)
+            }
+            TypeError::AssignmentError { .. } => {
+                Diagnostic::error("E0014".to_string(), format!("{}", error), span)
+            }
+            TypeError::InferenceError { .. } => {
+                Diagnostic::error("E0015".to_string(), format!("{}", error), span)
+            }
+            TypeError::CannotInferParamType { .. } => {
+                Diagnostic::error("E0016".to_string(), format!("{}", error), span)
+            }
         }
     }
 }

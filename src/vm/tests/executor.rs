@@ -2,9 +2,9 @@
 //!
 //! 测试虚拟机执行器的配置、状态和值类型
 
-use crate::vm::{VMError, VM, VMConfig, VMStatus, Value};
-use crate::vm::executor::Opcode;
 use crate::middle::ModuleIR;
+use crate::vm::executor::Opcode;
+use crate::vm::{VMConfig, VMError, VMStatus, Value, VM};
 
 #[cfg(test)]
 mod vm_config_tests {
@@ -169,7 +169,10 @@ mod opcode_tests {
     #[test]
     fn test_opcode_try_from_invalid() {
         assert!(Opcode::try_from(0xFF).is_err());
-        assert!(matches!(Opcode::try_from(0xFF), Err(VMError::InvalidOpcode(0xFF))));
+        assert!(matches!(
+            Opcode::try_from(0xFF),
+            Err(VMError::InvalidOpcode(0xFF))
+        ));
     }
 
     #[test]

@@ -1,14 +1,36 @@
 //! Type annotation parsing
 
-use super::state::*;
-use super::ast::*;
 use super::super::lexer::tokens::*;
+use super::ast::*;
+use super::state::*;
 use crate::util::span::Span;
 
 impl<'a> ParserState<'a> {
     /// Parse a type annotation
     #[inline]
     pub fn parse_type_anno(&mut self) -> Option<Type> {
+        // Consume optional leading generic parameter list like `<T, U>`
+        if self.at(&TokenKind::Lt) {
+            let mut depth = 1;
+            self.bump(); // consume '<'
+            while depth > 0 {
+                match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Lt) => {
+                        depth += 1;
+                        self.bump();
+                    }
+                    Some(TokenKind::Gt) => {
+                        depth -= 1;
+                        self.bump();
+                    }
+                    Some(_) => {
+                        self.bump();
+                    }
+                    None => break,
+                }
+            }
+        }
+
         self.parse_type()
     }
 
@@ -174,7 +196,7 @@ impl<'a> ParserState<'a> {
 
         // Handle qualified names: std.io.Reader
         while self.skip(&TokenKind::Dot) {
-             match self.current().map(|t| &t.kind) {
+            match self.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => {
                     name.push('.');
                     name.push_str(n);
@@ -216,11 +238,11 @@ impl<'a> ParserState<'a> {
 
         // Check if first arg is named
         if !self.at(&close) && !self.at_end() {
-             if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {
-                 if matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Colon)) {
-                     is_named = true;
-                 }
-             }
+            if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {
+                if matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Colon)) {
+                    is_named = true;
+                }
+            }
         }
 
         while !self.at(&close) && !self.at_end() {
@@ -236,7 +258,9 @@ impl<'a> ParserState<'a> {
                     _ => return None,
                 };
                 self.bump();
-                if !self.expect(&TokenKind::Colon) { return None; }
+                if !self.expect(&TokenKind::Colon) {
+                    return None;
+                }
                 let ty = self.parse_type()?;
                 named_fields.push((field_name, ty));
             } else {
@@ -249,7 +273,10 @@ impl<'a> ParserState<'a> {
         }
 
         if is_named {
-            Some(Type::NamedStruct { name, fields: named_fields })
+            Some(Type::NamedStruct {
+                name,
+                fields: named_fields,
+            })
         } else {
             Some(Type::Generic { name, args })
         }
@@ -269,7 +296,9 @@ impl<'a> ParserState<'a> {
                 }
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
-                        self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                        self.current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Int(64)); // default
                 }
@@ -298,7 +327,9 @@ impl<'a> ParserState<'a> {
                 }
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
-                        self.current().map(|t: &Token| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                        self.current()
+                            .map(|t: &Token| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Float(64)); // default
                 }

@@ -2,8 +2,8 @@
 //!
 //! 测试计算图的所有核心功能
 
-use crate::runtime::dag::{ComputationDAG, DAGError, DAGNodeKind};
 use crate::runtime::dag::node_id::NodeId;
+use crate::runtime::dag::{ComputationDAG, DAGError, DAGNodeKind};
 
 #[cfg(test)]
 mod node_id_tests {
@@ -45,7 +45,9 @@ mod dag_node_tests {
     fn test_dag_node_new() {
         let node = DAGNode::new(
             NodeId(0),
-            DAGNodeKind::Compute { name: "add".to_string() },
+            DAGNodeKind::Compute {
+                name: "add".to_string(),
+            },
         );
         assert_eq!(node.id(), NodeId(0));
         assert!(node.dependencies().is_empty());
@@ -56,7 +58,9 @@ mod dag_node_tests {
     fn test_dag_node_add_dependency() {
         let mut node = DAGNode::new(
             NodeId(0),
-            DAGNodeKind::Compute { name: "c".to_string() },
+            DAGNodeKind::Compute {
+                name: "c".to_string(),
+            },
         );
         node.add_dependency(NodeId(1));
         node.add_dependency(NodeId(2));
@@ -70,7 +74,9 @@ mod dag_node_tests {
     fn test_dag_node_add_dependent() {
         let mut node = DAGNode::new(
             NodeId(0),
-            DAGNodeKind::Compute { name: "a".to_string() },
+            DAGNodeKind::Compute {
+                name: "a".to_string(),
+            },
         );
         node.add_dependent(NodeId(1));
         node.add_dependent(NodeId(2));
@@ -83,14 +89,18 @@ mod dag_node_tests {
     fn test_dag_node_is_root_and_leaf() {
         let mut root = DAGNode::new(
             NodeId(0),
-            DAGNodeKind::Constant { value: "42".to_string() },
+            DAGNodeKind::Constant {
+                value: "42".to_string(),
+            },
         );
         assert!(root.is_root());
         assert!(root.is_leaf());
 
         let mut leaf = DAGNode::new(
             NodeId(1),
-            DAGNodeKind::Compute { name: "result".to_string() },
+            DAGNodeKind::Compute {
+                name: "result".to_string(),
+            },
         );
         leaf.add_dependency(NodeId(0));
         assert!(!leaf.is_root());
@@ -101,7 +111,9 @@ mod dag_node_tests {
     fn test_dag_node_priority() {
         let mut node = DAGNode::new(
             NodeId(0),
-            DAGNodeKind::Compute { name: "high".to_string() },
+            DAGNodeKind::Compute {
+                name: "high".to_string(),
+            },
         );
         assert_eq!(node.priority(), 1);
 
@@ -118,10 +130,7 @@ mod dag_node_tests {
 
     #[test]
     fn test_dag_node_parallel_region() {
-        let mut node = DAGNode::new(
-            NodeId(0),
-            DAGNodeKind::ParallelBlock { num_exprs: 2 },
-        );
+        let mut node = DAGNode::new(NodeId(0), DAGNodeKind::ParallelBlock { num_exprs: 2 });
         assert!(!node.is_in_parallel_region());
 
         node.set_in_parallel_region(true);
@@ -130,7 +139,9 @@ mod dag_node_tests {
 
     #[test]
     fn test_dag_node_kind_is_parallel() {
-        let compute = DAGNodeKind::Compute { name: "add".to_string() };
+        let compute = DAGNodeKind::Compute {
+            name: "add".to_string(),
+        };
         let parallel_block = DAGNodeKind::ParallelBlock { num_exprs: 3 };
         let data_parallel = DAGNodeKind::DataParallel {
             iterator_id: NodeId(0),
@@ -164,7 +175,11 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_add_node() {
         let mut dag = ComputationDAG::new();
-        let id = dag.add_node(DAGNodeKind::Constant { value: "42".to_string() }).unwrap();
+        let id = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "42".to_string(),
+            })
+            .unwrap();
         assert!(dag.contains_node(id));
         assert_eq!(dag.num_nodes(), 1);
     }
@@ -172,9 +187,21 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_add_edge() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "add".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, c).unwrap();
         dag.add_edge(b, c).unwrap();
@@ -186,16 +213,31 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_edge_node_not_found() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
 
-        assert_eq!(dag.add_edge(a, NodeId(999)), Err(DAGError::NodeNotFound(NodeId(999))));
+        assert_eq!(
+            dag.add_edge(a, NodeId(999)),
+            Err(DAGError::NodeNotFound(NodeId(999)))
+        );
     }
 
     #[test]
     fn test_dag_cycle_detection() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, b).unwrap();
 
@@ -206,7 +248,11 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_self_cycle_detection() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
 
         // Adding a -> a is a self-cycle
         assert_eq!(dag.add_edge(a, a), Err(DAGError::CycleDetected));
@@ -215,8 +261,16 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_duplicate_edge() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Compute { name: "x".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "x".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, b).unwrap();
         assert_eq!(dag.add_edge(a, b), Err(DAGError::DuplicateEdge));
@@ -225,7 +279,11 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_get_node() {
         let mut dag = ComputationDAG::new();
-        let id = dag.add_node(DAGNodeKind::Compute { name: "test".to_string() }).unwrap();
+        let id = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "test".to_string(),
+            })
+            .unwrap();
         let node = dag.get_node(id).unwrap();
         assert!(matches!(node.kind(), DAGNodeKind::Compute { .. }));
     }
@@ -233,13 +291,20 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_get_node_not_found() {
         let dag = ComputationDAG::new();
-        assert_eq!(dag.get_node(NodeId(999)), Err(DAGError::NodeNotFound(NodeId(999))));
+        assert_eq!(
+            dag.get_node(NodeId(999)),
+            Err(DAGError::NodeNotFound(NodeId(999)))
+        );
     }
 
     #[test]
     fn test_dag_get_node_mut() {
         let mut dag = ComputationDAG::new();
-        let id = dag.add_node(DAGNodeKind::Compute { name: "test".to_string() }).unwrap();
+        let id = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "test".to_string(),
+            })
+            .unwrap();
         let node = dag.get_node_mut(id).unwrap();
         node.set_priority(5);
         assert_eq!(dag.get_node(id).unwrap().priority(), 5);
@@ -248,9 +313,21 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_roots_and_leaves() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "add".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add".to_string(),
+            })
+            .unwrap();
 
         // Initially all nodes are both roots and leaves
         assert_eq!(dag.roots().len(), 3);
@@ -269,9 +346,21 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_ready_nodes() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "add".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add".to_string(),
+            })
+            .unwrap();
 
         // Initially all nodes are ready (no dependencies)
         let ready = dag.ready_nodes();
@@ -291,10 +380,26 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_topological_sort() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "add".to_string() }).unwrap();
-        let d = dag.add_node(DAGNodeKind::Compute { name: "mult".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add".to_string(),
+            })
+            .unwrap();
+        let d = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "mult".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, c).unwrap();
         dag.add_edge(b, c).unwrap();
@@ -320,11 +425,31 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_max_parallelism() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "x".to_string() }).unwrap();
-        let d = dag.add_node(DAGNodeKind::Compute { name: "y".to_string() }).unwrap();
-        let e = dag.add_node(DAGNodeKind::Compute { name: "z".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "x".to_string(),
+            })
+            .unwrap();
+        let d = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "y".to_string(),
+            })
+            .unwrap();
+        let e = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "z".to_string(),
+            })
+            .unwrap();
 
         // a and b can run in parallel
         dag.add_edge(a, c).unwrap();
@@ -340,10 +465,26 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_critical_path_length() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Compute { name: "a+1".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "b+1".to_string() }).unwrap();
-        let d = dag.add_node(DAGNodeKind::Compute { name: "c+1".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "a+1".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "b+1".to_string(),
+            })
+            .unwrap();
+        let d = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "c+1".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, b).unwrap();
         dag.add_edge(b, c).unwrap();
@@ -356,7 +497,11 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_freeze() {
         let mut dag = ComputationDAG::new();
-        let id = dag.add_node(DAGNodeKind::Constant { value: "42".to_string() }).unwrap();
+        let id = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "42".to_string(),
+            })
+            .unwrap();
 
         assert!(!dag.is_frozen());
 
@@ -365,7 +510,9 @@ mod computation_dag_tests {
 
         // Can't add nodes after freezing
         assert_eq!(
-            dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }),
+            dag.add_node(DAGNodeKind::Constant {
+                value: "1".to_string()
+            }),
             Err(DAGError::GraphFrozen)
         );
     }
@@ -373,16 +520,30 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_freeze_after_edges() {
         let mut dag = ComputationDAG::new();
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Compute { name: "x".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "x".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
 
         dag.add_edge(a, b).unwrap();
         dag.freeze();
 
         // Can't add nodes after freezing
         assert_eq!(
-            dag.add_node(DAGNodeKind::Constant { value: "3".to_string() }),
+            dag.add_node(DAGNodeKind::Constant {
+                value: "3".to_string()
+            }),
             Err(DAGError::GraphFrozen)
         );
 
@@ -393,7 +554,10 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_display() {
         let mut dag = ComputationDAG::new();
-        dag.add_node(DAGNodeKind::Constant { value: "42".to_string() }).unwrap();
+        dag.add_node(DAGNodeKind::Constant {
+            value: "42".to_string(),
+        })
+        .unwrap();
         let display = format!("{}", dag);
         assert!(display.contains("nodes: 1"));
     }
@@ -401,10 +565,24 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_parallel_block() {
         let mut dag = ComputationDAG::new();
-        let block = dag.add_node(DAGNodeKind::ParallelBlock { num_exprs: 3 }).unwrap();
-        let a = dag.add_node(DAGNodeKind::Compute { name: "a".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Compute { name: "b".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Compute { name: "c".to_string() }).unwrap();
+        let block = dag
+            .add_node(DAGNodeKind::ParallelBlock { num_exprs: 3 })
+            .unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "a".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "b".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "c".to_string(),
+            })
+            .unwrap();
 
         // block -> a, block -> b, block -> c means a, b, c all depend on block
         dag.add_edge(block, a).unwrap();
@@ -420,13 +598,23 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_data_parallel() {
         let mut dag = ComputationDAG::new();
-        let iter = dag.add_node(DAGNodeKind::Constant { value: "range(10)".to_string() }).unwrap();
-        let body = dag.add_node(DAGNodeKind::Compute { name: "process".to_string() }).unwrap();
-        let dp = dag.add_node(DAGNodeKind::DataParallel {
-            iterator_id: iter,
-            body_id: body,
-            num_iterations: 10,
-        }).unwrap();
+        let iter = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "range(10)".to_string(),
+            })
+            .unwrap();
+        let body = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "process".to_string(),
+            })
+            .unwrap();
+        let dp = dag
+            .add_node(DAGNodeKind::DataParallel {
+                iterator_id: iter,
+                body_id: body,
+                num_iterations: 10,
+            })
+            .unwrap();
 
         dag.add_edge(iter, dp).unwrap();
         dag.add_edge(body, dp).unwrap();
@@ -440,17 +628,45 @@ mod computation_dag_tests {
         let mut dag = ComputationDAG::new();
 
         // Leaf nodes (constants)
-        let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
-        let b = dag.add_node(DAGNodeKind::Constant { value: "2".to_string() }).unwrap();
-        let c = dag.add_node(DAGNodeKind::Constant { value: "3".to_string() }).unwrap();
-        let d = dag.add_node(DAGNodeKind::Constant { value: "4".to_string() }).unwrap();
+        let a = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "1".to_string(),
+            })
+            .unwrap();
+        let b = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "2".to_string(),
+            })
+            .unwrap();
+        let c = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "3".to_string(),
+            })
+            .unwrap();
+        let d = dag
+            .add_node(DAGNodeKind::Constant {
+                value: "4".to_string(),
+            })
+            .unwrap();
 
         // First level computations
-        let ab = dag.add_node(DAGNodeKind::Compute { name: "add_ab".to_string() }).unwrap();
-        let cd = dag.add_node(DAGNodeKind::Compute { name: "add_cd".to_string() }).unwrap();
+        let ab = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add_ab".to_string(),
+            })
+            .unwrap();
+        let cd = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "add_cd".to_string(),
+            })
+            .unwrap();
 
         // Final computation
-        let result = dag.add_node(DAGNodeKind::Compute { name: "mult".to_string() }).unwrap();
+        let result = dag
+            .add_node(DAGNodeKind::Compute {
+                name: "mult".to_string(),
+            })
+            .unwrap();
 
         // Build edges
         dag.add_edge(a, ab).unwrap();
@@ -464,9 +680,9 @@ mod computation_dag_tests {
         assert_eq!(dag.num_nodes(), 7);
         assert_eq!(dag.roots().len(), 4); // a, b, c, d
         assert_eq!(dag.leaves().len(), 1); // result
-        // Level 0: a, b, c, d (4 nodes, all roots, can run in parallel)
-        // Level 1: ab, cd (2 nodes)
-        // Level 2: result (1 node)
+                                           // Level 0: a, b, c, d (4 nodes, all roots, can run in parallel)
+                                           // Level 1: ab, cd (2 nodes)
+                                           // Level 2: result (1 node)
         assert_eq!(dag.max_parallelism(), 4);
         assert_eq!(dag.critical_path_length(), 3); // leaf -> first -> result
     }

@@ -34,7 +34,10 @@ impl Compiler {
         // Parsing
         eprintln!("[DEBUG] Starting parsing...");
         let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
-        eprintln!("[DEBUG] Parsing successful, got {} statements", ast.items.len());
+        eprintln!(
+            "[DEBUG] Parsing successful, got {} statements",
+            ast.items.len()
+        );
 
         // Type checking
         eprintln!("[DEBUG] Starting type checking...");

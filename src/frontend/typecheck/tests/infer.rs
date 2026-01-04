@@ -1,7 +1,7 @@
 //! 类型推断器详细测试
 
 use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, UnOp, Expr, Pattern, Block, Stmt, StmtKind};
+use crate::frontend::parser::ast::{BinOp, Block, Expr, Pattern, Stmt, StmtKind, UnOp};
 use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 
@@ -873,12 +873,14 @@ fn test_infer_var_decl() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    inferrer.infer_var_decl(
-        "x",
-        None,
-        Some(&Expr::Lit(Literal::Int(42), Span::default())),
-        Span::default()
-    ).unwrap();
+    inferrer
+        .infer_var_decl(
+            "x",
+            None,
+            Some(&Expr::Lit(Literal::Int(42), Span::default())),
+            Span::default(),
+        )
+        .unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");
@@ -891,12 +893,14 @@ fn test_infer_var_decl_with_annotation() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    inferrer.infer_var_decl(
-        "x",
-        Some(&crate::frontend::parser::ast::Type::Int(64)),
-        Some(&Expr::Lit(Literal::Int(42), Span::default())),
-        Span::default()
-    ).unwrap();
+    inferrer
+        .infer_var_decl(
+            "x",
+            Some(&crate::frontend::parser::ast::Type::Int(64)),
+            Some(&Expr::Lit(Literal::Int(42), Span::default())),
+            Span::default(),
+        )
+        .unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");
@@ -909,12 +913,14 @@ fn test_infer_var_decl_no_initializer() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    inferrer.infer_var_decl(
-        "x",
-        Some(&crate::frontend::parser::ast::Type::Int(64)),
-        None,
-        Span::default()
-    ).unwrap();
+    inferrer
+        .infer_var_decl(
+            "x",
+            Some(&crate::frontend::parser::ast::Type::Int(64)),
+            None,
+            Span::default(),
+        )
+        .unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");

@@ -1,13 +1,13 @@
-use crate::frontend::parser::parse;
 use crate::frontend::lexer::tokenize;
-use crate::frontend::parser::ast::{StmtKind, Expr};
+use crate::frontend::parser::ast::{Expr, StmtKind};
+use crate::frontend::parser::parse;
 
 #[test]
 fn test_parse_fn_def_no_params() {
     let source = "main: () -> () = () => {}";
     let tokens = tokenize(source).unwrap();
     let module = parse(&tokens).unwrap();
-    
+
     assert_eq!(module.items.len(), 1);
     match &module.items[0].kind {
         StmtKind::Fn { name, params, .. } => {
@@ -44,4 +44,3 @@ fn test_parse_complex_fn_def() {
     let module = parse(&tokens).unwrap();
     assert_eq!(module.items.len(), 1);
 }
-

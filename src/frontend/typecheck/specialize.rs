@@ -126,12 +126,16 @@ impl GenericSpecializer {
                     .map(|t| self.substitute_type(t, substitution, solver))
                     .collect(),
             ),
-            MonoType::List(t) => MonoType::List(Box::new(self.substitute_type(t, substitution, solver))),
+            MonoType::List(t) => {
+                MonoType::List(Box::new(self.substitute_type(t, substitution, solver)))
+            }
             MonoType::Dict(k, v) => MonoType::Dict(
                 Box::new(self.substitute_type(k, substitution, solver)),
                 Box::new(self.substitute_type(v, substitution, solver)),
             ),
-            MonoType::Set(t) => MonoType::Set(Box::new(self.substitute_type(t, substitution, solver))),
+            MonoType::Set(t) => {
+                MonoType::Set(Box::new(self.substitute_type(t, substitution, solver)))
+            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -214,10 +218,7 @@ impl PolyType {
 }
 
 /// 替换单态类型中的变量
-fn substitute_mono_type(
-    ty: &MonoType,
-    substitution: &HashMap<TypeVar, MonoType>,
-) -> MonoType {
+fn substitute_mono_type(ty: &MonoType, substitution: &HashMap<TypeVar, MonoType>) -> MonoType {
     match ty {
         MonoType::TypeVar(v) => {
             if let Some(ty) = substitution.get(v) {

@@ -15,13 +15,13 @@
 //! - [`ComputationDAG`](graph::ComputationDAG) - The complete computation graph
 //! - [`DAGError`](graph::DAGError) - Errors that can occur when manipulating the graph
 
-pub mod node_id;
-pub mod node;
 pub mod graph;
+pub mod node;
+pub mod node_id;
 
-pub use node_id::{NodeId, NodeIdGenerator};
-pub use node::{DAGNode, DAGNodeKind};
 pub use graph::{ComputationDAG, DAGError};
+pub use node::{DAGNode, DAGNodeKind};
+pub use node_id::{NodeId, NodeIdGenerator};
 
 #[cfg(test)]
 mod tests;

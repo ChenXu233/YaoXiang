@@ -71,7 +71,10 @@ mod error_display_tests {
     #[test]
     fn test_vm_error_runtime_error() {
         let error = VMError::RuntimeError("null pointer dereference".to_string());
-        assert_eq!(format!("{}", error), "Runtime error: null pointer dereference");
+        assert_eq!(
+            format!("{}", error),
+            "Runtime error: null pointer dereference"
+        );
     }
 
     #[test]

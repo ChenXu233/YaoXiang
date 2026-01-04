@@ -2,8 +2,8 @@
 //!
 //! 处理闭包捕获和 Upvalue 生成。
 
-use super::{CodegenContext, CodegenError, BytecodeInstruction};
-use crate::frontend::parser::ast::{Expr, Block, Param};
+use super::{BytecodeInstruction, CodegenContext, CodegenError};
+use crate::frontend::parser::ast::{Block, Expr, Param};
 use crate::middle::ir::{FunctionIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use std::collections::HashMap;
@@ -13,9 +13,20 @@ impl CodegenContext {
     pub fn generate_closure_expr(&mut self, func_expr: &Expr) -> Result<Operand, CodegenError> {
         // 1. 提取 FnDef 表达式
         let (name, params, return_type, body, is_async) = match func_expr {
-            Expr::FnDef { name, params, return_type, body, is_async, .. } => {
-                (name.clone(), params.clone(), return_type.clone(), body.clone(), *is_async)
-            }
+            Expr::FnDef {
+                name,
+                params,
+                return_type,
+                body,
+                is_async,
+                ..
+            } => (
+                name.clone(),
+                params.clone(),
+                return_type.clone(),
+                body.clone(),
+                *is_async,
+            ),
             _ => {
                 return Err(CodegenError::UnimplementedExpr {
                     expr_type: "Non-function closure".to_string(),
@@ -58,12 +69,15 @@ impl CodegenContext {
 
         // 收集当前作用域的变量
         for (name, symbol) in &self.symbol_table.symbols {
-            var_positions.insert(name.clone(), match symbol.storage {
-                super::Storage::Local(id) => Operand::Local(id),
-                super::Storage::Arg(id) => Operand::Arg(id),
-                super::Storage::Temp(id) => Operand::Temp(id),
-                super::Storage::Global(id) => Operand::Global(id),
-            });
+            var_positions.insert(
+                name.clone(),
+                match symbol.storage {
+                    super::Storage::Local(id) => Operand::Local(id),
+                    super::Storage::Arg(id) => Operand::Arg(id),
+                    super::Storage::Temp(id) => Operand::Temp(id),
+                    super::Storage::Global(id) => Operand::Global(id),
+                },
+            );
         }
 
         // 递归收集函数体中引用的变量
@@ -105,7 +119,13 @@ impl CodegenContext {
                     self.collect_captures(arg, var_positions, captures);
                 }
             }
-            Expr::If { condition, then_branch, elif_branches, else_branch, .. } => {
+            Expr::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
                 self.collect_captures(condition, var_positions, captures);
                 self.collect_captures_block(then_branch, var_positions, captures);
                 for (_, elif_body) in elif_branches {
@@ -115,7 +135,9 @@ impl CodegenContext {
                     self.collect_captures_block(else_b, var_positions, captures);
                 }
             }
-            Expr::While { condition, body, .. } => {
+            Expr::While {
+                condition, body, ..
+            } => {
                 self.collect_captures(condition, var_positions, captures);
                 self.collect_captures_block(body, var_positions, captures);
             }
@@ -231,12 +253,15 @@ impl CodegenContext {
         func_id: u32,
     ) -> Result<(), CodegenError> {
         // 转换参数类型
-        let params: Vec<_> = params.iter().map(|p| {
-            p.ty.as_ref()
-                .map_or(Ok(crate::frontend::typecheck::MonoType::Void), |t| {
-                    Ok(crate::frontend::typecheck::MonoType::from(t.clone()))
-                })
-        }).collect::<Result<Vec<_>, _>>()?;
+        let params: Vec<_> = params
+            .iter()
+            .map(|p| {
+                p.ty.as_ref()
+                    .map_or(Ok(crate::frontend::typecheck::MonoType::Void), |t| {
+                        Ok(crate::frontend::typecheck::MonoType::from(t.clone()))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // 转换返回类型
         let return_type = return_type
@@ -246,7 +271,11 @@ impl CodegenContext {
 
         // 创建函数 IR
         let func_ir = FunctionIR {
-            name: if name.is_empty() { format!("closure_{}", func_id) } else { name.to_string() },
+            name: if name.is_empty() {
+                format!("closure_{}", func_id)
+            } else {
+                name.to_string()
+            },
             params,
             return_type,
             is_async,

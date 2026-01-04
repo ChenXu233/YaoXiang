@@ -6,14 +6,14 @@
 //! 2. 寄存器架构：所有操作在寄存器上进行
 //! 3. 单态化输出：泛型已在编译期展开
 
-pub mod expr;
-pub mod stmt;
-pub mod control_flow;
-pub mod switch;
-pub mod loop_gen;
-pub mod closure;
 pub mod bytecode;
+pub mod closure;
+pub mod control_flow;
+pub mod expr;
 pub mod generator;
+pub mod loop_gen;
+pub mod stmt;
+pub mod switch;
 
 use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
@@ -357,7 +357,12 @@ impl CodegenContext {
         }
 
         // 3. 生成类型表
-        let type_table: Vec<MonoType> = self.module.types.iter().map(|t| self.type_from_ast(t)).collect();
+        let type_table: Vec<MonoType> = self
+            .module
+            .types
+            .iter()
+            .map(|t| self.type_from_ast(t))
+            .collect();
 
         // 4. 生成文件头
         let header = self.generate_header();
@@ -394,7 +399,10 @@ impl CodegenContext {
     }
 
     /// 生成函数指令
-    fn generate_instructions(&mut self, func: &FunctionIR) -> Result<Vec<BytecodeInstruction>, CodegenError> {
+    fn generate_instructions(
+        &mut self,
+        func: &FunctionIR,
+    ) -> Result<Vec<BytecodeInstruction>, CodegenError> {
         let mut instructions = Vec::new();
 
         for block in &func.blocks {
@@ -408,7 +416,10 @@ impl CodegenContext {
     }
 
     /// 翻译 IR 指令为字节码指令
-    fn translate_instruction(&mut self, instr: &Instruction) -> Result<BytecodeInstruction, CodegenError> {
+    fn translate_instruction(
+        &mut self,
+        instr: &Instruction,
+    ) -> Result<BytecodeInstruction, CodegenError> {
         use Instruction::*;
 
         match instr {
@@ -418,7 +429,10 @@ impl CodegenContext {
             Move { dst, src } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![dst_reg, src_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::Mov,
+                    vec![dst_reg, src_reg],
+                ))
             }
 
             Load { dst, src } => {
@@ -427,11 +441,17 @@ impl CodegenContext {
                 match src {
                     Operand::Const(const_val) => {
                         let const_idx = self.add_constant(const_val.clone());
-                        Ok(BytecodeInstruction::new(TypedOpcode::LoadConst, vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8]))
+                        Ok(BytecodeInstruction::new(
+                            TypedOpcode::LoadConst,
+                            vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
+                        ))
                     }
                     _ => {
                         let src_reg = self.operand_to_reg(src)?;
-                        Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![dst_reg, src_reg]))
+                        Ok(BytecodeInstruction::new(
+                            TypedOpcode::Mov,
+                            vec![dst_reg, src_reg],
+                        ))
                     }
                 }
             }
@@ -449,41 +469,59 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Add, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Add,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Sub { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Sub, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Sub,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Mul { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Mul, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Mul,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Div { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Div, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Div,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Mod { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Rem, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Rem,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Neg { dst, src } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Neg, vec![dst_reg, src_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Neg,
+                    vec![dst_reg, src_reg],
+                ))
             }
 
             // =====================
@@ -493,42 +531,60 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Eq, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Eq,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Ne { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Ne, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Ne,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Lt { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Lt, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Lt,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Le { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Le, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Le,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Gt { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Gt, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Gt,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             Ge { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::I64Ge, vec![dst_reg, lhs_reg, rhs_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Ge,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
             }
 
             // =====================
@@ -544,20 +600,29 @@ impl CodegenContext {
                 let cond_reg = self.operand_to_reg(cond)?;
                 let offset = *target as i32;
                 let offset_bytes = (offset as i16).to_le_bytes();
-                Ok(BytecodeInstruction::new(TypedOpcode::JmpIf, vec![cond_reg, offset_bytes[0], offset_bytes[1]]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::JmpIf,
+                    vec![cond_reg, offset_bytes[0], offset_bytes[1]],
+                ))
             }
 
             JmpIfNot(cond, target) => {
                 let cond_reg = self.operand_to_reg(cond)?;
                 let offset = *target as i32;
                 let offset_bytes = (offset as i16).to_le_bytes();
-                Ok(BytecodeInstruction::new(TypedOpcode::JmpIfNot, vec![cond_reg, offset_bytes[0], offset_bytes[1]]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::JmpIfNot,
+                    vec![cond_reg, offset_bytes[0], offset_bytes[1]],
+                ))
             }
 
             Ret(value) => {
                 if let Some(v) = value {
                     let reg = self.operand_to_reg(v)?;
-                    Ok(BytecodeInstruction::new(TypedOpcode::ReturnValue, vec![reg]))
+                    Ok(BytecodeInstruction::new(
+                        TypedOpcode::ReturnValue,
+                        vec![reg],
+                    ))
                 } else {
                     Ok(BytecodeInstruction::new(TypedOpcode::Return, vec![]))
                 }
@@ -566,14 +631,20 @@ impl CodegenContext {
             // =====================
             // 函数调用
             // =====================
-            Call { dst: _, func: _, args: _ } => {
+            Call {
+                dst: _,
+                func: _,
+                args: _,
+            } => {
                 // 简化实现：返回 Nop
                 Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
             }
 
-            CallAsync { dst: _, func: _, args: _ } => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
-            }
+            CallAsync {
+                dst: _,
+                func: _,
+                args: _,
+            } => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
 
             TailCall { func: _, args: _ } => {
                 Ok(BytecodeInstruction::new(TypedOpcode::TailCall, vec![]))
@@ -584,78 +655,122 @@ impl CodegenContext {
             // =====================
             Alloc { dst, size: _ } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::StackAlloc, vec![dst_reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StackAlloc,
+                    vec![dst_reg],
+                ))
             }
 
-            Free(_) => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
-            }
+            Free(_) => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
-            AllocArray { dst, size: _, elem_size: _ } => {
+            AllocArray {
+                dst,
+                size: _,
+                elem_size: _,
+            } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::NewListWithCap, vec![dst_reg, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::NewListWithCap,
+                    vec![dst_reg, 0, 0],
+                ))
             }
 
             // =====================
             // 字段操作
             // =====================
-            LoadField { dst, src: _, field: _ } => {
+            LoadField {
+                dst,
+                src: _,
+                field: _,
+            } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::GetField, vec![dst_reg, 0, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::GetField,
+                    vec![dst_reg, 0, 0, 0],
+                ))
             }
 
-            StoreField { dst: _, field: _, src: _ } => {
-                Ok(BytecodeInstruction::new(TypedOpcode::SetField, vec![0, 0, 0]))
-            }
+            StoreField {
+                dst: _,
+                field: _,
+                src: _,
+            } => Ok(BytecodeInstruction::new(
+                TypedOpcode::SetField,
+                vec![0, 0, 0],
+            )),
 
-            LoadIndex { dst, src: _, index: _ } => {
+            LoadIndex {
+                dst,
+                src: _,
+                index: _,
+            } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::LoadElement, vec![dst_reg, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::LoadElement,
+                    vec![dst_reg, 0, 0],
+                ))
             }
 
-            StoreIndex { dst: _, index: _, src: _ } => {
-                Ok(BytecodeInstruction::new(TypedOpcode::StoreElement, vec![0, 0, 0]))
-            }
+            StoreIndex {
+                dst: _,
+                index: _,
+                src: _,
+            } => Ok(BytecodeInstruction::new(
+                TypedOpcode::StoreElement,
+                vec![0, 0, 0],
+            )),
 
             // =====================
             // 类型操作
             // =====================
-            Cast { dst, src, target_type: _ } => {
+            Cast {
+                dst,
+                src,
+                target_type: _,
+            } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Cast, vec![dst_reg, src_reg, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::Cast,
+                    vec![dst_reg, src_reg, 0, 0],
+                ))
             }
 
-            TypeTest(_, _) => {
-                Ok(BytecodeInstruction::new(TypedOpcode::TypeCheck, vec![0, 0, 0]))
-            }
+            TypeTest(_, _) => Ok(BytecodeInstruction::new(
+                TypedOpcode::TypeCheck,
+                vec![0, 0, 0],
+            )),
 
             // =====================
             // 异步操作
             // =====================
-            Spawn { func: _ } => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
-            }
+            Spawn { func: _ } => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
-            Await(_) => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
-            }
+            Await(_) => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
 
-            Yield => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![]))
-            }
+            Yield => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
 
             // =====================
             // 内存管理
             // =====================
             HeapAlloc { dst, type_id: _ } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::HeapAlloc, vec![dst_reg, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::HeapAlloc,
+                    vec![dst_reg, 0, 0],
+                ))
             }
 
-            MakeClosure { dst, func: _, env: _ } => {
+            MakeClosure {
+                dst,
+                func: _,
+                env: _,
+            } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::MakeClosure, vec![dst_reg, 0, 0, 0]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::MakeClosure,
+                    vec![dst_reg, 0, 0, 0],
+                ))
             }
 
             Drop(operand) => {
@@ -676,13 +791,9 @@ impl CodegenContext {
                 Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
             }
 
-            Dup => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
-            }
+            Dup => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
-            Swap => {
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
-            }
+            Swap => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
         }
     }
 
@@ -743,10 +854,13 @@ impl CodegenContext {
                 Box::new(self.type_from_ast(key)),
                 Box::new(self.type_from_ast(value)),
             ),
-            Type::Tuple(types) => MonoType::Tuple(
-                types.iter().map(|t| self.type_from_ast(t)).collect(),
-            ),
-            Type::Fn { params, return_type } => MonoType::Fn {
+            Type::Tuple(types) => {
+                MonoType::Tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
+            }
+            Type::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
                 params: params.iter().map(|t| self.type_from_ast(t)).collect(),
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
@@ -782,10 +896,10 @@ impl CodegenContext {
 }
 
 pub use bytecode::BytecodeFile;
-pub use bytecode::FileHeader as BytecodeHeader;
-pub use bytecode::CodeSection;
-pub use bytecode::FunctionCode;
 pub use bytecode::BytecodeInstruction;
+pub use bytecode::CodeSection;
+pub use bytecode::FileHeader as BytecodeHeader;
+pub use bytecode::FunctionCode;
 
 /// 常量定义
 pub const YAOXIANG_MAGIC: u32 = 0x59584243;

@@ -91,13 +91,15 @@ pub fn build_bytecode(source_path: &Path, output_path: &Path) -> Result<()> {
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
-    let bytecode_file = ctx.generate()
+    let bytecode_file = ctx
+        .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
 
     // Write to file
     let mut file = fs::File::create(output_path)
         .with_context(|| format!("Failed to create output: {}", output_path.display()))?;
-    bytecode_file.write_to(&mut file)
+    bytecode_file
+        .write_to(&mut file)
         .with_context(|| format!("Failed to write bytecode: {}", output_path.display()))?;
 
     eprintln!("[INFO] Bytecode written to: {}", output_path.display());
@@ -106,7 +108,6 @@ pub fn build_bytecode(source_path: &Path, output_path: &Path) -> Result<()> {
 
 /// Dump bytecode for debugging
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    
     use crate::middle::codegen::CodegenContext;
     use crate::vm::opcode::TypedOpcode;
 
@@ -119,7 +120,8 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
-    let bytecode_file = ctx.generate()
+    let bytecode_file = ctx
+        .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
 
     // Dump human-readable format
@@ -141,7 +143,10 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
         println!("  [{}] {:?}", i, c);
     }
 
-    println!("\n--- Functions ({}) ---", bytecode_file.code_section.functions.len());
+    println!(
+        "\n--- Functions ({}) ---",
+        bytecode_file.code_section.functions.len()
+    );
     for (i, func) in bytecode_file.code_section.functions.iter().enumerate() {
         println!("\n  Function {}: {}", i, func.name);
         println!("    Params: {:?}", func.params);
@@ -158,9 +163,8 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
             if instr.operands.is_empty() {
                 println!("    [{:4}] {}", j, opcode_name);
             } else {
-                let operands: Vec<String> = instr.operands.iter()
-                    .map(|b| format!("{}", b))
-                    .collect();
+                let operands: Vec<String> =
+                    instr.operands.iter().map(|b| format!("{}", b)).collect();
                 println!("    [{:4}] {} [{}]", j, opcode_name, operands.join(", "));
             }
         }

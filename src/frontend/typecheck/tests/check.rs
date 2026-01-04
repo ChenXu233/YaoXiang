@@ -1,7 +1,7 @@
 use crate::frontend::parser::ast;
 use crate::frontend::typecheck::check::TypeChecker;
 use crate::frontend::typecheck::types::TypeConstraintSolver;
-use crate::util::span::{Span, Position};
+use crate::util::span::{Position, Span};
 
 fn create_dummy_span() -> Span {
     Span::new(Position::dummy(), Position::dummy())
@@ -74,9 +74,9 @@ fn test_check_var_type_mismatch() {
 
     // check_stmt adds constraints.
     assert!(checker.check_stmt(&stmt).is_ok());
-    
+
     // Now we need to solve constraints to see the error
-    let result = checker.check_module(&ast::Module { 
+    let result = checker.check_module(&ast::Module {
         items: vec![stmt],
         span: create_dummy_span(),
     });
@@ -136,7 +136,7 @@ fn test_check_type_alias() {
     // This is expected to fail currently because alias resolution is missing
     // But let's see if it passes or fails.
     let result = checker.check_module(&module);
-    // assert!(result.is_ok()); 
+    // assert!(result.is_ok());
 }
 
 #[test]
@@ -150,15 +150,27 @@ fn test_check_for_loop() {
             var: "i".to_string(),
             iterable: Box::new(ast::Expr::List(
                 vec![
-                    ast::Expr::Lit(crate::frontend::lexer::tokens::Literal::Int(1), create_dummy_span()),
-                    ast::Expr::Lit(crate::frontend::lexer::tokens::Literal::Int(2), create_dummy_span()),
-                    ast::Expr::Lit(crate::frontend::lexer::tokens::Literal::Int(3), create_dummy_span()),
+                    ast::Expr::Lit(
+                        crate::frontend::lexer::tokens::Literal::Int(1),
+                        create_dummy_span(),
+                    ),
+                    ast::Expr::Lit(
+                        crate::frontend::lexer::tokens::Literal::Int(2),
+                        create_dummy_span(),
+                    ),
+                    ast::Expr::Lit(
+                        crate::frontend::lexer::tokens::Literal::Int(3),
+                        create_dummy_span(),
+                    ),
                 ],
                 create_dummy_span(),
             )),
             body: Box::new(ast::Block {
                 stmts: vec![],
-                expr: Some(Box::new(ast::Expr::Var("i".to_string(), create_dummy_span()))),
+                expr: Some(Box::new(ast::Expr::Var(
+                    "i".to_string(),
+                    create_dummy_span(),
+                ))),
                 span: create_dummy_span(),
             }),
             label: None,
@@ -179,8 +191,16 @@ fn test_check_fn_def() {
         kind: ast::StmtKind::Expr(Box::new(ast::Expr::FnDef {
             name: "add".to_string(),
             params: vec![
-                ast::Param { name: "a".to_string(), ty: Some(ast::Type::Name("Int".to_string())), span: create_dummy_span() },
-                ast::Param { name: "b".to_string(), ty: Some(ast::Type::Name("Int".to_string())), span: create_dummy_span() },
+                ast::Param {
+                    name: "a".to_string(),
+                    ty: Some(ast::Type::Name("Int".to_string())),
+                    span: create_dummy_span(),
+                },
+                ast::Param {
+                    name: "b".to_string(),
+                    ty: Some(ast::Type::Name("Int".to_string())),
+                    span: create_dummy_span(),
+                },
             ],
             return_type: Some(ast::Type::Name("Int".to_string())),
             body: Box::new(ast::Block {

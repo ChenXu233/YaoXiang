@@ -2,11 +2,11 @@
 //!
 //! 测试中间 IR 到字节码的翻译功能
 
-use crate::middle::codegen::generator::BytecodeGenerator;
-use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand, ConstValue};
-use crate::middle::codegen::bytecode::FunctionCode;
-use crate::vm::opcode::TypedOpcode;
 use crate::frontend::typecheck::MonoType;
+use crate::middle::codegen::bytecode::FunctionCode;
+use crate::middle::codegen::generator::BytecodeGenerator;
+use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, Operand};
+use crate::vm::opcode::TypedOpcode;
 
 #[test]
 fn test_generate_add() {
@@ -164,16 +164,12 @@ fn test_generate_jump() {
         blocks: vec![
             BasicBlock {
                 label: 0,
-                instructions: vec![
-                    Instruction::Jmp(1),
-                ],
+                instructions: vec![Instruction::Jmp(1)],
                 successors: vec![1],
             },
             BasicBlock {
                 label: 1,
-                instructions: vec![
-                    Instruction::Ret(None),
-                ],
+                instructions: vec![Instruction::Ret(None)],
                 successors: vec![],
             },
         ],

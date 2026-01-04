@@ -1,6 +1,6 @@
 //! 循环优化代码生成
 
-use super::{CodegenContext, CodegenError, BytecodeInstruction};
+use super::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Expr, Stmt};
 use crate::middle::ir::Operand;
 use crate::vm::opcode::TypedOpcode;
@@ -14,13 +14,22 @@ impl CodegenContext {
         body: &Stmt,
     ) -> Result<Operand, CodegenError> {
         if let Some(range_info) = self.try_match_range(iterable) {
-            return self.generate_range_loop(var_name, range_info.0, range_info.1, range_info.2, body);
+            return self.generate_range_loop(
+                var_name,
+                range_info.0,
+                range_info.1,
+                range_info.2,
+                body,
+            );
         }
         self.generate_iterator_loop(var_name, iterable, body)
     }
 
     /// 尝试匹配 range 调用
-    fn try_match_range<'a>(&self, expr: &'a Expr) -> Option<(&'a Expr, &'a Expr, Option<&'a Expr>)> {
+    fn try_match_range<'a>(
+        &self,
+        expr: &'a Expr,
+    ) -> Option<(&'a Expr, &'a Expr, Option<&'a Expr>)> {
         if let Expr::Call { func, args, .. } = expr {
             if let Expr::Var(name, _) = &**func {
                 if name == "range" {
@@ -55,7 +64,9 @@ impl CodegenContext {
         let loop_exit_label = self.next_label();
 
         // 保存当前循环标签
-        let _prev_label = self.current_loop_label.replace((loop_start_label, loop_exit_label));
+        let _prev_label = self
+            .current_loop_label
+            .replace((loop_start_label, loop_exit_label));
 
         // 生成 start 和 end 表达式
         let start_reg = self.generate_expr(start)?;
@@ -85,13 +96,16 @@ impl CodegenContext {
 
         // 注册循环变量到符号表
         let local_idx = self.next_local();
-        self.symbol_table.insert(var_name.to_string(), super::Symbol {
-            name: var_name.to_string(),
-            ty: crate::frontend::typecheck::MonoType::Int(64),
-            storage: super::Storage::Local(local_idx),
-            is_mut: true,
-            scope_level: self.scope_level,
-        });
+        self.symbol_table.insert(
+            var_name.to_string(),
+            super::Symbol {
+                name: var_name.to_string(),
+                ty: crate::frontend::typecheck::MonoType::Int(64),
+                storage: super::Storage::Local(local_idx),
+                is_mut: true,
+                scope_level: self.scope_level,
+            },
+        );
 
         // 使用 LoopStart 指令开始循环
         // 操作数：current_reg, end_reg, step_reg, exit_label
@@ -149,7 +163,9 @@ impl CodegenContext {
         let loop_exit_label = self.next_label();
         let loop_body_label = self.next_label();
 
-        let _prev_label = self.current_loop_label.replace((loop_start_label, loop_exit_label));
+        let _prev_label = self
+            .current_loop_label
+            .replace((loop_start_label, loop_exit_label));
 
         let _iterable_reg = self.generate_expr(iterable)?;
 
@@ -182,13 +198,16 @@ impl CodegenContext {
         ));
 
         let local_idx = self.next_local();
-        self.symbol_table.insert(var_name.to_string(), super::Symbol {
-            name: var_name.to_string(),
-            ty: crate::frontend::typecheck::MonoType::Void,
-            storage: super::Storage::Local(local_idx),
-            is_mut: false,
-            scope_level: self.scope_level,
-        });
+        self.symbol_table.insert(
+            var_name.to_string(),
+            super::Symbol {
+                name: var_name.to_string(),
+                ty: crate::frontend::typecheck::MonoType::Void,
+                storage: super::Storage::Local(local_idx),
+                is_mut: false,
+                scope_level: self.scope_level,
+            },
+        );
 
         self.emit(BytecodeInstruction::new(
             TypedOpcode::StoreLocal,
@@ -225,7 +244,9 @@ impl CodegenContext {
         let loop_start_label = self.next_label();
         let loop_exit_label = self.next_label();
 
-        let _prev_label = self.current_loop_label.replace((loop_start_label, loop_exit_label));
+        let _prev_label = self
+            .current_loop_label
+            .replace((loop_start_label, loop_exit_label));
 
         self.emit(BytecodeInstruction::new(
             TypedOpcode::Label,

@@ -9,9 +9,9 @@ pub mod lifetime;
 pub mod monomorphize;
 pub mod optimizer;
 
-pub use ir::*;
 pub use codegen::*;
 pub use escape_analysis::*;
+pub use ir::*;
 pub use lifetime::*;
-pub use monomorphize::*;
 pub use monomorphize::instance::*;
+pub use monomorphize::*;

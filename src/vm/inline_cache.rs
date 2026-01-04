@@ -13,9 +13,9 @@
 #[repr(C)]
 pub struct InlineCacheSlot {
     /// 缓存的有效性标志
-    pub valid: u8,          // 0 = 无效, 1 = 单态, 2 = 多态
+    pub valid: u8, // 0 = 无效, 1 = 单态, 2 = 多态
     /// 缓存的类型数量
-    pub count: u8,          // 1-4，通常为 1
+    pub count: u8, // 1-4，通常为 1
     /// 缓存的插槽数据
     pub slots: [ICSlotData; 4],
 }
@@ -143,18 +143,16 @@ impl InlineCacheManager {
     }
 
     /// 检查缓存
-    pub fn check_cache(
-        &self,
-        slot_idx: usize,
-        receiver_type_id: u32,
-    ) -> ICCheckResult {
+    pub fn check_cache(&self, slot_idx: usize, receiver_type_id: u32) -> ICCheckResult {
         let slot = match self.get_slot(slot_idx) {
             Some(s) => s,
             None => return ICCheckResult::Invalid,
         };
 
         if slot.valid == 0 {
-            return ICCheckResult::Miss { reason: ICMissReason::FirstCall };
+            return ICCheckResult::Miss {
+                reason: ICMissReason::FirstCall,
+            };
         }
 
         // 查找匹配的插槽
@@ -169,10 +167,14 @@ impl InlineCacheManager {
 
         // 未找到，检查是否可以扩展为多态
         if slot.valid == 1 && slot.count < self.config.polymorphic_size as u8 {
-            return ICCheckResult::Miss { reason: ICMissReason::PolymorphicOverflow };
+            return ICCheckResult::Miss {
+                reason: ICMissReason::PolymorphicOverflow,
+            };
         }
 
-        ICCheckResult::Miss { reason: ICMissReason::TypeMismatch }
+        ICCheckResult::Miss {
+            reason: ICMissReason::TypeMismatch,
+        }
     }
 
     /// 更新缓存
@@ -201,7 +203,7 @@ impl InlineCacheManager {
             };
         } else if (slot.count as usize) < config.polymorphic_size {
             // 扩展多态缓存
-            slot.valid = 2;  // 多态
+            slot.valid = 2; // 多态
             slot.slots[slot.count as usize] = ICSlotData {
                 receiver_type_id,
                 method_offset,

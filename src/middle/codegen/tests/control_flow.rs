@@ -12,7 +12,10 @@ fn test_if_label_generation() {
     let end_label = ctx.next_label();
     let then_label = ctx.next_label();
 
-    assert_ne!(end_label, then_label, "If branches should have different labels");
+    assert_ne!(
+        end_label, then_label,
+        "If branches should have different labels"
+    );
 }
 
 /// 测试 while 循环标签生成
@@ -24,8 +27,14 @@ fn test_while_label_generation() {
     let loop_label = ctx.next_label();
     let end_label = ctx.next_label();
 
-    assert_ne!(loop_label, end_label, "Loop should have different start and end labels");
-    assert!(loop_label < end_label, "Labels should be in increasing order");
+    assert_ne!(
+        loop_label, end_label,
+        "Loop should have different start and end labels"
+    );
+    assert!(
+        loop_label < end_label,
+        "Labels should be in increasing order"
+    );
 }
 
 /// 测试 for 循环标签生成

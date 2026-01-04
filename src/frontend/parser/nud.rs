@@ -1,8 +1,8 @@
 //! Prefix expression parsing (nud - null denotation)
 
-use super::state::*;
-use super::ast::*;
 use super::super::lexer::tokens::*;
+use super::ast::*;
+use super::state::*;
 use crate::util::span::Span;
 /// Extension trait for prefix parsing
 pub trait PrefixParser {
@@ -552,7 +552,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }

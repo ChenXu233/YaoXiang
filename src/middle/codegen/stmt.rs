@@ -2,7 +2,7 @@
 //!
 //! 将语句转换为字节码指令
 
-use super::{CodegenContext, CodegenError, BytecodeInstruction};
+use super::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param, Stmt, StmtKind, Type};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction};
@@ -19,11 +19,24 @@ impl CodegenContext {
                 Ok(())
             }
 
-            StmtKind::Var { name, type_annotation, initializer, is_mut } => {
-                self.generate_var_decl(name, type_annotation.as_ref(), initializer.as_deref(), *is_mut)
-            }
+            StmtKind::Var {
+                name,
+                type_annotation,
+                initializer,
+                is_mut,
+            } => self.generate_var_decl(
+                name,
+                type_annotation.as_ref(),
+                initializer.as_deref(),
+                *is_mut,
+            ),
 
-            StmtKind::For { var, iterable, body, label } => {
+            StmtKind::For {
+                var,
+                iterable,
+                body,
+                label,
+            } => {
                 // For 循环由 control_flow.rs 中的 generate_for_stmt 处理
                 // 这里仅生成占位符，实际生成在表达式层面处理
                 let _ = (var, iterable, body, label);
@@ -107,13 +120,16 @@ impl CodegenContext {
         }
 
         // 注册符号
-        self.symbol_table.insert(name.to_string(), super::Symbol {
-            name: name.to_string(),
-            ty: ty.clone(),
-            storage: super::Storage::Local(local_idx),
-            is_mut,
-            scope_level: self.scope_level,
-        });
+        self.symbol_table.insert(
+            name.to_string(),
+            super::Symbol {
+                name: name.to_string(),
+                ty: ty.clone(),
+                storage: super::Storage::Local(local_idx),
+                is_mut,
+                scope_level: self.scope_level,
+            },
+        );
 
         Ok(())
     }
@@ -170,11 +186,7 @@ impl CodegenContext {
     }
 
     /// 注册类型定义
-    fn register_type_definition(
-        &mut self,
-        _name: &str,
-        _definition: &Type,
-    ) {
+    fn register_type_definition(&mut self, _name: &str, _definition: &Type) {
         // TODO: 实现类型定义注册
         // 类型定义需要添加到模块的 types 列表中
     }
@@ -213,7 +225,10 @@ impl CodegenContext {
     }
 
     /// 从 AST 类型转换（处理 Option）
-    fn type_from_ast_option(&self, ast_type: &Option<Type>) -> crate::frontend::typecheck::MonoType {
+    fn type_from_ast_option(
+        &self,
+        ast_type: &Option<Type>,
+    ) -> crate::frontend::typecheck::MonoType {
         match ast_type {
             Some(ty) => self.type_from_ast(ty),
             None => crate::frontend::typecheck::MonoType::Int(64),
@@ -221,7 +236,11 @@ impl CodegenContext {
     }
 
     /// 生成块并填充到函数IR
-    fn generate_block_to_ir(&mut self, block: &Block, func_ir: &mut FunctionIR) -> Result<(), CodegenError> {
+    fn generate_block_to_ir(
+        &mut self,
+        block: &Block,
+        func_ir: &mut FunctionIR,
+    ) -> Result<(), CodegenError> {
         let mut current_block = BasicBlock {
             label: 0,
             instructions: Vec::new(),
@@ -243,7 +262,9 @@ impl CodegenContext {
         // 如果块有表达式，添加返回指令
         if let Some(expr) = &block.expr {
             let operand = self.generate_expr(expr)?;
-            current_block.instructions.push(Instruction::Ret(Some(operand)));
+            current_block
+                .instructions
+                .push(Instruction::Ret(Some(operand)));
         } else {
             current_block.instructions.push(Instruction::Ret(None));
         }

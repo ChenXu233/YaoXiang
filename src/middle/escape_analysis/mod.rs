@@ -195,7 +195,10 @@ impl EscapeAnalyzer {
                     Instruction::Call { args, .. } => {
                         for arg in args {
                             if let Some(local_id) = self.get_variable(arg) {
-                                self.local_vars.get_mut(&local_id).unwrap().passed_to_function = true;
+                                self.local_vars
+                                    .get_mut(&local_id)
+                                    .unwrap()
+                                    .passed_to_function = true;
                                 // 保守假设：传递给函数的参数可能逃逸
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
@@ -206,7 +209,10 @@ impl EscapeAnalyzer {
                     Instruction::TailCall { args, .. } => {
                         for arg in args {
                             if let Some(local_id) = self.get_variable(arg) {
-                                self.local_vars.get_mut(&local_id).unwrap().passed_to_function = true;
+                                self.local_vars
+                                    .get_mut(&local_id)
+                                    .unwrap()
+                                    .passed_to_function = true;
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
                         }
@@ -276,19 +282,33 @@ impl EscapeAnalyzer {
     }
 
     /// 分析单条指令中的变量使用关系
-    fn analyze_var_uses(&mut self, instr: &Instruction, var_uses: &mut HashMap<LocalId, HashSet<LocalId>>) {
+    fn analyze_var_uses(
+        &mut self,
+        instr: &Instruction,
+        var_uses: &mut HashMap<LocalId, HashSet<LocalId>>,
+    ) {
         match instr {
             // a = b 形式：b 被 a 使用
             Instruction::Move { dst, src } => {
-                if let (Some(dst_id), Some(src_id)) = (self.get_variable(dst), self.get_variable(src)) {
-                    var_uses.entry(src_id).or_insert_with(HashSet::new).insert(dst_id);
+                if let (Some(dst_id), Some(src_id)) =
+                    (self.get_variable(dst), self.get_variable(src))
+                {
+                    var_uses
+                        .entry(src_id)
+                        .or_insert_with(HashSet::new)
+                        .insert(dst_id);
                 }
             }
 
             // Load: a = *b 形式
             Instruction::Load { dst, src } => {
-                if let (Some(dst_id), Some(src_id)) = (self.get_variable(dst), self.get_variable(src)) {
-                    var_uses.entry(src_id).or_insert_with(HashSet::new).insert(dst_id);
+                if let (Some(dst_id), Some(src_id)) =
+                    (self.get_variable(dst), self.get_variable(src))
+                {
+                    var_uses
+                        .entry(src_id)
+                        .or_insert_with(HashSet::new)
+                        .insert(dst_id);
                 }
             }
 
@@ -297,7 +317,10 @@ impl EscapeAnalyzer {
                 if let Some(src_id) = self.get_variable(src) {
                     // dst 可能是任何地址表达式，简化处理
                     if let Some(dst_local) = self.get_variable(dst) {
-                        var_uses.entry(src_id).or_insert_with(HashSet::new).insert(dst_local);
+                        var_uses
+                            .entry(src_id)
+                            .or_insert_with(HashSet::new)
+                            .insert(dst_local);
                     }
                 }
             }
@@ -307,7 +330,10 @@ impl EscapeAnalyzer {
                 if let Some(dst_id) = dst.as_ref().and_then(|d| self.get_variable(d)) {
                     for arg in args {
                         if let Some(arg_id) = self.get_variable(arg) {
-                            var_uses.entry(arg_id).or_insert_with(HashSet::new).insert(dst_id);
+                            var_uses
+                                .entry(arg_id)
+                                .or_insert_with(HashSet::new)
+                                .insert(dst_id);
                         }
                     }
                 }
@@ -329,8 +355,13 @@ impl EscapeAnalyzer {
 
             // 类型转换不改变逃逸状态
             Instruction::Cast { dst, src, .. } => {
-                if let (Some(dst_id), Some(src_id)) = (self.get_variable(dst), self.get_variable(src)) {
-                    var_uses.entry(src_id).or_insert_with(HashSet::new).insert(dst_id);
+                if let (Some(dst_id), Some(src_id)) =
+                    (self.get_variable(dst), self.get_variable(src))
+                {
+                    var_uses
+                        .entry(src_id)
+                        .or_insert_with(HashSet::new)
+                        .insert(dst_id);
                 }
             }
 
@@ -351,8 +382,12 @@ impl EscapeAnalyzer {
         match instr {
             // 赋值：目标继承源的逃逸状态
             Instruction::Move { dst, src } => {
-                if let (Some(dst_id), Some(src_id)) = (self.get_variable(dst), self.get_variable(src)) {
-                    let src_escapes = self.local_vars.get(&src_id)
+                if let (Some(dst_id), Some(src_id)) =
+                    (self.get_variable(dst), self.get_variable(src))
+                {
+                    let src_escapes = self
+                        .local_vars
+                        .get(&src_id)
                         .map(|i| i.escapes)
                         .unwrap_or(false);
 
@@ -376,9 +411,12 @@ impl EscapeAnalyzer {
                 let mut return_escapes = false;
                 for arg in args {
                     if let Some(arg_id) = self.get_variable(arg) {
-                        if self.local_vars.get(&arg_id)
+                        if self
+                            .local_vars
+                            .get(&arg_id)
                             .map(|i| i.escapes)
-                            .unwrap_or(false) {
+                            .unwrap_or(false)
+                        {
                             return_escapes = true;
                             break;
                         }
@@ -399,8 +437,12 @@ impl EscapeAnalyzer {
 
             // 移动传播
             Instruction::Load { dst, src } => {
-                if let (Some(dst_id), Some(src_id)) = (self.get_variable(dst), self.get_variable(src)) {
-                    let src_escapes = self.local_vars.get(&src_id)
+                if let (Some(dst_id), Some(src_id)) =
+                    (self.get_variable(dst), self.get_variable(src))
+                {
+                    let src_escapes = self
+                        .local_vars
+                        .get(&src_id)
                         .map(|i| i.escapes)
                         .unwrap_or(false);
 

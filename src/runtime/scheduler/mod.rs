@@ -3,13 +3,13 @@
 //! This module provides the FlowScheduler, a dependency-aware task scheduler
 //! that integrates with the DAG module for parallel execution.
 
-pub mod task;
 pub mod queue;
+pub mod task;
 pub mod work_stealer;
 
-pub use task::{Task, TaskId, TaskPriority, TaskState, TaskConfig, TaskBuilder, TaskIdGenerator};
-pub use queue::{TaskQueue, PriorityTaskQueue};
-pub use work_stealer::{WorkStealer, StealStrategy, StealStats};
+pub use queue::{PriorityTaskQueue, TaskQueue};
+pub use task::{Task, TaskBuilder, TaskConfig, TaskId, TaskIdGenerator, TaskPriority, TaskState};
+pub use work_stealer::{StealStats, StealStrategy, WorkStealer};
 
 use std::collections::VecDeque;
 use std::sync::{
@@ -88,7 +88,8 @@ impl SchedulerStats {
     #[inline]
     pub fn record_completed(&self, duration_us: usize) {
         self.tasks_completed.fetch_add(1, Ordering::SeqCst);
-        self.total_exec_time_us.fetch_add(duration_us, Ordering::SeqCst);
+        self.total_exec_time_us
+            .fetch_add(duration_us, Ordering::SeqCst);
     }
 
     /// Record a steal.
@@ -178,7 +179,9 @@ impl FlowScheduler {
 
         // Create local queues for each worker
         let local_queues = Arc::new(RwLock::new(
-            (0..num_workers).map(|_| Arc::new(TaskQueue::new())).collect(),
+            (0..num_workers)
+                .map(|_| Arc::new(TaskQueue::new()))
+                .collect(),
         ));
 
         // Create global ready queue for DAG nodes
@@ -311,7 +314,10 @@ impl FlowScheduler {
 
     /// Try to get a task from local queue.
     #[inline]
-    fn try_local_queue(worker_id: usize, local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>) -> Option<Arc<Task>> {
+    fn try_local_queue(
+        worker_id: usize,
+        local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
+    ) -> Option<Arc<Task>> {
         let queues = local_queues.read().unwrap();
         if worker_id < queues.len() {
             queues[worker_id].pop_front()
@@ -373,13 +379,8 @@ impl FlowScheduler {
         self.stats.record_scheduled();
 
         // Round-robin to workers for load distribution
-        let worker_id = self
-            .task_id_generator
-            .lock()
-            .unwrap()
-            .next()
-            .inner()
-            % self.config.num_workers;
+        let worker_id =
+            self.task_id_generator.lock().unwrap().next().inner() % self.config.num_workers;
 
         {
             let queues = self.local_queues.read().unwrap();
@@ -441,7 +442,12 @@ impl FlowScheduler {
 
     /// Add a data parallel node to the DAG.
     #[inline]
-    pub fn add_data_parallel(&self, iterator_id: NodeId, body_id: NodeId, num_iterations: usize) -> NodeId {
+    pub fn add_data_parallel(
+        &self,
+        iterator_id: NodeId,
+        body_id: NodeId,
+        num_iterations: usize,
+    ) -> NodeId {
         self.schedule_node(
             DAGNodeKind::DataParallel {
                 iterator_id,
@@ -530,4 +536,3 @@ impl Scheduler {
         self.inner.spawn(task);
     }
 }
-

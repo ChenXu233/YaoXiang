@@ -11,12 +11,7 @@ mod frame_tests {
 
     #[test]
     fn test_frame_creation() {
-        let frame = Frame::new(
-            "test_function".to_string(),
-            100,
-            50,
-            vec![],
-        );
+        let frame = Frame::new("test_function".to_string(), 100, 50, vec![]);
         assert_eq!(frame.name, "test_function");
         assert_eq!(frame.return_addr, 100);
         assert_eq!(frame.saved_fp, 50);
@@ -25,11 +20,7 @@ mod frame_tests {
 
     #[test]
     fn test_frame_with_locals() {
-        let locals = vec![
-            Value::Int(1),
-            Value::Int(2),
-            Value::Bool(true),
-        ];
+        let locals = vec![Value::Int(1), Value::Int(2), Value::Bool(true)];
         let frame = Frame::new("func".to_string(), 0, 0, locals);
         assert_eq!(frame.locals.len(), 3);
         assert!(matches!(frame.locals[0], Value::Int(1)));

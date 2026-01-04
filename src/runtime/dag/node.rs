@@ -242,4 +242,3 @@ impl fmt::Display for DAGNode {
         write!(f, "DAGNode({}: {:?})", self.id, self.kind)
     }
 }
-

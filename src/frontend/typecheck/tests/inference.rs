@@ -2,8 +2,8 @@
 //!
 //! 测试类型检查器的推断功能
 
-use crate::frontend::parser::parse;
 use crate::frontend::lexer::tokenize;
+use crate::frontend::parser::parse;
 use crate::frontend::typecheck::{check_module, TypeEnvironment};
 
 /// 检查类型推断是否成功
@@ -118,7 +118,9 @@ fn test_return_with_full_annotation() {
     assert!(check_type_inference("add: (Int, Int) -> Int = (a, b) => { return a + b; }").is_ok());
     assert!(check_type_inference("square: Int -> Int = (x) => { return x * x; }").is_ok());
     assert!(check_type_inference("get_value: () -> Int = () => { return 42; }").is_ok());
-    assert!(check_type_inference("log: (String) -> Void = (msg) => { print(msg); return; }").is_ok());
+    assert!(
+        check_type_inference("log: (String) -> Void = (msg) => { print(msg); return; }").is_ok()
+    );
 }
 
 #[test]
@@ -131,19 +133,28 @@ fn test_return_without_annotation() {
 #[test]
 fn test_return_untyped_param_fails() {
     // 无标注参数 + return 应该失败
-    assert!(check_type_inference_fails("add = (a, b) => { return a + b; }"));
-    assert!(check_type_inference_fails("square = (x) => { return x * x; }"));
+    assert!(check_type_inference_fails(
+        "add = (a, b) => { return a + b; }"
+    ));
+    assert!(check_type_inference_fails(
+        "square = (x) => { return x * x; }"
+    ));
 }
 
 #[test]
 fn test_early_return() {
     // 早期 return 应该通过
-    assert!(check_type_inference("early: Int -> Int = (x) => { if x < 0 { return 0; } x }").is_ok());
-    assert!(check_type_inference("multiple_returns: Int -> Int = (x) => {
+    assert!(
+        check_type_inference("early: Int -> Int = (x) => { if x < 0 { return 0; } x }").is_ok()
+    );
+    assert!(check_type_inference(
+        "multiple_returns: Int -> Int = (x) => {
         if x < 0 { return 0; }
         if x == 0 { return 1; }
         return x;
-    }").is_ok());
+    }"
+    )
+    .is_ok());
 }
 
 #[test]
@@ -152,7 +163,9 @@ fn test_legacy_return_syntax() {
     assert!(check_type_inference("mul(Int, Int) -> Int = (a, b) => { return a * b; }").is_ok());
     assert!(check_type_inference("square2(Int) -> Int = (x) => { return x * x; }").is_ok());
     assert!(check_type_inference("get_random2() -> Int = () => { return 42; }").is_ok());
-    assert!(check_type_inference("say_hello2() -> Void = () => { print(\"hi\"); return; }").is_ok());
+    assert!(
+        check_type_inference("say_hello2() -> Void = () => { print(\"hi\"); return; }").is_ok()
+    );
 }
 
 // ============================================================================
@@ -176,13 +189,17 @@ fn test_invalid_missing_arrow() {
 fn test_invalid_missing_body() {
     // 缺少函数体应该被拒绝
     assert!(check_type_inference_fails("dec: Int -> Int = (a) => "));
-    assert!(check_type_inference_fails("missing_body: Int -> Int = => 42"));
+    assert!(check_type_inference_fails(
+        "missing_body: Int -> Int = => 42"
+    ));
 }
 
 #[test]
 fn test_invalid_bad_parens() {
     // 错误的括号形式应该被拒绝
-    assert!(check_type_inference_fails("bad_parens: Int, Int -> Int = (a, b) => a + b"));
+    assert!(check_type_inference_fails(
+        "bad_parens: Int, Int -> Int = (a, b) => a + b"
+    ));
 }
 
 // ============================================================================
@@ -217,14 +234,20 @@ fn test_curried_function() {
         eprintln!("CURRIED FUNCTION ERROR: {:?}", e);
     }
     assert!(result.is_ok());
-    assert!(check_type_inference("multiply_curried: Int -> Int -> Int -> Int = a => b => c => a * b * c").is_ok());
+    assert!(check_type_inference(
+        "multiply_curried: Int -> Int -> Int -> Int = a => b => c => a * b * c"
+    )
+    .is_ok());
 }
 
 #[test]
 fn test_higher_order_function() {
     // 高阶函数应该通过
     assert!(check_type_inference("apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)").is_ok());
-    assert!(check_type_inference("compose: ((Int) -> Int, (Int) -> Int) -> (Int) -> Int = (f, g) => x => f(g(x))").is_ok());
+    assert!(check_type_inference(
+        "compose: ((Int) -> Int, (Int) -> Int) -> (Int) -> Int = (f, g) => x => f(g(x))"
+    )
+    .is_ok());
 }
 
 #[test]

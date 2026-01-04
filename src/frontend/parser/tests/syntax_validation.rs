@@ -1,14 +1,12 @@
-use crate::frontend::parser::parse;
 use crate::frontend::lexer::tokenize;
+use crate::frontend::parser::parse;
 
 fn check_syntax(input: &str) -> bool {
     match tokenize(input) {
-        Ok(tokens) => {
-            match parse(&tokens) {
-                Ok(_) => true,
-                Err(_) => false,
-            }
-        }
+        Ok(tokens) => match parse(&tokens) {
+            Ok(_) => true,
+            Err(_) => false,
+        },
         Err(_) => false,
     }
 }
@@ -63,7 +61,9 @@ fn test_standard_syntax() {
     assert!(check_syntax("mul: (Int, Int) -> Int = (a, b) => a * b"));
 
     // 柯里化函数（右结合）
-    assert!(check_syntax("add_curried: Int -> Int -> Int = a => b => a + b"));
+    assert!(check_syntax(
+        "add_curried: Int -> Int -> Int = a => b => a + b"
+    ));
 }
 
 #[test]
@@ -143,7 +143,9 @@ fn test_invalid_syntax() {
     assert!(!check_syntax("double: Int -> Int =  => x * 2;"));
 
     // 无效的括号形式
-    assert!(!check_syntax("bad_parens: Int, Int -> Int = (a, b) => a + b"));
+    assert!(!check_syntax(
+        "bad_parens: Int, Int -> Int = (a, b) => a + b"
+    ));
 
     // 无效的参数形式
     assert!(!check_syntax("bad_param: (Int)Int -> Int = (a) => a"));
@@ -166,43 +168,63 @@ fn test_return_syntax() {
     // return 语句用于从函数体中返回一个值
 
     // 标准语法 + return 语句
-    assert!(check_syntax("add: (Int, Int) -> Int = (a, b) => { return a + b; }"));
-    assert!(check_syntax("square: Int -> Int = (x) => { return x * x; }"));
+    assert!(check_syntax(
+        "add: (Int, Int) -> Int = (a, b) => { return a + b; }"
+    ));
+    assert!(check_syntax(
+        "square: Int -> Int = (x) => { return x * x; }"
+    ));
     assert!(check_syntax("square: Int -> Int = x => { return x * x; }"));
     assert!(check_syntax("get_value: () -> Int = () => { return 42; }"));
-    assert!(check_syntax("log: (String) -> Void = (msg) => { print(msg); return; }"));
+    assert!(check_syntax(
+        "log: (String) -> Void = (msg) => { print(msg); return; }"
+    ));
 
     // 标准语法 + return 语句（多行函数体）
-    assert!(check_syntax("fact: Int -> Int = (n) => {
+    assert!(check_syntax(
+        "fact: Int -> Int = (n) => {
         if n <= 1 {
             return 1;
         }
         return n * fact(n - 1);
-    }"));
+    }"
+    ));
 
     // 标准语法 + 混合表达式和 return
-    assert!(check_syntax("max: (Int, Int) -> Int = (a, b) => {
+    assert!(check_syntax(
+        "max: (Int, Int) -> Int = (a, b) => {
         if a > b {
             return a;
         }
         a + b
-    }"));
+    }"
+    ));
 
     // 旧语法 + return 语句
-    assert!(check_syntax("mul(Int, Int) -> Int = (a, b) => { return a * b; }"));
-    assert!(check_syntax("square2(Int) -> Int = (x) => { return x * x; }"));
+    assert!(check_syntax(
+        "mul(Int, Int) -> Int = (a, b) => { return a * b; }"
+    ));
+    assert!(check_syntax(
+        "square2(Int) -> Int = (x) => { return x * x; }"
+    ));
     assert!(check_syntax("get_random2() -> Int = () => { return 42; }"));
 
     // 旧语法 + return + Void
-    assert!(check_syntax("say_hello2() -> Void = () => { print(\"hi\"); return; }"));
+    assert!(check_syntax(
+        "say_hello2() -> Void = () => { print(\"hi\"); return; }"
+    ));
 
     // return 语句的位置测试
-    assert!(check_syntax("early_return: Int -> Int = (x) => { if x < 0 { return 0; } x }"));
-    assert!(check_syntax("multiple_returns: Int -> Int = (x) => {
+    assert!(check_syntax(
+        "early_return: Int -> Int = (x) => { if x < 0 { return 0; } x }"
+    ));
+    assert!(check_syntax(
+        "multiple_returns: Int -> Int = (x) => {
         if x < 0 { return 0; }
         if x == 0 { return 1; }
         return x;
-    }"));
+    }"
+    ));
 }
 
 #[test]

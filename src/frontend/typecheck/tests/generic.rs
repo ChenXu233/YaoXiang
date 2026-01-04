@@ -38,7 +38,11 @@ fn test_generic_constraints() {
     let specialized = solver.instantiate(&poly);
 
     match specialized {
-        MonoType::Fn { params, return_type, .. } => {
+        MonoType::Fn {
+            params,
+            return_type,
+            ..
+        } => {
             assert_eq!(params.len(), 1);
             assert!(matches!(*return_type, MonoType::TypeVar(_)));
         }
@@ -118,11 +122,15 @@ fn test_specialization_cache() {
 
     // 第一次特化
     let args1 = vec![MonoType::Int(64)];
-    let result1 = specializer.specialize_with_cache(&poly, &args1, &mut solver).unwrap();
+    let result1 = specializer
+        .specialize_with_cache(&poly, &args1, &mut solver)
+        .unwrap();
 
     // 第二次特化（相同参数）
     let args2 = vec![MonoType::Int(64)];
-    let result2 = specializer.specialize_with_cache(&poly, &args2, &mut solver).unwrap();
+    let result2 = specializer
+        .specialize_with_cache(&poly, &args2, &mut solver)
+        .unwrap();
 
     // 结果应该相同（类型变量可能不同，但结构相同）
     match (result1, result2) {
@@ -198,10 +206,16 @@ fn test_multi_param_generic_specialization() {
 
     // 特化为 fn(int64, string) -> (int64, string)
     let args = vec![MonoType::Int(64), MonoType::String];
-    let result = specializer.specialize_with_cache(&poly, &args, &mut solver).unwrap();
+    let result = specializer
+        .specialize_with_cache(&poly, &args, &mut solver)
+        .unwrap();
 
     match result {
-        MonoType::Fn { params, return_type, .. } => {
+        MonoType::Fn {
+            params,
+            return_type,
+            ..
+        } => {
             assert_eq!(params.len(), 2);
             assert!(matches!(*return_type, MonoType::Tuple(_)));
         }
@@ -291,7 +305,9 @@ fn test_nested_generic_specialization() {
 
     // 特化为 List[List[int64]]
     let args = vec![MonoType::Int(64)];
-    let result = specializer.specialize_with_cache(&poly, &args, &mut solver).unwrap();
+    let result = specializer
+        .specialize_with_cache(&poly, &args, &mut solver)
+        .unwrap();
 
     match result {
         MonoType::List(inner) => {
@@ -317,11 +333,15 @@ fn test_specializer_cache_behavior() {
 
     // 特化为 int64
     let args1 = vec![MonoType::Int(64)];
-    let result1 = specializer.specialize_with_cache(&poly, &args1, &mut solver).unwrap();
+    let result1 = specializer
+        .specialize_with_cache(&poly, &args1, &mut solver)
+        .unwrap();
 
     // 特化为 string
     let args2 = vec![MonoType::String];
-    let result2 = specializer.specialize_with_cache(&poly, &args2, &mut solver).unwrap();
+    let result2 = specializer
+        .specialize_with_cache(&poly, &args2, &mut solver)
+        .unwrap();
 
     // 两个结果应该不同（参数类型不同）
     match (result1, result2) {
@@ -373,7 +393,10 @@ fn test_solver_constraint_resolution() {
     assert!(result.is_ok() || result.err().unwrap().is_empty());
 
     let resolved = solver.resolve_type(&var);
-    assert!(matches!(resolved, MonoType::Int(32) | MonoType::Int(64) | MonoType::TypeVar(_)));
+    assert!(matches!(
+        resolved,
+        MonoType::Int(32) | MonoType::Int(64) | MonoType::TypeVar(_)
+    ));
 }
 
 /// 测试类型环境未找到变量
@@ -395,9 +418,7 @@ fn test_generic_struct_type_get() {
     let t_var = solver.new_generic_var();
     let struct_type = MonoType::Struct(StructType {
         name: "Container".to_string(),
-        fields: vec![
-            ("value".to_string(), MonoType::TypeVar(t_var)),
-        ],
+        fields: vec![("value".to_string(), MonoType::TypeVar(t_var))],
     });
     let poly = PolyType::new(vec![t_var], struct_type);
     env.add_type("Container".to_string(), poly);
@@ -446,17 +467,21 @@ fn test_generic_function_return_type() {
 
     // 特化
     let args = vec![MonoType::Int(64), MonoType::String];
-    let result = specializer.specialize_with_cache(&poly, &args, &mut solver).unwrap();
+    let result = specializer
+        .specialize_with_cache(&poly, &args, &mut solver)
+        .unwrap();
 
     match result {
         MonoType::Fn { return_type, .. } => {
             // 返回类型是 Box<MonoType>，检查其变体
             let inner = &*return_type;
             // 接受任何 MonoType 变体
-            assert!(matches!(inner, MonoType::TypeVar(_))
-                || matches!(inner, MonoType::Tuple(_))
-                || matches!(inner, MonoType::Int(_))
-                || matches!(inner, MonoType::String));
+            assert!(
+                matches!(inner, MonoType::TypeVar(_))
+                    || matches!(inner, MonoType::Tuple(_))
+                    || matches!(inner, MonoType::Int(_))
+                    || matches!(inner, MonoType::String)
+            );
         }
         _ => panic!("Expected function type"),
     }
@@ -576,8 +601,12 @@ fn test_solver_unify_error() {
     let var1 = solver.new_var();
     let var2 = solver.new_var();
 
-    solver.bind(var1.type_var().unwrap(), &MonoType::Int(64)).unwrap();
-    solver.bind(var2.type_var().unwrap(), &MonoType::String).unwrap();
+    solver
+        .bind(var1.type_var().unwrap(), &MonoType::Int(64))
+        .unwrap();
+    solver
+        .bind(var2.type_var().unwrap(), &MonoType::String)
+        .unwrap();
 
     // 尝试统一应该失败
     let result = solver.unify(&var1, &var2);

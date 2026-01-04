@@ -274,10 +274,9 @@ impl OwnershipAnalyzer {
                     .insert(src.clone());
 
                 // src 被移动后，不再拥有自己的所有权
-                self.ownership_graph.lifetimes.insert(
-                    src.clone(),
-                    Lifetime::new(pos, pos),
-                );
+                self.ownership_graph
+                    .lifetimes
+                    .insert(src.clone(), Lifetime::new(pos, pos));
             }
 
             // 函数调用：返回值拥有参数的所有权
@@ -316,10 +315,9 @@ impl OwnershipAnalyzer {
                     },
                 );
 
-                self.ownership_graph.lifetimes.insert(
-                    dst.clone(),
-                    Lifetime::new(pos, pos),
-                );
+                self.ownership_graph
+                    .lifetimes
+                    .insert(dst.clone(), Lifetime::new(pos, pos));
             }
 
             // 闭包：闭包拥有捕获变量的所有权
@@ -422,5 +420,3 @@ impl fmt::Display for Definition {
 
 #[cfg(test)]
 mod tests;
-
-

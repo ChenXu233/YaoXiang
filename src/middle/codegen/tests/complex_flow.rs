@@ -1,7 +1,7 @@
+use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::generator::BytecodeGenerator;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::vm::opcode::TypedOpcode;
-use crate::frontend::typecheck::MonoType;
 
 #[test]
 fn test_generate_complex_flow() {
@@ -15,7 +15,7 @@ fn test_generate_complex_flow() {
     //     }
     //     return x;
     // }
-    
+
     let mut func = FunctionIR {
         name: "complex".to_string(),
         params: vec![MonoType::Int(64)],
@@ -32,48 +32,61 @@ fn test_generate_complex_flow() {
     let block0 = BasicBlock {
         label: 0,
         instructions: vec![
-            Instruction::Move { dst: Operand::Local(0), src: Operand::Const(crate::middle::ir::ConstValue::Int(0)) },
-            Instruction::Gt { dst: Operand::Temp(0), lhs: Operand::Arg(0), rhs: Operand::Const(crate::middle::ir::ConstValue::Int(10)) },
+            Instruction::Move {
+                dst: Operand::Local(0),
+                src: Operand::Const(crate::middle::ir::ConstValue::Int(0)),
+            },
+            Instruction::Gt {
+                dst: Operand::Temp(0),
+                lhs: Operand::Arg(0),
+                rhs: Operand::Const(crate::middle::ir::ConstValue::Int(10)),
+            },
             Instruction::JmpIf(Operand::Temp(0), 1),
             Instruction::Jmp(2),
         ],
         successors: vec![1, 2],
     };
-    
+
     // Block 1: Then
     // x = a + 1
     // goto 3
     let block1 = BasicBlock {
         label: 1,
         instructions: vec![
-            Instruction::Add { dst: Operand::Local(0), lhs: Operand::Arg(0), rhs: Operand::Const(crate::middle::ir::ConstValue::Int(1)) },
+            Instruction::Add {
+                dst: Operand::Local(0),
+                lhs: Operand::Arg(0),
+                rhs: Operand::Const(crate::middle::ir::ConstValue::Int(1)),
+            },
             Instruction::Jmp(3),
         ],
         successors: vec![3],
     };
-    
+
     // Block 2: Else
     // x = a * 2
     // goto 3
     let block2 = BasicBlock {
         label: 2,
         instructions: vec![
-            Instruction::Mul { dst: Operand::Local(0), lhs: Operand::Arg(0), rhs: Operand::Const(crate::middle::ir::ConstValue::Int(2)) },
+            Instruction::Mul {
+                dst: Operand::Local(0),
+                lhs: Operand::Arg(0),
+                rhs: Operand::Const(crate::middle::ir::ConstValue::Int(2)),
+            },
             Instruction::Jmp(3),
         ],
         successors: vec![3],
     };
-    
+
     // Block 3: Exit
     // return x
     let block3 = BasicBlock {
         label: 3,
-        instructions: vec![
-            Instruction::Ret(Some(Operand::Local(0))),
-        ],
+        instructions: vec![Instruction::Ret(Some(Operand::Local(0)))],
         successors: vec![],
     };
-    
+
     func.blocks.push(block0);
     func.blocks.push(block1);
     func.blocks.push(block2);
@@ -84,10 +97,10 @@ fn test_generate_complex_flow() {
 
     // Verify we have instructions
     assert!(!code.instructions.is_empty());
-    
+
     // Check for specific opcodes we expect
     let opcodes: Vec<u8> = code.instructions.iter().map(|i| i.opcode).collect();
-    
+
     // Should contain LoadConst, Gt, JumpIfFalse (or similar), Add, Jump, Mul, Jump, Ret
     assert!(opcodes.contains(&(TypedOpcode::I64Gt as u8)));
     assert!(opcodes.contains(&(TypedOpcode::JmpIf as u8)));

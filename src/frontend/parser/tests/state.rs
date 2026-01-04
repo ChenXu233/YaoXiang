@@ -1,14 +1,17 @@
 //! Parser state tests
 
 use crate::frontend::lexer::tokens::*;
-use crate::util::span::{Span, Position};
 use crate::frontend::parser::state::*;
 use crate::frontend::parser::ParseError;
+use crate::util::span::{Position, Span};
 
 fn create_token(kind: TokenKind) -> Token {
     Token {
         kind,
-        span: Span::new(Position::with_offset(1, 1, 0), Position::with_offset(1, 2, 1)),
+        span: Span::new(
+            Position::with_offset(1, 1, 0),
+            Position::with_offset(1, 2, 1),
+        ),
         literal: None,
     }
 }
@@ -60,7 +63,6 @@ fn test_at_end_false_with_tokens() {
     let state = ParserState::new(&tokens);
     assert!(!state.at_end());
 }
-
 
 // =========================================================================
 // 当前 token 测试
@@ -283,8 +285,14 @@ fn test_errors_list() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
     let mut state = ParserState::new(&tokens);
 
-    state.error(ParseError::ExpectedToken(TokenKind::Plus, TokenKind::IntLiteral(42)));
-    state.error(ParseError::ExpectedToken(TokenKind::Minus, TokenKind::IntLiteral(42)));
+    state.error(ParseError::ExpectedToken(
+        TokenKind::Plus,
+        TokenKind::IntLiteral(42),
+    ));
+    state.error(ParseError::ExpectedToken(
+        TokenKind::Minus,
+        TokenKind::IntLiteral(42),
+    ));
 
     let errors = state.into_errors();
     assert_eq!(errors.len(), 2);
@@ -295,8 +303,14 @@ fn test_first_error() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
     let mut state = ParserState::new(&tokens);
 
-    state.error(ParseError::ExpectedToken(TokenKind::Plus, TokenKind::IntLiteral(42)));
-    state.error(ParseError::ExpectedToken(TokenKind::Minus, TokenKind::IntLiteral(42)));
+    state.error(ParseError::ExpectedToken(
+        TokenKind::Plus,
+        TokenKind::IntLiteral(42),
+    ));
+    state.error(ParseError::ExpectedToken(
+        TokenKind::Minus,
+        TokenKind::IntLiteral(42),
+    ));
 
     let first = state.first_error();
     assert!(first.is_some());
@@ -319,7 +333,10 @@ fn test_synchronize() {
     let tokens_ref: &[Token] = &tokens;
     let mut state = ParserState::new(tokens_ref);
     state.bump(); // At Plus
-    state.error(ParseError::ExpectedToken(TokenKind::IntLiteral(1), TokenKind::Plus));
+    state.error(ParseError::ExpectedToken(
+        TokenKind::IntLiteral(1),
+        TokenKind::Plus,
+    ));
 
     state.synchronize();
 

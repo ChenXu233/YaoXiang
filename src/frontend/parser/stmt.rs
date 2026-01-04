@@ -1,8 +1,8 @@
 //! Statement parsing
 
-use super::state::*;
-use super::ast::*;
 use super::super::lexer::tokens::*;
+use super::ast::*;
+use super::state::*;
 use crate::util::span::Span;
 
 impl<'a> ParserState<'a> {
@@ -31,9 +31,15 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => {
                 // Check if this is a function definition: name(types) -> type = (params) => body
                 // Or a simple assignment/expression: name = expr or just name expr
-                eprintln!("[DEBUG] parse_stmt: calling parse_identifier_stmt, current: {:?}", self.current().map(|t| &t.kind));
+                eprintln!(
+                    "[DEBUG] parse_stmt: calling parse_identifier_stmt, current: {:?}",
+                    self.current().map(|t| &t.kind)
+                );
                 let result = self.parse_identifier_stmt(start_span);
-                eprintln!("[DEBUG] parse_stmt: parse_identifier_stmt returned: {:?}", result.is_some());
+                eprintln!(
+                    "[DEBUG] parse_stmt: parse_identifier_stmt returned: {:?}",
+                    result.is_some()
+                );
                 result
             }
             // expression statement
@@ -57,7 +63,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -104,7 +112,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -169,13 +179,18 @@ impl<'a> ParserState<'a> {
             }
 
             // Check if all types are variant-like (Name, Generic, or NamedStruct)
-            let all_variants = types.iter().all(|t| matches!(t, Type::Name(_) | Type::Generic { .. } | Type::NamedStruct { .. }));
+            let all_variants = types.iter().all(|t| {
+                matches!(
+                    t,
+                    Type::Name(_) | Type::Generic { .. } | Type::NamedStruct { .. }
+                )
+            });
 
             if all_variants {
                 // Try to convert to VariantDef
                 let mut variants = Vec::new();
                 for ty in types.iter() {
-                     match ty {
+                    match ty {
                         Type::Generic { name, args } => {
                             let params = args.iter().map(|a| (None, a.clone())).collect();
                             variants.push(VariantDef {
@@ -185,7 +200,10 @@ impl<'a> ParserState<'a> {
                             });
                         }
                         Type::NamedStruct { name, fields } => {
-                            let params = fields.iter().map(|(n, t)| (Some(n.clone()), t.clone())).collect();
+                            let params = fields
+                                .iter()
+                                .map(|(n, t)| (Some(n.clone()), t.clone()))
+                                .collect();
                             variants.push(VariantDef {
                                 name: name.clone(),
                                 params,
@@ -218,7 +236,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -320,7 +340,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -415,7 +437,9 @@ impl<'a> ParserState<'a> {
 
         if parts.is_empty() {
             self.error(super::ParseError::UnexpectedToken(
-                self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                self.current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
             ));
             None
         } else {
@@ -434,14 +458,42 @@ impl<'a> ParserState<'a> {
         let next = self.peek();
 
         // Check for potential function definition: identifier followed by LParen
+        // Also handle optional generic parameters after the identifier, e.g. `name<T>(...)`.
+        let mut pos_of_lparen: Option<usize> = None;
         if matches!(next.map(|t| &t.kind), Some(TokenKind::LParen)) {
-            // Look ahead to find matching RParen, then check what's after it
-            // For function definition: name(types) -> type = ...
-            // For function call: name(args) ...
-
-            // Count depth to find matching RParen
+            pos_of_lparen = Some(1);
+        } else if matches!(next.map(|t| &t.kind), Some(TokenKind::Lt)) {
+            // Find matching '>' for generic parameters and then check for '(' after it
             let mut depth = 1;
-            let mut pos = 2; // Start after identifier and LParen
+            let mut p = 2; // start after identifier and '<'
+            while depth > 0 {
+                match self.peek_nth(p).map(|t| &t.kind) {
+                    Some(TokenKind::Lt) => {
+                        depth += 1;
+                        p += 1;
+                    }
+                    Some(TokenKind::Gt) => {
+                        depth -= 1;
+                        p += 1;
+                        break;
+                    }
+                    Some(_) => {
+                        p += 1;
+                    }
+                    None => break,
+                }
+            }
+
+            // After finding '>', check if next token is LParen
+            if matches!(self.peek_nth(p).map(|t| &t.kind), Some(TokenKind::LParen)) {
+                pos_of_lparen = Some(p);
+            }
+        }
+
+        if let Some(lparen_pos) = pos_of_lparen {
+            // Look ahead to find matching RParen, then check what's after it
+            let mut depth = 1;
+            let mut pos = lparen_pos + 1; // Start after the found LParen
 
             while depth > 0 {
                 match self.peek_nth(pos).map(|t| &t.kind) {
@@ -472,12 +524,19 @@ impl<'a> ParserState<'a> {
             let rparen = self.peek_nth(pos);
             let after_rparen = self.peek_nth(pos + 1);
 
-            eprintln!("[DEBUG] parse_identifier_stmt: pos={}, rparen={:?}, after_rparen={:?}",
-                     pos, rparen.map(|t| &t.kind), after_rparen.map(|t| &t.kind));
+            eprintln!(
+                "[DEBUG] parse_identifier_stmt: pos={}, rparen={:?}, after_rparen={:?}",
+                pos,
+                rparen.map(|t| &t.kind),
+                after_rparen.map(|t| &t.kind)
+            );
 
             // If current pos is RParen AND after it comes -> or =, this is a function definition
             if matches!(rparen.map(|t| &t.kind), Some(TokenKind::RParen))
-                && matches!(after_rparen.map(|t| &t.kind), Some(TokenKind::Arrow) | Some(TokenKind::Eq))
+                && matches!(
+                    after_rparen.map(|t| &t.kind),
+                    Some(TokenKind::Arrow) | Some(TokenKind::Eq)
+                )
             {
                 eprintln!("[DEBUG] parse_identifier_stmt: Detected function definition!");
                 // This is a function definition - parse as expression
@@ -493,13 +552,18 @@ impl<'a> ParserState<'a> {
 
         // Check if this is a variable declaration: name: type or name = expr
         // We check next token (peek) because current is identifier
-        if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon) | Some(TokenKind::Eq)) {
+        if matches!(
+            next.map(|t| &t.kind),
+            Some(TokenKind::Colon) | Some(TokenKind::Eq)
+        ) {
             // Consume the identifier first
             let name = match self.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => n.clone(),
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
-                        self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                        self.current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof),
                     ));
                     return None;
                 }
@@ -531,7 +595,10 @@ impl<'a> ParserState<'a> {
                     // Check if the first thing in the parens is an identifier (parameter name)
                     let first_in_paren = self.peek_nth(2);
 
-                    let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                    let is_fn_def = if matches!(
+                        first_in_paren.map(|t| &t.kind),
+                        Some(TokenKind::Identifier(_))
+                    ) {
                         true
                     } else if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::RParen)) {
                         // Check if followed by =>
@@ -590,7 +657,10 @@ impl<'a> ParserState<'a> {
                 }
                 // Case 2: `= identifier => body` - single param without parens
                 // e.g., `inc: Int -> Int = x => x + 1`
-                else if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                else if matches!(
+                    next_after_eq.map(|t| &t.kind),
+                    Some(TokenKind::Identifier(_))
+                ) {
                     // Check if followed by =>
                     let after_identifier = self.peek_nth(2);
                     if matches!(after_identifier.map(|t| &t.kind), Some(TokenKind::FatArrow)) {
@@ -606,7 +676,9 @@ impl<'a> ParserState<'a> {
                             Some(TokenKind::Identifier(n)) => n.clone(),
                             _ => {
                                 self.error(super::ParseError::UnexpectedToken(
-                                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                                    self.current()
+                                        .map(|t| t.kind.clone())
+                                        .unwrap_or(TokenKind::Eof),
                                 ));
                                 return None;
                             }
@@ -667,7 +739,10 @@ impl<'a> ParserState<'a> {
                     // Check if the first thing in the parens is an identifier (parameter name)
                     let first_in_paren = self.peek_nth(2);
 
-                    let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                    let is_fn_def = if matches!(
+                        first_in_paren.map(|t| &t.kind),
+                        Some(TokenKind::Identifier(_))
+                    ) {
                         true
                     } else if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::RParen)) {
                         // Check if followed by =>
@@ -742,7 +817,10 @@ impl<'a> ParserState<'a> {
             // If next token is LParen followed by Identifier and FatArrow,
             // this looks like `name: Type (params) => body` without the `=`
             // which is invalid syntax
-            if type_annotation.is_some() && initializer.is_none() && !self.skip(&TokenKind::Semicolon) {
+            if type_annotation.is_some()
+                && initializer.is_none()
+                && !self.skip(&TokenKind::Semicolon)
+            {
                 let next = self.current().map(|t| &t.kind);
                 if matches!(next, Some(TokenKind::LParen)) {
                     // Look ahead to see if this is a lambda-like pattern without =
@@ -753,18 +831,21 @@ impl<'a> ParserState<'a> {
                     let third = self.peek_nth(2);
                     let fourth = self.peek_nth(3);
                     // Check for pattern: ( identifier ) => or ( identifier , ...
-                    let is_lambda_like = if matches!(second.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
-                        // Check if third is ) and fourth is => (single param case)
-                        // Or third is , (multi param case)
-                        matches!(third.map(|t| &t.kind), Some(TokenKind::RParen))
-                            || matches!(third.map(|t| &t.kind), Some(TokenKind::Comma))
-                    } else {
-                        false
-                    };
-                    if is_lambda_like && matches!(fourth.map(|t| &t.kind), Some(TokenKind::FatArrow)) {
+                    let is_lambda_like =
+                        if matches!(second.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                            // Check if third is ) and fourth is => (single param case)
+                            // Or third is , (multi param case)
+                            matches!(third.map(|t| &t.kind), Some(TokenKind::RParen))
+                                || matches!(third.map(|t| &t.kind), Some(TokenKind::Comma))
+                        } else {
+                            false
+                        };
+                    if is_lambda_like
+                        && matches!(fourth.map(|t| &t.kind), Some(TokenKind::FatArrow))
+                    {
                         // This is `name: Type (param) => body` without `=`
                         self.error(super::ParseError::Generic(
-                            "Missing '=' before lambda in function definition".to_string()
+                            "Missing '=' before lambda in function definition".to_string(),
                         ));
                         return None;
                     }
@@ -793,13 +874,18 @@ impl<'a> ParserState<'a> {
     /// Example: `add(Int, Int) -> Int = (a, b) => a + b`
     /// Also supports: `name() = (params) => body` (inferred types)
     fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
-        eprintln!("[DEBUG] parse_fn_stmt called, current token: {:?}", self.current().map(|t| &t.kind));
+        eprintln!(
+            "[DEBUG] parse_fn_stmt called, current token: {:?}",
+            self.current().map(|t| &t.kind)
+        );
         // Parse function name
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -808,7 +894,10 @@ impl<'a> ParserState<'a> {
         self.bump();
 
         // Parse parameter types in parentheses: (Int, String) or ()
-        eprintln!("[DEBUG] parse_fn_stmt: expecting LParen, current: {:?}", self.current().map(|t| &t.kind));
+        eprintln!(
+            "[DEBUG] parse_fn_stmt: expecting LParen, current: {:?}",
+            self.current().map(|t| &t.kind)
+        );
         if !self.expect(&TokenKind::LParen) {
             eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen");
             return None;
@@ -841,14 +930,19 @@ impl<'a> ParserState<'a> {
         // Expect equals sign
         if !self.skip(&TokenKind::Eq) {
             self.error(super::ParseError::UnexpectedToken(
-                self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                self.current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
             ));
             eprintln!("[DEBUG] parse_fn_stmt: failed to expect Eq");
             return None;
         }
 
         // Parse implementation: (params) => body
-        eprintln!("[DEBUG] parse_fn_stmt: expecting LParen for params, current: {:?}", self.current().map(|t| &t.kind));
+        eprintln!(
+            "[DEBUG] parse_fn_stmt: expecting LParen for params, current: {:?}",
+            self.current().map(|t| &t.kind)
+        );
         if !self.expect(&TokenKind::LParen) {
             eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen for params");
             return None;
@@ -899,16 +993,18 @@ impl<'a> ParserState<'a> {
 
             // Parameter count must match type count
             if param_types.len() != params.len() {
-                 self.error(super::ParseError::Generic(
-                    format!("Parameter count mismatch: expected {}, got {}", param_types.len(), params.len())
-                ));
+                self.error(super::ParseError::Generic(format!(
+                    "Parameter count mismatch: expected {}, got {}",
+                    param_types.len(),
+                    params.len()
+                )));
                 return None;
             }
         }
 
         // Construct function type if types were provided
         let type_annotation = if !param_types.is_empty() || return_type.is_some() {
-             Some(Type::Fn {
+            Some(Type::Fn {
                 params: param_types,
                 return_type: Box::new(return_type.clone().unwrap_or(Type::Name("_".to_string()))),
             })
@@ -978,14 +1074,12 @@ impl<'a> ParserState<'a> {
     fn parse_return_stmt(&mut self, span: Span) -> Option<Stmt> {
         self.bump(); // consume 'return'
 
-        let value = if self.at(&TokenKind::Semicolon)
-            || self.at(&TokenKind::RBrace)
-            || self.at_end()
-        {
-            None
-        } else {
-            Some(Box::new(self.parse_expression(BP_LOWEST)?))
-        };
+        let value =
+            if self.at(&TokenKind::Semicolon) || self.at(&TokenKind::RBrace) || self.at_end() {
+                None
+            } else {
+                Some(Box::new(self.parse_expression(BP_LOWEST)?))
+            };
 
         self.skip(&TokenKind::Semicolon);
 
@@ -1040,7 +1134,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }

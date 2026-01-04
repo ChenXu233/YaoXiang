@@ -5,9 +5,8 @@
 pub use errors::{VMError, VMResult};
 pub use executor::{Opcode as ExecutorOpcode, VMConfig, VMStatus, Value, VM};
 
-pub mod opcode; // 添加 opcode 模块
 pub mod inline_cache;
-
+pub mod opcode; // 添加 opcode 模块
 
 mod errors;
 mod executor;

@@ -25,7 +25,11 @@ pub struct InstantiationRequest {
 
 impl InstantiationRequest {
     /// 创建新的实例化请求
-    pub fn new(generic_id: GenericFunctionId, type_args: Vec<MonoType>, source_location: Span) -> Self {
+    pub fn new(
+        generic_id: GenericFunctionId,
+        type_args: Vec<MonoType>,
+        source_location: Span,
+    ) -> Self {
         InstantiationRequest {
             generic_id,
             type_args,
@@ -45,10 +49,7 @@ impl InstantiationRequest {
 
     /// 生成缓存键
     pub fn specialization_key(&self) -> SpecializationKey {
-        SpecializationKey::new(
-            self.generic_id.name.clone(),
-            self.type_args.clone(),
-        )
+        SpecializationKey::new(self.generic_id.name.clone(), self.type_args.clone())
     }
 }
 
@@ -214,11 +215,7 @@ pub struct FunctionInstance {
 
 impl FunctionInstance {
     /// 创建新的函数实例
-    pub fn new(
-        id: FunctionId,
-        generic_id: GenericFunctionId,
-        type_args: Vec<MonoType>,
-    ) -> Self {
+    pub fn new(id: FunctionId, generic_id: GenericFunctionId, type_args: Vec<MonoType>) -> Self {
         FunctionInstance {
             id,
             generic_id,
@@ -290,7 +287,3 @@ impl fmt::Display for FunctionId {
         write!(f, "{}", self.specialized_name())
     }
 }
-
-
-
-

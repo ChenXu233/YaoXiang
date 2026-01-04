@@ -227,10 +227,7 @@ fn test_string_concat() {
 fn test_variable_reference() {
     // 使用 TypeEnvironment 来添加变量
     let mut env = TypeEnvironment::new();
-    env.add_var(
-        "my_var".to_string(),
-        PolyType::mono(MonoType::Int(64)),
-    );
+    env.add_var("my_var".to_string(), PolyType::mono(MonoType::Int(64)));
 
     // 我们使用 TypeEnvironment 的 get_var 来验证
     let retrieved = env.get_var("my_var").unwrap();

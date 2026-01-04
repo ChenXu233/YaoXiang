@@ -1,8 +1,8 @@
 //! 错误收集测试
 
 use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::typecheck::*;
 use crate::frontend::parser::ast::*;
+use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 
 /// 测试多个类型错误收集
@@ -11,8 +11,14 @@ fn test_multiple_error_collection() {
     let mut errors = ErrorCollector::new();
 
     // 添加一些错误
-    errors.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
-    errors.add_error(TypeError::unknown_variable("y".to_string(), Span::default()));
+    errors.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
+    errors.add_error(TypeError::unknown_variable(
+        "y".to_string(),
+        Span::default(),
+    ));
 
     // 应该收集到两个错误
     assert_eq!(errors.error_count(), 2);
@@ -24,11 +30,7 @@ fn test_multiple_error_collection() {
 fn test_error_formatting() {
     let formatter = ErrorFormatter::new(false);
 
-    let mismatch = TypeError::type_mismatch(
-        MonoType::Int(64),
-        MonoType::String,
-        Span::default(),
-    );
+    let mismatch = TypeError::type_mismatch(MonoType::Int(64), MonoType::String, Span::default());
 
     let formatted = formatter.format_error(&mismatch);
     assert!(formatted.contains("Type mismatch"));
@@ -41,11 +43,7 @@ fn test_error_formatting() {
 fn test_verbose_error_formatting() {
     let formatter = ErrorFormatter::new(true);
 
-    let mismatch = TypeError::type_mismatch(
-        MonoType::Int(64),
-        MonoType::String,
-        Span::default(),
-    );
+    let mismatch = TypeError::type_mismatch(MonoType::Int(64), MonoType::String, Span::default());
 
     let formatted = formatter.format_error(&mismatch);
     // 详细模式应该包含位置信息
@@ -68,8 +66,14 @@ fn test_diagnostic_generation() {
 fn test_error_collector_clear() {
     let mut collector = ErrorCollector::new();
 
-    collector.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
-    collector.add_error(TypeError::unknown_variable("y".to_string(), Span::default()));
+    collector.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
+    collector.add_error(TypeError::unknown_variable(
+        "y".to_string(),
+        Span::default(),
+    ));
 
     assert_eq!(collector.error_count(), 2);
 
@@ -84,8 +88,14 @@ fn test_error_collector_clear() {
 fn test_error_collector_into_errors() {
     let mut collector = ErrorCollector::new();
 
-    collector.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
-    collector.add_error(TypeError::unknown_variable("y".to_string(), Span::default()));
+    collector.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
+    collector.add_error(TypeError::unknown_variable(
+        "y".to_string(),
+        Span::default(),
+    ));
 
     let errors: Vec<TypeError> = collector.into_errors();
 
@@ -137,15 +147,15 @@ fn test_index_out_of_bounds_error() {
 /// 测试类型不匹配错误
 #[test]
 fn test_type_mismatch_error() {
-    let error = TypeError::type_mismatch(
-        MonoType::Int(32),
-        MonoType::Float(64),
-        Span::default(),
-    );
+    let error = TypeError::type_mismatch(MonoType::Int(32), MonoType::Float(64), Span::default());
 
     let formatted = format!("{}", error);
     // 检查是否包含类型不匹配相关信息
-    assert!(formatted.contains("Type mismatch") || formatted.contains("int") || formatted.contains("float"));
+    assert!(
+        formatted.contains("Type mismatch")
+            || formatted.contains("int")
+            || formatted.contains("float")
+    );
 }
 
 /// 测试未知变量错误格式化
@@ -197,7 +207,10 @@ fn test_warning_formatting() {
 fn test_multiple_error_types() {
     let mut collector = ErrorCollector::new();
 
-    collector.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
+    collector.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
     collector.add_error(TypeError::type_mismatch(
         MonoType::Int(64),
         MonoType::String,
@@ -224,11 +237,7 @@ fn test_no_errors() {
 /// 测试诊断转换
 #[test]
 fn test_diagnostic_from_type_error() {
-    let error = TypeError::type_mismatch(
-        MonoType::Bool,
-        MonoType::Int(64),
-        Span::default(),
-    );
+    let error = TypeError::type_mismatch(MonoType::Bool, MonoType::Int(64), Span::default());
 
     let diagnostic: Diagnostic = error.into();
     assert_eq!(diagnostic.severity, Severity::Error);
@@ -251,7 +260,10 @@ fn test_severity_levels() {
 fn test_error_collector_errors_list() {
     let mut collector = ErrorCollector::new();
 
-    collector.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
+    collector.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
 
     let errors = collector.errors();
     assert_eq!(errors.len(), 1);
@@ -276,11 +288,7 @@ fn test_error_collector_warnings_list() {
 fn test_error_formatter_non_verbose() {
     let formatter = ErrorFormatter::new(false);
 
-    let error = TypeError::type_mismatch(
-        MonoType::Int(64),
-        MonoType::String,
-        Span::default(),
-    );
+    let error = TypeError::type_mismatch(MonoType::Int(64), MonoType::String, Span::default());
 
     let formatted = formatter.format_error(&error);
     // 非详细模式不应该包含 span 信息
@@ -292,8 +300,14 @@ fn test_error_formatter_non_verbose() {
 fn test_error_collector_merge() {
     let mut collector1 = ErrorCollector::new();
 
-    collector1.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
-    collector1.add_error(TypeError::unknown_variable("y".to_string(), Span::default()));
+    collector1.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
+    collector1.add_error(TypeError::unknown_variable(
+        "y".to_string(),
+        Span::default(),
+    ));
 
     assert_eq!(collector1.error_count(), 2);
 }
@@ -301,11 +315,7 @@ fn test_error_collector_merge() {
 /// 测试诊断代码格式
 #[test]
 fn test_diagnostic_code_format() {
-    let error = TypeError::type_mismatch(
-        MonoType::Int(64),
-        MonoType::String,
-        Span::default(),
-    );
+    let error = TypeError::type_mismatch(MonoType::Int(64), MonoType::String, Span::default());
     let diagnostic: Diagnostic = error.into();
 
     // 错误码应该是 E001 格式
@@ -325,11 +335,7 @@ fn test_error_collector_warning_count() {
 fn test_type_error_variants() {
     // 测试各种错误类型
     let unknown = TypeError::unknown_variable("test".to_string(), Span::default());
-    let mismatch = TypeError::type_mismatch(
-        MonoType::Int(64),
-        MonoType::String,
-        Span::default(),
-    );
+    let mismatch = TypeError::type_mismatch(MonoType::Int(64), MonoType::String, Span::default());
 
     // 验证错误可以格式化
     let _ = format!("{}", unknown);
@@ -351,7 +357,10 @@ fn test_diagnostic_related() {
 fn test_error_collector_get_errors() {
     let mut collector = ErrorCollector::new();
 
-    collector.add_error(TypeError::unknown_variable("x".to_string(), Span::default()));
+    collector.add_error(TypeError::unknown_variable(
+        "x".to_string(),
+        Span::default(),
+    ));
 
     let errors = collector.errors();
     assert_eq!(errors.len(), 1);

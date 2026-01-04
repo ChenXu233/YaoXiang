@@ -115,7 +115,8 @@ mod lexer_keywords_tests {
 
     #[test]
     fn test_all_keywords() {
-        let source = "type pub use spawn ref mut if elif else match while for in return break continue as";
+        let source =
+            "type pub use spawn ref mut if elif else match while for in return break continue as";
         let tokens = tokenize(source).unwrap();
         // Each keyword + EOF = 17 + 1 = 18
         assert_eq!(tokens.len(), 18);
@@ -416,8 +417,12 @@ mod lexer_comments_tests {
     fn test_single_line_comment_skips_content() {
         // Comments should be skipped
         let tokens = tokenize("42 // comment\n99").unwrap();
-        let has_42 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
-        let has_99 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        let has_99 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
         assert!(has_42, "Should have integer 42");
         assert!(has_99, "Should have integer 99");
     }
@@ -426,8 +431,12 @@ mod lexer_comments_tests {
     fn test_multi_line_comment_skips_content() {
         // Multi-line comments should be skipped
         let tokens = tokenize("42 /* comment */ 99").unwrap();
-        let has_42 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
-        let has_99 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        let has_99 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
         assert!(has_42, "Should have integer 42");
         assert!(has_99, "Should have integer 99");
     }
@@ -437,7 +446,9 @@ mod lexer_comments_tests {
         // Test that text after multi-line comment is parsed correctly
         let tokens = tokenize("/* comment */ let").unwrap();
         // Should have identifier "let" and EOF
-        let has_let = tokens.iter().any(|t| matches!(&t.kind, TokenKind::Identifier(s)));
+        let has_let = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::Identifier(s)));
         assert!(has_let, "Should have identifier 'let'");
     }
 
@@ -445,8 +456,12 @@ mod lexer_comments_tests {
     fn test_comment_with_asterisks() {
         // Test comment with multiple asterisks
         let tokens = tokenize("42 /* ** */ 99").unwrap();
-        let has_42 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
-        let has_99 = tokens.iter().any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        let has_99 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(99)));
         assert!(has_42, "Should have integer 42");
         assert!(has_99, "Should have integer 99");
     }

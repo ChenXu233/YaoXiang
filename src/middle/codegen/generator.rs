@@ -2,10 +2,10 @@
 //!
 //! Translates Middle IR to Typed Bytecode.
 
-use crate::middle::ir::{FunctionIR, Instruction, Operand, ConstValue};
-use crate::middle::codegen::bytecode::{BytecodeInstruction, FunctionCode};
-use crate::vm::opcode::TypedOpcode;
 use crate::frontend::typecheck::MonoType;
+use crate::middle::codegen::bytecode::{BytecodeInstruction, FunctionCode};
+use crate::middle::ir::{ConstValue, FunctionIR, Instruction, Operand};
+use crate::vm::opcode::TypedOpcode;
 use std::collections::HashMap;
 
 pub struct BytecodeGenerator<'a> {
@@ -191,7 +191,7 @@ impl<'a> BytecodeGenerator<'a> {
                 for _ in 1..arg_count {
                     self.next_temp_reg();
                 }
-                
+
                 // Move args to these regs
                 for (i, arg) in args.iter().enumerate() {
                     let arg_reg = self.load_operand(arg);
@@ -211,13 +211,13 @@ impl<'a> BytecodeGenerator<'a> {
                 // Assuming func is a Const(Int) representing ID or Label
                 // Or a Global.
                 // For now, placeholder ID 0.
-                let func_id = 0u32; 
-                
+                let func_id = 0u32;
+
                 let mut operands = vec![dst_reg];
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_count as u8);
-                
+
                 self.emit(TypedOpcode::CallStatic, operands);
             }
             _ => {
@@ -226,7 +226,13 @@ impl<'a> BytecodeGenerator<'a> {
         }
     }
 
-    fn emit_arithmetic(&mut self, opcode: TypedOpcode, dst: &Operand, lhs: &Operand, rhs: &Operand) {
+    fn emit_arithmetic(
+        &mut self,
+        opcode: TypedOpcode,
+        dst: &Operand,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) {
         let dst_reg = self.resolve_dst(dst);
         let lhs_reg = self.load_operand(lhs);
         let rhs_reg = self.load_operand(rhs);
@@ -300,5 +306,3 @@ impl<'a> BytecodeGenerator<'a> {
         }
     }
 }
-
-

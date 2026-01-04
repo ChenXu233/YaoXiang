@@ -6,8 +6,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
-use super::node_id::{NodeId, NodeIdGenerator};
 use super::node::{DAGNode, DAGNodeKind};
+use super::node_id::{NodeId, NodeIdGenerator};
 
 /// Errors that can occur when manipulating the computation DAG.
 #[derive(Debug, PartialEq)]
@@ -298,12 +298,9 @@ impl ComputationDAG {
         self.nodes
             .values()
             .filter(|node| {
-                node.dependencies().iter().all(|dep| {
-                    self.nodes
-                        .get(dep)
-                        .map(|n| n.is_leaf())
-                        .unwrap_or(true)
-                })
+                node.dependencies()
+                    .iter()
+                    .all(|dep| self.nodes.get(dep).map(|n| n.is_leaf()).unwrap_or(true))
             })
             .map(|node| node.id())
             .collect()
@@ -329,8 +326,10 @@ impl ComputationDAG {
 
         // Clone to avoid borrowing issues
         let nodes: HashMap<NodeId, DAGNode> = self.nodes.clone();
-        let mut in_degree: HashMap<NodeId, usize> =
-            nodes.iter().map(|(id, node)| (*id, node.num_dependencies())).collect();
+        let mut in_degree: HashMap<NodeId, usize> = nodes
+            .iter()
+            .map(|(id, node)| (*id, node.num_dependencies()))
+            .collect();
 
         let mut queue: VecDeque<NodeId> = in_degree
             .iter()
@@ -385,11 +384,7 @@ impl ComputationDAG {
     /// concurrently based on the dependency structure.
     pub fn max_parallelism(&self) -> usize {
         let mut max_width = 0;
-        let mut current_level: Vec<NodeId> = self
-            .roots
-            .iter()
-            .copied()
-            .collect();
+        let mut current_level: Vec<NodeId> = self.roots.iter().copied().collect();
 
         while !current_level.is_empty() {
             max_width = max_width.max(current_level.len());
@@ -479,5 +474,3 @@ impl fmt::Display for ComputationDAG {
         write!(f, "}}")
     }
 }
-
-

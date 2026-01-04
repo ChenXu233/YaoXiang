@@ -5,18 +5,18 @@
 //! - 泛型函数和泛型类型
 //! - 完整的错误收集
 
-pub mod types;
-pub mod infer;
 pub mod check;
+mod errors;
+pub mod infer;
 pub mod specialize;
 mod tests;
-mod errors;
+pub mod types;
 
-pub use errors::*;
-pub use types::*;
-pub use infer::*;
 pub use check::*;
+pub use errors::*;
+pub use infer::*;
 pub use specialize::*;
+pub use types::*;
 
 use super::parser::ast;
 use crate::middle;

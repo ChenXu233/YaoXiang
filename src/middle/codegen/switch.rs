@@ -2,7 +2,7 @@
 //!
 //! 实现 O(1) 的跳转表优化。
 
-use super::{CodegenContext, CodegenError, BytecodeInstruction};
+use super::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
 use crate::frontend::parser::ast::Expr;
 use crate::middle::ir::Operand;
@@ -84,7 +84,11 @@ impl CodegenContext {
         let default_offset = default_label.map_or(end_label as i32, |l| l as i32);
         self.emit(BytecodeInstruction::new(
             TypedOpcode::Switch,
-            vec![self.operand_to_reg(&cond_reg)?, default_offset as u8, table_idx as u8],
+            vec![
+                self.operand_to_reg(&cond_reg)?,
+                default_offset as u8,
+                table_idx as u8,
+            ],
         ));
 
         self.jump_tables.insert(table_idx, jump_table);
@@ -169,8 +173,12 @@ fn get_min_max<T: Copy + PartialOrd, I: Iterator<Item = T>>(mut iter: I) -> Opti
             let mut min = first;
             let mut max = first;
             for item in iter {
-                if item < min { min = item; }
-                if item > max { max = item; }
+                if item < min {
+                    min = item;
+                }
+                if item > max {
+                    max = item;
+                }
             }
             Some((min, max))
         }

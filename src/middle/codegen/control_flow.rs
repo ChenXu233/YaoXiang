@@ -162,11 +162,7 @@ impl CodegenContext {
     }
 
     /// 生成 match 表达式
-    fn generate_match_stmt(
-        &mut self,
-        expr: &Block,
-        arms: &[MatchArm],
-    ) -> Result<(), CodegenError> {
+    fn generate_match_stmt(&mut self, expr: &Block, arms: &[MatchArm]) -> Result<(), CodegenError> {
         // 生成匹配表达式
         let match_reg = self.generate_block(expr)?;
 
@@ -177,11 +173,7 @@ impl CodegenContext {
         // 发射 Switch 指令
         self.emit(super::BytecodeInstruction::new(
             crate::vm::opcode::TypedOpcode::Switch,
-            vec![
-                self.operand_to_reg(&match_reg)?,
-                end_label as i16 as u8,
-                0,
-            ],
+            vec![self.operand_to_reg(&match_reg)?, end_label as i16 as u8, 0],
         ));
 
         // 生成每个臂的代码

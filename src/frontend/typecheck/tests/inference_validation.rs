@@ -8,15 +8,15 @@ fn check_type(input: &str) -> bool {
         Ok(t) => t,
         Err(_) => return false,
     };
-    
+
     let module = match parse(&tokens) {
         Ok(m) => m,
         Err(_) => return false,
     };
-    
+
     let mut solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new(&mut solver);
-    
+
     match checker.check_module(&module) {
         Ok(_) => {
             if checker.has_errors() {
@@ -52,7 +52,7 @@ fn test_single_param_annotation() {
 #[test]
 fn test_void_return() {
     // 3. log: (String) -> Void = (msg) => print(msg)
-    // Assuming print is available or we mock it. 
+    // Assuming print is available or we mock it.
     // Since print is likely in std or built-in, we might need to ensure it's available.
     // If not, we can use a dummy function or just assume it works if print is built-in.
     // For now, let's assume print is not available and use a dummy block or assume print is resolved.
@@ -144,7 +144,9 @@ fn test_legacy_full_params() {
 #[test]
 fn test_return_stmt_annotated() {
     // 16. add: (Int, Int) -> Int = (a, b) => { return a + b; } -> PASS
-    assert!(check_type("add: (Int, Int) -> Int = (a, b) => { return a + b; }"));
+    assert!(check_type(
+        "add: (Int, Int) -> Int = (a, b) => { return a + b; }"
+    ));
 }
 
 #[test]
@@ -162,5 +164,7 @@ fn test_return_stmt_inferred() {
 #[test]
 fn test_early_return() {
     // 19. early: Int -> Int = (x) => { if x < 0 { return 0; } x } -> PASS
-    assert!(check_type("early: Int -> Int = (x) => { if x < 0 { return 0; } x }"));
+    assert!(check_type(
+        "early: Int -> Int = (x) => { if x < 0 { return 0; } x }"
+    ));
 }

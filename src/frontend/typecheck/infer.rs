@@ -2,8 +2,8 @@
 //!
 //! 使用 Hindley-Milner 算法推断表达式的类型
 
-use super::super::parser::ast::{self, BinOp, UnOp};
 use super::super::lexer::tokens::Literal;
+use super::super::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
 use super::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::span::Span;
@@ -54,7 +54,12 @@ impl<'a> TypeInferrer<'a> {
         match &expr {
             ast::Expr::Lit(lit, span) => self.infer_literal(lit, *span),
             ast::Expr::Var(name, span) => self.infer_var(name, *span),
-            ast::Expr::BinOp { op, left, right, span } => self.infer_binop(op, left, right, *span),
+            ast::Expr::BinOp {
+                op,
+                left,
+                right,
+                span,
+            } => self.infer_binop(op, left, right, *span),
             ast::Expr::UnOp { op, expr, span } => self.infer_unop(op, expr, *span),
             ast::Expr::Call { func, args, span } => self.infer_call(func, args, *span),
             ast::Expr::FnDef {
@@ -105,7 +110,9 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::List(exprs, span) => self.infer_list(exprs, *span),
             ast::Expr::Dict(pairs, span) => self.infer_dict(pairs, *span),
             ast::Expr::Index { expr, index, span } => self.infer_index(expr, index, *span),
-            ast::Expr::FieldAccess { expr, field, span } => self.infer_field_access(expr, field, *span),
+            ast::Expr::FieldAccess { expr, field, span } => {
+                self.infer_field_access(expr, field, *span)
+            }
         }
     }
 
@@ -171,10 +178,8 @@ impl<'a> TypeInferrer<'a> {
             // 逻辑运算
             BinOp::And | BinOp::Or => {
                 // 两边必须是布尔类型
-                self.solver
-                    .add_constraint(left_ty, MonoType::Bool, span);
-                self.solver
-                    .add_constraint(right_ty, MonoType::Bool, span);
+                self.solver.add_constraint(left_ty, MonoType::Bool, span);
+                self.solver.add_constraint(right_ty, MonoType::Bool, span);
                 Ok(MonoType::Bool)
             }
 
@@ -188,7 +193,8 @@ impl<'a> TypeInferrer<'a> {
             // 范围运算
             BinOp::Range => {
                 // 左右两边必须是相同类型
-                self.solver.add_constraint(left_ty.clone(), right_ty.clone(), span);
+                self.solver
+                    .add_constraint(left_ty.clone(), right_ty.clone(), span);
                 // 返回一个范围类型
                 Ok(MonoType::Range {
                     elem_type: Box::new(left_ty),
@@ -227,10 +233,7 @@ impl<'a> TypeInferrer<'a> {
         let func_ty = self.infer_expr(func)?;
 
         // 创建类型变量用于参数和返回值
-        let param_tys: Vec<MonoType> = args
-            .iter()
-            .map(|_| self.solver.new_var())
-            .collect();
+        let param_tys: Vec<MonoType> = args.iter().map(|_| self.solver.new_var()).collect();
 
         let return_ty = self.solver.new_var();
 
@@ -302,8 +305,7 @@ impl<'a> TypeInferrer<'a> {
     ) -> TypeResult<MonoType> {
         // 条件必须是布尔类型
         let cond_ty = self.infer_expr(condition)?;
-        self.solver
-            .add_constraint(cond_ty, MonoType::Bool, span);
+        self.solver.add_constraint(cond_ty, MonoType::Bool, span);
 
         // 推断各分支的类型
         let then_ty = self.infer_block(then_branch, true, None)?;
@@ -376,7 +378,11 @@ impl<'a> TypeInferrer<'a> {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
             }
-            ast::Pattern::Union { name: _, variant: _, pattern: _ } => {
+            ast::Pattern::Union {
+                name: _,
+                variant: _,
+                pattern: _,
+            } => {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
             }
@@ -412,8 +418,7 @@ impl<'a> TypeInferrer<'a> {
         // 条件必须是布尔类型
         let cond_ty = self.infer_expr(condition)?;
 
-        self.solver
-            .add_constraint(cond_ty, MonoType::Bool, span);
+        self.solver.add_constraint(cond_ty, MonoType::Bool, span);
 
         // 推断循环体
         // 注意：infer_block 会自动管理作用域，所以这里不再调用 enter_scope/exit_scope
@@ -447,11 +452,13 @@ impl<'a> TypeInferrer<'a> {
         match &iter_ty {
             MonoType::Range { elem_type } => {
                 // Range 类型：元素类型由 Range 决定
-                self.solver.add_constraint(elem_ty.clone(), *elem_type.clone(), span);
+                self.solver
+                    .add_constraint(elem_ty.clone(), *elem_type.clone(), span);
             }
             MonoType::List(list_elem) => {
                 // List 类型：元素类型由 List 决定
-                self.solver.add_constraint(elem_ty.clone(), *list_elem.clone(), span);
+                self.solver
+                    .add_constraint(elem_ty.clone(), *list_elem.clone(), span);
             }
             _ => {
                 // 其他类型：假设是 List，元素类型用 elem_ty
@@ -474,7 +481,12 @@ impl<'a> TypeInferrer<'a> {
     /// * `block` - 要推断的代码块
     /// * `manage_scope` - 是否管理作用域（进入/退出作用域）
     /// * `expected_type` - 期望的类型（如果有）
-    pub fn infer_block(&mut self, block: &ast::Block, manage_scope: bool, expected_type: Option<&MonoType>) -> TypeResult<MonoType> {
+    pub fn infer_block(
+        &mut self,
+        block: &ast::Block,
+        manage_scope: bool,
+        expected_type: Option<&MonoType>,
+    ) -> TypeResult<MonoType> {
         if manage_scope {
             self.enter_scope();
         }
@@ -492,7 +504,12 @@ impl<'a> TypeInferrer<'a> {
                     initializer,
                     is_mut: _,
                 } => {
-                    self.infer_var_decl(name, type_annotation.as_ref(), initializer.as_deref(), block.span)?;
+                    self.infer_var_decl(
+                        name,
+                        type_annotation.as_ref(),
+                        initializer.as_deref(),
+                        block.span,
+                    )?;
                 }
                 ast::StmtKind::For {
                     var,
@@ -521,7 +538,8 @@ impl<'a> TypeInferrer<'a> {
         }
 
         if let Some(expected) = expected_type {
-            self.solver.add_constraint(ty.clone(), expected.clone(), block.span);
+            self.solver
+                .add_constraint(ty.clone(), expected.clone(), block.span);
         }
 
         Ok(ty)
@@ -540,8 +558,7 @@ impl<'a> TypeInferrer<'a> {
 
             if let Some(ann) = type_annotation {
                 let ann_ty = MonoType::from(ann.clone());
-                self.solver
-                    .add_constraint(init_ty.clone(), ann_ty, span);
+                self.solver.add_constraint(init_ty.clone(), ann_ty, span);
             }
 
             // 泛化 initializer 的类型
@@ -568,7 +585,8 @@ impl<'a> TypeInferrer<'a> {
                 self.solver.add_constraint(ty, ret_ty.clone(), span);
             }
         } else if let Some(ret_ty) = &self.current_return_type {
-            self.solver.add_constraint(MonoType::Void, ret_ty.clone(), span);
+            self.solver
+                .add_constraint(MonoType::Void, ret_ty.clone(), span);
         }
         Ok(MonoType::Void)
     }
@@ -638,11 +656,7 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断字典类型
-    fn infer_dict(
-        &mut self,
-        pairs: &[(ast::Expr, ast::Expr)],
-        span: Span,
-    ) -> TypeResult<MonoType> {
+    fn infer_dict(&mut self, pairs: &[(ast::Expr, ast::Expr)], span: Span) -> TypeResult<MonoType> {
         if pairs.is_empty() {
             // 空字典，创建类型变量
             let key_ty = self.solver.new_var();
@@ -663,10 +677,7 @@ impl<'a> TypeInferrer<'a> {
             self.solver.add_constraint(value_ty.clone(), v_ty, span);
         }
 
-        Ok(MonoType::Dict(
-            Box::new(key_ty),
-            Box::new(value_ty),
-        ))
+        Ok(MonoType::Dict(Box::new(key_ty), Box::new(value_ty)))
     }
 
     /// 推断下标访问类型

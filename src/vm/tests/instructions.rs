@@ -74,7 +74,10 @@ mod instruction_variants_tests {
     #[test]
     fn test_instruction_with_large_operands() {
         let instruction = Instruction::new(0xFF, [u32::MAX, u32::MAX, u32::MAX, u32::MAX]);
-        assert_eq!(instruction.operands, [u32::MAX, u32::MAX, u32::MAX, u32::MAX]);
+        assert_eq!(
+            instruction.operands,
+            [u32::MAX, u32::MAX, u32::MAX, u32::MAX]
+        );
     }
 
     #[test]

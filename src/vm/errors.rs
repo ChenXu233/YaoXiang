@@ -47,6 +47,3 @@ pub enum VMError {
     #[error("Invalid state: {0}")]
     InvalidState(String),
 }
-
-
-

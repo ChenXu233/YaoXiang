@@ -277,7 +277,12 @@ fn test_parse_simple_type_no_param() {
     let code = "type Color = red";
     let tokens = tokenize(code).unwrap();
     let result = parse(&tokens);
-    assert!(result.is_ok(), "Failed to parse: {}\nError: {:?}", code, result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to parse: {}\nError: {:?}",
+        code,
+        result.err()
+    );
     let module = result.unwrap();
     assert_eq!(module.items.len(), 1);
 }

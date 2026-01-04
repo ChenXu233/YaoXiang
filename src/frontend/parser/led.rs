@@ -1,8 +1,8 @@
 //! Infix expression parsing (led - left denotation)
 
-use super::state::*;
-use super::ast::*;
 use super::super::lexer::tokens::*;
+use super::ast::*;
+use super::state::*;
 
 /// Extension trait for infix parsing
 pub trait InfixParser {
@@ -182,7 +182,9 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
                 self.error(super::ParseError::UnexpectedToken(
-                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
             }
@@ -278,7 +280,9 @@ impl<'a> ParserState<'a> {
                 span: var_span,
             },
             _ => {
-                self.error(super::ParseError::Generic("Invalid lambda parameter".to_string()));
+                self.error(super::ParseError::Generic(
+                    "Invalid lambda parameter".to_string(),
+                ));
                 return None;
             }
         };
@@ -288,13 +292,25 @@ impl<'a> ParserState<'a> {
 
         // Parse body
         let body = if self.at(&TokenKind::LBrace) {
-            if !self.expect(&TokenKind::LBrace) { return None; }
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
             let (stmts, expr) = self.parse_block_body()?;
-            if !self.expect(&TokenKind::RBrace) { return None; }
-            Block { stmts, expr, span: self.span() }
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            Block {
+                stmts,
+                expr,
+                span: self.span(),
+            }
         } else {
             let expr = self.parse_expression(BP_LOWEST)?;
-            Block { stmts: vec![], expr: Some(Box::new(expr)), span: self.span() }
+            Block {
+                stmts: vec![],
+                expr: Some(Box::new(expr)),
+                span: self.span(),
+            }
         };
 
         Some(Expr::FnDef {

@@ -5,8 +5,8 @@
 use super::{CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
 use crate::frontend::parser::ast::{BinOp, Expr, UnOp};
-use crate::frontend::typecheck::MonoType;
 use crate::frontend::typecheck::check::infer_literal_type;
+use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::BytecodeInstruction;
 use crate::middle::ir::{ConstValue, Operand};
 use crate::vm::opcode::TypedOpcode;
@@ -18,14 +18,22 @@ impl CodegenContext {
         match expr {
             Expr::Lit(literal, _) => self.generate_literal(literal),
             Expr::Var(name, span) => self.generate_variable(name, *span),
-            Expr::BinOp { op, left, right, .. } => self.generate_binop(op, left, right),
+            Expr::BinOp {
+                op, left, right, ..
+            } => self.generate_binop(op, left, right),
             Expr::UnOp { op, expr, .. } => self.generate_unop(op, expr),
             Expr::Call { func, args, .. } => self.generate_call(func, args),
             Expr::FnDef { .. } => Err(CodegenError::UnimplementedExpr {
                 expr_type: "FnDef".to_string(),
             }),
             // 控制流表达式（简化实现）
-            Expr::If { condition, then_branch, elif_branches, else_branch, .. } => {
+            Expr::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
                 // 生成条件
                 let _cond = self.generate_expr(condition)?;
                 // 生成 then 分支
@@ -40,14 +48,21 @@ impl CodegenContext {
                 }
                 Ok(Operand::Temp(self.next_temp()))
             }
-            Expr::While { condition, body, .. } => {
+            Expr::While {
+                condition, body, ..
+            } => {
                 // 生成条件
                 let _cond = self.generate_expr(condition)?;
                 // 生成循环体
                 let _ = self.generate_block(body)?;
                 Ok(Operand::Temp(self.next_temp()))
             }
-            Expr::For { var: _var, iterable, body, .. } => {
+            Expr::For {
+                var: _var,
+                iterable,
+                body,
+                ..
+            } => {
                 // 生成可迭代对象
                 let _iter = self.generate_expr(iterable)?;
                 // 生成循环体
@@ -76,7 +91,9 @@ impl CodegenContext {
             Expr::Tuple(exprs, _) => self.generate_tuple(exprs),
             Expr::List(exprs, _) => self.generate_list(exprs),
             Expr::Dict(pairs, _) => self.generate_dict(pairs),
-            Expr::Cast { expr, target_type, .. } => self.generate_cast(expr, target_type),
+            Expr::Cast {
+                expr, target_type, ..
+            } => self.generate_cast(expr, target_type),
             Expr::FieldAccess { expr, field, .. } => self.generate_field_access(expr, field),
             Expr::Index { expr, index, .. } => self.generate_index(expr, index),
         }
@@ -97,7 +114,11 @@ impl CodegenContext {
     }
 
     /// 生成变量
-    fn generate_variable(&mut self, name: &str, _span: crate::util::span::Span) -> Result<Operand, CodegenError> {
+    fn generate_variable(
+        &mut self,
+        name: &str,
+        _span: crate::util::span::Span,
+    ) -> Result<Operand, CodegenError> {
         // 查找符号
         if let Some(symbol) = self.symbol_table.get(name) {
             match symbol.storage {
@@ -166,7 +187,12 @@ impl CodegenContext {
     }
 
     /// 生成二元运算（类型化指令）
-    fn generate_binop(&mut self, op: &BinOp, left: &Expr, right: &Expr) -> Result<Operand, CodegenError> {
+    fn generate_binop(
+        &mut self,
+        op: &BinOp,
+        left: &Expr,
+        right: &Expr,
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let lhs = self.generate_expr(left)?;
         let rhs = self.generate_expr(right)?;
@@ -184,7 +210,7 @@ impl CodegenContext {
             (BinOp::Div, MonoType::Int(64)) => TypedOpcode::I64Div,
             (BinOp::Div, MonoType::Float(64)) => TypedOpcode::F64Div,
             (BinOp::Mod, MonoType::Int(64)) => TypedOpcode::I64Rem,
-            
+
             // Comparisons
             (BinOp::Eq, MonoType::Int(64)) => TypedOpcode::I64Eq,
             (BinOp::Eq, MonoType::Float(64)) => TypedOpcode::F64Eq,
@@ -203,22 +229,30 @@ impl CodegenContext {
             (BinOp::Or, _) => TypedOpcode::BoolOr,
             (BinOp::Range, _) => TypedOpcode::NewListWithCap,
             (BinOp::Assign, _) => return self.generate_assignment(left, right),
-            
+
             // Fallback for other types (e.g. I32, F32) or mismatches
-            _ => TypedOpcode::I64Add, 
+            _ => TypedOpcode::I64Add,
         };
 
         // 发射二元运算指令
         self.emit(BytecodeInstruction::new(
             opcode,
-            vec![dst as u8, self.operand_to_reg(&lhs)?, self.operand_to_reg(&rhs)?],
+            vec![
+                dst as u8,
+                self.operand_to_reg(&lhs)?,
+                self.operand_to_reg(&rhs)?,
+            ],
         ));
 
         Ok(Operand::Temp(dst))
     }
 
     /// 生成赋值
-    fn generate_assignment(&mut self, target: &Expr, value: &Expr) -> Result<Operand, CodegenError> {
+    fn generate_assignment(
+        &mut self,
+        target: &Expr,
+        value: &Expr,
+    ) -> Result<Operand, CodegenError> {
         // 生成值表达式
         let src = self.generate_expr(value)?;
 
@@ -340,7 +374,13 @@ impl CodegenContext {
                 let name_idx = self.add_constant(ConstValue::String(format!("{:?}", func)));
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::CallDyn,
-                    vec![dst as u8, self.operand_to_reg(&Operand::Temp(0))?, name_idx as u8, 0, arg_regs.len() as u8],
+                    vec![
+                        dst as u8,
+                        self.operand_to_reg(&Operand::Temp(0))?,
+                        name_idx as u8,
+                        0,
+                        arg_regs.len() as u8,
+                    ],
                 ));
             }
         }
@@ -402,11 +442,7 @@ impl CodegenContext {
     }
 
     /// 生成字段访问
-    fn generate_field_access(
-        &mut self,
-        expr: &Expr,
-        field: &str,
-    ) -> Result<Operand, CodegenError> {
+    fn generate_field_access(&mut self, expr: &Expr, field: &str) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let obj = self.generate_expr(expr)?;
         let field_offset = self.get_field_offset(field);
@@ -427,7 +463,11 @@ impl CodegenContext {
 
         self.emit(BytecodeInstruction::new(
             TypedOpcode::LoadElement,
-            vec![dst as u8, self.operand_to_reg(&array)?, self.operand_to_reg(&idx)?],
+            vec![
+                dst as u8,
+                self.operand_to_reg(&array)?,
+                self.operand_to_reg(&idx)?,
+            ],
         ));
 
         Ok(Operand::Temp(dst))

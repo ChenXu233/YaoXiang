@@ -254,7 +254,11 @@ impl Value {
     pub fn needs_drop(&self) -> bool {
         matches!(
             self,
-            Value::String(_) | Value::Bytes(_) | Value::List(_) | Value::Dict(_) | Value::HeapObject(_)
+            Value::String(_)
+                | Value::Bytes(_)
+                | Value::List(_)
+                | Value::Dict(_)
+                | Value::HeapObject(_)
         )
     }
 }
@@ -345,6 +349,3 @@ impl TryFrom<u8> for Opcode {
         }
     }
 }
-
-
-

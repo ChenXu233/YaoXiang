@@ -28,7 +28,6 @@ pub enum TypedOpcode {
     // =====================
     // 基础控制流指令 (0x00-0x1F)
     // =====================
-
     /// 空操作
     Nop = 0x00,
 
@@ -75,7 +74,6 @@ pub enum TypedOpcode {
     // =====================
     // 栈与寄存器操作 (0x10-0x1F)
     // =====================
-
     /// 寄存器移动
     /// 操作数：dst (u8，目标寄存器), src (u8，源寄存器)
     Mov = 0x10,
@@ -100,7 +98,6 @@ pub enum TypedOpcode {
     // I64 整数运算指令 (0x20-0x2F)
     // 主要整数类型，使用最频繁
     // =====================
-
     /// I64 加法：dst = src1 + src2
     I64Add = 0x20,
 
@@ -153,7 +150,6 @@ pub enum TypedOpcode {
     // I32 整数运算指令 (0x30-0x3F)
     // 用于内存优化场景（如字节操作）
     // =====================
-
     /// I32 加法
     I32Add = 0x30,
 
@@ -203,7 +199,6 @@ pub enum TypedOpcode {
     // F64 浮点运算指令 (0x40-0x4F)
     // 主要浮点类型
     // =====================
-
     /// F64 加法
     F64Add = 0x40,
 
@@ -238,7 +233,6 @@ pub enum TypedOpcode {
     // F32 浮点运算指令 (0x50-0x5F)
     // 用于图形/科学计算
     // =====================
-
     /// F32 加法
     F32Add = 0x50,
 
@@ -272,7 +266,6 @@ pub enum TypedOpcode {
     // =====================
     // 比较指令 (0x60-0x6F)
     // =====================
-
     /// I64 相等比较：dst = (src1 == src2) ? 1 : 0
     I64Eq = 0x60,
 
@@ -321,7 +314,6 @@ pub enum TypedOpcode {
     // =====================
     // 内存与对象操作指令 (0x70-0x7F)
     // =====================
-
     /// 栈上分配（值类型优化）
     /// 操作数：size (u16，分配大小)
     StackAlloc = 0x70,
@@ -357,7 +349,6 @@ pub enum TypedOpcode {
     // =====================
     // 函数调用指令 (0x80-0x8F)
     // =====================
-
     /// 静态分发调用（最快）
     /// 操作数：dst, func_id (u32，函数ID), base_arg_reg, arg_count
     CallStatic = 0x80,
@@ -389,7 +380,6 @@ pub enum TypedOpcode {
     // =====================
     // 字符串操作指令 (0x90-0x9F)
     // =====================
-
     /// 获取字符串长度
     /// 操作数：dst, src
     StringLength = 0x90,
@@ -417,7 +407,6 @@ pub enum TypedOpcode {
     // =====================
     // 异常处理指令 (0xA0-0xAF)
     // =====================
-
     /// try 块开始
     /// 操作数：catch_offset (u16)
     TryBegin = 0xA0,
@@ -435,7 +424,6 @@ pub enum TypedOpcode {
     // =====================
     // 边界检查指令 (调试模式) (0xB0-0xBF)
     // =====================
-
     /// 数组边界检查
     /// 操作数：array_reg, index_reg, dst（存储检查结果或直接跳转）
     BoundsCheck = 0xB0,
@@ -443,7 +431,6 @@ pub enum TypedOpcode {
     // =====================
     // 类型操作指令 (0xC0-0xCF)
     // =====================
-
     /// 类型检查
     /// 操作数：obj_reg, type_id (u16), dst（存储检查结果）
     TypeCheck = 0xC0,
@@ -455,7 +442,6 @@ pub enum TypedOpcode {
     // =====================
     // 反射操作指令 (0xD0-0xDF)
     // =====================
-
     /// 获取类型元数据（懒加载）
     /// 操作数：dst, type_id (u16)
     /// 如果元数据未加载，触发加载；否则直接返回缓存的指针
@@ -464,7 +450,6 @@ pub enum TypedOpcode {
     // =====================
     // 保留指令 (0xE0-0xFF)
     // =====================
-
     /// 自定义指令 0
     Custom0 = 0xE0,
 
@@ -621,67 +606,137 @@ impl TypedOpcode {
 
     /// 检查是否是数值运算指令
     pub fn is_numeric_op(&self) -> bool {
-        matches!(self,
-            TypedOpcode::I64Add | TypedOpcode::I64Sub | TypedOpcode::I64Mul | TypedOpcode::I64Div | TypedOpcode::I64Rem |
-            TypedOpcode::I32Add | TypedOpcode::I32Sub | TypedOpcode::I32Mul | TypedOpcode::I32Div | TypedOpcode::I32Rem |
-            TypedOpcode::F64Add | TypedOpcode::F64Sub | TypedOpcode::F64Mul | TypedOpcode::F64Div | TypedOpcode::F64Rem |
-            TypedOpcode::F32Add | TypedOpcode::F32Sub | TypedOpcode::F32Mul | TypedOpcode::F32Div | TypedOpcode::F32Rem
+        matches!(
+            self,
+            TypedOpcode::I64Add
+                | TypedOpcode::I64Sub
+                | TypedOpcode::I64Mul
+                | TypedOpcode::I64Div
+                | TypedOpcode::I64Rem
+                | TypedOpcode::I32Add
+                | TypedOpcode::I32Sub
+                | TypedOpcode::I32Mul
+                | TypedOpcode::I32Div
+                | TypedOpcode::I32Rem
+                | TypedOpcode::F64Add
+                | TypedOpcode::F64Sub
+                | TypedOpcode::F64Mul
+                | TypedOpcode::F64Div
+                | TypedOpcode::F64Rem
+                | TypedOpcode::F32Add
+                | TypedOpcode::F32Sub
+                | TypedOpcode::F32Mul
+                | TypedOpcode::F32Div
+                | TypedOpcode::F32Rem
         )
     }
 
     /// 检查是否是整数运算指令
     pub fn is_integer_op(&self) -> bool {
-        matches!(self,
-            TypedOpcode::I64Add | TypedOpcode::I64Sub | TypedOpcode::I64Mul | TypedOpcode::I64Div | TypedOpcode::I64Rem |
-            TypedOpcode::I64And | TypedOpcode::I64Or | TypedOpcode::I64Xor | TypedOpcode::I64Shl | TypedOpcode::I64Sar | TypedOpcode::I64Shr |
-            TypedOpcode::I32Add | TypedOpcode::I32Sub | TypedOpcode::I32Mul | TypedOpcode::I32Div | TypedOpcode::I32Rem |
-            TypedOpcode::I32And | TypedOpcode::I32Or | TypedOpcode::I32Xor | TypedOpcode::I32Shl | TypedOpcode::I32Sar | TypedOpcode::I32Shr
+        matches!(
+            self,
+            TypedOpcode::I64Add
+                | TypedOpcode::I64Sub
+                | TypedOpcode::I64Mul
+                | TypedOpcode::I64Div
+                | TypedOpcode::I64Rem
+                | TypedOpcode::I64And
+                | TypedOpcode::I64Or
+                | TypedOpcode::I64Xor
+                | TypedOpcode::I64Shl
+                | TypedOpcode::I64Sar
+                | TypedOpcode::I64Shr
+                | TypedOpcode::I32Add
+                | TypedOpcode::I32Sub
+                | TypedOpcode::I32Mul
+                | TypedOpcode::I32Div
+                | TypedOpcode::I32Rem
+                | TypedOpcode::I32And
+                | TypedOpcode::I32Or
+                | TypedOpcode::I32Xor
+                | TypedOpcode::I32Shl
+                | TypedOpcode::I32Sar
+                | TypedOpcode::I32Shr
         )
     }
 
     /// 检查是否是浮点运算指令
     pub fn is_float_op(&self) -> bool {
-        matches!(self,
-            TypedOpcode::F64Add | TypedOpcode::F64Sub | TypedOpcode::F64Mul | TypedOpcode::F64Div | TypedOpcode::F64Rem |
-            TypedOpcode::F64Sqrt |
-            TypedOpcode::F32Add | TypedOpcode::F32Sub | TypedOpcode::F32Mul | TypedOpcode::F32Div | TypedOpcode::F32Rem |
-            TypedOpcode::F32Sqrt
+        matches!(
+            self,
+            TypedOpcode::F64Add
+                | TypedOpcode::F64Sub
+                | TypedOpcode::F64Mul
+                | TypedOpcode::F64Div
+                | TypedOpcode::F64Rem
+                | TypedOpcode::F64Sqrt
+                | TypedOpcode::F32Add
+                | TypedOpcode::F32Sub
+                | TypedOpcode::F32Mul
+                | TypedOpcode::F32Div
+                | TypedOpcode::F32Rem
+                | TypedOpcode::F32Sqrt
         )
     }
 
     /// 检查是否是加载指令
     pub fn is_load_op(&self) -> bool {
-        matches!(self,
-            TypedOpcode::LoadConst | TypedOpcode::LoadLocal | TypedOpcode::LoadArg |
-            TypedOpcode::I64Load | TypedOpcode::I32Load | TypedOpcode::F64Load | TypedOpcode::F32Load |
-            TypedOpcode::LoadElement | TypedOpcode::GetField | TypedOpcode::LoadUpvalue
+        matches!(
+            self,
+            TypedOpcode::LoadConst
+                | TypedOpcode::LoadLocal
+                | TypedOpcode::LoadArg
+                | TypedOpcode::I64Load
+                | TypedOpcode::I32Load
+                | TypedOpcode::F64Load
+                | TypedOpcode::F32Load
+                | TypedOpcode::LoadElement
+                | TypedOpcode::GetField
+                | TypedOpcode::LoadUpvalue
         )
     }
 
     /// 检查是否是存储指令
     pub fn is_store_op(&self) -> bool {
-        matches!(self,
-            TypedOpcode::StoreLocal |
-            TypedOpcode::I64Store | TypedOpcode::I32Store | TypedOpcode::F64Store | TypedOpcode::F32Store |
-            TypedOpcode::StoreElement | TypedOpcode::SetField | TypedOpcode::StoreUpvalue
+        matches!(
+            self,
+            TypedOpcode::StoreLocal
+                | TypedOpcode::I64Store
+                | TypedOpcode::I32Store
+                | TypedOpcode::F64Store
+                | TypedOpcode::F32Store
+                | TypedOpcode::StoreElement
+                | TypedOpcode::SetField
+                | TypedOpcode::StoreUpvalue
         )
     }
 
     /// 检查是否是调用指令
     pub fn is_call_op(&self) -> bool {
-        matches!(self, TypedOpcode::CallStatic | TypedOpcode::CallVirt | TypedOpcode::CallDyn)
+        matches!(
+            self,
+            TypedOpcode::CallStatic | TypedOpcode::CallVirt | TypedOpcode::CallDyn
+        )
     }
 
     /// 检查是否是返回指令
     pub fn is_return_op(&self) -> bool {
-        matches!(self, TypedOpcode::Return | TypedOpcode::ReturnValue | TypedOpcode::TailCall)
+        matches!(
+            self,
+            TypedOpcode::Return | TypedOpcode::ReturnValue | TypedOpcode::TailCall
+        )
     }
 
     /// 检查是否是跳转指令
     pub fn is_jump_op(&self) -> bool {
-        matches!(self, 
-            TypedOpcode::Jmp | TypedOpcode::JmpIf | TypedOpcode::JmpIfNot | TypedOpcode::Switch |
-            TypedOpcode::LoopStart | TypedOpcode::LoopInc
+        matches!(
+            self,
+            TypedOpcode::Jmp
+                | TypedOpcode::JmpIf
+                | TypedOpcode::JmpIfNot
+                | TypedOpcode::Switch
+                | TypedOpcode::LoopStart
+                | TypedOpcode::LoopInc
         )
     }
 
@@ -689,7 +744,7 @@ impl TypedOpcode {
     pub fn operand_count(&self) -> u8 {
         match self {
             // 无操作数
-            TypedOpcode::Nop | TypedOpcode::Return | TypedOpcode::TryEnd | 
+             TypedOpcode::Nop | TypedOpcode::Return | TypedOpcode::TryEnd |
             TypedOpcode::Yield | TypedOpcode::Invalid | TypedOpcode::Jmp => 0,
             // 1 个操作数
             TypedOpcode::ReturnValue | TypedOpcode::Drop | TypedOpcode::CloseUpvalue |
@@ -866,6 +921,3 @@ impl TryFrom<u8> for TypedOpcode {
         }
     }
 }
-
-
-

@@ -47,9 +47,7 @@ impl<'a> ParserState<'a> {
     /// Create a new parser state
     #[inline]
     pub fn new(tokens: &'a [Token]) -> Self {
-        let span = tokens.first()
-            .map(|t| t.span)
-            .unwrap_or_else(Span::dummy);
+        let span = tokens.first().map(|t| t.span).unwrap_or_else(Span::dummy);
 
         Self {
             tokens,
@@ -62,8 +60,7 @@ impl<'a> ParserState<'a> {
     /// Check if at end of token stream
     #[inline]
     pub fn at_end(&self) -> bool {
-        self.pos >= self.tokens.len()
-            || matches!(self.tokens[self.pos].kind, TokenKind::Eof)
+        self.pos >= self.tokens.len() || matches!(self.tokens[self.pos].kind, TokenKind::Eof)
     }
 
     /// Get current token
@@ -224,8 +221,7 @@ impl<'a> ParserState<'a> {
     pub fn can_start_expr(&self) -> bool {
         matches!(
             self.current().map(|t| &t.kind),
-            Some(
-                TokenKind::IntLiteral(_))
+            Some(TokenKind::IntLiteral(_))
                 | Some(TokenKind::FloatLiteral(_))
                 | Some(TokenKind::StringLiteral(_))
                 | Some(TokenKind::CharLiteral(_))
@@ -241,6 +237,6 @@ impl<'a> ParserState<'a> {
                 | Some(TokenKind::KwWhile)
                 | Some(TokenKind::KwFor)
                 | Some(TokenKind::Pipe)
-            )
+        )
     }
 }

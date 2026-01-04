@@ -8,7 +8,9 @@ fn create_dummy_span() -> Span {
     Span::dummy()
 }
 
-fn parse_type_anno(tokens: &[crate::frontend::lexer::tokens::Token]) -> Option<crate::frontend::parser::ast::Type> {
+fn parse_type_anno(
+    tokens: &[crate::frontend::lexer::tokens::Token],
+) -> Option<crate::frontend::parser::ast::Type> {
     let mut state = ParserState::new(tokens);
     state.parse_type_anno()
 }
@@ -135,7 +137,9 @@ fn test_parse_fn_type_no_params() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, } if params.is_empty()));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, } if params.is_empty())
+    );
 }
 
 #[test]
@@ -144,8 +148,10 @@ fn test_parse_fn_type_single_param() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, }
-        if params.len() == 1 && matches!(*return_type, crate::frontend::parser::ast::Type::String)));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, }
+        if params.len() == 1 && matches!(*return_type, crate::frontend::parser::ast::Type::String))
+    );
 }
 
 #[test]
@@ -154,8 +160,10 @@ fn test_parse_fn_type_multiple_params() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, }
-        if params.len() == 3));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, }
+        if params.len() == 3)
+    );
 }
 
 #[test]
@@ -222,7 +230,9 @@ fn test_parse_qualified_name() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Name(name) if name == "std.io.Reader"));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Name(name) if name == "std.io.Reader")
+    );
 }
 
 // =========================================================================
@@ -235,8 +245,10 @@ fn test_parse_generic_type_single_arg() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "List" && args.len() == 1));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "List" && args.len() == 1)
+    );
 }
 
 #[test]
@@ -245,8 +257,10 @@ fn test_parse_generic_type_multiple_args() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "Dict" && args.len() == 2));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "Dict" && args.len() == 2)
+    );
 }
 
 #[test]
@@ -255,8 +269,10 @@ fn test_parse_nested_generic() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "Dict" && args.len() == 2));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "Dict" && args.len() == 2)
+    );
 }
 
 #[test]
@@ -272,8 +288,10 @@ fn test_parse_option_type() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "Option" && args.len() == 1));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "Option" && args.len() == 1)
+    );
 }
 
 #[test]
@@ -282,8 +300,10 @@ fn test_parse_result_type() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "Result" && args.len() == 2));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "Result" && args.len() == 2)
+    );
 }
 
 // =========================================================================
@@ -296,8 +316,10 @@ fn test_parse_set_type() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();
-    assert!(matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
-        if name == "Set" && args.len() == 1));
+    assert!(
+        matches!(ty, crate::frontend::parser::ast::Type::Generic { name, args }
+        if name == "Set" && args.len() == 1)
+    );
 }
 
 // =========================================================================

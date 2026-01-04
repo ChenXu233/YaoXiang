@@ -126,7 +126,14 @@ impl MonoType {
             MonoType::Struct(s) => s.name.clone(),
             MonoType::Enum(e) => e.name.clone(),
             MonoType::Tuple(types) => {
-                format!("({})", types.iter().map(|t| t.type_name()).collect::<Vec<_>>().join(", "))
+                format!(
+                    "({})",
+                    types
+                        .iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
             MonoType::List(t) => format!("List<{}>", t.type_name()),
             MonoType::Dict(k, v) => format!("Dict<{}, {}>", k.type_name(), v.type_name()),
@@ -136,7 +143,11 @@ impl MonoType {
                 return_type,
                 is_async: _,
             } => {
-                let params_str = params.iter().map(|t| t.type_name()).collect::<Vec<_>>().join(", ");
+                let params_str = params
+                    .iter()
+                    .map(|t| t.type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 format!("fn({}) -> {}", params_str, return_type.type_name())
             }
             MonoType::TypeVar(v) => format!("{}", v),
@@ -193,9 +204,13 @@ impl From<ast::Type> for MonoType {
                 name: String::new(),
                 variants: variants.into_iter().map(|v| v.name).collect(),
             }),
-            ast::Type::Tuple(types) => MonoType::Tuple(types.into_iter().map(MonoType::from).collect()),
+            ast::Type::Tuple(types) => {
+                MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
+            }
             ast::Type::List(t) => MonoType::List(Box::new(MonoType::from(*t))),
-            ast::Type::Dict(k, v) => MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v))),
+            ast::Type::Dict(k, v) => {
+                MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v)))
+            }
             ast::Type::Set(t) => MonoType::Set(Box::new(MonoType::from(*t))),
             ast::Type::Fn {
                 params,
@@ -218,7 +233,10 @@ impl From<ast::Type> for MonoType {
                 MonoType::TypeRef(format!(
                     "{}<{}>",
                     name,
-                    args.iter().map(|t| MonoType::from(t.clone()).type_name()).collect::<Vec<_>>().join(", ")
+                    args.iter()
+                        .map(|t| MonoType::from(t.clone()).type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ))
             }
             // NamedStruct and Sum types (placeholder implementations)
@@ -233,7 +251,11 @@ impl From<ast::Type> for MonoType {
                 // Sum type - treat as union for now
                 MonoType::TypeRef(format!(
                     "({})",
-                    types.iter().map(|t| MonoType::from(t.clone()).type_name()).collect::<Vec<_>>().join(" | ")
+                    types
+                        .iter()
+                        .map(|t| MonoType::from(t.clone()).type_name())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
                 ))
             }
         }
@@ -449,14 +471,13 @@ impl TypeConstraintSolver {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
-            MonoType::Tuple(ts) => MonoType::Tuple(
-                ts.iter().map(|t| self.expand_type(t)).collect(),
-            ),
+            MonoType::Tuple(ts) => {
+                MonoType::Tuple(ts.iter().map(|t| self.expand_type(t)).collect())
+            }
             MonoType::List(t) => MonoType::List(Box::new(self.expand_type(t))),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.expand_type(k)),
-                Box::new(self.expand_type(v)),
-            ),
+            MonoType::Dict(k, v) => {
+                MonoType::Dict(Box::new(self.expand_type(k)), Box::new(self.expand_type(v)))
+            }
             MonoType::Set(t) => MonoType::Set(Box::new(self.expand_type(t))),
             MonoType::Fn {
                 params,
@@ -473,7 +494,8 @@ impl TypeConstraintSolver {
 
     /// 添加类型约束
     pub fn add_constraint(&mut self, left: MonoType, right: MonoType, span: Span) {
-        self.constraints.push(TypeConstraint::new(left, right, span));
+        self.constraints
+            .push(TypeConstraint::new(left, right, span));
     }
 
     /// 求解所有约束
@@ -644,7 +666,11 @@ impl TypeConstraintSolver {
     }
 
     /// 替换类型中的变量
-    fn substitute_type(&self, ty: &MonoType, substitution: &HashMap<TypeVar, MonoType>) -> MonoType {
+    fn substitute_type(
+        &self,
+        ty: &MonoType,
+        substitution: &HashMap<TypeVar, MonoType>,
+    ) -> MonoType {
         match ty {
             MonoType::TypeVar(v) => {
                 if let Some(new_ty) = substitution.get(v) {
@@ -666,7 +692,9 @@ impl TypeConstraintSolver {
                 variants: e.variants.clone(),
             }),
             MonoType::Tuple(ts) => MonoType::Tuple(
-                ts.iter().map(|t| self.substitute_type(t, substitution)).collect(),
+                ts.iter()
+                    .map(|t| self.substitute_type(t, substitution))
+                    .collect(),
             ),
             MonoType::List(t) => MonoType::List(Box::new(self.substitute_type(t, substitution))),
             MonoType::Dict(k, v) => MonoType::Dict(
@@ -788,9 +816,15 @@ impl TypeConstraintSolver {
             MonoType::TypeVar(v) => *v == var,
             MonoType::Tuple(types) => types.iter().any(|t| Self::type_contains_var(t, var)),
             MonoType::List(t) => Self::type_contains_var(t, var),
-            MonoType::Dict(k, v) => Self::type_contains_var(k, var) || Self::type_contains_var(v, var),
+            MonoType::Dict(k, v) => {
+                Self::type_contains_var(k, var) || Self::type_contains_var(v, var)
+            }
             MonoType::Set(t) => Self::type_contains_var(t, var),
-            MonoType::Fn { params, return_type, .. } => {
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
                 params.iter().any(|p| Self::type_contains_var(p, var))
                     || Self::type_contains_var(return_type, var)
             }
@@ -809,7 +843,12 @@ pub struct TypeMismatch {
 
 impl fmt::Display for TypeMismatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "expected {}, found {}", self.left.type_name(), self.right.type_name())
+        write!(
+            f,
+            "expected {}, found {}",
+            self.left.type_name(),
+            self.right.type_name()
+        )
     }
 }
 

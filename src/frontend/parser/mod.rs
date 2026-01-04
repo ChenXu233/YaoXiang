@@ -4,14 +4,14 @@
 //! The parser transforms tokens into an Abstract Syntax Tree (AST).
 
 pub mod ast;
-mod state;
-mod nud;
-mod led;
-mod stmt;
 mod expr;
+mod led;
+mod nud;
+mod state;
+mod stmt;
 mod type_parser;
 
-pub use state::{ParserState, BP_LOWEST, BP_HIGHEST};
+pub use state::{ParserState, BP_HIGHEST, BP_LOWEST};
 
 use crate::frontend::lexer::tokens::*;
 use crate::util::span::Span;
@@ -44,11 +44,17 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
                 state.bump();
                 continue;
             }
-            
-            eprintln!("[DEBUG] Skipping token that can't start statement: {:?}", state.current().map(|t| &t.kind));
+
+            eprintln!(
+                "[DEBUG] Skipping token that can't start statement: {:?}",
+                state.current().map(|t| &t.kind)
+            );
             // Report error for unexpected token
             state.error(ParseError::UnexpectedToken(
-                state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
             ));
             state.synchronize();
             continue;
@@ -58,11 +64,19 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
         eprintln!("[DEBUG] Parsing statement {}", stmt_count);
         match state.parse_stmt() {
             Some(stmt) => {
-                eprintln!("[DEBUG] Statement {} parsed successfully: {:?}", stmt_count, std::mem::discriminant(&stmt.kind));
+                eprintln!(
+                    "[DEBUG] Statement {} parsed successfully: {:?}",
+                    stmt_count,
+                    std::mem::discriminant(&stmt.kind)
+                );
                 items.push(stmt);
             }
             None => {
-                eprintln!("[DEBUG] Statement {} failed to parse, current token: {:?}", stmt_count, state.current().map(|t| &t.kind));
+                eprintln!(
+                    "[DEBUG] Statement {} failed to parse, current token: {:?}",
+                    stmt_count,
+                    state.current().map(|t| &t.kind)
+                );
                 if state.has_errors() {
                     eprintln!("[DEBUG] Error set: {:?}", state.first_error());
                 }
@@ -83,7 +97,10 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
             // Should not happen, but return a generic error
             eprintln!("[DEBUG] No specific error but has_errors() is true");
             Err(ParseError::UnexpectedToken(
-                state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
             ))
         }
     } else {

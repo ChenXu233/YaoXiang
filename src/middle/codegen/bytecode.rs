@@ -2,10 +2,10 @@
 //!
 //! 定义 .yx (.42) 字节码文件格式并实现序列化。
 
-use std::io::{self, Write};
-use crate::middle::ir::{ModuleIR, ConstValue};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::generator::BytecodeGenerator;
+use crate::middle::ir::{ConstValue, ModuleIR};
+use std::io::{self, Write};
 
 /// 字节码文件头魔数 (YaoXiang ByteCode: YXBC)
 /// 0x59584243 = 'Y' 'X' 'B' 'C' = YaoXiang ByteCode
@@ -79,7 +79,9 @@ impl BytecodeFile {
     /// 从 IR 模块构建字节码文件
     pub fn from_ir(module: &ModuleIR) -> Self {
         // 1. 构建类型表
-        let type_table: Vec<MonoType> = module.types.iter()
+        let type_table: Vec<MonoType> = module
+            .types
+            .iter()
             .map(|t| MonoTypeExt::from_ast(t))
             .collect();
 
@@ -87,7 +89,9 @@ impl BytecodeFile {
         let const_pool = module.constants.clone();
 
         // 3. 构建代码段
-        let functions: Vec<FunctionCode> = module.functions.iter()
+        let functions: Vec<FunctionCode> = module
+            .functions
+            .iter()
             .map(|func| {
                 let generator = BytecodeGenerator::new(func);
                 generator.generate()
@@ -107,13 +111,10 @@ impl BytecodeFile {
         let header_size = 32;
         let type_table_size = 4 + type_table.len() * 4;
         let const_pool_size = 4 + const_pool.iter().map(|c| c.encoded_size()).sum::<usize>();
-        let code_section_size = 4 + functions.iter()
+        let code_section_size = 4 + functions
+            .iter()
             .map(|f| {
-                4 + f.name.len() +
-                4 + f.params.len() * 4 +
-                4 +
-                4 +
-                4 + f.instructions.len() * 16
+                4 + f.name.len() + 4 + f.params.len() * 4 + 4 + 4 + 4 + f.instructions.len() * 16
             })
             .sum::<usize>();
 
@@ -140,7 +141,7 @@ impl BytecodeFile {
     /// 格式设计：魔数大端序（方便调试），其他数据小端序（x86 性能优化）
     pub fn write_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         // 文件头：魔数大端序，其他小端序
-        writer.write_all(&self.header.magic.to_be_bytes())?;  // YXBC 方便调试
+        writer.write_all(&self.header.magic.to_be_bytes())?; // YXBC 方便调试
         writer.write_all(&self.header.version.to_le_bytes())?;
         writer.write_all(&self.header.flags.to_le_bytes())?;
         writer.write_all(&self.header.entry_point.to_le_bytes())?;
@@ -160,11 +161,28 @@ impl BytecodeFile {
             match const_val {
                 ConstValue::Void => writer.write_all(&[0])?,
                 ConstValue::Bool(b) => writer.write_all(&[1, if *b { 1 } else { 0 }])?,
-                ConstValue::Int(n) => { writer.write_all(&[2])?; writer.write_all(&n.to_le_bytes())?; }
-                ConstValue::Float(f) => { writer.write_all(&[3])?; writer.write_all(&f.to_le_bytes())?; }
-                ConstValue::Char(c) => { writer.write_all(&[4])?; writer.write_all(&(*c as u32).to_le_bytes())?; }
-                ConstValue::String(s) => { writer.write_all(&[5])?; writer.write_all(&(s.len() as u32).to_le_bytes())?; writer.write_all(s.as_bytes())?; }
-                ConstValue::Bytes(bytes) => { writer.write_all(&[6])?; writer.write_all(&(bytes.len() as u32).to_le_bytes())?; writer.write_all(bytes)?; }
+                ConstValue::Int(n) => {
+                    writer.write_all(&[2])?;
+                    writer.write_all(&n.to_le_bytes())?;
+                }
+                ConstValue::Float(f) => {
+                    writer.write_all(&[3])?;
+                    writer.write_all(&f.to_le_bytes())?;
+                }
+                ConstValue::Char(c) => {
+                    writer.write_all(&[4])?;
+                    writer.write_all(&(*c as u32).to_le_bytes())?;
+                }
+                ConstValue::String(s) => {
+                    writer.write_all(&[5])?;
+                    writer.write_all(&(s.len() as u32).to_le_bytes())?;
+                    writer.write_all(s.as_bytes())?;
+                }
+                ConstValue::Bytes(bytes) => {
+                    writer.write_all(&[6])?;
+                    writer.write_all(&(bytes.len() as u32).to_le_bytes())?;
+                    writer.write_all(bytes)?;
+                }
             }
         }
 

@@ -70,10 +70,8 @@ impl Monomorphizer {
     fn collect_generic_functions(&mut self, module: &ModuleIR) {
         for func in &module.functions {
             if self.is_generic_function(func) {
-                let generic_id = GenericFunctionId::new(
-                    func.name.clone(),
-                    self.extract_type_params(func),
-                );
+                let generic_id =
+                    GenericFunctionId::new(func.name.clone(), self.extract_type_params(func));
                 self.generic_functions.insert(generic_id, func.clone());
             }
         }
@@ -104,11 +102,18 @@ impl Monomorphizer {
         match ty {
             MonoType::TypeVar(_) => true,
             MonoType::List(elem) => self.contains_type_var(elem),
-            MonoType::Dict(key, value) => self.contains_type_var(key) || self.contains_type_var(value),
+            MonoType::Dict(key, value) => {
+                self.contains_type_var(key) || self.contains_type_var(value)
+            }
             MonoType::Set(elem) => self.contains_type_var(elem),
             MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_var(t)),
-            MonoType::Fn { params, return_type, .. } => {
-                params.iter().any(|t| self.contains_type_var(t)) || self.contains_type_var(return_type)
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|t| self.contains_type_var(t))
+                    || self.contains_type_var(return_type)
             }
             _ => false,
         }
@@ -225,10 +230,9 @@ impl Monomorphizer {
 
             // 移动指令：传播类型信息
             Instruction::Move { dst, src } => {
-                if let (Some(dst_ty), Some(src_ty)) = (
-                    self.operand_to_type(dst),
-                    self.operand_to_type(src),
-                ) {
+                if let (Some(dst_ty), Some(src_ty)) =
+                    (self.operand_to_type(dst), self.operand_to_type(src))
+                {
                     if dst_ty != src_ty {
                         let type_key = Self::types_to_key(&[dst_ty]);
                         all_call_type_names.insert(type_key);
@@ -346,12 +350,13 @@ impl Monomorphizer {
     }
 
     /// 添加实例化请求
-    pub fn add_instantiation_request(&mut self, generic_id: GenericFunctionId, type_args: Vec<MonoType>) {
-        let request = InstantiationRequest::new(
-            generic_id,
-            type_args,
-            crate::util::span::Span::default(),
-        );
+    pub fn add_instantiation_request(
+        &mut self,
+        generic_id: GenericFunctionId,
+        type_args: Vec<MonoType>,
+    ) {
+        let request =
+            InstantiationRequest::new(generic_id, type_args, crate::util::span::Span::default());
         self.instantiation_queue.push(request);
     }
 
@@ -370,7 +375,8 @@ impl Monomorphizer {
 
     /// 检查是否应该特化
     fn should_specialize(&self, generic_id: &GenericFunctionId) -> bool {
-        let count = self.specialization_cache
+        let count = self
+            .specialization_cache
             .keys()
             .filter(|key| key.name == generic_id.name())
             .count();
@@ -407,7 +413,8 @@ impl Monomorphizer {
 
         // 缓存和存储
         self.specialization_cache.insert(key, func_id.clone());
-        self.instantiated_functions.insert(func_id.clone(), specialized_func);
+        self.instantiated_functions
+            .insert(func_id.clone(), specialized_func);
 
         Some(func_id)
     }
@@ -419,7 +426,12 @@ impl Monomorphizer {
         } else {
             let args_str = type_args
                 .iter()
-                .map(|t| t.type_name().replace("/", "_").replace("<", "_").replace(">", "_"))
+                .map(|t| {
+                    t.type_name()
+                        .replace("/", "_")
+                        .replace("<", "_")
+                        .replace(">", "_")
+                })
                 .collect::<Vec<_>>()
                 .join("_");
             format!("{}_{}", base_name, args_str)
@@ -456,7 +468,8 @@ impl Monomorphizer {
             .collect();
 
         // 替换返回类型
-        let new_return_type = self.substitute_single_type(&generic_func.return_type, &type_param_map);
+        let new_return_type =
+            self.substitute_single_type(&generic_func.return_type, &type_param_map);
 
         // 替换局部变量类型
         let new_locals: Vec<MonoType> = generic_func
@@ -484,7 +497,11 @@ impl Monomorphizer {
     }
 
     /// 单个类型替换
-    fn substitute_single_type(&self, ty: &MonoType, type_map: &HashMap<usize, MonoType>) -> MonoType {
+    fn substitute_single_type(
+        &self,
+        ty: &MonoType,
+        type_map: &HashMap<usize, MonoType>,
+    ) -> MonoType {
         match ty {
             MonoType::TypeVar(tv) => {
                 if let Some(replacement) = type_map.get(&tv.index()) {
@@ -504,10 +521,20 @@ impl Monomorphizer {
                 MonoType::Set(Box::new(self.substitute_single_type(elem, type_map)))
             }
             MonoType::Tuple(types) => MonoType::Tuple(
-                types.iter().map(|t| self.substitute_single_type(t, type_map)).collect(),
+                types
+                    .iter()
+                    .map(|t| self.substitute_single_type(t, type_map))
+                    .collect(),
             ),
-            MonoType::Fn { params, return_type, is_async } => MonoType::Fn {
-                params: params.iter().map(|t| self.substitute_single_type(t, type_map)).collect(),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .map(|t| self.substitute_single_type(t, type_map))
+                    .collect(),
                 return_type: Box::new(self.substitute_single_type(return_type, type_map)),
                 is_async: *is_async,
             },
@@ -516,7 +543,11 @@ impl Monomorphizer {
     }
 
     /// 替换基本块中的指令
-    fn substitute_block(&self, block: &BasicBlock, type_map: &HashMap<usize, MonoType>) -> BasicBlock {
+    fn substitute_block(
+        &self,
+        block: &BasicBlock,
+        type_map: &HashMap<usize, MonoType>,
+    ) -> BasicBlock {
         let new_instructions: Vec<Instruction> = block
             .instructions
             .iter()
@@ -531,9 +562,17 @@ impl Monomorphizer {
     }
 
     /// 替换指令中的类型
-    fn substitute_instruction(&self, instr: &Instruction, type_map: &HashMap<usize, MonoType>) -> Instruction {
+    fn substitute_instruction(
+        &self,
+        instr: &Instruction,
+        type_map: &HashMap<usize, MonoType>,
+    ) -> Instruction {
         match instr {
-            Instruction::Cast { dst, src, target_type } => {
+            Instruction::Cast {
+                dst,
+                src,
+                target_type,
+            } => {
                 let new_target = self.substitute_type_ast(target_type, type_map);
                 Instruction::Cast {
                     dst: dst.clone(),

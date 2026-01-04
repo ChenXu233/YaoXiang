@@ -241,7 +241,8 @@ impl WorkStealer {
     fn next_rand(&self) -> usize {
         // LCG parameters (from Numerical Recipes)
         let state = self.rng_state.fetch_add(1, Ordering::SeqCst);
-        state.wrapping_mul(6364136223846793005)
+        state
+            .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407)
     }
 
@@ -272,4 +273,3 @@ impl Default for WorkStealer {
         Self::new(num_cpus)
     }
 }
-

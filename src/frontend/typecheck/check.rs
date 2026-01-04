@@ -1,12 +1,12 @@
-﻿//! 语句和函数类型检查
+//! 语句和函数类型检查
 //!
 //! 实现语句的类型检查和函数定义的类型验证
 
+use super::super::lexer::tokens::Literal;
+use super::super::parser::ast;
 use super::errors::{TypeError, TypeResult};
 use super::infer::TypeInferrer;
 use super::types::{MonoType, PolyType, TypeConstraintSolver};
-use super::super::parser::ast;
-use super::super::lexer::tokens::Literal;
 use crate::middle;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -60,7 +60,10 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 检查整个模块
-    pub fn check_module(&mut self, module: &ast::Module) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    pub fn check_module(
+        &mut self,
+        module: &ast::Module,
+    ) -> Result<middle::ModuleIR, Vec<TypeError>> {
         // 首先收集所有类型定义
         for stmt in &module.items {
             if let ast::StmtKind::TypeDef { name, definition } = &stmt.kind {
@@ -118,7 +121,15 @@ impl<'a> TypeChecker<'a> {
                     span: _,
                 } = expr.as_ref()
                 {
-                    self.check_fn_def(name, params, return_type.as_ref(), body, *is_async, None, false)?;
+                    self.check_fn_def(
+                        name,
+                        params,
+                        return_type.as_ref(),
+                        body,
+                        *is_async,
+                        None,
+                        false,
+                    )?;
                     Ok(())
                 } else {
                     self.inferrer.infer_expr(expr)?;
@@ -132,13 +143,21 @@ impl<'a> TypeChecker<'a> {
                 body: (stmts, expr),
             } => {
                 eprintln!("[CHECK] check_stmt: processing Fn for '{}'", name);
-                eprintln!("[DEBUG] type_annotation is_some: {}", type_annotation.is_some());
+                eprintln!(
+                    "[DEBUG] type_annotation is_some: {}",
+                    type_annotation.is_some()
+                );
                 if let Some(ann) = type_annotation {
                     eprintln!("[DEBUG] type_annotation: {:?}", ann);
                 }
-                
+
                 // 1. Extract params and return type from annotation if available
-                let (annotated_params, annotated_return) = if let Some(ast::Type::Fn { params, return_type, .. }) = type_annotation {
+                let (annotated_params, annotated_return) = if let Some(ast::Type::Fn {
+                    params,
+                    return_type,
+                    ..
+                }) = type_annotation
+                {
                     (Some(params), Some(return_type.as_ref()))
                 } else {
                     (None, None)
@@ -149,17 +168,20 @@ impl<'a> TypeChecker<'a> {
                     if a_params.len() == params.len() {
                         a_params.iter().map(|t| MonoType::from(t.clone())).collect()
                     } else {
-                        // Mismatch in count, fallback to params or error? 
-                        // For now, fallback to inferring from params if counts don't match, 
+                        // Mismatch in count, fallback to params or error?
+                        // For now, fallback to inferring from params if counts don't match,
                         // but ideally this should be an error caught by parser/validation.
                         // Given parser checks count, we can assume they match or use params.
-                        params.iter().map(|p| {
-                            if let Some(ty) = &p.ty {
-                                MonoType::from(ty.clone())
-                            } else {
-                                self.inferrer.solver().new_var()
-                            }
-                        }).collect()
+                        params
+                            .iter()
+                            .map(|p| {
+                                if let Some(ty) = &p.ty {
+                                    MonoType::from(ty.clone())
+                                } else {
+                                    self.inferrer.solver().new_var()
+                                }
+                            })
+                            .collect()
                     }
                 } else {
                     params
@@ -178,7 +200,11 @@ impl<'a> TypeChecker<'a> {
                 // Handle "_" as "inferred" (None)
                 let expected_return_type = if let Some(ty) = annotated_return {
                     if let ast::Type::Name(n) = ty {
-                        if n == "_" { None } else { Some(ty) }
+                        if n == "_" {
+                            None
+                        } else {
+                            Some(ty)
+                        }
                     } else {
                         Some(ty)
                     }
@@ -202,7 +228,9 @@ impl<'a> TypeChecker<'a> {
                 // 5. If there is an annotation, constrain the inferred type to it
                 if let Some(ann) = type_annotation {
                     let ann_ty = MonoType::from(ann.clone());
-                    self.inferrer.solver().add_constraint(fn_type.clone(), ann_ty, stmt.span);
+                    self.inferrer
+                        .solver()
+                        .add_constraint(fn_type.clone(), ann_ty, stmt.span);
                 }
 
                 // 6. Register the function in the scope
@@ -213,10 +241,21 @@ impl<'a> TypeChecker<'a> {
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                
+
                 // Pass the constrained param_types to check_fn_def so inner scope matches outer signature
-                eprintln!("[DEBUG] Calling check_fn_def from check_stmt. annotated_params.is_some(): {}", annotated_params.is_some());
-                self.check_fn_def(name, params, expected_return_type, &body, false, Some(param_types), annotated_params.is_some())?;
+                eprintln!(
+                    "[DEBUG] Calling check_fn_def from check_stmt. annotated_params.is_some(): {}",
+                    annotated_params.is_some()
+                );
+                self.check_fn_def(
+                    name,
+                    params,
+                    expected_return_type,
+                    &body,
+                    false,
+                    Some(param_types),
+                    annotated_params.is_some(),
+                )?;
                 Ok(())
             }
             ast::StmtKind::Var {
@@ -224,8 +263,18 @@ impl<'a> TypeChecker<'a> {
                 type_annotation,
                 initializer,
                 is_mut: _,
-            } => self.check_var(name, type_annotation.as_ref(), initializer.as_deref(), stmt.span),
-            ast::StmtKind::For { var, iterable, body, .. } => {
+            } => self.check_var(
+                name,
+                type_annotation.as_ref(),
+                initializer.as_deref(),
+                stmt.span,
+            ),
+            ast::StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
                 // 类型检查 for 循环
                 // 1. 推断 iterable 的类型（应该是可迭代的）
                 let _iter_ty = self.inferrer.infer_expr(iterable)?;
@@ -243,12 +292,12 @@ impl<'a> TypeChecker<'a> {
             ast::StmtKind::TypeDef { name, definition } => {
                 self.check_type_def(name, definition, stmt.span)
             }
-            ast::StmtKind::Module { name, items } => self.check_module_alias(name, items, stmt.span),
-            ast::StmtKind::Use {
-                path,
-                items,
-                alias,
-            } => self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span),
+            ast::StmtKind::Module { name, items } => {
+                self.check_module_alias(name, items, stmt.span)
+            }
+            ast::StmtKind::Use { path, items, alias } => {
+                self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span)
+            }
         }
     }
 
@@ -287,10 +336,14 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查类型定义
-    fn check_type_def(&mut self, name: &str, definition: &ast::Type, _span: Span) -> TypeResult<()> {
+    fn check_type_def(
+        &mut self,
+        name: &str,
+        definition: &ast::Type,
+        _span: Span,
+    ) -> TypeResult<()> {
         let ty = MonoType::from(definition.clone());
-        self.inferrer
-            .add_var(name.to_string(), PolyType::mono(ty));
+        self.inferrer.add_var(name.to_string(), PolyType::mono(ty));
         Ok(())
     }
 
@@ -405,29 +458,36 @@ impl<'a> TypeChecker<'a> {
                 // diverging via explicit return; nothing to do here
             } else {
                 // 有最后表达式，约束其类型为返回类型
-                self.inferrer.solver().add_constraint(body_ty.clone(), return_ty.clone(), body.span);
+                self.inferrer.solver().add_constraint(
+                    body_ty.clone(),
+                    return_ty.clone(),
+                    body.span,
+                );
             }
         } else {
             // 无最后表达式，检查是否是发散的（以 return 结尾）
             // 如果不是发散的，则隐式返回 Void
             // Consider the function diverging if any top-level statement in the
             // block is an explicit `return`.
-            let is_diverging = body
-                .stmts
-                .iter()
-                .any(|s| match &s.kind {
-                    ast::StmtKind::Expr(e) => matches!(e.as_ref(), ast::Expr::Return(_, _)),
-                    _ => false,
-                });
+            let is_diverging = body.stmts.iter().any(|s| match &s.kind {
+                ast::StmtKind::Expr(e) => matches!(e.as_ref(), ast::Expr::Return(_, _)),
+                _ => false,
+            });
 
             if !is_diverging {
-                self.inferrer.solver().add_constraint(MonoType::Void, return_ty.clone(), body.span);
+                self.inferrer
+                    .solver()
+                    .add_constraint(MonoType::Void, return_ty.clone(), body.span);
             }
         }
 
         // 参数类型推断规则：检查未类型化参数
         // 如果没有外部类型标注，且参数本身没有类型标注，则报错（不支持从使用推断参数类型）
-        eprintln!("[DEBUG] is_annotated: {}, untyped_params len: {}", is_annotated, untyped_params.len());
+        eprintln!(
+            "[DEBUG] is_annotated: {}, untyped_params len: {}",
+            is_annotated,
+            untyped_params.len()
+        );
         if !is_annotated {
             for (param_name, param_idx, _param_ty) in &untyped_params {
                 eprintln!("[DEBUG] Adding error for param: {}", param_name);
@@ -464,9 +524,7 @@ impl<'a> TypeChecker<'a> {
     /// 如果类型变量仍然是 Unbound 状态，返回 true
     fn is_unconstrained_var(&self, ty: &MonoType) -> bool {
         match ty {
-            MonoType::TypeVar(id) => {
-                self.inferrer.solver_ref().is_unconstrained(*id)
-            }
+            MonoType::TypeVar(id) => self.inferrer.solver_ref().is_unconstrained(*id),
             _ => false,
         }
     }
@@ -524,7 +582,9 @@ impl<'a> TypeChecker<'a> {
                     if let Some(e) = expr {
                         let result_reg = instructions.len(); // 使用新寄存器
                         self.generate_expr_ir(e, result_reg, &mut instructions);
-                        instructions.push(middle::Instruction::Ret(Some(middle::Operand::Local(result_reg))));
+                        instructions.push(middle::Instruction::Ret(Some(middle::Operand::Local(
+                            result_reg,
+                        ))));
                     } else {
                         instructions.push(middle::Instruction::Ret(None));
                     }
@@ -532,7 +592,11 @@ impl<'a> TypeChecker<'a> {
                     // 构建函数 IR
                     let func_ir = middle::FunctionIR {
                         name: name.clone(),
-                        params: params.iter().filter_map(|p| p.ty.clone()).map(|t| t.into()).collect(),
+                        params: params
+                            .iter()
+                            .filter_map(|p| p.ty.clone())
+                            .map(|t| t.into())
+                            .collect(),
                         return_type,
                         is_async: false,
                         locals: Vec::new(),
@@ -546,9 +610,15 @@ impl<'a> TypeChecker<'a> {
 
                     functions.push(func_ir);
                 }
-                ast::StmtKind::Var { name, type_annotation, initializer, is_mut: _ } => {
+                ast::StmtKind::Var {
+                    name,
+                    type_annotation,
+                    initializer,
+                    is_mut: _,
+                } => {
                     // 全局变量处理（简化）
-                    let var_type = type_annotation.clone()
+                    let var_type = type_annotation
+                        .clone()
                         .map(|t| t.into())
                         .unwrap_or(MonoType::Int(64));
 
@@ -600,14 +670,24 @@ impl<'a> TypeChecker<'a> {
                 let result_reg = instructions.len();
                 self.generate_expr_ir(expr, result_reg, instructions);
             }
-            ast::StmtKind::Var { name: _, type_annotation: _, initializer, is_mut: _ } => {
+            ast::StmtKind::Var {
+                name: _,
+                type_annotation: _,
+                initializer,
+                is_mut: _,
+            } => {
                 // 生成变量声明指令
                 let var_idx = instructions.len();
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions);
                 }
             }
-            ast::StmtKind::Fn { name: _, type_annotation: _, params: _, body: _ } => {
+            ast::StmtKind::Fn {
+                name: _,
+                type_annotation: _,
+                params: _,
+                body: _,
+            } => {
                 // 嵌套函数（简化处理）
             }
             _ => {}
@@ -615,7 +695,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 生成表达式 IR
-    fn generate_expr_ir(&self, expr: &ast::Expr, result_reg: usize, instructions: &mut Vec<middle::Instruction>) {
+    fn generate_expr_ir(
+        &self,
+        expr: &ast::Expr,
+        result_reg: usize,
+        instructions: &mut Vec<middle::Instruction>,
+    ) {
         match expr {
             ast::Expr::Lit(literal, _) => {
                 // 常量加载
@@ -638,7 +723,12 @@ impl<'a> TypeChecker<'a> {
                     src: middle::Operand::Local(result_reg), // 简化处理
                 });
             }
-            ast::Expr::BinOp { op, left, right, span: _ } => {
+            ast::Expr::BinOp {
+                op,
+                left,
+                right,
+                span: _,
+            } => {
                 // 二元运算
                 let left_reg = result_reg;
                 let right_reg = result_reg + 1;
@@ -710,7 +800,11 @@ impl<'a> TypeChecker<'a> {
                 };
                 instructions.push(instr);
             }
-            ast::Expr::Call { func: _, args, span: _ } => {
+            ast::Expr::Call {
+                func: _,
+                args,
+                span: _,
+            } => {
                 // 函数调用
                 let mut arg_regs = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
@@ -820,7 +914,12 @@ pub fn binop_result_type(op: &ast::BinOp, left: &MonoType, right: &MonoType) -> 
                 None
             }
         }
-        ast::BinOp::Eq | ast::BinOp::Neq | ast::BinOp::Lt | ast::BinOp::Le | ast::BinOp::Gt | ast::BinOp::Ge => {
+        ast::BinOp::Eq
+        | ast::BinOp::Neq
+        | ast::BinOp::Lt
+        | ast::BinOp::Le
+        | ast::BinOp::Gt
+        | ast::BinOp::Ge => {
             if left == right {
                 Some(MonoType::Bool)
             } else {

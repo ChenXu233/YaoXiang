@@ -53,10 +53,7 @@ impl Region {
         self.buffer.resize(new_len, 0);
 
         // Record the allocation marker for cleanup
-        self.markers.push(AllocationMarker {
-            offset,
-            size,
-        });
+        self.markers.push(AllocationMarker { offset, size });
 
         Some(offset)
     }
@@ -144,7 +141,8 @@ impl Heap {
         }
 
         // Current region is full, create a new one
-        self.free_regions.push(std::mem::replace(&mut self.current_region, Region::new()));
+        self.free_regions
+            .push(std::mem::replace(&mut self.current_region, Region::new()));
 
         // Try again with new region
         self.current_region.alloc(size).map(|offset| {
@@ -165,7 +163,12 @@ impl Heap {
 
     /// Get total capacity
     pub fn capacity(&self) -> usize {
-        self.current_region.capacity() + self.free_regions.iter().map(|r| r.capacity()).sum::<usize>()
+        self.current_region.capacity()
+            + self
+                .free_regions
+                .iter()
+                .map(|r| r.capacity())
+                .sum::<usize>()
     }
 
     /// Get used size
@@ -192,4 +195,3 @@ impl Default for Heap {
 
 #[cfg(test)]
 mod tests;
-

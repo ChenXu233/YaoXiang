@@ -1,7 +1,7 @@
 //! Pratt Parser expression parsing
 
-use super::state::*;
 use super::ast::*;
+use super::state::*;
 
 impl<'a> ParserState<'a> {
     /// Parse an expression using Pratt parser

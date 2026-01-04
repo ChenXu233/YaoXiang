@@ -1,11 +1,11 @@
 //! 类型检查器测试模块
 
 mod basic;
-mod generic;
-mod error;
-mod infer;
 mod check;
-mod types;
-mod scope;
+mod error;
+mod generic;
+mod infer;
 mod inference;
 mod inference_validation;
+mod scope;
+mod types;

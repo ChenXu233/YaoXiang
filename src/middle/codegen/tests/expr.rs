@@ -56,8 +56,8 @@ fn test_variable_loading() {
 /// 测试二元运算类型选择
 #[test]
 fn test_binop_type_selection() {
-    use crate::frontend::parser::ast::{BinOp, Expr};
     use crate::frontend::lexer::tokens::Literal;
+    use crate::frontend::parser::ast::{BinOp, Expr};
 
     // 验证 I64Add 指令存在
     assert_eq!(TypedOpcode::I64Add.name(), "I64Add");
@@ -164,7 +164,10 @@ fn test_label_generation() {
     let label2 = ctx.next_label();
 
     assert_ne!(label1, label2, "Should generate different labels");
-    assert!(label1 < label2, "Should generate labels in increasing order");
+    assert!(
+        label1 < label2,
+        "Should generate labels in increasing order"
+    );
 }
 
 /// 测试常量池

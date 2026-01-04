@@ -25,6 +25,3 @@ impl Instruction {
         self.operands.get(index).copied()
     }
 }
-
-
-
