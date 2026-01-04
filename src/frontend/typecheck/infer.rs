@@ -37,12 +37,12 @@ impl<'a> TypeInferrer<'a> {
 
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
-        &mut self.solver
+        self.solver
     }
 
     /// 获取求解器引用（不可变）
     pub fn solver_ref(&self) -> &TypeConstraintSolver {
-        &self.solver
+        self.solver
     }
 
     // =========================================================================
@@ -79,7 +79,7 @@ impl<'a> TypeInferrer<'a> {
             } => self.infer_if(
                 condition,
                 then_branch,
-                &elif_branches,
+                elif_branches,
                 else_branch.as_deref(),
                 *span,
             ),

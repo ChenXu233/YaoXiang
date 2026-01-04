@@ -50,6 +50,11 @@ impl<'a> TypeChecker<'a> {
         !self.errors.is_empty()
     }
 
+    /// 添加变量绑定
+    pub fn add_var(&mut self, name: String, poly: PolyType) {
+        self.inferrer.add_var(name, poly);
+    }
+
     /// 添加错误
     fn add_error(&mut self, error: TypeError) {
         self.errors.push(error);

@@ -4,13 +4,24 @@
 
 use crate::frontend::lexer::tokenize;
 use crate::frontend::parser::parse;
-use crate::frontend::typecheck::{check_module, TypeEnvironment};
+use crate::frontend::typecheck::{check_module, MonoType, PolyType, TypeEnvironment};
 
 /// 检查类型推断是否成功
 fn check_type_inference(input: &str) -> Result<(), String> {
     let tokens = tokenize(input).map_err(|e| format!("Lexer error: {:?}", e))?;
     let ast = parse(&tokens).map_err(|e| format!("Parse error: {:?}", e))?;
     let mut env = TypeEnvironment::new();
+
+    // 添加内置函数 print
+    env.add_var(
+        "print".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![MonoType::String],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        }),
+    );
+
     check_module(&ast, Some(&mut env))
         .map(|_| ())
         .map_err(|e| format!("Type error: {:?}", e))
@@ -51,6 +62,9 @@ fn test_inference_expression_return() {
     assert!(check_type_inference("get_num = () => 42").is_ok());
     assert!(check_type_inference("get_str = () => \"hello\"").is_ok());
     assert!(check_type_inference("get_bool = () => true").is_ok());
+    if let Err(e) = check_type_inference("get_bool = () => true") {
+        eprintln!("DEBUG: check_type_inference error: {}", e);
+    }
 }
 
 #[test]
@@ -181,8 +195,8 @@ fn test_invalid_missing_equals() {
 #[test]
 fn test_invalid_missing_arrow() {
     // 缺少 '=>' 符号 - 这个实际上是有效的变量声明
-    // 解析会通过，类型检查会报错
-    assert!(check_type_inference("inc: Int -> Int = a + 1").is_ok());
+    // 解析会通过，类型检查会报错（因为 a 未定义且类型不匹配）
+    assert!(check_type_inference_fails("inc: Int -> Int = a + 1"));
 }
 
 #[test]

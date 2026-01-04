@@ -246,11 +246,10 @@ impl<'a> ParserState<'a> {
         }
 
         while !self.at(&close) && !self.at_end() {
-            if !args.is_empty() || !named_fields.is_empty() {
-                if !self.expect(&TokenKind::Comma) {
+            if (!args.is_empty() || !named_fields.is_empty())
+                && !self.expect(&TokenKind::Comma) {
                     return None;
                 }
-            }
 
             if is_named {
                 let field_name = match self.current().map(|t| &t.kind) {
@@ -349,11 +348,10 @@ impl<'a> ParserState<'a> {
         let mut args = Vec::new();
 
         while !self.at(&TokenKind::Gt) && !self.at_end() {
-            if !args.is_empty() {
-                if !self.expect(&TokenKind::Comma) {
+            if !args.is_empty()
+                && !self.expect(&TokenKind::Comma) {
                     return None;
                 }
-            }
 
             args.push(self.parse_type()?);
         }
@@ -366,11 +364,10 @@ impl<'a> ParserState<'a> {
         let mut types = Vec::new();
 
         while !self.at(&TokenKind::RParen) && !self.at_end() {
-            if !types.is_empty() {
-                if !self.expect(&TokenKind::Comma) {
+            if !types.is_empty()
+                && !self.expect(&TokenKind::Comma) {
                     return None;
                 }
-            }
 
             // Check for trailing comma
             if self.at(&TokenKind::RParen) {

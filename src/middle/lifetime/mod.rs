@@ -270,7 +270,7 @@ impl OwnershipAnalyzer {
                 self.ownership_graph
                     .edges
                     .entry(dst.clone())
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(src.clone());
 
                 // src 被移动后，不再拥有自己的所有权
@@ -297,7 +297,7 @@ impl OwnershipAnalyzer {
                         self.ownership_graph
                             .edges
                             .entry(d.clone())
-                            .or_insert_with(HashSet::new)
+                            .or_default()
                             .insert(arg.clone());
                     }
                 }
@@ -336,7 +336,7 @@ impl OwnershipAnalyzer {
                     self.ownership_graph
                         .edges
                         .entry(dst.clone())
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(var.clone());
                 }
             }

@@ -71,7 +71,7 @@ impl SpecializationKey {
     }
 
     /// 生成字符串键
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         if self.type_args.is_empty() {
             self.name.clone()
         } else {
@@ -88,7 +88,7 @@ impl SpecializationKey {
 
 impl fmt::Display for SpecializationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }
 

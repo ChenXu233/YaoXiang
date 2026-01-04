@@ -87,10 +87,12 @@ impl TaskState {
 
 /// Task priority levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Default)]
 pub enum TaskPriority {
     /// Low priority tasks.
     Low = 0,
     /// Normal priority (default).
+    #[default]
     Normal = 1,
     /// High priority tasks.
     High = 2,
@@ -98,11 +100,6 @@ pub enum TaskPriority {
     Critical = 3,
 }
 
-impl Default for TaskPriority {
-    fn default() -> Self {
-        TaskPriority::Normal
-    }
-}
 
 /// A task that can be scheduled for execution.
 pub struct Task {

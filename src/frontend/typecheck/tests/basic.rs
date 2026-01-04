@@ -1,9 +1,5 @@
 //! 基础类型推断测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, Expr, UnOp};
-use crate::frontend::typecheck::*;
-use crate::util::span::Span;
 
 /// 测试字面量类型推断
 #[test]

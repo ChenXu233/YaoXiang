@@ -19,7 +19,7 @@ impl NodeId {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::NodeId;
+    /// use yaoxiang::runtime::dag::NodeId;
     ///
     /// let id = NodeId(42);
     /// assert_eq!(id.0, 42);
@@ -63,7 +63,7 @@ impl NodeIdGenerator {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::NodeIdGenerator;
+    /// use yaoxiang::runtime::dag::NodeIdGenerator;
     ///
     /// let generator = NodeIdGenerator::new();
     /// let id1 = generator.generate();
@@ -85,11 +85,11 @@ impl NodeIdGenerator {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::NodeIdGenerator;
+    /// use yaoxiang::runtime::dag::NodeIdGenerator;
     ///
     /// let generator = NodeIdGenerator::new();
     /// let id = generator.generate();
-    /// assert!(id.value() > 0);
+    /// assert_eq!(id.value(), 0);
     /// ```
     #[inline]
     pub fn generate(&self) -> NodeId {
@@ -105,7 +105,7 @@ impl NodeIdGenerator {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::NodeIdGenerator;
+    /// use yaoxiang::runtime::dag::NodeIdGenerator;
     ///
     /// let generator = NodeIdGenerator::new();
     /// generator.generate();

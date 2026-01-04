@@ -110,9 +110,18 @@ pub fn check_module(
         Box::leak(Box::new(new_env))
     });
 
+    // 复制环境变量（因为 checker 会借用 env.solver，所以需要先复制 vars）
+    let vars = env.vars.clone();
+
     // 在内部作用域中执行类型检查，确保 checker 在访问 env 之前被 drop
     let (result, checker_errors) = {
         let mut checker = TypeChecker::new(env.solver());
+
+        // 添加环境变量到检查器
+        for (name, poly) in vars {
+            checker.add_var(name, poly);
+        }
+
         let result = checker.check_module(ast);
         let errors = checker.errors().to_vec();
         (result, errors)
@@ -126,7 +135,7 @@ pub fn check_module(
     if env.has_errors() {
         Err(env.get_errors().to_vec())
     } else {
-        result.map_err(|e| e)
+        result
     }
 }
 

@@ -128,9 +128,7 @@ mod tokenizer {
             self.skip_whitespace_and_comments();
 
             // 检查是否到达文件末尾
-            if self.peek().is_none() {
-                return None;
-            }
+            self.peek()?;
 
             self.start_offset = self.offset;
             self.start_line = self.line;
@@ -260,7 +258,7 @@ mod tokenizer {
                             self.advance();
                         }
                         // Continue to get next token
-                        return self.next_token();
+                        self.next_token()
                     } else if self.peek() == Some(&'*') {
                         // Multi-line comment
                         self.advance();
@@ -280,7 +278,7 @@ mod tokenizer {
                             }
                         }
                         // Continue to get next token
-                        return self.next_token();
+                        self.next_token()
                     } else {
                         Some(self.make_token(TokenKind::Slash))
                     }
@@ -579,6 +577,8 @@ mod tokenizer {
                 "break" => Some(TokenKind::KwBreak),
                 "continue" => Some(TokenKind::KwContinue),
                 "as" => Some(TokenKind::KwAs),
+                "true" => Some(TokenKind::BoolLiteral(true)),
+                "false" => Some(TokenKind::BoolLiteral(false)),
                 _ => None,
             }
         }

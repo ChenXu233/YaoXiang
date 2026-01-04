@@ -57,7 +57,7 @@ impl ComputationDAG {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::ComputationDAG;
+    /// use yaoxiang::runtime::dag::ComputationDAG;
     ///
     /// let dag = ComputationDAG::new();
     /// assert!(dag.is_empty());
@@ -94,10 +94,10 @@ impl ComputationDAG {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::{ComputationDAG, DAGNodeKind};
+    /// use yaoxiang::runtime::dag::{ComputationDAG, DAGNodeKind};
     ///
     /// let mut dag = ComputationDAG::new();
-    /// let id = dag.add_node(DAGNodeKind::Constant { value: "42".to_string() });
+    /// let id = dag.add_node(DAGNodeKind::Constant { value: "42".to_string() }).unwrap();
     /// assert!(dag.contains_node(id));
     /// ```
     ///
@@ -124,7 +124,7 @@ impl ComputationDAG {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::{ComputationDAG, DAGNodeKind};
+    /// use yaoxiang::runtime::dag::{ComputationDAG, DAGNodeKind};
     ///
     /// let mut dag = ComputationDAG::new();
     /// let a = dag.add_node(DAGNodeKind::Constant { value: "1".to_string() }).unwrap();
@@ -231,7 +231,7 @@ impl ComputationDAG {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::{ComputationDAG, DAGNodeKind};
+    /// use yaoxiang::runtime::dag::{ComputationDAG, DAGNodeKind};
     ///
     /// let mut dag = ComputationDAG::new();
     /// let id = dag.add_node(DAGNodeKind::Constant { value: "42".to_string() }).unwrap();
@@ -400,11 +400,9 @@ impl ComputationDAG {
                                 .dependencies()
                                 .iter()
                                 .all(|d| current_level.contains(d) || next_level.contains(d))
-                            {
-                                if !next_level.contains(&dependent) {
+                                && !next_level.contains(&dependent) {
                                     next_level.push(dependent);
                                 }
-                            }
                         }
                     }
                 }

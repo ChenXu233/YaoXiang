@@ -232,6 +232,7 @@ impl std::hash::Hash for ConstValue {
 
 /// Module IR
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ModuleIR {
     pub types: Vec<Type>,
     pub constants: Vec<ConstValue>,
@@ -239,13 +240,3 @@ pub struct ModuleIR {
     pub functions: Vec<FunctionIR>,
 }
 
-impl Default for ModuleIR {
-    fn default() -> Self {
-        Self {
-            types: Vec::new(),
-            constants: Vec::new(),
-            globals: Vec::new(),
-            functions: Vec::new(),
-        }
-    }
-}

@@ -275,7 +275,7 @@ impl Monomorphizer {
             return Vec::new();
         }
         key.split(',')
-            .filter_map(|name| Self::type_name_to_mono_type(name))
+            .filter_map(Self::type_name_to_mono_type)
             .collect()
     }
 

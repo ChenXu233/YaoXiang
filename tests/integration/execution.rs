@@ -7,7 +7,7 @@ fn test_run_complex_test() {
     // It runs the complex_test.yx file and checks for success exit code.
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let complex_test_path = Path::new(&manifest_dir).join("complex_test.yx");
+    let complex_test_path = Path::new(&manifest_dir).join("docs/examples/complex_test.yx");
 
     // Ensure the file exists (it was created in previous steps)
     assert!(complex_test_path.exists(), "complex_test.yx not found");

@@ -169,7 +169,7 @@ impl EscapeAnalyzer {
                 match instr {
                     // 返回值逃逸
                     Instruction::Ret(value) => {
-                        if let Some(ref var) = value.as_ref() {
+                        if let Some(var) = value.as_ref() {
                             if let Some(local_id) = self.get_variable(var) {
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                                 self.local_vars.get_mut(&local_id).unwrap().is_returned = true;
@@ -295,7 +295,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses
                         .entry(src_id)
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(dst_id);
                 }
             }
@@ -307,7 +307,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses
                         .entry(src_id)
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(dst_id);
                 }
             }
@@ -319,7 +319,7 @@ impl EscapeAnalyzer {
                     if let Some(dst_local) = self.get_variable(dst) {
                         var_uses
                             .entry(src_id)
-                            .or_insert_with(HashSet::new)
+                            .or_default()
                             .insert(dst_local);
                     }
                 }
@@ -332,7 +332,7 @@ impl EscapeAnalyzer {
                         if let Some(arg_id) = self.get_variable(arg) {
                             var_uses
                                 .entry(arg_id)
-                                .or_insert_with(HashSet::new)
+                                .or_default()
                                 .insert(dst_id);
                         }
                     }
@@ -360,7 +360,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses
                         .entry(src_id)
-                        .or_insert_with(HashSet::new)
+                        .or_default()
                         .insert(dst_id);
                 }
             }
@@ -634,7 +634,7 @@ impl CallGraph {
     }
 
     fn add_edge(&mut self, from: FunctionId, to: FunctionId) {
-        self.edges.entry(from).or_insert_with(Vec::new).push(to);
+        self.edges.entry(from).or_default().push(to);
     }
 }
 

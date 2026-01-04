@@ -155,7 +155,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
         println!("    Instructions ({}):", func.instructions.len());
 
         for (j, instr) in func.instructions.iter().enumerate() {
-            let opcode_value = instr.opcode as u8;
+            let opcode_value = instr.opcode;
             let opcode_name = TypedOpcode::try_from(opcode_value)
                 .map(|o| format!("{:?}", o))
                 .unwrap_or_else(|_| format!("Unknown(0x{:02X})", opcode_value));

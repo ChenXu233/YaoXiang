@@ -142,12 +142,11 @@ impl Heap {
 
         // Current region is full, create a new one
         self.free_regions
-            .push(std::mem::replace(&mut self.current_region, Region::new()));
+            .push(std::mem::take(&mut self.current_region));
 
         // Try again with new region
-        self.current_region.alloc(size).map(|offset| {
+        self.current_region.alloc(size).inspect(|offset| {
             self.total_allocations += 1;
-            offset
         })
     }
 

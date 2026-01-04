@@ -521,6 +521,12 @@ pub struct Scheduler {
 
 #[deprecated]
 #[allow(deprecated)]
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scheduler {
     /// Create a new scheduler.
     #[inline]

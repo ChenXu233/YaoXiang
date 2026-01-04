@@ -82,7 +82,7 @@ impl BytecodeFile {
         let type_table: Vec<MonoType> = module
             .types
             .iter()
-            .map(|t| MonoTypeExt::from_ast(t))
+            .map(MonoTypeExt::from_ast)
             .collect();
 
         // 2. 构建常量池

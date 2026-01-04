@@ -88,7 +88,7 @@ impl GenericSpecializer {
         // 缓存结果
         self.cache
             .entry(signature)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(cache_key, PolyType::mono(result.clone()));
 
         Ok(result)
@@ -337,7 +337,7 @@ impl SpecializationKey {
     }
 
     /// 生成字符串键
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         let args_str = self
             .type_args
             .iter()
@@ -350,7 +350,7 @@ impl SpecializationKey {
 
 impl fmt::Display for SpecializationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }
 

@@ -11,6 +11,7 @@
 /// 位于函数调用点附近，缓存类型-地址映射
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
+#[derive(Default)]
 pub struct InlineCacheSlot {
     /// 缓存的有效性标志
     pub valid: u8, // 0 = 无效, 1 = 单态, 2 = 多态
@@ -20,15 +21,6 @@ pub struct InlineCacheSlot {
     pub slots: [ICSlotData; 4],
 }
 
-impl Default for InlineCacheSlot {
-    fn default() -> Self {
-        Self {
-            valid: 0,
-            count: 0,
-            slots: [ICSlotData::default(); 4],
-        }
-    }
-}
 
 /// 单个缓存插槽
 #[derive(Debug, Clone, Copy, Default)]

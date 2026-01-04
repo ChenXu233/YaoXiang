@@ -52,11 +52,7 @@ impl<'a> ParserState<'a> {
     /// New syntax: `x: int = 42` or `mut y: int = 10`
     fn parse_var_stmt(&mut self, span: Span) -> Option<Stmt> {
         // Check for mutability
-        let is_mut = if self.skip(&TokenKind::KwMut) {
-            true
-        } else {
-            false
-        };
+        let is_mut = self.skip(&TokenKind::KwMut);
 
         // Parse variable name (identifier)
         let name = match self.current().map(|t| &t.kind) {
@@ -644,6 +640,25 @@ impl<'a> ParserState<'a> {
                         // Optional semicolon
                         self.skip(&TokenKind::Semicolon);
 
+                        let type_annotation = type_annotation.map(|ty| match ty {
+                            Type::Fn {
+                                params,
+                                return_type,
+                            } => {
+                                let mut fn_params = params;
+                                if fn_params.len() == 1 {
+                                    if let Type::Tuple(inner) = fn_params[0].clone() {
+                                        fn_params = inner;
+                                    }
+                                }
+                                Type::Fn {
+                                    params: fn_params,
+                                    return_type,
+                                }
+                            }
+                            other => other,
+                        });
+
                         return Some(Stmt {
                             kind: StmtKind::Fn {
                                 name: name.clone(),
@@ -714,6 +729,25 @@ impl<'a> ParserState<'a> {
 
                         // Optional semicolon
                         self.skip(&TokenKind::Semicolon);
+
+                        let type_annotation = type_annotation.map(|ty| match ty {
+                            Type::Fn {
+                                params,
+                                return_type,
+                            } => {
+                                let mut fn_params = params;
+                                if fn_params.len() == 1 {
+                                    if let Type::Tuple(inner) = fn_params[0].clone() {
+                                        fn_params = inner;
+                                    }
+                                }
+                                Type::Fn {
+                                    params: fn_params,
+                                    return_type,
+                                }
+                            }
+                            other => other,
+                        });
 
                         return Some(Stmt {
                             kind: StmtKind::Fn {
@@ -787,6 +821,25 @@ impl<'a> ParserState<'a> {
 
                         // Optional semicolon
                         self.skip(&TokenKind::Semicolon);
+
+                        let type_annotation = type_annotation.map(|ty| match ty {
+                            Type::Fn {
+                                params,
+                                return_type,
+                            } => {
+                                let mut fn_params = params;
+                                if fn_params.len() == 1 {
+                                    if let Type::Tuple(inner) = fn_params[0].clone() {
+                                        fn_params = inner;
+                                    }
+                                }
+                                Type::Fn {
+                                    params: fn_params,
+                                    return_type,
+                                }
+                            }
+                            other => other,
+                        });
 
                         return Some(Stmt {
                             kind: StmtKind::Fn {
@@ -991,11 +1044,19 @@ impl<'a> ParserState<'a> {
             // Note: Parser is lenient. Type checking will handle type inference.
             // We allow parameter types without return type (type checker will infer).
 
+            // Normalize parameter types: allow a single tuple type to represent multiple params
+            let mut normalized_param_types = param_types.clone();
+            if normalized_param_types.len() == 1 {
+                if let Type::Tuple(inner) = &normalized_param_types[0] {
+                    normalized_param_types = inner.clone();
+                }
+            }
+
             // Parameter count must match type count
-            if param_types.len() != params.len() {
+            if normalized_param_types.len() != params.len() {
                 self.error(super::ParseError::Generic(format!(
                     "Parameter count mismatch: expected {}, got {}",
-                    param_types.len(),
+                    normalized_param_types.len(),
                     params.len()
                 )));
                 return None;
@@ -1004,8 +1065,17 @@ impl<'a> ParserState<'a> {
 
         // Construct function type if types were provided
         let type_annotation = if !param_types.is_empty() || return_type.is_some() {
+            // If the original param_types was a single Tuple wrapping multiple types,
+            // unwrap it so the function type stores each parameter type separately.
+            let mut fn_params = param_types;
+            if fn_params.len() == 1 {
+                if let Type::Tuple(inner) = &fn_params[0] {
+                    fn_params = inner.clone();
+                }
+            }
+
             Some(Type::Fn {
-                params: param_types,
+                params: fn_params,
                 return_type: Box::new(return_type.clone().unwrap_or(Type::Name("_".to_string()))),
             })
         } else {
@@ -1028,11 +1098,10 @@ impl<'a> ParserState<'a> {
         let mut params = Vec::new();
 
         while !self.at(&TokenKind::RParen) && !self.at_end() {
-            if !params.is_empty() {
-                if !self.expect(&TokenKind::Comma) {
+            if !params.is_empty()
+                && !self.expect(&TokenKind::Comma) {
                     return None;
                 }
-            }
 
             // Check for trailing comma
             if self.at(&TokenKind::RParen) {

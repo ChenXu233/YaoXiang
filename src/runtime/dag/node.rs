@@ -98,7 +98,7 @@ impl DAGNode {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::{DAGNode, DAGNodeKind, NodeId};
+    /// use yaoxiang::runtime::dag::{DAGNode, DAGNodeKind, NodeId};
     ///
     /// let node = DAGNode::new(
     ///     NodeId(0),
@@ -152,7 +152,7 @@ impl DAGNode {
     /// # Examples
     ///
     /// ```
-    /// use yaoxiang_runtime::dag::{DAGNode, DAGNodeKind, NodeId};
+    /// use yaoxiang::runtime::dag::{DAGNode, DAGNodeKind, NodeId};
     ///
     /// let mut node = DAGNode::new(NodeId(0), DAGNodeKind::Compute { name: "a".to_string() });
     /// node.add_dependency(NodeId(1));
