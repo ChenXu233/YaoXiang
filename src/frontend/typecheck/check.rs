@@ -241,6 +241,10 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 检查函数定义
+    ///
+    /// 实现完整的类型推断规则：
+    /// - 参数类型推断：有标注用标注，无标注尝试推断，Lambda 参数无法推断则拒绝
+    /// - 返回类型推断：有标注用标注，无标注则从函数体推断
     pub fn check_fn_def(
         &mut self,
         name: &str,
@@ -252,7 +256,15 @@ impl<'a> TypeChecker<'a> {
         // 保存当前返回类型
         let prev_return_type = self.current_return_type.take();
 
-        // 创建函数类型
+        // 跟踪未类型化的参数
+        let mut untyped_params: Vec<(String, usize)> = Vec::new();
+        for (i, param) in params.iter().enumerate() {
+            if param.ty.is_none() {
+                untyped_params.push((param.name.clone(), i));
+            }
+        }
+
+        // 创建参数类型列表
         let param_types: Vec<MonoType> = params
             .iter()
             .map(|p| {
@@ -264,25 +276,18 @@ impl<'a> TypeChecker<'a> {
             })
             .collect();
 
-        let return_ty = return_type
-            .map(|t| MonoType::from(t.clone()))
-            .unwrap_or_else(|| self.inferrer.solver().new_var());
+        // 处理返回类型
+        let (return_ty, inferred_return_ty) = if let Some(ty) = return_type {
+            // 有标注类型，使用标注类型
+            (MonoType::from(ty.clone()), None)
+        } else {
+            // 无标注类型，需要从函数体推断
+            let inferred = self.inferrer.solver().new_var();
+            (inferred.clone(), Some(inferred))
+        };
 
-        // 设置当前返回类型
+        // 设置当前返回类型（如果需要推断，会在后面更新）
         self.current_return_type = Some(return_ty.clone());
-
-        // 泛型参数处理
-        let _generic_params: Vec<MonoType> = params
-            .iter()
-            .filter_map(|p| p.ty.as_ref())
-            .filter_map(|t| {
-                if let ast::Type::Generic { name: _, args: _ } = t {
-                    Some(MonoType::from(t.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
 
         // 进入函数体作用域
         self.inferrer.enter_scope();
@@ -294,14 +299,50 @@ impl<'a> TypeChecker<'a> {
             self.inferrer.add_var(param.name.clone(), poly);
         }
 
-        // 推断函数体
-        let body_ty = self.inferrer.infer_block(body)?;
+        // 分析函数体，获取返回类型和 return 语句信息
+        let (body_ty, has_return_stmt, return_expr_ty) = self.analyze_fn_body(body)?;
 
-        // 检查返回类型
-        if let Some(expected) = &self.current_return_type {
+        // 返回类型推断规则
+        if let Some(inferred_ret_ty) = inferred_return_ty {
+            // 无标注返回类型，需要推断
+            if has_return_stmt {
+                // 有 return 语句，从 return 表达式推断返回类型
+                if let Some(expr_ty) = return_expr_ty {
+                    self.inferrer.solver().add_constraint(expr_ty, inferred_ret_ty.clone(), body.span);
+                }
+                // 否则 return; 类型为 Void
+            } else if body.stmts.is_empty() && body.expr.is_none() {
+                // 空块 {} → Void
+                self.inferrer.solver().add_constraint(MonoType::Void, inferred_ret_ty.clone(), body.span);
+            } else if let Some(expr) = &body.expr {
+                // 无 return，有表达式 → 从表达式推断
+                self.inferrer.solver().add_constraint(expr_ty.clone(), inferred_ret_ty.clone(), body.span);
+            } else {
+                // 块无 return 且无表达式 → 无法推断，添加错误
+                self.add_error(TypeError::TypeMismatch {
+                    expected: inferred_ret_ty.clone(),
+                    found: MonoType::Void,
+                    span: body.span,
+                });
+            }
+        } else {
+            // 有标注返回类型，检查函数体是否兼容
             self.inferrer
                 .solver()
-                .add_constraint(body_ty, expected.clone(), body.span);
+                .add_constraint(body_ty, return_ty.clone(), body.span);
+        }
+
+        // 参数类型推断规则：检查未类型化参数是否被使用
+        for (param_name, param_idx) in &untyped_params {
+            // 检查参数类型变量是否被约束到具体类型
+            let param_ty = &param_types[*param_idx];
+            if self.is_unconstrained_var(param_ty) {
+                // 参数类型无法推断（没有被使用），添加错误
+                self.add_error(TypeError::UnknownVariable {
+                    name: format!("parameter '{}' has no type annotation and cannot be inferred", param_name),
+                    span: params[*param_idx].span,
+                });
+            }
         }
 
         // 退出函数体作用域
@@ -322,6 +363,68 @@ impl<'a> TypeChecker<'a> {
         };
 
         Ok(fn_ir)
+    }
+
+    /// 分析函数体，返回 (体类型, 是否有return, return表达式类型)
+    fn analyze_fn_body(&mut self, body: &ast::Block) -> TypeResult<(MonoType, bool, Option<MonoType>)> {
+        self.inferrer.enter_scope();
+
+        let mut has_return = false;
+        let mut return_expr_ty: Option<MonoType> = None;
+
+        // 检查语句
+        for stmt in &body.stmts {
+            match &stmt.kind {
+                ast::StmtKind::Expr(expr) => {
+                    // 检查是否是 return 语句
+                    if let ast::Expr::Return(expr_opt, _) = expr.as_ref() {
+                        has_return = true;
+                        if let Some(e) = expr_opt {
+                            return_expr_ty = Some(self.inferrer.infer_expr(e)?);
+                        } else {
+                            return_expr_ty = Some(MonoType::Void);
+                        }
+                    }
+                    let _ty = self.inferrer.infer_expr(expr)?;
+                }
+                ast::StmtKind::Var {
+                    name,
+                    type_annotation,
+                    initializer,
+                    is_mut: _,
+                } => {
+                    self.inferrer.infer_var_decl(
+                        name,
+                        type_annotation.as_ref(),
+                        initializer.as_deref(),
+                        stmt.span,
+                    )?;
+                }
+                _ => {}
+            }
+        }
+
+        self.inferrer.exit_scope();
+
+        // 获取函数体类型
+        let body_ty = if let Some(expr) = &body.expr {
+            self.inferrer.infer_expr(expr)?
+        } else {
+            MonoType::Void
+        };
+
+        Ok((body_ty, has_return, return_expr_ty))
+    }
+
+    /// 检查类型变量是否未约束（未被使用）
+    fn is_unconstrained_var(&self, ty: &MonoType) -> bool {
+        match ty {
+            MonoType::TypeVar(id) => {
+                // 检查这个类型变量是否有任何约束
+                self.inferrer.solver().is_unconstrained(*id)
+            }
+            _ => false,
+        }
     }
 
     /// 检查函数调用
