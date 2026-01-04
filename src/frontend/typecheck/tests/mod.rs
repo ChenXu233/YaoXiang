@@ -7,3 +7,4 @@ mod infer;
 mod check;
 mod types;
 mod scope;
+mod inference;
