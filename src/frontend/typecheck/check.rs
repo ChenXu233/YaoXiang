@@ -307,23 +307,16 @@ impl<'a> TypeChecker<'a> {
             // 无标注返回类型，需要推断
             if has_return_stmt {
                 // 有 return 语句，从 return 表达式推断返回类型
-                if let Some(expr_ty) = return_expr_ty {
-                    self.inferrer.solver().add_constraint(expr_ty, inferred_ret_ty.clone(), body.span);
+                if let Some(ret_ty) = return_expr_ty {
+                    self.inferrer.solver().add_constraint(ret_ty, inferred_ret_ty.clone(), body.span);
                 }
                 // 否则 return; 类型为 Void
             } else if body.stmts.is_empty() && body.expr.is_none() {
                 // 空块 {} → Void
                 self.inferrer.solver().add_constraint(MonoType::Void, inferred_ret_ty.clone(), body.span);
-            } else if let Some(expr) = &body.expr {
-                // 无 return，有表达式 → 从表达式推断
-                self.inferrer.solver().add_constraint(expr_ty.clone(), inferred_ret_ty.clone(), body.span);
             } else {
-                // 块无 return 且无表达式 → 无法推断，添加错误
-                self.add_error(TypeError::TypeMismatch {
-                    expected: inferred_ret_ty.clone(),
-                    found: MonoType::Void,
-                    span: body.span,
-                });
+                // 无 return，有表达式 → 从表达式推断（body_ty 已经是表达式的类型）
+                self.inferrer.solver().add_constraint(body_ty.clone(), inferred_ret_ty.clone(), body.span);
             }
         } else {
             // 有标注返回类型，检查函数体是否兼容
@@ -338,8 +331,8 @@ impl<'a> TypeChecker<'a> {
             let param_ty = &param_types[*param_idx];
             if self.is_unconstrained_var(param_ty) {
                 // 参数类型无法推断（没有被使用），添加错误
-                self.add_error(TypeError::UnknownVariable {
-                    name: format!("parameter '{}' has no type annotation and cannot be inferred", param_name),
+                self.add_error(TypeError::CannotInferParamType {
+                    name: param_name.clone(),
                     span: params[*param_idx].span,
                 });
             }
@@ -417,7 +410,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查类型变量是否未约束（未被使用）
-    fn is_unconstrained_var(&self, ty: &MonoType) -> bool {
+    fn is_unconstrained_var(&mut self, ty: &MonoType) -> bool {
         match ty {
             MonoType::TypeVar(id) => {
                 // 检查这个类型变量是否有任何约束

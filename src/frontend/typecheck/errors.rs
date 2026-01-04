@@ -602,6 +602,11 @@ impl From<TypeError> for Diagnostic {
                 format!("{}", error),
                 span,
             ),
+            TypeError::CannotInferParamType { .. } => Diagnostic::error(
+                "E0016".to_string(),
+                format!("{}", error),
+                span,
+            ),
         }
     }
 }
