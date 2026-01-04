@@ -1,8 +1,8 @@
 # YaoXiang 项目架构文档
 
-> 版本：v1.0.0
+> 版本：v2.0.0
 > 状态：正式
-> 作者：晨煦
+> 作者：沫郁酱
 > 日期：2025-01-04
 
 ---
@@ -30,87 +30,170 @@ YaoXiang 是一个采用 Rust 编写的实验性编程语言项目，采用现�
 - **零成本抽象**：编译时优化，运行时无额外开销
 - **可扩展性**：支持 JIT/AOT 编译，易于添加新特性
 
+### 技术栈
+
+- **语言**：Rust 2021 Edition
+- **构建工具**：Cargo
+- **测试框架**：builtin test + proptest + quickcheck
+- **并发支持**：parking_lot, crossbeam, rayon
+
 ---
 
 ## 二、目录结构
 
 ```
 YaoXiang/
-├── docs/                           # 文档系统
-│   ├── architecture/              # 架构文档（本文件）
-│   │   ├── project-structure.md   # 项目结构
-│   │   ├── compiler-design.md     # 编译器设计
-│   │   └── runtime-design.md      # 运行时设计
-│   ├── guides/                    # 用户指南
-│   │   ├── getting-started.md     # 快速开始
-│   │   ├── error-system-design.md # 错误系统
-│   │   └── dev/                   # 开发者指南
+├── .claude/                      # Claude AI 配置
+│   └── plan/                     # 任务计划
+│
+├── .github/                      # GitHub 配置
+│   └── workflows/
+│
+├── docs/                         # 文档系统
+│   ├── architecture/             # 架构文档
+│   │   ├── project-structure.md  # 项目结构（本文档）
+│   │   ├── compiler-design.md    # 编译器设计
+│   │   └── runtime-design.md     # 运行时设计
+│   ├── guides/                   # 用户指南
+│   │   ├── getting-started.md    # 快速开始
+│   │   ├── error-system-design.md# 错误系统
+│   │   └── dev/                  # 开发者指南
 │   │       ├── commit-convention.md
 │   │       └── release-guide.md
-│   ├── works/                     # 工作文档
-│   │   ├── old/                   # 历史方案
-│   │   ├── phase/                 # 阶段性文档
-│   │   └── plans/                 # 规划文档
-│   ├── examples/                  # 示例代码
-│   └── YaoXiang-book.md           # 语言指南
+│   ├── works/                    # 工作文档
+│   │   ├── old/                  # 历史方案
+│   │   ├── phase/                # 阶段性文档
+│   │   └── plans/                # 规划文档
+│   └── YaoXiang-book.md          # 语言指南
 │
-├── src/                           # 源代码
-│   ├── frontend/                  # 前端：词法分析、语法分析、类型检查
-│   │   ├── lexer/                # 词法分析器
-│   │   ├── parser/               # 语法分析器
-│   │   └── typecheck/            # 类型检查器
+├── src/                          # 源代码
+│   ├── frontend/                 # 前端：词法分析、语法分析、类型检查
+│   │   ├── lexer/
+│   │   │   ├── mod.rs            # 词法分析器入口
+│   │   │   ├── tokens.rs         # Token 定义
+│   │   │   └── tests/
+│   │   ├── parser/
+│   │   │   ├── mod.rs            # 解析器入口和状态管理
+│   │   │   ├── ast.rs            # AST 节点定义
+│   │   │   ├── expr.rs           # 表达式解析
+│   │   │   ├── nud.rs            # 前缀解析（Pratt Parser）
+│   │   │   ├── led.rs            # 中缀解析（Pratt Parser）
+│   │   │   ├── stmt.rs           # 语句解析
+│   │   │   ├── state.rs          # 解析器状态
+│   │   │   ├── type_parser.rs    # 类型解析
+│   │   │   └── tests/
+│   │   └── typecheck/
+│   │       ├── mod.rs            # 类型检查入口
+│   │       ├── types.rs          # 类型定义
+│   │       ├── infer.rs          # 类型推断
+│   │       ├── check.rs          # 类型验证
+│   │       ├── specialize.rs     # 泛型特化
+│   │       ├── errors.rs         # 类型错误
+│   │       └── tests/
 │   │
-│   ├── middle/                    # 中端：优化、中间表示、代码生成准备
-│   │   ├── ir/                   # 中间表示
-│   │   ├── optimizer/            # 优化器
+│   ├── middle/                   # 中端：优化、中间表示、代码生成
+│   │   ├── mod.rs                # 中端模块入口
+│   │   ├── ir.rs                 # 中间表示定义（单文件）
+│   │   ├── optimizer.rs          # 优化器（单文件）
+│   │   ├── codegen/              # 代码生成器
+│   │   │   ├── mod.rs            # 代码生成入口
+│   │   │   ├── bytecode.rs       # 字节码格式
+│   │   │   ├── expr.rs           # 表达式代码生成
+│   │   │   ├── stmt.rs           # 语句代码生成
+│   │   │   ├── control_flow.rs   # 控制流代码生成
+│   │   │   ├── loop_gen.rs       # 循环代码生成
+│   │   │   ├── switch.rs         # 模式匹配代码生成
+│   │   │   ├── closure.rs        # 闭包处理
+│   │   │   ├── generator.rs      # 代码生成器核心
+│   │   │   └── tests/
 │   │   ├── monomorphize/         # 单态化
+│   │   │   ├── mod.rs            # 单态化入口
+│   │   │   ├── instance.rs       # 实例管理
+│   │   │   └── tests/
 │   │   ├── escape_analysis/      # 逃逸分析
-│   │   └── codegen/              # 代码生成器（字节码）
+│   │   │   └── mod.rs
+│   │   └── lifetime/             # 生命周期分析
+│   │       └── mod.rs
 │   │
-│   ├── runtime/                   # 运行时：执行、内存管理、并发
+│   ├── runtime/                  # 运行时：执行、内存管理、并发
+│   │   ├── mod.rs                # 运行时模块入口
 │   │   ├── dag/                  # 并作图（DAG）
+│   │   │   ├── mod.rs            # DAG 模块入口
+│   │   │   ├── node.rs           # 节点定义
+│   │   │   ├── node_id.rs        # 节点 ID 管理
+│   │   │   ├── graph.rs          # 图操作
+│   │   │   └── tests/
 │   │   ├── scheduler/            # 任务调度器
+│   │   │   ├── mod.rs            # 调度器入口
+│   │   │   ├── task.rs           # 任务定义
+│   │   │   ├── queue.rs          # 任务队列
+│   │   │   ├── work_stealer.rs   # 工作窃取算法
+│   │   │   └── tests/
 │   │   └── memory/               # 内存管理
+│   │       ├── mod.rs            # 内存管理入口
+│   │       └── tests/
 │   │
-│   ├── vm/                        # 虚拟机：字节码执行
+│   ├── vm/                       # 虚拟机：字节码执行
+│   │   ├── mod.rs                # 虚拟机入口
 │   │   ├── executor.rs           # 执行器
 │   │   ├── frames.rs             # 调用帧
 │   │   ├── instructions.rs       # 指令集
-│   │   └── opcode.rs             # 操作码定义
+│   │   ├── opcode.rs             # 操作码定义
+│   │   ├── inline_cache.rs       # 内联缓存（类型优化）
+│   │   ├── errors.rs             # VM 错误
+│   │   └── tests/
 │   │
-│   ├── std/                       # 标准库
+│   ├── std/                      # 标准库
+│   │   ├── mod.rs                # 标准库入口
 │   │   ├── io.rs                 # 输入输出
 │   │   ├── string.rs             # 字符串操作
 │   │   ├── list.rs               # 列表操作
 │   │   ├── dict.rs               # 字典操作
 │   │   ├── math.rs               # 数学函数
 │   │   ├── concurrent.rs         # 并发原语
-│   │   └── net.rs                # 网络
+│   │   └── net.rs                # 网络（实验性）
 │   │
-│   └── util/                      # 工具库
-│       ├── span.rs               # 源码位置
-│       ├── diagnostic.rs         # 诊断系统
-│       └── cache.rs              # 缓存工具
+│   ├── util/                     # 工具库
+│   │   ├── mod.rs                # 工具入口
+│   │   ├── span.rs               # 源码位置
+│   │   ├── diagnostic.rs         # 诊断系统
+│   │   └── cache.rs              # 缓存工具
+│   │
+│   ├── lib.rs                    # 库入口
+│   └── main.rs                   # 可执行文件入口
 │
-├── tests/                         # 测试
+├── tests/                        # 测试
 │   ├── integration/              # 集成测试
-│   │   ├── codegen.rs           # 代码生成测试
-│   │   └── execution.rs         # 执行测试
+│   │   ├── codegen.rs
+│   │   └── execution.rs
 │   └── unit/                     # 单元测试
 │       └── codegen.rs
 │
 ├── Cargo.toml                    # Rust 项目配置
+├── Cargo.lock                    # 依赖锁定
 ├── clippy.toml                   # Clippy 配置
 ├── rustfmt.toml                  # 代码格式化配置
 ├── .gitignore
 └── README.md
 ```
 
+### 与旧版文档的差异说明
+
+| 旧版描述 | 实际结构 | 说明 |
+|---------|---------|------|
+| `middle/optimizer/` | `middle/optimizer.rs` | 优化器为单文件，非目录 |
+| `middle/ir/` | `middle/ir.rs` | IR 为单文件，非目录 |
+| 无 `middle/lifetime/` | `middle/lifetime/` | 新增生命周期分析模块 |
+| 无 `vm/inline_cache.rs` | `vm/inline_cache.rs` | 新增内联缓存模块 |
+| `vm/instructions.rs` | `vm/instructions.rs` | 存在，指令集完整 |
+
 ---
 
 ## 三、核心模块详解
 
 ### 3.1 前端 (src/frontend/)
+
+前端负责将源代码转换为中间表示（IR），包含三个主要阶段：
 
 #### 3.1.1 词法分析器 (lexer/)
 **职责**：将源代码字符串转换为 Token 流
@@ -121,22 +204,30 @@ YaoXiang/
 
 **关键数据结构**：
 ```rust
+// Token 定义
 pub enum Token {
     Identifier(String),
     Integer(i64),
     Float(f64),
     String(String),
+    BoolLiteral(bool),
     // 关键字
     Type, Pub, Use, Spawn, Ref, Mut,
+    If, Elif, Else, Match, While, For, Return,
     // 符号
     LParen, RParen, LBrace, RBrace,
+    Comma, Colon, Semicolon,
     // 运算符
-    Equal, Arrow, Plus, Minus,
-    // ...
+    Equal, Arrow, Plus, Minus, Star, Slash,
+    Eq, Ne, Lt, Le, Gt, Ge,
+    // 特殊
+    Eof,
 }
 
+// 词法分析器
 pub struct Lexer {
     input: String,
+    chars: Vec<char>,
     position: usize,
     line: usize,
     column: usize,
@@ -156,18 +247,23 @@ pub struct Lexer {
 - `mod.rs` - 解析器入口和状态管理
 - `ast.rs` - AST 节点定义
 - `expr.rs` - 表达式解析
+- `nud.rs` / `led.rs` - Pratt Parser 核心
 - `stmt.rs` - 语句解析
-- `nud.rs`/`led.rs` - 表达式解析核心（Pratt Parser）
+- `state.rs` - 解析器状态
 - `type_parser.rs` - 类型解析
 
 **关键数据结构**：
 ```rust
+// AST 节点
 pub enum Expr {
     Literal(Literal),
     Identifier(String),
     Binary { left: Box<Expr>, op: BinOp, right: Box<Expr> },
     Lambda { params: Vec<Param>, body: Box<Expr> },
     Call { func: Box<Expr>, args: Vec<Expr> },
+    Match { expr: Box<Expr>, arms: Vec<MatchArm> },
+    If { cond: Box<Expr>, then_branch: Box<Expr>, else_branch: Option<Box<Expr>> },
+    Block(Vec<Stmt>),
     // ...
 }
 
@@ -175,9 +271,11 @@ pub enum Stmt {
     Let { name: String, ty: Option<Type>, value: Expr },
     Function { name: String, params: Vec<Param>, ret_ty: Type, body: Expr },
     TypeDef { name: String, variants: Vec<Variant> },
+    Return(Option<Expr>),
     // ...
 }
 
+// 解析器
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
@@ -188,7 +286,7 @@ pub struct Parser {
 **解析策略**：
 - **Pratt Parser**：处理表达式的优先级和结合性
 - **递归下降**：处理语句和声明
-- **双层处理**：解析层宽松，类型检查层严格
+- **状态管理**：使用 `ParserState` 跟踪解析上下文
 
 #### 3.1.3 类型检查器 (typecheck/)
 **职责**：验证 AST 的类型正确性，进行类型推断
@@ -198,71 +296,214 @@ pub struct Parser {
 - `types.rs` - 类型定义
 - `infer.rs` - 类型推断
 - `check.rs` - 类型验证
-- `specialize.rs` - 泛型单态化
+- `specialize.rs` - 泛型特化
 - `errors.rs` - 类型错误
+- `tests/` - 测试用例
 
 **关键数据结构**：
 ```rust
+// 类型定义
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    Primitive(PrimitiveType),
+    // 原子类型
+    Void, Bool, Int, Float, Char, String,
+
+    // 复合类型
+    List(Box<Type>),
+    Dict(Box<Type>, Box<Type>),
+    Tuple(Vec<Type>),
+
+    // 函数类型
+    Fn { params: Vec<Type>, ret: Box<Type>, is_async: bool },
+
+    // 类型引用
+    TypeRef(String),
+
+    // 类型变量（用于推断）
     Variable(TypeVar),
-    Function { params: Vec<Type>, ret: Box<Type> },
+
+    // 泛型
     Generic { name: String, args: Vec<Type> },
-    Constructor { name: String, args: Vec<Type> },
-    // ...
 }
 
-pub struct TypeScheme {
-    pub vars: Vec<TypeVar>,
-    pub body: Type,
-}
+// 类型变量
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeVar(pub u32);
 
+// 类型上下文
 pub struct TypeContext {
     pub vars: HashMap<String, TypeScheme>,
+    pub structs: HashMap<String, StructDef>,
     pub constraints: Vec<Constraint>,
+    pub next_var: u32,
 }
 ```
 
 **核心算法**：
-- ** Hindley-Milner 类型推断**：支持泛型和多态
+- **Hindley-Milner 类型推断**：支持泛型和多态
 - **约束求解**：解决类型变量的约束
 - **单态化**：将泛型函数展开为具体版本
 
 ### 3.2 中端 (src/middle/)
 
-#### 3.2.1 中间表示 (ir/)
-**职责**：定义编译器内部的中间表示形式
+中端负责从 AST 生成优化的字节码。
+
+#### 3.2.1 中间表示 (ir.rs)
+**职责**：定义编译器内部的中间表示形式（单文件模块）
+
+**关键数据结构**：
+```rust
+// IR 模块
+pub struct ModuleIR {
+    pub types: Vec<Type>,
+    pub constants: Vec<ConstValue>,
+    pub globals: Vec<GlobalIR>,
+    pub functions: Vec<FunctionIR>,
+}
+
+// IR 指令
+#[derive(Debug, Clone)]
+pub enum Instruction {
+    // 移动和加载
+    Move { dst: Operand, src: Operand },
+    Load { dst: Operand, src: Operand },
+    Store { dst: Operand, src: Operand },
+
+    // 算术运算
+    Add { dst: Operand, lhs: Operand, rhs: Operand },
+    Sub { dst: Operand, lhs: Operand, rhs: Operand },
+    Mul { dst: Operand, lhs: Operand, rhs: Operand },
+    Div { dst: Operand, lhs: Operand, rhs: Operand },
+    Mod { dst: Operand, lhs: Operand, rhs: Operand },
+    Neg { dst: Operand, src: Operand },
+
+    // 比较
+    Eq { dst: Operand, lhs: Operand, rhs: Operand },
+    Ne { dst: Operand, lhs: Operand, rhs: Operand },
+    Lt { dst: Operand, lhs: Operand, rhs: Operand },
+    Le { dst: Operand, lhs: Operand, rhs: Operand },
+    Gt { dst: Operand, lhs: Operand, rhs: Operand },
+    Ge { dst: Operand, lhs: Operand, rhs: Operand },
+
+    // 控制流
+    Jmp(u32),
+    JmpIf(Operand, u32),
+    JmpIfNot(Operand, u32),
+    Ret(Option<Operand>),
+
+    // 函数调用
+    Call { dst: Option<Operand>, func: Operand, args: Vec<Operand> },
+    TailCall { func: Operand, args: Vec<Operand> },
+
+    // 内存操作
+    Alloc { dst: Operand, size: Operand },
+    Free(Operand),
+    HeapAlloc { dst: Operand, type_id: u32 },
+
+    // 类型操作
+    Cast { dst: Operand, src: Operand, target_type: u32 },
+    TypeTest(Operand, u32),
+
+    // 并发
+    Spawn { func: Operand },
+    Await(Operand),
+    Yield,
+
+    // 闭包
+    MakeClosure { dst: Operand, func: Operand, env: Vec<Operand> },
+}
+```
+
+#### 3.2.2 代码生成器 (codegen/)
+**职责**：将 IR 转换为类型化字节码
 
 **核心文件**：
-- `mod.rs` - IR 定义
+- `mod.rs` - 代码生成入口和配置
+- `bytecode.rs` - 字节码文件格式
+- `expr.rs` - 表达式代码生成
+- `stmt.rs` - 语句代码生成
+- `control_flow.rs` - 控制流代码生成
+- `loop_gen.rs` - 循环代码生成
+- `switch.rs` - 模式匹配代码生成
+- `closure.rs` - 闭包处理
+- `generator.rs` - 代码生成器核心
+- `tests/` - 测试用例
 
-**IR 特点**：
-- SSA (Static Single Assignment) 形式
-- 支持控制流图 (CFG)
-- 易于优化和转换
+**关键数据结构**：
+```rust
+// 代码生成上下文
+pub struct CodegenContext {
+    module: ModuleIR,
+    symbol_table: SymbolTable,
+    constant_pool: ConstantPool,
+    bytecode: Vec<u8>,
+    current_function: Option<FunctionIR>,
+    register_allocator: RegisterAllocator,
+    label_generator: LabelGenerator,
+    config: CodegenConfig,
+}
 
-#### 3.2.2 优化器 (optimizer/)
-**职责**：对 IR 进行各种优化
+// 字节码文件格式
+pub struct BytecodeFile {
+    pub header: BytecodeHeader,
+    pub type_table: Vec<MonoType>,
+    pub const_pool: Vec<ConstValue>,
+    pub code_section: CodeSection,
+}
+
+// 字节码指令
+pub struct BytecodeInstruction {
+    pub opcode: TypedOpcode,
+    pub operands: Vec<u8>,
+}
+
+// 操作码（带类型）
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TypedOpcode {
+    Nop, Mov,
+    // 整数运算
+    I64Add, I64Sub, I64Mul, I64Div, I64Rem, I64Neg,
+    I64Eq, I64Ne, I64Lt, I64Le, I64Gt, I64Ge,
+    // 内存操作
+    StackAlloc, HeapAlloc, LoadConst,
+    // 控制流
+    Jmp, JmpIf, JmpIfNot, Return, ReturnValue,
+    // 函数调用
+    Call, TailCall,
+    // 列表操作
+    NewList, NewListWithCap, LoadElement, StoreElement,
+    // 类型操作
+    Cast, TypeCheck,
+    // 闭包
+    MakeClosure, LoadEnv,
+    // 其他
+    Drop, Yield,
+}
+```
+
+**设计特点**：
+- **类型化指令**：每条指令携带明确的类型信息
+- **寄存器架构**：所有操作在寄存器上进行
+- **单态化输出**：泛型已在编译期展开
+
+#### 3.2.3 优化器 (optimizer.rs)
+**职责**：对 IR 进行各种优化（单文件模块）
 
 **优化类型**：
 - **常量折叠**：编译时计算常量表达式
 - **死代码消除**：移除不可达代码
-- **循环优化**：循环展开、不变量外提
-- **内联优化**：函数内联
+- **公共子表达式消除**：避免重复计算
+- **代数简化**：优化运算表达式
 
-#### 3.2.3 单态化 (monomorphize/)
+#### 3.2.4 单态化 (monomorphize/)
 **职责**：将泛型代码转换为具体版本
 
 **核心文件**：
 - `mod.rs` - 单态化入口
 - `instance.rs` - 实例管理
+- `tests/` - 测试用例
 
-**处理流程**：
-1. 收集所有泛型函数调用
-2. 根据实际类型参数生成具体版本
-3. 替换原调用为具体版本
-
-#### 3.2.4 逃逸分析 (escape_analysis/)
+#### 3.2.5 逃逸分析 (escape_analysis/)
 **职责**：分析值的生命周期，优化内存分配
 
 **核心文件**：
@@ -273,59 +514,15 @@ pub struct TypeContext {
 - 识别需要堆分配的值
 - 优化所有权转移
 
-#### 3.2.5 代码生成器 (codegen/)
-**职责**：生成字节码
+#### 3.2.6 生命周期分析 (lifetime/)
+**职责**：分析值的生命周期和作用域
 
 **核心文件**：
-- `mod.rs` - 代码生成入口
-- `bytecode.rs` - 字节码定义
-- `expr.rs` - 表达式代码生成
-- `stmt.rs` - 语句代码生成
-- `control_flow.rs` - 控制流代码生成
-- `loop_gen.rs` - 循环代码生成
-- `switch.rs` - 模式匹配代码生成
-- `closure.rs` - 闭包处理
-
-**字节码示例**：
-```rust
-pub enum Instruction {
-    // 栈操作
-    PushConstant(u32),
-    Pop,
-    Dup,
-    
-    // 变量操作
-    LoadLocal(u32),
-    StoreLocal(u32),
-    LoadGlobal(u32),
-    StoreGlobal(u32),
-    
-    // 函数调用
-    Call(u32),        // 调用函数
-    Return,           // 返回
-    TailCall(u32),    // 尾调用优化
-    
-    // 控制流
-    Jump(u32),        // 无条件跳转
-    JumpIf(u32),      // 条件跳转
-    Loop(u32),        // 循环跳转
-    
-    // 运算
-    Add, Sub, Mul, Div,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    
-    // 并发
-    Spawn(u32),       // 创建并作任务
-    Await,            // 等待异步值
-    
-    // 类型操作
-    Cast,             // 类型转换
-    Is,               // 类型检查
-    // ...
-}
-```
+- `mod.rs` - 生命周期分析器
 
 ### 3.3 运行时 (src/runtime/)
+
+运行时负责程序执行时的资源管理和任务调度。
 
 #### 3.3.1 并作图 (dag/)
 **职责**：管理并作任务的依赖关系
@@ -334,23 +531,33 @@ pub enum Instruction {
 - `mod.rs` - DAG 模块入口
 - `node.rs` - 节点定义
 - `node_id.rs` - 节点 ID 管理
+- `graph.rs` - 图操作
+- `tests/` - 测试用例
 
 **关键数据结构**：
 ```rust
-pub struct Node {
+// 并作图节点
+pub struct DagNode {
     pub id: NodeId,
-    pub deps: Vec<NodeId>,        // 依赖的节点
-    pub task: Option<Task>,       // 关联的任务
-    pub result: Option<Value>,    // 计算结果
-    pub status: NodeStatus,       // 节点状态
+    pub task_id: Option<TaskId>,
+    pub deps: Vec<NodeId>,
+    pub status: NodeStatus,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum NodeStatus {
-    Pending,      // 等待依赖
-    Ready,        // 可以执行
-    Running,      // 执行中
-    Completed,    // 已完成
-    Failed,       // 失败
+    Pending,  // 等待依赖
+    Ready,    // 可以执行
+    Running,  // 执行中
+    Completed,// 已完成
+    Failed,   // 失败
+}
+
+// 并作图
+pub struct Dag {
+    nodes: HashMap<NodeId, DagNode>,
+    edges: HashMap<NodeId, HashSet<NodeId>>,
+    node_counter: u32,
 }
 ```
 
@@ -360,8 +567,9 @@ pub enum NodeStatus {
 **核心文件**：
 - `mod.rs` - 调度器入口
 - `task.rs` - 任务定义
-- `queue.rs` - 工作队列
+- `queue.rs` - 任务队列
 - `work_stealer.rs` - 工作窃取算法
+- `tests/` - 测试用例
 
 **调度策略**：
 - **工作窃取 (Work Stealing)**：多线程负载均衡
@@ -370,22 +578,27 @@ pub enum NodeStatus {
 
 **关键数据结构**：
 ```rust
+// 任务
 pub struct Task {
     pub id: TaskId,
-    pub fiber: Fiber,              // 协程/纤程
-    pub priority: u8,
-    pub affinity: Option<usize>,   // CPU 亲和性
+    pub func_idx: FuncId,
+    pub args: Vec<Value>,
+    pub status: TaskStatus,
+    pub result: Option<Value>,
 }
 
+// 调度器
 pub struct Scheduler {
     pub workers: Vec<Worker>,
     pub global_queue: TaskQueue,
-    pub blocking_pool: ThreadPool, // 阻塞任务线程池
+    pub tasks: HashMap<TaskId, Task>,
+    pub dag: Dag,
+    pub config: SchedulerConfig,
 }
 ```
 
 #### 3.3.3 内存管理 (memory/)
-**职责**：堆分配、垃圾回收（如果需要）、内存布局
+**职责**：堆分配、内存布局
 
 **核心文件**：
 - `mod.rs` - 内存管理入口
@@ -398,6 +611,8 @@ pub struct Scheduler {
 
 ### 3.4 虚拟机 (src/vm/)
 
+虚拟机负责执行字节码。
+
 #### 3.4.1 执行器 (executor.rs)
 **职责**：执行字节码
 
@@ -407,22 +622,43 @@ pub struct Scheduler {
 - 寄存器操作
 - 异常处理
 
-**执行循环**：
+**关键数据结构**：
 ```rust
-loop {
-    let instr = self.fetch();
-    match instr {
-        Instruction::PushConstant(idx) => {
-            let value = self.get_constant(idx);
-            self.push_stack(value);
-        }
-        Instruction::Add => {
-            let b = self.pop_stack();
-            let a = self.pop_stack();
-            self.push_stack(a + b);
-        }
-        // ... 其他指令
-    }
+// 虚拟机
+pub struct VM {
+    pub stack: Vec<Value>,
+    pub frames: Vec<CallFrame>,
+    pub ip: usize,
+    pub constant_pool: Vec<Value>,
+    pub globals: HashMap<String, Value>,
+    pub config: VMConfig,
+}
+
+// 调用帧
+pub struct CallFrame {
+    pub func_idx: u32,
+    pub return_addr: u32,
+    pub base_ptr: u32,
+    pub closure: Option<Closure>,
+}
+
+// 值类型
+#[derive(Debug, Clone)]
+pub enum Value {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Char(char),
+    String(String),
+    Unit,
+    List(Rc<RefCell<Vec<Value>>>),
+    Dict(Rc<RefCell<HashMap<String, Value>>>),
+    Tuple(Vec<Value>),
+    Function(FuncId),
+    Closure(Closure),
+    Task(TaskId),
+    Ref(RefCell<Value>),
+    Object(HeapPtr),
 }
 ```
 
@@ -445,16 +681,35 @@ pub struct CallFrame {
 #### 3.4.4 操作码 (opcode.rs)
 **职责**：操作码常量定义
 
+#### 3.4.5 内联缓存 (inline_cache.rs)
+**职责**：类型检查结果缓存，加速动态分发
+
+**关键数据结构**：
+```rust
+pub struct InlineCache {
+    pub caches: HashMap<(TypeId, String), FuncId>,
+}
+```
+
 ### 3.5 标准库 (src/std/)
 
-提供基础功能：
-- **io.rs**：文件、控制台 I/O
-- **string.rs**：字符串操作
-- **list.rs**：动态数组
-- **dict.rs**：哈希表
-- **math.rs**：数学函数
-- **concurrent.rs**：并发原语（Channel, Mutex, RwLock）
-- **net.rs**：网络编程
+**核心文件**：
+- `mod.rs` - 标准库入口
+- `io.rs` - 文件、控制台 I/O
+- `string.rs` - 字符串操作
+- `list.rs` - 动态数组
+- `dict.rs` - 哈希表
+- `math.rs` - 数学函数
+- `concurrent.rs` - 并发原语（Channel, Mutex）
+- `net.rs` - 网络编程（实验性）
+
+### 3.6 工具库 (src/util/)
+
+**核心文件**：
+- `mod.rs` - 工具入口
+- `span.rs` - 源码位置信息
+- `diagnostic.rs` - 诊断系统
+- `cache.rs` - 缓存工具
 
 ---
 
@@ -469,9 +724,9 @@ pub struct CallFrame {
   ↓
 [语法分析] → AST
   ↓
-[类型检查] → 带类型的 AST
+[类型检查] → 带类型的 AST + 类型约束
   ↓
-[中间表示] → IR
+[IR 生成] → IR (SSA 形式)
   ↓
 [优化] → 优化后的 IR
   ↓
@@ -587,24 +842,28 @@ middle/ir
   ↓ (依赖 typecheck)
   ↓ (被 optimizer, monomorphize, codegen 依赖)
 
-middle/optimizer
+middle/optimizer.rs
   ↓ (依赖 ir, 修改 IR)
 
 middle/monomorphize
   ↓ (依赖 ir, 生成具体 IR)
 
+middle/escape_analysis
+  ↓ (依赖 ir)
+
+middle/lifetime
+  ↓ (依赖 ir)
+
 middle/codegen
   ↓ (依赖 ir, 生成字节码)
-  ↓ (输出给 runtime)
-
-runtime/scheduler
-  ↓ (执行字节码)
-
-runtime/dag
-  ↓ (管理并作依赖)
+  ↓ (输出给 vm)
 
 vm/
   ↓ (执行字节码)
+
+runtime/
+  ↓ (提供调度器和内存管理)
+  ↓ (被 vm 依赖)
 ```
 
 ### 6.2 运行时依赖
@@ -616,9 +875,27 @@ vm/executor
 runtime/scheduler
   ↓ (依赖 runtime/task, runtime/dag)
 
+runtime/dag
+  ↓ (管理并作依赖)
+
 runtime/memory
   ↓ (被所有模块依赖)
 ```
+
+### 6.3 Cargo.toml 依赖关系
+
+**直接依赖**：
+- `parking_lot` - 高性能锁
+- `crossbeam` - 并发数据结构
+- `rayon` - 数据并行
+- `once_cell` - 单次初始化
+- `indexmap` - 有序哈希表
+- `hashbrown` - 高性能哈希表
+- `smallvec` - 栈上小向量
+- `regex` - 正则表达式
+- `serde` / `ron` - 序列化
+- `anyhow` / `thiserror` - 错误处理
+- `clap` - 命令行解析
 
 ---
 
@@ -731,23 +1008,6 @@ Git 分支策略：
 - [ ] 实时编译 (JIT)
 - [ ] 并发模型优化
 - [ ] 异步 I/O 集成
-
----
-
-## 十、参考资源
-
-### 10.1 类似项目
-- **Rust**：所有权模型、零成本抽象
-- **LLVM**：编译器基础设施
-- **V8**：JavaScript 引擎（字节码、JIT）
-- **Lua**：轻量级虚拟机
-- **Erlang**：并作模型、Actor 模型
-
-### 10.2 学术资料
-- **类型论**：HM 类型推断、依赖类型
-- **编译原理**：龙书、虎书、鲸书
-- **并发模型**：CSP、Actor、并行函数式
-- **内存管理**：逃逸分析、区域推断
 
 ---
 

@@ -1,8 +1,8 @@
 # YaoXiang 运行时设计文档
 
-> 版本：v1.0.0
+> 版本：v2.0.0
 > 状态：正式
-> 作者：晨煦
+> 作者：沫郁酱
 > 日期：2025-01-04
 
 ---
@@ -11,1157 +11,1427 @@
 
 1. [概述](#一概述)
 2. [虚拟机设计](#二虚拟机设计)
-3. [并作模型实现](#三并作模型实现)
-4. [内存管理](#四内存管理)
-5. [调度器设计](#五调度器设计)
-6. [标准库集成](#六标准库集成)
+3. [并作模型](#三并作模型)
+4. [任务调度器](#四任务调度器)
+5. [内存管理](#五内存管理)
+6. [内联缓存](#六内联缓存)
 7. [性能优化](#七性能优化)
+8. [错误处理](#八错误处理)
 
 ---
 
 ## 一、概述
 
-YaoXiang 运行时系统是一个高性能的执行环境，核心特性包括：
-- **字节码虚拟机**：执行编译后的指令流
-- **并作并发模型**：自动并行化，零认知负担
-- **所有权内存管理**：编译时保证安全，运行时零开销
-- **多线程调度器**：工作窃取，负载均衡
+YaoXiang 运行时系统负责执行编译生成的字节码，并提供程序运行所需的基础设施。运行时设计的核心目标是：
 
-### 运行时架构总览
+- **高效执行**：优化的字节码解释器，最大化执行性能
+- **安全并发**：无数据竞争的任务调度，支持并作模型
+- **内存安全**：自动内存管理，防止内存泄漏和悬挂指针
+- **可观测性**：提供运行时监控和诊断能力
+
+### 运行时组件总览
 
 ```
-字节码输入
-  ↓
 ┌─────────────────────────────────────────────────────────┐
-│                    虚拟机执行器 (VM)                     │
+│                     运行时 (Runtime)                     │
 ├─────────────────────────────────────────────────────────┤
-│  指令分发 → 执行循环                                    │
-│  ↓                                                      │
-│  调用帧管理 → 函数调用栈                                │
-│  ↓                                                      │
-│  值栈管理 → 操作数栈                                    │
-│  ↓                                                      │
-│  内存访问 → 栈/堆/常量池                                │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+│  │   虚拟机    │  │  调度器     │  │    内存管理     │  │
+│  │  Executor  │  │ Scheduler  │  │    Memory      │  │
+│  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘  │
+│         │                │                   │           │
+│         └────────────────┼───────────────────┘           │
+│                          │                               │
+│                   ┌──────┴──────┐                        │
+│                   │   并作图    │                        │
+│                   │    DAG      │                        │
+│                   └─────────────┘                        │
 └─────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────┐
-│                  并作调度器 (Scheduler)                 │
-├─────────────────────────────────────────────────────────┤
-│  任务生成 → 并作图节点                                   │
-│  ↓                                                      │
-│  依赖追踪 → DAG 管理                                    │
-│  ↓                                                      │
-│  工作窃取 → 多线程负载均衡                              │
-│  ↓                                                      │
-│  自动等待 → 惰性求值                                    │
-└─────────────────────────────────────────────────────────┘
-  ↓
-┌─────────────────────────────────────────────────────────┐
-│                  内存管理器 (Memory)                    │
-├─────────────────────────────────────────────────────────┤
-│  栈分配 → 局部变量                                      │
-│  堆分配 → 动态对象                                      │
-│  RAII → 自动资源清理                                    │
-│  引用计数 → 共享对象                                    │
-└─────────────────────────────────────────────────────────┘
-  ↓
-执行结果
+```
+
+### 核心文件结构
+
+```
+src/runtime/
+├── mod.rs                  # 运行时模块入口
+├── dag/                    # 并作图（DAG）
+│   ├── mod.rs              # DAG 模块入口
+│   ├── node_id.rs          # 节点 ID 管理
+│   ├── node.rs             # 节点定义
+│   ├── graph.rs            # 图操作
+│   └── tests/
+├── scheduler/              # 任务调度器
+│   ├── mod.rs              # 调度器入口
+│   ├── task.rs             # 任务定义
+│   ├── queue.rs            # 任务队列
+│   ├── work_stealer.rs     # 工作窃取算法
+│   └── tests/
+└── memory/                 # 内存管理
+    ├── mod.rs              # 内存管理入口
+    └── tests/
+
+src/vm/
+├── mod.rs                  # 虚拟机入口
+├── executor.rs             # 执行器
+├── frames.rs               # 调用帧
+├── instructions.rs         # 指令集
+├── opcode.rs               # 操作码定义
+├── inline_cache.rs         # 内联缓存
+├── errors.rs               # VM 错误
+└── tests/
 ```
 
 ---
 
 ## 二、虚拟机设计
 
-### 2.1 虚拟机核心结构
+### 2.1 虚拟机架构
+
+**核心文件**：`src/vm/mod.rs`, `src/vm/executor.rs`
+
+YaoXiang 虚拟机采用基于栈的字节码解释器设计，兼顾执行效率和实现简洁性。
 
 ```rust
-pub struct VirtualMachine {
-    // 执行状态
-    pub stack: Vec<Value>,              // 操作数栈
-    pub frames: Vec<CallFrame>,         // 调用帧栈
-    pub ip: usize,                      // 指针指针（当前帧内）
-    
-    // 内存区域
-    pub constant_pool: Vec<Value>,      // 常量池
-    pub globals: HashMap<String, Value>, // 全局变量
-    
-    // 字节码
-    pub bytecode: Vec<u8>,              // 指令流
-    pub functions: Vec<FunctionHeader>, // 函数表
-    
-    // 执行上下文
-    pub scheduler: Scheduler,           // 并作调度器
-    pub heap: Heap,                     // 堆管理器
-    
-    // 异常处理
-    pub exception_handler: Option<ExceptionHandler>,
+/// 虚拟机
+///
+/// 基于栈的解释器，执行编译生成的字节码。
+pub struct VM {
+    /// 操作数栈
+    pub stack: Vec<Value>,
+
+    /// 调用帧栈
+    pub frames: Vec<CallFrame>,
+
+    /// 指令指针
+    pub ip: usize,
+
+    /// 常量池
+    pub constant_pool: Vec<Value>,
+
+    /// 全局变量
+    pub globals: HashMap<String, Value>,
+
+    /// 配置
+    pub config: VMConfig,
+
+    /// 内联缓存
+    pub inline_cache: InlineCache,
+
+    /// 调度器（用于并发任务）
+    pub scheduler: Option<Scheduler>,
 }
 
 #[derive(Debug, Clone)]
-pub struct CallFrame {
-    pub func_idx: u32,          // 函数索引
-    pub return_addr: u32,       // 返回地址（在字节码中的位置）
-    pub base_ptr: u32,          // 栈基址（当前帧在栈中的起始位置）
-    pub closure: Option<Closure>, // 闭包环境
+pub struct VMConfig {
+    /// 最大栈大小
+    pub max_stack_size: usize,
+    /// 最大调用帧深度
+    pub max_call_depth: usize,
+    /// 是否启用内联缓存
+    pub enable_inline_cache: bool,
+    /// 跟踪执行
+    pub trace_execution: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct FunctionHeader {
-    pub name: String,
-    pub arity: u8,              // 参数个数
-    pub entry_point: u32,       // 入口地址
-    pub is_native: bool,        // 是否是原生函数
-}
-```
-
-### 2.2 执行循环
-
-```rust
-impl VirtualMachine {
-    pub fn run(&mut self, func_id: FuncId) -> Result<Value, RuntimeError> {
-        // 设置初始调用帧
-        self.push_call_frame(func_id, 0);
-        
-        loop {
-            // 获取当前指令
-            let instr = self.fetch_instruction()?;
-            
-            match instr {
-                // 栈操作
-                Instruction::PushConstant(idx) => {
-                    let value = self.constant_pool[idx as usize].clone();
-                    self.push_stack(value);
-                }
-                
-                Instruction::Pop => {
-                    self.pop_stack();
-                }
-                
-                Instruction::Dup => {
-                    let top = self.peek_stack(0)?;
-                    self.push_stack(top);
-                }
-                
-                // 变量操作
-                Instruction::LoadLocal(slot) => {
-                    let value = self.get_local(slot)?;
-                    self.push_stack(value);
-                }
-                
-                Instruction::StoreLocal(slot) => {
-                    let value = self.pop_stack()?;
-                    self.set_local(slot, value);
-                }
-                
-                Instruction::LoadGlobal(idx) => {
-                    let name = self.get_global_name(idx)?;
-                    let value = self.globals.get(&name)
-                        .ok_or_else(|| RuntimeError::UndefinedGlobal(name))?;
-                    self.push_stack(value.clone());
-                }
-                
-                Instruction::StoreGlobal(idx) => {
-                    let value = self.pop_stack()?;
-                    let name = self.get_global_name(idx)?;
-                    self.globals.insert(name, value);
-                }
-                
-                // 算术运算
-                Instruction::Add => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    let result = self.add_values(a, b)?;
-                    self.push_stack(result);
-                }
-                
-                Instruction::Sub => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    let result = self.sub_values(a, b)?;
-                    self.push_stack(result);
-                }
-                
-                Instruction::Mul => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    let result = self.mul_values(a, b)?;
-                    self.push_stack(result);
-                }
-                
-                Instruction::Div => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    let result = self.div_values(a, b)?;
-                    self.push_stack(result);
-                }
-                
-                // 比较运算
-                Instruction::Eq => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(a == b));
-                }
-                
-                Instruction::Ne => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(a != b));
-                }
-                
-                Instruction::Lt => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(self.compare(a, b)? < 0));
-                }
-                
-                Instruction::Le => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(self.compare(a, b)? <= 0));
-                }
-                
-                Instruction::Gt => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(self.compare(a, b)? > 0));
-                }
-                
-                Instruction::Ge => {
-                    let b = self.pop_stack()?;
-                    let a = self.pop_stack()?;
-                    self.push_stack(Value::Bool(self.compare(a, b)? >= 0));
-                }
-                
-                // 控制流
-                Instruction::Jump(addr) => {
-                    self.jump(addr);
-                }
-                
-                Instruction::JumpIf(addr) => {
-                    let cond = self.pop_stack()?;
-                    if self.is_truthy(cond) {
-                        self.jump(addr);
-                    }
-                }
-                
-                Instruction::Call(func_idx) => {
-                    self.call_function(func_idx)?;
-                }
-                
-                Instruction::TailCall(func_idx) => {
-                    self.tail_call_function(func_idx)?;
-                }
-                
-                Instruction::Return => {
-                    let result = if self.has_return_value()? {
-                        Some(self.pop_stack()?)
-                    } else {
-                        None
-                    };
-                    
-                    if !self.pop_call_frame(result)? {
-                        // 主函数返回，结束执行
-                        return Ok(result.unwrap_or(Value::Unit));
-                    }
-                }
-                
-                // 并发
-                Instruction::Spawn(func_idx) => {
-                    let task_id = self.spawn_task(func_idx)?;
-                    self.push_stack(Value::Task(task_id));
-                }
-                
-                Instruction::Await => {
-                    let task_id = self.pop_stack()?;
-                    let result = self.await_task(task_id)?;
-                    self.push_stack(result);
-                }
-                
-                // 类型操作
-                Instruction::Cast => {
-                    let target_type = self.pop_type()?;
-                    let value = self.pop_stack()?;
-                    let result = self.cast_value(value, target_type)?;
-                    self.push_stack(result);
-                }
-                
-                Instruction::Is => {
-                    let target_type = self.pop_type()?;
-                    let value = self.pop_stack()?;
-                    let is_match = self.type_check(value, target_type)?;
-                    self.push_stack(Value::Bool(is_match));
-                }
-                
-                // 错误处理
-                Instruction::Halt => {
-                    return Err(RuntimeError::Halted);
-                }
-                
-                _ => {
-                    return Err(RuntimeError::UnknownInstruction);
-                }
-            }
-            
-            // 检查栈深度限制
-            if self.stack.len() > MAX_STACK_DEPTH {
-                return Err(RuntimeError::StackOverflow);
-            }
-        }
-    }
-    
-    fn fetch_instruction(&mut self) -> Result<Instruction, RuntimeError> {
-        let frame = self.frames.last()
-            .ok_or_else(|| RuntimeError::NoCallFrame)?;
-        
-        if self.ip >= self.bytecode.len() {
-            return Ok(Instruction::Return);
-        }
-        
-        let byte = self.bytecode[self.ip];
-        self.ip += 1;
-        
-        // 指令解码（简化版）
-        let instr = match byte {
-            0x01 => Instruction::PushConstant(self.read_u32()?),
-            0x02 => Instruction::Pop,
-            0x03 => Instruction::Dup,
-            0x10 => Instruction::LoadLocal(self.read_u8()?),
-            0x11 => Instruction::StoreLocal(self.read_u8()?),
-            0x12 => Instruction::LoadGlobal(self.read_u32()?),
-            0x13 => Instruction::StoreGlobal(self.read_u32()?),
-            0x20 => Instruction::Add,
-            0x21 => Instruction::Sub,
-            0x22 => Instruction::Mul,
-            0x23 => Instruction::Div,
-            0x30 => Instruction::Eq,
-            0x31 => Instruction::Ne,
-            0x32 => Instruction::Lt,
-            0x33 => Instruction::Le,
-            0x34 => Instruction::Gt,
-            0x35 => Instruction::Ge,
-            0x40 => Instruction::Jump(self.read_u32()?),
-            0x41 => Instruction::JumpIf(self.read_u32()?),
-            0x42 => Instruction::Call(self.read_u32()?),
-            0x43 => Instruction::TailCall(self.read_u32()?),
-            0x44 => Instruction::Return,
-            0x50 => Instruction::Spawn(self.read_u32()?),
-            0x51 => Instruction::Await,
-            0x60 => Instruction::Cast,
-            0x61 => Instruction::Is,
-            0xFF => Instruction::Halt,
-            _ => return Err(RuntimeError::UnknownInstruction),
-        };
-        
-        Ok(instr)
-    }
-    
-    fn read_u8(&mut self) -> Result<u8, RuntimeError> {
-        if self.ip >= self.bytecode.len() {
-            return Err(RuntimeError::UnexpectedEof);
-        }
-        let byte = self.bytecode[self.ip];
-        self.ip += 1;
-        Ok(byte)
-    }
-    
-    fn read_u32(&mut self) -> Result<u32, RuntimeError> {
-        if self.ip + 3 >= self.bytecode.len() {
-            return Err(RuntimeError::UnexpectedEof);
-        }
-        let bytes = &self.bytecode[self.ip..self.ip + 4];
-        let value = u32::from_be_bytes(bytes.try_into().unwrap());
-        self.ip += 4;
-        Ok(value)
-    }
-}
-```
-
-### 2.3 栈管理
-
-```rust
-impl VirtualMachine {
-    fn push_stack(&mut self, value: Value) {
-        self.stack.push(value);
-    }
-    
-    fn pop_stack(&mut self) -> Result<Value, RuntimeError> {
-        self.stack.pop()
-            .ok_or_else(|| RuntimeError::StackUnderflow)
-    }
-    
-    fn peek_stack(&self, depth: usize) -> Result<Value, RuntimeError> {
-        if depth >= self.stack.len() {
-            return Err(RuntimeError::StackUnderflow);
-        }
-        let idx = self.stack.len() - 1 - depth;
-        Ok(self.stack[idx].clone())
-    }
-    
-    fn get_local(&self, slot: u8) -> Result<Value, RuntimeError> {
-        let frame = self.frames.last()
-            .ok_or_else(|| RuntimeError::NoCallFrame)?;
-        let idx = (frame.base_ptr + slot as u32) as usize;
-        
-        if idx >= self.stack.len() {
-            return Err(RuntimeError::InvalidLocal);
-        }
-        
-        Ok(self.stack[idx].clone())
-    }
-    
-    fn set_local(&mut self, slot: u8, value: Value) -> Result<(), RuntimeError> {
-        let frame = self.frames.last()
-            .ok_or_else(|| RuntimeError::NoCallFrame)?;
-        let idx = (frame.base_ptr + slot as u32) as usize;
-        
-        if idx >= self.stack.len() {
-            return Err(RuntimeError::InvalidLocal);
-        }
-        
-        self.stack[idx] = value;
-        Ok(())
-    }
-}
-```
-
-### 2.4 调用帧管理
-
-```rust
-impl VirtualMachine {
-    fn push_call_frame(&mut self, func_idx: FuncId, return_addr: u32) {
-        let func = &self.functions[func_idx.0 as usize];
-        
-        let frame = CallFrame {
-            func_idx: func_idx.0,
-            return_addr,
-            base_ptr: self.stack.len() as u32,
-            closure: None,
-        };
-        
-        self.frames.push(frame);
-        self.ip = func.entry_point as usize;
-    }
-    
-    fn pop_call_frame(&mut self, result: Option<Value>) -> Result<bool, RuntimeError> {
-        let frame = self.frames.pop()
-            .ok_or_else(|| RuntimeError::NoCallFrame)?;
-        
-        // 清理参数和局部变量
-        let cleanup_count = self.stack.len() - frame.base_ptr as usize;
-        self.stack.truncate(frame.base_ptr as usize);
-        
-        // 如果有返回值，压入栈
-        if let Some(ret_val) = result {
-            self.push_stack(ret_val);
-        }
-        
-        // 恢复上一帧的执行位置
-        if let Some(prev_frame) = self.frames.last() {
-            self.ip = prev_frame.return_addr as usize;
-            Ok(true)  // 继续执行
-        } else {
-            Ok(false)  // 主函数返回
-        }
-    }
-    
-    fn call_function(&mut self, func_idx: u32) -> Result<(), RuntimeError> {
-        let func = &self.functions[func_idx as usize];
-        
-        if func.is_native {
-            // 调用原生函数
-            self.call_native(func_idx)?;
-        } else {
-            // 普通函数调用
-            let return_addr = self.ip as u32;
-            self.push_call_frame(FuncId(func_idx), return_addr);
-        }
-        
-        Ok(())
-    }
-    
-    fn tail_call_function(&mut self, func_idx: u32) -> Result<(), RuntimeError> {
-        // 尾调用优化：复用当前调用帧
-        let frame = self.frames.last_mut()
-            .ok_or_else(|| RuntimeError::NoCallFrame)?;
-        
-        // 保存当前栈顶的参数
-        let func = &self.functions[func_idx as usize];
-        let args: Vec<Value> = self.stack.drain(
-            self.stack.len() - func.arity as usize..
-        ).collect();
-        
-        // 清理当前帧的局部变量
-        self.stack.truncate(frame.base_ptr as usize);
-        
-        // 更新帧信息
-        frame.func_idx = func_idx;
-        self.ip = func.entry_point as usize;
-        
-        // 重新压入参数
-        for arg in args {
-            self.push_stack(arg);
-        }
-        
-        Ok(())
-    }
-    
-    fn call_native(&mut self, func_idx: u32) -> Result<(), RuntimeError> {
-        // 从栈中获取参数
-        let func = &self.functions[func_idx as usize];
-        let arg_count = func.arity as usize;
-        
-        let args = if arg_count > 0 {
-            let start = self.stack.len() - arg_count;
-            self.stack.drain(start..).collect()
-        } else {
-            Vec::new()
-        };
-        
-        // 执行原生函数
-        let result = self.execute_native(func_idx, args)?;
-        
-        // 压入结果
-        if let Some(value) = result {
-            self.push_stack(value);
-        }
-        
-        Ok(())
-    }
-}
-```
-
----
-
-## 三、并作模型实现
-
-### 3.1 任务与并作图
-
-```rust
-// 任务状态
-#[derive(Debug, Clone)]
-pub struct Task {
-    pub id: TaskId,
-    pub func_idx: FuncId,
-    pub args: Vec<Value>,
-    pub status: TaskStatus,
-    pub result: Option<Value>,
-    pub deps: Vec<TaskId>,  // 依赖的任务
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TaskStatus {
-    Pending,      // 等待依赖
-    Ready,        // 可以执行
-    Running,      // 执行中
-    Completed,    // 已完成
-    Failed,       // 失败
-}
-
-// 并作图节点
-#[derive(Debug, Clone)]
-pub struct DagNode {
-    pub id: NodeId,
-    pub task_id: Option<TaskId>,
-    pub deps: Vec<NodeId>,  // 依赖的节点
-    pub status: NodeStatus,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum NodeStatus {
-    Pending,
-    Ready,
-    Running,
-    Completed,
-    Failed,
-}
-
-// 并作图
-pub struct Dag {
-    nodes: HashMap<NodeId, DagNode>,
-    node_counter: u32,
-}
-
-impl Dag {
-    pub fn new() -> Self {
+impl Default for VMConfig {
+    fn default() -> Self {
         Self {
-            nodes: HashMap::new(),
-            node_counter: 0,
-        }
-    }
-    
-    pub fn create_node(&mut self, task_id: Option<TaskId>, deps: Vec<NodeId>) -> NodeId {
-        let id = NodeId(self.node_counter);
-        self.node_counter += 1;
-        
-        let node = DagNode {
-            id,
-            task_id,
-            deps,
-            status: if deps.is_empty() {
-                NodeStatus::Ready
-            } else {
-                NodeStatus::Pending
-            },
-        };
-        
-        self.nodes.insert(id, node);
-        id
-    }
-    
-    pub fn get_ready_nodes(&self) -> Vec<NodeId> {
-        self.nodes.values()
-            .filter(|n| n.status == NodeStatus::Ready)
-            .map(|n| n.id)
-            .collect()
-    }
-    
-    pub fn mark_completed(&mut self, node_id: NodeId) {
-        if let Some(node) = self.nodes.get_mut(&node_id) {
-            node.status = NodeStatus::Completed;
-            
-            // 检查依赖此节点的其他节点
-            for other in self.nodes.values_mut() {
-                if other.deps.contains(&node_id) {
-                    // 移除已完成的依赖
-                    other.deps.retain(|&d| d != node_id);
-                    // 如果所有依赖都完成，标记为就绪
-                    if other.deps.is_empty() {
-                        other.status = NodeStatus::Ready;
-                    }
-                }
-            }
-        }
-    }
-    
-    pub fn mark_failed(&mut self, node_id: NodeId, error: RuntimeError) {
-        if let Some(node) = self.nodes.get_mut(&node_id) {
-            node.status = NodeStatus::Failed;
-            // 传播失败到依赖节点
-            for other in self.nodes.values_mut() {
-                if other.deps.contains(&node_id) {
-                    other.status = NodeStatus::Failed;
-                }
-            }
+            max_stack_size: 1024,
+            max_call_depth: 256,
+            enable_inline_cache: true,
+            trace_execution: false,
         }
     }
 }
+
+/// 虚拟机状态
+#[derive(Debug, Clone, PartialEq)]
+pub enum VMStatus {
+    /// 正常运行
+    Running,
+    /// 等待（阻塞）
+    Waiting,
+    /// 已暂停
+    Paused,
+    /// 已完成
+    Completed,
+    /// 错误
+    Error(String),
+}
+
+/// 虚拟机执行结果
+pub type VMResult<T> = Result<T, VMError>;
 ```
 
-### 3.2 并作执行流程
+### 2.2 值类型系统
+
+**核心文件**：`src/vm/executor.rs`
 
 ```rust
-impl VirtualMachine {
-    // spawn 指令的实现
-    fn spawn_task(&mut self, func_idx: u32) -> Result<TaskId, RuntimeError> {
-        // 从栈中获取参数
-        let func = &self.functions[func_idx as usize];
-        let arg_count = func.arity as usize;
-        
-        let args = if arg_count > 0 {
-            let start = self.stack.len() - arg_count;
-            self.stack.drain(start..).collect()
-        } else {
-            Vec::new()
-        };
-        
-        // 创建任务
-        let task_id = self.scheduler.create_task(FuncId(func_idx), args);
-        
-        // 创建并作图节点
-        let deps = self.detect_dependencies(&args);
-        let node_id = self.scheduler.dag.create_node(Some(task_id), deps);
-        
-        // 如果节点就绪，提交到工作队列
-        if self.scheduler.dag.nodes[&node_id].status == NodeStatus::Ready {
-            self.scheduler.submit_task(task_id);
-        }
-        
-        Ok(task_id)
-    }
-    
-    // await 指令的实现
-    fn await_task(&mut self, task_id: Value) -> Result<Value, RuntimeError> {
-        let tid = match task_id {
-            Value::Task(id) => id,
-            _ => return Err(RuntimeError::TypeMismatch),
-        };
-        
-        // 检查任务状态
-        if let Some(task) = self.scheduler.tasks.get(&tid) {
-            match task.status {
-                TaskStatus::Completed => {
-                    return Ok(task.result.clone().unwrap());
-                }
-                TaskStatus::Failed => {
-                    return Err(RuntimeError::TaskFailed);
-                }
-                TaskStatus::Pending | TaskStatus::Ready | TaskStatus::Running => {
-                    // 需要等待
-                    // 这里会挂起当前任务，让出执行权
-                    self.scheduler.wait_for_task(tid);
-                    
-                    // 重新调度其他任务
-                    self.scheduler.run_to_completion()?;
-                    
-                    // 再次检查结果
-                    if let Some(task) = self.scheduler.tasks.get(&tid) {
-                        match task.status {
-                            TaskStatus::Completed => {
-                                return Ok(task.result.clone().unwrap());
-                            }
-                            TaskStatus::Failed => {
-                                return Err(RuntimeError::TaskFailed);
-                            }
-                            _ => return Err(RuntimeError::TaskNotReady),
-                        }
-                    }
-                }
-            }
-        }
-        
-        Err(RuntimeError::TaskNotFound)
-    }
-    
-    // 检测依赖关系
-    fn detect_dependencies(&self, args: &[Value]) -> Vec<NodeId> {
-        let mut deps = Vec::new();
-        
-        for arg in args {
-            if let Value::Task(task_id) = arg {
-                // 查找任务对应的节点
-                if let Some(node_id) = self.scheduler.get_node_for_task(*task_id) {
-                    // 检查节点是否已完成
-                    if let Some(node) = self.scheduler.dag.nodes.get(&node_id) {
-                        if node.status != NodeStatus::Completed {
-                            deps.push(node_id);
-                        }
-                    }
-                }
-            }
-        }
-        
-        deps
-    }
-}
-```
-
-### 3.3 惰性求值策略
-
-```rust
-// 并作值（代理对象）
-#[derive(Debug, Clone)]
-pub struct AsyncValue {
-    pub task_id: TaskId,
-    pub value: Option<Value>,
-}
-
-impl AsyncValue {
-    pub fn get(&self, vm: &VirtualMachine) -> Result<Value, RuntimeError> {
-        if let Some(val) = &self.value {
-            return Ok(val.clone());
-        }
-        
-        // 触发等待
-        let result = vm.await_task(Value::Task(self.task_id))?;
-        Ok(result)
-    }
-}
-
-// 在字节码层面，自动插入等待点
-// 例如：访问并作值的字段时
-// 原代码：data = fetch_data(); print(data.name)
-// 编译后：
-//   0. fetch_data() -> Task
-//   1. Await -> 实际值
-//   2. LoadField "name"
-//   3. print
-```
-
----
-
-## 四、内存管理
-
-### 4.1 值类型
-
-```rust
+/// 运行时代值
+///
+/// 表示运行时可能出现的所有值类型。
 #[derive(Debug, Clone)]
 pub enum Value {
-    // 原子类型
+    /// 布尔值
     Bool(bool),
+
+    /// 整数 (64位)
     Int(i64),
-    Uint(u64),
+
+    /// 浮点数 (64位)
     Float(f64),
+
+    /// 字符
+    Char(char),
+
+    /// 字符串
     String(String),
-    Unit,  // 空值
-    
-    // 复合类型
+
+    /// 空值
+    Unit,
+
+    /// 列表
     List(Rc<RefCell<Vec<Value>>>),
+
+    /// 字典
     Dict(Rc<RefCell<HashMap<String, Value>>>),
+
+    /// 元组
     Tuple(Vec<Value>),
-    
-    // 函数
+
+    /// 函数
     Function(FuncId),
+
+    /// 闭包
     Closure(Closure),
-    
-    // 并发
+
+    /// 任务（并发）
     Task(TaskId),
-    
-    // 引用
+
+    /// 可变引用
     Ref(RefCell<Value>),
-    
-    // 对象（堆分配）
+
+    /// 堆对象指针
     Object(HeapPtr),
 }
 
+/// 闭包
 #[derive(Debug, Clone)]
 pub struct Closure {
-    pub func_idx: FuncId,
-    pub env: HashMap<String, Value>,  // 捕获的变量
+    /// 函数 ID
+    pub func_id: FuncId,
+    /// 环境变量
+    pub env: Vec<Value>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct RefCell<T>(T);  // 简化的内部可变性
-```
-
-### 4.2 堆管理器
-
-```rust
-pub struct Heap {
-    // 简单的标记清除 GC
-    objects: HashMap<HeapPtr, HeapObject>,
-    next_ptr: u64,
-    allocated_bytes: usize,
-    gc_threshold: usize,
-}
-
+/// 堆指针
 #[derive(Debug, Clone)]
-pub struct HeapObject {
-    pub data: ObjectData,
-    pub marked: bool,
-    pub size: usize,
-}
+pub struct HeapPtr(pub usize);
 
-#[derive(Debug, Clone)]
-pub enum ObjectData {
-    // 大列表
-    LargeList(Vec<Value>),
-    
-    // 大字典
-    LargeDict(HashMap<String, Value>),
-    
-    // 自定义对象
-    Custom {
-        type_name: String,
-        fields: HashMap<String, Value>,
-    },
-}
+impl Value {
+    /// 获取值的类型名称
+    pub fn type_name(&self) -> String {
+        match self {
+            Value::Bool(_) => "bool".to_string(),
+            Value::Int(_) => "int".to_string(),
+            Value::Float(_) => "float".to_string(),
+            Value::Char(_) => "char".to_string(),
+            Value::String(_) => "string".to_string(),
+            Value::Unit => "void".to_string(),
+            Value::List(_) => "list".to_string(),
+            Value::Dict(_) => "dict".to_string(),
+            Value::Tuple(_) => "tuple".to_string(),
+            Value::Function(_) => "function".to_string(),
+            Value::Closure(_) => "closure".to_string(),
+            Value::Task(_) => "task".to_string(),
+            Value::Ref(_) => "ref".to_string(),
+            Value::Object(_) => "object".to_string(),
+        }
+    }
 
-impl Heap {
-    pub fn allocate(&mut self, data: ObjectData) -> HeapPtr {
-        let size = self.estimate_size(&data);
-        self.allocated_bytes += size;
-        
-        let ptr = HeapPtr(self.next_ptr);
-        self.next_ptr += 1;
-        
-        self.objects.insert(ptr, HeapObject {
-            data,
-            marked: false,
-            size,
-        });
-        
-        // 触发 GC
-        if self.allocated_bytes > self.gc_threshold {
-            self.collect_garbage();
-        }
-        
-        ptr
-    }
-    
-    fn estimate_size(&self, data: &ObjectData) -> usize {
-        match data {
-            ObjectData::LargeList(vec) => vec.len() * std::mem::size_of::<Value>(),
-            ObjectData::LargeDict(map) => map.len() * 64,  // 估算
-            ObjectData::Custom { fields, .. } => fields.len() * 64,
-        }
-    }
-    
-    pub fn collect_garbage(&mut self) {
-        // 标记阶段
-        self.mark_roots();
-        
-        // 清除阶段
-        self.sweep();
-        
-        // 调整阈值
-        self.gc_threshold = (self.allocated_bytes as f64 * 1.5) as usize;
-    }
-    
-    fn mark_roots(&mut self) {
-        // 标记栈上的对象引用
-        // 标记全局变量
-        // 标记任务中的值
-    }
-    
-    fn sweep(&mut self) {
-        let mut to_remove = Vec::new();
-        
-        for (ptr, obj) in self.objects.iter_mut() {
-            if !obj.marked {
-                to_remove.push(*ptr);
-                self.allocated_bytes -= obj.size;
-            } else {
-                obj.marked = false;  // 重置标记
-            }
-        }
-        
-        for ptr in to_remove {
-            self.objects.remove(&ptr);
+    /// 检查是否为真值
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Value::Bool(b) => *b,
+            Value::Int(n) => *n != 0,
+            Value::Float(f) => *f != 0.0,
+            Value::String(s) => !s.is_empty(),
+            Value::Unit => false,
+            Value::List(v) => !v.borrow().is_empty(),
+            Value::Dict(d) => !d.borrow().is_empty(),
+            _ => true,
         }
     }
 }
 ```
 
-### 4.3 所有权与引用计数
+### 2.3 调用帧管理
+
+**核心文件**：`src/vm/frames.rs`
 
 ```rust
-pub struct Rc<T> {
-    ptr: *mut RcBox<T>,
+/// 调用帧
+///
+/// 表示函数调用时的执行上下文，包含：
+/// - 返回地址
+/// - 局部变量
+/// - 参数
+/// - 闭包环境
+pub struct CallFrame {
+    /// 函数索引
+    pub func_idx: u32,
+
+    /// 返回地址
+    pub return_addr: u32,
+
+    /// 栈基址
+    pub base_ptr: u32,
+
+    /// 闭包（如果是闭包调用）
+    pub closure: Option<Closure>,
+
+    /// 局部变量槽
+    pub locals: Vec<Value>,
+
+    /// 指令指针（捕获以支持调试）
+    pub ip: usize,
 }
 
-struct RcBox<T> {
-    count: usize,
-    value: T,
-}
-
-impl<T> Clone for Rc<T> {
-    fn clone(&self) -> Self {
-        unsafe {
-            (*self.ptr).count += 1;
+impl CallFrame {
+    /// 创建新调用帧
+    pub fn new(
+        func_idx: u32,
+        return_addr: u32,
+        base_ptr: u32,
+        arg_count: usize,
+        closure: Option<Closure>,
+    ) -> Self {
+        Self {
+            func_idx,
+            return_addr,
+            base_ptr,
+            closure,
+            locals: vec![Value::Unit; arg_count],
+            ip: 0,
         }
-        Self { ptr: self.ptr }
+    }
+
+    /// 获取局部变量
+    #[inline]
+    pub fn get_local(&self, index: u32) -> Option<&Value> {
+        self.locals.get(index as usize)
+    }
+
+    /// 设置局部变量
+    #[inline]
+    pub fn set_local(&mut self, index: u32, value: Value) {
+        if let Some(slot) = self.locals.get_mut(index as usize) {
+            *slot = value;
+        }
     }
 }
+```
 
-impl<T> Drop for Rc<T> {
-    fn drop(&mut self) {
-        unsafe {
-            (*self.ptr).count -= 1;
-            if (*self.ptr).count == 0 {
-                drop(Box::from_raw(self.ptr));
+### 2.4 指令集
+
+**核心文件**：`src/vm/instructions.rs`, `src/vm/opcode.rs`
+
+```rust
+/// 虚拟机指令
+///
+/// 所有字节码指令的定义。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Instruction {
+    // =====================================================================
+    // 栈操作
+    // =====================================================================
+    /// Nop - 空操作
+    Nop,
+    /// Pop - 弹出栈顶值
+    Pop,
+    /// Dup - 复制栈顶值
+    Dup,
+    /// Swap - 交换栈顶两个值
+    Swap,
+
+    // =====================================================================
+    // 常量加载
+    // =====================================================================
+    /// LoadConst { index: u16 } - 从常量池加载常量
+    LoadConst(u16),
+
+    // =====================================================================
+    // 局部变量操作
+    // =====================================================================
+    /// LoadLocal { index: u8 } - 加载局部变量
+    LoadLocal(u8),
+    /// StoreLocal { index: u8 } - 存储局部变量
+    StoreLocal(u8),
+    /// LoadArg { index: u8 } - 加载参数
+    LoadArg(u8),
+
+    // =====================================================================
+    // 全局变量操作
+    // =====================================================================
+    /// LoadGlobal { index: u16 } - 加载全局变量
+    LoadGlobal(u16),
+    /// StoreGlobal { index: u16 } - 存储全局变量
+    StoreGlobal(u16),
+
+    // =====================================================================
+    // 算术运算 (64位整数)
+    // =====================================================================
+    /// I64Add - 整数加法
+    I64Add,
+    /// I64Sub - 整数减法
+    I64Sub,
+    /// I64Mul - 整数乘法
+    I64Mul,
+    /// I64Div - 整数除法
+    I64Div,
+    /// I64Rem - 整数取余
+    I64Rem,
+    /// I64Neg - 整数取负
+    I64Neg,
+
+    // =====================================================================
+    // 浮点运算 (64位)
+    // =====================================================================
+    /// F64Add - 浮点加法
+    F64Add,
+    /// F64Sub - 浮点减法
+    F64Sub,
+    /// F64Mul - 浮点乘法
+    F64Mul,
+    /// F64Div - 浮点除法
+    F64Div,
+    /// F64Neg - 浮点取负
+    F64Neg,
+
+    // =====================================================================
+    // 比较运算
+    // =====================================================================
+    /// Eq - 相等比较
+    Eq,
+    /// Ne - 不等比较
+    Ne,
+    /// Lt - 小于比较
+    Lt,
+    /// Le - 小于等于比较
+    Le,
+    /// Gt - 大于比较
+    Gt,
+    /// Ge - 大于等于比较
+    Ge,
+
+    // =====================================================================
+    // 逻辑运算
+    // =====================================================================
+    /// And - 逻辑与
+    And,
+    /// Or - 逻辑或
+    Or,
+    /// Not - 逻辑非
+    Not,
+
+    // =====================================================================
+    // 控制流
+    // =====================================================================
+    /// Jmp { offset: i16 } - 无条件跳转
+    Jmp(i16),
+    /// JmpIf { offset: i16 } - 条件为真跳转
+    JmpIf(i16),
+    /// JmpIfNot { offset: i16 } - 条件为假跳转
+    JmpIfNot(i16),
+
+    // =====================================================================
+    // 函数调用
+    // =====================================================================
+    /// Call { arg_count: u8 } - 函数调用
+    Call(u8),
+    /// CallIndirect - 间接调用（通过函数值）
+    CallIndirect,
+    /// TailCall { arg_count: u8 } - 尾调用优化
+    TailCall(u8),
+    /// Return - 返回
+    Return,
+    /// ReturnValue - 返回值
+    ReturnValue,
+
+    // =====================================================================
+    // 内存操作
+    // =====================================================================
+    /// StackAlloc { size: u16 } - 栈分配
+    StackAlloc(u16),
+    /// HeapAlloc { type_id: u16 } - 堆分配
+    HeapAlloc(u16),
+
+    // =====================================================================
+    // 列表操作
+    // =====================================================================
+    /// NewList - 创建空列表
+    NewList,
+    /// NewListWithCap { cap: u16 } - 创建带容量的列表
+    NewListWithCap(u16),
+    /// LoadElement - 加载列表元素
+    LoadElement,
+    /// StoreElement - 存储列表元素
+    StoreElement,
+
+    // =====================================================================
+    // 字典操作
+    // =====================================================================
+    /// NewDict - 创建空字典
+    NewDict,
+    /// LoadDictElement - 加载字典元素
+    LoadDictElement,
+    /// StoreDictElement - 存储字典元素
+    StoreDictElement,
+
+    // =====================================================================
+    // 字段操作
+    // =====================================================================
+    /// GetField { index: u16 } - 获取结构体字段
+    GetField(u16),
+    /// SetField { index: u16 } - 设置结构体字段
+    SetField(u16),
+
+    // =====================================================================
+    // 类型操作
+    // =====================================================================
+    /// Cast { target_type: u16 } - 类型转换
+    Cast(u16),
+    /// TypeCheck { type_id: u16 } - 类型检查
+    TypeCheck(u16),
+    /// IsInstance { type_id: u16 } - 实例检查
+    IsInstance(u16),
+
+    // =====================================================================
+    // 闭包操作
+    // =====================================================================
+    /// MakeClosure { func_id: u16, env_size: u8 } - 创建闭包
+    MakeClosure(u16, u8),
+    /// LoadEnv { index: u8 } - 加载环境变量
+    LoadEnv(u8),
+    /// LoadClosureVar { index: u8 } - 加载闭包变量
+    LoadClosureVar(u8),
+
+    // =====================================================================
+    // 并发操作
+    // =====================================================================
+    /// Spawn - 创建新任务
+    Spawn,
+    /// Await - 等待任务完成
+    Await,
+    /// Yield - 让出执行权
+    Yield,
+    /// Join - 加入任务
+    Join,
+
+    // =====================================================================
+    // 引用操作
+    // =====================================================================
+    /// Ref - 创建引用
+    Ref,
+    /// Deref - 解引用
+    Deref,
+    /// DerefMut - 可变解引用
+    DerefMut,
+
+    // =====================================================================
+    // 迭代器操作
+    // =====================================================================
+    /// Iter - 创建迭代器
+    Iter,
+    /// IterNext - 迭代下一步
+    IterNext,
+    /// IterEnd - 迭代结束检查
+    IterEnd,
+}
+
+/// 操作码（指令的字节编码）
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Opcode {
+    Nop = 0x00,
+    Pop = 0x01,
+    Dup = 0x02,
+    Swap = 0x03,
+
+    LoadConst = 0x10,
+    LoadLocal = 0x11,
+    StoreLocal = 0x12,
+    LoadArg = 0x13,
+    LoadGlobal = 0x14,
+    StoreGlobal = 0x15,
+
+    I64Add = 0x20,
+    I64Sub = 0x21,
+    I64Mul = 0x22,
+    I64Div = 0x23,
+    I64Rem = 0x24,
+    I64Neg = 0x25,
+
+    F64Add = 0x30,
+    F64Sub = 0x31,
+    F64Mul = 0x32,
+    F64Div = 0x33,
+    F64Neg = 0x34,
+
+    Eq = 0x40,
+    Ne = 0x41,
+    Lt = 0x42,
+    Le = 0x43,
+    Gt = 0x44,
+    Ge = 0x45,
+
+    And = 0x50,
+    Or = 0x51,
+    Not = 0x52,
+
+    Jmp = 0x60,
+    JmpIf = 0x61,
+    JmpIfNot = 0x62,
+
+    Call = 0x70,
+    CallIndirect = 0x71,
+    TailCall = 0x72,
+    Return = 0x73,
+    ReturnValue = 0x74,
+
+    StackAlloc = 0x80,
+    HeapAlloc = 0x81,
+
+    NewList = 0x90,
+    NewListWithCap = 0x91,
+    LoadElement = 0x92,
+    StoreElement = 0x93,
+
+    NewDict = 0xA0,
+    LoadDictElement = 0xA1,
+    StoreDictElement = 0xA2,
+
+    GetField = 0xB0,
+    SetField = 0xB1,
+
+    Cast = 0xC0,
+    TypeCheck = 0xC1,
+    IsInstance = 0xC2,
+
+    MakeClosure = 0xD0,
+    LoadEnv = 0xD1,
+    LoadClosureVar = 0xD2,
+
+    Spawn = 0xE0,
+    Await = 0xE1,
+    Yield = 0xE2,
+    Join = 0xE3,
+
+    Ref = 0xF0,
+    Deref = 0xF1,
+    DerefMut = 0xF2,
+
+    Iter = 0xF8,
+    IterNext = 0xF9,
+    IterEnd = 0xFA,
+}
+```
+
+### 2.5 执行器核心
+
+**核心文件**：`src/vm/executor.rs`
+
+```rust
+impl VM {
+    /// 创建新虚拟机
+    pub fn new(config: Option<VMConfig>, bytecode: &BytecodeFile) -> Self {
+        let config = config.unwrap_or_default();
+
+        VM {
+            stack: Vec::with_capacity(config.max_stack_size),
+            frames: Vec::with_capacity(config.max_call_depth),
+            ip: 0,
+            constant_pool: bytecode.const_pool.clone(),
+            globals: HashMap::new(),
+            config,
+            inline_cache: InlineCache::new(),
+            scheduler: None,
+        }
+    }
+
+    /// 执行字节码
+    pub fn run(&mut self) -> VMResult<Value> {
+        self.ip = 0;
+
+        loop {
+            // 获取当前调用帧
+            let frame = self.frames.last_mut()
+                .ok_or(VMError::NoCallFrame)?;
+
+            // 检查是否到达函数末尾
+            if frame.ip >= self.get_current_function().code.len() {
+                // 默认返回 Unit
+                return Ok(Value::Unit);
             }
+
+            // 获取并执行指令
+            let instr = self.get_current_function().code[frame.ip];
+            frame.ip += 1;
+
+            if self.config.trace_execution {
+                println!("[VM] IP={} Instr={:?}", frame.ip - 1, instr);
+            }
+
+            self.execute_instruction(instr)?;
         }
     }
-}
 
-// 用于编译时所有权检查的引用
-#[derive(Debug)]
-pub struct Ref<T> {
-    value: *const T,
-    // 记录借用状态
-    borrowed: bool,
-}
+    /// 执行单条指令
+    fn execute_instruction(&mut self, instr: Instruction) -> VMResult<()> {
+        match instr {
+            // 栈操作
+            Instruction::Nop => {}
+            Instruction::Pop => {
+                self.stack.pop()
+                    .ok_or(VMError::StackUnderflow)?;
+            }
+            Instruction::Dup => {
+                let top = self.stack.last()
+                    .ok_or(VMError::StackUnderflow)?
+                    .clone();
+                self.stack.push(top);
+            }
 
-#[derive(Debug)]
-pub struct RefMut<T> {
-    value: *mut T,
-    borrowed: bool,
+            // 常量加载
+            Instruction::LoadConst(idx) => {
+                let value = self.constant_pool.get(idx as usize)
+                    .ok_or(VMError::InvalidConstantIndex(idx))?
+                    .clone();
+                self.stack.push(value);
+            }
+
+            // 局部变量操作
+            Instruction::LoadLocal(idx) => {
+                let frame = self.frames.last_mut()
+                    .ok_or(VMError::NoCallFrame)?;
+                let value = frame.locals.get(idx as usize)
+                    .ok_or(VMError::InvalidLocalIndex(idx))?
+                    .clone();
+                self.stack.push(value);
+            }
+            Instruction::StoreLocal(idx) => {
+                let value = self.stack.pop()
+                    .ok_or(VMError::StackUnderflow)?;
+                let frame = self.frames.last_mut()
+                    .ok_or(VMError::NoCallFrame)?;
+                if let Some(slot) = frame.locals.get_mut(idx as usize) {
+                    *slot = value;
+                }
+            }
+
+            // 算术运算
+            Instruction::I64Add => {
+                let (b, a) = self.pop_two()?;
+                match (a, b) {
+                    (Value::Int(lhs), Value::Int(rhs)) => {
+                        self.stack.push(Value::Int(lhs + rhs));
+                    }
+                    _ => return Err(VMError::TypeError("expected int".to_string())),
+                }
+            }
+            // ... 其他算术运算类似
+
+            // 比较运算
+            Instruction::Eq => {
+                let (b, a) = self.pop_two()?;
+                self.stack.push(Value::Bool(a == b));
+            }
+            // ... 其他比较运算类似
+
+            // 控制流
+            Instruction::Jmp(offset) => {
+                let frame = self.frames.last_mut()
+                    .ok_or(VMError::NoCallFrame)?;
+                frame.ip = (frame.ip as i32 + offset as i32) as usize;
+            }
+            Instruction::JmpIf(offset) => {
+                let cond = self.pop_one()?;
+                if cond.is_truthy() {
+                    let frame = self.frames.last_mut()
+                        .ok_or(VMError::NoCallFrame)?;
+                    frame.ip = (frame.ip as i32 + offset as i32) as usize;
+                }
+            }
+
+            // 函数调用
+            Instruction::Call(arg_count) => {
+                let func = self.pop_one()?;
+                match func {
+                    Value::Function(func_id) => {
+                        self.call_function(func_id, arg_count as usize)?;
+                    }
+                    Value::Closure(closure) => {
+                        self.call_closure(closure, arg_count as usize)?;
+                    }
+                    _ => return Err(VMError::NotCallable(func.type_name())),
+                }
+            }
+            Instruction::Return => {
+                self.frames.pop();
+                if self.frames.is_empty() {
+                    return Ok(Value::Unit);
+                }
+            }
+            Instruction::ReturnValue => {
+                let value = self.pop_one()?;
+                self.frames.pop();
+                if self.frames.is_empty() {
+                    return Ok(value);
+                }
+                self.stack.push(value);
+            }
+
+            // ... 其他指令
+
+            // 异常情况
+            _ => return Err(VMError::UnimplementedInstruction(format!("{:?}", instr))),
+        }
+
+        Ok(())
+    }
+
+    /// 调用函数
+    fn call_function(&mut self, func_id: u32, arg_count: usize) -> VMResult<()> {
+        let frame = CallFrame::new(
+            func_id,
+            self.get_current_ip() as u32,
+            self.stack.len() as u32,
+            arg_count,
+            None,
+        );
+        self.frames.push(frame);
+        Ok(())
+    }
+
+    /// 辅助方法
+    fn pop_two(&mut self) -> VMResult<(Value, Value)> {
+        let b = self.stack.pop()
+            .ok_or(VMError::StackUnderflow)?;
+        let a = self.stack.pop()
+            .ok_or(VMError::StackUnderflow)?;
+        Ok((b, a))
+    }
+
+    fn pop_one(&mut self) -> VMResult<Value> {
+        self.stack.pop()
+            .ok_or(VMError::StackUnderflow)
+    }
 }
 ```
 
 ---
 
-## 五、调度器设计
+## 三、并作模型
 
-### 5.1 工作窃取调度器
+### 3.1 并作图 (DAG)
+
+**核心文件**：`src/runtime/dag/mod.rs`, `src/runtime/dag/node.rs`, `src/runtime/dag/graph.rs`
+
+YaoXiang 的并作模型基于有向无环图（DAG）表示任务间的依赖关系。
 
 ```rust
-pub struct Scheduler {
-    // 工作线程
-    workers: Vec<Worker>,
-    
-    // 全局任务队列
-    global_queue: TaskQueue,
-    
-    // 任务状态
-    tasks: HashMap<TaskId, Task>,
-    
-    // 并作图
-    dag: Dag,
-    
-    // 线程池（用于阻塞操作）
-    blocking_pool: ThreadPool,
-    
-    // 配置
-    config: SchedulerConfig,
+/// 并作图
+///
+/// 管理并作任务的依赖关系图。
+pub struct ComputationDAG {
+    /// 节点映射
+    nodes: HashMap<NodeId, DAGNode>,
+
+    /// 出边（从节点到依赖它的节点）
+    outgoing_edges: HashMap<NodeId, HashSet<NodeId>>,
+
+    /// 入边（从节点到它依赖的节点）
+    incoming_edges: HashMap<NodeId, HashSet<NodeId>>,
+
+    /// 节点 ID 生成器
+    id_generator: NodeIdGenerator,
+
+    /// 根节点（没有入边的节点）
+    roots: HashSet<NodeId>,
 }
 
+/// 并作图节点
 #[derive(Debug, Clone)]
-pub struct SchedulerConfig {
-    pub num_workers: usize,
-    pub work_stealing_threshold: usize,
-    pub max_blocking_threads: usize,
+pub struct DAGNode {
+    /// 节点 ID
+    pub id: NodeId,
+
+    /// 节点类型
+    pub kind: DAGNodeKind,
+
+    /// 依赖的节点
+    pub dependencies: Vec<NodeId>,
+
+    /// 节点状态
+    pub status: NodeStatus,
+
+    /// 结果值（计算完成后）
+    pub result: Option<Value>,
+
+    /// 错误（如果计算失败）
+    pub error: Option<String>,
 }
 
-// 每个线程的工作器
-pub struct Worker {
-    id: usize,
-    local_queue: TaskQueue,
-    rng: ThreadRng,  // 用于随机窃取
+/// 节点类型
+#[derive(Debug, Clone)]
+pub enum DAGNodeKind {
+    /// 值节点（叶子节点）
+    Value(Value),
+
+    /// 计算节点
+    Computation {
+        /// 函数 ID
+        func_id: u32,
+        /// 参数
+        args: Vec<NodeId>,
+    },
+
+    /// 任务节点
+    Task {
+        /// 任务 ID
+        task_id: TaskId,
+    },
+
+    /// 等待节点（等待其他节点完成）
+    Wait {
+        /// 依赖的节点
+        dependencies: Vec<NodeId>,
+    },
 }
 
-// 任务队列（无锁队列）
-pub struct TaskQueue {
-    queue: VecDeque<TaskId>,
-    // 使用 Arc<Mutex<>> 或更高效的无锁实现
+/// 节点状态
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeStatus {
+    /// 等待依赖
+    Pending,
+
+    /// 就绪（依赖已满足）
+    Ready,
+
+    /// 执行中
+    Running,
+
+    /// 已完成
+    Completed,
+
+    /// 失败
+    Failed(String),
 }
 
-impl Scheduler {
-    pub fn new(config: SchedulerConfig) -> Self {
-        let mut workers = Vec::with_capacity(config.num_workers);
-        for id in 0..config.num_workers {
-            workers.push(Worker {
-                id,
-                local_queue: TaskQueue::new(),
-                rng: rand::thread_rng(),
-            });
-        }
-        
+impl ComputationDAG {
+    /// 创建新的 DAG
+    pub fn new() -> Self {
         Self {
-            workers,
-            global_queue: TaskQueue::new(),
-            tasks: HashMap::new(),
-            dag: Dag::new(),
-            blocking_pool: ThreadPool::new(config.max_blocking_threads),
-            config,
+            nodes: HashMap::new(),
+            outgoing_edges: HashMap::new(),
+            incoming_edges: HashMap::new(),
+            id_generator: NodeIdGenerator::new(),
+            roots: HashSet::new(),
         }
     }
-    
-    pub fn create_task(&mut self, func_idx: FuncId, args: Vec<Value>) -> TaskId {
-        let task_id = TaskId(self.tasks.len() as u32);
-        
-        let task = Task {
-            id: task_id,
-            func_idx,
-            args,
-            status: TaskStatus::Pending,
+
+    /// 添加值节点
+    pub fn add_value(&mut self, value: Value) -> NodeId {
+        let id = self.id_generator.next();
+
+        let node = DAGNode {
+            id,
+            kind: DAGNodeKind::Value(value),
+            dependencies: Vec::new(),
+            status: NodeStatus::Completed,
             result: None,
-            deps: Vec::new(),
+            error: None,
         };
-        
-        self.tasks.insert(task_id, task);
-        task_id
+
+        self.nodes.insert(id, node);
+        self.roots.insert(id);
+
+        id
     }
-    
-    pub fn submit_task(&mut self, task_id: TaskId) {
-        // 优先提交到全局队列
-        self.global_queue.push(task_id);
-        
-        // 唤醒工作线程
-        self.notify_workers();
-    }
-    
-    pub fn run_to_completion(&mut self) -> Result<(), RuntimeError> {
-        // 检查是否有就绪节点
-        let ready_nodes = self.dag.get_ready_nodes();
-        
-        for node_id in ready_nodes {
-            if let Some(node) = self.dag.nodes.get(&node_id) {
-                if let Some(task_id) = node.task_id {
-                    self.submit_task(task_id);
+
+    /// 添加计算节点
+    pub fn add_computation(&mut self, func_id: u32, args: Vec<NodeId>) -> NodeId {
+        let id = self.id_generator.next();
+
+        // 检查依赖是否都已完成
+        let mut all_ready = true;
+        for &dep_id in &args {
+            if let Some(dep) = self.nodes.get(&dep_id) {
+                if dep.status != NodeStatus::Completed {
+                    all_ready = false;
+                    break;
                 }
             }
         }
-        
-        // 工作线程执行任务
-        while !self.is_idle() {
-            for worker in &mut self.workers {
-                if let Some(task_id) = self.steal_or_get() {
-                    self.execute_task(worker, task_id)?;
-                }
-            }
+
+        let node = DAGNode {
+            id,
+            kind: DAGNodeKind::Computation { func_id, args: args.clone() },
+            dependencies: args.clone(),
+            status: if all_ready { NodeStatus::Ready } else { NodeStatus::Pending },
+            result: None,
+            error: None,
+        };
+
+        self.nodes.insert(id, node);
+
+        // 建立边关系
+        for &dep_id in &args {
+            self.outgoing_edges.entry(dep_id)
+                .or_insert_with(HashSet::new)
+                .insert(id);
+            self.incoming_edges.entry(id)
+                .or_insert_with(HashSet::new)
+                .insert(dep_id);
         }
-        
-        Ok(())
+
+        // 如果有依赖未完成，添加到入边
+        if !args.is_empty() {
+            self.roots.remove(&id);
+        } else {
+            self.roots.insert(id);
+        }
+
+        id
     }
-    
-    fn execute_task(&mut self, worker: &Worker, task_id: TaskId) -> Result<(), RuntimeError> {
-        // 获取任务
-        let task = self.tasks.get_mut(&task_id)
-            .ok_or_else(|| RuntimeError::TaskNotFound)?;
-        
-        if task.status != TaskStatus::Ready {
-            return Ok(());
+
+    /// 获取所有就绪节点
+    pub fn get_ready_nodes(&self) -> Vec<NodeId> {
+        self.nodes.iter()
+            .filter(|(_, node)| node.status == NodeStatus::Ready)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// 完成节点计算
+    pub fn complete(&mut self, node_id: NodeId, result: Value) {
+        if let Some(node) = self.nodes.get_mut(&node_id) {
+            node.status = NodeStatus::Completed;
+            node.result = Some(result);
         }
-        
-        task.status = TaskStatus::Running;
-        
-        // 在虚拟机中执行
-        let mut vm = VirtualMachine::new(self);
-        let result = vm.run(task.func_idx);
-        
-        // 更新任务状态
-        match result {
-            Ok(value) => {
-                task.result = Some(value);
-                task.status = TaskStatus::Completed;
-            }
-            Err(e) => {
-                task.status = TaskStatus::Failed;
-                return Err(e);
-            }
-        }
-        
-        // 标记并作图节点完成
-        if let Some(node_id) = self.get_node_for_task(task_id) {
-            self.dag.mark_completed(node_id);
-            
-            // 检查是否有新就绪的任务
-            let ready_nodes = self.dag.get_ready_nodes();
-            for node_id in ready_nodes {
-                if let Some(node) = self.dag.nodes.get(&node_id) {
-                    if let Some(tid) = node.task_id {
-                        self.submit_task(tid);
+
+        // 标记依赖此节点的节点为就绪
+        if let Some(dependents) = self.outgoing_edges.get(&node_id) {
+            for &dep_id in dependents {
+                if let Some(dep_node) = self.nodes.get_mut(&dep_id) {
+                    // 检查是否所有依赖都已完成
+                    let all_deps_done = dep_node.dependencies.iter()
+                        .all(|&d| {
+                            self.nodes.get(&d)
+                                .map(|n| n.status == NodeStatus::Completed)
+                                .unwrap_or(false)
+                        });
+
+                    if all_deps_done {
+                        dep_node.status = NodeStatus::Ready;
                     }
                 }
             }
         }
-        
-        Ok(())
     }
-    
-    fn steal_or_get(&mut self) -> Option<TaskId> {
-        // 1. 尝试从本地队列获取
-        if let Some(task) = self.global_queue.pop() {
-            return Some(task);
+
+    /// 获取已完成节点的值
+    pub fn get_value(&self, node_id: NodeId) -> Option<&Value> {
+        self.nodes.get(&node_id)
+            .and_then(|n| n.result.as_ref())
+    }
+}
+```
+
+### 3.2 节点 ID 管理
+
+**核心文件**：`src/runtime/dag/node_id.rs`
+
+```rust
+/// 节点 ID
+///
+/// DAG 中节点的唯一标识符。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(pub u32);
+
+impl NodeId {
+    /// 获取内部索引
+    pub fn index(&self) -> u32 {
+        self.0
+    }
+}
+
+/// 线程安全的节点 ID 生成器
+#[derive(Debug)]
+pub struct NodeIdGenerator {
+    next_id: AtomicU32,
+}
+
+impl NodeIdGenerator {
+    /// 创建新的 ID 生成器
+    pub fn new() -> Self {
+        Self {
+            next_id: AtomicU32::new(0),
         }
-        
-        // 2. 尝试从其他工作线程窃取
-        for worker in &mut self.workers {
-            if let Some(task) = worker.local_queue.steal() {
-                return Some(task);
-            }
+    }
+
+    /// 生成下一个 ID
+    pub fn next(&self) -> NodeId {
+        NodeId(self.next_id.fetch_add(1, Ordering::SeqCst))
+    }
+}
+```
+
+---
+
+## 四、任务调度器
+
+### 4.1 调度器架构
+
+**核心文件**：`src/runtime/scheduler/mod.rs`, `src/runtime/scheduler/task.rs`, `src/runtime/scheduler/queue.rs`, `src/runtime/scheduler/work_stealer.rs`
+
+```rust
+/// 调度器
+///
+/// 负责并作任务的调度和执行。
+pub struct Scheduler {
+    /// 工作线程
+    workers: Vec<Worker>,
+
+    /// 全局任务队列
+    global_queue: Arc<PriorityTaskQueue>,
+
+    /// 所有任务
+    tasks: HashMap<TaskId, Task>,
+
+    /// 并作图
+    dag: Arc<RwLock<ComputationDAG>>,
+
+    /// 配置
+    config: SchedulerConfig,
+
+    /// 统计信息
+    stats: Arc<SchedulerStats>,
+}
+
+/// 调度器配置
+#[derive(Debug, Clone)]
+pub struct SchedulerConfig {
+    /// 工作线程数量
+    pub num_workers: usize,
+    /// 默认栈大小
+    pub default_stack_size: usize,
+    /// 工作窃取批次大小
+    pub steal_batch: usize,
+    /// 每个工作队列的最大大小
+    pub max_queue_size: usize,
+    /// 是否启用工作窃取
+    pub use_work_stealing: bool,
+    /// 空闲超时
+    pub idle_timeout: Duration,
+    /// 是否收集统计信息
+    pub enable_stats: bool,
+}
+
+impl Default for SchedulerConfig {
+    fn default() -> Self {
+        let num_cpus = thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+
+        Self {
+            num_workers: num_cpus,
+            default_stack_size: 2 * 1024 * 1024,
+            steal_batch: 4,
+            max_queue_size: 1024,
+            use_work_stealing: true,
+            idle_timeout: Duration::from_millis(1),
+            enable_stats: false,
         }
-        
-        None
     }
-    
-    fn is_idle(&self) -> bool {
-        self.global_queue.is_empty() &&
-        self.workers.iter().all(|w| w.local_queue.is_empty())
+}
+
+/// 调度器统计
+#[derive(Debug, Default)]
+pub struct SchedulerStats {
+    /// 调度任务总数
+    pub tasks_scheduled: AtomicUsize,
+    /// 完成任务总数
+    pub tasks_completed: AtomicUsize,
+    /// 被窃取的任务数
+    pub tasks_stolen: AtomicUsize,
+    /// 窃取尝试次数
+    pub steal_attempts: AtomicUsize,
+    /// 成功窃取次数
+    pub steal_success: AtomicUsize,
+}
+
+impl SchedulerStats {
+    /// 记录调度的任务
+    pub fn record_scheduled(&self) {
+        self.tasks_scheduled.fetch_add(1, Ordering::SeqCst);
     }
-    
-    pub fn wait_for_task(&mut self, task_id: TaskId) {
-        // 将当前任务挂起，加入等待队列
-        // 当 task_id 完成时，恢复执行
+
+    /// 记录完成的任务
+    pub fn record_completed(&self, duration_us: usize) {
+        self.tasks_completed.fetch_add(1, Ordering::SeqCst);
     }
-    
-    pub fn get_node_for_task(&self, task_id: TaskId) -> Option<NodeId> {
-        for (node_id, node) in self.dag.nodes.iter() {
-            if let Some(tid) = node.task_id {
-                if tid == task_id {
-                    return Some(*node_id);
-                }
+}
+```
+
+### 4.2 任务定义
+
+**核心文件**：`src/runtime/scheduler/task.rs`
+
+```rust
+/// 任务 ID
+///
+/// 任务的唯一标识符。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TaskId(pub u64);
+
+impl TaskId {
+    /// 获取内部索引
+    pub fn index(&self) -> u64 {
+        self.0
+    }
+}
+
+/// 任务
+///
+/// 表示一个可并作执行的工作单元。
+pub struct Task {
+    /// 任务 ID
+    pub id: TaskId,
+
+    /// 函数 ID
+    pub func_id: FuncId,
+
+    /// 参数
+    pub args: Vec<Value>,
+
+    /// 状态
+    pub status: TaskStatus,
+
+    /// 优先级
+    pub priority: TaskPriority,
+
+    /// 结果
+    pub result: Option<Value>,
+
+    /// 错误
+    pub error: Option<String>,
+}
+
+/// 任务状态
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskStatus {
+    /// 等待调度
+    Pending,
+
+    /// 就绪（可执行）
+    Ready,
+
+    /// 执行中
+    Running,
+
+    /// 等待（阻塞）
+    Waiting,
+
+    /// 已完成
+    Completed,
+
+    /// 失败
+    Failed(String),
+
+    /// 取消
+    Cancelled,
+}
+
+/// 任务优先级
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TaskPriority {
+    /// 低优先级
+    Low = 0,
+    /// 正常优先级
+    Normal = 1,
+    /// 高优先级
+    High = 2,
+    /// 关键优先级
+    Critical = 3,
+}
+
+/// 任务配置
+#[derive(Debug, Clone)]
+pub struct TaskConfig {
+    /// 栈大小
+    pub stack_size: usize,
+    /// 优先级
+    pub priority: TaskPriority,
+    /// 是否可窃取
+    pub stealable: bool,
+    /// 依赖的任务
+    pub dependencies: Vec<TaskId>,
+}
+
+/// 任务构建器
+pub struct TaskBuilder {
+    config: TaskConfig,
+}
+
+impl TaskBuilder {
+    /// 创建新的任务构建器
+    pub fn new() -> Self {
+        Self {
+            config: TaskConfig {
+                stack_size: 0,
+                priority: TaskPriority::Normal,
+                stealable: true,
+                dependencies: Vec::new(),
+            },
+        }
+    }
+
+    /// 设置栈大小
+    pub fn stack_size(mut self, size: usize) -> Self {
+        self.config.stack_size = size;
+        self
+    }
+
+    /// 设置优先级
+    pub fn priority(mut self, priority: TaskPriority) -> Self {
+        self.config.priority = priority;
+        self
+    }
+
+    /// 设置是否可窃取
+    pub fn stealable(mut self, stealable: bool) -> Self {
+        self.config.stealable = stealable;
+        self
+    }
+
+    /// 添加依赖
+    pub fn depends_on(mut self, task_id: TaskId) -> Self {
+        self.config.dependencies.push(task_id);
+        self
+    }
+
+    /// 构建任务
+    pub fn build(self, id: TaskId, func_id: FuncId, args: Vec<Value>) -> Task {
+        Task {
+            id,
+            func_id,
+            args,
+            status: TaskStatus::Pending,
+            priority: self.config.priority,
+            result: None,
+            error: None,
+        }
+    }
+}
+```
+
+### 4.3 任务队列
+
+**核心文件**：`src/runtime/scheduler/queue.rs`
+
+```rust
+/// 任务队列
+///
+/// 支持优先级和阻塞等待的任务队列。
+pub struct TaskQueue {
+    /// 内部队列（使用 VecDeque 实现双端队列）
+    queue: Mutex<VecDeque<TaskId>>,
+
+    /// 条件变量（用于阻塞等待）
+    condvar: Condvar,
+
+    /// 是否已关闭
+    closed: AtomicBool,
+}
+
+/// 优先级任务队列
+pub struct PriorityTaskQueue {
+    /// 按优先级分组的队列
+    queues: [Arc<TaskQueue>; 4],
+
+    /// 总任务数
+    len: AtomicUsize,
+}
+
+impl TaskQueue {
+    /// 创建新任务队列
+    pub fn new() -> Self {
+        Self {
+            queue: Mutex::new(VecDeque::new()),
+            condvar: Condvar::new(),
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    /// 入队
+    pub fn push(&self, task_id: TaskId) {
+        let mut queue = self.queue.lock().unwrap();
+        queue.push_back(task_id);
+        self.condvar.notify_one();
+    }
+
+    /// 出队（阻塞）
+    pub fn pop(&self) -> Option<TaskId> {
+        let mut queue = self.queue.lock().unwrap();
+
+        while queue.is_empty() && !self.closed.load(Ordering::SeqCst) {
+            queue = self.condvar.wait(queue).unwrap();
+        }
+
+        queue.pop_front()
+    }
+
+    /// 尝试出队（非阻塞）
+    pub fn try_pop(&self) -> Option<TaskId> {
+        self.queue.lock().unwrap().pop_front()
+    }
+
+    /// 关闭队列
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.condvar.notify_all();
+    }
+}
+
+impl PriorityTaskQueue {
+    /// 创建新的优先级队列
+    pub fn new() -> Self {
+        Self {
+            queues: [
+                Arc::new(TaskQueue::new()), // Low
+                Arc::new(TaskQueue::new()), // Normal
+                Arc::new(TaskQueue::new()), // High
+                Arc::new(TaskQueue::new()), // Critical
+            ],
+            len: AtomicUsize::new(0),
+        }
+    }
+
+    /// 入队（按优先级）
+    pub fn push(&self, task_id: TaskId, priority: TaskPriority) {
+        let idx = priority as usize;
+        self.queues[idx].push(task_id);
+        self.len.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// 出队（高优先级优先）
+    pub fn pop(&self) -> Option<TaskId> {
+        // 从高优先级到低优先级检查
+        for i in (0..4).rev() {
+            if let Some(task_id) = self.queues[i].try_pop() {
+                self.len.fetch_sub(1, Ordering::SeqCst);
+                return Some(task_id);
             }
         }
         None
@@ -1169,30 +1439,141 @@ impl Scheduler {
 }
 ```
 
-### 5.2 阻塞操作处理
+### 4.4 工作窃取算法
+
+**核心文件**：`src/runtime/scheduler/work_stealer.rs`
 
 ```rust
-impl Scheduler {
-    // @blocking 注解的实现
-    pub fn execute_blocking<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce() -> R + Send + 'static,
-        R: Send + 'static,
-    {
-        // 使用专用线程池执行阻塞操作
-        self.blocking_pool.execute(f)
+/// 工作窃取器
+///
+/// 实现工作窃取算法，用于负载均衡。
+pub struct WorkStealer {
+    /// 被窃取的队列
+    victim_queues: Vec<Arc<TaskQueue>>,
+
+    /// 窃取策略
+    strategy: StealStrategy,
+
+    /// 窃取批次大小
+    batch_size: usize,
+
+    /// 统计信息
+    stats: Arc<StealStats>,
+}
+
+/// 窃取策略
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StealStrategy {
+    /// 随机选择队列
+    Random,
+    /// 轮询选择队列
+    RoundRobin,
+    /// 选择最空闲的队列
+    LeastLoaded,
+    /// 选择最长的队列（从头部窃取）
+    LongestFirst,
+}
+
+/// 窃取统计
+#[derive(Debug, Default)]
+pub struct StealStats {
+    /// 总尝试次数
+    attempts: AtomicUsize,
+    /// 成功次数
+    successes: AtomicUsize,
+    /// 窃取失败原因统计
+    failures: AtomicUsize,
+}
+
+impl WorkStealer {
+    /// 创建新的工作窃取器
+    pub fn new(queues: Vec<Arc<TaskQueue>>, strategy: StealStrategy, batch_size: usize) -> Self {
+        Self {
+            victim_queues: queues,
+            strategy,
+            batch_size,
+            stats: Arc::new(StealStats::default()),
+        }
     }
-    
-    // 文件 I/O 示例
-    pub fn read_file(&mut self, path: String) -> Result<Value, RuntimeError> {
-        // 在阻塞线程池中执行
-        let result = self.execute_blocking(move || {
-            std::fs::read_to_string(path)
-        });
-        
-        match result {
-            Ok(content) => Ok(Value::String(content)),
-            Err(e) => Err(RuntimeError::IoError(e)),
+
+    /// 尝试从其他队列窃取任务
+    pub fn steal(&self, my_queue: &Arc<TaskQueue>) -> Vec<TaskId> {
+        self.stats.attempts.fetch_add(1, Ordering::SeqCst);
+
+        // 根据策略选择要窃取的队列
+        let victim_id = self.select_victim();
+
+        if let Some(victim) = self.victim_queues.get(victim_id) {
+            // 尝试从 victim 队列的尾部窃取
+            let mut stolen = Vec::new();
+
+            for _ in 0..self.batch_size {
+                if let Some(task_id) = self.steal_one(victim) {
+                    stolen.push(task_id);
+                } else {
+                    break;
+                }
+            }
+
+            if !stolen.is_empty() {
+                self.stats.successes.fetch_add(1, Ordering::SeqCst);
+                return stolen;
+            }
+        }
+
+        self.stats.failures.fetch_add(1, Ordering::SeqCst);
+        Vec::new()
+    }
+
+    /// 从单个队列窃取一个任务
+    fn steal_one(&self, victim: &Arc<TaskQueue>) -> Option<TaskId> {
+        // 从尾部窃取（双端队列特性）
+        let mut queue = victim.queue.lock().unwrap();
+
+        // 从尾部窃取，减少对 victim 的竞争
+        queue.pop_back()
+    }
+
+    /// 根据策略选择要窃取的队列
+    fn select_victim(&self) -> usize {
+        match self.strategy {
+            StealStrategy::Random => {
+                use rand::random;
+                random::<usize>() % self.victim_queues.len()
+            }
+            StealStrategy::RoundRobin => {
+                // 使用原子计数器实现轮询
+                static COUNTER: AtomicUsize = AtomicUsize::new(0);
+                COUNTER.fetch_add(1, Ordering::SeqCst) % self.victim_queues.len()
+            }
+            StealStrategy::LeastLoaded => {
+                // 选择队列最短的
+                let mut min_len = usize::MAX;
+                let mut min_id = 0;
+
+                for (i, queue) in self.victim_queues.iter().enumerate() {
+                    let len = queue.queue.lock().unwrap().len();
+                    if len < min_len {
+                        min_len = len;
+                        min_id = i;
+                    }
+                }
+                min_id
+            }
+            StealStrategy::LongestFirst => {
+                // 选择队列最长的
+                let mut max_len = 0;
+                let mut max_id = 0;
+
+                for (i, queue) in self.victim_queues.iter().enumerate() {
+                    let len = queue.queue.lock().unwrap().len();
+                    if len > max_len {
+                        max_len = len;
+                        max_id = i;
+                    }
+                }
+                max_id
+            }
         }
     }
 }
@@ -1200,157 +1581,371 @@ impl Scheduler {
 
 ---
 
-## 六、标准库集成
+## 五、内存管理
 
-### 6.1 原生函数注册
+### 5.1 内存分配器
+
+**核心文件**：`src/runtime/memory/mod.rs`
 
 ```rust
-pub struct NativeRegistry {
-    natives: HashMap<String, NativeFunction>,
+/// 内存管理模块
+///
+/// 提供栈分配和堆分配的管理。
+pub struct MemoryManager {
+    /// 堆分配器
+    heap_allocator: HeapAllocator,
+
+    /// 栈大小限制
+    max_stack_size: usize,
+
+    /// 当前栈使用量
+    current_stack_size: AtomicUsize,
+
+    /// GC 配置
+    gc_config: GCConfig,
 }
 
-type NativeFunction = fn(&[Value]) -> Result<Value, RuntimeError>;
+/// 堆分配器
+pub struct HeapAllocator {
+    /// 内存块列表
+    blocks: Mutex<Vec<MemoryBlock>>,
 
-impl NativeRegistry {
-    pub fn new() -> Self {
-        let mut registry = Self {
-            natives: HashMap::new(),
-        };
-        
-        // 注册标准库函数
-        registry.register("print", print);
-        registry.register("println", println);
-        registry.register("panic", panic);
-        
-        // 数学函数
-        registry.register("sqrt", sqrt);
-        registry.register("abs", abs);
-        registry.register("pow", pow);
-        
-        // 字符串操作
-        registry.register("len", len);
-        registry.register("concat", concat);
-        registry.register("substring", substring);
-        
-        // 类型转换
-        registry.register("to_int", to_int);
-        registry.register("to_string", to_string);
-        
-        registry
-    }
-    
-    pub fn register(&mut self, name: &str, func: NativeFunction) {
-        self.natives.insert(name.to_string(), func);
-    }
-    
-    pub fn get(&self, name: &str) -> Option<NativeFunction> {
-        self.natives.get(name).copied()
-    }
+    /// 总分配大小
+    total_allocated: AtomicUsize,
+
+    /// 最大分配大小
+    max_allocated: AtomicUsize,
 }
 
-// 原生函数实现示例
-fn print(args: &[Value]) -> Result<Value, RuntimeError> {
-    for arg in args {
-        print!("{}", arg);
-    }
-    Ok(Value::Unit)
+/// 内存块
+#[derive(Debug)]
+pub struct MemoryBlock {
+    /// 起始地址
+    pub start: usize,
+
+    /// 大小
+    pub size: usize,
+
+    /// 类型
+    pub kind: MemoryKind,
+
+    /// 引用计数（用于 GC）
+    ref_count: AtomicUsize,
+
+    /// 是否可达（用于 GC）
+    reachable: AtomicBool,
 }
 
-fn println(args: &[Value]) -> Result<Value, RuntimeError> {
-    for arg in args {
-        print!("{}", arg);
-    }
-    println!();
-    Ok(Value::Unit)
+/// 内存类型
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MemoryKind {
+    /// 值类型（小对象）
+    Value,
+
+    /// 列表
+    List,
+
+    /// 字典
+    Dict,
+
+    /// 闭包环境
+    Closure,
+
+    /// 字符串
+    String,
+
+    /// 用户对象
+    Object,
 }
 
-fn sqrt(args: &[Value]) -> Result<Value, RuntimeError> {
-    match args.first() {
-        Some(Value::Float(f)) => Ok(Value::Float(f.sqrt())),
-        Some(Value::Int(i)) => Ok(Value::Float((i as f64).sqrt())),
-        _ => Err(RuntimeError::TypeMismatch),
-    }
+/// GC 配置
+#[derive(Debug, Clone)]
+pub struct GCConfig {
+    /// 触发 GC 的阈值（字节）
+    pub threshold: usize,
+
+    /// 是否启用增量 GC
+    pub incremental: bool,
+
+    /// 是否启用分代 GC
+    pub generational: bool,
+
+    /// 最小 GC 间隔（毫秒）
+    pub min_gc_interval: u64,
 }
 
-fn concat(args: &[Value]) -> Result<Value, RuntimeError> {
-    let mut result = String::new();
-    for arg in args {
-        match arg {
-            Value::String(s) => result.push_str(s),
-            _ => return Err(RuntimeError::TypeMismatch),
+impl Default for GCConfig {
+    fn default() -> Self {
+        Self {
+            threshold: 10 * 1024 * 1024, // 10MB
+            incremental: true,
+            generational: true,
+            min_gc_interval: 10,
         }
     }
-    Ok(Value::String(result))
+}
+
+impl MemoryManager {
+    /// 创建新的内存管理器
+    pub fn new(max_stack_size: usize) -> Self {
+        Self {
+            heap_allocator: HeapAllocator::new(),
+            max_stack_size,
+            current_stack_size: AtomicUsize::new(0),
+            gc_config: GCConfig::default(),
+        }
+    }
+
+    /// 栈分配
+    pub fn stack_alloc(&self, size: usize) -> Result<StackAllocation, MemoryError> {
+        let current = self.current_stack_size.load(Ordering::SeqCst);
+
+        if current + size > self.max_stack_size {
+            return Err(MemoryError::StackOverflow);
+        }
+
+        self.current_stack_size.store(current + size, Ordering::SeqCst);
+
+        Ok(StackAllocation {
+            size,
+            manager: self,
+        })
+    }
+
+    /// 堆分配
+    pub fn heap_alloc(&self, size: usize, kind: MemoryKind) -> Result<HeapPtr, MemoryError> {
+        self.heap_allocator.alloc(size, kind)
+    }
+
+    /// 分配列表
+    pub fn alloc_list(&self, capacity: usize) -> Result<Value, MemoryError> {
+        let ptr = self.heap_allocator.alloc(
+            capacity * std::mem::size_of::<Value>(),
+            MemoryKind::List,
+        )?;
+
+        Ok(Value::List(Rc::new(RefCell::new(Vec::with_capacity(capacity)))))
+    }
+}
+
+impl HeapAllocator {
+    /// 创建新的堆分配器
+    pub fn new() -> Self {
+        Self {
+            blocks: Mutex::new(Vec::new()),
+            total_allocated: AtomicUsize::new(0),
+            max_allocated: AtomicUsize::new(0),
+        }
+    }
+
+    /// 分配内存
+    pub fn alloc(&self, size: usize, kind: MemoryKind) -> Result<HeapPtr, MemoryError> {
+        // 使用系统分配器
+        let layout = std::alloc::Layout::from_size_align(size, std::mem::align_of::<u8>())
+            .map_err(|_| MemoryError::InvalidSize)?;
+
+        let ptr = unsafe { std::alloc::alloc(layout) };
+
+        if ptr.is_null() {
+            return Err(MemoryError::OutOfMemory);
+        }
+
+        let block = MemoryBlock {
+            start: ptr as usize,
+            size,
+            kind,
+            ref_count: AtomicUsize::new(1),
+            reachable: AtomicBool::new(true),
+        };
+
+        self.blocks.lock().unwrap().push(block);
+
+        let total = self.total_allocated.fetch_add(size, Ordering::SeqCst) + size;
+        let mut max = self.max_allocated.load(Ordering::SeqCst);
+        while total > max {
+            match self.max_allocated.compare_exchange(max, total, Ordering::SeqCst, Ordering::SeqCst) {
+                Ok(_) => break,
+                Err(new_max) => max = new_max,
+            }
+        }
+
+        Ok(HeapPtr(ptr as usize))
+    }
+
+    /// 释放内存
+    pub fn free(&self, ptr: HeapPtr) {
+        let mut blocks = self.heap_allocator.blocks.lock().unwrap();
+
+        if let Some(pos) = blocks.iter().position(|b| b.start == ptr.0) {
+            let block = blocks.remove(pos);
+
+            let layout = std::alloc::Layout::from_size_align(block.size, std::mem::align_of::<u8>())
+                .unwrap();
+
+            unsafe {
+                std::alloc::dealloc(block.start as *mut u8, layout);
+            }
+
+            self.total_allocated.fetch_sub(block.size, Ordering::SeqCst);
+        }
+    }
 }
 ```
 
-### 6.2 并发原语
+### 5.2 垃圾回收
 
 ```rust
-// Channel 实现
-#[derive(Debug, Clone)]
-pub struct Channel {
-    sender: Sender,
-    receiver: Receiver,
-}
+impl MemoryManager {
+    /// 执行垃圾回收
+    pub fn gc(&mut self) {
+        // 标记阶段
+        self.mark();
 
-#[derive(Debug, Clone)]
-pub struct Sender {
-    channel_id: ChannelId,
-}
+        // 清除阶段
+        self.sweep();
+    }
 
-#[derive(Debug, Clone)]
-pub struct Receiver {
-    channel_id: ChannelId,
-}
+    /// 标记可达对象
+    fn mark(&self) {
+        // 从根集（全局变量、栈变量）开始标记
+        // ...
+    }
 
-impl Channel {
-    pub fn new() -> Self {
-        // 创建无界或有界队列
-        Self {
-            sender: Sender { channel_id: ChannelId(0) },
-            receiver: Receiver { channel_id: ChannelId(0) },
+    /// 清除不可达对象
+    fn sweep(&self) {
+        let mut blocks = self.heap_allocator.blocks.lock().unwrap();
+
+        blocks.retain(|block| {
+            if block.reachable.load(Ordering::SeqCst) {
+                // 重置可达性，供下次 GC 使用
+                block.reachable.store(true, Ordering::SeqCst);
+                true
+            } else {
+                // 释放内存
+                drop(block);
+                self.free(HeapPtr(block.start));
+                false
+            }
+        });
+    }
+
+    /// 增加引用计数
+    pub fn inc_ref(&self, ptr: HeapPtr) {
+        if let Some(block) = self.find_block(ptr) {
+            block.ref_count.fetch_add(1, Ordering::SeqCst);
         }
     }
-    
-    pub fn send(&self, value: Value) -> Result<(), RuntimeError> {
-        // 将值放入队列
-        // 如果接收者在等待，唤醒它
-        Ok(())
+
+    /// 减少引用计数
+    pub fn dec_ref(&self, ptr: HeapPtr) {
+        if let Some(block) = self.find_block(ptr) {
+            let count = block.ref_count.fetch_sub(1, Ordering::SeqCst);
+            if count == 1 {
+                // 引用计数为0，立即释放
+                self.free(ptr);
+            }
+        }
     }
-    
-    pub fn recv(&self) -> Result<Value, RuntimeError> {
-        // 从队列获取值
-        // 如果队列为空，挂起当前任务
-        Ok(Value::Unit)
+
+    fn find_block(&self, ptr: HeapPtr) -> Option<MemoryBlock> {
+        let blocks = self.heap_allocator.blocks.lock().unwrap();
+        blocks.iter().find(|b| b.start == ptr.0).cloned()
+    }
+}
+```
+
+---
+
+## 六、内联缓存
+
+### 6.1 内联缓存设计
+
+**核心文件**：`src/vm/inline_cache.rs`
+
+```rust
+/// 内联缓存
+///
+/// 用于缓存类型检查和方法分派的结果，加速动态分派。
+pub struct InlineCache {
+    /// 缓存条目
+    caches: HashMap<CacheKey, CacheEntry>,
+}
+
+impl InlineCache {
+    /// 创建一个新的内联缓存
+    pub fn new() -> Self {
+        Self {
+            caches: HashMap::new(),
+        }
+    }
+
+    /// 查找缓存
+    pub fn lookup(&mut self, receiver_type: TypeId, method: &str) -> Option<FuncId> {
+        let key = CacheKey {
+            receiver_type,
+            method: method.to_string(),
+        };
+
+        self.caches.get(&key).map(|entry| {
+            entry.hit_count += 1;
+            entry.func_id
+        })
+    }
+
+    /// 更新缓存
+    pub fn update(&mut self, receiver_type: TypeId, method: &str, func_id: FuncId) {
+        let key = CacheKey {
+            receiver_type,
+            method: method.to_string(),
+        };
+
+        self.caches.insert(key, CacheEntry {
+            func_id,
+            hit_count: 0,
+            compiled_at: std::time::Instant::now(),
+        });
+    }
+
+    /// 获取缓存统计
+    pub fn stats(&self) -> CacheStats {
+        let total_hits: usize = self.caches.values().map(|e| e.hit_count).sum();
+        let total_misses = self.caches.len(); // 简化计算
+
+        CacheStats {
+            cache_size: self.caches.len(),
+            total_hits,
+            total_misses,
+            hit_rate: if total_hits + total_misses > 0 {
+                total_hits as f64 / (total_hits + total_misses) as f64
+            } else {
+                0.0
+            },
+        }
     }
 }
 
-// Mutex 实现
+/// 缓存键
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CacheKey {
+    receiver_type: TypeId,
+    method: String,
+}
+
+/// 缓存条目
 #[derive(Debug, Clone)]
-pub struct Mutex {
-    locked: AtomicBool,
-    owner: Option<TaskId>,
-    waiters: Vec<TaskId>,
+struct CacheEntry {
+    func_id: FuncId,
+    hit_count: usize,
+    compiled_at: std::time::Instant,
 }
 
-impl Mutex {
-    pub fn lock(&self) -> Result<MutexGuard, RuntimeError> {
-        // 如果已锁定，挂起当前任务
-        // 否则获取锁
-        Ok(MutexGuard { mutex: self.clone() })
-    }
-}
-
-#[derive(Debug)]
-pub struct MutexGuard {
-    mutex: Mutex,
-}
-
-impl Drop for MutexGuard {
-    fn drop(&mut self) {
-        // 释放锁，唤醒等待者
-    }
+/// 缓存统计
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub cache_size: usize,
+    pub total_hits: usize,
+    pub total_misses: usize,
+    pub hit_rate: f64,
 }
 ```
 
@@ -1358,238 +1953,123 @@ impl Drop for MutexGuard {
 
 ## 七、性能优化
 
-### 7.1 虚拟机优化
+### 7.1 虚拟机优化策略
 
-#### 7.1.1 指令分发优化
+| 优化策略 | 描述 | 效果 |
+|---------|------|------|
+| **Computed Goto** | 使用跳转表替代 switch | 减少分支预测失败 |
+| **栈顶缓存** | 缓存频繁访问的栈顶值 | 减少栈操作 |
+| **指令内联** | 将常用指令序列内联 | 减少指令开销 |
+| **本地变量缓存** | 缓存频繁访问的局部变量 | 减少内存访问 |
+| **常量传播** | 预加载常用常量 | 减少常量池查找 |
 
-```rust
-// 使用 computed goto（GCC/Clang 扩展）
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-impl VirtualMachine {
-    pub fn run_fast(&mut self) {
-        static mut DISPATCH_TABLE: [&&'static [u8]; 256] = [
-            &&OP_PUSH_CONST,
-            &&OP_POP,
-            &&OP_DUP,
-            // ...
-        ];
-        
-        unsafe {
-            goto *DISPATCH_TABLE[self.bytecode[self.ip] as usize];
-        }
-        
-        OP_PUSH_CONST: {
-            // ...
-            goto *DISPATCH_TABLE[self.bytecode[self.ip] as usize];
-        }
-        
-        OP_POP: {
-            // ...
-            goto *DISPATCH_TABLE[self.bytecode[self.ip] as usize];
-        }
-    }
-}
+### 7.2 调度器优化策略
 
-// Windows 使用 switch 优化
-#[cfg(target_os = "windows")]
-impl VirtualMachine {
-    pub fn run(&mut self) {
-        loop {
-            match self.bytecode[self.ip] {
-                OP_PUSH_CONST => {
-                    // ...
-                }
-                OP_POP => {
-                    // ...
-                }
-                // ...
-            }
-        }
-    }
-}
-```
+| 优化策略 | 描述 | 效果 |
+|---------|------|------|
+| **工作窃取** | 空闲线程从繁忙线程窃取任务 | 负载均衡 |
+| **亲和性调度** | 优先在相同线程执行相关任务 | 缓存友好 |
+| **批量处理** | 一次处理多个任务 | 减少上下文切换 |
+| **自适应线程池** | 根据负载动态调整线程数 | 资源高效利用 |
 
-#### 7.1.2 内联缓存优化
+### 7.3 内存优化策略
 
-```rust
-pub struct MethodCache {
-    cache: HashMap<(TypeId, String), FuncId>,
-}
-
-impl MethodCache {
-    pub fn lookup(&mut self, type_id: TypeId, method: &str) -> Option<FuncId> {
-        let key = (type_id, method.to_string());
-        
-        if let Some(cached) = self.cache.get(&key) {
-            return Some(*cached);
-        }
-        
-        // 缓存未命中，查找并缓存
-        let func_id = self.find_method(type_id, method)?;
-        self.cache.insert(key, func_id);
-        Some(func_id)
-    }
-    
-    fn find_method(&self, type_id: TypeId, method: &str) -> Option<FuncId> {
-        // 在类型的方法表中查找
-        // 支持继承和接口
-        None
-    }
-}
-```
-
-### 7.2 并发优化
-
-#### 7.2.1 无锁队列
-
-```rust
-use crossbeam::queue::SegQueue;
-
-pub struct LockFreeTaskQueue {
-    queue: SegQueue<TaskId>,
-}
-
-impl LockFreeTaskQueue {
-    pub fn push(&self, task: TaskId) {
-        self.queue.push(task);
-    }
-    
-    pub fn pop(&self) -> Option<TaskId> {
-        self.queue.pop()
-    }
-    
-    pub fn steal(&self) -> Option<TaskId> {
-        // 工作窃取算法
-        self.queue.pop()
-    }
-}
-```
-
-#### 7.2.2 任务窃取优化
-
-```rust
-impl Worker {
-    pub fn steal(&mut self) -> Option<TaskId> {
-        // 随机选择其他工作线程
-        if self.workers.is_empty() {
-            return None;
-        }
-        
-        let target = self.rng.gen_range(0..self.workers.len());
-        let target_worker = &mut self.workers[target];
-        
-        // 尝试窃取一半任务
-        let steal_count = (target_worker.local_queue.len() + 1) / 2;
-        
-        let mut stolen = Vec::new();
-        for _ in 0..steal_count {
-            if let Some(task) = target_worker.local_queue.pop() {
-                stolen.push(task);
-            } else {
-                break;
-            }
-        }
-        
-        // 将窃取的任务加入本地队列
-        for task in stolen {
-            self.local_queue.push(task);
-        }
-        
-        self.local_queue.pop()
-    }
-}
-```
-
-### 7.3 JIT 编译（未来扩展）
-
-```rust
-pub struct JITCompiler {
-    // 热点检测
-    hotness_threshold: u32,
-    call_counts: HashMap<FuncId, u32>,
-    
-    // 编译缓存
-    compiled: HashMap<FuncId, *const u8>,
-    
-    // 代码生成器
-    codegen: CraneliftCodegen,  // 或 LLVM
-}
-
-impl JITCompiler {
-    pub fn record_call(&mut self, func_id: FuncId) {
-        let count = self.call_counts.entry(func_id).or_insert(0);
-        *count += 1;
-        
-        if *count > self.hotness_threshold {
-            self.compile(func_id);
-        }
-    }
-    
-    pub fn compile(&mut self, func_id: FuncId) {
-        // 1. 获取 IR
-        // 2. 生成机器码
-        // 3. 分配可执行内存
-        // 4. 缓存函数指针
-    }
-    
-    pub fn get_compiled(&self, func_id: FuncId) -> Option<*const u8> {
-        self.compiled.get(&func_id).copied()
-    }
-}
-```
+| 优化策略 | 描述 | 效果 |
+|---------|------|------|
+| **小对象优化** | 使用栈分配小对象 | 减少堆分配 |
+| **内存池** | 预分配常用大小的内存块 | 减少分配开销 |
+| **引用计数** | 自动管理对象生命周期 | 减少内存泄漏 |
+| **分代 GC** | 新对象在年轻代，频繁回收 | 减少 GC 开销 |
 
 ---
 
-## 八、性能基准
+## 八、错误处理
 
-### 8.1 微基准测试
+### 8.1 错误类型
+
+**核心文件**：`src/vm/errors.rs`
 
 ```rust
-// 计算性能指标
-pub struct PerformanceMetrics {
-    // 虚拟机
-    pub instructions_per_second: f64,
-    pub stack_operation_latency: f64,  // ns
-    pub function_call_overhead: f64,   // ns
-    
-    // 并发
-    pub task_spawn_latency: f64,       // ns
-    pub context_switch_time: f64,      // ns
-    pub work_stealing_efficiency: f64, // %
-    
-    // 内存
-    pub allocation_throughput: f64,    // MB/s
-    pub gc_pause_time: f64,            // ms
-}
+/// 虚拟机错误
+#[derive(Debug, Error)]
+pub enum VMError {
+    #[error("Stack underflow")]
+    StackUnderflow,
 
-// 基准测试示例
-#[cfg(test)]
-mod benchmarks {
-    use super::*;
-    use test::Bencher;
-    
-    #[bench]
-    fn bench_task_spawn(b: &mut Bencher) {
-        let mut vm = VirtualMachine::new();
-        b.iter(|| {
-            vm.spawn_task(FuncId(0)).unwrap();
-        });
-    }
-    
-    #[bench]
-    fn bench_work_stealing(b: &mut Bencher) {
-        let scheduler = Scheduler::new(SchedulerConfig {
-            num_workers: 4,
-            ..Default::default()
-        });
-        
-        b.iter(|| {
-            // 提交多个任务
-            for _ in 0..100 {
-                scheduler.submit_task(TaskId(0));
+    #[error("Stack overflow (max: {0})")]
+    StackOverflow(usize),
+
+    #[error("Invalid constant index: {0}")]
+    InvalidConstantIndex(u16),
+
+    #[error("Invalid local index: {0}")]
+    InvalidLocalIndex(u8),
+
+    #[error("Invalid global index: {0}")]
+    InvalidGlobalIndex(u16),
+
+    #[error("No call frame")]
+    NoCallFrame,
+
+    #[error("Call stack overflow (max depth: {0})")]
+    CallStackOverflow(usize),
+
+    #[error("Type error: {0}")]
+    TypeError(String),
+
+    #[error("Division by zero")]
+    DivisionByZero,
+
+    #[error("Not callable: {0}")]
+    NotCallable(String),
+
+    #[error("Index out of bounds: {0}")]
+    IndexOutOfBounds(usize),
+
+    #[error("Key not found: {0}")]
+    KeyNotFound(String),
+
+    #[error("Unimplemented instruction: {0}")]
+    UnimplementedInstruction(String),
+
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
+
+    #[error("Task error: {0}")]
+    TaskError(String),
+}
+```
+
+### 8.2 错误恢复
+
+```rust
+impl VM {
+    /// 执行并捕获错误
+    pub fn run_catch(&mut self) -> Result<Value, VMError> {
+        match self.run() {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                // 生成错误回溯
+                let backtrace = self.generate_backtrace();
+                eprintln!("Error: {}", error);
+                eprintln!("Backtrace:");
+                for (i, frame_info) in backtrace.iter().enumerate() {
+                    eprintln!("  #{}: {}", i, frame_info);
+                }
+                Err(error)
             }
-            scheduler.run_to_completion().unwrap();
-        });
+        }
+    }
+
+    /// 生成错误回溯
+    fn generate_backtrace(&self) -> Vec<String> {
+        self.frames.iter()
+            .enumerate()
+            .map(|(i, frame)| {
+                let func = &self.get_function(frame.func_id);
+                format!("at {} ({}:{})", func.name, func.filename, frame.ip)
+            })
+            .collect()
     }
 }
 ```
@@ -1598,36 +2078,19 @@ mod benchmarks {
 
 ## 九、总结
 
-YaoXiang 运行时系统采用现代并发和内存管理技术：
+YaoXiang 运行时系统采用模块化设计：
 
-### 核心优势
+1. **虚拟机**：基于栈的解释器，高效执行字节码
+2. **并作模型**：DAG 表示任务依赖，自动并行执行
+3. **调度器**：工作窃取算法，负载均衡
+4. **内存管理**：引用计数 + 垃圾回收，自动内存管理
+5. **内联缓存**：优化动态分派性能
 
-1. **高性能虚拟机**
-   - 优化的指令分发
-   - 紧凑的字节码格式
-   - 内联缓存加速
+**核心创新点**：
 
-2. **并作并发模型**
-   - 零认知负担的自动并行
-   - 工作窃取负载均衡
-   - 依赖图自动管理
-
-3. **高效内存管理**
-   - 编译时所有权保证
-   - 最小化运行时开销
-   - 可选的 GC 隔离
-
-4. **可扩展架构**
-   - 模块化设计
-   - 易于添加新指令
-   - 支持未来 JIT
-
-### 关键性能指标（目标）
-
-- **虚拟机执行**：10-50 亿指令/秒
-- **任务创建**：< 100ns
-- **上下文切换**：< 1μs
-- **GC 暂停**：< 1ms（可选）
-- **内存开销**：每个任务 < 1KB
+- **同步思维，并发执行**：用户使用同步 API，编译器自动构建 DAG
+- **工作窃取负载均衡**：高效利用多核资源
+- **类型化字节码**：减少运行时类型检查开销
+- **增量 GC**：减少垃圾回收暂停时间
 
 **最后更新**：2025-01-04
