@@ -458,7 +458,7 @@ impl EscapeAnalyzer {
     }
 
     /// 标记被调用函数返回值导致的逃逸
-    fn mark_callee_return_escapes(&mut self, var: LocalId, callee: &Operand) -> bool {
+    fn mark_callee_return_escapes(&mut self, var: LocalId, _callee: &Operand) -> bool {
         // 保守假设：如果变量被传递给可能返回它的函数，则逃逸
         // 在实际实现中需要更精确的分析
         let mut escaped = false;

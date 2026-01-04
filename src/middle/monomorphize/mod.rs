@@ -6,11 +6,10 @@
 //! 2. 代码共享：相同类型组合共享一份代码
 //! 3. 阈值控制：单函数特化数量上限为16
 
-use crate::frontend::parser::ast::{Expr, Stmt, StmtKind, Type};
+use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 // 导出 instance 模块
 pub mod instance;
@@ -450,7 +449,7 @@ impl Monomorphizer {
             .collect();
 
         // 替换参数类型
-        let mut new_params: Vec<MonoType> = generic_func
+        let new_params: Vec<MonoType> = generic_func
             .params
             .iter()
             .map(|ty| self.substitute_single_type(ty, &type_param_map))

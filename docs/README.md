@@ -10,14 +10,28 @@ docs/
 ├── YaoXiang-language-specification.md  # 语言规范（权威参考）
 ├── YaoXiang-design-manifesto.md        # 设计宣言（核心理念与路线图）
 ├── YaoXiang-implementation-plan.md     # 实现计划（技术细节）
+├── YaoXiang-WTF.md                     # 常见问题与解答
+├── YaoXiang-async-whitepaper.md        # 异步并发白皮书
+├── README.md                           # 文档索引（本文档）
+│
 ├── guides/                             # 用户指南
-│   └── getting-started.md              # 快速入门
-├── reference/                          # 技术参考
-│   └── (待添加)
-├── architecture/                       # 架构文档
-│   └── (待添加)
-└── examples/                           # 示例代码
-    └── (待添加)
+│   ├── getting-started.md              # 快速入门（5 分钟上手）
+│   ├── error-system-design.md          # 错误系统设计
+│   └── dev/                            # 开发者指南
+│       ├── commit-convention.md        # 提交规范
+│       └── release-guide.md            # 发布指南
+│
+├── architecture/                       # 架构文档（v2.0.0）
+│   ├── README.md                       # 架构索引
+│   ├── project-structure.md            # 项目结构
+│   ├── compiler-design.md              # 编译器设计
+│   └── runtime-design.md               # 运行时设计
+│
+└── works/                              # 工作文档
+    ├── old/                            # 历史文档（已归档）
+    │   └── archived/                   # 归档的旧文档
+    ├── phase/                          # 阶段性文档
+    └── plans/                          # 规划文档
 ```
 
 ## 阅读顺序
@@ -33,7 +47,15 @@ docs/
 
 ### 高级内容
 
-4. [实现计划](YaoXiang-implementation-plan.md) - 编译器实现技术细节
+4. [项目结构](architecture/project-structure.md) - 代码库结构概览
+5. [编译器设计](architecture/compiler-design.md) - 编译原理与实现
+6. [运行时设计](architecture/runtime-design.md) - 虚拟机与并发模型
+
+### 参考资料
+
+- [设计宣言](YaoXiang-design-manifesto.md) - 核心理念与路线图
+- [异步白皮书](YaoXiang-async-whitepaper.md) - 并作模型详解
+- [常见问题](YaoXiang-WTF.md) - 设计与使用 FAQ
 
 ## 贡献
 

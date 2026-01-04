@@ -39,7 +39,17 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
     while !state.at_end() {
         // Skip empty statements (like stray semicolons)
         if !state.can_start_stmt() {
+            // Allow semicolons to be skipped without error (empty statements)
+            if state.at(&TokenKind::Semicolon) {
+                state.bump();
+                continue;
+            }
+            
             eprintln!("[DEBUG] Skipping token that can't start statement: {:?}", state.current().map(|t| &t.kind));
+            // Report error for unexpected token
+            state.error(ParseError::UnexpectedToken(
+                state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+            ));
             state.synchronize();
             continue;
         }

@@ -3,7 +3,7 @@
 //! 定义 .yx (.42) 字节码文件格式并实现序列化。
 
 use std::io::{self, Write};
-use crate::middle::ir::{ModuleIR, ConstValue, FunctionIR};
+use crate::middle::ir::{ModuleIR, ConstValue};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::generator::BytecodeGenerator;
 
@@ -236,6 +236,7 @@ impl MonoTypeExt for MonoType {
             MonoType::Fn { .. } => 30,
             MonoType::TypeRef(_) => 40,
             MonoType::TypeVar(_) => 50,
+            MonoType::Range { .. } => 26,
         }
     }
 

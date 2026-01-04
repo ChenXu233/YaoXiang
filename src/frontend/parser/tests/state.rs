@@ -50,14 +50,14 @@ fn test_parser_state_new_with_tokens() {
 #[test]
 fn test_at_end_true() {
     let tokens = vec![];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
     assert!(state.at_end());
 }
 
 #[test]
 fn test_at_end_false_with_tokens() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
     assert!(!state.at_end());
 }
 
@@ -375,7 +375,7 @@ fn test_can_start_stmt_identifier() {
 #[test]
 fn test_can_start_stmt_kw_mut() {
     let tokens = vec![create_token(TokenKind::KwMut)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -383,7 +383,7 @@ fn test_can_start_stmt_kw_mut() {
 #[test]
 fn test_can_start_stmt_kw_type() {
     let tokens = vec![create_token(TokenKind::KwType)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }

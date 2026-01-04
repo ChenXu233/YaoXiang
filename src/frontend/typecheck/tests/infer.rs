@@ -847,7 +847,7 @@ fn test_infer_block() {
         span: Span::default(),
     };
 
-    let ty = inferrer.infer_block(&block).unwrap();
+    let ty = inferrer.infer_block(&block, true, None).unwrap();
     assert_eq!(ty, MonoType::Int(64));
 }
 
@@ -863,7 +863,7 @@ fn test_infer_empty_block() {
         span: Span::default(),
     };
 
-    let ty = inferrer.infer_block(&block).unwrap();
+    let ty = inferrer.infer_block(&block, true, None).unwrap();
     assert_eq!(ty, MonoType::Void);
 }
 

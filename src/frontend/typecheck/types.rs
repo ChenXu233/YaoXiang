@@ -88,6 +88,11 @@ pub enum MonoType {
         /// 是否异步
         is_async: bool,
     },
+    /// 范围类型 (start..end)
+    Range {
+        /// 元素类型
+        elem_type: Box<MonoType>,
+    },
     /// 类型变量（推断中）
     TypeVar(TypeVar),
     /// 类型引用（如自定义类型名）
@@ -136,6 +141,7 @@ impl MonoType {
             }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
+            MonoType::Range { elem_type } => format!("Range<{}>", elem_type.type_name()),
         }
     }
 }

@@ -566,7 +566,7 @@ impl CodegenContext {
             // =====================
             // 函数调用
             // =====================
-            Call { dst, func: _, args: _ } => {
+            Call { dst: _, func: _, args: _ } => {
                 // 简化实现：返回 Nop
                 Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
             }

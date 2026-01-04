@@ -106,7 +106,7 @@ pub fn build_bytecode(source_path: &Path, output_path: &Path) -> Result<()> {
 
 /// Dump bytecode for debugging
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    use crate::middle::codegen::bytecode::BytecodeFile;
+    
     use crate::middle::codegen::CodegenContext;
     use crate::vm::opcode::TypedOpcode;
 

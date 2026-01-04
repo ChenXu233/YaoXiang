@@ -4,7 +4,7 @@
 
 use super::{CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, Block, Expr, UnOp};
+use crate::frontend::parser::ast::{BinOp, Expr, UnOp};
 use crate::frontend::typecheck::MonoType;
 use crate::frontend::typecheck::check::infer_literal_type;
 use crate::middle::codegen::BytecodeInstruction;
@@ -97,7 +97,7 @@ impl CodegenContext {
     }
 
     /// 生成变量
-    fn generate_variable(&mut self, name: &str, span: crate::util::span::Span) -> Result<Operand, CodegenError> {
+    fn generate_variable(&mut self, name: &str, _span: crate::util::span::Span) -> Result<Operand, CodegenError> {
         // 查找符号
         if let Some(symbol) = self.symbol_table.get(name) {
             match symbol.storage {
@@ -349,7 +349,7 @@ impl CodegenContext {
     }
 
     /// 生成元组
-    fn generate_tuple(&mut self, exprs: &[Expr]) -> Result<Operand, CodegenError> {
+    fn generate_tuple(&mut self, _exprs: &[Expr]) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         // TODO: 实现元组代码生成
         Ok(Operand::Temp(dst))
@@ -378,7 +378,7 @@ impl CodegenContext {
     }
 
     /// 生成字典
-    fn generate_dict(&mut self, pairs: &[(Expr, Expr)]) -> Result<Operand, CodegenError> {
+    fn generate_dict(&mut self, _pairs: &[(Expr, Expr)]) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         // TODO: 实现字典代码生成
         Ok(Operand::Temp(dst))

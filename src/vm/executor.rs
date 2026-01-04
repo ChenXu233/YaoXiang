@@ -3,6 +3,7 @@
 use super::*;
 use crate::middle::{ConstValue, ModuleIR};
 use crate::runtime::memory::Heap;
+#[allow(deprecated)]
 use crate::runtime::scheduler::Scheduler;
 use std::collections::HashMap;
 
@@ -26,6 +27,7 @@ impl Default for VMConfig {
 
 /// Virtual Machine
 #[derive(Debug)]
+#[allow(deprecated)]
 pub struct VM {
     /// Configuration
     config: VMConfig,
@@ -54,7 +56,9 @@ impl Default for VM {
     }
 }
 
+#[allow(deprecated)]
 impl VM {
+    /// Create VM with config
     /// Create VM with config
     pub fn new_with_config(config: VMConfig) -> Self {
         let stack_size = config.stack_size;

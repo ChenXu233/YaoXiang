@@ -19,7 +19,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::runtime::dag::{ComputationDAG, DAGError, DAGNodeKind, NodeId};
+use crate::runtime::dag::{ComputationDAG, DAGNodeKind, NodeId};
 
 /// Scheduler configuration.
 #[derive(Debug, Clone)]
@@ -268,7 +268,7 @@ impl FlowScheduler {
     fn worker_loop(
         worker_id: usize,
         running: &Arc<AtomicBool>,
-        wake_condvar: &Arc<Condvar>,
+        _wake_condvar: &Arc<Condvar>,
         work_stealer: &Arc<WorkStealer>,
         local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
         ready_queue: &Arc<Mutex<VecDeque<NodeId>>>,
@@ -405,7 +405,7 @@ impl FlowScheduler {
     }
 
     /// Add a node to the DAG and schedule it if ready.
-    pub fn schedule_node(&self, kind: DAGNodeKind, dependencies: &[NodeId]) -> NodeId {
+    pub fn schedule_node(&self, kind: DAGNodeKind, _dependencies: &[NodeId]) -> NodeId {
         // This is a placeholder - actual implementation would integrate with codegen
         // For now, we just add a simple compute node
         let node_id = self
@@ -514,6 +514,7 @@ pub struct Scheduler {
 }
 
 #[deprecated]
+#[allow(deprecated)]
 impl Scheduler {
     /// Create a new scheduler.
     #[inline]

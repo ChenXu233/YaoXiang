@@ -1,7 +1,7 @@
 //! 循环优化代码生成
 
 use super::{CodegenContext, CodegenError, BytecodeInstruction};
-use crate::frontend::parser::ast::{Expr, Stmt, StmtKind};
+use crate::frontend::parser::ast::{Expr, Stmt};
 use crate::middle::ir::Operand;
 use crate::vm::opcode::TypedOpcode;
 

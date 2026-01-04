@@ -1,4 +1,4 @@
-//! 语句和函数类型检查
+﻿//! 语句和函数类型检查
 //!
 //! 实现语句的类型检查和函数定义的类型验证
 
@@ -118,7 +118,7 @@ impl<'a> TypeChecker<'a> {
                     span: _,
                 } = expr.as_ref()
                 {
-                    self.check_fn_def(name, params, return_type.as_ref(), body, *is_async)?;
+                    self.check_fn_def(name, params, return_type.as_ref(), body, *is_async, None, false)?;
                     Ok(())
                 } else {
                     self.inferrer.infer_expr(expr)?;
@@ -131,41 +131,92 @@ impl<'a> TypeChecker<'a> {
                 params,
                 body: (stmts, expr),
             } => {
-                // 新语法函数定义：name[: Type] = (params) => body
-                // 需要构造 return_type 和 body
                 eprintln!("[CHECK] check_stmt: processing Fn for '{}'", name);
-                // type_annotation 是 Option<Type>，需要借用为 Option<&Type>
-                let return_type = type_annotation.as_ref().map(|t| t as &ast::Type);
+                eprintln!("[DEBUG] type_annotation is_some: {}", type_annotation.is_some());
+                if let Some(ann) = type_annotation {
+                    eprintln!("[DEBUG] type_annotation: {:?}", ann);
+                }
+                
+                // 1. Extract params and return type from annotation if available
+                let (annotated_params, annotated_return) = if let Some(ast::Type::Fn { params, return_type, .. }) = type_annotation {
+                    (Some(params), Some(return_type.as_ref()))
+                } else {
+                    (None, None)
+                };
 
-                // 先创建函数类型并注册到作用域（支持递归调用）
-                let param_types: Vec<MonoType> = params
-                    .iter()
-                    .map(|p| {
-                        if let Some(ty) = &p.ty {
-                            MonoType::from(ty.clone())
-                        } else {
-                            self.inferrer.solver().new_var()
-                        }
-                    })
-                    .collect();
-                let return_ty = if let Some(ty) = return_type {
+                // 2. Prepare parameter types for the function signature
+                let param_types: Vec<MonoType> = if let Some(a_params) = annotated_params {
+                    if a_params.len() == params.len() {
+                        a_params.iter().map(|t| MonoType::from(t.clone())).collect()
+                    } else {
+                        // Mismatch in count, fallback to params or error? 
+                        // For now, fallback to inferring from params if counts don't match, 
+                        // but ideally this should be an error caught by parser/validation.
+                        // Given parser checks count, we can assume they match or use params.
+                        params.iter().map(|p| {
+                            if let Some(ty) = &p.ty {
+                                MonoType::from(ty.clone())
+                            } else {
+                                self.inferrer.solver().new_var()
+                            }
+                        }).collect()
+                    }
+                } else {
+                    params
+                        .iter()
+                        .map(|p| {
+                            if let Some(ty) = &p.ty {
+                                MonoType::from(ty.clone())
+                            } else {
+                                self.inferrer.solver().new_var()
+                            }
+                        })
+                        .collect()
+                };
+
+                // 3. Prepare return type for the function signature
+                // Handle "_" as "inferred" (None)
+                let expected_return_type = if let Some(ty) = annotated_return {
+                    if let ast::Type::Name(n) = ty {
+                        if n == "_" { None } else { Some(ty) }
+                    } else {
+                        Some(ty)
+                    }
+                } else {
+                    None
+                };
+
+                let return_ty = if let Some(ty) = expected_return_type {
                     MonoType::from(ty.clone())
                 } else {
                     self.inferrer.solver().new_var()
                 };
-                let fn_type = PolyType::mono(MonoType::Fn {
-                    params: param_types,
+
+                // 4. Construct the inferred function type
+                let fn_type = MonoType::Fn {
+                    params: param_types.clone(),
                     return_type: Box::new(return_ty),
                     is_async: false,
-                });
-                self.inferrer.add_var(name.clone(), fn_type);
+                };
+
+                // 5. If there is an annotation, constrain the inferred type to it
+                if let Some(ann) = type_annotation {
+                    let ann_ty = MonoType::from(ann.clone());
+                    self.inferrer.solver().add_constraint(fn_type.clone(), ann_ty, stmt.span);
+                }
+
+                // 6. Register the function in the scope
+                self.inferrer.add_var(name.clone(), PolyType::mono(fn_type));
 
                 let body = ast::Block {
                     stmts: stmts.clone(),
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                self.check_fn_def(name, params, return_type, &body, false)?;
+                
+                // Pass the constrained param_types to check_fn_def so inner scope matches outer signature
+                eprintln!("[DEBUG] Calling check_fn_def from check_stmt. annotated_params.is_some(): {}", annotated_params.is_some());
+                self.check_fn_def(name, params, expected_return_type, &body, false, Some(param_types), annotated_params.is_some())?;
                 Ok(())
             }
             ast::StmtKind::Var {
@@ -186,7 +237,7 @@ impl<'a> TypeChecker<'a> {
                 self.inferrer.add_var(var.clone(), poly);
 
                 // 3. 类型检查循环体
-                let _body_ty = self.inferrer.infer_block(body)?;
+                let _body_ty = self.inferrer.infer_block(body, false, None)?;
                 Ok(())
             }
             ast::StmtKind::TypeDef { name, definition } => {
@@ -198,19 +249,6 @@ impl<'a> TypeChecker<'a> {
                 items,
                 alias,
             } => self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span),
-            ast::StmtKind::Fn {
-                name,
-                type_annotation,
-                params: _,
-                body: _,
-            } => {
-                // Register function type if available
-                if let Some(ty) = type_annotation {
-                    let poly = PolyType::mono(MonoType::from(ty.clone()));
-                    self.inferrer.add_var(name.to_string(), poly);
-                }
-                Ok(())
-            }
         }
     }
 
@@ -295,21 +333,30 @@ impl<'a> TypeChecker<'a> {
         return_type: Option<&ast::Type>,
         body: &ast::Block,
         is_async: bool,
+        external_param_types: Option<Vec<MonoType>>,
+        is_annotated: bool,
     ) -> TypeResult<middle::FunctionIR> {
         // 保存当前返回类型
         let prev_return_type = self.current_return_type.take();
+        let prev_inferrer_return_type = self.inferrer.current_return_type.take();
+
+        let has_external_types = external_param_types.is_some();
 
         // 创建参数类型列表
-        let param_types: Vec<MonoType> = params
-            .iter()
-            .map(|p| {
-                if let Some(ty) = &p.ty {
-                    MonoType::from(ty.clone())
-                } else {
-                    self.inferrer.solver().new_var()
-                }
-            })
-            .collect();
+        let param_types: Vec<MonoType> = if let Some(types) = external_param_types {
+            types
+        } else {
+            params
+                .iter()
+                .map(|p| {
+                    if let Some(ty) = &p.ty {
+                        MonoType::from(ty.clone())
+                    } else {
+                        self.inferrer.solver().new_var()
+                    }
+                })
+                .collect()
+        };
 
         // 跟踪未类型化的参数（使用 param_types 中对应位置的类型变量）
         let mut untyped_params: Vec<(String, usize, MonoType)> = Vec::new();
@@ -332,6 +379,7 @@ impl<'a> TypeChecker<'a> {
 
         // 设置当前返回类型
         self.current_return_type = Some(return_ty.clone());
+        self.inferrer.current_return_type = Some(return_ty.clone());
 
         // 进入函数体作用域
         self.inferrer.enter_scope();
@@ -343,70 +391,51 @@ impl<'a> TypeChecker<'a> {
             self.inferrer.add_var(param.name.clone(), poly);
         }
 
-        // 推断函数体（收集 return 语句信息）
-        let mut has_return_stmt = false;
-        let mut return_expr_ty: Option<MonoType> = None;
+        // 推断函数体
+        // infer_block 会调用 infer_expr，后者会调用 infer_return
+        // infer_return 会使用 self.inferrer.current_return_type 进行检查
+        let body_ty = self.inferrer.infer_block(body, true, None)?;
 
-        // 检查语句，查找 return
-        for stmt in &body.stmts {
-            if let ast::StmtKind::Expr(expr) = &stmt.kind {
-                if let ast::Expr::Return(expr_opt, _) = expr.as_ref() {
-                    has_return_stmt = true;
-                    if let Some(e) = expr_opt {
-                        return_expr_ty = Some(self.inferrer.infer_expr(e)?);
-                    } else {
-                        return_expr_ty = Some(MonoType::Void);
-                    }
-                }
-            }
-        }
-
-        // 推断整个函数体
-        let body_ty = self.inferrer.infer_block(body)?;
-
-        // 返回类型推断规则
-        if let Some(inferred_ret_ty) = inferred_return_ty {
-            // 无标注返回类型，需要推断
-            if has_return_stmt {
-                // 有 return 语句，从 return 表达式推断返回类型
-                if let Some(ret_ty) = return_expr_ty {
-                    self.inferrer.solver().add_constraint(ret_ty, inferred_ret_ty.clone(), body.span);
-                }
-                // 否则 return; 类型为 Void
-            } else if body.stmts.is_empty() && body.expr.is_none() {
-                // 空块 {} → Void
-                self.inferrer.solver().add_constraint(MonoType::Void, inferred_ret_ty.clone(), body.span);
+        // 检查隐式返回（最后表达式或 Void）
+        if let Some(expr) = &body.expr {
+            // 如果最后表达式是 `return`，则该 return 已在 infer_return 中
+            // 对当前返回类型添加了约束，因此不需要（也不应）再将
+            // 块的类型与返回类型约束在一起 — 否则会把 `Void` 约束到返回类型。
+            if let ast::Expr::Return(_, _) = expr.as_ref() {
+                // diverging via explicit return; nothing to do here
             } else {
-                // 无 return，有表达式 → 从表达式推断
-                self.inferrer.solver().add_constraint(body_ty.clone(), inferred_ret_ty.clone(), body.span);
+                // 有最后表达式，约束其类型为返回类型
+                self.inferrer.solver().add_constraint(body_ty.clone(), return_ty.clone(), body.span);
             }
         } else {
-            // 有标注返回类型，检查函数体是否兼容
-            self.inferrer
-                .solver()
-                .add_constraint(body_ty, return_ty.clone(), body.span);
+            // 无最后表达式，检查是否是发散的（以 return 结尾）
+            // 如果不是发散的，则隐式返回 Void
+            // Consider the function diverging if any top-level statement in the
+            // block is an explicit `return`.
+            let is_diverging = body
+                .stmts
+                .iter()
+                .any(|s| match &s.kind {
+                    ast::StmtKind::Expr(e) => matches!(e.as_ref(), ast::Expr::Return(_, _)),
+                    _ => false,
+                });
+
+            if !is_diverging {
+                self.inferrer.solver().add_constraint(MonoType::Void, return_ty.clone(), body.span);
+            }
         }
 
-        // 注意：不在这里求解约束，而是在 check_module 中统一求解
-        // 这样可以确保所有函数的约束一起被求解
-
-        // 参数类型推断规则：检查未类型化参数是否被使用
-        // 检查参数类型变量是否出现在约束中（被使用）
-        for (param_name, param_idx, param_ty) in &untyped_params {
-            let solver = self.inferrer.solver_ref();
-            let in_constraints = solver.appears_in_constraints(match param_ty {
-                MonoType::TypeVar(id) => *id,
-                _ => panic!("Expected TypeVar"),
-            });
-            if in_constraints {
-                // 参数类型变量出现在约束中，说明它被使用了，可以推断
-                continue;
+        // 参数类型推断规则：检查未类型化参数
+        // 如果没有外部类型标注，且参数本身没有类型标注，则报错（不支持从使用推断参数类型）
+        eprintln!("[DEBUG] is_annotated: {}, untyped_params len: {}", is_annotated, untyped_params.len());
+        if !is_annotated {
+            for (param_name, param_idx, _param_ty) in &untyped_params {
+                eprintln!("[DEBUG] Adding error for param: {}", param_name);
+                self.add_error(TypeError::CannotInferParamType {
+                    name: param_name.clone(),
+                    span: params[*param_idx].span,
+                });
             }
-            // 不在约束中，参数类型无法推断
-            self.add_error(TypeError::CannotInferParamType {
-                name: param_name.clone(),
-                span: params[*param_idx].span,
-            });
         }
 
         // 退出函数体作用域
@@ -414,6 +443,7 @@ impl<'a> TypeChecker<'a> {
 
         // 恢复之前的返回类型
         self.current_return_type = prev_return_type;
+        self.inferrer.current_return_type = prev_inferrer_return_type;
 
         // 生成函数 IR
         let fn_ir = middle::FunctionIR {
@@ -478,7 +508,7 @@ impl<'a> TypeChecker<'a> {
                     let mut instructions = Vec::new();
 
                     // 为每个参数生成 LoadArg 指令
-                    for (i, param) in params.iter().enumerate() {
+                    for (i, _param) in params.iter().enumerate() {
                         instructions.push(middle::Instruction::Load {
                             dst: middle::Operand::Local(i),
                             src: middle::Operand::Arg(i),
@@ -522,7 +552,7 @@ impl<'a> TypeChecker<'a> {
                         .map(|t| t.into())
                         .unwrap_or(MonoType::Int(64));
 
-                    let init_instr = if let Some(expr) = initializer {
+                    let init_instr = if let Some(_expr) = initializer {
                         // 简化：假设初始化为整数常量
                         middle::Instruction::Load {
                             dst: middle::Operand::Global(0),
@@ -570,14 +600,14 @@ impl<'a> TypeChecker<'a> {
                 let result_reg = instructions.len();
                 self.generate_expr_ir(expr, result_reg, instructions);
             }
-            ast::StmtKind::Var { name, type_annotation: _, initializer, is_mut: _ } => {
+            ast::StmtKind::Var { name: _, type_annotation: _, initializer, is_mut: _ } => {
                 // 生成变量声明指令
                 let var_idx = instructions.len();
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions);
                 }
             }
-            ast::StmtKind::Fn { name, type_annotation, params, body: _ } => {
+            ast::StmtKind::Fn { name: _, type_annotation: _, params: _, body: _ } => {
                 // 嵌套函数（简化处理）
             }
             _ => {}
@@ -595,14 +625,13 @@ impl<'a> TypeChecker<'a> {
                     Literal::Bool(b) => middle::ConstValue::Bool(*b),
                     Literal::String(s) => middle::ConstValue::String(s.clone()),
                     Literal::Char(c) => middle::ConstValue::Char(*c),
-                    _ => middle::ConstValue::Int(0),
                 };
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Const(const_val),
                 });
             }
-            ast::Expr::Var(name, _) => {
+            ast::Expr::Var(_, _) => {
                 // 变量加载
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
@@ -681,7 +710,7 @@ impl<'a> TypeChecker<'a> {
                 };
                 instructions.push(instr);
             }
-            ast::Expr::Call { func, args, span: _ } => {
+            ast::Expr::Call { func: _, args, span: _ } => {
                 // 函数调用
                 let mut arg_regs = Vec::new();
                 for (i, arg) in args.iter().enumerate() {

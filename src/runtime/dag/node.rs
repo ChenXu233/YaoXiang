@@ -3,7 +3,6 @@
 //! Represents a computation unit in the dependency graph.
 
 use std::fmt;
-use std::sync::Arc;
 
 use super::node_id::NodeId;
 

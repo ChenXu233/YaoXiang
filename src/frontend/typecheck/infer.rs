@@ -20,6 +20,8 @@ pub struct TypeInferrer<'a> {
     scopes: Vec<HashMap<String, PolyType>>,
     /// 循环标签栈（用于 break/continue）
     loop_labels: Vec<String>,
+    /// 当前函数的返回类型（用于 return 语句检查）
+    pub current_return_type: Option<MonoType>,
 }
 
 impl<'a> TypeInferrer<'a> {
@@ -29,6 +31,7 @@ impl<'a> TypeInferrer<'a> {
             solver,
             scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
+            current_return_type: None,
         }
     }
 
@@ -54,10 +57,14 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::BinOp { op, left, right, span } => self.infer_binop(op, left, right, *span),
             ast::Expr::UnOp { op, expr, span } => self.infer_unop(op, expr, *span),
             ast::Expr::Call { func, args, span } => self.infer_call(func, args, *span),
-            ast::Expr::FnDef { span, .. } => Err(TypeError::UnsupportedOp {
-                op: "function definition".to_string(),
-                span: *span,
-            }),
+            ast::Expr::FnDef {
+                name: _,
+                params,
+                return_type,
+                body,
+                is_async: _,
+                span,
+            } => self.infer_fn_def_expr(params, return_type.as_ref(), body, *span),
             ast::Expr::If {
                 condition,
                 then_branch,
@@ -85,7 +92,7 @@ impl<'a> TypeInferrer<'a> {
                 label: _,
                 span,
             } => self.infer_for(var, iterable, body, *span),
-            ast::Expr::Block(block) => self.infer_block(block),
+            ast::Expr::Block(block) => self.infer_block(block, true, None),
             ast::Expr::Return(expr, span) => self.infer_return(expr.as_deref(), *span),
             ast::Expr::Break(label, span) => self.infer_break(label.as_deref(), *span),
             ast::Expr::Continue(label, span) => self.infer_continue(label.as_deref(), *span),
@@ -118,7 +125,7 @@ impl<'a> TypeInferrer<'a> {
     fn infer_var(&mut self, name: &str, span: Span) -> TypeResult<MonoType> {
         // 查找变量
         let poly = self.get_var(name).cloned();
-        
+
         if let Some(poly) = poly {
             // 实例化多态类型
             let ty = self.solver.instantiate(&poly);
@@ -180,11 +187,12 @@ impl<'a> TypeInferrer<'a> {
 
             // 范围运算
             BinOp::Range => {
-                // 返回一个范围类型，暂时使用动态类型
-                let range_ty = self.solver.new_var();
-                self.solver.add_constraint(left_ty, range_ty.clone(), span);
-                self.solver.add_constraint(right_ty, range_ty.clone(), span);
-                Ok(range_ty)
+                // 左右两边必须是相同类型
+                self.solver.add_constraint(left_ty.clone(), right_ty.clone(), span);
+                // 返回一个范围类型
+                Ok(MonoType::Range {
+                    elem_type: Box::new(left_ty),
+                })
             }
         }
     }
@@ -244,6 +252,45 @@ impl<'a> TypeInferrer<'a> {
         Ok(return_ty)
     }
 
+    /// 推断函数定义表达式的类型
+    fn infer_fn_def_expr(
+        &mut self,
+        params: &[ast::Param],
+        return_type: Option<&ast::Type>,
+        body: &ast::Block,
+        _span: Span,
+    ) -> TypeResult<MonoType> {
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .map(|p| {
+                if let Some(ty) = &p.ty {
+                    MonoType::from(ty.clone())
+                } else {
+                    self.solver.new_var()
+                }
+            })
+            .collect();
+
+        let return_ty = if let Some(ty) = return_type {
+            MonoType::from(ty.clone())
+        } else {
+            self.solver.new_var()
+        };
+
+        self.enter_scope();
+        for (param, param_ty) in params.iter().zip(param_types.iter()) {
+            self.add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
+        }
+        let _body_ty = self.infer_block(body, false, None)?;
+        self.exit_scope();
+
+        Ok(MonoType::Fn {
+            params: param_types,
+            return_type: Box::new(return_ty),
+            is_async: false,
+        })
+    }
+
     /// 推断 if 表达式的类型
     fn infer_if(
         &mut self,
@@ -259,7 +306,7 @@ impl<'a> TypeInferrer<'a> {
             .add_constraint(cond_ty, MonoType::Bool, span);
 
         // 推断各分支的类型
-        let then_ty = self.infer_block(then_branch)?;
+        let then_ty = self.infer_block(then_branch, true, None)?;
 
         // 处理 elif 分支
         let mut current_ty = then_ty;
@@ -268,7 +315,7 @@ impl<'a> TypeInferrer<'a> {
             self.solver
                 .add_constraint(elif_cond_ty, MonoType::Bool, span);
 
-            let elif_body_ty = self.infer_block(elif_body)?;
+            let elif_body_ty = self.infer_block(elif_body, true, None)?;
 
             // 所有分支类型必须一致
             self.solver
@@ -278,7 +325,7 @@ impl<'a> TypeInferrer<'a> {
 
         // 处理 else 分支
         if let Some(else_body) = else_branch {
-            let else_ty = self.infer_block(else_body)?;
+            let else_ty = self.infer_block(else_body, true, None)?;
             self.solver
                 .add_constraint(current_ty.clone(), else_ty, span);
         }
@@ -364,19 +411,19 @@ impl<'a> TypeInferrer<'a> {
     ) -> TypeResult<MonoType> {
         // 条件必须是布尔类型
         let cond_ty = self.infer_expr(condition)?;
+
         self.solver
             .add_constraint(cond_ty, MonoType::Bool, span);
 
         // 推断循环体
-        self.enter_scope();
+        // 注意：infer_block 会自动管理作用域，所以这里不再调用 enter_scope/exit_scope
         if let Some(l) = label {
             self.loop_labels.push(l.to_string());
         }
-        let _body_ty = self.infer_block(body)?;
+        let _body_ty = self.infer_block(body, true, None)?;
         if label.is_some() {
             self.loop_labels.pop();
         }
-        self.exit_scope();
 
         // while 表达式返回 Void
         Ok(MonoType::Void)
@@ -396,23 +443,41 @@ impl<'a> TypeInferrer<'a> {
         // 获取元素类型
         let elem_ty = self.solver.new_var();
 
-        // 可迭代对象应该是 List、Dict 或 String 等
-        let expected_iter_ty = MonoType::List(Box::new(elem_ty.clone()));
-        self.solver
-            .add_constraint(iter_ty, expected_iter_ty, span);
+        // 支持 Range 和 List 类型作为可迭代对象
+        match &iter_ty {
+            MonoType::Range { elem_type } => {
+                // Range 类型：元素类型由 Range 决定
+                self.solver.add_constraint(elem_ty.clone(), *elem_type.clone(), span);
+            }
+            MonoType::List(list_elem) => {
+                // List 类型：元素类型由 List 决定
+                self.solver.add_constraint(elem_ty.clone(), *list_elem.clone(), span);
+            }
+            _ => {
+                // 其他类型：假设是 List，元素类型用 elem_ty
+                let expected_iter_ty = MonoType::List(Box::new(elem_ty.clone()));
+                self.solver.add_constraint(iter_ty, expected_iter_ty, span);
+            }
+        }
 
         // 在循环体内绑定迭代变量
-        self.enter_scope();
+        // 注意：infer_block 会自动管理作用域，所以这里不再调用 enter_scope/exit_scope
         self.add_var(var.to_string(), PolyType::mono(elem_ty));
-        let _body_ty = self.infer_block(body)?;
-        self.exit_scope();
+        let _body_ty = self.infer_block(body, true, None)?;
 
         Ok(MonoType::Void)
     }
 
     /// 推断代码块类型
-    pub fn infer_block(&mut self, block: &ast::Block) -> TypeResult<MonoType> {
-        self.enter_scope();
+    ///
+    /// # Arguments
+    /// * `block` - 要推断的代码块
+    /// * `manage_scope` - 是否管理作用域（进入/退出作用域）
+    /// * `expected_type` - 期望的类型（如果有）
+    pub fn infer_block(&mut self, block: &ast::Block, manage_scope: bool, expected_type: Option<&MonoType>) -> TypeResult<MonoType> {
+        if manage_scope {
+            self.enter_scope();
+        }
 
         // 检查语句
         for stmt in &block.stmts {
@@ -444,14 +509,22 @@ impl<'a> TypeInferrer<'a> {
             }
         }
 
-        self.exit_scope();
-
         // 返回最后表达式的类型或 Void
-        if let Some(expr) = &block.expr {
-            self.infer_expr(expr)
+        let ty = if let Some(expr) = &block.expr {
+            self.infer_expr(expr)?
         } else {
-            Ok(MonoType::Void)
+            MonoType::Void
+        };
+
+        if manage_scope {
+            self.exit_scope();
         }
+
+        if let Some(expected) = expected_type {
+            self.solver.add_constraint(ty.clone(), expected.clone(), block.span);
+        }
+
+        Ok(ty)
     }
 
     /// 推断变量声明: `name[: type] [= expr]`
@@ -488,9 +561,14 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断 return 表达式
-    fn infer_return(&mut self, expr: Option<&ast::Expr>, _span: Span) -> TypeResult<MonoType> {
+    fn infer_return(&mut self, expr: Option<&ast::Expr>, span: Span) -> TypeResult<MonoType> {
         if let Some(e) = expr {
-            self.infer_expr(e)?;
+            let ty = self.infer_expr(e)?;
+            if let Some(ret_ty) = &self.current_return_type {
+                self.solver.add_constraint(ty, ret_ty.clone(), span);
+            }
+        } else if let Some(ret_ty) = &self.current_return_type {
+            self.solver.add_constraint(MonoType::Void, ret_ty.clone(), span);
         }
         Ok(MonoType::Void)
     }

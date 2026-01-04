@@ -2,7 +2,7 @@
 //!
 //! Translates Middle IR to Typed Bytecode.
 
-use crate::middle::ir::{FunctionIR, Instruction, Operand, ConstValue, BasicBlock};
+use crate::middle::ir::{FunctionIR, Instruction, Operand, ConstValue};
 use crate::middle::codegen::bytecode::{BytecodeInstruction, FunctionCode};
 use crate::vm::opcode::TypedOpcode;
 use crate::frontend::typecheck::MonoType;
@@ -181,7 +181,7 @@ impl<'a> BytecodeGenerator<'a> {
                     self.emit(TypedOpcode::Return, vec![]);
                 }
             }
-            Instruction::Call { dst, func, args } => {
+            Instruction::Call { dst, func: _, args } => {
                 // CallStatic: dst, func_id, base_arg_reg, arg_count
                 // We need to move args to contiguous registers if they aren't already.
                 // For simplicity, let's allocate a block of temp registers for args.

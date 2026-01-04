@@ -6,7 +6,7 @@
 //! 2. 当所有者离开作用域时，值被释放
 //! 3. 所有权可以转移（Move），但不能复制（除非使用 Copy）
 
-use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::ir::{FunctionIR, Instruction, Operand};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -124,7 +124,7 @@ impl OwnershipAnalyzer {
     /// 活跃变量分析（反向数据流）
     fn liveness_analysis(&mut self, func: &FunctionIR) {
         // 初始化：每个基本块的活跃变量集
-        for (block_idx, block) in func.blocks.iter().enumerate() {
+        for (block_idx, _) in func.blocks.iter().enumerate() {
             self.live_vars.insert(block_idx, HashSet::new());
         }
 
@@ -349,7 +349,7 @@ impl OwnershipAnalyzer {
 
     /// 计算释放点
     fn compute_drop_points(&mut self, func: &FunctionIR) {
-        for (block_idx, block) in func.blocks.iter().enumerate() {
+        for (block_idx, _block) in func.blocks.iter().enumerate() {
             let mut drops = Vec::new();
 
             // 获取该块末尾的活跃变量

@@ -168,6 +168,7 @@ fn test_return_syntax() {
     // 标准语法 + return 语句
     assert!(check_syntax("add: (Int, Int) -> Int = (a, b) => { return a + b; }"));
     assert!(check_syntax("square: Int -> Int = (x) => { return x * x; }"));
+    assert!(check_syntax("square: Int -> Int = x => { return x * x; }"));
     assert!(check_syntax("get_value: () -> Int = () => { return 42; }"));
     assert!(check_syntax("log: (String) -> Void = (msg) => { print(msg); return; }"));
 

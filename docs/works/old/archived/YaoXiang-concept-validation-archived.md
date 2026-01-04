@@ -3,6 +3,15 @@
 > 版本：v0.1.0-draft
 > 作者：晨煦
 > 日期：2024-12-31
+> 状态：[已归档] 本文档为早期概念设计，已被正式文档取代
+
+---
+
+> **⚠️ 归档说明**：本文档记录了 YaoXiang 语言的设计早期概念，已被以下正式文档取代：
+> - [YaoXiang-book.md](../YaoXiang-book.md) - 语言指南
+> - [YaoXiang-design-manifesto.md](../YaoXiang-design-manifesto.md) - 设计宣言
+>
+> 仅保留作为历史参考。
 
 ---
 

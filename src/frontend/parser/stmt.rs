@@ -519,16 +519,16 @@ impl<'a> ParserState<'a> {
             // Both with and without type annotation can be function definitions
             // Key difference from variable init:
             // - Function def: `= (identifier, ...) => body` (lambda with identifier params)
-            // - Variable init: `= (expr, ...)` or `= expr` (not a lambda or tuple)
+            // - Function def: `= identifier => body` (single param without parens)
+            // - Variable init: `= (expr, ...)` or `= expr` (not a lambda)
             let next_after_type = self.peek_nth(0);
             if matches!(next_after_type.map(|t| &t.kind), Some(TokenKind::Eq)) {
-                // Check if this is a function definition (lambda)
-                // Look ahead: `= (identifier, ...) => body`
+                // Look ahead to check what comes after `=`
                 let next_after_eq = self.peek_nth(1);
+
+                // Case 1: `= (identifier, ...) => body` - multi-param function
                 if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::LParen)) {
                     // Check if the first thing in the parens is an identifier (parameter name)
-                    // For function def: `(x, y) =>`
-                    // For tuple init: `(1, 2)` or `("hello", true)`
                     let first_in_paren = self.peek_nth(2);
 
                     let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
@@ -541,7 +541,7 @@ impl<'a> ParserState<'a> {
                     };
 
                     if is_fn_def {
-                        // This is a function definition!
+                        // This is a function definition with parentheses!
                         let fn_span = span;
 
                         // Expect `=`
@@ -587,8 +587,74 @@ impl<'a> ParserState<'a> {
                             span: fn_span,
                         });
                     }
-                    // Not a function definition, fall through to variable initializer handling
                 }
+                // Case 2: `= identifier => body` - single param without parens
+                // e.g., `inc: Int -> Int = x => x + 1`
+                else if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                    // Check if followed by =>
+                    let after_identifier = self.peek_nth(2);
+                    if matches!(after_identifier.map(|t| &t.kind), Some(TokenKind::FatArrow)) {
+                        // This is a single-param function definition!
+                        let fn_span = span;
+
+                        // Expect `=`
+                        self.expect(&TokenKind::Eq);
+
+                        // Parse single parameter (without parentheses)
+                        let param_span = self.span();
+                        let param_name = match self.current().map(|t| &t.kind) {
+                            Some(TokenKind::Identifier(n)) => n.clone(),
+                            _ => {
+                                self.error(super::ParseError::UnexpectedToken(
+                                    self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                                ));
+                                return None;
+                            }
+                        };
+                        self.bump();
+
+                        // Expect fat arrow
+                        if !self.expect(&TokenKind::FatArrow) {
+                            return None;
+                        }
+
+                        // Parse body
+                        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+                            if !self.expect(&TokenKind::LBrace) {
+                                return None;
+                            }
+                            let body = self.parse_block_body()?;
+                            if !self.expect(&TokenKind::RBrace) {
+                                return None;
+                            }
+                            body
+                        } else {
+                            let expr = self.parse_expression(BP_LOWEST)?;
+                            (Vec::new(), Some(Box::new(expr)))
+                        };
+
+                        // Create single parameter with no type annotation
+                        let params = vec![super::ast::Param {
+                            name: param_name,
+                            ty: None,
+                            span: param_span,
+                        }];
+
+                        // Optional semicolon
+                        self.skip(&TokenKind::Semicolon);
+
+                        return Some(Stmt {
+                            kind: StmtKind::Fn {
+                                name: name.clone(),
+                                type_annotation,
+                                params,
+                                body: (stmts, expr),
+                            },
+                            span: fn_span,
+                        });
+                    }
+                }
+                // Not a function definition, fall through to variable initializer handling
             }
 
             // Check if this is a function definition: `name: Type = (params) => body`
@@ -844,7 +910,7 @@ impl<'a> ParserState<'a> {
         let type_annotation = if !param_types.is_empty() || return_type.is_some() {
              Some(Type::Fn {
                 params: param_types,
-                return_type: Box::new(return_type.clone().unwrap_or(Type::Void)),
+                return_type: Box::new(return_type.clone().unwrap_or(Type::Name("_".to_string()))),
             })
         } else {
             None

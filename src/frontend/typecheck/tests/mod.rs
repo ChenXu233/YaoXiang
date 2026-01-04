@@ -8,3 +8,4 @@ mod check;
 mod types;
 mod scope;
 mod inference;
+mod inference_validation;

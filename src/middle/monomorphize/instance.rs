@@ -141,6 +141,10 @@ impl SpecializationKey {
                 self.type_name_hash(t, state);
             }
             MonoType::Fn { .. } => "fn".hash(state),
+            MonoType::Range { elem_type } => {
+                "range".hash(state);
+                self.type_name_hash(elem_type, state);
+            }
             MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
             MonoType::TypeRef(n) => n.hash(state),
         }

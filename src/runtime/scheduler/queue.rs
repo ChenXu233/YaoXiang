@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use super::task::{Task, TaskId, TaskPriority, TaskState};
+use super::task::{Task, TaskPriority};
 
 /// A thread-safe task queue supporting multiple producers and consumers.
 #[derive(Debug)]

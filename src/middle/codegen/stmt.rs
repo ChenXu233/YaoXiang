@@ -5,7 +5,7 @@
 use super::{CodegenContext, CodegenError, BytecodeInstruction};
 use crate::frontend::parser::ast::{Block, Expr, Param, Stmt, StmtKind, Type};
 use crate::frontend::typecheck::MonoType;
-use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
+use crate::middle::ir::{BasicBlock, FunctionIR, Instruction};
 use crate::vm::opcode::TypedOpcode;
 
 /// 语句代码生成实现

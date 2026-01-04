@@ -189,7 +189,7 @@ pub fn check_function(
     // 在内部作用域中执行类型检查，确保 checker 在访问 env 之前被 drop
     let (result, checker_errors) = {
         let mut checker = TypeChecker::new(env.solver());
-        let result = checker.check_fn_def(name, params, return_type, body, is_async);
+        let result = checker.check_fn_def(name, params, return_type, body, is_async, None, false);
         let errors = checker.errors().to_vec();
         (result, errors)
     };
