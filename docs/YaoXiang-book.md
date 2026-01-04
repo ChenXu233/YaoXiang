@@ -61,26 +61,28 @@ YaoXiang 的设计目标可以概括为以下几个方面：
 
 ```yaoxiang
 # 自动类型推断
-x = 42                           # 推断为 Int
-name = "YaoXiang"                # 推断为 String
+x: Int = 42                           # 显式类型
+y = 42                                # 推断为 Int
+name = "YaoXiang"                     # 推断为 String
 
 # 默认不可变
-x = 10
-x = 20                           # 编译错误！
+x: Int = 10
+x = 20                                # ❌ 编译错误！不可变
 
-# 函数定义
-add(Int, Int) -> Int = (a, b) => a + b
+# 统一声明语法：标识符: 类型 = 表达式
+add: (Int, Int) -> Int = (a, b) => a + b  # 函数声明
+inc: Int -> Int = x => x + 1               # 单参数函数
 
 # 统一类型语法：构造器即类型
 type Point = Point(x: Float, y: Float)
 type Result[T, E] = ok(T) | err(E)
 
-# 无感异步
-fetch_data(String) -> JSON spawn = (url) => {
+# 无感异步（并作函数）
+fetch_data: (String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
-main() -> Void = () => {
+main: () -> Void = () => {
     # 值构造：与函数调用完全相同
     p = Point(3.0, 4.0)
     r = ok("success")
@@ -89,6 +91,15 @@ main() -> Void = () => {
     # 自动等待，无需 await
     print(data.name)
 }
+
+# 泛型函数
+identity: <T> (T) -> T = x => x
+
+# 高阶函数
+apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
+
+# 柯里化
+add_curried: Int -> Int -> Int = a => b => a + b
 ```
 
 ---
@@ -182,6 +193,302 @@ classify(Int) -> String = (n) => {
     }
 }
 ```
+
+### 2.5 完整语法规范
+
+YaoXiang 采用统一的声明语法：**标识符: 类型 = 表达式**。以下是完整的语法规范：
+
+#### 2.5.1 基础声明语法
+
+```yaoxiang
+# 所有声明都遵循：标识符: 类型 = 表达式
+
+# 变量声明
+x: Int = 42
+name: String = "YaoXiang"
+
+# 函数声明
+add: (Int, Int) -> Int = (a, b) => a + b
+inc: Int -> Int = x => x + 1
+getAnswer: () -> Int = () => 42
+log: (String) -> Void = msg => print(msg)
+```
+
+#### 2.5.2 函数类型语法
+
+```
+函数类型 ::= '(' 参数类型列表 ')' '->' 返回类型
+           | 参数类型 '->' 返回类型              # 单参数简写
+
+参数类型列表 ::= [类型 (',' 类型)*]
+返回类型 ::= 类型 | 函数类型 | 'Void'
+
+# 函数类型是一等公民，可嵌套
+# 高阶函数类型 ::= '(' 函数类型 ')' '->' 返回类型
+```
+
+| 示例 | 含义 |
+|------|------|
+| `Int -> Int` | 单参数函数类型 |
+| `(Int, Int) -> Int` | 双参数函数类型 |
+| `() -> Void` | 无参函数类型 |
+| `(Int -> Int) -> Int` | 高阶函数：接收函数，返回 Int |
+| `Int -> Int -> Int` | 柯里化函数（右结合） |
+
+#### 2.5.3 泛型语法（仅用于类型参数）
+
+```yaoxiang
+# 泛型函数：<类型参数> 前缀
+identity: <T> (T) -> T = x => x
+map: <A, B> ((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+  [] => []
+  (x :: rest) => f(x) :: map(f, rest)
+
+# 泛型类型
+List: Type = <T> List[T]
+```
+
+#### 2.5.4 Lambda 表达式语法
+
+```
+Lambda ::= '(' 参数列表 ')' '=>' 表达式
+         | 参数 '=>' 表达式              # 单参数简写
+
+参数列表 ::= [参数 (',' 参数)*]
+参数 ::= 标识符 [':' 类型]               # 可选的类型注解
+```
+
+| 示例 | 含义 |
+|------|------|
+| `(a, b) => a + b` | 多参数 Lambda |
+| `x => x + 1` | 单参数简写 |
+| `(x: Int) => x + 1` | 带类型注解 |
+| `() => 42` | 无参 Lambda |
+
+#### 2.5.5 完整示例
+
+```yaoxiang
+# === 基本函数声明 ===
+
+# 基础函数
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# 单参数函数（两种形式）
+inc: Int -> Int = x => x + 1
+inc2: (Int) -> Int = (x) => x + 1
+
+# 无参函数
+getAnswer: () -> Int = () => 42
+
+# 无返回值函数
+log: (String) -> Void = msg => print(msg)
+
+# === 递归函数 ===
+# 递归在 lambda 中自然支持
+fact: Int -> Int = (n) =>
+  if n <= 1 then 1 else n * fact(n - 1)
+
+# === 高阶函数与函数类型赋值 ===
+
+# 函数类型作为一等公民
+IntToInt: Type = Int -> Int
+IntBinaryOp: Type = (Int, Int) -> Int
+
+# 高阶函数声明
+applyTwice: (IntToInt, Int) -> Int = (f, x) => f(f(x))
+
+# 柯里化函数
+addCurried: Int -> Int -> Int = a => b => a + b
+
+# 函数组合
+compose: (Int -> Int, Int -> Int) -> Int -> Int =
+  (f, g) => x => f(g(x))
+
+# 返回函数的函数
+makeAdder: Int -> (Int -> Int) =
+  x => y => x + y
+
+# === 泛型函数 ===
+
+# 泛型函数
+identity: <T> (T) -> T = x => x
+
+# 泛型高阶函数
+map: <A, B> ((A) -> B, List[A]) -> List[B] =
+  (f, xs) => case xs of
+    [] => []
+    (x :: rest) => f(x) :: map(f, rest)
+
+# 泛型函数类型
+Transformer: Type = <A, B> (A) -> B
+
+# 使用泛型类型
+applyTransformer: <A, B> (Transformer<A, B>, A) -> B =
+  (f, x) => f(x)
+
+# === 复杂类型示例 ===
+
+# 嵌套函数类型
+higherOrder: ((Int) -> Int) -> (Int) -> Int =
+  f => x => f(x) + 1
+
+# 多参数高阶函数
+zipWith: <A, B, C> ((A, B) -> C, List[A], List[B]) -> List[C] =
+  (f, xs, ys) => case (xs, ys) of
+    ([], _) => []
+    (_, []) => []
+    (x::xs', y::ys') => f(x, y) :: zipWith(f, xs', ys')
+
+# 函数类型别名
+Predicate: Type = <T> (T) -> Bool
+Mapper: Type = <A, B> (A) -> B
+Reducer: Type = <A, B> (B, A) -> B
+```
+
+#### 2.5.6 语法解析规则
+
+**类型解析优先级：**
+
+| 优先级 | 类型 | 说明 |
+|--------|------|------|
+| 1 (最高) | 泛型应用 `List<T>` | 左结合 |
+| 2 | 括号 `(T)` | 改变结合性 |
+| 3 | 函数类型 `->` | 右结合 |
+| 4 (最低) | 基础类型 `Int, String` | 原子类型 |
+
+**类型解析示例：**
+
+```yaoxiang
+# (A -> B) -> C -> D
+# 解析为: ((A -> B) -> (C -> D))
+
+# A -> B -> C
+# 解析为: (A -> (B -> C))  # 右结合
+
+# (Int -> Int) -> Int
+# 解析为: 接收函数，返回 Int -> Int
+
+# List<Int -> Int>
+# 解析为: List 的元素类型是 Int -> Int
+```
+
+**Lambda 解析示例：**
+
+```yaoxiang
+# a => b => a + b
+# 解析为: a => (b => (a + b))  # 右结合，柯里化
+
+# (a, b) => a + b
+# 解析为: 接收两个参数，返回 a + b
+```
+
+#### 2.5.7 类型推断规则
+
+YaoXiang 采用**双层处理**策略：解析层宽松放过，类型检查层严格推断。
+
+**解析层规则：**
+- 解析器只验证语法结构，不进行类型推断
+- 缺少类型标注的声明，类型标注字段为 `None`
+- 所有符合基础语法结构的声明都能通过解析
+
+**类型检查层推断规则：**
+
+| 场景 | 参数推断 | 返回推断 | 示例 |
+|------|---------|---------|------|
+| 完整标注 | 使用标注类型 | 使用标注类型 | `add: (Int, Int) -> Int = ...` |
+| 空参空返回 | 推断 `()` | 推断 `Void` | `main = () => {}` |
+| 有参无类型标注 | **无法推断** ✗ | 从表达式推断 | `add = (a, b) => a + b` ✗ |
+| 无参有返回值 | 推断 `()` | 从表达式推断 | `get = () => 42` ✓ |
+| 旧语法有参数类型 | 使用标注类型 | 从表达式推断 | `square(Int) = (x) => x * x` ✓ |
+| return 语句 | - | 从 return 表达式推断 | `add = (a, b) => { return a + b; }` |
+
+**详细推断规则：**
+
+```
+类型检查推断规则：
+├── 参数类型推断
+│   ├── 参数有类型标注 → 使用标注类型
+│   ├── 参数无类型标注但有初始化值 → 尝试从上下文推断
+│   │   └── Lambda 参数无法从上下文推断类型 → 拒绝
+│   └── 参数完全无标注且无法推断 → 拒绝
+│
+├── 返回类型推断
+│   ├── 有 return expr → 从 expr 推断返回类型
+│   ├── 无 return，有表达式 → 从表达式推断
+│   ├── 无 return，有块 `{ ... }`
+│   │   ├── 块为空 `{}` → Void
+│   │   ├── 块有 return → 从 return 推断
+│   │   └── 块无 return 且无显式返回 → **拒绝**
+│   └── 无法推断 → 拒绝
+│
+└── 完全无法推断 → 拒绝
+```
+
+**推断示例：**
+
+```yaoxiang
+# === 推断成功 ===
+
+# 空块推断为 Void
+main = () => {}                    # () -> Void
+
+# 从表达式推断返回类型
+get_num = () => 42                 # () -> Int
+add_one(x: Int) = x + 1            # (Int) -> Int
+
+# 从 return 推断
+square(x: Int) = (y) => { return y * y; }  # (Int) -> Int
+
+# 旧语法有参数类型
+square2(Int) = (x) => x * x        # (Int) -> Int
+
+# === 推断失败 ===
+
+# 参数无法推断
+add = (a, b) => a + b              # ✗ a, b 无类型
+
+# 无显式返回的块
+no_return = (x: Int) => { x }      # ✗ 块无 return，无法推断隐式返回
+
+# 全无法推断
+identity = x => x                  # ✗ x 无类型
+```
+
+#### 2.5.8 旧语法（向后兼容）
+
+YaoXiang 提供旧语法支持以兼容历史代码，**不推荐在新代码中使用**。
+
+```
+旧语法 ::= 标识符 '(' [参数类型列表] ')' '->' 返回类型 '=' Lambda
+```
+
+| 特性 | 标准语法 | 旧语法 |
+|------|---------|--------|
+| 声明格式 | `name: Type = ...` | `name(Types) -> Type = ...` |
+| 参数类型位置 | 在类型标注中 | 在函数名后的括号中 |
+| 空参数 | 必须写 `()` | 可省略 `()` |
+| 推荐程度 | ✅ 官方推荐 | ⚠️ 仅向后兼容 |
+
+**旧语法示例：**
+
+```yaoxiang
+# 旧语法示例（仅向后兼容，不推荐使用）
+mul(Int, Int) -> Int = (a, b) => a * b    # 多参数
+square(Int) -> Int = (x) => x * x          # 单参数
+empty() -> Void = () => {}                  # 无参
+get_random() -> Int = () => 42              # 有返回值
+
+# 新语法等效形式（推荐）
+mul: (Int, Int) -> Int = (a, b) => a * b
+square: (Int) -> Int = (x) => x * x
+empty: () -> Void = () => {}
+get_random: () -> Int = () => 42
+```
+
+**不推荐原因：**
+1. 与标准语法不一致，增加学习成本
+2. 参数类型位置不统一（一个在类型标注中，一个在函数名后）
+3. 解析器需要额外处理两种形式
 
 ---
 

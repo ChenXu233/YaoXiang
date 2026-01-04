@@ -27,11 +27,13 @@ YaoXiang（爻象）是一门实验性的通用编程语言，其设计理念源
 
 ```yaoxiang
 # 自动类型推断
-x = 42
-name = "YaoXiang"
+x: Int = 42
+y = 42                               # 推断为 Int
+name = "YaoXiang"                    # 推断为 String
 
-# 函数定义
-add(Int, Int) -> Int = (a, b) => a + b
+# 统一声明语法：标识符: 类型 = 表达式
+add: (Int, Int) -> Int = (a, b) => a + b
+inc: Int -> Int = x => x + 1
 
 # 统一类型语法：只有构造器，没有 enum/struct/union 关键字
 # 规则：用 | 分隔的都是构造器，构造器名(参数) 就是类型
@@ -47,12 +49,12 @@ c = green
 # === 并作模型：同步语法，异步本质 ===
 
 # 使用 spawn 标记异步函数 - 语法与普通函数完全一致
-fetch_data(String) -> JSON spawn = (url) => {
+fetch_data: (String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
 # 自动并行：多个 spawn 调用自动并行执行
-process_users_and_posts() -> Void spawn = () => {
+process_users_and_posts: () -> Void spawn = () => {
     users = fetch_data("https://api.example.com/users")  # Async[JSON]
     posts = fetch_data("https://api.example.com/posts")  # Async[JSON]
 
@@ -62,7 +64,7 @@ process_users_and_posts() -> Void spawn = () => {
 }
 
 # 并发构造块：显式并行
-compute_all() -> (Int, Int, Int) spawn = () => {
+compute_all: () -> (Int, Int, Int) spawn = () => {
     # spawn { } 内的表达式强制并行执行
     (a, b, c) = spawn {
         heavy_calc(1),    # 独立任务 1
@@ -73,7 +75,7 @@ compute_all() -> (Int, Int, Int) spawn = () => {
 }
 
 # 数据并行循环
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: (Int) -> Int spawn = (n) => {
     # spawn for 标记的循环自动并行化
     total = spawn for i in 0..n {
         fibonacci(i)  # 每次迭代并行执行
@@ -86,7 +88,7 @@ parallel_sum(Int) -> Int spawn = (n) => {
 # Arc：原子引用计数（线程安全）
 type ThreadSafeCounter = ThreadSafeCounter(value: Int)
 
-main() -> Void = () => {
+main: () -> Void = () => {
     # Arc 实现 Send + Sync
     counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(0))
 
@@ -98,6 +100,17 @@ main() -> Void = () => {
 
     # ...
 }
+
+# === 泛型与高阶函数 ===
+
+# 泛型函数
+identity: <T> (T) -> T = x => x
+
+# 高阶函数
+apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
+
+# 柯里化
+add_curried: Int -> Int -> Int = a => b => a + b
 ```
 
 ## 快速开始

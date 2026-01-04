@@ -69,7 +69,7 @@ counter = counter + 1     # OK
 ### 函数
 
 ```yaoxiang
-add(Int, Int) -> Int = (a, b) => a + b
+add:(Int, Int) -> Int = (a, b) => a + b
 
 # 调用
 result = add(1, 2)        # result = 3
