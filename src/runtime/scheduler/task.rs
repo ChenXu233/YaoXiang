@@ -86,8 +86,7 @@ impl TaskState {
 }
 
 /// Task priority levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default)]
 pub enum TaskPriority {
     /// Low priority tasks.
     Low = 0,
@@ -99,7 +98,6 @@ pub enum TaskPriority {
     /// Critical priority tasks.
     Critical = 3,
 }
-
 
 /// A task that can be scheduled for execution.
 pub struct Task {

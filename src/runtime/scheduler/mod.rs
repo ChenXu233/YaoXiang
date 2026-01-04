@@ -11,7 +11,7 @@ pub use queue::{PriorityTaskQueue, TaskQueue};
 pub use task::{Task, TaskBuilder, TaskConfig, TaskId, TaskIdGenerator, TaskPriority, TaskState};
 pub use work_stealer::{StealStats, StealStrategy, WorkStealer};
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Condvar, Mutex, RwLock,
@@ -19,7 +19,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::runtime::dag::{ComputationDAG, DAGNodeKind, NodeId};
+use crate::runtime::dag::{ComputationDAG, DAGError, DAGNodeKind, NodeId};
 
 /// Scheduler configuration.
 #[derive(Debug, Clone)]
@@ -142,8 +142,8 @@ pub struct FlowScheduler {
     dag: Arc<Mutex<ComputationDAG>>,
     /// Work stealer for load balancing (shared via Arc).
     work_stealer: Arc<WorkStealer>,
-    /// Per-worker local queues.
-    local_queues: Arc<RwLock<Vec<Arc<TaskQueue>>>>,
+    /// Per-worker local queues (shared with work stealer).
+    worker_queues: Arc<RwLock<Vec<Arc<TaskQueue>>>>,
     /// Global ready queue (DAG nodes ready to execute).
     ready_queue: Arc<Mutex<VecDeque<NodeId>>>,
     /// Worker threads.
@@ -156,6 +156,8 @@ pub struct FlowScheduler {
     stats: Arc<SchedulerStats>,
     /// Task ID generator.
     task_id_generator: Mutex<TaskIdGenerator>,
+    /// Completed DAG nodes to track dependency readiness.
+    completed_nodes: Arc<Mutex<HashSet<NodeId>>>,
 }
 
 impl FlowScheduler {
@@ -177,12 +179,8 @@ impl FlowScheduler {
         // Create work stealer
         let work_stealer = Arc::new(WorkStealer::new(num_workers));
 
-        // Create local queues for each worker
-        let local_queues = Arc::new(RwLock::new(
-            (0..num_workers)
-                .map(|_| Arc::new(TaskQueue::new()))
-                .collect(),
-        ));
+        // Share the internal queues managed by the work stealer
+        let worker_queues = work_stealer.queues().clone();
 
         // Create global ready queue for DAG nodes
         let ready_queue = Arc::new(Mutex::new(VecDeque::new()));
@@ -193,16 +191,20 @@ impl FlowScheduler {
         // Create task ID generator
         let task_id_generator = Mutex::new(TaskIdGenerator::new());
 
+        // Track completed DAG nodes for dependency resolution
+        let completed_nodes = Arc::new(Mutex::new(HashSet::new()));
+
         // Spawn worker threads
         let workers = Self::spawn_workers(
             num_workers,
             &running,
             &wake_condvar,
             &work_stealer,
-            &local_queues,
+            &worker_queues,
             &ready_queue,
             &dag,
             &stats,
+            &completed_nodes,
             &config,
         );
 
@@ -210,13 +212,14 @@ impl FlowScheduler {
             config,
             dag,
             work_stealer,
-            local_queues,
+            worker_queues,
             ready_queue,
             workers,
             running,
             wake_condvar,
             stats,
             task_id_generator,
+            completed_nodes,
         }
     }
 
@@ -226,10 +229,11 @@ impl FlowScheduler {
         running: &Arc<AtomicBool>,
         wake_condvar: &Arc<Condvar>,
         work_stealer: &Arc<WorkStealer>,
-        local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
+        worker_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
         ready_queue: &Arc<Mutex<VecDeque<NodeId>>>,
         dag: &Arc<Mutex<ComputationDAG>>,
         stats: &Arc<SchedulerStats>,
+        completed_nodes: &Arc<Mutex<HashSet<NodeId>>>,
         config: &SchedulerConfig,
     ) -> Vec<thread::JoinHandle<()>> {
         let mut workers = Vec::with_capacity(num_workers);
@@ -238,10 +242,11 @@ impl FlowScheduler {
             let running = running.clone();
             let wake_condvar = wake_condvar.clone();
             let work_stealer = work_stealer.clone();
-            let local_queues = local_queues.clone();
+            let worker_queues = worker_queues.clone();
             let ready_queue = ready_queue.clone();
             let dag = dag.clone();
             let stats = stats.clone();
+            let completed_nodes = completed_nodes.clone();
             let config = config.clone();
 
             let worker = thread::Builder::new()
@@ -252,10 +257,11 @@ impl FlowScheduler {
                         &running,
                         &wake_condvar,
                         &work_stealer,
-                        &local_queues,
+                        &worker_queues,
                         &ready_queue,
                         &dag,
                         &stats,
+                        &completed_nodes,
                         &config,
                     );
                 })
@@ -273,34 +279,43 @@ impl FlowScheduler {
         running: &Arc<AtomicBool>,
         _wake_condvar: &Arc<Condvar>,
         work_stealer: &Arc<WorkStealer>,
-        local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
+        worker_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
         ready_queue: &Arc<Mutex<VecDeque<NodeId>>>,
         dag: &Arc<Mutex<ComputationDAG>>,
         stats: &Arc<SchedulerStats>,
+        completed_nodes: &Arc<Mutex<HashSet<NodeId>>>,
         config: &SchedulerConfig,
     ) {
         // Register with work stealer
         work_stealer.register_worker(worker_id);
 
+        // Keep a handle to worker queues (currently unused but retained for future placement strategies)
+        let _ = worker_queues;
+
         while running.load(Ordering::SeqCst) {
             // 1. Try to get a task from local queue
-            if let Some(task) = Self::try_local_queue(worker_id, local_queues) {
+            if let Some(task) = work_stealer.try_local() {
                 Self::execute_task(task, stats);
                 continue;
             }
 
             // 2. Try to get a ready DAG node
             if let Some(node_id) = Self::try_ready_queue(ready_queue) {
-                Self::execute_node(worker_id, node_id, dag, stats);
+                Self::execute_node(node_id, dag, ready_queue, completed_nodes, stats);
                 continue;
             }
 
             // 3. Try work stealing (if enabled)
             if config.use_work_stealing {
-                if let Some(task) = work_stealer.steal_random() {
-                    stats.record_steal(true);
-                    Self::execute_task(task, stats);
+                let stolen = work_stealer.steal_batch(config.steal_batch);
+                if !stolen.is_empty() {
+                    for task in stolen {
+                        stats.record_steal(true);
+                        Self::execute_task(task, stats);
+                    }
                     continue;
+                } else {
+                    stats.record_steal(false);
                 }
             }
 
@@ -309,20 +324,6 @@ impl FlowScheduler {
             drop(guard);
             // Wait with timeout
             std::thread::sleep(config.idle_timeout);
-        }
-    }
-
-    /// Try to get a task from local queue.
-    #[inline]
-    fn try_local_queue(
-        worker_id: usize,
-        local_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
-    ) -> Option<Arc<Task>> {
-        let queues = local_queues.read().unwrap();
-        if worker_id < queues.len() {
-            queues[worker_id].pop_front()
-        } else {
-            None
         }
     }
 
@@ -354,23 +355,49 @@ impl FlowScheduler {
 
     /// Execute a DAG node.
     fn execute_node(
-        _worker_id: usize,
         node_id: NodeId,
         dag: &Arc<Mutex<ComputationDAG>>,
+        ready_queue: &Arc<Mutex<VecDeque<NodeId>>>,
+        completed_nodes: &Arc<Mutex<HashSet<NodeId>>>,
         stats: &Arc<SchedulerStats>,
     ) {
-        if let Ok(node) = dag.lock().unwrap().get_node(node_id) {
+        let node_info = {
+            let dag_guard = dag.lock().unwrap();
+            dag_guard.get_node(node_id).ok().cloned()
+        };
+
+        if let Some(node) = node_info {
             let start = std::time::Instant::now();
 
             // Execute node (placeholder - actual execution would be handled by VM)
-            // The node execution is a no-op for this skeleton
             let _ = node.kind();
 
             let duration_us = start.elapsed().as_micros() as usize;
             stats.record_completed(duration_us);
 
-            // Notify DAG that node is complete
-            // This would trigger dependent nodes
+            // Mark node as completed
+            {
+                let mut completed = completed_nodes.lock().unwrap();
+                completed.insert(node_id);
+            }
+
+            // Check dependents; if all dependencies done, enqueue them
+            if !node.dependents().is_empty() {
+                let dependents = node.dependents().to_vec();
+                let completed_snapshot = completed_nodes.lock().unwrap().clone();
+                let dag_guard = dag.lock().unwrap();
+                for dependent in dependents {
+                    if let Ok(dep_node) = dag_guard.get_node(dependent) {
+                        let ready = dep_node
+                            .dependencies()
+                            .iter()
+                            .all(|dep| completed_snapshot.contains(dep));
+                        if ready {
+                            ready_queue.lock().unwrap().push_back(dependent);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -382,10 +409,7 @@ impl FlowScheduler {
         let worker_id =
             self.task_id_generator.lock().unwrap().next().inner() % self.config.num_workers;
 
-        {
-            let queues = self.local_queues.read().unwrap();
-            queues[worker_id].push(task);
-        }
+        Self::enqueue_task(&self.worker_queues, worker_id, task);
 
         // Wake up the worker
         self.wake_condvar.notify_one();
@@ -395,26 +419,53 @@ impl FlowScheduler {
     pub fn spawn_on(&self, worker_id: usize, task: Arc<Task>) {
         self.stats.record_scheduled();
 
-        {
-            let queues = self.local_queues.read().unwrap();
-            if worker_id < queues.len() {
-                queues[worker_id].push(task);
-            }
-        }
+        Self::enqueue_task(&self.worker_queues, worker_id, task);
 
         self.wake_condvar.notify_one();
     }
 
+    /// Enqueue a task onto a specific worker queue.
+    fn enqueue_task(
+        worker_queues: &Arc<RwLock<Vec<Arc<TaskQueue>>>>,
+        worker_id: usize,
+        task: Arc<Task>,
+    ) {
+        let queues = worker_queues.read().unwrap();
+        if worker_id < queues.len() {
+            queues[worker_id].push(task);
+        }
+    }
+
+    /// Add an edge between DAG nodes.
+    pub fn add_edge(&self, from: NodeId, to: NodeId) -> Result<(), DAGError> {
+        let mut dag = self.dag.lock().unwrap();
+        let result = dag.add_edge(from, to);
+
+        if result.is_ok() {
+            // Node now has a dependency, ensure it is not marked ready prematurely
+            let mut queue = self.ready_queue.lock().unwrap();
+            queue.retain(|id| *id != to);
+        }
+
+        result
+    }
+
     /// Add a node to the DAG and schedule it if ready.
-    pub fn schedule_node(&self, kind: DAGNodeKind, _dependencies: &[NodeId]) -> NodeId {
-        // This is a placeholder - actual implementation would integrate with codegen
-        // For now, we just add a simple compute node
-        let node_id = self
-            .dag
-            .lock()
-            .unwrap()
+    pub fn schedule_node(&self, kind: DAGNodeKind, dependencies: &[NodeId]) -> NodeId {
+        let mut dag = self.dag.lock().unwrap();
+        let node_id = dag
             .add_node(kind)
             .expect("Failed to add node to DAG");
+
+        for &dependency in dependencies {
+            dag.add_edge(dependency, node_id)
+                .expect("Failed to add dependency edge");
+        }
+
+        // If there are no dependencies, mark as ready
+        if dependencies.is_empty() {
+            self.ready_queue.lock().unwrap().push_back(node_id);
+        }
 
         // Wake up workers to process the new node
         self.wake_condvar.notify_all();
@@ -507,38 +558,5 @@ impl Drop for FlowScheduler {
         if self.is_running() {
             self.shutdown();
         }
-    }
-}
-
-/// Legacy scheduler for backward compatibility.
-///
-/// This is a simple wrapper around FlowScheduler that provides the old API.
-#[deprecated(since = "0.3.0", note = "Please use FlowScheduler instead")]
-#[derive(Debug)]
-pub struct Scheduler {
-    inner: FlowScheduler,
-}
-
-#[deprecated]
-#[allow(deprecated)]
-impl Default for Scheduler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Scheduler {
-    /// Create a new scheduler.
-    #[inline]
-    pub fn new() -> Self {
-        Self {
-            inner: FlowScheduler::new(),
-        }
-    }
-
-    /// Spawn a task.
-    #[inline]
-    pub fn spawn(&self, task: Arc<Task>) {
-        self.inner.spawn(task);
     }
 }

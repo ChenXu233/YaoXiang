@@ -12,7 +12,7 @@ fn check_type_inference(input: &str) -> Result<(), String> {
     let ast = parse(&tokens).map_err(|e| format!("Parse error: {:?}", e))?;
     let mut env = TypeEnvironment::new();
 
-    // 添加内置函数 print
+    // Provide minimal built-ins used by tests (e.g., print: String -> Void)
     env.add_var(
         "print".to_string(),
         PolyType::mono(MonoType::Fn {
@@ -62,9 +62,6 @@ fn test_inference_expression_return() {
     assert!(check_type_inference("get_num = () => 42").is_ok());
     assert!(check_type_inference("get_str = () => \"hello\"").is_ok());
     assert!(check_type_inference("get_bool = () => true").is_ok());
-    if let Err(e) = check_type_inference("get_bool = () => true") {
-        eprintln!("DEBUG: check_type_inference error: {}", e);
-    }
 }
 
 #[test]
@@ -195,7 +192,7 @@ fn test_invalid_missing_equals() {
 #[test]
 fn test_invalid_missing_arrow() {
     // 缺少 '=>' 符号 - 这个实际上是有效的变量声明
-    // 解析会通过，类型检查会报错（因为 a 未定义且类型不匹配）
+    // 解析会通过，类型检查会报错
     assert!(check_type_inference_fails("inc: Int -> Int = a + 1"));
 }
 

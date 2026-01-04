@@ -1,7 +1,7 @@
 //! Lifetime 模块单元测试
 //!
 //! 测试生命周期分析和引用计数插入功能
-
+#![allow(unused_imports)]
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::lifetime::{OwnershipAnalysisResult, OwnershipAnalyzer};

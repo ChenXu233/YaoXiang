@@ -293,10 +293,7 @@ impl EscapeAnalyzer {
                 if let (Some(dst_id), Some(src_id)) =
                     (self.get_variable(dst), self.get_variable(src))
                 {
-                    var_uses
-                        .entry(src_id)
-                        .or_default()
-                        .insert(dst_id);
+                    var_uses.entry(src_id).or_default().insert(dst_id);
                 }
             }
 
@@ -305,10 +302,7 @@ impl EscapeAnalyzer {
                 if let (Some(dst_id), Some(src_id)) =
                     (self.get_variable(dst), self.get_variable(src))
                 {
-                    var_uses
-                        .entry(src_id)
-                        .or_default()
-                        .insert(dst_id);
+                    var_uses.entry(src_id).or_default().insert(dst_id);
                 }
             }
 
@@ -317,10 +311,7 @@ impl EscapeAnalyzer {
                 if let Some(src_id) = self.get_variable(src) {
                     // dst 可能是任何地址表达式，简化处理
                     if let Some(dst_local) = self.get_variable(dst) {
-                        var_uses
-                            .entry(src_id)
-                            .or_default()
-                            .insert(dst_local);
+                        var_uses.entry(src_id).or_default().insert(dst_local);
                     }
                 }
             }
@@ -330,10 +321,7 @@ impl EscapeAnalyzer {
                 if let Some(dst_id) = dst.as_ref().and_then(|d| self.get_variable(d)) {
                     for arg in args {
                         if let Some(arg_id) = self.get_variable(arg) {
-                            var_uses
-                                .entry(arg_id)
-                                .or_default()
-                                .insert(dst_id);
+                            var_uses.entry(arg_id).or_default().insert(dst_id);
                         }
                     }
                 }
@@ -358,10 +346,7 @@ impl EscapeAnalyzer {
                 if let (Some(dst_id), Some(src_id)) =
                     (self.get_variable(dst), self.get_variable(src))
                 {
-                    var_uses
-                        .entry(src_id)
-                        .or_default()
-                        .insert(dst_id);
+                    var_uses.entry(src_id).or_default().insert(dst_id);
                 }
             }
 

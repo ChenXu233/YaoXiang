@@ -1,3 +1,6 @@
+use crate::frontend::parser::ast;
+use crate::frontend::typecheck::check::TypeChecker;
+use crate::frontend::typecheck::types::TypeConstraintSolver;
 use crate::util::span::{Position, Span};
 
 fn create_dummy_span() -> Span {

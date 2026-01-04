@@ -1,6 +1,6 @@
 //! FlowScheduler 单元测试
 
-use crate::runtime::scheduler::{FlowScheduler, Scheduler, SchedulerConfig, Task, TaskId, TaskPriority};
+use crate::runtime::scheduler::{FlowScheduler, SchedulerConfig, Task, TaskId, TaskPriority};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;

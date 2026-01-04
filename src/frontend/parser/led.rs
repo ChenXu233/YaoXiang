@@ -124,10 +124,9 @@ impl<'a> ParserState<'a> {
 
         // Parse arguments
         while !self.at(&TokenKind::RParen) && !self.at_end() {
-            if !args.is_empty()
-                && !self.expect(&TokenKind::Comma) {
-                    return None;
-                }
+            if !args.is_empty() && !self.expect(&TokenKind::Comma) {
+                return None;
+            }
 
             // Handle named arguments: foo(x: 1, y: 2)
             if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {
@@ -202,10 +201,9 @@ impl<'a> ParserState<'a> {
 
             if !self.at(&TokenKind::RParen) {
                 while !self.at(&TokenKind::RParen) && !self.at_end() {
-                    if !args.is_empty()
-                        && !self.expect(&TokenKind::Comma) {
-                            return None;
-                        }
+                    if !args.is_empty() && !self.expect(&TokenKind::Comma) {
+                        return None;
+                    }
                     args.push(self.parse_expression(BP_LOWEST)?);
                 }
             }

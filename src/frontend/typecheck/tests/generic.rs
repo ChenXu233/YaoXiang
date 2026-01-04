@@ -1,5 +1,7 @@
 //! 泛型类型推断测试
 
+use crate::frontend::typecheck::*;
+use crate::util::span::Span;
 
 /// 测试泛型特化
 #[test]

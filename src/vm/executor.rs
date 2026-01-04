@@ -3,8 +3,7 @@
 use super::*;
 use crate::middle::{ConstValue, ModuleIR};
 use crate::runtime::memory::Heap;
-#[allow(deprecated)]
-use crate::runtime::scheduler::Scheduler;
+use crate::runtime::scheduler::FlowScheduler;
 use std::collections::HashMap;
 
 /// VM configuration
@@ -27,7 +26,6 @@ impl Default for VMConfig {
 
 /// Virtual Machine
 #[derive(Debug)]
-#[allow(deprecated)]
 pub struct VM {
     /// Configuration
     config: VMConfig,
@@ -44,7 +42,7 @@ pub struct VM {
     ip: usize,
     /// Runtime
     heap: Heap,
-    scheduler: Scheduler,
+    scheduler: FlowScheduler,
     /// State
     status: VMStatus,
     error: Option<VMError>,
@@ -72,7 +70,7 @@ impl VM {
             code: vec![],
             ip: 0,
             heap: Heap::new(),
-            scheduler: Scheduler::new(),
+            scheduler: FlowScheduler::new(),
             status: VMStatus::Ready,
             error: None,
         }

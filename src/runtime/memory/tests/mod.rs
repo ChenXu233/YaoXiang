@@ -1,7 +1,7 @@
 //! Memory 单元测试
 //!
 //! 测试内存管理堆的实现和行为
-
+#![allow(unused_imports)]
 use crate::runtime::memory::Heap;
 
 #[cfg(test)]

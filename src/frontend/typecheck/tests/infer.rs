@@ -1,5 +1,9 @@
 //! 类型推断器详细测试
 
+use crate::frontend::lexer::tokens::Literal;
+use crate::frontend::parser::ast::{BinOp, Block, Expr, Pattern, Stmt, StmtKind, UnOp};
+use crate::frontend::typecheck::*;
+use crate::util::span::Span;
 
 /// 测试类型推断器创建
 #[test]
@@ -809,13 +813,11 @@ fn test_infer_field_access_on_non_struct() {
 
 /// 测试不支持的操作错误
 #[test]
-/// 测试函数定义表达式推断
-#[test]
-fn test_infer_fn_def_expr() {
+fn test_infer_unsupported_op() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    // 函数定义在表达式上下文中是支持的
+    // 函数定义在表达式上下文中是不支持的
     let fn_def = Expr::FnDef {
         name: "".to_string(),
         params: vec![],
@@ -829,6 +831,7 @@ fn test_infer_fn_def_expr() {
         span: Span::default(),
     };
 
+    // 函数定义表达式目前被视为支持的表达式类型
     let result = inferrer.infer_expr(&fn_def);
     assert!(result.is_ok());
 }

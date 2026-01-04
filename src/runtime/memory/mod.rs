@@ -145,7 +145,7 @@ impl Heap {
             .push(std::mem::take(&mut self.current_region));
 
         // Try again with new region
-        self.current_region.alloc(size).inspect(|offset| {
+        self.current_region.alloc(size).inspect(|_offset| {
             self.total_allocations += 1;
         })
     }

@@ -1,1 +1,9 @@
 # YaoXiang Clippy Configuration
+# 保持默认配置，不添加特殊规则
+# NOTE: `unused-imports` is not a valid field for `clippy.toml`.
+# Clippy configuration only accepts specific keys; see `rustc` or
+# per-crate attributes for enabling/disabling `unused_imports`.
+# To allow unused imports use one of:
+#  - add `#![allow(unused_imports)]` in the crate root, or
+#  - add `#[allow(unused_imports)]` on specific modules/items, or
+#  - silence via `#[allow(clippy::all)]` as appropriate.

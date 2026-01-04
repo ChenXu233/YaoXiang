@@ -1098,10 +1098,9 @@ impl<'a> ParserState<'a> {
         let mut params = Vec::new();
 
         while !self.at(&TokenKind::RParen) && !self.at_end() {
-            if !params.is_empty()
-                && !self.expect(&TokenKind::Comma) {
-                    return None;
-                }
+            if !params.is_empty() && !self.expect(&TokenKind::Comma) {
+                return None;
+            }
 
             // Check for trailing comma
             if self.at(&TokenKind::RParen) {

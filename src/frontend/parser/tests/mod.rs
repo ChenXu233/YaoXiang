@@ -1,5 +1,5 @@
 //! Parser tests module
-
+#![allow(unused_imports)]
 mod basic;
 mod boundary;
 mod fn_def;

@@ -1,7 +1,7 @@
 //! Lexer 单元测试
 //!
 //! 测试词法分析器的分词功能
-
+#![allow(unused_imports)]
 use crate::frontend::lexer::{tokenize, LexError, TokenKind};
 use crate::util::span::Span;
 

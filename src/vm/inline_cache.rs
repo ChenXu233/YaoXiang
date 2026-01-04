@@ -21,7 +21,6 @@ pub struct InlineCacheSlot {
     pub slots: [ICSlotData; 4],
 }
 
-
 /// 单个缓存插槽
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]

@@ -79,11 +79,7 @@ impl BytecodeFile {
     /// 从 IR 模块构建字节码文件
     pub fn from_ir(module: &ModuleIR) -> Self {
         // 1. 构建类型表
-        let type_table: Vec<MonoType> = module
-            .types
-            .iter()
-            .map(MonoTypeExt::from_ast)
-            .collect();
+        let type_table: Vec<MonoType> = module.types.iter().map(MonoTypeExt::from_ast).collect();
 
         // 2. 构建常量池
         let const_pool = module.constants.clone();

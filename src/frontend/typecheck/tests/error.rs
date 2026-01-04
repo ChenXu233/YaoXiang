@@ -1,5 +1,9 @@
 //! 错误收集测试
 
+use crate::frontend::lexer::tokens::Literal;
+use crate::frontend::parser::ast::*;
+use crate::frontend::typecheck::*;
+use crate::util::span::Span;
 
 /// 测试多个类型错误收集
 #[test]

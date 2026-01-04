@@ -400,9 +400,10 @@ impl ComputationDAG {
                                 .dependencies()
                                 .iter()
                                 .all(|d| current_level.contains(d) || next_level.contains(d))
-                                && !next_level.contains(&dependent) {
-                                    next_level.push(dependent);
-                                }
+                                && !next_level.contains(&dependent)
+                            {
+                                next_level.push(dependent);
+                            }
                         }
                     }
                 }

@@ -8,7 +8,7 @@ mod queue;
 mod work_stealer;
 mod flow_scheduler;
 
-use crate::runtime::scheduler::{Scheduler, SchedulerConfig, Task, TaskId, TaskPriority, TaskState};
+use crate::runtime::scheduler::{FlowScheduler, SchedulerConfig, Task, TaskId, TaskPriority, TaskState};
 
 #[cfg(test)]
 mod task_id_tests {
@@ -148,19 +148,19 @@ mod scheduler_tests {
 
     #[test]
     fn test_scheduler_new() {
-        let scheduler = Scheduler::new();
+        let scheduler = FlowScheduler::new();
         let _ = format!("{:?}", scheduler);
     }
 
     #[test]
     fn test_scheduler_default() {
-        let scheduler = Scheduler::default();
+        let scheduler = FlowScheduler::default();
         let _ = format!("{:?}", scheduler);
     }
 
     #[test]
     fn test_scheduler_spawn() {
-        let scheduler = Scheduler::new();
+        let scheduler = FlowScheduler::new();
         let task = Arc::new(Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024, || {}));
         scheduler.spawn(task);
         // Spawn should not panic
@@ -179,7 +179,7 @@ mod scheduler_tests {
             idle_timeout: Duration::from_millis(2),
             enable_stats: false,
         };
-        let scheduler = Scheduler::with_config(config);
+        let scheduler = FlowScheduler::with_config(config);
         let _ = format!("{:?}", scheduler);
     }
 }

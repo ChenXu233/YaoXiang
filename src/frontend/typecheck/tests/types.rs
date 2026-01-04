@@ -1,5 +1,7 @@
 //! 类型系统核心数据结构测试
 
+use crate::frontend::parser::ast;
+use crate::frontend::typecheck::types::*;
 use crate::util::span::Span;
 
 fn create_dummy_span() -> Span {
