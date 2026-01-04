@@ -1,0 +1,5 @@
+// Test function with content
+add: (Int, Int) -> Int = (a, b) => {
+    result = a + b;
+    result;
+}
