@@ -34,6 +34,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 60  # Allow more time for slow test runs
     steps:
       - uses: actions/checkout@v4
 
@@ -112,6 +113,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 60  # Allow more time for coverage runs with tarpaulin
     steps:
       - uses: actions/checkout@v4
 
@@ -125,7 +127,16 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Generate coverage
-        run: cargo tarpaulin --all-features -o Html
+        # Prevent CI timeouts by:
+        # - Using RUST_TEST_THREADS=1 to avoid ptrace conflicts in CI
+        # - Using --timeout 300 for tarpaulin's internal timeout
+        # - Using --test-threads=1 to force single-threaded test execution
+        # - Wrapping with timeout 15m as a safety guard
+        # This mitigates "Timed out waiting for test response" errors in the runner environment
+        env:
+          RUST_TEST_THREADS: 1
+          COVERAGE: 1
+        run: timeout 15m cargo tarpaulin --verbose --timeout 300 --all-features -o Html -- --test-threads=1
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
