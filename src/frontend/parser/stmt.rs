@@ -503,12 +503,196 @@ impl<'a> ParserState<'a> {
                 None
             };
 
+            // Check if this is actually a function definition: `name: Type = (params) => body`
+            // After parsing type annotation, if we see `=` followed by `(`, check if it's a lambda
+            // Function definition: `= (identifier, ...) =>` (params are identifiers)
+            // Tuple init: `= (expr, ...)` (params are expressions)
+            if self.at(&TokenKind::Eq) {
+                // Peek ahead to check if this is a function definition (lambda)
+                // Function definition: `name: Type = (param_name, ...) => body`
+                // Variable init: `name: Type = (expr, ...)` or `name: Type = expr`
+                let next_after_eq = self.peek_nth(1);
+                if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::LParen)) {
+                    // Check if the first thing in the parens is an identifier (parameter name)
+                    // For function def: `(x, y) =>`
+                    // For tuple init: `(1, 2)` or `("hello", true)`
+                    let first_in_paren = self.peek_nth(2);
+                    
+                    let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                        true
+                    } else if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::RParen)) {
+                        // Check if followed by =>
+                        matches!(self.peek_nth(3).map(|t| &t.kind), Some(TokenKind::FatArrow))
+                    } else {
+                        false
+                    };
+
+                    if !is_fn_def {
+                        // Not an identifier, so this is NOT a function definition
+                        // Fall through to normal variable initializer handling
+                    } else {
+                        // This is a function definition!
+                        let fn_span = span;
+
+                        // Expect `=`
+                        self.expect(&TokenKind::Eq);
+
+                        // Parse lambda: `(params) => body`
+                        if !self.expect(&TokenKind::LParen) {
+                            return None;
+                        }
+                        let params = self.parse_fn_params()?;
+                        if !self.expect(&TokenKind::RParen) {
+                            return None;
+                        }
+                        if !self.expect(&TokenKind::FatArrow) {
+                            return None;
+                        }
+
+                        // Parse body
+                        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+                            if !self.expect(&TokenKind::LBrace) {
+                                return None;
+                            }
+                            let body = self.parse_block_body()?;
+                            if !self.expect(&TokenKind::RBrace) {
+                                return None;
+                            }
+                            body
+                        } else {
+                            let expr = self.parse_expression(BP_LOWEST)?;
+                            (Vec::new(), Some(Box::new(expr)))
+                        };
+
+                        // Optional semicolon
+                        self.skip(&TokenKind::Semicolon);
+
+                        return Some(Stmt {
+                            kind: StmtKind::Fn {
+                                name: name.clone(),
+                                type_annotation,
+                                params,
+                                body: (stmts, expr),
+                            },
+                            span: fn_span,
+                        });
+                    }
+                }
+            }
+
+            // Check if this is a function definition: `name: Type = (params) => body`
+            // Even without the standard pattern, check if `=` followed by lambda params
+            if self.at(&TokenKind::Eq) {
+                // Peek ahead to check if this is a lambda (function definition)
+                let next_after_eq = self.peek_nth(1);
+                if matches!(next_after_eq.map(|t| &t.kind), Some(TokenKind::LParen)) {
+                    // This looks like a function definition: name: Type = (params) => body
+                    // Check if the first thing in the parens is an identifier (parameter name)
+                    let first_in_paren = self.peek_nth(2);
+
+                    let is_fn_def = if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                        true
+                    } else if matches!(first_in_paren.map(|t| &t.kind), Some(TokenKind::RParen)) {
+                        // Check if followed by =>
+                        matches!(self.peek_nth(3).map(|t| &t.kind), Some(TokenKind::FatArrow))
+                    } else {
+                        false
+                    };
+
+                    if is_fn_def {
+                        // This is a function definition!
+                        let fn_span = span;
+
+                        // Expect `=`
+                        self.expect(&TokenKind::Eq);
+
+                        // Parse lambda: `(params) => body`
+                        if !self.expect(&TokenKind::LParen) {
+                            return None;
+                        }
+                        let params = self.parse_fn_params()?;
+                        if !self.expect(&TokenKind::RParen) {
+                            return None;
+                        }
+                        if !self.expect(&TokenKind::FatArrow) {
+                            return None;
+                        }
+
+                        // Parse body
+                        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+                            if !self.expect(&TokenKind::LBrace) {
+                                return None;
+                            }
+                            let body = self.parse_block_body()?;
+                            if !self.expect(&TokenKind::RBrace) {
+                                return None;
+                            }
+                            body
+                        } else {
+                            let expr = self.parse_expression(BP_LOWEST)?;
+                            (Vec::new(), Some(Box::new(expr)))
+                        };
+
+                        // Optional semicolon
+                        self.skip(&TokenKind::Semicolon);
+
+                        return Some(Stmt {
+                            kind: StmtKind::Fn {
+                                name: name.clone(),
+                                type_annotation,
+                                params,
+                                body: (stmts, expr),
+                            },
+                            span: fn_span,
+                        });
+                    }
+                }
+            }
+
             // Optional initializer
             let initializer = if self.skip(&TokenKind::Eq) {
-                Some(Box::new(self.parse_expression(BP_LOWEST)?))
+                let expr = self.parse_expression(BP_LOWEST)?;
+                // Note: Type checking for lambda without type annotation
+                // is deferred to the type checker, not the parser.
+                // Parser is lenient: allows all syntactically valid declarations.
+                Some(Box::new(expr))
             } else {
                 None
             };
+
+            // If we have a type annotation but no initializer and no semicolon,
+            // check if the next token could be part of an invalid pattern
+            // If next token is LParen followed by Identifier and FatArrow,
+            // this looks like `name: Type (params) => body` without the `=`
+            // which is invalid syntax
+            if type_annotation.is_some() && initializer.is_none() && !self.skip(&TokenKind::Semicolon) {
+                let next = self.current().map(|t| &t.kind);
+                if matches!(next, Some(TokenKind::LParen)) {
+                    // Look ahead to see if this is a lambda-like pattern without =
+                    // Pattern: ( identifier ) => or ( identifier , ... ) =>
+                    // For single param: ( a ) => - peek at 1, 2, 3
+                    // For multi param: ( a , b ) => - peek at 1, 2, 3 (first comma or RParen)
+                    let second = self.peek_nth(1);
+                    let third = self.peek_nth(2);
+                    let fourth = self.peek_nth(3);
+                    // Check for pattern: ( identifier ) => or ( identifier , ...
+                    let is_lambda_like = if matches!(second.map(|t| &t.kind), Some(TokenKind::Identifier(_))) {
+                        // Check if third is ) and fourth is => (single param case)
+                        // Or third is , (multi param case)
+                        matches!(third.map(|t| &t.kind), Some(TokenKind::RParen))
+                            || matches!(third.map(|t| &t.kind), Some(TokenKind::Comma))
+                    } else {
+                        false
+                    };
+                    if is_lambda_like && matches!(fourth.map(|t| &t.kind), Some(TokenKind::FatArrow)) {
+                        // This is `name: Type (param) => body` without `=`
+                        self.error(super::ParseError::Generic(
+                            "Missing '=' before lambda in function definition".to_string()
+                        ));
+                        return None;
+                    }
+                }
+            }
 
             self.skip(&TokenKind::Semicolon);
 
@@ -530,6 +714,7 @@ impl<'a> ParserState<'a> {
 
     /// Parse function definition: `name(types) -> type = (params) => body`
     /// Example: `add(Int, Int) -> Int = (a, b) => a + b`
+    /// Also supports: `name() = (params) => body` (inferred types)
     fn parse_fn_stmt(&mut self, span: Span) -> Option<Stmt> {
         // Parse function name
         let name = match self.current().map(|t| &t.kind) {
@@ -543,11 +728,18 @@ impl<'a> ParserState<'a> {
         };
         self.bump();
 
-        // Parse parameter types in parentheses: (Int, String)
+        // Parse parameter types in parentheses: (Int, String) or ()
         if !self.expect(&TokenKind::LParen) {
             return None;
         }
-        let _param_types = self.parse_type_list()?;
+        
+        // Check if it's empty parens `()`
+        let param_types = if self.at(&TokenKind::RParen) {
+            Vec::new()
+        } else {
+            self.parse_type_list()?
+        };
+        
         if !self.expect(&TokenKind::RParen) {
             return None;
         }
@@ -598,19 +790,45 @@ impl<'a> ParserState<'a> {
             (Vec::new(), Some(Box::new(expr)))
         };
 
+        // Validate function definition rules
+        // Note: Parser is lenient. Type checking will handle type inference.
+        // We allow all syntactically valid function definitions.
+        if param_types.is_empty() && return_type.is_none() {
+            // No-signature form: name() = (params) => body
+            // This is allowed - type checker will infer types
+            // Previously required no parameters, but now we allow parameters
+            // and let the type checker handle inference
+        } else {
+            // Standard form: name(Types) -> Ret = (params) => body
+            // Note: Parser is lenient. Type checking will handle type inference.
+            // We allow parameter types without return type (type checker will infer).
+
+            // Parameter count must match type count
+            if param_types.len() != params.len() {
+                 self.error(super::ParseError::Generic(
+                    format!("Parameter count mismatch: expected {}, got {}", param_types.len(), params.len())
+                ));
+                return None;
+            }
+        }
+
+        // Construct function type if types were provided
+        let type_annotation = if !param_types.is_empty() || return_type.is_some() {
+             Some(Type::Fn {
+                params: param_types,
+                return_type: Box::new(return_type.clone().unwrap_or(Type::Void)),
+            })
+        } else {
+            None
+        };
+
         Some(Stmt {
-            kind: StmtKind::Expr(Box::new(Expr::FnDef {
+            kind: StmtKind::Fn {
                 name,
+                type_annotation,
                 params,
-                return_type,
-                body: Box::new(Block {
-                    stmts,
-                    expr,
-                    span: self.span(),
-                }),
-                is_async: false,
-                span,
-            })),
+                body: (stmts, expr),
+            },
             span,
         })
     }

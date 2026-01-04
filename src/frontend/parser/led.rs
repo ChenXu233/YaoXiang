@@ -47,6 +47,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::LBracket) => Some((BP_CALL, BP_CALL + 1, Self::parse_index)),
             // Type cast
             Some(TokenKind::KwAs) => Some((BP_ADD, BP_ADD + 1, Self::parse_cast)),
+            // Lambda (single parameter)
+            Some(TokenKind::FatArrow) => Some((11, 1, Self::parse_lambda_infix)),
             _ => None,
         }
     }
@@ -260,6 +262,48 @@ impl<'a> ParserState<'a> {
             expr: Box::new(lhs),
             target_type,
             span: start_span,
+        })
+    }
+
+    /// Parse lambda expression (infix position for single parameter)
+    fn parse_lambda_infix(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+        let _span = self.span(); // Span of '=>'
+        self.bump(); // consume '=>'
+
+        // Convert lhs to param
+        let param = match lhs {
+            Expr::Var(name, var_span) => Param {
+                name,
+                ty: None,
+                span: var_span,
+            },
+            _ => {
+                self.error(super::ParseError::Generic("Invalid lambda parameter".to_string()));
+                return None;
+            }
+        };
+
+        // Save span before moving param
+        let param_span = param.span;
+
+        // Parse body
+        let body = if self.at(&TokenKind::LBrace) {
+            if !self.expect(&TokenKind::LBrace) { return None; }
+            let (stmts, expr) = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) { return None; }
+            Block { stmts, expr, span: self.span() }
+        } else {
+            let expr = self.parse_expression(BP_LOWEST)?;
+            Block { stmts: vec![], expr: Some(Box::new(expr)), span: self.span() }
+        };
+
+        Some(Expr::FnDef {
+            name: "".to_string(), // Anonymous
+            params: vec![param],
+            return_type: None,
+            body: Box::new(body.clone()),
+            is_async: false,
+            span: crate::util::span::Span::new(param_span.start, body.span.end),
         })
     }
 }

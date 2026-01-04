@@ -249,7 +249,7 @@ mod tokenizer {
                     }
                 }
                 '/' => {
-                    if self.peek_next() == Some('/') {
+                    if self.peek() == Some(&'/') {
                         // Single line comment
                         self.advance();
                         self.advance();
@@ -261,17 +261,17 @@ mod tokenizer {
                         }
                         // Continue to get next token
                         return self.next_token();
-                    } else if self.peek_next() == Some('*') {
+                    } else if self.peek() == Some(&'*') {
                         // Multi-line comment
                         self.advance();
                         self.advance();
                         let mut depth = 1;
                         while depth > 0 {
                             if let Some(c) = self.advance() {
-                                if c == '/' && self.peek_next() == Some('*') {
+                                if c == '/' && self.peek() == Some(&'*') {
                                     self.advance();
                                     depth += 1;
-                                } else if c == '*' && self.peek_next() == Some('/') {
+                                } else if c == '*' && self.peek() == Some(&'/') {
                                     self.advance();
                                     depth -= 1;
                                 }

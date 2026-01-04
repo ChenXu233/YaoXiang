@@ -26,15 +26,21 @@ impl Compiler {
 
     /// Compile source code to IR
     pub fn compile(&mut self, source: &str) -> Result<middle::ModuleIR, CompileError> {
+        eprintln!("[DEBUG] Compiling source code ({} bytes)", source.len());
         // Lexical analysis
         let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
+        eprintln!("[DEBUG] Tokenized into {} tokens", tokens.len());
 
         // Parsing
+        eprintln!("[DEBUG] Starting parsing...");
         let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
+        eprintln!("[DEBUG] Parsing successful, got {} statements", ast.items.len());
 
         // Type checking
+        eprintln!("[DEBUG] Starting type checking...");
         let module = typecheck::check_module(&ast, Some(&mut self.type_env))
             .map_err(|e| CompileError::TypeError(format!("{:?}", e)))?;
+        eprintln!("[DEBUG] Type checking successful");
 
         Ok(module)
     }

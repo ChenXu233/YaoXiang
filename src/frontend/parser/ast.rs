@@ -147,6 +147,13 @@ pub enum StmtKind {
         items: Option<Vec<String>>,
         alias: Option<String>,
     },
+    /// Function definition: `name: Type = (params) => body`
+    Fn {
+        name: String,
+        type_annotation: Option<Type>,
+        params: Vec<Param>,
+        body: (Vec<Stmt>, Option<Box<Expr>>),
+    },
 }
 
 /// Variant constructor definition (for variant types)

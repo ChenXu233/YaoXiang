@@ -16,7 +16,7 @@ impl<'a> ParserState<'a> {
     pub fn parse_type(&mut self) -> Option<Type> {
         let start_span = self.span();
 
-        match self.current().map(|t| &t.kind) {
+        let mut ty = match self.current().map(|t| &t.kind) {
             // Function type: (param_types) -> return_type (using parentheses without fn keyword)
             Some(TokenKind::LParen) => self.parse_tuple_or_parens_type(start_span),
             // List type: [Type]
@@ -25,8 +25,20 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::LBrace) => self.parse_struct_type(start_span),
             // Named type or generic type (including: void, bool, char, string, bytes, int, float)
             Some(TokenKind::Identifier(_)) => self.parse_named_or_generic_type(start_span),
-            _ => None,
+            _ => return None,
+        }?;
+
+        // Handle function type arrow: T -> R
+        // This handles `Int -> Int` or `[Int] -> Int`
+        if self.skip(&TokenKind::Arrow) {
+            let return_type = self.parse_type()?;
+            ty = Type::Fn {
+                params: vec![ty],
+                return_type: Box::new(return_type),
+            };
         }
+
+        Some(ty)
     }
 
     /// Parse function type: `fn(...) -> ...`
@@ -175,13 +187,13 @@ impl<'a> ParserState<'a> {
         // Built-in type name mapping (can be shadowed by user-defined types)
         // Check built-ins first to handle int<32> correctly
         match name.as_str() {
-            "void" => return Some(Type::Void),
-            "bool" => return Some(Type::Bool),
-            "char" => return Some(Type::Char),
-            "string" => return Some(Type::String),
-            "bytes" => return Some(Type::Bytes),
-            "int" => return self.parse_int_type_from_name(),
-            "float" => return self.parse_float_type_from_name(),
+            "void" | "Void" => return Some(Type::Void),
+            "bool" | "Bool" => return Some(Type::Bool),
+            "char" | "Char" => return Some(Type::Char),
+            "string" | "String" => return Some(Type::String),
+            "bytes" | "Bytes" => return Some(Type::Bytes),
+            "int" | "Int" => return self.parse_int_type_from_name(),
+            "float" | "Float" => return self.parse_float_type_from_name(),
             _ => {}
         }
 

@@ -130,8 +130,8 @@ pub enum ParseError {
     #[error("Unexpected end of input")]
     UnexpectedEof,
 
-    #[error("Parser error: {0}")]
-    Custom(String),
+    #[error("{0}")]
+    Generic(String),
 }
 
 #[cfg(test)]
