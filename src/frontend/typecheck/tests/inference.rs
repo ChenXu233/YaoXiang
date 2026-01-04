@@ -2,15 +2,15 @@
 //!
 //! 测试类型检查器的推断功能
 
-use yaoxiang::frontend::parser::parse;
-use yaoxiang::frontend::lexer::tokenize;
-use yaoxiang::frontend::typecheck::check_module;
+use crate::frontend::parser::parse;
+use crate::frontend::lexer::tokenize;
+use crate::frontend::typecheck::check_module;
 
 /// 检查类型推断是否成功
 fn check_type_inference(input: &str) -> Result<(), String> {
     let tokens = tokenize(input).map_err(|e| format!("Lexer error: {:?}", e))?;
     let ast = parse(&tokens).map_err(|e| format!("Parse error: {:?}", e))?;
-    yaoxiang::frontend::typecheck::check_module(&ast)
+    crate::frontend::typecheck::check_module(&ast)
         .map_err(|e| format!("Type error: {:?}", e))
 }
 
