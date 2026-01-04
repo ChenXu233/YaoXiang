@@ -16,10 +16,8 @@ use std::collections::HashMap;
 pub struct TypeInferrer<'a> {
     /// 类型约束求解器
     solver: &'a mut TypeConstraintSolver,
-    /// 变量环境：名称 -> 多态类型
-    vars: HashMap<String, PolyType>,
-    /// 当前作用域的嵌套深度
-    scope_depth: usize,
+    /// 变量环境栈：每一层是一个作用域
+    scopes: Vec<HashMap<String, PolyType>>,
     /// 循环标签栈（用于 break/continue）
     loop_labels: Vec<String>,
 }
@@ -29,8 +27,7 @@ impl<'a> TypeInferrer<'a> {
     pub fn new(solver: &'a mut TypeConstraintSolver) -> Self {
         TypeInferrer {
             solver,
-            vars: HashMap::new(),
-            scope_depth: 0,
+            scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
         }
     }
@@ -114,9 +111,12 @@ impl<'a> TypeInferrer<'a> {
 
     /// 推断变量的类型
     fn infer_var(&mut self, name: &str, span: Span) -> TypeResult<MonoType> {
-        if let Some(poly) = self.vars.get(name) {
+        // 查找变量
+        let poly = self.get_var(name).cloned();
+        
+        if let Some(poly) = poly {
             // 实例化多态类型
-            let ty = self.solver.instantiate(poly);
+            let ty = self.solver.instantiate(&poly);
             Ok(ty)
         } else {
             Err(TypeError::UnknownVariable {
@@ -309,7 +309,7 @@ impl<'a> TypeInferrer<'a> {
             ast::Pattern::Identifier(name) => {
                 // 绑定变量到新类型变量
                 let ty = self.solver.new_var();
-                self.vars.insert(name.clone(), PolyType::mono(ty.clone()));
+                self.add_var(name.clone(), PolyType::mono(ty.clone()));
                 Ok(ty)
             }
             ast::Pattern::Literal(lit) => self.infer_literal(lit, Span::default()),
@@ -398,7 +398,7 @@ impl<'a> TypeInferrer<'a> {
 
         // 在循环体内绑定迭代变量
         self.enter_scope();
-        self.vars.insert(var.to_string(), PolyType::mono(elem_ty));
+        self.add_var(var.to_string(), PolyType::mono(elem_ty));
         let _body_ty = self.infer_block(body)?;
         self.exit_scope();
 
@@ -438,7 +438,7 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断变量声明: `name[: type] [= expr]`
-    fn infer_var_decl(
+    pub(crate) fn infer_var_decl(
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
@@ -456,15 +456,15 @@ impl<'a> TypeInferrer<'a> {
 
             // 泛化 initializer 的类型
             let poly = self.solver.generalize(&init_ty);
-            self.vars.insert(name.to_string(), poly);
+            self.add_var(name.to_string(), poly);
         } else if let Some(ann) = type_annotation {
             // 没有初始化时，创建未绑定类型变量
             let ty = MonoType::from(ann.clone());
-            self.vars.insert(name.to_string(), PolyType::mono(ty));
+            self.add_var(name.to_string(), PolyType::mono(ty));
         } else {
             // 没有任何信息，创建新类型变量
             let ty = self.solver.new_var();
-            self.vars.insert(name.to_string(), PolyType::mono(ty));
+            self.add_var(name.to_string(), PolyType::mono(ty));
         }
 
         Ok(())
@@ -655,17 +655,14 @@ impl<'a> TypeInferrer<'a> {
 
     /// 进入新作用域
     pub fn enter_scope(&mut self) {
-        self.scope_depth += 1;
+        self.scopes.push(HashMap::new());
     }
 
     /// 退出作用域
     pub fn exit_scope(&mut self) {
-        if self.scope_depth > 0 {
-            self.scope_depth -= 1;
+        if self.scopes.len() > 1 {
+            self.scopes.pop();
         }
-        // 移除当前作用域的变量绑定
-        self.vars
-            .retain(|_, poly| poly.binders.is_empty() || self.scope_depth == 0);
     }
 
     // =========================================================================
@@ -674,11 +671,18 @@ impl<'a> TypeInferrer<'a> {
 
     /// 添加变量绑定
     pub fn add_var(&mut self, name: String, poly: PolyType) {
-        self.vars.insert(name, poly);
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, poly);
+        }
     }
 
     /// 获取变量类型
     pub fn get_var(&self, name: &str) -> Option<&PolyType> {
-        self.vars.get(name)
+        for scope in self.scopes.iter().rev() {
+            if let Some(poly) = scope.get(name) {
+                return Some(poly);
+            }
+        }
+        None
     }
 }

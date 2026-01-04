@@ -6,3 +6,4 @@ mod error;
 mod infer;
 mod check;
 mod types;
+mod scope;

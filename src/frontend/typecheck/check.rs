@@ -155,6 +155,19 @@ impl<'a> TypeChecker<'a> {
                 items,
                 alias,
             } => self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span),
+            ast::StmtKind::Fn {
+                name,
+                type_annotation,
+                params: _,
+                body: _,
+            } => {
+                // Register function type if available
+                if let Some(ty) = type_annotation {
+                    let poly = PolyType::mono(MonoType::from(ty.clone()));
+                    self.inferrer.add_var(name.to_string(), poly);
+                }
+                Ok(())
+            }
         }
     }
 
@@ -326,13 +339,253 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 生成模块 IR
-    fn generate_module_ir(&self, _module: &ast::Module) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    fn generate_module_ir(&self, module: &ast::Module) -> Result<middle::ModuleIR, Vec<TypeError>> {
+        let mut functions = Vec::new();
+
+        for stmt in &module.items {
+            match &stmt.kind {
+                ast::StmtKind::Fn {
+                    name,
+                    type_annotation,
+                    params,
+                    body: (stmts, expr),
+                } => {
+                    // 解析返回类型
+                    let return_type = match type_annotation {
+                        Some(ast::Type::Fn { return_type, .. }) => (**return_type).clone().into(),
+                        Some(ty) => ty.clone().into(),
+                        None => MonoType::Void,
+                    };
+
+                    // 生成函数体指令
+                    let mut instructions = Vec::new();
+
+                    // 为每个参数生成 LoadArg 指令
+                    for (i, param) in params.iter().enumerate() {
+                        instructions.push(middle::Instruction::Load {
+                            dst: middle::Operand::Local(i),
+                            src: middle::Operand::Arg(i),
+                        });
+                    }
+
+                    // 处理语句
+                    for stmt in stmts {
+                        self.generate_stmt_ir(stmt, &mut instructions);
+                    }
+
+                    // 处理返回值表达式
+                    if let Some(e) = expr {
+                        let result_reg = instructions.len(); // 使用新寄存器
+                        self.generate_expr_ir(e, result_reg, &mut instructions);
+                        instructions.push(middle::Instruction::Ret(Some(middle::Operand::Local(result_reg))));
+                    } else {
+                        instructions.push(middle::Instruction::Ret(None));
+                    }
+
+                    // 构建函数 IR
+                    let func_ir = middle::FunctionIR {
+                        name: name.clone(),
+                        params: params.iter().filter_map(|p| p.ty.clone()).map(|t| t.into()).collect(),
+                        return_type,
+                        is_async: false,
+                        locals: Vec::new(),
+                        blocks: vec![middle::BasicBlock {
+                            label: 0,
+                            instructions,
+                            successors: Vec::new(),
+                        }],
+                        entry: 0,
+                    };
+
+                    functions.push(func_ir);
+                }
+                ast::StmtKind::Var { name, type_annotation, initializer, is_mut: _ } => {
+                    // 全局变量处理（简化）
+                    let var_type = type_annotation.clone()
+                        .map(|t| t.into())
+                        .unwrap_or(MonoType::Int(64));
+
+                    let init_instr = if let Some(expr) = initializer {
+                        // 简化：假设初始化为整数常量
+                        middle::Instruction::Load {
+                            dst: middle::Operand::Global(0),
+                            src: middle::Operand::Const(middle::ConstValue::Int(0)),
+                        }
+                    } else {
+                        middle::Instruction::Load {
+                            dst: middle::Operand::Global(0),
+                            src: middle::Operand::Const(middle::ConstValue::Int(0)),
+                        }
+                    };
+
+                    // 为全局变量创建函数（简化处理）
+                    let func_ir = middle::FunctionIR {
+                        name: name.clone(),
+                        params: Vec::new(),
+                        return_type: var_type,
+                        is_async: false,
+                        locals: Vec::new(),
+                        blocks: vec![middle::BasicBlock {
+                            label: 0,
+                            instructions: vec![init_instr, middle::Instruction::Ret(None)],
+                            successors: Vec::new(),
+                        }],
+                        entry: 0,
+                    };
+                    functions.push(func_ir);
+                }
+                _ => {}
+            }
+        }
+
         Ok(middle::ModuleIR {
             types: Vec::new(),
             constants: Vec::new(),
             globals: Vec::new(),
-            functions: Vec::new(),
+            functions,
         })
+    }
+
+    /// 生成语句 IR
+    fn generate_stmt_ir(&self, stmt: &ast::Stmt, instructions: &mut Vec<middle::Instruction>) {
+        match &stmt.kind {
+            ast::StmtKind::Expr(expr) => {
+                let result_reg = instructions.len();
+                self.generate_expr_ir(expr, result_reg, instructions);
+            }
+            ast::StmtKind::Var { name, type_annotation: _, initializer, is_mut: _ } => {
+                // 生成变量声明指令
+                let var_idx = instructions.len();
+                if let Some(expr) = initializer {
+                    self.generate_expr_ir(expr, var_idx, instructions);
+                }
+            }
+            ast::StmtKind::Fn { name, type_annotation, params, body: _ } => {
+                // 嵌套函数（简化处理）
+            }
+            _ => {}
+        }
+    }
+
+    /// 生成表达式 IR
+    fn generate_expr_ir(&self, expr: &ast::Expr, result_reg: usize, instructions: &mut Vec<middle::Instruction>) {
+        match expr {
+            ast::Expr::Lit(literal, _) => {
+                // 常量加载
+                let const_val = match literal {
+                    Literal::Int(n) => middle::ConstValue::Int(*n),
+                    Literal::Float(f) => middle::ConstValue::Float(*f),
+                    Literal::Bool(b) => middle::ConstValue::Bool(*b),
+                    Literal::String(s) => middle::ConstValue::String(s.clone()),
+                    Literal::Char(c) => middle::ConstValue::Char(*c),
+                    _ => middle::ConstValue::Int(0),
+                };
+                instructions.push(middle::Instruction::Load {
+                    dst: middle::Operand::Local(result_reg),
+                    src: middle::Operand::Const(const_val),
+                });
+            }
+            ast::Expr::Var(name, _) => {
+                // 变量加载
+                instructions.push(middle::Instruction::Load {
+                    dst: middle::Operand::Local(result_reg),
+                    src: middle::Operand::Local(result_reg), // 简化处理
+                });
+            }
+            ast::Expr::BinOp { op, left, right, span: _ } => {
+                // 二元运算
+                let left_reg = result_reg;
+                let right_reg = result_reg + 1;
+
+                self.generate_expr_ir(left, left_reg, instructions);
+                self.generate_expr_ir(right, right_reg, instructions);
+
+                let instr = match op {
+                    ast::BinOp::Add => middle::Instruction::Add {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Sub => middle::Instruction::Sub {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Mul => middle::Instruction::Mul {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Div => middle::Instruction::Div {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Mod => middle::Instruction::Mod {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Eq => middle::Instruction::Eq {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Neq => middle::Instruction::Ne {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Lt => middle::Instruction::Lt {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Le => middle::Instruction::Le {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Gt => middle::Instruction::Gt {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    ast::BinOp::Ge => middle::Instruction::Ge {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                    _ => middle::Instruction::Add {
+                        dst: middle::Operand::Local(result_reg),
+                        lhs: middle::Operand::Local(left_reg),
+                        rhs: middle::Operand::Local(right_reg),
+                    },
+                };
+                instructions.push(instr);
+            }
+            ast::Expr::Call { func, args, span: _ } => {
+                // 函数调用
+                let mut arg_regs = Vec::new();
+                for (i, arg) in args.iter().enumerate() {
+                    self.generate_expr_ir(arg, result_reg + i + 1, instructions);
+                    arg_regs.push(middle::Operand::Local(result_reg + i + 1));
+                }
+
+                instructions.push(middle::Instruction::Call {
+                    dst: Some(middle::Operand::Local(result_reg)),
+                    func: middle::Operand::Local(result_reg), // 简化
+                    args: arg_regs,
+                });
+            }
+            _ => {
+                // 默认返回 0
+                instructions.push(middle::Instruction::Load {
+                    dst: middle::Operand::Local(result_reg),
+                    src: middle::Operand::Const(middle::ConstValue::Int(0)),
+                });
+            }
+        }
     }
 }
 

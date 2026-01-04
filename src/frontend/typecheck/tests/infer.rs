@@ -873,22 +873,12 @@ fn test_infer_var_decl() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    let block = Block {
-        stmts: vec![Stmt {
-            kind: StmtKind::Var {
-                name: "x".to_string(),
-                type_annotation: None,
-                initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::default()))),
-                is_mut: false,
-            },
-            span: Span::default(),
-        }],
-        expr: None,
-        span: Span::default(),
-    };
-
-    let ty = inferrer.infer_block(&block).unwrap();
-    assert_eq!(ty, MonoType::Void);
+    inferrer.infer_var_decl(
+        "x",
+        None,
+        Some(&Expr::Lit(Literal::Int(42), Span::default())),
+        Span::default()
+    ).unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");
@@ -901,21 +891,12 @@ fn test_infer_var_decl_with_annotation() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    let block = Block {
-        stmts: vec![Stmt {
-            kind: StmtKind::Var {
-                name: "x".to_string(),
-                type_annotation: Some(*Box::new(crate::frontend::parser::ast::Type::Int(64))),
-                initializer: Some(Box::new(Expr::Lit(Literal::Int(42), Span::default()))),
-                is_mut: false,
-            },
-            span: Span::default(),
-        }],
-        expr: None,
-        span: Span::default(),
-    };
-
-    let _ = inferrer.infer_block(&block).unwrap();
+    inferrer.infer_var_decl(
+        "x",
+        Some(&crate::frontend::parser::ast::Type::Int(64)),
+        Some(&Expr::Lit(Literal::Int(42), Span::default())),
+        Span::default()
+    ).unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");
@@ -928,21 +909,12 @@ fn test_infer_var_decl_no_initializer() {
     let mut solver = TypeConstraintSolver::new();
     let mut inferrer = TypeInferrer::new(&mut solver);
 
-    let block = Block {
-        stmts: vec![Stmt {
-            kind: StmtKind::Var {
-                name: "x".to_string(),
-                type_annotation: Some(*Box::new(crate::frontend::parser::ast::Type::Int(64))),
-                initializer: None,
-                is_mut: false,
-            },
-            span: Span::default(),
-        }],
-        expr: None,
-        span: Span::default(),
-    };
-
-    let _ = inferrer.infer_block(&block).unwrap();
+    inferrer.infer_var_decl(
+        "x",
+        Some(&crate::frontend::parser::ast::Type::Int(64)),
+        None,
+        Span::default()
+    ).unwrap();
 
     // 验证变量已添加
     let var = inferrer.get_var("x");
