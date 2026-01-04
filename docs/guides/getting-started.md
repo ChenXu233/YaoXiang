@@ -1,21 +1,37 @@
 # YaoXiang 快速入门
 
 > 本指南帮助您快速上手 YaoXiang 编程语言。
+>
+> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../YaoXiang-language-specification.md)。
 
 ## 安装
 
-### 从源码编译
+### 从源码编译（推荐）
 
 ```bash
 # 克隆仓库
 git clone https://github.com/yourusername/yaoxiang.git
 cd yaoxiang
 
-# 编译
+# 编译（调试版本，用于开发测试）
+cargo build
+
+# 编译（发布版本，推荐用于生产）
 cargo build --release
 
-# 运行
-./target/release/yaoxiang your_program.yx
+# 运行测试
+cargo test
+
+# 查看版本
+./target/debug/yaoxiang --version
+# 或
+./target/release/yaoxiang --version
+```
+
+**验证安装成功**：
+```bash
+./target/debug/yaoxiang --version
+# 应输出类似: yaoxiang x.y.z
 ```
 
 ## 第一个程序
@@ -26,7 +42,8 @@ cargo build --release
 # hello.yx
 use std.io
 
-main() -> Void = () => {
+# 函数定义: name: (types) -> return_type = (params) => body
+main: () -> Void = () => {
     println("Hello, YaoXiang!")
 }
 ```
@@ -34,7 +51,9 @@ main() -> Void = () => {
 运行：
 
 ```bash
-yaoxiang hello.yx
+./target/debug/yaoxiang hello.yx
+# 或使用 release 版本
+./target/release/yaoxiang hello.yx
 ```
 
 输出：
@@ -49,48 +68,65 @@ Hello, YaoXiang!
 
 ```yaoxiang
 # 自动类型推断
-x = 42                    # Int
-name = "YaoXiang"         # String
-pi = 3.14159              # Float
-is_valid = true           # Bool
+x = 42                    # 推断为 Int
+name = "YaoXiang"         # 推断为 String
+pi = 3.14159              # 推断为 Float
+is_valid = true           # 推断为 Bool
 
-# 显式类型注解
+# 显式类型注解（推荐使用类型集中约定）
 count: Int = 100
 
-# 不可变（默认）
+# 默认不可变（安全特性）
 x = 10
-x = 20                    # 编译错误！
+x = 20                    # ❌ 编译错误！不可变
 
-# 可变变量
+# 可变变量（需要显式声明）
 mut counter = 0
-counter = counter + 1     # OK
+counter = counter + 1     # ✅ OK
 ```
 
 ### 函数
 
 ```yaoxiang
-add:(Int, Int) -> Int = (a, b) => a + b
+# 函数定义语法
+add: (Int, Int) -> Int = (a, b) => a + b
 
 # 调用
 result = add(1, 2)        # result = 3
+
+# 单参数函数
+inc: Int -> Int = x => x + 1
 ```
 
 ### 类型定义
 
+YaoXiang 使用构造器语法定义类型：
+
 ```yaoxiang
-type Point = {
-    x: Float
-    y: Float
-}
+# 结构体类型（使用花括号语法）
+type Point = { x: Float, y: Float }
 
 # 使用
 p = Point(x: 3.0, y: 4.0)
+# 访问字段
+p.x  # 3.0
+p.y  # 4.0
+
+# 枚举类型
+type Color = red | green | blue
+
+# 泛型类型
+type Result[T, E] = ok(T) | err(E)
+
+# 使用泛型
+success: Result[Int, String] = ok(42)
+failure: Result[Int, String] = err("not found")
 ```
 
 ### 控制流
 
 ```yaoxiang
-# 条件
+# 条件表达式
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -103,36 +139,120 @@ if x > 0 {
 for i in 0..5 {
     print(i)
 }
+
+# while 循环
+mut n = 0
+while n < 5 {
+    print(n)
+    n = n + 1
+}
 ```
 
-### 列表推导式
-
-使用 `in` 关键字可以创建简洁的列表推导式：
+### 列表和字典
 
 ```yaoxiang
-# 基本列表推导式
-evens = [x * 2 for x in 0..10]          # [0, 4, 8, 12, 16]
+# 列表
+numbers = [1, 2, 3, 4, 5]
+first = numbers[0]         # 1
 
-# 带条件的列表推导式
-squares = [x * x for x in 1..10 if x % 2 == 1]  # [1, 9, 25, 49, 81]
+# 字典
+scores = {"Alice": 90, "Bob": 85}
+alice_score = scores["Alice"]  # 90
+
+# 添加元素
+mut list = [1, 2, 3]
+list.append(4)
 ```
 
-### 成员检测
-
-使用 `in` 关键字可以检测值是否存在于集合中：
+### 模式匹配
 
 ```yaoxiang
-# 成员检测
-if x in [1, 2, 3] {
-    print("x is in the list")
+# match 表达式
+result: Result[Int, String] = ok(42)
+
+message = match result {
+    ok(value) => "Success: " + value.to_string()
+    err(error) => "Error: " + error
+}
+```
+
+## 并作编程（异步）
+
+YaoXiang 的独特特性：使用 `spawn` 标记的函数自动获得异步能力。
+
+```yaoxiang
+# 定义并作函数（自动异步执行）
+fetch_data: (String) -> JSON spawn = (url) => {
+    HTTP.get(url).json()
 }
 
-# 与条件表达式结合
-result = if name in ["Alice", "Bob"] { "known" } else { "unknown" }
+# 调用并作函数（自动并行，无需 await）
+main: () -> Void = () => {
+    # 两次调用自动并行执行
+    user = fetch_user(1)     # 自动并行
+    posts = fetch_posts()    # 自动并行
+
+    # 当需要结果时自动等待
+    print(user.name)
+    print(posts.length)
+}
+```
+
+## 模块系统
+
+```yaoxiang
+# 导入标准库
+use std.io
+use std.math
+
+# 使用导入的函数
+result = math.sqrt(16)      # 4.0
+println("Hello!")
+```
+
+## 常见问题
+
+### Q: 变量默认不可变，如何修改变量？
+
+```yaoxiang
+# 使用 mut 关键字声明可变变量
+mut x = 10
+x = 20                       # ✅ OK
+```
+
+### Q: 如何定义函数？
+
+```yaoxiang
+# 完整形式（推荐）
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# 简短形式（类型推断）
+add = (a, b) => a + b
+```
+
+### Q: 如何处理错误？
+
+```yaoxiang
+# 使用 Result 类型
+type Result[T, E] = ok(T) | err(E)
+
+# 模式匹配处理
+result = risky_operation()
+match result {
+    ok(value) => print("Success: " + value)
+    err(error) => print("Error: " + error)
+}
 ```
 
 ## 下一步
 
-- 阅读 [YaoXiang 指南](../YaoXiang-book.md) 了解核心特性
-- 查看 [语言规范](../YaoXiang-language-specification.md) 了解完整语法
-- 浏览 [示例代码](../examples/) 学习常用模式
+- 📖 阅读 [YaoXiang 指南](../YaoXiang-book.md) 了解核心特性
+- 📚 查看 [语言规范](../YaoXiang-language-specification.md) 了解完整语法
+- 🏗️ 浏览 [架构文档](../architecture/) 了解实现细节
+- 💡 查看 [设计宣言](../YaoXiang-design-manifesto.md) 了解核心理念
+
+## 相关资源
+
+- [GitHub 仓库](https://github.com/yourusername/yaoxiang)
+- [Issue 反馈](https://github.com/yourusername/yaoxiang/issues)
+- [贡献指南](../guides/dev/)

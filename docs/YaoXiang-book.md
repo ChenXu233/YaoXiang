@@ -1,9 +1,10 @@
 # YaoXiang（爻象）编程语言指南
 
-> 版本：v1.0.0
+> 版本：v1.1.0
 > 状态：草稿
 > 作者：晨煦
 > 日期：2024-12-31
+> 更新：2025-01-04 - 修正泛型语法为 `[T]`，移除 `fn` 关键字
 
 ---
 
@@ -99,7 +100,7 @@ main: () -> Void = () => {
 }
 
 # 泛型函数
-identity: <T> (T) -> T = x => x
+identity: [T](T) -> T = x => x
 
 # 高阶函数
 apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
@@ -168,7 +169,7 @@ YaoXiang 保证零成本抽象，即高层次的抽象不会带来运行时的�
 
 ```yaoxiang
 # 泛型展开（单态化）
-identity<T>(T) -> T = (x) => x
+identity[T](T) -> T = (x) => x
 
 # 使用
 int_val = identity(42)      # 展开为 identity(Int) -> Int
@@ -294,13 +295,13 @@ getRandom() -> Int = () => 42
 
 ```yaoxiang
 # 泛型函数：<类型参数> 前缀
-identity: <T> (T) -> T = x => x
-map: <A, B> ((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+identity: [T](T) -> T = x => x
+map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
 # 泛型类型
-List: Type = <T> List[T]
+List: Type = [T] List[T]
 ```
 
 #### 2.5.5 Lambda 表达式语法
@@ -371,19 +372,19 @@ makeAdder: Int -> (Int -> Int) =
 # === 泛型函数 ===
 
 # 泛型函数
-identity: <T> (T) -> T = x => x
+identity: [T](T) -> T = x => x
 
 # 泛型高阶函数
-map: <A, B> ((A) -> B, List[A]) -> List[B] =
+map: [A, B]((A) -> B, List[A]) -> List[B] =
   (f, xs) => case xs of
     [] => []
     (x :: rest) => f(x) :: map(f, rest)
 
 # 泛型函数类型
-Transformer: Type = <A, B> (A) -> B
+Transformer: Type = [A, B](A) -> B
 
 # 使用泛型类型
-applyTransformer: <A, B> (Transformer<A, B>, A) -> B =
+applyTransformer: [A, B](Transformer[A, B], A) -> B =
   (f, x) => f(x)
 
 # === 复杂类型示例 ===
@@ -393,16 +394,16 @@ higherOrder: ((Int) -> Int) -> (Int) -> Int =
   f => x => f(x) + 1
 
 # 多参数高阶函数
-zipWith: <A, B, C> ((A, B) -> C, List[A], List[B]) -> List[C] =
+zipWith: [A, B, C]((A, B) -> C, List[A], List[B]) -> List[C] =
   (f, xs, ys) => case (xs, ys) of
     ([], _) => []
     (_, []) => []
     (x::xs', y::ys') => f(x, y) :: zipWith(f, xs', ys')
 
 # 函数类型别名
-Predicate: Type = <T> (T) -> Bool
-Mapper: Type = <A, B> (A) -> B
-Reducer: Type = <A, B> (B, A) -> B
+Predicate: Type = [T] (T) -> Bool
+Mapper: Type = [A, B](A) -> B
+Reducer: Type = [A, B](B, A) -> B
 
 # === 旧语法示例（仅向后兼容） ===
 # 不推荐在新代码中使用
@@ -425,7 +426,7 @@ get_random: () -> Int = () => 42
 
 | 优先级 | 类型 | 说明 |
 |--------|------|------|
-| 1 (最高) | 泛型应用 `List<T>` | 左结合 |
+| 1 (最高) | 泛型应用 `List[T]` | 左结合 |
 | 2 | 括号 `(T)` | 改变结合性 |
 | 3 | 函数类型 `->` | 右结合 |
 | 4 (最低) | 基础类型 `Int, String` | 原子类型 |
@@ -695,7 +696,7 @@ z = "hello"               # 推断为 String
 add: (Int, Int) -> Int = (a, b) => a + b
 
 # 泛型推断
-first: <T> (List[T]) -> Option[T] = (list) => {
+first: [T](List[T]) -> Option[T] = (list) => {
     if list.length > 0 { some(list[0]) } else { none }
 }
 ```
@@ -741,7 +742,7 @@ longest<'a>(&'a str, &'a str) -> &'a str = (s1, s2) => {
 }
 
 # 自动生命周期推断
-first<T>(ref List[T]) -> ref T = (list) => ref list[0]
+first[T](ref List[T]) -> ref T = (list) => ref list[0]
 ```
 
 ### 4.3 智能指针
@@ -1802,7 +1803,7 @@ pub apply_twice: (Int -> Int, Int) -> Int = (f, x) => f(f(x))
 pub make_adder: Int -> (Int -> Int) = x => y => x + y
 
 # 泛型函数
-pub map: <A, B> ((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
@@ -1827,7 +1828,7 @@ apply_twice = (f: (Int) -> Int, x: Int) => f(f(x))
 make_adder = (x: Int) => (y: Int) => x + y
 
 # 泛型类型分散
-map = <A, B> (f: (A) -> B, xs: List[A]) => List[B] => case xs of
+map = [A, B](f: (A) -> B, xs: List[A]) => List[B] => case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 ```
@@ -2044,6 +2045,15 @@ result2 = p1.distance_scaled(2.0, p2)
 - **Python**：语法风格、可读性
 - **Idris/Agda**：依赖类型、类型驱动开发
 - **TypeScript**：类型注解、运行时类型
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 作者 | 变更说明 |
+|------|------|------|---------|
+| v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
+| v1.1.0 | 2025-01-04 | 沫郁酱 | 修正泛型语法为 `[T]`（而非 `<T>`）；移除 `fn` 关键字；更新函数定义示例 |
 
 ---
 
