@@ -90,8 +90,6 @@ mod name_tests {
             TypedOpcode::BoolNot,
             TypedOpcode::StackAlloc,
             TypedOpcode::HeapAlloc,
-            TypedOpcode::Retain,
-            TypedOpcode::Release,
             TypedOpcode::GetField,
             TypedOpcode::SetField,
             TypedOpcode::LoadElement,
@@ -268,7 +266,6 @@ mod operand_count_tests {
     #[test]
     fn test_operand_count_one() {
         assert_eq!(TypedOpcode::ReturnValue.operand_count(), 1);
-        assert_eq!(TypedOpcode::Retain.operand_count(), 1);
         assert_eq!(TypedOpcode::Throw.operand_count(), 1);
     }
 
@@ -314,7 +311,6 @@ mod try_from_tests {
 
     #[test]
     fn test_try_from_invalid() {
-        assert!(TypedOpcode::try_from(0x0B).is_err());
         assert!(TypedOpcode::try_from(0x0F).is_err());
         assert!(TypedOpcode::try_from(0x1F).is_err());
         assert!(TypedOpcode::try_from(0x6F).is_err());

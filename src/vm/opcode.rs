@@ -330,17 +330,13 @@ pub enum TypedOpcode {
     /// 操作数：dst, type_id (u16，类型标识)
     HeapAlloc = 0x71,
 
-    /// 引用计数增加
+    /// 释放所有权（Drop）
     /// 操作数：reg
-    Retain = 0x72,
-
-    /// 引用计数减少（为0时析构）
-    /// 操作数：reg
-    Release = 0x73,
+    Drop = 0x72,
 
     /// 读取字段（静态偏移，极快）
     /// 操作数：dst, obj_reg, field_offset (u16)
-    GetField = 0x74,
+    GetField = 0x73,
 
     /// 写入字段
     /// 操作数：obj_reg, field_offset (u16), src_reg
@@ -508,7 +504,7 @@ impl TypedOpcode {
             TypedOpcode::LoopInc => "LoopInc",
             TypedOpcode::TailCall => "TailCall",
             TypedOpcode::Yield => "Yield",
-            TypedOpcode::Mov => "Mov",
+            TypedOpcode::Label => "Label",
             TypedOpcode::LoadConst => "LoadConst",
             TypedOpcode::LoadLocal => "LoadLocal",
             TypedOpcode::StoreLocal => "StoreLocal",
@@ -580,8 +576,7 @@ impl TypedOpcode {
             TypedOpcode::BoolNot => "BoolNot",
             TypedOpcode::StackAlloc => "StackAlloc",
             TypedOpcode::HeapAlloc => "HeapAlloc",
-            TypedOpcode::Retain => "Retain",
-            TypedOpcode::Release => "Release",
+            TypedOpcode::Drop => "Drop",
             TypedOpcode::GetField => "GetField",
             TypedOpcode::SetField => "SetField",
             TypedOpcode::LoadElement => "LoadElement",
@@ -684,27 +679,32 @@ impl TypedOpcode {
 
     /// 检查是否是跳转指令
     pub fn is_jump_op(&self) -> bool {
-        matches!(self, TypedOpcode::Jmp | TypedOpcode::JmpIf | TypedOpcode::JmpIfNot | TypedOpcode::Switch)
+        matches!(self, 
+            TypedOpcode::Jmp | TypedOpcode::JmpIf | TypedOpcode::JmpIfNot | TypedOpcode::Switch |
+            TypedOpcode::LoopStart | TypedOpcode::LoopInc
+        )
     }
 
     /// 获取指令的操作数数量
     pub fn operand_count(&self) -> u8 {
         match self {
             // 无操作数
-            TypedOpcode::Nop | TypedOpcode::Return | TypedOpcode::TryEnd | TypedOpcode::Yield | TypedOpcode::Invalid | TypedOpcode::Label => 0,
+            TypedOpcode::Nop | TypedOpcode::Return | TypedOpcode::TryEnd | 
+            TypedOpcode::Yield | TypedOpcode::Invalid | TypedOpcode::Jmp => 0,
             // 1 个操作数
-            TypedOpcode::ReturnValue | TypedOpcode::Retain | TypedOpcode::Release | TypedOpcode::CloseUpvalue |
-            TypedOpcode::Throw | TypedOpcode::Rethrow | TypedOpcode::BoundsCheck | TypedOpcode::TypeCheck => 1,
+            TypedOpcode::ReturnValue | TypedOpcode::Drop | TypedOpcode::CloseUpvalue |
+            TypedOpcode::Throw | TypedOpcode::Rethrow | TypedOpcode::BoundsCheck | TypedOpcode::TypeCheck |
+            TypedOpcode::Label | TypedOpcode::StackAlloc => 1,
             // 2 个操作数
-            TypedOpcode::Jmp | TypedOpcode::JmpIf | TypedOpcode::JmpIfNot | TypedOpcode::LoopInc |
+            TypedOpcode::JmpIf | TypedOpcode::JmpIfNot |
             TypedOpcode::Mov | TypedOpcode::LoadConst | TypedOpcode::LoadLocal | TypedOpcode::StoreLocal |
             TypedOpcode::LoadArg | TypedOpcode::I64Const | TypedOpcode::I32Const | TypedOpcode::F64Const |
             TypedOpcode::F32Const | TypedOpcode::I64Neg | TypedOpcode::I32Neg | TypedOpcode::F64Neg | TypedOpcode::F32Neg |
-            TypedOpcode::BoolNot | TypedOpcode::StackAlloc | TypedOpcode::HeapAlloc |
+            TypedOpcode::BoolNot | TypedOpcode::HeapAlloc |
             TypedOpcode::StringLength | TypedOpcode::StringFromInt | TypedOpcode::StringFromFloat |
             TypedOpcode::TypeOf | TypedOpcode::Cast => 2,
             // 3 个操作数
-            TypedOpcode::LoopStart | TypedOpcode::Switch |
+            TypedOpcode::Switch | TypedOpcode::LoopInc |
             TypedOpcode::I64Add | TypedOpcode::I64Sub | TypedOpcode::I64Mul | TypedOpcode::I64Div | TypedOpcode::I64Rem |
             TypedOpcode::I64And | TypedOpcode::I64Or | TypedOpcode::I64Xor | TypedOpcode::I64Shl | TypedOpcode::I64Sar | TypedOpcode::I64Shr |
             TypedOpcode::I32Add | TypedOpcode::I32Sub | TypedOpcode::I32Mul | TypedOpcode::I32Div | TypedOpcode::I32Rem |
@@ -718,6 +718,7 @@ impl TypedOpcode {
             TypedOpcode::F64Load | TypedOpcode::F64Store | TypedOpcode::F32Load | TypedOpcode::F32Store |
             TypedOpcode::GetField | TypedOpcode::SetField | TypedOpcode::NewListWithCap => 3,
             // 4 个操作数
+            TypedOpcode::LoopStart | // 4 个操作数：start_reg, end_reg, step_reg, exit_offset
             TypedOpcode::TailCall | TypedOpcode::MakeClosure |
             TypedOpcode::CallStatic | TypedOpcode::CallVirt | TypedOpcode::CallDyn |
             TypedOpcode::LoadElement | TypedOpcode::StoreElement |
@@ -756,6 +757,7 @@ impl TryFrom<u8> for TypedOpcode {
             0x08 => Ok(TypedOpcode::LoopInc),
             0x09 => Ok(TypedOpcode::TailCall),
             0x0A => Ok(TypedOpcode::Yield),
+            0x0B => Ok(TypedOpcode::Label),
             0x10 => Ok(TypedOpcode::Mov),
             0x11 => Ok(TypedOpcode::LoadConst),
             0x12 => Ok(TypedOpcode::LoadLocal),
@@ -828,13 +830,12 @@ impl TryFrom<u8> for TypedOpcode {
             0x6E => Ok(TypedOpcode::BoolNot),
             0x70 => Ok(TypedOpcode::StackAlloc),
             0x71 => Ok(TypedOpcode::HeapAlloc),
-            0x72 => Ok(TypedOpcode::Retain),
-            0x73 => Ok(TypedOpcode::Release),
-            0x74 => Ok(TypedOpcode::GetField),
-            0x75 => Ok(TypedOpcode::SetField),
-            0x76 => Ok(TypedOpcode::LoadElement),
-            0x77 => Ok(TypedOpcode::StoreElement),
-            0x78 => Ok(TypedOpcode::NewListWithCap),
+            0x72 => Ok(TypedOpcode::Drop),
+            0x73 => Ok(TypedOpcode::GetField),
+            0x74 => Ok(TypedOpcode::SetField),
+            0x75 => Ok(TypedOpcode::LoadElement),
+            0x76 => Ok(TypedOpcode::StoreElement),
+            0x77 => Ok(TypedOpcode::NewListWithCap),
             0x80 => Ok(TypedOpcode::CallStatic),
             0x81 => Ok(TypedOpcode::CallVirt),
             0x82 => Ok(TypedOpcode::CallDyn),

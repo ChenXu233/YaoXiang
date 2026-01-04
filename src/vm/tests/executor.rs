@@ -2,7 +2,6 @@
 //!
 //! 测试虚拟机执行器的配置、状态和值类型
 
-use crate::runtime::gc::GCConfig;
 use crate::vm::{VMError, VM, VMConfig, VMStatus, Value};
 use crate::vm::executor::Opcode;
 use crate::middle::ModuleIR;
@@ -23,7 +22,6 @@ mod vm_config_tests {
         let config = VMConfig {
             stack_size: 128 * 1024,
             enable_jit: true,
-            gc_config: GCConfig::default(),
         };
         assert_eq!(config.stack_size, 128 * 1024);
         assert!(config.enable_jit);

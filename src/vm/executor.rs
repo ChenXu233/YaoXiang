@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::middle::{ConstValue, ModuleIR};
-use crate::runtime::gc::{GCConfig, GC};
 use crate::runtime::memory::Heap;
 use crate::runtime::scheduler::Scheduler;
 use std::collections::HashMap;
@@ -14,8 +13,6 @@ pub struct VMConfig {
     pub stack_size: usize,
     /// Enable JIT compilation
     pub enable_jit: bool,
-    /// GC configuration
-    pub gc_config: GCConfig,
 }
 
 impl Default for VMConfig {
@@ -23,7 +20,6 @@ impl Default for VMConfig {
         Self {
             stack_size: 64 * 1024,
             enable_jit: false,
-            gc_config: GCConfig::default(),
         }
     }
 }
@@ -46,7 +42,6 @@ pub struct VM {
     ip: usize,
     /// Runtime
     heap: Heap,
-    gc: GC,
     scheduler: Scheduler,
     /// State
     status: VMStatus,
@@ -62,7 +57,6 @@ impl Default for VM {
 impl VM {
     /// Create VM with config
     pub fn new_with_config(config: VMConfig) -> Self {
-        let gc_config = config.gc_config.clone();
         let stack_size = config.stack_size;
         Self {
             config,
@@ -74,7 +68,6 @@ impl VM {
             code: vec![],
             ip: 0,
             heap: Heap::new(),
-            gc: GC::new(gc_config),
             scheduler: Scheduler::new(),
             status: VMStatus::Ready,
             error: None,
@@ -102,10 +95,81 @@ impl VM {
     ///
     /// * `_module` - The module IR to execute
     pub fn execute_module(&mut self, _module: &ModuleIR) -> VMResult<()> {
-        // TODO: Implement execution
+        // TODO: Implement full execution engine
         self.status = VMStatus::Running;
         self.status = VMStatus::Finished;
         Ok(())
+    }
+
+    /// Execute bytecode instructions
+    ///
+    /// This is a basic execution engine for testing Drop instruction.
+    pub fn execute_instructions(&mut self, instructions: &[Opcode]) -> VMResult<()> {
+        self.status = VMStatus::Running;
+        self.code = instructions.to_vec();
+        self.ip = 0;
+
+        while self.ip < self.code.len() {
+            let opcode = self.code[self.ip];
+            self.ip += 1;
+
+            match opcode {
+                Opcode::Nop => {}
+                Opcode::Push => {
+                    // Push a placeholder value for testing
+                    self.stack.push(Value::Void);
+                }
+                Opcode::Pop => {
+                    if let Some(mut val) = self.stack.pop() {
+                        val.drop();
+                    }
+                }
+                Opcode::Drop => {
+                    // Drop the top value without popping
+                    if let Some(val) = self.stack.last_mut() {
+                        val.drop();
+                    }
+                }
+                Opcode::Alloc => {
+                    // Allocate a heap object for testing
+                    let obj = HeapObject {
+                        type_id: 0,
+                        data: vec![0; 16],
+                    };
+                    self.stack.push(Value::HeapObject(obj));
+                }
+                Opcode::Ret => {
+                    // Return - pop and return value
+                    self.status = VMStatus::Finished;
+                    return Ok(());
+                }
+                Opcode::Call => {
+                    // Function call placeholder
+                    // In real implementation, this would push return address and jump
+                }
+                _ => {
+                    // Other opcodes not yet implemented in basic engine
+                }
+            }
+        }
+
+        self.status = VMStatus::Finished;
+        Ok(())
+    }
+
+    /// Push a value onto the stack
+    pub fn push(&mut self, value: Value) {
+        self.stack.push(value);
+    }
+
+    /// Pop a value from the stack
+    pub fn pop(&mut self) -> Option<Value> {
+        self.stack.pop()
+    }
+
+    /// Get stack depth
+    pub fn stack_depth(&self) -> usize {
+        self.stack.len()
     }
 }
 
@@ -130,7 +194,65 @@ pub enum Value {
     List(Vec<Value>),
     /// Dictionary mapping values to values
     Dict(HashMap<Value, Value>),
+    /// Heap-allocated object (with ownership tracking)
+    HeapObject(HeapObject),
     // TODO: Add more types
+}
+
+/// Heap-allocated object with type info
+#[derive(Debug, Clone)]
+pub struct HeapObject {
+    /// Type identifier
+    pub type_id: usize,
+    /// Object data (byte representation for simplicity)
+    pub data: Vec<u8>,
+}
+
+impl Value {
+    /// Drop this value, releasing any owned resources
+    pub fn drop(&mut self) {
+        match self {
+            Value::String(s) => {
+                // Release string memory
+                s.clear();
+            }
+            Value::Bytes(b) => {
+                // Release byte array
+                b.clear();
+            }
+            Value::List(list) => {
+                // Recursively drop all elements
+                for item in list.iter_mut() {
+                    item.drop();
+                }
+                list.clear();
+            }
+            Value::Dict(map) => {
+                // Recursively drop all values (keys don't need explicit cleanup for simple types)
+                // Take ownership of values to drop them properly
+                let values: Vec<_> = map.values().cloned().collect();
+                for mut v in values {
+                    v.drop();
+                }
+                // Clear the map (keys are dropped automatically when removed)
+                map.clear();
+            }
+            Value::HeapObject(obj) => {
+                // Release heap object
+                obj.data.clear();
+            }
+            // Primitive types don't need explicit cleanup
+            Value::Void | Value::Bool(_) | Value::Int(_) | Value::Float(_) | Value::Char(_) => {}
+        }
+    }
+
+    /// Check if this value needs to be dropped (is owned)
+    pub fn needs_drop(&self) -> bool {
+        matches!(
+            self,
+            Value::String(_) | Value::Bytes(_) | Value::List(_) | Value::Dict(_) | Value::HeapObject(_)
+        )
+    }
 }
 
 /// VM opcode instructions
@@ -179,8 +301,8 @@ pub enum Opcode {
     Ret,
     /// Allocate memory
     Alloc,
-    /// Free memory
-    Free,
+    /// Drop value (ownership-based cleanup)
+    Drop,
     /// Load field from object
     LoadField,
     /// Store field to object
