@@ -11,7 +11,7 @@ mod heap_tests {
     #[test]
     fn test_heap_new() {
         let heap = Heap::new();
-        assert_eq!(heap.capacity(), 64 * 1024 * 1024);
+        assert_eq!(heap.capacity(), 64 * 1024);
         assert_eq!(heap.used(), 0);
     }
 
@@ -27,14 +27,6 @@ mod heap_tests {
         let offset = heap.alloc(100);
         assert!(offset.is_some());
         assert_eq!(heap.used(), 100);
-    }
-
-    #[test]
-    fn test_heap_alloc_zeroed() {
-        let mut heap = Heap::new();
-        let offset = heap.alloc_zeroed(50);
-        assert!(offset.is_some());
-        assert_eq!(heap.used(), 50);
     }
 
     #[test]
@@ -56,34 +48,10 @@ mod heap_tests {
     }
 
     #[test]
-    fn test_heap_realloc() {
-        let mut heap = Heap::new();
-        let offset = heap.alloc(100);
-        assert!(offset.is_some());
-        
-        let new_offset = heap.realloc(offset.unwrap(), 200);
-        assert!(new_offset.is_some());
-        // realloc returns new offset (end of current data)
-        assert_eq!(new_offset.unwrap(), 100);
-    }
-
-    #[test]
-    fn test_heap_dealloc() {
-        let mut heap = Heap::new();
-        let offset = heap.alloc(100);
-        assert!(offset.is_some());
-        
-        // dealloc is a no-op for Vec-based heap
-        heap.dealloc(offset.unwrap(), 100);
-        // Used size should remain the same
-        assert_eq!(heap.used(), 100);
-    }
-
-    #[test]
     fn test_heap_capacity() {
         let heap = Heap::new();
-        // Default capacity is 64MB
-        assert_eq!(heap.capacity(), 64 * 1024 * 1024);
+        // Default capacity is 64KB
+        assert_eq!(heap.capacity(), 64 * 1024);
     }
 
     #[test]

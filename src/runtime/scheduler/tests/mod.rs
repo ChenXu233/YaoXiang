@@ -2,6 +2,12 @@
 //!
 //! 测试任务调度器的配置、任务状态和调度行为
 
+// 声明子模块
+mod task;
+mod queue;
+mod work_stealer;
+mod flow_scheduler;
+
 use crate::runtime::scheduler::{Scheduler, SchedulerConfig, Task, TaskId, TaskPriority, TaskState};
 
 #[cfg(test)]
@@ -45,7 +51,8 @@ mod task_state_tests {
         assert_eq!(TaskState::Running as u8, 1);
         assert_eq!(TaskState::Waiting as u8, 2);
         assert_eq!(TaskState::Finished as u8, 3);
-        assert_eq!(TaskState::Cancelled as u8, 4);
+        assert_eq!(TaskState::Failed as u8, 4);
+        assert_eq!(TaskState::Cancelled as u8, 5);
     }
 
     #[test]
@@ -94,46 +101,9 @@ mod task_priority_tests {
 }
 
 #[cfg(test)]
-mod task_tests {
-    use super::*;
-
-    #[test]
-    fn test_task_new() {
-        let task = Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024);
-        assert_eq!(task.id(), TaskId(1));
-        assert_eq!(task.priority(), TaskPriority::Normal);
-        assert_eq!(task.stack_size(), 1024 * 1024);
-    }
-
-    #[test]
-    fn test_task_state() {
-        let task = Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024);
-        assert_eq!(task.state(), TaskState::Ready);
-    }
-
-    #[test]
-    fn test_task_set_state() {
-        let task = Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024);
-        assert_eq!(task.state(), TaskState::Ready);
-        
-        task.set_state(TaskState::Running);
-        assert_eq!(task.state(), TaskState::Running);
-        
-        task.set_state(TaskState::Finished);
-        assert_eq!(task.state(), TaskState::Finished);
-    }
-
-    #[test]
-    fn test_task_debug() {
-        let task = Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024);
-        let debug = format!("{:?}", task);
-        assert!(debug.contains("Task"));
-    }
-}
-
-#[cfg(test)]
 mod scheduler_config_tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_scheduler_config_default() {
@@ -143,6 +113,9 @@ mod scheduler_config_tests {
         assert_eq!(config.default_stack_size, 2 * 1024 * 1024);
         assert_eq!(config.steal_batch, 4);
         assert_eq!(config.max_queue_size, 1024);
+        assert!(config.use_work_stealing);
+        assert_eq!(config.idle_timeout, Duration::from_millis(1));
+        assert!(!config.enable_stats);
     }
 
     #[test]
@@ -152,6 +125,9 @@ mod scheduler_config_tests {
             default_stack_size: 4 * 1024 * 1024,
             steal_batch: 8,
             max_queue_size: 2048,
+            use_work_stealing: true,
+            idle_timeout: Duration::from_millis(5),
+            enable_stats: true,
         };
         assert_eq!(config.num_workers, 8);
         assert_eq!(config.default_stack_size, 4 * 1024 * 1024);
@@ -185,18 +161,23 @@ mod scheduler_tests {
     #[test]
     fn test_scheduler_spawn() {
         let scheduler = Scheduler::new();
-        let task = Arc::new(Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024));
+        let task = Arc::new(Task::new(TaskId(1), TaskPriority::Normal, 1024 * 1024, || {}));
         scheduler.spawn(task);
         // Spawn should not panic
     }
 
     #[test]
     fn test_scheduler_with_config() {
+        use std::time::Duration;
+
         let config = SchedulerConfig {
             num_workers: 2,
             default_stack_size: 1024 * 1024,
             steal_batch: 2,
             max_queue_size: 512,
+            use_work_stealing: true,
+            idle_timeout: Duration::from_millis(2),
+            enable_stats: false,
         };
         let scheduler = Scheduler::with_config(config);
         let _ = format!("{:?}", scheduler);

@@ -1,8 +1,7 @@
 //! Runtime system
 //!
-//! This module contains memory management, garbage collection,
-//! and concurrency scheduling.
+//! This module contains memory management and concurrency scheduling.
 
-pub mod gc;
+pub mod dag;
 pub mod memory;
 pub mod scheduler;
