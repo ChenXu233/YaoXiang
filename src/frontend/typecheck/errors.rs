@@ -120,6 +120,13 @@ pub enum TypeError {
         message: String,
         span: Span,
     },
+
+    /// 无法推断参数类型错误
+    #[error("Cannot infer type for parameter '{name}': parameter has no type annotation and is not used in a way that allows inference")]
+    CannotInferParamType {
+        name: String,
+        span: Span,
+    },
 }
 
 impl TypeError {
@@ -141,6 +148,7 @@ impl TypeError {
             TypeError::CallError { span, .. } => *span,
             TypeError::AssignmentError { span, .. } => *span,
             TypeError::InferenceError { span, .. } => *span,
+            TypeError::CannotInferParamType { span, .. } => *span,
         }
     }
 
@@ -493,6 +501,13 @@ impl ErrorFormatter {
                     format!("Inference error: {} at {:?}", message, span)
                 } else {
                     format!("Inference error: {}", message)
+                }
+            }
+            TypeError::CannotInferParamType { name, span } => {
+                if self.verbose {
+                    format!("Cannot infer type for parameter '{}' at {:?}", name, span)
+                } else {
+                    format!("Cannot infer type for parameter '{}'", name)
                 }
             }
         }

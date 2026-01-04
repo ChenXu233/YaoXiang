@@ -755,6 +755,17 @@ impl TypeConstraintSolver {
         }
         state
     }
+
+    /// 检查类型变量是否未约束
+    ///
+    /// 如果类型变量仍然是 Unbound 状态，返回 true
+    pub fn is_unconstrained(&self, var: TypeVar) -> bool {
+        if let Some(binding) = self.bindings.get(var.0) {
+            matches!(binding, TypeBinding::Unbound)
+        } else {
+            false
+        }
+    }
 }
 
 /// 类型不匹配错误
