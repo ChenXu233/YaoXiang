@@ -67,7 +67,7 @@ enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
 
-        /// Output file (optional, defaults to <input>.yxb)
+        /// Output file (optional, defaults to <input>.42)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -111,7 +111,7 @@ fn main() -> Result<()> {
         Commands::Build { file, output } => {
             let output_path = output.unwrap_or_else(|| {
                 let mut path = file.clone();
-                path.set_extension("yxb");
+                path.set_extension("42");
                 path
             });
             build_bytecode(&file, &output_path)

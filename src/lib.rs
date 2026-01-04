@@ -78,7 +78,7 @@ pub fn run_file(path: &Path) -> Result<()> {
     run(&source)
 }
 
-/// Build bytecode file (.yxb)
+/// Build bytecode file (.42)
 pub fn build_bytecode(source_path: &Path, output_path: &Path) -> Result<()> {
     use crate::middle::codegen::CodegenContext;
 
