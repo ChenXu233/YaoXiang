@@ -4,13 +4,15 @@
 
 use crate::frontend::parser::parse;
 use crate::frontend::lexer::tokenize;
-use crate::frontend::typecheck::check_module;
+use crate::frontend::typecheck::{check_module, TypeEnvironment};
 
 /// 检查类型推断是否成功
 fn check_type_inference(input: &str) -> Result<(), String> {
     let tokens = tokenize(input).map_err(|e| format!("Lexer error: {:?}", e))?;
     let ast = parse(&tokens).map_err(|e| format!("Parse error: {:?}", e))?;
-    crate::frontend::typecheck::check_module(&ast)
+    let mut env = TypeEnvironment::new();
+    check_module(&ast, Some(&mut env))
+        .map(|_| ())
         .map_err(|e| format!("Type error: {:?}", e))
 }
 
