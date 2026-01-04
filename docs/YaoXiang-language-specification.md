@@ -1,9 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.0.0
+> 版本：v1.1.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
+> 更新：2025-01-04 - 修正与代码实现的差异
 
 ---
 
@@ -486,7 +487,7 @@ status = if code == 200 {
 
 ```
 MatchExpr   ::= 'match' Expr '{' MatchArm+ '}'
-MatchArm    ::= Pattern ('|' Pattern)* ('if' Expr)? '->' Expr ','
+MatchArm    ::= Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
 Pattern     ::= Literal
               | Identifier
               | Wildcard
@@ -499,18 +500,18 @@ Pattern     ::= Literal
 ```yaoxiang
 fn classify(x: Int) -> String {
     match x {
-        0 -> "zero"
-        1 -> "one"
-        _ if x < 0 -> "negative"
-        _ -> "positive"
+        0 => "zero"
+        1 => "one"
+        _ if x < 0 => "negative"
+        _ => "positive"
     }
 }
 
 # 解构
-type Point = { x: Float, y: Float }
+type Point = Point(x: Float, y: Float)
 match point {
-    Point { x: 0, y: 0 } -> "origin"
-    Point { x, y } -> "point"
+    Point(x: 0, y: 0) => "origin"
+    Point(x, y) => "point"
 }
 ```
 
@@ -649,8 +650,8 @@ MatchStmt   ::= 'match' Expr '{' MatchArm+ '}'
 
 ```yaoxiang
 match value {
-    ok: v -> print("Success: " + v)
-    err: e -> print("Error: " + e)
+    ok(v) => print("Success: " + v)
+    err(e) => print("Error: " + e)
 }
 ```
 
@@ -708,49 +709,65 @@ for key, value in {"a": 1, "b": 2} {
 
 ### 6.1 函数定义
 
+YaoXiang 支持两种函数定义语法：
+
+**形式一：类型集中式（推荐）**
 ```
-FunctionDef ::= Identifier GenericParams? '(' ParamTypes? ')' '->' TypeExpr '=' Lambda
-GenericParams::= '<' Identifier (',' Identifier)* '>'
-ParamTypes  ::= TypeExpr (',' TypeExpr)*
-Lambda      ::= '(' ParamNames? ')' '->' Expr
-            |  '(' ParamNames? ')' '->' Block
+FunctionDef ::= Identifier ':' FnType '=' Lambda
+FnType      ::= '(' ParamTypes? ')' '->' TypeExpr
+Lambda      ::= '(' ParamNames? ')' '=>' Expr
+            |  '(' ParamNames? ')' '=>' Block
 ParamNames  ::= Identifier (',' Identifier)*
+ParamTypes  ::= TypeExpr (',' TypeExpr)*
+```
+
+**形式二：简写式**
+```
+FunctionDef ::= Identifier '(' ParamTypes? ')' '->' TypeExpr? '=' Lambda
 ```
 
 ```yaoxiang
+# 形式一：类型集中式（推荐）
 # 基本函数
-greet(String) -> String = (name) => "Hello, " + name
+greet: (String) -> String = (name) => "Hello, " + name
 
 # 多参数函数
-add(Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# 单参数简写
+inc: Int -> Int = x => x + 1
 
 # 泛型函数
-identity<T>(T) -> T = (x) => x
+identity: [T](T) -> T = (x) => x
 
 # 多行函数
-fact(Int) -> Int = (n) => {
+fact: (Int) -> Int = (n) => {
     if n == 0 { 1 } else { n * fact(n - 1) }
 }
 
 # 返回函数的函数
-adder(Int) -> (Int) -> Int = (x) => (y) => x + y
+adder: (Int) -> (Int) -> Int = (x) => (y) => x + y
 
 # 使用
 add5: (Int) -> Int = adder(5)
 result = add5(3)  # 8
+
+# 形式二：简写式
+add(Int, Int) -> Int = (a, b) => a + b
+identity[T](T) -> T = (x) => x
 ```
 
 ### 6.2 参数类型
 
 ```yaoxiang
 # 位置参数
-add(Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => a + b
 
 # 函数类型参数
-apply((Int) -> Int, Int) -> Int = (f, x) => f(x)
+apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
 
 # 泛型参数
-identity<T>(T) -> T = (x) => x
+identity: [T](T) -> T = (x) => x
 ```
 
 ### 6.3 高阶函数
@@ -882,10 +899,7 @@ thread_safe: Arc[Data] = Arc.new(data)
 ### 9.1 Result 类型
 
 ```yaoxiang
-type Result[T, E] = union {
-    ok: T
-    err: E
-}
+type Result[T, E] = ok(T) | err(E)
 
 fn divide(a: Float, b: Float) -> Result[Float, String] {
     if b == 0.0 {
@@ -898,18 +912,15 @@ fn divide(a: Float, b: Float) -> Result[Float, String] {
 # 使用
 result = divide(10.0, 2.0)
 match result {
-    ok: value -> print("Result: " + value)
-    err: msg -> print("Error: " + msg)
+    ok(value) => print("Result: " + value)
+    err(msg) => print("Error: " + msg)
 }
 ```
 
 ### 9.2 Option 类型
 
 ```yaoxiang
-type Option[T] = union {
-    some: T
-    none
-}
+type Option[T] = some(T) | none
 
 fn find_user(id: Int) -> Option[User] {
     if id > 0 { some(User(id)) } else { none }
@@ -934,13 +945,27 @@ fn process() -> Result[Int, String] {
 ### A.1 类型定义
 
 ```
-TypeDef ::= 'type' Identifier '=' TypeExpr
+# 简单类型
+type Result[T, E] = ok(T) | err(E)
+
+# 构造器类型
+type Point = Point(x: Float, y: Float)
+
+# 联合类型
+type Status = pending | processing | completed
+
+# 函数类型
+type Adder = (Int, Int) -> Int
 ```
 
 ### A.2 函数定义
 
 ```
-FunctionDef ::= Identifier GenericParams? '(' ParamTypes? ')' '->' TypeExpr '=' Lambda
+# 形式一：类型集中式（推荐）
+name: (ParamTypes) -> ReturnType = (params) => body
+
+# 形式二：简写式
+name(ParamTypes) -> ReturnType = (params) => body
 ```
 
 ### A.3 模块
@@ -959,6 +984,55 @@ match Expr { MatchArm+ }
 while Expr Block
 for Identifier in Expr Block
 ```
+
+### A.5 match 语法
+
+```
+match value {
+    pattern1 => expr1,
+    pattern2 if guard => expr2,
+    _ => default_expr,
+}
+```
+
+---
+
+## 附录B：与代码实现差异说明
+
+> 本节说明语言规范与当前代码实现之间的已知差异。
+
+### B.1 关键字
+
+| 关键字 | 规范状态 | 代码实现 | 说明 |
+|--------|---------|---------|------|
+| `struct` | 有 | ❌ 无 | 类型定义使用构造器语法，无需此关键字 |
+| `union` | 有 | ❌ 无 | 使用 `\|` 运算符定义联合类型 |
+| `enum` | 有 | ❌ 无 | 使用变体语法 `type X = A \| B \| C` |
+
+### B.2 语法差异
+
+| 语法元素 | 规范 | 代码实现 | 说明 |
+|---------|------|---------|------|
+| match arm 分隔符 | `->` | `=>` | 使用 `=>` (FatArrow) |
+| 函数定义 | `name(types) -> type = (params) => body` | 两种形式 | 支持类型集中式 `name: Type = (params) =>` |
+| 类型定义 | `type Point = { x: Float }` | `type Point = Point(x: Float)` | 使用构造器语法 |
+
+### B.3 待实现特性
+
+以下规范中描述的特性尚未在代码中实现：
+- 列表推导式 `[x for x in list if condition]`
+- `?` 错误传播运算符
+- 生命周期 `'a` 注解
+- 智能指针 `Box`, `Rc`, `Arc`
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 作者 | 变更说明 |
+|------|------|------|---------|
+| v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
+| v1.1.0 | 2025-01-04 | 沫郁酱 | 修正 match arm 使用 `=>` 而非 `->`；更新函数定义语法（两种形式）；更新类型定义语法（构造器语法）；更新 Result/Option 定义；添加与代码实现差异说明 |
 
 ---
 
