@@ -151,10 +151,13 @@ yaoxiang/
 │   └── lib.rs              # 库入口
 ├── docs/                   # 文档
 │   ├── design/             # 设计讨论区
-│   │   ├── manifesto.md           # 设计宣言
+|   │   ├── accepted/              # 已接受的设计提案
+|   │   ├── rfc/                   # 设计提案草案
+|   │   ├── discussion/            # 设计讨论区
+|   |   ├── manifesto.md           # 设计宣言
+│   |   ├── manifesto-wtf.md       # 设计宣言WTF版
 │   │   ├── language-spec.md       # 语言规范
-│   │   ├── async-whitepaper.md    # 异步白皮书
-│   │   └── 00-wtf.md              # 常见问题
+│   │   └── async-whitepaper.md    # 异步白皮书
 │   ├── guides/             # 使用指南
 │   │   ├── getting-started.md     # 快速入门
 │   │   ├── YaoXiang-book.md       # 语言指南
@@ -213,7 +216,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 
 ## 贡献
 
-欢迎贡献！请阅读 [贡献指南](CONTRIBUTING.md)（待添加）。
+欢迎贡献！请阅读 [贡献指南](CONTRIBUTING.md)。
 
 ## 社区
 
@@ -237,7 +240,7 @@ YaoXiang 的设计灵感来自以下项目和语言：
 
 ## 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
 
-- [爻象设计宣言WTF版](docs/design/wtf.md) - DeepSeek锐评
+- [爻象设计宣言WTF版](docs/design/manifesto-wtf.md) - DeepSeek锐评
 
 
 ---

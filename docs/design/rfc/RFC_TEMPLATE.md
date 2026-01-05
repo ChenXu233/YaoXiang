@@ -5,6 +5,8 @@
 > **创建日期**: [YYYY-MM-DD]
 > **最后更新**: [YYYY-MM-DD]
 
+> **参考**: 查看 [完整示例](EXAMPLE_full_feature_proposal.md) 了解如何编写 RFC。
+
 ## 摘要
 
 用 1-2 句话概括这个 RFC 要解决的问题和提出的解决方案。
@@ -122,8 +124,8 @@ RFC 有以下状态流转：
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│ docs/design/│    │ archived/   │
-│ (正式设计)  │    │ (归档)      │
+│   accepted/ │    │    rfc/     │
+│ (正式设计)  │    │ (保留原位)  │
 └─────────────┘    └─────────────┘
 ```
 
@@ -133,22 +135,22 @@ RFC 有以下状态流转：
 |------|------|------|
 | **草案** | `docs/design/rfc/` | 作者草稿，等待提交审核 |
 | **审核中** | `docs/design/rfc/` | 开放社区讨论和反馈 |
-| **已接受** | `docs/design/` | 成为正式设计文档，进入实现阶段 |
-| **已拒绝** | `docs/works/old/archived/` | 记录决策原因，供未来参考 |
+| **已接受** | `docs/design/accepted/` | 成为正式设计文档，进入实现阶段 |
+| **已拒绝** | `docs/design/rfc/` | 保留在 RFC 目录，更新状态 |
 
 ### 接受后的操作
 
-1. 将 RFC 移至 `docs/design/` 目录
+1. 将 RFC 移至 `docs/design/accepted/` 目录
 2. 更新文件名为描述性名称（如 `enhanced-pattern-matching.md`）
 3. 更新状态为 "正式"
-4. 在 `docs/design/README.md` 中添加链接
+4. 更新状态为 "已接受"，添加接受日期
 
 ### 拒绝后的操作
 
-1. 将 RFC 移至 `docs/works/old/archived/`
-2. 在文件顶部添加拒绝原因
+1. 保留在 `docs/design/rfc/` 目录
+2. 在文件顶部添加拒绝原因和日期
 3. 更新状态为 "已拒绝"
 
 ---
 
-> **注**: RFC 编号仅在 `docs/design/rfc/` 阶段使用。接受后移除编号，使用描述性文件名。
+> **注**: RFC 编号仅在讨论阶段使用。接受后移除编号，使用描述性文件名。

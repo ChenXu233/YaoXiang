@@ -2,6 +2,8 @@
 
 YaoXiang 编程语言的官方文档。
 
+[English](README.en.md) | [中文](README.zh.md)
+
 ## 文档结构
 
 ```
