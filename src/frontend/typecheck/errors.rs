@@ -381,21 +381,21 @@ impl ErrorFormatter {
                         found.type_name()
                     )
                 }
-            },
+            }
             TypeError::UnknownVariable { name, span } => {
                 if self.verbose {
                     format!("Unknown variable '{}' at {:?}", name, span)
                 } else {
                     format!("Unknown variable '{}'", name)
                 }
-            },
+            }
             TypeError::UnknownType { name, span } => {
                 if self.verbose {
                     format!("Unknown type '{}' at {:?}", name, span)
                 } else {
                     format!("Unknown type '{}'", name)
                 }
-            },
+            }
             TypeError::ArityMismatch {
                 expected,
                 found,
@@ -409,49 +409,49 @@ impl ErrorFormatter {
                 } else {
                     format!("Expected {} arguments, found {}", expected, found)
                 }
-            },
+            }
             TypeError::RecursiveType { name, span } => {
                 if self.verbose {
                     format!("Recursive type definition '{}' at {:?}", name, span)
                 } else {
                     format!("Recursive type definition '{}'", name)
                 }
-            },
+            }
             TypeError::UnsupportedOp { op, span } => {
                 if self.verbose {
                     format!("Unsupported operation '{}' at {:?}", op, span)
                 } else {
                     format!("Unsupported operation: {}", op)
                 }
-            },
+            }
             TypeError::GenericConstraint { constraint, span } => {
                 if self.verbose {
                     format!("Generic constraint violated: {} at {:?}", constraint, span)
                 } else {
                     format!("Generic constraint violated: {}", constraint)
                 }
-            },
+            }
             TypeError::InfiniteType { var, ty, span } => {
                 if self.verbose {
                     format!("Infinite type: {} = {} at {:?}", var, ty.type_name(), span)
                 } else {
                     format!("Infinite type: {} = {}", var, ty.type_name())
                 }
-            },
+            }
             TypeError::UnboundTypeVar { var, span } => {
                 if self.verbose {
                     format!("Unbound type variable {} at {:?}", var, span)
                 } else {
                     format!("Unbound type variable: {}", var)
                 }
-            },
+            }
             TypeError::UnknownLabel { name, span } => {
                 if self.verbose {
                     format!("Unknown label '{}' at {:?}", name, span)
                 } else {
                     format!("Unknown label '{}'", name)
                 }
-            },
+            }
             TypeError::UnknownField {
                 struct_name,
                 field_name,
@@ -465,7 +465,7 @@ impl ErrorFormatter {
                 } else {
                     format!("Unknown field '{}' in '{}'", field_name, struct_name)
                 }
-            },
+            }
             TypeError::IndexOutOfBounds { index, size, span } => {
                 if self.verbose {
                     format!(
@@ -475,35 +475,35 @@ impl ErrorFormatter {
                 } else {
                     format!("Index out of bounds: {} (size: {})", index, size)
                 }
-            },
+            }
             TypeError::CallError { message, span } => {
                 if self.verbose {
                     format!("Call error: {} at {:?}", message, span)
                 } else {
                     format!("Call error: {}", message)
                 }
-            },
+            }
             TypeError::AssignmentError { message, span } => {
                 if self.verbose {
                     format!("Assignment error: {} at {:?}", message, span)
                 } else {
                     format!("Assignment error: {}", message)
                 }
-            },
+            }
             TypeError::InferenceError { message, span } => {
                 if self.verbose {
                     format!("Inference error: {} at {:?}", message, span)
                 } else {
                     format!("Inference error: {}", message)
                 }
-            },
+            }
             TypeError::CannotInferParamType { name, span } => {
                 if self.verbose {
                     format!("Cannot infer type for parameter '{}' at {:?}", name, span)
                 } else {
                     format!("Cannot infer type for parameter '{}'", name)
                 }
-            },
+            }
         }
     }
 
@@ -523,52 +523,52 @@ impl From<TypeError> for Diagnostic {
         match &error {
             TypeError::TypeMismatch { .. } => {
                 Diagnostic::error("E0001".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnknownVariable { .. } => {
                 Diagnostic::error("E0002".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnknownType { .. } => {
                 Diagnostic::error("E0003".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::ArityMismatch { .. } => {
                 Diagnostic::error("E0004".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::RecursiveType { .. } => {
                 Diagnostic::error("E0005".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnsupportedOp { .. } => {
                 Diagnostic::error("E0006".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::GenericConstraint { .. } => {
                 Diagnostic::error("E0007".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::InfiniteType { .. } => {
                 Diagnostic::error("E0008".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnboundTypeVar { .. } => {
                 Diagnostic::error("E0009".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnknownLabel { .. } => {
                 Diagnostic::error("E0010".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::UnknownField { .. } => {
                 Diagnostic::error("E0011".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::IndexOutOfBounds { .. } => {
                 Diagnostic::error("E0012".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::CallError { .. } => {
                 Diagnostic::error("E0013".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::AssignmentError { .. } => {
                 Diagnostic::error("E0014".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::InferenceError { .. } => {
                 Diagnostic::error("E0015".to_string(), format!("{}", error), span)
-            },
+            }
             TypeError::CannotInferParamType { .. } => {
                 Diagnostic::error("E0016".to_string(), format!("{}", error), span)
-            },
+            }
         }
     }
 }

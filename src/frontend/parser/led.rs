@@ -31,19 +31,19 @@ impl<'a> ParserState<'a> {
             // Equality
             Some(TokenKind::EqEq) | Some(TokenKind::Neq) => {
                 Some((BP_EQ, BP_EQ + 1, Self::parse_binary))
-            },
+            }
             // Comparison
             Some(TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge) => {
                 Some((BP_CMP, BP_CMP + 1, Self::parse_binary))
-            },
+            }
             // Addition/Subtraction
             Some(TokenKind::Plus | TokenKind::Minus) => {
                 Some((BP_ADD, BP_ADD + 1, Self::parse_binary))
-            },
+            }
             // Multiplication/Division/Modulo
             Some(TokenKind::Star | TokenKind::Slash | TokenKind::Percent) => {
                 Some((BP_MUL, BP_MUL + 1, Self::parse_binary))
-            },
+            }
             // Function call
             Some(TokenKind::LParen) => Some((BP_CALL, BP_CALL + 1, Self::parse_call)),
             // Field access
@@ -102,7 +102,7 @@ impl<'a> ParserState<'a> {
             _ => {
                 self.error(super::ParseError::InvalidExpression);
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -152,7 +152,7 @@ impl<'a> ParserState<'a> {
                     _ => {
                         args.push(self.parse_expression(BP_LOWEST)?);
                         continue;
-                    },
+                    }
                 };
 
                 // Peek ahead to see if next token is '=' (named arg)
@@ -206,7 +206,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -313,7 +313,7 @@ impl<'a> ParserState<'a> {
                     "Invalid lambda parameter".to_string(),
                 ));
                 return None;
-            },
+            }
         };
 
         // Save span before moving param

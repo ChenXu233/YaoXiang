@@ -158,7 +158,7 @@ impl<'a> TypeChecker<'a> {
                     self.inferrer.infer_expr(expr)?;
                     Ok(())
                 }
-            },
+            }
             ast::StmtKind::Fn {
                 name,
                 type_annotation,
@@ -280,7 +280,7 @@ impl<'a> TypeChecker<'a> {
                     annotated_params.is_some(),
                 )?;
                 Ok(())
-            },
+            }
             ast::StmtKind::Var {
                 name,
                 type_annotation,
@@ -311,16 +311,16 @@ impl<'a> TypeChecker<'a> {
                 // 3. 类型检查循环体
                 let _body_ty = self.inferrer.infer_block(body, false, None)?;
                 Ok(())
-            },
+            }
             ast::StmtKind::TypeDef { name, definition } => {
                 self.check_type_def(name, definition, stmt.span)
-            },
+            }
             ast::StmtKind::Module { name, items } => {
                 self.check_module_alias(name, items, stmt.span)
-            },
+            }
             ast::StmtKind::Use { path, items, alias } => {
                 self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span)
-            },
+            }
         }
     }
 
@@ -645,7 +645,7 @@ impl<'a> TypeChecker<'a> {
                     };
 
                     functions.push(func_ir);
-                },
+                }
                 ast::StmtKind::Var {
                     name,
                     type_annotation,
@@ -686,8 +686,8 @@ impl<'a> TypeChecker<'a> {
                         entry: 0,
                     };
                     functions.push(func_ir);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -709,7 +709,7 @@ impl<'a> TypeChecker<'a> {
             ast::StmtKind::Expr(expr) => {
                 let result_reg = instructions.len();
                 self.generate_expr_ir(expr, result_reg, instructions);
-            },
+            }
             ast::StmtKind::Var {
                 name: _,
                 type_annotation: _,
@@ -721,7 +721,7 @@ impl<'a> TypeChecker<'a> {
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions);
                 }
-            },
+            }
             ast::StmtKind::Fn {
                 name: _,
                 type_annotation: _,
@@ -729,8 +729,8 @@ impl<'a> TypeChecker<'a> {
                 body: _,
             } => {
                 // 嵌套函数（简化处理）
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -756,14 +756,14 @@ impl<'a> TypeChecker<'a> {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Const(const_val),
                 });
-            },
+            }
             ast::Expr::Var(_, _) => {
                 // 变量加载
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Local(result_reg), // 简化处理
                 });
-            },
+            }
             ast::Expr::BinOp {
                 op,
                 left,
@@ -840,7 +840,7 @@ impl<'a> TypeChecker<'a> {
                     },
                 };
                 instructions.push(instr);
-            },
+            }
             ast::Expr::Call {
                 func: _,
                 args,
@@ -858,14 +858,14 @@ impl<'a> TypeChecker<'a> {
                     func: middle::Operand::Local(result_reg), // 简化
                     args: arg_regs,
                 });
-            },
+            }
             _ => {
                 // 默认返回 0
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Const(middle::ConstValue::Int(0)),
                 });
-            },
+            }
         }
     }
 }
@@ -975,7 +975,7 @@ pub fn binop_result_type(
             } else {
                 None
             }
-        },
+        }
         ast::BinOp::Eq
         | ast::BinOp::Neq
         | ast::BinOp::Lt
@@ -987,14 +987,14 @@ pub fn binop_result_type(
             } else {
                 None
             }
-        },
+        }
         ast::BinOp::And | ast::BinOp::Or => {
             if *left == MonoType::Bool && *right == MonoType::Bool {
                 Some(MonoType::Bool)
             } else {
                 None
             }
-        },
+        }
         ast::BinOp::Assign => Some(MonoType::Void),
         ast::BinOp::Range => None, // 范围运算暂时不支持类型检查
     }
@@ -1012,13 +1012,13 @@ pub fn unop_result_type(
             } else {
                 None
             }
-        },
+        }
         ast::UnOp::Not => {
             if *expr == MonoType::Bool {
                 Some(MonoType::Bool)
             } else {
                 None
             }
-        },
+        }
     }
 }

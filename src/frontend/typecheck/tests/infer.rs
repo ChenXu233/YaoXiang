@@ -298,7 +298,7 @@ fn test_infer_tuple() {
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 3);
-        },
+        }
         _ => panic!("Expected tuple type"),
     }
 }
@@ -315,7 +315,7 @@ fn test_infer_empty_tuple() {
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 0);
-        },
+        }
         _ => panic!("Expected empty tuple type"),
     }
 }
@@ -337,7 +337,7 @@ fn test_infer_list() {
     match ty {
         MonoType::List(_) => {
             // 成功推断为列表类型
-        },
+        }
         _ => panic!("Expected list type"),
     }
 }
@@ -355,7 +355,7 @@ fn test_infer_empty_list() {
         MonoType::List(elem_ty) => {
             // 空列表的元素类型是类型变量
             assert!(elem_ty.type_var().is_some());
-        },
+        }
         _ => panic!("Expected list type"),
     }
 }
@@ -382,7 +382,7 @@ fn test_infer_dict() {
     match ty {
         MonoType::Dict(_, _) => {
             // 成功推断为字典类型
-        },
+        }
         _ => panic!("Expected dict type"),
     }
 }
@@ -401,7 +401,7 @@ fn test_infer_empty_dict() {
             // 空字典的键值类型都是类型变量
             assert!(key_ty.type_var().is_some());
             assert!(value_ty.type_var().is_some());
-        },
+        }
         _ => panic!("Expected dict type"),
     }
 }
@@ -558,7 +558,7 @@ fn test_infer_tuple_pattern() {
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 2);
-        },
+        }
         _ => panic!("Expected tuple type"),
     }
 }

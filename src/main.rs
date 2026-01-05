@@ -89,25 +89,25 @@ fn main() -> Result<()> {
             eprintln!("[DEBUG] Run command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to run: {}", file.display()))?;
             eprintln!("[DEBUG] Run command completed successfully!");
-        },
+        }
         Commands::Eval { code } => {
             eprintln!("[DEBUG] Eval command received");
             run(&code).context("Failed to evaluate code")?;
             eprintln!("[DEBUG] Eval command completed successfully!");
-        },
+        }
         Commands::Check { file } => {
             // TODO: Implement type checking without execution
             eprintln!("[DEBUG] Check command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to check: {}", file.display()))?;
             eprintln!("Check passed!");
-        },
+        }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter
             eprintln!("Formatter not implemented yet");
-        },
+        }
         Commands::Dump { file } => {
             dump_bytecode(&file).with_context(|| format!("Failed to dump: {}", file.display()))?;
-        },
+        }
         Commands::Build { file, output } => {
             let output_path = output.unwrap_or_else(|| {
                 let mut path = file.clone();
@@ -116,10 +116,10 @@ fn main() -> Result<()> {
             });
             build_bytecode(&file, &output_path)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
-        },
+        }
         Commands::Version => {
             println!("{} {}", NAME, VERSION);
-        },
+        }
     }
 
     Ok(())

@@ -224,7 +224,7 @@ impl WorkStealer {
                 } else {
                     queue.pop_front()
                 }
-            },
+            }
         }
     }
 

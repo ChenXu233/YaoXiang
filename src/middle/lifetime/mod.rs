@@ -184,33 +184,33 @@ impl OwnershipAnalyzer {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 live_in.insert(src.clone());
-            },
+            }
 
             // 加载：定义 dst，src 活跃
             Instruction::LoadIndex { dst, src, index } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 block_live.insert(index.clone());
-            },
+            }
             Instruction::LoadField { dst, src, .. } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
-            },
+            }
 
             // 存储：src 和 dst 都活跃
             Instruction::Store { src, dst } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
-            },
+            }
             Instruction::StoreIndex { src, dst, index } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
                 block_live.insert(index.clone());
-            },
+            }
             Instruction::StoreField { src, dst, .. } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
-            },
+            }
 
             // 函数调用：参数活跃，返回值定义新变量
             Instruction::Call { dst, args, .. } => {
@@ -220,26 +220,26 @@ impl OwnershipAnalyzer {
                 for arg in args {
                     block_live.insert(arg.clone());
                 }
-            },
+            }
 
             // 返回：返回值活跃
             Instruction::Ret(Some(value)) => {
                 block_live.insert(value.clone());
-            },
-            Instruction::Ret(None) => {},
+            }
+            Instruction::Ret(None) => {}
 
             // 内存分配：定义新变量
             Instruction::HeapAlloc { dst, .. } => {
                 block_live.remove(dst);
-            },
+            }
 
             // 类型转换
             Instruction::Cast { dst, src, .. } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 
@@ -288,7 +288,7 @@ impl OwnershipAnalyzer {
                 self.ownership_graph
                     .lifetimes
                     .insert(src.clone(), Lifetime::new(pos, pos));
-            },
+            }
 
             // 函数调用：返回值拥有参数的所有权
             Instruction::Call {
@@ -312,7 +312,7 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(arg.clone());
                 }
-            },
+            }
             Instruction::Call {
                 dst: None, args, ..
             } => {
@@ -324,7 +324,7 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(arg.clone());
                 }
-            },
+            }
 
             // 堆分配：新变量拥有新内存的所有权
             Instruction::HeapAlloc { dst, .. } => {
@@ -341,7 +341,7 @@ impl OwnershipAnalyzer {
                 self.ownership_graph
                     .lifetimes
                     .insert(dst.clone(), Lifetime::new(pos, pos));
-            },
+            }
 
             // 闭包：闭包拥有捕获变量的所有权
             Instruction::MakeClosure { dst, env, .. } => {
@@ -362,9 +362,9 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(var.clone());
                 }
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 

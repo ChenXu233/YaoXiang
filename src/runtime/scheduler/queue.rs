@@ -131,13 +131,13 @@ impl PriorityTaskQueue {
         match priority {
             TaskPriority::Critical | TaskPriority::High => {
                 self.high.lock().unwrap().push_back(task);
-            },
+            }
             TaskPriority::Normal => {
                 self.normal.lock().unwrap().push_back(task);
-            },
+            }
             TaskPriority::Low => {
                 self.low.lock().unwrap().push_back(task);
-            },
+            }
         }
     }
 

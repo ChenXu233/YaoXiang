@@ -41,7 +41,7 @@ impl<'a> ParserState<'a> {
                     result.is_some()
                 );
                 result
-            },
+            }
             // expression statement
             Some(_) => self.parse_expr_stmt(start_span),
             None => None,
@@ -67,7 +67,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -119,7 +119,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -200,7 +200,7 @@ impl<'a> ParserState<'a> {
                                 params,
                                 span: self.span(),
                             });
-                        },
+                        }
                         Type::NamedStruct { name, fields } => {
                             let params = fields
                                 .iter()
@@ -211,14 +211,14 @@ impl<'a> ParserState<'a> {
                                 params,
                                 span: self.span(),
                             });
-                        },
+                        }
                         Type::Name(name) => {
                             variants.push(VariantDef {
                                 name: name.clone(),
                                 params: Vec::new(),
                                 span: self.span(),
                             });
-                        },
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -243,7 +243,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -273,7 +273,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => {
                 // Look ahead to see if next token is Colon
                 matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Colon))
-            },
+            }
             _ => false,
         };
 
@@ -350,7 +350,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -395,11 +395,11 @@ impl<'a> ParserState<'a> {
                         items.push(n.clone());
                         self.bump();
                         self.skip(&TokenKind::Comma);
-                    },
+                    }
                     Some(TokenKind::KwPub) => {
                         // Skip 'pub' in import items
                         self.bump();
-                    },
+                    }
                     _ => break,
                 }
             }
@@ -416,7 +416,7 @@ impl<'a> ParserState<'a> {
                     let a = n.clone();
                     self.bump();
                     Some(a)
-                },
+                }
                 _ => None,
             }
         } else {
@@ -482,14 +482,14 @@ impl<'a> ParserState<'a> {
                     Some(TokenKind::Lt) => {
                         depth += 1;
                         p += 1;
-                    },
+                    }
                     Some(TokenKind::Gt) => {
                         p += 1;
                         break;
-                    },
+                    }
                     Some(_) => {
                         p += 1;
-                    },
+                    }
                     None => break,
                 }
             }
@@ -510,23 +510,23 @@ impl<'a> ParserState<'a> {
                     Some(TokenKind::LParen) => {
                         depth += 1;
                         pos += 1;
-                    },
+                    }
                     Some(TokenKind::RParen) => {
                         depth -= 1;
                         if depth > 0 {
                             pos += 1;
                         }
-                    },
+                    }
                     Some(TokenKind::Comma) => {
                         pos += 1;
-                    },
+                    }
                     Some(_) => {
                         pos += 1;
-                    },
+                    }
                     None => {
                         // Reached end of tokens
                         break;
-                    },
+                    }
                 }
             }
 
@@ -576,7 +576,7 @@ impl<'a> ParserState<'a> {
                             .unwrap_or(TokenKind::Eof),
                     ));
                     return None;
-                },
+                }
             };
             self.bump();
 
@@ -669,7 +669,7 @@ impl<'a> ParserState<'a> {
                                     params: fn_params,
                                     return_type,
                                 }
-                            },
+                            }
                             other => other,
                         });
 
@@ -710,7 +710,7 @@ impl<'a> ParserState<'a> {
                                         .unwrap_or(TokenKind::Eof),
                                 ));
                                 return None;
-                            },
+                            }
                         };
                         self.bump();
 
@@ -759,7 +759,7 @@ impl<'a> ParserState<'a> {
                                     params: fn_params,
                                     return_type,
                                 }
-                            },
+                            }
                             other => other,
                         });
 
@@ -851,7 +851,7 @@ impl<'a> ParserState<'a> {
                                     params: fn_params,
                                     return_type,
                                 }
-                            },
+                            }
                             other => other,
                         });
 
@@ -958,7 +958,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         eprintln!("[DEBUG] parse_fn_stmt: function name = {}", name);
         self.bump();
@@ -1134,7 +1134,7 @@ impl<'a> ParserState<'a> {
                 Some(TokenKind::Identifier(n)) => n.clone(),
                 _ => {
                     break;
-                },
+                }
             };
             self.bump();
 
@@ -1236,7 +1236,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 

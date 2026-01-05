@@ -118,7 +118,7 @@ fn test_tuple_inference() {
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 2);
-        },
+        }
         _ => panic!("Expected tuple type"),
     }
 }
@@ -140,7 +140,7 @@ fn test_list_inference() {
     match ty {
         MonoType::List(_) => {
             // 列表类型，检查是否是 MonoType
-        },
+        }
         _ => panic!("Expected list type"),
     }
 }
@@ -370,7 +370,7 @@ fn test_empty_tuple() {
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 0);
-        },
+        }
         _ => panic!("Expected tuple type"),
     }
 }
@@ -466,7 +466,7 @@ fn test_solver_get_binding_after_bind() {
     match binding {
         Some(TypeBinding::Bound(ty)) => {
             assert_eq!(*ty, MonoType::Int(64));
-        },
+        }
         _ => panic!("Expected bound type"),
     }
 }

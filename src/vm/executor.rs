@@ -122,22 +122,22 @@ impl VM {
             self.ip += 1;
 
             match opcode {
-                Opcode::Nop => {},
+                Opcode::Nop => {}
                 Opcode::Push => {
                     // Push a placeholder value for testing
                     self.stack.push(Value::Void);
-                },
+                }
                 Opcode::Pop => {
                     if let Some(mut val) = self.stack.pop() {
                         val.drop();
                     }
-                },
+                }
                 Opcode::Drop => {
                     // Drop the top value without popping
                     if let Some(val) = self.stack.last_mut() {
                         val.drop();
                     }
-                },
+                }
                 Opcode::Alloc => {
                     // Allocate a heap object for testing
                     let obj = HeapObject {
@@ -145,19 +145,19 @@ impl VM {
                         data: vec![0; 16],
                     };
                     self.stack.push(Value::HeapObject(obj));
-                },
+                }
                 Opcode::Ret => {
                     // Return - pop and return value
                     self.status = VMStatus::Finished;
                     return Ok(());
-                },
+                }
                 Opcode::Call => {
                     // Function call placeholder
                     // In real implementation, this would push return address and jump
-                },
+                }
                 _ => {
                     // Other opcodes not yet implemented in basic engine
-                },
+                }
             }
         }
 
@@ -227,18 +227,18 @@ impl Value {
             Value::String(s) => {
                 // Release string memory
                 s.clear();
-            },
+            }
             Value::Bytes(b) => {
                 // Release byte array
                 b.clear();
-            },
+            }
             Value::List(list) => {
                 // Recursively drop all elements
                 for item in list.iter_mut() {
                     item.drop();
                 }
                 list.clear();
-            },
+            }
             Value::Dict(map) => {
                 // Recursively drop all values (keys don't need explicit cleanup for simple types)
                 // Take ownership of values to drop them properly
@@ -248,13 +248,13 @@ impl Value {
                 }
                 // Clear the map (keys are dropped automatically when removed)
                 map.clear();
-            },
+            }
             Value::HeapObject(obj) => {
                 // Release heap object
                 obj.data.clear();
-            },
+            }
             // Primitive types don't need explicit cleanup
-            Value::Void | Value::Bool(_) | Value::Int(_) | Value::Float(_) | Value::Char(_) => {},
+            Value::Void | Value::Bool(_) | Value::Int(_) | Value::Float(_) | Value::Char(_) => {}
         }
     }
 

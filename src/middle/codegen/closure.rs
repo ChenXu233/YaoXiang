@@ -34,7 +34,7 @@ impl CodegenContext {
                 return Err(CodegenError::UnimplementedExpr {
                     expr_type: "Non-function closure".to_string(),
                 });
-            },
+            }
         };
 
         // 2. 分析捕获变量 (Upvalues)
@@ -111,20 +111,20 @@ impl CodegenContext {
                         });
                     }
                 }
-            },
+            }
             Expr::BinOp { left, right, .. } => {
                 self.collect_captures(left, var_positions, captures);
                 self.collect_captures(right, var_positions, captures);
-            },
+            }
             Expr::UnOp { expr, .. } => {
                 self.collect_captures(expr, var_positions, captures);
-            },
+            }
             Expr::Call { func, args, .. } => {
                 self.collect_captures(func, var_positions, captures);
                 for arg in args {
                     self.collect_captures(arg, var_positions, captures);
                 }
-            },
+            }
             Expr::If {
                 condition,
                 then_branch,
@@ -140,56 +140,56 @@ impl CodegenContext {
                 if let Some(else_b) = else_branch {
                     self.collect_captures_block(else_b, var_positions, captures);
                 }
-            },
+            }
             Expr::While {
                 condition, body, ..
             } => {
                 self.collect_captures(condition, var_positions, captures);
                 self.collect_captures_block(body, var_positions, captures);
-            },
+            }
             Expr::For { iterable, body, .. } => {
                 self.collect_captures(iterable, var_positions, captures);
                 self.collect_captures_block(body, var_positions, captures);
-            },
+            }
             Expr::Match { expr, arms, .. } => {
                 self.collect_captures(expr, var_positions, captures);
                 for arm in arms {
                     self.collect_captures(&arm.body, var_positions, captures);
                 }
-            },
+            }
             Expr::Block(block) => {
                 self.collect_captures_block(block, var_positions, captures);
-            },
+            }
             Expr::Return(Some(value), _) => {
                 self.collect_captures(value, var_positions, captures);
-            },
+            }
             Expr::Cast { expr, .. } => {
                 self.collect_captures(expr, var_positions, captures);
-            },
+            }
             Expr::Tuple(exprs, _) => {
                 for e in exprs {
                     self.collect_captures(e, var_positions, captures);
                 }
-            },
+            }
             Expr::List(exprs, _) => {
                 for e in exprs {
                     self.collect_captures(e, var_positions, captures);
                 }
-            },
+            }
             Expr::Dict(pairs, _) => {
                 for (k, v) in pairs {
                     self.collect_captures(k, var_positions, captures);
                     self.collect_captures(v, var_positions, captures);
                 }
-            },
+            }
             Expr::Index { expr, index, .. } => {
                 self.collect_captures(expr, var_positions, captures);
                 self.collect_captures(index, var_positions, captures);
-            },
+            }
             Expr::FieldAccess { expr, .. } => {
                 self.collect_captures(expr, var_positions, captures);
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -220,23 +220,23 @@ impl CodegenContext {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
                 self.collect_captures(expr, var_positions, captures);
-            },
+            }
             StmtKind::Var { initializer, .. } => {
                 if let Some(init) = initializer {
                     self.collect_captures(init, var_positions, captures);
                 }
-            },
+            }
             StmtKind::For { iterable, body, .. } => {
                 self.collect_captures(iterable, var_positions, captures);
                 self.collect_captures_block(body, var_positions, captures);
-            },
-            StmtKind::TypeDef { .. } => {},
+            }
+            StmtKind::TypeDef { .. } => {}
             StmtKind::Module { items, .. } => {
                 for item in items {
                     self.collect_captures_stmt(item, var_positions, captures);
                 }
-            },
-            StmtKind::Use { .. } => {},
+            }
+            StmtKind::Use { .. } => {}
             StmtKind::Fn { body, .. } => {
                 let (stmts, expr) = body;
                 for stmt in stmts {
@@ -245,7 +245,7 @@ impl CodegenContext {
                 if let Some(e) = expr {
                     self.collect_captures(e, var_positions, captures);
                 }
-            },
+            }
         }
     }
 

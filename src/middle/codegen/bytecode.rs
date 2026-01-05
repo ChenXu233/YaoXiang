@@ -166,25 +166,25 @@ impl BytecodeFile {
                 ConstValue::Int(n) => {
                     writer.write_all(&[2])?;
                     writer.write_all(&n.to_le_bytes())?;
-                },
+                }
                 ConstValue::Float(f) => {
                     writer.write_all(&[3])?;
                     writer.write_all(&f.to_le_bytes())?;
-                },
+                }
                 ConstValue::Char(c) => {
                     writer.write_all(&[4])?;
                     writer.write_all(&(*c as u32).to_le_bytes())?;
-                },
+                }
                 ConstValue::String(s) => {
                     writer.write_all(&[5])?;
                     writer.write_all(&(s.len() as u32).to_le_bytes())?;
                     writer.write_all(s.as_bytes())?;
-                },
+                }
                 ConstValue::Bytes(bytes) => {
                     writer.write_all(&[6])?;
                     writer.write_all(&(bytes.len() as u32).to_le_bytes())?;
                     writer.write_all(bytes)?;
-                },
+                }
             }
         }
 

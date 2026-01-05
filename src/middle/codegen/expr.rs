@@ -50,7 +50,7 @@ impl CodegenContext {
                     let _ = self.generate_block(else_b)?;
                 }
                 Ok(Operand::Temp(self.next_temp()))
-            },
+            }
             Expr::While {
                 condition, body, ..
             } => {
@@ -59,7 +59,7 @@ impl CodegenContext {
                 // 生成循环体
                 let _ = self.generate_block(body)?;
                 Ok(Operand::Temp(self.next_temp()))
-            },
+            }
             Expr::For {
                 var: _var,
                 iterable,
@@ -71,7 +71,7 @@ impl CodegenContext {
                 // 生成循环体
                 let _ = self.generate_block(body)?;
                 Ok(Operand::Temp(self.next_temp()))
-            },
+            }
             Expr::Match { expr, arms, .. } => {
                 // 生成匹配表达式
                 let _match = self.generate_expr(expr)?;
@@ -80,7 +80,7 @@ impl CodegenContext {
                     let _ = self.generate_expr(&arm.body)?;
                 }
                 Ok(Operand::Temp(self.next_temp()))
-            },
+            }
             Expr::Block(block) => self.generate_block(block),
             Expr::Return(_, _) => Err(CodegenError::UnimplementedExpr {
                 expr_type: "Return".to_string(),
@@ -136,7 +136,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                },
+                }
                 super::Storage::Arg(id) => {
                     let dst = self.next_temp();
                     // 发射加载参数指令
@@ -145,7 +145,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                },
+                }
                 super::Storage::Temp(id) => Ok(Operand::Temp(id)),
                 super::Storage::Global(id) => {
                     let dst = self.next_temp();
@@ -154,7 +154,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                },
+                }
             }
         } else {
             Err(CodegenError::SymbolNotFound {
@@ -178,7 +178,7 @@ impl CodegenContext {
                         name: name.to_string(),
                     })
                 }
-            },
+            }
             Expr::BinOp { left, .. } => self.get_expr_type(left),
             Expr::UnOp { expr, .. } => self.get_expr_type(expr),
             Expr::Call { func, .. } => {
@@ -190,7 +190,7 @@ impl CodegenContext {
                         found: format!("{:?}", func_ty),
                     }),
                 }
-            },
+            }
             _ => Ok(MonoType::Int(64)), // Default fallback
         }
     }
@@ -274,7 +274,7 @@ impl CodegenContext {
                                 TypedOpcode::StoreLocal,
                                 vec![self.operand_to_reg(&src)?, id as u8],
                             ));
-                        },
+                        }
                         _ => return Err(CodegenError::InvalidAssignmentTarget),
                     }
                 } else {
@@ -282,7 +282,7 @@ impl CodegenContext {
                         name: name.to_string(),
                     });
                 }
-            },
+            }
             Expr::Index { expr, index, .. } => {
                 let array = self.generate_expr(expr)?;
                 let idx = self.generate_expr(index)?;
@@ -294,7 +294,7 @@ impl CodegenContext {
                         self.operand_to_reg(&src)?,
                     ],
                 ));
-            },
+            }
             Expr::FieldAccess { expr, field, .. } => {
                 let obj = self.generate_expr(expr)?;
                 // 假设字段偏移是字段名的哈希值（简化）
@@ -307,7 +307,7 @@ impl CodegenContext {
                         self.operand_to_reg(&src)?,
                     ],
                 ));
-            },
+            }
             _ => return Err(CodegenError::InvalidAssignmentTarget),
         }
 
@@ -373,7 +373,7 @@ impl CodegenContext {
                     TypedOpcode::CallStatic,
                     vec![dst as u8, func_idx as u8, 0, arg_regs.len() as u8],
                 ));
-            },
+            }
             Expr::FieldAccess { expr, field, .. } => {
                 // 方法调用
                 let obj = self.generate_expr(expr)?;
@@ -388,7 +388,7 @@ impl CodegenContext {
                         arg_regs.len() as u8,
                     ],
                 ));
-            },
+            }
             _ => {
                 // 动态调用
                 let name_idx = self.add_constant(ConstValue::String(format!("{:?}", func)));
@@ -402,7 +402,7 @@ impl CodegenContext {
                         arg_regs.len() as u8,
                     ],
                 ));
-            },
+            }
         }
 
         Ok(Operand::Temp(dst))

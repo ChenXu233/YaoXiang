@@ -38,7 +38,7 @@ impl<'a> ParserState<'a> {
             None => {
                 self.error(super::ParseError::InvalidExpression);
                 return None;
-            },
+            }
         };
 
         // Only parse if prefix binding power meets minimum

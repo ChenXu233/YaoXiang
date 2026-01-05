@@ -45,7 +45,7 @@ fn test_generic_constraints() {
         } => {
             assert_eq!(params.len(), 1);
             assert!(matches!(*return_type, MonoType::TypeVar(_)));
-        },
+        }
         _ => panic!("Expected function type"),
     }
 }
@@ -100,7 +100,7 @@ fn test_generic_dict() {
             // 使用模式匹配检查 Box 内部
             assert!(matches!(*key, MonoType::TypeVar(_)));
             assert!(matches!(*value, MonoType::TypeVar(_)));
-        },
+        }
         _ => panic!("Expected dict type"),
     }
 }
@@ -136,7 +136,7 @@ fn test_specialization_cache() {
     match (result1, result2) {
         (MonoType::Fn { params: p1, .. }, MonoType::Fn { params: p2, .. }) => {
             assert_eq!(p1.len(), p2.len());
-        },
+        }
         _ => panic!("Expected function type"),
     }
 }
@@ -218,7 +218,7 @@ fn test_multi_param_generic_specialization() {
         } => {
             assert_eq!(params.len(), 2);
             assert!(matches!(*return_type, MonoType::Tuple(_)));
-        },
+        }
         _ => panic!("Expected function type"),
     }
 }
@@ -267,7 +267,7 @@ fn test_specialization_type_var_mapping() {
     match specialized {
         MonoType::List(inner) => {
             assert!(matches!(*inner, MonoType::TypeVar(_)));
-        },
+        }
         _ => panic!("Expected list type"),
     }
 }
@@ -312,7 +312,7 @@ fn test_nested_generic_specialization() {
     match result {
         MonoType::List(inner) => {
             assert!(matches!(*inner, MonoType::List(_)));
-        },
+        }
         _ => panic!("Expected nested list type"),
     }
 }
@@ -347,7 +347,7 @@ fn test_specializer_cache_behavior() {
     match (result1, result2) {
         (MonoType::Fn { params: p1, .. }, MonoType::Fn { params: p2, .. }) => {
             assert_eq!(p1.len(), p2.len());
-        },
+        }
         _ => panic!("Expected function type"),
     }
 }
@@ -482,7 +482,7 @@ fn test_generic_function_return_type() {
                     || matches!(inner, MonoType::Int(_))
                     || matches!(inner, MonoType::String)
             );
-        },
+        }
         _ => panic!("Expected function type"),
     }
 }
@@ -500,7 +500,7 @@ fn test_instantiate_returns_mono_type() {
     match result {
         MonoType::List(inner) => {
             assert!(matches!(*inner, MonoType::Int(64)));
-        },
+        }
         _ => panic!("Expected list type"),
     }
 }

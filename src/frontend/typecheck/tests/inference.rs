@@ -60,13 +60,13 @@ fn check_type(input: &str) -> bool {
             } else {
                 true
             }
-        },
+        }
         Err(errors) => {
             for err in errors {
                 println!("Error: {:?}", err);
             }
             false
-        },
+        }
     }
 }
 
@@ -483,7 +483,7 @@ fn test_fn_type_with_fn_return() {
                 "Expected Fn type, got {:?}",
                 return_type
             );
-        },
+        }
         _ => panic!("Expected Fn type, got {:?}", result),
     }
 }

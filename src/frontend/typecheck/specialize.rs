@@ -111,7 +111,7 @@ impl GenericSpecializer {
                 } else {
                     ty.clone()
                 }
-            },
+            }
             MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
                 name: s.name.clone(),
                 fields: s
@@ -131,14 +131,14 @@ impl GenericSpecializer {
             ),
             MonoType::List(t) => {
                 MonoType::List(Box::new(self.substitute_type(t, substitution, _solver)))
-            },
+            }
             MonoType::Dict(k, v) => MonoType::Dict(
                 Box::new(self.substitute_type(k, substitution, _solver)),
                 Box::new(self.substitute_type(v, substitution, _solver)),
             ),
             MonoType::Set(t) => {
                 MonoType::Set(Box::new(self.substitute_type(t, substitution, _solver)))
-            },
+            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -247,7 +247,7 @@ fn substitute_mono_type(
             } else {
                 ty.clone()
             }
-        },
+        }
         MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
             name: s.name.clone(),
             fields: s
@@ -432,27 +432,27 @@ impl SpecializationKey {
                 for t in ts {
                     self.type_name_hash(t, state);
                 }
-            },
+            }
             MonoType::List(t) => {
                 "list".hash(state);
                 self.type_name_hash(t, state);
-            },
+            }
             MonoType::Dict(k, v) => {
                 "dict".hash(state);
                 self.type_name_hash(k, state);
                 self.type_name_hash(v, state);
-            },
+            }
             MonoType::Set(t) => {
                 "set".hash(state);
                 self.type_name_hash(t, state);
-            },
+            }
             MonoType::Fn { .. } => "fn".hash(state),
             MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
             MonoType::TypeRef(n) => n.hash(state),
             MonoType::Range { elem_type } => {
                 "range".hash(state);
                 self.type_name_hash(elem_type, state);
-            },
+            }
         }
     }
 }

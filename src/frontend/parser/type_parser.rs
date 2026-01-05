@@ -18,14 +18,14 @@ impl<'a> ParserState<'a> {
                     Some(TokenKind::Lt) => {
                         depth += 1;
                         self.bump();
-                    },
+                    }
                     Some(TokenKind::Gt) => {
                         depth -= 1;
                         self.bump();
-                    },
+                    }
                     Some(_) => {
                         self.bump();
-                    },
+                    }
                     None => break,
                 }
             }
@@ -344,7 +344,7 @@ impl<'a> ParserState<'a> {
                     name.push('.');
                     name.push_str(n);
                     self.bump();
-                },
+                }
                 _ => return None, // Expected identifier after dot
             }
         }
@@ -359,7 +359,7 @@ impl<'a> ParserState<'a> {
             "bytes" | "Bytes" => return Some(Type::Bytes),
             "int" | "Int" => return self.parse_int_type_from_name(),
             "float" | "Float" => return self.parse_float_type_from_name(),
-            _ => {},
+            _ => {}
         }
 
         // Check for generic arguments or struct fields
@@ -434,7 +434,7 @@ impl<'a> ParserState<'a> {
                     let s = *n as usize;
                     self.bump();
                     s
-                },
+                }
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
                         self.current()
@@ -442,7 +442,7 @@ impl<'a> ParserState<'a> {
                             .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Int(64)); // default
-                },
+                }
             };
 
             if !self.expect(&TokenKind::Gt) {
@@ -465,7 +465,7 @@ impl<'a> ParserState<'a> {
                     let s = *n as usize;
                     self.bump();
                     s
-                },
+                }
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
                         self.current()
@@ -473,7 +473,7 @@ impl<'a> ParserState<'a> {
                             .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Float(64)); // default
-                },
+                }
             };
 
             if !self.expect(&TokenKind::Gt) {

@@ -180,6 +180,6 @@ fn get_min_max<T: Copy + PartialOrd, I: Iterator<Item = T>>(mut iter: I) -> Opti
                 }
             }
             Some((min, max))
-        },
+        }
     }
 }

@@ -184,21 +184,21 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().is_returned = true;
                             }
                         }
-                    },
+                    }
 
                     // 字段存储逃逸（赋值给对象的字段可能逃逸）
                     Instruction::StoreField { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    },
+                    }
 
                     // 索引存储逃逸（赋值给数组元素可能逃逸）
                     Instruction::StoreIndex { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    },
+                    }
 
                     // 函数调用可能导致参数逃逸
                     Instruction::Call { args, .. } => {
@@ -212,7 +212,7 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
                         }
-                    },
+                    }
 
                     // 尾调用也可能导致参数逃逸
                     Instruction::TailCall { args, .. } => {
@@ -225,16 +225,16 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
                         }
-                    },
+                    }
 
                     // 类型转换可能导致逃逸
                     Instruction::Cast { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    },
+                    }
 
-                    _ => {},
+                    _ => {}
                 }
             }
         }
@@ -310,7 +310,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            },
+            }
 
             // Load: a = *b 形式
             Instruction::Load { dst, src } => {
@@ -319,7 +319,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            },
+            }
 
             // Store: *a = b 形式
             Instruction::Store { dst, src } => {
@@ -329,7 +329,7 @@ impl EscapeAnalyzer {
                         var_uses.entry(src_id).or_default().insert(dst_local);
                     }
                 }
-            },
+            }
 
             // 函数调用：返回值可能来自参数
             Instruction::Call { dst, args, .. } => {
@@ -340,7 +340,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            },
+            }
 
             // 尾调用
             Instruction::TailCall { func: _, args } => {
@@ -354,7 +354,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            },
+            }
 
             // 类型转换不改变逃逸状态
             Instruction::Cast { dst, src, .. } => {
@@ -363,9 +363,9 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 
@@ -403,7 +403,7 @@ impl EscapeAnalyzer {
                         changed |= self.propagate_to_uses(dst_id, src_escapes, var_uses);
                     }
                 }
-            },
+            }
 
             // 函数调用：返回值可能继承参数的逃逸状态
             Instruction::Call { dst, args, .. } => {
@@ -433,7 +433,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            },
+            }
 
             // 移动传播
             Instruction::Load { dst, src } => {
@@ -453,9 +453,9 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
 
         changed

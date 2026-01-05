@@ -22,7 +22,7 @@ impl<'a> ParserState<'a> {
             // Unary operators
             Some(TokenKind::Minus) | Some(TokenKind::Plus) | Some(TokenKind::Not) => {
                 Some((BP_UNARY, Self::parse_unary))
-            },
+            }
             // Literals
             Some(TokenKind::IntLiteral(_)) => Some((BP_HIGHEST, Self::parse_int_literal)),
             Some(TokenKind::FloatLiteral(_)) => Some((BP_HIGHEST, Self::parse_float_literal)),
@@ -184,12 +184,12 @@ impl<'a> ParserState<'a> {
                             ty: None,
                             span,
                         });
-                    },
+                    }
                     _ => {
                         // Invalid lambda parameter
                         self.error(super::ParseError::InvalidExpression);
                         return None;
-                    },
+                    }
                 }
             }
             return self.parse_lambda_body(params, start_span);
@@ -450,7 +450,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Underscore) => {
                 self.bump();
                 Some(Pattern::Wildcard)
-            },
+            }
             Some(TokenKind::Identifier(_)) => {
                 let name = match self.current().map(|t| &t.kind) {
                     Some(TokenKind::Identifier(n)) => n.clone(),
@@ -481,27 +481,27 @@ impl<'a> ParserState<'a> {
                 }
 
                 Some(Pattern::Identifier(name))
-            },
+            }
             Some(TokenKind::IntLiteral(n)) => {
                 let value = *n;
                 self.bump();
                 Some(Pattern::Literal(Literal::Int(value)))
-            },
+            }
             Some(TokenKind::StringLiteral(s)) => {
                 let value = s.clone();
                 self.bump();
                 Some(Pattern::Literal(Literal::String(value)))
-            },
+            }
             Some(TokenKind::CharLiteral(c)) => {
                 let value = *c;
                 self.bump();
                 Some(Pattern::Literal(Literal::Char(value)))
-            },
+            }
             Some(TokenKind::BoolLiteral(b)) => {
                 let value = *b;
                 self.bump();
                 Some(Pattern::Literal(Literal::Bool(value)))
-            },
+            }
             Some(TokenKind::LParen) => {
                 self.bump();
                 let mut patterns = Vec::new();
@@ -513,11 +513,11 @@ impl<'a> ParserState<'a> {
                     return None;
                 }
                 Some(Pattern::Tuple(patterns))
-            },
+            }
             _ => {
                 self.error(super::ParseError::InvalidPattern);
                 None
-            },
+            }
         }
     }
 
@@ -565,7 +565,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            },
+            }
         };
         self.bump();
 
@@ -607,7 +607,7 @@ impl<'a> ParserState<'a> {
                     let label = n.clone();
                     self.bump();
                     Some(label)
-                },
+                }
                 _ => None,
             }
         } else {

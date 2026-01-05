@@ -20,7 +20,7 @@ impl CodegenContext {
                 // 生成表达式语句
                 self.generate_expr(expr)?;
                 Ok(())
-            },
+            }
 
             StmtKind::Var {
                 name,
@@ -44,13 +44,13 @@ impl CodegenContext {
                 // 这里仅生成占位符，实际生成在表达式层面处理
                 let _ = (var, iterable, body, label);
                 Ok(())
-            },
+            }
 
             StmtKind::TypeDef { name, definition } => {
                 // 类型定义在编译时处理，不生成运行时指令
                 self.register_type_definition(name, definition);
                 Ok(())
-            },
+            }
 
             StmtKind::Module { name: _, items } => {
                 // 模块处理：收集所有定义
@@ -58,12 +58,12 @@ impl CodegenContext {
                     self.generate_stmt(item)?;
                 }
                 Ok(())
-            },
+            }
 
             StmtKind::Use { .. } => {
                 // use 语句在解析时处理，不生成字节码
                 Ok(())
-            },
+            }
 
             _ => Err(CodegenError::UnimplementedStmt {
                 stmt_type: format!("{:?}", stmt.kind),
@@ -88,7 +88,7 @@ impl CodegenContext {
                     Some(init) => self.infer_expr_type(init)?,
                     None => MonoType::Int(64), // 默认类型
                 }
-            },
+            }
         };
 
         // 分配局部变量
@@ -167,7 +167,7 @@ impl CodegenContext {
                 } else {
                     Err(CodegenError::SymbolNotFound { name: name.clone() })
                 }
-            },
+            }
             Expr::BinOp { left, .. } => self.infer_expr_type(left),
             Expr::Call { func, .. } => {
                 let func_ty = self.infer_expr_type(func)?;
@@ -178,7 +178,7 @@ impl CodegenContext {
                         found: format!("{:?}", func_ty),
                     }),
                 }
-            },
+            }
             _ => Ok(MonoType::Int(64)), // 默认推断为 Int64
         }
     }
@@ -268,10 +268,10 @@ impl CodegenContext {
                 StmtKind::Expr(expr) => {
                     // 生成表达式
                     let _operand = self.generate_expr(expr)?;
-                },
+                }
                 _ => {
                     // 其他语句暂不处理
-                },
+                }
             }
         }
 

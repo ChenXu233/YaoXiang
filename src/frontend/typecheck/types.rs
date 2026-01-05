@@ -139,7 +139,7 @@ impl MonoType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
-            },
+            }
             MonoType::List(t) => format!("List<{}>", t.type_name()),
             MonoType::Dict(k, v) => format!("Dict<{}, {}>", k.type_name(), v.type_name()),
             MonoType::Set(t) => format!("Set<{}>", t.type_name()),
@@ -154,7 +154,7 @@ impl MonoType {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("fn({}) -> {}", params_str, return_type.type_name())
-            },
+            }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
             MonoType::Range { elem_type } => format!("Range<{}>", elem_type.type_name()),
@@ -214,11 +214,11 @@ impl From<ast::Type> for MonoType {
             }),
             ast::Type::Tuple(types) => {
                 MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
-            },
+            }
             ast::Type::List(t) => MonoType::List(Box::new(MonoType::from(*t))),
             ast::Type::Dict(k, v) => {
                 MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v)))
-            },
+            }
             ast::Type::Set(t) => MonoType::Set(Box::new(MonoType::from(*t))),
             ast::Type::Fn {
                 params,
@@ -246,7 +246,7 @@ impl From<ast::Type> for MonoType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ))
-            },
+            }
             // NamedStruct and Sum types (placeholder implementations)
             ast::Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name,
@@ -265,7 +265,7 @@ impl From<ast::Type> for MonoType {
                         .collect::<Vec<_>>()
                         .join(" | ")
                 ))
-            },
+            }
         }
     }
 }
@@ -401,7 +401,7 @@ impl TypeConstraintSolver {
                     *binding = TypeBinding::Link(root);
                 }
                 root
-            },
+            }
             Some(TypeBinding::Bound(_)) => var,
             Some(TypeBinding::Unbound) => var,
             None => var,
@@ -454,7 +454,7 @@ impl TypeConstraintSolver {
                 TypeBinding::Unbound => {
                     *binding = TypeBinding::Bound(ty);
                     Ok(())
-                },
+                }
                 TypeBinding::Bound(existing) => {
                     // 已绑定，检查是否一致
                     if existing == &ty {
@@ -466,11 +466,11 @@ impl TypeConstraintSolver {
                             span: Span::default(),
                         })
                     }
-                },
+                }
                 TypeBinding::Link(_) => {
                     // 不应该到这里
                     Ok(())
-                },
+                }
             }
         } else {
             Ok(())
@@ -489,7 +489,7 @@ impl TypeConstraintSolver {
                 } else {
                     ty.clone()
                 }
-            },
+            }
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
                 fields: s
@@ -504,11 +504,11 @@ impl TypeConstraintSolver {
             }),
             MonoType::Tuple(ts) => {
                 MonoType::Tuple(ts.iter().map(|t| self.expand_type(t)).collect())
-            },
+            }
             MonoType::List(t) => MonoType::List(Box::new(self.expand_type(t))),
             MonoType::Dict(k, v) => {
                 MonoType::Dict(Box::new(self.expand_type(k)), Box::new(self.expand_type(v)))
-            },
+            }
             MonoType::Set(t) => MonoType::Set(Box::new(self.expand_type(t))),
             MonoType::Fn {
                 params,
@@ -587,7 +587,7 @@ impl TypeConstraintSolver {
                     // 建立链接
                     self.bind(v1, &MonoType::TypeVar(v2))
                 }
-            },
+            }
             (MonoType::TypeVar(v), _) => self.bind(*v, &t2),
             (_, MonoType::TypeVar(v)) => self.bind(*v, &t1),
 
@@ -626,7 +626,7 @@ impl TypeConstraintSolver {
                 }
                 self.unify(r1, r2)?;
                 Ok(())
-            },
+            }
 
             // 结构体类型 unify
             (MonoType::Struct(s1), MonoType::Struct(s2)) => {
@@ -641,7 +641,7 @@ impl TypeConstraintSolver {
                     self.unify(f1, f2)?;
                 }
                 Ok(())
-            },
+            }
 
             // 枚举类型 unify
             (MonoType::Enum(e1), MonoType::Enum(e2)) => {
@@ -653,7 +653,7 @@ impl TypeConstraintSolver {
                     });
                 }
                 Ok(())
-            },
+            }
 
             // 元组类型 unify
             (MonoType::Tuple(ts1), MonoType::Tuple(ts2)) => {
@@ -668,7 +668,7 @@ impl TypeConstraintSolver {
                     self.unify(t1, t2)?;
                 }
                 Ok(())
-            },
+            }
 
             // 列表类型 unify
             (MonoType::List(t1), MonoType::List(t2)) => self.unify(t1, t2),
@@ -678,7 +678,7 @@ impl TypeConstraintSolver {
                 self.unify(k1, k2)?;
                 self.unify(v1, v2)?;
                 Ok(())
-            },
+            }
 
             // 集合类型 unify
             (MonoType::Set(t1), MonoType::Set(t2)) => self.unify(t1, t2),
@@ -725,7 +725,7 @@ impl TypeConstraintSolver {
                 } else {
                     ty.clone()
                 }
-            },
+            }
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
                 fields: s
@@ -799,22 +799,22 @@ impl TypeConstraintSolver {
                 if !self.generic_vars.contains_key(v) {
                     free.push(*v);
                 }
-            },
+            }
             MonoType::Struct(s) => {
                 for (_, t) in &s.fields {
                     self.collect_free_vars(t, free);
                 }
-            },
+            }
             MonoType::Tuple(ts) => {
                 for t in ts {
                     self.collect_free_vars(t, free);
                 }
-            },
+            }
             MonoType::List(t) => self.collect_free_vars(t, free),
             MonoType::Dict(k, v) => {
                 self.collect_free_vars(k, free);
                 self.collect_free_vars(v, free);
-            },
+            }
             MonoType::Set(t) => self.collect_free_vars(t, free),
             MonoType::Fn {
                 params,
@@ -825,8 +825,8 @@ impl TypeConstraintSolver {
                     self.collect_free_vars(p, free);
                 }
                 self.collect_free_vars(return_type, free);
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -835,13 +835,13 @@ impl TypeConstraintSolver {
         let mut state = String::new();
         for (i, binding) in self.bindings.iter().enumerate() {
             match binding {
-                TypeBinding::Unbound => {},
+                TypeBinding::Unbound => {}
                 TypeBinding::Bound(ty) => {
                     state.push_str(&format!("t{} = {}\n", i, ty.type_name()));
-                },
+                }
                 TypeBinding::Link(v) => {
                     state.push_str(&format!("t{} -> t{}\n", i, v.index()));
-                },
+                }
             }
         }
         state
@@ -884,7 +884,7 @@ impl TypeConstraintSolver {
             MonoType::List(t) => Self::type_contains_var(t, var),
             MonoType::Dict(k, v) => {
                 Self::type_contains_var(k, var) || Self::type_contains_var(v, var)
-            },
+            }
             MonoType::Set(t) => Self::type_contains_var(t, var),
             MonoType::Fn {
                 params,
@@ -893,7 +893,7 @@ impl TypeConstraintSolver {
             } => {
                 params.iter().any(|p| Self::type_contains_var(p, var))
                     || Self::type_contains_var(return_type, var)
-            },
+            }
             _ => false,
         }
     }

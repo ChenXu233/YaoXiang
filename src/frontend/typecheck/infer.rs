@@ -118,7 +118,7 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::Index { expr, index, span } => self.infer_index(expr, index, *span),
             ast::Expr::FieldAccess { expr, field, span } => {
                 self.infer_field_access(expr, field, *span)
-            },
+            }
         }
     }
 
@@ -181,14 +181,14 @@ impl<'a> TypeInferrer<'a> {
                 self.solver
                     .add_constraint(right_ty.clone(), num_ty.clone(), span);
                 Ok(num_ty)
-            },
+            }
 
             // 比较运算
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                 // 两边类型必须相等
                 self.solver.add_constraint(left_ty, right_ty, span);
                 Ok(MonoType::Bool)
-            },
+            }
 
             // 逻辑运算
             BinOp::And | BinOp::Or => {
@@ -196,14 +196,14 @@ impl<'a> TypeInferrer<'a> {
                 self.solver.add_constraint(left_ty, MonoType::Bool, span);
                 self.solver.add_constraint(right_ty, MonoType::Bool, span);
                 Ok(MonoType::Bool)
-            },
+            }
 
             // 赋值运算
             BinOp::Assign => {
                 // 赋值表达式的类型是 Unit（void）
                 self.solver.add_constraint(left_ty, right_ty, span);
                 Ok(MonoType::Void)
-            },
+            }
 
             // 范围运算
             BinOp::Range => {
@@ -214,7 +214,7 @@ impl<'a> TypeInferrer<'a> {
                 Ok(MonoType::Range {
                     elem_type: Box::new(left_ty),
                 })
-            },
+            }
         }
     }
 
@@ -233,12 +233,12 @@ impl<'a> TypeInferrer<'a> {
                 let num_ty = self.solver.new_var();
                 self.solver.add_constraint(expr_ty, num_ty.clone(), span);
                 Ok(num_ty)
-            },
+            }
             UnOp::Not => {
                 // 布尔类型
                 self.solver.add_constraint(expr_ty, MonoType::Bool, span);
                 Ok(MonoType::Bool)
-            },
+            }
         }
     }
 
@@ -388,7 +388,7 @@ impl<'a> TypeInferrer<'a> {
                 let ty = self.solver.new_var();
                 self.add_var(name.clone(), PolyType::mono(ty.clone()));
                 Ok(ty)
-            },
+            }
             ast::Pattern::Literal(lit) => self.infer_literal(lit, Span::default()),
             ast::Pattern::Tuple(patterns) => {
                 let elem_tys: Vec<_> = patterns
@@ -396,11 +396,11 @@ impl<'a> TypeInferrer<'a> {
                     .map(|p| self.infer_pattern(p))
                     .collect::<Result<_, _>>()?;
                 Ok(MonoType::Tuple(elem_tys))
-            },
+            }
             ast::Pattern::Struct { name: _, fields: _ } => {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
-            },
+            }
             ast::Pattern::Union {
                 name: _,
                 variant: _,
@@ -408,7 +408,7 @@ impl<'a> TypeInferrer<'a> {
             } => {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
-            },
+            }
             ast::Pattern::Or(patterns) => {
                 if let Some(first) = patterns.first() {
                     let first_ty = self.infer_pattern(first)?;
@@ -421,12 +421,12 @@ impl<'a> TypeInferrer<'a> {
                 } else {
                     Ok(self.solver.new_var())
                 }
-            },
+            }
             ast::Pattern::Guard { pattern, condition } => {
                 let pattern_ty = self.infer_pattern(pattern)?;
                 let _cond_ty = self.infer_expr(condition)?;
                 Ok(pattern_ty)
-            },
+            }
         }
     }
 
@@ -477,17 +477,17 @@ impl<'a> TypeInferrer<'a> {
                 // Range 类型：元素类型由 Range 决定
                 self.solver
                     .add_constraint(elem_ty.clone(), *elem_type.clone(), span);
-            },
+            }
             MonoType::List(list_elem) => {
                 // List 类型：元素类型由 List 决定
                 self.solver
                     .add_constraint(elem_ty.clone(), *list_elem.clone(), span);
-            },
+            }
             _ => {
                 // 其他类型：假设是 List，元素类型用 elem_ty
                 let expected_iter_ty = MonoType::List(Box::new(elem_ty.clone()));
                 self.solver.add_constraint(iter_ty, expected_iter_ty, span);
-            },
+            }
         }
 
         // 在循环体内绑定迭代变量
@@ -520,7 +520,7 @@ impl<'a> TypeInferrer<'a> {
                 ast::StmtKind::Expr(expr) => {
                     // Expr 可能包含 While, For, Return, Break, Continue 等
                     let _ty = self.infer_expr(expr)?;
-                },
+                }
                 ast::StmtKind::Var {
                     name,
                     type_annotation,
@@ -533,7 +533,7 @@ impl<'a> TypeInferrer<'a> {
                         initializer.as_deref(),
                         block.span,
                     )?;
-                },
+                }
                 ast::StmtKind::For {
                     var,
                     iterable,
@@ -542,10 +542,10 @@ impl<'a> TypeInferrer<'a> {
                 } => {
                     // 推断 for 循环
                     self.infer_for(var, iterable, body, block.span)?;
-                },
+                }
                 // Fn, TypeDef, Use 等已在 check_stmt 中处理
                 // While, Return, Break, Continue 作为 Expr 的一部分处理
-                _ => {},
+                _ => {}
             }
         }
 
@@ -757,13 +757,13 @@ impl<'a> TypeInferrer<'a> {
                 } else {
                     self.solver.new_var()
                 }
-            },
+            }
             _ => {
                 return Err(TypeError::UnsupportedOp {
                     op: "index".to_string(),
                     span,
                 });
-            },
+            }
         };
 
         Ok(elem_ty)
@@ -790,7 +790,7 @@ impl<'a> TypeInferrer<'a> {
                     field_name: field.to_string(),
                     span,
                 })
-            },
+            }
             _ => Err(TypeError::UnsupportedOp {
                 op: "field access".to_string(),
                 span,

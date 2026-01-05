@@ -117,7 +117,7 @@ impl Monomorphizer {
             MonoType::List(elem) => self.contains_type_var(elem),
             MonoType::Dict(key, value) => {
                 self.contains_type_var(key) || self.contains_type_var(value)
-            },
+            }
             MonoType::Set(elem) => self.contains_type_var(elem),
             MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_var(t)),
             MonoType::Fn {
@@ -127,7 +127,7 @@ impl Monomorphizer {
             } => {
                 params.iter().any(|t| self.contains_type_var(t))
                     || self.contains_type_var(return_type)
-            },
+            }
             _ => false,
         }
     }
@@ -223,7 +223,7 @@ impl Monomorphizer {
                         all_generic_calls.push((name.clone(), arg_types));
                     }
                 }
-            },
+            }
 
             // 尾调用
             Instruction::TailCall { func: _, args } => {
@@ -235,7 +235,7 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&arg_types);
                     all_call_type_names.insert(type_key);
                 }
-            },
+            }
 
             // 返回值可能包含类型信息
             Instruction::Ret(Some(operand)) => {
@@ -243,8 +243,8 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            },
-            Instruction::Ret(None) => {},
+            }
+            Instruction::Ret(None) => {}
 
             // 移动指令：传播类型信息
             Instruction::Move { dst, src } => {
@@ -256,7 +256,7 @@ impl Monomorphizer {
                         all_call_type_names.insert(type_key);
                     }
                 }
-            },
+            }
 
             // 加载指令：收集加载的类型
             Instruction::Load { dst, .. } => {
@@ -264,7 +264,7 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            },
+            }
 
             // 分配指令：收集分配的类型
             Instruction::Alloc { dst, .. } => {
@@ -272,9 +272,9 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 
@@ -325,13 +325,13 @@ impl Monomorphizer {
                 // 尝试从局部变量类型映射获取
                 // 当前简化版本返回一个默认类型
                 Some(MonoType::Int(64))
-            },
+            }
             Operand::Temp(_id) => Some(MonoType::Int(64)),
             Operand::Arg(_id) => Some(MonoType::Int(64)),
             Operand::Global(_id) => {
                 // 全局变量类型
                 Some(MonoType::Int(64))
-            },
+            }
             Operand::Const(ConstValue::Int(_)) => Some(MonoType::Int(64)),
             Operand::Const(ConstValue::Float(_)) => Some(MonoType::Float(64)),
             Operand::Const(ConstValue::Bool(_)) => Some(MonoType::Bool),
@@ -538,17 +538,17 @@ impl Monomorphizer {
                 } else {
                     ty.clone()
                 }
-            },
+            }
             MonoType::List(elem) => {
                 MonoType::List(Box::new(self.substitute_single_type(elem, type_map)))
-            },
+            }
             MonoType::Dict(key, value) => MonoType::Dict(
                 Box::new(self.substitute_single_type(key, type_map)),
                 Box::new(self.substitute_single_type(value, type_map)),
             ),
             MonoType::Set(elem) => {
                 MonoType::Set(Box::new(self.substitute_single_type(elem, type_map)))
-            },
+            }
             MonoType::Tuple(types) => MonoType::Tuple(
                 types
                     .iter()
@@ -608,11 +608,11 @@ impl Monomorphizer {
                     src: src.clone(),
                     target_type: new_target,
                 }
-            },
+            }
             Instruction::TypeTest(operand, test_type) => {
                 let new_test_type = self.substitute_type_ast(test_type, type_map);
                 Instruction::TypeTest(operand.clone(), new_test_type)
-            },
+            }
             _ => instr.clone(),
         }
     }
