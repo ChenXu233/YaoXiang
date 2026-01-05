@@ -1,5 +1,7 @@
 use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[test]
 fn test_run_complex_test() {
@@ -12,21 +14,43 @@ fn test_run_complex_test() {
     // Ensure the file exists (it was created in previous steps)
     assert!(complex_test_path.exists(), "complex_test.yx not found");
 
-    let output = Command::new("cargo")
+    let mut child = Command::new("cargo")
         .arg("run")
         .arg("--release")
         .arg("--")
         .arg("run")
         .arg(complex_test_path)
         .current_dir(&manifest_dir)
-        .output()
-        .expect("Failed to execute command");
+        .spawn()
+        .expect("Failed to spawn command");
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        println!("STDOUT: {}", stdout);
-        println!("STDERR: {}", stderr);
-        panic!("Interpreter failed to run complex_test.yx");
+    let timeout = Duration::from_secs(60);
+    let start = Instant::now();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                let output = child
+                    .wait_with_output()
+                    .expect("Failed to collect child output");
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    println!("STDOUT: {}", stdout);
+                    println!("STDERR: {}", stderr);
+                    panic!("Interpreter failed to run complex_test.yx");
+                }
+                break;
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    panic!("Interpreter timed out running complex_test.yx");
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => panic!("Error waiting for child process: {}", e),
+        }
     }
 }
