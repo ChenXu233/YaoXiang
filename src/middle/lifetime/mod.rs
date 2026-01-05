@@ -214,11 +214,10 @@ impl OwnershipAnalyzer {
             }
 
             // 返回：返回值活跃
-            Instruction::Ret(value) => {
-                if let Some(v) = value {
-                    block_live.insert(v.clone());
-                }
+            Instruction::Ret(Some(value)) => {
+                block_live.insert(value.clone());
             }
+            Instruction::Ret(None) => {}
 
             // 内存分配：定义新变量
             Instruction::HeapAlloc { dst, .. } => {
@@ -280,26 +279,40 @@ impl OwnershipAnalyzer {
             }
 
             // 函数调用：返回值拥有参数的所有权
-            Instruction::Call { dst, args, .. } => {
-                if let Some(d) = dst {
-                    self.definitions.insert(
-                        d.clone(),
-                        Definition {
-                            position: pos,
-                            ty: None,
-                            escapes: false,
-                            is_moved: false,
-                        },
-                    );
+            Instruction::Call {
+                dst: Some(d),
+                args,
+                ..
+            } => {
+                self.definitions.insert(
+                    d.clone(),
+                    Definition {
+                        position: pos,
+                        ty: None,
+                        escapes: false,
+                        is_moved: false,
+                    },
+                );
 
-                    // 返回值拥有参数的所有权
-                    for arg in args {
-                        self.ownership_graph
-                            .edges
-                            .entry(d.clone())
-                            .or_default()
-                            .insert(arg.clone());
-                    }
+                // 返回值拥有参数的所有权
+                for arg in args {
+                    self.ownership_graph
+                        .edges
+                        .entry(d.clone())
+                        .or_default()
+                        .insert(arg.clone());
+                }
+            }
+            Instruction::Call {
+                dst: None, args, ..
+            } => {
+                // 无返回值时，参数仍可能被使用
+                for arg in args {
+                    self.ownership_graph
+                        .edges
+                        .entry(arg.clone())
+                        .or_default()
+                        .insert(arg.clone());
                 }
             }
 

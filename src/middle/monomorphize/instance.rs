@@ -111,6 +111,7 @@ impl Hash for SpecializationKey {
 
 impl SpecializationKey {
     /// 辅助函数：计算类型名称的哈希值
+    #[allow(clippy::only_used_in_recursion)]
     fn type_name_hash<H: Hasher>(&self, ty: &MonoType, state: &mut H) {
         match ty {
             MonoType::Void => "void".hash(state),

@@ -38,9 +38,64 @@ impl<'a> ParserState<'a> {
     pub fn parse_type(&mut self) -> Option<Type> {
         let start_span = self.span();
 
+        // 预先检查是否是函数类型: (T1, T2) -> R 或 (T) -> R
+        // 如果以 '(' 开头，需要完整解析括号内容后再检查外层 ->
+        if self.at(&TokenKind::LParen) {
+            let span = self.span();
+            self.bump(); // consume '('
+
+            // 情况1: 空元组 ()
+            if self.at(&TokenKind::RParen) {
+                self.bump(); // consume ')'
+                // 检查是否是函数类型: () -> Ret
+                if self.skip(&TokenKind::Arrow) {
+                    let return_type = Box::new(self.parse_type()?);
+                    return Some(Type::Fn {
+                        params: vec![],
+                        return_type,
+                    });
+                }
+                return Some(Type::Tuple(vec![]));
+            }
+
+            // 情况2: 解析括号内的类型
+            let first_ty = self.parse_type()?;
+            let mut types = vec![first_ty];
+
+            // 检查是否是元组 (T1, T2, ...)
+            if self.skip(&TokenKind::Comma) {
+                while !self.at(&TokenKind::RParen) && !self.at_end() {
+                    types.push(self.parse_type()?);
+                    if !self.skip(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+
+            // 必须有 ')'
+            if !self.expect(&TokenKind::RParen) {
+                return None;
+            }
+
+            // 检查是否是函数类型: (T) -> R 或 (T1, T2) -> R
+            if self.skip(&TokenKind::Arrow) {
+                let return_type = Box::new(self.parse_type()?);
+                return Some(Type::Fn {
+                    params: types,
+                    return_type,
+                });
+            }
+
+            // 多元素元组
+            if types.len() > 1 {
+                return Some(Type::Tuple(types));
+            }
+
+            // 单元素元组 (T)
+            return Some(Type::Tuple(types));
+        }
+
         let mut ty = match self.current().map(|t| &t.kind) {
-            // Function type: (param_types) -> return_type (using parentheses without fn keyword)
-            Some(TokenKind::LParen) => self.parse_tuple_or_parens_type(start_span),
             // List type: [Type]
             Some(TokenKind::LBracket) => self.parse_list_type(start_span),
             // Struct type: { field: Type, ... }

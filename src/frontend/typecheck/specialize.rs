@@ -2,6 +2,8 @@
 //!
 //! 实现多态类型的实例化和特化
 
+#![allow(clippy::result_large_err)]
+
 use super::errors::TypeResult;
 use super::types::{MonoType, PolyType, TypeConstraintSolver, TypeVar};
 use std::collections::HashMap;
@@ -95,11 +97,12 @@ impl GenericSpecializer {
     }
 
     /// 替换类型中的变量
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_type(
         &self,
         ty: &MonoType,
         substitution: &HashMap<TypeVar, MonoType>,
-        solver: &mut TypeConstraintSolver,
+        _solver: &mut TypeConstraintSolver,
     ) -> MonoType {
         match ty {
             MonoType::TypeVar(v) => {
@@ -114,7 +117,7 @@ impl GenericSpecializer {
                 fields: s
                     .fields
                     .iter()
-                    .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution, solver)))
+                    .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution, _solver)))
                     .collect(),
             }),
             MonoType::Enum(e) => MonoType::Enum(super::types::EnumType {
@@ -123,18 +126,18 @@ impl GenericSpecializer {
             }),
             MonoType::Tuple(ts) => MonoType::Tuple(
                 ts.iter()
-                    .map(|t| self.substitute_type(t, substitution, solver))
+                    .map(|t| self.substitute_type(t, substitution, _solver))
                     .collect(),
             ),
             MonoType::List(t) => {
-                MonoType::List(Box::new(self.substitute_type(t, substitution, solver)))
+                MonoType::List(Box::new(self.substitute_type(t, substitution, _solver)))
             }
             MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.substitute_type(k, substitution, solver)),
-                Box::new(self.substitute_type(v, substitution, solver)),
+                Box::new(self.substitute_type(k, substitution, _solver)),
+                Box::new(self.substitute_type(v, substitution, _solver)),
             ),
             MonoType::Set(t) => {
-                MonoType::Set(Box::new(self.substitute_type(t, substitution, solver)))
+                MonoType::Set(Box::new(self.substitute_type(t, substitution, _solver)))
             }
             MonoType::Fn {
                 params,
@@ -143,9 +146,9 @@ impl GenericSpecializer {
             } => MonoType::Fn {
                 params: params
                     .iter()
-                    .map(|t| self.substitute_type(t, substitution, solver))
+                    .map(|t| self.substitute_type(t, substitution, _solver))
                     .collect(),
-                return_type: Box::new(self.substitute_type(return_type, substitution, solver)),
+                return_type: Box::new(self.substitute_type(return_type, substitution, _solver)),
                 is_async: *is_async,
             },
             _ => ty.clone(),
@@ -372,6 +375,7 @@ impl std::hash::Hash for SpecializationKey {
 }
 
 impl SpecializationKey {
+    #[allow(clippy::only_used_in_recursion)]
     fn type_name_hash<H: std::hash::Hasher>(&self, ty: &MonoType, state: &mut H) {
         match ty {
             MonoType::Void => "void".hash(state),

@@ -329,6 +329,7 @@ impl TaskIdGenerator {
 
     /// Generate the next task ID.
     #[inline]
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> TaskId {
         let id = self.next_id;
         self.next_id += 1;

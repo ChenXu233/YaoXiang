@@ -224,6 +224,7 @@ impl FlowScheduler {
     }
 
     /// Spawn worker threads.
+    #[allow(clippy::too_many_arguments)]
     fn spawn_workers(
         num_workers: usize,
         running: &Arc<AtomicBool>,
@@ -274,6 +275,7 @@ impl FlowScheduler {
     }
 
     /// Worker thread main loop.
+    #[allow(clippy::too_many_arguments)]
     fn worker_loop(
         worker_id: usize,
         running: &Arc<AtomicBool>,

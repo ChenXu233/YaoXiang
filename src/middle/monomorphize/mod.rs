@@ -98,6 +98,7 @@ impl Monomorphizer {
     }
 
     /// 检查类型是否包含类型变量
+    #[allow(clippy::only_used_in_recursion)]
     fn contains_type_var(&self, ty: &MonoType) -> bool {
         match ty {
             MonoType::TypeVar(_) => true,
@@ -172,7 +173,7 @@ impl Monomorphizer {
         for type_names in &all_call_type_names {
             // 解析类型名字符串回 MonoType
             let type_args = Self::parse_type_names(type_names);
-            self.queue_instantiations_for_types(&type_args, &mut all_generic_calls);
+            self.queue_instantiations_for_types(&type_args, &all_generic_calls);
         }
     }
 
@@ -219,14 +220,13 @@ impl Monomorphizer {
             }
 
             // 返回值可能包含类型信息
-            Instruction::Ret(value) => {
-                if let Some(operand) = value {
-                    if let Some(ty) = self.operand_to_type(operand) {
-                        let type_key = Self::types_to_key(&[ty]);
-                        all_call_type_names.insert(type_key);
-                    }
+            Instruction::Ret(Some(operand)) => {
+                if let Some(ty) = self.operand_to_type(operand) {
+                    let type_key = Self::types_to_key(&[ty]);
+                    all_call_type_names.insert(type_key);
                 }
             }
+            Instruction::Ret(None) => {}
 
             // 移动指令：传播类型信息
             Instruction::Move { dst, src } => {
@@ -394,9 +394,7 @@ impl Monomorphizer {
 
         // 获取泛型函数
         let generic_id = request.generic_id();
-        let Some(generic_func) = self.generic_functions.get(generic_id) else {
-            return None;
-        };
+        let generic_func = self.generic_functions.get(generic_id)?;
 
         // 生成特化函数ID
         let type_args = request.type_args.clone();
@@ -497,6 +495,7 @@ impl Monomorphizer {
     }
 
     /// 单个类型替换
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_single_type(
         &self,
         ty: &MonoType,

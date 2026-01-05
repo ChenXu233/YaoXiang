@@ -114,6 +114,7 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 检查语句
+    #[allow(clippy::result_large_err)]
     pub fn check_stmt(&mut self, stmt: &ast::Stmt) -> TypeResult<()> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
@@ -126,6 +127,8 @@ impl<'a> TypeChecker<'a> {
                     span: _,
                 } = expr.as_ref()
                 {
+                    // 有返回类型标注表示有完整类型签名
+                    let is_annotated = return_type.is_some();
                     self.check_fn_def(
                         name,
                         params,
@@ -133,7 +136,7 @@ impl<'a> TypeChecker<'a> {
                         body,
                         *is_async,
                         None,
-                        false,
+                        is_annotated,
                     )?;
                     Ok(())
                 } else {
@@ -307,6 +310,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查变量声明: `name[: type] [= expr]`
+    #[allow(clippy::result_large_err)]
     fn check_var(
         &mut self,
         name: &str,
@@ -341,6 +345,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查类型定义
+    #[allow(clippy::result_large_err)]
     fn check_type_def(
         &mut self,
         name: &str,
@@ -353,6 +358,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查模块别名
+    #[allow(clippy::result_large_err)]
     fn check_module_alias(
         &mut self,
         _name: &str,
@@ -364,6 +370,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查 use 语句
+    #[allow(clippy::result_large_err)]
     fn check_use(
         &mut self,
         _path: &str,
@@ -384,6 +391,8 @@ impl<'a> TypeChecker<'a> {
     /// 实现完整的类型推断规则：
     /// - 参数类型推断：有标注用标注，无标注尝试推断，Lambda 参数无法推断则拒绝
     /// - 返回类型推断：有标注用标注，无标注则从函数体推断
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn check_fn_def(
         &mut self,
         name: &str,
@@ -398,7 +407,7 @@ impl<'a> TypeChecker<'a> {
         let prev_return_type = self.current_return_type.take();
         let prev_inferrer_return_type = self.inferrer.current_return_type.take();
 
-        let has_external_types = external_param_types.is_some();
+        let _has_external_types = external_param_types.is_some();
 
         // 创建参数类型列表
         let param_types: Vec<MonoType> = if let Some(types) = external_param_types {
@@ -426,7 +435,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         // 处理返回类型
-        let (return_ty, inferred_return_ty) = if let Some(ty) = return_type {
+        let (return_ty, _inferred_return_ty) = if let Some(ty) = return_type {
             // 有标注类型，使用标注类型
             (MonoType::from(ty.clone()), None)
         } else {
@@ -535,6 +544,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查函数调用
+    #[allow(clippy::result_large_err)]
     fn check_fn_call(
         &mut self,
         func: &ast::Expr,
@@ -700,6 +710,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 生成表达式 IR
+    #[allow(clippy::only_used_in_recursion)]
     fn generate_expr_ir(
         &self,
         expr: &ast::Expr,

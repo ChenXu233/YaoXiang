@@ -212,6 +212,7 @@ pub struct HeapObject {
 
 impl Value {
     /// Drop this value, releasing any owned resources
+    #[allow(clippy::should_implement_trait)]
     pub fn drop(&mut self) {
         match self {
             Value::String(s) => {

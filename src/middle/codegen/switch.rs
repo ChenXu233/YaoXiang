@@ -30,12 +30,8 @@ impl CodegenContext {
         let mut table = Vec::new();
 
         for (idx, (value_expr, _body_expr)) in cases.iter().enumerate() {
-            if let Expr::Lit(literal, _) = value_expr {
-                if let Literal::Int(n) = literal {
-                    table.push((*n as i32, idx));
-                } else {
-                    return None;
-                }
+            if let Expr::Lit(Literal::Int(n), _) = value_expr {
+                table.push((*n as i32, idx));
             } else {
                 return None;
             }

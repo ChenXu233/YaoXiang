@@ -840,6 +840,7 @@ impl CodegenContext {
     }
 
     /// 从 AST 类型转换
+    #[allow(clippy::only_used_in_recursion)]
     fn type_from_ast(&self, ast_type: &Type) -> MonoType {
         match ast_type {
             Type::Name(name) => MonoType::TypeRef(name.clone()),

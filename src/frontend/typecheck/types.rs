@@ -6,6 +6,8 @@
 //! - MonoType: 单态类型（具体类型）
 //! - PolyType: 多态类型（带泛型参数）
 
+#![allow(clippy::result_large_err)]
+
 use super::super::parser::ast;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -666,6 +668,7 @@ impl TypeConstraintSolver {
     }
 
     /// 替换类型中的变量
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_type(
         &self,
         ty: &MonoType,

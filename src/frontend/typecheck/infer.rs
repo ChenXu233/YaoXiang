@@ -2,6 +2,8 @@
 //!
 //! 使用 Hindley-Milner 算法推断表达式的类型
 
+#![allow(clippy::result_large_err)]
+
 use super::super::lexer::tokens::Literal;
 use super::super::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
@@ -50,6 +52,7 @@ impl<'a> TypeInferrer<'a> {
     // =========================================================================
 
     /// 推断表达式的类型
+    #[allow(clippy::result_large_err)]
     pub fn infer_expr(&mut self, expr: &ast::Expr) -> TypeResult<MonoType> {
         match &expr {
             ast::Expr::Lit(lit, span) => self.infer_literal(lit, *span),
@@ -117,6 +120,7 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断字面量的类型
+    #[allow(clippy::result_large_err)]
     fn infer_literal(&mut self, lit: &Literal, _span: Span) -> TypeResult<MonoType> {
         let ty = match lit {
             Literal::Int(_) => MonoType::Int(64),
@@ -697,19 +701,15 @@ impl<'a> TypeInferrer<'a> {
             MonoType::String => MonoType::Char,
             MonoType::Tuple(types) => {
                 // 静态下标检查
-                if let ast::Expr::Lit(lit, _) = index {
-                    if let Literal::Int(i) = lit {
-                        if *i >= 0 && (*i as usize) < types.len() {
-                            types[*i as usize].clone()
-                        } else {
-                            return Err(TypeError::IndexOutOfBounds {
-                                index: *i,
-                                size: types.len(),
-                                span,
-                            });
-                        }
+                if let ast::Expr::Lit(Literal::Int(i), _) = index {
+                    if *i >= 0 && (*i as usize) < types.len() {
+                        types[*i as usize].clone()
                     } else {
-                        self.solver.new_var()
+                        return Err(TypeError::IndexOutOfBounds {
+                            index: *i,
+                            size: types.len(),
+                            span,
+                        });
                     }
                 } else {
                     self.solver.new_var()

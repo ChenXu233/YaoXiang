@@ -13,6 +13,7 @@ pub trait InfixParser {
 impl<'a> ParserState<'a> {
     /// Get infix binding power and parser for current token
     #[inline]
+    #[allow(clippy::type_complexity)]
     pub(crate) fn infix_info(&self) -> Option<(u8, u8, fn(&mut Self, Expr, u8) -> Option<Expr>)> {
         match self.current().map(|t| &t.kind) {
             // Assignment

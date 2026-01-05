@@ -469,7 +469,6 @@ impl<'a> ParserState<'a> {
                         p += 1;
                     }
                     Some(TokenKind::Gt) => {
-                        depth -= 1;
                         p += 1;
                         break;
                     }

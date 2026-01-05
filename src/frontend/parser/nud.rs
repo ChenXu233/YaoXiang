@@ -13,6 +13,7 @@ pub trait PrefixParser {
 impl<'a> ParserState<'a> {
     /// Get prefix binding power and parser for current token
     #[inline]
+    #[allow(clippy::type_complexity)]
     pub(crate) fn prefix_info(&self) -> Option<(u8, fn(&mut Self) -> Option<Expr>)> {
         match self.current().map(|t| &t.kind) {
             // Unary operators
