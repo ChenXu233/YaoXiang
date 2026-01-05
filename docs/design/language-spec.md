@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.1.0
+> 版本：v1.2.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2025-01-04 - 修正与代码实现的差异
+> 更新：2025-01-05 - 精简为纯规范，示例移至 tutorial/
 
 ---
 
@@ -13,6 +13,8 @@
 ### 1.1 范围
 
 本文档定义了 YaoXiang 编程语言的语法和语义。它是语言的权威参考，面向编译器和工具实现者。
+
+教程和示例代码请参考 [YaoXiang 指南](../guides/YaoXiang-book.md) 和 [tutorial/](../tutorial/) 目录。
 
 ### 1.2 符合性
 
@@ -69,7 +71,7 @@ break  continue as     in
 
 ### 2.6 字面量
 
-#### 整数
+#### 2.6.1 整数
 
 ```
 Decimal     ::= [0-9][0-9_]*
@@ -78,13 +80,13 @@ Hex         ::= 0x[0-9a-fA-F][0-9a-fA-F_]*
 Binary      ::= 0b[01][01_]*
 ```
 
-#### 浮点数
+#### 2.6.2 浮点数
 
 ```
 Float       ::= [0-9][0-9_]* '.' [0-9][0-9_]* ([eE][+-]?[0-9][0-9_]*)?
 ```
 
-#### 字符串
+#### 2.6.3 字符串
 
 ```
 String      ::= '"' ([^"\\] | EscapeSequence)* '"'
@@ -92,7 +94,7 @@ Escape      ::= '\\' ([nrt'"\\] | UnicodeEscape)
 Unicode     ::= 'u' '{' HexDigit+ '}'
 ```
 
-#### 集合
+#### 2.6.4 集合
 
 ```
 List        ::= '[' Expr (',' Expr)* ']'
@@ -100,52 +102,21 @@ Dict        ::= '{' String ':' Expr (',' String ':' Expr)* '}'
 Set         ::= '{' Expr (',' Expr)* '}'
 ```
 
-#### 列表推导式
-
-`in` 关键字用于列表推导式，支持声明式的数据转换和过滤：
+#### 2.6.5 列表推导式
 
 ```
 ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 ```
 
-```yaoxiang
-# 基本列表推导式
-evens = [x * 2 for x in 0..10]          # [0, 4, 8, 12, 16]
-
-# 带条件的列表推导式
-squares = [x * x for x in 1..10 if x % 2 == 1]  # [1, 9, 25, 49, 81]
-
-# 嵌套推导式
-matrix = [[i * j for j in 1..4] for i in 1..3]
-# [[1, 2, 3], [2, 4, 6], [3, 6, 9]]
-```
-
-#### 成员检测
-
-`in` 关键字用于检测值是否存在于集合中：
+#### 2.6.6 成员检测
 
 ```
 Membership  ::= Expr 'in' Expr
 ```
 
-```yaoxiang
-# 成员检测
-if x in [1, 2, 3] {
-    print("x is in the list")
-}
-
-# 与条件表达式结合
-result = if name in ["Alice", "Bob"] { "known" } else { "unknown" }
-
-# 字典键检测
-if "key" in {"a": 1, "b": 2} {
-    print("key exists")
-}
-```
-
 ### 2.7 注释
 
-```yaoxiang
+```
 # 单行注释
 
 #! 多行注释
@@ -165,7 +136,6 @@ if "key" in {"a": 1, "b": 2} {
 ```
 TypeExpr    ::= PrimitiveType
               | StructType
-              | UnionType
               | EnumType
               | TupleType
               | FnType
@@ -194,133 +164,56 @@ TypeExpr    ::= PrimitiveType
 ### 3.3 结构体类型
 
 ```
-StructType  ::= 'struct' '{' FieldList '}'
+StructType  ::= Identifier '(' FieldList ')'
 FieldList   ::= Field (',' Field)* ','?
 Field       ::= Identifier ':' TypeExpr
 ```
 
-```yaoxiang
-type Point = {
-    x: Float
-    y: Float
-}
-
-type Person = {
-    name: String
-    age: Int
-}
-```
-
-### 3.4 联合类型
+### 3.4 枚举类型
 
 ```
-UnionType   ::= 'union' '{' VariantList '}'
-VariantList ::= Variant (',' Variant)* ','?
+EnumType    ::= Identifier '=' Variant ('|' Variant)*
 Variant     ::= Identifier (':' TypeExpr)?
 ```
 
-```yaoxiang
-type Result[T, E] = union {
-    ok: T
-    err: E
-}
-
-type Option[T] = union {
-    some: T
-    none
-}
-```
-
-### 3.5 枚举类型
-
-```
-EnumType    ::= 'enum' '{' Identifier (',' Identifier)* ','? '}'
-```
-
-```yaoxiang
-type Color = enum {
-    red
-    green
-    blue
-}
-```
-
-### 3.6 元组类型
+### 3.5 元组类型
 
 ```
 TupleType   ::= '(' TypeList? ')'
 TypeList    ::= TypeExpr (',' TypeExpr)* ','?
 ```
 
-```yaoxiang
-Point2D = (Float, Float)
-Triple = (Int, String, Bool)
-```
-
-### 3.7 函数类型
+### 3.6 函数类型
 
 ```
 FnType      ::= '(' ParamList? ')' '->' TypeExpr
 ParamList   ::= TypeExpr (',' TypeExpr)*
 ```
 
-```yaoxiang
-# 函数类型
-type Adder = (Int, Int) -> Int
-type Callback = (T) -> Void
-
-# 函数类型作为值
-add: (Int, Int) -> Int = (a, b) => a + b
-```
-
-### 3.8 泛型类型
+### 3.7 泛型类型
 
 ```
 GenericType ::= Identifier '[' TypeArgList ']'
 TypeArgList ::= TypeExpr (',' TypeExpr)* ','?
 ```
 
-```yaoxiang
-type List[T] = { elements: [T], length: Int }
-type Map[K, V] = { keys: [K], values: [V] }
-
-# 使用
-numbers: List[Int] = [1, 2, 3]
-```
-
-### 3.9 依赖类型
+### 3.8 依赖类型
 
 ```
 DependentType ::= Identifier '[' TypeParamList ']' TypeExpr?
 TypeParamList ::= Identifier ':' TypeExpr (',' Identifier ':' TypeExpr)*
 ```
 
-```yaoxiang
-type Vector[T, n: Nat] = {
-    data: [T; n]  # 固定长度数组
-}
-```
-
-### 3.10 类型联合
+### 3.9 类型联合
 
 ```
 TypeUnion     ::= TypeExpr '|' TypeExpr
 ```
 
-```yaoxiang
-type Number = Int | Float
-```
-
-### 3.11 类型交集
+### 3.10 类型交集
 
 ```
 TypeIntersection ::= TypeExpr '&' TypeExpr
-```
-
-```yaoxiang
-type Printable = { to_string: fn() -> String }
-type Serializable = { to_json: fn() -> String }
-type Versatile = Printable & Serializable
 ```
 
 ---
@@ -360,28 +253,7 @@ Expr        ::= Literal
 | 10 | `if...else` | 右到左 |
 | 11 | `=` `+=` `-=` `*=` `/=` | 右到左 |
 
-### 4.3 字面量表达式
-
-```yaoxiang
-42          # Int
-3.14        # Float
-true        # Bool
-"hello"     # String
-'a'         # Char
-[1, 2, 3]   # List
-{"a": 1}    # Dict
-```
-
-### 4.4 标识符表达式
-
-标识符引用变量或函数：
-
-```yaoxiang
-x           # 变量引用
-my_func     # 函数引用
-```
-
-### 4.5 函数调用
+### 4.3 函数调用
 
 ```
 FnCall      ::= Expr '(' ArgList? ')'
@@ -389,101 +261,31 @@ ArgList     ::= Expr (',' Expr)* (',' NamedArg)* | NamedArg (',' NamedArg)*
 NamedArg    ::= Identifier ':' Expr
 ```
 
-```yaoxiang
-add(1, 2)
-greet(name: "Alice", formal: true)
-math.sqrt(4.0)
-```
-
-### 4.6 成员访问
+### 4.4 成员访问
 
 ```
 MemberAccess::= Expr '.' Identifier
 ```
 
-```yaoxiang
-point.x
-person.name
-list.length
-```
-
-### 4.7 索引访问
+### 4.5 索引访问
 
 ```
 IndexAccess ::= Expr '[' Expr ']'
 ```
 
-```yaoxiang
-list[0]
-dict["key"]
-numbers[-1]
+### 4.6 类型转换
+
+```
+TypeCast    ::= Expr 'as' TypeExpr
 ```
 
-### 4.8 算术表达式
-
-```yaoxiang
-a = 10 + 5          # 加法
-b = 10 - 3          # 减法
-c = 4 * 6           # 乘法
-d = 15 / 2          # 除法
-e = 15 // 2         # 整除
-f = 15 % 4          # 取模
-```
-
-### 4.9 比较表达式
-
-```yaoxiang
-equal = a == b
-not_equal = a != b
-less = a < b
-greater = a > b
-less_equal = a <= b
-greater_equal = a >= b
-```
-
-### 4.10 逻辑表达式
-
-```yaoxiang
-and_result = flag1 and flag2
-or_result = flag1 or flag2
-not_result = not flag1
-```
-
-### 4.11 位运算
-
-```yaoxiang
-and_result = a & b
-or_result = a | b
-xor_result = a ^ b
-not_result = not a
-left_shift = a << 2
-right_shift = a >> 1
-```
-
-### 4.12 类型转换
-
-```yaoxiang
-x = 42 as Float     # Int -> Float
-y = 3.14 as Int     # Float -> Int
-```
-
-### 4.13 条件表达式
+### 4.7 条件表达式
 
 ```
 IfExpr      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
 ```
 
-```yaoxiang
-status = if code == 200 {
-    "success"
-} elif code == 404 {
-    "not found"
-} else {
-    "error"
-}
-```
-
-### 4.14 模式匹配
+### 4.8 模式匹配
 
 ```
 MatchExpr   ::= 'match' Expr '{' MatchArm+ '}'
@@ -493,60 +295,21 @@ Pattern     ::= Literal
               | Wildcard
               | StructPattern
               | TuplePattern
-              | UnionPattern
+              | EnumPattern
               | OrPattern
 ```
 
-```yaoxiang
-fn classify(x: Int) -> String {
-    match x {
-        0 => "zero"
-        1 => "one"
-        _ if x < 0 => "negative"
-        _ => "positive"
-    }
-}
-
-# 解构
-type Point = Point(x: Float, y: Float)
-match point {
-    Point(x: 0, y: 0) => "origin"
-    Point(x, y) => "point"
-}
-```
-
-### 4.15 块表达式
+### 4.9 块表达式
 
 ```
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
-```yaoxiang
-result = {
-    a = 5
-    b = 10
-    a + b
-}
-```
-
-### 4.16 Lambda 表达式（箭头函数）
+### 4.10 Lambda 表达式
 
 ```
-Lambda      ::= '(' ParamList? ')' '->' Expr
-            |  '(' ParamList? ')' '->' Block
-```
-
-```yaoxiang
-# 简单箭头函数
-double: (Int) -> Int = (x) => x * 2
-
-# 多行箭头函数
-add(Int, Int) -> Int = (a, b) => {
-    a + b
-}
-
-# 在高阶函数中使用
-numbers.map((x) => x * 2)
+Lambda      ::= '(' ParamList? ')' '=>' Expr
+            |  '(' ParamList? ')' '=>' Block
 ```
 
 ---
@@ -574,144 +337,62 @@ Stmt        ::= LetStmt
 LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ```
 
-```yaoxiang
-x = 42
-count: Int = 100
-mut counter = 0
-```
-
-### 5.3 表达式语句
-
-任何表达式都可以作为语句：
-
-```yaoxiang
-print("Hello")
-numbers.append(6)
-```
-
-### 5.4 return 语句
+### 5.3 return 语句
 
 ```
 ReturnStmt  ::= 'return' Expr?
 ```
 
-```yaoxiang
-add(Int, Int) -> Int = (a, b) => {
-    return a + b
-}
-```
-
-### 5.5 break 语句
+### 5.4 break 语句
 
 ```
 BreakStmt   ::= 'break' Identifier?
 ```
 
-```yaoxiang
-for i in 0..10 {
-    if i == 5 { break }
-}
-```
-
-### 5.6 continue 语句
+### 5.5 continue 语句
 
 ```
 ContinueStmt::= 'continue'
 ```
 
-```yaoxiang
-for i in 1..10 {
-    if i % 2 == 0 { continue }
-    print(i)
-}
-```
-
-### 5.7 if 语句
+### 5.6 if 语句
 
 ```
 IfStmt      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
 ```
 
-```yaoxiang
-if x > 0 {
-    print("positive")
-} elif x < 0 {
-    print("negative")
-} else {
-    print("zero")
-}
-```
-
-### 5.8 match 语句
+### 5.7 match 语句
 
 ```
 MatchStmt   ::= 'match' Expr '{' MatchArm+ '}'
 ```
 
-```yaoxiang
-match value {
-    ok(v) => print("Success: " + v)
-    err(e) => print("Error: " + e)
-}
-```
-
-### 5.9 loop 语句（无限循环）
+### 5.8 loop 语句
 
 ```
 LoopStmt    ::= 'loop' Block
 ```
 
-```yaoxiang
-loop {
-    input = read_line()
-    if input == "quit" { break }
-    process(input)
-}
-```
-
-### 5.10 while 语句
+### 5.9 while 语句
 
 ```
 WhileStmt   ::= 'while' Expr Block
 ```
 
-```yaoxiang
-mut i = 0
-while i < 10 {
-    print(i)
-    i += 1
-}
-```
-
-### 5.11 for 语句
+### 5.10 for 语句
 
 ```
 ForStmt     ::= 'for' Identifier 'in' Expr Block
-```
-
-```yaoxiang
-for item in [1, 2, 3] {
-    print(item)
-}
-
-for i in 0..10 {
-    print(i)
-}
-
-for key, value in {"a": 1, "b": 2} {
-    print(key + ": " + value)
-}
 ```
 
 ---
 
 ## 第六章：函数
 
-### 6.1 函数定义
-
-YaoXiang 支持两种函数定义语法：
+### 6.1 函数定义语法
 
 **形式一：类型集中式（推荐）**
+
 ```
 FunctionDef ::= Identifier ':' FnType '=' Lambda
 FnType      ::= '(' ParamTypes? ')' '->' TypeExpr
@@ -722,98 +403,15 @@ ParamTypes  ::= TypeExpr (',' TypeExpr)*
 ```
 
 **形式二：简写式**
+
 ```
 FunctionDef ::= Identifier '(' ParamTypes? ')' '->' TypeExpr? '=' Lambda
 ```
 
-```yaoxiang
-# 形式一：类型集中式（推荐）
-# 基本函数
-greet: (String) -> String = (name) => "Hello, " + name
-
-# 多参数函数
-add: (Int, Int) -> Int = (a, b) => a + b
-
-# 单参数简写
-inc: Int -> Int = x => x + 1
-
-# 泛型函数
-identity: [T](T) -> T = (x) => x
-
-# 多行函数
-fact: (Int) -> Int = (n) => {
-    if n == 0 { 1 } else { n * fact(n - 1) }
-}
-
-# 返回函数的函数
-adder: (Int) -> (Int) -> Int = (x) => (y) => x + y
-
-# 使用
-add5: (Int) -> Int = adder(5)
-result = add5(3)  # 8
-
-# 形式二：简写式
-add(Int, Int) -> Int = (a, b) => a + b
-identity[T](T) -> T = (x) => x
-```
-
-### 6.2 参数类型
-
-```yaoxiang
-# 位置参数
-add: (Int, Int) -> Int = (a, b) => a + b
-
-# 函数类型参数
-apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
-
-# 泛型参数
-identity: [T](T) -> T = (x) => x
-```
-
-### 6.3 高阶函数
-
-```yaoxiang
-# 接受函数作为参数
-apply((T) -> U, T) -> U = (f, value) => f(value)
-
-# 返回函数
-create_multiplier(Int) -> (Int) -> Int = (factor) => (x) => x * factor
-
-# 使用
-double = create_multiplier(2)
-result = double(5)  # 10
-```
-
-### 6.4 闭包
-
-```yaoxiang
-# 捕获外部变量
-create_counter() -> () -> Int = () => {
-    mut count = 0
-    () => {
-        count += 1
-        count
-    }
-}
-```
-
-### 6.5 spawn 函数
+### 6.2 spawn 函数
 
 ```
 SpawnFn     ::= Identifier Params? '->' TypeExpr 'spawn' Block
-```
-
-```yaoxiang
-# 异步函数
-fetch_data(String) -> JSON spawn = (url) => {
-    HTTP.get(url).json()
-}
-
-main() -> Void = () => {
-    data = fetch_data("https://api.example.com")
-    # 自动等待
-    print(data)
-}
 ```
 
 ---
@@ -829,9 +427,6 @@ main() -> Void = () => {
 # Math.yx
 pub pi: Float = 3.14159
 pub sqrt(Float) -> Float = (x) => { ... }
-
-# internal_helper 不使用 pub，是模块私有的
-internal_helper() -> Void = () => { ... }
 ```
 
 ### 7.2 模块导入
@@ -841,13 +436,6 @@ Import      ::= 'use' ModuleRef ('as' Identifier)?
               | 'use' ModuleRef '{' ImportItems '}'
 ImportItems ::= ImportItem (',' ImportItem)* ','?
 ImportItem  ::= Identifier ('as' Identifier)?
-```
-
-```yaoxiang
-use std.io
-use std.io as IO
-use std.io.{ read_file, write_file, File }
-use std.list as ListLib
 ```
 
 ---
@@ -860,36 +448,15 @@ use std.list as ListLib
 
 ### 8.2 引用类型
 
-```yaoxiang
-fn process(data: ref Data) {     # 不可变引用
-    print(data.field)
-}
-
-fn modify(data: mut Data) {      # 可变引用
-    data.field = new_value
-}
+```
+ref T       # 不可变引用
+mut T       # 可变引用
 ```
 
 ### 8.3 生命周期
 
-```yaoxiang
-# 显式生命周期
-fn longest<'a>(s1: &'a str, s2: &'a str) -> &'a str {
-    if s1.length > s2.length { s1 } else { s2 }
-}
 ```
-
-### 8.4 智能指针
-
-```yaoxiang
-# Box - 堆分配
-heap_data: Box[List[Int]] = Box.new([1, 2, 3])
-
-# Rc - 引用计数
-shared: Rc[Data] = Rc.new(data)
-
-# Arc - 原子引用计数
-thread_safe: Arc[Data] = Arc.new(data)
+Lifetime   ::= '\'' Identifier
 ```
 
 ---
@@ -898,44 +465,14 @@ thread_safe: Arc[Data] = Arc.new(data)
 
 ### 9.1 Result 类型
 
-```yaoxiang
+```
 type Result[T, E] = ok(T) | err(E)
-
-fn divide(a: Float, b: Float) -> Result[Float, String] {
-    if b == 0.0 {
-        err("Division by zero")
-    } else {
-        ok(a / b)
-    }
-}
-
-# 使用
-result = divide(10.0, 2.0)
-match result {
-    ok(value) => print("Result: " + value)
-    err(msg) => print("Error: " + msg)
-}
 ```
 
 ### 9.2 Option 类型
 
-```yaoxiang
-type Option[T] = some(T) | none
-
-fn find_user(id: Int) -> Option[User] {
-    if id > 0 { some(User(id)) } else { none }
-}
 ```
-
-### 9.3 ? 运算符
-
-```yaoxiang
-fn process() -> Result[Int, String] {
-    a = read_number()?
-    b = read_number()?
-    c = divide(a, b)?
-    ok(c * 2)
-}
+type Option[T] = some(T) | none
 ```
 
 ---
@@ -951,7 +488,7 @@ type Result[T, E] = ok(T) | err(E)
 # 构造器类型
 type Point = Point(x: Float, y: Float)
 
-# 联合类型
+# 枚举类型
 type Status = pending | processing | completed
 
 # 函数类型
@@ -981,8 +518,8 @@ Import ::= 'use' ModuleRef
 ```
 if Expr Block (elif Expr Block)* (else Block)?
 match Expr { MatchArm+ }
-while Expr Block
-for Identifier in Expr Block
+while Identifier in Expr Block Expr Block
+for
 ```
 
 ### A.5 match 语法
@@ -1006,8 +543,7 @@ match value {
 | 关键字 | 规范状态 | 代码实现 | 说明 |
 |--------|---------|---------|------|
 | `struct` | 有 | ❌ 无 | 类型定义使用构造器语法，无需此关键字 |
-| `union` | 有 | ❌ 无 | 使用 `\|` 运算符定义联合类型 |
-| `enum` | 有 | ❌ 无 | 使用变体语法 `type X = A \| B \| C` |
+| `enum` | 有 | ❌ 无 | 使用变体语法 `type X = A | B | C` |
 
 ### B.2 语法差异
 
@@ -1023,7 +559,6 @@ match value {
 - 列表推导式 `[x for x in list if condition]`
 - `?` 错误传播运算符
 - 生命周期 `'a` 注解
-- 智能指针 `Box`, `Rc`, `Arc`
 
 ---
 
@@ -1032,8 +567,10 @@ match value {
 | 版本 | 日期 | 作者 | 变更说明 |
 |------|------|------|---------|
 | v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
-| v1.1.0 | 2025-01-04 | 沫郁酱 | 修正 match arm 使用 `=>` 而非 `->`；更新函数定义语法（两种形式）；更新类型定义语法（构造器语法）；更新 Result/Option 定义；添加与代码实现差异说明 |
+| v1.1.0 | 2025-01-04 | 沫郁酱 | 修正 match arm 使用 `=>` 而非 `->`；更新函数定义语法；更新类型定义语法；添加与代码实现差异说明 |
+| v1.2.0 | 2025-01-05 | 沫郁酱 | 精简为纯规范，示例代码移至 tutorial/ 目录 |
 
 ---
 
 > 本规范定义了 YaoXiang 编程语言的核心语法和语义。
+> 教程和示例代码请参考 [YaoXiang 指南](../guides/YaoXiang-book.md) 和 [tutorial/](../tutorial/) 目录。

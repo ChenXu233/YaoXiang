@@ -232,7 +232,7 @@
 
 ### 7.2 归档流程
 
-1. 将文档移至 `docs/works/old/archived/`
+1. 将文档移至 `docs/archived/`
 2. 在文档顶部添加归档标记：
 
 ```markdown
