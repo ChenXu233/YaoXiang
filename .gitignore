@@ -10,6 +10,7 @@ target/
 .spec-workflow
 .claude
 .serena
+.obsidian
 
 # OS files
 .DS_Store
