@@ -408,10 +408,84 @@ ParamTypes  ::= TypeExpr (',' TypeExpr)*
 FunctionDef ::= Identifier '(' ParamTypes? ')' '->' TypeExpr? '=' Lambda
 ```
 
-### 6.2 spawn 函数
+### 6.2 并作函数与注解
+
+#### 6.2.1 spawn 函数（并作函数）
 
 ```
-SpawnFn     ::= Identifier Params? '->' TypeExpr 'spawn' Block
+SpawnFn     ::= Identifier ':' FnType 'spawn' '=' Lambda
+FnType      ::= '(' ParamTypes? ')' '->' TypeExpr ('@' Annotation)?
+Annotation  ::= 'blocking' | 'eager'
+```
+
+**函数注解**：
+
+| 注解 | 位置 | 行为 |
+|------|------|------|
+| `@blocking` | 返回类型后 | 禁用并发优化，完全顺序执行 |
+| `@eager` | 返回类型后 | 强制急切求值 |
+
+**语法示例**：
+
+```
+# 并作函数：可并发执行
+fetch_data: (String) -> JSON spawn = (url) => { ... }
+
+# @blocking 同步函数：完全顺序执行
+main: () -> Void @blocking = () => { ... }
+
+# @eager 急切函数：立即执行
+compute: (Int) -> Int @eager = (n) => { ... }
+```
+
+#### 6.2.2 spawn 块
+
+显式声明的并发疆域，块内任务将并作执行：
+
+```
+SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' Expr (',' Expr)* '}'
+```
+
+**示例**：
+
+```
+# 并作块：显式并发
+(result_a, result_b) = spawn {
+    parse(fetch("url1")),
+    parse(fetch("url2"))
+}
+```
+
+#### 6.2.3 spawn 循环
+
+数据并行循环，循环体在所有数据元素上并作执行：
+
+```
+SpawnFor    ::= Identifier '=' 'spawn' 'for' Identifier 'in' Expr '{' Expr '}'
+```
+
+**示例**：
+
+```
+# 并作循环：数据并行
+results = spawn for item in items {
+    process(item)
+}
+```
+
+#### 6.2.4 错误传播运算符
+
+```
+ErrorPropagate ::= Expr '?'
+```
+
+**示例**：
+
+```
+process() -> Result[Data, Error] = {
+    data = fetch_data()?      # 自动传播错误
+    transform(data)?
+}
 ```
 
 ---
@@ -461,6 +535,59 @@ Lifetime   ::= '\'' Identifier
 
 ---
 
+## 第八章（续）：类型系统约束
+
+### 8.4 Send/Sync 约束
+
+YaoXiang 使用 Rust 风格的类型约束来保证并发安全：
+
+| 约束 | 语义 | 说明 |
+|------|------|------|
+| **Send** | 可安全跨线程传输 | 值可以移动到另一个线程 |
+| **Sync** | 可安全跨线程共享 | 不可变引用可以共享到另一个线程 |
+
+**约束层次**：
+
+```
+Send ──► 可安全跨线程传输
+  │
+  └──► Sync ──► 可安全跨线程共享
+       │
+       └──► 满足 Send + Sync 的类型可自动并发
+
+Arc[T] 实现 Send + Sync（线程安全引用计数）
+Mutex[T] 提供内部可变性
+```
+
+### 8.5 并发安全类型
+
+| 类型 | 语义 | 并发安全 | 说明 |
+|------|------|----------|------|
+| `T` | 不可变数据 | ✅ 安全 | 默认类型，多任务读取无竞争 |
+| `Ref[T]` | 可变引用 | ⚠️ 需同步 | 标记为可并发修改，编译检查锁使用 |
+| `Atomic[T]` | 原子类型 | ✅ 安全 | 底层原子操作，无锁并发 |
+| `Mutex[T]` | 互斥锁包装 | ✅ 安全 | 自动加锁解锁，编译保证 |
+| `RwLock[T]` | 读写锁包装 | ✅ 安全 | 读多写少场景优化 |
+
+**语法**：
+
+```
+Mutex[T]    # 互斥锁包装的可变数据
+Atomic[T]   # 原子类型（仅限 Int、Float 等）
+RwLock[T]   # 读写锁包装
+```
+
+**with 语法糖**：
+
+```
+with mutex.lock() {
+    # 临界区：受 Mutex 保护
+    ...
+}
+```
+
+---
+
 ## 第九章：错误处理
 
 ### 9.1 Result 类型
@@ -469,10 +596,43 @@ Lifetime   ::= '\'' Identifier
 type Result[T, E] = ok(T) | err(E)
 ```
 
+**变体构造**：
+
+| 变体 | 语法 | 说明 |
+|------|------|------|
+| `ok(T)` | `ok(value)` | 成功值 |
+| `err(E)` | `err(error)` | 错误值 |
+
 ### 9.2 Option 类型
 
 ```
 type Option[T] = some(T) | none
+```
+
+**变体构造**：
+
+| 变体 | 语法 | 说明 |
+|------|------|------|
+| `some(T)` | `some(value)` | 有值 |
+| `none` | `none` | 无值 |
+
+### 9.3 错误传播
+
+```
+ErrorPropagate ::= Expr '?'
+```
+
+`?` 运算符自动传播 Result 类型的错误：
+
+```
+# 成功时返回值，失败时向上返回 err
+data = fetch_data()?
+
+# 等价于
+data = match fetch_data() {
+    ok(v) => v
+    err(e) => return err(e)
+}
 ```
 
 ---
@@ -556,9 +716,19 @@ match value {
 ### B.3 待实现特性
 
 以下规范中描述的特性尚未在代码中实现：
-- 列表推导式 `[x for x in list if condition]`
-- `?` 错误传播运算符
-- 生命周期 `'a` 注解
+
+| 特性 | 优先级 | 说明 |
+|------|--------|------|
+| 列表推导式 | P2 | `[x for x in list if condition]` |
+| `?` 错误传播 | P1 | Result 类型自动错误传播 |
+| 生命周期 `'a` | P2 | 借用检查 |
+| `@blocking` 注解 | P1 | 同步执行保证 |
+| `spawn` 函数 | P1 | 并作函数标记 |
+| `spawn {}` 块 | P1 | 显式并发疆域 |
+| `spawn for` 循环 | P1 | 数据并行循环 |
+| Send/Sync 约束 | P2 | 并发安全类型检查 |
+| Mutex/Atomic 类型 | P2 | 并发安全数据类型 |
+| 错误图可视化 | P3 | 并发错误传播追踪 |
 
 ---
 
@@ -569,6 +739,7 @@ match value {
 | v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
 | v1.1.0 | 2025-01-04 | 沫郁酱 | 修正 match arm 使用 `=>` 而非 `->`；更新函数定义语法；更新类型定义语法；添加与代码实现差异说明 |
 | v1.2.0 | 2025-01-05 | 沫郁酱 | 精简为纯规范，示例代码移至 tutorial/ 目录 |
+| v1.3.0 | 2025-01-05 | 沫郁酱 | 添加并作模型规范（三层并发架构、spawn语法、注解）；添加类型系统约束（Send/Sync）；添加并发安全类型（Mutex、Atomic）；更新错误处理（?运算符）；更新待实现特性列表 |
 
 ---
 
