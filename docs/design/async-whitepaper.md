@@ -41,8 +41,96 @@
 | **并作值** | `Async[T]` 代理类型 | 一个正在并作中的"未来值"，在使用时自动等待其"作"完 |
 | **并作图** | 惰性计算图（DAG） | "并作"发生的舞台，描述了所有计算单元间的依赖与并行关系 |
 | **并作调度器** | 运行时任务调度器 | 负责协调"万物"，让它们在正确时机"并作"的智能中枢 |
+| **错误图** | Error Graph | 并发环境下的错误传播路径可视化，类似调用栈但展示DAG中的错误流向 |
+| **资源冲突** | Resource Conflict | 多个任务同时访问同一可写资源时的冲突，编译时检测并自动串行化 |
 
 > **技术交流示例**："这里我们用个并作块来并发调用两个并作函数，就能自动获得它们的并作值。"
+
+---
+
+## 三、三层并发架构：渐进式透明
+
+### 3.1 架构概述
+
+并作模型提供**三层递进式并发抽象**，让不同技能水平的开发者都能找到适合的使用模式：
+
+| 层级 | 模式 | 语法标记 | 执行方式 | 可控性 | 适用场景 |
+|------|------|----------|----------|--------|----------|
+| **L1** | `@blocking`同步 | `@blocking` | 完全顺序执行 | 最高 | 调试、新手学习、关键代码段 |
+| **L2** | 显式spawn | `spawn` | 开发者可控并发 | 中 | 中级用户、需要精细控制并发 |
+| **L3** | 完全透明 | 无（默认） | 自动最优并行 | 最低 | 专家、自动并行优化 |
+
+### 3.2 L1: `@blocking` 同步模式
+
+**核心特性**：禁用所有并发优化，完全顺序执行，便于调试和理解。
+
+```yaoxiang
+# L1: @blocking 同步模式（注解放在返回类型后）
+fetch_sync: (String) -> JSON @blocking = (url) => {
+    HTTP.get(url).json()
+}
+
+main: () -> Void @blocking = () => {
+    # 严格顺序执行，无任何并发
+    data1 = fetch_sync("https://api.example.com/data1")
+    data2 = fetch_sync("https://api.example.com/data2")
+    process(data1, data2)
+}
+```
+
+### 3.3 L2: 显式 spawn 并发
+
+**核心特性**：开发者显式标记可并发单元，保持可控性同时获得并发收益。
+
+```yaoxiang
+# L2: 显式 spawn 并发
+fetch_data: (String) -> JSON spawn = (url) => {
+    HTTP.get(url).json()
+}
+
+process_users_and_posts: () -> Void spawn = () => {
+    users = fetch_data("https://api.example.com/users")
+    posts = fetch_data("https://api.example.com/posts")
+    # users 和 posts 自动并行执行
+    print(users.length.to_string())
+    print(posts.length.to_string())
+}
+
+# 显式并发块
+compute_all: () -> (Int, Int, Int) spawn = () => {
+    (a, b, c) = spawn {
+        heavy_calc(1),
+        heavy_calc(2),
+        heavy_calc(3)
+    }
+    (a, b, c)
+}
+```
+
+### 3.4 L3: 完全透明（默认）
+
+**核心特性**：无需任何标记，编译器自动分析依赖并生成最优并行执行计划。
+
+```yaoxiang
+# L3: 完全透明（默认模式）
+heavy_calc: (Int) -> Int = (n) => {
+    fibonacci(n)
+}
+
+auto_parallel: (Int) -> Int = (n) => {
+    # 系统自动分析：a, b, c 无依赖，可完全并行
+    a = heavy_calc(1)
+    b = heavy_calc(2)
+    c = heavy_calc(3)
+    a + b + c
+}
+```
+
+### 3.5 手动控制注解
+
+| 注解 | 行为 | 使用场景 |
+|------|------|----------|
+| `@eager` | 强制急切求值 | 需要立即获取结果的计算 |
 
 ---
 
@@ -275,21 +363,92 @@ main: () -> Void = () => {
 
 ### 4.2 错误处理
 
-错误沿数据流自然传播，如同同步代码般直观：
+#### Result 类型定义
 
 ```yaoxiang
-might_fail: () -> Result[Data, Error] spawn = () => { ... }
+# 标准Result类型（统一构造器语法）
+type Result[T, E] = ok(T) | err(E)
 
-main: () -> Void = () => {
-    # 并作值内部实际为 Result
-    data = might_fail()  # Async[Result[Data, Error]]
+# 自定义错误类型
+type ParseError = invalid_format | unexpected_eof | position(Int)
 
-    # 等待点：若底层计算失败，异常在此抛出
-    processed = data.transform()  # 如同步代码般处理错误
+parse_config: (String) -> Result[Config, ParseError] = (content) => {
+    if content.is_empty() {
+        err(invalid_format)
+    } else {
+        ok(parse(content))
+    }
 }
 ```
 
-### 4.3 纯函数与 @block 同步保证
+#### 错误传播语法
+
+采用Rust式`?`运算符，实现透明错误传播：
+
+```yaoxiang
+# Rust式 ? 运算符
+process() -> Result[Data, Error] = {
+    data = fetch_data()?      # 自动等待并检查错误
+    processed = transform(data)?
+    save(processed)?          # 错误自动向上传播
+}
+
+# 模式匹配处理错误
+handle_result: (Result[Int, Error]) -> String = (result) => {
+    match result {
+        ok(value) => "Success: " + value.to_string()
+        err(e) => match e {
+            network_error => "Network failed"
+            parse_error => "Parse failed"
+            _ => "Unknown error"
+        }
+    }
+}
+```
+
+#### 错误图可视化
+
+错误图类似调用栈，但显示DAG中的错误传播路径：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Error: Division by zero                                     │
+├─────────────────────────────────────────────────────────────┤
+│ Error Graph:                                                │
+│                                                             │
+│   main()                                                   │
+│     │                                                       │
+│     ├──► calculate()                                        │
+│     │         │                                             │
+│     │         └──► divide(100, 0)  ✗ [Division by zero]     │
+│     │                                                       │
+│     └──► fallback()  ✓                                      │
+│                                                             │
+│ 因果链: main → calculate → divide                           │
+│ 捕获位置: calculate (第42行)                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 错误处理最佳实践
+
+```yaoxiang
+# 组合多个可能出错的操作
+batch_process: ([String]) -> Result[[String], Error] = (items) => {
+    results = items.map(item => {
+        process_item(item)?
+    })
+    ok(results)
+}
+
+# with? 语法糖（未来特性）
+validate_user: (User) -> Result[ValidatedUser, ValidationError] = (user) => {
+    name = user.name.with?(validate_name)?
+    email = user.email.with?(validate_email)?
+    ok(ValidatedUser(name, email))
+}
+```
+
+### 4.3 纯函数与 `@blocking` 同步保证
 
 **核心洞察：纯函数不会阻塞！**
 
@@ -303,17 +462,17 @@ main: () -> Void = () => {
 |----------|----------|--------|
 | 纯函数（无 I/O） | 同步执行 | 否（仅 CPU 占用） |
 | 异步函数（返回 `Async[T]`） | 异步执行 | 否 |
-| `@block` 注解函数 | 同步执行，内部调度 | 否 |
+| `@blocking` 注解函数 | 同步执行，内部调度 | 否 |
 
-**@block 注解：同步执行保证**
+**`@blocking` 注解：同步执行保证**
 
-`@block` 注解保证函数以同步姿态执行：
+`@blocking` 注解保证函数以同步姿态执行：
 - 函数返回时结果已准备好
 - 内部如有异步调用，在内部完成调度
 - 适合需要同步语义但内部可能包含异步操作的场景
 
 ```yaoxiang
-# @block：同步执行，内部异步调度完成后再返回
+# @blocking：同步执行，内部异步调度完成后再返回
 heavy_compute: (List[Int]) -> Int = (data) => {
     # 内部可能有异步操作，但在返回前完成
     processed = data.map(x => async_transform(x))
@@ -331,7 +490,7 @@ factorial: (Int) -> Int = (n) => {
 }
 
 main: () -> Void = () => {
-    # @block 函数：同步执行
+    # @blocking 函数：同步执行
     result = heavy_compute([1, 2, 3, 4, 5])  # 立即返回结果
     print(result)  # 15
 
@@ -355,7 +514,7 @@ fn execute_function(node: &DAGNode) {
             async_runtime.submit(node);
         }
         ExecutionMode::Blocking => {
-            // @block 函数：同步执行，内部调度异步操作
+            // @blocking 函数：同步执行，内部调度异步操作
             execute_blocking(node);
         }
     }
@@ -380,11 +539,66 @@ fn execute_blocking(node: &DAGNode) {
 
 **设计优势：**
 - **简洁**：无需复杂的 effect 系统
-- **灵活**：`@block` 可选，需要同步语义时使用
+- **灵活**：`@blocking` 可选，需要同步语义时使用
 - **高效**：纯函数自动同步执行
 - **安全**：主调度器永远不阻塞
 
-### 4.4 并行竞争控制：类型系统保证原子性
+### 4.4 资源冲突检测
+
+编译时分析资源访问模式，自动串行化冲突操作：
+
+```
+资源冲突规则矩阵：
+╔═══════════╦══════════╦══════════╗
+║   访问    ║   读     ║    写    ║
+╠═══════════╬══════════╬══════════╣
+║   读      ║  可并行  ║  串行化  ║
+║   写      ║  串行化  ║  串行化  ║
+╚═══════════╩══════════╩══════════╝
+```
+
+**编译时分析示例**：
+
+```rust
+// 编译时分析资源访问
+struct ResourceAccess {
+    reads: Set<ResourceId>,   // 读取的资源
+    writes: Set<ResourceId>,  // 写入的资源
+}
+
+// 示例
+file1 = open("a.txt")  // 资源1：读
+file2 = open("b.txt")  // 资源2：读
+// file1 读和 file2 读 → 可并行
+
+file3 = open("c.txt")  // 资源3：写
+// file1 读和 file3 写 → 串行化
+// file2 读和 file3 写 → 串行化
+```
+
+**代码示例**：
+
+```yaoxiang
+# 编译器自动检测并串行化冲突操作
+process_files: () -> Void = () => {
+    file_a = open("a.txt")  # 资源1：读
+    file_b = open("b.txt")  # 资源2：读
+    # file_a 和 file_b 都只读 → 可并行
+
+    file_c = open("c.txt")  # 资源3：写
+    # file_a 读 和 file_c 写 → 串行化
+    # file_b 读 和 file_c 写 → 串行化
+}
+
+# 多个写操作自动串行化
+write_logs: () -> Void = () => {
+    log1 = open_log("log1.txt")  # 资源1：写
+    log2 = open_log("log2.txt")  # 资源2：写
+    # log1 和 log2 不同资源 → 可并行
+}
+```
+
+### 4.5 并行竞争控制：类型系统保证原子性
 
 **核心思想：用类型系统标记并发访问的数据，编译器检查同步正确性。**
 
@@ -510,8 +724,10 @@ fn compile_check_locks(func: &Function) {
 - [ ] 实现数据流分析，构建并作图
 - [ ] 实现 `spawn` 返回类型标记的解析和类型推断
 - [ ] 将 `spawn {}` 和 `spawn for` 脱糖为运行时并行原语
-- [ ] 支持装饰器风格的注解（`@eager`、`@lazy`）
+- [ ] 支持注解（`@eager`、`@blocking`）
 - [ ] 实现 Void 返回类型自动急切求值逻辑
+- [ ] 实现资源冲突检测
+- [ ] 实现 Send/Sync 类型约束检查
 
 ### 6.2 运行时
 
@@ -519,6 +735,8 @@ fn compile_check_locks(func: &Function) {
 - [ ] 实现计算图依赖感知的任务调度
 - [ ] 实现 `Async[T]` 类型的自动解包机制
 - [ ] 实现 Void 函数的自动急切执行
+- [ ] 实现错误图生成和传播
+- [ ] 实现资源访问序列化
 
 ### 6.3 调试工具 ⚠️ 必须
 
@@ -530,6 +748,7 @@ fn compile_check_locks(func: &Function) {
 | **依赖关系展示** | 显示节点间的数据依赖边 |
 | **任务流动追踪** | 观察任务在各个线程间的流转 |
 | **性能瓶颈定位** | 识别长链路和热点节点 |
+| **错误图可视化** | 并发环境下的错误传播路径展示 |
 
 ---
 
