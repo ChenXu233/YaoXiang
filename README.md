@@ -9,7 +9,8 @@
 > Based on "Concurrent Model: All Things Work Together, and We Observe the Return"
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v1.0.0--draft-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.2.2--experimental-blue.svg)]()
+[![Status](https://img.shields.io/badge/Status-Experiment--Validation-yellow.svg)]()
 
 ---
 
@@ -22,19 +23,77 @@
 <!-- bilingual-section-start -->
 ## <a name="english"></a>📖 Introduction
 
-YaoXiang (爻象) is an experimental general-purpose programming language whose design philosophy originates from the core concepts of "爻" (yao) and "象" (xiang) in the I Ching (Book of Changes).
+YaoXiang (爻象) is an **experimental programming language under active development**, designed to explore the fusion of type theory, ownership models, and natural syntax.
 
-### Core Features
+> **⚠️ Project Status: Experimental Validation**  
+> This is a research project for learning compiler development. The implementation is incomplete and not production-ready. See [Project Status](#project-status-experimental-validation) for current implementation level.
 
-| Feature | Description |
-|---------|-------------|
+### Project Status: Experimental Validation
+
+**Current Implementation Level:**
+- ✅ **Lexer**: 95% complete (can tokenize most constructs)
+- ✅ **Parser**: 80% complete (handles basic syntax)
+- ⚠️ **Type Checker**: 30% complete (basic inference only)
+- ❌ **Optimizer**: Framework only (no optimizations implemented)
+- ❌ **Code Generator**: 40% complete (partial implementation)
+- ❌ **Runtime/VM**: Conceptual (execution not fully implemented)
+- ❌ **Standard Library**: Placeholder only
+
+**Known Unimplemented Features:**
+- Error propagation operator (`?`)
+- Generic monomorphization (simplified version)
+- Spawn-based concurrency (`spawn`, `@blocking`, `@eager`)
+- Send/Sync type constraints
+- Dependency types
+- Pattern matching
+- Result/Option types with proper error handling
+- Complete standard library
+- Working virtual machine
+- Optimizer passes
+
+See [ROADMAP.md](ROADMAP.md) for detailed implementation status.
+
+### Getting Started
+
+**⚠️ Warning: This is for experimental/educational use only**
+
+#### Installation & Building
+
+```bash
+# Clone and build (development build)
+git clone https://github.com/ChenXu233/YaoXiang.git
+cd YaoXiang
+cargo build
+
+# Run tests to see current status
+cargo test
+
+# Try the examples (some may not work)
+cargo run --example hello
+```
+
+#### Current Working Features
+
+```bash
+# Basic tokenization and parsing only
+echo 'main: () -> Void = () => { print("Hello") }' | cargo run -- eval
+
+# Build bytecode (partial implementation)
+cargo run -- build docs/examples/hello.yx -o hello.42
+
+# Dump bytecode for debugging
+cargo run -- dump docs/examples/hello.yx
+```
+
+### Core Design Goals
+
+| Goal | Description |
+|------|-------------|
 | **Everything is Type** | Values, functions, modules, generics are all types; types are first-class citizens |
-| **Mathematical Abstraction** | Unified abstraction framework based on type theory |
-| **Zero-Cost Abstraction** | High performance, no GC, ownership model ensures memory safety |
+| **Unified Abstraction** | Mathematical abstraction framework based on type theory |
 | **Natural Syntax** | Python-like readability, close to natural language |
-| **Concurrent Model** | Synchronous syntax, async nature; "All things work together, we observe the return" |
-| **Thread Safety** | Send/Sync type constraints, compile-time concurrency safety |
-| **AI-Friendly** | Strictly structured, clear AST, easy to parse and modify |
+| **Concurrent Model Design** | Synchronous syntax, async nature (design phase, not implemented) |
+| **AI-Friendly Design** | Strictly structured, clear AST (design goal) |
 
 ### Code Example
 
@@ -189,7 +248,7 @@ yaoxiang/
 │   │   │   └── functions.md       # Functions and closures
 │   │   └── en/                    # English tutorials
 │   │       ├── README.md          # Tutorial index
-│   │       ├── basics.md          # Basics
+│   │       ├── basics.md          # Quick Start
 │   │       ├── types.md           # Type system
 │   │       └── functions.md       # Functions and closures
 │   ├── architecture/       # Architecture documents
@@ -244,7 +303,7 @@ Send/Sync → Compile-Time Check → Data Race → Thread Safety
 | v1.0 | AOT Compiler | 8-10 months |
 | v2.0 | Self-Hosting Compiler | 14 months |
 
-See [Implementation Plan](docs/plans/YaoXiang-implementation-plan.md) for details.
+See [Implementation Plan](docs/archived/plans/YaoXiang-implementation-plan.md) for details.
 
 ---
 
@@ -292,19 +351,77 @@ Before you criticize, check this out:
 
 ## <a name="中文"></a>📖 简介
 
-YaoXiang（爻象）是一门实验性的通用编程语言，其设计理念源于《易经》中「爻」与「象」的核心概念。
+YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**，旨在探索类型论、所有权模型和自然语法的融合。
 
-### 核心特性
+> **⚠️ 项目状态：实验验证阶段**  
+> 这是一个用于学习编译器开发的研究项目。实现不完整且不适用于生产环境。当前实现进度见[项目状态](#项目状态实验验证)。
 
-| 特性 | 说明 |
-|------|------|
-| **一切皆类型** | 值、函数、模块、泛型都是类型，类型是一等公民 |
-| **数学抽象** | 基于类型论的统一抽象框架 |
-| **零成本抽象** | 高性能，无 GC，所有权模型保证内存安全 |
+### 项目状态：实验验证
+
+**当前实现进度：**
+- ✅ **词法分析器**：95% 完成（可分析大多数语法结构）
+- ✅ **语法分析器**：80% 完成（处理基本语法）
+- ⚠️ **类型检查器**：30% 完成（仅基本类型推断）
+- ❌ **优化器**：仅有框架，无实际优化
+- ❌ **代码生成器**：40% 完成（部分实现）
+- ❌ **运行时/虚拟机**：概念阶段（执行未完全实现）
+- ❌ **标准库**：仅占位符
+
+**已知未实现功能：**
+- 错误传播操作符 (`?`)
+- 泛型单态化（简化版本）
+- 基于 spawn 的并发 (`spawn`, `@blocking`, `@eager`)
+- Send/Sync 类型约束
+- 依赖类型
+- 模式匹配
+- Result/Option 类型及错误处理
+- 完整的标准库
+- 可工作的虚拟机
+- 优化器通道
+
+详见 [ROADMAP.md](ROADMAP.md) 了解详细实现状态。
+
+### 快速开始
+
+**⚠️ 警告：仅用于实验/教育目的**
+
+#### 安装与构建
+
+```bash
+# 克隆并构建（开发版本）
+git clone https://github.com/ChenXu233/YaoXiang.git
+cd YaoXiang
+cargo build
+
+# 运行测试查看当前状态
+cargo test
+
+# 尝试示例（某些可能无法工作）
+cargo run --example hello
+```
+
+#### 当前可用功能
+
+```bash
+# 仅基础词法分析和语法分析
+echo 'main: () -> Void = () => { print("Hello") }' | cargo run -- eval
+
+# 构建字节码（部分实现）
+cargo run -- build docs/examples/hello.yx -o hello.42
+
+# 转储字节码用于调试
+cargo run -- dump docs/examples/hello.yx
+```
+
+### 核心设计目标
+
+| 目标 | 描述 |
+|------|-------------|
+| **一切皆类型** | 值、函数、模块、泛型都是类型；类型是一等公民 |
+| **统一抽象** | 基于类型论的数学抽象框架 |
 | **自然语法** | Python 般的可读性，接近自然语言 |
-| **并作模型** | 同步语法，异步本质；「万物并作，吾以观复」 |
-| **线程安全** | Send/Sync 类型约束，编译时保证并发安全 |
-| **AI 友好** | 严格结构化，AST 清晰，易于解析和修改 |
+| **并发模型设计** | 同步语法，异步本质（设计阶段，未实现） |
+| **AI 友好设计** | 严格结构化，清晰的 AST（设计目标） |
 
 ### 代码示例
 
@@ -488,7 +605,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 
 ### 与现有语言的对比
 
-| 特性 | YaoXiang | Rust | Python | TypeScript | Go |
+| 特性 | 设计目标 | Rust | Python | TypeScript | Go |
 |------|----------|------|--------|------------|-----|
 | 一切皆类型 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 自动类型推断 | ✅ | ✅ | ✅ | ✅ | ❌ |
@@ -514,7 +631,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 | v1.0 | AOT 编译器 | 8-10 个月 |
 | v2.0 | 自举编译器 | 14 个月 |
 
-详见 [实现计划](docs/plans/YaoXiang-implementation-plan.md)
+详见 [实现计划](docs/archived/plans/YaoXiang-implementation-plan.md)
 
 ---
 
