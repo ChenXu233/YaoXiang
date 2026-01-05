@@ -87,7 +87,7 @@ mod dag_node_tests {
 
     #[test]
     fn test_dag_node_is_root_and_leaf() {
-        let mut root = DAGNode::new(
+        let root = DAGNode::new(
             NodeId(0),
             DAGNodeKind::Constant {
                 value: "42".to_string(),
@@ -497,7 +497,7 @@ mod computation_dag_tests {
     #[test]
     fn test_dag_freeze() {
         let mut dag = ComputationDAG::new();
-        let id = dag
+        let _id = dag
             .add_node(DAGNodeKind::Constant {
                 value: "42".to_string(),
             })

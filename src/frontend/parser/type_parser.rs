@@ -41,7 +41,6 @@ impl<'a> ParserState<'a> {
         // 预先检查是否是函数类型: (T1, T2) -> R 或 (T) -> R
         // 如果以 '(' 开头，需要完整解析括号内容后再检查外层 ->
         if self.at(&TokenKind::LParen) {
-            let span = self.span();
             self.bump(); // consume '('
 
             // 情况1: 空元组 ()
@@ -59,7 +58,81 @@ impl<'a> ParserState<'a> {
             }
 
             // 情况2: 解析括号内的类型
+            // 重要：先解析第一个类型，递归调用会正确处理内部的 ->
             let first_ty = self.parse_type()?;
+
+            // 如果第一个类型是函数类型，说明内部有 ->，括号可能用于分组
+            // 这种情况需要根据 ) 后面是 -> 还是 , 来决定是元组还是函数类型
+            if matches!(first_ty, Type::Fn { .. }) {
+                // 检查 ) 后是否是 ->
+                if self.at(&TokenKind::RParen) {
+                    self.bump(); // consume )
+
+                    if self.at(&TokenKind::Arrow) {
+                        // (Fn) -> R 形式，外层还有函数类型
+                        let return_type = Box::new(self.parse_type()?);
+                        return Some(Type::Fn {
+                            params: vec![first_ty],
+                            return_type,
+                        });
+                    } else if self.skip(&TokenKind::Comma) {
+                        // (Fn, ...) 形式，括号内是元组
+                        let mut types = vec![first_ty];
+                        // 解析元组的其他元素
+                        while !self.at(&TokenKind::RParen) && !self.at_end() {
+                            types.push(self.parse_type()?);
+                            if !self.skip(&TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        if !self.expect(&TokenKind::RParen) {
+                            return None;
+                        }
+                        // 检查是否是函数类型: (Fn, T) -> R
+                        if self.skip(&TokenKind::Arrow) {
+                            let return_type = Box::new(self.parse_type()?);
+                            return Some(Type::Fn {
+                                params: types,
+                                return_type,
+                            });
+                        }
+                        // 返回元组
+                        return Some(Type::Tuple(types));
+                    } else {
+                        // (Fn) 形式，括号只是为了分组，直接返回函数类型
+                        return Some(first_ty);
+                    }
+                } else if self.skip(&TokenKind::Comma) {
+                    // (Fn, ...) 形式，括号内是元组
+                    let mut types = vec![first_ty];
+                    // 解析元组的其他元素
+                    while !self.at(&TokenKind::RParen) && !self.at_end() {
+                        types.push(self.parse_type()?);
+                        if !self.skip(&TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                    if !self.expect(&TokenKind::RParen) {
+                        return None;
+                    }
+                    // 检查是否是函数类型: (Fn, T) -> R
+                    if self.skip(&TokenKind::Arrow) {
+                        let return_type = Box::new(self.parse_type()?);
+                        return Some(Type::Fn {
+                            params: types,
+                            return_type,
+                        });
+                    }
+                    // 返回元组
+                    return Some(Type::Tuple(types));
+                } else {
+                    // (Fn) 后面既没有 ) 也没有 ,，说明是 (Fn) 分组形式
+                    // 这种情况可能是 (Fn 后面直接跟其他 token，如 =
+                    // 直接返回函数类型
+                    return Some(first_ty);
+                }
+            }
+
             let mut types = vec![first_ty];
 
             // 检查是否是元组 (T1, T2, ...)

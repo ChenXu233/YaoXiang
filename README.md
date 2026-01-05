@@ -133,11 +133,11 @@ yaoxiang your_program.yx
 ### 文档
 
 - [快速入门](docs/guides/getting-started.md) - 5 分钟上手
-- [语言指南](docs/YaoXiang-book.md) - 系统学习
-- [语言规范](docs/YaoXiang-language-specification.md) - 完整参考
-- [并作模型白皮书](docs/YaoXiang-async-whitepaper.md) - 无感异步设计
-- [异步实现方案](docs/YaoXiang-async-implementation.md) - 技术实现细节
-- [线程安全设计](docs/works/plans/async/yaoxiang-threading-safety-design.md) - Send/Sync 约束
+- [语言指南](docs/guides/YaoXiang-book.md) - 系统学习核心概念
+- [语言规范](docs/design/language-spec.md) - 完整语法和语义定义
+- [异步白皮书](docs/design/async-whitepaper.md) - 无感异步设计
+- [教程](docs/tutorial/) - 逐步示例和最佳实践
+- [架构设计](docs/architecture/) - 编译器与运行时设计
 
 ## 项目结构
 
@@ -150,14 +150,25 @@ yaoxiang/
 │   ├── main.rs             # CLI 入口
 │   └── lib.rs              # 库入口
 ├── docs/                   # 文档
-│   ├── YaoXiang-book.md                    # 语言指南
-│   ├── YaoXiang-language-specification.md  # 语言规范
-│   ├── YaoXiang-implementation-plan.md     # 实现计划
-│   ├── guides/                               # 指南文档
-│   ├── reference/                            # 参考文档
-│   ├── architecture/                         # 架构文档
-│   └── examples/                             # 示例代码
-└── tests/                    # 测试
+│   ├── design/             # 设计讨论区
+│   │   ├── manifesto.md           # 设计宣言
+│   │   ├── language-spec.md       # 语言规范
+│   │   ├── async-whitepaper.md    # 异步白皮书
+│   │   └── 00-wtf.md              # 常见问题
+│   ├── guides/             # 使用指南
+│   │   ├── getting-started.md     # 快速入门
+│   │   ├── YaoXiang-book.md       # 语言指南
+│   │   └── dev/                   # 开发者指南
+│   ├── tutorial/           # 详细教程
+│   │   ├── basics.md               # 基础教程
+│   │   ├── types.md                # 类型系统
+│   │   └── functions.md            # 函数与闭包
+│   ├── architecture/       # 架构文档
+│   ├── plans/              # 实施计划
+│   ├── implementation/     # 实现追踪
+│   ├── examples/           # 示例代码
+│   └── maintenance/        # 维护规范
+└── tests/                  # 测试
 ```
 
 ## 设计理念
@@ -198,7 +209,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 | v1.0 | AOT 编译器 | 8-10 个月 |
 | v2.0 | 自举编译器 | 14 个月 |
 
-详见 [实现计划](docs/YaoXiang-implementation-plan.md)
+详见 [实现计划](docs/plans/YaoXiang-implementation-plan.md)
 
 ## 贡献
 
@@ -226,7 +237,7 @@ YaoXiang 的设计灵感来自以下项目和语言：
 
 ## 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
 
-- [爻象设计宣言WTF版](docs/YaoXiang-WTF.md) - DeepSeek锐评
+- [爻象设计宣言WTF版](docs/design/wtf.md) - DeepSeek锐评
 
 
 ---

@@ -138,7 +138,7 @@ fn test_parse_fn_type_no_params() {
     assert!(result.is_some());
     let ty = result.unwrap();
     assert!(
-        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, } if params.is_empty())
+        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type: _, } if params.is_empty())
     );
 }
 
@@ -161,7 +161,7 @@ fn test_parse_fn_type_multiple_params() {
     assert!(result.is_some());
     let ty = result.unwrap();
     assert!(
-        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type, }
+        matches!(ty, crate::frontend::parser::ast::Type::Fn { params, return_type: _, }
         if params.len() == 3)
     );
 }

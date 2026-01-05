@@ -448,7 +448,7 @@ mod lexer_comments_tests {
         // Should have identifier "let" and EOF
         let has_let = tokens
             .iter()
-            .any(|t| matches!(&t.kind, TokenKind::Identifier(s)));
+            .any(|t| matches!(&t.kind, TokenKind::Identifier(_s)));
         assert!(has_let, "Should have identifier 'let'");
     }
 

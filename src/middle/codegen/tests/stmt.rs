@@ -156,7 +156,7 @@ fn test_function_indices() {
         entry: 0,
     });
 
-    let mut ctx = CodegenContext::new(module);
+    let ctx = CodegenContext::new(module);
 
     // 检查函数索引
     let main_idx = ctx.function_indices.get("main");

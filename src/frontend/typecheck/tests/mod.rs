@@ -6,6 +6,5 @@ mod error;
 mod generic;
 mod infer;
 mod inference;
-mod inference_validation;
 mod scope;
 mod types;

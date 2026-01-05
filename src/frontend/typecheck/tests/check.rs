@@ -135,7 +135,7 @@ fn test_check_type_alias() {
 
     // This is expected to fail currently because alias resolution is missing
     // But let's see if it passes or fails.
-    let result = checker.check_module(&module);
+    let _result = checker.check_module(&module);
     // assert!(result.is_ok());
 }
 

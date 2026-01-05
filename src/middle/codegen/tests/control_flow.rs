@@ -95,7 +95,7 @@ fn test_label_opcode() {
 /// 测试 break/continue 标签支持
 #[test]
 fn test_break_continue_labels() {
-    let mut module = ModuleIR::default();
+    let module = ModuleIR::default();
 
     // 模拟带有循环标签的代码生成上下文
     let mut ctx = crate::middle::codegen::CodegenContext::new(module);

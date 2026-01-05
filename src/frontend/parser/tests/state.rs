@@ -74,7 +74,7 @@ fn test_current() {
         create_token(TokenKind::IntLiteral(42)),
         create_token(TokenKind::Plus),
     ];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.current().is_some());
     if let Some(token) = state.current() {
@@ -85,7 +85,7 @@ fn test_current() {
 #[test]
 fn test_current_none_at_end() {
     let tokens = vec![];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
     assert!(state.current().is_none());
 }
 
@@ -96,7 +96,7 @@ fn test_current_none_at_end() {
 #[test]
 fn test_at() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.at(&TokenKind::IntLiteral(42)));
     assert!(!state.at(&TokenKind::Plus));
@@ -128,7 +128,7 @@ fn test_peek() {
         create_token(TokenKind::IntLiteral(42)),
         create_token(TokenKind::Plus),
     ];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     let peeked = state.peek();
     assert!(peeked.is_some());
@@ -140,7 +140,7 @@ fn test_peek() {
 #[test]
 fn test_peek_none_at_end() {
     let tokens = vec![create_token(TokenKind::Eof)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     let peeked = state.peek();
     assert!(peeked.is_none());
@@ -153,7 +153,7 @@ fn test_peek_nth() {
         create_token(TokenKind::Plus),
         create_token(TokenKind::IntLiteral(10)),
     ];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.peek_nth(0).is_some());
     assert!(state.peek_nth(1).is_some());
@@ -322,7 +322,7 @@ fn test_first_error() {
 
 #[test]
 fn test_synchronize() {
-    let mut tokens = vec![
+    let tokens = vec![
         create_token(TokenKind::IntLiteral(42)),
         create_token(TokenKind::Plus),
         create_token(TokenKind::IntLiteral(10)),
@@ -368,7 +368,7 @@ fn test_skip_to_sync() {
 #[test]
 fn test_can_start_stmt_int() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -376,7 +376,7 @@ fn test_can_start_stmt_int() {
 #[test]
 fn test_can_start_stmt_string() {
     let tokens = vec![create_token(TokenKind::StringLiteral("hello".to_string()))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -384,7 +384,7 @@ fn test_can_start_stmt_string() {
 #[test]
 fn test_can_start_stmt_identifier() {
     let tokens = vec![create_token(TokenKind::Identifier("x".to_string()))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -408,7 +408,7 @@ fn test_can_start_stmt_kw_type() {
 #[test]
 fn test_can_start_stmt_kw_if() {
     let tokens = vec![create_token(TokenKind::KwIf)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -416,7 +416,7 @@ fn test_can_start_stmt_kw_if() {
 #[test]
 fn test_can_start_stmt_kw_while() {
     let tokens = vec![create_token(TokenKind::KwWhile)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -424,7 +424,7 @@ fn test_can_start_stmt_kw_while() {
 #[test]
 fn test_can_start_stmt_kw_for() {
     let tokens = vec![create_token(TokenKind::KwFor)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -432,7 +432,7 @@ fn test_can_start_stmt_kw_for() {
 #[test]
 fn test_can_start_stmt_kw_match() {
     let tokens = vec![create_token(TokenKind::KwMatch)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -440,7 +440,7 @@ fn test_can_start_stmt_kw_match() {
 #[test]
 fn test_can_start_stmt_kw_return() {
     let tokens = vec![create_token(TokenKind::KwReturn)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -448,7 +448,7 @@ fn test_can_start_stmt_kw_return() {
 #[test]
 fn test_can_start_stmt_kw_break() {
     let tokens = vec![create_token(TokenKind::KwBreak)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -456,7 +456,7 @@ fn test_can_start_stmt_kw_break() {
 #[test]
 fn test_can_start_stmt_kw_continue() {
     let tokens = vec![create_token(TokenKind::KwContinue)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -464,7 +464,7 @@ fn test_can_start_stmt_kw_continue() {
 #[test]
 fn test_can_start_stmt_lbrace() {
     let tokens = vec![create_token(TokenKind::LBrace)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_stmt());
 }
@@ -472,7 +472,7 @@ fn test_can_start_stmt_lbrace() {
 #[test]
 fn test_can_start_stmt_not_at_end() {
     let tokens = vec![create_token(TokenKind::Eof)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(!state.can_start_stmt());
 }
@@ -484,7 +484,7 @@ fn test_can_start_stmt_not_at_end() {
 #[test]
 fn test_can_start_expr_int() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -492,7 +492,7 @@ fn test_can_start_expr_int() {
 #[test]
 fn test_can_start_expr_float() {
     let tokens = vec![create_token(TokenKind::FloatLiteral(3.14))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -500,7 +500,7 @@ fn test_can_start_expr_float() {
 #[test]
 fn test_can_start_expr_string() {
     let tokens = vec![create_token(TokenKind::StringLiteral("hello".to_string()))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -508,7 +508,7 @@ fn test_can_start_expr_string() {
 #[test]
 fn test_can_start_expr_char() {
     let tokens = vec![create_token(TokenKind::CharLiteral('a'))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -516,7 +516,7 @@ fn test_can_start_expr_char() {
 #[test]
 fn test_can_start_expr_bool() {
     let tokens = vec![create_token(TokenKind::BoolLiteral(true))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -524,7 +524,7 @@ fn test_can_start_expr_bool() {
 #[test]
 fn test_can_start_expr_identifier() {
     let tokens = vec![create_token(TokenKind::Identifier("x".to_string()))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -532,7 +532,7 @@ fn test_can_start_expr_identifier() {
 #[test]
 fn test_can_start_expr_minus() {
     let tokens = vec![create_token(TokenKind::Minus)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -540,7 +540,7 @@ fn test_can_start_expr_minus() {
 #[test]
 fn test_can_start_expr_plus() {
     let tokens = vec![create_token(TokenKind::Plus)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -548,7 +548,7 @@ fn test_can_start_expr_plus() {
 #[test]
 fn test_can_start_expr_not() {
     let tokens = vec![create_token(TokenKind::Not)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -556,7 +556,7 @@ fn test_can_start_expr_not() {
 #[test]
 fn test_can_start_expr_lparen() {
     let tokens = vec![create_token(TokenKind::LParen)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -564,7 +564,7 @@ fn test_can_start_expr_lparen() {
 #[test]
 fn test_can_start_expr_lbrace() {
     let tokens = vec![create_token(TokenKind::LBrace)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -572,7 +572,7 @@ fn test_can_start_expr_lbrace() {
 #[test]
 fn test_can_start_expr_kw_if() {
     let tokens = vec![create_token(TokenKind::KwIf)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -580,7 +580,7 @@ fn test_can_start_expr_kw_if() {
 #[test]
 fn test_can_start_expr_kw_match() {
     let tokens = vec![create_token(TokenKind::KwMatch)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -588,7 +588,7 @@ fn test_can_start_expr_kw_match() {
 #[test]
 fn test_can_start_expr_kw_while() {
     let tokens = vec![create_token(TokenKind::KwWhile)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -596,7 +596,7 @@ fn test_can_start_expr_kw_while() {
 #[test]
 fn test_can_start_expr_kw_for() {
     let tokens = vec![create_token(TokenKind::KwFor)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -604,7 +604,7 @@ fn test_can_start_expr_kw_for() {
 #[test]
 fn test_can_start_expr_pipe() {
     let tokens = vec![create_token(TokenKind::Pipe)];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     assert!(state.can_start_expr());
 }
@@ -616,7 +616,7 @@ fn test_can_start_expr_pipe() {
 #[test]
 fn test_span() {
     let tokens = vec![create_token(TokenKind::IntLiteral(42))];
-    let mut state = ParserState::new(&tokens);
+    let state = ParserState::new(&tokens);
 
     let span = state.span();
     assert!(!span.is_dummy());
