@@ -21,7 +21,10 @@ pub fn dict_is_empty<K, V>(dict: &HashMap<K, V>) -> bool {
 }
 
 /// Get value for key
-pub fn dict_get<'a, K, V>(dict: &'a HashMap<K, V>, key: &K) -> Option<&'a V>
+pub fn dict_get<'a, K, V>(
+    dict: &'a HashMap<K, V>,
+    key: &K,
+) -> Option<&'a V>
 where
     K: std::hash::Hash + std::cmp::Eq,
 {
@@ -29,15 +32,21 @@ where
 }
 
 /// Set value for key
-pub fn dict_insert<K, V>(dict: &mut HashMap<K, V>, key: K, value: V)
-where
+pub fn dict_insert<K, V>(
+    dict: &mut HashMap<K, V>,
+    key: K,
+    value: V,
+) where
     K: std::hash::Hash + std::cmp::Eq,
 {
     dict.insert(key, value);
 }
 
 /// Remove key from dictionary
-pub fn dict_remove<K, V>(dict: &mut HashMap<K, V>, key: &K) -> Option<V>
+pub fn dict_remove<K, V>(
+    dict: &mut HashMap<K, V>,
+    key: &K,
+) -> Option<V>
 where
     K: std::hash::Hash + std::cmp::Eq,
 {
@@ -45,7 +54,10 @@ where
 }
 
 /// Check if key exists
-pub fn dict_contains<K, V>(dict: &HashMap<K, V>, key: &K) -> bool
+pub fn dict_contains<K, V>(
+    dict: &HashMap<K, V>,
+    key: &K,
+) -> bool
 where
     K: std::hash::Hash + std::cmp::Eq,
 {

@@ -25,7 +25,10 @@ impl Compiler {
     }
 
     /// Compile source code to IR
-    pub fn compile(&mut self, source: &str) -> Result<middle::ModuleIR, CompileError> {
+    pub fn compile(
+        &mut self,
+        source: &str,
+    ) -> Result<middle::ModuleIR, CompileError> {
         eprintln!("[DEBUG] Compiling source code ({} bytes)", source.len());
         // Lexical analysis
         let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;

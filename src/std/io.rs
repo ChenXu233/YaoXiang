@@ -23,6 +23,9 @@ pub fn read_file(path: &str) -> String {
 }
 
 /// Write to file
-pub fn write_file(path: &str, content: &str) -> bool {
+pub fn write_file(
+    path: &str,
+    content: &str,
+) -> bool {
     std::fs::write(path, content).is_ok()
 }

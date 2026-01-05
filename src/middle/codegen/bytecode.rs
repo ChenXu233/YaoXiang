@@ -60,7 +60,10 @@ pub struct BytecodeInstruction {
 }
 
 impl BytecodeInstruction {
-    pub fn new(opcode: crate::vm::opcode::TypedOpcode, operands: Vec<u8>) -> Self {
+    pub fn new(
+        opcode: crate::vm::opcode::TypedOpcode,
+        operands: Vec<u8>,
+    ) -> Self {
         Self {
             opcode: opcode as u8,
             operands,
@@ -135,7 +138,10 @@ impl BytecodeFile {
 
     /// 序列化到 Writer
     /// 格式设计：魔数大端序（方便调试），其他数据小端序（x86 性能优化）
-    pub fn write_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+    pub fn write_to<W: Write>(
+        &self,
+        writer: &mut W,
+    ) -> io::Result<()> {
         // 文件头：魔数大端序，其他小端序
         writer.write_all(&self.header.magic.to_be_bytes())?; // YXBC 方便调试
         writer.write_all(&self.header.version.to_le_bytes())?;
@@ -160,25 +166,25 @@ impl BytecodeFile {
                 ConstValue::Int(n) => {
                     writer.write_all(&[2])?;
                     writer.write_all(&n.to_le_bytes())?;
-                }
+                },
                 ConstValue::Float(f) => {
                     writer.write_all(&[3])?;
                     writer.write_all(&f.to_le_bytes())?;
-                }
+                },
                 ConstValue::Char(c) => {
                     writer.write_all(&[4])?;
                     writer.write_all(&(*c as u32).to_le_bytes())?;
-                }
+                },
                 ConstValue::String(s) => {
                     writer.write_all(&[5])?;
                     writer.write_all(&(s.len() as u32).to_le_bytes())?;
                     writer.write_all(s.as_bytes())?;
-                }
+                },
                 ConstValue::Bytes(bytes) => {
                     writer.write_all(&[6])?;
                     writer.write_all(&(bytes.len() as u32).to_le_bytes())?;
                     writer.write_all(bytes)?;
-                }
+                },
             }
         }
 
@@ -202,7 +208,11 @@ impl BytecodeFile {
     }
 }
 
-fn calculate_checksum(magic: u32, version: u32, file_size: usize) -> u32 {
+fn calculate_checksum(
+    magic: u32,
+    version: u32,
+    file_size: usize,
+) -> u32 {
     let mut sum = magic.wrapping_add(version);
     sum = sum.wrapping_add(file_size as u32);
     sum

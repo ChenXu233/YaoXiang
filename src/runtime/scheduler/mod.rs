@@ -86,7 +86,10 @@ impl SchedulerStats {
 
     /// Record a completed task.
     #[inline]
-    pub fn record_completed(&self, duration_us: usize) {
+    pub fn record_completed(
+        &self,
+        duration_us: usize,
+    ) {
         self.tasks_completed.fetch_add(1, Ordering::SeqCst);
         self.total_exec_time_us
             .fetch_add(duration_us, Ordering::SeqCst);
@@ -94,7 +97,10 @@ impl SchedulerStats {
 
     /// Record a steal.
     #[inline]
-    pub fn record_steal(&self, success: bool) {
+    pub fn record_steal(
+        &self,
+        success: bool,
+    ) {
         self.tasks_stolen.fetch_add(1, Ordering::SeqCst);
         self.steal_attempts.fetch_add(1, Ordering::SeqCst);
         if success {
@@ -104,7 +110,10 @@ impl SchedulerStats {
 
     /// Update parallelism.
     #[inline]
-    pub fn update_parallelism(&self, current: usize) {
+    pub fn update_parallelism(
+        &self,
+        current: usize,
+    ) {
         loop {
             let peak = self.peak_parallelism.load(Ordering::SeqCst);
             if current <= peak {
@@ -337,7 +346,10 @@ impl FlowScheduler {
     }
 
     /// Execute a task.
-    fn execute_task(task: Arc<Task>, stats: &Arc<SchedulerStats>) {
+    fn execute_task(
+        task: Arc<Task>,
+        stats: &Arc<SchedulerStats>,
+    ) {
         task.set_state(TaskState::Running);
 
         let start = std::time::Instant::now();
@@ -404,7 +416,10 @@ impl FlowScheduler {
     }
 
     /// Submit a task without dependencies.
-    pub fn spawn(&self, task: Arc<Task>) {
+    pub fn spawn(
+        &self,
+        task: Arc<Task>,
+    ) {
         self.stats.record_scheduled();
 
         // Round-robin to workers for load distribution
@@ -418,7 +433,11 @@ impl FlowScheduler {
     }
 
     /// Submit a task with a specific worker preference.
-    pub fn spawn_on(&self, worker_id: usize, task: Arc<Task>) {
+    pub fn spawn_on(
+        &self,
+        worker_id: usize,
+        task: Arc<Task>,
+    ) {
         self.stats.record_scheduled();
 
         Self::enqueue_task(&self.worker_queues, worker_id, task);
@@ -439,7 +458,11 @@ impl FlowScheduler {
     }
 
     /// Add an edge between DAG nodes.
-    pub fn add_edge(&self, from: NodeId, to: NodeId) -> Result<(), DAGError> {
+    pub fn add_edge(
+        &self,
+        from: NodeId,
+        to: NodeId,
+    ) -> Result<(), DAGError> {
         let mut dag = self.dag.lock().unwrap();
         let result = dag.add_edge(from, to);
 
@@ -453,7 +476,11 @@ impl FlowScheduler {
     }
 
     /// Add a node to the DAG and schedule it if ready.
-    pub fn schedule_node(&self, kind: DAGNodeKind, dependencies: &[NodeId]) -> NodeId {
+    pub fn schedule_node(
+        &self,
+        kind: DAGNodeKind,
+        dependencies: &[NodeId],
+    ) -> NodeId {
         let mut dag = self.dag.lock().unwrap();
         let node_id = dag.add_node(kind).expect("Failed to add node to DAG");
 
@@ -475,19 +502,29 @@ impl FlowScheduler {
 
     /// Add a constant node to the DAG.
     #[inline]
-    pub fn add_constant(&self, value: String) -> NodeId {
+    pub fn add_constant(
+        &self,
+        value: String,
+    ) -> NodeId {
         self.schedule_node(DAGNodeKind::Constant { value }, &[])
     }
 
     /// Add a compute node to the DAG.
     #[inline]
-    pub fn add_compute(&self, name: String, dependencies: &[NodeId]) -> NodeId {
+    pub fn add_compute(
+        &self,
+        name: String,
+        dependencies: &[NodeId],
+    ) -> NodeId {
         self.schedule_node(DAGNodeKind::Compute { name }, dependencies)
     }
 
     /// Add a parallel block node to the DAG.
     #[inline]
-    pub fn add_parallel_block(&self, num_exprs: usize) -> NodeId {
+    pub fn add_parallel_block(
+        &self,
+        num_exprs: usize,
+    ) -> NodeId {
         self.schedule_node(DAGNodeKind::ParallelBlock { num_exprs }, &[])
     }
 

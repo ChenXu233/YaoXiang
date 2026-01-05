@@ -162,7 +162,11 @@ impl CodegenContext {
     }
 
     /// 生成 match 表达式
-    fn generate_match_stmt(&mut self, expr: &Block, arms: &[MatchArm]) -> Result<(), CodegenError> {
+    fn generate_match_stmt(
+        &mut self,
+        expr: &Block,
+        arms: &[MatchArm],
+    ) -> Result<(), CodegenError> {
         // 生成匹配表达式
         let match_reg = self.generate_block(expr)?;
 
@@ -209,7 +213,10 @@ impl CodegenContext {
     }
 
     /// 生成返回语句
-    pub(super) fn generate_return(&mut self, value: Option<&Block>) -> Result<(), CodegenError> {
+    pub(super) fn generate_return(
+        &mut self,
+        value: Option<&Block>,
+    ) -> Result<(), CodegenError> {
         if let Some(block) = value {
             let result = self.generate_block(block)?;
             self.emit(super::BytecodeInstruction::new(
@@ -226,7 +233,10 @@ impl CodegenContext {
     }
 
     /// 生成 break 语句
-    pub(super) fn generate_break(&mut self, _label: Option<&str>) -> Result<(), CodegenError> {
+    pub(super) fn generate_break(
+        &mut self,
+        _label: Option<&str>,
+    ) -> Result<(), CodegenError> {
         if let Some((_, end_label)) = self.current_loop_label {
             self.emit(super::BytecodeInstruction::new(
                 crate::vm::opcode::TypedOpcode::Jmp,
@@ -237,7 +247,10 @@ impl CodegenContext {
     }
 
     /// 生成 continue 语句
-    pub(super) fn generate_continue(&mut self, _label: Option<&str>) -> Result<(), CodegenError> {
+    pub(super) fn generate_continue(
+        &mut self,
+        _label: Option<&str>,
+    ) -> Result<(), CodegenError> {
         if let Some((loop_label, _)) = self.current_loop_label {
             self.emit(super::BytecodeInstruction::new(
                 crate::vm::opcode::TypedOpcode::Jmp,
@@ -248,7 +261,10 @@ impl CodegenContext {
     }
 
     /// 生成块
-    pub(super) fn generate_block(&mut self, block: &Block) -> Result<Operand, CodegenError> {
+    pub(super) fn generate_block(
+        &mut self,
+        block: &Block,
+    ) -> Result<Operand, CodegenError> {
         let mut result = Operand::Temp(self.next_temp());
 
         // 生成所有语句

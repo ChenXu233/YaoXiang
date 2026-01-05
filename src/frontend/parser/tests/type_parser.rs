@@ -9,7 +9,7 @@ fn create_dummy_span() -> Span {
 }
 
 fn parse_type_anno(
-    tokens: &[crate::frontend::lexer::tokens::Token],
+    tokens: &[crate::frontend::lexer::tokens::Token]
 ) -> Option<crate::frontend::parser::ast::Type> {
     let mut state = ParserState::new(tokens);
     state.parse_type_anno()

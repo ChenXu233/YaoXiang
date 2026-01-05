@@ -199,7 +199,10 @@ pub enum ConstValue {
 }
 
 impl PartialEq for ConstValue {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         match (self, other) {
             (Self::Void, Self::Void) => true,
             (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
@@ -216,10 +219,13 @@ impl PartialEq for ConstValue {
 impl Eq for ConstValue {}
 
 impl std::hash::Hash for ConstValue {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         core::mem::discriminant(self).hash(state);
         match self {
-            Self::Void => {}
+            Self::Void => {},
             Self::Bool(b) => b.hash(state),
             Self::Int(i) => i.hash(state),
             Self::Float(f) => f.to_bits().hash(state),

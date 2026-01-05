@@ -16,7 +16,10 @@ pub struct Spanned<T> {
 impl<T> Spanned<T> {
     /// Create a new spanned value
     #[inline]
-    pub fn new(value: T, span: span::Span) -> Self {
+    pub fn new(
+        value: T,
+        span: span::Span,
+    ) -> Self {
         Self { value, span }
     }
 }

@@ -14,7 +14,10 @@ use crate::vm::opcode::TypedOpcode;
 /// 表达式代码生成实现
 impl CodegenContext {
     /// 生成表达式
-    pub fn generate_expr(&mut self, expr: &Expr) -> Result<Operand, CodegenError> {
+    pub fn generate_expr(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<Operand, CodegenError> {
         match expr {
             Expr::Lit(literal, _) => self.generate_literal(literal),
             Expr::Var(name, span) => self.generate_variable(name, *span),
@@ -47,7 +50,7 @@ impl CodegenContext {
                     let _ = self.generate_block(else_b)?;
                 }
                 Ok(Operand::Temp(self.next_temp()))
-            }
+            },
             Expr::While {
                 condition, body, ..
             } => {
@@ -56,7 +59,7 @@ impl CodegenContext {
                 // 生成循环体
                 let _ = self.generate_block(body)?;
                 Ok(Operand::Temp(self.next_temp()))
-            }
+            },
             Expr::For {
                 var: _var,
                 iterable,
@@ -68,7 +71,7 @@ impl CodegenContext {
                 // 生成循环体
                 let _ = self.generate_block(body)?;
                 Ok(Operand::Temp(self.next_temp()))
-            }
+            },
             Expr::Match { expr, arms, .. } => {
                 // 生成匹配表达式
                 let _match = self.generate_expr(expr)?;
@@ -77,7 +80,7 @@ impl CodegenContext {
                     let _ = self.generate_expr(&arm.body)?;
                 }
                 Ok(Operand::Temp(self.next_temp()))
-            }
+            },
             Expr::Block(block) => self.generate_block(block),
             Expr::Return(_, _) => Err(CodegenError::UnimplementedExpr {
                 expr_type: "Return".to_string(),
@@ -100,7 +103,10 @@ impl CodegenContext {
     }
 
     /// 生成字面量
-    fn generate_literal(&mut self, literal: &Literal) -> Result<Operand, CodegenError> {
+    fn generate_literal(
+        &mut self,
+        literal: &Literal,
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let const_idx = self.add_constant(literal_to_const_value(literal));
 
@@ -130,7 +136,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                }
+                },
                 super::Storage::Arg(id) => {
                     let dst = self.next_temp();
                     // 发射加载参数指令
@@ -139,7 +145,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                }
+                },
                 super::Storage::Temp(id) => Ok(Operand::Temp(id)),
                 super::Storage::Global(id) => {
                     let dst = self.next_temp();
@@ -148,7 +154,7 @@ impl CodegenContext {
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
-                }
+                },
             }
         } else {
             Err(CodegenError::SymbolNotFound {
@@ -158,7 +164,10 @@ impl CodegenContext {
     }
 
     /// 获取表达式类型
-    fn get_expr_type(&self, expr: &Expr) -> Result<MonoType, CodegenError> {
+    fn get_expr_type(
+        &self,
+        expr: &Expr,
+    ) -> Result<MonoType, CodegenError> {
         match expr {
             Expr::Lit(lit, _) => Ok(infer_literal_type(lit)),
             Expr::Var(name, _) => {
@@ -169,7 +178,7 @@ impl CodegenContext {
                         name: name.to_string(),
                     })
                 }
-            }
+            },
             Expr::BinOp { left, .. } => self.get_expr_type(left),
             Expr::UnOp { expr, .. } => self.get_expr_type(expr),
             Expr::Call { func, .. } => {
@@ -181,7 +190,7 @@ impl CodegenContext {
                         found: format!("{:?}", func_ty),
                     }),
                 }
-            }
+            },
             _ => Ok(MonoType::Int(64)), // Default fallback
         }
     }
@@ -265,7 +274,7 @@ impl CodegenContext {
                                 TypedOpcode::StoreLocal,
                                 vec![self.operand_to_reg(&src)?, id as u8],
                             ));
-                        }
+                        },
                         _ => return Err(CodegenError::InvalidAssignmentTarget),
                     }
                 } else {
@@ -273,7 +282,7 @@ impl CodegenContext {
                         name: name.to_string(),
                     });
                 }
-            }
+            },
             Expr::Index { expr, index, .. } => {
                 let array = self.generate_expr(expr)?;
                 let idx = self.generate_expr(index)?;
@@ -285,7 +294,7 @@ impl CodegenContext {
                         self.operand_to_reg(&src)?,
                     ],
                 ));
-            }
+            },
             Expr::FieldAccess { expr, field, .. } => {
                 let obj = self.generate_expr(expr)?;
                 // 假设字段偏移是字段名的哈希值（简化）
@@ -298,7 +307,7 @@ impl CodegenContext {
                         self.operand_to_reg(&src)?,
                     ],
                 ));
-            }
+            },
             _ => return Err(CodegenError::InvalidAssignmentTarget),
         }
 
@@ -306,7 +315,10 @@ impl CodegenContext {
     }
 
     /// 获取字段偏移
-    fn get_field_offset(&self, field: &str) -> u16 {
+    fn get_field_offset(
+        &self,
+        field: &str,
+    ) -> u16 {
         // 简化：使用字段名的哈希值作为偏移
         use std::collections::hash_map::DefaultHasher;
         let mut hasher = DefaultHasher::new();
@@ -316,7 +328,11 @@ impl CodegenContext {
     }
 
     /// 生成一元运算
-    fn generate_unop(&mut self, op: &UnOp, expr: &Expr) -> Result<Operand, CodegenError> {
+    fn generate_unop(
+        &mut self,
+        op: &UnOp,
+        expr: &Expr,
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let src = self.generate_expr(expr)?;
 
@@ -335,7 +351,11 @@ impl CodegenContext {
     }
 
     /// 生成函数调用
-    fn generate_call(&mut self, func: &Expr, args: &[Expr]) -> Result<Operand, CodegenError> {
+    fn generate_call(
+        &mut self,
+        func: &Expr,
+        args: &[Expr],
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
 
         // 生成参数
@@ -353,7 +373,7 @@ impl CodegenContext {
                     TypedOpcode::CallStatic,
                     vec![dst as u8, func_idx as u8, 0, arg_regs.len() as u8],
                 ));
-            }
+            },
             Expr::FieldAccess { expr, field, .. } => {
                 // 方法调用
                 let obj = self.generate_expr(expr)?;
@@ -368,7 +388,7 @@ impl CodegenContext {
                         arg_regs.len() as u8,
                     ],
                 ));
-            }
+            },
             _ => {
                 // 动态调用
                 let name_idx = self.add_constant(ConstValue::String(format!("{:?}", func)));
@@ -382,21 +402,27 @@ impl CodegenContext {
                         arg_regs.len() as u8,
                     ],
                 ));
-            }
+            },
         }
 
         Ok(Operand::Temp(dst))
     }
 
     /// 生成元组
-    fn generate_tuple(&mut self, _exprs: &[Expr]) -> Result<Operand, CodegenError> {
+    fn generate_tuple(
+        &mut self,
+        _exprs: &[Expr],
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         // TODO: 实现元组代码生成
         Ok(Operand::Temp(dst))
     }
 
     /// 生成列表
-    fn generate_list(&mut self, exprs: &[Expr]) -> Result<Operand, CodegenError> {
+    fn generate_list(
+        &mut self,
+        exprs: &[Expr],
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
 
         // 预分配列表
@@ -418,7 +444,10 @@ impl CodegenContext {
     }
 
     /// 生成字典
-    fn generate_dict(&mut self, _pairs: &[(Expr, Expr)]) -> Result<Operand, CodegenError> {
+    fn generate_dict(
+        &mut self,
+        _pairs: &[(Expr, Expr)],
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         // TODO: 实现字典代码生成
         Ok(Operand::Temp(dst))
@@ -442,7 +471,11 @@ impl CodegenContext {
     }
 
     /// 生成字段访问
-    fn generate_field_access(&mut self, expr: &Expr, field: &str) -> Result<Operand, CodegenError> {
+    fn generate_field_access(
+        &mut self,
+        expr: &Expr,
+        field: &str,
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let obj = self.generate_expr(expr)?;
         let field_offset = self.get_field_offset(field);
@@ -456,7 +489,11 @@ impl CodegenContext {
     }
 
     /// 生成索引访问
-    fn generate_index(&mut self, expr: &Expr, index: &Expr) -> Result<Operand, CodegenError> {
+    fn generate_index(
+        &mut self,
+        expr: &Expr,
+        index: &Expr,
+    ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let array = self.generate_expr(expr)?;
         let idx = self.generate_expr(index)?;

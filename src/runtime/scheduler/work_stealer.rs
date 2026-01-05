@@ -28,7 +28,10 @@ pub struct StealStats {
 impl StealStats {
     /// Record a successful steal.
     #[inline]
-    pub fn record_success(&self, count: usize) {
+    pub fn record_success(
+        &self,
+        count: usize,
+    ) {
         self.steal_successes.fetch_add(1, Ordering::SeqCst);
         self.tasks_stolen.fetch_add(count, Ordering::SeqCst);
         self.total_attempts.fetch_add(1, Ordering::SeqCst);
@@ -104,7 +107,10 @@ impl WorkStealer {
 
     /// Register the current thread as a worker with the given ID.
     #[inline]
-    pub fn register_worker(&self, worker_id: usize) {
+    pub fn register_worker(
+        &self,
+        worker_id: usize,
+    ) {
         self.current_worker.store(worker_id, Ordering::SeqCst);
     }
 
@@ -157,7 +163,10 @@ impl WorkStealer {
     }
 
     /// Steal multiple tasks from random victims (batch stealing).
-    pub fn steal_batch(&self, max_count: usize) -> Vec<Arc<Task>> {
+    pub fn steal_batch(
+        &self,
+        max_count: usize,
+    ) -> Vec<Arc<Task>> {
         let mut stolen = Vec::with_capacity(max_count);
         let num_workers = self.num_workers();
 
@@ -196,7 +205,10 @@ impl WorkStealer {
     }
 
     /// Steal from a specific victim's queue.
-    fn steal_from(&self, victim_id: usize) -> Option<Arc<Task>> {
+    fn steal_from(
+        &self,
+        victim_id: usize,
+    ) -> Option<Arc<Task>> {
         let queues = self.queues.read().unwrap();
         if victim_id >= queues.len() {
             return None;
@@ -212,7 +224,7 @@ impl WorkStealer {
                 } else {
                     queue.pop_front()
                 }
-            }
+            },
         }
     }
 
@@ -254,7 +266,10 @@ impl WorkStealer {
 
     /// Set the stealing strategy.
     #[inline]
-    pub fn set_strategy(&mut self, strategy: StealStrategy) {
+    pub fn set_strategy(
+        &mut self,
+        strategy: StealStrategy,
+    ) {
         self.strategy = strategy;
     }
 

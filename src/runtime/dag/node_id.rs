@@ -37,13 +37,19 @@ impl NodeId {
 }
 
 impl fmt::Display for NodeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "NodeId({})", self.0)
     }
 }
 
 impl Hash for NodeId {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.0.hash(state);
     }
 }
@@ -115,7 +121,10 @@ impl NodeIdGenerator {
     /// assert_eq!(id.value(), 100);
     /// ```
     #[inline]
-    pub fn reset(&self, value: usize) {
+    pub fn reset(
+        &self,
+        value: usize,
+    ) {
         self.next_id.store(value, Ordering::SeqCst);
     }
 }

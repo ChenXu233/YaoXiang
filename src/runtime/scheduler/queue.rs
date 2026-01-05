@@ -25,14 +25,20 @@ impl TaskQueue {
 
     /// Push a task to the back of the queue.
     #[inline]
-    pub fn push(&self, task: Arc<Task>) {
+    pub fn push(
+        &self,
+        task: Arc<Task>,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         inner.push_back(task);
     }
 
     /// Push a task to the front of the queue (high priority).
     #[inline]
-    pub fn push_front(&self, task: Arc<Task>) {
+    pub fn push_front(
+        &self,
+        task: Arc<Task>,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         inner.push_front(task);
     }
@@ -117,17 +123,21 @@ impl PriorityTaskQueue {
     }
 
     /// Push a task with the given priority.
-    pub fn push(&self, task: Arc<Task>, priority: TaskPriority) {
+    pub fn push(
+        &self,
+        task: Arc<Task>,
+        priority: TaskPriority,
+    ) {
         match priority {
             TaskPriority::Critical | TaskPriority::High => {
                 self.high.lock().unwrap().push_back(task);
-            }
+            },
             TaskPriority::Normal => {
                 self.normal.lock().unwrap().push_back(task);
-            }
+            },
             TaskPriority::Low => {
                 self.low.lock().unwrap().push_back(task);
-            }
+            },
         }
     }
 

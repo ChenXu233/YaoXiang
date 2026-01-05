@@ -6,7 +6,10 @@ pub fn abs(n: i128) -> i128 {
 }
 
 /// Maximum of two values
-pub fn max<T: PartialOrd>(a: T, b: T) -> T {
+pub fn max<T: PartialOrd>(
+    a: T,
+    b: T,
+) -> T {
     if a > b {
         a
     } else {
@@ -15,7 +18,10 @@ pub fn max<T: PartialOrd>(a: T, b: T) -> T {
 }
 
 /// Minimum of two values
-pub fn min<T: PartialOrd>(a: T, b: T) -> T {
+pub fn min<T: PartialOrd>(
+    a: T,
+    b: T,
+) -> T {
     if a < b {
         a
     } else {
@@ -24,7 +30,11 @@ pub fn min<T: PartialOrd>(a: T, b: T) -> T {
 }
 
 /// Clamp value to range
-pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {
+pub fn clamp<T: PartialOrd>(
+    value: T,
+    min: T,
+    max: T,
+) -> T {
     if value < min {
         min
     } else if value > max {
@@ -35,7 +45,10 @@ pub fn clamp<T: PartialOrd>(value: T, min: T, max: T) -> T {
 }
 
 /// Power (base^exp)
-pub fn pow(base: f64, exp: f64) -> f64 {
+pub fn pow(
+    base: f64,
+    exp: f64,
+) -> f64 {
     base.powf(exp)
 }
 

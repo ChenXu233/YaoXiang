@@ -19,19 +19,26 @@ impl<'a> ParserState<'a> {
     ///    - Parse infix expression (led) with higher right binding power
     /// 3. Return expression
     #[inline]
-    pub fn parse_expression(&mut self, min_bp: u8) -> Option<Expr> {
+    pub fn parse_expression(
+        &mut self,
+        min_bp: u8,
+    ) -> Option<Expr> {
         self.parse_expression_inner(min_bp, BP_HIGHEST)
     }
 
     /// Inner Pratt parser implementation
-    fn parse_expression_inner(&mut self, mut min_bp: u8, max_bp: u8) -> Option<Expr> {
+    fn parse_expression_inner(
+        &mut self,
+        mut min_bp: u8,
+        max_bp: u8,
+    ) -> Option<Expr> {
         // Parse prefix expression (nud)
         let (left_bp, prefix_fn) = match self.prefix_info() {
             Some(info) => info,
             None => {
                 self.error(super::ParseError::InvalidExpression);
                 return None;
-            }
+            },
         };
 
         // Only parse if prefix binding power meets minimum
@@ -78,7 +85,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse expression with right-associative operators
-    fn parse_expression_right(&mut self, min_bp: u8) -> Option<Expr> {
+    fn parse_expression_right(
+        &mut self,
+        min_bp: u8,
+    ) -> Option<Expr> {
         self.parse_expression_inner(min_bp, BP_LOWEST)
     }
 }

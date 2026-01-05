@@ -52,7 +52,10 @@ impl Monomorphizer {
     }
 
     /// 单态化模块中的所有泛型函数
-    pub fn monomorphize_module(&mut self, module: &ModuleIR) -> ModuleIR {
+    pub fn monomorphize_module(
+        &mut self,
+        module: &ModuleIR,
+    ) -> ModuleIR {
         // 1. 收集所有泛型函数
         self.collect_generic_functions(module);
 
@@ -67,7 +70,10 @@ impl Monomorphizer {
     }
 
     /// 收集所有泛型函数
-    fn collect_generic_functions(&mut self, module: &ModuleIR) {
+    fn collect_generic_functions(
+        &mut self,
+        module: &ModuleIR,
+    ) {
         for func in &module.functions {
             if self.is_generic_function(func) {
                 let generic_id =
@@ -78,7 +84,10 @@ impl Monomorphizer {
     }
 
     /// 检查函数是否是泛型函数
-    fn is_generic_function(&self, func: &FunctionIR) -> bool {
+    fn is_generic_function(
+        &self,
+        func: &FunctionIR,
+    ) -> bool {
         // 检查参数类型或返回类型是否包含类型变量
         for param_ty in &func.params {
             if matches!(param_ty, MonoType::TypeVar(_)) {
@@ -99,13 +108,16 @@ impl Monomorphizer {
 
     /// 检查类型是否包含类型变量
     #[allow(clippy::only_used_in_recursion)]
-    fn contains_type_var(&self, ty: &MonoType) -> bool {
+    fn contains_type_var(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
         match ty {
             MonoType::TypeVar(_) => true,
             MonoType::List(elem) => self.contains_type_var(elem),
             MonoType::Dict(key, value) => {
                 self.contains_type_var(key) || self.contains_type_var(value)
-            }
+            },
             MonoType::Set(elem) => self.contains_type_var(elem),
             MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_var(t)),
             MonoType::Fn {
@@ -115,13 +127,16 @@ impl Monomorphizer {
             } => {
                 params.iter().any(|t| self.contains_type_var(t))
                     || self.contains_type_var(return_type)
-            }
+            },
             _ => false,
         }
     }
 
     /// 提取函数的类型参数
-    fn extract_type_params(&self, func: &FunctionIR) -> Vec<String> {
+    fn extract_type_params(
+        &self,
+        func: &FunctionIR,
+    ) -> Vec<String> {
         let mut type_params = Vec::new();
         let mut seen = HashSet::new();
 
@@ -150,7 +165,10 @@ impl Monomorphizer {
     ///
     /// 遍历 IR 中所有函数调用，收集实际使用的类型参数，
     /// 为每个泛型函数生成实例化请求。
-    fn collect_instantiation_requests(&mut self, module: &ModuleIR) {
+    fn collect_instantiation_requests(
+        &mut self,
+        module: &ModuleIR,
+    ) {
         // 收集所有函数调用中的类型使用（使用 type_name 作为键来避免 Hash 约束）
         let mut all_call_type_names: HashSet<String> = HashSet::new();
         let mut all_generic_calls: Vec<(String, Vec<MonoType>)> = Vec::new();
@@ -205,7 +223,7 @@ impl Monomorphizer {
                         all_generic_calls.push((name.clone(), arg_types));
                     }
                 }
-            }
+            },
 
             // 尾调用
             Instruction::TailCall { func: _, args } => {
@@ -217,7 +235,7 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&arg_types);
                     all_call_type_names.insert(type_key);
                 }
-            }
+            },
 
             // 返回值可能包含类型信息
             Instruction::Ret(Some(operand)) => {
@@ -225,8 +243,8 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            }
-            Instruction::Ret(None) => {}
+            },
+            Instruction::Ret(None) => {},
 
             // 移动指令：传播类型信息
             Instruction::Move { dst, src } => {
@@ -238,7 +256,7 @@ impl Monomorphizer {
                         all_call_type_names.insert(type_key);
                     }
                 }
-            }
+            },
 
             // 加载指令：收集加载的类型
             Instruction::Load { dst, .. } => {
@@ -246,7 +264,7 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            }
+            },
 
             // 分配指令：收集分配的类型
             Instruction::Alloc { dst, .. } => {
@@ -254,9 +272,9 @@ impl Monomorphizer {
                     let type_key = Self::types_to_key(&[ty]);
                     all_call_type_names.insert(type_key);
                 }
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
     }
 
@@ -298,19 +316,22 @@ impl Monomorphizer {
     }
 
     /// 将操作数转换为类型
-    fn operand_to_type(&self, operand: &Operand) -> Option<MonoType> {
+    fn operand_to_type(
+        &self,
+        operand: &Operand,
+    ) -> Option<MonoType> {
         match operand {
             Operand::Local(_id) => {
                 // 尝试从局部变量类型映射获取
                 // 当前简化版本返回一个默认类型
                 Some(MonoType::Int(64))
-            }
+            },
             Operand::Temp(_id) => Some(MonoType::Int(64)),
             Operand::Arg(_id) => Some(MonoType::Int(64)),
             Operand::Global(_id) => {
                 // 全局变量类型
                 Some(MonoType::Int(64))
-            }
+            },
             Operand::Const(ConstValue::Int(_)) => Some(MonoType::Int(64)),
             Operand::Const(ConstValue::Float(_)) => Some(MonoType::Float(64)),
             Operand::Const(ConstValue::Bool(_)) => Some(MonoType::Bool),
@@ -374,7 +395,10 @@ impl Monomorphizer {
     }
 
     /// 检查是否应该特化
-    fn should_specialize(&self, generic_id: &GenericFunctionId) -> bool {
+    fn should_specialize(
+        &self,
+        generic_id: &GenericFunctionId,
+    ) -> bool {
         let count = self
             .specialization_cache
             .keys()
@@ -384,7 +408,10 @@ impl Monomorphizer {
     }
 
     /// 实例化单个函数
-    fn instantiate_function(&mut self, request: &InstantiationRequest) -> Option<FunctionId> {
+    fn instantiate_function(
+        &mut self,
+        request: &InstantiationRequest,
+    ) -> Option<FunctionId> {
         let key = request.specialization_key();
 
         // 检查缓存
@@ -418,7 +445,10 @@ impl Monomorphizer {
     }
 
     /// 生成特化函数名称
-    fn generate_specialized_name(base_name: &str, type_args: &[MonoType]) -> String {
+    fn generate_specialized_name(
+        base_name: &str,
+        type_args: &[MonoType],
+    ) -> String {
         if type_args.is_empty() {
             base_name.to_string()
         } else {
@@ -508,17 +538,17 @@ impl Monomorphizer {
                 } else {
                     ty.clone()
                 }
-            }
+            },
             MonoType::List(elem) => {
                 MonoType::List(Box::new(self.substitute_single_type(elem, type_map)))
-            }
+            },
             MonoType::Dict(key, value) => MonoType::Dict(
                 Box::new(self.substitute_single_type(key, type_map)),
                 Box::new(self.substitute_single_type(value, type_map)),
             ),
             MonoType::Set(elem) => {
                 MonoType::Set(Box::new(self.substitute_single_type(elem, type_map)))
-            }
+            },
             MonoType::Tuple(types) => MonoType::Tuple(
                 types
                     .iter()
@@ -578,24 +608,31 @@ impl Monomorphizer {
                     src: src.clone(),
                     target_type: new_target,
                 }
-            }
+            },
             Instruction::TypeTest(operand, test_type) => {
                 let new_test_type = self.substitute_type_ast(test_type, type_map);
                 Instruction::TypeTest(operand.clone(), new_test_type)
-            }
+            },
             _ => instr.clone(),
         }
     }
 
     /// 替换 AST 类型
-    fn substitute_type_ast(&self, ty: &Type, _type_map: &HashMap<usize, MonoType>) -> Type {
+    fn substitute_type_ast(
+        &self,
+        ty: &Type,
+        _type_map: &HashMap<usize, MonoType>,
+    ) -> Type {
         // TODO: 实现完整的类型替换
         // 当前简化版本直接返回原类型
         ty.clone()
     }
 
     /// 构建输出模块
-    fn build_output_module(&self, original_module: &ModuleIR) -> ModuleIR {
+    fn build_output_module(
+        &self,
+        original_module: &ModuleIR,
+    ) -> ModuleIR {
         // 复制非泛型函数
         let mut output_funcs: Vec<FunctionIR> = original_module
             .functions

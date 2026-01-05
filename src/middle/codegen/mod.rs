@@ -152,13 +152,19 @@ impl ConstantPool {
     }
 
     /// 添加常量并返回索引
-    fn add(&mut self, value: ConstValue) -> usize {
+    fn add(
+        &mut self,
+        value: ConstValue,
+    ) -> usize {
         self.constants.push(value);
         self.constants.len() - 1
     }
 
     /// 获取常量
-    fn get(&self, index: usize) -> Option<&ConstValue> {
+    fn get(
+        &self,
+        index: usize,
+    ) -> Option<&ConstValue> {
         self.constants.get(index)
     }
 
@@ -256,7 +262,11 @@ impl JumpTable {
     }
 
     /// 添加条目
-    fn add_entry(&mut self, key: usize, target: usize) {
+    fn add_entry(
+        &mut self,
+        key: usize,
+        target: usize,
+    ) {
         self.entries.insert(key, target);
     }
 }
@@ -290,20 +300,23 @@ pub enum CodegenError {
 }
 
 impl fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             CodegenError::UnimplementedExpr { expr_type } => {
                 write!(f, "未实现的表达式类型: {}", expr_type)
-            }
+            },
             CodegenError::UnimplementedStmt { stmt_type } => {
                 write!(f, "未实现的语句类型: {}", stmt_type)
-            }
+            },
             CodegenError::UnimplementedCall => write!(f, "未实现的函数调用"),
             CodegenError::InvalidAssignmentTarget => write!(f, "无效的赋值目标"),
             CodegenError::SymbolNotFound { name } => write!(f, "符号未找到: {}", name),
             CodegenError::TypeMismatch { expected, found } => {
                 write!(f, "类型不匹配: 期望 {}, 实际 {}", expected, found)
-            }
+            },
             CodegenError::OutOfRegisters => write!(f, "寄存器不足"),
             CodegenError::InvalidOperand => write!(f, "无效的操作数"),
         }
@@ -433,7 +446,7 @@ impl CodegenContext {
                     TypedOpcode::Mov,
                     vec![dst_reg, src_reg],
                 ))
-            }
+            },
 
             Load { dst, src } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -445,22 +458,22 @@ impl CodegenContext {
                             TypedOpcode::LoadConst,
                             vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
                         ))
-                    }
+                    },
                     _ => {
                         let src_reg = self.operand_to_reg(src)?;
                         Ok(BytecodeInstruction::new(
                             TypedOpcode::Mov,
                             vec![dst_reg, src_reg],
                         ))
-                    }
+                    },
                 }
-            }
+            },
 
             Store { dst: _, src } => {
                 // Store 指令 dst 是存储目标，src 是源
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![src_reg])) // 简化
-            }
+            },
 
             // =====================
             // 整数运算 (I64)
@@ -473,7 +486,7 @@ impl CodegenContext {
                     TypedOpcode::I64Add,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Sub { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -483,7 +496,7 @@ impl CodegenContext {
                     TypedOpcode::I64Sub,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Mul { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -493,7 +506,7 @@ impl CodegenContext {
                     TypedOpcode::I64Mul,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Div { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -503,7 +516,7 @@ impl CodegenContext {
                     TypedOpcode::I64Div,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Mod { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -513,7 +526,7 @@ impl CodegenContext {
                     TypedOpcode::I64Rem,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Neg { dst, src } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -522,7 +535,7 @@ impl CodegenContext {
                     TypedOpcode::I64Neg,
                     vec![dst_reg, src_reg],
                 ))
-            }
+            },
 
             // =====================
             // 比较指令
@@ -535,7 +548,7 @@ impl CodegenContext {
                     TypedOpcode::I64Eq,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Ne { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -545,7 +558,7 @@ impl CodegenContext {
                     TypedOpcode::I64Ne,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Lt { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -555,7 +568,7 @@ impl CodegenContext {
                     TypedOpcode::I64Lt,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Le { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -565,7 +578,7 @@ impl CodegenContext {
                     TypedOpcode::I64Le,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Gt { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -575,7 +588,7 @@ impl CodegenContext {
                     TypedOpcode::I64Gt,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             Ge { dst, lhs, rhs } => {
                 let dst_reg = self.operand_to_reg(dst)?;
@@ -585,7 +598,7 @@ impl CodegenContext {
                     TypedOpcode::I64Ge,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
-            }
+            },
 
             // =====================
             // 控制流
@@ -594,7 +607,7 @@ impl CodegenContext {
                 let offset = *target as i32;
                 let bytes = offset.to_le_bytes();
                 Ok(BytecodeInstruction::new(TypedOpcode::Jmp, bytes.to_vec()))
-            }
+            },
 
             JmpIf(cond, target) => {
                 let cond_reg = self.operand_to_reg(cond)?;
@@ -604,7 +617,7 @@ impl CodegenContext {
                     TypedOpcode::JmpIf,
                     vec![cond_reg, offset_bytes[0], offset_bytes[1]],
                 ))
-            }
+            },
 
             JmpIfNot(cond, target) => {
                 let cond_reg = self.operand_to_reg(cond)?;
@@ -614,7 +627,7 @@ impl CodegenContext {
                     TypedOpcode::JmpIfNot,
                     vec![cond_reg, offset_bytes[0], offset_bytes[1]],
                 ))
-            }
+            },
 
             Ret(value) => {
                 if let Some(v) = value {
@@ -626,7 +639,7 @@ impl CodegenContext {
                 } else {
                     Ok(BytecodeInstruction::new(TypedOpcode::Return, vec![]))
                 }
-            }
+            },
 
             // =====================
             // 函数调用
@@ -638,7 +651,7 @@ impl CodegenContext {
             } => {
                 // 简化实现：返回 Nop
                 Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
-            }
+            },
 
             CallAsync {
                 dst: _,
@@ -648,7 +661,7 @@ impl CodegenContext {
 
             TailCall { func: _, args: _ } => {
                 Ok(BytecodeInstruction::new(TypedOpcode::TailCall, vec![]))
-            }
+            },
 
             // =====================
             // 内存操作
@@ -659,7 +672,7 @@ impl CodegenContext {
                     TypedOpcode::StackAlloc,
                     vec![dst_reg],
                 ))
-            }
+            },
 
             Free(_) => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
@@ -673,7 +686,7 @@ impl CodegenContext {
                     TypedOpcode::NewListWithCap,
                     vec![dst_reg, 0, 0],
                 ))
-            }
+            },
 
             // =====================
             // 字段操作
@@ -688,7 +701,7 @@ impl CodegenContext {
                     TypedOpcode::GetField,
                     vec![dst_reg, 0, 0, 0],
                 ))
-            }
+            },
 
             StoreField {
                 dst: _,
@@ -709,7 +722,7 @@ impl CodegenContext {
                     TypedOpcode::LoadElement,
                     vec![dst_reg, 0, 0],
                 ))
-            }
+            },
 
             StoreIndex {
                 dst: _,
@@ -734,7 +747,7 @@ impl CodegenContext {
                     TypedOpcode::Cast,
                     vec![dst_reg, src_reg, 0, 0],
                 ))
-            }
+            },
 
             TypeTest(_, _) => Ok(BytecodeInstruction::new(
                 TypedOpcode::TypeCheck,
@@ -759,7 +772,7 @@ impl CodegenContext {
                     TypedOpcode::HeapAlloc,
                     vec![dst_reg, 0, 0],
                 ))
-            }
+            },
 
             MakeClosure {
                 dst,
@@ -771,12 +784,12 @@ impl CodegenContext {
                     TypedOpcode::MakeClosure,
                     vec![dst_reg, 0, 0, 0],
                 ))
-            }
+            },
 
             Drop(operand) => {
                 let reg = self.operand_to_reg(operand)?;
                 Ok(BytecodeInstruction::new(TypedOpcode::Drop, vec![reg]))
-            }
+            },
 
             // =====================
             // 栈操作
@@ -784,12 +797,12 @@ impl CodegenContext {
             Push(operand) => {
                 let reg = self.operand_to_reg(operand)?;
                 Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
-            }
+            },
 
             Pop(operand) => {
                 let reg = self.operand_to_reg(operand)?;
                 Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
-            }
+            },
 
             Dup => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
@@ -798,7 +811,10 @@ impl CodegenContext {
     }
 
     /// 将操作数转换为寄存器编号
-    fn operand_to_reg(&self, operand: &Operand) -> Result<u8, CodegenError> {
+    fn operand_to_reg(
+        &self,
+        operand: &Operand,
+    ) -> Result<u8, CodegenError> {
         match operand {
             Operand::Local(id) => Ok(*id as u8),
             Operand::Temp(id) => Ok(*id as u8),
@@ -841,7 +857,10 @@ impl CodegenContext {
 
     /// 从 AST 类型转换
     #[allow(clippy::only_used_in_recursion)]
-    fn type_from_ast(&self, ast_type: &Type) -> MonoType {
+    fn type_from_ast(
+        &self,
+        ast_type: &Type,
+    ) -> MonoType {
         match ast_type {
             Type::Name(name) => MonoType::TypeRef(name.clone()),
             Type::Int(n) => MonoType::Int(*n),
@@ -857,7 +876,7 @@ impl CodegenContext {
             ),
             Type::Tuple(types) => {
                 MonoType::Tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
-            }
+            },
             Type::Fn {
                 params,
                 return_type,
@@ -871,7 +890,10 @@ impl CodegenContext {
     }
 
     /// 添加常量
-    fn add_constant(&mut self, value: ConstValue) -> usize {
+    fn add_constant(
+        &mut self,
+        value: ConstValue,
+    ) -> usize {
         self.constant_pool.add(value)
     }
 
@@ -891,7 +913,10 @@ impl CodegenContext {
     }
 
     /// 发射指令
-    fn emit(&mut self, instr: BytecodeInstruction) {
+    fn emit(
+        &mut self,
+        instr: BytecodeInstruction,
+    ) {
         self.bytecode.extend(instr.encode());
     }
 }
@@ -940,11 +965,18 @@ impl SymbolTable {
         }
     }
 
-    fn insert(&mut self, name: String, symbol: Symbol) {
+    fn insert(
+        &mut self,
+        name: String,
+        symbol: Symbol,
+    ) {
         self.symbols.insert(name, symbol);
     }
 
-    fn get(&self, name: &str) -> Option<&Symbol> {
+    fn get(
+        &self,
+        name: &str,
+    ) -> Option<&Symbol> {
         self.symbols.get(name)
     }
 

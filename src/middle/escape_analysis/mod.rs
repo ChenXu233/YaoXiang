@@ -126,7 +126,10 @@ impl EscapeAnalyzer {
     }
 
     /// 分析函数的逃逸情况
-    pub fn analyze_function(&mut self, func: &FunctionIR) -> EscapeAnalysisResult {
+    pub fn analyze_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> EscapeAnalysisResult {
         self.current_function = Some(func.clone());
         self.local_vars.clear();
 
@@ -144,7 +147,10 @@ impl EscapeAnalyzer {
     }
 
     /// 收集所有局部变量
-    fn collect_locals(&mut self, func: &FunctionIR) {
+    fn collect_locals(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         for (idx, local_ty) in func.locals.iter().enumerate() {
             self.local_vars.insert(
                 LocalId::new(idx),
@@ -163,7 +169,10 @@ impl EscapeAnalyzer {
     }
 
     /// 标记明显的逃逸情况
-    fn mark_obvious_escapes(&mut self, func: &FunctionIR) {
+    fn mark_obvious_escapes(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         for block in &func.blocks {
             for instr in &block.instructions {
                 match instr {
@@ -175,21 +184,21 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().is_returned = true;
                             }
                         }
-                    }
+                    },
 
                     // 字段存储逃逸（赋值给对象的字段可能逃逸）
                     Instruction::StoreField { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    }
+                    },
 
                     // 索引存储逃逸（赋值给数组元素可能逃逸）
                     Instruction::StoreIndex { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    }
+                    },
 
                     // 函数调用可能导致参数逃逸
                     Instruction::Call { args, .. } => {
@@ -203,7 +212,7 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
                         }
-                    }
+                    },
 
                     // 尾调用也可能导致参数逃逸
                     Instruction::TailCall { args, .. } => {
@@ -216,16 +225,16 @@ impl EscapeAnalyzer {
                                 self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                             }
                         }
-                    }
+                    },
 
                     // 类型转换可能导致逃逸
                     Instruction::Cast { src, .. } => {
                         if let Some(local_id) = self.get_variable(src) {
                             self.local_vars.get_mut(&local_id).unwrap().escapes = true;
                         }
-                    }
+                    },
 
-                    _ => {}
+                    _ => {},
                 }
             }
         }
@@ -237,7 +246,10 @@ impl EscapeAnalyzer {
     /// 1. 赋值传播：如果 a 逃逸，a = b 则 b 也逃逸
     /// 2. phi 节点传播：合并的变量如果任一逃逸则结果逃逸
     /// 3. 循环变量传播：循环内的变量在循环外使用则逃逸
-    fn propagate_escape(&mut self, func: &FunctionIR) {
+    fn propagate_escape(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         // 构建变量使用关系图
         let var_uses = self.build_var_use_graph(func);
 
@@ -269,7 +281,10 @@ impl EscapeAnalyzer {
     /// 构建变量使用关系图
     ///
     /// 返回：Map<变量ID, Set<被该变量赋值的变量ID>>
-    fn build_var_use_graph(&mut self, func: &FunctionIR) -> HashMap<LocalId, HashSet<LocalId>> {
+    fn build_var_use_graph(
+        &mut self,
+        func: &FunctionIR,
+    ) -> HashMap<LocalId, HashSet<LocalId>> {
         let mut var_uses: HashMap<LocalId, HashSet<LocalId>> = HashMap::new();
 
         for block in &func.blocks {
@@ -295,7 +310,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            }
+            },
 
             // Load: a = *b 形式
             Instruction::Load { dst, src } => {
@@ -304,7 +319,7 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            }
+            },
 
             // Store: *a = b 形式
             Instruction::Store { dst, src } => {
@@ -314,7 +329,7 @@ impl EscapeAnalyzer {
                         var_uses.entry(src_id).or_default().insert(dst_local);
                     }
                 }
-            }
+            },
 
             // 函数调用：返回值可能来自参数
             Instruction::Call { dst, args, .. } => {
@@ -325,7 +340,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            }
+            },
 
             // 尾调用
             Instruction::TailCall { func: _, args } => {
@@ -339,7 +354,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            }
+            },
 
             // 类型转换不改变逃逸状态
             Instruction::Cast { dst, src, .. } => {
@@ -348,9 +363,9 @@ impl EscapeAnalyzer {
                 {
                     var_uses.entry(src_id).or_default().insert(dst_id);
                 }
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
     }
 
@@ -388,7 +403,7 @@ impl EscapeAnalyzer {
                         changed |= self.propagate_to_uses(dst_id, src_escapes, var_uses);
                     }
                 }
-            }
+            },
 
             // 函数调用：返回值可能继承参数的逃逸状态
             Instruction::Call { dst, args, .. } => {
@@ -418,7 +433,7 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            }
+            },
 
             // 移动传播
             Instruction::Load { dst, src } => {
@@ -438,9 +453,9 @@ impl EscapeAnalyzer {
                         }
                     }
                 }
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
 
         changed
@@ -485,7 +500,11 @@ impl EscapeAnalyzer {
     }
 
     /// 标记被调用函数返回值导致的逃逸
-    fn mark_callee_return_escapes(&mut self, var: LocalId, _callee: &Operand) -> bool {
+    fn mark_callee_return_escapes(
+        &mut self,
+        var: LocalId,
+        _callee: &Operand,
+    ) -> bool {
         // 保守假设：如果变量被传递给可能返回它的函数，则逃逸
         // 在实际实现中需要更精确的分析
         let mut escaped = false;
@@ -500,7 +519,10 @@ impl EscapeAnalyzer {
     }
 
     /// 生成分析结果
-    fn generate_result(&self, _func: &FunctionIR) -> EscapeAnalysisResult {
+    fn generate_result(
+        &self,
+        _func: &FunctionIR,
+    ) -> EscapeAnalysisResult {
         let mut stack_allocated = HashSet::new();
         let mut heap_allocated = HashSet::new();
 
@@ -524,7 +546,10 @@ impl EscapeAnalyzer {
     }
 
     /// 从操作数获取变量ID
-    fn get_variable(&self, operand: &Operand) -> Option<LocalId> {
+    fn get_variable(
+        &self,
+        operand: &Operand,
+    ) -> Option<LocalId> {
         match operand {
             Operand::Local(id) => Some(LocalId::new(*id)),
             _ => None,
@@ -532,8 +557,10 @@ impl EscapeAnalyzer {
     }
 
     /// 配置分析器
-    pub fn configure<F>(&mut self, f: F)
-    where
+    pub fn configure<F>(
+        &mut self,
+        f: F,
+    ) where
         F: FnOnce(&mut EscapeAnalysisConfig),
     {
         f(&mut self.config);
@@ -552,17 +579,26 @@ pub struct EscapeAnalysisResult {
 
 impl EscapeAnalysisResult {
     /// 检查变量是否应该栈分配
-    pub fn should_stack_allocate(&self, var_id: LocalId) -> bool {
+    pub fn should_stack_allocate(
+        &self,
+        var_id: LocalId,
+    ) -> bool {
         self.stack_allocated.contains(&var_id)
     }
 
     /// 检查变量是否应该堆分配
-    pub fn should_heap_allocate(&self, var_id: LocalId) -> bool {
+    pub fn should_heap_allocate(
+        &self,
+        var_id: LocalId,
+    ) -> bool {
         self.heap_allocated.contains(&var_id)
     }
 
     /// 获取分配方式
-    pub fn get_allocation(&self, var_id: LocalId) -> Allocation {
+    pub fn get_allocation(
+        &self,
+        var_id: LocalId,
+    ) -> Allocation {
         if self.stack_allocated.contains(&var_id) {
             Allocation::Stack
         } else if self.heap_allocated.contains(&var_id) {
@@ -590,7 +626,10 @@ impl LocalId {
 }
 
 impl fmt::Display for LocalId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "local_{}", self.0)
     }
 }
@@ -618,7 +657,11 @@ impl CallGraph {
         }
     }
 
-    fn add_edge(&mut self, from: FunctionId, to: FunctionId) {
+    fn add_edge(
+        &mut self,
+        from: FunctionId,
+        to: FunctionId,
+    ) {
         self.edges.entry(from).or_default().push(to);
     }
 }
@@ -642,24 +685,36 @@ impl EscapeAnalysisResultBuilder {
     }
 
     /// 标记变量为栈分配
-    pub fn mark_stack_allocated(&mut self, var_id: LocalId) {
+    pub fn mark_stack_allocated(
+        &mut self,
+        var_id: LocalId,
+    ) {
         self.stack_allocated.insert(var_id);
     }
 
     /// 标记变量为堆分配
-    pub fn mark_heap_allocated(&mut self, var_id: LocalId) {
+    pub fn mark_heap_allocated(
+        &mut self,
+        var_id: LocalId,
+    ) {
         self.heap_allocated.insert(var_id);
     }
 
     /// 批量标记为栈分配
-    pub fn mark_stack_allocated_batch(&mut self, vars: impl IntoIterator<Item = LocalId>) {
+    pub fn mark_stack_allocated_batch(
+        &mut self,
+        vars: impl IntoIterator<Item = LocalId>,
+    ) {
         for var in vars {
             self.stack_allocated.insert(var);
         }
     }
 
     /// 批量标记为堆分配
-    pub fn mark_heap_allocated_batch(&mut self, vars: impl IntoIterator<Item = LocalId>) {
+    pub fn mark_heap_allocated_batch(
+        &mut self,
+        vars: impl IntoIterator<Item = LocalId>,
+    ) {
         for var in vars {
             self.heap_allocated.insert(var);
         }

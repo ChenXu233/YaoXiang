@@ -18,14 +18,14 @@ impl<'a> ParserState<'a> {
                     Some(TokenKind::Lt) => {
                         depth += 1;
                         self.bump();
-                    }
+                    },
                     Some(TokenKind::Gt) => {
                         depth -= 1;
                         self.bump();
-                    }
+                    },
                     Some(_) => {
                         self.bump();
-                    }
+                    },
                     None => break,
                 }
             }
@@ -46,7 +46,7 @@ impl<'a> ParserState<'a> {
             // 情况1: 空元组 ()
             if self.at(&TokenKind::RParen) {
                 self.bump(); // consume ')'
-                // 检查是否是函数类型: () -> Ret
+                             // 检查是否是函数类型: () -> Ret
                 if self.skip(&TokenKind::Arrow) {
                     let return_type = Box::new(self.parse_type()?);
                     return Some(Type::Fn {
@@ -192,7 +192,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse function type: `fn(...) -> ...`
-    fn parse_fn_type(&mut self, _span: Span) -> Option<Type> {
+    fn parse_fn_type(
+        &mut self,
+        _span: Span,
+    ) -> Option<Type> {
         self.bump(); // consume 'fn'
 
         if !self.expect(&TokenKind::LParen) {
@@ -217,7 +220,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse tuple or parenthesized type
-    fn parse_tuple_or_parens_type(&mut self, _span: Span) -> Option<Type> {
+    fn parse_tuple_or_parens_type(
+        &mut self,
+        _span: Span,
+    ) -> Option<Type> {
         self.bump(); // consume '('
 
         // Empty tuple: ()
@@ -271,7 +277,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse list type: `[Type]`
-    fn parse_list_type(&mut self, _span: Span) -> Option<Type> {
+    fn parse_list_type(
+        &mut self,
+        _span: Span,
+    ) -> Option<Type> {
         self.bump(); // consume '['
 
         let inner_type = self.parse_type()?;
@@ -283,7 +292,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse struct type: `{ field: Type, ... }`
-    fn parse_struct_type(&mut self, _span: Span) -> Option<Type> {
+    fn parse_struct_type(
+        &mut self,
+        _span: Span,
+    ) -> Option<Type> {
         self.bump(); // consume '{'
 
         let mut fields = Vec::new();
@@ -315,7 +327,10 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse named type or generic type
-    fn parse_named_or_generic_type(&mut self, _span: Span) -> Option<Type> {
+    fn parse_named_or_generic_type(
+        &mut self,
+        _span: Span,
+    ) -> Option<Type> {
         let mut name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => return None,
@@ -329,7 +344,7 @@ impl<'a> ParserState<'a> {
                     name.push('.');
                     name.push_str(n);
                     self.bump();
-                }
+                },
                 _ => return None, // Expected identifier after dot
             }
         }
@@ -344,7 +359,7 @@ impl<'a> ParserState<'a> {
             "bytes" | "Bytes" => return Some(Type::Bytes),
             "int" | "Int" => return self.parse_int_type_from_name(),
             "float" | "Float" => return self.parse_float_type_from_name(),
-            _ => {}
+            _ => {},
         }
 
         // Check for generic arguments or struct fields
@@ -419,7 +434,7 @@ impl<'a> ParserState<'a> {
                     let s = *n as usize;
                     self.bump();
                     s
-                }
+                },
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
                         self.current()
@@ -427,7 +442,7 @@ impl<'a> ParserState<'a> {
                             .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Int(64)); // default
-                }
+                },
             };
 
             if !self.expect(&TokenKind::Gt) {
@@ -450,7 +465,7 @@ impl<'a> ParserState<'a> {
                     let s = *n as usize;
                     self.bump();
                     s
-                }
+                },
                 _ => {
                     self.error(super::ParseError::UnexpectedToken(
                         self.current()
@@ -458,7 +473,7 @@ impl<'a> ParserState<'a> {
                             .unwrap_or(TokenKind::Eof),
                     ));
                     return Some(Type::Float(64)); // default
-                }
+                },
             };
 
             if !self.expect(&TokenKind::Gt) {

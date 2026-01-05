@@ -71,7 +71,10 @@ impl<'a> ParserState<'a> {
 
     /// Get current token kind
     #[inline]
-    pub fn at(&self, kind: &TokenKind) -> bool {
+    pub fn at(
+        &self,
+        kind: &TokenKind,
+    ) -> bool {
         matches!(self.current(), Some(t) if &t.kind == kind)
     }
 
@@ -83,7 +86,10 @@ impl<'a> ParserState<'a> {
 
     /// Peek at nth token ahead
     #[inline]
-    pub fn peek_nth(&self, n: usize) -> Option<&Token> {
+    pub fn peek_nth(
+        &self,
+        n: usize,
+    ) -> Option<&Token> {
         self.tokens.get(self.pos + n)
     }
 
@@ -100,7 +106,10 @@ impl<'a> ParserState<'a> {
 
     /// Skip a specific token
     #[inline]
-    pub fn skip(&mut self, kind: &TokenKind) -> bool {
+    pub fn skip(
+        &mut self,
+        kind: &TokenKind,
+    ) -> bool {
         if self.at(kind) {
             self.bump();
             true
@@ -111,7 +120,10 @@ impl<'a> ParserState<'a> {
 
     /// Expect a specific token, report error if not found
     #[inline]
-    pub fn expect(&mut self, kind: &TokenKind) -> bool {
+    pub fn expect(
+        &mut self,
+        kind: &TokenKind,
+    ) -> bool {
         if let Some(token) = self.current() {
             if &token.kind == kind {
                 self.bump();
@@ -147,13 +159,19 @@ impl<'a> ParserState<'a> {
 
     /// Create a span from current position
     #[inline]
-    pub fn span_from(&self, start: Span) -> Span {
+    pub fn span_from(
+        &self,
+        start: Span,
+    ) -> Span {
         Span::new(start.start, self.current_span.end)
     }
 
     /// Add a parse error
     #[inline]
-    pub fn error(&mut self, error: super::ParseError) {
+    pub fn error(
+        &mut self,
+        error: super::ParseError,
+    ) {
         self.errors.push(error);
     }
 

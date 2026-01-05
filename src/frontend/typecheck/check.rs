@@ -51,12 +51,19 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 添加变量绑定
-    pub fn add_var(&mut self, name: String, poly: PolyType) {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.inferrer.add_var(name, poly);
     }
 
     /// 添加错误
-    fn add_error(&mut self, error: TypeError) {
+    fn add_error(
+        &mut self,
+        error: TypeError,
+    ) {
         self.errors.push(error);
     }
 
@@ -104,7 +111,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 添加类型定义
-    fn add_type_definition(&mut self, name: &str, definition: &ast::Type, _span: Span) {
+    fn add_type_definition(
+        &mut self,
+        name: &str,
+        definition: &ast::Type,
+        _span: Span,
+    ) {
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         self.inferrer.add_var(name.to_string(), poly);
     }
@@ -115,7 +127,10 @@ impl<'a> TypeChecker<'a> {
 
     /// 检查语句
     #[allow(clippy::result_large_err)]
-    pub fn check_stmt(&mut self, stmt: &ast::Stmt) -> TypeResult<()> {
+    pub fn check_stmt(
+        &mut self,
+        stmt: &ast::Stmt,
+    ) -> TypeResult<()> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
                 if let ast::Expr::FnDef {
@@ -143,7 +158,7 @@ impl<'a> TypeChecker<'a> {
                     self.inferrer.infer_expr(expr)?;
                     Ok(())
                 }
-            }
+            },
             ast::StmtKind::Fn {
                 name,
                 type_annotation,
@@ -265,7 +280,7 @@ impl<'a> TypeChecker<'a> {
                     annotated_params.is_some(),
                 )?;
                 Ok(())
-            }
+            },
             ast::StmtKind::Var {
                 name,
                 type_annotation,
@@ -296,16 +311,16 @@ impl<'a> TypeChecker<'a> {
                 // 3. 类型检查循环体
                 let _body_ty = self.inferrer.infer_block(body, false, None)?;
                 Ok(())
-            }
+            },
             ast::StmtKind::TypeDef { name, definition } => {
                 self.check_type_def(name, definition, stmt.span)
-            }
+            },
             ast::StmtKind::Module { name, items } => {
                 self.check_module_alias(name, items, stmt.span)
-            }
+            },
             ast::StmtKind::Use { path, items, alias } => {
                 self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span)
-            }
+            },
         }
     }
 
@@ -536,7 +551,10 @@ impl<'a> TypeChecker<'a> {
     /// 检查类型变量是否未约束（未被使用）
     ///
     /// 如果类型变量仍然是 Unbound 状态，返回 true
-    fn is_unconstrained_var(&self, ty: &MonoType) -> bool {
+    fn is_unconstrained_var(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
         match ty {
             MonoType::TypeVar(id) => self.inferrer.solver_ref().is_unconstrained(*id),
             _ => false,
@@ -559,7 +577,10 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 生成模块 IR
-    fn generate_module_ir(&self, module: &ast::Module) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    fn generate_module_ir(
+        &self,
+        module: &ast::Module,
+    ) -> Result<middle::ModuleIR, Vec<TypeError>> {
         let mut functions = Vec::new();
 
         for stmt in &module.items {
@@ -624,7 +645,7 @@ impl<'a> TypeChecker<'a> {
                     };
 
                     functions.push(func_ir);
-                }
+                },
                 ast::StmtKind::Var {
                     name,
                     type_annotation,
@@ -665,8 +686,8 @@ impl<'a> TypeChecker<'a> {
                         entry: 0,
                     };
                     functions.push(func_ir);
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -679,12 +700,16 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 生成语句 IR
-    fn generate_stmt_ir(&self, stmt: &ast::Stmt, instructions: &mut Vec<middle::Instruction>) {
+    fn generate_stmt_ir(
+        &self,
+        stmt: &ast::Stmt,
+        instructions: &mut Vec<middle::Instruction>,
+    ) {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
                 let result_reg = instructions.len();
                 self.generate_expr_ir(expr, result_reg, instructions);
-            }
+            },
             ast::StmtKind::Var {
                 name: _,
                 type_annotation: _,
@@ -696,7 +721,7 @@ impl<'a> TypeChecker<'a> {
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions);
                 }
-            }
+            },
             ast::StmtKind::Fn {
                 name: _,
                 type_annotation: _,
@@ -704,8 +729,8 @@ impl<'a> TypeChecker<'a> {
                 body: _,
             } => {
                 // 嵌套函数（简化处理）
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -731,14 +756,14 @@ impl<'a> TypeChecker<'a> {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Const(const_val),
                 });
-            }
+            },
             ast::Expr::Var(_, _) => {
                 // 变量加载
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Local(result_reg), // 简化处理
                 });
-            }
+            },
             ast::Expr::BinOp {
                 op,
                 left,
@@ -815,7 +840,7 @@ impl<'a> TypeChecker<'a> {
                     },
                 };
                 instructions.push(instr);
-            }
+            },
             ast::Expr::Call {
                 func: _,
                 args,
@@ -833,14 +858,14 @@ impl<'a> TypeChecker<'a> {
                     func: middle::Operand::Local(result_reg), // 简化
                     args: arg_regs,
                 });
-            }
+            },
             _ => {
                 // 默认返回 0
                 instructions.push(middle::Instruction::Load {
                     dst: middle::Operand::Local(result_reg),
                     src: middle::Operand::Const(middle::ConstValue::Int(0)),
                 });
-            }
+            },
         }
     }
 }
@@ -874,27 +899,44 @@ impl ExtendedTypeEnvironment {
     }
 
     /// 添加变量
-    pub fn add_var(&mut self, name: String, poly: PolyType) {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.vars.insert(name, poly);
     }
 
     /// 添加类型
-    pub fn add_type(&mut self, name: String, poly: PolyType) {
+    pub fn add_type(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.types.insert(name, poly);
     }
 
     /// 获取变量
-    pub fn get_var(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         self.vars.get(name)
     }
 
     /// 获取类型
-    pub fn get_type(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_type(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         self.types.get(name)
     }
 
     /// 添加错误
-    pub fn add_error(&mut self, error: TypeError) {
+    pub fn add_error(
+        &mut self,
+        error: TypeError,
+    ) {
         self.errors.push(error);
     }
 
@@ -921,7 +963,11 @@ pub fn infer_literal_type(lit: &Literal) -> MonoType {
 }
 
 /// 获取二元运算的结果类型
-pub fn binop_result_type(op: &ast::BinOp, left: &MonoType, right: &MonoType) -> Option<MonoType> {
+pub fn binop_result_type(
+    op: &ast::BinOp,
+    left: &MonoType,
+    right: &MonoType,
+) -> Option<MonoType> {
     match op {
         ast::BinOp::Add | ast::BinOp::Sub | ast::BinOp::Mul | ast::BinOp::Div | ast::BinOp::Mod => {
             if left == right && left.is_numeric() {
@@ -929,7 +975,7 @@ pub fn binop_result_type(op: &ast::BinOp, left: &MonoType, right: &MonoType) -> 
             } else {
                 None
             }
-        }
+        },
         ast::BinOp::Eq
         | ast::BinOp::Neq
         | ast::BinOp::Lt
@@ -941,21 +987,24 @@ pub fn binop_result_type(op: &ast::BinOp, left: &MonoType, right: &MonoType) -> 
             } else {
                 None
             }
-        }
+        },
         ast::BinOp::And | ast::BinOp::Or => {
             if *left == MonoType::Bool && *right == MonoType::Bool {
                 Some(MonoType::Bool)
             } else {
                 None
             }
-        }
+        },
         ast::BinOp::Assign => Some(MonoType::Void),
         ast::BinOp::Range => None, // 范围运算暂时不支持类型检查
     }
 }
 
 /// 获取一元运算的结果类型
-pub fn unop_result_type(op: &ast::UnOp, expr: &MonoType) -> Option<MonoType> {
+pub fn unop_result_type(
+    op: &ast::UnOp,
+    expr: &MonoType,
+) -> Option<MonoType> {
     match op {
         ast::UnOp::Neg | ast::UnOp::Pos => {
             if expr.is_numeric() {
@@ -963,13 +1012,13 @@ pub fn unop_result_type(op: &ast::UnOp, expr: &MonoType) -> Option<MonoType> {
             } else {
                 None
             }
-        }
+        },
         ast::UnOp::Not => {
             if *expr == MonoType::Bool {
                 Some(MonoType::Bool)
             } else {
                 None
             }
-        }
+        },
     }
 }

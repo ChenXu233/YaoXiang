@@ -106,7 +106,10 @@ impl DAGNode {
     /// );
     /// ```
     #[inline]
-    pub fn new(id: NodeId, kind: DAGNodeKind) -> Self {
+    pub fn new(
+        id: NodeId,
+        kind: DAGNodeKind,
+    ) -> Self {
         Self {
             id,
             kind,
@@ -160,25 +163,37 @@ impl DAGNode {
     /// assert_eq!(node.dependencies().len(), 2);
     /// ```
     #[inline]
-    pub fn add_dependency(&mut self, dependency: NodeId) {
+    pub fn add_dependency(
+        &mut self,
+        dependency: NodeId,
+    ) {
         self.dependencies.push(dependency);
     }
 
     /// Add a dependent edge (`dependent` depends on this node).
     #[inline]
-    pub fn add_dependent(&mut self, dependent: NodeId) {
+    pub fn add_dependent(
+        &mut self,
+        dependent: NodeId,
+    ) {
         self.dependents.push(dependent);
     }
 
     /// Check if this node depends on the given node.
     #[inline]
-    pub fn depends_on(&self, node_id: NodeId) -> bool {
+    pub fn depends_on(
+        &self,
+        node_id: NodeId,
+    ) -> bool {
         self.dependencies.contains(&node_id)
     }
 
     /// Check if the given node depends on this node.
     #[inline]
-    pub fn has_dependent(&self, node_id: NodeId) -> bool {
+    pub fn has_dependent(
+        &self,
+        node_id: NodeId,
+    ) -> bool {
         self.dependents.contains(&node_id)
     }
 
@@ -208,7 +223,10 @@ impl DAGNode {
 
     /// Mark this node as being in a parallel evaluation region.
     #[inline]
-    pub fn set_in_parallel_region(&mut self, in_region: bool) {
+    pub fn set_in_parallel_region(
+        &mut self,
+        in_region: bool,
+    ) {
         self.in_parallel_region = in_region;
     }
 
@@ -220,7 +238,10 @@ impl DAGNode {
 
     /// Set the priority of this node.
     #[inline]
-    pub fn set_priority(&mut self, priority: u8) {
+    pub fn set_priority(
+        &mut self,
+        priority: u8,
+    ) {
         self.priority = priority.clamp(0, 255);
     }
 
@@ -238,7 +259,10 @@ impl DAGNode {
 }
 
 impl fmt::Display for DAGNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "DAGNode({}: {:?})", self.id, self.kind)
     }
 }

@@ -26,7 +26,10 @@ impl CodegenContext {
     }
 
     /// 尝试构建跳转表
-    fn try_build_jump_table(&self, cases: &[(Expr, Expr)]) -> Option<Vec<(i32, usize)>> {
+    fn try_build_jump_table(
+        &self,
+        cases: &[(Expr, Expr)],
+    ) -> Option<Vec<(i32, usize)>> {
         let mut table = Vec::new();
 
         for (idx, (value_expr, _body_expr)) in cases.iter().enumerate() {
@@ -177,6 +180,6 @@ fn get_min_max<T: Copy + PartialOrd, I: Iterator<Item = T>>(mut iter: I) -> Opti
                 }
             }
             Some((min, max))
-        }
+        },
     }
 }

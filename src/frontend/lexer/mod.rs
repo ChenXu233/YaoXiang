@@ -95,12 +95,12 @@ mod tokenizer {
                     self.line += 1;
                     self.column = 1;
                     Some('\n')
-                }
+                },
                 Some(c) => {
                     self.offset += c.len_utf8();
                     self.column += 1;
                     Some(c)
-                }
+                },
                 None => None,
             }
         }
@@ -118,7 +118,7 @@ mod tokenizer {
                 match c {
                     ' ' | '\t' | '\r' | '\n' => {
                         self.advance();
-                    }
+                    },
                     _ => break,
                 }
             }
@@ -145,7 +145,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Underscore))
                     }
-                }
+                },
                 c if is_identifier_start(c) => self.scan_identifier(c),
                 c if is_digit(c) => self.scan_number(c),
                 '"' => self.scan_string(),
@@ -158,7 +158,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Minus))
                     }
-                }
+                },
                 '*' => Some(self.make_token(TokenKind::Star)),
                 '%' => Some(self.make_token(TokenKind::Percent)),
                 ',' => Some(self.make_token(TokenKind::Comma)),
@@ -179,7 +179,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Eq))
                     }
-                }
+                },
                 '!' => {
                     if self.peek() == Some(&'=') {
                         self.advance();
@@ -187,7 +187,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Not))
                     }
-                }
+                },
                 '<' => {
                     if self.peek() == Some(&'=') {
                         self.advance();
@@ -195,7 +195,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Lt))
                     }
-                }
+                },
                 '>' => {
                     if self.peek() == Some(&'=') {
                         self.advance();
@@ -203,7 +203,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Gt))
                     }
-                }
+                },
                 '&' => {
                     if self.peek() == Some(&'&') {
                         self.advance();
@@ -216,7 +216,7 @@ mod tokenizer {
                             )),
                         )
                     }
-                }
+                },
                 '|' => {
                     if self.peek() == Some(&'|') {
                         self.advance();
@@ -224,7 +224,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Pipe))
                     }
-                }
+                },
                 ':' => {
                     if self.peek() == Some(&':') {
                         self.advance();
@@ -232,7 +232,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Colon))
                     }
-                }
+                },
                 '.' => {
                     if self.peek() == Some(&'.') {
                         self.advance();
@@ -245,7 +245,7 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Dot))
                     }
-                }
+                },
                 '/' => {
                     if self.peek() == Some(&'/') {
                         // Single line comment
@@ -282,15 +282,18 @@ mod tokenizer {
                     } else {
                         Some(self.make_token(TokenKind::Slash))
                     }
-                }
+                },
                 c => {
                     self.error = Some(LexError::UnexpectedChar { ch: c });
                     Some(self.make_token(TokenKind::Error(format!("Unexpected character: {}", c))))
-                }
+                },
             }
         }
 
-        fn scan_identifier(&mut self, first_char: char) -> Option<Token> {
+        fn scan_identifier(
+            &mut self,
+            first_char: char,
+        ) -> Option<Token> {
             let mut value = String::new();
             value.push(first_char);
 
@@ -318,7 +321,10 @@ mod tokenizer {
             }
         }
 
-        fn scan_number(&mut self, first_char: char) -> Option<Token> {
+        fn scan_number(
+            &mut self,
+            first_char: char,
+        ) -> Option<Token> {
             let mut value = String::new();
             value.push(first_char);
 
@@ -387,7 +393,7 @@ mod tokenizer {
                     Err(_) => {
                         self.error = Some(LexError::InvalidNumber(value));
                         Some(self.make_token(TokenKind::Error("Invalid float".to_string())))
-                    }
+                    },
                 }
             } else {
                 match num_str.parse::<i128>() {
@@ -399,7 +405,7 @@ mod tokenizer {
                     Err(_) => {
                         self.error = Some(LexError::InvalidNumber(value));
                         Some(self.make_token(TokenKind::Error("Invalid integer".to_string())))
-                    }
+                    },
                 }
             }
         }
@@ -424,7 +430,7 @@ mod tokenizer {
                             ),
                             literal: Some(Literal::String(value.clone())),
                         });
-                    }
+                    },
                     '\\' => {
                         self.advance();
                         if let Some(escaped) = self.advance() {
@@ -440,10 +446,10 @@ mod tokenizer {
                                     self.error = Some(LexError::InvalidEscape {
                                         sequence: c.to_string(),
                                     });
-                                }
+                                },
                             }
                         }
-                    }
+                    },
                     '\n' => {
                         self.error = Some(LexError::UnterminatedString {
                             position: format!("{}:{}", start_pos.line, start_pos.column),
@@ -453,11 +459,11 @@ mod tokenizer {
                             span: self.span(),
                             literal: None,
                         });
-                    }
+                    },
                     c => {
                         value.push(c);
                         self.advance();
-                    }
+                    },
                 }
             }
 
@@ -491,7 +497,7 @@ mod tokenizer {
                                     span: self.span(),
                                     literal: None,
                                 });
-                            }
+                            },
                         };
                         return Some(Token {
                             kind: TokenKind::CharLiteral(ch),
@@ -505,7 +511,7 @@ mod tokenizer {
                             ),
                             literal: Some(Literal::Char(ch)),
                         });
-                    }
+                    },
                     '\\' => {
                         self.advance();
                         if let Some(escaped) = self.advance() {
@@ -520,7 +526,7 @@ mod tokenizer {
                                 c => value.push(c),
                             }
                         }
-                    }
+                    },
                     '\n' => {
                         self.error = Some(LexError::InvalidToken {
                             position: format!("{}:{}", start_pos.line, start_pos.column),
@@ -531,11 +537,11 @@ mod tokenizer {
                             span: self.span(),
                             literal: None,
                         });
-                    }
+                    },
                     c => {
                         value.push(c);
                         self.advance();
-                    }
+                    },
                 }
             }
 
@@ -550,7 +556,10 @@ mod tokenizer {
             })
         }
 
-        fn make_token(&self, kind: TokenKind) -> Token {
+        fn make_token(
+            &self,
+            kind: TokenKind,
+        ) -> Token {
             Token {
                 kind,
                 span: self.span(),
@@ -558,7 +567,10 @@ mod tokenizer {
             }
         }
 
-        fn keyword_from_str(&self, s: &str) -> Option<TokenKind> {
+        fn keyword_from_str(
+            &self,
+            s: &str,
+        ) -> Option<TokenKind> {
             match s {
                 "type" => Some(TokenKind::KwType),
                 "pub" => Some(TokenKind::KwPub),

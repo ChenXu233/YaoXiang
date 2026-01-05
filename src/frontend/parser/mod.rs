@@ -70,7 +70,7 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
                     std::mem::discriminant(&stmt.kind)
                 );
                 items.push(stmt);
-            }
+            },
             None => {
                 eprintln!(
                     "[DEBUG] Statement {} failed to parse, current token: {:?}",
@@ -82,7 +82,7 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
                 }
                 // Skip to next statement or EOF
                 state.synchronize();
-            }
+            },
         }
     }
 
@@ -140,14 +140,14 @@ pub fn parse_expression(tokens: &[Token]) -> Result<Expr, ParseError> {
             } else {
                 Ok(e)
             }
-        }
+        },
         None => {
             if let Some(error) = state.first_error().cloned() {
                 Err(error)
             } else {
                 Err(ParseError::InvalidExpression)
             }
-        }
+        },
     }
 }
 

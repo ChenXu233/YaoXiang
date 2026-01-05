@@ -49,22 +49,36 @@ impl TypeEnvironment {
     }
 
     /// 添加变量绑定
-    pub fn add_var(&mut self, name: String, poly: PolyType) {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.vars.insert(name, poly);
     }
 
     /// 获取变量类型
-    pub fn get_var(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         self.vars.get(name)
     }
 
     /// 添加类型定义
-    pub fn add_type(&mut self, name: String, poly: PolyType) {
+    pub fn add_type(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.types.insert(name, poly);
     }
 
     /// 获取类型定义
-    pub fn get_type(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_type(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         self.types.get(name)
     }
 

@@ -32,7 +32,10 @@ impl TypeVar {
 }
 
 impl fmt::Display for TypeVar {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "t{}", self.0)
     }
 }
@@ -136,7 +139,7 @@ impl MonoType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
-            }
+            },
             MonoType::List(t) => format!("List<{}>", t.type_name()),
             MonoType::Dict(k, v) => format!("Dict<{}, {}>", k.type_name(), v.type_name()),
             MonoType::Set(t) => format!("Set<{}>", t.type_name()),
@@ -151,7 +154,7 @@ impl MonoType {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("fn({}) -> {}", params_str, return_type.type_name())
-            }
+            },
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
             MonoType::Range { elem_type } => format!("Range<{}>", elem_type.type_name()),
@@ -160,7 +163,10 @@ impl MonoType {
 }
 
 impl fmt::Display for MonoType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.type_name())
     }
 }
@@ -208,11 +214,11 @@ impl From<ast::Type> for MonoType {
             }),
             ast::Type::Tuple(types) => {
                 MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
-            }
+            },
             ast::Type::List(t) => MonoType::List(Box::new(MonoType::from(*t))),
             ast::Type::Dict(k, v) => {
                 MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v)))
-            }
+            },
             ast::Type::Set(t) => MonoType::Set(Box::new(MonoType::from(*t))),
             ast::Type::Fn {
                 params,
@@ -240,7 +246,7 @@ impl From<ast::Type> for MonoType {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ))
-            }
+            },
             // NamedStruct and Sum types (placeholder implementations)
             ast::Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name,
@@ -259,7 +265,7 @@ impl From<ast::Type> for MonoType {
                         .collect::<Vec<_>>()
                         .join(" | ")
                 ))
-            }
+            },
         }
     }
 }
@@ -291,7 +297,10 @@ pub struct PolyType {
 
 impl PolyType {
     /// 创建新的多态类型
-    pub fn new(binders: Vec<TypeVar>, body: MonoType) -> Self {
+    pub fn new(
+        binders: Vec<TypeVar>,
+        body: MonoType,
+    ) -> Self {
         PolyType { binders, body }
     }
 
@@ -319,7 +328,11 @@ pub struct TypeConstraint {
 
 impl TypeConstraint {
     /// 创建新的类型约束
-    pub fn new(left: MonoType, right: MonoType, span: Span) -> Self {
+    pub fn new(
+        left: MonoType,
+        right: MonoType,
+        span: Span,
+    ) -> Self {
         TypeConstraint { left, right, span }
     }
 }
@@ -376,7 +389,10 @@ impl TypeConstraintSolver {
     }
 
     /// 查找类型变量的最终绑定（路径压缩）
-    pub fn find(&mut self, var: TypeVar) -> TypeVar {
+    pub fn find(
+        &mut self,
+        var: TypeVar,
+    ) -> TypeVar {
         match self.bindings.get(var.0) {
             Some(TypeBinding::Link(next)) => {
                 let root = self.find(*next);
@@ -385,7 +401,7 @@ impl TypeConstraintSolver {
                     *binding = TypeBinding::Link(root);
                 }
                 root
-            }
+            },
             Some(TypeBinding::Bound(_)) => var,
             Some(TypeBinding::Unbound) => var,
             None => var,
@@ -393,19 +409,29 @@ impl TypeConstraintSolver {
     }
 
     /// 获取类型变量的当前绑定
-    pub fn get_binding(&self, var: TypeVar) -> Option<&TypeBinding> {
+    pub fn get_binding(
+        &self,
+        var: TypeVar,
+    ) -> Option<&TypeBinding> {
         self.bindings.get(var.0)
     }
 
     /// 获取类型变量的当前绑定（可变）
-    pub fn get_binding_mut(&mut self, var: TypeVar) -> Option<&mut TypeBinding> {
+    pub fn get_binding_mut(
+        &mut self,
+        var: TypeVar,
+    ) -> Option<&mut TypeBinding> {
         self.bindings.get_mut(var.0)
     }
 
     /// 绑定类型变量到类型
     ///
     /// 如果类型变量已经绑定，会尝试合并
-    pub fn bind(&mut self, var: TypeVar, ty: &MonoType) -> Result<(), TypeMismatch> {
+    pub fn bind(
+        &mut self,
+        var: TypeVar,
+        ty: &MonoType,
+    ) -> Result<(), TypeMismatch> {
         let resolved_var = self.find(var);
 
         // 检查是否产生无限类型
@@ -428,7 +454,7 @@ impl TypeConstraintSolver {
                 TypeBinding::Unbound => {
                     *binding = TypeBinding::Bound(ty);
                     Ok(())
-                }
+                },
                 TypeBinding::Bound(existing) => {
                     // 已绑定，检查是否一致
                     if existing == &ty {
@@ -440,11 +466,11 @@ impl TypeConstraintSolver {
                             span: Span::default(),
                         })
                     }
-                }
+                },
                 TypeBinding::Link(_) => {
                     // 不应该到这里
                     Ok(())
-                }
+                },
             }
         } else {
             Ok(())
@@ -452,7 +478,10 @@ impl TypeConstraintSolver {
     }
 
     /// 展开类型变量，获取具体类型
-    fn expand_type(&self, ty: &MonoType) -> MonoType {
+    fn expand_type(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
         match ty {
             MonoType::TypeVar(v) => {
                 if let Some(TypeBinding::Bound(bound_ty)) = self.bindings.get(v.0) {
@@ -460,7 +489,7 @@ impl TypeConstraintSolver {
                 } else {
                     ty.clone()
                 }
-            }
+            },
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
                 fields: s
@@ -475,11 +504,11 @@ impl TypeConstraintSolver {
             }),
             MonoType::Tuple(ts) => {
                 MonoType::Tuple(ts.iter().map(|t| self.expand_type(t)).collect())
-            }
+            },
             MonoType::List(t) => MonoType::List(Box::new(self.expand_type(t))),
             MonoType::Dict(k, v) => {
                 MonoType::Dict(Box::new(self.expand_type(k)), Box::new(self.expand_type(v)))
-            }
+            },
             MonoType::Set(t) => MonoType::Set(Box::new(self.expand_type(t))),
             MonoType::Fn {
                 params,
@@ -495,7 +524,12 @@ impl TypeConstraintSolver {
     }
 
     /// 添加类型约束
-    pub fn add_constraint(&mut self, left: MonoType, right: MonoType, span: Span) {
+    pub fn add_constraint(
+        &mut self,
+        left: MonoType,
+        right: MonoType,
+        span: Span,
+    ) {
         self.constraints
             .push(TypeConstraint::new(left, right, span));
     }
@@ -524,14 +558,21 @@ impl TypeConstraintSolver {
     }
 
     /// 解析类型，展开所有类型变量
-    pub fn resolve_type(&self, ty: &MonoType) -> MonoType {
+    pub fn resolve_type(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
         self.expand_type(ty)
     }
 
     /// Unify 两个类型
     ///
     /// 尝试将两个类型统一，返回约束或错误
-    pub fn unify(&mut self, t1: &MonoType, t2: &MonoType) -> Result<(), TypeMismatch> {
+    pub fn unify(
+        &mut self,
+        t1: &MonoType,
+        t2: &MonoType,
+    ) -> Result<(), TypeMismatch> {
         let t1 = self.expand_type(t1);
         let t2 = self.expand_type(t2);
 
@@ -546,7 +587,7 @@ impl TypeConstraintSolver {
                     // 建立链接
                     self.bind(v1, &MonoType::TypeVar(v2))
                 }
-            }
+            },
             (MonoType::TypeVar(v), _) => self.bind(*v, &t2),
             (_, MonoType::TypeVar(v)) => self.bind(*v, &t1),
 
@@ -585,7 +626,7 @@ impl TypeConstraintSolver {
                 }
                 self.unify(r1, r2)?;
                 Ok(())
-            }
+            },
 
             // 结构体类型 unify
             (MonoType::Struct(s1), MonoType::Struct(s2)) => {
@@ -600,7 +641,7 @@ impl TypeConstraintSolver {
                     self.unify(f1, f2)?;
                 }
                 Ok(())
-            }
+            },
 
             // 枚举类型 unify
             (MonoType::Enum(e1), MonoType::Enum(e2)) => {
@@ -612,7 +653,7 @@ impl TypeConstraintSolver {
                     });
                 }
                 Ok(())
-            }
+            },
 
             // 元组类型 unify
             (MonoType::Tuple(ts1), MonoType::Tuple(ts2)) => {
@@ -627,7 +668,7 @@ impl TypeConstraintSolver {
                     self.unify(t1, t2)?;
                 }
                 Ok(())
-            }
+            },
 
             // 列表类型 unify
             (MonoType::List(t1), MonoType::List(t2)) => self.unify(t1, t2),
@@ -637,7 +678,7 @@ impl TypeConstraintSolver {
                 self.unify(k1, k2)?;
                 self.unify(v1, v2)?;
                 Ok(())
-            }
+            },
 
             // 集合类型 unify
             (MonoType::Set(t1), MonoType::Set(t2)) => self.unify(t1, t2),
@@ -657,7 +698,10 @@ impl TypeConstraintSolver {
     /// 实例化多态类型
     ///
     /// 将多态类型中的泛型变量替换为新类型变量
-    pub fn instantiate(&mut self, poly: &PolyType) -> MonoType {
+    pub fn instantiate(
+        &mut self,
+        poly: &PolyType,
+    ) -> MonoType {
         let substitution: HashMap<_, _> = poly
             .binders
             .iter()
@@ -681,7 +725,7 @@ impl TypeConstraintSolver {
                 } else {
                     ty.clone()
                 }
-            }
+            },
             MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
                 fields: s
@@ -724,13 +768,19 @@ impl TypeConstraintSolver {
     /// 泛化类型
     ///
     /// 将单态类型中的自由变量提取为泛型变量
-    pub fn generalize(&self, ty: &MonoType) -> PolyType {
+    pub fn generalize(
+        &self,
+        ty: &MonoType,
+    ) -> PolyType {
         let free_vars = self.free_variables(ty);
         PolyType::new(free_vars, ty.clone())
     }
 
     /// 获取类型中的自由变量
-    fn free_variables(&self, ty: &MonoType) -> Vec<TypeVar> {
+    fn free_variables(
+        &self,
+        ty: &MonoType,
+    ) -> Vec<TypeVar> {
         let mut free = Vec::new();
         self.collect_free_vars(ty, &mut free);
         // 去重
@@ -739,28 +789,32 @@ impl TypeConstraintSolver {
         free
     }
 
-    fn collect_free_vars(&self, ty: &MonoType, free: &mut Vec<TypeVar>) {
+    fn collect_free_vars(
+        &self,
+        ty: &MonoType,
+        free: &mut Vec<TypeVar>,
+    ) {
         match ty {
             MonoType::TypeVar(v) => {
                 if !self.generic_vars.contains_key(v) {
                     free.push(*v);
                 }
-            }
+            },
             MonoType::Struct(s) => {
                 for (_, t) in &s.fields {
                     self.collect_free_vars(t, free);
                 }
-            }
+            },
             MonoType::Tuple(ts) => {
                 for t in ts {
                     self.collect_free_vars(t, free);
                 }
-            }
+            },
             MonoType::List(t) => self.collect_free_vars(t, free),
             MonoType::Dict(k, v) => {
                 self.collect_free_vars(k, free);
                 self.collect_free_vars(v, free);
-            }
+            },
             MonoType::Set(t) => self.collect_free_vars(t, free),
             MonoType::Fn {
                 params,
@@ -771,8 +825,8 @@ impl TypeConstraintSolver {
                     self.collect_free_vars(p, free);
                 }
                 self.collect_free_vars(return_type, free);
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -781,13 +835,13 @@ impl TypeConstraintSolver {
         let mut state = String::new();
         for (i, binding) in self.bindings.iter().enumerate() {
             match binding {
-                TypeBinding::Unbound => {}
+                TypeBinding::Unbound => {},
                 TypeBinding::Bound(ty) => {
                     state.push_str(&format!("t{} = {}\n", i, ty.type_name()));
-                }
+                },
                 TypeBinding::Link(v) => {
                     state.push_str(&format!("t{} -> t{}\n", i, v.index()));
-                }
+                },
             }
         }
         state
@@ -796,7 +850,10 @@ impl TypeConstraintSolver {
     /// 检查类型变量是否未约束
     ///
     /// 如果类型变量仍然是 Unbound 状态，返回 true
-    pub fn is_unconstrained(&self, var: TypeVar) -> bool {
+    pub fn is_unconstrained(
+        &self,
+        var: TypeVar,
+    ) -> bool {
         if let Some(binding) = self.bindings.get(var.0) {
             matches!(binding, TypeBinding::Unbound)
         } else {
@@ -807,21 +864,27 @@ impl TypeConstraintSolver {
     /// 检查类型变量是否出现在任何未求解的约束中
     ///
     /// 如果类型变量出现在约束中，说明它被使用了
-    pub fn appears_in_constraints(&self, var: TypeVar) -> bool {
+    pub fn appears_in_constraints(
+        &self,
+        var: TypeVar,
+    ) -> bool {
         self.constraints.iter().any(|c| {
             Self::type_contains_var(&c.left, var) || Self::type_contains_var(&c.right, var)
         })
     }
 
     /// 检查类型是否包含指定的类型变量
-    fn type_contains_var(ty: &MonoType, var: TypeVar) -> bool {
+    fn type_contains_var(
+        ty: &MonoType,
+        var: TypeVar,
+    ) -> bool {
         match ty {
             MonoType::TypeVar(v) => *v == var,
             MonoType::Tuple(types) => types.iter().any(|t| Self::type_contains_var(t, var)),
             MonoType::List(t) => Self::type_contains_var(t, var),
             MonoType::Dict(k, v) => {
                 Self::type_contains_var(k, var) || Self::type_contains_var(v, var)
-            }
+            },
             MonoType::Set(t) => Self::type_contains_var(t, var),
             MonoType::Fn {
                 params,
@@ -830,7 +893,7 @@ impl TypeConstraintSolver {
             } => {
                 params.iter().any(|p| Self::type_contains_var(p, var))
                     || Self::type_contains_var(return_type, var)
-            }
+            },
             _ => false,
         }
     }
@@ -845,7 +908,10 @@ pub struct TypeMismatch {
 }
 
 impl fmt::Display for TypeMismatch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(
             f,
             "expected {}, found {}",
@@ -863,7 +929,10 @@ pub struct TypeConstraintError {
 }
 
 impl fmt::Display for TypeConstraintError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{} at {:?}", self.error, self.span)
     }
 }

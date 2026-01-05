@@ -105,7 +105,10 @@ impl ComputationDAG {
     ///
     /// Returns `DAGError::GraphFrozen` if the graph has been frozen.
     #[inline]
-    pub fn add_node(&mut self, kind: DAGNodeKind) -> Result<NodeId, DAGError> {
+    pub fn add_node(
+        &mut self,
+        kind: DAGNodeKind,
+    ) -> Result<NodeId, DAGError> {
         if self.frozen {
             return Err(DAGError::GraphFrozen);
         }
@@ -139,7 +142,11 @@ impl ComputationDAG {
     /// - `DAGError::CycleDetected` if adding this edge would create a cycle
     /// - `DAGError::DuplicateEdge` if this edge already exists
     /// - `DAGError::GraphFrozen` if the graph has been frozen
-    pub fn add_edge(&mut self, from: NodeId, to: NodeId) -> Result<(), DAGError> {
+    pub fn add_edge(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+    ) -> Result<(), DAGError> {
         if self.frozen {
             return Err(DAGError::GraphFrozen);
         }
@@ -172,7 +179,11 @@ impl ComputationDAG {
     }
 
     /// Check if adding an edge from `from` to `to` would create a cycle.
-    fn would_create_cycle(&self, from: NodeId, to: NodeId) -> bool {
+    fn would_create_cycle(
+        &self,
+        from: NodeId,
+        to: NodeId,
+    ) -> bool {
         // Adding from -> to means to will depend on from.
         // If there's already a path from to to from (to -> ... -> from),
         // then adding from -> to would create a cycle: from -> to -> ... -> from
@@ -182,7 +193,11 @@ impl ComputationDAG {
 
     /// Check if there's a path from `source` to `target`.
     /// Returns true if we can reach target starting from source.
-    fn is_reachable(&self, source: NodeId, target: NodeId) -> bool {
+    fn is_reachable(
+        &self,
+        source: NodeId,
+        target: NodeId,
+    ) -> bool {
         if source == target {
             return true;
         }
@@ -213,13 +228,20 @@ impl ComputationDAG {
 
     /// Check if the graph contains a node.
     #[inline]
-    pub fn contains_node(&self, id: NodeId) -> bool {
+    pub fn contains_node(
+        &self,
+        id: NodeId,
+    ) -> bool {
         self.nodes.contains_key(&id)
     }
 
     /// Check if there's an edge from `from` to `to`.
     #[inline]
-    pub fn has_edge(&self, from: NodeId, to: NodeId) -> bool {
+    pub fn has_edge(
+        &self,
+        from: NodeId,
+        to: NodeId,
+    ) -> bool {
         self.nodes
             .get(&from)
             .map(|node| node.has_dependent(to))
@@ -242,7 +264,10 @@ impl ComputationDAG {
     ///
     /// Returns `DAGError::NodeNotFound` if the node doesn't exist.
     #[inline]
-    pub fn get_node(&self, id: NodeId) -> Result<&DAGNode, DAGError> {
+    pub fn get_node(
+        &self,
+        id: NodeId,
+    ) -> Result<&DAGNode, DAGError> {
         self.nodes.get(&id).ok_or(DAGError::NodeNotFound(id))
     }
 
@@ -252,7 +277,10 @@ impl ComputationDAG {
     ///
     /// Returns `DAGError::NodeNotFound` if the node doesn't exist.
     #[inline]
-    pub fn get_node_mut(&mut self, id: NodeId) -> Result<&mut DAGNode, DAGError> {
+    pub fn get_node_mut(
+        &mut self,
+        id: NodeId,
+    ) -> Result<&mut DAGNode, DAGError> {
         self.nodes.get_mut(&id).ok_or(DAGError::NodeNotFound(id))
     }
 
@@ -464,7 +492,10 @@ impl Default for ComputationDAG {
 }
 
 impl fmt::Display for ComputationDAG {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         writeln!(f, "ComputationDAG {{")?;
         writeln!(f, "  nodes: {}", self.nodes.len())?;
         writeln!(f, "  roots: {}", self.roots.len())?;

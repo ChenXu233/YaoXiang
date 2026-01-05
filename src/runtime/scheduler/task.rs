@@ -34,7 +34,10 @@ impl From<TaskId> for usize {
 }
 
 impl std::fmt::Display for TaskId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         write!(f, "Task({})", self.0)
     }
 }
@@ -118,7 +121,10 @@ pub struct Task {
 }
 
 impl std::fmt::Debug for Task {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         f.debug_struct("Task")
             .field("id", &self.id)
             .field("name", &self.name)
@@ -131,7 +137,12 @@ impl std::fmt::Debug for Task {
 
 impl Task {
     /// Create a new task with the given ID and executor.
-    pub fn new<F>(id: TaskId, priority: TaskPriority, stack_size: usize, executor: F) -> Self
+    pub fn new<F>(
+        id: TaskId,
+        priority: TaskPriority,
+        stack_size: usize,
+        executor: F,
+    ) -> Self
     where
         F: FnOnce() + Send + 'static,
     {
@@ -147,7 +158,11 @@ impl Task {
     }
 
     /// Create a simple task (without executor, for testing).
-    pub fn simple(id: TaskId, priority: TaskPriority, stack_size: usize) -> Self {
+    pub fn simple(
+        id: TaskId,
+        priority: TaskPriority,
+        stack_size: usize,
+    ) -> Self {
         Self {
             id,
             name: format!("Task({})", id.inner()),
@@ -179,7 +194,10 @@ impl Task {
 
     /// Set the task state.
     #[inline]
-    pub fn set_state(&self, state: TaskState) {
+    pub fn set_state(
+        &self,
+        state: TaskState,
+    ) {
         self.state.store(state.as_u8(), Ordering::SeqCst);
     }
 
@@ -221,7 +239,10 @@ impl Task {
 
     /// Record the execution duration.
     #[inline]
-    pub fn record_duration(&self, duration: Duration) {
+    pub fn record_duration(
+        &self,
+        duration: Duration,
+    ) {
         *self.exec_duration.lock().unwrap() = Some(duration);
     }
 
@@ -270,27 +291,40 @@ impl TaskBuilder {
 
     /// Set the task name.
     #[inline]
-    pub fn name(mut self, name: impl Into<String>) -> Self {
+    pub fn name(
+        mut self,
+        name: impl Into<String>,
+    ) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Set the task priority.
     #[inline]
-    pub fn priority(mut self, priority: TaskPriority) -> Self {
+    pub fn priority(
+        mut self,
+        priority: TaskPriority,
+    ) -> Self {
         self.priority = priority;
         self
     }
 
     /// Set the stack size.
     #[inline]
-    pub fn stack_size(mut self, size: usize) -> Self {
+    pub fn stack_size(
+        mut self,
+        size: usize,
+    ) -> Self {
         self.stack_size = Some(size);
         self
     }
 
     /// Build the task with the given ID and executor.
-    pub fn build<F>(self, id: TaskId, executor: F) -> Task
+    pub fn build<F>(
+        self,
+        id: TaskId,
+        executor: F,
+    ) -> Task
     where
         F: FnOnce() + Send + 'static,
     {

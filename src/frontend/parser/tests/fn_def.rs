@@ -13,7 +13,7 @@ fn test_parse_fn_def_no_params() {
         StmtKind::Fn { name, params, .. } => {
             assert_eq!(name, "main");
             assert!(params.is_empty());
-        }
+        },
         _ => panic!("Expected Fn statement"),
     }
 }
@@ -32,7 +32,7 @@ fn test_parse_fn_def_with_params() {
             assert_eq!(params.len(), 2);
             assert_eq!(params[0].name, "a");
             assert_eq!(params[1].name, "b");
-        }
+        },
         _ => panic!("Expected Fn statement"),
     }
 }

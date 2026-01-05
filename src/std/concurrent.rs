@@ -53,7 +53,10 @@ impl AtomicBool {
     }
 
     /// Store value
-    pub fn store(&self, value: bool) {
+    pub fn store(
+        &self,
+        value: bool,
+    ) {
         self.value.store(
             if value { 1 } else { 0 },
             std::sync::atomic::Ordering::SeqCst,
@@ -80,12 +83,18 @@ impl AtomicUsize {
     }
 
     /// Store value
-    pub fn store(&self, value: usize) {
+    pub fn store(
+        &self,
+        value: usize,
+    ) {
         self.value.store(value, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Add and return old value
-    pub fn fetch_add(&self, delta: usize) -> usize {
+    pub fn fetch_add(
+        &self,
+        delta: usize,
+    ) -> usize {
         self.value
             .fetch_add(delta, std::sync::atomic::Ordering::SeqCst)
     }

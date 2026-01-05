@@ -16,7 +16,10 @@ pub struct Position {
 impl Position {
     /// Create a new position
     #[inline]
-    pub fn new(line: usize, column: usize) -> Self {
+    pub fn new(
+        line: usize,
+        column: usize,
+    ) -> Self {
         Self {
             line,
             column,
@@ -26,7 +29,11 @@ impl Position {
 
     /// Create a new position with offset
     #[inline]
-    pub fn with_offset(line: usize, column: usize, offset: usize) -> Self {
+    pub fn with_offset(
+        line: usize,
+        column: usize,
+        offset: usize,
+    ) -> Self {
         Self {
             line,
             column,
@@ -46,7 +53,10 @@ impl Position {
 }
 
 impl fmt::Display for Position {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
     }
 }
@@ -63,7 +73,10 @@ pub struct Span {
 impl Span {
     /// Create a new span
     #[inline]
-    pub fn new(start: Position, end: Position) -> Self {
+    pub fn new(
+        start: Position,
+        end: Position,
+    ) -> Self {
         Self { start, end }
     }
 
@@ -96,7 +109,10 @@ impl Span {
 }
 
 impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "[{} - {}]", self.start, self.end)
     }
 }
@@ -114,7 +130,10 @@ pub struct SourceFile {
 
 impl SourceFile {
     /// Create a new source file
-    pub fn new(name: String, content: String) -> Self {
+    pub fn new(
+        name: String,
+        content: String,
+    ) -> Self {
         let mut line_offsets = vec![0];
         for (i, _) in content.char_indices() {
             if content[i..].starts_with('\n') {
@@ -131,14 +150,21 @@ impl SourceFile {
     }
 
     /// Get position from byte offset
-    pub fn position_from_offset(&self, offset: usize) -> Position {
+    pub fn position_from_offset(
+        &self,
+        offset: usize,
+    ) -> Position {
         let line = self.line_offsets.partition_point(|&o| o <= offset);
         let column = offset.saturating_sub(self.line_offsets[line.saturating_sub(1)]);
         Position::with_offset(line, column + 1, offset)
     }
 
     /// Get span from byte range
-    pub fn span_from_range(&self, start: usize, end: usize) -> Span {
+    pub fn span_from_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Span {
         Span {
             start: self.position_from_offset(start),
             end: self.position_from_offset(end),
@@ -146,7 +172,10 @@ impl SourceFile {
     }
 
     /// Get source text for a span
-    pub fn source_text(&self, span: Span) -> Option<&str> {
+    pub fn source_text(
+        &self,
+        span: Span,
+    ) -> Option<&str> {
         let start = self.line_offsets[span.start.line.saturating_sub(1)]
             + (span.start.column - 1).min(
                 self.line_offsets[span.start.line.saturating_sub(1) + 1]
@@ -164,7 +193,10 @@ impl SourceFile {
 }
 
 impl fmt::Display for SourceFile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.name)
     }
 }

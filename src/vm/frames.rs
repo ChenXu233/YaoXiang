@@ -17,7 +17,12 @@ pub struct Frame {
 
 impl Frame {
     /// Create a new frame
-    pub fn new(name: String, return_addr: usize, saved_fp: usize, locals: Vec<Value>) -> Self {
+    pub fn new(
+        name: String,
+        return_addr: usize,
+        saved_fp: usize,
+        locals: Vec<Value>,
+    ) -> Self {
         Self {
             name,
             return_addr,

@@ -66,7 +66,10 @@ pub struct SpecializationKey {
 
 impl SpecializationKey {
     /// 创建新的缓存键
-    pub fn new(name: String, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         SpecializationKey { name, type_args }
     }
 
@@ -87,13 +90,19 @@ impl SpecializationKey {
 }
 
 impl fmt::Display for SpecializationKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.as_string())
     }
 }
 
 impl PartialEq for SpecializationKey {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.name == other.name && self.type_args == other.type_args
     }
 }
@@ -101,7 +110,10 @@ impl PartialEq for SpecializationKey {
 impl Eq for SpecializationKey {}
 
 impl Hash for SpecializationKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.name.hash(state);
         for ty in &self.type_args {
             self.type_name_hash(ty, state);
@@ -112,7 +124,11 @@ impl Hash for SpecializationKey {
 impl SpecializationKey {
     /// 辅助函数：计算类型名称的哈希值
     #[allow(clippy::only_used_in_recursion)]
-    fn type_name_hash<H: Hasher>(&self, ty: &MonoType, state: &mut H) {
+    fn type_name_hash<H: Hasher>(
+        &self,
+        ty: &MonoType,
+        state: &mut H,
+    ) {
         match ty {
             MonoType::Void => "void".hash(state),
             MonoType::Bool => "bool".hash(state),
@@ -128,25 +144,25 @@ impl SpecializationKey {
                 for t in ts {
                     self.type_name_hash(t, state);
                 }
-            }
+            },
             MonoType::List(t) => {
                 "list".hash(state);
                 self.type_name_hash(t, state);
-            }
+            },
             MonoType::Dict(k, v) => {
                 "dict".hash(state);
                 self.type_name_hash(k, state);
                 self.type_name_hash(v, state);
-            }
+            },
             MonoType::Set(t) => {
                 "set".hash(state);
                 self.type_name_hash(t, state);
-            }
+            },
             MonoType::Fn { .. } => "fn".hash(state),
             MonoType::Range { elem_type } => {
                 "range".hash(state);
                 self.type_name_hash(elem_type, state);
-            }
+            },
             MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
             MonoType::TypeRef(n) => n.hash(state),
         }
@@ -166,7 +182,10 @@ pub struct GenericFunctionId {
 
 impl GenericFunctionId {
     /// 创建新的泛型函数ID
-    pub fn new(name: String, type_params: Vec<String>) -> Self {
+    pub fn new(
+        name: String,
+        type_params: Vec<String>,
+    ) -> Self {
         GenericFunctionId { name, type_params }
     }
 
@@ -191,7 +210,10 @@ impl GenericFunctionId {
 }
 
 impl fmt::Display for GenericFunctionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.signature())
     }
 }
@@ -216,7 +238,11 @@ pub struct FunctionInstance {
 
 impl FunctionInstance {
     /// 创建新的函数实例
-    pub fn new(id: FunctionId, generic_id: GenericFunctionId, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        id: FunctionId,
+        generic_id: GenericFunctionId,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         FunctionInstance {
             id,
             generic_id,
@@ -226,7 +252,10 @@ impl FunctionInstance {
     }
 
     /// 设置函数IR
-    pub fn set_ir(&mut self, ir: crate::middle::ir::FunctionIR) {
+    pub fn set_ir(
+        &mut self,
+        ir: crate::middle::ir::FunctionIR,
+    ) {
         self.ir = Some(Arc::new(ir));
     }
 
@@ -249,7 +278,10 @@ pub struct FunctionId {
 
 impl FunctionId {
     /// 创建新的函数ID
-    pub fn new(name: String, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         FunctionId { name, type_args }
     }
 
@@ -275,7 +307,10 @@ impl FunctionId {
 }
 
 impl std::hash::Hash for FunctionId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.name.hash(state);
         for ty in &self.type_args {
             ty.type_name().hash(state);
@@ -284,7 +319,10 @@ impl std::hash::Hash for FunctionId {
 }
 
 impl fmt::Display for FunctionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.specialized_name())
     }
 }

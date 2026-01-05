@@ -124,17 +124,27 @@ impl InlineCacheManager {
     }
 
     /// 获取缓存槽
-    pub fn get_slot(&self, index: usize) -> Option<&InlineCacheSlot> {
+    pub fn get_slot(
+        &self,
+        index: usize,
+    ) -> Option<&InlineCacheSlot> {
         self.cache_pool.get(index)
     }
 
     /// 获取可变缓存槽
-    pub fn get_slot_mut(&mut self, index: usize) -> Option<&mut InlineCacheSlot> {
+    pub fn get_slot_mut(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut InlineCacheSlot> {
         self.cache_pool.get_mut(index)
     }
 
     /// 检查缓存
-    pub fn check_cache(&self, slot_idx: usize, receiver_type_id: u32) -> ICCheckResult {
+    pub fn check_cache(
+        &self,
+        slot_idx: usize,
+        receiver_type_id: u32,
+    ) -> ICCheckResult {
         let slot = match self.get_slot(slot_idx) {
             Some(s) => s,
             None => return ICCheckResult::Invalid,
@@ -215,7 +225,10 @@ impl InlineCacheManager {
     }
 
     /// 使缓存失效
-    pub fn invalidate_cache(&mut self, slot_idx: usize) {
+    pub fn invalidate_cache(
+        &mut self,
+        slot_idx: usize,
+    ) {
         if let Some(slot) = self.get_slot_mut(slot_idx) {
             slot.valid = 0;
             slot.count = 0;
@@ -228,7 +241,10 @@ impl InlineCacheManager {
     }
 
     /// 批量使缓存失效（根据类型 ID）
-    pub fn invalidate_by_type(&mut self, _type_id: u32) {
+    pub fn invalidate_by_type(
+        &mut self,
+        _type_id: u32,
+    ) {
         // 在多态缓存场景下，如果某类型的方法实现发生变化，
         // 需要使所有包含该类型的缓存失效
         // 当前简化实现：使所有缓存失效

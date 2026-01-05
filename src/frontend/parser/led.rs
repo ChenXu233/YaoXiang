@@ -7,7 +7,11 @@ use super::state::*;
 /// Extension trait for infix parsing
 pub trait InfixParser {
     /// Parse infix expression with given left binding power
-    fn parse_infix(&mut self, lhs: Expr, bp: u8) -> Option<Expr>;
+    fn parse_infix(
+        &mut self,
+        lhs: Expr,
+        bp: u8,
+    ) -> Option<Expr>;
 }
 
 impl<'a> ParserState<'a> {
@@ -27,19 +31,19 @@ impl<'a> ParserState<'a> {
             // Equality
             Some(TokenKind::EqEq) | Some(TokenKind::Neq) => {
                 Some((BP_EQ, BP_EQ + 1, Self::parse_binary))
-            }
+            },
             // Comparison
             Some(TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge) => {
                 Some((BP_CMP, BP_CMP + 1, Self::parse_binary))
-            }
+            },
             // Addition/Subtraction
             Some(TokenKind::Plus | TokenKind::Minus) => {
                 Some((BP_ADD, BP_ADD + 1, Self::parse_binary))
-            }
+            },
             // Multiplication/Division/Modulo
             Some(TokenKind::Star | TokenKind::Slash | TokenKind::Percent) => {
                 Some((BP_MUL, BP_MUL + 1, Self::parse_binary))
-            }
+            },
             // Function call
             Some(TokenKind::LParen) => Some((BP_CALL, BP_CALL + 1, Self::parse_call)),
             // Field access
@@ -55,7 +59,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse assignment expression
-    fn parse_assign(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_assign(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let span = self.span();
         self.bump(); // consume '='
 
@@ -70,7 +78,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse binary operator expression
-    fn parse_binary(&mut self, lhs: Expr, left_bp: u8) -> Option<Expr> {
+    fn parse_binary(
+        &mut self,
+        lhs: Expr,
+        left_bp: u8,
+    ) -> Option<Expr> {
         let span = self.span();
         let op = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Plus) => BinOp::Add,
@@ -90,7 +102,7 @@ impl<'a> ParserState<'a> {
             _ => {
                 self.error(super::ParseError::InvalidExpression);
                 return None;
-            }
+            },
         };
         self.bump();
 
@@ -107,7 +119,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse function call expression
-    fn parse_call(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_call(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume '('
 
@@ -136,7 +152,7 @@ impl<'a> ParserState<'a> {
                     _ => {
                         args.push(self.parse_expression(BP_LOWEST)?);
                         continue;
-                    }
+                    },
                 };
 
                 // Peek ahead to see if next token is '=' (named arg)
@@ -173,7 +189,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse field access expression
-    fn parse_field(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_field(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume '.'
 
@@ -186,7 +206,7 @@ impl<'a> ParserState<'a> {
                         .unwrap_or(TokenKind::Eof),
                 ));
                 return None;
-            }
+            },
         };
         self.bump();
 
@@ -233,7 +253,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse index expression
-    fn parse_index(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_index(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume '['
 
@@ -251,7 +275,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse type cast expression
-    fn parse_cast(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_cast(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume 'as'
 
@@ -265,7 +293,11 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse lambda expression (infix position for single parameter)
-    fn parse_lambda_infix(&mut self, lhs: Expr, _left_bp: u8) -> Option<Expr> {
+    fn parse_lambda_infix(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
         let _span = self.span(); // Span of '=>'
         self.bump(); // consume '=>'
 
@@ -281,7 +313,7 @@ impl<'a> ParserState<'a> {
                     "Invalid lambda parameter".to_string(),
                 ));
                 return None;
-            }
+            },
         };
 
         // Save span before moving param

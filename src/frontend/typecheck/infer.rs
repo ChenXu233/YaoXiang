@@ -53,7 +53,10 @@ impl<'a> TypeInferrer<'a> {
 
     /// 推断表达式的类型
     #[allow(clippy::result_large_err)]
-    pub fn infer_expr(&mut self, expr: &ast::Expr) -> TypeResult<MonoType> {
+    pub fn infer_expr(
+        &mut self,
+        expr: &ast::Expr,
+    ) -> TypeResult<MonoType> {
         match &expr {
             ast::Expr::Lit(lit, span) => self.infer_literal(lit, *span),
             ast::Expr::Var(name, span) => self.infer_var(name, *span),
@@ -115,13 +118,17 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::Index { expr, index, span } => self.infer_index(expr, index, *span),
             ast::Expr::FieldAccess { expr, field, span } => {
                 self.infer_field_access(expr, field, *span)
-            }
+            },
         }
     }
 
     /// 推断字面量的类型
     #[allow(clippy::result_large_err)]
-    fn infer_literal(&mut self, lit: &Literal, _span: Span) -> TypeResult<MonoType> {
+    fn infer_literal(
+        &mut self,
+        lit: &Literal,
+        _span: Span,
+    ) -> TypeResult<MonoType> {
         let ty = match lit {
             Literal::Int(_) => MonoType::Int(64),
             Literal::Float(_) => MonoType::Float(64),
@@ -133,7 +140,11 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断变量的类型
-    fn infer_var(&mut self, name: &str, span: Span) -> TypeResult<MonoType> {
+    fn infer_var(
+        &mut self,
+        name: &str,
+        span: Span,
+    ) -> TypeResult<MonoType> {
         // 查找变量
         let poly = self.get_var(name).cloned();
 
@@ -170,14 +181,14 @@ impl<'a> TypeInferrer<'a> {
                 self.solver
                     .add_constraint(right_ty.clone(), num_ty.clone(), span);
                 Ok(num_ty)
-            }
+            },
 
             // 比较运算
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                 // 两边类型必须相等
                 self.solver.add_constraint(left_ty, right_ty, span);
                 Ok(MonoType::Bool)
-            }
+            },
 
             // 逻辑运算
             BinOp::And | BinOp::Or => {
@@ -185,14 +196,14 @@ impl<'a> TypeInferrer<'a> {
                 self.solver.add_constraint(left_ty, MonoType::Bool, span);
                 self.solver.add_constraint(right_ty, MonoType::Bool, span);
                 Ok(MonoType::Bool)
-            }
+            },
 
             // 赋值运算
             BinOp::Assign => {
                 // 赋值表达式的类型是 Unit（void）
                 self.solver.add_constraint(left_ty, right_ty, span);
                 Ok(MonoType::Void)
-            }
+            },
 
             // 范围运算
             BinOp::Range => {
@@ -203,12 +214,17 @@ impl<'a> TypeInferrer<'a> {
                 Ok(MonoType::Range {
                     elem_type: Box::new(left_ty),
                 })
-            }
+            },
         }
     }
 
     /// 推断一元运算的类型
-    fn infer_unop(&mut self, op: &UnOp, expr: &ast::Expr, span: Span) -> TypeResult<MonoType> {
+    fn infer_unop(
+        &mut self,
+        op: &UnOp,
+        expr: &ast::Expr,
+        span: Span,
+    ) -> TypeResult<MonoType> {
         let expr_ty = self.infer_expr(expr)?;
 
         match op {
@@ -217,12 +233,12 @@ impl<'a> TypeInferrer<'a> {
                 let num_ty = self.solver.new_var();
                 self.solver.add_constraint(expr_ty, num_ty.clone(), span);
                 Ok(num_ty)
-            }
+            },
             UnOp::Not => {
                 // 布尔类型
                 self.solver.add_constraint(expr_ty, MonoType::Bool, span);
                 Ok(MonoType::Bool)
-            }
+            },
         }
     }
 
@@ -361,7 +377,10 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断模式类型
-    pub fn infer_pattern(&mut self, pattern: &ast::Pattern) -> TypeResult<MonoType> {
+    pub fn infer_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+    ) -> TypeResult<MonoType> {
         match pattern {
             ast::Pattern::Wildcard => Ok(self.solver.new_var()),
             ast::Pattern::Identifier(name) => {
@@ -369,7 +388,7 @@ impl<'a> TypeInferrer<'a> {
                 let ty = self.solver.new_var();
                 self.add_var(name.clone(), PolyType::mono(ty.clone()));
                 Ok(ty)
-            }
+            },
             ast::Pattern::Literal(lit) => self.infer_literal(lit, Span::default()),
             ast::Pattern::Tuple(patterns) => {
                 let elem_tys: Vec<_> = patterns
@@ -377,11 +396,11 @@ impl<'a> TypeInferrer<'a> {
                     .map(|p| self.infer_pattern(p))
                     .collect::<Result<_, _>>()?;
                 Ok(MonoType::Tuple(elem_tys))
-            }
+            },
             ast::Pattern::Struct { name: _, fields: _ } => {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
-            }
+            },
             ast::Pattern::Union {
                 name: _,
                 variant: _,
@@ -389,7 +408,7 @@ impl<'a> TypeInferrer<'a> {
             } => {
                 // 简化处理：返回新类型变量
                 Ok(self.solver.new_var())
-            }
+            },
             ast::Pattern::Or(patterns) => {
                 if let Some(first) = patterns.first() {
                     let first_ty = self.infer_pattern(first)?;
@@ -402,12 +421,12 @@ impl<'a> TypeInferrer<'a> {
                 } else {
                     Ok(self.solver.new_var())
                 }
-            }
+            },
             ast::Pattern::Guard { pattern, condition } => {
                 let pattern_ty = self.infer_pattern(pattern)?;
                 let _cond_ty = self.infer_expr(condition)?;
                 Ok(pattern_ty)
-            }
+            },
         }
     }
 
@@ -458,17 +477,17 @@ impl<'a> TypeInferrer<'a> {
                 // Range 类型：元素类型由 Range 决定
                 self.solver
                     .add_constraint(elem_ty.clone(), *elem_type.clone(), span);
-            }
+            },
             MonoType::List(list_elem) => {
                 // List 类型：元素类型由 List 决定
                 self.solver
                     .add_constraint(elem_ty.clone(), *list_elem.clone(), span);
-            }
+            },
             _ => {
                 // 其他类型：假设是 List，元素类型用 elem_ty
                 let expected_iter_ty = MonoType::List(Box::new(elem_ty.clone()));
                 self.solver.add_constraint(iter_ty, expected_iter_ty, span);
-            }
+            },
         }
 
         // 在循环体内绑定迭代变量
@@ -501,7 +520,7 @@ impl<'a> TypeInferrer<'a> {
                 ast::StmtKind::Expr(expr) => {
                     // Expr 可能包含 While, For, Return, Break, Continue 等
                     let _ty = self.infer_expr(expr)?;
-                }
+                },
                 ast::StmtKind::Var {
                     name,
                     type_annotation,
@@ -514,7 +533,7 @@ impl<'a> TypeInferrer<'a> {
                         initializer.as_deref(),
                         block.span,
                     )?;
-                }
+                },
                 ast::StmtKind::For {
                     var,
                     iterable,
@@ -523,10 +542,10 @@ impl<'a> TypeInferrer<'a> {
                 } => {
                     // 推断 for 循环
                     self.infer_for(var, iterable, body, block.span)?;
-                }
+                },
                 // Fn, TypeDef, Use 等已在 check_stmt 中处理
                 // While, Return, Break, Continue 作为 Expr 的一部分处理
-                _ => {}
+                _ => {},
             }
         }
 
@@ -582,7 +601,11 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断 return 表达式
-    fn infer_return(&mut self, expr: Option<&ast::Expr>, span: Span) -> TypeResult<MonoType> {
+    fn infer_return(
+        &mut self,
+        expr: Option<&ast::Expr>,
+        span: Span,
+    ) -> TypeResult<MonoType> {
         if let Some(e) = expr {
             let ty = self.infer_expr(e)?;
             if let Some(ret_ty) = &self.current_return_type {
@@ -596,7 +619,11 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断 break 表达式
-    fn infer_break(&mut self, label: Option<&str>, span: Span) -> TypeResult<MonoType> {
+    fn infer_break(
+        &mut self,
+        label: Option<&str>,
+        span: Span,
+    ) -> TypeResult<MonoType> {
         if let Some(l) = label {
             if !self.loop_labels.contains(&l.to_string()) {
                 return Err(TypeError::UnknownLabel {
@@ -609,7 +636,11 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断 continue 表达式
-    fn infer_continue(&mut self, label: Option<&str>, span: Span) -> TypeResult<MonoType> {
+    fn infer_continue(
+        &mut self,
+        label: Option<&str>,
+        span: Span,
+    ) -> TypeResult<MonoType> {
         if let Some(l) = label {
             if !self.loop_labels.contains(&l.to_string()) {
                 return Err(TypeError::UnknownLabel {
@@ -634,13 +665,21 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断元组类型
-    fn infer_tuple(&mut self, exprs: &[ast::Expr], _span: Span) -> TypeResult<MonoType> {
+    fn infer_tuple(
+        &mut self,
+        exprs: &[ast::Expr],
+        _span: Span,
+    ) -> TypeResult<MonoType> {
         let elem_tys: Result<Vec<_>, _> = exprs.iter().map(|e| self.infer_expr(e)).collect();
         Ok(MonoType::Tuple(elem_tys?))
     }
 
     /// 推断列表类型
-    fn infer_list(&mut self, exprs: &[ast::Expr], span: Span) -> TypeResult<MonoType> {
+    fn infer_list(
+        &mut self,
+        exprs: &[ast::Expr],
+        span: Span,
+    ) -> TypeResult<MonoType> {
         if exprs.is_empty() {
             // 空列表，创建类型变量
             let elem_ty = self.solver.new_var();
@@ -660,7 +699,11 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断字典类型
-    fn infer_dict(&mut self, pairs: &[(ast::Expr, ast::Expr)], span: Span) -> TypeResult<MonoType> {
+    fn infer_dict(
+        &mut self,
+        pairs: &[(ast::Expr, ast::Expr)],
+        span: Span,
+    ) -> TypeResult<MonoType> {
         if pairs.is_empty() {
             // 空字典，创建类型变量
             let key_ty = self.solver.new_var();
@@ -714,13 +757,13 @@ impl<'a> TypeInferrer<'a> {
                 } else {
                     self.solver.new_var()
                 }
-            }
+            },
             _ => {
                 return Err(TypeError::UnsupportedOp {
                     op: "index".to_string(),
                     span,
                 });
-            }
+            },
         };
 
         Ok(elem_ty)
@@ -747,7 +790,7 @@ impl<'a> TypeInferrer<'a> {
                     field_name: field.to_string(),
                     span,
                 })
-            }
+            },
             _ => Err(TypeError::UnsupportedOp {
                 op: "field access".to_string(),
                 span,
@@ -776,14 +819,21 @@ impl<'a> TypeInferrer<'a> {
     // =========================================================================
 
     /// 添加变量绑定
-    pub fn add_var(&mut self, name: String, poly: PolyType) {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, poly);
         }
     }
 
     /// 获取变量类型
-    pub fn get_var(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         for scope in self.scopes.iter().rev() {
             if let Some(poly) = scope.get(name) {
                 return Some(poly);

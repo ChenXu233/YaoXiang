@@ -111,7 +111,7 @@ impl GenericSpecializer {
                 } else {
                     ty.clone()
                 }
-            }
+            },
             MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
                 name: s.name.clone(),
                 fields: s
@@ -131,14 +131,14 @@ impl GenericSpecializer {
             ),
             MonoType::List(t) => {
                 MonoType::List(Box::new(self.substitute_type(t, substitution, _solver)))
-            }
+            },
             MonoType::Dict(k, v) => MonoType::Dict(
                 Box::new(self.substitute_type(k, substitution, _solver)),
                 Box::new(self.substitute_type(v, substitution, _solver)),
             ),
             MonoType::Set(t) => {
                 MonoType::Set(Box::new(self.substitute_type(t, substitution, _solver)))
-            }
+            },
             MonoType::Fn {
                 params,
                 return_type,
@@ -156,7 +156,11 @@ impl GenericSpecializer {
     }
 
     /// 生成泛型签名
-    fn signature(&self, poly: &PolyType, args: &[MonoType]) -> String {
+    fn signature(
+        &self,
+        poly: &PolyType,
+        args: &[MonoType],
+    ) -> String {
         let binders_str = poly
             .binders
             .iter()
@@ -174,7 +178,11 @@ impl GenericSpecializer {
     }
 
     /// 生成缓存键
-    fn generate_cache_key(&self, _poly: &PolyType, args: &[MonoType]) -> String {
+    fn generate_cache_key(
+        &self,
+        _poly: &PolyType,
+        args: &[MonoType],
+    ) -> String {
         let args_str = args
             .iter()
             .map(|t| t.type_name())
@@ -208,12 +216,19 @@ impl PolyType {
     }
 
     /// 检查类型是否包含特定泛型变量
-    pub fn contains_var(&self, var: &TypeVar) -> bool {
+    pub fn contains_var(
+        &self,
+        var: &TypeVar,
+    ) -> bool {
         self.binders.contains(var)
     }
 
     /// 替换类型体中的泛型变量
-    pub fn substitute(&self, var: TypeVar, ty: MonoType) -> PolyType {
+    pub fn substitute(
+        &self,
+        var: TypeVar,
+        ty: MonoType,
+    ) -> PolyType {
         let substitution: HashMap<_, _> = vec![(var, ty)].into_iter().collect();
         let body = substitute_mono_type(&self.body, &substitution);
         PolyType::new(self.binders.clone(), body)
@@ -221,7 +236,10 @@ impl PolyType {
 }
 
 /// 替换单态类型中的变量
-fn substitute_mono_type(ty: &MonoType, substitution: &HashMap<TypeVar, MonoType>) -> MonoType {
+fn substitute_mono_type(
+    ty: &MonoType,
+    substitution: &HashMap<TypeVar, MonoType>,
+) -> MonoType {
     match ty {
         MonoType::TypeVar(v) => {
             if let Some(ty) = substitution.get(v) {
@@ -229,7 +247,7 @@ fn substitute_mono_type(ty: &MonoType, substitution: &HashMap<TypeVar, MonoType>
             } else {
                 ty.clone()
             }
-        }
+        },
         MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
             name: s.name.clone(),
             fields: s
@@ -303,12 +321,18 @@ impl GenericConstraintSolver {
     }
 
     /// 添加约束
-    pub fn add_constraint(&mut self, constraint: GenericConstraint) {
+    pub fn add_constraint(
+        &mut self,
+        constraint: GenericConstraint,
+    ) {
         self.constraints.push(constraint);
     }
 
     /// 检查约束是否满足
-    pub fn check(&self, _ty: &MonoType) -> bool {
+    pub fn check(
+        &self,
+        _ty: &MonoType,
+    ) -> bool {
         // 简化实现：始终返回 true
         // 完整实现需要检查 trait 实现等
         true
@@ -335,7 +359,10 @@ pub struct SpecializationKey {
 
 impl SpecializationKey {
     /// 创建新的缓存键
-    pub fn new(name: String, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         SpecializationKey { name, type_args }
     }
 
@@ -352,13 +379,19 @@ impl SpecializationKey {
 }
 
 impl fmt::Display for SpecializationKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(f, "{}", self.as_string())
     }
 }
 
 impl PartialEq for SpecializationKey {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.name == other.name && self.type_args == other.type_args
     }
 }
@@ -366,7 +399,10 @@ impl PartialEq for SpecializationKey {
 impl Eq for SpecializationKey {}
 
 impl std::hash::Hash for SpecializationKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.name.hash(state);
         for ty in &self.type_args {
             self.type_name_hash(ty, state);
@@ -376,7 +412,11 @@ impl std::hash::Hash for SpecializationKey {
 
 impl SpecializationKey {
     #[allow(clippy::only_used_in_recursion)]
-    fn type_name_hash<H: std::hash::Hasher>(&self, ty: &MonoType, state: &mut H) {
+    fn type_name_hash<H: std::hash::Hasher>(
+        &self,
+        ty: &MonoType,
+        state: &mut H,
+    ) {
         match ty {
             MonoType::Void => "void".hash(state),
             MonoType::Bool => "bool".hash(state),
@@ -392,27 +432,27 @@ impl SpecializationKey {
                 for t in ts {
                     self.type_name_hash(t, state);
                 }
-            }
+            },
             MonoType::List(t) => {
                 "list".hash(state);
                 self.type_name_hash(t, state);
-            }
+            },
             MonoType::Dict(k, v) => {
                 "dict".hash(state);
                 self.type_name_hash(k, state);
                 self.type_name_hash(v, state);
-            }
+            },
             MonoType::Set(t) => {
                 "set".hash(state);
                 self.type_name_hash(t, state);
-            }
+            },
             MonoType::Fn { .. } => "fn".hash(state),
             MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
             MonoType::TypeRef(n) => n.hash(state),
             MonoType::Range { elem_type } => {
                 "range".hash(state);
                 self.type_name_hash(elem_type, state);
-            }
+            },
         }
     }
 }

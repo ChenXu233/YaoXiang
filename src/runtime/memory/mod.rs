@@ -38,7 +38,10 @@ impl Region {
     /// Allocate memory in this region
     ///
     /// Returns the offset in the buffer, or None if allocation fails.
-    pub fn alloc(&mut self, size: usize) -> Option<usize> {
+    pub fn alloc(
+        &mut self,
+        size: usize,
+    ) -> Option<usize> {
         let offset = self.buffer.len();
 
         // Ensure capacity
@@ -59,12 +62,19 @@ impl Region {
     }
 
     /// Read a value from the region
-    pub fn read<T>(&self, offset: usize) -> &T {
+    pub fn read<T>(
+        &self,
+        offset: usize,
+    ) -> &T {
         unsafe { &*self.buffer.as_ptr().add(offset).cast::<T>() }
     }
 
     /// Write a value to the region
-    pub fn write<T>(&mut self, offset: usize, value: &T) {
+    pub fn write<T>(
+        &mut self,
+        offset: usize,
+        value: &T,
+    ) {
         unsafe {
             std::ptr::copy(
                 value as *const T as *const u8,
@@ -75,7 +85,10 @@ impl Region {
     }
 
     /// Get a mutable reference to a value in the region
-    pub fn get_mut<T>(&mut self, offset: usize) -> &mut T {
+    pub fn get_mut<T>(
+        &mut self,
+        offset: usize,
+    ) -> &mut T {
         unsafe { &mut *self.buffer.as_mut_ptr().add(offset).cast::<T>() }
     }
 
@@ -133,7 +146,10 @@ impl Heap {
     }
 
     /// Allocate memory on the heap
-    pub fn alloc(&mut self, size: usize) -> Option<usize> {
+    pub fn alloc(
+        &mut self,
+        size: usize,
+    ) -> Option<usize> {
         // Try to allocate in current region
         if let Some(offset) = self.current_region.alloc(size) {
             self.total_allocations += 1;
@@ -151,12 +167,19 @@ impl Heap {
     }
 
     /// Read a value from the heap
-    pub fn read<T>(&self, offset: usize) -> &T {
+    pub fn read<T>(
+        &self,
+        offset: usize,
+    ) -> &T {
         self.current_region.read(offset)
     }
 
     /// Write a value to the heap
-    pub fn write<T>(&mut self, offset: usize, value: &T) {
+    pub fn write<T>(
+        &mut self,
+        offset: usize,
+        value: &T,
+    ) {
         self.current_region.write(offset, value);
     }
 

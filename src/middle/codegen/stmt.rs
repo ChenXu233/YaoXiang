@@ -11,13 +11,16 @@ use crate::vm::opcode::TypedOpcode;
 /// 语句代码生成实现
 impl CodegenContext {
     /// 生成语句
-    pub fn generate_stmt(&mut self, stmt: &Stmt) -> Result<(), CodegenError> {
+    pub fn generate_stmt(
+        &mut self,
+        stmt: &Stmt,
+    ) -> Result<(), CodegenError> {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
                 // 生成表达式语句
                 self.generate_expr(expr)?;
                 Ok(())
-            }
+            },
 
             StmtKind::Var {
                 name,
@@ -41,13 +44,13 @@ impl CodegenContext {
                 // 这里仅生成占位符，实际生成在表达式层面处理
                 let _ = (var, iterable, body, label);
                 Ok(())
-            }
+            },
 
             StmtKind::TypeDef { name, definition } => {
                 // 类型定义在编译时处理，不生成运行时指令
                 self.register_type_definition(name, definition);
                 Ok(())
-            }
+            },
 
             StmtKind::Module { name: _, items } => {
                 // 模块处理：收集所有定义
@@ -55,12 +58,12 @@ impl CodegenContext {
                     self.generate_stmt(item)?;
                 }
                 Ok(())
-            }
+            },
 
             StmtKind::Use { .. } => {
                 // use 语句在解析时处理，不生成字节码
                 Ok(())
-            }
+            },
 
             _ => Err(CodegenError::UnimplementedStmt {
                 stmt_type: format!("{:?}", stmt.kind),
@@ -85,7 +88,7 @@ impl CodegenContext {
                     Some(init) => self.infer_expr_type(init)?,
                     None => MonoType::Int(64), // 默认类型
                 }
-            }
+            },
         };
 
         // 分配局部变量
@@ -135,7 +138,10 @@ impl CodegenContext {
     }
 
     /// 检查类型是否需要堆分配
-    fn should_heap_allocate_for_type(&self, ty: &MonoType) -> bool {
+    fn should_heap_allocate_for_type(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
         // 大型对象或可能逃逸的对象需要堆分配
         match ty {
             MonoType::List(_) => true,
@@ -149,7 +155,10 @@ impl CodegenContext {
     }
 
     /// 从表达式推断类型
-    fn infer_expr_type(&self, expr: &Expr) -> Result<MonoType, CodegenError> {
+    fn infer_expr_type(
+        &self,
+        expr: &Expr,
+    ) -> Result<MonoType, CodegenError> {
         match expr {
             Expr::Lit(literal, _) => Ok(self.infer_literal_type(literal)),
             Expr::Var(name, _) => {
@@ -158,7 +167,7 @@ impl CodegenContext {
                 } else {
                     Err(CodegenError::SymbolNotFound { name: name.clone() })
                 }
-            }
+            },
             Expr::BinOp { left, .. } => self.infer_expr_type(left),
             Expr::Call { func, .. } => {
                 let func_ty = self.infer_expr_type(func)?;
@@ -169,13 +178,16 @@ impl CodegenContext {
                         found: format!("{:?}", func_ty),
                     }),
                 }
-            }
+            },
             _ => Ok(MonoType::Int(64)), // 默认推断为 Int64
         }
     }
 
     /// 从字面量推断类型
-    fn infer_literal_type(&self, literal: &crate::frontend::lexer::tokens::Literal) -> MonoType {
+    fn infer_literal_type(
+        &self,
+        literal: &crate::frontend::lexer::tokens::Literal,
+    ) -> MonoType {
         match literal {
             crate::frontend::lexer::tokens::Literal::Int(_) => MonoType::Int(64),
             crate::frontend::lexer::tokens::Literal::Float(_) => MonoType::Float(64),
@@ -186,7 +198,11 @@ impl CodegenContext {
     }
 
     /// 注册类型定义
-    fn register_type_definition(&mut self, _name: &str, _definition: &Type) {
+    fn register_type_definition(
+        &mut self,
+        _name: &str,
+        _definition: &Type,
+    ) {
         // TODO: 实现类型定义注册
         // 类型定义需要添加到模块的 types 列表中
     }
@@ -252,10 +268,10 @@ impl CodegenContext {
                 StmtKind::Expr(expr) => {
                     // 生成表达式
                     let _operand = self.generate_expr(expr)?;
-                }
+                },
                 _ => {
                     // 其他语句暂不处理
-                }
+                },
             }
         }
 

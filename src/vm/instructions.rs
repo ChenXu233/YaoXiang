@@ -11,7 +11,10 @@ pub struct Instruction {
 
 impl Instruction {
     /// Create a new instruction
-    pub fn new(opcode: u8, operands: [u32; 4]) -> Self {
+    pub fn new(
+        opcode: u8,
+        operands: [u32; 4],
+    ) -> Self {
         Self { opcode, operands }
     }
 
@@ -21,7 +24,10 @@ impl Instruction {
     }
 
     /// Get operand at index
-    pub fn get_operand(&self, index: usize) -> Option<u32> {
+    pub fn get_operand(
+        &self,
+        index: usize,
+    ) -> Option<u32> {
         self.operands.get(index).copied()
     }
 }

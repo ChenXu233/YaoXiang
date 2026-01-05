@@ -55,7 +55,10 @@ pub struct Lifetime {
 }
 
 impl Lifetime {
-    pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
+    pub fn new(
+        start: (usize, usize),
+        end: (usize, usize),
+    ) -> Self {
         Self {
             start,
             end,
@@ -97,7 +100,10 @@ impl OwnershipAnalyzer {
     }
 
     /// 分析函数的所有权
-    pub fn analyze_function(&mut self, func: &FunctionIR) -> OwnershipAnalysisResult {
+    pub fn analyze_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> OwnershipAnalysisResult {
         // 重置状态
         self.ownership_graph = OwnershipGraph::default();
         self.definitions = HashMap::new();
@@ -122,7 +128,10 @@ impl OwnershipAnalyzer {
     }
 
     /// 活跃变量分析（反向数据流）
-    fn liveness_analysis(&mut self, func: &FunctionIR) {
+    fn liveness_analysis(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         // 初始化：每个基本块的活跃变量集
         for (block_idx, _) in func.blocks.iter().enumerate() {
             self.live_vars.insert(block_idx, HashSet::new());
@@ -175,33 +184,33 @@ impl OwnershipAnalyzer {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 live_in.insert(src.clone());
-            }
+            },
 
             // 加载：定义 dst，src 活跃
             Instruction::LoadIndex { dst, src, index } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 block_live.insert(index.clone());
-            }
+            },
             Instruction::LoadField { dst, src, .. } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
-            }
+            },
 
             // 存储：src 和 dst 都活跃
             Instruction::Store { src, dst } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
-            }
+            },
             Instruction::StoreIndex { src, dst, index } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
                 block_live.insert(index.clone());
-            }
+            },
             Instruction::StoreField { src, dst, .. } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
-            }
+            },
 
             // 函数调用：参数活跃，返回值定义新变量
             Instruction::Call { dst, args, .. } => {
@@ -211,31 +220,34 @@ impl OwnershipAnalyzer {
                 for arg in args {
                     block_live.insert(arg.clone());
                 }
-            }
+            },
 
             // 返回：返回值活跃
             Instruction::Ret(Some(value)) => {
                 block_live.insert(value.clone());
-            }
-            Instruction::Ret(None) => {}
+            },
+            Instruction::Ret(None) => {},
 
             // 内存分配：定义新变量
             Instruction::HeapAlloc { dst, .. } => {
                 block_live.remove(dst);
-            }
+            },
 
             // 类型转换
             Instruction::Cast { dst, src, .. } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
     }
 
     /// 分析所有权关系
-    fn analyze_ownership(&mut self, func: &FunctionIR) {
+    fn analyze_ownership(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
                 self.analyze_instruction_ownership(instr, block_idx, instr_idx);
@@ -276,13 +288,11 @@ impl OwnershipAnalyzer {
                 self.ownership_graph
                     .lifetimes
                     .insert(src.clone(), Lifetime::new(pos, pos));
-            }
+            },
 
             // 函数调用：返回值拥有参数的所有权
             Instruction::Call {
-                dst: Some(d),
-                args,
-                ..
+                dst: Some(d), args, ..
             } => {
                 self.definitions.insert(
                     d.clone(),
@@ -302,7 +312,7 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(arg.clone());
                 }
-            }
+            },
             Instruction::Call {
                 dst: None, args, ..
             } => {
@@ -314,7 +324,7 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(arg.clone());
                 }
-            }
+            },
 
             // 堆分配：新变量拥有新内存的所有权
             Instruction::HeapAlloc { dst, .. } => {
@@ -331,7 +341,7 @@ impl OwnershipAnalyzer {
                 self.ownership_graph
                     .lifetimes
                     .insert(dst.clone(), Lifetime::new(pos, pos));
-            }
+            },
 
             // 闭包：闭包拥有捕获变量的所有权
             Instruction::MakeClosure { dst, env, .. } => {
@@ -352,14 +362,17 @@ impl OwnershipAnalyzer {
                         .or_default()
                         .insert(var.clone());
                 }
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
     }
 
     /// 计算释放点
-    fn compute_drop_points(&mut self, func: &FunctionIR) {
+    fn compute_drop_points(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         for (block_idx, _block) in func.blocks.iter().enumerate() {
             let mut drops = Vec::new();
 
@@ -386,7 +399,10 @@ impl OwnershipAnalyzer {
     /// 将分析结果应用到 IR
     ///
     /// 在作用域结束时插入 Drop 指令
-    pub fn apply_to_ir(&self, func: &FunctionIR) -> FunctionIR {
+    pub fn apply_to_ir(
+        &self,
+        func: &FunctionIR,
+    ) -> FunctionIR {
         let mut new_func = func.clone();
 
         // 按块索引倒序处理（从后往前插入不影响索引）
@@ -422,7 +438,10 @@ impl Default for OwnershipAnalyzer {
 }
 
 impl fmt::Display for Definition {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         write!(
             f,
             "Definition at {:?}, escapes={}, moved={}",

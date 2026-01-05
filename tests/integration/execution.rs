@@ -1,7 +1,7 @@
 use std::path::Path;
-use std::time::Duration;
-use std::thread;
 use std::sync::mpsc::channel;
+use std::thread;
+use std::time::Duration;
 use yaoxiang::run_file;
 
 #[test]
@@ -27,11 +27,11 @@ fn test_run_complex_test() {
 
     let timeout = Duration::from_secs(60);
     match rx.recv_timeout(timeout) {
-        Ok(Ok(())) => {}
+        Ok(Ok(())) => {},
         Ok(Err(err)) => panic!("Interpreter failed: {}", err),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
             panic!("Interpreter timed out running complex_test.yx")
-        }
+        },
         Err(e) => panic!("Channel error: {}", e),
     }
 }
