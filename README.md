@@ -289,11 +289,6 @@ Before you criticize, check this out:
 >
 > Types are like the Way, all things are born from them.
 
----
-
-<!-- separator-start -->
-***
----
 
 ## <a name="中文"></a>📖 简介
 
