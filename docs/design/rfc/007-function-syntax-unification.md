@@ -1,7 +1,7 @@
 # RFC-007: 函数定义语法统一方案
 
 > **状态**: 草案
-> **作者**: 晨煦
+> **作者**: 沫郁酱
 > **创建日期**: 2025-01-05
 > **最后更新**: 2025-01-05
 
@@ -85,7 +85,7 @@ fn main() {
 | 有参有返回 | `f(Int)->Int = ...` | `f:(Int)->Int = ...` | 冒号差异 |
 | 无参有返回 | `f()->Int = ...` | `f:()->Int = ...` | 冒号差异 |
 | 无参无返回 | `f() = ...` | `f:()→() = ...` | **新语法必须写签名** |
-| 推断类型 | 不支持 | 不支持 | 两边都不支持 |
+| 推断类型 | 支持 | 支持 | 均支持类型自动推断 |
 
 ## 提案
 
@@ -440,4 +440,4 @@ main = () => { println("Hello") }
 - [MoonBit 语言设计](https://moonbitlang.com/)
 - [Rust 函数语法](https://doc.rust-lang.org/book/ch03-03-how-functions-work.html)
 - [Haskell 类型推断](https://www.haskell.org/tutorial/patterns.html)
-- [OCaml 类型推断](https://v2.ocaml.org/manual inference.html)
+- [OCaml 类型推断](https://v2.ocaml.org/manual/)
