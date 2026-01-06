@@ -19,6 +19,27 @@
 2. **多参数绑定困难**：当方法需要接收多个同类型参数时，无法优雅表达
 3. **柯里化语义歧义**：部分应用时难以区分"绑定到哪个位置"
 
+### 设计目标：统一两种编程视角
+
+本设计旨在**统一函数式和 OOP 两种编程视角**：
+
+```yaoxiang
+# 函数视角：显式传递所有参数
+distance(p1, p2)
+
+# OOP 视角：隐式 this
+p1.distance(p2)
+
+# [positions] 语法糖让两种写法等价，本质都是函数调用
+Point.distance = distance[0]   # this 绑定到第 0 位
+```
+
+**核心价值**：
+- 底层是函数，上层是方法语法
+- 不引入 `self` 关键字，保持语言简洁性
+- 完全函数化：方法调用本质是参数传递
+- `[0]`, `[1]`, `[-1]` 灵活控制 this 绑定位置
+
 ### 当前的问题
 
 ```yaoxiang
@@ -39,7 +60,53 @@ Point.distance = distance  # 等价于 distance[0]
 
 ## 提案
 
-### 核心设计：位置索引绑定语法
+### 核心设计：默认绑定 + 可选位置指定
+
+#### 默认绑定到第 0 位
+
+**默认行为**：`Type.method = function` 等价于 `function[0]`
+
+```yaoxiang
+# 默认绑定到第 0 位（最常见的场景）
+Point.distance = distance           # 等价于 distance[0]
+p1.distance(p2)                     # → distance(p1, p2)
+
+# 只有需要特殊位置时才写 [positions]
+Point.transform = transform[1]      # this 绑定到第 1 位
+p1.transform(v1)                    # → transform(v1, p1)
+```
+
+**好处**：
+- 99% 的方法调用不需要写 `[0]`
+- OOP 程序员迁移无压力，符合直觉
+- 简洁优先，复杂场景才用高级语法
+
+#### 自动柯里化绑定
+
+当函数参数数量 > 绑定位置数量时，自动生成柯里化函数：
+
+```yaoxiang
+type Point = Point(x: Float, y: Float)
+
+# 基础函数：3 个参数
+scale(Point, Point, Float) -> Point = (p, s, factor) => {
+    Point(p.x * factor, p.y * factor)
+}
+
+# 绑定时自动柯里化
+Point.scale = scale[0, 1]   # Point 绑定到第 0、1 位，第 2 位保留
+
+# 调用时自动部分应用
+p1 = Point(2.0, 3.0)
+p2 = Point(1.0, 1.0)
+scaled = p1.scale(p2)       # → scale(p1, p2, ?) 返回柯里化函数
+result = scaled(2.0)        # → scale(p1, p2, 2.0)
+
+# 链式调用更优雅
+result = p1.scale(p2)(2.0)  # 一步到位
+```
+
+### 位置索引绑定语法
 
 引入 `[position]` 语法精确控制函数参数与类型的绑定关系：
 
@@ -262,22 +329,30 @@ fn check_binding_type_compatibility(
 
 | 场景 | 绑定语法 | 调用 | 转换为 |
 |------|---------|------|--------|
+| 默认绑定 | `Point.distance = distance` | `p1.distance(p2)` | `distance(p1, p2)` |
 | 单位置 | `Point.distance = distance[0]` | `p1.distance(p2)` | `distance(p1, p2)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
+| 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
 | 多位置 | `Point.transform = transform[0, 1]` | `p.transform(v)` | `transform(p, v)` |
-| 部分绑定 | `Point.scale = func[0, _, 2]` | `p.scale(other, 2.0)` | `func(p, other, 2.0)` |
+| 自动柯里化 | `Point.scale = scale[0, 1]` | `p.scale(other)(2.0)` | `scale(p, other, 2.0)` |
 | 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
+
+**说明**：
+- `[0]`：this 绑定到第 0 位（第一个参数）
+- `[1]`：this 绑定到第 1 位（第二个参数）
+- `[-1]`：this 绑定到最后一位（从末尾计数）
 
 ## 权衡
 
 ### 优点
 
+- **默认简单**：默认绑定到第 0 位，99% 场景不需要写 `[positions]`
 - **精确控制**：可以绑定到任意参数位置，灵活度高
 - **类型安全**：编译时完全类型检查
 - **语法简洁**：`[position]` 语法直观易懂
 - **无 `self` 关键字**：保持语言简洁性
 - **柯里化友好**：天然支持部分应用和链式调用
-- **元组友好**：支持元组解构和返回值解构
+- **OOP 友好**：自动柯里化让 OOP 程序员无脑迁移
 
 ### 缺点
 
@@ -299,19 +374,18 @@ fn check_binding_type_compatibility(
 ### 阶段划分
 
 1. **Phase 1: 基础绑定**（v0.3）
-   - 实现单位置 `[n]` 绑定语法
+   - 实现单位置 `[n]` 绑定语法（n 从 0 开始，支持负数）
    - 基本的类型检查和代码生成
    - 单元测试覆盖
 
 2. **Phase 2: 多位置绑定**（v0.4）
    - 实现多位置 `[n, m, ...]` 联合绑定
-   - 支持元组解构
-   - 部分应用支持
+   - 占位符 `_` 支持
+   - 支持元组解构和部分应用
 
 3. **Phase 3: 高级特性**（v0.5）
    - 支持范围语法 `[n..m]`
-   - 命名占位符 `[@skip, @named]`
-   - 编译时位置计算
+   - 编译时位置计算优化
 
 ### 依赖关系
 
@@ -321,15 +395,22 @@ fn check_binding_type_compatibility(
 
 ### 风险
 
-- 位置索引从 0 还是 1 开始需要明确（建议 0，与大多数语言一致）
 - 与现有绑定语法的兼容性处理
+- 性能优化策略（编译期展开 vs 运行时查找）
 
 ## 开放问题
 
-- [ ] 位置索引是否从 0 开始？（建议：从 0 开始）
-- [ ] 是否支持负数索引表示从末尾计数？（如 `[-1]` 表示最后一个参数）
-- [ ] 占位符使用 `_` 还是 `@skip` 语法？
-- [ ] 范围语法 `[1..3]` 是否在本阶段实现？
+以下问题已在设计中解决，记录在附录A：
+
+- ~~位置索引从 0 开始~~ → 已决定：从 0 开始
+- ~~负数索引~~ → 已决定：支持
+- ~~占位符~~ → 已决定：使用 `_`
+- ~~范围语法~~ → 已决定：实现
+
+**剩余开放问题**：
+
+- [ ] 与现有绑定语法的兼容性处理
+- [ ] 性能优化策略（编译期展开 vs 运行时查找）
 
 ---
 
@@ -337,11 +418,13 @@ fn check_binding_type_compatibility(
 
 ### 附录A：设计决策记录
 
-| 决策 | 决定 | 日期 | 记录人 |
-|------|------|------|--------|
-| 索引基准 | 从 0 开始（与 Rust/Python 一致） | - | - |
-| 占位符 | 使用 `_` 作为匿名占位符 | - | - |
-| 语法风格 | 中缀 `Type.method = func[positions]` | - | - |
+| 决策 | 决定 | 理由 |
+|------|------|------|
+| 索引基准 | 从 0 开始 | 与元组/参数列表索引一致 |
+| 负数索引 | 支持 | 灵活，从末尾计数 |
+| 占位符 | `_` | 简洁，通用符号 |
+| 范围语法 | 实现 | 批量绑定，如 `[0..2]` |
+| 语法风格 | 中缀 `Type.method = func[positions]` | 与 `name = expr` 风格统一 |
 
 ### 附录B：术语表
 

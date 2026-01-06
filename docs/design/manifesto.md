@@ -199,8 +199,8 @@ distance(Point, Point) -> Float = (a, b) => {
     (dx * dx + dy * dy).sqrt()
 }
 
-# 方法语法糖绑定
-Point.distance(_) = distance(self, _)
+# 方法语法糖绑定（RFC-004）
+Point.distance = distance  # 默认绑定到第 0 位，等价于 distance[0]
 ```
 
 ```yaoxiang
@@ -246,23 +246,25 @@ main() -> Void = () => {
 
 | 官方术语 | 对应语法 | 阐释 |
 |----------|----------|------|
-| **并作函数** | `spawn fn` | 定义可参与并作执行的计算单元 |
-| **并作块** | `spawn { a(), b() } | 显式声明的并发疆域，块内任务并作执行 |
-| **并作循环** | `spawn for x in xs { ... } | 数据并行，循环体在所有元素上并作执行 |
+| **并作函数** | `spawn (params) => body` | 定义可参与并作执行的计算单元 |
+| **并作块** | `spawn { a(), b() }` | 显式声明的并发疆域，块内任务并作执行 |
+| **并作循环** | `spawn for x in xs { ... }` | 数据并行，循环体在所有元素上并作执行 |
 | **并作值** | `Async[T]` | 正在并作中的未来值，使用时自动等待 |
 | **并作图** | 惰性计算图(DAG) | 并作发生的舞台，描述依赖与并行关系 |
 | **并作调度器** | 运行时任务调度器 | 协调万物，让它们在正确时机并作的智能中枢 |
 
+> **详见**：[RFC-001 并作模型](./rfc/001-concurrent-model-error-handling.md)
+
 ```yaoxiang
 # === 并作函数 ===
-# spawn 标记的函数返回 Async[T]，语法与普通函数一致
-fetch_data(String) -> JSON spawn = (url) => {
+# spawn 标记的函数（RFC-003 语法）
+fetch_data: String -> JSON = spawn (url) => {
     HTTP.get(url).json()
 }
 
 # === 并作块 ===
 # spawn { } 内的表达式强制并行执行
-compute_all() -> (Int, Int, Int) spawn = () => {
+compute_all: () -> (Int, Int, Int) = spawn () => {
     (a, b, c) = spawn {
         heavy_calc(1),    # 任务 1
         heavy_calc(2),    # 任务 2
@@ -273,7 +275,7 @@ compute_all() -> (Int, Int, Int) spawn = () => {
 
 # === 并作循环 ===
 # spawn for 标记的循环自动并行化
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: Int -> Int = spawn (n) => {
     total = spawn for i in 0..n {
         fibonacci(i)  # 每次迭代并行执行
     }
@@ -297,30 +299,30 @@ main() -> Void = () => {
 # Send/Sync 约束保证编译时线程安全
 type SafeCounter = SafeCounter(mutex: Mutex[Int])
 
-main() -> Void = () => {
+main: () -> Void = () => {
     counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
 
     # spawn 自动检查 Send 约束
-    spawn(|| => {
+    spawn () => {
         guard = counter.mutex.lock()
         guard.value = guard.value + 1
-    })
+    }
 }
 ```
 
 **技术文档**：
-- 详见 [《并作模型白皮书》](YaoXiang-async-whitepaper.md)
-- 详见 [异步实现方案](YaoXiang-async-implementation.md)
-- 详见 [线程安全设计](works/plans/async/yaoxiang-threading-safety-design.md)
+- 详见 [RFC-001 并作模型](./rfc/001-concurrent-model-error-handling.md)
 
 **创新价值**：异步编程的认知负担降为零，代码可读性与同步代码完全相同，同时获得高性能并行的执行效率。
 
-### 3.5 创新五：依赖类型支持
+### 3.5 创新五：依赖类型支持（未来特性）
+
+> **状态**：v1.0 后考虑实现
 
 类型可以依赖于值，实现真正的类型驱动开发。
 
 ```yaoxiang
-# 固定长度向量
+# 固定长度向量（未来语法）
 type Vector[T, n: Nat] = {
     data: [T; n]
     length: n
@@ -382,13 +384,13 @@ type Result[T, E] = ok(T) | err(E)
 type Color = red | green | blue
 
 # 函数定义（箭头函数语法）
-add(Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => a + b
 
 # 泛型函数
-identity<T>(T) -> T = (x) => x
+identity: [T](T) -> T = (x) => x
 
 # 多行函数
-fact(Int) -> Int = (n) => {
+fact: Int -> Int = (n) => {
     if n == 0 { 1 } else { n * fact(n - 1) }
 }
 ```
@@ -471,14 +473,14 @@ process() -> Result[Int, String] = () => {
 ### 4.7 并发编程（SeamlessAsync）
 
 ```yaoxiang
-# spawn 标记异步函数
-fetch_api(String) -> JSON spawn = (url) => {
+# spawn 标记异步函数（RFC-003 语法）
+fetch_api: String -> JSON = spawn (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
 # 并发构造块：显式并行
-process_all() -> (JSON, JSON, JSON) spawn = () => {
+process_all: () -> (JSON, JSON, JSON) = spawn () => {
     (a, b, c) = spawn {
         fetch_api("https://api1.com/data"),
         fetch_api("https://api2.com/data"),
@@ -488,7 +490,7 @@ process_all() -> (JSON, JSON, JSON) spawn = () => {
 }
 
 # 数据并行循环
-parallel_process(Int) -> Int spawn = (n) => {
+parallel_process: Int -> Int = spawn (n) => {
     total = spawn for i in 0..n {
         compute(i)
     }
@@ -498,12 +500,12 @@ parallel_process(Int) -> Int spawn = (n) => {
 # 线程安全示例
 type ThreadSafeCounter = ThreadSafeCounter(value: Mutex[Int])
 
-main() -> Void = () => {
+main: () -> Void = () => {
     counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(Mutex.new(0)))
 
     # 自动并行执行
-    spawn(|| => counter.value.lock().value = counter.value.lock().value + 1)
-    spawn(|| => counter.value.lock().value = counter.value.lock().value + 2)
+    spawn () => counter.value.lock().value = counter.value.lock().value + 1
+    spawn () => counter.value.lock().value = counter.value.lock().value + 2
 }
 ```
 
@@ -521,12 +523,12 @@ main() -> Void = () => {
 | **类型语法** | 统一构造器语法 | 无 `enum`、`struct`、`union` 关键字 |
 | **缩进规则** | 4空格缩进 | 强制要求，禁止 Tab |
 | **关键字** | 17个核心关键字 | 如上表所列 |
-| **函数语法** | 箭头函数语法 | `fn_name(Type1, Type2) -> Type = (params) => body` |
-| **方法绑定** | 柯里化实现 | `Type.method(_) = func(self, _)` |
-| **异步模型** | 并作模型 | 并作模型，惰性求值，自动并行 |
+| **函数语法** | 箭头函数语法 | `name: (Type1, Type2) -> Type = (params) => body` |
+| **方法绑定** | RFC-004 柯里化绑定 | `Type.method = function`（默认绑定到第 0 位） |
+| **异步模型** | RFC-003 并作模型 | `spawn (params) => body`，惰性求值，自动并行 |
 | **内存管理** | 所有权模型 | 无 GC，编译期安全保证 |
 | **文件即模块** | 模块系统 | 每个 `.yx` 文件是一个模块 |
-| **主函数** | `main() -> Void` | 程序入口点 |
+| **主函数** | `main: () -> Void` | 程序入口点 |
 | **线程安全** | Send/Sync 约束 | 编译时消除数据竞争 |
 
 ### 5.2 待讨论的设计议题
@@ -823,7 +825,7 @@ docs(readme): update installation instructions
 | `type` | 类型定义 |
 | `pub` | 公共导出 |
 | `use` | 导入模块 |
-| `spawn` | 异步标记（函数/块/循环） |
+| `spawn` | 并作标记（RFC-003：`spawn (params) => body`） |
 | `ref` | 不可变引用 |
 | `mut` | 可变引用 |
 | `if/elif/else` | 条件分支 |
@@ -905,7 +907,7 @@ A: 4 空格提供了清晰的代码块视觉分隔，减少了嵌套深度带来
 
 **Q: 什么时候会发布 1.0 版本？**
 
-A: 预计在项目启动后 14-18 个月发布 v1.0，具体取决于社区贡献进度。
+A: v1.0 目标：生产可用。发布时间取决于实现进度，详见 [版本规划 RFC](./rfc/003-version-planning.md)。
 
 **Q: 如何联系核心团队？**
 
