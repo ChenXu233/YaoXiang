@@ -453,6 +453,18 @@ impl SpecializationKey {
                 "range".hash(state);
                 self.type_name_hash(elem_type, state);
             }
+            MonoType::Union(types) => {
+                "union".hash(state);
+                for t in types {
+                    self.type_name_hash(t, state);
+                }
+            }
+            MonoType::Intersection(types) => {
+                "intersection".hash(state);
+                for t in types {
+                    self.type_name_hash(t, state);
+                }
+            }
         }
     }
 }

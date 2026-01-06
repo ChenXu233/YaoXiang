@@ -305,7 +305,7 @@ impl<'a> TypeInferrer<'a> {
         for (param, param_ty) in params.iter().zip(param_types.iter()) {
             self.add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
         }
-        let _body_ty = self.infer_block(body, false, None)?;
+        let _body_ty = self.infer_block(body, false, Some(&return_ty))?;
         self.exit_scope();
 
         Ok(MonoType::Fn {
@@ -363,13 +363,13 @@ impl<'a> TypeInferrer<'a> {
         arms: &[ast::MatchArm],
         _span: Span,
     ) -> TypeResult<MonoType> {
-        let _expr_ty = self.infer_expr(expr)?;
+        let expr_ty = self.infer_expr(expr)?;
 
         // 所有 match arm 的类型必须一致
         let result_ty = self.solver.new_var();
 
         for arm in arms {
-            let arm_ty = self.infer_pattern(&arm.pattern)?;
+            let arm_ty = self.infer_pattern(&arm.pattern, Some(&expr_ty), arm.span)?;
             self.solver
                 .add_constraint(arm_ty, result_ty.clone(), arm.span);
         }
@@ -378,9 +378,16 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 推断模式类型
+    ///
+    /// # Arguments
+    /// * `pattern` - 要推断的模式
+    /// * `expected` - 期望的类型（用于约束模式类型与被匹配值类型一致）
+    /// * `span` - 模式的位置信息（用于错误报告）
     pub fn infer_pattern(
         &mut self,
         pattern: &ast::Pattern,
+        expected: Option<&MonoType>,
+        span: Span,
     ) -> TypeResult<MonoType> {
         match pattern {
             ast::Pattern::Wildcard => Ok(self.solver.new_var()),
@@ -390,17 +397,114 @@ impl<'a> TypeInferrer<'a> {
                 self.add_var(name.clone(), PolyType::mono(ty.clone()));
                 Ok(ty)
             }
-            ast::Pattern::Literal(lit) => self.infer_literal(lit, Span::default()),
+            ast::Pattern::Literal(lit) => self.infer_literal(lit, span),
             ast::Pattern::Tuple(patterns) => {
                 let elem_tys: Vec<_> = patterns
                     .iter()
-                    .map(|p| self.infer_pattern(p))
+                    .map(|p| self.infer_pattern(p, expected, span))
                     .collect::<Result<_, _>>()?;
                 Ok(MonoType::Tuple(elem_tys))
             }
-            ast::Pattern::Struct { name: _, fields: _ } => {
-                // 简化处理：返回新类型变量
-                Ok(self.solver.new_var())
+            ast::Pattern::Struct { name, fields } => {
+                // 从类型环境获取结构体类型定义
+                let poly_clone = self.get_var(name).cloned();
+                let struct_ty: Option<super::types::StructType> = if let Some(poly) = poly_clone {
+                    // 实例化多态类型获取具体类型
+                    let instantiated = self.solver.instantiate(&poly);
+                    match instantiated {
+                        MonoType::Struct(s) => Some(s),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(struct_def) = &struct_ty {
+                    // 结构体定义存在，验证字段匹配
+                    // 创建字段类型的映射
+                    let field_types: HashMap<_, _> = struct_def
+                        .fields
+                        .iter()
+                        .map(|(n, t)| (n.clone(), t.clone()))
+                        .collect();
+
+                    // 收集所有字段模式的期望类型
+                    let field_expected_types: Vec<_> = fields
+                        .iter()
+                        .map(|(field_name, _)| field_types.get(field_name).cloned())
+                        .collect();
+
+                    // 推断每个模式字段
+                    for ((field_name, field_pattern), expected_field_ty) in
+                        fields.iter().zip(field_expected_types.iter())
+                    {
+                        if let Some(expected_ty) = expected_field_ty {
+                            // 推断字段模式类型
+                            let _field_pat_ty =
+                                self.infer_pattern(field_pattern, Some(expected_ty), span)?;
+                        } else {
+                            // 字段不存在于结构体定义
+                            return Err(TypeError::UnknownField {
+                                struct_name: name.clone(),
+                                field_name: field_name.clone(),
+                                span,
+                            });
+                        }
+                    }
+
+                    // 返回结构体类型
+                    Ok(MonoType::Struct(struct_def.clone()))
+                } else {
+                    // 结构体定义不存在，尝试从 expected 类型推断
+                    if let Some(expected_ty) = expected {
+                        match expected_ty {
+                            MonoType::Struct(s) => {
+                                // 从 expected 类型获取字段
+                                let field_types: HashMap<_, _> = s
+                                    .fields
+                                    .iter()
+                                    .map(|(n, t)| (n.clone(), t.clone()))
+                                    .collect();
+
+                                // 收集所有字段模式的期望类型
+                                let field_expected_types: Vec<_> = fields
+                                    .iter()
+                                    .map(|(field_name, _)| field_types.get(field_name).cloned())
+                                    .collect();
+
+                                // 推断每个模式字段
+                                for ((field_name, field_pattern), expected_field_ty) in
+                                    fields.iter().zip(field_expected_types.iter())
+                                {
+                                    if let Some(expected_ty) = expected_field_ty {
+                                        let _field_pat_ty =
+                                            self.infer_pattern(field_pattern, Some(expected_ty), span)?;
+                                    } else {
+                                        return Err(TypeError::UnknownField {
+                                            struct_name: name.clone(),
+                                            field_name: field_name.clone(),
+                                            span,
+                                        });
+                                    }
+                                }
+                                Ok(expected_ty.clone())
+                            }
+                            _ => {
+                                // expected 不是结构体类型，创建类型变量
+                                let ty = self.solver.new_var();
+                                self.solver.add_constraint(
+                                    ty.clone(),
+                                    expected_ty.clone(),
+                                    span,
+                                );
+                                Ok(ty)
+                            }
+                        }
+                    } else {
+                        // 没有 expected 类型，创建新类型变量
+                        Ok(self.solver.new_var())
+                    }
+                }
             }
             ast::Pattern::Union {
                 name: _,
@@ -408,15 +512,20 @@ impl<'a> TypeInferrer<'a> {
                 pattern: _,
             } => {
                 // 简化处理：返回新类型变量
-                Ok(self.solver.new_var())
+                let ty = self.solver.new_var();
+                if let Some(expected_ty) = expected {
+                    self.solver
+                        .add_constraint(ty.clone(), expected_ty.clone(), span);
+                }
+                Ok(ty)
             }
             ast::Pattern::Or(patterns) => {
                 if let Some(first) = patterns.first() {
-                    let first_ty = self.infer_pattern(first)?;
+                    let first_ty = self.infer_pattern(first, expected, span)?;
                     for pattern in patterns.iter().skip(1) {
-                        let pattern_ty = self.infer_pattern(pattern)?;
+                        let pattern_ty = self.infer_pattern(pattern, expected, span)?;
                         self.solver
-                            .add_constraint(first_ty.clone(), pattern_ty, Span::default());
+                            .add_constraint(first_ty.clone(), pattern_ty, span);
                     }
                     Ok(first_ty)
                 } else {
@@ -424,7 +533,7 @@ impl<'a> TypeInferrer<'a> {
                 }
             }
             ast::Pattern::Guard { pattern, condition } => {
-                let pattern_ty = self.infer_pattern(pattern)?;
+                let pattern_ty = self.infer_pattern(pattern, expected, span)?;
                 let _cond_ty = self.infer_expr(condition)?;
                 Ok(pattern_ty)
             }

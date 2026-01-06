@@ -165,6 +165,19 @@ impl SpecializationKey {
             }
             MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
             MonoType::TypeRef(n) => n.hash(state),
+            // 联合类型和交集类型使用 TypeRef 的哈希方式
+            MonoType::Union(types) => {
+                "union".hash(state);
+                for t in types {
+                    self.type_name_hash(t, state);
+                }
+            }
+            MonoType::Intersection(types) => {
+                "intersection".hash(state);
+                for t in types {
+                    self.type_name_hash(t, state);
+                }
+            }
         }
     }
 }

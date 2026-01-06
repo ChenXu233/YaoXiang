@@ -94,6 +94,13 @@ pub enum TypeError {
     /// 无法推断参数类型错误
     #[error("Cannot infer type for parameter '{name}': parameter has no type annotation and is not used in a way that allows inference")]
     CannotInferParamType { name: String, span: Span },
+
+    /// 模式匹配穷举性错误
+    #[error("Non-exhaustive patterns: missing {} pattern(s)", .missing.len())]
+    NonExhaustivePatterns {
+        missing: Vec<String>,
+        span: Span,
+    },
 }
 
 impl TypeError {
@@ -116,6 +123,7 @@ impl TypeError {
             TypeError::AssignmentError { span, .. } => *span,
             TypeError::InferenceError { span, .. } => *span,
             TypeError::CannotInferParamType { span, .. } => *span,
+            TypeError::NonExhaustivePatterns { span, .. } => *span,
         }
     }
 
@@ -504,6 +512,13 @@ impl ErrorFormatter {
                     format!("Cannot infer type for parameter '{}'", name)
                 }
             }
+            TypeError::NonExhaustivePatterns { missing, span } => {
+                if self.verbose {
+                    format!("Non-exhaustive patterns: missing {:?} at {:?}", missing, span)
+                } else {
+                    format!("Non-exhaustive patterns: missing {} pattern(s)", missing.len())
+                }
+            }
         }
     }
 
@@ -568,6 +583,9 @@ impl From<TypeError> for Diagnostic {
             }
             TypeError::CannotInferParamType { .. } => {
                 Diagnostic::error("E0016".to_string(), format!("{}", error), span)
+            }
+            TypeError::NonExhaustivePatterns { .. } => {
+                Diagnostic::error("E0017".to_string(), format!("{}", error), span)
             }
         }
     }

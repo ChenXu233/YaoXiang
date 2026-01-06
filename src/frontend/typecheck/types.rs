@@ -102,6 +102,10 @@ pub enum MonoType {
     TypeVar(TypeVar),
     /// 类型引用（如自定义类型名）
     TypeRef(String),
+    /// 联合类型 `T1 | T2`
+    Union(Vec<MonoType>),
+    /// 交集类型 `T1 & T2`
+    Intersection(Vec<MonoType>),
 }
 
 impl MonoType {
@@ -158,6 +162,26 @@ impl MonoType {
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
             MonoType::Range { elem_type } => format!("Range<{}>", elem_type.type_name()),
+            MonoType::Union(types) => {
+                format!(
+                    "({})",
+                    types
+                        .iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                )
+            }
+            MonoType::Intersection(types) => {
+                format!(
+                    "({})",
+                    types
+                        .iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(" & ")
+                )
+            }
         }
     }
 }
@@ -519,6 +543,14 @@ impl TypeConstraintSolver {
                 return_type: Box::new(self.expand_type(return_type)),
                 is_async: *is_async,
             },
+            // 联合类型展开
+            MonoType::Union(types) => {
+                MonoType::Union(types.iter().map(|t| self.expand_type(t)).collect())
+            }
+            // 交集类型展开
+            MonoType::Intersection(types) => {
+                MonoType::Intersection(types.iter().map(|t| self.expand_type(t)).collect())
+            }
             _ => ty.clone(),
         }
     }
@@ -686,6 +718,68 @@ impl TypeConstraintSolver {
             // 类型引用 unify（仅比较名称）
             (MonoType::TypeRef(n1), MonoType::TypeRef(n2)) if n1 == n2 => Ok(()),
 
+            // 联合类型 unify：T1 | T2 == T3 分解为 (T1 == T3) | (T2 == T3)
+            // 即：检查 T3 是否是联合类型的超类型，或者 T3 是否兼容联合的每个成员
+            (MonoType::Union(types1), MonoType::Union(types2)) => {
+                // 联合类型 == 联合类型：检查是否集合相等
+                // 简化处理：元素数量相同且一一兼容
+                if types1.len() != types2.len() {
+                    return Err(TypeMismatch {
+                        left: t1,
+                        right: t2,
+                        span: Span::default(),
+                    });
+                }
+                for (t1, t2) in types1.iter().zip(types2.iter()) {
+                    self.unify(t1, t2)?;
+                }
+                Ok(())
+            }
+            (MonoType::Union(types), other) | (other, MonoType::Union(types)) => {
+                // 联合类型 == 具体类型：检查具体类型是否是联合的成员之一
+                // 或者尝试将具体类型与每个成员统一
+                let mut unified = false;
+                for member in types {
+                    if self.unify(member, other).is_ok() {
+                        unified = true;
+                        break;
+                    }
+                }
+                if !unified {
+                    return Err(TypeMismatch {
+                        left: t1,
+                        right: t2,
+                        span: Span::default(),
+                    });
+                }
+                Ok(())
+            }
+
+            // 交集类型 unify：T1 & T2 == T3 分解为 (T1 == T3) & (T2 == T3)
+            // 即：检查 T3 是否同时满足 T1 和 T2 的约束
+            (MonoType::Intersection(types1), MonoType::Intersection(types2)) => {
+                // 交集类型 == 交集类型：需要两个类型的成员都兼容
+                // 简化处理：元素数量相同且一一兼容
+                if types1.len() != types2.len() {
+                    return Err(TypeMismatch {
+                        left: t1,
+                        right: t2,
+                        span: Span::default(),
+                    });
+                }
+                for (t1, t2) in types1.iter().zip(types2.iter()) {
+                    self.unify(t1, t2)?;
+                }
+                Ok(())
+            }
+            (MonoType::Intersection(types), other) | (other, MonoType::Intersection(types)) => {
+                // 交集类型 == 具体类型：检查具体类型是否与所有成员兼容
+                for member in types {
+                    self.unify(member, other)?;
+                }
+                Ok(())
+            }
+
             // 不兼容类型
             _ => Err(TypeMismatch {
                 left: t1,
@@ -761,6 +855,20 @@ impl TypeConstraintSolver {
                 return_type: Box::new(self.substitute_type(return_type, substitution)),
                 is_async: *is_async,
             },
+            // 联合类型替换
+            MonoType::Union(types) => MonoType::Union(
+                types
+                    .iter()
+                    .map(|t| self.substitute_type(t, substitution))
+                    .collect(),
+            ),
+            // 交集类型替换
+            MonoType::Intersection(types) => MonoType::Intersection(
+                types
+                    .iter()
+                    .map(|t| self.substitute_type(t, substitution))
+                    .collect(),
+            ),
             _ => ty.clone(),
         }
     }
@@ -825,6 +933,12 @@ impl TypeConstraintSolver {
                     self.collect_free_vars(p, free);
                 }
                 self.collect_free_vars(return_type, free);
+            }
+            // 联合类型收集自由变量
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                for t in types {
+                    self.collect_free_vars(t, free);
+                }
             }
             _ => {}
         }
@@ -893,6 +1007,10 @@ impl TypeConstraintSolver {
             } => {
                 params.iter().any(|p| Self::type_contains_var(p, var))
                     || Self::type_contains_var(return_type, var)
+            }
+            // 联合/交集类型检查
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                types.iter().any(|t| Self::type_contains_var(t, var))
             }
             _ => false,
         }

@@ -261,6 +261,9 @@ impl MonoTypeExt for MonoType {
             MonoType::TypeRef(_) => 40,
             MonoType::TypeVar(_) => 50,
             MonoType::Range { .. } => 26,
+            // 联合类型和交集类型暂时使用 TypeRef 的 ID
+            MonoType::Union(_) => 40,
+            MonoType::Intersection(_) => 40,
         }
     }
 

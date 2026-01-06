@@ -512,7 +512,7 @@ fn test_infer_wildcard_pattern() {
     let mut inferrer = TypeInferrer::new(&mut solver);
 
     let pattern = Pattern::Wildcard;
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     assert!(ty.type_var().is_some());
 }
 
@@ -523,7 +523,7 @@ fn test_infer_identifier_pattern() {
     let mut inferrer = TypeInferrer::new(&mut solver);
 
     let pattern = Pattern::Identifier("x".to_string());
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     assert!(ty.type_var().is_some());
 
     // 验证变量已添加到环境
@@ -538,7 +538,7 @@ fn test_infer_literal_pattern() {
     let mut inferrer = TypeInferrer::new(&mut solver);
 
     let pattern = Pattern::Literal(Literal::Int(42));
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     assert_eq!(ty, MonoType::Int(64));
 }
 
@@ -554,7 +554,7 @@ fn test_infer_tuple_pattern() {
     ];
     let pattern = Pattern::Tuple(patterns);
 
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     match ty {
         MonoType::Tuple(types) => {
             assert_eq!(types.len(), 2);
@@ -575,7 +575,7 @@ fn test_infer_or_pattern() {
     ];
     let pattern = Pattern::Or(patterns);
 
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     // 或模式应该返回第一个分支的类型
     assert_eq!(ty, MonoType::Int(64));
 }
@@ -589,7 +589,7 @@ fn test_infer_empty_or_pattern() {
     let patterns = vec![];
     let pattern = Pattern::Or(patterns);
 
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     // 空或模式应该返回新类型变量
     assert!(ty.type_var().is_some());
 }
@@ -607,7 +607,7 @@ fn test_infer_guard_pattern() {
         condition: *Box::new(condition),
     };
 
-    let ty = inferrer.infer_pattern(&pattern).unwrap();
+    let ty = inferrer.infer_pattern(&pattern, None, Span::default()).unwrap();
     assert!(ty.type_var().is_some());
 }
 
