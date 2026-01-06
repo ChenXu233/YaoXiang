@@ -358,7 +358,10 @@ mod tokenizer {
             }
         }
 
-        fn scan_hex_number(&mut self, mut value: String) -> Option<Token> {
+        fn scan_hex_number(
+            &mut self,
+            mut value: String,
+        ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
 
@@ -376,9 +379,7 @@ mod tokenizer {
             }
 
             if !has_digits {
-                self.error = Some(LexError::InvalidNumber(
-                    "Expected hex digits".to_string(),
-                ));
+                self.error = Some(LexError::InvalidNumber("Expected hex digits".to_string()));
                 return Some(self.make_token(TokenKind::Error("Invalid hex number".to_string())));
             }
 
@@ -395,7 +396,10 @@ mod tokenizer {
             }
         }
 
-        fn scan_octal_number(&mut self, mut value: String) -> Option<Token> {
+        fn scan_octal_number(
+            &mut self,
+            mut value: String,
+        ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
 
@@ -413,9 +417,7 @@ mod tokenizer {
             }
 
             if !has_digits {
-                self.error = Some(LexError::InvalidNumber(
-                    "Expected octal digits".to_string(),
-                ));
+                self.error = Some(LexError::InvalidNumber("Expected octal digits".to_string()));
                 return Some(self.make_token(TokenKind::Error("Invalid octal number".to_string())));
             }
 
@@ -432,7 +434,10 @@ mod tokenizer {
             }
         }
 
-        fn scan_binary_number(&mut self, mut value: String) -> Option<Token> {
+        fn scan_binary_number(
+            &mut self,
+            mut value: String,
+        ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
 
@@ -453,7 +458,9 @@ mod tokenizer {
                 self.error = Some(LexError::InvalidNumber(
                     "Expected binary digits".to_string(),
                 ));
-                return Some(self.make_token(TokenKind::Error("Invalid binary number".to_string())));
+                return Some(
+                    self.make_token(TokenKind::Error("Invalid binary number".to_string())),
+                );
             }
 
             match num_value.try_into() {
@@ -469,7 +476,10 @@ mod tokenizer {
             }
         }
 
-        fn scan_decimal_number(&mut self, mut value: String) -> Option<Token> {
+        fn scan_decimal_number(
+            &mut self,
+            mut value: String,
+        ) -> Option<Token> {
             while let Some(&c) = self.peek() {
                 if is_digit(c) {
                     value.push(c);
