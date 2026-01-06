@@ -367,13 +367,30 @@ mod tokenizer {
         ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
+            let mut overflow = false;
 
             while let Some(&c) = self.peek() {
                 if is_hex_digit(c) {
-                    num_value = num_value * 16 + hex_digit_value(c);
-                    value.push(c);
-                    self.advance();
-                    has_digits = true;
+                    let digit = hex_digit_value(c);
+                    if overflow {
+                        // Already overflowed, just continue to consume input
+                        value.push(c);
+                        self.advance();
+                    } else {
+                        match num_value.checked_mul(16).and_then(|v| v.checked_add(digit)) {
+                            Some(new_val) => {
+                                num_value = new_val;
+                                value.push(c);
+                                self.advance();
+                                has_digits = true;
+                            }
+                            None => {
+                                overflow = true;
+                                value.push(c);
+                                self.advance();
+                            }
+                        }
+                    }
                 } else if c == '_' {
                     self.advance();
                 } else {
@@ -384,6 +401,11 @@ mod tokenizer {
             if !has_digits {
                 self.error = Some(LexError::InvalidNumber("Expected hex digits".to_string()));
                 return Some(self.make_token(TokenKind::Error("Invalid hex number".to_string())));
+            }
+
+            if overflow {
+                self.error = Some(LexError::InvalidNumber(value));
+                return Some(self.make_token(TokenKind::Error("Hex number too large".to_string())));
             }
 
             match num_value.try_into() {
@@ -405,13 +427,29 @@ mod tokenizer {
         ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
+            let mut overflow = false;
 
             while let Some(&c) = self.peek() {
                 if c >= '0' && c <= '7' {
-                    num_value = num_value * 8 + (c as u128 - b'0' as u128);
-                    value.push(c);
-                    self.advance();
-                    has_digits = true;
+                    let digit = c as u128 - b'0' as u128;
+                    if overflow {
+                        value.push(c);
+                        self.advance();
+                    } else {
+                        match num_value.checked_mul(8).and_then(|v| v.checked_add(digit)) {
+                            Some(new_val) => {
+                                num_value = new_val;
+                                value.push(c);
+                                self.advance();
+                                has_digits = true;
+                            }
+                            None => {
+                                overflow = true;
+                                value.push(c);
+                                self.advance();
+                            }
+                        }
+                    }
                 } else if c == '_' {
                     self.advance();
                 } else {
@@ -422,6 +460,13 @@ mod tokenizer {
             if !has_digits {
                 self.error = Some(LexError::InvalidNumber("Expected octal digits".to_string()));
                 return Some(self.make_token(TokenKind::Error("Invalid octal number".to_string())));
+            }
+
+            if overflow {
+                self.error = Some(LexError::InvalidNumber(value));
+                return Some(
+                    self.make_token(TokenKind::Error("Octal number too large".to_string())),
+                );
             }
 
             match num_value.try_into() {
@@ -443,13 +488,29 @@ mod tokenizer {
         ) -> Option<Token> {
             let mut num_value: u128 = 0;
             let mut has_digits = false;
+            let mut overflow = false;
 
             while let Some(&c) = self.peek() {
                 if c == '0' || c == '1' {
-                    num_value = num_value * 2 + (c as u128 - b'0' as u128);
-                    value.push(c);
-                    self.advance();
-                    has_digits = true;
+                    let digit = c as u128 - b'0' as u128;
+                    if overflow {
+                        value.push(c);
+                        self.advance();
+                    } else {
+                        match num_value.checked_mul(2).and_then(|v| v.checked_add(digit)) {
+                            Some(new_val) => {
+                                num_value = new_val;
+                                value.push(c);
+                                self.advance();
+                                has_digits = true;
+                            }
+                            None => {
+                                overflow = true;
+                                value.push(c);
+                                self.advance();
+                            }
+                        }
+                    }
                 } else if c == '_' {
                     self.advance();
                 } else {
@@ -463,6 +524,13 @@ mod tokenizer {
                 ));
                 return Some(
                     self.make_token(TokenKind::Error("Invalid binary number".to_string())),
+                );
+            }
+
+            if overflow {
+                self.error = Some(LexError::InvalidNumber(value));
+                return Some(
+                    self.make_token(TokenKind::Error("Binary number too large".to_string())),
                 );
             }
 
@@ -483,10 +551,29 @@ mod tokenizer {
             &mut self,
             mut value: String,
         ) -> Option<Token> {
+            let mut num_value: u128 = 0;
+            let mut overflow = false;
+
             while let Some(&c) = self.peek() {
                 if is_digit(c) {
-                    value.push(c);
-                    self.advance();
+                    let digit = c as u128 - b'0' as u128;
+                    if overflow {
+                        value.push(c);
+                        self.advance();
+                    } else {
+                        match num_value.checked_mul(10).and_then(|v| v.checked_add(digit)) {
+                            Some(new_val) => {
+                                num_value = new_val;
+                                value.push(c);
+                                self.advance();
+                            }
+                            None => {
+                                overflow = true;
+                                value.push(c);
+                                self.advance();
+                            }
+                        }
+                    }
                 } else if c == '_' {
                     self.advance();
                 } else {
@@ -494,9 +581,15 @@ mod tokenizer {
                 }
             }
 
+            if overflow {
+                self.error = Some(LexError::InvalidNumber(value));
+                return Some(self.make_token(TokenKind::Error("Integer too large".to_string())));
+            }
+
             // 检查是否有小数部分
             if self.peek() == Some(&'.') {
                 let next = self.peek_next();
+                // 只有当小数点后面是数字，或者是下划线+数字时才进入浮点数解析
                 if next.map(is_digit).unwrap_or(false) || next == Some('_') {
                     value.push(self.advance().unwrap());
                     while let Some(&c) = self.peek() {
@@ -504,7 +597,19 @@ mod tokenizer {
                             value.push(c);
                             self.advance();
                         } else if c == '_' {
-                            self.advance();
+                            // 下划线只能作为数字之间的分隔符
+                            if self.peek_next().map(is_digit).unwrap_or(false) {
+                                self.advance();
+                            } else {
+                                // 下划线后面没有数字，这是一个错误
+                                self.error = Some(LexError::InvalidNumber(
+                                    "Invalid number format: underscore must be between digits"
+                                        .to_string(),
+                                ));
+                                return Some(
+                                    self.make_token(TokenKind::Error("Invalid number".to_string())),
+                                );
+                            }
                         } else {
                             break;
                         }
@@ -525,7 +630,19 @@ mod tokenizer {
                         self.advance();
                         has_digits = true;
                     } else if c == '_' {
-                        self.advance();
+                        // Underscore must be followed by a digit
+                        if self.peek_next().map(is_digit).unwrap_or(false) {
+                            self.advance();
+                        } else {
+                            // Underscore followed by non-digit is an error
+                            self.error = Some(LexError::InvalidNumber(
+                                "Invalid number format: underscore must be between digits"
+                                    .to_string(),
+                            ));
+                            return Some(
+                                self.make_token(TokenKind::Error("Invalid number".to_string())),
+                            );
+                        }
                     } else {
                         break;
                     }
@@ -579,7 +696,20 @@ mod tokenizer {
                     value.push(c);
                     self.advance();
                 } else if c == '_' {
-                    self.advance();
+                    // Underscore must be followed by a digit
+                    if self.peek_next().map(is_digit).unwrap_or(false) {
+                        self.advance();
+                    } else {
+                        // Underscore followed by non-digit is an error
+                        self.error = Some(LexError::InvalidNumber(
+                            "Invalid number format: underscore must be between digits".to_string(),
+                        ));
+                        return Some(Token {
+                            kind: TokenKind::Error("Invalid number".to_string()),
+                            span: Span::new(start_pos, self.position()),
+                            literal: None,
+                        });
+                    }
                 } else {
                     break;
                 }
@@ -598,7 +728,21 @@ mod tokenizer {
                         self.advance();
                         has_digits = true;
                     } else if c == '_' {
-                        self.advance();
+                        // Underscore must be followed by a digit
+                        if self.peek_next().map(is_digit).unwrap_or(false) {
+                            self.advance();
+                        } else {
+                            // Underscore followed by non-digit is an error
+                            self.error = Some(LexError::InvalidNumber(
+                                "Invalid number format: underscore must be between digits"
+                                    .to_string(),
+                            ));
+                            return Some(Token {
+                                kind: TokenKind::Error("Invalid number".to_string()),
+                                span: Span::new(start_pos, self.position()),
+                                literal: None,
+                            });
+                        }
                     } else {
                         break;
                     }
