@@ -1,7 +1,7 @@
 # Task 3.2: 类型推断
 
 > **优先级**: P0
-> **状态**: ⚠️ 部分实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -16,7 +16,8 @@
 | 二元运算 | 约束左右操作数类型，返回结果类型 |
 | 函数调用 | 约束参数类型，返回函数返回类型 |
 | if 表达式 | 所有分支类型必须一致 |
-| match 表达式 | 所有 arm 类型必须一致 |
+| match 表达式 | 所有 arm 类型必须一致；模式类型必须与被匹配值类型兼容 |
+| 模式 | 推断模式绑定的变量类型，支持字面量、结构体、元组、枚举模式 |
 
 ## 推断方法
 
@@ -36,6 +37,21 @@ impl<'a> TypeInferrer<'a> {
 
     /// 推断 match 表达式类型
     fn infer_match(...) -> TypeResult<MonoType> { ... }
+
+    /// 推断模式类型
+    pub fn infer_pattern(&mut self, pattern: &ast::Pattern) -> TypeResult<MonoType> { ... }
+
+    /// 推断类型转换 (as)
+    fn infer_cast(...) -> TypeResult<MonoType> { ... }
+
+    /// 推断元组类型
+    fn infer_tuple(...) -> TypeResult<MonoType> { ... }
+
+    /// 推断列表类型
+    fn infer_list(...) -> TypeResult<MonoType> { ... }
+
+    /// 推断字典类型
+    fn infer_dict(...) -> TypeResult<MonoType> { ... }
 }
 ```
 
@@ -60,6 +76,21 @@ double(n) = n * 2  # 推断为 (Int) -> Int
 # if 表达式推断
 sign(n) = if n > 0 { "positive" } else { "negative" }
 # 推断为 (Int) -> String
+
+# 模式匹配推断
+type Option[T] = some(T) | none
+first_opt = some(42)      # 推断为 Option[Int]
+result = match first_opt {
+    some(n) => n * 2      # n 推断为 Int
+    none => 0
+}  # 推断为 Int
+
+# 结构体模式匹配
+type Point = Point(x: Int, y: Int)
+p = Point(x: 1, y: 2)     # 推断为 Point
+match p {
+    Point(x, y) => x + y  # x, y 推断为 Int
+}  # 推断为 Int
 
 print("Type inference tests passed!")
 ```

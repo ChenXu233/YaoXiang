@@ -1,7 +1,7 @@
 # Task 3.5: 类型统一
 
 > **优先级**: P0
-> **状态**: ⚠️ 部分实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -28,6 +28,37 @@ impl TypeConstraintSolver {
 | `List[T1] == List[T2]` | 统一 T1 和 T2 |
 | `Fn[P1] == Fn[P2]` | 统一参数和返回类型 |
 | `Struct[S1] == Struct[S2]` | 结构体类型必须完全匹配 |
+| `Union[T1, T2] == Union[T3, T4]` | 元素数量相同且一一兼容 |
+| `Union[T1, T2] == T3` | T3 兼容任一成员即成功 |
+| `Intersection[T1, T2] == T3` | T3 必须同时兼容所有成员 |
+| `Intersection[T1, T2] == Intersection[T3, T4]` | 元素数量相同且一一兼容 |
+
+## 代码实现
+
+```rust
+// 联合类型 unify：T1 | T2 == T3 分解为 (T1 == T3) | (T2 == T3)
+(MonoType::Union(types), other) | (other, MonoType::Union(types)) => {
+    let mut unified = false;
+    for member in types {
+        if self.unify(member, other).is_ok() {
+            unified = true;
+            break;
+        }
+    }
+    if !unified {
+        return Err(TypeMismatch { ... });
+    }
+    Ok(())
+}
+
+// 交集类型 unify：T1 & T2 == T3 分解为 (T1 == T3) & (T2 == T3)
+(MonoType::Intersection(types), other) | (other, MonoType::Intersection(types)) => {
+    for member in types {
+        self.unify(member, other)?;
+    }
+    Ok(())
+}
+```
 
 ## 验收测试
 
@@ -47,9 +78,17 @@ apply(f: (Int) -> Int, x: Int): Int = f(x)
 add_one(n: Int): Int = n + 1
 result = apply(add_one, 5)  # ✓
 
+# 联合类型统一
+type Result[T] = Ok(T) | Err(Exception)
+let r: Result[Int] = Ok(42)
+
+# 交集类型统一
+trait Printable = { print(self) }
+trait Comparable = { compare(self, other) -> Int }
+
 print("Unification tests passed!")
 ```
 
 ## 相关文件
 
-- **types.rs**: TypeConstraintSolver 实现
+- **types.rs**: TypeConstraintSolver 实现（包含 Union/Intersection unify 逻辑）

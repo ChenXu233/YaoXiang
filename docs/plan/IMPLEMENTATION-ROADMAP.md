@@ -1,8 +1,9 @@
-# YaoXiang 实现路线图：MVP 与架构设计
+# YaoXiang 实现路线图：Phase 4 - 字节码生成器进行中
 
-> **状态**: 设计中
+> **状态**: P4 进行中
 > **作者**: 沫郁酱
 > **日期**: 2025-01-05
+> **最后更新**: 2025-01-06
 
 ---
 
@@ -259,18 +260,20 @@
 
 ### P0 - 必须实现（Standard Runtime 核心）
 
-| 顺序 | 模块 | 文件 | 说明 |
-|------|------|------|------|
-| 1 | Lexer | `src/frontend/lexer/` | ✅ 已完成 |
-| 2 | Parser | `src/frontend/parser/` | ✅ 已完成 |
-| 3 | TypeCheck | `src/frontend/typecheck/` | ⚠️ 有缺陷，待修复 |
-| 4 | Codegen | `src/codegen/` | 🔶 新建，IR/Bytecode 生成 |
-| 5 | Value | `src/core/value.rs` | 🔶 新建，从 vm/mod.rs 迁移 |
-| 6 | Allocator | `src/core/allocator.rs` | 🔶 新建，整合 memory 模块 |
-| 7 | Ownership | `src/core/ownership.rs` | 🔶 新建，借用检查 + 生命周期 |
-| 8 | DAG | `src/runtime/dag/` | ✅ 已存在，需评估 |
-| 9 | Scheduler | `src/runtime/scheduler/` | ✅ 已存在，需适配 |
-| 10 | VM | `src/vm/` | ⚠️ 需重构，使用 Runtime 组件 |
+| Phase | 模块 | 文件 | 状态 | 说明 |
+|-------|------|------|------|------|
+| P1 | Lexer | `src/frontend/lexer/` | ✅ 完成 | Token 完整 |
+| P2 | Parser | `src/frontend/parser/` | ✅ 完成 | Pratt Parser 完整 |
+| P3 | TypeCheck | `src/frontend/typecheck/` | ✅ 完成 | 类型推断、单态化 |
+| P4 | Codegen | `src/middle/codegen/` | 🔶 进行中 | 表达式/语句生成 |
+| P5 | EscapeAnalysis | `src/middle/escape_analysis/` | ⏳ 待实现 | 内存分配优化 |
+| P6 | Lifetime | `src/middle/lifetime/` | ⏳ 待实现 | 生命周期分析 |
+| P7 | Monomorphize | `src/middle/monomorphize/` | ✅ 已完成 | 泛型特化 |
+| P8 | Core Runtime | `src/runtime/` | ⏳ 待实现 | Value/Allocator/Ownership |
+| P9 | DAG | `src/runtime/dag/` | ✅ 已存在 | 惰性计算图 |
+| P10 | Scheduler | `src/runtime/scheduler/` | ✅ 已存在 | 任务调度 |
+| P11 | VM | `src/vm/` | ⏳ 待实现 | 字节码解释执行 |
+| P12-19 | 高级特性 | `src/runtime/` | ⏳ 待实现 | WorkStealer/JIT/Debugger |
 
 ### E - Embedded Runtime（可选，嵌入式场景）
 

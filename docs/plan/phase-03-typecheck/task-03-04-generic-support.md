@@ -1,7 +1,7 @@
 # Task 3.4: 泛型支持
 
 > **优先级**: P1
-> **状态**: ⚠️ 部分实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -10,34 +10,26 @@
 ## 泛型语法
 
 ```yaoxiang
-# 泛型函数
-identity[T](x: T): T = x
+# 泛型函数（新语法）
+identity: [T](T) -> T = x => x
 
 # 泛型类型
-List[T] = struct {
-    elements: List[T],
-    length: Int,
-}
+type List[T] = List(head: T, tail: Option[List[T]])
 
-# 泛型约束
-print_value[T: Printable](value: T) = value.to_string()
+# 多泛型参数
+pair: [A, B](A, B) -> (A, B) = (a, b) => (a, b)
 ```
 
 ## 泛型处理
 
+泛型处理在 `TypeConstraintSolver` 中实现：
+
 ```rust
-// 泛型特化
-impl TypeSpecializer {
-    /// 特化泛型类型
-    pub fn specialize(ty: &PolyType, args: &[MonoType]) -> Result<MonoType, TypeError> { ... }
-
-    /// 泛型实例化
-    pub fn instantiate(poly: &PolyType) -> MonoType { ... }
-}
-
-// 类型约束求解
 impl TypeConstraintSolver {
-    /// 泛化类型
+    /// 泛型实例化：将泛型变量替换为新类型变量
+    pub fn instantiate(&mut self, poly: &PolyType) -> MonoType { ... }
+
+    /// 泛化类型：将单态类型中的自由变量提取为泛型变量
     pub fn generalize(&self, ty: &MonoType) -> PolyType { ... }
 
     /// 泛型参数替换
@@ -50,28 +42,20 @@ impl TypeConstraintSolver {
 ```yaoxiang
 # test_generics.yx
 
-# 泛型函数
-identity[T](x: T): T = x
+# 泛型函数（新语法）
+identity: [T](T) -> T = x => x
 assert(identity(42) == 42)
 assert(identity("hello") == "hello")
 
-# 泛型类型
-list = List[Int]([1, 2, 3])
-assert(list.length == 3)
-
 # 多泛型参数
-pair[A, B](a: A, b: B): (A, B) = (a, b)
+pair: [A, B](A, B) -> (A, B) = (a, b) => (a, b)
 result = pair(1, "hello")
 assert(result[0] == 1)
 assert(result[1] == "hello")
-
-# 泛型约束
-has_repr[T](x: T): String = x.to_string()
-assert(has_repr(42) == "42")
 
 print("Generic support tests passed!")
 ```
 
 ## 相关文件
 
-- **specialize.rs**: TypeSpecializer 实现
+- **types.rs**: PolyType, TypeConstraintSolver（含泛型处理）

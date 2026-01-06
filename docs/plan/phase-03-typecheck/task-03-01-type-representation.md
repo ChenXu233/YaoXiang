@@ -21,6 +21,7 @@ enum MonoType {
     Bytes,
     List(Box<MonoType>),
     Dict(Box<MonoType>, Box<MonoType>),
+    Set(Box<MonoType>),              // 集合类型
     Tuple(Vec<MonoType>),
     Struct(StructType),
     Enum(EnumType),
@@ -52,9 +53,6 @@ struct TypeConstraintSolver {
 
 enum TypeConstraint {
     Equal(MonoType, MonoType, Span),
-    Subtype(MonoType, MonoType, Span),
-    HasField(MonoType, String, Span),
-    IsCallable(MonoType, Span),
 }
 ```
 
