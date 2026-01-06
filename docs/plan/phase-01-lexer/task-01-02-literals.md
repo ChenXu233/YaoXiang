@@ -16,6 +16,9 @@
 | 字符串 | `"hello"` | `StringLiteral(String)` |
 | 字符 | `'a'`, `'\\n'` | `CharLiteral(char)` |
 | 布尔 | `true`, `false` | `BoolLiteral(bool)` |
+| 空值 | `void` | `VoidLiteral` |
+
+> **注意**: `void` 是关键字/字面量，类型签名为 `Void`（大写开头）。
 
 ## 整数格式支持
 
@@ -102,6 +105,10 @@ assert('\x41' == 'A')  // A
 assert(true == true)
 assert(false == false)
 assert(!false == true)
+
+# 空值
+let nothing: Void = void
+assert(nothing == void)
 
 print("All literal tests passed!")
 ```

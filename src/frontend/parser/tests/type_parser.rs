@@ -30,7 +30,7 @@ fn test_parse_empty_tuple_type() {
 
 #[test]
 fn test_parse_void_type() {
-    let tokens = tokenize("void").unwrap();
+    let tokens = tokenize("Void").unwrap();
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
     let ty = result.unwrap();

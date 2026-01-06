@@ -21,7 +21,6 @@
 | 循环 | `while`, `for`, `in` |
 | 控制流 | `return`, `break`, `continue` |
 | 类型转换 | `as` |
-| 字面量 | `true`, `false` |
 
 ## 输入
 

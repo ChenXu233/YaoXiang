@@ -34,6 +34,7 @@ pub enum TokenKind {
     BoolLiteral(bool),
     CharLiteral(char),
     StringLiteral(String),
+    VoidLiteral,
 
     // Operators
     Plus,

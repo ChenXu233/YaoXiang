@@ -328,6 +328,148 @@ mod tokenizer {
             let mut value = String::new();
             value.push(first_char);
 
+            // 检测进制前缀
+            let base = if first_char == '0' {
+                if self.peek() == Some(&'x') || self.peek() == Some(&'X') {
+                    self.advance();
+                    value.push('x');
+                    Some(16)
+                } else if self.peek() == Some(&'o') || self.peek() == Some(&'O') {
+                    self.advance();
+                    value.push('o');
+                    Some(8)
+                } else if self.peek() == Some(&'b') || self.peek() == Some(&'B') {
+                    self.advance();
+                    value.push('b');
+                    Some(2)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            match base {
+                Some(16) => self.scan_hex_number(value),
+                Some(8) => self.scan_octal_number(value),
+                Some(2) => self.scan_binary_number(value),
+                None => self.scan_decimal_number(value),
+                _ => unreachable!("Invalid base value"),
+            }
+        }
+
+        fn scan_hex_number(&mut self, mut value: String) -> Option<Token> {
+            let mut num_value: u128 = 0;
+            let mut has_digits = false;
+
+            while let Some(&c) = self.peek() {
+                if is_hex_digit(c) {
+                    num_value = num_value * 16 + hex_digit_value(c);
+                    value.push(c);
+                    self.advance();
+                    has_digits = true;
+                } else if c == '_' {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            if !has_digits {
+                self.error = Some(LexError::InvalidNumber(
+                    "Expected hex digits".to_string(),
+                ));
+                return Some(self.make_token(TokenKind::Error("Invalid hex number".to_string())));
+            }
+
+            match num_value.try_into() {
+                Ok(n) => Some(Token {
+                    kind: TokenKind::IntLiteral(n),
+                    span: self.span(),
+                    literal: Some(Literal::Int(n)),
+                }),
+                Err(_) => {
+                    self.error = Some(LexError::InvalidNumber(value));
+                    Some(self.make_token(TokenKind::Error("Hex number too large".to_string())))
+                }
+            }
+        }
+
+        fn scan_octal_number(&mut self, mut value: String) -> Option<Token> {
+            let mut num_value: u128 = 0;
+            let mut has_digits = false;
+
+            while let Some(&c) = self.peek() {
+                if c >= '0' && c <= '7' {
+                    num_value = num_value * 8 + (c as u128 - b'0' as u128);
+                    value.push(c);
+                    self.advance();
+                    has_digits = true;
+                } else if c == '_' {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            if !has_digits {
+                self.error = Some(LexError::InvalidNumber(
+                    "Expected octal digits".to_string(),
+                ));
+                return Some(self.make_token(TokenKind::Error("Invalid octal number".to_string())));
+            }
+
+            match num_value.try_into() {
+                Ok(n) => Some(Token {
+                    kind: TokenKind::IntLiteral(n),
+                    span: self.span(),
+                    literal: Some(Literal::Int(n)),
+                }),
+                Err(_) => {
+                    self.error = Some(LexError::InvalidNumber(value));
+                    Some(self.make_token(TokenKind::Error("Octal number too large".to_string())))
+                }
+            }
+        }
+
+        fn scan_binary_number(&mut self, mut value: String) -> Option<Token> {
+            let mut num_value: u128 = 0;
+            let mut has_digits = false;
+
+            while let Some(&c) = self.peek() {
+                if c == '0' || c == '1' {
+                    num_value = num_value * 2 + (c as u128 - b'0' as u128);
+                    value.push(c);
+                    self.advance();
+                    has_digits = true;
+                } else if c == '_' {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            if !has_digits {
+                self.error = Some(LexError::InvalidNumber(
+                    "Expected binary digits".to_string(),
+                ));
+                return Some(self.make_token(TokenKind::Error("Invalid binary number".to_string())));
+            }
+
+            match num_value.try_into() {
+                Ok(n) => Some(Token {
+                    kind: TokenKind::IntLiteral(n),
+                    span: self.span(),
+                    literal: Some(Literal::Int(n)),
+                }),
+                Err(_) => {
+                    self.error = Some(LexError::InvalidNumber(value));
+                    Some(self.make_token(TokenKind::Error("Binary number too large".to_string())))
+                }
+            }
+        }
+
+        fn scan_decimal_number(&mut self, mut value: String) -> Option<Token> {
             while let Some(&c) = self.peek() {
                 if is_digit(c) {
                     value.push(c);
@@ -339,6 +481,7 @@ mod tokenizer {
                 }
             }
 
+            // 检查是否有小数部分
             if self.peek() == Some(&'.') {
                 let next = self.peek_next();
                 if next.map(is_digit).unwrap_or(false) || next == Some('_') {
@@ -356,6 +499,7 @@ mod tokenizer {
                 }
             }
 
+            // 检查是否有指数部分
             if self.peek() == Some(&'e') || self.peek() == Some(&'E') {
                 value.push(self.advance().unwrap());
                 if self.peek() == Some(&'+') || self.peek() == Some(&'-') {
@@ -442,6 +586,72 @@ mod tokenizer {
                                 '"' => value.push('"'),
                                 '\'' => value.push('\''),
                                 '0' => value.push('\0'),
+                                'x' => {
+                                    // 十六进制转义 \xFF
+                                    let mut hex = String::new();
+                                    for _ in 0..2 {
+                                        if let Some(&hc) = self.peek() {
+                                            if is_hex_digit(hc) {
+                                                hex.push(hc);
+                                                self.advance();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if hex.len() == 2 {
+                                        if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                                            value.push(byte as char);
+                                        } else {
+                                            self.error = Some(LexError::InvalidEscape {
+                                                sequence: format!("\\x{}", hex),
+                                            });
+                                        }
+                                    } else {
+                                        self.error = Some(LexError::InvalidEscape {
+                                            sequence: format!("\\x{}", hex),
+                                        });
+                                    }
+                                }
+                                'u' => {
+                                    // Unicode 转义 \u{1F600}
+                                    if self.peek() == Some(&'{') {
+                                        self.advance();
+                                        let mut hex = String::new();
+                                        while let Some(&hc) = self.peek() {
+                                            if is_hex_digit(hc) {
+                                                hex.push(hc);
+                                                self.advance();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        if self.peek() == Some(&'}') && !hex.is_empty() {
+                                            self.advance();
+                                            if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
+                                                if let Some(ch) = char::from_u32(codepoint) {
+                                                    value.push(ch);
+                                                } else {
+                                                    self.error = Some(LexError::InvalidEscape {
+                                                        sequence: format!("\\u{{{}}}", hex),
+                                                    });
+                                                }
+                                            } else {
+                                                self.error = Some(LexError::InvalidEscape {
+                                                    sequence: format!("\\u{{{}}}", hex),
+                                                });
+                                            }
+                                        } else {
+                                            self.error = Some(LexError::InvalidEscape {
+                                                sequence: "\\u{".to_string(),
+                                            });
+                                        }
+                                    } else {
+                                        self.error = Some(LexError::InvalidEscape {
+                                            sequence: "\\u".to_string(),
+                                        });
+                                    }
+                                }
                                 c => {
                                     self.error = Some(LexError::InvalidEscape {
                                         sequence: c.to_string(),
@@ -523,6 +733,72 @@ mod tokenizer {
                                 '\'' => value.push('\''),
                                 '"' => value.push('"'),
                                 '0' => value.push('\0'),
+                                'x' => {
+                                    // 十六进制转义 \x41
+                                    let mut hex = String::new();
+                                    for _ in 0..2 {
+                                        if let Some(&hc) = self.peek() {
+                                            if is_hex_digit(hc) {
+                                                hex.push(hc);
+                                                self.advance();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if hex.len() == 2 {
+                                        if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                                            value.push(byte as char);
+                                        } else {
+                                            self.error = Some(LexError::InvalidEscape {
+                                                sequence: format!("\\x{}", hex),
+                                            });
+                                        }
+                                    } else {
+                                        self.error = Some(LexError::InvalidEscape {
+                                            sequence: format!("\\x{}", hex),
+                                        });
+                                    }
+                                }
+                                'u' => {
+                                    // Unicode 转义 \u{1F600}
+                                    if self.peek() == Some(&'{') {
+                                        self.advance();
+                                        let mut hex = String::new();
+                                        while let Some(&hc) = self.peek() {
+                                            if is_hex_digit(hc) {
+                                                hex.push(hc);
+                                                self.advance();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        if self.peek() == Some(&'}') && !hex.is_empty() {
+                                            self.advance();
+                                            if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
+                                                if let Some(ch) = char::from_u32(codepoint) {
+                                                    value.push(ch);
+                                                } else {
+                                                    self.error = Some(LexError::InvalidEscape {
+                                                        sequence: format!("\\u{{{}}}", hex),
+                                                    });
+                                                }
+                                            } else {
+                                                self.error = Some(LexError::InvalidEscape {
+                                                    sequence: format!("\\u{{{}}}", hex),
+                                                });
+                                            }
+                                        } else {
+                                            self.error = Some(LexError::InvalidEscape {
+                                                sequence: "\\u{".to_string(),
+                                            });
+                                        }
+                                    } else {
+                                        self.error = Some(LexError::InvalidEscape {
+                                            sequence: "\\u".to_string(),
+                                        });
+                                    }
+                                }
                                 c => value.push(c),
                             }
                         }
@@ -591,6 +867,7 @@ mod tokenizer {
                 "as" => Some(TokenKind::KwAs),
                 "true" => Some(TokenKind::BoolLiteral(true)),
                 "false" => Some(TokenKind::BoolLiteral(false)),
+                "void" => Some(TokenKind::VoidLiteral),
                 _ => None,
             }
         }
@@ -604,6 +881,18 @@ mod tokenizer {
     }
     fn is_digit(c: char) -> bool {
         c.is_ascii_digit()
+    }
+    fn is_hex_digit(c: char) -> bool {
+        c.is_ascii_digit() || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+    }
+    fn hex_digit_value(c: char) -> u128 {
+        if c.is_ascii_digit() {
+            c as u128 - b'0' as u128
+        } else if c >= 'a' && c <= 'f' {
+            10 + c as u128 - b'a' as u128
+        } else {
+            10 + c as u128 - b'A' as u128
+        }
     }
 }
 

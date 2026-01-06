@@ -407,6 +407,126 @@ mod lexer_literals_tests {
             panic!("Expected char literal");
         }
     }
+
+    #[test]
+    fn test_hex_literal() {
+        let tokens = tokenize("0xFF").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 255);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_hex_literal_uppercase() {
+        let tokens = tokenize("0XDEADBEEF").unwrap();
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 0xDEADBEEF);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_hex_literal_with_underscore() {
+        let tokens = tokenize("0xDEAD_BEEF").unwrap();
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 0xDEADBEEF);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_octal_literal() {
+        let tokens = tokenize("0o755").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 493);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_octal_literal_with_underscore() {
+        let tokens = tokenize("0o123_456").unwrap();
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 0o123456);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_binary_literal() {
+        let tokens = tokenize("0b1010").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 10);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_binary_literal_with_underscore() {
+        let tokens = tokenize("0b1111_0000").unwrap();
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 0b11110000);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_void_literal() {
+        let tokens = tokenize("void").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::VoidLiteral));
+    }
+
+    #[test]
+    fn test_string_with_hex_escape() {
+        let tokens = tokenize(r#""\x41""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "A");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_string_with_unicode_escape() {
+        let tokens = tokenize(r#""\u{1F600}""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "😀");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_hex_escape() {
+        let tokens = tokenize(r"'\x41'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, 'A');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_unicode_escape() {
+        let tokens = tokenize(r"'\u{1F600}'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '😀');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
 }
 
 #[cfg(test)]
