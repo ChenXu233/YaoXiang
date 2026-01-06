@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言指南
 
-> 版本：v1.1.0
+> 版本：v1.2.0
 > 状态：草稿
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2025-01-04 - 修正泛型语法为 `[T]`，移除 `fn` 关键字
+> 更新：2025-01-06 - 统一为新语法格式：name: type -> type = lambda
 
 [English version](./YaoXiang-book-en.md)
 ---
@@ -120,7 +120,7 @@ YaoXiang 的核心设计哲学是**一切皆类型**。这意味着在 YaoXiang 
 
 1. **值是类型的实例**：`42` 是 `Int` 类型的实例
 2. **类型是类型的实例**：`Int` 是 `type` 元类型的实例
-3. **函数是类型映射**：`fn add(Int, Int) -> Int` 是一个函数类型
+3. **函数是类型映射**：`add: (Int, Int) -> Int` 是一个函数类型
 4. **模块是类型组合**：模块是包含函数和类型的命名空间
 
 ```yaoxiang
@@ -131,12 +131,12 @@ x: Int = 42
 MyList: type = List(Int)
 
 # 函数是类型之间的映射
-add(Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => a + b
 
 # 模块是类型的组合（使用文件作为模块）
 # Math.yx
 pi: Float = 3.14159
-sqrt(Float) -> Float = (x) => { ... }
+sqrt: (Float) -> Float = (x) => { ... }
 ```
 
 ### 2.2 数学抽象
@@ -170,7 +170,7 @@ YaoXiang 保证零成本抽象，即高层次的抽象不会带来运行时的�
 
 ```yaoxiang
 # 泛型展开（单态化）
-identity[T](T) -> T = (x) => x
+identity: [T](T) -> T = x => x
 
 # 使用
 int_val = identity(42)      # 展开为 identity(Int) -> Int
@@ -673,7 +673,7 @@ MyInt = Int
 MyList = List(Int)
 
 # 类型反射（构造器模式匹配）
-describe_type(type) -> String = (t) => {
+describe_type: (type) -> String = (t) => {
     match t {
         Point(x, y) -> "Point with x=" + x + ", y=" + y
         red -> "Red color"
@@ -712,38 +712,38 @@ YaoXiang 采用 Rust 风格的所有权模型：
 
 ```yaoxiang
 # 默认不可变引用
-process(ref Data) -> Void = (data) => {
+process: (ref Data) -> Void = (data) => {
     # data 是只读的
     # 不能修改 data 的字段
     # 不能转移 data 的所有权
 }
 
 # 可变引用
-modify(mut Data) -> Void = (data) => {
+modify: (mut Data) -> Void = (data) => {
     # 可以修改 data 的字段
     # 不能有其他活跃的引用
 }
 
 # 转移所有权
-consume(Data) -> Void = (data) => {
+consume: (Data) -> Void = (data) => {
     # data 的所有权转移进来
     # 函数结束后 data 被销毁
 }
 
 # 借用返回
-borrow_field(ref Data) -> ref Field = (data) => ref data.field
+borrow_field: (ref Data) -> ref Field = (data) => ref data.field
 ```
 
 ### 4.2 生命周期
 
 ```yaoxiang
 # 显式生命周期标注（复杂情况）
-longest<'a>(&'a str, &'a str) -> &'a str = (s1, s2) => {
+longest: [<'a>](&'a str, &'a str) -> &'a str = (s1, s2) => {
     if s1.length > s2.length { s1 } else { s2 }
 }
 
 # 自动生命周期推断
-first[T](ref List[T]) -> ref T = (list) => ref list[0]
+first: [T](ref List[T]) -> ref T = (list) => ref list[0]
 ```
 
 ### 4.3 智能指针
@@ -763,7 +763,7 @@ thread_safe: Arc[Data] = Arc.new(data)
 
 ```yaoxiang
 # RAII 自动释放
-with_file(String) -> String = (path) => {
+with_file: (String) -> String = (path) => {
     file = File.open(path)  # 自动打开
     content = file.read_all()
     # 函数结束，file 自动关闭
@@ -789,10 +789,10 @@ with_file(String) -> String = (path) => {
 
 ```yaoxiang
 # 编译器自动构建并作图
-fetch_user() -> User spawn = (id) => { ... }
-fetch_posts(User) -> Posts spawn = (user) => { ... }
+fetch_user: spawn () -> User = (id) => { ... }
+fetch_posts: spawn (User) -> Posts = (user) => { ... }
 
-main() -> Void = () => {
+main:() -> Void = () => {
     user = fetch_user(1)     # 节点 A (Async[User])
     posts = fetch_posts(user) # 节点 B (Async[Posts])，依赖 A
 
@@ -812,9 +812,9 @@ main() -> Void = () => {
 
 ```yaoxiang
 # 并作值使用示例
-fetch_data(String) -> JSON spawn = (url) => { ... }
+fetch_data: spawn (String) -> JSON = (url) => { ... }
 
-main() -> Void = () => {
+main: () -> Void = () => {
     data = fetch_data("url")  # Async[JSON]
 
     # Async[JSON] 可直接当作 JSON 使用
@@ -839,13 +839,13 @@ main() -> Void = () => {
 # 使用 spawn 标记并作函数
 # 语法与普通函数完全一致，无额外负担
 
-fetch_api(String) -> JSON spawn = (url) => {
+fetch_api: spawn (String) -> JSON = (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
 # 嵌套并作调用
-process_user(Int) -> Report spawn = (user_id) => {
+process_user: (Int) -> Report = (user_id) => {
     user = fetch_user(user_id)     # Async[User]
     profile = fetch_profile(user)  # Async[Profile]，依赖 user
     generate_report(user, profile) # 依赖 profile
@@ -858,7 +858,7 @@ process_user(Int) -> Report spawn = (user_id) => {
 # spawn { } - 显式并行构造
 # 块内所有表达式作为独立任务并发执行
 
-compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
+compute_all: (Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
     # 三个独立计算并行执行
     (x, y, z) = spawn {
         heavy_calc(a),        # 任务 1
@@ -875,7 +875,7 @@ compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
 # spawn for - 数据并行循环
 # 每次迭代作为独立任务并行执行
 
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: (Int) -> Int spawn = (n) => {
     total = spawn for i in 0..n {
         fibonacci(i)          # 每次迭代并行
     }
@@ -889,7 +889,7 @@ parallel_sum(Int) -> Int spawn = (n) => {
 # spawn for - 数据并行循环
 # 每次迭代作为独立任务并行执行
 
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: (Int) -> Int spawn = (n) => {
     total = spawn for i in 0..n {
         fibonacci(i)          # 每次迭代并行
     }
@@ -897,7 +897,7 @@ parallel_sum(Int) -> Int spawn = (n) => {
 }
 
 # 矩阵乘法并行化
-matmul[[A: Matrix], [B: Matrix]] -> Matrix spawn = (A, B) => {
+matmul: spawn [[A: Matrix], [B: Matrix]] -> Matrix = (A, B) => {
     result = spawn for i in 0..A.rows {
         row = spawn for j in 0..B.cols {
             dot_product(A.row(i), B.col(j))
@@ -913,7 +913,7 @@ matmul[[A: Matrix], [B: Matrix]] -> Matrix spawn = (A, B) => {
 ```yaoxiang
 # 无需显式 await，编译器自动插入等待点
 
-main() -> Void = () => {
+main: () -> Void = () => {
     # 自动并行：两个独立请求并行执行
     users = fetch_users()      # Async[List[User]]
     posts = fetch_posts()      # Async[List[Post]]
@@ -927,7 +927,7 @@ main() -> Void = () => {
 }
 
 # 条件分支中的等待
-process_data() -> Void spawn = () => {
+process_data: spawn () -> Void = () => {
     data = fetch_data()        # Async[Data]
 
     if data.is_valid {         # 等待 data 就绪
@@ -942,17 +942,17 @@ process_data() -> Void spawn = () => {
 
 ```yaoxiang
 # 等待所有任务完成
-await_all[List[T]](List[Async[T]]) -> List[T] = (tasks) => {
+await_all: [T](List[Async[T]]) -> List[T] = (tasks) => {
     # Barrier 等待
 }
 
 # 等待任意一个完成
-await_any[List[T]](List[Async[T]]) -> T = (tasks) => {
+await_any: [T](List[Async[T]]) -> T = (tasks) => {
     # 返回第一个完成的结果
 }
 
 # 超时控制
-with_timeout[T](Async[T], Duration) -> Option[T] = (task, timeout) => {
+with_timeout: [T](Async[T], Duration) -> Option[T] = (task, timeout) => {
     # 超时返回 None
 }
 ```
@@ -1046,7 +1046,7 @@ Result[T, E]: Send ⇐ T: Send 且 E: Send
 # 线程安全计数器示例
 type SafeCounter = SafeCounter(mutex: Mutex[Int])
 
-main() -> Void = () => {
+main: () -> Void = () => {
     counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
 
     # 并发更新
@@ -1069,7 +1069,7 @@ main() -> Void = () => {
 # 运行时会将其分配到专用阻塞线程池
 
 @blocking
-read_large_file(String) -> String = (path) => {
+read_large_file: (String) -> String = (path) => {
     # 此调用不会阻塞核心调度器
     file = File.open(path)
     content = file.read_all()
@@ -1120,22 +1120,26 @@ YaoXiang 采用**纯函数式设计**，通过先进的绑定机制实现无缝�
 type Point = Point(x: Float, y: Float)
 
 # 核心函数：第一个参数是操作的主体
-distance(Point, Point) -> Float = (a, b) => {
+distance: (Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-add(Point, Point) -> Point = (a, b) => {
+add: (Point, Point) -> Point = (a, b) => {
     Point(a.x + b.x, a.y + b.y)
 }
 
-scale(Point, Float) -> Point = (p, s) => {
+scale: (Point, Float) -> Point = (p, s) => {
     Point(p.x * s, p.y * s)
 }
 
 # 更复杂的函数
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
+distance_with_scale: (Float, Point, Point) -> Float = (s, p1, p2) => {
+    dx = (p1.x - p2.x) * s
+    dy = (p1.y - p2.y) * s
+    (dx * dx + dy * dy).sqrt()
+}
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
     (dx * dx + dy * dy).sqrt()
@@ -1154,13 +1158,17 @@ YaoXiang 支持基于命名空间的自动绑定，**无需任何额外声明**�
 type Point = Point(x: Float, y: Float)
 
 # 核心函数
-distance(Point, Point) -> Float = (a, b) => { ... }
+distance: (Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
 
 # === main.yx ===
 
 use Point
 
-main() -> Void = () => {
+main: () -> Void = () => {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
     
@@ -1182,7 +1190,9 @@ main() -> Void = () => {
 type Vector = Vector(x: Float, y: Float, z: Float)
 
 # 内部辅助函数，不希望自动绑定
-dot_product_internal(v1: Vector, v2: Vector) -> Float = (a, b) => {
+dot_product_internal: (Vector, Vector) -> Float = (a, b) => {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
     a.x * b.x + a.y * b.y + a.z * b.z
 }
 
@@ -1190,7 +1200,7 @@ dot_product_internal(v1: Vector, v2: Vector) -> Float = (a, b) => {
 
 use Vector
 
-main() -> Void = () => {
+main: () -> Void = () => {
     v1 = Vector(1.0, 0.0, 0.0)
     v2 = Vector(0.0, 1.0, 0.0)
     
@@ -1213,9 +1223,17 @@ YaoXiang 提供**最优雅的绑定语法**，使用位置标记 `[n]` 来精确
 type Point = Point(x: Float, y: Float)
 
 # 核心函数
-distance(Point, Point) -> Float = (a, b) => { ... }
-add(Point, Point) -> Point = (a, b) => { ... }
-scale(Point, Float) -> Point = (p, s) => { ... }
+distance: (Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
+add: (Point, Point) -> Point = (a, b) => {
+    Point(a.x + b.x, a.y + b.y)
+}
+scale: (Point, Float) -> Point = (p, s) => {
+    Point(p.x * s, p.y * s)
+}
 
 # 绑定语法：Type.method = func[position]
 # 表示：调用方法时，将调用者绑定到 func 的 [position] 参数
@@ -1237,7 +1255,7 @@ Point.scale = scale[1]             # 绑定到第1个参数
 # === Math.yx ===
 
 # 函数：scale, point1, point2, extra1, extra2
-calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s, p1, p2, x, y) => { ... }
+calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s, p1, p2, x, y) => { ... }
 
 # === Point.yx ===
 
@@ -1307,7 +1325,7 @@ Point.wrong = distance[1, 2, 3, 4]    # 超出函数参数个数
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
+distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
 
 # === Point.yx ===
 
@@ -1344,9 +1362,17 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # 链式调用
 type Point = Point(x: Float, y: Float)
 
 # 核心函数
-distance(Point, Point) -> Float = (a, b) => { ... }
-add(Point, Point) -> Point = (a, b) => { ... }
-scale(Point, Float) -> Point = (p, s) => { ... }
+distance: (Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
+add: (Point, Point) -> Point = (a, b) => {
+    Point(a.x + b.x, a.y + b.y)
+}
+scale: (Point, Float) -> Point = (p, s) => {
+    Point(p.x * s, p.y * s)
+}
 
 # 自动绑定（核心）
 Point.distance = distance[1]
@@ -1356,7 +1382,7 @@ Point.scale = scale[1]
 # === Math.yx ===
 
 # 全局函数
-multiply_by_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
+multiply_by_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
 
 # === main.yx ===
 
@@ -1386,10 +1412,18 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 type Point = Point(x: Float, y: Float)
 
 # 非 pub 函数
-internal_distance(a: Point, b: Point) -> Float = (a, b) => { ... }
+internal_distance: (a: Point, b: Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
 
 # pub 函数
-pub distance(a: Point, b: Point) -> Float = (a, b) => { ... }
+pub distance: (a: Point, b: Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
 
 # === main.yx ===
 
@@ -1407,7 +1441,11 @@ p1.distance(p2)      # ✅ distance 是 pub，可自动绑定
 
 type Point = Point(x: Float, y: Float)
 
-distance(Point, Point) -> Float = (a, b) => { ... }
+distance: (Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
 
 # 在模块内部，所有函数都可见
 # 但自动绑定只对 pub 导出的函数在外部有效
@@ -1951,7 +1989,7 @@ for i in 0..10 {
 type Point = Point(x: Float, y: Float)
 
 # 核心函数
-distance(Point, Point) -> Float = (a, b) => {
+distance: (Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1964,7 +2002,7 @@ Point.distance = distance[1]
 
 use Point
 
-main() -> Void = () => {
+main: () -> Void = () => {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
     
@@ -1979,7 +2017,7 @@ main() -> Void = () => {
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
+distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
     (dx * dx + dy * dy).sqrt()
@@ -2055,6 +2093,7 @@ result2 = p1.distance_scaled(2.0, p2)
 |------|------|------|---------|
 | v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
 | v1.1.0 | 2025-01-04 | 沫郁酱 | 修正泛型语法为 `[T]`（而非 `<T>`）；移除 `fn` 关键字；更新函数定义示例 |
+| v1.2.0 | 2025-01-06 | 晨煦 | 统一为新语法格式：name: type -> type = lambda
 
 ---
 
