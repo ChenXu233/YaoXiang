@@ -97,10 +97,7 @@ pub enum TypeError {
 
     /// 模式匹配穷举性错误
     #[error("Non-exhaustive patterns: missing {} pattern(s)", .missing.len())]
-    NonExhaustivePatterns {
-        missing: Vec<String>,
-        span: Span,
-    },
+    NonExhaustivePatterns { missing: Vec<String>, span: Span },
 }
 
 impl TypeError {
@@ -514,9 +511,15 @@ impl ErrorFormatter {
             }
             TypeError::NonExhaustivePatterns { missing, span } => {
                 if self.verbose {
-                    format!("Non-exhaustive patterns: missing {:?} at {:?}", missing, span)
+                    format!(
+                        "Non-exhaustive patterns: missing {:?} at {:?}",
+                        missing, span
+                    )
                 } else {
-                    format!("Non-exhaustive patterns: missing {} pattern(s)", missing.len())
+                    format!(
+                        "Non-exhaustive patterns: missing {} pattern(s)",
+                        missing.len()
+                    )
                 }
             }
         }

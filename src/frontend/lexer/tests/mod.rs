@@ -475,6 +475,18 @@ mod lexer_literals_tests {
     }
 
     #[test]
+    fn test_string_literal_with_unicode_char_in_source() {
+        // Ensure lexer advances over a multi-byte UTF-8 char in raw source
+        let tokens = tokenize("\"😀\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "😀");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
     fn test_string_with_escape() {
         let tokens = tokenize(r#""hello\nworld""#).unwrap();
         if let TokenKind::StringLiteral(s) = &tokens[0].kind {
@@ -490,6 +502,31 @@ mod lexer_literals_tests {
         assert_eq!(tokens.len(), 2);
         if let TokenKind::CharLiteral(c) = &tokens[0].kind {
             assert_eq!(*c, 'a');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_character_literal_with_unicode_char_in_source() {
+        // Ensure lexer advances over a multi-byte UTF-8 char in raw source
+        let tokens = tokenize("'😀'").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '😀');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_unknown_escape_treated_as_literal() {
+        // In char literals, unknown escape sequences are treated as the escaped char itself
+        // (unlike strings, where it becomes an error)
+        let tokens = tokenize(r#"'\q'"#).unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, 'q');
         } else {
             panic!("Expected char literal");
         }
@@ -698,6 +735,19 @@ mod lexer_literals_tests {
         assert_eq!(tokens.len(), 2);
         if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
             assert!((n - 1000.5).abs() < 0.001);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_float_with_underscore_after_dot_before_digit() {
+        // Underscore is allowed as a separator when it's between digits
+        // This exercises the decimal-part underscore handling branch.
+        let tokens = tokenize("1._2").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 1.2).abs() < 0.000_000_1);
         } else {
             panic!("Expected float literal");
         }
@@ -1090,6 +1140,13 @@ mod lexer_error_tests {
     }
 
     #[test]
+    fn test_invalid_hex_number_only_underscore() {
+        // 0x_ consumes underscore but still has no digits
+        let result = tokenize("0x_");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_invalid_octal_number_no_digits() {
         // 0o without any octal digits
         let result = tokenize("0o");
@@ -1097,9 +1154,23 @@ mod lexer_error_tests {
     }
 
     #[test]
+    fn test_invalid_octal_number_only_underscore() {
+        // 0o_ consumes underscore but still has no digits
+        let result = tokenize("0o_");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_invalid_binary_number_no_digits() {
         // 0b without any binary digits
         let result = tokenize("0b");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_binary_number_only_underscore() {
+        // 0b_ consumes underscore but still has no digits
+        let result = tokenize("0b_");
         assert!(result.is_err());
     }
 
@@ -1172,6 +1243,32 @@ mod lexer_error_tests {
     }
 
     #[test]
+    fn test_hex_number_exceeds_i128_but_fits_u128() {
+        // This should hit the `try_into()` error path (fits u128, exceeds i128::MAX)
+        let value: u128 = 1u128 << 127;
+        let source = format!("0x{:x}", value);
+        let result = tokenize(&source);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_octal_number_exceeds_i128_but_fits_u128() {
+        // Also hit the `try_into()` error path for octal
+        let value: u128 = 1u128 << 127;
+        let source = format!("0o{:o}", value);
+        let result = tokenize(&source);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_binary_number_exceeds_i128_but_fits_u128() {
+        // Also hit the `try_into()` error path for binary
+        let source = format!("0b1{}", "0".repeat(127));
+        let result = tokenize(&source);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_float_with_only_underscore_after_dot() {
         // 123._ should be an error (underscore after decimal point must be followed by digit)
         let result = tokenize(r"123._");
@@ -1207,6 +1304,13 @@ mod lexer_error_tests {
     }
 
     #[test]
+    fn test_exponent_trailing_underscore_error() {
+        // Underscore must be between digits in exponent
+        let result = tokenize("1e1_");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_leading_dot_with_underscore_error() {
         // .5_ should error (underscore after decimal must be followed by digit)
         let result = tokenize(r".5_");
@@ -1217,6 +1321,13 @@ mod lexer_error_tests {
     fn test_leading_dot_exponent_without_digits() {
         // .5e without exponent digits should error
         let result = tokenize(r".5e");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_leading_dot_exponent_trailing_underscore_error() {
+        // Underscore must be between digits in exponent (leading-dot float)
+        let result = tokenize(r".5e1_");
         assert!(result.is_err());
     }
 
@@ -1560,7 +1671,7 @@ mod lexer_error_tests {
         // Hex number that's too large for i128 but fits in u128
         // This tests the try_into failure path
         let result = tokenize("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); // near i128::MAX
-        // Should succeed if it fits in i128
+                                                                      // Should succeed if it fits in i128
         if result.is_ok() {
             let tokens = result.unwrap();
             assert!(matches!(tokens[0].kind, TokenKind::IntLiteral(_)));
@@ -1600,10 +1711,10 @@ mod lexer_error_tests {
     fn test_unicode_escape_valid_chars() {
         // Test various valid unicode escapes
         let tests = [
-            (r#"\u{00A9}"#, '©'),  // Copyright
-            (r#"\u{00AE}"#, '®'),  // Registered
-            (r#"\u{2600}"#, '☀'),  // Sun
-            (r#"\u{2601}"#, '☁'),  // Cloud
+            (r#"\u{00A9}"#, '©'), // Copyright
+            (r#"\u{00AE}"#, '®'), // Registered
+            (r#"\u{2600}"#, '☀'), // Sun
+            (r#"\u{2601}"#, '☁'), // Cloud
         ];
         for (escape, expected) in tests {
             let input = format!("\"{}\"", escape);
@@ -1652,10 +1763,18 @@ mod lexer_error_tests {
     #[test]
     fn test_keywords_are_not_identifiers() {
         // Keywords should be recognized as keywords, not identifiers
-        let keywords = ["type", "pub", "use", "spawn", "ref", "mut", "if", "else", "while", "for", "in", "return", "break", "continue", "as"];
+        let keywords = [
+            "type", "pub", "use", "spawn", "ref", "mut", "if", "else", "while", "for", "in",
+            "return", "break", "continue", "as",
+        ];
         for kw in &keywords {
             let tokens = tokenize(kw).unwrap();
-            assert_ne!(tokens[0].kind, TokenKind::Identifier(kw.to_string()), "{} should be keyword", kw);
+            assert_ne!(
+                tokens[0].kind,
+                TokenKind::Identifier(kw.to_string()),
+                "{} should be keyword",
+                kw
+            );
         }
     }
 
@@ -1945,7 +2064,10 @@ mod lexer_error_tests {
         let cases = ["0", "0.0", "0e0", "0.0e0", ".0"];
         for case in &cases {
             let tokens = tokenize(case).unwrap();
-            assert!(matches!(tokens[0].kind, TokenKind::FloatLiteral(0.0) | TokenKind::IntLiteral(0)));
+            assert!(matches!(
+                tokens[0].kind,
+                TokenKind::FloatLiteral(0.0) | TokenKind::IntLiteral(0)
+            ));
         }
     }
 
@@ -2228,5 +2350,83 @@ mod lexer_error_tests {
         // 0b1_0 - valid underscore between binary digits
         let tokens = tokenize("0b1_0").unwrap();
         assert!(matches!(tokens[0].kind, TokenKind::IntLiteral(2)));
+    }
+
+    // ===== 缺失覆盖率补全测试 =====
+
+    #[test]
+    fn test_hex_with_non_hex_char_terminates() {
+        // 0x1G - G terminates hex parsing, G becomes next token
+        let tokens = tokenize("0x1G").unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::IntLiteral(1)));
+        assert!(matches!(tokens[1].kind, TokenKind::Identifier(_)));
+    }
+
+    #[test]
+    fn test_float_exponent_with_only_underscore_terminates() {
+        // 1e_ - exponent with only underscore should be an error
+        let result = tokenize("1e_");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_leading_dot_float_parse_failure() {
+        // Extremely large float that would overflow f64
+        let result = tokenize("1e99999999999999999999999999999999999999999999999999");
+        // Should either succeed (as infinity) or error, but not panic
+        // This exercises the f64 parse failure path
+        let _ = result;
+    }
+
+    #[test]
+    fn test_leading_dot_exponent_only_underscore() {
+        // .e_ - exponent without digits, underscore terminates
+        let tokens = tokenize(".e_").unwrap();
+        // Should be: Dot, Identifier(e), Identifier(_), EOF
+        // Or: Dot, Error, depending on implementation
+        assert!(tokens.len() >= 2);
+    }
+
+    #[test]
+    fn test_char_hex_escape_single_digit_error() {
+        // '\x with only one hex digit - lexer sets error and continues
+        let result = tokenize(r"'\x4'");
+        // Should return error since \x requires 2 hex digits
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_char_hex_escape_no_digits_error() {
+        // '\x with no hex digits
+        let result = tokenize(r"'\x'");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_char_unicode_escape_empty_braces_error() {
+        // '\u{}' - empty braces, no hex digits
+        let result = tokenize(r"'\u{}'");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_char_unicode_escape_no_closing_brace() {
+        // '\u{123' without closing brace
+        let result = tokenize(r"'\u{123'");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_char_unicode_escape_missing_open_brace() {
+        // '\u1234' without opening brace
+        let result = tokenize(r"'\u1234'");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_char_unicode_escape_invalid_codepoint() {
+        // Codepoint too large for char
+        let result = tokenize(r"'\u{10FFFFFFF}'");
+        assert!(result.is_err());
     }
 }

@@ -477,8 +477,11 @@ impl<'a> TypeInferrer<'a> {
                                     fields.iter().zip(field_expected_types.iter())
                                 {
                                     if let Some(expected_ty) = expected_field_ty {
-                                        let _field_pat_ty =
-                                            self.infer_pattern(field_pattern, Some(expected_ty), span)?;
+                                        let _field_pat_ty = self.infer_pattern(
+                                            field_pattern,
+                                            Some(expected_ty),
+                                            span,
+                                        )?;
                                     } else {
                                         return Err(TypeError::UnknownField {
                                             struct_name: name.clone(),
@@ -492,11 +495,8 @@ impl<'a> TypeInferrer<'a> {
                             _ => {
                                 // expected 不是结构体类型，创建类型变量
                                 let ty = self.solver.new_var();
-                                self.solver.add_constraint(
-                                    ty.clone(),
-                                    expected_ty.clone(),
-                                    span,
-                                );
+                                self.solver
+                                    .add_constraint(ty.clone(), expected_ty.clone(), span);
                                 Ok(ty)
                             }
                         }
