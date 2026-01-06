@@ -250,6 +250,7 @@ impl<'a> ParserState<'a> {
                 | Some(TokenKind::Not)
                 | Some(TokenKind::LParen)
                 | Some(TokenKind::LBrace)
+                | Some(TokenKind::LBracket)
                 | Some(TokenKind::KwIf)
                 | Some(TokenKind::KwMatch)
                 | Some(TokenKind::KwWhile)

@@ -33,8 +33,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => Some((BP_HIGHEST, Self::parse_identifier)),
             // Grouped expression or tuple
             Some(TokenKind::LParen) => Some((BP_HIGHEST, Self::parse_group_or_tuple)),
-            // List literal
-            Some(TokenKind::LBracket) => Some((BP_HIGHEST, Self::parse_list_literal)),
+            // List literal or list comprehension
+            Some(TokenKind::LBracket) => Some((BP_HIGHEST, Self::parse_list_or_comp)),
             // Block expression
             Some(TokenKind::LBrace) => Some((BP_HIGHEST, Self::parse_block)),
             // If expression
@@ -204,11 +204,21 @@ impl<'a> ParserState<'a> {
         Some(elements.into_iter().next().unwrap())
     }
 
-    /// Parse list literal: [expr, expr, ...]
-    fn parse_list_literal(&mut self) -> Option<Expr> {
+    /// Parse list literal or list comprehension: [expr, ...] or [x for x in iter if cond]
+    fn parse_list_or_comp(&mut self) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume '['
 
+        // Check if this is a list comprehension: [expr for ...
+        // Look ahead to see if we have identifier followed by KwFor
+        if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {
+            let after_identifier = self.peek();
+            if matches!(after_identifier.map(|t| &t.kind), Some(TokenKind::KwFor)) {
+                return self.parse_list_comprehension(start_span);
+            }
+        }
+
+        // Parse as regular list literal: [expr, expr, ...]
         let mut elements = Vec::new();
         while !self.at(&TokenKind::RBracket) && !self.at_end() {
             elements.push(self.parse_expression(BP_LOWEST)?);
@@ -222,6 +232,62 @@ impl<'a> ParserState<'a> {
         }
 
         Some(Expr::List(elements, start_span))
+    }
+
+    /// Parse list comprehension: [element for var in iterable if condition]
+    fn parse_list_comprehension(
+        &mut self,
+        start_span: Span,
+    ) -> Option<Expr> {
+        // Parse element expression
+        let element = self.parse_expression(BP_LOWEST)?;
+
+        // Expect 'for'
+        if !self.expect(&TokenKind::KwFor) {
+            return None;
+        }
+
+        // Parse loop variable (must be identifier)
+        let var = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                self.error(super::ParseError::UnexpectedToken(
+                    self.current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
+                ));
+                return None;
+            }
+        };
+        self.bump();
+
+        // Expect 'in'
+        if !self.expect(&TokenKind::KwIn) {
+            return None;
+        }
+
+        // Parse iterable expression
+        let iterable = self.parse_expression(BP_LOWEST)?;
+
+        // Parse optional condition: 'if' expr
+        let condition = if self.skip(&TokenKind::KwIf) {
+            Some(Box::new(self.parse_expression(BP_LOWEST)?))
+        } else {
+            None
+        };
+
+        // Expect ']'
+        if !self.expect(&TokenKind::RBracket) {
+            return None;
+        }
+
+        Some(Expr::ListComp {
+            element: Box::new(element),
+            var,
+            iterable: Box::new(iterable),
+            condition,
+            span: start_span,
+        })
     }
 
     fn parse_lambda_body(
@@ -446,6 +512,34 @@ impl<'a> ParserState<'a> {
     fn parse_pattern(&mut self) -> Option<Pattern> {
         let _start_span = self.span();
 
+        // Check for Or pattern first: pattern | pattern | ...
+        let first = self.parse_simple_pattern()?;
+
+        // Check for Or (|) to combine patterns
+        if self.at(&TokenKind::Pipe) {
+            let mut patterns = vec![first];
+            while self.skip(&TokenKind::Pipe) {
+                patterns.push(self.parse_simple_pattern()?);
+            }
+            return Some(Pattern::Or(patterns));
+        }
+
+        // Check for Guard pattern: pattern if condition
+        if self.skip(&TokenKind::KwIf) {
+            let condition = self.parse_expression(BP_LOWEST)?;
+            return Some(Pattern::Guard {
+                pattern: Box::new(first),
+                condition,
+            });
+        }
+
+        Some(first)
+    }
+
+    /// Parse a simple pattern (without Or or Guard)
+    fn parse_simple_pattern(&mut self) -> Option<Pattern> {
+        let _start_span = self.span();
+
         match self.current().map(|t| &t.kind) {
             Some(TokenKind::Underscore) => {
                 self.bump();
@@ -478,6 +572,25 @@ impl<'a> ParserState<'a> {
                         return None;
                     }
                     return Some(Pattern::Struct { name, fields });
+                }
+
+                // Check for Union/Variant pattern: Variant(pattern)
+                if self.at(&TokenKind::LParen) {
+                    self.bump(); // consume '('
+                    let inner_pattern = if self.at(&TokenKind::RParen) {
+                        None
+                    } else {
+                        Some(Box::new(self.parse_pattern()?))
+                    };
+                    if !self.expect(&TokenKind::RParen) {
+                        return None;
+                    }
+                    let name_clone = name.clone();
+                    return Some(Pattern::Union {
+                        name,
+                        variant: name_clone,
+                        pattern: inner_pattern,
+                    });
                 }
 
                 Some(Pattern::Identifier(name))

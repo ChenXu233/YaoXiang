@@ -84,11 +84,39 @@ mod lexer_keywords_tests {
     }
 
     #[test]
+    fn test_spawn_keyword() {
+        let tokens = tokenize("spawn").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwSpawn));
+    }
+
+    #[test]
+    fn test_ref_keyword() {
+        let tokens = tokenize("ref").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwRef));
+    }
+
+    #[test]
+    fn test_mut_keyword() {
+        let tokens = tokenize("mut").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwMut));
+    }
+
+    #[test]
     fn test_if_else_keywords() {
         let tokens = tokenize("if else").unwrap();
         assert_eq!(tokens.len(), 3);
         assert!(matches!(tokens[0].kind, TokenKind::KwIf));
         assert!(matches!(tokens[1].kind, TokenKind::KwElse));
+    }
+
+    #[test]
+    fn test_elif_keyword() {
+        let tokens = tokenize("elif").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwElif));
     }
 
     #[test]
@@ -107,10 +135,38 @@ mod lexer_keywords_tests {
     }
 
     #[test]
+    fn test_in_keyword() {
+        let tokens = tokenize("in").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwIn));
+    }
+
+    #[test]
     fn test_return_keyword() {
         let tokens = tokenize("return").unwrap();
         assert_eq!(tokens.len(), 2);
         assert!(matches!(tokens[0].kind, TokenKind::KwReturn));
+    }
+
+    #[test]
+    fn test_break_keyword() {
+        let tokens = tokenize("break").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwBreak));
+    }
+
+    #[test]
+    fn test_continue_keyword() {
+        let tokens = tokenize("continue").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwContinue));
+    }
+
+    #[test]
+    fn test_as_keyword() {
+        let tokens = tokenize("as").unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(tokens[0].kind, TokenKind::KwAs));
     }
 
     #[test]
@@ -527,6 +583,185 @@ mod lexer_literals_tests {
             panic!("Expected char literal");
         }
     }
+
+    #[test]
+    fn test_float_leading_dot() {
+        // Test .5 format (equivalent to 0.5)
+        let tokens = tokenize(".5").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 0.5).abs() < 0.001);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_float_scientific_notation() {
+        let tokens = tokenize("1e10").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 1e10).abs() < 1.0);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_float_scientific_notation_negative_exp() {
+        let tokens = tokenize("1.5e-5").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 0.000015).abs() < 0.000001);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_float_scientific_notation_uppercase() {
+        let tokens = tokenize("3.14E10").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 3.14e10).abs() < 1.0);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_float_scientific_notation_with_plus() {
+        let tokens = tokenize("2e+5").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 200000.0).abs() < 1.0);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_integer_with_underscores() {
+        let tokens = tokenize("1_000_000").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::IntLiteral(n) = &tokens[0].kind {
+            assert_eq!(*n, 1000000);
+        } else {
+            panic!("Expected int literal");
+        }
+    }
+
+    #[test]
+    fn test_float_with_underscores() {
+        let tokens = tokenize("1_000.5").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::FloatLiteral(n) = &tokens[0].kind {
+            assert!((n - 1000.5).abs() < 0.001);
+        } else {
+            panic!("Expected float literal");
+        }
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let tokens = tokenize(r#""""#).unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_string_with_tab_escape() {
+        let tokens = tokenize(r#""hello\tworld""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\tworld");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_string_with_cr_escape() {
+        let tokens = tokenize(r#""hello\rworld""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\rworld");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_string_with_null_escape() {
+        let tokens = tokenize(r#""hello\0world""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\0world");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_string_with_quote_escape() {
+        let tokens = tokenize(r#""hello\"world""#).unwrap();
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\"world");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_tab_escape() {
+        let tokens = tokenize(r"'\t'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '\t');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_cr_escape() {
+        let tokens = tokenize(r"'\r'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '\r');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_null_escape() {
+        let tokens = tokenize(r"'\0'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '\0');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_quote_escape() {
+        let tokens = tokenize(r"'\''").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '\'');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
+
+    #[test]
+    fn test_char_with_double_quote_escape() {
+        let tokens = tokenize(r"'\x22'").unwrap();
+        if let TokenKind::CharLiteral(c) = &tokens[0].kind {
+            assert_eq!(*c, '"');
+        } else {
+            panic!("Expected char literal");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -585,6 +820,65 @@ mod lexer_comments_tests {
         assert!(has_42, "Should have integer 42");
         assert!(has_99, "Should have integer 99");
     }
+
+    #[test]
+    fn test_nested_comments() {
+        // Test nested multi-line comments
+        let tokens = tokenize("/* outer /* inner */ outer2 */ 42").unwrap();
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        assert!(has_42, "Should have integer 42 after nested comments");
+    }
+
+    #[test]
+    fn test_deeply_nested_comments() {
+        // Test deeply nested comments
+        let tokens = tokenize("/* a /* b /* c */ b2 */ a2 */ 42").unwrap();
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        assert!(
+            has_42,
+            "Should have integer 42 after deeply nested comments"
+        );
+    }
+
+    #[test]
+    fn test_comment_at_start_of_file() {
+        // Test comment at the very start
+        let tokens = tokenize("/* comment at start */ let").unwrap();
+        let has_let = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::Identifier(_s)));
+        assert!(
+            has_let,
+            "Should have identifier 'let' after comment at start"
+        );
+    }
+
+    #[test]
+    fn test_multiple_single_line_comments() {
+        // Test multiple single-line comments
+        let tokens = tokenize("// first comment\n// second comment\n42").unwrap();
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        assert!(
+            has_42,
+            "Should have integer 42 after multiple single-line comments"
+        );
+    }
+
+    #[test]
+    fn test_comment_before_and_after_code() {
+        // Test comments on both sides of code
+        let tokens = tokenize("/* before */ 42 /* after */").unwrap();
+        let has_42 = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::IntLiteral(42)));
+        assert!(has_42, "Should have integer 42 with comments on both sides");
+    }
 }
 
 #[cfg(test)]
@@ -628,5 +922,75 @@ mod lexer_error_tests {
         } else {
             panic!("Expected unexpected char error");
         }
+    }
+
+    #[test]
+    fn test_standalone_ampersand_error() {
+        // Single & without second & should be an error
+        let result = tokenize("&");
+        assert!(result.is_err());
+        if let Err(LexError::UnexpectedChar { .. }) = result {
+            // Expected error
+        } else {
+            panic!("Expected unexpected char error for &");
+        }
+    }
+
+    #[test]
+    fn test_invalid_hex_escape() {
+        // \x with only one hex digit
+        let result = tokenize(r#""\x4""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_hex_number_no_digits() {
+        // 0x without any hex digits
+        let result = tokenize("0x");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_octal_number_no_digits() {
+        // 0o without any octal digits
+        let result = tokenize("0o");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_binary_number_no_digits() {
+        // 0b without any binary digits
+        let result = tokenize("0b");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_char_literal() {
+        let result = tokenize("''");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unterminated_multi_line_comment() {
+        // Unterminated multi-line comments are skipped by lexer
+        // (Parser will catch unmatched /* later)
+        let tokens = tokenize("/* unterminated comment").unwrap();
+        // Should have EOF token (comment is skipped)
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(tokens[0].kind, TokenKind::Eof));
+    }
+
+    #[test]
+    fn test_invalid_unicode_escape() {
+        // \u without braces
+        let result = tokenize(r#""\u1234""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_unicode_escape_empty_braces() {
+        // \u{} without hex digits
+        let result = tokenize(r#""\u{}""#);
+        assert!(result.is_err());
     }
 }

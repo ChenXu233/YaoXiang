@@ -34,7 +34,6 @@ use ast::*;
 pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
     let mut state = ParserState::new(tokens);
     let mut items = Vec::new();
-    let mut stmt_count = 0;
 
     while !state.at_end() {
         // Skip empty statements (like stray semicolons)
@@ -45,10 +44,6 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
                 continue;
             }
 
-            eprintln!(
-                "[DEBUG] Skipping token that can't start statement: {:?}",
-                state.current().map(|t| &t.kind)
-            );
             // Report error for unexpected token
             state.error(ParseError::UnexpectedToken(
                 state
@@ -60,42 +55,23 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
             continue;
         }
 
-        stmt_count += 1;
-        eprintln!("[DEBUG] Parsing statement {}", stmt_count);
         match state.parse_stmt() {
             Some(stmt) => {
-                eprintln!(
-                    "[DEBUG] Statement {} parsed successfully: {:?}",
-                    stmt_count,
-                    std::mem::discriminant(&stmt.kind)
-                );
                 items.push(stmt);
             }
             None => {
-                eprintln!(
-                    "[DEBUG] Statement {} failed to parse, current token: {:?}",
-                    stmt_count,
-                    state.current().map(|t| &t.kind)
-                );
-                if state.has_errors() {
-                    eprintln!("[DEBUG] Error set: {:?}", state.first_error());
-                }
                 // Skip to next statement or EOF
                 state.synchronize();
             }
         }
     }
 
-    eprintln!("[DEBUG] Total statements parsed: {}", items.len());
-
     if state.has_errors() {
         // Return the first error
         if let Some(error) = state.first_error().cloned() {
-            eprintln!("[DEBUG] Parse error detected: {:?}", error);
             Err(error)
         } else {
             // Should not happen, but return a generic error
-            eprintln!("[DEBUG] No specific error but has_errors() is true");
             Err(ParseError::UnexpectedToken(
                 state
                     .current()

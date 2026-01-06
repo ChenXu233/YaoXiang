@@ -68,6 +68,13 @@ pub enum Expr {
     },
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Span),
+    ListComp {
+        element: Box<Expr>,           // 元素表达式 x * x
+        var: String,                  // 迭代变量名 x
+        iterable: Box<Expr>,          // 可迭代对象
+        condition: Option<Box<Expr>>, // 过滤条件 if x > 0
+        span: Span,
+    },
     Dict(Vec<(Expr, Expr)>, Span),
     Index {
         expr: Box<Expr>,

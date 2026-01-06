@@ -99,6 +99,7 @@ impl CodegenContext {
             } => self.generate_cast(expr, target_type),
             Expr::FieldAccess { expr, field, .. } => self.generate_field_access(expr, field),
             Expr::Index { expr, index, .. } => self.generate_index(expr, index),
+            Expr::ListComp { .. } => unimplemented!("List comprehension codegen"),
         }
     }
 

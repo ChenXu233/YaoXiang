@@ -242,6 +242,9 @@ mod tokenizer {
                         } else {
                             Some(self.make_token(TokenKind::DotDot))
                         }
+                    } else if self.peek().map(|c| is_digit(*c)).unwrap_or(false) {
+                        // Leading decimal point: .5
+                        self.scan_leading_dot()
                     } else {
                         Some(self.make_token(TokenKind::Dot))
                     }
@@ -560,6 +563,67 @@ mod tokenizer {
                         self.error = Some(LexError::InvalidNumber(value));
                         Some(self.make_token(TokenKind::Error("Invalid integer".to_string())))
                     }
+                }
+            }
+        }
+
+        /// Scan a float literal that starts with a leading decimal point (e.g., .5)
+        fn scan_leading_dot(&mut self) -> Option<Token> {
+            let start_pos = self.position(); // Save start position after '.'
+
+            let mut value = String::from("0.");
+
+            // Collect digits after the decimal point
+            while let Some(&c) = self.peek() {
+                if is_digit(c) {
+                    value.push(c);
+                    self.advance();
+                } else if c == '_' {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            // Check for exponent part
+            if self.peek() == Some(&'e') || self.peek() == Some(&'E') {
+                value.push(self.advance().unwrap());
+                if self.peek() == Some(&'+') || self.peek() == Some(&'-') {
+                    value.push(self.advance().unwrap());
+                }
+                let mut has_digits = false;
+                while let Some(&c) = self.peek() {
+                    if is_digit(c) {
+                        value.push(c);
+                        self.advance();
+                        has_digits = true;
+                    } else if c == '_' {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                if !has_digits {
+                    self.error = Some(LexError::InvalidNumber(
+                        "Expected digits in exponent".to_string(),
+                    ));
+                }
+            }
+
+            let cleaned: String = value.chars().filter(|&c| c != '_').collect();
+            match cleaned.parse::<f64>() {
+                Ok(n) => Some(Token {
+                    kind: TokenKind::FloatLiteral(n),
+                    span: Span::new(start_pos, self.position()),
+                    literal: Some(Literal::Float(n)),
+                }),
+                Err(_) => {
+                    self.error = Some(LexError::InvalidNumber(value));
+                    Some(Token {
+                        kind: TokenKind::Error("Invalid float".to_string()),
+                        span: Span::new(start_pos, self.position()),
+                        literal: None,
+                    })
                 }
             }
         }

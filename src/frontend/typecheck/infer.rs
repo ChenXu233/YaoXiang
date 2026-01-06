@@ -119,6 +119,7 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::FieldAccess { expr, field, span } => {
                 self.infer_field_access(expr, field, *span)
             }
+            ast::Expr::ListComp { .. } => unimplemented!("List comprehension type inference"),
         }
     }
 

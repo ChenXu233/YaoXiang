@@ -31,16 +31,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(_)) => {
                 // Check if this is a function definition: name(types) -> type = (params) => body
                 // Or a simple assignment/expression: name = expr or just name expr
-                eprintln!(
-                    "[DEBUG] parse_stmt: calling parse_identifier_stmt, current: {:?}",
-                    self.current().map(|t| &t.kind)
-                );
-                let result = self.parse_identifier_stmt(start_span);
-                eprintln!(
-                    "[DEBUG] parse_stmt: parse_identifier_stmt returned: {:?}",
-                    result.is_some()
-                );
-                result
+                self.parse_identifier_stmt(start_span)
             }
             // expression statement
             Some(_) => self.parse_expr_stmt(start_span),
@@ -534,13 +525,6 @@ impl<'a> ParserState<'a> {
             let rparen = self.peek_nth(pos);
             let after_rparen = self.peek_nth(pos + 1);
 
-            eprintln!(
-                "[DEBUG] parse_identifier_stmt: pos={}, rparen={:?}, after_rparen={:?}",
-                pos,
-                rparen.map(|t| &t.kind),
-                after_rparen.map(|t| &t.kind)
-            );
-
             // If current pos is RParen AND after it comes -> or =, this is a function definition
             if matches!(rparen.map(|t| &t.kind), Some(TokenKind::RParen))
                 && matches!(
@@ -548,12 +532,9 @@ impl<'a> ParserState<'a> {
                     Some(TokenKind::Arrow) | Some(TokenKind::Eq)
                 )
             {
-                eprintln!("[DEBUG] parse_identifier_stmt: Detected function definition!");
                 // This is a function definition - parse as expression
                 return self.parse_fn_stmt(span);
             }
-
-            eprintln!("[DEBUG] parse_identifier_stmt: Falling through to expression statement");
 
             // Otherwise, this is a function call or other expression
             // Just parse as expression (the Pratt parser will handle it)
@@ -944,10 +925,6 @@ impl<'a> ParserState<'a> {
         &mut self,
         span: Span,
     ) -> Option<Stmt> {
-        eprintln!(
-            "[DEBUG] parse_fn_stmt called, current token: {:?}",
-            self.current().map(|t| &t.kind)
-        );
         // Parse function name
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
@@ -960,16 +937,10 @@ impl<'a> ParserState<'a> {
                 return None;
             }
         };
-        eprintln!("[DEBUG] parse_fn_stmt: function name = {}", name);
         self.bump();
 
         // Parse parameter types in parentheses: (Int, String) or ()
-        eprintln!(
-            "[DEBUG] parse_fn_stmt: expecting LParen, current: {:?}",
-            self.current().map(|t| &t.kind)
-        );
         if !self.expect(&TokenKind::LParen) {
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen");
             return None;
         }
 
@@ -977,14 +948,10 @@ impl<'a> ParserState<'a> {
         let param_types = if self.at(&TokenKind::RParen) {
             Vec::new()
         } else {
-            eprintln!("[DEBUG] parse_fn_stmt: parsing type list");
             self.parse_type_list()?
         };
 
-        eprintln!("[DEBUG] parse_fn_stmt: param_types = {:?}", param_types);
-
         if !self.expect(&TokenKind::RParen) {
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect RParen");
             return None;
         }
 
@@ -995,8 +962,6 @@ impl<'a> ParserState<'a> {
             None
         };
 
-        eprintln!("[DEBUG] parse_fn_stmt: return_type = {:?}", return_type);
-
         // Expect equals sign
         if !self.skip(&TokenKind::Eq) {
             self.error(super::ParseError::UnexpectedToken(
@@ -1004,28 +969,20 @@ impl<'a> ParserState<'a> {
                     .map(|t| t.kind.clone())
                     .unwrap_or(TokenKind::Eof),
             ));
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect Eq");
             return None;
         }
 
         // Parse implementation: (params) => body
-        eprintln!(
-            "[DEBUG] parse_fn_stmt: expecting LParen for params, current: {:?}",
-            self.current().map(|t| &t.kind)
-        );
         if !self.expect(&TokenKind::LParen) {
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect LParen for params");
             return None;
         }
         let params = self.parse_fn_params()?;
         if !self.expect(&TokenKind::RParen) {
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect RParen for params");
             return None;
         }
 
         // Expect fat arrow
         if !self.expect(&TokenKind::FatArrow) {
-            eprintln!("[DEBUG] parse_fn_stmt: failed to expect FatArrow");
             return None;
         }
 
@@ -1045,8 +1002,6 @@ impl<'a> ParserState<'a> {
             let expr = self.parse_expression(BP_LOWEST)?;
             (Vec::new(), Some(Box::new(expr)))
         };
-
-        eprintln!("[DEBUG] parse_fn_stmt: success!");
 
         // Validate function definition rules
         // Note: Parser is lenient. Type checking will handle type inference.
