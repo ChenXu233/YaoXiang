@@ -430,14 +430,146 @@ impl From<uv::UvError> for IoError {
 
 ### 依赖关系
 
-- 无外部RFC依赖
-- 需要与RFC-001（并作模型）协调调度器设计
+- 无外部 RFC 依赖
+- **RFC-001 并发模型**：定义 DAG 调度器，RFC-002 提供 IO 抽象
+
+## 与 RFC-001 并发模型的集成
+
+RFC-001 定义了 **DAG 调度器**（调度层），RFC-002 定义了 **libuv + 线程池**（IO 层）。两者协作实现"同步语法，自动并发"。
+
+### 分层架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    YaoXiang Runtime                         │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────┐    ┌─────────────────────┐        │
+│  │   RFC-001: DAG      │    │  RFC-002: libuv     │        │
+│  │   调度层            │    │  IO 层              │        │
+│  │                     │    │                     │        │
+│  │  • 拓扑排序调度     │    │  • 跨平台 I/O       │        │
+│  │  • 工作窃取         │    │  • 事件循环         │        │
+│  │  • 依赖分析         │    │  • 线程池           │        │
+│  └──────────┬──────────┘    └──────────┬──────────┘        │
+│             │                         │                    │
+│             │     ┌───────────────────┘                    │
+│             │     │                                         │
+│             ▼     ▼                                         │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Runtime 接口层                          │   │
+│  │  • spawn/suspend/resume 协议                         │   │
+│  │  • IO Completion 回调                                │   │
+│  │  • 任务提交与唤醒                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 协作流程
+
+```markdown
+1. **编译期**：资源类型操作被识别为 IO 节点
+   - File.read, HTTP.get 等被标记为 "需要异步执行"
+   - 创建 DAG 节点，标记为 IO 类型
+
+2. **运行期**：DAG 调度器遇到 IO 节点
+   - 识别为非计算节点，提交到 libuv
+   - 调度器继续执行其他可执行节点
+
+3. **IO 完成**：libuv 回调触发
+   - libuv 线程池完成阻塞操作
+   - completion 回调通知 DAG 调度器
+   - 下游节点变为可执行
+```
+
+### 接口协议
+
+```rust
+// RFC-001 定义的 IO 节点接口
+trait IoScheduler {
+    // 提交 IO 任务，返回 future/handle
+    fn submit_io(&self, task: IoTask) -> IoHandle;
+
+    // IO 完成时由 libuv 调用，唤醒 DAG 节点
+    fn on_io_complete(&self, handle: IoHandle);
+}
+
+// RFC-002 实现的 libuv 集成
+impl IoScheduler for LibUvRuntime {
+    fn submit_io(&self, task: IoTask) -> IoHandle {
+        // 1. 将任务提交到 libuv 线程池
+        let handle = self.thread_pool.submit(|| {
+            // 阻塞执行实际 IO
+            let result = perform_blocking_io(&task);
+            // 2. IO 完成，调用回调
+            self.on_io_complete(handle);
+        });
+        handle
+    }
+
+    fn on_io_complete(&self, handle: IoHandle) {
+        // 通知 DAG 调度器唤醒下游节点
+        self.dag_scheduler.wake_dependents(handle.node_id);
+    }
+}
+```
+
+### 透明异步机制
+
+#### 编译期处理
+
+```yaoxiang
+# 用户代码（同步语法）
+read_config: String -> Config = (path) => {
+    content = File.read(path)  # 资源操作
+    parse_yaml(content)
+}
+
+# 编译期自动转换
+# 1. 识别 File.read 为资源类型操作
+# 2. 创建 DAG 节点，标记为 IO 类型
+# 3. 添加隐式 await 点
+```
+
+#### 运行时处理
+
+```markdown
+| 步骤 | 操作 | 说明 |
+|------|------|------|
+| 1 | 解析 DAG | 发现 IO 节点 |
+| 2 | 提交 IO | 将任务加入 libuv 线程池 |
+| 3 | 继续调度 | 执行其他可执行节点 |
+| 4 | IO 完成 | libuv 回调触发 |
+| 5 | 唤醒下游 | DAG 调度器 resume 等待的节点 |
+```
+
+### 资源类型与 IO 操作的映射
+
+```yaoxiang
+# RFC-001 定义：资源类型
+type FilePath: Resource
+type HttpUrl: Resource
+
+# RFC-002 实现：资源操作的 IO 语义
+File.read: (FilePath) -> String = path => {
+    # 标记为 IO 操作，自动进入 libuv 线程池
+}
+
+HTTP.get: (HttpUrl) -> Response = url => {
+    # 标记为 IO 操作，使用 libuv 异步网络 API
+}
+```
+
+**处理规则**：
+- 资源类型参数的操作 → 标记为 IO 节点
+- IO 节点提交到 libuv 线程池执行
+- completion 回调唤醒 DAG 下游节点
 
 ### 风险
 
 1. **libuv绑定完整性**：完整绑定需要大量工作
 2. **Windows兼容性**：某些API需要特殊处理
 3. **性能开销**：FFI调用有一定开销
+4. **集成复杂度**：libuv 线程池与 DAG 调度器的协调需要仔细设计
 
 ## 开放问题
 
@@ -446,6 +578,8 @@ impl From<uv::UvError> for IoError {
 - [ ] 网络I/O的超时机制设计
 - [ ] 零拷贝优化的边界
 - [ ] 取消操作的语义设计
+- [ ] libuv 线程池大小动态调整策略
+- [ ] IO 节点优先级与计算节点优先级的协调
 
 ## 参考文献
 

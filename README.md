@@ -28,30 +28,34 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 > **⚠️ Project Status: Experimental Validation**  
 > This is a research project for learning compiler development. The implementation is incomplete and not production-ready. See [Project Status](#project-status-experimental-validation) for current implementation level.
 
-### Project Status: Experimental Validation
+### Project Status: Phase 4 - Codegen in Progress
 
-**Current Implementation Level:**
-- ✅ **Lexer**: 95% complete (can tokenize most constructs)
-- ✅ **Parser**: 80% complete (handles basic syntax)
-- ⚠️ **Type Checker**: 30% complete (basic inference only)
-- ❌ **Optimizer**: Framework only (no optimizations implemented)
-- ❌ **Code Generator**: 40% complete (partial implementation)
-- ❌ **Runtime/VM**: Conceptual (execution not fully implemented)
-- ❌ **Standard Library**: Placeholder only
+**当前实现进度** (基于 docs/plan 阶段划分):
 
-**Known Unimplemented Features:**
-- Error propagation operator (`?`)
-- Generic monomorphization (simplified version)
-- Spawn-based concurrency (`spawn`, `@blocking`, `@eager`)
-- Send/Sync type constraints
-- Dependency types
-- Pattern matching
-- Result/Option types with proper error handling
-- Complete standard library
-- Working virtual machine
-- Optimizer passes
+| Phase | 模块 | 状态 | 位置 |
+|-------|------|------|------|
+| P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
+| P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
+| P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
+| P4 | 字节码生成器 | 🔶 进行中 | `src/middle/codegen/` |
+| P5-10 | 优化阶段 | ⏳ 待实现 | `src/middle/` |
+| P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
+| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
 
-See [ROADMAP.md](ROADMAP.md) for detailed implementation status.
+**各模块详情**:
+- ✅ **词法分析器**: Token 完整，支持所有字面量
+- ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
+- ✅ **类型检查器**: 类型推断、单态化、特化完成
+- 🔶 **字节码生成器**: 表达式/语句生成中
+- ⏳ **优化器**: 逃逸分析、生命周期、单态化待完善
+- ⏳ **运行时**: DAG、调度器、VM 待实现
+
+**下一步目标 (v0.1)**:
+- 完成 P4 字节码生成器
+- 实现 P11 虚拟机
+- 端到端运行 Hello World
+
+详见 [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) 了解详细实现状态。
 
 ### Getting Started
 
@@ -98,92 +102,34 @@ cargo run -- dump docs/examples/hello.yx
 ### Code Example
 
 ```yaoxiang
-# Automatic type inference
+# === Basic Syntax ===
+
+# Variable with type inference
 x: Int = 42
 y = 42                               # Inferred as Int
 name = "YaoXiang"                    # Inferred as String
 
-# Unified declaration syntax: identifier: Type = expression
+# Function definition (type signature required)
 add: (Int, Int) -> Int = (a, b) => a + b
 inc: Int -> Int = x => x + 1
 
-# Unified type syntax: only constructors, no enum/struct/union keywords
-# Rule: Separated by | are constructors, constructor_name(parameters) is the type
-type Point = Point(x: Float, y: Float)          # Single constructor (struct style)
-type Result[T, E] = ok(T) | err(E)              # Multiple constructors (union style)
-type Color = red | green | blue                  # Zero-parameter constructors (enum style)
+# Type definition (only constructors)
+type Point = Point(x: Float, y: Float)
+type Result[T, E] = ok(T) | err(E)
+type Color = red | green | blue
 
-# Value construction: exactly the same as function calls
+# Value construction
 p = Point(3.0, 4.0)
 r = ok("success")
-c = green
 
-# === Concurrent Model: Synchronous Syntax, Async Nature ===
-
-# Use spawn to mark async function - syntax exactly the same as normal functions
-fetch_data: (String) -> JSON spawn = (url) => {
-    HTTP.get(url).json()
-}
-
-# Auto parallel: multiple spawn calls automatically execute in parallel
-process_users_and_posts: () -> Void spawn = () => {
-    users = fetch_data("https://api.example.com/users")  # Async[JSON]
-    posts = fetch_data("https://api.example.com/posts")  # Async[JSON]
-
-    # users and posts automatically execute in parallel, no await needed
-    print("Users: " + users.length.to_string())
-    print("Posts: " + posts.length.to_string())
-}
-
-# Concurrent block: explicit parallelism
-compute_all: () -> (Int, Int, Int) spawn = () => {
-    # Expressions in spawn { } execute in parallel
-    (a, b, c) = spawn {
-        heavy_calc(1),    # Independent task 1
-        heavy_calc(2),    # Independent task 2
-        heavy_calc(3)     # Independent task 3
-    }
-    (a, b, c)
-}
-
-# Data parallel loop
-parallel_sum: (Int) -> Int spawn = (n) => {
-    # Loops marked with spawn for are automatically parallelized
-    total = spawn for i in 0..n {
-        fibonacci(i)  # Each iteration executes in parallel
-    }
-    total
-}
-
-# === Thread Safety: Send/Sync Constraints ===
-
-# Arc: Atomic reference counting (thread-safe)
-type ThreadSafeCounter = ThreadSafeCounter(value: Int)
-
+# === Entry Point ===
 main: () -> Void = () => {
-    # Arc implements Send + Sync
-    counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(0))
-
-    # spawn automatically checks Send constraint
-    spawn(|| => {
-        guard = counter.value.lock()  # Mutex provides internal mutability
-        guard.value = guard.value + 1
-    })
-
-    # ...
+    print("Hello, YaoXiang!")
+    print("2 + 3 = " + add(2, 3).to_string())
 }
-
-# === Generics and Higher-Order Functions ===
-
-# Generic function
-identity: <T> (T) -> T = x => x
-
-# Higher-order function
-apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
-
-# Currying
-add_curried: Int -> Int -> Int = a => b => a + b
 ```
+
+For more examples, see [docs/examples/](docs/examples/).
 
 ---
 
@@ -296,14 +242,7 @@ Send/Sync → Compile-Time Check → Data Race → Thread Safety
 
 ### Roadmap
 
-| Version | Goal | Time |
-|---------|------|------|
-| v0.1 | Interpreter Prototype | 1-2 months |
-| v0.5 | Complete Interpreter | 3-4 months |
-| v1.0 | AOT Compiler | 8-10 months |
-| v2.0 | Self-Hosting Compiler | 14 months |
-
-See [Implementation Plan](docs/archived/plans/YaoXiang-implementation-plan.md) for details.
+For detailed implementation status and future plans, see [Implementation Roadmap](docs/plan/IMPLEMENTATION-ROADMAP.md).
 
 ---
 
@@ -356,30 +295,34 @@ YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**�
 > **⚠️ 项目状态：实验验证阶段**  
 > 这是一个用于学习编译器开发的研究项目。实现不完整且不适用于生产环境。当前实现进度见[项目状态](#项目状态实验验证)。
 
-### 项目状态：实验验证
+### 项目状态：Phase 4 - 字节码生成器进行中
 
-**当前实现进度：**
-- ✅ **词法分析器**：95% 完成（可分析大多数语法结构）
-- ✅ **语法分析器**：80% 完成（处理基本语法）
-- ⚠️ **类型检查器**：30% 完成（仅基本类型推断）
-- ❌ **优化器**：仅有框架，无实际优化
-- ❌ **代码生成器**：40% 完成（部分实现）
-- ❌ **运行时/虚拟机**：概念阶段（执行未完全实现）
-- ❌ **标准库**：仅占位符
+**当前实现进度** (基于 docs/plan 阶段划分):
 
-**已知未实现功能：**
-- 错误传播操作符 (`?`)
-- 泛型单态化（简化版本）
-- 基于 spawn 的并发 (`spawn`, `@blocking`, `@eager`)
-- Send/Sync 类型约束
-- 依赖类型
-- 模式匹配
-- Result/Option 类型及错误处理
-- 完整的标准库
-- 可工作的虚拟机
-- 优化器通道
+| Phase | 模块 | 状态 | 位置 |
+|-------|------|------|------|
+| P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
+| P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
+| P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
+| P4 | 字节码生成器 | 🔶 进行中 | `src/middle/codegen/` |
+| P5-10 | 优化阶段 | ⏳ 待实现 | `src/middle/` |
+| P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
+| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
 
-详见 [ROADMAP.md](ROADMAP.md) 了解详细实现状态。
+**各模块详情**:
+- ✅ **词法分析器**: Token 完整，支持所有字面量
+- ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
+- ✅ **类型检查器**: 类型推断、单态化、特化完成
+- 🔶 **字节码生成器**: 表达式/语句生成中
+- ⏳ **优化器**: 逃逸分析、生命周期、单态化待完善
+- ⏳ **运行时**: DAG、调度器、VM 待实现
+
+**下一步目标 (v0.1)**:
+- 完成 P4 字节码生成器
+- 实现 P11 虚拟机
+- 端到端运行 Hello World
+
+详见 [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) 了解详细实现状态。
 
 ### 快速开始
 
@@ -403,14 +346,17 @@ cargo run --example hello
 #### 当前可用功能
 
 ```bash
-# 仅基础词法分析和语法分析
-echo 'main: () -> Void = () => { print("Hello") }' | cargo run -- eval
+# 完整编译流程
+cargo run -- build docs/examples/hello.yx -o hello.yxb    # 编译为字节码
+cargo run -- run hello.yxb                                 # 运行字节码
+cargo run -- dump docs/examples/hello.yx                   # 转储 AST/字节码用于调试
 
-# 构建字节码（部分实现）
-cargo run -- build docs/examples/hello.yx -o hello.42
-
-# 转储字节码用于调试
-cargo run -- dump docs/examples/hello.yx
+# 当前支持的功能：
+# - 词法分析：所有字面量、关键字、标识符
+# - 语法分析：函数定义、类型定义、控制流、模式匹配
+# - 类型检查：类型推断、单态化、泛型特化
+# - 字节码生成：表达式、语句、闭包、控制流
+# - 虚拟机：指令解释执行（进行中）
 ```
 
 ### 核心设计目标
@@ -624,14 +570,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 
 ### 路线图
 
-| 版本 | 目标 | 时间 |
-|------|------|------|
-| v0.1 | 解释器原型 | 1-2 个月 |
-| v0.5 | 完整解释器 | 3-4 个月 |
-| v1.0 | AOT 编译器 | 8-10 个月 |
-| v2.0 | 自举编译器 | 14 个月 |
-
-详见 [实现计划](docs/archived/plans/YaoXiang-implementation-plan.md)
+详细实现状态和未来计划，请查看 [实现路线图](docs/plan/IMPLEMENTATION-ROADMAP.md)。
 
 ---
 
