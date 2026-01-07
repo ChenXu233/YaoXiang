@@ -1,7 +1,7 @@
 # Task 4.5: 数据结构字节码
 
 > **优先级**: P1
-> **状态**: ⏳ 待实现
+> **状态**: 🔄 部分实现
 
 ## 功能描述
 
@@ -13,30 +13,34 @@
 - 结构体：结构体是构造器，字段访问用 `GetField`/`SetField`
 - 列表/字典：作为引用类型，用 `HeapAlloc` + 元素操作
 - 列表访问：边界检查 + `LoadElement`/`StoreElement`
+- 元组：匿名结构体，字段用数字索引 (0, 1, 2...)
 
 ## 字节码指令（复用现有指令）
 
-| Opcode | 值 | 操作 | 说明 |
-|--------|-----|------|------|
-| `HeapAlloc` | 0x71 | 堆分配 | dst, type_id |
-| `StackAlloc` | 0x70 | 栈分配 | size |
-| `GetField` | 0x73 | 读取字段 | dst, obj_reg, field_offset |
-| `SetField` | 0x75 | 写入字段 | obj_reg, field_offset, src_reg |
-| `LoadElement` | 0x76 | 加载元素 | dst, array_reg, index_reg |
-| `StoreElement` | 0x77 | 存储元素 | array_reg, index_reg, src_reg |
-| `NewListWithCap` | 0x78 | 预分配列表 | dst, capacity |
-| `BoundsCheck` | 0xB0 | 边界检查 | array_reg, index_reg |
-| `TypeCheck` | 0xC0 | 类型检查 | obj_reg, type_id, dst |
+| Opcode | 值 | 操作 | 说明 | 实现状态 |
+|--------|-----|------|------|----------|
+| `HeapAlloc` | 0x71 | 堆分配 | dst, type_id(u16) | ✅ 已实现 |
+| `StackAlloc` | 0x70 | 栈分配 | size | ✅ 已实现 |
+| `GetField` | 0x73 | 读取字段 | dst, obj_reg, field_offset(u16) | ✅ 已实现 |
+| `SetField` | 0x75 | 写入字段 | obj_reg, field_offset(u16), src_reg | ✅ 已实现 |
+| `LoadElement` | 0x76 | 加载元素 | dst, array_reg, index_reg | ✅ 已实现 |
+| `StoreElement` | 0x77 | 存储元素 | array_reg, index_reg, src_reg | ✅ 已实现 |
+| `NewListWithCap` | 0x78 | 预分配列表 | dst, capacity(u16) | ✅ 已实现 |
+| `BoundsCheck` | 0xB0 | 边界检查 | array_reg, index_reg | ✅ 已实现 |
+| `TypeCheck` | 0xC0 | 类型检查 | obj_reg, type_id(u16), dst | ⏳ 待实现 |
+| **字典** | - | 字典字面量 | 调用 Dict.new + Dict.insert | ✅ 已实现 |
+| **元组** | - | 元组字面量 | HeapAlloc + SetField(0,1,2...) | ✅ 已实现 |
 
 ## 字节码格式
 
 ```rust
-// GetField: dst(1), obj_reg(1), field_offset(2)
-// SetField: obj_reg(1), field_offset(2), src_reg(1)
-// LoadElement: dst(1), array_reg(1), index_reg(1)
-// StoreElement: array_reg(1), index_reg(1), src_reg(1)
-// NewListWithCap: dst(1), capacity(2)
-// TypeCheck: obj_reg(1), type_id(2), dst(1)
+// GetField: dst(1), obj_reg(1), field_offset(u16, 2字节) = 4 字节
+// SetField: obj_reg(1), field_offset(u16, 2字节), src_reg(1) = 4 字节
+// LoadElement: dst(1), array_reg(1), index_reg(1) = 3 字节
+// StoreElement: array_reg(1), index_reg(1), src_reg(1) = 3 字节
+// NewListWithCap: dst(1), capacity(u16, 2字节) = 3 字节
+// BoundsCheck: array_reg(1), index_reg(1) = 2 字节
+// TypeCheck: obj_reg(1), type_id(u16, 2字节), dst(1) = 4 字节
 ```
 
 ## 生成规则
