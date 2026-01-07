@@ -1,7 +1,7 @@
 # Task 4.9: 逃逸分析集成
 
 > **优先级**: P2
-> **状态**: ⏳ 待实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -26,17 +26,33 @@
 
 ## 集成机制
 
-逃逸分析在 IR → 字节码转换之前完成，为每个值标记逃逸信息：
+逃逸分析在 IR → 字节码转换之前完成：
 
 ```rust
-struct EscapeInfo {
-    escapes: bool,           // 是否逃逸到外部作用域
-    captured_by: Vec<usize>, // 被哪些闭包捕获（闭包索引）
-    modified: bool,          // 是否被修改（需要可变内存）
+// src/middle/codegen/mod.rs
+
+fn generate_function(
+    &mut self,
+    func: &FunctionIR,
+    code_section: &mut CodeSection,
+) -> Result<(), CodegenError> {
+    self.current_function = Some(func.clone());
+    self.register_allocator = RegisterAllocator::new();
+
+    // 运行逃逸分析（在生成字节码之前）
+    let mut escape_analyzer = EscapeAnalyzer::new();
+    self.escape_analysis = Some(escape_analyzer.analyze_function(func));
+
+    // 生成函数体
+    let instructions = self.generate_instructions(func)?;
+
+    // 清除逃逸分析结果（避免影响下一个函数）
+    self.escape_analysis = None;
+    ...
 }
 ```
 
-字节码生成器根据 `EscapeInfo` 选择分配指令：
+字节码生成器根据逃逸分析结果选择分配指令：
 
 | EscapeInfo | 分配策略 | 字节码指令 |
 |------------|----------|-----------|
@@ -45,6 +61,36 @@ struct EscapeInfo {
 | 逃逸 | 堆分配 | `HeapAlloc` |
 | 可能逃逸（不确定） | 堆分配（保守） | `HeapAlloc` |
 | 可变且不逃逸 | 栈分配 + 写时复制 | `StackAlloc` |
+
+## 当前实现状态
+
+```rust
+// src/middle/codegen/stmt.rs
+
+/// 检查变量是否需要堆分配（综合考虑类型和逃逸分析）
+fn should_heap_allocate_for_var(
+    &self,
+    local_idx: usize,
+    ty: &MonoType,
+) -> bool {
+    // 1. 首先检查逃逸分析结果
+    if let Some(ref escape) = self.escape_analysis {
+        let local_id = LocalId::new(local_idx);
+        if escape.should_heap_allocate(local_id) {
+            return true;
+        }
+    }
+
+    // 2. 根据类型决定（回退策略）
+    self.should_heap_allocate_for_type(ty)
+}
+```
+
+**说明**：集成工作流程：
+1. `generate_function` 调用 `EscapeAnalyzer::analyze_function(func)`
+2. 结果存储在 `CodegenContext.escape_analysis`
+3. `generate_var_decl` 调用 `should_heap_allocate_for_var` 检查逃逸分析结果
+4. 决定使用 `StackAlloc` 或 `HeapAlloc`
 
 ## 生成规则
 
