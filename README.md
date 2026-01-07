@@ -37,8 +37,8 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 | P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
 | P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
 | P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
-| P4 | 字节码生成器 | 🔶 进行中 | `src/middle/codegen/` |
-| P5-10 | 优化阶段 | ⏳ 待实现 | `src/middle/` |
+| P4 | 字节码生成器 | ✅ 进行中 | `src/middle/codegen/` |
+| P5-10 | 优化阶段 | 🔶 待实现 | `src/middle/` |
 | P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
 | P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
 
@@ -46,8 +46,8 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 - ✅ **词法分析器**: Token 完整，支持所有字面量
 - ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
 - ✅ **类型检查器**: 类型推断、单态化、特化完成
-- 🔶 **字节码生成器**: 表达式/语句生成中
-- ⏳ **优化器**: 逃逸分析、生命周期、单态化待完善
+- ✅ **字节码生成器**: 表达式/语句生成中
+- 🔶 **优化器**: 逃逸分析、生命周期、单态化待完善
 - ⏳ **运行时**: DAG、调度器、VM 待实现
 
 **下一步目标 (v0.1)**:
@@ -304,8 +304,8 @@ YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**�
 | P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
 | P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
 | P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
-| P4 | 字节码生成器 | 🔶 进行中 | `src/middle/codegen/` |
-| P5-10 | 优化阶段 | ⏳ 待实现 | `src/middle/` |
+| P4 | 字节码生成器 | ✅ 进行中 | `src/middle/codegen/` |
+| P5-10 | 优化阶段 | 🔶 待实现 | `src/middle/` |
 | P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
 | P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
 
@@ -313,8 +313,8 @@ YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**�
 - ✅ **词法分析器**: Token 完整，支持所有字面量
 - ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
 - ✅ **类型检查器**: 类型推断、单态化、特化完成
-- 🔶 **字节码生成器**: 表达式/语句生成中
-- ⏳ **优化器**: 逃逸分析、生命周期、单态化待完善
+- ✅ **字节码生成器**: 表达式/语句生成中
+- 🔶 **优化器**: 逃逸分析、生命周期、单态化待完善
 - ⏳ **运行时**: DAG、调度器、VM 待实现
 
 **下一步目标 (v0.1)**:

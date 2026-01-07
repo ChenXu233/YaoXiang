@@ -644,7 +644,7 @@ impl CodegenContext {
         let dst = self.next_temp();
         let obj = self.generate_expr(expr)?;
         // GetField: dst(1), obj_reg(1), field_offset(u16, 2字节)
-        let field_offset = self.get_field_offset(field) as u16;
+        let field_offset = self.get_field_offset(field);
 
         self.emit(BytecodeInstruction::new(
             TypedOpcode::GetField,
