@@ -108,6 +108,17 @@ impl<'a> BytecodeGenerator<'a> {
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
+            Instruction::Neg { dst, src } => {
+                let type_ = self.get_operand_type(src);
+                let opcode = match type_ {
+                    MonoType::Int(_) => TypedOpcode::I64Neg,
+                    MonoType::Float(_) => TypedOpcode::F64Neg,
+                    _ => TypedOpcode::I64Neg,
+                };
+                let dst_reg = self.resolve_dst(dst);
+                let src_reg = self.load_operand(src);
+                self.emit(opcode, vec![dst_reg, src_reg]);
+            }
             Instruction::Eq { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
