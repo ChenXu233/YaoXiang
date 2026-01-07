@@ -709,36 +709,46 @@ impl CodegenContext {
             // =====================
             // 字段操作
             // =====================
-            LoadField {
-                dst,
-                src: _,
-                field: _,
-            } => {
+            LoadField { dst, src, field } => {
+                // GetField: dst(1), src(1), field_offset(u16, 2字节)
                 let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                let field_offset = *field as u16;
                 Ok(BytecodeInstruction::new(
                     TypedOpcode::GetField,
-                    vec![dst_reg, 0, 0, 0],
+                    vec![
+                        dst_reg,
+                        src_reg,
+                        (field_offset & 0xFF) as u8,
+                        (field_offset >> 8) as u8,
+                    ],
                 ))
             }
 
-            StoreField {
-                dst: _,
-                field: _,
-                src: _,
-            } => Ok(BytecodeInstruction::new(
-                TypedOpcode::SetField,
-                vec![0, 0, 0],
-            )),
-
-            LoadIndex {
-                dst,
-                src: _,
-                index: _,
-            } => {
+            StoreField { dst, field, src } => {
+                // SetField: dst(1), field_offset(u16, 2字节), src(1)
                 let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                let field_offset = *field as u16;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::SetField,
+                    vec![
+                        dst_reg,
+                        (field_offset & 0xFF) as u8,
+                        (field_offset >> 8) as u8,
+                        src_reg,
+                    ],
+                ))
+            }
+
+            LoadIndex { dst, src, index } => {
+                // LoadElement: dst, src, index
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                let index_reg = self.operand_to_reg(index)?;
                 Ok(BytecodeInstruction::new(
                     TypedOpcode::LoadElement,
-                    vec![dst_reg, 0, 0],
+                    vec![dst_reg, src_reg, index_reg],
                 ))
             }
 

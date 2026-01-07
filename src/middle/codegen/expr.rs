@@ -443,12 +443,42 @@ impl CodegenContext {
     }
 
     /// 生成元组
+    /// 元组是匿名结构体，字段用数字索引 (0, 1, 2, ...)
+    /// (1, "hello") 生成：HeapAlloc -> SetField(0, 1) -> SetField(1, "hello")
     fn generate_tuple(
         &mut self,
-        _exprs: &[Expr],
+        exprs: &[Expr],
     ) -> Result<Operand, CodegenError> {
+        if exprs.is_empty() {
+            // 空元组 ()
+            let dst = self.next_temp();
+            return Ok(Operand::Temp(dst));
+        }
+
         let dst = self.next_temp();
-        // TODO: 实现元组代码生成
+
+        // 预分配元组结构体（使用 HeapAlloc，type_id=0 表示匿名元组）
+        // HeapAlloc: dst(1), type_id(u16, 2字节)
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::HeapAlloc,
+            vec![dst as u8, 0, 0], // type_id=0 表示元组
+        ));
+
+        // 设置每个字段（字段偏移 = 索引）
+        for (i, elem) in exprs.iter().enumerate() {
+            let elem_reg = self.generate_expr(elem)?;
+            let field_offset = i as u16;
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::SetField,
+                vec![
+                    dst as u8,
+                    (field_offset & 0xFF) as u8,
+                    (field_offset >> 8) as u8,
+                    self.operand_to_reg(&elem_reg)?,
+                ],
+            ));
+        }
+
         Ok(Operand::Temp(dst))
     }
 
@@ -460,9 +490,11 @@ impl CodegenContext {
         let dst = self.next_temp();
 
         // 预分配列表
+        // NewListWithCap: dst(1), capacity(u16, 2字节)
+        let cap = exprs.len();
         self.emit(BytecodeInstruction::new(
             TypedOpcode::NewListWithCap,
-            vec![dst as u8, exprs.len() as u8],
+            vec![dst as u8, (cap & 0xFF) as u8, (cap >> 8) as u8],
         ));
 
         // 存储元素
@@ -478,13 +510,95 @@ impl CodegenContext {
     }
 
     /// 生成字典
+    /// 字典字面量 {"key1": val1, "key2": val2} 生成：
+    /// 1. CallStatic Dict.new() 创建空字典
+    /// 2. 对每个键值对调用 Dict.insert(dict, key, value)
     fn generate_dict(
         &mut self,
-        _pairs: &[(Expr, Expr)],
+        pairs: &[(Expr, Expr)],
     ) -> Result<Operand, CodegenError> {
-        let dst = self.next_temp();
-        // TODO: 实现字典代码生成
-        Ok(Operand::Temp(dst))
+        if pairs.is_empty() {
+            // 空字典 {}
+            let dst = self.next_temp();
+            return Ok(Operand::Temp(dst));
+        }
+
+        // 首先创建空字典
+        let dict_reg = self.next_temp();
+
+        // 尝试调用 Dict.new（使用 function_indices，如果不存在则用动态调用）
+        if let Some(&dict_new_idx) = self.function_indices.get("Dict.new") {
+            // CallStatic: dst(1), func_id(4), base_arg_reg(1), arg_count(1)
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::CallStatic,
+                vec![
+                    dict_reg as u8,
+                    (dict_new_idx & 0xFF) as u8,
+                    ((dict_new_idx >> 8) & 0xFF) as u8,
+                    ((dict_new_idx >> 16) & 0xFF) as u8,
+                    ((dict_new_idx >> 24) & 0xFF) as u8,
+                    0,
+                    0,
+                ],
+            ));
+        } else {
+            // 动态调用 Dict.new（使用常量池中的函数名）
+            let name_idx = self.add_constant(ConstValue::String("Dict.new".to_string()));
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::CallDyn,
+                vec![dict_reg as u8, 0, (name_idx & 0xFF) as u8, (name_idx >> 8) as u8, 0, 0],
+            ));
+        }
+
+        // 对每个键值对调用 Dict.insert(dict, key, value)
+        for (key, value) in pairs {
+            let key_reg = self.generate_expr(key)?;
+            let value_reg = self.generate_expr(value)?;
+
+            // 准备参数：dict, key, value
+            let base_arg = self.next_temp() as u8;
+            self.next_temp(); // key
+            self.next_temp(); // value
+
+            // 移动参数到连续寄存器
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Mov,
+                vec![base_arg, dict_reg as u8],
+            ));
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Mov,
+                vec![base_arg + 1, self.operand_to_reg(&key_reg)?],
+            ));
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Mov,
+                vec![base_arg + 2, self.operand_to_reg(&value_reg)?],
+            ));
+
+            // 调用 Dict.insert
+            if let Some(&dict_insert_idx) = self.function_indices.get("Dict.insert") {
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::CallStatic,
+                    vec![
+                        dict_reg as u8,
+                        (dict_insert_idx & 0xFF) as u8,
+                        ((dict_insert_idx >> 8) & 0xFF) as u8,
+                        ((dict_insert_idx >> 16) & 0xFF) as u8,
+                        ((dict_insert_idx >> 24) & 0xFF) as u8,
+                        base_arg,
+                        3,
+                    ],
+                ));
+            } else {
+                // 动态调用
+                let name_idx = self.add_constant(ConstValue::String("Dict.insert".to_string()));
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::CallDyn,
+                    vec![dict_reg as u8, 0, (name_idx & 0xFF) as u8, (name_idx >> 8) as u8, base_arg, 3],
+                ));
+            }
+        }
+
+        Ok(Operand::Temp(dict_reg))
     }
 
     /// 生成类型转换
@@ -512,11 +626,17 @@ impl CodegenContext {
     ) -> Result<Operand, CodegenError> {
         let dst = self.next_temp();
         let obj = self.generate_expr(expr)?;
-        let field_offset = self.get_field_offset(field);
+        // GetField: dst(1), obj_reg(1), field_offset(u16, 2字节)
+        let field_offset = self.get_field_offset(field) as u16;
 
         self.emit(BytecodeInstruction::new(
             TypedOpcode::GetField,
-            vec![dst as u8, self.operand_to_reg(&obj)?, field_offset as u8],
+            vec![
+                dst as u8,
+                self.operand_to_reg(&obj)?,
+                (field_offset & 0xFF) as u8,
+                (field_offset >> 8) as u8,
+            ],
         ));
 
         Ok(Operand::Temp(dst))
@@ -532,6 +652,13 @@ impl CodegenContext {
         let array = self.generate_expr(expr)?;
         let idx = self.generate_expr(index)?;
 
+        // BoundsCheck: array_reg, index_reg
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::BoundsCheck,
+            vec![self.operand_to_reg(&array)?, self.operand_to_reg(&idx)?],
+        ));
+
+        // LoadElement: dst, array_reg, index_reg
         self.emit(BytecodeInstruction::new(
             TypedOpcode::LoadElement,
             vec![
