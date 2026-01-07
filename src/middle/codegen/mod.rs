@@ -644,13 +644,22 @@ impl CodegenContext {
             // =====================
             // 函数调用
             // =====================
-            Call {
-                dst: _,
-                func: _,
-                args: _,
-            } => {
-                // 简化实现：返回 Nop
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            Call { dst, func, args } => {
+                // Call: dst(1), func_id(4), base_arg_reg(1), arg_count(1)
+                let dst_reg = if let Some(d) = dst {
+                    self.operand_to_reg(d)?
+                } else {
+                    0
+                };
+                let func_id = match func {
+                    Operand::Const(ConstValue::Int(i)) => *i as u32,
+                    _ => 0,
+                };
+                let mut operands = vec![dst_reg];
+                operands.extend_from_slice(&func_id.to_le_bytes());
+                operands.push(0); // base_arg_reg
+                operands.push(args.len() as u8);
+                Ok(BytecodeInstruction::new(TypedOpcode::CallStatic, operands))
             }
 
             CallAsync {
@@ -659,8 +668,17 @@ impl CodegenContext {
                 args: _,
             } => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
 
-            TailCall { func: _, args: _ } => {
-                Ok(BytecodeInstruction::new(TypedOpcode::TailCall, vec![]))
+            TailCall { func, args } => {
+                // TailCall: func_id(4), base_arg_reg(1), arg_count(1)
+                let func_id = match func {
+                    Operand::Const(ConstValue::Int(i)) => *i as u32,
+                    _ => 0,
+                };
+                let mut operands = vec![];
+                operands.extend_from_slice(&func_id.to_le_bytes());
+                operands.push(0); // base_arg_reg
+                operands.push(args.len() as u8);
+                Ok(BytecodeInstruction::new(TypedOpcode::TailCall, operands))
             }
 
             // =====================
@@ -774,16 +792,15 @@ impl CodegenContext {
                 ))
             }
 
-            MakeClosure {
-                dst,
-                func: _,
-                env: _,
-            } => {
+            MakeClosure { dst, func, env: _ } => {
+                // MakeClosure: dst(1), func_id(u32, 4字节), upvalue_count(1)
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(
-                    TypedOpcode::MakeClosure,
-                    vec![dst_reg, 0, 0, 0],
-                ))
+                // func 是函数索引 (usize)，不是 Operand
+                let func_id = *func as u32;
+                let mut operands = vec![dst_reg];
+                operands.extend_from_slice(&func_id.to_le_bytes());
+                operands.push(0); // upvalue_count
+                Ok(BytecodeInstruction::new(TypedOpcode::MakeClosure, operands))
             }
 
             Drop(operand) => {

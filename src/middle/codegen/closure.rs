@@ -45,22 +45,53 @@ impl CodegenContext {
         self.compile_function_body(&name, &params, return_type, is_async, func_id)?;
 
         // 4. 生成 MakeClosure 指令
+        // 操作数：dst(1), func_id(u32, 4字节), upvalue_count(1)
         let closure_reg = self.next_temp();
-        self.emit(BytecodeInstruction::new(
-            TypedOpcode::MakeClosure,
-            vec![closure_reg as u8, func_id as u8, upvalues.len() as u8],
-        ));
+        let mut operands = vec![closure_reg as u8];
+        operands.extend_from_slice(&func_id.to_le_bytes());
+        operands.push(upvalues.len() as u8);
+        self.emit(BytecodeInstruction::new(TypedOpcode::MakeClosure, operands));
 
         // 5. 填充 Upvalues
+        // StoreUpvalue: src, upvalue_idx (2 个操作数)
         for (i, upvalue) in upvalues.iter().enumerate() {
             let src_reg = self.operand_to_reg(&upvalue.source)?;
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::StoreUpvalue,
-                vec![closure_reg as u8, i as u8, src_reg],
+                vec![src_reg, i as u8],
             ));
         }
 
         Ok(Operand::Temp(closure_reg))
+    }
+
+    /// 生成 CloseUpvalue 指令
+    ///
+    /// 将栈上的局部变量搬迁到堆上，使闭包可以在函数返回后访问
+    pub fn generate_close_upvalue(
+        &mut self,
+        reg: u8,
+    ) {
+        // CloseUpvalue: reg (1 个操作数)
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::CloseUpvalue,
+            vec![reg],
+        ));
+    }
+
+    /// 生成尾调用优化
+    pub fn generate_tail_call(
+        &mut self,
+        func_id: u32,
+        args: &[Operand],
+    ) -> Result<(), CodegenError> {
+        // TailCall: func_id(u32, 4字节), base_arg_reg(1), arg_count(1)
+        let mut operands = vec![];
+        operands.extend_from_slice(&func_id.to_le_bytes());
+        operands.push(0); // base_arg_reg - 简化处理
+        operands.push(args.len() as u8);
+        self.emit(BytecodeInstruction::new(TypedOpcode::TailCall, operands));
+        Ok(())
     }
 
     /// 分析闭包捕获的变量

@@ -1,7 +1,7 @@
 # Task 4.3: 控制流字节码
 
 > **优先级**: P0
-> **状态**: ⏳ 待实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -15,13 +15,13 @@
 
 | Opcode | 值 | 操作 | 说明 |
 |--------|-----|------|------|
-| `Jmp` | 0x03 | 无条件跳转 | offset (i32，相对偏移量) |
-| `JmpIf` | 0x04 | 条件为真跳转 | cond_reg, offset (i16) |
-| `JmpIfNot` | 0x05 | 条件为假跳转 | cond_reg, offset (i16) |
-| `Switch` | 0x06 | 多分支跳转 | jump table |
-| `LoopStart` | 0x07 | 循环开始 | 迭代器优化 |
-| `LoopInc` | 0x08 | 循环递增 | 迭代器优化 |
-| `Label` | 0x0B | 标签定义 | 跳转目标 |
+| `Jmp` | 0x03 | 无条件跳转 | label_id (u8，标签ID) |
+| `JmpIf` | 0x04 | 条件为真跳转 | cond_reg, label_id |
+| `JmpIfNot` | 0x05 | 条件为假跳转 | cond_reg, label_id |
+| `Switch` | 0x06 | 多分支跳转 | cond_reg, default_offset, table_idx |
+| `LoopStart` | 0x07 | 循环开始 | current_reg, end_reg, step_reg, exit_label |
+| `LoopInc` | 0x08 | 循环递增 | current_reg, step_reg, loop_start_label |
+| `Label` | 0x0B | 标签定义 | label_id (u8，标签ID) |
 | `Return` | 0x01 | 无返回值返回 | |
 | `ReturnValue` | 0x02 | 带返回值返回 | value_reg |
 
@@ -33,36 +33,60 @@
 // 所有指令统一使用：opcode + operands
 BytecodeInstruction { opcode: u8, operands: Vec<u8> }
 
-// 跳转指令操作数
-// - Jmp: offset (i32, 4 bytes)
-// - JmpIf/JmpIfNot: cond_reg (u8), offset (i16, 2 bytes)
+// 跳转指令操作数（两遍生成 + 回填偏移量）
+// - Jmp: label_id (u8)
+// - JmpIf/JmpIfNot: cond_reg (u8), label_id (u8)
 // - Label: label_id (u8)
+// - Switch: cond_reg (u8), default_label (u8), table_idx (u8)
+// - LoopStart: current_reg, end_reg, step_reg, exit_label (all u8)
+// - LoopInc: current_reg, step_reg, loop_start_label (all u8)
 ```
+
+**生成流程**：
+1. 第一遍：生成所有指令，记录跳转目标为 label_id
+2. 第二遍：遍历所有跳转指令，将 label_id 转换为相对偏移量
 
 ## 生成规则
 
 ### if 语句
 ```yaoxiang
-if cond {
+if cond1 {
     then_branch
+} elif cond2 {
+    elif_branch
 } else {
     else_branch
 }
 ```
 生成字节码：
 ```
-LOAD cond -> r1
-JmpIfNot r1, else_offset   # 条件为假跳转到 else
+# 条件检查
+LOAD cond1 -> r1
+JmpIfNot r1, elif1_label   # 条件为假跳转到第一个 elif
 
 # then 分支
+then_label:
 then_branch
-Jmp end_offset             # 跳过 else
+Jmp end_label              # 跳过 elif 和 else
 
-# else 分支（偏移量计算）
-else_offset:
+# elif 分支 1
+elif1_label:
+LOAD cond2 -> r2
+JmpIfNot r2, elif2_label   # 条件为假跳转到下一个 elif
+
+elif1_body_label:
+elif_branch1
+Jmp end_label              # 跳过其他 elif 和 else
+
+# elif 分支 2（如果有多个）
+elif2_label:
+...（类似处理）
+
+# else 分支
+else_label:
 else_branch
 
-end_offset:
+end_label:
 ```
 
 ### while 循环
@@ -73,43 +97,63 @@ while cond {
 ```
 生成字节码：
 ```
-# 跳转到条件检查
-Jmp cond_offset
+# 循环开始标签
+loop_label:
+# 条件检查
+LOAD cond -> r1
+JmpIfNot r1, end_label     # 条件为假，退出循环
 
 # 循环体
-body_offset:
 body
-Jmp cond_offset            # 继续下一次条件检查
+Jmp loop_label             # 跳回继续条件检查
 
-# 条件检查
-cond_offset:
-LOAD cond -> r1
-JmpIfNot r1, end_offset    # 条件为假，退出循环
-
-Jmp body_offset            # 条件为真，执行循环体
-
-end_offset:
+end_label:
 ```
 
-### break 语句
+### break/continue 语句
 ```yaoxiang
 while i < 10 {
     if i == 5 {
         break  # 跳出循环
+    }
+    if i == 3 {
+        continue  # 继续下一次迭代
     }
     i = i + 1
 }
 ```
 生成字节码：
 ```
-# ... 循环结构
-JmpIfNot condition, end_offset   # 条件检查
+loop_label:
+LOAD i -> r1
+CONST 10 -> r2
+I64Lt r1, r2 -> r3
+JmpIfNot r3, end_label   # 条件为假，退出循环
 
 # break: 跳转到循环结束
-Jmp end_offset
+LOAD i -> r4
+CONST 5 -> r5
+I64Eq r4, r5 -> r6
+JmpIfNot r6, check_continue
+Jmp end_label            # break: 跳转到 end_label
 
-# 循环体继续...
-end_offset:
+# continue: 跳回循环开始
+check_continue:
+LOAD i -> r7
+CONST 3 -> r8
+I64Eq r7, r8 -> r9
+JmpIfNot r9, increment
+Jmp loop_label           # continue: 跳回 loop_label
+
+increment:
+# i = i + 1
+LOAD i -> r10
+CONST 1 -> r11
+I64Add r10, r11 -> r12
+StoreLocal r12, i
+Jmp loop_label           # 继续下一次迭代
+
+end_label:
 ```
 
 ### for 循环（范围迭代）
@@ -120,12 +164,25 @@ for i in 0..5 {
 ```
 生成字节码：
 ```
-# 使用 LoopStart/LoopInc 优化
-LoopStart start=0, end=5, step=1, exit_offset=end
+# 生成 start 和 end 表达式
+CONST 0 -> r1
+CONST 5 -> r2
+
+# 分配循环变量寄存器
+current = r3
+
+# 使用 LoopStart 指令开始循环
+# 操作数：current_reg, end_reg, step_reg, exit_label
+LoopStart current, r2, CONST(1), exit_label
+
 # 循环体
 body
-LoopInc current, step, loop_start_offset
-end:
+
+# 使用 LoopInc 指令递增循环变量
+# 操作数：current_reg, step_reg, loop_start_label
+LoopInc current, CONST(1), loop_label
+
+exit_label:
 ```
 
 ## 验收测试
@@ -137,6 +194,17 @@ end:
 x = 10
 result = if x > 5 { "big" } else { "small" }
 assert(result == "big")
+
+# if-elif-else 语句
+y = 15
+result2 = if y < 10 {
+    "small"
+} elif y < 20 {
+    "medium"
+} else {
+    "large"
+}
+assert(result2 == "medium")
 
 # while 循环
 sum = 0

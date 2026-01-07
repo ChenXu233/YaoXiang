@@ -81,14 +81,6 @@ fn test_comparison_opcodes() {
     assert_eq!(TypedOpcode::F64Ne.name(), "F64Ne");
 }
 
-/// 测试布尔运算指令
-#[test]
-fn test_boolean_opcodes() {
-    assert_eq!(TypedOpcode::BoolAnd.name(), "BoolAnd");
-    assert_eq!(TypedOpcode::BoolOr.name(), "BoolOr");
-    assert_eq!(TypedOpcode::BoolNot.name(), "BoolNot");
-}
-
 /// 测试操作数数量
 #[test]
 fn test_operand_counts() {

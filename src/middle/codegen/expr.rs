@@ -386,43 +386,56 @@ impl CodegenContext {
             arg_regs.push(self.operand_to_reg(&arg_reg)?);
         }
 
+        // 参数寄存器从下一个临时寄存器开始
+        let base_arg_reg = self.next_temp() as u8;
+        // 保留更多寄存器给参数
+        for _ in 1..arg_regs.len() {
+            self.next_temp();
+        }
+        // 将参数移动到连续寄存器
+        for (i, &arg_reg) in arg_regs.iter().enumerate() {
+            let target_reg = base_arg_reg + i as u8;
+            if arg_reg != target_reg {
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::Mov,
+                    vec![target_reg, arg_reg],
+                ));
+            }
+        }
+
         match func {
             Expr::Var(name, _) => {
                 // 静态函数调用
+                // CallStatic: dst(1), func_id(u32, 4字节), base_arg_reg(1), arg_count(1)
                 let func_idx = self.function_indices.get(name).copied().unwrap_or(0);
-                self.emit(BytecodeInstruction::new(
-                    TypedOpcode::CallStatic,
-                    vec![dst as u8, func_idx as u8, 0, arg_regs.len() as u8],
-                ));
+                let mut operands = vec![dst as u8];
+                operands.extend_from_slice(&func_idx.to_le_bytes());
+                operands.push(base_arg_reg);
+                operands.push(arg_regs.len() as u8);
+                self.emit(BytecodeInstruction::new(TypedOpcode::CallStatic, operands));
             }
             Expr::FieldAccess { expr, field, .. } => {
-                // 方法调用
+                // 方法调用（虚表分发）
+                // CallVirt: dst(1), obj_reg(1), vtable_idx(u16, 2字节), base_arg_reg(1), arg_count(1)
                 let obj = self.generate_expr(expr)?;
                 let field_offset = self.get_field_offset(field);
-                self.emit(BytecodeInstruction::new(
-                    TypedOpcode::CallVirt,
-                    vec![
-                        dst as u8,
-                        self.operand_to_reg(&obj)?,
-                        field_offset as u8,
-                        0,
-                        arg_regs.len() as u8,
-                    ],
-                ));
+                let mut operands = vec![dst as u8];
+                operands.push(self.operand_to_reg(&obj)?);
+                operands.extend_from_slice(&field_offset.to_le_bytes());
+                operands.push(base_arg_reg);
+                operands.push(arg_regs.len() as u8);
+                self.emit(BytecodeInstruction::new(TypedOpcode::CallVirt, operands));
             }
             _ => {
                 // 动态调用
+                // CallDyn: dst(1), obj_reg(1), name_idx(u16, 2字节), base_arg_reg(1), arg_count(1)
                 let name_idx = self.add_constant(ConstValue::String(format!("{:?}", func)));
-                self.emit(BytecodeInstruction::new(
-                    TypedOpcode::CallDyn,
-                    vec![
-                        dst as u8,
-                        self.operand_to_reg(&Operand::Temp(0))?,
-                        name_idx as u8,
-                        0,
-                        arg_regs.len() as u8,
-                    ],
-                ));
+                let mut operands = vec![dst as u8];
+                operands.push(self.operand_to_reg(&Operand::Temp(0))?);
+                operands.extend_from_slice(&(name_idx as u16).to_le_bytes());
+                operands.push(base_arg_reg);
+                operands.push(arg_regs.len() as u8);
+                self.emit(BytecodeInstruction::new(TypedOpcode::CallDyn, operands));
             }
         }
 

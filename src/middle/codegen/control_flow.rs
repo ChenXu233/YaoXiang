@@ -36,9 +36,19 @@ impl CodegenContext {
         ));
 
         // 处理 elif 分支
-        for (_elif_cond, elif_body) in elif_branches {
+        for (elif_cond, elif_body) in elif_branches {
             let elif_label = self.next_label();
 
+            // 生成 elif 条件
+            let elif_cond_result = self.generate_block(elif_cond)?;
+
+            // 条件为假则跳转到下一个 elif 或 else
+            self.emit(super::BytecodeInstruction::new(
+                crate::vm::opcode::TypedOpcode::JmpIfNot,
+                vec![self.operand_to_reg(&elif_cond_result)?, then_label as u8],
+            ));
+
+            // 生成 elif 标签
             self.emit(super::BytecodeInstruction::new(
                 crate::vm::opcode::TypedOpcode::Label,
                 vec![elif_label as u8],

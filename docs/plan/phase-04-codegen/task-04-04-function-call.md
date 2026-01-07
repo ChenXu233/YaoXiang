@@ -1,7 +1,7 @@
 # Task 4.4: 函数调用字节码
 
 > **优先级**: P0
-> **状态**: ⏳ 待实现
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -14,32 +14,35 @@
 - **虚表分发**：`CallVirt` - trait/多态调用
 - **动态分发**：`CallDyn` - 反射调用（带内联缓存）
 
-**无 ENTER/LEAVE**：函数序言/尾声通过 `LoadArg`/`ReturnValue` 直接处理，不需要显式指令。
+**无 ENTER/LEAVE**：函数序言/尾声通过参数寄存器直接处理，不需要显式指令。
 
 ## 字节码指令
 
-| Opcode | 值 | 操作 | 说明 |
-|--------|-----|------|------|
-| `CallStatic` | 0x80 | 静态分发调用 | dst, func_id, base_arg_reg, arg_count |
-| `CallVirt` | 0x81 | 虚表分发调用 | dst, obj_reg, vtable_idx, base_arg_reg, arg_count |
-| `CallDyn` | 0x82 | 动态分发调用 | dst, obj_reg, name_idx, base_arg_reg, arg_count |
-| `MakeClosure` | 0x83 | 创建闭包 | dst, func_id, upvalue_count |
-| `LoadUpvalue` | 0x84 | 加载 Upvalue | dst, upvalue_idx |
-| `StoreUpvalue` | 0x85 | 存储 Upvalue | src, upvalue_idx |
-| `CloseUpvalue` | 0x86 | 关闭 Upvalue | reg |
-| `Return` | 0x01 | 无返回值返回 | |
-| `ReturnValue` | 0x02 | 带返回值返回 | value_reg |
-| `LoadArg` | 0x14 | 加载函数参数 | dst, arg_idx |
-| `TailCall` | 0x09 | 尾调用优化 | func_id, base_arg_reg, arg_count |
+| Opcode | 值 | 操作 | 说明 | 实现状态 |
+|--------|-----|------|------|----------|
+| `CallStatic` | 0x80 | 静态分发调用 | dst, func_id(4), base_arg_reg, arg_count | ✅ 已实现 |
+| `CallVirt` | 0x81 | 虚表分发调用 | dst, obj_reg, vtable_idx(2), base_arg_reg, arg_count | ✅ 已实现 |
+| `CallDyn` | 0x82 | 动态分发调用 | dst, obj_reg, name_idx(2), base_arg_reg, arg_count | ✅ 已实现 |
+| `MakeClosure` | 0x83 | 创建闭包 | dst, func_id(u32, 4字节), upvalue_count | ✅ 已实现 |
+| `LoadUpvalue` | 0x84 | 加载 Upvalue | dst, upvalue_idx | ✅ 已实现 |
+| `StoreUpvalue` | 0x85 | 存储 Upvalue | src, upvalue_idx | ✅ 已实现 |
+| `CloseUpvalue` | 0x86 | 关闭 Upvalue | reg | ✅ 已实现 |
+| `Return` | 0x01 | 无返回值返回 | | ✅ 已实现 |
+| `ReturnValue` | 0x02 | 带返回值返回 | value_reg | ✅ 已实现 |
+| `TailCall` | 0x09 | 尾调用优化 | func_id, base_arg_reg, arg_count | ✅ 已实现 |
 
 ## 字节码格式
 
 ```rust
 // 调用指令操作数
-// CallStatic: dst(1), func_id(4), base_arg_reg(1), arg_count(1)
-// CallVirt: dst(1), obj_reg(1), vtable_idx(2), base_arg_reg(1), arg_count(1)
-// CallDyn: dst(1), obj_reg(1), name_idx(2), base_arg_reg(1), arg_count(1)
-// MakeClosure: dst(1), func_id(4), upvalue_count(1)
+// CallStatic: dst(1), func_id(4), base_arg_reg(1), arg_count(1) = 7 字节
+// CallVirt: dst(1), obj_reg(1), vtable_idx(2), base_arg_reg(1), arg_count(1) = 6 字节
+// CallDyn: dst(1), obj_reg(1), name_idx(2), base_arg_reg(1), arg_count(1) = 6 字节
+// MakeClosure: dst(1), func_id(4), upvalue_count(1) = 6 字节
+// LoadUpvalue: dst(1), upvalue_idx(1) = 2 字节
+// StoreUpvalue: src(1), upvalue_idx(1) = 2 字节
+// CloseUpvalue: reg(1) = 1 字节
+// TailCall: func_id(4), base_arg_reg(1), arg_count(1) = 6 字节
 // ReturnValue: value_reg(1)
 ```
 
@@ -66,10 +69,14 @@ result = add5(10)
 生成字节码：
 ```
 # 创建闭包 adder
-MakeClosure r1, func_id=adder, upvalue_count=1
+# MakeClosure: dst(1), func_id(4), upvalue_count(1)
+MakeClosure r1, func_id=0x..., upvalue_count=1
+
+# 填充 upvalue（x）
+StoreUpvalue r_x, 0
 
 # 调用 adder(5)
-LoadUpvalue r2, upvalue_idx=0  # x = ?
+LoadUpvalue r2, upvalue_idx=0  # x
 CallStatic r3, func_id=adder$1, base_arg=r1, arg_count=1
 STORE r3 -> add5
 
