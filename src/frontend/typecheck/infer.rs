@@ -120,6 +120,7 @@ impl<'a> TypeInferrer<'a> {
                 self.infer_field_access(expr, field, *span)
             }
             ast::Expr::ListComp { .. } => unimplemented!("List comprehension type inference"),
+            ast::Expr::Try { expr, span } => self.infer_try(expr, *span),
         }
     }
 
@@ -905,6 +906,52 @@ impl<'a> TypeInferrer<'a> {
                 op: "field access".to_string(),
                 span,
             }),
+        }
+    }
+
+    /// 推断 try 运算符（错误传播）`expr?`
+    ///
+    /// `?` 运算符返回成功类型的值：
+    /// - Result<T, E> -> T
+    /// - Option<T> -> T
+    fn infer_try(
+        &mut self,
+        expr: &ast::Expr,
+        _span: Span,
+    ) -> TypeResult<MonoType> {
+        let expr_ty = self.infer_expr(expr)?;
+
+        // 尝试解包 Result 或 Option 类型
+        match &expr_ty {
+            MonoType::Enum(e) if e.name == "Result" => {
+                // Result<T, E> -> 返回 T (泛型，需要创建类型变量)
+                Ok(self.solver.new_var())
+            }
+            MonoType::Enum(e) if e.name == "Option" => {
+                // Option<T> -> 返回 T (泛型，需要创建类型变量)
+                Ok(self.solver.new_var())
+            }
+            MonoType::Struct(s) if s.name == "Result" => {
+                // Result 结构体
+                if let Some((_, ok_ty)) = s.fields.iter().find(|(n, _)| n == "value") {
+                    Ok(ok_ty.clone())
+                } else {
+                    Ok(self.solver.new_var())
+                }
+            }
+            MonoType::Struct(s) if s.name == "Option" => {
+                // Option 结构体
+                if let Some((_, some_ty)) = s.fields.iter().find(|(n, _)| n == "value") {
+                    Ok(some_ty.clone())
+                } else {
+                    Ok(self.solver.new_var())
+                }
+            }
+            _ => {
+                // 不是 Result/Option，创建一个新类型变量
+                // 运行时错误会通过模式匹配检测
+                Ok(self.solver.new_var())
+            }
         }
     }
 
