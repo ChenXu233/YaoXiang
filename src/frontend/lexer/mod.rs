@@ -430,7 +430,7 @@ mod tokenizer {
             let mut overflow = false;
 
             while let Some(&c) = self.peek() {
-                if c >= '0' && c <= '7' {
+                if ('0'..='7').contains(&c) {
                     let digit = c as u128 - b'0' as u128;
                     if overflow {
                         value.push(c);
@@ -1101,12 +1101,12 @@ mod tokenizer {
         c.is_ascii_digit()
     }
     fn is_hex_digit(c: char) -> bool {
-        c.is_ascii_digit() || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+        c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
     }
     fn hex_digit_value(c: char) -> u128 {
         if c.is_ascii_digit() {
             c as u128 - b'0' as u128
-        } else if c >= 'a' && c <= 'f' {
+        } else if ('a'..='f').contains(&c) {
             10 + c as u128 - b'a' as u128
         } else {
             10 + c as u128 - b'A' as u128
