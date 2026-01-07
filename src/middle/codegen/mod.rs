@@ -662,11 +662,8 @@ impl CodegenContext {
                 Ok(BytecodeInstruction::new(TypedOpcode::CallStatic, operands))
             }
 
-            CallAsync {
-                dst: _,
-                func: _,
-                args: _,
-            } => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
+            // 注意：根据 RFC-008，CallAsync 已移除
+            // await 不是关键字，运行时自动处理
 
             TailCall { func, args } => {
                 // TailCall: func_id(4), base_arg_reg(1), arg_count(1)
@@ -783,11 +780,14 @@ impl CodegenContext {
             )),
 
             // =====================
-            // 异步操作
+            // 并发操作（基于 RFC-008）
+            // spawn 是注解标记，await 不是关键字（运行时自动处理）
             // =====================
-            Spawn { func: _ } => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
-
-            Await(_) => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
+            Spawn { func: _ } => {
+                // 根据 RFC-008，spawn 标记由运行时处理
+                // 编译产物是普通函数调用，调度器负责创建 Async[T]
+                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+            }
 
             Yield => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
 

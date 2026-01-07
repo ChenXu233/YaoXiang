@@ -4,7 +4,7 @@
 
 use super::{CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, Expr, UnOp};
+use crate::frontend::parser::ast::{BinOp, Block, Expr, UnOp};
 use crate::frontend::typecheck::check::infer_literal_type;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::BytecodeInstruction;
@@ -74,11 +74,13 @@ impl CodegenContext {
             }
             Expr::Match { expr, arms, .. } => {
                 // 生成匹配表达式
-                let _match = self.generate_expr(expr)?;
-                // 生成每个臂
-                for arm in arms {
-                    let _ = self.generate_expr(&arm.body)?;
-                }
+                let match_expr = Block {
+                    stmts: Vec::new(),
+                    expr: Some(Box::new(expr.as_ref().clone())),
+                    span: Default::default(),
+                };
+                // 生成 match 表达式代码
+                self.generate_match_stmt(&match_expr, arms)?;
                 Ok(Operand::Temp(self.next_temp()))
             }
             Expr::Block(block) => self.generate_block(block),
@@ -100,6 +102,7 @@ impl CodegenContext {
             Expr::FieldAccess { expr, field, .. } => self.generate_field_access(expr, field),
             Expr::Index { expr, index, .. } => self.generate_index(expr, index),
             Expr::ListComp { .. } => unimplemented!("List comprehension codegen"),
+            Expr::Try { expr, .. } => self.generate_try(expr),
         }
     }
 
@@ -318,7 +321,7 @@ impl CodegenContext {
     }
 
     /// 获取字段偏移
-    fn get_field_offset(
+    pub(super) fn get_field_offset(
         &self,
         field: &str,
     ) -> u16 {
@@ -546,7 +549,14 @@ impl CodegenContext {
             let name_idx = self.add_constant(ConstValue::String("Dict.new".to_string()));
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::CallDyn,
-                vec![dict_reg as u8, 0, (name_idx & 0xFF) as u8, (name_idx >> 8) as u8, 0, 0],
+                vec![
+                    dict_reg as u8,
+                    0,
+                    (name_idx & 0xFF) as u8,
+                    (name_idx >> 8) as u8,
+                    0,
+                    0,
+                ],
             ));
         }
 
@@ -593,7 +603,14 @@ impl CodegenContext {
                 let name_idx = self.add_constant(ConstValue::String("Dict.insert".to_string()));
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::CallDyn,
-                    vec![dict_reg as u8, 0, (name_idx & 0xFF) as u8, (name_idx >> 8) as u8, base_arg, 3],
+                    vec![
+                        dict_reg as u8,
+                        0,
+                        (name_idx & 0xFF) as u8,
+                        (name_idx >> 8) as u8,
+                        base_arg,
+                        3,
+                    ],
                 ));
             }
         }
@@ -669,6 +686,83 @@ impl CodegenContext {
         ));
 
         Ok(Operand::Temp(dst))
+    }
+
+    /// 生成 try 运算符（错误传播）`expr?`
+    ///
+    /// 生成与 `match expr { Ok(v) => v, Err(e) => return Err(e) }` 相同的字节码：
+    /// 1. 生成内部表达式
+    /// 2. TypeCheck 检查是否为 Err/None
+    /// 3. JmpIfNot 跳过错误处理（成功路径）
+    /// 4. GetField 提取错误值
+    /// 5. ReturnValue 返回错误
+    fn generate_try(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<Operand, CodegenError> {
+        // 生成内部表达式
+        let result_reg = self.generate_expr(expr)?;
+
+        // 创建标签
+        let continue_label = self.next_label();
+        let _error_label = self.next_label(); // 用于错误路径（当前不需要特殊处理）
+
+        // TypeCheck: 检查是否为 Err 变体
+        // TypeCheck: obj_reg, type_id, dst
+        let type_check_reg = self.next_temp();
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::TypeCheck,
+            vec![
+                self.operand_to_reg(&result_reg)?,
+                0, // type_id=0 表示 Err (TODO: 需要正确的 type_id)
+                type_check_reg as u8,
+            ],
+        ));
+
+        // JmpIfNot: 如果不是 Err，继续执行（成功路径）
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::JmpIfNot,
+            vec![type_check_reg as u8, continue_label as i16 as u8],
+        ));
+
+        // 是 Err，提取错误值
+        let error_reg = self.next_temp();
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::GetField,
+            vec![
+                error_reg as u8,
+                self.operand_to_reg(&result_reg)?,
+                0, // field_offset=0 表示 error 字段 (TODO: 需要正确的 offset)
+                0,
+            ],
+        ));
+
+        // ReturnValue: 返回错误值（提前返回）
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::ReturnValue,
+            vec![error_reg as u8],
+        ));
+
+        // 成功路径标签
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
+            vec![continue_label as u8],
+        ));
+
+        // 返回 Ok 中的值（成功路径）
+        // GetField: dst, obj_reg, field_offset
+        let ok_value_reg = self.next_temp();
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::GetField,
+            vec![
+                ok_value_reg as u8,
+                self.operand_to_reg(&result_reg)?,
+                0, // field_offset=0 表示 value 字段 (TODO: 需要正确的 offset)
+                0,
+            ],
+        ));
+
+        Ok(Operand::Temp(ok_value_reg))
     }
 }
 

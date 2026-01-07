@@ -101,11 +101,8 @@ pub enum Instruction {
         func: Operand,
         args: Vec<Operand>,
     },
-    CallAsync {
-        dst: Operand,
-        func: Operand,
-        args: Vec<Operand>,
-    },
+    // 注意：根据 RFC-008，await 不是关键字
+    // CallAsync 和 Await 指令已移除，由运行时自动处理
     TailCall {
         func: Operand,
         args: Vec<Operand>,
@@ -150,7 +147,6 @@ pub enum Instruction {
     Spawn {
         func: Operand,
     },
-    Await(Operand),
     Yield,
     // Phase 5 additions
     HeapAlloc {
