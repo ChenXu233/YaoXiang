@@ -7,12 +7,12 @@
 
 ## 概述
 
-Full Runtime 是完整运行时环境，在 Standard 基础上增加 Work Stealing 负载均衡和 @blocking 同步执行保证。
+Full Runtime 是完整运行时环境，在 Standard 基础上增加 Work Stealing 负载均衡和 @block 同步执行保证。
 
 ## 特性
 
 - **Work Stealing**：多线程负载均衡
-- **@blocking 注解**：同步执行保证
+- **@block 注解**：同步执行保证
 - **高性能并发**：最优资源利用率
 
 ## 文件结构
@@ -20,7 +20,7 @@ Full Runtime 是完整运行时环境，在 Standard 基础上增加 Work Steali
 ```
 full/
 ├── work_stealing.rs  # 工作窃取（P13）
-├── blocking.rs       # @blocking 注解（P14）
+├── block.rs       # @block 注解（P14）
 └── README.md         # 本文档
 ```
 
@@ -40,7 +40,7 @@ full/
 │  │   ├── 线程本地队列               │
 │  │   ├── 窃取算法                   │
 │  │   └── 负载监控                   │
-│  └── @blocking                      │
+│  └── @block                      │
 │      ├── 同步执行                   │
 │      └── 阻塞保证                   │
 └─────────────────────────────────────┘
@@ -77,12 +77,13 @@ full/
 └────────────────────────────────────────────┘
 ```
 
-## @blocking 使用示例
+## @block 使用示例
 
 ```yaoxiang
 # 同步函数：完全顺序执行，无并发优化
-main: () -> Void @blocking = () => {
-    # 所有 spawn 调用将顺序执行
+@block
+main: () -> Void = () => {
+    # 所有 spawn 调用将同步顺序执行，进行同步状态下的异步计算（让出完整执行权）
     result_a = spawn compute_a()
     result_b = spawn compute_b()
     # result_a 和 result_b 顺序计算

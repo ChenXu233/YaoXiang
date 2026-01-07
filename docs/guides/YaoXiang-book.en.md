@@ -1064,10 +1064,10 @@ main() -> Void = () => {
 ### 5.6 Blocking Operations
 
 ```yaoxiang
-# Use @blocking annotation to mark operations that block OS threads
-# Runtime will assign them to dedicated blocking thread pool
+# Use @block annotation to mark operations that block OS threads
+# Runtime will assign them to dedicated block thread pool
 
-@blocking
+@block
 read_large_file(String) -> String = (path) => {
     # This call will not block the core scheduler
     file = File.open(path)
@@ -2034,7 +2034,7 @@ result2 = p1.distance_scaled(2.0, p2)
 
 | Annotation | Purpose |
 |------------|---------|
-| `@blocking` | Mark blocking operation, assign to blocking thread pool |
+| `@block` | Mark blocking operation, assign to blocking thread pool |
 | `@eager` | Mark expression needing eager evaluation |
 | `@Send` | Explicitly declare satisfying Send constraint |
 | `@Sync` | Explicitly declare satisfying Sync constraint |

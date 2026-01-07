@@ -1065,10 +1065,10 @@ main: () -> Void = () => {
 ### 5.6 阻塞操作
 
 ```yaoxiang
-# 使用 @blocking 注解标记会阻塞 OS 线程的操作
+# 使用 @block 注解标记会阻塞 OS 线程的操作
 # 运行时会将其分配到专用阻塞线程池
 
-@blocking
+@block
 read_large_file: (String) -> String = (path) => {
     # 此调用不会阻塞核心调度器
     file = File.open(path)
@@ -2073,7 +2073,7 @@ result2 = p1.distance_scaled(2.0, p2)
 
 | 注解 | 作用 |
 |------|------|
-| `@blocking` | 标记阻塞操作，分配到阻塞线程池 |
+| `@block` | 标记为完全同步的代码 |
 | `@eager` | 标记需急切求值的表达式 |
 | `@Send` | 显式声明满足 Send 约束 |
 | `@Sync` | 显式声明满足 Sync 约束 |

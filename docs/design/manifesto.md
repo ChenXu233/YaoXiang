@@ -839,7 +839,7 @@ docs(readme): update installation instructions
 
 | 注解 | 作用 |
 |------|------|
-| `@blocking` | 标记阻塞操作，分配到阻塞线程池 |
+| `@block` | 标记后将会同步执行函数 |
 | `@eager` | 标记需急切求值的表达式 |
 | `@Send` | 显式声明满足 Send 约束 |
 | `@Sync` | 显式声明满足 Sync 约束 |

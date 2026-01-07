@@ -82,7 +82,7 @@ standard/
 
 Standard Runtime 缺少以下 Full Runtime 特性：
 - Work Stealing 负载均衡
-- @blocking 同步执行保证
+- @block 同步执行保证
 
 ## 使用场景
 

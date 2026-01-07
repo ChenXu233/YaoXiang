@@ -16,7 +16,7 @@ runtime/core/full/
 │   ├── thief.rs           # 窃取者实现
 │   ├── victim.rs          # 被窃取者实现
 │   └── mod.rs
-└── blocking.rs            # P14（@blocking）
+└── block.rs            # P14（@block）
 ```
 
 ## 文件结构

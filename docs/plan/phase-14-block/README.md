@@ -1,26 +1,26 @@
-# Phase 14: @blocking 注解
+# Phase 14: @block 注解
 
-> **模块路径**: `src/runtime/core/full/blocking/`
+> **模块路径**: `src/runtime/core/full/block/`
 > **状态**: ⏳ 待实现
 > **依赖**: P10-P11（Scheduler + VM）
 
 ## 概述
 
-@blocking 注解提供同步执行保证，禁用所有并发优化，确保函数按顺序执行。
+@block 注解提供同步执行保证，禁用所有并发优化，确保函数按顺序执行。
 
 ## 与 Standard Runtime 的关系
 
 ```
 runtime/core/full/
 ├── work_stealing/         # P13
-├── blocking.rs            # P14（@blocking）
+├── block.rs            # P14（@block）
 └── mod.rs
 ```
 
 ## 文件结构
 
 ```
-phase-14-blocking/
+phase-14-block/
 ├── README.md              # 本文档
 ├── task-14-01-sync-executor.md # 同步执行器
 ├── task-14-02-semantics.md     # 阻塞语义
@@ -37,11 +37,11 @@ phase-14-blocking/
 | task-14-03 | 错误处理 | ⏳ 待实现 | task-14-01 |
 | task-14-04 | 使用示例 | ⏳ 待实现 | task-14-02 |
 
-## @blocking 语义
+## @block 语义
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│              @blocking 执行模型                           │
+│              @block 执行模型                           │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  spawn f()  ──► 直接调用 f()（非并发）                   │
@@ -82,16 +82,16 @@ impl Executor for SyncExecutor {
 }
 ```
 
-## @blocking 注解处理
+## @block 注解处理
 
 ```rust
-/// @blocking 注解处理器
-struct BlockingAnnotator;
+/// @block 注解处理器
+struct BlockAnnotator;
 
-impl Annotator for BlockingAnnotator {
+impl Annotator for BlockAnnotator {
     fn annotate_fn(&self, fn_decl: &FnDecl) -> AnnotatedFn {
-        // 检查 @blocking 注解
-        if fn_decl.has_annotation("blocking") {
+        // 检查 @block 注解
+        if fn_decl.has_annotation("block") {
             AnnotatedFn {
                 executor: ExecutorType::Sync,
                 error_handling: ErrorHandling::Propagate,
@@ -107,8 +107,9 @@ impl Annotator for BlockingAnnotator {
 ## 与并发的交互
 
 ```yaoxiang
-# @blocking 函数内部调用普通 spawn
-main: () -> Void @blocking = () => {
+# @block 函数内部调用普通 spawn
+@block
+main: () -> Void = () => {
     # 这些 spawn 顺序执行
     a = spawn compute_heavy_task()  # 先执行
     b = spawn compute_heavy_task()  # 后执行
@@ -128,7 +129,7 @@ main: () -> Void @blocking = () => {
 
 ## 性能影响
 
-| 操作 | 无 @blocking | 有 @blocking |
+| 操作 | 无 @block | 有 @block |
 |------|--------------|--------------|
 | spawn 开销 | 队列操作 | 直接调用 |
 | 并发优化 | DAG 调度 | 禁用 |
@@ -137,7 +138,7 @@ main: () -> Void @blocking = () => {
 
 ## 相关文件
 
-- `src/runtime/executor/blocking.rs`
+- `src/runtime/executor/block.rs`
 
 ## 相关文档
 

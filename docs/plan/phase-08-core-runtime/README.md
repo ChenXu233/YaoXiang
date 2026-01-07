@@ -12,7 +12,7 @@ Core Runtime 是运行时核心，提供值类型、内存分配器和 GC 接口
 runtime/core/
 ├── embedded/     # 🟢 Embedded Runtime（立即执行器，无 DAG）
 ├── standard/     # 🔵 Standard Runtime（DAG + Scheduler）
-└── full/         # 🟣 Full Runtime（Standard + WorkStealing + @blocking）
+└── full/         # 🟣 Full Runtime（Standard + WorkStealing + @block）
                   #     ↓ 链接到 P13/P14
 ```
 
@@ -22,7 +22,7 @@ runtime/core/
 |------|-------|------|----------|
 | **Embedded** | P8+P12 | 立即执行器，无 DAG | 资源受限环境、脚本嵌入 |
 | **Standard** | P8-P11 | DAG + Scheduler + VM | 标准应用（v0.3+） |
-| **Full** | P8-P14 | Standard + WorkStealing + @blocking | 高性能计算（v0.5+） |
+| **Full** | P8-P14 | Standard + WorkStealing + @block | 高性能计算（v0.5+） |
 
 ### Embedded Runtime（立即执行器）
 
@@ -62,13 +62,13 @@ standard/
 ```
 full/
 ├── work_stealing.rs  # 工作窃取（P13）
-├── blocking.rs       # @blocking 注解（P14）
+├── block.rs       # @block 注解（P14）
 └── README.md         # 完整运行时说明
 ```
 
 **特性**：
 - Work-stealing 负载均衡
-- @blocking 同步执行保证
+- @block 同步执行保证
 - 高性能并发
 
 **相关 Task**：task-13-01 至 task-14-02
@@ -108,7 +108,7 @@ phase-08-core-runtime/
 | Task | 名称 | 状态 | 位置 |
 |------|------|------|------|
 | task-13-01 | Work Stealing | ⚠️ 部分实现 | full/work_stealing.md |
-| task-14-01 | @blocking 注解 | ⏳ 待实现 | full/blocking.md |
+| task-14-01 | @block 注解 | ⏳ 待实现 | full/block.md |
 
 ## 架构问题
 

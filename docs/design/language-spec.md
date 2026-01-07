@@ -415,14 +415,14 @@ FunctionDef ::= Identifier '(' ParamTypes? ')' '->' TypeExpr? '=' Lambda
 ```
 SpawnFn     ::= Identifier ':' FnType 'spawn' '=' Lambda
 FnType      ::= '(' ParamTypes? ')' '->' TypeExpr ('@' Annotation)?
-Annotation  ::= 'blocking' | 'eager'
+Annotation  ::= 'block' | 'eager'
 ```
 
 **函数注解**：
 
 | 注解 | 位置 | 行为 |
 |------|------|------|
-| `@blocking` | 返回类型后 | 禁用并发优化，完全顺序执行 |
+| `@block` | 返回类型后 | 禁用并发优化，完全顺序执行 |
 | `@eager` | 返回类型后 | 强制急切求值 |
 
 **语法示例**：
@@ -431,8 +431,8 @@ Annotation  ::= 'blocking' | 'eager'
 # 并作函数：可并发执行
 fetch_data: (String) -> JSON spawn = (url) => { ... }
 
-# @blocking 同步函数：完全顺序执行
-main: () -> Void @blocking = () => { ... }
+# @block 同步函数：完全顺序执行
+main: () -> Void @block = () => { ... }
 
 # @eager 急切函数：立即执行
 compute: (Int) -> Int @eager = (n) => { ... }
@@ -722,7 +722,7 @@ match value {
 | 列表推导式 | P2 | `[x for x in list if condition]` |
 | `?` 错误传播 | P1 | Result 类型自动错误传播 |
 | 生命周期 `'a` | P2 | 借用检查 |
-| `@blocking` 注解 | P1 | 同步执行保证 |
+| `@block` 注解 | P1 | 同步执行保证 |
 | `spawn` 函数 | P1 | 并作函数标记 |
 | `spawn {}` 块 | P1 | 显式并发疆域 |
 | `spawn for` 循环 | P1 | 数据并行循环 |
