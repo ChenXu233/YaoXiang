@@ -86,6 +86,12 @@ pub enum Expr {
         field: String,
         span: Span,
     },
+    /// Error propagation operator: `expr?`
+    /// Generated when the user writes `expr?` - propagates Err/None upward
+    Try {
+        expr: Box<Expr>,
+        span: Span,
+    },
 }
 
 /// Binary operators

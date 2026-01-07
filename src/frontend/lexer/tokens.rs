@@ -70,6 +70,7 @@ pub enum TokenKind {
     Dot,
     Arrow,
     FatArrow,
+    Question,
 
     // Special
     Eof,

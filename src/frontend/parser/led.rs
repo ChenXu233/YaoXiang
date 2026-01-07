@@ -52,6 +52,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::LBracket) => Some((BP_CALL, BP_CALL + 1, Self::parse_index)),
             // Type cast
             Some(TokenKind::KwAs) => Some((BP_ADD, BP_ADD + 1, Self::parse_cast)),
+            // Try operator (error propagation)
+            Some(TokenKind::Question) => Some((BP_CALL, BP_CALL + 1, Self::parse_try)),
             // Lambda (single parameter)
             Some(TokenKind::FatArrow) => Some((11, 1, Self::parse_lambda_infix)),
             _ => None,
@@ -349,6 +351,25 @@ impl<'a> ParserState<'a> {
             body: Box::new(body.clone()),
             is_async: false,
             span: crate::util::span::Span::new(param_span.start, body.span.end),
+        })
+    }
+
+    /// Parse try operator (error propagation) `expr?`
+    ///
+    /// The `?` operator propagates errors:
+    /// - If expr is Ok(v) or Some(v), returns v
+    /// - If expr is Err(e) or None, returns the error from the function
+    fn parse_try(
+        &mut self,
+        lhs: Expr,
+        _left_bp: u8,
+    ) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume '?'
+
+        Some(Expr::Try {
+            expr: Box::new(lhs),
+            span,
         })
     }
 }

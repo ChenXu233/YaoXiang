@@ -286,6 +286,7 @@ mod tokenizer {
                         Some(self.make_token(TokenKind::Slash))
                     }
                 }
+                '?' => Some(self.make_token(TokenKind::Question)),
                 c => {
                     self.error = Some(LexError::UnexpectedChar { ch: c });
                     Some(self.make_token(TokenKind::Error(format!("Unexpected character: {}", c))))
