@@ -139,18 +139,55 @@
 
 根据项目结构，推荐使用以下作用域：
 
+### 代码作用域
+
 | 作用域 | 说明 |
 |--------|------|
-| `core` | 核心业务逻辑 |
-| `db` | 数据库相关 |
-| `ui` | 界面组件 |
-| `screen` | 页面/屏幕 |
-| `widget` | 小组件 |
-| `provider` | 状态管理 |
-| `repo` | 数据仓库 |
-| `i18n` | 国际化 |
-| `router` | 路由配置 |
-| `dep` | 依赖更新 |
+| `frontend` | 前端模块：词法分析、语法解析、类型检查 |
+| `parser` | 语法解析器 |
+| `lexer` | 词法分析器 |
+| `typecheck` | 类型检查 |
+| `middle` | 中间层：IR、优化器 |
+| `codegen` | 代码生成器 |
+| `monomorphize` | 单态化处理 |
+| `lifetime` | 生命周期分析 |
+| `vm` | 虚拟机：指令执行、栈帧、操作码 |
+| `executor` | 执行器 |
+| `frames` | 栈帧管理 |
+| `instructions` | 指令集 |
+| `runtime` | 运行时：内存管理、调度器 |
+| `memory` | 内存管理 |
+| `scheduler` | 任务调度 |
+| `std` | 标准库 |
+| `concurrent` | 并发库 |
+| `io` | IO 库 |
+| `net` | 网络库 |
+| `util` | 工具库：诊断、缓存、Span |
+| `cache` | 缓存管理 |
+| `diagnostic` | 诊断信息 |
+
+### 文档作用域
+
+| 作用域 | 说明 |
+|--------|------|
+| `docs` | 通用文档更新 |
+| `architecture` | 架构设计文档 |
+| `design` | 语言设计规范 |
+| `plan` | 实现计划文档 |
+| `guides` | 指南文档 |
+| `tutorial` | 教程文档 |
+| `examples` | 示例代码 |
+
+### 其他作用域
+
+| 作用域 | 说明 |
+|--------|------|
+| `build` | 构建系统、依赖管理 |
+| `ci` | CI/CD 配置 |
+| `test` | 测试相关 |
+| `chore` | 杂项任务 |
+| `release` | 发版相关 |
+| `meta` | 项目元配置（如 .claude, cargo 配置）|
 
 ---
 
