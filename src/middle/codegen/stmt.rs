@@ -5,6 +5,7 @@
 use super::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param, Stmt, StmtKind, Type};
 use crate::frontend::typecheck::MonoType;
+use crate::middle::escape_analysis::LocalId;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction};
 use crate::vm::opcode::TypedOpcode;
 
@@ -98,8 +99,8 @@ impl CodegenContext {
         if let Some(init) = initializer {
             let src = self.generate_expr(init)?;
 
-            // 根据类型决定分配方式
-            let should_heap_allocate = self.should_heap_allocate_for_type(&ty);
+            // 根据类型和逃逸分析决定分配方式
+            let should_heap_allocate = self.should_heap_allocate_for_var(local_idx, &ty);
 
             if should_heap_allocate {
                 // 堆分配
@@ -137,7 +138,25 @@ impl CodegenContext {
         Ok(())
     }
 
-    /// 检查类型是否需要堆分配
+    /// 检查变量是否需要堆分配（综合考虑类型和逃逸分析）
+    fn should_heap_allocate_for_var(
+        &self,
+        local_idx: usize,
+        ty: &MonoType,
+    ) -> bool {
+        // 1. 首先检查逃逸分析结果
+        if let Some(ref escape) = self.escape_analysis {
+            let local_id = LocalId::new(local_idx);
+            if escape.should_heap_allocate(local_id) {
+                return true;
+            }
+        }
+
+        // 2. 根据类型决定（回退策略）
+        self.should_heap_allocate_for_type(ty)
+    }
+
+    /// 检查类型是否需要堆分配（回退策略）
     fn should_heap_allocate_for_type(
         &self,
         ty: &MonoType,

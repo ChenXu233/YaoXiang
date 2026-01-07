@@ -17,7 +17,7 @@ pub mod switch;
 
 use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
-use crate::middle::escape_analysis::EscapeAnalysisResult;
+use crate::middle::escape_analysis::{EscapeAnalysisResult, EscapeAnalyzer};
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use std::collections::{HashMap, HashSet};
@@ -397,8 +397,15 @@ impl CodegenContext {
         self.current_function = Some(func.clone());
         self.register_allocator = RegisterAllocator::new();
 
+        // 运行逃逸分析（在生成字节码之前）
+        let mut escape_analyzer = EscapeAnalyzer::new();
+        self.escape_analysis = Some(escape_analyzer.analyze_function(func));
+
         // 生成函数体
         let instructions = self.generate_instructions(func)?;
+
+        // 清除逃逸分析结果（避免影响下一个函数）
+        self.escape_analysis = None;
 
         code_section.functions.push(FunctionCode {
             name: func.name.clone(),
@@ -664,7 +671,6 @@ impl CodegenContext {
 
             // 注意：根据 RFC-008，CallAsync 已移除
             // await 不是关键字，运行时自动处理
-
             TailCall { func, args } => {
                 // TailCall: func_id(4), base_arg_reg(1), arg_count(1)
                 let func_id = match func {
