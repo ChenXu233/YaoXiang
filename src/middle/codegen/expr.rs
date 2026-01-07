@@ -235,8 +235,10 @@ impl CodegenContext {
             (BinOp::Ge, MonoType::Int(64)) => TypedOpcode::I64Ge,
             (BinOp::Ge, MonoType::Float(64)) => TypedOpcode::F64Ge,
 
-            (BinOp::And, _) => TypedOpcode::BoolAnd,
-            (BinOp::Or, _) => TypedOpcode::BoolOr,
+            // And/Or 在表达式中使用 I64Mul/I64Add 近似
+            // 注意：真正的短路求值在 if 条件中通过控制流实现
+            (BinOp::And, _) => TypedOpcode::I64Mul,
+            (BinOp::Or, _) => TypedOpcode::I64Add,
             (BinOp::Range, _) => TypedOpcode::NewListWithCap,
             (BinOp::Assign, _) => return self.generate_assignment(left, right),
 
@@ -337,16 +339,34 @@ impl CodegenContext {
         let dst = self.next_temp();
         let src = self.generate_expr(expr)?;
 
-        let opcode = match op {
-            UnOp::Neg => TypedOpcode::I64Neg,
-            UnOp::Pos => TypedOpcode::Mov,
-            UnOp::Not => TypedOpcode::BoolNot,
-        };
-
-        self.emit(BytecodeInstruction::new(
-            opcode,
-            vec![dst as u8, self.operand_to_reg(&src)?],
-        ));
+        match op {
+            UnOp::Neg => {
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::I64Neg,
+                    vec![dst as u8, self.operand_to_reg(&src)?],
+                ));
+            }
+            UnOp::Pos => {
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::Mov,
+                    vec![dst as u8, self.operand_to_reg(&src)?],
+                ));
+            }
+            UnOp::Not => {
+                // !a 等价于 (a == 0)
+                // 加载 0 常量
+                let zero_reg = self.next_temp();
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::I64Const,
+                    vec![zero_reg as u8, 0, 0, 0, 0, 0, 0, 0, 0],
+                ));
+                // 比较 a == 0
+                self.emit(BytecodeInstruction::new(
+                    TypedOpcode::I64Eq,
+                    vec![dst as u8, self.operand_to_reg(&src)?, zero_reg as u8],
+                ));
+            }
+        }
 
         Ok(Operand::Temp(dst))
     }

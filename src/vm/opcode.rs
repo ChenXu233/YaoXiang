@@ -302,15 +302,6 @@ pub enum TypedOpcode {
     /// F64 大于等于比较
     F64Ge = 0x6B,
 
-    /// 布尔与：dst = src1 && src2
-    BoolAnd = 0x6C,
-
-    /// 布尔或：dst = src1 || src2
-    BoolOr = 0x6D,
-
-    /// 布尔非：dst = !src
-    BoolNot = 0x6E,
-
     // =====================
     // 内存与对象操作指令 (0x70-0x7F)
     // =====================
@@ -556,9 +547,6 @@ impl TypedOpcode {
             TypedOpcode::F64Le => "F64Le",
             TypedOpcode::F64Gt => "F64Gt",
             TypedOpcode::F64Ge => "F64Ge",
-            TypedOpcode::BoolAnd => "BoolAnd",
-            TypedOpcode::BoolOr => "BoolOr",
-            TypedOpcode::BoolNot => "BoolNot",
             TypedOpcode::StackAlloc => "StackAlloc",
             TypedOpcode::HeapAlloc => "HeapAlloc",
             TypedOpcode::Drop => "Drop",
@@ -755,7 +743,7 @@ impl TypedOpcode {
             TypedOpcode::Mov | TypedOpcode::LoadConst | TypedOpcode::LoadLocal | TypedOpcode::StoreLocal |
             TypedOpcode::LoadArg | TypedOpcode::I64Const | TypedOpcode::I32Const | TypedOpcode::F64Const |
             TypedOpcode::F32Const | TypedOpcode::I64Neg | TypedOpcode::I32Neg | TypedOpcode::F64Neg | TypedOpcode::F32Neg |
-            TypedOpcode::BoolNot | TypedOpcode::HeapAlloc |
+            TypedOpcode::HeapAlloc |
             TypedOpcode::StringLength | TypedOpcode::StringFromInt | TypedOpcode::StringFromFloat |
             TypedOpcode::TypeOf | TypedOpcode::Cast => 2,
             // 3 个操作数
@@ -768,7 +756,6 @@ impl TypedOpcode {
             TypedOpcode::F32Add | TypedOpcode::F32Sub | TypedOpcode::F32Mul | TypedOpcode::F32Div | TypedOpcode::F32Rem |
             TypedOpcode::I64Eq | TypedOpcode::I64Ne | TypedOpcode::I64Lt | TypedOpcode::I64Le | TypedOpcode::I64Gt | TypedOpcode::I64Ge |
             TypedOpcode::F64Eq | TypedOpcode::F64Ne | TypedOpcode::F64Lt | TypedOpcode::F64Le | TypedOpcode::F64Gt | TypedOpcode::F64Ge |
-            TypedOpcode::BoolAnd | TypedOpcode::BoolOr |
             TypedOpcode::I64Load | TypedOpcode::I64Store | TypedOpcode::I32Load | TypedOpcode::I32Store |
             TypedOpcode::F64Load | TypedOpcode::F64Store | TypedOpcode::F32Load | TypedOpcode::F32Store |
             TypedOpcode::GetField | TypedOpcode::SetField | TypedOpcode::NewListWithCap => 3,
@@ -883,9 +870,6 @@ impl TryFrom<u8> for TypedOpcode {
             0x69 => Ok(TypedOpcode::F64Le),
             0x6A => Ok(TypedOpcode::F64Gt),
             0x6B => Ok(TypedOpcode::F64Ge),
-            0x6C => Ok(TypedOpcode::BoolAnd),
-            0x6D => Ok(TypedOpcode::BoolOr),
-            0x6E => Ok(TypedOpcode::BoolNot),
             0x70 => Ok(TypedOpcode::StackAlloc),
             0x71 => Ok(TypedOpcode::HeapAlloc),
             0x72 => Ok(TypedOpcode::Drop),
