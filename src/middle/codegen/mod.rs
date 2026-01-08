@@ -5,6 +5,13 @@
 //! 1. 类型化指令：每条指令携带明确的类型信息
 //! 2. 寄存器架构：所有操作在寄存器上进行
 //! 3. 单态化输出：泛型已在编译期展开
+//!
+//! ## 关于逃逸分析
+//!
+//! ⚠️ 逃逸分析已废弃，代码中保留仅用于可能的细粒度优化参考。
+//! YaoXiang 使用所有权模型，内存分配由程序员显式控制：
+//! - 栈分配：默认行为
+//! - 堆分配：`Box[T]`、`Arc[T]` 等显式智能指针
 
 pub mod bytecode;
 pub mod closure;
@@ -17,7 +24,6 @@ pub mod switch;
 
 use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
-use crate::middle::escape_analysis::{EscapeAnalysisResult, EscapeAnalyzer};
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use std::collections::{HashMap, HashSet};
@@ -47,9 +53,6 @@ pub struct CodegenContext {
 
     /// 标签生成器
     label_generator: LabelGenerator,
-
-    /// 逃逸分析结果
-    escape_analysis: Option<EscapeAnalysisResult>,
 
     /// 字节码偏移追踪
     code_offsets: HashMap<usize, usize>,
@@ -336,7 +339,6 @@ impl CodegenContext {
             current_function: None,
             register_allocator: RegisterAllocator::new(),
             label_generator: LabelGenerator::new(),
-            escape_analysis: None,
             code_offsets: HashMap::new(),
             jump_tables: HashMap::new(),
             function_indices: HashMap::new(),
@@ -397,15 +399,8 @@ impl CodegenContext {
         self.current_function = Some(func.clone());
         self.register_allocator = RegisterAllocator::new();
 
-        // 运行逃逸分析（在生成字节码之前）
-        let mut escape_analyzer = EscapeAnalyzer::new();
-        self.escape_analysis = Some(escape_analyzer.analyze_function(func));
-
         // 生成函数体
         let instructions = self.generate_instructions(func)?;
-
-        // 清除逃逸分析结果（避免影响下一个函数）
-        self.escape_analysis = None;
 
         code_section.functions.push(FunctionCode {
             name: func.name.clone(),
@@ -979,7 +974,6 @@ impl Default for CodegenContext {
             current_function: None,
             register_allocator: RegisterAllocator::new(),
             label_generator: LabelGenerator::new(),
-            escape_analysis: None,
             code_offsets: HashMap::new(),
             jump_tables: HashMap::new(),
             function_indices: HashMap::new(),
