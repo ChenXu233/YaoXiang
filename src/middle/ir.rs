@@ -182,6 +182,13 @@ pub struct FunctionIR {
     pub entry: usize,
 }
 
+impl FunctionIR {
+    /// 迭代所有指令
+    pub fn all_instructions(&self) -> impl Iterator<Item = &Instruction> {
+        self.blocks.iter().flat_map(|block| block.instructions.iter())
+    }
+}
+
 /// Constant value
 #[derive(Debug, Clone)]
 pub enum ConstValue {
