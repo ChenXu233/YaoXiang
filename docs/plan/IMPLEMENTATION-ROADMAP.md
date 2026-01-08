@@ -266,7 +266,7 @@
 | P2 | Parser | `src/frontend/parser/` | ✅ 完成 | Pratt Parser 完整 |
 | P3 | TypeCheck | `src/frontend/typecheck/` | ✅ 完成 | 类型推断、单态化 |
 | P4 | Codegen | `src/middle/codegen/` | 🔶 进行中 | 表达式/语句生成 |
-| P5 | EscapeAnalysis | `src/middle/escape_analysis/` | ⏳ 待实现 | 内存分配优化 |
+| P5 | Ownership System | `src/middle/ownership/` | ⏳ 待实现 | 所有权/借用/生命周期/SendSync |
 | P6 | Lifetime | `src/middle/lifetime/` | ⏳ 待实现 | 生命周期分析 |
 | P7 | Monomorphize | `src/middle/monomorphize/` | ✅ 已完成 | 泛型特化 |
 | P8 | Core Runtime | `src/runtime/` | ⏳ 待实现 | Value/Allocator/Ownership |
@@ -438,6 +438,6 @@ src/
 
 ## 附录：相关 RFC
 
-- [RFC 003: 版本规划](003-version-planning.md)
-- [RFC 008: Runtime 并发模型与调度器脱耦设计](008-runtime-concurrency-model.md)
-- [RFC 009: 所有权模型设计（待创建）](009-ownership-model.md)
+- [RFC 003: 版本规划](../rfc/003-version-planning.md)
+- [RFC 008: Runtime 并发模型与调度器脱耦设计](../rfc/008-runtime-concurrency-model.md)
+- [RFC 009: 所有权模型设计](../rfc/009-ownership-model.md)

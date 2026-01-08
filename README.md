@@ -30,32 +30,32 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 
 ### Project Status: Phase 4 - Codegen in Progress
 
-**当前实现进度** (基于 docs/plan 阶段划分):
+## Current Implementation Progress (based on docs/plan phase division):
 
-| Phase | 模块 | 状态 | 位置 |
+| Phase | Module | Status | Location |
 |-------|------|------|------|
-| P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
-| P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
-| P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
-| P4 | 字节码生成器 | ✅ 进行中 | `src/middle/codegen/` |
-| P5-10 | 优化阶段 | 🔶 待实现 | `src/middle/` |
-| P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
-| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
+| P1 | Lexer | ✅ Complete | `src/frontend/lexer/` |
+| P2 | Parser | ✅ Complete | `src/frontend/parser/` |
+| P3 | Type Checker | ✅ Complete | `src/frontend/typecheck/` |
+| P4 | Bytecode Generator | ✅ In Progress | `src/middle/codegen/` |
+| P5-10 | Optimization Phase | 🔶 To Be Implemented | `src/middle/` |
+| P11 | Virtual Machine | ⏳ To Be Implemented | `src/vm/` |
+| P12-19 | Runtime/Toolchain | ⏳ To Be Implemented | `src/runtime/` |
 
-**各模块详情**:
-- ✅ **词法分析器**: Token 完整，支持所有字面量
-- ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
-- ✅ **类型检查器**: 类型推断、单态化、特化完成
-- ✅ **字节码生成器**: 表达式/语句生成中
-- 🔶 **优化器**: 逃逸分析、生命周期、单态化待完善
-- ⏳ **运行时**: DAG、调度器、VM 待实现
+## Module Details:
+- ✅ **Lexer**: Complete token support, supports all literals
+- ✅ **Parser**: Complete Pratt Parser, supports functions/types/control flow
+- ✅ **Type Checker**: Type inference, monomorphization, specialization completed
+- ✅ **Bytecode Generator**: Expression/statement generation in progress
+- 🔶 **Optimizer**: Ownership system, lifetime, monomorphization to be improved
+- ⏳ **Runtime**: DAG, scheduler, VM to be implemented
 
-**下一步目标 (v0.1)**:
-- 完成 P4 字节码生成器
-- 实现 P11 虚拟机
-- 端到端运行 Hello World
+## Next Goals (v0.1):
+- Complete P4 Bytecode Generator
+- Implement P11 Virtual Machine
+- End-to-end Hello World execution
 
-详见 [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) 了解详细实现状态。
+See [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) for detailed implementation status.
 
 ### Getting Started
 
@@ -314,7 +314,7 @@ YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**�
 - ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
 - ✅ **类型检查器**: 类型推断、单态化、特化完成
 - ✅ **字节码生成器**: 表达式/语句生成中
-- 🔶 **优化器**: 逃逸分析、生命周期、单态化待完善
+- 🔶 **优化器**: 所有权系统、生命周期、单态化待完善
 - ⏳ **运行时**: DAG、调度器、VM 待实现
 
 **下一步目标 (v0.1)**:
