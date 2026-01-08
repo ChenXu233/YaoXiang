@@ -82,14 +82,14 @@ impl EscapeAnalyzer {
             match instr {
                 // 返回值逃逸
                 Instruction::Ret(Some(var)) => {
-                    if let Some(id) = Self::operand_as_local(&var) {
+                    if let Some(id) = Self::operand_as_local(var) {
                         escapes.insert(id);
                     }
                 }
                 // 函数调用参数可能逃逸
                 Instruction::Call { args, .. } => {
                     for arg in args {
-                        if let Some(id) = Self::operand_as_local(&arg) {
+                        if let Some(id) = Self::operand_as_local(arg) {
                             escapes.insert(id);
                         }
                     }
