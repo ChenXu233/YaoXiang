@@ -53,7 +53,10 @@ pub struct EscapeAnalysisResult {
 
 impl EscapeAnalysisResult {
     /// 检查变量是否逃逸
-    pub fn escapes(&self, var_id: usize) -> bool {
+    pub fn escapes(
+        &self,
+        var_id: usize,
+    ) -> bool {
         self.escapes.contains(&var_id)
     }
 }
@@ -69,7 +72,10 @@ impl EscapeAnalyzer {
     }
 
     /// 分析函数的逃逸情况
-    pub fn analyze(&mut self, func: &FunctionIR) -> EscapeAnalysisResult {
+    pub fn analyze(
+        &mut self,
+        func: &FunctionIR,
+    ) -> EscapeAnalysisResult {
         let mut escapes = HashSet::new();
 
         for instr in func.all_instructions() {
