@@ -3,7 +3,7 @@
 > **状态**: 审核中
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2025-01-08
+> **最后更新**: 2025-01-09（v4：引用跨边界规则 + @block修正）
 
 ## 参考文档
 
@@ -13,20 +13,21 @@
 |------|------|------|
 | [language-spec](../language-spec.md) | **规范目标** | 本 RFC 的设计将整合到语言规范中 |
 | [manifesto](../manifesto.md) | **设计哲学** | 零成本抽象、默认不可变、无 GC |
-| [RFC-001 并作模型](./001-concurrent-model-error-handling.md) | **并发安全** | Send/Sync 约束与所有权的交互 |
+| [RFC-001 并作模型](./001-concurrent-model-error-handling.md) | **并发安全** | DAG 资源分析 + 消息传递替代共享内存 |
 | [RFC-008 运行时并发模型](./accepted/008-runtime-concurrency-model.md) | **运行时集成** | 运行时内存管理与所有权的集成 |
 
 ## 摘要
 
-本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**，包括所有权语义、移动语义、智能指针类型和 Send/Sync 约束。YaoXiang 采用简化的所有权模型，**不引入生命周期标注 `'a`**，通过编译器自动推断和移动语义实现内存安全，同时保持零成本抽象，无需 GC 即可实现高性能。
+本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**，包括所有权语义、移动语义和线程通信。YaoXiang 采用简化的所有权模型，**不引入生命周期标注 `'a`**，通过编译器自动推断和值传递实现内存安全，通过值传递 + Send 检查实现基本的并发安全，通过 DAG 资源分析实现自动调度，无需 GC 即可实现高性能。
 
 > **设计决策**：YaoXiang 选择**不实现生命周期标注**，通过以下策略解决借用问题：
 > 1. 禁止返回借用引用（返回整个值）
 > 2. 禁止结构体包含借用字段
 > 3. 小对象直接复制（开销可忽略）
 > 4. 大对象用移动语义（零拷贝）
-> 5. 共享访问用 Arc（零拷贝）
-> 6. 极端性能场景由标准库兜底
+> 5. 极端性能场景由标准库兜底（Arc 等可选）
+
+> **核心原则**：99% 的代码不需要任何特殊处理。值传递 + 小对象复制 + DAG 资源类型已覆盖几乎所有场景。Arc/Rc/RefCell/Mutex 仅作为标准库可选实现，用于极端性能场景。
 
 > **性能保证**：YaoXiang 的性能接近 Rust，远超 Go。小字段复制（< 1KB）开销 < 0.01%，大对象移动零拷贝。
 
@@ -65,16 +66,19 @@ transfer: (Data) -> Data = (data) => {
     Data(data.value * 2)  # 返回新值，所有权转移
 }
 
-# 3. 智能指针（共享所有权）
-shared: (Data) -> Arc[Data] = (data) => Arc.new(data)
-# Arc 零拷贝共享，多线程安全
-
-# 4. 小对象复制（开销可忽略）
+# 3. 小对象复制（开销可忽略）
 get_header: (BigData) -> Header = (data) => data.header
 # 复制 64 字节开销 ~1ns，可忽略
+
+# 4. 值传递（并发安全）
+# 并作模型自动处理并发，无需 Arc/Mutex
+worker: (Task) -> Result = (task) => {
+    # 值通过变量传递，DAG 自动构建依赖
+    process(task)  # task 自动复制或移动
+}
 ```
 
-### 关键设计决策：不实现生命周期标注
+### 关键设计决策：不实现生命周期标注 + 值传递替代共享内存
 
 #### 为什么不做生命周期 `'a`？
 
@@ -83,6 +87,16 @@ get_header: (BigData) -> Header = (data) => data.header
 | **`'a` 语法** | 丑、学习成本高、增加语言复杂度 |
 | **编译器无法推断** | 返回哪个输入、返回新借用、结构体包含引用 |
 | **用户负担** | 99% 的代码不需要生命周期，只有 1% 的复杂场景需要 |
+
+#### 为什么不需要 Arc/Mutex？
+
+| Rust 问题 | YaoXiang 解法 |
+|-----------|---------------|
+| 多线程共享数据 | **值传递**（channel 内部实现） |
+| 内部可变性 | **`mut` 标记**（编译期可变性） |
+| 线程安全同步 | **DAG 资源分析**（自动串行/并行） |
+
+> **核心洞察**：共享内存需要锁，值传递不需要。YaoXiang 的并作模型（DAG + 资源类型）已经解决了并发安全问题，不需要 Arc/Mutex。
 
 #### 编译器无法推断的场景（被禁止）
 
@@ -117,12 +131,12 @@ type Container = Container(data: Data)
 
 | | 损失 | 收获 |
 |---|------|------|
-| **表达能力** | 无法返回借用 | 简化 99% |
+| **表达能力** | 无法返回借用 | 简化设计 |
 | **学习曲线** | - | 几乎为 0 |
 | **代码安全** | - | 更高 |
 | **常见代码影响** | < 1% | - |
 
-> **结论**：99% 的情况，返回整个值完全可行。只有极端性能场景才需要避免复制，这些场景由标准库兜底。
+> **结论**：返回整个值完全可行。只有极端性能场景才需要避免复制，由标准库兜底。
 
 ## 提案
 
@@ -132,31 +146,33 @@ type Container = Container(data: Data)
 
 YaoXiang 的所有权系统基于以下核心规则：
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    YaoXiang 所有权核心规则                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  规则 1：每个值有唯一的所有者                                     │
-│  ├── 变量绑定是值的所有者                                        │
-│  └── 所有者离开作用域时，值被自动销毁                            │
-│                                                                 │
-│  规则 2：所有权转移（Move）                                      │
-│  ├── 赋值、函数传参、返回都可能转移所有权                        │
-│  ├── 转移后原所有者失效                                         │
-│  └── 转移成本为零（只是指针移动）                               │
-│                                                                 │
-│  规则 3：复制语义（Copy）                                        │
-│  ├── 小对象（< 1KB）自动复制，开销可忽略                        │
-│  ├── 复制后原所有者保持可用                                     │
-│  └── 基础类型（Int、Float等）默认 Copy                          │
-│                                                                 │
-│  规则 4：引用传递（Borrow）                                      │
-│  ├── ref Data - 不可变借用（只读）                              │
-│  ├── mut Data - 可变借用（读写）                                │
-│  └── 借用不能超过所有者作用域                                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+> **引用跨边界规则**：借用（ref/mut）**不能跨代码块边界**。跨越边界时，默认失去所有权，需要重新获取或传递值。
+
+```mermaid
+flowchart TB
+    subgraph 规则1["规则 1：每个值有唯一的所有者"]
+        A1["变量绑定 = 值的所有者"] --> A2["所有者离开作用域 → 自动销毁"]
+    end
+
+    subgraph 规则2["规则 2：所有权转移（Move）"]
+        B1["赋值 / 函数传参 / 返回"] --> B2["所有权转移"]
+        B2 --> B3["转移后原所有者失效"]
+        B2 --> B4["转移成本 = 零（指针移动）"]
+    end
+
+    subgraph 规则3["规则 3：复制语义（Copy）"]
+        C1["小对象（< 1KB）"] --> C2["自动复制，开销可忽略"]
+        C3["基础类型（Int, Float等）"] --> C4["默认 Copy"]
+        C2 --> C5["复制后原所有者保持可用"]
+    end
+
+    subgraph 规则4["规则 4：引用传递（Borrow）"]
+        D1["ref Data"] --> D2["不可变借用（只读）"]
+        D3["mut Data"] --> D4["可变借用（读写）"]
+        D2 --> D5["借用不能超过所有者作用域"]
+        D4 --> D5
+        D5 --> D6["引用不能跨代码塊（跨邊界默認失去所有權）"]
+    end
 ```
 
 #### 1.2 所有权语义示例
@@ -204,6 +220,32 @@ write_data: (mut Data) -> Void = (data) => {
 #     data = Data(42)
 #     write_data(mut data)  # 可变借用
 #     # data.value = 100     # ❌ 编译错误！借用期间不能直接修改
+# }
+
+# === 引用跨边界规则 ===
+
+# ❌ 错误：引用不能跨 spawn 边界
+# bad_example: () -> Void = () => {
+#     data = Data(42)
+#     ref_data = ref data
+#     spawn(() => {
+#         print(ref_data.value)  # ❌ ref 不能跨代码块
+#     })
+# }
+
+# ✅ 正确：跨边界传递值（复制或移动）
+good_example: () -> Void = () => {
+    data = Data(42)
+    spawn(() => {
+        print(data.value)  # data 自动复制或移动
+    })
+}
+
+# ❌ 错误：mut 跨边界
+# bad_mut: () -> Void = () => {
+#     data = Data(42)
+#     mut_data = mut data
+#     process(mut_data)  # mut 跨边界？取决于实现
 # }
 
 # === 规则 3：所有权转移 ===
@@ -265,7 +307,7 @@ readwrite_access: (mut Data) -> Void = (data) => {
 #### 3.1 小对象复制的实际开销
 
 ```yaoxiang
-# === 小字段访问（99% 的情况） ===
+# === 小字段访问 ===
 type BigData = BigData(header: Header, payload: Bytes)
 # 假设 Header = 64 字节
 
@@ -329,34 +371,27 @@ dynamic: (Trait) -> Void = (t) => t.method()  # 虚表查找
 
 #### 3.5 性能保证
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                                                            │
-│  YaoXiang 性能保证：                                       │
-│                                                            │
-│  ✅ 小字段复制：开销 < 0.01% 运行时                         │
-│  ✅ 大对象移动：零拷贝（所有权转移）                         │
-│  ✅ 共享访问：Arc 原子计数，零拷贝                          │
-│  ✅ 内存分配：优化器减少分配次数                             │
-│                                                            │
-│  与 Rust 对比：                                            │
-│  - 借用优化：无（但影响可忽略）                             │
-│  - 移动语义：✅ 相同                                        │
-│  - Arc：✅ 相同                                            │
-│  - 零成本抽象：✅ 相同                                      │
-│                                                            │
-│  结论：性能接近 Rust，远超 Go                               │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
+| 保证项 | 说明 |
+|--------|------|
+| 小字段复制 | 开销 < 0.01% 运行时 |
+| 大对象移动 | 零拷贝（所有权转移） |
+| 共享访问 | Arc 原子计数，零拷贝 |
+| 内存分配 | 优化器减少分配次数 |
+
+与 Rust 对比：
+- 借用优化：无（但影响可忽略）
+- 移动语义：✅ 相同
+- Arc：✅ 相同
+- 零成本抽象：✅ 相同
+
+**结论：性能接近 Rust，远超 Go**
 
 #### 3.6 极端性能场景（标准库兜底）
 
 ```yaoxiang
-# 99.9% 的代码不需要任何特殊处理
 get_header: (BigData) -> Header = (data) => data.header
 
-# 极端性能场景：标准库提供视图（1% 情况）
+# 极端性能场景：标准库提供视图
 use std.memory
 
 get_header_view: (BigData) -> HeaderView = (data) => {
@@ -364,244 +399,200 @@ get_header_view: (BigData) -> HeaderView = (data) => {
 }
 ```
 
-### 4. 智能指针类型
+### 4. 值传递与并发安全
 
-#### 4.1 智能指针概览
+#### 4.1 并发安全保证
 
-```yaoxiang
-# === 智能指针类型 ===
+> **与 RFC-001 的关系**：本节的并发安全模型基于 RFC-001 的"信任用户 + 数据流依赖"设计。
 
-# Box[T] - 堆分配
-# 用途：大小不确定的类型、递归类型、Trait 对象
+YaoXiang 的并发安全来自**值传递 + Send 检查**：
 
-# Rc[T] - 引用计数（非线程安全）
-# 用途：单线程共享所有权
+| 机制 | 保证 | 边界情况 |
+|------|------|---------|
+| **值传递** | ✅ 跨线程移动无数据竞争 | 需要 Send |
+| **小对象复制** | ✅ 每个线程有独立副本 | >1KB 需要移动 |
+| **DAG 资源分析** | ⚠️ 依赖变量传递 | 字面量资源不保证 |
 
-# Arc[T] - 原子引用计数（线程安全）
-# 用途：多线程共享所有权
+> **⚠️ 注意**：DAG 资源分析基于 RFC-001 的规则。编译器无法验证运行时资源标识的同一性，字面量资源操作的行为由用户负责。
 
-# RefCell[T] - 内部可变性（非线程安全）
-# 用途：运行时借用检查
+```mermaid
+flowchart LR
+    subgraph Rust["Rust（共享内存）"]
+        T1["Thread1"] --> A["Arc[T] + Mutex"] <--> T2["Thread2"]
+    end
 
-# Mutex[T] - 互斥锁包装（线程安全）
-# 用途：线程安全的内部可变性
+    subgraph YaoXiang["YaoXiang（值传递）"]
+        T3["Thread1"] --> C["Channel"] --> T4["Thread2"]
+    end
 
-# RwLock[T] - 读写锁（线程安全）
-# 用途：读多写少的场景
+    style Rust fill:#ffe6e6
+    style YaoXiang fill:#e6ffe6
 ```
 
-#### 4.2 Box - 堆分配
+#### 4.2 核心原则：共享不如传递
 
-```yaoxiang
-# === Box[T] - 堆分配 ===
+YaoXiang 的并发安全**不依赖共享内存**，而是：
 
-# Box 用于将数据分配到堆上
-heap_data: Box[Data] = Box.new(Data(42))
+1. **值传递**：值在并发边界间流动（channel 为内部实现细节）
+2. **小对象复制**：<1KB 自动复制，开销可忽略
+3. **Send 检查**：跨线程传输的类型必须满足 Send
 
-# 访问 Box 内容（自动解引用）
-access_box: Box[Data] -> Int = (box) => {
-    box.value           # 自动解引用
-    (*box).value        # 显式解引用
-    box.value           # 两种方式等价
-}
+> **实现细节**：channel 是值传递的内部实现机制，用户只需传值，无需直接操作 channel。
 
-# Box 主要用途 1：递归类型
-type Tree = Tree(value: Int, children: List[Box[Tree]])
-#                  ^^^^^^^^^^^^^^^^ 需要 Box 打破无限大小
+```mermaid
+flowchart LR
+    subgraph Rust["Rust（共享内存）"]
+        T1["Thread1"] --> A["Arc[T] + Mutex"] <--> T2["Thread2"]
+    end
 
-# Box 主要用途 2：Trait 对象（未来特性）
-# type Runnable = Runnable(run: () -> Void)
-# process: (Box[Runnable]) -> Void = (r) => { r.run() }
+    subgraph YaoXiang["YaoXiang（值传递）"]
+        T3["Thread1"] --> C["Channel"] --> T4["Thread2"]
+    end
 
-# Box 主要用途 3：大小不确定的类型
-# dynamic_size: (Box[DynamicData]) -> Void = (data) => { ... }
+    style Rust fill:#ffe6e6
+    style YaoXiang fill:#e6ffe6
 ```
 
-#### 4.3 Rc - 引用计数（非线程安全）
+#### 4.3 值传递示例
 
 ```yaoxiang
-# === Rc[T] - 引用计数（单线程） ===
+# === 值传递示例 ===
 
-# 创建 Rc
-shared_data: Rc[Data] = Rc.new(Data(42))
-
-# 克隆 Rc（增加引用计数）
-clone_rc: Rc[Data] -> Rc[Data] = (data) => {
-    Rc.clone(data)  # 引用计数 +1
+# 方式1：直接捕获变量（推荐）
+worker: (Task) -> Result = (task) => {
+    process(task)  # task 自动复制或移动到闭包
 }
 
-# 访问 Rc 内容（自动解引用）
-access_rc: Rc[Data] -> Int = (rc) => {
-    rc.value  # 自动解引用
+# 方式2：闭包捕获多个变量
+process_data: (Int, String) -> Void = (id, data) => {
+    spawn(() => {
+        print(id)      # 复制
+        print(data)    # 复制
+    })
 }
 
-# 引用计数变化
-# rc_clone: () -> Void = () => {
-#     data = Rc.new(Data(42))      # ref count = 1
-#     data2 = Rc.clone(data)       # ref count = 2
-#     data3 = data                 # ref count = 3（简写形式）
-#     # data, data2, data3 都指向同一内存
-#     # 最后销毁时 ref count = 0，内存释放
-# }
+# 方式3：高级用法 - 内部 channel API（标准库）
+# use std.concurrent
+# channel: std.concurrent.Channel[Task] = std.concurrent.Channel.new()
+# channel.send(task)  # 小对象自动复制
 
-# Rc 不是 Send（引用计数非原子）
-# data: Rc[Data] = Rc.new(Data(42))
-# spawn(() => process(data))  # ❌ 编译错误！Rc 不是线程安全
+# === 小对象共享：直接复制 ===
 
-# Rc 不是 Sync（无法安全共享引用）
-# ref_rc: ref Rc[Data] = ref data  # ❌ 编译错误！
-```
+# 100 个线程读取配置（<1KB 自动复制）
+config = Config(timeout: 1000, retries: 3)
 
-#### 4.4 Arc - 原子引用计数（线程安全）
-
-```yaoxiang
-# === Arc[T] - 原子引用计数（多线程） ===
-
-# 创建 Arc
-thread_safe: Arc[Data] = Arc.new(Data(42))
-
-# 克隆 Arc（原子操作，开销比 Rc 大）
-clone_arc: Arc[Data] -> Arc[Data] = (data) => {
-    Arc.clone(data)  # 原子增加引用计数
-}
-
-# 访问 Arc 内容（自动解引用）
-access_arc: Arc[Data] -> Int = (arc) => {
-    arc.value  # 自动解引用
-}
-
-# Arc 是 Send + Sync
-# thread_safe: () -> Void = () => {
-#     data = Arc.new(Data(42))
-#
-#     spawn(() => {
-#         print(data.value)  # ✅ Arc 可以跨线程共享
-#     })
-#
-#     spawn(() => {
-#         print(data.value)  # ✅ 多个线程可同时读取
-#     })
-# }
-
-# Arc 不是 Mutex，访问时需注意：
-# Arc 提供共享所有权，但不提供同步访问
-# 需要使用 Mutex/RwLock 实现内部可变性
-```
-
-#### 4.5 RefCell - 内部可变性（非线程安全）
-
-```yaoxiang
-# === RefCell[T] - 运行时借用检查（单线程） ===
-
-# RefCell 允许在不可变上下文中修改内部数据
-type Container = Container(value: RefCell[Int])
-
-# 创建 RefCell
-cell: RefCell[Int] = RefCell.new(42)
-
-# 读取 - 通过 borrow()
-read_cell: RefCell[Int] -> Int = (cell) => {
-    # borrow() 返回不可变引用
-    ref r = cell.borrow()
-    r.value
-}
-
-# 写入 - 通过 borrow_mut()
-write_cell: RefCell[Int] -> Void = (cell) => {
-    # borrow_mut() 返回可变引用
-    mut r = cell.borrow_mut()
-    r.value = 100
-}
-
-# RefCell 借用规则在运行时检查
-# runtime_borrow: () -> Void = () => {
-#     cell = RefCell.new(42)
-#
-#     ref r1 = cell.borrow()      # ✅ 不可变借用成功
-#     mut r2 = cell.borrow_mut()  # ❌ 运行时 panic！借用冲突
-# }
-
-# with 语法糖（自动释放借用）
-with_cell: RefCell[Int] -> Int = (cell) => {
-    cell.with(ref value) => value.value + 1
+spawn_for i in 0..100 {
+    # config 自动复制给每个线程
+    # 复制 64 字节开销 ~1ns，可忽略
+    print(config.timeout)
 }
 ```
 
-#### 4.6 Mutex - 互斥锁（线程安全）
+#### 4.4 DAG 资源类型
+
+> **与 RFC-001 的关系**：资源类型基于 RFC-001 的数据流依赖规则。
+
+资源类型标记用于自动构建 DAG 依赖：
 
 ```yaoxiang
-# === Mutex[T] - 线程安全互斥锁 ===
+# === 资源类型标记 ===
 
-# Mutex 提供线程安全的内部可变性
-type SafeCounter = SafeCounter(mutex: Mutex[Int])
-
-# 创建 Mutex
-counter: Mutex[Int] = Mutex.new(0)
-
-# 访问 - 通过 lock()（阻塞获取锁）
-# lock() 返回 Guard，包含可变引用
-access_mutex: Mutex[Int] -> Int = (mutex) => {
-    guard = mutex.lock()  # 获取锁
-    guard.value + 1       # 访问数据
-}  # guard 离开作用域，自动释放锁
-
-# with 语法糖（更简洁）
-access_mutex2: Mutex[Int] -> Int = (mutex) => {
-    mutex.with(mut value) => value + 1
-}
-
-# 并发访问示例
-# concurrent_counter: () -> Void = () => {
-#     counter = Mutex.new(0)
-#
-#     spawn(() => {
-#         guard = counter.lock()
-#         guard.value = guard.value + 1
-#     })
-#
-#     spawn(() => {
-#         guard = counter.lock()
-#         guard.value = guard.value + 1
-#     })
-#     # 两个 spawn 会串行执行，因为 Mutex 保护数据
-# }
+type FileSystem: Resource
+type Network: Resource
+type Database: Resource
 ```
 
-#### 4.7 RwLock - 读写锁（线程安全）
+**资源依赖分析规则**（来自 RFC-001）：
 
 ```yaoxiang
-# === RwLock[T] - 线程安全读写锁 ===
+# === 可靠：变量传递资源标识 ===
+file = open("data.txt")     # file 是变量
+write(file, "hello")         # 依赖 file 变量
+write(file, "world")         # 依赖 file 变量 → 自动串行
 
-# RwLock 适合读多写少的场景
-cache: RwLock[Map[String, Data]] = RwLock.new(Map.new())
+# === ⚠️ 不保证：字面量资源标识 ===
+write("data.txt", "hello")   # 字面量，编译器无法识别
+write("data.txt", "world")   # 编译器保守处理：可能串行或并行
+# 这是用户设计问题，非语言保证
 
-# 读取 - read()（可多个并发读）
-read_cache: RwLock[Map[String, Data]] -> Int = (cache) => {
-    guard = cache.read()
-    guard.size()
-}
+# === 标准库预定义资源类型 ===
+use std.resource
 
-# 写入 - write()（排他性写）
-write_cache: (RwLock[Map[String, Data]], String, Data) -> Void = (cache, key, data) => {
-    guard = cache.write()
-    guard.insert(key, data)
-}
+file: std.resource.File = open("data.txt")
+# 标准库强制约束，字面量也能被正确识别
+```
 
-# with 语法糖
-read_cache2: RwLock[Map[String, Data]] -> Int = (cache) => {
-    cache.with(ref data) => data.size()
-}
+**资源类型的作用**：
+- 标记参数类型为 `Resource`，帮助编译器识别
+- 但**不能替代变量传递**
+- 标准库提供预定义资源类型，强制约束
 
-write_cache2: (RwLock[Map[String, Data]], String, Data) -> Void = (cache, key, data) => {
-    cache.with(mut data) => data.insert(key, data)
+**不同资源的操作自动并行**：
+
+```yaoxiang
+fetch_users: () -> JSON = () => HTTP.get("api/users")
+fetch_posts: () -> JSON = () => HTTP.get("api/posts")
+
+main: () -> Void = () => {
+    users = fetch_users()  # Network 资源
+    posts = fetch_posts()  # Network 资源，不同 URL → 并行
+    render(users, posts)
 }
 ```
+
+#### 4.5 可变性：`mut` 标记
+
+YaoXiang 的可变性通过 `mut` 标记，无需 RefCell：
+
+```yaoxiang
+# === 可变性 ===
+
+# 不可变引用
+read_only: (ref Data) -> Int = (data) => data.value
+
+# 可变引用
+read_write: (mut Data) -> Void = (mut data) => {
+    data.value = 100  # 直接修改
+}
+
+# mut 标记在编译期检查，无需运行时 RefCell
+# 如果借用规则被违反，编译期报错
+```
+
+#### 4.6 极端场景：标准库可选实现
+
+极端场景可通过标准库实现：
+
+```yaoxiang
+# === 标准库可选实现（极端场景） ===
+
+# 极端场景 1：需要共享大对象给多个线程
+# 使用 std.sync.arc
+use std.sync
+
+shared_data: std.sync.Arc[BigData] = std.sync.Arc.new(load_large_file())
+
+# 极端场景 2：需要内部可变性
+# 使用 std.cell
+counter: std.cell.RefCell[Int] = std.cell.RefCell.new(0)
+
+# 极端场景 3：需要互斥访问
+# 使用 std.sync.mutex
+shared_counter: std.sync.Mutex[Int] = std.sync.Mutex.new(0)
+
+# ⚠️ 注意：这些是极端场景的兜底方案
+# 大多数场景应该用值传递 + 复制语义
+```
+
+> **设计原则**：标准库提供 Arc/RefCell/Mutex，但它们是**极端场景的兜底方案**，不是日常工具。
 
 ### 5. Send/Sync 约束
 
+> **说明**：Send/Sync 在 YaoXiang 中**主要用于值传递**，不是共享内存。
+
 #### 5.1 Send 约束
 
-**Send**：类型可以安全地跨线程**转移所有权**。
+**Send**：类型可以安全地跨线程**传输**（值传递）。
 
 ```yaoxiang
 # === Send 约束 ===
@@ -613,25 +604,14 @@ write_cache2: (RwLock[Map[String, Data]], String, Data) -> Void = (cache, key, d
 type Point = Point(x: Int, y: Float)
 # Point 是 Send，因为 Int 和 Float 都是 Send
 
-# 包含非 Send 字段的类型不是 Send
-type NonSend = NonSend(data: Rc[Int])
-# Rc 不是 Send（引用计数非原子），因此 NonSend 不是 Send
-
-# spawn 要求参数满足 Send
+# spawn 要求 Send
 # spawn_task: () -> Void = () => {
-#     data = Rc.new(42)
-#     spawn(() => {
-#         print(data)  # ❌ 编译错误！Rc 不是 Send
-#     })
+#     data = BigStruct(...)  # Send
+#     spawn(() => process(data))  # ✅ 值传递
 # }
 
-# 解决方案：使用 Arc（原子引用计数）
-# safe_task: () -> Void = () => {
-#     data = Arc.new(42)  # Arc 是 Send
-#     spawn(() => {
-#         print(data)  # ✅
-#     })
-# }
+# 大多数类型默认 Send
+# 闭包捕获变量自动检查 Send
 ```
 
 #### 5.2 Sync 约束
@@ -643,29 +623,14 @@ type NonSend = NonSend(data: Rc[Int])
 
 # 基本类型都是 Sync
 type Point = Point(x: Int, y: Float)
-# &Point 是 Sync，因为 &Int 和 &Float 都是 Sync
+# ref Point 是 Sync
 
-# 包含内部可变性的类型
-type Counter = Counter(value: Int, mutex: Mutex[Int])
-# &Counter 是 Sync，因为 Mutex 提供内部可变性
+# ⚠️ 注意：YaoXiang 很少需要共享引用
+# 优先使用值传递 + 复制
 
-# 非 Sync 类型
-type NotSync = NotSync(data: Rc[Int])
-# &NotSync 不是 Sync，因为 Rc 不提供线程安全的共享访问
-
-# Sync 的语义
-# shared_ref: () -> Void = () => {
-#     data = Arc.new(42)  # Arc 是 Sync
-#     ref r = ref data    # 可以安全共享引用
-#
-#     spawn(() => {
-#         print(r.value)  # ✅ 多个线程可以同时读取
-#     })
-#
-#     spawn(() => {
-#         print(r.value)  # ✅
-#     })
-# }
+# 唯一需要 Sync 的场景：ref 参数跨并发边界
+# process: (ref Data) -> Void = (data) => { ... }
+# 这个 ref 可以安全跨线程共享
 ```
 
 #### 5.3 Send/Sync 派生规则
@@ -681,22 +646,6 @@ type Struct[T1, T2] = Struct(f1: T1, f2: T2)
 
 # Sync 派生规则
 # Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
-
-# 联合类型
-type Result[T, E] = ok(T) | err(E)
-
-# Send 派生规则
-# Result[T, E]: Send ⇐ T: Send 且 E: Send
-
-# 泛型容器
-type Box[T] = Box(T)
-type Option[T] = some(T) | none
-
-# Send/Sync 派生
-# Box[T]: Send ⇐ T: Send
-# Box[T]: Sync ⇐ T: Sync
-# Option[T]: Send ⇐ T: Send
-# Option[T]: Sync ⇐ T: Sync
 ```
 
 #### 5.4 标准库类型约束表
@@ -705,14 +654,11 @@ type Option[T] = some(T) | none
 |------|:----:|:----:|------|
 | `Int`, `Float`, `Bool` | ✅ | ✅ | 原类型 |
 | `String` | ✅ | ✅ | UTF-8 字符串 |
-| `Box[T]` | ✅ | ✅ | T: Send + Sync |
-| `Rc[T]` | ❌ | ❌ | 非原子引用计数 |
-| `Arc[T]` | ✅ | ✅ | T: Send + Sync |
-| `RefCell[T]` | ❌ | ❌ | 运行时借用检查 |
-| `Mutex[T]` | ✅ | ✅ | T: Send |
-| `RwLock[T]` | ✅ | ✅ | T: Send |
-| `Channel[T]` | ✅ | ❌ | 只发送端 Send |
-| `Vec[T]` | ✅ | ❌ | T: Send（但 &Vec 不是 Sync） |
+| `Channel[T]` | ✅ | ❌ | 内部实现细节（用户不直接使用） |
+| `std.sync.Arc` | ✅ | ✅ | 极端场景可选（标准库，不推荐） |
+| `std.sync.Mutex` | ✅ | ✅ | 极端场景可选（标准库，不推荐） |
+
+> **层级归属**：YaoXiang 语言核心**不依赖共享原语**，并发安全通过值传递 + DAG 实现。Channel/Arc/Mutex 是内部或标准库实现，不鼓励日常使用。
 
 ### 6. RAII 与资源管理
 
@@ -787,33 +733,41 @@ move_and_drop: () -> Void = () => {
 }  # resource2（在 resource1 中）被 drop
 ```
 
+### 7. 与运行时模式的关系
+
+> **与 RFC-008 的关系**：运行时分层基于 RFC-008 的三层架构设计。
+
+所有权规则（move/copy/drop）在所有运行时模式下一致。并发相关规则随运行时模式变化：
+
+| 规则 | Embedded | Standard | Full |
+|------|----------|----------|------|
+| **所有权规则** | ✅ 一致 | ✅ 一致 | ✅ 一致 |
+| **move/copy/drop** | ✅ 启用 | ✅ 启用 | ✅ 启用 |
+| **借用规则** | ⚠️ 宽松 | ❌ 禁止跨边界 | ❌ 禁止跨边界 |
+| **DAG 资源分析** | ❌ 不适用 | ✅ 启用 | ✅ 启用 |
+| **@block 注解** | N/A | 标准库 | 标准库 |
+| **WorkStealing** | ❌ | ❌ | ✅ |
+| **Send 检查点** | 无 | spawn/channel | spawn/channel |
+
+**各运行时说明**：
+
+- **Embedded 模式**：无 DAG 调度，所有代码同步执行。借用规则更宽松（因为不会并行），但跨线程操作仍需 Send。
+- **Standard 模式**：启用 DAG 调度，借用禁止跨并作边界（spawn/channel）。
+- **Full 模式**：Standard + WorkStealing，规则与 Standard 相同。
+
+> **核心保证**：所有权语义在所有模式下保持一致，用户代码无需针对不同模式重写。
+
 ## 详细设计
 
 ### 语法定义
 
-```bnf
-# === 所有权语法 ===
+> 语法定义详见 [language-spec.md](../language-spec.md)
 
-# 引用类型
-RefType      ::= 'ref' Type
-              | 'mut' Type
-
-# 泛型约束（未来特性）
-WhereClause  ::= 'where' Type ':' Constraint (',' Constraint)*
-Constraint   ::= 'Send'
-              | 'Sync'
-
-# 智能指针类型
-SmartPointer ::= 'Box' '[' Type ']'
-              | 'Rc' '[' Type ']'
-              | 'Arc' '[' Type ']'
-              | 'RefCell' '[' Type ']'
-              | 'Mutex' '[' Type ']'
-              | 'RwLock' '[' Type ']'
-
-# 变量声明（带所有权）
-LetStmt      ::= ('mut' | 'ref')? Identifier (':' Type)? '=' Expr
-```
+所有权相关语法已整合到语言规范中，包括：
+- 引用类型：`ref T`, `mut T`
+- 泛型约束：`Send`, `Sync`
+- 智能指针类型：`Box`, `Rc`, `Arc`, `RefCell`, `Mutex`, `RwLock`
+- 变量声明：`let` / `mut` / `ref` 修饰符
 
 ### 类型系统约束
 
@@ -850,70 +804,25 @@ LetStmt      ::= ('mut' | 'ref')? Identifier (':' Type)? '=' Expr
 # Mutex[T] 需要 T: Send
 ```
 
-### 编译器实现
-
-#### 借用检查器
-
-```rust
-// 借用检查器核心数据结构
-struct BorrowChecker {
-    // 所有权关系
-    ownerships: Map<ValueId, Owner>,
-    // 借用关系
-    borrows: Vec<Borrow>,
-    // 生命周期
-    lifetimes: Map<LifetimeId, Lifetime>,
-}
-
-struct Borrow {
-    borrow_id: BorrowId,
-    value_id: ValueId,
-    borrow_kind: BorrowKind,  // Ref 或 Mut
-    lifetime: Lifetime,
-    location: Span,
-}
-```
-
-#### 生命周期分析
-
-```rust
-// 生命周期分析算法
-fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
-    // 1. 收集所有借用
-    let borrows = collect_borrows(fn);
-
-    // 2. 构建生命周期约束
-    let constraints = build_constraints(borrows);
-
-    // 3. 求解生命周期
-    let lifetimes = solve_constraints(constraints);
-
-    // 4. 检查约束冲突
-    check_conflicts(lifetimes);
-
-    lifetimes
-}
-```
-
 ## 权衡
 
 ### 优点
 
 1. **内存安全**：编译期消除内存泄漏和野指针
-2. **数据竞争消除**：Send/Sync 约束保证并发安全
+2. **并发安全**：值传递 + Send 检查 + DAG 资源分析消除数据竞争
 3. **零成本抽象**：无 GC 运行时开销
 4. **可预测性能**：无垃圾回收暂停
 5. **RAII 资源管理**：文件、网络等资源自动释放
 6. **AI 友好**：明确的规则易于 AI 理解和生成
-7. **学习曲线低**：无需理解生命周期标注
-8. **简洁**：99% 的代码无需特殊处理
+7. **学习曲线低**：无需理解生命周期标注、Arc、Mutex
+8. **简洁**：只需传值，无需任何特殊处理
 
 ### 缺点
 
 1. **小字段复制**：< 1KB 对象复制（开销可忽略）
 2. **无法返回借用**：需要返回整个值
-3. **结构体不能含借用**：需要包含值或用 Arc
-4. **极端性能场景**：需要标准库视图（1% 情况）
+3. **结构体不能含借用**：需要包含值
+4. **极端性能场景**：需要标准库 Arc/视图（1% 情况）
 
 ## 替代方案
 
@@ -926,41 +835,46 @@ fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
 
 ## 实现策略
 
-### 阶段 1：基础所有权（v0.5）
+> **核心原则**：YaoXiang 通过值传递 + DAG 资源分析实现并发安全，**不依赖共享内存**。智能指针（Box/Rc/Arc/RefCell/Mutex）是标准库可选实现，不在语言核心实现范围内。
 
-- [ ] 所有权规则实现
-- [ ] 移动语义
-- [ ] 基本类型 Copy 语义
-- [ ] 借用检查器
+### 阶段 1：所有权核心（v0.5）
 
-### 阶段 2：智能指针（v0.6）
+- [ ] 所有权规则（唯一所有者、自动释放）
+- [ ] 移动语义（零拷贝）
+- [ ] 小对象复制语义（< 1KB）
+- [ ] 借用检查器（ref/mut 规则）
 
-- [ ] Box 实现
-- [ ] Rc 实现
-- [ ] Arc 实现
-- [ ] RefCell/Mutex 实现
+### 阶段 2：值传递与并发安全（v0.6）
 
-### 阶段 3：Send/Sync（v0.7）
-
+- [ ] spawn 集成（闭包捕获变量）
+- [ ] 值传递机制（小对象复制、大对象移动）
 - [ ] Send 约束检查
-- [ ] Sync 约束检查
-- [ ] spawn 集成
-- [ ] 并发安全测试
+- [ ] 跨边界所有权转移
+
+### 阶段 3：DAG 资源分析（v0.7）
+
+- [ ] 资源类型标记（`type X: Resource`）
+- [ ] 依赖图构建（变量传递 vs 字面量）
+- [ ] 自动并行调度
+- [ ] 运行时 DAG 执行
 
 ### 阶段 4：标准库扩展（v0.8）
 
-- [ ] 视图类型（std.memory）
-- [ ] 句柄类型
-- [ ] Copy-on-Write 优化
+> 标准库提供极端场景兜底，非语言核心
+
+- [ ] 视图类型（std.memory，零拷贝访问）
+- [ ] 句柄类型（RAII 资源管理）
+- [ ] Arc/Mutex/RefCell（可选，非推荐）
 
 ## 开放问题
 
 | 议题 | 状态 | 说明 |
 |------|------|------|
+| 引用跨边界规则 | 待定 | ref/mut 跨 spawn/channel 的具体实现 |
+| DAG 资源分析 | 待定 | 变量传递 vs 字面量的边界情况 |
+| 视图类型 API | 待定 | std.memory 视图的具体设计 |
+| @block 注解 | 待定 | 仅用于调试/阻塞IO，还是通用注解 |
 | Drop 语法 | 待定 | 是否需要显式 `drop()` 函数 |
-| Copy 派生 | 已解决 | 基本类型自动实现 Copy |
-| 视图类型 API | 待定 | 标准库视图的具体设计 |
-| Pin/Unpin | 待定 | 是否需要 Future 安全特性 |
 
 ---
 
@@ -973,9 +887,12 @@ fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
 | 借用语法 | `&T`, `&mut T` | `ref T`, `mut T` |
 | 生命周期 | `&'a T` | **无**（自动推断） |
 | 返回借用 | ✅ 支持 | ❌ 禁止（返回整个值） |
-| 结构体含借用 | ✅ 支持 | ❌ 禁止（包含值或 Arc） |
-| Drop | `Drop` trait | 内置 drop 语义 |
-| Copy | `Copy` trait | 基本类型自动 Copy |
+| 结构体含借用 | ✅ 支持 | ❌ 禁止（包含值） |
+| 共享所有权 | `Arc[T]` | **不需要**（消息传递） |
+| 线程同步 | `Mutex`, `RwLock` | **不需要**（消息传递） |
+| 内部可变性 | `RefCell` | **不需要**（`mut` 标记） |
+| 并发模型 | async/await + Arc | **消息传递 + DAG** |
+| Arc/Mutex | 语言内置 | **标准库可选**（极端场景） |
 
 ### 附录B：设计决策记录
 
@@ -985,11 +902,15 @@ fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
 | **生命周期** | **不实现** | 2025-01-08 | 晨煦 |
 | **借用返回** | **禁止** | 2025-01-08 | 晨煦 |
 | **结构体借用** | **禁止** | 2025-01-08 | 晨煦 |
-| 小对象复制 | 自动（开销可忽略） | 2025-01-08 | 晨煦 |
+| 小对象复制 | 自动（<1KB，开销可忽略） | 2025-01-08 | 晨煦 |
 | 大对象移动 | 零拷贝 | 2025-01-08 | 晨煦 |
-| 智能指针 | Box/Rc/Arc/RefCell/Mutex | 2025-01-08 | 晨煦 |
-| Send/Sync | 编译时约束 | 2025-01-08 | 晨煦 |
+| 并发安全 | **值传递 + Send + DAG 资源分析** | 2025-01-08 | 晨煦 |
+| **DAG 资源分析** | ⚠️ 依赖变量传递，字面量不保证 | 2025-01-09 | 晨煦 |
+| Arc/Mutex | **标准库可选**（极端场景，不推荐） | 2025-01-09 | 晨煦 |
 | RAII | 自动资源释放 | 2025-01-08 | 晨煦 |
+| **运行时模式** | 所有权一致，并发规则分层 | 2025-01-09 | 晨煦 |
+| **引用跨边界** | **禁止**（跨越默認失去所有權） | 2025-01-09 | 晨煦 |
+| **@block 注解** | **不用於 Arc/Mutex 同步**（僅用於調試/阻塞IO） | 2025-01-09 | 晨煦 |
 | 极端性能场景 | 标准库兜底 | 2025-01-08 | 晨煦 |
 
 ### 附录C：术语表
@@ -1000,6 +921,7 @@ fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
 | 借用（Borrow） | 引用值的临时访问 |
 | 移动（Move） | 所有权的转移 |
 | 复制（Copy） | 值的浅拷贝（< 1KB 自动复制） |
+| 值传递 | 值在并发边界间流动（channel 为内部实现） |
 | Send | 可安全跨线程传输 |
 | Sync | 可安全跨线程共享引用 |
 | RAII | 资源获取即初始化 |
@@ -1022,8 +944,9 @@ fn analyze_lifetimes(fn: &Function) -> LifetimeMap {
 
 - [Rust 所有权模型](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
 - [Rust 生命周期](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
-- [Rust Send/Sync](https://doc.rust-lang.org/book/ch16-04-extensible-concurrency-sync-and-send.html)
 - [C++ RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization)
+- [Erlang 消息传递](https://www.erlang.org/doc/getting_concurrency/getting_concurrency.html)
+- [Go 并发模型](https://golang.org/doc/effective_go#concurrency)
 
 ---
 

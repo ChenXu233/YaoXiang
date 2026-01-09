@@ -533,11 +533,54 @@ mut T       # 可变引用
 Lifetime   ::= '\'' Identifier
 ```
 
+### 8.4 所有权语法
+
+```bnf
+# === 所有权语法 ===
+
+# 引用类型
+RefType      ::= 'ref' Type
+              | 'mut' Type
+
+# 泛型约束
+WhereClause  ::= 'where' Type ':' Constraint (',' Constraint)*
+Constraint   ::= 'Send'
+              | 'Sync'
+
+# 智能指针类型
+SmartPointer ::= 'Box' '[' Type ']'
+              | 'Rc' '[' Type ']'
+              | 'Arc' '[' Type ']'
+              | 'RefCell' '[' Type ']'
+              | 'Mutex' '[' Type ']'
+              | 'RwLock' '[' Type ']'
+
+# 变量声明（带所有权）
+LetStmt      ::= ('mut' | 'ref')? Identifier (':' Type)? '=' Expr
+```
+
+### 8.5 借用规则
+
+| 引用类型 | 可读 | 可写 | 可同时存在多个 | 可与可变引用共存 |
+|----------|------|------|----------------|------------------|
+| `ref T` | ✅ | ❌ | ✅ | ❌ |
+| `mut T` | ✅ | ✅ | ❌ | ❌ |
+
+### 8.6 Send/Sync 派生规则
+
+```
+# Send 派生规则
+Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
+
+# Sync 派生规则
+Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
+```
+
 ---
 
 ## 第八章（续）：类型系统约束
 
-### 8.4 Send/Sync 约束
+### 8.7 Send/Sync 约束
 
 YaoXiang 使用 Rust 风格的类型约束来保证并发安全：
 
@@ -559,7 +602,7 @@ Arc[T] 实现 Send + Sync（线程安全引用计数）
 Mutex[T] 提供内部可变性
 ```
 
-### 8.5 并发安全类型
+### 8.8 并发安全类型
 
 | 类型 | 语义 | 并发安全 | 说明 |
 |------|------|----------|------|
