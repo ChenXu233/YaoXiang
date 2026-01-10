@@ -18,18 +18,21 @@
 
 ## 摘要
 
-本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**，包括所有权语义、移动语义和线程通信。YaoXiang 采用简化的所有权模型，**不引入生命周期标注 `'a`**，通过编译器自动推断和值传递实现内存安全，通过值传递 + Send 检查实现基本的并发安全，通过 DAG 资源分析实现自动调度，无需 GC 即可实现高性能。
+本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**，包括所有权语义、移动语义和线程通信。YaoXiang 采用简化的所有权模型，**不引入生命周期标注 `'a`** 和**引用语法**，通过值传递实现内存安全，通过 Send 检查实现并发安全，通过 DAG 资源分析实现自动调度，无需 GC 即可实现高性能。
 
-> **设计决策**：YaoXiang 选择**不实现生命周期标注**，通过以下策略解决借用问题：
-> 1. 禁止返回借用引用（返回整个值）
-> 2. 禁止结构体包含借用字段
-> 3. 小对象直接复制（开销可忽略）
-> 4. 大对象用移动语义（零拷贝）
-> 5. 极端性能场景由标准库兜底（Arc 等可选）
+> **设计决策**：YaoXiang 选择**不实现生命周期标注**和**借用引用**，通过以下策略解决内存安全问题：
+> 1. 类型透明，编译器直接访问字段（无需 ref T）
+> 2. 赋值/传参/返回 = Move（零拷贝）
+> 3. 显式 clone() = 复制
+> 4. 极端性能场景由标准库兜底（视图类型等可选）
 
-> **核心原则**：99% 的代码不需要任何特殊处理。值传递 + 小对象复制 + DAG 资源类型已覆盖几乎所有场景。Arc/Rc/RefCell/Mutex 仅作为标准库可选实现，用于极端性能场景。
+> **核心原则**：99% 的代码不需要任何特殊处理。值传递 + Move 语义 + DAG 资源类型已覆盖几乎所有场景。Arc/Rc/RefCell/Mutex 仅作为标准库可选实现，用于极端性能场景。
 
-> **性能保证**：YaoXiang 的性能接近 Rust，远超 Go。小字段复制（< 1KB）开销 < 0.01%，大对象移动零拷贝。
+> **性能保证**：YaoXiang 的性能接近 Rust，远超 Go。大对象 Move 零拷贝。
+>
+> **所有权绑定**：99% 的代码不需要任何特殊处理。值传递 + Move 语义 + DAG 资源类型已覆盖几乎所有场景。Arc/Rc/RefCell/Mutex 仅作为标准库可选实现，用于极端性能场景。
+>
+> **柯里化多位置绑定**：YaoXiang 通过 RFC-004 的柯里化绑定机制，实现流畅 API。方法调用如 `p1.distance(p2)` 实际上是柯里化绑定后的函数调用，返回 `(Float, Point)`，调用者可根据需要选择重新赋值或丢弃。
 
 ## 动机
 
@@ -66,19 +69,18 @@ transfer: (Data) -> Data = (data) => {
     Data(data.value * 2)  # 返回新值，所有权转移
 }
 
-# 3. 小对象复制（开销可忽略）
-get_header: (BigData) -> Header = (data) => data.header
-# 复制 64 字节开销 ~1ns，可忽略
+# 3. 显式复制（用户控制）
+copy_data: (Data) -> Data = (data) => data.clone()
 
 # 4. 值传递（并发安全）
 # 并作模型自动处理并发，无需 Arc/Mutex
 worker: (Task) -> Result = (task) => {
     # 值通过变量传递，DAG 自动构建依赖
-    process(task)  # task 自动复制或移动
+    process(task)  # Move（所有权转移）
 }
 ```
 
-### 关键设计决策：不实现生命周期标注 + 值传递替代共享内存
+### 关键设计决策：不实现生命周期标注 + 删除引用语法 + 值传递替代共享内存
 
 #### 为什么不做生命周期 `'a`？
 
@@ -87,6 +89,35 @@ worker: (Task) -> Result = (task) => {
 | **`'a` 语法** | 丑、学习成本高、增加语言复杂度 |
 | **编译器无法推断** | 返回哪个输入、返回新借用、结构体包含引用 |
 | **用户负担** | 99% 的代码不需要生命周期，只有 1% 的复杂场景需要 |
+
+#### 为什么不做引用语法？
+
+YaoXiang 没有 `ref` 关键字，因为：
+
+| 问题 | 分析 |
+|------|------|
+| **类型透明** | 函数式语言中，类型定义对所有人可见 |
+| **编译器优化** | 编译器看到类型定义，可以直接优化访问 |
+| **用户负担** | 99% 的代码不需要借用，只有 1% 的极端场景需要 |
+| **替代方案** | 大对象用移动语义，视图类型兜底 |
+
+```yaoxiang
+# 不需要 ref T，因为类型透明
+type BigData = BigData(header: Header, payload: Payload)
+
+# get_header 吃掉 data 的所有权，返回 Header
+# data 在调用后失效
+
+get_header: (BigData) -> Header = (data) => {
+    data.header  # 所有权转移，返回 Header
+}
+
+# 如果需要保留原值，函数应该返回新值
+get_both: (BigData) -> (Header, BigData) = (data) => {
+    (data.header, data)  # 返回 Header 和原 BigData
+}
+# 调用者自己决定怎么处理返回值
+```
 
 #### 为什么不需要 Arc/Mutex？
 
@@ -101,29 +132,15 @@ worker: (Task) -> Result = (task) => {
 #### 编译器无法推断的场景（被禁止）
 
 ```yaoxiang
-# === 场景1：返回哪个输入引用？ ===
-# pick: (ref Data, ref Data) -> ref Data = (a, b) => {
-#     if a.value > b.value { a } else { b }
-# }  # ❌ 编译器不知道返回哪个
-
-# ✅ 替代方案：返回整个值
+# === 场景1：返回哪个输入？ ===
 pick: (Data, Data) -> Data = (a, b) => {
     if a.value > b.value { a } else { b }
 }
 
-# === 场景2：返回"新借用" ===
-# get_buffer: () -> ref Data = () => {
-#     buffer = Data(42)
-#     ref buffer  # ❌ 返回局部借用
-# }
-
-# ✅ 替代方案：返回整个值
+# === 场景2：返回"新值" ===
 get_buffer: () -> Data = () => Data(42)
 
-# === 场景3：结构体包含借用 ===
-# type Container = Container(data: ref Data)  # ❌
-
-# ✅ 替代方案：直接包含值
+# === 场景3：结构体包含值 ===
 type Container = Container(data: Data)
 ```
 
@@ -146,7 +163,7 @@ type Container = Container(data: Data)
 
 YaoXiang 的所有权系统基于以下核心规则：
 
-> **引用跨边界规则**：借用（ref/mut）**不能跨代码块边界**。跨越边界时，默认失去所有权，需要重新获取或传递值。
+> **核心规则**：值传递 + 默认不可变 + 显式 mut 标记
 
 ```mermaid
 flowchart TB
@@ -160,18 +177,14 @@ flowchart TB
         B2 --> B4["转移成本 = 零（指针移动）"]
     end
 
-    subgraph 规则3["规则 3：复制语义（Copy）"]
-        C1["小对象（< 1KB）"] --> C2["自动复制，开销可忽略"]
-        C3["基础类型（Int, Float等）"] --> C4["默认 Copy"]
-        C2 --> C5["复制后原所有者保持可用"]
+    subgraph 规则3["规则 3：显式复制（Clone）"]
+        C1["data.clone()"] --> C2["复制值，原所有者保持可用"]
+        C3["用户控制"] --> C2
     end
 
-    subgraph 规则4["规则 4：引用传递（Borrow）"]
-        D1["ref Data"] --> D2["不可变借用（只读）"]
-        D3["mut Data"] --> D4["可变借用（读写）"]
-        D2 --> D5["借用不能超过所有者作用域"]
-        D4 --> D5
-        D5 --> D6["引用不能跨代码塊（跨邊界默認失去所有權）"]
+    subgraph 规则4["规则 4：可变性（mut）"]
+        D1["mut 标记"] --> D2["显式允许修改"]
+        D2 --> D3["编译期检查"]
     end
 ```
 
@@ -180,11 +193,11 @@ flowchart TB
 ```yaoxiang
 # === 规则 1：唯一所有者 ===
 
-# 基础类型 - 复制语义
+# 基础类型 - Move 语义
 x: Int = 42
-y = x  # 复制值，x 和 y 独立
+y = x  # Move，x 失效
 
-# 复杂类型 - 移动语义
+# 复杂类型 - Move 语义
 type Data = Data(value: Int)
 
 create_data: () -> Data = () => {
@@ -199,56 +212,36 @@ create_data: () -> Data = () => {
 #     print(data.value)  # ❌ 编译错误！
 # }
 
-# === 规则 2：引用传递 ===
+# === 规则 2：透明访问（不需要 ref T）===
 
-# 不可变引用（可以有多个）
-read_data: (ref Data) -> Int = (data) => data.value
+# 编译器看到类型定义，直接访问字段
+get_value: (Data) -> Int = (data) => data.value
 
-# usage: () -> Void = () => {
-#     data = Data(42)
-#     r1 = read_data(data)   # 借用 1
-#     r2 = read_data(data)   # 借用 2
-#     # r1 和 r2 可以同时存在
-# }
+# === 规则 3：可变性（mut 标记）===
 
-# 可变引用（只能有一个）
-write_data: (mut Data) -> Void = (data) => {
-    data.value = 100
-}
+# 默认不可变
+data: Data = Data(42)
+# data.value = 100  # ❌ 编译错误！
 
-# usage2: () -> Void = () => {
-#     data = Data(42)
-#     write_data(mut data)  # 可变借用
-#     # data.value = 100     # ❌ 编译错误！借用期间不能直接修改
-# }
+# mut 标记允许修改
+mut counter: Int = 0
+counter = counter + 1  # ✅ 允许
 
-# === 引用跨边界规则 ===
+# mut 数据结构
+mut data_mut: Data = Data(42)
+data_mut.value = 100   # ✅ mut 标记允许修改
 
-# ❌ 错误：引用不能跨 spawn 边界
-# bad_example: () -> Void = () => {
-#     data = Data(42)
-#     ref_data = ref data
-#     spawn(() => {
-#         print(ref_data.value)  # ❌ ref 不能跨代码块
-#     })
-# }
+# === 规则 4：跨边界传递（值传递）===
 
-# ✅ 正确：跨边界传递值（复制或移动）
+# ✅ 正确：跨边界传递值（Move 或 Clone）
 good_example: () -> Void = () => {
     data = Data(42)
     spawn(() => {
-        print(data.value)  # data 自动复制或移动
+        print(data.value)  # data Move 或 Clone
     })
 }
 
-# ❌ 错误：mut 跨边界
-# bad_mut: () -> Void = () => {
-#     data = Data(42)
-#     mut_data = mut data
-#     process(mut_data)  # mut 跨边界？取决于实现
-# }
-
-# === 规则 3：所有权转移 ===
+# === 规则 5：所有权转移 ===
 
 transfer: (Data) -> Data = (data) => {
     # data 的所有权转移进来
@@ -264,70 +257,263 @@ transfer: (Data) -> Data = (data) => {
 # }
 ```
 
-### 2. 引用类型系统
+#### 1.3 所有权绑定（Ownership Binding）
 
-#### 2.1 引用类型语法
+> **与 RFC-004 的关系**：所有权绑定依赖于柯里化多位置绑定（RFC-004）的语法机制。
 
-```yaoxiang
-# === 引用类型定义 ===
+YaoXiang 提供**所有权绑定**机制，让函数可以返回`(结果, 原参数)`，调用者根据返回值类型决定是否重新赋值原变量。这使得 API 更加流畅，同时保持所有权的明确性。
 
-# ref T - 不可变引用
-ref Int           # 指向 Int 的不可变引用
-ref Data          # 指向 Data 的不可变引用
+##### 1.3.1 所有权绑定规则
 
-# mut T - 可变引用
-mut Int           # 指向 Int 的可变引用
-mut Data          # 指向 Data 的可变引用
+```mermaid
+flowchart TB
+    subgraph 函数定义["函数返回 (Result, OriginalParams)"]
+        F1["distance: (Point, Point) -> (Float, Point)"]
+        F2["返回 (距离, 第一个参数)"]
+    end
+
+    subgraph 调用场景["调用方式决定行为"]
+        C1["result: (Float, Point) = p1.distance(p2)"]
+        C2["result: (Float, Point) = p1.distance(p2)"]
+        C3["dist: Float = p1.distance(p2)"]
+    end
+
+    subgraph 行为["绑定行为"]
+        B1["p1 被重新赋值（所有权保留）"]
+        B2["p2 被 drop"]
+        B3["p1 被 drop（没人接受）"]
+    end
+
+    F2 --> C1
+    F2 --> C2
+    F2 --> C3
+    C1 --> B1
+    C2 --> B1
+    C3 --> B3
 ```
 
-#### 2.2 引用类型规则表
+**核心规则**：
+1. 函数返回 `(结果, 原参数)` 元组
+2. 调用者根据返回值类型决定行为：
+   - 完全匹配 → 自动重新赋值原变量
+   - 部分匹配 → 丢弃未接受的部分
+3. 未被接受的所有权被 drop
 
-| 引用类型 | 可读 | 可写 | 可同时存在多个 | 可与可变引用共存 |
-|----------|------|------|----------------|------------------|
-| `ref T` | ✅ | ❌ | ✅ | ❌ |
-| `mut T` | ✅ | ✅ | ❌ | ❌ |
+##### 1.3.2 所有权绑定示例
 
 ```yaoxiang
-# === 引用类型使用示例 ===
+# === 所有权绑定基础 ===
 
-# 不可变引用 - 只读访问
-readonly_access: (ref Data) -> Int = (data) => {
-    data.value  # 只读，编译保证
+type Point = Point(x: Float, y: Float)
+
+# 基础函数：返回 (距离, 第一个 Point)
+distance: (Point, Point) -> (Float, Point) = (a, b) => {
+    dx = b.x - a.x
+    dy = b.y - a.y
+    d = (dx * dx + dy * dy).sqrt()
+    (d, a)  # 返回距离和第一个参数
 }
 
-# 可变引用 - 读写访问
-readwrite_access: (mut Data) -> Void = (data) => {
-    data.value = 100  # 可写
-    x = data.value    # 可读
+# 通过柯里化绑定到类型（RFC-004）
+Point.distance = distance[1]
+
+# === 调用场景 ===
+
+p1: Point = Point(0.0, 0.0)
+p2: Point = Point(3.0, 4.0)
+
+# 场景1：完全接受返回值 → p1 被重新赋值
+# p2 被 drop（没人接受它的所有权）
+result: (Float, Point) = p1.distance(p2)
+# result = (5.0, Point(0.0, 0.0))
+# p1 保持不变（没人要求重新赋值）
+
+# 场景2：只接受距离 → p1 被 drop
+dist: Float = p1.distance(p2)
+# dist = 5.0
+# p1 和 p2 都被 drop
+
+# 场景3：丢弃所有返回值 → p1 被 drop
+_ = p1.distance(p2)  # 只关心副作用
+# p1 和 p2 都被 drop
+```
+
+##### 1.3.3 更复杂的例子
+
+```yaoxiang
+# === 所有权绑定：返回原参数 ===
+
+type Point = Point(x: Float, y: Float)
+type Line = Line(start: Point, end: Point)
+
+# 计算线段长度，返回 (长度, 原 Line)
+line_length: (Line) -> (Float, Line) = (line) => {
+    d = line.start.distance(line.end)
+    (d, line)
 }
+
+# 绑定到类型
+Line.length = line_length[0]
+
+# 使用示例
+line: Line = Line(
+    start: Point(0.0, 0.0),
+    end: Point(3.0, 4.0)
+)
+
+# 接受返回值（Line 不失效）
+result: (Float, Line) = line.length
+# result = (5.0, line)
+# line 仍然有效
+
+# 不接受返回值（Line 被 drop）
+_ = line.length
+# line 被 drop
+```
+
+##### 1.3.4 所有权绑定与异步/并发的关系
+
+> **核心洞察**：所有权绑定让异步操作更加清晰。返回值类型决定原参数是否被 drop。
+
+```yaoxiang
+# === 异步任务的所有权绑定 ===
+
+type Task = Task(id: Int, data: String)
+
+# 异步任务：处理数据并返回 (结果, 原 Task)
+process_task: (Task) -> (Result, Task) = (task) => {
+    result = do_async_work(task.data)
+    (result, task)
+}
+
+Task.process = process_task[0]
+
+# 使用示例
+task: Task = Task(id: 1, data: "hello")
+
+# 接受返回值（保留 Task）
+result: (Result, Task) = task.process()
+# result = (ok_result, task)
+# task 仍然有效
+
+# 不接受返回值（Task 被 drop）
+result: Result = task.process()
+# task 被 drop
+```
+
+**异步/并发的所有权绑定规则**：
+1. 异步任务参数的所有权进入任务
+2. 任务完成时返回 `(结果, 原参数)` 或仅 `结果`
+3. 调用者根据需要选择是否保留参数
+4. 未保留的参数被自动 drop
+
+### 2. 可变性与 mut 标记
+
+#### 2.1 mut 标记语法
+
+> **核心规则**：mut 是**字段级**属性，不是变量级属性。变量绑定不可重新赋值。
+
+```yaoxiang
+# === 变量绑定不可重新赋值 ===
+
+p: Point = Point(10, 20)
+# p = Point(30, 40)  # ❌ 编译错误！变量不能重新赋值
+
+# === mut 是字段级 ===
+
+# mut 标记单个字段，只有该字段可变
+type Point = Point(x: Int, mut y: Int)
+
+p: Point = Point(10, 20)
+p.x = 100        # ❌ x 没有 mut，编译错误！
+p.y = 200        # ✅ y 有 mut 标记，可以修改
+
+# === 字段 mut 的使用场景 ===
+
+# 只允许修改某些字段，暴露更多不可变字段给 API 用户
+type Config = Config(
+    api_key: String,        # 不可变
+    timeout: mut Int,       # 可变
+    retries: mut Int        # 可变
+)
+
+# API 用户可以修改 timeout/retries，但不能修改 api_key
+```
+
+#### 2.2 mut 规则
+
+| 特性 | 规则 |
+|------|------|
+| **变量绑定** | 不可重新赋值，只能 Move |
+| **字段 mut** | mut 标记的字段可以修改 |
+| **不可变字段** | 编译期检查 |
+
+```yaoxiang
+# === 变量不可重新赋值 ===
+
+data: Data = Data(42)
+# data = Data(100)  # ❌ 编译错误！
+
+# === 需要新值？创建新值 ===
+
+data2: Data = Data(data.value * 2)  # ✅ 创建新值
+
+# === mut 字段修改 ===
+
+type Point = Point(x: Int, mut y: Int)
+
+p: Point = Point(10, 20)
+p.y = 200        # ✅ y 有 mut，可以修改
+```
+
+#### 2.3 并发规则
+
+> **核心洞察**：不可变字段天然可并发读，mut 字段编译器自动串行。
+
+```mermaid
+flowchart TB
+    subgraph 字段类型["字段类型"]
+        I["不可变字段（无 mut）"]
+        M["可变字段（mut）"]
+    end
+
+    subgraph 并发行为["并发行为"]
+        R["✅ 并发读"]
+        W["❌ 串行改"]
+    end
+
+    I --> R
+    M --> W
+```
+
+```yaoxiang
+# === 不可变字段 - 并发读 ===
+
+type Point = Point(x: Float, y: Float)
+
+p: Point = Point(0.0, 0.0)
+target1: Point = Point(1.0, 0.0)
+target2: Point = Point(2.0, 0.0)
+
+# 两个距离计算并发执行（只读 x）
+d1 = p.x.distance(target1)  # 读 x
+d2 = p.x.distance(target2)  # 读 x，并发！
+
+# === mut 字段 - 串行改 ===
+
+type Config = Config(name: String, mut timeout: Int)
+
+cfg: Config = Config(name: "app", timeout: 1000)
+cfg.timeout = 2000  # 串行修改
+cfg.timeout = 3000  # 串行修改
 ```
 
 ### 3. 性能分析
 
-#### 3.1 小对象复制的实际开销
+#### 3.1 所有权转移（零拷贝）
 
 ```yaoxiang
-# === 小字段访问 ===
-type BigData = BigData(header: Header, payload: Bytes)
-# 假设 Header = 64 字节
-
-get_header: (BigData) -> Header = (data) => data.header
-#                           ^^^^^^^^
-#                           复制 64 字节
-
-# 实际开销分析：
-# - 复制 64 字节：~1 纳秒
-# - 内存访问延迟：~100 纳秒
-# - 函数调用开销：~10 纳秒
-# - L1 缓存命中：~4 周期
-
-# 结论：64 字节复制的开销可忽略不计
-```
-
-#### 3.2 大对象移动（零拷贝）
-
-```yaoxiang
-# === 大对象移动 ===
+# === Move 语义 ===
 load_data: () -> BigData = () => BigData(...)
 
 process: (BigData) -> Void = (data) => { ... }
@@ -340,53 +526,24 @@ main: () -> Void = () => {
 #                          大对象直接移动，零拷贝
 ```
 
-#### 3.3 性能对比
+#### 3.2 性能对比
 
-| 语言 | 小字段访问 | 大对象移动 | 共享访问 |
-|------|-----------|-----------|---------|
-| **Rust** | 零拷贝（借用） | 零拷贝（移动） | Arc 零拷贝 |
-| **YaoXiang** | 复制 64B ⚠️ | 零拷贝（移动） | Arc 零拷贝 |
-| **Go** | 指针（间接） | 拷贝 | 引用 |
-| **Java** | 指针（间接） | 拷贝 | 引用 |
+| 语言 | 所有权语义 | 并发安全 |
+|------|-----------|---------|
+| **Rust** | Move + 借用检查 | Arc + Mutex |
+| **YaoXiang** | Move + Clone | 值传递 + DAG |
+| **Go** | 指针传递 | Channel |
+| **Java** | 引用传递 | synchronized |
 
-#### 3.4 真正影响性能的因素
-
-```yaoxiang
-# 比 64 字节复制更影响性能的是：
-
-# 1. 内存分配
-alloc: () -> Data = () => Data.new()  # 分配开销大
-
-# 2. 缓存未命中
-cache_miss: (BigStruct) -> Int = (s) => s.field[1000]  # 随机访问
-
-# 3. 函数调用
-call_overhead: () -> Void = () => tiny_func()  # 调用开销
-
-# 4. 动态分派
-dynamic: (Trait) -> Void = (t) => t.method()  # 虚表查找
-
-# 64 字节复制？根本不在性能问题列表里！
-```
-
-#### 3.5 性能保证
+#### 3.3 性能保证
 
 | 保证项 | 说明 |
 |--------|------|
-| 小字段复制 | 开销 < 0.01% 运行时 |
-| 大对象移动 | 零拷贝（所有权转移） |
-| 共享访问 | Arc 原子计数，零拷贝 |
-| 内存分配 | 优化器减少分配次数 |
+| Move 语义 | 零拷贝（所有权转移） |
+| Clone | 用户显式控制，编译器优化 |
+| 并发安全 | 无数据竞争（值传递） |
 
-与 Rust 对比：
-- 借用优化：无（但影响可忽略）
-- 移动语义：✅ 相同
-- Arc：✅ 相同
-- 零成本抽象：✅ 相同
-
-**结论：性能接近 Rust，远超 Go**
-
-#### 3.6 极端性能场景（标准库兜底）
+> **核心**：YaoXiang 通过值传递实现内存安全，性能接近 Rust。
 
 ```yaoxiang
 get_header: (BigData) -> Header = (data) => data.header
@@ -407,11 +564,11 @@ get_header_view: (BigData) -> HeaderView = (data) => {
 
 YaoXiang 的并发安全来自**值传递 + Send 检查**：
 
-| 机制 | 保证 | 边界情况 |
-|------|------|---------|
-| **值传递** | ✅ 跨线程移动无数据竞争 | 需要 Send |
-| **小对象复制** | ✅ 每个线程有独立副本 | >1KB 需要移动 |
-| **DAG 资源分析** | ⚠️ 依赖变量传递 | 字面量资源不保证 |
+| 机制 | 保证 |
+|------|------|
+| **值传递** | ✅ 跨线程移动无数据竞争 |
+| **Send 检查** | ✅ 跨线程传输的类型必须满足 Send |
+| **DAG 资源分析** | ⚠️ 依赖变量传递 |
 
 > **⚠️ 注意**：DAG 资源分析基于 RFC-001 的规则。编译器无法验证运行时资源标识的同一性，字面量资源操作的行为由用户负责。
 
@@ -434,8 +591,8 @@ flowchart LR
 YaoXiang 的并发安全**不依赖共享内存**，而是：
 
 1. **值传递**：值在并发边界间流动（channel 为内部实现细节）
-2. **小对象复制**：<1KB 自动复制，开销可忽略
-3. **Send 检查**：跨线程传输的类型必须满足 Send
+2. **Send 检查**：跨线程传输的类型必须满足 Send
+3. **DAG 资源分析**：自动并行调度
 
 > **实现细节**：channel 是值传递的内部实现机制，用户只需传值，无需直接操作 channel。
 
@@ -458,33 +615,38 @@ flowchart LR
 ```yaoxiang
 # === 值传递示例 ===
 
-# 方式1：直接捕获变量（推荐）
+# 方式1：直接捕获变量（Move）
 worker: (Task) -> Result = (task) => {
-    process(task)  # task 自动复制或移动到闭包
+    process(task)  # task Move 到闭包
 }
 
 # 方式2：闭包捕获多个变量
 process_data: (Int, String) -> Void = (id, data) => {
     spawn(() => {
-        print(id)      # 复制
-        print(data)    # 复制
+        print(id)      # Move
+        print(data)    # Move
     })
 }
 
-# 方式3：高级用法 - 内部 channel API（标准库）
-# use std.concurrent
-# channel: std.concurrent.Channel[Task] = std.concurrent.Channel.new()
-# channel.send(task)  # 小对象自动复制
+# 方式3：显式 Clone 后传递
+worker_clone: (Task) -> Result = (task) => {
+    spawn(() => process(task.clone()))  # Clone 后 Move
+}
 
-# === 小对象共享：直接复制 ===
-
-# 100 个线程读取配置（<1KB 自动复制）
+# === 100 个线程读取配置 ===
 config = Config(timeout: 1000, retries: 3)
 
 spawn_for i in 0..100 {
-    # config 自动复制给每个线程
-    # 复制 64 字节开销 ~1ns，可忽略
+    # config Move 到每个线程
+    # 原 config 失效
     print(config.timeout)
+}
+
+# === 保留原值：显式 Clone ===
+config = Config(timeout: 1000, retries: 3)
+
+spawn_for i in 0..100 {
+    print(config.clone().timeout)  # Clone 后 Move，原 config 保留
 }
 ```
 
@@ -547,16 +709,16 @@ YaoXiang 的可变性通过 `mut` 标记，无需 RefCell：
 ```yaoxiang
 # === 可变性 ===
 
-# 不可变引用
-read_only: (ref Data) -> Int = (data) => data.value
+# 默认不可变
+data: Data = Data(42)
+# data.value = 100  # ❌ 编译错误！
 
-# 可变引用
-read_write: (mut Data) -> Void = (mut data) => {
-    data.value = 100  # 直接修改
-}
+# mut 标记允许修改
+mut data: Data = Data(42)
+data.value = 100     # ✅ 允许修改
 
 # mut 标记在编译期检查，无需运行时 RefCell
-# 如果借用规则被违反，编译期报错
+# 如果未标记 mut 的变量被修改，编译期报错
 ```
 
 #### 4.6 极端场景：标准库可选实现
@@ -614,49 +776,47 @@ type Point = Point(x: Int, y: Float)
 # 闭包捕获变量自动检查 Send
 ```
 
-#### 5.2 Sync 约束
+#### 5.2 Sync 约束（预留）
 
 **Sync**：类型可以安全地跨线程**共享引用**。
+
+> **注意**：YaoXiang 默认使用值传递，不需要共享引用。Sync 仅作为预留特性，未来可能用于标准库类型（如 Arc）的约束。
 
 ```yaoxiang
 # === Sync 约束 ===
 
-# 基本类型都是 Sync
+# Sync 在 YaoXiang 中几乎没有实际用途
+# 因为 YaoXiang 不需要共享引用，所有数据传递都是值传递
+
+# 如果未来需要跨线程共享值，需要显式使用 Arc 等标准库类型
 type Point = Point(x: Int, y: Float)
-# ref Point 是 Sync
 
-# ⚠️ 注意：YaoXiang 很少需要共享引用
-# 优先使用值传递 + 复制
-
-# 唯一需要 Sync 的场景：ref 参数跨并发边界
-# process: (ref Data) -> Void = (data) => { ... }
-# 这个 ref 可以安全跨线程共享
+# Arc[Point] 是 Sync（标准库实现）
 ```
 
-#### 5.3 Send/Sync 派生规则
+#### 5.3 Send 派生规则
 
 ```yaoxiang
-# === Send/Sync 派生规则 ===
+# === Send 派生规则 ===
 
 # 结构体类型
 type Struct[T1, T2] = Struct(f1: T1, f2: T2)
 
 # Send 派生规则
 # Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
-
-# Sync 派生规则
-# Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
 ```
+
+> **Sync 预留**：Sync 派生规则暂不实现，仅用于未来标准库类型约束。
 
 #### 5.4 标准库类型约束表
 
-| 类型 | Send | Sync | 说明 |
-|------|:----:|:----:|------|
-| `Int`, `Float`, `Bool` | ✅ | ✅ | 原类型 |
-| `String` | ✅ | ✅ | UTF-8 字符串 |
-| `Channel[T]` | ✅ | ❌ | 内部实现细节（用户不直接使用） |
-| `std.sync.Arc` | ✅ | ✅ | 极端场景可选（标准库，不推荐） |
-| `std.sync.Mutex` | ✅ | ✅ | 极端场景可选（标准库，不推荐） |
+| 类型 | Send | 说明 |
+|------|:----:|------|
+| `Int`, `Float`, `Bool` | ✅ | 原类型 |
+| `String` | ✅ | UTF-8 字符串 |
+| `Channel[T]` | ✅ | 内部实现细节（用户不直接使用） |
+| `std.sync.Arc` | ✅ | 极端场景可选（标准库，不推荐） |
+| `std.sync.Mutex` | ✅ | 极端场景可选（标准库，不推荐） |
 
 > **层级归属**：YaoXiang 语言核心**不依赖共享原语**，并发安全通过值传递 + DAG 实现。Channel/Arc/Mutex 是内部或标准库实现，不鼓励日常使用。
 
@@ -737,22 +897,20 @@ move_and_drop: () -> Void = () => {
 
 > **与 RFC-008 的关系**：运行时分层基于 RFC-008 的三层架构设计。
 
-所有权规则（move/copy/drop）在所有运行时模式下一致。并发相关规则随运行时模式变化：
+所有权规则在所有运行时模式下一致：
 
 | 规则 | Embedded | Standard | Full |
 |------|----------|----------|------|
-| **所有权规则** | ✅ 一致 | ✅ 一致 | ✅ 一致 |
-| **move/copy/drop** | ✅ 启用 | ✅ 启用 | ✅ 启用 |
-| **借用规则** | ⚠️ 宽松 | ❌ 禁止跨边界 | ❌ 禁止跨边界 |
+| **所有权规则（Move/Clone/Drop）** | ✅ 一致 | ✅ 一致 | ✅ 一致 |
+| **mut 可变性检查** | ✅ 一致 | ✅ 一致 | ✅ 一致 |
+| **Send 检查** | ✅ 一致 | ✅ 一致 | ✅ 一致 |
 | **DAG 资源分析** | ❌ 不适用 | ✅ 启用 | ✅ 启用 |
-| **@block 注解** | N/A | 标准库 | 标准库 |
 | **WorkStealing** | ❌ | ❌ | ✅ |
-| **Send 检查点** | 无 | spawn/channel | spawn/channel |
 
 **各运行时说明**：
 
-- **Embedded 模式**：无 DAG 调度，所有代码同步执行。借用规则更宽松（因为不会并行），但跨线程操作仍需 Send。
-- **Standard 模式**：启用 DAG 调度，借用禁止跨并作边界（spawn/channel）。
+- **Embedded 模式**：无 DAG 调度，所有代码同步执行。跨线程操作仍需 Send 检查。
+- **Standard 模式**：启用 DAG 调度，资源操作自动并行化。
 - **Full 模式**：Standard + WorkStealing，规则与 Standard 相同。
 
 > **核心保证**：所有权语义在所有模式下保持一致，用户代码无需针对不同模式重写。
@@ -764,40 +922,32 @@ move_and_drop: () -> Void = () => {
 > 语法定义详见 [language-spec.md](../language-spec.md)
 
 所有权相关语法已整合到语言规范中，包括：
-- 引用类型：`ref T`, `mut T`
+- 可变标记：`mut`
 - 泛型约束：`Send`, `Sync`
-- 智能指针类型：`Box`, `Rc`, `Arc`, `RefCell`, `Mutex`, `RwLock`
-- 变量声明：`let` / `mut` / `ref` 修饰符
+- 智能指针类型：`Box`, `Rc`, `Arc`, `RefCell`, `Mutex`, `RwLock`（标准库可选）
+- 变量声明：`let` / `mut` 修饰符
 
 ### 类型系统约束
 
 ```yaoxiang
 # === 所有权类型系统规则 ===
 
-# 规则 1：借用检查
-# 不可变引用（ref）规则：
-#   - 可以有任意多个 ref 借用
-#   - 借用期间所有者不能修改
-#   - 借用期间不能有 mut 借用
+# 规则 1：可变性检查
+# 默认不可变：
+#   - 所有绑定默认不可变
+#   - 未标记 mut 的变量不能修改
 
-# 可变引用（mut）规则：
-#   - 只能有一个 mut 借用
-#   - 借用期间不能有其他 ref 或 mut 借用
-#   - 所有者不能访问
+# mut 标记规则：
+#   - 标记 mut 后可以修改
+#   - 编译期检查
 
-# 规则 2：生命周期
-# 引用的生命周期不能超过所有者
-# lifetime_rule: [<'a, 'b>](&'a T) -> &'b T = (r) => {
-#     r  # ❌ 编译错误！'b 可能比 'a 短
-# }
-
-# 规则 3：Send/Sync
+# 规则 2：Send/Sync
 # spawn 要求：
 #   - 参数类型必须是 Send
 #   - 返回类型必须是 Send
 #   - 闭包捕获的所有变量必须是 Send
 
-# 规则 4：智能指针
+# 规则 3：智能指针（标准库可选）
 # Box[T] 需要 T: Sized（大小已知）
 # Rc[T]/Arc[T] 需要 T: Clone（克隆语义）
 # RefCell[T] 需要 T: Sized
@@ -819,7 +969,7 @@ move_and_drop: () -> Void = () => {
 
 ### 缺点
 
-1. **小字段复制**：< 1KB 对象复制（开销可忽略）
+1. **需要显式 Clone**：想保留原值时需要调用 clone()
 2. **无法返回借用**：需要返回整个值
 3. **结构体不能含借用**：需要包含值
 4. **极端性能场景**：需要标准库 Arc/视图（1% 情况）
@@ -833,38 +983,6 @@ move_and_drop: () -> Void = () => {
 | ARC（自动引用计数） | 无法检测数据竞争 |
 | 区域分析 | 复杂度高，实现困难 |
 
-## 实现策略
-
-> **核心原则**：YaoXiang 通过值传递 + DAG 资源分析实现并发安全，**不依赖共享内存**。智能指针（Box/Rc/Arc/RefCell/Mutex）是标准库可选实现，不在语言核心实现范围内。
-
-### 阶段 1：所有权核心（v0.5）
-
-- [ ] 所有权规则（唯一所有者、自动释放）
-- [ ] 移动语义（零拷贝）
-- [ ] 小对象复制语义（< 1KB）
-- [ ] 借用检查器（ref/mut 规则）
-
-### 阶段 2：值传递与并发安全（v0.6）
-
-- [ ] spawn 集成（闭包捕获变量）
-- [ ] 值传递机制（小对象复制、大对象移动）
-- [ ] Send 约束检查
-- [ ] 跨边界所有权转移
-
-### 阶段 3：DAG 资源分析（v0.7）
-
-- [ ] 资源类型标记（`type X: Resource`）
-- [ ] 依赖图构建（变量传递 vs 字面量）
-- [ ] 自动并行调度
-- [ ] 运行时 DAG 执行
-
-### 阶段 4：标准库扩展（v0.8）
-
-> 标准库提供极端场景兜底，非语言核心
-
-- [ ] 视图类型（std.memory，零拷贝访问）
-- [ ] 句柄类型（RAII 资源管理）
-- [ ] Arc/Mutex/RefCell（可选，非推荐）
 
 ## 开放问题
 
@@ -884,7 +1002,8 @@ move_and_drop: () -> Void = () => {
 
 | 特性 | Rust | YaoXiang |
 |------|------|----------|
-| 借用语法 | `&T`, `&mut T` | `ref T`, `mut T` |
+| 借用语法 | `&T`, `&mut T` | **无**（类型透明，直接访问） |
+| 可变标记 | `&mut T` | `mut` |
 | 生命周期 | `&'a T` | **无**（自动推断） |
 | 返回借用 | ✅ 支持 | ❌ 禁止（返回整个值） |
 | 结构体含借用 | ✅ 支持 | ❌ 禁止（包含值） |
@@ -898,19 +1017,22 @@ move_and_drop: () -> Void = () => {
 
 | 决策 | 决定 | 日期 | 记录人 |
 |------|------|------|--------|
-| 引用语法 | `ref T`, `mut T` | 2025-01-08 | 晨煦 |
+| **引用语法 ref T** | **删除**（类型透明） | 2025-01-10 | 晨煦 |
+| **mut 语义** | **字段级**（非变量级） | 2025-01-10 | 晨煦 |
+| **变量绑定** | **不可重新赋值**（只能 Move） | 2025-01-10 | 晨煦 |
 | **生命周期** | **不实现** | 2025-01-08 | 晨煦 |
+| **借用检查器** | **删除** | 2025-01-10 | 晨煦 |
 | **借用返回** | **禁止** | 2025-01-08 | 晨煦 |
-| **结构体借用** | **禁止** | 2025-01-08 | 晨煦 |
-| 小对象复制 | 自动（<1KB，开销可忽略） | 2025-01-08 | 晨煦 |
+| **所有权绑定** | **支持**（返回 (结果, 原参数)） | 2025-01-10 | 晨煦 |
+| **并发规则** | 不可变字段并发读，mut 字段串行 | 2025-01-10 | 晨煦 |
+| **显式复制** | clone() | 用户控制何时复制 | 2025-01-10 | 晨煦 |
 | 大对象移动 | 零拷贝 | 2025-01-08 | 晨煦 |
 | 并发安全 | **值传递 + Send + DAG 资源分析** | 2025-01-08 | 晨煦 |
 | **DAG 资源分析** | ⚠️ 依赖变量传递，字面量不保证 | 2025-01-09 | 晨煦 |
 | Arc/Mutex | **标准库可选**（极端场景，不推荐） | 2025-01-09 | 晨煦 |
 | RAII | 自动资源释放 | 2025-01-08 | 晨煦 |
 | **运行时模式** | 所有权一致，并发规则分层 | 2025-01-09 | 晨煦 |
-| **引用跨边界** | **禁止**（跨越默認失去所有權） | 2025-01-09 | 晨煦 |
-| **@block 注解** | **不用於 Arc/Mutex 同步**（僅用於調試/阻塞IO） | 2025-01-09 | 晨煦 |
+| **@block 注解** | **仅用于调试/阻塞IO** | 2025-01-09 | 晨煦 |
 | 极端性能场景 | 标准库兜底 | 2025-01-08 | 晨煦 |
 
 ### 附录C：术语表
@@ -918,15 +1040,48 @@ move_and_drop: () -> Void = () => {
 | 术语 | 定义 |
 |------|------|
 | 所有者（Owner） | 负责释放值的变量或资源 |
-| 借用（Borrow） | 引用值的临时访问 |
 | 移动（Move） | 所有权的转移 |
-| 复制（Copy） | 值的浅拷贝（< 1KB 自动复制） |
+| 复制（Clone） | 值的显式复制（调用 clone()） |
+| 所有权绑定 | 函数返回 (结果, 原参数)，调用者根据类型决定是否重新赋值 |
 | 值传递 | 值在并发边界间流动（channel 为内部实现） |
 | Send | 可安全跨线程传输 |
 | Sync | 可安全跨线程共享引用 |
 | RAII | 资源获取即初始化 |
-| 借用检查器 | 验证借用规则的编译器组件 |
+| mut 标记 | 显式可变性声明 |
 | 视图类型 | 标准库提供的零拷贝访问方式 |
+
+---
+
+## 社区讨论
+
+### 设计决策记录
+
+| 决策 | 决定 | 原因 | 日期 |
+|------|------|------|------|
+| **引用语法 ref T** | 删除 | 类型透明，编译器直接访问字段 | 2025-01-10 |
+| **mut 语义** | 字段级 | mut 是字段属性，不是变量属性 | 2025-01-10 |
+| **变量绑定** | 不可重新赋值 | 只能 Move，不能覆盖 | 2025-01-10 |
+| **生命周期** | 不实现 | 编译器自动推断，无需用户标注 | 2025-01-08 |
+| **借用检查器** | 删除 | 不需要借用检查 | 2025-01-10 |
+| **借用返回** | 禁止 | 返回整个值替代借用 | 2025-01-08 |
+| **所有权语义** | 默认 Move | 赋值/传参/返回 = Move（零拷贝） | 2025-01-10 |
+| **所有权绑定** | 支持 | 返回 (结果, 原参数) 实现流畅 API | 2025-01-10 |
+| **并发规则** | 不可变并发读，mut 串行 | 编译器自动处理 | 2025-01-10 |
+| **显式复制** | clone() | 用户控制何时复制 | 2025-01-10 |
+| **自动复制** | 删除 | 不引入隐性概念 | 2025-01-10 |
+| **并发安全** | 值传递 + Send + DAG | 消息传递替代共享内存 | 2025-01-08 |
+| **DAG 资源分析** | 依赖变量传递 | 字面量资源由用户负责 | 2025-01-09 |
+| **Arc/Mutex** | 标准库可选 | 极端场景兜底 | 2025-01-09 |
+| **RAII** | 自动资源释放 | 作用域绑定资源生命周期 | 2025-01-08 |
+| **运行时模式** | 所有权一致 | 并发规则分层 | 2025-01-09 |
+| **@block 注解** | 仅用于调试/阻塞IO | 非通用注解 | 2025-01-09 |
+
+### 待决议题
+
+| 议题 | 说明 | 状态 |
+|------|------|------|
+| 视图类型 API | std.memory 视图的具体设计 | 待讨论 |
+| Drop 语法 | 是否需要显式 `drop()` 函数 | 待讨论 |
 
 ---
 
