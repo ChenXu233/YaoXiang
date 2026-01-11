@@ -1,4 +1,4 @@
-//! 逃逸分析器 [简化版 - 未来参考]
+//! 逃逸分析器 [已简化 - 未来参考]
 //!
 //! ⚠️ **此模块已简化**，仅保留核心设计思路供未来实现参考。
 //!
@@ -15,24 +15,14 @@
 //! 2. **闭包捕获** - 被闭包捕获的变量逃逸
 //! 3. **跨函数传递** - 传给其他函数的参数可能逃逸
 //!
-//! ## 简单实现（10行代码）
+//! ## 简单实现（伪代码）
 //!
-//! ```rust
-//! impl EscapeAnalyzer {
-//!     fn analyze(&mut self, func: &FunctionIR) -> EscapeAnalysisResult {
-//!         let mut escapes = HashSet::new();
-//!
-//!         for instr in func.all_instructions() {
-//!             match instr {
-//!                 Instruction::Ret(var) => escapes.insert(var),
-//!                 Instruction::Call { args, .. } => args.iter().for_each(|a| { escapes.insert(a); }),
-//!                 _ => {}
-//!             }
-//!         }
-//!
-//!         EscapeAnalysisResult { escapes }
-//!     }
-//! }
+//! ```text
+//! 对于每个变量，检查它是否"逃逸"到：
+//!   - 返回值（被 return 语句使用）
+//!   - 函数调用参数（传给其他函数）
+//!   - 闭包捕获（被闭包引用）
+//! 如果逃逸，标记为堆分配；否则栈分配
 //! ```
 //!
 //! ## 何时实现
