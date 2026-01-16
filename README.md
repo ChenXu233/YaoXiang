@@ -234,7 +234,7 @@ Send/Sync → Compile-Time Check → Data Race → Thread Safety
 | No GC | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Compile-Time Thread Safety | ✅ | ✅ | ❌ | ❌ | ❌ |
 | AI-Friendly Syntax | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Keyword Count | 17 | 51+ | 35 | 64+ | 25 |
+| Keyword Count | 18 | 51+ | 35 | 64+ | 25 |
 
 > **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Auto Parallel + Seamless Async
 
