@@ -40,13 +40,13 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 
 ### 2.3 关键字
 
-YaoXiang 共定义 17 个关键字：
+YaoXiang 共定义 18 个关键字：
 
 ```
 type   pub    use    spawn
 ref    mut    if     elif
 else   match  while  for    return
-break  continue as     in
+break  continue as     in     unsafe
 ```
 
 ### 2.4 保留字
@@ -516,57 +516,125 @@ ImportItem  ::= Identifier ('as' Identifier)?
 
 ## 第八章：内存管理
 
-### 8.1 所有权
+### 8.1 所有权模型
 
-每个值有唯一的所有者。当所有者离开作用域时，值被自动销毁。
+YaoXiang 采用**所有权模型**管理内存，每个值有唯一的所有者：
 
-### 8.2 引用类型
+| 语义 | 说明 | 语法 |
+|------|------|------|
+| **Move** | 默认语义，所有权转移 | `p2 = p` |
+| **ref** | 共享（Arc 引用计数） | `shared = ref p` |
+| **clone()** | 显式复制 | `p2 = p.clone()` |
 
+### 8.2 Move 语义（默认）
+
+```yaoxiang
+# 赋值 = Move（零拷贝）
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move，p 失效
+
+# 函数传参 = Move
+process(Point) -> Void = (p) => {
+    # p 的所有权转移进来
+}
+
+# 返回值 = Move
+create() -> Point = () => {
+    p = Point(1.0, 2.0)
+    return p        # Move，所有权转移
+}
 ```
-ref T       # 不可变引用
-mut T       # 可变引用
+
+### 8.3 ref 关键字（Arc）
+
+`ref` 关键字创建**引用计数指针**（Arc），用于安全共享：
+
+```yaoxiang
+# 创建 Arc
+p: Point = Point(1.0, 2.0)
+shared = ref p      # Arc，线程安全
+
+# 共享访问
+spawn(() => print(shared.x))   # ✅ 安全
+
+# Arc 自动管理生命周期
+# shared 离开作用域时，计数归零自动释放
 ```
 
-### 8.3 生命周期
+**特点**：
+- 线程安全引用计数
+- 自动管理生命周期
+- 跨 spawn 边界安全
 
-```
-Lifetime   ::= '\'' Identifier
+### 8.4 clone() 显式复制
+
+```yaoxiang
+# 显式复制值
+p: Point = Point(1.0, 2.0)
+p2 = p.clone()      # p 和 p2 独立
+
+# 两者都可修改，互不影响
+p.x = 0.0           # ✅
+p2.x = 0.0          # ✅
 ```
 
-### 8.4 所有权语法
+### 8.5 unsafe 代码块
+
+`unsafe` 代码块允许使用裸指针，用于系统级编程：
+
+```yaoxiang
+# 裸指针类型
+PtrType ::= '*' TypeExpr
+
+# unsafe 代码块
+UnsafeBlock ::= 'unsafe' '{' Stmt* '}'
+```
+
+**示例**：
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+
+# 裸指针只能在 unsafe 块中使用
+unsafe {
+    ptr: *Point = &p     # 获取裸指针
+    (*ptr).x = 0.0       # 解引用
+}
+```
+
+**限制**：
+- 裸指针只能在 `unsafe` 块中使用
+- 用户保证不悬空、不释放后使用
+- 不参与 Send/Sync 检查
+
+### 8.7 所有权语法 BNF
 
 ```bnf
-# === 所有权语法 ===
+# === 所有权表达式 ===
 
-# 引用类型
-RefType      ::= 'ref' Type
-              | 'mut' Type
+# Move（默认）
+MoveExpr     ::= Expr
 
-# 泛型约束
-WhereClause  ::= 'where' Type ':' Constraint (',' Constraint)*
-Constraint   ::= 'Send'
-              | 'Sync'
+# ref Arc
+RefExpr      ::= 'ref' Expr
 
-# 智能指针类型
-SmartPointer ::= 'Box' '[' Type ']'
-              | 'Rc' '[' Type ']'
-              | 'Arc' '[' Type ']'
-              | 'RefCell' '[' Type ']'
-              | 'Mutex' '[' Type ']'
-              | 'RwLock' '[' Type ']'
+# clone
+CloneExpr    ::= Expr '.clone' '(' ')'
 
-# 变量声明（带所有权）
-LetStmt      ::= ('mut' | 'ref')? Identifier (':' Type)? '=' Expr
+# === 裸指针（仅 unsafe） ===
+
+PtrType       ::= '*' TypeExpr
+UnsafeBlock   ::= 'unsafe' '{' Stmt* '}'
 ```
 
-### 8.5 借用规则
+### 8.8 Send / Sync 约束
 
-| 引用类型 | 可读 | 可写 | 可同时存在多个 | 可与可变引用共存 |
-|----------|------|------|----------------|------------------|
-| `ref T` | ✅ | ❌ | ✅ | ❌ |
-| `mut T` | ✅ | ✅ | ❌ | ❌ |
+| 约束 | 语义 | 说明 |
+|------|------|------|
+| **Send** | 可安全跨线程传输 | 值可以移动到另一个线程 |
+| **Sync** | 可安全跨线程共享 | 不可变引用可以共享到另一个线程 |
 
-### 8.6 Send/Sync 派生规则
+**自动派生**：
 
 ```
 # Send 派生规则
@@ -575,6 +643,14 @@ Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
 # Sync 派生规则
 Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
 ```
+
+**类型约束**：
+
+| 类型 | Send | Sync | 说明 |
+|------|------|------|------|
+| `T`（值） | ✅ | ✅ | 不可变数据 |
+| `ref T` | ✅ | ✅ | Arc 线程安全 |
+| `*T` | ❌ | ❌ | 裸指针不安全 |
 
 ---
 
@@ -764,7 +840,10 @@ match value {
 |------|--------|------|
 | 列表推导式 | P2 | `[x for x in list if condition]` |
 | `?` 错误传播 | P1 | Result 类型自动错误传播 |
-| 生命周期 `'a` | P2 | 借用检查 |
+| `ref` 关键字 | P1 | Arc 引用计数共享 |
+| `unsafe` 代码块 | P1 | 裸指针和系统级编程 |
+| `*T` 裸指针类型 | P1 | 裸指针类型语法 |
+| `clone()` 语义 | P1 | 显式复制 |
 | `@block` 注解 | P1 | 同步执行保证 |
 | `spawn` 函数 | P1 | 并作函数标记 |
 | `spawn {}` 块 | P1 | 显式并发疆域 |
@@ -772,6 +851,17 @@ match value {
 | Send/Sync 约束 | P2 | 并发安全类型检查 |
 | Mutex/Atomic 类型 | P2 | 并发安全数据类型 |
 | 错误图可视化 | P3 | 并发错误传播追踪 |
+
+### B.4 不实现特性
+
+以下 Rust 风格特性**不会实现**：
+
+| 特性 | 原因 |
+|------|------|
+| 生命周期 `'a` | 无引用概念，无需生命周期 |
+| 借用检查器 | ref = Arc 替代 |
+| `&T` 借用语法 | 使用 Move 语义 |
+| `&mut T` 可变借用 | 使用 mut + Move |
 
 ---
 
@@ -783,6 +873,7 @@ match value {
 | v1.1.0 | 2025-01-04 | 沫郁酱 | 修正 match arm 使用 `=>` 而非 `->`；更新函数定义语法；更新类型定义语法；添加与代码实现差异说明 |
 | v1.2.0 | 2025-01-05 | 沫郁酱 | 精简为纯规范，示例代码移至 tutorial/ 目录 |
 | v1.3.0 | 2025-01-05 | 沫郁酱 | 添加并作模型规范（三层并发架构、spawn语法、注解）；添加类型系统约束（Send/Sync）；添加并发安全类型（Mutex、Atomic）；更新错误处理（?运算符）；更新待实现特性列表 |
+| v1.4.0 | 2025-01-15 | 晨煦 | 更新所有权模型（默认Move + 显式ref=Arc）；添加unsafe关键字；删除生命周期 `'a` 和借用检查器；更新待实现特性列表 |
 
 ---
 
