@@ -705,69 +705,202 @@ first: [T](List[T]) -> Option[T] = (list) => {
 
 ## 四、Memory Management
 
-### 4.1 Ownership Principles
+### 4.1 Ownership Core Principles
 
-YaoXiang adopts Rust-style ownership model:
+YaoXiang's memory management is based on **Ownership Model**, ensuring memory safety without garbage collection. The core design is simple:
 
-```yaoxiang
-# Default immutable reference
-process(ref Data) -> Void = (data) => {
-    # data is read-only
-    # Cannot modify data's fields
-    # Cannot transfer data's ownership
-}
-
-# Mutable reference
-modify(mut Data) -> Void = (data) => {
-    # Can modify data's fields
-    # Cannot have other active references
-}
-
-# Transfer ownership
-consume(Data) -> Void = (data) => {
-    # data's ownership is transferred in
-    # data is destroyed after function ends
-}
-
-# Borrow return
-borrow_field(ref Data) -> ref Field = (data) => ref data.field
-```
-
-### 4.2 Lifetimes
+- **Default: Move (Zero-Copy)** - Ownership transfer on assignment/parameter/return
+- **Explicit: `ref` = Arc** - Safe shared ownership with reference counting
+- **Explicit: `clone()`** - Value copying when original must be preserved
+- **System-Level: `unsafe` + `*T`** - Raw pointers for system programming
 
 ```yaoxiang
-# Explicit lifetime annotation (complex cases)
-longest<'a>(&'a str, &'a str) -> &'a str = (s1, s2) => {
-    if s1.length > s2.length { s1 } else { s2 }
-}
+# === Default: Move (Zero-Copy) ===
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move, p becomes invalid
 
-# Automatic lifetime inference
-first[T](ref List[T]) -> ref T = (list) => ref list[0]
+# === Explicit: ref = Arc (Thread-Safe Sharing) ===
+shared = ref p      # Arc, reference counting, thread-safe
+
+spawn(() => print(shared.x))   # ✅ Safe, Arc is Send + Sync
+
+# === Explicit: clone() (Value Copy) ===
+p3 = p.clone()      # Full copy, p and p3 are independent
+
+# === System-Level: unsafe + raw pointer ===
+unsafe {
+    ptr: *Point = &p
+    (*ptr).x = 0.0  # User guarantees safety
+}
 ```
 
-### 4.3 Smart Pointers
+### 4.2 Move Semantics (Default)
+
+**Rule**: Assignment, parameter passing, and return = Move (ownership transfer).
 
 ```yaoxiang
-# Box - Heap allocation
-heap_data: Box[List[Int]] = Box.new([1, 2, 3])
+# === Assignment = Move ===
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move, p is now invalid
+# print(p.x)        # ❌ Error: p no longer owns the value
 
-# Rc - Reference counting
-shared: Rc[Data] = Rc.new(data)
+# === Parameter = Move ===
+process(p: Point) -> Point = (p) => {
+    p.transform()   # p is the parameter, Move
+}
 
-# Arc - Atomic reference counting (thread-safe)
-thread_safe: Arc[Data] = Arc.new(data)
+main: () -> Void = () => {
+    p = Point(1.0, 2.0)
+    result = process(p)
+    # p is moved into process(), cannot use p here
+}
+
+# === Return = Move ===
+create_point: () -> Point = () => {
+    p = Point(1.0, 2.0)
+    return p        # Move, p's ownership transferred to caller
+}
 ```
 
-### 4.4 RAII
+**Characteristics**:
+- Zero-copy (only pointer movement)
+- Original owner becomes invalid
+- RAII automatic cleanup when scope ends
+
+### 4.3 ref = Arc (Explicit Shared Ownership)
+
+**Rule**: Use `ref` keyword to create an Arc (atomic reference counting) for safe sharing.
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+
+# Create Arc
+shared: ref Point = ref p
+
+# Arc automatically manages lifetime
+spawn(() => print(shared.x))   # ✅ Safe
+spawn(() => print(shared.y))   # ✅ Safe
+
+# Arc refcount automatically increments/decrements
+# shared goes out of scope → refcount reaches zero → auto release
+```
+
+**Characteristics**:
+- Thread-safe atomic reference counting
+- Automatic lifetime management
+- User explicitly controls sharing timing
+
+### 4.4 clone() (Explicit Copy)
+
+**Rule**: Use `clone()` when you need to keep the original value.
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+
+# Copy the value
+p2 = p.clone()
+
+# Both p and p2 are independent owners
+p.x = 0.0      # ✅ OK
+p2.x = 0.0     # ✅ OK, p2 is independent
+
+# Small objects are copied efficiently (compiler optimization)
+```
+
+**When to use**:
+- Need to preserve the original value
+- Move is not suitable for the scenario
+- Small objects (compiler optimizes copying)
+
+### 4.5 unsafe and Raw Pointers
+
+**Rule**: Use `unsafe` blocks for system-level programming with raw pointers. User guarantees safety.
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+
+# System-level programming
+unsafe {
+    # Get raw pointer
+    ptr: *Point = &p
+
+    # Dereference (user guarantees validity)
+    (*ptr).x = 0.0
+
+    # Pointer arithmetic
+    ptr2 = ptr + 1
+}
+
+# Outside unsafe, raw pointers cannot exist
+```
+
+**Restrictions**:
+- Can only be used inside `unsafe` blocks
+- User must guarantee no dangling pointers, no use-after-free
+- Used for system-level programming (FFI, memory operations)
+
+### 4.6 RAII (Resource Acquisition Is Initialization)
 
 ```yaoxiang
 # RAII automatic release
-with_file(String) -> String = (path) => {
+with_file: (String) -> String = (path) => {
     file = File.open(path)  # Auto open
     content = file.read_all()
     # Function ends, file auto closes
     content
 }
+
+# Custom resource cleanup
+type Connection = Connection(handle: Handle)
+
+# Drop called automatically when Connection goes out of scope
+```
+
+### 4.7 Send/Sync Constraints
+
+```yaoxiang
+# Basic types automatically satisfy Send + Sync
+# Int, Float, Bool, Point, ...
+
+# ref[T] automatically satisfies Send + Sync (Arc is thread-safe)
+p: Point = Point(1.0, 2.0)
+shared = ref p                      # Arc, thread-safe
+
+spawn(() => print(shared.x))        # ✅ OK
+
+# Raw pointer *T does not satisfy Send + Sync
+unsafe {
+    ptr: *Point = &p                 # Can only be used in single thread
+}
+```
+
+### 4.9 No Lifetimes, No Borrow Checker
+
+YaoXiang eliminates complex lifetime annotations and borrow checking:
+
+- **No `&T` reference concept** - No need for `&` syntax
+- **No `'a` lifetime annotations** - Eliminated because no references
+- **No borrow checker** - Replaced by `ref` = Arc mechanism
+
+```yaoxiang
+# === No lifetime needed ===
+# Rust problem:
+# fn returns_ref(&Point) -> &Point { ... }  # Needs 'a annotation
+
+# YaoXiang solution:
+create_point: () -> Point = () => {
+    p = Point(1.0, 2.0)
+    return p                    # Move, ownership transfer, no lifetime needed
+}
+
+# === No borrow checker needed ===
+# Use ref for sharing, Arc handles all lifetime management
+p: Point = Point(1.0, 2.0)
+shared = ref p                  # Arc, automatic lifetime management
+```
+
+**Programming Burden**: ⭐☆☆☆☆ (Almost Zero)
+**Performance Guarantee**: Near Rust, no GC pauses
 ```
 
 ---
@@ -2023,14 +2156,15 @@ result2 = p1.distance_scaled(2.0, p2)
 | `pub` | Public export |
 | `use` | Import module |
 | `spawn` | Async marker (function/block/loop) |
-| `ref` | Immutable reference |
-| `mut` | Mutable reference |
+| `ref` | Arc (atomic reference counting) for safe sharing |
+| `mut` | Mutable binding |
 | `if/elif/else` | Conditional branches |
 | `match` | Pattern matching |
 | `while/for` | Loops |
 | `return/break/continue` | Control flow |
 | `as` | Type casting |
 | `in` | Member access |
+| `unsafe` | System-level code block with raw pointers |
 
 | Annotation | Purpose |
 |------------|---------|

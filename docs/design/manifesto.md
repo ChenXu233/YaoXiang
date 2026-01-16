@@ -339,18 +339,18 @@ vec: Vector[Int, 3] = Vector([1, 2, 3], 3)
 
 ### 3.6 创新六：极简关键字设计
 
-YaoXiang 仅定义 17 个核心关键字，数量远少于主流语言：
+YaoXiang 仅定义 18 个核心关键字，数量远少于主流语言：
 
 ```
 type   pub    use    spawn
 ref    mut    if     elif
 else   match  while  for    return
-break  continue as     in
+break  continue as     in     unsafe
 ```
 
 | 对比语言 | 关键字数量 |
 |----------|-----------|
-| YaoXiang | **17** |
+| YaoXiang | **18** |
 | Rust | 51+ |
 | Python | 35 |
 | TypeScript | 64+ |
@@ -428,24 +428,27 @@ matrix = [[i * j for j in 1..4] for i in 1..3]
 # [[1, 2, 3], [2, 4, 6], [3, 6, 9]]
 ```
 
-### 4.5 所有权与借用
+### 4.5 所有权模型
 
 ```yaoxiang
-# 默认不可变引用
-process(ref Data) -> Void = (data) => {
-    # data 是只读的
-}
+# 默认 Move（零拷贝）
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move，所有权转移，p 失效
 
-# 可变引用
-modify(mut Data) -> Void = (data) => {
-    # 可以修改 data
-}
+# 显式 ref = Arc（安全共享）
+shared = ref p      # Arc，线程安全
 
-# 转移所有权
-consume(Data) -> Void = (data) => {
-    # data 的所有权转移进来
-}
+spawn(() => print(shared.x))   # ✅ 安全
+
+# 显式 clone() = 复制
+p3 = p.clone()      # p 和 p3 独立
 ```
+
+**核心规则**：
+- 默认 Move（零拷贝）
+- 共享用 `ref`（Arc）
+- 副本用 `clone()`
+- 系统级用 `unsafe` + `*T`
 
 ### 4.6 错误处理
 
@@ -539,7 +542,6 @@ main: () -> Void = () => {
 |------|----------|----------|
 | **字面量语法** | 浮点数支持 | 是否支持 `3.14e-10` 科学计数法？ |
 | **泛型推导** | 基础支持 | 是否支持返回类型泛型推导？ |
-| **模式匹配** | 基础支持 | 是否支持视图模式（view patterns）？ |
 | **宏系统** | 尚未设计 | 是否需要卫生宏？语法设计方向？ |
 | **包管理器** | 尚未设计 | 是否需要集中式包仓库？依赖解析策略？ |
 | **FFI** | 尚未设计 | 与 C 互操作的具体方案？ |
@@ -826,14 +828,15 @@ docs(readme): update installation instructions
 | `pub` | 公共导出 |
 | `use` | 导入模块 |
 | `spawn` | 并作标记（RFC-003：`spawn (params) => body`） |
-| `ref` | 不可变引用 |
-| `mut` | 可变引用 |
+| `ref` | 共享指针（Arc） |
+| `mut` | 可变变量 |
 | `if/elif/else` | 条件分支 |
 | `match` | 模式匹配 |
 | `while/for` | 循环 |
 | `return/break/continue` | 控制流 |
 | `as` | 类型转换 |
 | `in` | 成员检测/列表推导 |
+| `unsafe` | unsafe 代码块（裸指针） |
 
 ### A.2 注解
 

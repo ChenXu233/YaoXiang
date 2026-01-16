@@ -706,60 +706,80 @@ first: [T](List[T]) -> Option[T] = (list) => {
 
 ## 四、内存管理
 
-### 4.1 所有权原则
+### 4.1 所有权模型
 
-YaoXiang 采用 Rust 风格的所有权模型：
-
-```yaoxiang
-# 默认不可变引用
-process: (ref Data) -> Void = (data) => {
-    # data 是只读的
-    # 不能修改 data 的字段
-    # 不能转移 data 的所有权
-}
-
-# 可变引用
-modify: (mut Data) -> Void = (data) => {
-    # 可以修改 data 的字段
-    # 不能有其他活跃的引用
-}
-
-# 转移所有权
-consume: (Data) -> Void = (data) => {
-    # data 的所有权转移进来
-    # 函数结束后 data 被销毁
-}
-
-# 借用返回
-borrow_field: (ref Data) -> ref Field = (data) => ref data.field
-```
-
-### 4.2 生命周期
+YaoXiang 采用**所有权模型**管理内存，每个值有唯一所有者：
 
 ```yaoxiang
-# 显式生命周期标注（复杂情况）
-longest: [<'a>](&'a str, &'a str) -> &'a str = (s1, s2) => {
-    if s1.length > s2.length { s1 } else { s2 }
-}
+# === 默认 Move（零拷贝） ===
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move，所有权转移，p 失效
 
-# 自动生命周期推断
-first: [T](ref List[T]) -> ref T = (list) => ref list[0]
+# === ref 关键字 = Arc（安全共享） ===
+shared = ref p      # Arc，线程安全
+
+spawn(() => print(shared.x))   # ✅ 安全
+
+# === clone() 显式复制 ===
+p3 = p.clone()      # p 和 p3 独立
 ```
 
-### 4.3 智能指针
+### 4.2 Move 语义（默认）
 
 ```yaoxiang
-# Box - 堆分配
-heap_data: Box[List[Int]] = Box.new([1, 2, 3])
+# 赋值 = Move（零拷贝）
+p: Point = Point(1.0, 2.0)
+p2 = p              # Move，p 失效
 
-# Rc - 引用计数
-shared: Rc[Data] = Rc.new(data)
+# 函数传参 = Move
+process(Point) -> Void = (p) => {
+    # p 的所有权转移进来
+}
 
-# Arc - 原子引用计数（线程安全）
-thread_safe: Arc[Data] = Arc.new(data)
+# 返回值 = Move
+create() -> Point = () => {
+    p = Point(1.0, 2.0)
+    return p        # Move，所有权转移
+}
 ```
 
-### 4.4 RAII
+### 4.3 ref 关键字（Arc）
+
+```yaoxiang
+# ref 关键字创建 Arc（引用计数）
+p: Point = Point(1.0, 2.0)
+shared = ref p      # Arc，线程安全
+
+spawn(() => print(shared.x))   # ✅ 安全
+
+# Arc 自动管理生命周期
+# shared 离开作用域时，计数归零自动释放
+```
+
+### 4.4 clone() 显式复制
+
+```yaoxiang
+# 需要保留原值时使用 clone()
+p: Point = Point(1.0, 2.0)
+p2 = p.clone()   # p 和 p2 独立
+
+p.x = 0.0        # ✅
+p2.x = 0.0       # ✅ 互不影响
+```
+
+### 4.5 unsafe 代码块（系统级）
+
+```yaoxiang
+# 裸指针只能在 unsafe 块中使用
+p: Point = Point(1.0, 2.0)
+
+unsafe {
+    ptr: *Point = &p     # 裸指针
+    (*ptr).x = 0.0       # 用户保证安全
+}
+```
+
+### 4.6 RAII
 
 ```yaoxiang
 # RAII 自动释放
@@ -770,6 +790,34 @@ with_file: (String) -> String = (path) => {
     content
 }
 ```
+
+### 4.7 Send / Sync 约束
+
+| 约束 | 语义 | 说明 |
+|------|------|------|
+| **Send** | 可安全跨线程传输 | 值可以移动到另一个线程 |
+| **Sync** | 可安全跨线程共享 | 不可变引用可以共享到另一个线程 |
+
+```yaoxiang
+# ref T 自动满足 Send + Sync（Arc 线程安全）
+p: Point = Point(1.0, 2.0)
+shared = ref p
+
+spawn(() => print(shared.x))   # ✅ Arc 线程安全
+
+# 裸指针 *T 不满足 Send/Sync
+unsafe {
+    ptr: *Point = &p         # 只能在单线程使用
+}
+```
+
+### 4.9 不实现
+
+| 特性 | 原因 |
+|------|------|
+| 生命周期 `'a` | 无引用概念，无需生命周期 |
+| 借用检查器 | ref = Arc 替代 |
+| `&T` 借用语法 | 使用 Move 语义 |
 
 ---
 
