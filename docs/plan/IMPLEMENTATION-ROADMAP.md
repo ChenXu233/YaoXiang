@@ -1,9 +1,9 @@
-# YaoXiang 实现路线图：Phase 4 - 字节码生成器进行中
+# YaoXiang 实现路线图：Phase 5 - 所有权系统已完成
 
-> **状态**: P4 进行中
+> **状态**: P5 已完成
 > **作者**: 沫郁酱
 > **日期**: 2025-01-05
-> **最后更新**: 2025-01-06
+> **最后更新**: 2025-01-17
 
 ---
 
@@ -266,7 +266,7 @@
 | P2 | Parser | `src/frontend/parser/` | ✅ 完成 | Pratt Parser 完整 |
 | P3 | TypeCheck | `src/frontend/typecheck/` | ✅ 完成 | 类型推断、单态化 |
 | P4 | Codegen | `src/middle/codegen/` | 🔶 进行中 | 表达式/语句生成 |
-| P5 | Ownership System | `src/core/ownership/` | ⏳ 待实现 | 所有权/循环检测/ref-Arc/SendSync |
+| P5 | Ownership System | `src/middle/lifetime/` | ✅ 已完成 | 所有权/循环检测/ref-Arc/SendSync |
 | P7 | Monomorphize | `src/middle/monomorphize/` | ✅ 已完成 | 泛型特化 |
 | P8 | Core Runtime | `src/runtime/` | ⏳ 待实现 | Value/Allocator/Ownership |
 | P9 | DAG | `src/runtime/dag/` | ✅ 已存在 | 惰性计算图 |
@@ -277,7 +277,7 @@
 
 | Phase | 模块 | 文件 | 说明 |
 |-------|------|------|------|
-| P6 | unsafe | `src/core/unsafe/` | FFI/裸指针，后期实现 |
+| P6 | unsafe | `src/middle/unsafe/` | FFI/裸指针，后期实现 |
 | P12 | Embedded Runtime | `src/embedded/` | 即时执行器，无 DAG |
 | P13 | WorkStealer | `src/runtime/work_stealer/` | 工作窃取，负载均衡 |
 | P14 | @block | `src/std/sync/` | 强制同步执行 |

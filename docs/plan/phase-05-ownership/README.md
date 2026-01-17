@@ -1,8 +1,8 @@
 # Phase 5: 所有权系统
 
-> **模块路径**: `src/core/ownership/`
-> **状态**: 🔄 待实现
-> **设计依据**: [RFC-009 所有权模型 v7](../../design/rfc/009-ownership-model.md)
+> **模块路径**: `src/middle/lifetime/`
+> **状态**: ✅ 已实现
+> **设计依据**: [RFC-009 所有权模型 v7.1](../../design/accepted/009-ownership-model.md)
 
 ## 概述
 
@@ -73,73 +73,72 @@ weak: Weak[Node] = Weak::new(arc)
 
 ## 任务列表
 
-根据 RFC-009 v7 设计，实现顺序如下：
+根据 RFC-009 v7.1 设计，所有任务已完成：
 
-| 顺序 | 任务 | 名称 | 依赖 | 优先级 |
-|------|------|------|------|--------|
-| 1 | task-05-01 | Move 语义（转移/释放） | 无 | P0 |
-| 2 | task-05-02 | mut 检查 | task-05-01 | P0 |
-| 3 | task-05-03 | ref 关键字（Arc） | task-05-01 | P0 |
-| 4 | task-05-04 | clone() 显式复制 | task-05-01 | P0 |
-| 5 | task-05-05 | Send/Sync 约束 | task-05-03 | P1 |
-| 6 | task-05-06 | 跨任务循环引用检测 | task-05-03, phase-09 | P1 |
+| 顺序 | 任务 | 名称 | 依赖 | 状态 |
+|------|------|------|------|------|
+| 1 | task-05-01 | Move 语义（转移/释放） | 无 | ✅ 已实现 |
+| 2 | task-05-02 | mut 检查 | task-05-01 | ✅ 已实现 |
+| 3 | task-05-03 | ref 关键字（Arc） | task-05-01 | ✅ 已实现 |
+| 4 | task-05-04 | clone() 显式复制 | task-05-01 | ✅ 已实现 |
+| 5 | task-05-05 | Send/Sync 约束 | task-05-03 | ✅ 已实现 |
+| 6 | task-05-06 | 跨任务循环引用检测 | task-05-03 | ✅ 已实现 |
 
-> **说明**：RFC-009 v7 明确**不实现生命周期标注**和**借用检查器**。
+> **说明**：RFC-009 v7.1 明确**不实现生命周期标注**和**借用检查器**。
 
 ### 任务说明
 
-#### Task 5.1: Move 语义（基础模块）
+#### Task 5.1: Move 语义（基础模块）✅
 
 - Move 语义（转移后原所有者失效）
 - Drop 规则（RAII 资源释放）
 - 值传递语义
-- 实现：`src/core/ownership/move.rs`
+- 实现：`src/middle/lifetime/move_semantics.rs`
 
 > **依赖**：无（此任务是所有权系统的**基础模块**）
 
-#### Task 5.2: mut 检查
+#### Task 5.2: mut 检查 ✅
 
 - 变量可变性声明
 - mut 字段访问规则
-- 实现：`src/core/ownership/mut_check.rs`
+- 实现：`src/middle/lifetime/mut_check.rs`
 
 > **依赖**：task-05-01（需要所有权状态信息）
 
-#### Task 5.3: ref 关键字（Arc）
+#### Task 5.3: ref 关键字（Arc）✅
 
 - `ref` 关键字解析为 Arc
 - 引用计数管理
 - 跨 spawn 边界安全
-- 实现：`src/core/ownership/ref.rs`
+- 实现：`src/middle/lifetime/ref_semantics.rs`
 
 > **依赖**：task-05-01（需要所有权状态信息）
 
-#### Task 5.4: clone() 语义
+#### Task 5.4: clone() 语义 ✅
 
 - `clone()` 方法调用
 - 值复制语义
-- 实现：`src/core/ownership/clone.rs`
+- 实现：`src/middle/lifetime/clone.rs`
 
 > **依赖**：task-05-01（需要所有权状态信息）
 
-#### Task 5.5: Send/Sync 约束检查
+#### Task 5.5: Send/Sync 约束检查 ✅
 
 - 跨线程所有权转移安全
 - spawn 参数/返回值检查
 - ref Arc 的 Send/Sync 自动满足
-- 实现：`src/core/ownership/send_sync.rs`
+- 实现：`src/middle/lifetime/send_sync.rs`
 
 > **依赖**：task-05-03（需要 ref Arc 信息）
 
-#### Task 5.6: 跨任务循环引用检测
+#### Task 5.6: 跨任务循环引用检测 ✅
 
-- 基于 DAG 分析构建任务树
-- 追踪所有 `ref` 的源和目标
+- 追踪 spawn 参数和返回值边界
 - 检测跨任务边是否形成环
 - 任务内循环不检测（泄漏可控）
-- 实现：`src/core/ownership/cycle_check.rs`
+- 实现：`src/middle/lifetime/cycle_check.rs`
 
-> **依赖**：task-05-03（需要 ref Arc 信息），phase-09（DAG 分析）
+> **依赖**：task-05-03（需要 ref Arc 信息）
 
 ## 不实现
 
@@ -164,13 +163,14 @@ weak: Weak[Node] = Weak::new(arc)
 
 ### 源码文件
 
-- **src/core/ownership/mod.rs**: 所有权检查器主实现
-- **src/core/ownership/move.rs**: Move 语义
-- **src/core/ownership/mut_check.rs**: mut 检查
-- **src/core/ownership/ref.rs**: ref 关键字（Arc）
-- **src/core/ownership/clone.rs**: clone() 语义
-- **src/core/ownership/send_sync.rs**: Send/Sync 检查
-- **src/core/ownership/cycle_check.rs**: 循环引用检测
+- **src/middle/lifetime/mod.rs**: 所有权检查器主实现（OwnershipChecker）
+- **src/middle/lifetime/move_semantics.rs**: Move 语义
+- **src/middle/lifetime/drop_semantics.rs**: Drop 规则
+- **src/middle/lifetime/mut_check.rs**: mut 检查
+- **src/middle/lifetime/ref_semantics.rs**: ref 关键字（Arc）
+- **src/middle/lifetime/clone.rs**: clone() 语义
+- **src/middle/lifetime/send_sync.rs**: Send/Sync 检查
+- **src/middle/lifetime/cycle_check.rs**: 循环引用检测
 
 ## 参考文档
 

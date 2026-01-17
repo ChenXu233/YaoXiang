@@ -28,7 +28,7 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 > **⚠️ Project Status: Experimental Validation**  
 > This is a research project for learning compiler development. The implementation is incomplete and not production-ready. See [Project Status](#project-status-experimental-validation) for current implementation level.
 
-### Project Status: Phase 4 - Codegen in Progress
+### Project Status: Phase 5 - Ownership System Completed
 
 ## Current Implementation Progress (based on docs/plan phase division):
 
@@ -38,7 +38,9 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 | P2 | Parser | ✅ Complete | `src/frontend/parser/` |
 | P3 | Type Checker | ✅ Complete | `src/frontend/typecheck/` |
 | P4 | Bytecode Generator | ✅ In Progress | `src/middle/codegen/` |
-| P5-10 | Optimization Phase | 🔶 To Be Implemented | `src/middle/` |
+| P5 | Ownership System | ✅ Complete | `src/middle/lifetime/` |
+| P6 | Unsafe / FFI | 🔶 To Be Implemented | `src/middle/` |
+| P7-P10 | Optimization | ⏳ To Be Implemented | `src/middle/optim/` |
 | P11 | Virtual Machine | ⏳ To Be Implemented | `src/vm/` |
 | P12-19 | Runtime/Toolchain | ⏳ To Be Implemented | `src/runtime/` |
 
@@ -46,11 +48,11 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 - ✅ **Lexer**: Complete token support, supports all literals
 - ✅ **Parser**: Complete Pratt Parser, supports functions/types/control flow
 - ✅ **Type Checker**: Type inference, monomorphization, specialization completed
-- ✅ **Bytecode Generator**: Expression/statement generation in progress
-- 🔶 **Optimizer**: Ownership system, lifetime, monomorphization to be improved
+- 🔶 **Bytecode Generator**: Expression/statement generation in progress
+- ✅ **Ownership System**: Move semantics, mut check, ref (Arc), Send/Sync, cycle detection (100 tests passing)
 - ⏳ **Runtime**: DAG, scheduler, VM to be implemented
 
-## Next Goals (v0.1):
+## Next Goals (v0.2):
 - Complete P4 Bytecode Generator
 - Implement P11 Virtual Machine
 - End-to-end Hello World execution
