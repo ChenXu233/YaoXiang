@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: 🔄 待实现
-> **模块**: `src/core/ownership/send_sync.rs`
+> **模块**: `src/core/lifetime/send_sync.rs`
 
 ## 功能描述
 

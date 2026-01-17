@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: 🔄 待实现
-> **模块**: `src/core/ownership/cycle_check.rs`
+> **模块**: `src/core/lifetime/cycle_check.rs`
 > **依赖**: task-05-03（ref Arc），phase-09（DAG 分析）
 
 ## 功能描述
