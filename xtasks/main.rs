@@ -80,8 +80,18 @@ if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ] || [ -n "$S
     exit 0
 fi
 
-# Run the version bumper
-exec cargo xtask bump-version
+# Change to project root directory
+cd "$(git rev-parse --show-toplevel)"
+
+# Only bump version if Rust files (.rs) are modified
+rs_files=$(git diff --cached --name-only | grep -E '\.rs$' || true)
+
+if [ -n "$rs_files" ]; then
+    echo "Rust files modified, bumping version..."
+    exec cargo xtask bump-version
+else
+    echo "No Rust files modified, skipping version bump."
+fi
 "#,
     );
 
@@ -95,7 +105,7 @@ exec cargo xtask bump-version
         .ok();
 
     println!("✓ Git hook installed at .git/hooks/prepare-commit-msg");
-    println!("  Version will be bumped automatically on each commit!");
+    println!("  Version will be bumped automatically when Rust files are committed!");
 }
 
 fn show_help() {
@@ -110,6 +120,8 @@ Git Hook Usage:
     After running 'cargo xtask install-hook', every commit will
     automatically bump the patch version (0.2.6 -> 0.2.7 -> 0.2.8)
     and stage the Cargo.toml change.
+    
+    Version bump only happens when Rust files (.rs) are modified.
 "#
     );
 }
