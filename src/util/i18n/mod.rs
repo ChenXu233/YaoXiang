@@ -6,10 +6,10 @@
 //! # Usage
 //!
 //! ```rust
-//! use yaoxiang::util::i18n::{t, current_lang, MSG};
+//! use yaoxiang::util::i18n::{t_simple, current_lang, MSG};
 //!
 //! // Get translated message
-//! println!("{}", t(MSG::CmdReceived, \"zh-miao\"));
+//! println!("{}", t_simple(MSG::CmdReceived, "zh-x-miao"));
 //! ```
 
 use once_cell::sync::Lazy;
