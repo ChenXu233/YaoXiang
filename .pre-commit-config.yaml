@@ -1,0 +1,36 @@
+repos:
+  - repo: local
+    hooks:
+      - id: xtask-bump-version
+        name: xtask bump-version
+        entry: cargo xtask bump-version
+        language: system
+        files: '\.rs$'
+        pass_filenames: false
+
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-fix
+        name: cargo fix
+        entry: cargo fix --all --allow-dirty
+        language: system
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      # Optional: enable cargo test (commented out by default because it's slow)
+      #- id: cargo-test
+      #  name: cargo test
+      #  entry: cargo test --all --quiet
+      #  language: system
+      #  always_run: false

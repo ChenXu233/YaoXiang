@@ -101,6 +101,39 @@ cargo run -- dump docs/examples/hello.yx
 | **Concurrent Model Design** | Synchronous syntax, async nature (design phase, not implemented) |
 | **AI-Friendly Design** | Strictly structured, clear AST (design goal) |
 
+---
+
+**Development hooks (pre-commit)**
+
+We use `pre-commit` to run project checks before commits (cross-platform). The repository includes a `.pre-commit-config.yaml` that runs `cargo fmt` and `cargo clippy`.
+
+Recommended installation (uses `pipx` to avoid polluting global site-packages):
+
+```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+pipx install pre-commit
+pre-commit install
+```
+
+Quick install without `pipx`:
+
+```bash
+python -m pip install --user pre-commit
+pre-commit install
+```
+
+Run checks locally:
+
+```bash
+pre-commit run --all-files
+```
+
+Notes:
+- `pre-commit` requires Python 3.7+. On Windows ensure `pre-commit` is in your PATH (restart shell after `pipx ensurepath`).
+- If you prefer not to install Python tooling locally, CI can run `pre-commit` to enforce checks centrally.
+- The previous `xtasks` tooling has been removed in favor of the cross-platform `pre-commit` workflow.
+
 ### Code Example
 
 ```yaoxiang
