@@ -22,7 +22,11 @@ pub struct CloneChecker {
 
 impl CloneChecker {
     /// 检查 clone() 调用（核心逻辑）
-    fn check_clone(&mut self, receiver: &Operand, dst: Option<&Operand>) {
+    fn check_clone(
+        &mut self,
+        receiver: &Operand,
+        dst: Option<&Operand>,
+    ) {
         if let Some(state) = self.state.get(receiver) {
             match state {
                 ValueState::Moved => self.error_clone_moved(receiver),
@@ -36,33 +40,52 @@ impl CloneChecker {
         }
     }
 
-    fn error_clone_moved(&mut self, operand: &Operand) {
+    fn error_clone_moved(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.errors.push(OwnershipError::CloneMovedValue {
             value: operand_to_string(operand),
             location: self.location,
         });
     }
 
-    fn error_clone_dropped(&mut self, operand: &Operand) {
+    fn error_clone_dropped(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.errors.push(OwnershipError::CloneDroppedValue {
             value: operand_to_string(operand),
             location: self.location,
         });
     }
 
-    fn set_owned(&mut self, operand: &Operand) {
+    fn set_owned(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.state.insert(operand.clone(), ValueState::Owned);
     }
 
-    fn set_moved(&mut self, operand: &Operand) {
+    fn set_moved(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.state.insert(operand.clone(), ValueState::Moved);
     }
 
-    fn set_dropped(&mut self, operand: &Operand) {
+    fn set_dropped(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.state.insert(operand.clone(), ValueState::Dropped);
     }
 
-    fn update_from_call(&mut self, args: &[Operand], dst: Option<&Operand>) {
+    fn update_from_call(
+        &mut self,
+        args: &[Operand],
+        dst: Option<&Operand>,
+    ) {
         for arg in args {
             self.set_moved(arg);
         }
@@ -71,10 +94,17 @@ impl CloneChecker {
         }
     }
 
-    fn check_instruction(&mut self, instr: &Instruction) {
+    fn check_instruction(
+        &mut self,
+        instr: &Instruction,
+    ) {
         match instr {
             // clone() 方法调用：检查 receiver 状态
-            Instruction::Call { dst, func: Operand::Local(_) | Operand::Temp(_), args } => {
+            Instruction::Call {
+                dst,
+                func: Operand::Local(_) | Operand::Temp(_),
+                args,
+            } => {
                 if let Some(receiver) = args.first() {
                     self.check_clone(receiver, dst.as_ref());
                 }
@@ -110,7 +140,10 @@ impl CloneChecker {
 }
 
 impl OwnershipCheck for CloneChecker {
-    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError] {
+    fn check_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> &[OwnershipError] {
         self.clear();
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {

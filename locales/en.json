@@ -1,0 +1,19 @@
+{
+  "cmd_received": "Run command received",
+  "lex_start": "Starting lexical analysis",
+  "lex_complete": "Lexical analysis completed",
+  "lex_complete_tokens": "Lexical analysis completed: {0} tokens",
+  "parser_start": "Starting parsing",
+  "parser_complete": "Parsing completed",
+  "parser_complete_items": "Parsing completed: {0} items",
+  "typecheck_start": "Starting type checking",
+  "typecheck_complete": "Type checking completed",
+  "codegen_start": "Starting code generation",
+  "codegen_complete": "Code generation completed",
+  "codegen_functions": "Code generation completed: {0} functions",
+  "vm_start": "VM starting execution",
+  "vm_complete": "VM execution completed",
+  "compilation_start": "Starting compilation",
+  "compiling_source": "Compiling source code ({0} bytes)",
+  "debug_run_called": "run() called"
+}

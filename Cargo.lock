@@ -1245,6 +1245,7 @@ dependencies = [
  "regex",
  "ron",
  "serde",
+ "serde_json",
  "smallvec",
  "tempfile",
  "thiserror",

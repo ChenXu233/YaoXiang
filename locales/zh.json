@@ -1,0 +1,19 @@
+{
+  "cmd_received": "收到运行命令",
+  "lex_start": "开始词法分析",
+  "lex_complete": "词法分析完成",
+  "lex_complete_tokens": "词法分析完成：{0} 个 token",
+  "parser_start": "开始解析",
+  "parser_complete": "解析完成",
+  "parser_complete_items": "解析完成：{0} 个项",
+  "typecheck_start": "开始类型检查",
+  "typecheck_complete": "类型检查完成",
+  "codegen_start": "开始代码生成",
+  "codegen_complete": "代码生成完成",
+  "codegen_functions": "代码生成完成：{0} 个函数",
+  "vm_start": "VM 开始执行",
+  "vm_complete": "VM 执行完成",
+  "compilation_start": "开始编译",
+  "compiling_source": "正在编译源代码（{0} 字节）",
+  "debug_run_called": "run() 被调用"
+}
