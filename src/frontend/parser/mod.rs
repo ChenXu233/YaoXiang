@@ -95,7 +95,10 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
         };
 
         let item_count = items.len();
-        debug!("{}", t_cur(MSG::ParserCompleteWithItems, Some(&[&item_count])));
+        debug!(
+            "{}",
+            t_cur(MSG::ParserCompleteWithItems, Some(&[&item_count]))
+        );
         Ok(Module { items, span })
     }
 }

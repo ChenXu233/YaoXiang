@@ -27,7 +27,10 @@ fn load_translation_file(file_name: &str) -> TranslationMap {
     let path = format!("locales/{}.json", file_name);
     match std::fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to parse {} translation file: {}", file_name, e);
+            eprintln!(
+                "Warning: Failed to parse {} translation file: {}",
+                file_name, e
+            );
             HashMap::new()
         }),
         Err(_) => HashMap::new(),
@@ -37,7 +40,7 @@ fn load_translation_file(file_name: &str) -> TranslationMap {
 /// Load hardcoded translations and scan for additional languages
 static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
     let mut map = HashMap::new();
-    
+
     // Load hardcoded languages (en, zh, zh-miao)
     for &lang in HARDCODED_LANGS {
         let translations = load_translation_file(lang);
@@ -45,7 +48,7 @@ static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
             map.insert(lang.to_string(), translations);
         }
     }
-    
+
     // Dynamically scan for additional language files
     let locales_dir = Path::new("locales");
     if let Ok(entries) = std::fs::read_dir(locales_dir) {
@@ -66,7 +69,7 @@ static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
             }
         }
     }
-    
+
     map
 });
 
@@ -83,15 +86,18 @@ pub fn t(
     args: Option<&[&dyn std::fmt::Display]>,
 ) -> String {
     // Try the requested language first
-    let translations = TRANSLATIONS.get(lang).cloned()
-        .or_else(|| TRANSLATIONS.get("zh").cloned())  // Fallback to zh
-        .or_else(|| TRANSLATIONS.get("en").cloned())  // Fallback to en
+    let translations = TRANSLATIONS
+        .get(lang)
+        .cloned()
+        .or_else(|| TRANSLATIONS.get("zh").cloned()) // Fallback to zh
+        .or_else(|| TRANSLATIONS.get("en").cloned()) // Fallback to en
         .unwrap_or_default();
 
     let key = id.key();
-    let template = translations.get(key).cloned().unwrap_or_else(|| {
-        key.to_string()
-    });
+    let template = translations
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| key.to_string());
 
     match args {
         Some(args) => {
@@ -144,17 +150,18 @@ macro_rules! tlog {
 /// Convenience function to get current language from env or default
 pub fn current_lang() -> &'static str {
     let env_lang = std::env::var("YAOXIANG_LANG").ok();
-    
+
     // Check if this language is available
     if let Some(lang) = &env_lang {
         if TRANSLATIONS.contains_key(lang) {
-            return TRANSLATIONS.keys()
+            return TRANSLATIONS
+                .keys()
                 .find(|k| k.as_str() == lang)
                 .map(|s| s.as_str())
                 .unwrap_or("en");
         }
     }
-    
+
     // Default to "zh" or "en" based on available translations
     if TRANSLATIONS.contains_key("zh") {
         "zh"

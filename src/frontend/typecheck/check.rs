@@ -261,7 +261,13 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 // Pass the constrained param_types to check_fn_def so inner scope matches outer signature
-                debug!("{}", t_cur(MSG::TypeCheckCallFnDef, Some(&[&annotated_params.is_some()])));
+                debug!(
+                    "{}",
+                    t_cur(
+                        MSG::TypeCheckCallFnDef,
+                        Some(&[&annotated_params.is_some()])
+                    )
+                );
                 self.check_fn_def(
                     name,
                     params,
@@ -504,7 +510,16 @@ impl<'a> TypeChecker<'a> {
 
         // 参数类型推断规则：检查未类型化参数
         // 如果没有外部类型标注，且参数本身没有类型标注，则报错（不支持从使用推断参数类型）
-        debug!("{}", t_cur(MSG::TypeCheckAnnotated, Some(&[&format!("{}", is_annotated), &format!("{}", untyped_params.len())])));
+        debug!(
+            "{}",
+            t_cur(
+                MSG::TypeCheckAnnotated,
+                Some(&[
+                    &format!("{}", is_annotated),
+                    &format!("{}", untyped_params.len())
+                ])
+            )
+        );
         if !is_annotated {
             for (param_name, param_idx, _param_ty) in &untyped_params {
                 debug!("{}", t_cur(MSG::TypeCheckAddError, Some(&[param_name])));

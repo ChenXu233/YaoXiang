@@ -52,7 +52,10 @@ mod tokenizer {
                 literal: None,
             });
             let token_count = tokens.len();
-            debug!("{}", t_cur(MSG::LexCompleteWithTokens, Some(&[&token_count])));
+            debug!(
+                "{}",
+                t_cur(MSG::LexCompleteWithTokens, Some(&[&token_count]))
+            );
             Ok(tokens)
         }
     }
