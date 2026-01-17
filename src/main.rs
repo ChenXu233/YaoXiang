@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
 
 /// A high-performance programming language with "everything is type" philosophy
@@ -77,29 +78,30 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
+    yaoxiang::util::logger::init_cli();
     let args = Args::parse();
 
     if args.verbose {
-        eprintln!("YaoXiang version: {}", VERSION);
-        eprintln!("Host: {}", std::env::consts::OS);
+        info!("YaoXiang version: {}", VERSION);
+        info!("Host: {}", std::env::consts::OS);
     }
 
     match args.command {
         Commands::Run { file } => {
-            eprintln!("[DEBUG] Run command received: {:?}", file);
+            info!("Run command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to run: {}", file.display()))?;
-            eprintln!("[DEBUG] Run command completed successfully!");
+            info!("Run command completed successfully!");
         }
         Commands::Eval { code } => {
-            eprintln!("[DEBUG] Eval command received");
+            info!("Eval command received");
             run(&code).context("Failed to evaluate code")?;
-            eprintln!("[DEBUG] Eval command completed successfully!");
+            info!("Eval command completed successfully!");
         }
         Commands::Check { file } => {
             // TODO: Implement type checking without execution
-            eprintln!("[DEBUG] Check command received: {:?}", file);
+            info!("Check command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to check: {}", file.display()))?;
-            eprintln!("Check passed!");
+            info!("Check passed!");
         }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter

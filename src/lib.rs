@@ -26,11 +26,14 @@ pub mod std;
 pub mod vm;
 
 // Utility modules
-mod util;
+pub mod util;
 
 // Re-exports
 pub use anyhow::{Context, Result};
 pub use thiserror::Error;
+
+// Logging
+use tracing::debug;
 
 /// Language version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -56,15 +59,15 @@ pub const NAME: &str = "YaoXiang (爻象)";
 /// }
 /// ```
 pub fn run(source: &str) -> Result<()> {
-    eprintln!("[DEBUG] run() called");
+    debug!("run() called");
     let mut compiler = frontend::Compiler::new();
-    eprintln!("[DEBUG] Starting compilation...");
+    debug!("Starting compilation...");
     let module = compiler.compile(source)?;
-    eprintln!("[DEBUG] Compilation successful!");
+    debug!("Compilation successful!");
     let mut vm = vm::VM::new();
-    eprintln!("[DEBUG] VM created, executing module...");
+    debug!("VM created, executing module...");
     vm.execute_module(&module)?;
-    eprintln!("[DEBUG] Module execution completed!");
+    debug!("Module execution completed!");
     Ok(())
 }
 
