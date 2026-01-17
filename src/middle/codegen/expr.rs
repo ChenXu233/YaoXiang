@@ -103,6 +103,7 @@ impl CodegenContext {
             Expr::Index { expr, index, .. } => self.generate_index(expr, index),
             Expr::ListComp { .. } => unimplemented!("List comprehension codegen"),
             Expr::Try { expr, .. } => self.generate_try(expr),
+            Expr::Ref { expr, .. } => self.generate_ref(expr),
         }
     }
 
@@ -763,6 +764,28 @@ impl CodegenContext {
         ));
 
         Ok(Operand::Temp(ok_value_reg))
+    }
+
+    /// 生成 ref 表达式：`ref expr` 创建 Arc
+    ///
+    /// ArcNew: dst, src
+    /// - 分配新的 Arc 结构（包含指针和原子计数）
+    /// - 将 src 的值复制到 Arc 内部
+    /// - 引用计数初始化为 1
+    fn generate_ref(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<Operand, CodegenError> {
+        let dst = self.next_temp();
+        let src = self.generate_expr(expr)?;
+
+        // ArcNew: dst(1), src(1)
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::ArcNew,
+            vec![dst as u8, self.operand_to_reg(&src)?],
+        ));
+
+        Ok(Operand::Temp(dst))
     }
 }
 

@@ -264,6 +264,7 @@ impl MonoTypeExt for MonoType {
             // 联合类型和交集类型暂时使用 TypeRef 的 ID
             MonoType::Union(_) => 40,
             MonoType::Intersection(_) => 40,
+            MonoType::Arc(_) => 45,
         }
     }
 

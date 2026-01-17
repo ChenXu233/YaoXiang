@@ -835,6 +835,32 @@ impl CodegenContext {
             Dup => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
 
             Swap => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
+
+            // =====================
+            // Arc 指令
+            // =====================
+            ArcNew { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::ArcNew,
+                    vec![dst_reg, src_reg],
+                ))
+            }
+
+            ArcClone { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::ArcClone,
+                    vec![dst_reg, src_reg],
+                ))
+            }
+
+            ArcDrop(operand) => {
+                let reg = self.operand_to_reg(operand)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::ArcDrop, vec![reg]))
+            }
         }
     }
 
