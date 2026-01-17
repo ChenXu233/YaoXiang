@@ -5,6 +5,7 @@
 mod drop_semantics;
 mod move_semantics;
 mod mut_check;
+mod ref_semantics;
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};

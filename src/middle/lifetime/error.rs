@@ -80,6 +80,15 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// ref 应用于非所有者（已移动或已释放的值）
+    RefNonOwner {
+        /// ref 表达式位置
+        ref_span: (usize, usize),
+        /// 目标值位置
+        target_span: (usize, usize),
+        /// 目标值标识
+        target_value: String,
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -128,6 +137,17 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "ImmutableMutation: cannot mutate '{}' via method '{}' at {:?}",
                     value, method, location
+                )
+            }
+            OwnershipError::RefNonOwner {
+                ref_span,
+                target_span,
+                target_value,
+            } => {
+                write!(
+                    f,
+                    "RefNonOwner: cannot create ref for value '{}' at {:?} (target defined at {:?})",
+                    target_value, ref_span, target_span
                 )
             }
         }

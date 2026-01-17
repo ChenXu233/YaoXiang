@@ -21,11 +21,13 @@ mod drop_semantics;
 mod error;
 mod move_semantics;
 mod mut_check;
+mod ref_semantics;
 
 pub use error::*;
 pub use move_semantics::*;
 pub use drop_semantics::*;
 pub use mut_check::*;
+pub use ref_semantics::*;
 
 /// 所有权分析结果
 #[derive(Debug, Clone)]
@@ -86,12 +88,13 @@ impl Lifetime {
 
 /// 统一的所有权检查器
 ///
-/// 同时运行 Move 检查、Drop 检查和 Mut 检查，返回所有错误。
+/// 同时运行 Move 检查、Drop 检查、Mut 检查和 Ref 检查，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
     move_checker: MoveChecker,
     drop_checker: DropChecker,
     mut_checker: MutChecker,
+    ref_checker: RefChecker,
 }
 
 impl OwnershipChecker {
@@ -101,6 +104,7 @@ impl OwnershipChecker {
             move_checker: MoveChecker::new(),
             drop_checker: DropChecker::new(),
             mut_checker: MutChecker::new(),
+            ref_checker: RefChecker::new(),
         }
     }
 
@@ -112,12 +116,14 @@ impl OwnershipChecker {
         let move_errors = self.move_checker.check_function(func);
         let drop_errors = self.drop_checker.check_function(func);
         let mut_errors = self.mut_checker.check_function(func);
+        let ref_errors = self.ref_checker.check_function(func);
 
         // 合并错误
         move_errors
             .iter()
             .chain(drop_errors)
             .chain(mut_errors)
+            .chain(ref_errors)
             .cloned()
             .collect()
     }
@@ -135,6 +141,11 @@ impl OwnershipChecker {
     /// 获取 Mut 检查器的错误
     pub fn mut_errors(&self) -> &[OwnershipError] {
         self.mut_checker.errors()
+    }
+
+    /// 获取 Ref 检查器的错误
+    pub fn ref_errors(&self) -> &[OwnershipError] {
+        self.ref_checker.errors()
     }
 }
 
