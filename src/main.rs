@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
-use yaoxiang::util::i18n::Lang;
+use yaoxiang::util::i18n::set_lang_from_string;
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -33,13 +33,15 @@ impl From<LogLevelArg> for LogLevel {
 enum LangArg {
     En,
     Zh,
+    ZhMiao,
 }
 
-impl From<LangArg> for Lang {
+impl From<LangArg> for String {
     fn from(lang: LangArg) -> Self {
         match lang {
-            LangArg::En => Lang::En,
-            LangArg::Zh => Lang::Zh,
+            LangArg::En => "en".to_string(),
+            LangArg::Zh => "zh".to_string(),
+            LangArg::ZhMiao => "zh-x-miao".to_string(),
         }
     }
 }
@@ -62,7 +64,7 @@ struct Args {
     #[arg(short, long, value_enum)]
     log_level: Option<LogLevelArg>,
 
-    /// Set language (en, zh)
+    /// Set language (en, zh, zh-miao)
     #[arg(short = 'L', long, value_enum)]
     lang: Option<LangArg>,
 }
@@ -127,14 +129,20 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Set language first (before logger init)
-    let lang = args.lang.map(Into::into).unwrap_or_else(|| {
+    let lang = args.lang.map(Into::<String>::into).unwrap_or_else(|| {
         std::env::var("YAOXIANG_LANG")
             .ok()
-            .as_deref()
-            .map(Into::into)
-            .unwrap_or(Lang::En)
+            .and_then(|s| {
+                // Only use if it's a valid language
+                if ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()) {
+                    Some(s)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| "en".to_string())
     });
-    yaoxiang::util::logger::set_lang(lang);
+    set_lang_from_string(lang);
 
     // Initialize logger with specified level
     match args.log_level {

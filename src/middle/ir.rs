@@ -144,8 +144,11 @@ pub enum Instruction {
         target_type: Type,
     },
     TypeTest(Operand, Type),
+    /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
         func: Operand,
+        args: Vec<Operand>,
+        result: Operand,
     },
     Yield,
     // Phase 5 additions

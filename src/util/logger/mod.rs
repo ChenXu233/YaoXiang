@@ -14,37 +14,30 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry};
 
-use crate::util::i18n::Lang;
-
-impl Lang {
-    /// Convert to u8 for atomic storage
-    fn as_u8(self) -> u8 {
-        match self {
-            Lang::En => 0,
-            Lang::Zh => 1,
-        }
-    }
-
-    /// Convert from u8
-    fn from_u8(val: u8) -> Self {
-        match val {
-            1 => Lang::Zh,
-            _ => Lang::En,
-        }
-    }
-}
+use crate::util::i18n::current_lang;
 
 /// Global language setting for i18n (stored as atomic u8 for thread-safe access)
 static CURRENT_LANG: AtomicU8 = AtomicU8::new(0);
 
-/// Set the current language for i18n
-pub fn set_lang(lang: Lang) {
-    CURRENT_LANG.store(lang.as_u8(), Ordering::SeqCst);
+/// Set the current language for i18n (for backward compatibility)
+pub fn set_lang(lang_code: &str) {
+    // Map lang code to u8: en=0, zh=1, zh-x-miao=2, others=0
+    let val = match lang_code {
+        "zh" => 1,
+        "zh-x-miao" | "zh-miao" => 2,
+        _ => 0,
+    };
+    CURRENT_LANG.store(val, Ordering::SeqCst);
 }
 
-/// Get the current language for i18n
-pub fn get_lang() -> Lang {
-    Lang::from_u8(CURRENT_LANG.load(Ordering::SeqCst))
+/// Get the current language for i18n (for backward compatibility)
+pub fn get_lang() -> &'static str {
+    let val = CURRENT_LANG.load(Ordering::SeqCst);
+    match val {
+        1 => "zh",
+        2 => "zh-x-miao",
+        _ => current_lang(),
+    }
 }
 
 /// Log level

@@ -366,14 +366,18 @@ impl CodegenContext {
         let lang = get_lang();
         let func_count = self.module.functions.len();
         debug!("{}", t(MSG::CodegenFunctions, lang, Some(&[&func_count])));
+
         // 1. 生成常量池
         let const_pool = std::mem::take(&mut self.constant_pool.constants);
+        let const_count = const_pool.len();
+        debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
 
         // 2. 生成代码段
         let mut code_section = CodeSection {
             functions: Vec::new(),
         };
 
+        debug!("{}", t(MSG::CodegenCodeSection, lang, Some(&[&func_count])));
         // 克隆函数以避免借用问题
         let functions = self.module.functions.clone();
         for func in functions {
@@ -381,12 +385,14 @@ impl CodegenContext {
         }
 
         // 3. 生成类型表
+        let type_count = self.module.types.len();
         let type_table: Vec<MonoType> = self
             .module
             .types
             .iter()
             .map(|t| self.type_from_ast(t))
             .collect();
+        debug!("{}", t(MSG::CodegenTypeTable, lang, Some(&[&type_count])));
 
         // 4. 生成文件头
         let header = self.generate_header();
@@ -794,7 +800,7 @@ impl CodegenContext {
             // 并发操作（基于 RFC-008）
             // spawn 是注解标记，await 不是关键字（运行时自动处理）
             // =====================
-            Spawn { func: _ } => {
+            Spawn { func: _, .. } => {
                 // 根据 RFC-008，spawn 标记由运行时处理
                 // 编译产物是普通函数调用，调度器负责创建 Async[T]
                 Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))

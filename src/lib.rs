@@ -34,7 +34,7 @@ pub use thiserror::Error;
 
 // Logging
 use tracing::debug;
-use crate::util::i18n::{t_simple, MSG};
+use crate::util::i18n::{t, MSG};
 use crate::util::logger::get_lang;
 
 /// Language version
@@ -62,9 +62,9 @@ pub const NAME: &str = "YaoXiang (爻象)";
 /// ```
 pub fn run(source: &str) -> Result<()> {
     let lang = get_lang();
-    debug!("{}", t_simple(MSG::DebugRunCalled, lang));
+    debug!("{}", t(MSG::DebugRunCalled, lang, None));
     let mut compiler = frontend::Compiler::new();
-    debug!("{}", t_simple(MSG::CompilationStart, lang));
+    debug!("{}", t(MSG::CompilationStart, lang, None));
     let module = compiler.compile(source)?;
     debug!("Compilation successful!"); // Internal message, no need to translate
     let mut vm = vm::VM::new();
@@ -79,8 +79,12 @@ use ::std::path::Path;
 
 /// Run the interpreter on a file
 pub fn run_file(path: &Path) -> Result<()> {
+    let lang = get_lang();
+    let path_str = path.display().to_string();
+    debug!("{}", t(MSG::RunFile, lang, Some(&[&path_str])));
     let source = fs::read_to_string(path)
         .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    debug!("{}", t(MSG::ReadingFile, lang, Some(&[&path_str])));
     run(&source)
 }
 
@@ -91,8 +95,14 @@ pub fn build_bytecode(
 ) -> Result<()> {
     use crate::middle::codegen::CodegenContext;
 
+    let lang = get_lang();
+    let source_path_str = source_path.display().to_string();
+    let output_path_str = output_path.display().to_string();
+
+    debug!("{}", t(MSG::BuildBytecode, lang, None));
     let source = fs::read_to_string(source_path)
         .with_context(|| format!("Failed to read source: {}", source_path.display()))?;
+    debug!("{}", t(MSG::ReadingFile, lang, Some(&[&source_path_str])));
 
     // Compile
     let mut compiler = frontend::Compiler::new();
@@ -107,11 +117,11 @@ pub fn build_bytecode(
     // Write to file
     let mut file = fs::File::create(output_path)
         .with_context(|| format!("Failed to create output: {}", output_path.display()))?;
+    debug!("{}", t(MSG::WritingBytecode, lang, Some(&[&output_path_str])));
     bytecode_file
         .write_to(&mut file)
         .with_context(|| format!("Failed to write bytecode: {}", output_path.display()))?;
 
-    eprintln!("[INFO] Bytecode written to: {}", output_path.display());
     Ok(())
 }
 
@@ -120,8 +130,13 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
     use crate::middle::codegen::CodegenContext;
     use crate::vm::opcode::TypedOpcode;
 
+    let lang = get_lang();
+    let path_str = path.display().to_string();
+
+    debug!("{}", t(MSG::DumpBytecode, lang, Some(&[&path_str])));
     let source = fs::read_to_string(path)
         .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    debug!("{}", t(MSG::ReadingFile, lang, Some(&[&path_str])));
 
     // Compile
     let mut compiler = frontend::Compiler::new();

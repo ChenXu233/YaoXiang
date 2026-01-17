@@ -97,7 +97,7 @@ impl SendSyncChecker {
     ) {
         match instr {
             // Spawn 检查：闭包捕获的变量必须是 Send
-            Instruction::Spawn { func: closure_op } => {
+            Instruction::Spawn { func: closure_op, .. } => {
                 self.check_spawn(closure_op, func);
             }
             // ArcNew: Arc 总是 Send + Sync
