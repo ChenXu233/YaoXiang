@@ -1,10 +1,31 @@
 //! YaoXiang Programming Language - CLI
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
+use yaoxiang::util::logger::LogLevel;
+
+/// Log level enum for CLI
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum LogLevelArg {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl From<LogLevelArg> for LogLevel {
+    fn from(level: LogLevelArg) -> Self {
+        match level {
+            LogLevelArg::Debug => LogLevel::Debug,
+            LogLevelArg::Info => LogLevel::Info,
+            LogLevelArg::Warn => LogLevel::Warn,
+            LogLevelArg::Error => LogLevel::Error,
+        }
+    }
+}
 
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
@@ -19,6 +40,10 @@ struct Args {
     /// Enable verbose output
     #[arg(short, long)]
     verbose: bool,
+
+    /// Set log level (debug, info, warn, error)
+    #[arg(short, long, value_enum)]
+    log_level: Option<LogLevelArg>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -78,8 +103,13 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    yaoxiang::util::logger::init_cli();
     let args = Args::parse();
+
+    // Initialize logger with specified level
+    match args.log_level {
+        Some(level) => yaoxiang::util::logger::init_with_level(level.into()),
+        None => yaoxiang::util::logger::init_cli(),
+    }
 
     if args.verbose {
         info!("YaoXiang version: {}", VERSION);
