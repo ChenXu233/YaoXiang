@@ -106,6 +106,8 @@ pub enum MonoType {
     Union(Vec<MonoType>),
     /// 交集类型 `T1 & T2`
     Intersection(Vec<MonoType>),
+    /// Arc 类型（原子引用计数）
+    Arc(Box<MonoType>),
 }
 
 impl MonoType {
@@ -182,6 +184,7 @@ impl MonoType {
                         .join(" & ")
                 )
             }
+            MonoType::Arc(t) => format!("Arc<{}>", t.type_name()),
         }
     }
 }

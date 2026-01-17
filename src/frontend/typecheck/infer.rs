@@ -121,6 +121,7 @@ impl<'a> TypeInferrer<'a> {
             }
             ast::Expr::ListComp { .. } => unimplemented!("List comprehension type inference"),
             ast::Expr::Try { expr, span } => self.infer_try(expr, *span),
+            ast::Expr::Ref { expr, span } => self.infer_ref(expr, *span),
         }
     }
 
@@ -953,6 +954,18 @@ impl<'a> TypeInferrer<'a> {
                 Ok(self.solver.new_var())
             }
         }
+    }
+
+    /// 推断 ref 表达式的类型：`ref expr` 返回 Arc<T>
+    fn infer_ref(
+        &mut self,
+        expr: &ast::Expr,
+        _span: Span,
+    ) -> TypeResult<MonoType> {
+        // 推断内部表达式的类型
+        let inner_ty = self.infer_expr(expr)?;
+        // ref 创建 Arc，返回 Arc<T>
+        Ok(MonoType::Arc(Box::new(inner_ty)))
     }
 
     // =========================================================================
