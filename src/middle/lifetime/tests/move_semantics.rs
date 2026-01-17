@@ -16,12 +16,10 @@ fn test_move_checker_new() {
 #[test]
 fn test_no_error_on_simple_move() {
     let mut func = create_test_function_with_locals(1);
-    func.blocks[0].instructions = vec![
-        Instruction::Move {
-            dst: Operand::Temp(0),
-            src: Operand::Local(0),
-        },
-    ];
+    func.blocks[0].instructions = vec![Instruction::Move {
+        dst: Operand::Temp(0),
+        src: Operand::Local(0),
+    }];
 
     let mut checker = MoveChecker::new();
     let errors = checker.check_function(&func);

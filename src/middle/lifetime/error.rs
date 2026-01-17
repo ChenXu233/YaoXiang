@@ -21,7 +21,10 @@ pub enum ValueState {
 /// 提取公共接口，减少 MoveChecker 和 DropChecker 的重复代码。
 pub trait OwnershipCheck {
     /// 检查函数的所有权语义
-    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError];
+    fn check_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> &[OwnershipError];
 
     /// 获取收集的错误
     fn errors(&self) -> &[OwnershipError];
@@ -32,6 +35,9 @@ pub trait OwnershipCheck {
     /// 清除状态
     fn clear(&mut self);
 }
+/// 所有权检查错误类型
+///
+/// 包含 Move/Drop/Mut 三种检查的错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OwnershipError {
     /// 使用已移动的值
@@ -58,22 +64,71 @@ pub enum OwnershipError {
         /// 值标识
         value: String,
     },
+    /// 不可变赋值：对不可变变量进行赋值
+    ImmutableAssign {
+        /// 值标识
+        value: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// 不可变变异：调用不可变对象上的变异方法
+    ImmutableMutation {
+        /// 值标识
+        value: String,
+        /// 变异方法名
+        method: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         match self {
             OwnershipError::UseAfterMove { value, location } => {
-                write!(f, "UseAfterMove: value '{}' used after move at {:?}", value, location)
+                write!(
+                    f,
+                    "UseAfterMove: value '{}' used after move at {:?}",
+                    value, location
+                )
             }
             OwnershipError::UseAfterDrop { value, location } => {
-                write!(f, "UseAfterDrop: value '{}' used after drop at {:?}", value, location)
+                write!(
+                    f,
+                    "UseAfterDrop: value '{}' used after drop at {:?}",
+                    value, location
+                )
             }
             OwnershipError::DropMovedValue { value } => {
-                write!(f, "DropMovedValue: cannot drop value '{}' that has been moved", value)
+                write!(
+                    f,
+                    "DropMovedValue: cannot drop value '{}' that has been moved",
+                    value
+                )
             }
             OwnershipError::DoubleDrop { value } => {
                 write!(f, "DoubleDrop: value '{}' dropped twice", value)
+            }
+            OwnershipError::ImmutableAssign { value, location } => {
+                write!(
+                    f,
+                    "ImmutableAssign: cannot assign to immutable value '{}' at {:?}",
+                    value, location
+                )
+            }
+            OwnershipError::ImmutableMutation {
+                value,
+                method,
+                location,
+            } => {
+                write!(
+                    f,
+                    "ImmutableMutation: cannot mutate '{}' via method '{}' at {:?}",
+                    value, method, location
+                )
             }
         }
     }

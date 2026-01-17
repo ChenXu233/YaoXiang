@@ -2,8 +2,9 @@
 //!
 //! 测试生命周期分析和所有权检查功能
 
-mod move_semantics;
 mod drop_semantics;
+mod move_semantics;
+mod mut_check;
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};

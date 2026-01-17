@@ -26,7 +26,10 @@ impl MoveChecker {
         }
     }
 
-    fn check_instruction(&mut self, instr: &Instruction) {
+    fn check_instruction(
+        &mut self,
+        instr: &Instruction,
+    ) {
         match instr {
             Instruction::Move { dst, src } => self.check_move(dst, src),
             Instruction::Call { args, .. } => self.check_call(args),
@@ -56,7 +59,11 @@ impl MoveChecker {
         }
     }
 
-    fn check_move(&mut self, dst: &Operand, src: &Operand) {
+    fn check_move(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) {
         if let Some(state) = self.state.get(src) {
             if *state == ValueState::Moved {
                 self.report_use_after_move(src);
@@ -69,7 +76,10 @@ impl MoveChecker {
         self.state.insert(dst.clone(), ValueState::Owned);
     }
 
-    fn check_call(&mut self, args: &[Operand]) {
+    fn check_call(
+        &mut self,
+        args: &[Operand],
+    ) {
         for arg in args {
             if let Some(state) = self.state.get(arg) {
                 if *state == ValueState::Moved {
@@ -83,7 +93,10 @@ impl MoveChecker {
         }
     }
 
-    fn check_ret(&mut self, value: &Operand) {
+    fn check_ret(
+        &mut self,
+        value: &Operand,
+    ) {
         if let Some(state) = self.state.get(value) {
             if *state == ValueState::Moved {
                 // 已移动的值被返回是合法的
@@ -93,7 +106,10 @@ impl MoveChecker {
         }
     }
 
-    fn check_used(&mut self, operand: &Operand) {
+    fn check_used(
+        &mut self,
+        operand: &Operand,
+    ) {
         if let Some(state) = self.state.get(operand) {
             if *state == ValueState::Moved {
                 self.report_use_after_move(operand);
@@ -101,7 +117,10 @@ impl MoveChecker {
         }
     }
 
-    fn report_use_after_move(&mut self, operand: &Operand) {
+    fn report_use_after_move(
+        &mut self,
+        operand: &Operand,
+    ) {
         self.errors.push(OwnershipError::UseAfterMove {
             value: operand_to_string(operand),
             location: self.location,
@@ -110,7 +129,10 @@ impl MoveChecker {
 }
 
 impl OwnershipCheck for MoveChecker {
-    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError] {
+    fn check_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> &[OwnershipError] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {

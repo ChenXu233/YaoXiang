@@ -28,7 +28,10 @@ impl DropChecker {
         }
     }
 
-    fn check_instruction(&mut self, instr: &Instruction) {
+    fn check_instruction(
+        &mut self,
+        instr: &Instruction,
+    ) {
         match instr {
             Instruction::Drop(value) => self.check_drop(value),
             Instruction::Move { dst, src } => self.check_move(dst, src),
@@ -48,7 +51,10 @@ impl DropChecker {
         }
     }
 
-    fn check_drop(&mut self, value: &Operand) {
+    fn check_drop(
+        &mut self,
+        value: &Operand,
+    ) {
         match self.state.get(value) {
             Some(ValueState::Moved) => {
                 self.errors.push(OwnershipError::DropMovedValue {
@@ -69,7 +75,11 @@ impl DropChecker {
         }
     }
 
-    fn check_move(&mut self, dst: &Operand, src: &Operand) {
+    fn check_move(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) {
         self.state.insert(dst.clone(), ValueState::Owned);
         if let Some(ValueState::Owned) = self.state.get(src) {
             self.state.insert(src.clone(), ValueState::Moved);
@@ -78,7 +88,10 @@ impl DropChecker {
         }
     }
 
-    fn check_used(&mut self, operand: &Operand) {
+    fn check_used(
+        &mut self,
+        operand: &Operand,
+    ) {
         if let Some(ValueState::Dropped) = self.state.get(operand) {
             self.errors.push(OwnershipError::UseAfterDrop {
                 value: operand_to_string(operand),
@@ -89,7 +102,10 @@ impl DropChecker {
 }
 
 impl OwnershipCheck for DropChecker {
-    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError] {
+    fn check_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> &[OwnershipError] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
