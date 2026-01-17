@@ -190,7 +190,7 @@ impl CycleChecker {
     }
 
     /// 检测是否有环（简化版：只检测 spawn 参数/返回值之间）
-    fn has_cycle(&self, graph: &HashMap<Operand, HashSet<Operand>>) -> bool {
+    fn has_cycle(&mut self, graph: &HashMap<Operand, HashSet<Operand>>) -> bool {
         let mut visited = HashSet::new();
         let mut recursion_stack = HashSet::new();
         let mut path = Vec::new();
