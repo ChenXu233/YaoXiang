@@ -28,6 +28,7 @@ use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use tracing::debug;
 
 /// 代码生成器
 ///
@@ -331,6 +332,7 @@ impl std::error::Error for CodegenError {}
 impl CodegenContext {
     /// 创建新的代码生成上下文
     pub fn new(module: ModuleIR) -> Self {
+        debug!("Starting code generation ({} functions)", module.functions.len());
         let mut ctx = CodegenContext {
             module,
             symbol_table: SymbolTable::new(),
@@ -357,6 +359,7 @@ impl CodegenContext {
 
     /// 生成字节码
     pub fn generate(&mut self) -> Result<BytecodeFile, CodegenError> {
+        debug!("Generating bytecode for {} functions", self.module.functions.len());
         // 1. 生成常量池
         let const_pool = std::mem::take(&mut self.constant_pool.constants);
 
@@ -382,6 +385,8 @@ impl CodegenContext {
         // 4. 生成文件头
         let header = self.generate_header();
 
+        debug!("Code generation completed: {} functions, {} constants",
+               code_section.functions.len(), const_pool.len());
         Ok(BytecodeFile {
             header,
             type_table,

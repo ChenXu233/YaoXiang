@@ -21,6 +21,7 @@ pub use types::*;
 use super::parser::ast;
 use crate::middle;
 use std::collections::HashMap;
+use tracing::debug;
 
 /// 类型环境
 ///
@@ -117,6 +118,7 @@ pub fn check_module(
     ast: &ast::Module,
     env: Option<&mut TypeEnvironment>,
 ) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    debug!("Starting type checking ({} items)", ast.items.len());
     let env = env.unwrap_or_else(|| {
         let mut new_env = TypeEnvironment::new();
         // 添加内置类型
@@ -149,6 +151,7 @@ pub fn check_module(
     if env.has_errors() {
         Err(env.get_errors().to_vec())
     } else {
+        debug!("Type checking completed successfully");
         result
     }
 }

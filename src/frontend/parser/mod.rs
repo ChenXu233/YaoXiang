@@ -16,6 +16,7 @@ pub use state::{ParserState, BP_HIGHEST, BP_LOWEST};
 use crate::frontend::lexer::tokens::*;
 use crate::util::span::Span;
 use ast::*;
+use tracing::debug;
 
 /// Parse tokens into an AST module
 ///
@@ -32,6 +33,7 @@ use ast::*;
 /// }
 /// ```
 pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
+    debug!("Starting parsing ({} tokens)", tokens.len());
     let mut state = ParserState::new(tokens);
     let mut items = Vec::new();
 
@@ -90,6 +92,7 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
             Span::dummy()
         };
 
+        debug!("Parsing completed: {} items", items.len());
         Ok(Module { items, span })
     }
 }

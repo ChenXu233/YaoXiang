@@ -3,6 +3,7 @@
 pub mod tokens;
 
 use tokens::*;
+use tracing::debug;
 
 pub use tokenizer::tokenize;
 
@@ -29,6 +30,7 @@ mod tokenizer {
     use std::str::Chars;
 
     pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
+        debug!("Starting lexical analysis ({} bytes)", source.len());
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
 
@@ -47,6 +49,7 @@ mod tokenizer {
                 ),
                 literal: None,
             });
+            debug!("Lexical analysis completed: {} tokens", tokens.len());
             Ok(tokens)
         }
     }

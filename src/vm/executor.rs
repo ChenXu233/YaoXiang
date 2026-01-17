@@ -7,6 +7,7 @@ use crate::runtime::scheduler::FlowScheduler;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc as StdArc;
+use tracing::debug;
 
 /// VM configuration
 #[derive(Debug, Clone)]
@@ -103,10 +104,12 @@ impl VM {
     /// * `_module` - The module IR to execute
     pub fn execute_module(
         &mut self,
-        _module: &ModuleIR,
+        module: &ModuleIR,
     ) -> VMResult<()> {
+        debug!("VM starting execution ({} functions)", module.functions.len());
         // TODO: Implement full execution engine
         self.status = VMStatus::Running;
+        debug!("VM execution completed");
         self.status = VMStatus::Finished;
         Ok(())
     }
