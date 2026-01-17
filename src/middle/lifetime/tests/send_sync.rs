@@ -107,6 +107,41 @@ fn test_fn_types() {
     assert!(checker.is_send(&fn_type));
 }
 
+/// 测试：Dict 类型
+#[test]
+fn test_dict_types() {
+    let checker = SendSyncChecker::new();
+
+    let dict = MonoType::Dict(
+        Box::new(MonoType::String),
+        Box::new(MonoType::Int(64)),
+    );
+    assert!(checker.is_send(&dict));
+    assert!(!checker.is_sync(&dict));
+}
+
+/// 测试：Set 类型
+#[test]
+fn test_set_types() {
+    let checker = SendSyncChecker::new();
+
+    let set = MonoType::Set(Box::new(MonoType::String));
+    assert!(checker.is_send(&set));
+    assert!(!checker.is_sync(&set));
+}
+
+/// 测试：Range 类型
+#[test]
+fn test_range_types() {
+    let checker = SendSyncChecker::new();
+
+    let range = MonoType::Range {
+        elem_type: Box::new(MonoType::Int(64)),
+    };
+    assert!(checker.is_send(&range));
+    assert!(checker.is_sync(&range));
+}
+
 /// 测试：无 spawn 指令时无错误
 #[test]
 fn test_no_spawn_no_errors() {
@@ -157,6 +192,8 @@ fn test_spawn_closure_no_captured() {
                 // spawn 这个闭包
                 Instruction::Spawn {
                     func: Operand::Local(0),
+                    args: vec![],
+                    result: Operand::Local(2),
                 },
                 Instruction::Ret(None),
             ],
@@ -191,6 +228,8 @@ fn test_spawn_closure_captures_send() {
                 },
                 Instruction::Spawn {
                     func: Operand::Local(1),
+                    args: vec![],
+                    result: Operand::Local(2),
                 },
                 Instruction::Ret(None),
             ],
