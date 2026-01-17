@@ -34,6 +34,8 @@ pub use thiserror::Error;
 
 // Logging
 use tracing::debug;
+use crate::util::i18n::{t_simple, MSG};
+use crate::util::logger::get_lang;
 
 /// Language version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -59,15 +61,16 @@ pub const NAME: &str = "YaoXiang (爻象)";
 /// }
 /// ```
 pub fn run(source: &str) -> Result<()> {
-    debug!("run() called");
+    let lang = get_lang();
+    debug!("{}", t_simple(MSG::DebugRunCalled, lang));
     let mut compiler = frontend::Compiler::new();
-    debug!("Starting compilation...");
+    debug!("{}", t_simple(MSG::CompilationStart, lang));
     let module = compiler.compile(source)?;
-    debug!("Compilation successful!");
+    debug!("Compilation successful!"); // Internal message, no need to translate
     let mut vm = vm::VM::new();
-    debug!("VM created, executing module...");
+    debug!("VM created, executing module..."); // Internal message
     vm.execute_module(&module)?;
-    debug!("Module execution completed!");
+    debug!("Module execution completed!"); // Internal message
     Ok(())
 }
 

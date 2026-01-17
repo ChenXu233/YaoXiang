@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
+use yaoxiang::util::i18n::Lang;
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -27,6 +28,22 @@ impl From<LogLevelArg> for LogLevel {
     }
 }
 
+/// Language enum for CLI
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum LangArg {
+    En,
+    Zh,
+}
+
+impl From<LangArg> for Lang {
+    fn from(lang: LangArg) -> Self {
+        match lang {
+            LangArg::En => Lang::En,
+            LangArg::Zh => Lang::Zh,
+        }
+    }
+}
+
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
 #[command(name = "yaoxiang")]
@@ -44,6 +61,10 @@ struct Args {
     /// Set log level (debug, info, warn, error)
     #[arg(short, long, value_enum)]
     log_level: Option<LogLevelArg>,
+
+    /// Set language (en, zh)
+    #[arg(short = 'L', long, value_enum)]
+    lang: Option<LangArg>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -104,6 +125,16 @@ enum Commands {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Set language first (before logger init)
+    let lang = args.lang.map(Into::into).unwrap_or_else(|| {
+        std::env::var("YAOXIANG_LANG")
+            .ok()
+            .as_deref()
+            .map(Into::into)
+            .unwrap_or(Lang::En)
+    });
+    yaoxiang::util::logger::set_lang(lang);
 
     // Initialize logger with specified level
     match args.log_level {

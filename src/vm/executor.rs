@@ -4,6 +4,8 @@ use super::*;
 use crate::middle::{ConstValue, ModuleIR};
 use crate::runtime::memory::Heap;
 use crate::runtime::scheduler::FlowScheduler;
+use crate::util::i18n::{t, t_simple, MSG};
+use crate::util::logger::get_lang;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc as StdArc;
@@ -106,10 +108,12 @@ impl VM {
         &mut self,
         module: &ModuleIR,
     ) -> VMResult<()> {
-        debug!("VM starting execution ({} functions)", module.functions.len());
+        let lang = get_lang();
+        let func_count = module.functions.len();
+        debug!("{}", t(MSG::VmStart, lang, Some(&[&func_count])));
         // TODO: Implement full execution engine
         self.status = VMStatus::Running;
-        debug!("VM execution completed");
+        debug!("{}", t_simple(MSG::VmComplete, lang));
         self.status = VMStatus::Finished;
         Ok(())
     }

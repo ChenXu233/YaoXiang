@@ -3,6 +3,8 @@
 pub mod tokens;
 
 use tokens::*;
+use crate::util::i18n::{t, MSG};
+use crate::util::logger::get_lang;
 use tracing::debug;
 
 pub use tokenizer::tokenize;
@@ -30,7 +32,9 @@ mod tokenizer {
     use std::str::Chars;
 
     pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
-        debug!("Starting lexical analysis ({} bytes)", source.len());
+        let lang = get_lang();
+        let source_len = source.len();
+        debug!("{}", t(MSG::LexStart, lang, Some(&[&source_len])));
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
 
@@ -49,7 +53,11 @@ mod tokenizer {
                 ),
                 literal: None,
             });
-            debug!("Lexical analysis completed: {} tokens", tokens.len());
+            let token_count = tokens.len();
+            debug!(
+                "{}",
+                t(MSG::LexCompleteWithTokens, lang, Some(&[&token_count]))
+            );
             Ok(tokens)
         }
     }
