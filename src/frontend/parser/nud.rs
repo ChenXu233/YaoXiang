@@ -45,6 +45,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwWhile) => Some((BP_HIGHEST, Self::parse_while)),
             // For expression
             Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
+            // ref 关键字：创建 Arc
+            Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
             _ => None,
         }
     }
@@ -66,6 +68,20 @@ impl<'a> ParserState<'a> {
         Some(Expr::UnOp {
             op,
             expr: Box::new(operand),
+            span,
+        })
+    }
+
+    /// Parse ref expression: `ref expr` creates an Arc
+    fn parse_ref(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'ref'
+
+        // Parse operand with higher binding power
+        let expr = self.parse_expression(BP_UNARY + 1)?;
+
+        Some(Expr::Ref {
+            expr: Box::new(expr),
             span,
         })
     }

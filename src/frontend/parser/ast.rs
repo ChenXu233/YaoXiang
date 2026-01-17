@@ -92,6 +92,12 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// ref 关键字：创建 Arc（原子引用计数）
+    /// `shared = ref p` 创建 p 的 Arc 副本
+    Ref {
+        expr: Box<Expr>,
+        span: Span,
+    },
 }
 
 /// Binary operators
