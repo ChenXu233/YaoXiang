@@ -258,7 +258,7 @@
 
 ## 四、MVP 实现优先级
 
-### P0 - 必须实现（Standard Runtime 核心）
+### P0 - MVP 核心（v0.3-v0.4，必须实现）
 
 | Phase | 模块 | 文件 | 状态 | 说明 |
 |-------|------|------|------|------|
@@ -267,38 +267,25 @@
 | P3 | TypeCheck | `src/frontend/typecheck/` | ✅ 完成 | 类型推断、单态化 |
 | P4 | Codegen | `src/middle/codegen/` | 🔶 进行中 | 表达式/语句生成 |
 | P5 | Ownership System | `src/core/ownership/` | ⏳ 待实现 | 所有权/循环检测/ref-Arc/SendSync |
-| P6 | unsafe | `src/core/unsafe/` | ⏳ 待实现 | unsafe 代码块 + 裸指针 |
 | P7 | Monomorphize | `src/middle/monomorphize/` | ✅ 已完成 | 泛型特化 |
 | P8 | Core Runtime | `src/runtime/` | ⏳ 待实现 | Value/Allocator/Ownership |
 | P9 | DAG | `src/runtime/dag/` | ✅ 已存在 | 惰性计算图 |
 | P10 | Scheduler | `src/runtime/scheduler/` | ✅ 已存在 | 任务调度 |
 | P11 | VM | `src/vm/` | ⏳ 待实现 | 字节码解释执行 |
-| P12-19 | 高级特性 | `src/runtime/` | ⏳ 待实现 | WorkStealer/JIT/Debugger |
 
-### E - Embedded Runtime（可选，嵌入式场景）
+### 后期扩展（v0.5+，可推迟）
 
-| 模块 | 文件 | 说明 |
-|------|------|------|
-| 即时执行器 | `src/embedded/executor.rs` | 🔶 新建，按顺序同步执行 |
-| 嵌入式 API | `src/embedded/mod.rs` | 🔶 新建，WASM/脚本集成 |
-| 配置开关 | CLI / feature flag | 🔶 新建，`--embedded` 模式 |
-
-### P1 - 重要（可延后）
-
-| 模块 | 说明 |
-|------|------|
-| 标准库 | `std::core`, `std::collections`, `std::io` |
-| 单态化 | 泛型代码特化 |
-| 逃逸分析 | 内存分配优化 |
-
-### P2 - 可选（Full Runtime 高级特性）
-
-| 模块 | 说明 |
-|------|------|
-| WorkStealer | 工作窃取，多线程负载均衡 |
-| @block | 标准库，强制急切求值 |
-| JIT 编译器 | 热点代码编译 |
-| 调试器 | 断点、单步执行 |
+| Phase | 模块 | 文件 | 说明 |
+|-------|------|------|------|
+| P6 | unsafe | `src/core/unsafe/` | FFI/裸指针，后期实现 |
+| P12 | Embedded Runtime | `src/embedded/` | 即时执行器，无 DAG |
+| P13 | WorkStealer | `src/runtime/work_stealer/` | 工作窃取，负载均衡 |
+| P14 | @block | `src/std/sync/` | 强制同步执行 |
+| P15 | Stdlib | `src/std/` | core/io/net 等 |
+| P16 | JIT | `src/jit/` | 热点代码编译 |
+| P17 | Debugger | `src/debug/` | 断点/单步调试 |
+| P18 | Bootstrap | - | 自举编译 |
+| P19 | AOT | `src/aot/` | 机器码编译 |
 
 ---
 

@@ -30,13 +30,13 @@ spawn process_non_send(NonSend(rc))  # ❌ 编译错误！
 ### Sync 约束
 
 ```yaoxiang
-# ✅ Sync 类型（可以跨线程共享引用）
-type Point = Point(x: Int, y: Int)  # ref Point 是 Sync
+# ✅ Sync 类型（可以跨线程共享 Arc）
+type Point = Point(x: Int, y: Int)
 
-shared_point: ref Point = ref Point(1, 2)  # ✅ 可以在线程间共享
+shared_point: Arc[Point] = Arc.new(Point(1, 2))  # ✅ 可以在线程间共享
 
 # ⚠️ 注意：YaoXiang 很少需要共享引用
-# 优先使用值传递 + 复制
+# 优先使用值传递 + clone()
 ```
 
 ## 自动实现规则
@@ -99,7 +99,6 @@ impl SendSyncChecker {
             Type::Array { elem, .. } => self.is_send(elem),
             Type::Box(inner) => self.is_send(inner),
             Type::Arc(inner) => self.is_send(inner),
-            Type::Ref(inner) => self.is_send(inner),  // ref T 可以 Send
             Type::Rc(_) => false,  // Rc 不是 Send
             Type::RefCell(_) => false,
             Type::Mutex(inner) => self.is_send(inner),
@@ -121,7 +120,6 @@ impl SendSyncChecker {
             Type::Array { elem, .. } => self.is_sync(elem),
             Type::Box(inner) => self.is_send(inner) && self.is_sync(inner),
             Type::Arc(inner) => self.is_send(inner) && self.is_sync(inner),
-            Type::Ref(inner) => self.is_sync(inner),  // ref T 是 Sync 如果 T: Sync
             Type::Rc(_) => false,
             Type::RefCell(_) => false,
             Type::Mutex(inner) => self.is_send(inner),
@@ -217,14 +215,14 @@ pub enum SendSyncError {
 |------|:----:|:----:|------|
 | `Int`, `Float`, `Bool` | ✅ | ✅ | 原类型 |
 | `String` | ✅ | ✅ | UTF-8 字符串 |
-| `ref T` | ✅ | ✅ | 引用（拷贝语义） |
 | `Box[T]` | ✅ | ❌ | 需要 T: Sync 才能 Sync |
 | `Rc[T]` | ❌ | ❌ | 单线程引用计数 |
-| `Arc[T]` | ✅ | ✅ | 原子引用计数 |
+| `Arc[T]` | ✅ | ✅ | 原子引用计数（ref 关键字） |
+| `Weak[T]` | ❌ | ✅ | 弱引用，不增加计数 |
 | `RefCell[T]` | ❌ | ❌ | 运行时借用 |
 | `Mutex[T]` | ✅ | ✅ | 线程安全互斥 |
 
-## 与 RFC-009 对照
+## 与 RFC-009 v7 对照
 
 | RFC-009 设计 | 实现状态 |
 |-------------|---------|
@@ -245,7 +243,7 @@ spawn do_work(Point(1, 2))  # ✅ Point 是 Send
 
 # === Sync 测试 ===
 data: Point = Point(1, 2)
-shared: ref Point = ref data  # ✅ ref Point 是 Sync
+shared: Arc[Point] = ref data  # ✅ Arc[Point] 是 Sync
 assert(shared.x == 1)
 
 # === Arc 测试（线程安全引用）===
@@ -267,4 +265,4 @@ print("Send/Sync tests passed!")
 
 - **src/core/ownership/send_sync.rs**: Send/Sync 检查器
 - **src/core/ownership/errors.rs**: 错误定义
-- **src/core/ownership/value_pass.rs**: 值传递机制
+- **src/core/ownership/mod.rs**: 所有权检查器主模块

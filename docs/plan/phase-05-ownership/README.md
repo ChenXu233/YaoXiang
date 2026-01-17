@@ -80,7 +80,7 @@ weak: Weak[Node] = Weak::new(arc)
 | 1 | task-05-01 | Move 语义（转移/释放） | 无 | P0 |
 | 2 | task-05-02 | mut 检查 | task-05-01 | P0 |
 | 3 | task-05-03 | ref 关键字（Arc） | task-05-01 | P0 |
-| 4 | task-05-04 | clone() 语义 | task-05-01 | P0 |
+| 4 | task-05-04 | clone() 显式复制 | task-05-01 | P0 |
 | 5 | task-05-05 | Send/Sync 约束 | task-05-03 | P1 |
 | 6 | task-05-06 | 跨任务循环引用检测 | task-05-03, phase-09 | P1 |
 
@@ -151,6 +151,19 @@ weak: Weak[Node] = Weak::new(arc)
 
 ## 相关文件
 
+### 任务文件
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| task-05-01 | [task-05-01-move-transfer.md](task-05-01-move-transfer.md) | Move 语义（转移/释放） |
+| task-05-02 | [task-05-02-mut-check.md](task-05-02-mut-check.md) | mut 检查 |
+| task-05-03 | [task-05-03-ref-arc.md](task-05-03-ref-arc.md) | ref 关键字（Arc） |
+| task-05-04 | [task-05-04-clone.md](task-05-04-clone.md) | clone() 显式复制 |
+| task-05-05 | [task-05-05-send-sync.md](task-05-05-send-sync.md) | Send/Sync 约束 |
+| task-05-06 | [task-05-06-cycle-detection.md](task-05-06-cycle-detection.md) | 跨任务循环引用检测 |
+
+### 源码文件
+
 - **src/core/ownership/mod.rs**: 所有权检查器主实现
 - **src/core/ownership/move.rs**: Move 语义
 - **src/core/ownership/mut_check.rs**: mut 检查
@@ -161,7 +174,7 @@ weak: Weak[Node] = Weak::new(arc)
 
 ## 参考文档
 
-- [RFC-009 所有权模型 v7](../../design/rfc/009-ownership-model.md)
+- [RFC-009 所有权模型 v7](../../design/accepted/009-ownership-model.md)
 - [YaoXiang 语言规范](../../design/language-spec.md)
 - [RFC-001 并发模型与错误处理](../../design/rfc/001-concurrent-model-error-handling.md)
-- [RFC-008 运行时并发模型](../../design/rfc/accepted/008-runtime-concurrency-model.md)
+- [RFC-008 运行时并发模型](../../design/accepted/008-runtime-concurrency-model.md)

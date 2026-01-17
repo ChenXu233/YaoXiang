@@ -1,4 +1,4 @@
-# Task 5.1: 所有权转移
+# Task 5.1: Move 语义（所有权转移）
 
 > **优先级**: P0
 > **状态**: 🔄 待实现
@@ -7,67 +7,55 @@
 
 ## 功能描述
 
-跟踪所有权的转移和复制：
-- `move` 语义：转移后原所有者失效
-- `copy` 语义：浅拷贝（针对小对象 < 1KB）
-- `drop`：值离开作用域时释放
+跟踪所有权的转移（Move）：
 
+- **Move 语义**：赋值即转移，原所有者失效
+- **零拷贝设计**：不自动复制，所有复制必须显式调用 `clone()`
+- **Drop 规则**：值离开作用域时自动释放（RAII）
+
+> **RFC-009 v7 核心设计**：默认 Move，零拷贝。复制必须用 `clone()` 显式调用。
 > **注意**：此任务是所有权系统的**基础模块**，其他所有任务都依赖于它。
 
 ## 所有权规则
 
-### Move 语义
+### Move 语义（赋值即转移）
 
 ```yaoxiang
-# move：所有权转移
-data = [1, 2, 3]
-new_owner = data  # data 不再可用
-# print(data.length)  # 编译错误！
+# Move：所有权转移，零拷贝
+data: List[Int] = [1, 2, 3]
+new_owner = data    # data 不再可用
+# print(data.length)  # 编译错误！UseAfterMove
 
 # 函数调用也转移所有权
-process: (List[T]) -> T = (input) => input[0]
+process: (List[Int]) -> Int = (input) => input[0]
 
 data = [1, 2, 3]
 result = process(data)  # data 移动进函数，不再可用
+# print(data.length)    # 编译错误！
 ```
 
-### Copy 语义（小对象 < 1KB）
-
-> **RFC-009 核心设计**：小对象自动复制，开销可忽略（< 0.01% 运行时）
+### 所有类型都是 Move
 
 ```yaoxiang
-# Copy 类型（自动推导）：
-# - 原类型（Int, Float, Bool, Char）
-# - 不可变引用 ref T
-# - 小结构体（总大小 < 1KB）
-
+# 基础类型也是 Move
 x: Int = 42
-y = x  # x 仍然可用（Copy）
+y = x           # x 不再可用
+# print(x)      # 编译错误！
 
-# 小结构体自动 Copy
-type Point = Point(x: Int, y: Int)  # 16 字节 < 1KB
+# 结构体同样是 Move
+type Point = Point(x: Int, y: Int)
 p: Point = Point(1, 2)
-q = p  # p 仍然可用
+q = p           # p 不再可用
+# print(p.x)    # 编译错误！
 
-# 大结构体（> 1KB）：Move 语义
-type BigData = BigData(buffer: Bytes[10000])  # 10KB > 1KB
-data = BigData(...)
-new_owner = data  # 移动，data 不再可用
+# 需要保留原值时，使用 clone()
+p: Point = Point(1, 2)
+q = p.clone()   # p 和 q 都可用
+print(p.x)      # ✅ 1
+print(q.x)      # ✅ 1
 ```
 
-### 复制开销分析
-
-```yaoxiang
-# 复制开销分析（来自 RFC-009）：
-# - 复制 64 字节：~1 纳秒
-# - 内存访问延迟：~100 纳秒
-# - 函数调用开销：~10 纳秒
-
-# 结论：64 字节复制的开销可忽略不计
-# 1KB 复制开销 < 0.01% 运行时
-```
-
-### Drop 规则
+### Drop 规则（RAII）
 
 ```yaoxiang
 # 值离开作用域时自动释放
@@ -76,7 +64,7 @@ foo: () -> Void = () => {
     # data 在这里自动释放（RAII）
 }
 
-# Drop 顺序：后定义先释放
+# Drop 顺序：后定义先释放（栈顺序）
 bar: () -> Void = () => {
     a: List[Int] = [1, 2]
     b: List[Int] = [3, 4]
@@ -87,16 +75,22 @@ bar: () -> Void = () => {
 ## 检查算法
 
 ```rust
-/// Copy 阈值（字节）
-const COPY_THRESHOLD: usize = 1024; // 1KB
+/// 所有权状态
+#[derive(Debug, Clone, PartialEq)]
+enum ValueState {
+    /// 有效，所有者可用
+    Owned,
+    /// 已被移动，所有者不可用
+    Moved,
+    /// 已被释放
+    Dropped,
+}
 
 struct OwnershipAnalyzer {
-    /// 每个值的所有者
-    owner_of: HashMap<ValueId, ValueId>,
-    /// 值的状态（Owned, Moved, Copied）
+    /// 每个值的状态
     state: HashMap<ValueId, ValueState>,
-    /// 值的大小（用于判断 Copy vs Move）
-    value_size: HashMap<ValueId, usize>,
+    /// 作用域栈（用于 Drop 顺序）
+    scopes: Vec<Scope>,
     /// 所有权错误
     errors: Vec<OwnershipError>,
 }
@@ -106,11 +100,8 @@ impl OwnershipAnalyzer {
     fn analyze(&mut self, func: &FunctionIR) -> OwnershipResult {
         for instr in func.all_instructions() {
             match instr {
-                Instruction::Move { dst, src } => {
-                    self.analyze_move(dst, src)?;
-                }
-                Instruction::Copy { dst, src } => {
-                    self.analyze_copy(dst, src)?;
+                Instruction::Assign { dst, src } => {
+                    self.analyze_assign(dst, src)?;
                 }
                 Instruction::Drop { value } => {
                     self.analyze_drop(value)?;
@@ -118,74 +109,79 @@ impl OwnershipAnalyzer {
                 _ => {}
             }
         }
+        self.check_double_drop()?;
         Ok(())
     }
 
-    /// 判断类型是否 Copy
-    fn is_copyable(&self, ty: &Type) -> bool {
-        let size = self.type_size(ty);
-        size <= COPY_THRESHOLD && self.is_trivially_copyable(ty)
-    }
-
-    /// 判断类型是否"平凡可复制"（不含资源）
-    fn is_trivially_copyable(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Primitive(_) => true,
-            Type::Struct(fields) => {
-                fields.iter().all(|f| self.is_trivially_copyable(&f.ty))
-            }
-            Type::Tuple(types) => types.iter().all(|t| self.is_trivially_copyable(t)),
-            Type::Array { elem, .. } => self.is_trivially_copyable(elem),
-            Type::Ref(_) => true,  // 引用本身可复制
-            _ => false,
-        }
-    }
-
-    fn analyze_move(&mut self, dst: &Operand, src: &Operand) -> Result<(), OwnershipError> {
+    /// 分析赋值（Move 语义）
+    fn analyze_assign(&mut self, dst: &Operand, src: &Operand) -> Result<(), OwnershipError> {
         let src_id = self.get_value_id(src)?;
 
-        // 检查 src 是否可移动
+        // 检查 src 是否已被移动
         if let Some(state) = self.state.get(&src_id) {
             match state {
                 ValueState::Moved => {
                     return Err(OwnershipError::UseAfterMove {
                         value: src_id,
+                        location: src.location,
                     });
                 }
-                ValueState::Copied if self.is_copyable(&self.get_type(src)) => {
-                    return Err(OwnershipError::InvalidMove {
+                ValueState::Dropped => {
+                    return Err(OwnershipError::UseAfterDrop {
                         value: src_id,
-                        reason: "value is Copy",
+                        location: src.location,
                     });
                 }
-                _ => {}
+                ValueState::Owned => {
+                    // 正常 Move：标记原值已移动
+                    self.state.insert(src_id, ValueState::Moved);
+                }
             }
+        } else {
+            // 首次赋值
+            self.state.insert(src_id, ValueState::Owned);
         }
 
-        // 转移所有权
-        self.state.insert(src_id, ValueState::Moved);
-        self.owner_of.insert(self.get_value_id(dst)?, src_id);
+        // 目标值状态
+        self.state.insert(self.get_value_id(dst)?, ValueState::Owned);
 
         Ok(())
     }
 
-    fn analyze_copy(&mut self, dst: &Operand, src: &Operand) -> Result<(), OwnershipError> {
-        let src_id = self.get_value_id(src)?;
-        let src_ty = self.get_type(src);
+    /// 分析 Drop
+    fn analyze_drop(&mut self, value: &Operand) -> Result<(), OwnershipError> {
+        let value_id = self.get_value_id(value)?;
 
-        // 检查是否是 Copy 类型
-        if !self.is_copyable(&src_ty) {
-            return Err(OwnershipError::NonCopyable {
-                value: src_id,
-                size: self.type_size(&src_ty),
-                threshold: COPY_THRESHOLD,
-            });
+        match self.state.get(&value_id) {
+            Some(ValueState::Moved) => {
+                return Err(OwnershipError::DropMovedValue {
+                    value: value_id,
+                });
+            }
+            Some(ValueState::Dropped) => {
+                return Err(OwnershipError::DoubleDrop {
+                    value: value_id,
+                });
+            }
+            Some(ValueState::Owned) => {
+                self.state.insert(value_id, ValueState::Dropped);
+            }
+            None => {
+                // 未跟踪的值，忽略
+            }
         }
 
-        // 复制后双方都可用
-        self.state.insert(src_id, ValueState::Copied);
-        self.state.insert(self.get_value_id(dst)?, ValueState::Copied);
+        Ok(())
+    }
 
+    /// 检查双重释放
+    fn check_double_drop(&self) -> Result<(), OwnershipError> {
+        for (value, state) in &self.state {
+            if *state == ValueState::Dropped {
+                // 检查是否有其他引用指向此值
+                // ...
+            }
+        }
         Ok(())
     }
 }
@@ -194,80 +190,80 @@ impl OwnershipAnalyzer {
 ## 错误类型
 
 ```rust
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OwnershipError {
+    /// 使用已移动的值
     UseAfterMove {
         value: ValueId,
+        location: Location,
     },
-    InvalidMove {
+    /// 使用已释放的值
+    UseAfterDrop {
         value: ValueId,
-        reason: String,
+        location: Location,
     },
-    NonCopyable {
+    /// 释放已移动的值
+    DropMovedValue {
         value: ValueId,
-        size: usize,
-        threshold: usize,
     },
+    /// 双重释放
     DoubleDrop {
-        value: ValueId,
-    },
-    MoveOfCopyType {
         value: ValueId,
     },
 }
 ```
 
-## 与 RFC-009 对照
+## 与 RFC-009 v7 对照
 
-| RFC-009 设计 | 实现状态 |
-|-------------|---------|
-| Move 语义（零拷贝） | ✅ 已实现 |
-| Copy 语义（< 1KB） | ✅ 已实现，阈值 1024 字节 |
-| Drop 规则（RAII） | ✅ 已实现 |
-| 禁止返回借用 | ✅ 见借用检查器 |
-| 禁止结构体含借用 | ✅ 见类型检查器 |
+| RFC-009 v7 设计 | 实现状态 |
+|----------------|---------|
+| Move 语义（赋值即转移） | ✅ 待实现 |
+| 零拷贝（不自动复制） | ✅ 待实现 |
+| Drop 规则（RAII） | ✅ 待实现 |
+| clone() 显式复制 | ❌ 见 task-05-04 |
 
 ## 验收测试
 
 ```yaoxiang
-# test_ownership.yx
+# test_move.yx
 
-# === Move 测试 ===
-data: List[Int] = [1, 2, 3]
-new_owner = data
-# assert(data.length)  # 应该编译错误
-
-# === Copy 测试（小对象）===
+# === Move 测试（基础类型）===
 x: Int = 42
 y = x
-assert(x == 42)
-assert(y == 42)
+# assert(x == 42)  # 编译错误！x 已被移动
 
-type Point = Point(x: Int, y: Int)  # 16 字节 < 1KB
+# === Move 测试（结构体）===
+type Point = Point(x: Int, y: Int)
 p: Point = Point(1, 2)
 q = p
-assert(p.x == 1)
-assert(q.x == 1)
+# print(p.x)       # 编译错误！p 已被移动
 
-# === Copy 测试（大对象，应为 Move）===
-# type BigData = BigData(buffer: Bytes[2000])
-# data = BigData(...)
-# new_owner = data  # 移动，不是复制
-# # data 不再可用
+# === Move 测试（函数参数）===
+process: (List[Int]) -> Int = (input) => input[0]
+data = [1, 2, 3]
+result = process(data)
+# print(data.length)  # 编译错误！data 已移动
+
+# === clone() 测试（需要保留原值时）===
+x: Int = 42
+y = x.clone()    # 必须显式 clone()
+assert(x == 42)  # ✅ x 仍然可用
+assert(y == 42)
 
 # === Drop 测试 ===
-count: Int = 0
-with_drop: () -> Void = () => {
-    temp: Int = count + 1
-    # temp 在这里释放
+drop_count: Int = 0
+create_and_drop: () -> Void = () => {
+    temp: List[Int] = [1, 2, 3]
+    # temp 在这里自动释放
 }
-with_drop()
+create_and_drop()
+# 资源已正确释放
 
-print("Ownership tests passed!")
+print("Move semantics tests passed!")
 ```
 
 ## 相关文件
 
-- **src/core/ownership/move.rs**: 所有权转移检查
+- **src/core/ownership/move.rs**: Move 语义检查
 - **src/core/ownership/drop.rs**: Drop 顺序分析
-- **src/middle/escape_analysis/mod.rs**: 逃逸分析（判断大小）
+- **src/core/ownership/mod.rs**: 所有权检查器主模块
