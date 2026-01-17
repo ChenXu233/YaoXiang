@@ -2,6 +2,7 @@
 
 pub mod cache;
 pub mod diagnostic;
+pub mod logger;
 pub mod span;
 
 /// Spanned value wrapper
