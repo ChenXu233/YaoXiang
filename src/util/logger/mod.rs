@@ -1,11 +1,11 @@
 //! Logger module for YaoXiang
 //!
-//! Provides structured logging with customizable formatters and output targets.
+//! Go-style simple logging: `[LEVEL] message`
 //!
 //! # Usage
 //!
 //! ```rust
-//! use yaoxiang_util::logger;
+//! use yaoxiang::util::logger;
 //!
 //! logger::init();
 //! tracing::info!("Hello, {}", "world");
@@ -38,14 +38,22 @@ pub fn init() {
     init_with_level(LogLevel::Info);
 }
 
-/// Initialize logger with custom level
+/// Initialize logger with custom level (Go style: `[LEVEL] message`)
 pub fn init_with_level(level: LogLevel) {
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
-    let subscriber = tracing_subscriber::fmt::layer().with_filter(filter);
-    Registry::default().with(subscriber).init();
+
+    // Go 风格：只显示级别和消息，无时间戳、无模块路径
+    let layer = tracing_subscriber::fmt::layer()
+        .without_time()
+        .with_target(false)
+        .with_level(false)
+        .compact()
+        .with_filter(filter);
+
+    Registry::default().with(layer).init();
 }
 
-/// Initialize logger for CLI use (INFO level, pretty format)
+/// Initialize logger for CLI use (INFO level)
 pub fn init_cli() {
     init_with_level(LogLevel::Info);
 }
