@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.2.2"
+version = "0.2.9"
 edition = "2021"
 rust-version = "1.82"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -18,6 +18,12 @@ path = "src/lib.rs"
 [[bin]]
 name = "yaoxiang"
 path = "src/main.rs"
+test = false
+
+# cargo xtask - for project maintenance scripts
+[[bin]]
+name = "cargo-xtask"
+path = "xtasks/main.rs"
 test = false
 
 [dev-dependencies]
@@ -55,7 +61,7 @@ tempfile = "3"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = "1.0.149"
 ron = "0.12.0"
 
 # 错误处理
