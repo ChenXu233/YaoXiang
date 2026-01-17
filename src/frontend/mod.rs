@@ -4,8 +4,7 @@
 //! The frontend transforms source code into an intermediate representation (IR).
 
 use crate::middle;
-use crate::util::i18n::{t, t_simple, MSG};
-use crate::util::logger::get_lang;
+use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 use tracing::debug;
 
@@ -32,23 +31,17 @@ impl Compiler {
         &mut self,
         source: &str,
     ) -> Result<middle::ModuleIR, CompileError> {
-        let lang = get_lang();
         let source_len = source.len();
-        debug!("{}", t(MSG::CompilingSource, lang, Some(&[&source_len])));
+        debug!("{}", t_cur(MSG::CompilingSource, Some(&[&source_len])));
         // Lexical analysis
         let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
-        debug!("Tokenized into {} tokens", tokens.len()); // Internal message
 
         // Parsing
-        debug!("{}", t_simple(MSG::ParserStart, lang));
         let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
-        debug!("Parsing successful, got {} statements", ast.items.len()); // Internal message
 
         // Type checking
-        debug!("{}", t_simple(MSG::TypeCheckStart, lang));
         let module = typecheck::check_module(&ast, Some(&mut self.type_env))
             .map_err(|e| CompileError::TypeError(format!("{:?}", e)))?;
-        debug!("{}", t_simple(MSG::TypeCheckComplete, lang));
 
         Ok(module)
     }

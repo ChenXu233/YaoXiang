@@ -9,6 +9,7 @@ use super::infer::TypeInferrer;
 use super::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::middle;
 use crate::util::span::Span;
+use crate::util::i18n::{t_cur, MSG};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -166,11 +167,7 @@ impl<'a> TypeChecker<'a> {
                 params,
                 body: (stmts, expr),
             } => {
-                debug!("check_stmt: processing Fn for '{}'", name);
-                debug!("type_annotation is_some: {}", type_annotation.is_some());
-                if let Some(ann) = type_annotation {
-                    debug!("type_annotation: {:?}", ann);
-                }
+                debug!("{}", t_cur(MSG::TypeCheckProcessFn, Some(&[&name])));
 
                 // 1. Extract params and return type from annotation if available
                 let (annotated_params, annotated_return) = if let Some(ast::Type::Fn {
@@ -264,10 +261,7 @@ impl<'a> TypeChecker<'a> {
                 };
 
                 // Pass the constrained param_types to check_fn_def so inner scope matches outer signature
-                eprintln!(
-                    "[DEBUG] Calling check_fn_def from check_stmt. annotated_params.is_some(): {}",
-                    annotated_params.is_some()
-                );
+                debug!("{}", t_cur(MSG::TypeCheckCallFnDef, Some(&[&annotated_params.is_some()])));
                 self.check_fn_def(
                     name,
                     params,
@@ -510,14 +504,10 @@ impl<'a> TypeChecker<'a> {
 
         // 参数类型推断规则：检查未类型化参数
         // 如果没有外部类型标注，且参数本身没有类型标注，则报错（不支持从使用推断参数类型）
-        debug!(
-            "is_annotated: {}, untyped_params len: {}",
-            is_annotated,
-            untyped_params.len()
-        );
+        debug!("{}", t_cur(MSG::TypeCheckAnnotated, Some(&[&format!("{}", is_annotated), &format!("{}", untyped_params.len())])));
         if !is_annotated {
             for (param_name, param_idx, _param_ty) in &untyped_params {
-                debug!("Adding error for param: {}", param_name);
+                debug!("{}", t_cur(MSG::TypeCheckAddError, Some(&[param_name])));
                 self.add_error(TypeError::CannotInferParamType {
                     name: param_name.clone(),
                     span: params[*param_idx].span,

@@ -20,8 +20,7 @@ pub use types::*;
 
 use super::parser::ast;
 use crate::middle;
-use crate::util::i18n::{t, t_simple, MSG};
-use crate::util::logger::get_lang;
+use crate::util::i18n::{t_cur, t_cur_simple, MSG};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -120,9 +119,8 @@ pub fn check_module(
     ast: &ast::Module,
     env: Option<&mut TypeEnvironment>,
 ) -> Result<middle::ModuleIR, Vec<TypeError>> {
-    let lang = get_lang();
     let item_count = ast.items.len();
-    debug!("{}", t(MSG::TypeCheckStart, lang, Some(&[&item_count])));
+    debug!("{}", t_cur(MSG::TypeCheckStart, Some(&[&item_count])));
     let env = env.unwrap_or_else(|| {
         let mut new_env = TypeEnvironment::new();
         // 添加内置类型
@@ -155,7 +153,7 @@ pub fn check_module(
     if env.has_errors() {
         Err(env.get_errors().to_vec())
     } else {
-        debug!("{}", t_simple(MSG::TypeCheckComplete, lang));
+        debug!("{}", t_cur_simple(MSG::TypeCheckComplete));
         result
     }
 }

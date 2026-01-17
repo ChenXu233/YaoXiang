@@ -3,8 +3,7 @@
 pub mod tokens;
 
 use tokens::*;
-use crate::util::i18n::{t, MSG};
-use crate::util::logger::get_lang;
+use crate::util::i18n::{t_cur, MSG};
 use tracing::debug;
 
 pub use tokenizer::tokenize;
@@ -32,9 +31,8 @@ mod tokenizer {
     use std::str::Chars;
 
     pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
-        let lang = get_lang();
         let source_len = source.len();
-        debug!("{}", t(MSG::LexStart, lang, Some(&[&source_len])));
+        debug!("{}", t_cur(MSG::LexStart, Some(&[&source_len])));
         let mut lexer = Lexer::new(source);
         let mut tokens = Vec::new();
 
@@ -54,10 +52,7 @@ mod tokenizer {
                 literal: None,
             });
             let token_count = tokens.len();
-            debug!(
-                "{}",
-                t(MSG::LexCompleteWithTokens, lang, Some(&[&token_count]))
-            );
+            debug!("{}", t_cur(MSG::LexCompleteWithTokens, Some(&[&token_count])));
             Ok(tokens)
         }
     }

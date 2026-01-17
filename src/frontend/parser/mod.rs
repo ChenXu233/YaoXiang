@@ -15,8 +15,7 @@ pub use state::{ParserState, BP_HIGHEST, BP_LOWEST};
 
 use crate::frontend::lexer::tokens::*;
 use crate::util::span::Span;
-use crate::util::i18n::{t, MSG};
-use crate::util::logger::get_lang;
+use crate::util::i18n::{t_cur, MSG};
 use ast::*;
 use tracing::debug;
 
@@ -35,9 +34,8 @@ use tracing::debug;
 /// }
 /// ```
 pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
-    let lang = get_lang();
     let token_count = tokens.len();
-    debug!("{}", t(MSG::ParserStart, lang, Some(&[&token_count])));
+    debug!("{}", t_cur(MSG::ParserStart, Some(&[&token_count])));
     let mut state = ParserState::new(tokens);
     let mut items = Vec::new();
 
@@ -97,10 +95,7 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
         };
 
         let item_count = items.len();
-        debug!(
-            "{}",
-            t(MSG::ParserCompleteWithItems, lang, Some(&[&item_count]))
-        );
+        debug!("{}", t_cur(MSG::ParserCompleteWithItems, Some(&[&item_count])));
         Ok(Module { items, span })
     }
 }
