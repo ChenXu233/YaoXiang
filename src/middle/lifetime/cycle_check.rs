@@ -70,13 +70,8 @@ impl CycleChecker {
         // 2. 构建跨 spawn 引用图
         let graph = self.build_spawn_graph();
 
-        // 3. 检测环
-        if self.has_cycle(&graph) {
-            self.errors.push(OwnershipError::CrossSpawnCycle {
-                details: "检测到跨 spawn 循环引用".to_string(),
-                span: self.find_cycle_span(&graph),
-            });
-        }
+        // 3. 检测环（循环路径在 detect_cycle_dfs 中收集）
+        self.has_cycle(&graph);
 
         &self.errors
     }
@@ -129,15 +124,16 @@ impl CycleChecker {
 
         // 第三遍：通过 Move 指令建立持有边
         // 如果 Move 的 src 来自另一个 spawn 的结果，则 dst 持有 src
-        for (dst, (src, _)) in &self.value_defs {
+        for (dst, (src, move_span)) in &self.value_defs {
             if let Some(producer) = self.find_spawn_result(src) {
                 // dst 持有 producer（通过 Move producer 到 dst）
                 // 只有当 dst 是 spawn 结果时才建立持有边
-                if self.spawn_results.contains_key(dst) {
+                // 排除自引用：dst 和 producer 相同
+                if self.spawn_results.contains_key(dst) && dst != &producer {
                     self.spawn_ref_edges.push(SpawnRefEdge {
                         spawn_result: dst.clone(),
                         ref_target: producer,
-                        span: (0, 0), // Move 指令的位置会被记录在 value_defs 中
+                        span: *move_span, // 使用 Move 指令的真实位置
                     });
                 }
             }
@@ -197,10 +193,11 @@ impl CycleChecker {
     fn has_cycle(&self, graph: &HashMap<Operand, HashSet<Operand>>) -> bool {
         let mut visited = HashSet::new();
         let mut recursion_stack = HashSet::new();
+        let mut path = Vec::new();
 
         for node in graph.keys() {
             if !visited.contains(node) {
-                if self.detect_cycle_dfs(node, graph, &mut visited, &mut recursion_stack, &mut Vec::new()) {
+                if self.detect_cycle_dfs(node, graph, &mut visited, &mut recursion_stack, &mut path) {
                     return true;
                 }
             }
@@ -210,40 +207,77 @@ impl CycleChecker {
     }
 
     fn detect_cycle_dfs(
-        &self,
+        &mut self,
         node: &Operand,
         graph: &HashMap<Operand, HashSet<Operand>>,
         visited: &mut HashSet<Operand>,
         recursion_stack: &mut HashSet<Operand>,
-        _path: &mut Vec<Operand>,
+        path: &mut Vec<Operand>,
     ) -> bool {
         visited.insert(node.clone());
         recursion_stack.insert(node.clone());
+        path.push(node.clone());
 
         if let Some(edges) = graph.get(node) {
             for neighbor in edges {
                 if !visited.contains(neighbor) {
-                    if self.detect_cycle_dfs(neighbor, graph, visited, recursion_stack, _path) {
+                    if self.detect_cycle_dfs(neighbor, graph, visited, recursion_stack, path) {
                         return true;
                     }
                 } else if recursion_stack.contains(neighbor) {
-                    // 找到环！
+                    // 找到环！path 中从 neighbor 到末尾就是环
+                    self.errors.push(OwnershipError::CrossSpawnCycle {
+                        details: self.format_cycle_path(path, neighbor),
+                        span: self.find_cycle_span(graph, neighbor),
+                    });
                     return true;
                 }
             }
         }
 
+        path.pop();
         recursion_stack.remove(node);
         false
     }
 
-    /// 找到环的位置
-    fn find_cycle_span(&self, graph: &HashMap<Operand, HashSet<Operand>>) -> (usize, usize) {
-        // 简化：返回第一个 spawn 的位置
-        for node in graph.keys() {
-            if let Some(span) = self.spawn_results.get(node) {
-                return *span;
-            }
+    /// 格式化循环路径
+    fn format_cycle_path(&self, path: &Vec<Operand>, cycle_start: &Operand) -> String {
+        // 找到环的起始位置
+        let start_idx = path.iter().position(|p| p == cycle_start).unwrap_or(0);
+        let cycle_nodes = &path[start_idx..];
+
+        if cycle_nodes.is_empty() {
+            return "检测到跨 spawn 循环引用".to_string();
+        }
+
+        let cycle_strs: Vec<String> = cycle_nodes
+            .iter()
+            .map(|p| self.operand_to_string(p))
+            .collect();
+
+        format!("循环引用: {} → ... → {} → (回到起点)",
+            cycle_strs.join(" → "),
+            cycle_strs.first().unwrap_or(&"?".to_string()))
+    }
+
+    /// Operand 转字符串
+    fn operand_to_string(&self, op: &Operand) -> String {
+        match op {
+            Operand::Local(idx) => format!("local_{}", idx),
+            Operand::Arg(idx) => format!("arg_{}", idx),
+            Operand::Temp(idx) => format!("temp_{}", idx),
+            Operand::Global(idx) => format!("global_{}", idx),
+            Operand::Const(c) => format!("{:?}", c),
+            Operand::Label(idx) => format!("label_{}", idx),
+            Operand::Register(idx) => format!("reg_{}", idx),
+        }
+    }
+
+    /// 找到环的位置（使用 cycle_start 作为参考点）
+    fn find_cycle_span(&self, _graph: &HashMap<Operand, HashSet<Operand>>, cycle_start: &Operand) -> (usize, usize) {
+        // 返回环起始点的位置
+        if let Some(span) = self.spawn_results.get(cycle_start) {
+            return *span;
         }
         (0, 0)
     }
