@@ -103,6 +103,24 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 非 Send 类型用于跨线程操作
+    NotSend {
+        /// 值标识
+        value: String,
+        /// 原因说明
+        reason: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// 非 Sync 类型用于跨线程共享
+    NotSync {
+        /// 值标识
+        value: String,
+        /// 原因说明
+        reason: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -176,6 +194,28 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "CloneDroppedValue: cannot clone value '{}' that has been dropped at {:?}",
                     value, location
+                )
+            }
+            OwnershipError::NotSend {
+                value,
+                reason,
+                location,
+            } => {
+                write!(
+                    f,
+                    "NotSend: value '{}' cannot be sent between threads: {} at {:?}",
+                    value, reason, location
+                )
+            }
+            OwnershipError::NotSync {
+                value,
+                reason,
+                location,
+            } => {
+                write!(
+                    f,
+                    "NotSync: value '{}' cannot be shared between threads: {} at {:?}",
+                    value, reason, location
                 )
             }
         }
