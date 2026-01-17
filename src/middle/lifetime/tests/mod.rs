@@ -1,7 +1,10 @@
 //! Lifetime 模块单元测试
 //!
-//! 测试生命周期分析和引用计数插入功能
-#![allow(unused_imports)]
+//! 测试生命周期分析和所有权检查功能
+
+mod move_semantics;
+mod drop_semantics;
+
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::lifetime::{OwnershipAnalysisResult, OwnershipAnalyzer};
@@ -49,15 +52,6 @@ fn test_lifetime_analysis() {
     println!("Drop points: {:?}", result.drop_points);
 
     // 至少应该有一些分析结果
-    // result.ownership_graph.edges is private, so we can't check it directly if it's not pub
-    // But OwnershipAnalysisResult fields are pub in mod.rs
-    // pub struct OwnershipAnalysisResult {
-    //    pub ownership_graph: OwnershipGraph,
-    //    pub definitions: HashMap<Operand, Definition>,
-    //    pub drop_points: HashMap<usize, Vec<Operand>>,
-    // }
-    // OwnershipGraph fields are private though.
-
     assert!(result.definitions.len() > 0 || result.drop_points.len() > 0);
 }
 

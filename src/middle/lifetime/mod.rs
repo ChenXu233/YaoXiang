@@ -1,14 +1,29 @@
 //! 所有权分析与生命周期管理
 //!
-//! 实现 Rust 风格的所有权模型，确保内存正确释放而无需 GC。
+//! 实现 Move 语义检查和 Drop 语义检查，确保内存正确释放而无需 GC。
 //! 设计原则：
 //! 1. 每个值有一个所有者
 //! 2. 当所有者离开作用域时，值被释放
 //! 3. 所有权可以转移（Move），但不能复制（除非使用 Copy）
+//!
+//! # 模块结构
+//!
+//! - `error.rs`: 所有权错误类型定义
+//! - `move.rs`: Move 语义检查（UseAfterMove 检测）
+//! - `drop.rs`: Drop 语义检查（UseAfterDrop、DropMovedValue、DoubleDrop 检测）
 
 use crate::middle::ir::{FunctionIR, Instruction, Operand};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+
+// 子模块
+mod error;
+mod move_semantics;
+mod drop_semantics;
+
+pub use error::*;
+pub use move_semantics::*;
+pub use drop_semantics::*;
 
 /// 所有权分析结果
 #[derive(Debug, Clone)]
@@ -67,12 +82,53 @@ impl Lifetime {
     }
 }
 
-/// 所有权分析器
+/// 统一的所有权检查器
 ///
-/// 分析代码中的所有权关系，确定：
-/// 1. 每个变量的所有者
-/// 2. 变量的生命周期
-/// 3. 需要释放的变量及其时机
+/// 同时运行 Move 检查和 Drop 检查，返回所有错误。
+#[derive(Debug)]
+pub struct OwnershipChecker {
+    move_checker: MoveChecker,
+    drop_checker: DropChecker,
+}
+
+impl OwnershipChecker {
+    /// 创建新的所有权检查器
+    pub fn new() -> Self {
+        Self {
+            move_checker: MoveChecker::new(),
+            drop_checker: DropChecker::new(),
+        }
+    }
+
+    /// 检查函数的所有权语义
+    pub fn check_function(&mut self, func: &FunctionIR) -> Vec<OwnershipError> {
+        let move_errors = self.move_checker.check_function(func);
+        let drop_errors = self.drop_checker.check_function(func);
+
+        // 合并错误
+        let mut all_errors = move_errors;
+        all_errors.extend(drop_errors);
+        all_errors
+    }
+
+    /// 获取 Move 检查器的错误
+    pub fn move_errors(&self) -> &[OwnershipError] {
+        &self.move_checker.errors()
+    }
+
+    /// 获取 Drop 检查器的错误
+    pub fn drop_errors(&self) -> &[OwnershipError] {
+        &self.drop_checker.errors()
+    }
+}
+
+impl Default for OwnershipChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 所有权分析器（保留原有实现，用于引用计数插入）
 #[derive(Debug)]
 pub struct OwnershipAnalyzer {
     /// 所有权图
