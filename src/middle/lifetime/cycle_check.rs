@@ -57,7 +57,10 @@ struct SpawnParamEdge {
 
 impl CycleChecker {
     /// 检查函数的跨 spawn 循环引用
-    pub fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError] {
+    pub fn check_function(
+        &mut self,
+        func: &FunctionIR,
+    ) -> &[OwnershipError] {
         self.errors.clear();
         self.spawn_ref_edges.clear();
         self.spawn_param_edges.clear();
@@ -77,7 +80,10 @@ impl CycleChecker {
     }
 
     /// 收集 spawn 的参数和返回值信息
-    fn collect_spawn_edges(&mut self, func: &FunctionIR) {
+    fn collect_spawn_edges(
+        &mut self,
+        func: &FunctionIR,
+    ) {
         // 第一遍：收集所有 spawn 信息和 Move 定义
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
@@ -87,10 +93,12 @@ impl CycleChecker {
                         args: _,
                         result,
                     } => {
-                        self.spawn_results.insert(result.clone(), (block_idx, instr_idx));
+                        self.spawn_results
+                            .insert(result.clone(), (block_idx, instr_idx));
                     }
                     Instruction::Move { dst, src } => {
-                        self.value_defs.insert(dst.clone(), (src.clone(), (block_idx, instr_idx)));
+                        self.value_defs
+                            .insert(dst.clone(), (src.clone(), (block_idx, instr_idx)));
                     }
                     _ => {}
                 }
@@ -100,24 +108,22 @@ impl CycleChecker {
         // 第二遍：建立跨 spawn 边
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
-                match instr {
-                    Instruction::Spawn {
-                        func: _,
-                        args,
-                        result,
-                    } => {
-                        // 参数边：arg 来自另一个 spawn 的结果
-                        for arg in args {
-                            if let Some(producer) = self.find_spawn_result(arg) {
-                                self.spawn_param_edges.push(SpawnParamEdge {
-                                    consumer_spawn: result.clone(),
-                                    producer_spawn: producer,
-                                    span: (block_idx, instr_idx),
-                                });
-                            }
+                if let Instruction::Spawn {
+                    func: _,
+                    args,
+                    result,
+                } = instr
+                {
+                    // 参数边：arg 来自另一个 spawn 的结果
+                    for arg in args {
+                        if let Some(producer) = self.find_spawn_result(arg) {
+                            self.spawn_param_edges.push(SpawnParamEdge {
+                                consumer_spawn: result.clone(),
+                                producer_spawn: producer,
+                                span: (block_idx, instr_idx),
+                            });
                         }
                     }
-                    _ => {}
                 }
             }
         }
@@ -141,7 +147,10 @@ impl CycleChecker {
     }
 
     /// 查找某个值是否来自某个 spawn 的返回值
-    fn find_spawn_result(&self, val: &Operand) -> Option<Operand> {
+    fn find_spawn_result(
+        &self,
+        val: &Operand,
+    ) -> Option<Operand> {
         if self.spawn_results.contains_key(val) {
             return Some(val.clone());
         }
@@ -190,16 +199,19 @@ impl CycleChecker {
     }
 
     /// 检测是否有环（简化版：只检测 spawn 参数/返回值之间）
-    fn has_cycle(&mut self, graph: &HashMap<Operand, HashSet<Operand>>) -> bool {
+    fn has_cycle(
+        &mut self,
+        graph: &HashMap<Operand, HashSet<Operand>>,
+    ) -> bool {
         let mut visited = HashSet::new();
         let mut recursion_stack = HashSet::new();
         let mut path = Vec::new();
 
         for node in graph.keys() {
-            if !visited.contains(node) {
-                if self.detect_cycle_dfs(node, graph, &mut visited, &mut recursion_stack, &mut path) {
-                    return true;
-                }
+            if !visited.contains(node)
+                && self.detect_cycle_dfs(node, graph, &mut visited, &mut recursion_stack, &mut path)
+            {
+                return true;
             }
         }
 
@@ -241,7 +253,11 @@ impl CycleChecker {
     }
 
     /// 格式化循环路径
-    fn format_cycle_path(&self, path: &Vec<Operand>, cycle_start: &Operand) -> String {
+    fn format_cycle_path(
+        &self,
+        path: &[Operand],
+        cycle_start: &Operand,
+    ) -> String {
         // 找到环的起始位置
         let start_idx = path.iter().position(|p| p == cycle_start).unwrap_or(0);
         let cycle_nodes = &path[start_idx..];
@@ -255,13 +271,18 @@ impl CycleChecker {
             .map(|p| self.operand_to_string(p))
             .collect();
 
-        format!("循环引用: {} → ... → {} → (回到起点)",
+        format!(
+            "循环引用: {} → ... → {} → (回到起点)",
             cycle_strs.join(" → "),
-            cycle_strs.first().unwrap_or(&"?".to_string()))
+            cycle_strs.first().unwrap_or(&"?".to_string())
+        )
     }
 
     /// Operand 转字符串
-    fn operand_to_string(&self, op: &Operand) -> String {
+    fn operand_to_string(
+        &self,
+        op: &Operand,
+    ) -> String {
         match op {
             Operand::Local(idx) => format!("local_{}", idx),
             Operand::Arg(idx) => format!("arg_{}", idx),
@@ -274,7 +295,11 @@ impl CycleChecker {
     }
 
     /// 找到环的位置（使用 cycle_start 作为参考点）
-    fn find_cycle_span(&self, _graph: &HashMap<Operand, HashSet<Operand>>, cycle_start: &Operand) -> (usize, usize) {
+    fn find_cycle_span(
+        &self,
+        _graph: &HashMap<Operand, HashSet<Operand>>,
+        cycle_start: &Operand,
+    ) -> (usize, usize) {
         // 返回环起始点的位置
         if let Some(span) = self.spawn_results.get(cycle_start) {
             return *span;

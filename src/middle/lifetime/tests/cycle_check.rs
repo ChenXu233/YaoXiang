@@ -12,20 +12,22 @@ mod tests {
         args: Vec<Operand>,
         result: Operand,
     ) -> Instruction {
-        Instruction::Spawn {
-            func,
-            args,
-            result,
-        }
+        Instruction::Spawn { func, args, result }
     }
 
     /// 创建一个 Move 指令用于追踪
-    fn make_move_instr(dst: Operand, src: Operand) -> Instruction {
+    fn make_move_instr(
+        dst: Operand,
+        src: Operand,
+    ) -> Instruction {
         Instruction::Move { dst, src }
     }
 
     /// 创建一个 ArcNew 指令（ref）
-    fn make_arc_new_instr(dst: Operand, src: Operand) -> Instruction {
+    fn make_arc_new_instr(
+        dst: Operand,
+        src: Operand,
+    ) -> Instruction {
         Instruction::ArcNew { dst, src }
     }
 
@@ -57,7 +59,11 @@ mod tests {
         // a 不持有 b，b 持有 a（单向，不是环）
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(2)), // a = spawn(task_a)
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(2)], Operand::Local(3)), // b = spawn(task_b(ref a))
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(2)],
+                Operand::Local(3),
+            ), // b = spawn(task_b(ref a))
         ];
 
         let errors = checker.check_function(&func);
@@ -75,9 +81,21 @@ mod tests {
         // 多个 spawn 都 ref shared，但 shared 不 ref 它们（扇出，不是环）
         func.blocks[0].instructions = vec![
             make_arc_new_instr(Operand::Local(0), Operand::Local(10)), // shared = ref config
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(0)], Operand::Local(2)),
-            make_spawn_instr(Operand::Local(3), vec![Operand::Local(0)], Operand::Local(4)),
-            make_spawn_instr(Operand::Local(5), vec![Operand::Local(0)], Operand::Local(6)),
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(0)],
+                Operand::Local(2),
+            ),
+            make_spawn_instr(
+                Operand::Local(3),
+                vec![Operand::Local(0)],
+                Operand::Local(4),
+            ),
+            make_spawn_instr(
+                Operand::Local(5),
+                vec![Operand::Local(0)],
+                Operand::Local(6),
+            ),
         ];
 
         let errors = checker.check_function(&func);
@@ -97,7 +115,11 @@ mod tests {
             // a = spawn(task_a())
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(2)),
             // b = spawn(task_b(ref a))
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(2)], Operand::Local(3)),
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(2)],
+                Operand::Local(3),
+            ),
             // a 持有 b 的 ref（通过 Move）
             make_move_instr(Operand::Local(2), Operand::Local(3)),
         ];
@@ -105,9 +127,9 @@ mod tests {
         let errors = checker.check_function(&func);
         assert!(!errors.is_empty(), "应该检测到循环：a 和 b 互相 ref");
 
-        let has_cycle_error = errors.iter().any(|e| {
-            matches!(e, OwnershipError::CrossSpawnCycle { .. })
-        });
+        let has_cycle_error = errors
+            .iter()
+            .any(|e| matches!(e, OwnershipError::CrossSpawnCycle { .. }));
         assert!(has_cycle_error, "应该有 CrossSpawnCycle 错误");
     }
 
@@ -123,8 +145,16 @@ mod tests {
         // c → b, b → a, a → c，形成环
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(3)), // a = spawn(task_a)
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(3)], Operand::Local(4)), // b = spawn(task_b(ref a))
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(4)], Operand::Local(5)), // c = spawn(task_c(ref b))
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(3)],
+                Operand::Local(4),
+            ), // b = spawn(task_b(ref a))
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(4)],
+                Operand::Local(5),
+            ), // c = spawn(task_c(ref b))
             // c 持有 b 的 ref
             make_move_instr(Operand::Local(5), Operand::Local(4)),
             // a 持有 c 的 ref
@@ -132,9 +162,9 @@ mod tests {
         ];
 
         let errors = checker.check_function(&func);
-        let has_cycle_error = errors.iter().any(|e| {
-            matches!(e, OwnershipError::CrossSpawnCycle { .. })
-        });
+        let has_cycle_error = errors
+            .iter()
+            .any(|e| matches!(e, OwnershipError::CrossSpawnCycle { .. }));
         assert!(has_cycle_error, "应该检测到三节点环");
     }
 
@@ -150,8 +180,16 @@ mod tests {
         // a → b → c，单向链，不是环
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(3)),
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(3)], Operand::Local(4)),
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(4)], Operand::Local(5)),
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(3)],
+                Operand::Local(4),
+            ),
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(4)],
+                Operand::Local(5),
+            ),
         ];
 
         let errors = checker.check_function(&func);
@@ -174,9 +212,11 @@ mod tests {
         let mut checker = CycleChecker::new();
         let mut func = make_empty_func();
 
-        func.blocks[0].instructions = vec![
-            make_spawn_instr(Operand::Local(0), vec![], Operand::Local(1)),
-        ];
+        func.blocks[0].instructions = vec![make_spawn_instr(
+            Operand::Local(0),
+            vec![],
+            Operand::Local(1),
+        )];
 
         let errors = checker.check_function(&func);
         assert!(errors.is_empty(), "单个 spawn 不可能形成环");
@@ -197,9 +237,17 @@ mod tests {
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(3)),
             make_move_instr(Operand::Local(1), Operand::Local(3)), // tmp = Move a
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(1)], Operand::Local(4)), // b = spawn(task_b(ref tmp))
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(1)],
+                Operand::Local(4),
+            ), // b = spawn(task_b(ref tmp))
             make_move_instr(Operand::Local(5), Operand::Local(3)), // tmp2 = Move a
-            make_spawn_instr(Operand::Local(6), vec![Operand::Local(5)], Operand::Local(7)), // c = spawn(task_c(ref tmp2))
+            make_spawn_instr(
+                Operand::Local(6),
+                vec![Operand::Local(5)],
+                Operand::Local(7),
+            ), // c = spawn(task_c(ref tmp2))
         ];
 
         let errors = checker.check_function(&func);
@@ -219,9 +267,21 @@ mod tests {
         // a 不持有 b、c、d（扇入，不是环）
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(5)), // a
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(5)], Operand::Local(6)), // b
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(5)], Operand::Local(7)), // c
-            make_spawn_instr(Operand::Local(3), vec![Operand::Local(5)], Operand::Local(8)), // d
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(5)],
+                Operand::Local(6),
+            ), // b
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(5)],
+                Operand::Local(7),
+            ), // c
+            make_spawn_instr(
+                Operand::Local(3),
+                vec![Operand::Local(5)],
+                Operand::Local(8),
+            ), // d
         ];
 
         let errors = checker.check_function(&func);
@@ -258,8 +318,16 @@ mod tests {
         // a → c，但 c 不持有 a（环被中断）
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(4)), // a
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(4)], Operand::Local(5)), // b
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(5)], Operand::Local(6)), // c
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(4)],
+                Operand::Local(5),
+            ), // b
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(5)],
+                Operand::Local(6),
+            ), // c
             // c 的返回值是 Local(6)，但 Move 指向 Local(10) 不是 spawn 结果
             make_move_instr(Operand::Local(4), Operand::Local(10)), // a 持有非 spawn 值
         ];
@@ -281,17 +349,29 @@ mod tests {
         // a → d, d → c, c → b, b → a，形成环
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(5)), // a
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(5)], Operand::Local(6)), // b
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(6)], Operand::Local(7)), // c
-            make_spawn_instr(Operand::Local(3), vec![Operand::Local(7)], Operand::Local(8)), // d
-            make_move_instr(Operand::Local(5), Operand::Local(8)), // a 持有 d
-            make_move_instr(Operand::Local(7), Operand::Local(8)), // c 持有 d
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(5)],
+                Operand::Local(6),
+            ), // b
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(6)],
+                Operand::Local(7),
+            ), // c
+            make_spawn_instr(
+                Operand::Local(3),
+                vec![Operand::Local(7)],
+                Operand::Local(8),
+            ), // d
+            make_move_instr(Operand::Local(5), Operand::Local(8)),          // a 持有 d
+            make_move_instr(Operand::Local(7), Operand::Local(8)),          // c 持有 d
         ];
 
         let errors = checker.check_function(&func);
-        let has_cycle_error = errors.iter().any(|e| {
-            matches!(e, OwnershipError::CrossSpawnCycle { .. })
-        });
+        let has_cycle_error = errors
+            .iter()
+            .any(|e| matches!(e, OwnershipError::CrossSpawnCycle { .. }));
         assert!(has_cycle_error, "应该检测到四节点环");
     }
 
@@ -307,9 +387,17 @@ mod tests {
         // a ← c（c 持有 a），a 不持有 c（只有单向）
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(4)), // a
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(4)], Operand::Local(5)), // b
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(4)], Operand::Local(6)), // c
-            make_move_instr(Operand::Local(6), Operand::Local(4)), // c 持有 a
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(4)],
+                Operand::Local(5),
+            ), // b
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(4)],
+                Operand::Local(6),
+            ), // c
+            make_move_instr(Operand::Local(6), Operand::Local(4)),          // c 持有 a
         ];
 
         let errors = checker.check_function(&func);
@@ -328,8 +416,16 @@ mod tests {
         // b 和 c 都 ref a，但彼此不形成环
         func.blocks[0].instructions = vec![
             make_spawn_instr(Operand::Local(0), vec![], Operand::Local(4)),
-            make_spawn_instr(Operand::Local(1), vec![Operand::Local(4)], Operand::Local(5)),
-            make_spawn_instr(Operand::Local(2), vec![Operand::Local(4)], Operand::Local(6)),
+            make_spawn_instr(
+                Operand::Local(1),
+                vec![Operand::Local(4)],
+                Operand::Local(5),
+            ),
+            make_spawn_instr(
+                Operand::Local(2),
+                vec![Operand::Local(4)],
+                Operand::Local(6),
+            ),
         ];
 
         let errors = checker.check_function(&func);

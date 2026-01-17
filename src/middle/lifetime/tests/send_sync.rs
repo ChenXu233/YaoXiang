@@ -112,10 +112,7 @@ fn test_fn_types() {
 fn test_dict_types() {
     let checker = SendSyncChecker::new();
 
-    let dict = MonoType::Dict(
-        Box::new(MonoType::String),
-        Box::new(MonoType::Int(64)),
-    );
+    let dict = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(64)));
     assert!(checker.is_send(&dict));
     assert!(!checker.is_sync(&dict));
 }

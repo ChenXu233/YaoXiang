@@ -226,11 +226,7 @@ impl std::fmt::Display for OwnershipError {
                 )
             }
             OwnershipError::CrossSpawnCycle { details, span } => {
-                write!(
-                    f,
-                    "CrossSpawnCycle: {} at {:?}",
-                    details, span
-                )
+                write!(f, "CrossSpawnCycle: {} at {:?}", details, span)
             }
         }
     }
