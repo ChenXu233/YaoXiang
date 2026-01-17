@@ -2,9 +2,36 @@
 //!
 //! 定义所有权的语义错误，包括 UseAfterMove、UseAfterDrop 等。
 
-use crate::middle::ir::Operand;
+use crate::middle::ir::{FunctionIR, Operand};
+use std::collections::HashMap;
 
-/// 所有权错误类型
+/// 所有权状态（Move/Drop 检查器共用）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueState {
+    /// 有效，所有者可用
+    Owned,
+    /// 已被移动，所有者不可用
+    Moved,
+    /// 已被释放（仅 DropChecker 使用）
+    Dropped,
+}
+
+/// 所有权检查器 Trait
+///
+/// 提取公共接口，减少 MoveChecker 和 DropChecker 的重复代码。
+pub trait OwnershipCheck {
+    /// 检查函数的所有权语义
+    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError];
+
+    /// 获取收集的错误
+    fn errors(&self) -> &[OwnershipError];
+
+    /// 获取状态
+    fn state(&self) -> &HashMap<Operand, ValueState>;
+
+    /// 清除状态
+    fn clear(&mut self);
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OwnershipError {
     /// 使用已移动的值

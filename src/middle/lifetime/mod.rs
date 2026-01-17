@@ -106,19 +106,17 @@ impl OwnershipChecker {
         let drop_errors = self.drop_checker.check_function(func);
 
         // 合并错误
-        let mut all_errors = move_errors;
-        all_errors.extend(drop_errors);
-        all_errors
+        move_errors.iter().chain(drop_errors).cloned().collect()
     }
 
     /// 获取 Move 检查器的错误
     pub fn move_errors(&self) -> &[OwnershipError] {
-        &self.move_checker.errors()
+        &self.move_checker.errors
     }
 
     /// 获取 Drop 检查器的错误
     pub fn drop_errors(&self) -> &[OwnershipError] {
-        &self.drop_checker.errors()
+        &self.drop_checker.errors
     }
 }
 

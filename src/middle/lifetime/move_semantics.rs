@@ -2,18 +2,9 @@
 //!
 //! 检查 UseAfterMove 错误：检测赋值和函数调用后对原值的使用。
 
-use super::error::{OwnershipError, operand_to_string};
+use super::error::{OwnershipCheck, OwnershipError, ValueState, operand_to_string};
 use crate::middle::ir::{FunctionIR, Instruction, Operand};
 use std::collections::HashMap;
-
-/// 所有权状态
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ValueState {
-    /// 有效，所有者可用
-    Owned,
-    /// 已被移动，所有者不可用
-    Moved,
-}
 
 /// Move 检查器
 ///
@@ -21,226 +12,128 @@ enum ValueState {
 /// - UseAfterMove: 使用已移动的值
 #[derive(Debug)]
 pub struct MoveChecker {
-    /// 每个值的状态
-    state: HashMap<Operand, ValueState>,
-    /// 收集的错误
-    errors: Vec<OwnershipError>,
+    pub state: HashMap<Operand, ValueState>,
+    pub errors: Vec<OwnershipError>,
+    pub location: (usize, usize),
 }
 
 impl MoveChecker {
-    /// 创建新的 Move 检查器
     pub fn new() -> Self {
         Self {
             state: HashMap::new(),
             errors: Vec::new(),
+            location: (0, 0),
         }
     }
 
-    /// 检查函数中的 Move 语义
-    pub fn check_function(&mut self, func: &FunctionIR) -> Vec<OwnershipError> {
-        // 重置状态
-        self.state.clear();
-        self.errors.clear();
-
-        // 遍历所有指令
-        for (block_idx, block) in func.blocks.iter().enumerate() {
-            for (instr_idx, instr) in block.instructions.iter().enumerate() {
-                self.check_instruction(instr, block_idx, instr_idx);
-            }
-        }
-
-        self.errors.clone()
-    }
-
-    /// 检查单条指令
-    fn check_instruction(
-        &mut self,
-        instr: &Instruction,
-        block_idx: usize,
-        instr_idx: usize,
-    ) {
+    fn check_instruction(&mut self, instr: &Instruction) {
         match instr {
-            // Move: dst = src，src 被移动
-            Instruction::Move { dst, src } => {
-                let src_id = src.clone();
-                let src_str = operand_to_string(&src_id);
-
-                // 检查 src 是否已被移动
-                if let Some(state) = self.state.get(&src_id) {
-                    match state {
-                        ValueState::Moved => {
-                            self.errors.push(OwnershipError::UseAfterMove {
-                                value: src_str,
-                                location: (block_idx, instr_idx),
-                            });
-                            // src 仍然是 Moved（不改变）
-                        }
-                        ValueState::Owned => {
-                            // 正常 Move：标记原值已移动
-                            self.state.insert(src_id, ValueState::Moved);
-                        }
-                    }
-                } else {
-                    // 首次出现，标记为已拥有（然后立即移动）
-                    // 这是一个新的变量，第一次使用就被移动
-                    self.state.insert(src_id, ValueState::Moved);
-                }
-
-                // 目标值状态 - 拥有所有权
-                self.state.insert(dst.clone(), ValueState::Owned);
-            }
-
-            // 函数调用：参数移动进函数
-            Instruction::Call { args, .. } => {
-                for arg in args {
-                    let arg_id = arg.clone();
-                    let arg_str = operand_to_string(&arg_id);
-
-                    if let Some(state) = self.state.get(&arg_id) {
-                        match state {
-                            ValueState::Moved => {
-                                self.errors.push(OwnershipError::UseAfterMove {
-                                    value: arg_str,
-                                    location: (block_idx, instr_idx),
-                                });
-                            }
-                            ValueState::Owned => {
-                                // 参数移动进函数，标记为已移动
-                                self.state.insert(arg_id, ValueState::Moved);
-                            }
-                        }
-                    }
-                    // 未跟踪的值：假设是新变量，第一次使用就被移动
-                    else {
-                        self.state.insert(arg_id, ValueState::Moved);
-                    }
-                }
-            }
-
-            // Ret: 返回值可能移动
-            Instruction::Ret(Some(value)) => {
-                let value_id = value.clone();
-                let value_str = operand_to_string(&value_id);
-
-                if let Some(state) = self.state.get(&value_id) {
-                    match state {
-                        ValueState::Moved => {
-                            self.errors.push(OwnershipError::UseAfterMove {
-                                value: value_str,
-                                location: (block_idx, instr_idx),
-                            });
-                        }
-                        ValueState::Owned => {
-                            self.state.insert(value_id, ValueState::Moved);
-                        }
-                    }
-                }
-                // 未跟踪的值：假设是新变量
-            }
-
-            // LoadIndex: 加载元素，容器可能被移动
-            Instruction::LoadIndex { src, .. } => {
-                let src_id = src.clone();
-                if let Some(state) = self.state.get(&src_id) {
-                    if matches!(state, ValueState::Moved) {
-                        self.errors.push(OwnershipError::UseAfterMove {
-                            value: operand_to_string(&src_id),
-                            location: (block_idx, instr_idx),
-                        });
-                    }
-                    // Loaded values don't change ownership state
-                }
-                // 未跟踪的值：假设是新变量，不需要报错
-            }
-
-            // LoadField: 加载字段
-            Instruction::LoadField { src, .. } => {
-                let src_id = src.clone();
-                if let Some(state) = self.state.get(&src_id) {
-                    if matches!(state, ValueState::Moved) {
-                        self.errors.push(OwnershipError::UseAfterMove {
-                            value: operand_to_string(&src_id),
-                            location: (block_idx, instr_idx),
-                        });
-                    }
-                }
-                // 未跟踪的值：假设是新变量
-            }
-
-            // Store/StoreIndex/StoreField: 存储不涉及 Move
-            Instruction::Store { .. }
-            | Instruction::StoreIndex { .. }
-            | Instruction::StoreField { .. } => {}
-
-            // 二元运算：检查操作数是否被移动
+            Instruction::Move { dst, src } => self.check_move(dst, src),
+            Instruction::Call { args, .. } => self.check_call(args),
+            Instruction::Ret(Some(value)) => self.check_ret(value),
+            Instruction::LoadIndex { src, .. }
+            | Instruction::LoadField { src, .. }
+            | Instruction::Neg { src, .. }
+            | Instruction::Cast { src, .. } => self.check_used(src),
             Instruction::Add { lhs, rhs, .. }
             | Instruction::Sub { lhs, rhs, .. }
             | Instruction::Mul { lhs, rhs, .. }
             | Instruction::Div { lhs, rhs, .. }
             | Instruction::Mod { lhs, rhs, .. } => {
-                for operand in [lhs, rhs] {
-                    if let Some(state) = self.state.get(operand) {
-                        if matches!(state, ValueState::Moved) {
-                            self.errors.push(OwnershipError::UseAfterMove {
-                                value: operand_to_string(operand),
-                                location: (block_idx, instr_idx),
-                            });
-                        }
-                    }
-                }
+                self.check_used(lhs);
+                self.check_used(rhs);
             }
-
-            // 一元运算：检查操作数
-            Instruction::Neg { src, .. } => {
-                if let Some(state) = self.state.get(src) {
-                    if matches!(state, ValueState::Moved) {
-                        self.errors.push(OwnershipError::UseAfterMove {
-                            value: operand_to_string(src),
-                            location: (block_idx, instr_idx),
-                        });
-                    }
-                }
-            }
-
-            // 比较运算：检查操作数
             Instruction::Eq { lhs, rhs, .. }
             | Instruction::Ne { lhs, rhs, .. }
             | Instruction::Lt { lhs, rhs, .. }
             | Instruction::Le { lhs, rhs, .. }
             | Instruction::Gt { lhs, rhs, .. }
             | Instruction::Ge { lhs, rhs, .. } => {
-                for operand in [lhs, rhs] {
-                    if let Some(state) = self.state.get(operand) {
-                        if matches!(state, ValueState::Moved) {
-                            self.errors.push(OwnershipError::UseAfterMove {
-                                value: operand_to_string(operand),
-                                location: (block_idx, instr_idx),
-                            });
-                        }
-                    }
-                }
+                self.check_used(lhs);
+                self.check_used(rhs);
             }
-
-            // Cast: 检查源值
-            Instruction::Cast { src, .. } => {
-                if let Some(state) = self.state.get(src) {
-                    if matches!(state, ValueState::Moved) {
-                        self.errors.push(OwnershipError::UseAfterMove {
-                            value: operand_to_string(src),
-                            location: (block_idx, instr_idx),
-                        });
-                    }
-                }
-            }
-
-            // 其他指令不影响 Move 状态
             _ => {}
         }
     }
 
-    /// 获取收集的错误
-    pub fn errors(&self) -> &[OwnershipError] {
+    fn check_move(&mut self, dst: &Operand, src: &Operand) {
+        if let Some(state) = self.state.get(src) {
+            if *state == ValueState::Moved {
+                self.report_use_after_move(src);
+            } else {
+                self.state.insert(src.clone(), ValueState::Moved);
+            }
+        } else {
+            self.state.insert(src.clone(), ValueState::Moved);
+        }
+        self.state.insert(dst.clone(), ValueState::Owned);
+    }
+
+    fn check_call(&mut self, args: &[Operand]) {
+        for arg in args {
+            if let Some(state) = self.state.get(arg) {
+                if *state == ValueState::Moved {
+                    self.report_use_after_move(arg);
+                } else {
+                    self.state.insert(arg.clone(), ValueState::Moved);
+                }
+            } else {
+                self.state.insert(arg.clone(), ValueState::Moved);
+            }
+        }
+    }
+
+    fn check_ret(&mut self, value: &Operand) {
+        if let Some(state) = self.state.get(value) {
+            if *state == ValueState::Moved {
+                // 已移动的值被返回是合法的
+            } else {
+                self.state.insert(value.clone(), ValueState::Moved);
+            }
+        }
+    }
+
+    fn check_used(&mut self, operand: &Operand) {
+        if let Some(state) = self.state.get(operand) {
+            if *state == ValueState::Moved {
+                self.report_use_after_move(operand);
+            }
+        }
+    }
+
+    fn report_use_after_move(&mut self, operand: &Operand) {
+        self.errors.push(OwnershipError::UseAfterMove {
+            value: operand_to_string(operand),
+            location: self.location,
+        });
+    }
+}
+
+impl OwnershipCheck for MoveChecker {
+    fn check_function(&mut self, func: &FunctionIR) -> &[OwnershipError] {
+        self.clear();
+
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            for (instr_idx, instr) in block.instructions.iter().enumerate() {
+                self.location = (block_idx, instr_idx);
+                self.check_instruction(instr);
+            }
+        }
+
         &self.errors
+    }
+
+    fn errors(&self) -> &[OwnershipError] {
+        &self.errors
+    }
+
+    fn state(&self) -> &HashMap<Operand, ValueState> {
+        &self.state
+    }
+
+    fn clear(&mut self) {
+        self.state.clear();
+        self.errors.clear();
     }
 }
 
