@@ -178,6 +178,10 @@ impl SpecializationKey {
                     self.type_name_hash(t, state);
                 }
             }
+            MonoType::Arc(t) => {
+                "arc".hash(state);
+                self.type_name_hash(t, state);
+            }
         }
     }
 }

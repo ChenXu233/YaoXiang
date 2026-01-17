@@ -160,6 +160,18 @@ pub enum Instruction {
     },
     /// Drop a value (ownership-based cleanup)
     Drop(Operand),
+    /// Create Arc (atomic reference count = 1)
+    ArcNew {
+        dst: Operand,
+        src: Operand,
+    },
+    /// Clone Arc (atomic reference count + 1)
+    ArcClone {
+        dst: Operand,
+        src: Operand,
+    },
+    /// Drop Arc (atomic reference count - 1, free if zero)
+    ArcDrop(Operand),
 }
 
 /// Basic block
