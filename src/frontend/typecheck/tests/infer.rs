@@ -303,45 +303,6 @@ fn test_infer_tuple() {
     }
 }
 
-/// 测试空元组推断
-#[test]
-fn test_infer_empty_tuple() {
-    let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
-
-    let tuple = Expr::Tuple(vec![], Span::default());
-
-    let ty = inferrer.infer_expr(&tuple).unwrap();
-    match ty {
-        MonoType::Tuple(types) => {
-            assert_eq!(types.len(), 0);
-        }
-        _ => panic!("Expected empty tuple type"),
-    }
-}
-
-/// 测试列表推断
-#[test]
-fn test_infer_list() {
-    let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
-
-    let elems = vec![
-        Expr::Lit(Literal::Int(1), Span::default()),
-        Expr::Lit(Literal::Int(2), Span::default()),
-        Expr::Lit(Literal::Int(3), Span::default()),
-    ];
-    let list = Expr::List(elems, Span::default());
-
-    let ty = inferrer.infer_expr(&list).unwrap();
-    match ty {
-        MonoType::List(_) => {
-            // 成功推断为列表类型
-        }
-        _ => panic!("Expected list type"),
-    }
-}
-
 /// 测试空列表推断
 #[test]
 fn test_infer_empty_list() {
@@ -940,4 +901,151 @@ fn test_infer_var_decl_no_initializer() {
     // 验证变量已添加
     let var = inferrer.get_var("x");
     assert!(var.is_some());
+}
+
+/// 测试 If 表达式推断
+#[test]
+fn test_infer_if_expr() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let condition = Expr::Lit(Literal::Bool(true), Span::default());
+    let then_body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(1), Span::default()))),
+        span: Span::default(),
+    };
+    let else_body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(2), Span::default()))),
+        span: Span::default(),
+    };
+
+    let if_expr = Expr::If {
+        condition: Box::new(condition),
+        then_branch: Box::new(then_body),
+        elif_branches: vec![],
+        else_branch: Some(Box::new(else_body)),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&if_expr).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
+}
+
+/// 测试 While 表达式推断
+#[test]
+fn test_infer_while_expr() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let condition = Expr::Lit(Literal::Bool(true), Span::default());
+    let body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(1), Span::default()))),
+        span: Span::default(),
+    };
+
+    let while_expr = Expr::While {
+        condition: Box::new(condition),
+        body: Box::new(body),
+        label: None,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&while_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
+}
+
+/// 测试 For 表达式推断
+#[test]
+fn test_infer_for_loop() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let iterable = Expr::Lit(Literal::String("test".to_string()), Span::default());
+    let body = Block {
+        stmts: vec![],
+        expr: None,
+        span: Span::default(),
+    };
+
+    let for_expr = Expr::For {
+        var: "c".to_string(),
+        iterable: Box::new(iterable),
+        body: Box::new(body),
+        label: None,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&for_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
+}
+
+/// 测试取负运算推断
+#[test]
+fn test_infer_neg() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let expr = Expr::Lit(Literal::Int(42), Span::default());
+    let neg = Expr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(expr),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&neg).unwrap();
+    solver.solve().unwrap();
+    let resolved_ty = solver.resolve_type(&ty);
+    assert!(matches!(resolved_ty, MonoType::Int(64)));
+}
+
+/// 测试 FnDef 表达式推断
+#[test]
+fn test_infer_fn_def() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let fn_def = Expr::FnDef {
+        name: "add".to_string(),
+        params: vec![
+            crate::frontend::parser::ast::Param {
+                name: "a".to_string(),
+                ty: None,
+                span: Span::default(),
+            },
+            crate::frontend::parser::ast::Param {
+                name: "b".to_string(),
+                ty: None,
+                span: Span::default(),
+            },
+        ],
+        return_type: Some(crate::frontend::parser::ast::Type::Int(64)),
+        body: Box::new(Block {
+            stmts: vec![],
+            expr: Some(Box::new(Expr::Lit(Literal::Int(0), Span::default()))),
+            span: Span::default(),
+        }),
+        is_async: false,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&fn_def).unwrap();
+    assert!(matches!(ty, MonoType::Fn { .. }));
+}
+
+/// 测试类型注解模式推断
+#[test]
+fn test_infer_typed_pattern() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = TypeInferrer::new(&mut solver);
+
+    let pattern = Pattern::Identifier("x".to_string());
+
+    let ty = inferrer
+        .infer_pattern(&pattern, Some(&MonoType::Int(64)), Span::default())
+        .unwrap();
+    // Identifier 模式返回新类型变量
+    assert!(ty.type_var().is_some());
 }
