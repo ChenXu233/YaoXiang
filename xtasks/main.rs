@@ -1,0 +1,115 @@
+//! Cargo xtask for Yaoxiang project tooling
+//!
+//! Run with: cargo xtask <command>
+
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let command = args.get(1).map(|s| s.as_str()).unwrap_or("help");
+
+    match command {
+        "bump-version" => bump_version(),
+        "install-hook" => install_git_hook(),
+        "help" | _ => show_help(),
+    }
+}
+
+fn bump_version() {
+    // Read Cargo.toml
+    let cargo_content = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
+
+    // Parse and update version
+    let lines = cargo_content.lines();
+    let mut new_lines: Vec<String> = Vec::new();
+    let mut version_updated = false;
+
+    for line in lines {
+        if line.trim_start().starts_with("version = ") {
+            let version = line
+                .trim_start()
+                .strip_prefix("version = \"")
+                .and_then(|s| s.strip_suffix('\"'))
+                .expect("Failed to parse version");
+
+            let parts: Vec<u32> = version.split('.').map(|s| s.parse().unwrap_or(0)).collect();
+
+            if parts.len() >= 3 {
+                let new_version = format!("{}.{}.{}", parts[0], parts[1], parts[2] + 1);
+                println!("Version: {} -> {}", version, new_version);
+                new_lines.push(format!("version = \"{}\"", new_version));
+                version_updated = true;
+            } else {
+                new_lines.push(line.to_string());
+            }
+        } else {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    if version_updated {
+        let new_content = new_lines.join("\n");
+        fs::write("Cargo.toml", &new_content).expect("Failed to write Cargo.toml");
+
+        // Stage the change
+        Command::new("git")
+            .args(&["add", "Cargo.toml"])
+            .status()
+            .expect("Failed to stage Cargo.toml");
+
+        println!("✓ Version bumped and staged!");
+    }
+}
+
+fn install_git_hook() {
+    let hook_content = format!(
+        r#"#!/bin/bash
+# Yaoxiang auto-version-bump hook
+# Installed by cargo xtask install-hook
+
+set -e
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+SHA1="$3"
+
+# Skip merges and amends
+if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ] || [ -n "$SHA1" ]; then
+    exit 0
+fi
+
+# Run the version bumper
+exec cargo xtask bump-version
+"#,
+    );
+
+    let hook_path = Path::new(".git/hooks/prepare-commit-msg");
+    fs::write(hook_path, hook_content).expect("Failed to write hook");
+
+    // Make executable (works on Unix, ignored on Windows)
+    Command::new("chmod")
+        .args(&["+x", ".git/hooks/prepare-commit-msg"])
+        .status()
+        .ok();
+
+    println!("✓ Git hook installed at .git/hooks/prepare-commit-msg");
+    println!("  Version will be bumped automatically on each commit!");
+}
+
+fn show_help() {
+    println!(
+        r#"Yaoxiang xtask commands:
+    
+    cargo xtask bump-version    - Bump the patch version in Cargo.toml
+    cargo xtask install-hook    - Install git prepare-commit-msg hook
+    cargo xtask help            - Show this help message
+
+Git Hook Usage:
+    After running 'cargo xtask install-hook', every commit will
+    automatically bump the patch version (0.2.6 -> 0.2.7 -> 0.2.8)
+    and stage the Cargo.toml change.
+"#
+    );
+}
