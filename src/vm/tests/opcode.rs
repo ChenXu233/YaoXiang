@@ -311,7 +311,7 @@ mod try_from_tests {
         assert!(TypedOpcode::try_from(0x0F).is_err());
         assert!(TypedOpcode::try_from(0x1F).is_err());
         assert!(TypedOpcode::try_from(0x6F).is_err());
-        assert!(TypedOpcode::try_from(0x79).is_err());
+        // 0x79-0x7B 是 Arc 操作码，已被使用
         assert!(TypedOpcode::try_from(0x89).is_err());
         assert!(TypedOpcode::try_from(0x96).is_err());
     }

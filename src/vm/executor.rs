@@ -5,6 +5,8 @@ use crate::middle::{ConstValue, ModuleIR};
 use crate::runtime::memory::Heap;
 use crate::runtime::scheduler::FlowScheduler;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc as StdArc;
 
 /// VM configuration
 #[derive(Debug, Clone)]
@@ -43,6 +45,8 @@ pub struct VM {
     /// Runtime
     heap: Heap,
     scheduler: FlowScheduler,
+    /// Arc 追踪：用于运行时引用计数管理
+    arc_refcounts: HashMap<usize, ArcRefCount>,
     /// State
     status: VMStatus,
     error: Option<VMError>,
@@ -71,6 +75,7 @@ impl VM {
             ip: 0,
             heap: Heap::new(),
             scheduler: FlowScheduler::new(),
+            arc_refcounts: HashMap::new(),
             status: VMStatus::Ready,
             error: None,
         }
@@ -155,6 +160,35 @@ impl VM {
                     // Function call placeholder
                     // In real implementation, this would push return address and jump
                 }
+                Opcode::ArcNew => {
+                    // ArcNew: dst, src - 创建新的 Arc
+                    // 从堆对象创建 Arc（简化实现）
+                    if let Some(src) = self.stack.pop() {
+                        // 获取堆对象的指针（这里简化处理）
+                        let target = match &src {
+                            Value::HeapObject(obj) => obj.data.as_ptr() as usize,
+                            _ => 0,
+                        };
+                        // 创建 Arc 并压栈
+                        let arc = ArcValue::new(target);
+                        self.stack.push(Value::Arc(arc));
+                    }
+                }
+                Opcode::ArcClone => {
+                    // ArcClone: dst, src - 克隆 Arc（引用计数 +1）
+                    if let Some(src) = self.stack.pop() {
+                        // Arc 是 Clone 的，直接克隆
+                        self.stack.push(src.clone());
+                    }
+                }
+                Opcode::ArcDrop => {
+                    // ArcDrop: src - 释放 Arc（引用计数 -1）
+                    // Arc 的引用计数由 StdArc 自动管理
+                    // 当 Arc 被 drop 时，StdArc 会自动减少计数
+                    if let Some(mut val) = self.stack.pop() {
+                        val.drop();
+                    }
+                }
                 _ => {
                     // Other opcodes not yet implemented in basic engine
                 }
@@ -207,6 +241,8 @@ pub enum Value {
     Dict(HashMap<Value, Value>),
     /// Heap-allocated object (with ownership tracking)
     HeapObject(HeapObject),
+    /// Arc (原子引用计数)
+    Arc(ArcValue),
     // TODO: Add more types
 }
 
@@ -217,6 +253,43 @@ pub struct HeapObject {
     pub type_id: usize,
     /// Object data (byte representation for simplicity)
     pub data: Vec<u8>,
+}
+
+/// Arc 引用计数追踪
+#[derive(Debug)]
+struct ArcRefCount {
+    /// 原子引用计数
+    count: AtomicUsize,
+    /// 指向堆对象的指针
+    target: usize,
+}
+
+/// Arc 值（运行时引用计数指针）
+#[derive(Debug, Clone)]
+pub struct ArcValue {
+    /// 内部引用标准库的 Arc（用于实际的引用计数管理）
+    inner: StdArc<ArcInner>,
+}
+
+/// Arc 内部数据
+#[derive(Debug)]
+struct ArcInner {
+    /// 指向堆对象的指针（用于内存释放）
+    target: usize,
+}
+
+impl ArcValue {
+    /// 创建新的 Arc，指向给定的堆对象
+    pub fn new(target: usize) -> Self {
+        Self {
+            inner: StdArc::new(ArcInner { target }),
+        }
+    }
+
+    /// 获取内部目标指针
+    pub fn target(&self) -> usize {
+        self.inner.target
+    }
 }
 
 impl Value {
@@ -253,6 +326,11 @@ impl Value {
                 // Release heap object
                 obj.data.clear();
             }
+            Value::Arc(_arc) => {
+                // Arc 的引用计数由 StdArc 自动管理
+                // 当所有 Arc 副本被 drop 时，StdArc 会自动释放内存
+                // 这里不需要额外处理
+            }
             // Primitive types don't need explicit cleanup
             Value::Void | Value::Bool(_) | Value::Int(_) | Value::Float(_) | Value::Char(_) => {}
         }
@@ -267,6 +345,7 @@ impl Value {
                 | Value::List(_)
                 | Value::Dict(_)
                 | Value::HeapObject(_)
+                | Value::Arc(_)
         )
     }
 }
@@ -331,6 +410,12 @@ pub enum Opcode {
     Await,
     /// Yield execution
     Yield,
+    /// Create Arc (原子引用计数)
+    ArcNew,
+    /// Clone Arc (引用计数 +1)
+    ArcClone,
+    /// Drop Arc (引用计数 -1，归零时释放)
+    ArcDrop,
     // ... more opcodes
 }
 

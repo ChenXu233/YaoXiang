@@ -337,6 +337,18 @@ pub enum TypedOpcode {
     /// 操作数：dst, capacity (u16)
     NewListWithCap = 0x78,
 
+    /// 创建 Arc（原子引用计数）
+    /// 操作数：dst, src
+    ArcNew = 0x79,
+
+    /// 克隆 Arc（引用计数 +1）
+    /// 操作数：dst, src
+    ArcClone = 0x7A,
+
+    /// 释放 Arc（引用计数 -1，归零时释放内存）
+    /// 操作数：src
+    ArcDrop = 0x7B,
+
     // =====================
     // 函数调用指令 (0x80-0x8F)
     // =====================
@@ -555,6 +567,9 @@ impl TypedOpcode {
             TypedOpcode::LoadElement => "LoadElement",
             TypedOpcode::StoreElement => "StoreElement",
             TypedOpcode::NewListWithCap => "NewListWithCap",
+            TypedOpcode::ArcNew => "ArcNew",
+            TypedOpcode::ArcClone => "ArcClone",
+            TypedOpcode::ArcDrop => "ArcDrop",
             TypedOpcode::CallStatic => "CallStatic",
             TypedOpcode::CallVirt => "CallVirt",
             TypedOpcode::CallDyn => "CallDyn",
@@ -737,13 +752,13 @@ impl TypedOpcode {
             // 1 个操作数
             TypedOpcode::ReturnValue | TypedOpcode::Drop | TypedOpcode::CloseUpvalue |
             TypedOpcode::Throw | TypedOpcode::Rethrow | TypedOpcode::BoundsCheck | TypedOpcode::TypeCheck |
-            TypedOpcode::Label | TypedOpcode::StackAlloc => 1,
+            TypedOpcode::Label | TypedOpcode::StackAlloc | TypedOpcode::ArcDrop => 1,
             // 2 个操作数
             TypedOpcode::JmpIf | TypedOpcode::JmpIfNot |
             TypedOpcode::Mov | TypedOpcode::LoadConst | TypedOpcode::LoadLocal | TypedOpcode::StoreLocal |
             TypedOpcode::LoadArg | TypedOpcode::I64Const | TypedOpcode::I32Const | TypedOpcode::F64Const |
             TypedOpcode::F32Const | TypedOpcode::I64Neg | TypedOpcode::I32Neg | TypedOpcode::F64Neg | TypedOpcode::F32Neg |
-            TypedOpcode::HeapAlloc |
+            TypedOpcode::HeapAlloc | TypedOpcode::ArcNew | TypedOpcode::ArcClone |
             TypedOpcode::StringLength | TypedOpcode::StringFromInt | TypedOpcode::StringFromFloat |
             TypedOpcode::TypeOf | TypedOpcode::Cast => 2,
             // 3 个操作数
@@ -878,6 +893,9 @@ impl TryFrom<u8> for TypedOpcode {
             0x75 => Ok(TypedOpcode::LoadElement),
             0x76 => Ok(TypedOpcode::StoreElement),
             0x77 => Ok(TypedOpcode::NewListWithCap),
+            0x79 => Ok(TypedOpcode::ArcNew),
+            0x7A => Ok(TypedOpcode::ArcClone),
+            0x7B => Ok(TypedOpcode::ArcDrop),
             0x80 => Ok(TypedOpcode::CallStatic),
             0x81 => Ok(TypedOpcode::CallVirt),
             0x82 => Ok(TypedOpcode::CallDyn),
