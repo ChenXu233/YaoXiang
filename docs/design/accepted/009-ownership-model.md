@@ -1,9 +1,9 @@
 # RFC-009: 所有权模型设计
 
-> **状态**: 审核中
+> **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2025-01-16（v7：结构化并发 + 循环引用处理）
+> **最后更新**: 2025-01-16（v7.1：修复问题 + 完善细节）
 
 ## 参考文档
 
@@ -60,9 +60,9 @@ create_and_forget: () -> Point = () => {
     # p 离开作用域自动释放
 }
 
-# 2. 显式 ref = Arc（安全共享）
-shared: Point = ref p
-spawn(() => print(shared.x))   # Arc，安全
+# 2. 显式 ref = Arc（安全共享，类型自动推断）
+shared = ref p   # Arc，类型从 p 推断
+spawn(() => print(shared.x))
 
 # 3. 显式 clone() = 复制
 p2 = p.clone()
@@ -181,8 +181,8 @@ fn create() -> Point {
 
 p: Point = Point(1.0, 2.0)
 
-# 创建 Arc
-shared: Point = ref p
+# 创建 Arc，类型自动推断
+shared = ref p
 
 # Arc 自动管理生命周期
 spawn(() => print(shared.x))   # 安全
@@ -312,8 +312,8 @@ fn create_graph() {
 ```yaoxiang
 # === 跨任务循环：编译器检测 ===
 fn parent_task() {
-    shared_a: Node = ref a     # 任务内
-    shared_b: Node = ref b     # 任务内
+    shared_a = ref a     # 任务内
+    shared_b = ref b     # 任务内
 
     spawn(task_a)              # 子任务 A
     spawn(task_b)              # 子任务 B
@@ -337,8 +337,78 @@ unsafe {
 - 检测跨任务边是否形成环
 
 **检测级别**：
-- ✅ **跨任务循环**：编译报错
-- ❌ **任务内循环**：不检测（泄漏可控）
+- ✅ **跨任务循环**（同辈任务间）：编译报错
+- ❌ **任务内循环**：不检测（泄漏可控，任务结束后释放）
+- ⚠️ **if 分支/闭包内循环**：可能漏检，用户负责
+
+**检测边界**：
+```yaoxiang
+# ✅ 可检测：同作用域内的直接 ref
+a = ref b
+b = ref a    # ❌ 编译错误：同作用域循环
+
+# ⚠️ 可能漏检：if 分支内的 ref
+if condition {
+    a.child = ref b
+} else {
+    a.child = ref c   # 编译器可能无法追踪所有分支
+}
+
+# ⚠️ 可能漏检：闭包内的 ref
+closure = () => {
+    a.child = ref b   # 闭包捕获的 ref，编译器难以追踪
+}
+```
+
+#### 3.4 ref 与 Arc::new() 的选择
+
+| 特性 | `ref` 关键字 | `Arc::new()` |
+|------|--------------|--------------|
+| 语法 | `shared = ref p` | `arc = Arc::new(p)` |
+| 类型推断 | ✅ 自动 | ❌ 需显式泛型 |
+| 跨任务循环检测 | ✅ 自动检测 | ❌ 用户保证 |
+| 适用场景 | 日常共享 | 完全控制/特殊需求 |
+
+```yaoxiang
+# 推荐：日常使用 ref
+shared = ref data
+spawn(() => use(shared))
+
+# 可选：需要完全控制时用 Arc
+arc: Arc[Data] = Arc::new(data)
+arc2 = arc.clone()
+```
+
+#### 3.5 与 RFC-001 注解的交互
+
+`ref` 的行为与 `@block` / `@eager` / `@auto` 注解无关：
+
+| 注解 | ref 行为 | 说明 |
+|------|----------|------|
+| `@block` | `ref` 仍为 Arc | 无并发，但共享语义不变 |
+| `@eager` | `ref` 仍为 Arc | 同步执行，共享语义不变 |
+| `@auto` | `ref` 仍为 Arc | 最大并行，共享语义不变 |
+
+```yaoxiang
+# 无论什么注解，ref 都是 Arc
+@block
+fn blocked() {
+    shared = ref data     # 仍是 Arc，只是不会并发执行
+    use(shared)
+}
+
+@eager
+fn eager() {
+    shared = ref data     # 仍是 Arc，只是会同步等待
+    use(shared)
+}
+```
+
+**注解控制的是调度策略，不是内存语义。**
+
+---
+
+#### 3.6 任务树示例
 
 ```yaoxiang
 # 任务树示例
@@ -508,7 +578,8 @@ unsafe {
 | v4 | 删除生命周期，简化设计 | 2025-01-13 |
 | v5 | 默认安全 + 编译器自动优化 | 2025-01-15 |
 | v6 | 默认 Move + 显式 ref = Arc | 2025-01-15 |
-| **v7** | **结构化并发 + 循环引用处理** | **2025-01-16** |
+| v7 | 结构化并发 + 循环引用处理 | 2025-01-16 |
+| **v7.1** | **修复问题 + 完善细节** | **2025-01-16** |
 
 ### 待决议题
 
