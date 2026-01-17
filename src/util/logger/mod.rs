@@ -69,13 +69,13 @@ pub fn init() {
 pub fn init_with_level(level: LogLevel) {
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
-    // Go 风格：显示 [LEVEL] 前缀，不显示时间、不显示模块路径、无颜色
+    // Go 风格：显示 [LEVEL] 前缀，不显示时间、不显示模块路径
+    // 启用 ANSI 颜色，根据日志级别显示不同颜色
     let layer = tracing_subscriber::fmt::layer()
         .without_time()
         .with_target(false)
         .with_level(true)
-        .with_ansi(false)
-        .compact()
+        .with_ansi(true)
         .with_filter(filter);
 
     Registry::default().with(layer).init();

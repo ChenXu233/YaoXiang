@@ -114,14 +114,30 @@ pub fn t_simple(
     t(id, lang, None)
 }
 
-/// Macro for translated logging with arguments
+/// Convenience function using current language (for backward compatibility)
+#[inline]
+pub fn t_cur(
+    id: MSG,
+    args: Option<&[&dyn std::fmt::Display]>,
+) -> String {
+    let lang = current_lang();
+    t(id, lang, args)
+}
+
+/// Convenience function using current language without args (for backward compatibility)
+#[inline]
+pub fn t_cur_simple(id: MSG) -> String {
+    t_cur(id, None)
+}
+
+/// Macro for translated logging with arguments (using current language)
 #[macro_export]
 macro_rules! tlog {
-    ($level:expr, $id:expr, $lang:expr) => {
-        tracing::$level!("{}", $crate::util::i18n::t_simple($id, $lang));
+    ($level:expr, $id:expr) => {
+        tracing::$level!("{}", $crate::util::i18n::t_cur_simple($id));
     };
-    ($level:expr, $id:expr, $lang:expr, $($arg:expr),*) => {
-        tracing::$level!("{}", $crate::util::i18n::t($id, $lang, Some(&[$(&$arg as &dyn std::fmt::Display),*])));
+    ($level:expr, $id:expr, $($arg:expr),*) => {
+        tracing::$level!("{}", $crate::util::i18n::t_cur($id, Some(&[$(&$arg as &dyn std::fmt::Display),*])));
     };
 }
 
@@ -178,6 +194,12 @@ pub enum MSG {
     // TypeCheck
     TypeCheckStart,
     TypeCheckComplete,
+    TypeCheckProcessFn,
+    TypeCheckHasAnnotation,
+    TypeCheckAnnotation,
+    TypeCheckAnnotated,
+    TypeCheckAddError,
+    TypeCheckCallFnDef,
 
     // Codegen
     CodegenStart,
@@ -215,6 +237,12 @@ impl MSG {
             MSG::ParserCompleteWithItems => "parser_complete_items",
             MSG::TypeCheckStart => "typecheck_start",
             MSG::TypeCheckComplete => "typecheck_complete",
+            MSG::TypeCheckProcessFn => "typecheck_process_fn",
+            MSG::TypeCheckHasAnnotation => "typecheck_has_annotation",
+            MSG::TypeCheckAnnotation => "typecheck_annotation",
+            MSG::TypeCheckAnnotated => "typecheck_annotated",
+            MSG::TypeCheckAddError => "typecheck_add_error",
+            MSG::TypeCheckCallFnDef => "typecheck_call_fndef",
             MSG::CodegenStart => "codegen_start",
             MSG::CodegenComplete => "codegen_complete",
             MSG::CodegenFunctions => "codegen_functions",
