@@ -1,8 +1,8 @@
 # Task 5.1: Move 语义（所有权转移）
 
 > **优先级**: P0
-> **状态**: 🔄 待实现
-> **模块**: `src/core/ownership/move.rs`
+> **状态**: ✅ 已实现
+> **模块**: `src/middle/lifetime/`
 > **依赖**: 无（基础模块）
 
 ## 功能描述
@@ -217,10 +217,34 @@ pub enum OwnershipError {
 
 | RFC-009 v7 设计 | 实现状态 |
 |----------------|---------|
-| Move 语义（赋值即转移） | ✅ 待实现 |
-| 零拷贝（不自动复制） | ✅ 待实现 |
-| Drop 规则（RAII） | ✅ 待实现 |
+| Move 语义（赋值即转移） | ✅ 已实现 |
+| 零拷贝（不自动复制） | ✅ 已实现 |
+| Drop 规则（RAII） | ✅ 已实现 |
 | clone() 显式复制 | ❌ 见 task-05-04 |
+
+## 模块结构
+
+```
+src/middle/lifetime/
+├── mod.rs              # 主模块：协调者
+├── error.rs            # 错误类型定义
+│                       #   - UseAfterMove
+│                       #   - UseAfterDrop
+│                       #   - DropMovedValue
+│                       #   - DoubleDrop
+├── move_semantics.rs   # Move 语义检查
+│                       #   - MoveChecker
+│                       #   - UseAfterMove 检测
+├── drop_semantics.rs   # Drop 语义检查
+│                       #   - DropChecker
+│                       #   - UseAfterDrop 检测
+│                       #   - DropMovedValue 检测
+│                       #   - DoubleDrop 检测
+└── tests/
+    ├── mod.rs          # 测试入口
+    ├── move_semantics.rs
+    └── drop_semantics.rs
+```
 
 ## 验收测试
 
@@ -262,8 +286,3 @@ create_and_drop()
 print("Move semantics tests passed!")
 ```
 
-## 相关文件
-
-- **src/core/ownership/move.rs**: Move 语义检查
-- **src/core/ownership/drop.rs**: Drop 顺序分析
-- **src/core/ownership/mod.rs**: 所有权检查器主模块
