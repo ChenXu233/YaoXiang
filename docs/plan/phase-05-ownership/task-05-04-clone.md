@@ -2,7 +2,7 @@
 
 > **优先级**: P0
 > **状态**: 🔄 待实现
-> **模块**: `src/core/ownership/clone.rs`
+> **模块**: `src/middle/lifetime/clone.rs`
 
 ## 功能描述
 
@@ -95,39 +95,75 @@ Clone 检查器集成到现有的 `OwnershipChecker` 架构中，实现 `Ownersh
 ```rust
 // src/middle/lifetime/clone.rs
 
+#[derive(Debug, Default)]
+pub struct CloneChecker {
+    state: HashMap<Operand, ValueState>,
+    errors: Vec<OwnershipError>,
+    location: (usize, usize),
+}
+
 impl CloneChecker {
+    /// 检查 clone() 调用（核心逻辑）
+    fn check_clone(&mut self, receiver: &Operand, dst: Option<&Operand>) {
+        if let Some(state) = self.state.get(receiver) {
+            match state {
+                ValueState::Moved => self.error_clone_moved(receiver),
+                ValueState::Dropped => self.error_clone_dropped(receiver),
+                ValueState::Owned => {}
+            }
+            self.state.insert(receiver.clone(), ValueState::Owned);
+        }
+        if let Some(d) = dst {
+            self.state.insert(d.clone(), ValueState::Owned);
+        }
+    }
+
     fn check_instruction(&mut self, instr: &Instruction) {
         match instr {
             // clone() 方法调用：检查 receiver 状态
-            Instruction::Call {
-                dst: Some(dst),
-                func: Operand::Local(_) | Operand::Temp(_),
-                args,
-            } => {
+            Instruction::Call { dst, func: Operand::Local(_) | Operand::Temp(_), args } => {
                 if let Some(receiver) = args.first() {
-                    // 检查 receiver 是否可 clone
-                    if let Some(state) = self.state.get(receiver) {
-                        match state {
-                            ValueState::Moved => {
-                                self.errors.push(OwnershipError::CloneMovedValue {
-                                    value: operand_to_string(receiver),
-                                    location: self.location,
-                                });
-                            }
-                            ValueState::Dropped => {
-                                self.errors.push(OwnershipError::CloneDroppedValue {
-                                    value: operand_to_string(receiver),
-                                    location: self.location,
-                                });
-                            }
-                            ValueState::Owned => {}
-                        }
-                        // clone() 后 receiver 仍为 Owned（双方都是所有者）
-                        self.state.insert(receiver.clone(), ValueState::Owned);
-                    }
+                    self.check_clone(receiver, dst.as_ref());
+                }
+            }
+            // Move：src 被移动，dst 成为新所有者
+            Instruction::Move { dst, src } => {
+                self.state.insert(src.clone(), ValueState::Moved);
+                self.state.insert(dst.clone(), ValueState::Owned);
+            }
+            // 函数调用：参数被移动
+            Instruction::Call { args, dst, .. } => {
+                for arg in args {
+                    self.state.insert(arg.clone(), ValueState::Moved);
+                }
+                if let Some(d) = dst {
+                    self.state.insert(d.clone(), ValueState::Owned);
+                }
+            }
+            // 返回：返回值被移动
+            Instruction::Ret(Some(value)) => {
+                self.state.insert(value.clone(), ValueState::Moved);
+            }
+            // Drop：值被释放
+            Instruction::Drop(operand) => {
+                self.state.insert(operand.clone(), ValueState::Dropped);
+            }
+            // 堆分配：新值是有效的所有者
+            Instruction::HeapAlloc { dst, .. } => {
+                self.state.insert(dst.clone(), ValueState::Owned);
+            }
+            // 闭包：环境变量被移动
+            Instruction::MakeClosure { dst, env, .. } => {
+                for var in env {
+                    self.state.insert(var.clone(), ValueState::Moved);
                 }
                 self.state.insert(dst.clone(), ValueState::Owned);
             }
+            // Arc 操作：不影响原值状态
+            Instruction::ArcNew { dst, .. } | Instruction::ArcClone { dst, .. } => {
+                self.state.insert(dst.clone(), ValueState::Owned);
+            }
+            Instruction::ArcDrop(_) => {}
             _ => {}
         }
     }
@@ -138,6 +174,7 @@ impl CloneChecker {
 - **类型可克隆性**：在类型检查阶段确保（前端）
 - **值状态检查**：在所有权检查阶段确保（CloneChecker）
 - **状态管理**：clone() 后原值保持 Owned
+- **代码风格**：使用 `#[derive(Default)]`，状态操作内聚
 
 ## 错误类型
 

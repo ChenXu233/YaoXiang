@@ -42,11 +42,12 @@ pub fn init() {
 pub fn init_with_level(level: LogLevel) {
     let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
-    // Go 风格：只显示级别和消息，无时间戳、无模块路径
+    // Go 风格：显示 [LEVEL] 前缀，不显示时间、不显示模块路径、无颜色
     let layer = tracing_subscriber::fmt::layer()
         .without_time()
         .with_target(false)
-        .with_level(false)
+        .with_level(true)
+        .with_ansi(false)
         .compact()
         .with_filter(filter);
 
