@@ -90,107 +90,71 @@ user_config.timeout = 5000  # 修改副本
 
 ## 检查算法
 
+Clone 检查器集成到现有的 `OwnershipChecker` 架构中，实现 `OwnershipCheck` trait：
+
 ```rust
-struct CloneAnalyzer {
-    /// clone() 调用
-    clone_calls: Vec<CloneCall>,
-    /// 需要检查的 clone 上下文
-    contexts: Vec<CloneContext>,
-    /// 错误
-    errors: Vec<CloneError>,
-}
+// src/middle/lifetime/clone.rs
 
-impl CloneAnalyzer {
-    /// 分析 clone() 调用
-    fn analyze_clone(&mut self, call: &MethodCall) -> Result<(), CloneError> {
-        let receiver = &call.receiver;
-        let receiver_id = self.get_value_id(receiver)?;
-
-        // 检查接收者状态
-        match self.get_value_state(receiver_id) {
-            ValueState::Moved => {
-                return Err(CloneError::CloneMovedValue {
-                    value: receiver_id,
-                    span: call.span,
-                });
+impl CloneChecker {
+    fn check_instruction(&mut self, instr: &Instruction) {
+        match instr {
+            // clone() 方法调用：检查 receiver 状态
+            Instruction::Call {
+                dst: Some(dst),
+                func: Operand::Local(_) | Operand::Temp(_),
+                args,
+            } => {
+                if let Some(receiver) = args.first() {
+                    // 检查 receiver 是否可 clone
+                    if let Some(state) = self.state.get(receiver) {
+                        match state {
+                            ValueState::Moved => {
+                                self.errors.push(OwnershipError::CloneMovedValue {
+                                    value: operand_to_string(receiver),
+                                    location: self.location,
+                                });
+                            }
+                            ValueState::Dropped => {
+                                self.errors.push(OwnershipError::CloneDroppedValue {
+                                    value: operand_to_string(receiver),
+                                    location: self.location,
+                                });
+                            }
+                            ValueState::Owned => {}
+                        }
+                        // clone() 后 receiver 仍为 Owned（双方都是所有者）
+                        self.state.insert(receiver.clone(), ValueState::Owned);
+                    }
+                }
+                self.state.insert(dst.clone(), ValueState::Owned);
             }
-            ValueState::Dropped => {
-                return Err(CloneError::CloneDroppedValue {
-                    value: receiver_id,
-                    span: call.span,
-                });
-            }
-            ValueState::Owned => {
-                // 正常 clone()
-            }
-        }
-
-        // 检查类型是否可克隆
-        let ty = self.get_type(receiver_id);
-        if !self.is_cloneable(&ty) {
-            return Err(CloneError::NonCloneableType {
-                ty,
-                span: call.span,
-            });
-        }
-
-        // 记录 clone 调用
-        self.clone_calls.push(CloneCall {
-            id: self.get_value_id(&call.result)?,
-            receiver: receiver_id,
-            span: call.span,
-        });
-
-        // clone() 后原值仍然可用（双方都是 Owned）
-        self.value_states.insert(receiver_id, ValueState::Owned);
-
-        Ok(())
-    }
-
-    /// 检查类型是否可克隆
-    fn is_cloneable(&self, ty: &Type) -> bool {
-        match ty {
-            // 基础类型都可克隆
-            Type::Primitive(_) => true,
-            // 结构体需要所有字段都可克隆
-            Type::Struct(s) => s.fields.iter().all(|f| self.is_cloneable(&f.ty)),
-            // 元组
-            Type::Tuple(ts) => ts.iter().all(|t| self.is_cloneable(t)),
-            // 数组
-            Type::Array { elem, .. } => self.is_cloneable(elem),
-            // Arc 可克隆（增加引用计数）
-            Type::Arc(_) => true,
-            // 其他类型需要检查是否实现 Clone trait
-            _ => self.implements_trait(ty, "Clone"),
+            _ => {}
         }
     }
 }
 ```
 
+**设计要点**：
+- **类型可克隆性**：在类型检查阶段确保（前端）
+- **值状态检查**：在所有权检查阶段确保（CloneChecker）
+- **状态管理**：clone() 后原值保持 Owned
+
 ## 错误类型
 
+复用在 `src/middle/lifetime/error.rs` 中定义的 `OwnershipError` 枚举：
+
 ```rust
-#[derive(Debug, Clone, PartialEq)]
-pub enum CloneError {
+pub enum OwnershipError {
+    // ... 现有错误 ...
     /// clone 已移动的值
     CloneMovedValue {
-        value: ValueId,
-        span: Span,
+        value: String,
+        location: (usize, usize),
     },
     /// clone 已释放的值
     CloneDroppedValue {
-        value: ValueId,
-        span: Span,
-    },
-    /// 类型不可克隆
-    NonCloneableType {
-        ty: Type,
-        span: Span,
-    },
-    /// 缺少 clone 方法
-    MissingCloneMethod {
-        ty: Type,
-        span: Span,
+        value: String,
+        location: (usize, usize),
     },
 }
 ```
@@ -253,6 +217,7 @@ print("clone() tests passed!")
 
 ## 相关文件
 
-- **src/core/ownership/clone.rs**: clone() 分析
-- **src/core/ownership/ref.rs**: Arc clone 实现
-- **src/core/traits/mod.rs**: Clone trait 定义
+- **src/middle/lifetime/clone.rs**: CloneChecker 实现
+- **src/middle/lifetime/error.rs**: Clone 错误类型定义
+- **src/middle/lifetime/mod.rs**: OwnershipChecker 集成
+- **src/middle/lifetime/ref_semantics.rs**: Ref/Arc 语义检查（参考）

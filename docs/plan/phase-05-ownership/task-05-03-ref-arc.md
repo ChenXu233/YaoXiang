@@ -1,7 +1,7 @@
 # Task 5.3: ref 关键字（Arc 引用计数）
 
 > **优先级**: P0
-> **状态**: 🔄 待实现
+> **状态**: ✅ 已完成
 > **模块**: `src/middle/lifetime/`
 
 ## 功能描述
@@ -132,7 +132,7 @@ pub enum OwnershipError {
 
 | RFC-009 v7 设计 | 实现状态 |
 |----------------|---------|
-| ref 关键字创建 Arc | 🔄 实现中 |
+| ref 关键字创建 Arc | ✅ 已实现 |
 | Arc 自动 Send + Sync | ✅ 隐式满足 |
 | 跨 spawn 安全捕获 | ✅ 类型系统保证 |
 | 引用计数管理 | ✅ 运行时 |
@@ -178,8 +178,19 @@ print("ref (Arc) tests passed!")
 
 - **src/frontend/parser/ast.rs**: 添加 `Expr::Ref`
 - **src/frontend/parser/nud.rs**: `ref` 解析
+- **src/frontend/typecheck/types.rs**: `MonoType::Arc`
+- **src/frontend/typecheck/infer.rs**: `infer_ref` 类型推断
 - **src/middle/ir.rs**: `ArcNew`, `ArcClone`, `ArcDrop` 指令
 - **src/middle/lifetime/error.rs**: `RefNonOwner` 错误
-- **src/middle/lifetime/mod.rs**: `RefChecker`
-- **src/middle/codegen/expr.rs**: 代码生成
-- **src/vm/instructions.rs**: 运行时支持
+- **src/middle/lifetime/ref_semantics.rs**: `RefChecker` 所有权检查
+- **src/middle/codegen/expr.rs**: `generate_ref` 代码生成
+- **src/vm/opcode.rs**: `ArcNew(0x79)`, `ArcClone(0x7A)`, `ArcDrop(0x7B)`
+- **src/vm/executor.rs**: `ArcValue` 运行时实现
+
+## 测试覆盖
+
+- **src/frontend/parser/tests/ref_test.rs**: Parser 测试 (5个)
+- **src/frontend/typecheck/tests/ref_test.rs**: TypeCheck 测试 (6个)
+- **src/middle/codegen/tests/ref_test.rs**: Codegen 测试 (5个)
+- **src/middle/lifetime/tests/ref_semantics.rs**: Lifetime 测试 (5个)
+- **src/vm/tests/arc.rs**: VM 测试 (9个)
