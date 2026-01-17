@@ -89,6 +89,20 @@ pub enum OwnershipError {
         /// 目标值标识
         target_value: String,
     },
+    /// clone 已移动的值
+    CloneMovedValue {
+        /// 值标识
+        value: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// clone 已释放的值
+    CloneDroppedValue {
+        /// 值标识
+        value: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -148,6 +162,20 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "RefNonOwner: cannot create ref for value '{}' at {:?} (target defined at {:?})",
                     target_value, ref_span, target_span
+                )
+            }
+            OwnershipError::CloneMovedValue { value, location } => {
+                write!(
+                    f,
+                    "CloneMovedValue: cannot clone value '{}' that has been moved at {:?}",
+                    value, location
+                )
+            }
+            OwnershipError::CloneDroppedValue { value, location } => {
+                write!(
+                    f,
+                    "CloneDroppedValue: cannot clone value '{}' that has been dropped at {:?}",
+                    value, location
                 )
             }
         }
