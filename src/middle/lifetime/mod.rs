@@ -1,28 +1,31 @@
 //! 所有权分析与生命周期管理
 //!
-//! 实现 Move 语义检查和 Drop 语义检查，确保内存正确释放而无需 GC。
+//! 实现 Move 语义检查、Drop 语义检查和 Clone 语义检查，确保内存正确释放而无需 GC。
 //! 设计原则：
 //! 1. 每个值有一个所有者
 //! 2. 当所有者离开作用域时，值被释放
-//! 3. 所有权可以转移（Move），但不能复制（除非使用 Copy）
+//! 3. 所有权可以转移（Move），但不能复制（除非使用 clone()）
 //!
 //! # 模块结构
 //!
 //! - `error.rs`: 所有权错误类型定义
-//! - `move.rs`: Move 语义检查（UseAfterMove 检测）
-//! - `drop.rs`: Drop 语义检查（UseAfterDrop、DropMovedValue、DoubleDrop 检测）
+//! - `move_semantics.rs`: Move 语义检查（UseAfterMove 检测）
+//! - `drop_semantics.rs`: Drop 语义检查（UseAfterDrop、DropMovedValue、DoubleDrop 检测）
+//! - `clone.rs`: Clone 语义检查（CloneMovedValue、CloneDroppedValue 检测）
 
 use crate::middle::ir::{FunctionIR, Instruction, Operand};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 // 子模块
+mod clone;
 mod drop_semantics;
 mod error;
 mod move_semantics;
 mod mut_check;
 mod ref_semantics;
 
+pub use clone::*;
 pub use error::*;
 pub use move_semantics::*;
 pub use drop_semantics::*;
@@ -88,13 +91,14 @@ impl Lifetime {
 
 /// 统一的所有权检查器
 ///
-/// 同时运行 Move 检查、Drop 检查、Mut 检查和 Ref 检查，返回所有错误。
+/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查和 Clone 检查，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
     move_checker: MoveChecker,
     drop_checker: DropChecker,
     mut_checker: MutChecker,
     ref_checker: RefChecker,
+    clone_checker: CloneChecker,
 }
 
 impl OwnershipChecker {
@@ -105,6 +109,7 @@ impl OwnershipChecker {
             drop_checker: DropChecker::new(),
             mut_checker: MutChecker::new(),
             ref_checker: RefChecker::new(),
+            clone_checker: CloneChecker::default(),
         }
     }
 
@@ -117,6 +122,7 @@ impl OwnershipChecker {
         let drop_errors = self.drop_checker.check_function(func);
         let mut_errors = self.mut_checker.check_function(func);
         let ref_errors = self.ref_checker.check_function(func);
+        let clone_errors = self.clone_checker.check_function(func);
 
         // 合并错误
         move_errors
@@ -124,6 +130,7 @@ impl OwnershipChecker {
             .chain(drop_errors)
             .chain(mut_errors)
             .chain(ref_errors)
+            .chain(clone_errors)
             .cloned()
             .collect()
     }
@@ -146,6 +153,11 @@ impl OwnershipChecker {
     /// 获取 Ref 检查器的错误
     pub fn ref_errors(&self) -> &[OwnershipError] {
         self.ref_checker.errors()
+    }
+
+    /// 获取 Clone 检查器的错误
+    pub fn clone_errors(&self) -> &[OwnershipError] {
+        self.clone_checker.errors()
     }
 }
 
