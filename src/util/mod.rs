@@ -2,6 +2,7 @@
 
 pub mod cache;
 pub mod diagnostic;
+pub mod i18n;
 pub mod logger;
 pub mod span;
 
