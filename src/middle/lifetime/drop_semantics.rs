@@ -73,7 +73,7 @@ impl DropChecker {
         self.state.insert(dst.clone(), ValueState::Owned);
         if let Some(ValueState::Owned) = self.state.get(src) {
             self.state.insert(src.clone(), ValueState::Moved);
-        } else if self.state.get(src).is_none() {
+        } else if !self.state.contains_key(src) {
             self.state.insert(src.clone(), ValueState::Moved);
         }
     }
