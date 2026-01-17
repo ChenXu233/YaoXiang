@@ -59,13 +59,53 @@ fn bump_version() {
             .status()
             .expect("Failed to stage Cargo.toml");
 
-        println!("✓ Version bumped and staged!");
+        println!("[OK] Version bumped and staged!");
     }
 }
 
 fn install_git_hook() {
-    let hook_content = format!(
-        r#"#!/bin/bash
+    let is_windows = cfg!(target_os = "windows");
+
+    if is_windows {
+        // Windows batch script
+        let hook_content = r#"@echo off
+REM Yaoxiang auto-version-bump hook (Windows version)
+REM Installed by cargo xtask install-hook
+
+setlocal EnableDelayedExpansion
+
+set COMMIT_MSG_FILE=%1
+set COMMIT_SOURCE=%2
+set SHA1=%3
+
+REM Skip merges and amends
+if "%COMMIT_SOURCE%"=="merge" goto :eof
+if "%COMMIT_SOURCE%"=="squash" goto :eof
+if not "%SHA1%"=="" goto :eof
+
+REM Change to project root directory
+for /f "delims=" %%i in ('git rev-parse --show-toplevel') do set "PROJECT_ROOT=%%i"
+cd /d "%PROJECT_ROOT%"
+
+REM Only bump version if Rust files (.rs) are modified
+set "rs_files="
+for /f "delims=" %%i in ('git diff --cached --name-only ^| findstr /r "\.rs$"') do set "rs_files=%%i"
+
+if defined rs_files (
+    echo Rust files modified, bumping version...
+    cargo xtask bump-version
+) else (
+    echo No Rust files modified, skipping version bump.
+)
+
+endlocal
+"#;
+
+        let hook_path = Path::new(".git/hooks/prepare-commit-msg.bat");
+        fs::write(hook_path, hook_content).expect("Failed to write Windows hook");
+
+        // Also create bash version for Git Bash users
+        let bash_hook_content = r#"#!/bin/bash
 # Yaoxiang auto-version-bump hook
 # Installed by cargo xtask install-hook
 
@@ -92,19 +132,60 @@ if [ -n "$rs_files" ]; then
 else
     echo "No Rust files modified, skipping version bump."
 fi
-"#,
-    );
+"#;
 
-    let hook_path = Path::new(".git/hooks/prepare-commit-msg");
-    fs::write(hook_path, hook_content).expect("Failed to write hook");
+        let bash_hook_path = Path::new(".git/hooks/prepare-commit-msg");
+        fs::write(bash_hook_path, bash_hook_content).expect("Failed to write bash hook");
 
-    // Make executable (works on Unix, ignored on Windows)
-    Command::new("chmod")
-        .args(&["+x", ".git/hooks/prepare-commit-msg"])
-        .status()
-        .ok();
+        Command::new("chmod")
+            .args(&["+x", ".git/hooks/prepare-commit-msg"])
+            .status()
+            .ok();
 
-    println!("✓ Git hook installed at .git/hooks/prepare-commit-msg");
+        println!("[OK] Git hook installed at .git/hooks/prepare-commit-msg.bat (Windows CMD)");
+        println!("[OK] Also installed .git/hooks/prepare-commit-msg (Git Bash)");
+    } else {
+        // Unix/Linux/macOS bash script
+        let hook_content = r#"#!/bin/bash
+# Yaoxiang auto-version-bump hook
+# Installed by cargo xtask install-hook
+
+set -e
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+SHA1="$3"
+
+# Skip merges and amends
+if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ] || [ -n "$SHA1" ]; then
+    exit 0
+fi
+
+# Change to project root directory
+cd "$(git rev-parse --show-toplevel)"
+
+# Only bump version if Rust files (.rs) are modified
+rs_files=$(git diff --cached --name-only | grep -E '\.rs$' || true)
+
+if [ -n "$rs_files" ]; then
+    echo "Rust files modified, bumping version..."
+    exec cargo xtask bump-version
+else
+    echo "No Rust files modified, skipping version bump."
+fi
+"#;
+
+        let hook_path = Path::new(".git/hooks/prepare-commit-msg");
+        fs::write(hook_path, hook_content).expect("Failed to write hook");
+
+        Command::new("chmod")
+            .args(&["+x", ".git/hooks/prepare-commit-msg"])
+            .status()
+            .ok();
+
+        println!("[OK] Git hook installed at .git/hooks/prepare-commit-msg");
+    }
+
     println!("  Version will be bumped automatically when Rust files are committed!");
 }
 
