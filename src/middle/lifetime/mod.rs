@@ -19,6 +19,7 @@ use std::fmt;
 
 // 子模块
 mod clone;
+mod cycle_check;
 mod drop_semantics;
 mod error;
 mod move_semantics;
@@ -27,6 +28,7 @@ mod ref_semantics;
 mod send_sync;
 
 pub use clone::*;
+pub use cycle_check::*;
 pub use error::*;
 pub use move_semantics::*;
 pub use drop_semantics::*;
@@ -93,7 +95,7 @@ impl Lifetime {
 
 /// 统一的所有权检查器
 ///
-/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查和 Send/Sync 检查，返回所有错误。
+/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、Send/Sync 检查和跨 spawn 循环检查，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
     move_checker: MoveChecker,
@@ -102,6 +104,7 @@ pub struct OwnershipChecker {
     ref_checker: RefChecker,
     clone_checker: CloneChecker,
     send_sync_checker: SendSyncChecker,
+    cycle_checker: CycleChecker,
 }
 
 impl OwnershipChecker {
@@ -114,6 +117,7 @@ impl OwnershipChecker {
             ref_checker: RefChecker::new(),
             clone_checker: CloneChecker::default(),
             send_sync_checker: SendSyncChecker::new(),
+            cycle_checker: CycleChecker::new(),
         }
     }
 
@@ -128,6 +132,7 @@ impl OwnershipChecker {
         let ref_errors = self.ref_checker.check_function(func);
         let clone_errors = self.clone_checker.check_function(func);
         let send_sync_errors = self.send_sync_checker.check_function(func);
+        let cycle_errors = self.cycle_checker.check_function(func);
 
         // 合并错误
         move_errors
@@ -137,6 +142,7 @@ impl OwnershipChecker {
             .chain(ref_errors)
             .chain(clone_errors)
             .chain(send_sync_errors)
+            .chain(cycle_errors)
             .cloned()
             .collect()
     }
@@ -169,6 +175,11 @@ impl OwnershipChecker {
     /// 获取 Send/Sync 检查器的错误
     pub fn send_sync_errors(&self) -> &[OwnershipError] {
         self.send_sync_checker.errors()
+    }
+
+    /// 获取跨 spawn 循环检查的错误
+    pub fn cycle_errors(&self) -> &[OwnershipError] {
+        self.cycle_checker.errors()
     }
 }
 

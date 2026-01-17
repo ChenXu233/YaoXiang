@@ -121,6 +121,13 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 跨 spawn 循环引用（Task 5.6）
+    CrossSpawnCycle {
+        /// 详细信息
+        details: String,
+        /// 发生位置
+        span: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -216,6 +223,13 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "NotSync: value '{}' cannot be shared between threads: {} at {:?}",
                     value, reason, location
+                )
+            }
+            OwnershipError::CrossSpawnCycle { details, span } => {
+                write!(
+                    f,
+                    "CrossSpawnCycle: {} at {:?}",
+                    details, span
                 )
             }
         }

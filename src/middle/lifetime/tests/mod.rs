@@ -2,6 +2,7 @@
 //!
 //! 测试生命周期分析和所有权检查功能
 
+mod cycle_check;
 mod drop_semantics;
 mod move_semantics;
 mod mut_check;
