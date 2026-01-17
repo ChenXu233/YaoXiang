@@ -104,30 +104,26 @@ cargo run -- dump docs/examples/hello.yx
 ### Code Example
 
 ```yaoxiang
-# === Basic Syntax ===
+# === Type Definitions ===
 
-# Variable with type inference
-x: Int = 42
-y = 42                               # Inferred as Int
-name = "YaoXiang"                    # Inferred as String
+# Data types (curly braces)
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
+type Color = { red | green | blue }
 
-# Function definition (type signature required)
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
-
-# Type definition (only constructors)
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
-type Color = red | green | blue
+# Interface types (square brackets)
+type Serializable = [ serialize() -> String ]
 
 # Value construction
 p = Point(3.0, 4.0)
 r = ok("success")
 
+# === Functions ===
+add: (Int, Int) -> Int = (a, b) => a + b
+
 # === Entry Point ===
 main: () -> Void = () => {
     print("Hello, YaoXiang!")
-    print("2 + 3 = " + add(2, 3).to_string())
 }
 ```
 
@@ -374,91 +370,58 @@ cargo run -- dump docs/examples/hello.yx                   # 转储 AST/字节�
 ### 代码示例
 
 ```yaoxiang
-# 自动类型推断
-x: Int = 42
-y = 42                               # 推断为 Int
-name = "YaoXiang"                    # 推断为 String
+# === 类型定义 ===
 
-# 统一声明语法：标识符: 类型 = 表达式
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
+# 数据类型（花括号）
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
+type Color = { red | green | blue }
 
-# 统一类型语法：只有构造器，没有 enum/struct/union 关键字
-# 规则：用 | 分隔的都是构造器，构造器名(参数) 就是类型
-type Point = Point(x: Float, y: Float)          # 单构造器（结构体风格）
-type Result[T, E] = ok(T) | err(E)              # 多构造器（联合风格）
-type Color = red | green | blue                  # 零参构造器（枚举风格）
+# 接口类型（方括号）
+type Serializable = [ serialize() -> String ]
 
-# 值构造：与函数调用完全相同
+# 值构造
 p = Point(3.0, 4.0)
 r = ok("success")
-c = green
+
+# === 函数 ===
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# === 入口点 ===
+main: () -> Void = () => {
+    print("Hello, YaoXiang!")
+}
 
 # === 并作模型：同步语法，异步本质 ===
 
-# 使用 spawn 标记异步函数 - 语法与普通函数完全一致
+# 使用 spawn 标记异步函数
 fetch_data: (String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
 
 # 自动并行：多个 spawn 调用自动并行执行
 process_users_and_posts: () -> Void spawn = () => {
-    users = fetch_data("https://api.example.com/users")  # Async[JSON]
-    posts = fetch_data("https://api.example.com/posts")  # Async[JSON]
+    users = fetch_data("https://api.example.com/users")
+    posts = fetch_data("https://api.example.com/posts")
 
-    # users 和 posts 自动并行执行，无需 await
-    print("Users: " + users.length.to_string())
-    print("Posts: " + posts.length.to_string())
+    # 自动并行执行，无需 await
+    print(users.length.to_string())
+    print(posts.length.to_string())
 }
 
 # 并发构造块：显式并行
 compute_all: () -> (Int, Int, Int) spawn = () => {
-    # spawn { } 内的表达式强制并行执行
     (a, b, c) = spawn {
-        heavy_calc(1),    # 独立任务 1
-        heavy_calc(2),    # 独立任务 2
-        heavy_calc(3)     # 独立任务 3
+        heavy_calc(1),
+        heavy_calc(2),
+        heavy_calc(3)
     }
     (a, b, c)
 }
 
-# 数据并行循环
-parallel_sum: (Int) -> Int spawn = (n) => {
-    # spawn for 标记的循环自动并行化
-    total = spawn for i in 0..n {
-        fibonacci(i)  # 每次迭代并行执行
-    }
-    total
-}
+# === 泛型 ===
 
-# === 线程安全：Send/Sync 约束 ===
-
-# Arc：原子引用计数（线程安全）
-type ThreadSafeCounter = ThreadSafeCounter(value: Int)
-
-main: () -> Void = () => {
-    # Arc 实现 Send + Sync
-    counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(0))
-
-    # spawn 自动检查 Send 约束
-    spawn(|| => {
-        guard = counter.value.lock()  # Mutex 提供内部可变性
-        guard.value = guard.value + 1
-    })
-
-    # ...
-}
-
-# === 泛型与高阶函数 ===
-
-# 泛型函数
-identity: <T> (T) -> T = x => x
-
-# 高阶函数
-apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
-
-# 柯里化
-add_curried: Int -> Int -> Int = a => b => a + b
+identity: [T](T) -> T = (x) => x
 ```
 
 ---

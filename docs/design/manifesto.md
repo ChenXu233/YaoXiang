@@ -1,9 +1,9 @@
 # YaoXiang（爻象）设计宣言
 
-> **版本**：v1.1.0
+> **版本**：v1.2.0
 > **状态**：正式发布
 > **作者**：晨煦 + YaoXiang 社区
-> **日期**：2025-01-03
+> **日期**：2025-01-17
 
 ---
 
@@ -146,41 +146,64 @@ enum Color { Red, Green, Blue }
 union IntOrFloat { i: i32, f: f32 }
 ```
 
-**YaoXiang 的统一语法**：只有构造器，没有 `enum`、`struct`、`union` 关键字。规则简单——用 `|` 分隔的都是构造器，构造器名(参数) 就是类型。
+**YaoXiang 的统一语法**：只有 `type` 关键字，用 `{}` 定义数据结构，用 `[]` 定义接口类型。
 
 ```yaoxiang
-# 单构造器（结构体风格）
-type Point = Point(x: Float, y: Float)
+# === 数据类型（花括号） ===
 
-# 多构造器（联合风格）
-type Result[T, E] = ok(T) | err(E)
+# 结构体
+type Point = { x: Float, y: Float }
 
-# 零参构造器（枚举风格）
-type Color = red | green | blue
+# 枚举（多构造器）
+type Result[T, E] = { ok(T) | err(E) }
 
-# 混合构造器
-type Shape = circle(Float) | rect(Float, Float)
+# 零参构造器
+type Color = { red | green | blue }
+
+# 混合类型
+type Shape = { circle(Float) | rect(Float, Float) }
+
+# === 接口类型（方括号） ===
+
+# 接口定义：方法签名集合
+type Serializable = [
+    serialize() -> String
+]
+
+type Drawable = [
+    draw(Surface) -> Void,
+    bounding_box() -> Rect
+]
+
+# === 泛型 ===
+
+type Option[T] = { some(T) | none }
+type Result[T, E] = { ok(T) | err(E) }
 ```
 
-**创新价值**：消除了类型定义的关键字碎片，让类型系统更统一、更简洁。
+**创新价值**：统一类型语法，消除 `enum`/`struct`/`union`/`trait` 关键字碎片。
 
 ### 3.2 创新二：构造器即类型
 
-**值构造与函数调用完全相同**：
+**值构造与模式匹配完全相同**：
 
 ```yaoxiang
 # 类型定义
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
 
-# 值构造：与函数调用语法完全相同
+# 值构造：与函数调用相同
 p: Point = Point(3.0, 4.0)
 r: Result[Int, String] = ok(42)
 err_msg: Result[Int, String] = err("not found")
 c: Color = green
-```
 
-**创新价值**：消除了「类型」与「值」之间的认知鸿沟，学习成本更低，代码更一致。
+# 模式匹配：直接解构
+match point {
+    Point(0.0, 0.0) -> "origin"
+    Point(x, y) -> "point at ({x}, {y})"
+}
+```
 
 ### 3.3 创新三：柯里化方法绑定
 
@@ -189,18 +212,18 @@ YaoXiang 采用纯函数式设计，通过柯里化实现类似对象方法调�
 ```yaoxiang
 # === Point.yx ===
 
-# 统一语法：构造器就是类型
-type Point = Point(x: Float, y: Float)
+# 类型定义
+type Point = { x: Float, y: Float }
 
-# 核心函数：欧几里得距离（第一个参数是操作的主体）
+# 核心函数：欧几里得距离
 distance(Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# 方法语法糖绑定（RFC-004）
-Point.distance = distance  # 默认绑定到第 0 位，等价于 distance[0]
+# 方法语法糖绑定
+Point.distance = distance  # 默认绑定到第 0 位
 ```
 
 ```yaoxiang
@@ -379,11 +402,14 @@ main() -> Void = () => {
 
 ```yaoxiang
 # 统一类型语法
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
-type Color = red | green | blue
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
+type Color = { red | green | blue }
 
-# 函数定义（箭头函数语法）
+# 接口类型
+type Serializable = [ serialize() -> String ]
+
+# 函数定义
 add: (Int, Int) -> Int = (a, b) => a + b
 
 # 泛型函数
@@ -409,10 +435,10 @@ classify(Int) -> String = (n) => {
 }
 
 # 解构模式
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 match point {
     Point(0.0, 0.0) -> "origin"
-    Point(x, y) -> "point at (" + x + ", " + y + ")"
+    Point(x, y) -> "point at ({x}, {y})"
 }
 ```
 
@@ -431,8 +457,10 @@ matrix = [[i * j for j in 1..4] for i in 1..3]
 ### 4.5 所有权模型
 
 ```yaoxiang
+type Point = { x: Float, y: Float }
+
 # 默认 Move（零拷贝）
-p: Point = Point(1.0, 2.0)
+p = Point(1.0, 2.0)
 p2 = p              # Move，所有权转移，p 失效
 
 # 显式 ref = Arc（安全共享）
@@ -454,9 +482,9 @@ p3 = p.clone()      # p 和 p3 独立
 
 ```yaoxiang
 # Result 类型
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok(T) | err(E) }
 
-fn divide(Float, Float) -> Result[Float, String] = (a, b) => {
+divide: (Float, Float) -> Result[Float, String] = (a, b) => {
     if b == 0.0 {
         err("Division by zero")
     } else {
@@ -465,7 +493,7 @@ fn divide(Float, Float) -> Result[Float, String] = (a, b) => {
 }
 
 # 使用 ? 运算符
-process() -> Result[Int, String] = () => {
+process: () -> Result[Int, String] = () => {
     a = read_number()?
     b = read_number()?
     c = divide(a, b)?
@@ -476,14 +504,14 @@ process() -> Result[Int, String] = () => {
 ### 4.7 并发编程（SeamlessAsync）
 
 ```yaoxiang
-# spawn 标记异步函数（RFC-003 语法）
-fetch_api: String -> JSON = spawn (url) => {
+# spawn 标记异步函数
+fetch_api: String -> JSON spawn = (url) => {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
 # 并发构造块：显式并行
-process_all: () -> (JSON, JSON, JSON) = spawn () => {
+process_all: () -> (JSON, JSON, JSON) spawn = () => {
     (a, b, c) = spawn {
         fetch_api("https://api1.com/data"),
         fetch_api("https://api2.com/data"),
@@ -493,7 +521,7 @@ process_all: () -> (JSON, JSON, JSON) = spawn () => {
 }
 
 # 数据并行循环
-parallel_process: Int -> Int = spawn (n) => {
+parallel_process: Int -> Int spawn = (n) => {
     total = spawn for i in 0..n {
         compute(i)
     }
@@ -501,14 +529,16 @@ parallel_process: Int -> Int = spawn (n) => {
 }
 
 # 线程安全示例
-type ThreadSafeCounter = ThreadSafeCounter(value: Mutex[Int])
+type ThreadSafeCounter = { value: Mutex[Int] }
 
 main: () -> Void = () => {
-    counter: Arc[ThreadSafeCounter] = Arc.new(ThreadSafeCounter(Mutex.new(0)))
+    counter = ThreadSafeCounter(Mutex.new(0))
 
-    # 自动并行执行
-    spawn () => counter.value.lock().value = counter.value.lock().value + 1
-    spawn () => counter.value.lock().value = counter.value.lock().value + 2
+    # spawn 自动检查 Send 约束
+    spawn () => {
+        guard = counter.value.lock()
+        guard.value = guard.value + 1
+    }
 }
 ```
 
@@ -523,7 +553,7 @@ main: () -> Void = () => {
 | 模块 | 决策 | 说明 |
 |------|------|------|
 | **类型系统** | 一切皆类型 | 值、函数、模块、泛型都是类型 |
-| **类型语法** | 统一构造器语法 | 无 `enum`、`struct`、`union` 关键字 |
+| **类型语法** | 统一花括号语法 | `{}` 数据类型，`[]` 接口类型 |
 | **缩进规则** | 4空格缩进 | 强制要求，禁止 Tab |
 | **关键字** | 17个核心关键字 | 如上表所列 |
 | **函数语法** | 箭头函数语法 | `name: (Type1, Type2) -> Type = (params) => body` |
@@ -571,8 +601,8 @@ main: () -> Void = () => {
 |------|------|------|--------|
 | **v0.1** | ✅ 完成 | 解释器原型 | 基本解释器、词法分析、语法分析、基础类型 |
 | **v0.2** | ✅ 完成 | 完整解释器 | 类型检查、模式匹配、模块系统 |
-| **v0.3** | 🔄 进行中 | 字节码生成 | IR 中间表示、字节码生成、闭包优化 |
-| **v0.4** | 🔄 进行中 | 字节码虚拟机 | VM 核心、指令执行、调用帧管理 |
+| **v0.3** | 🔄 进行中 | 字节码生成 | IR中间表示、字节码生成、闭包优化、单态化 |
+| **v0.4** | 🔄 进行中 | 字节码虚拟机 | VM核心、指令执行、调用帧管理、内联缓存 |
 | **v0.5** | ⏳ 待开始 | 运行时系统 | GC、调度器、标准库 IO |
 | **v1.0** | ⏳ 待开始 | AOT 编译器 | 完整优化、本地代码生成 |
 | **v2.0** | ⏳ 待开始 | 自举编译器 | 用 YaoXiang 编写的新编译器 |
@@ -586,9 +616,12 @@ main: () -> Void = () => {
 | **类型检查器** | ✅ 完成 | 95% | 类型推断、单态化、泛型特化、错误处理 |
 | **IR 中间表示** | ✅ 完成 | 90% | IR 指令定义、类型表示、控制流图 |
 | **字节码生成** | ✅ 完成 | 85% | 表达式/语句/控制流字节码、闭包转换 |
-| **字节码虚拟机** | ✅ 完成 | 80% | VM 核心、指令执行、调用帧、内联缓存 |
+| **所有权系统** | ✅ 完成 | 100% | Move语义、Clone/Drop语义、可变性检查、Send/Sync约束 |
+| **单态化** | ✅ 完成 | 100% | 泛型实例化、特化实现 |
+| **逃逸分析** | 🔄 进行中 | 40% | 基础框架、变量逃逸判断 |
+| **字节码虚拟机** | 🔄 进行中 | 70% | VM核心、指令执行、调用帧、内联缓存 |
 | **运行时调度器** | 🔄 进行中 | 60% | 任务描述符、工作窃取队列、等待队列 |
-| **运行时内存** | 🔄 进行中 | 50% | 内存分配器、GC 框架 |
+| **运行时内存** | 🔄 进行中 | 50% | 内存分配器、GC框架 |
 | **标准库** | 🔄 进行中 | 30% | IO、String、List、Dict、Math、Concurrent |
 | **JIT 编译器** | ⏳ 待开始 | 0% | 待集成 Cranelift/LLVM |
 | **AOT 编译器** | ⏳ 待开始 | 0% | 待实现 |
@@ -602,6 +635,7 @@ main: () -> Void = () => {
 | 控制流生成 | ✅ 完成 | Switch 模式匹配、循环展开 |
 | 闭包处理 | ✅ 完成 | 环境捕获、闭包转换 |
 | 字节码序列化 | ✅ 完成 | 字节码读写、测试用例 |
+| 生成器代码生成 | ✅ 完成 | yield语法支持、状态机转换 |
 | 集成测试 | ✅ 完成 | 端到端编译执行测试 |
 
 **异步实现状态（并作模型）**：
@@ -633,12 +667,12 @@ YaoXiang 是一门诞生于社区、成长于社区、服务于社区的语言�
 - **设计提案（RFC）**：提出新特性的设计文档，遵循 `rfcs/` 目录下的模板
 - **语法评审**：对现有语法设计提出改进建议或发现潜在问题
 
-**当前热门议题**：
-
-- 宏系统的设计与实现
-- 泛型 trait/bounds 机制
-- 错误处理语法优化
-- 标准库 API 设计
+| **当前热门议题**： |
+| |
+| - 宏系统的设计与实现 |
+| - 接口类型机制 |
+| - 错误处理语法优化 |
+| - 标准库 API 设计 |
 
 **提交设计提案**：
 
@@ -918,9 +952,9 @@ A: 通过 GitHub Discussions 或 Discord 社区频道。核心团队成员会定
 
 ---
 
-> **最后更新**：2025-01-03
+> **最后更新**：2025-01-17
 >
-> **文档版本**：v1.1.0
+> **文档版本**：v1.2.0
 >
 > **许可证**：[MIT](LICENSE)
 

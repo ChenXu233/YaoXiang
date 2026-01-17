@@ -164,7 +164,7 @@ TypeExpr    ::= PrimitiveType
 ### 3.3 结构体类型
 
 ```
-StructType  ::= Identifier '(' FieldList ')'
+StructType  ::= '{' FieldList? '}'
 FieldList   ::= Field (',' Field)* ','?
 Field       ::= Identifier ':' TypeExpr
 ```
@@ -172,11 +172,18 @@ Field       ::= Identifier ':' TypeExpr
 ### 3.4 枚举类型
 
 ```
-EnumType    ::= Identifier '=' Variant ('|' Variant)*
+EnumType    ::= '{' Variant ('|' Variant)* '}'
 Variant     ::= Identifier (':' TypeExpr)?
 ```
 
-### 3.5 元组类型
+### 3.5 接口类型
+
+```
+InterfaceType ::= '[' FnSignature (',' FnSignature)* ']'
+FnSignature   ::= Identifier '(' ParamTypes? ')' '->' TypeExpr
+```
+
+### 3.6 元组类型
 
 ```
 TupleType   ::= '(' TypeList? ')'
@@ -761,16 +768,22 @@ data = match fetch_data() {
 ### A.1 类型定义
 
 ```
-# 简单类型
-type Result[T, E] = ok(T) | err(E)
+# === 数据类型（花括号） ===
 
-# 构造器类型
-type Point = Point(x: Float, y: Float)
+# 结构体
+type Point = { x: Float, y: Float }
 
-# 枚举类型
-type Status = pending | processing | completed
+# 枚举
+type Result[T, E] = { ok(T) | err(E) }
+type Status = { pending | processing | completed }
 
-# 函数类型
+# === 接口类型（方括号） ===
+
+# 接口定义
+type Serializable = [ serialize() -> String ]
+
+# === 函数类型 ===
+
 type Adder = (Int, Int) -> Int
 ```
 
@@ -830,7 +843,7 @@ match value {
 |---------|------|---------|------|
 | match arm 分隔符 | `->` | `=>` | 使用 `=>` (FatArrow) |
 | 函数定义 | `name(types) -> type = (params) => body` | 两种形式 | 支持类型集中式 `name: Type = (params) =>` |
-| 类型定义 | `type Point = { x: Float }` | `type Point = Point(x: Float)` | 使用构造器语法 |
+| 接口类型 | `type Serializable = [ serialize() -> String ]` | ❌ 未实现 | 方括号语法待实现 |
 
 ### B.3 待实现特性
 
@@ -838,6 +851,8 @@ match value {
 
 | 特性 | 优先级 | 说明 |
 |------|--------|------|
+| 花括号类型语法 | P0 | `type Point = { x: Float, y: Float }` |
+| 接口类型 | P1 | `type Serializable = [ serialize() -> String ]` |
 | 列表推导式 | P2 | `[x for x in list if condition]` |
 | `?` 错误传播 | P1 | Result 类型自动错误传播 |
 | `ref` 关键字 | P1 | Arc 引用计数共享 |
