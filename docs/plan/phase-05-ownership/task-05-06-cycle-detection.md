@@ -1,69 +1,70 @@
-# Task 5.6: 跨任务循环引用检测
+# Task 5.6: 跨 spawn 循环引用检测
 
 > **优先级**: P1
-> **状态**: 🔄 待实现
-> **模块**: `src/core/lifetime/cycle_check.rs`
-> **依赖**: task-05-03（ref Arc），phase-09（DAG 分析）
+> **状态**: ✅ 已实现
+> **模块**: `src/middle/lifetime/cycle_check.rs`
+> **依赖**: task-05-03（ref Arc）
+> **测试**: `src/middle/lifetime/tests/cycle_check.rs` (14 测试用例)
 
-## 功能描述
+## 循环检测边界
 
-检测跨任务边是否形成循环引用：
+### 循环类型与处理
 
-- **任务内循环**：允许（泄漏可控，任务结束后释放）
-- **跨任务循环**：编译器检测并报错
+| 循环类型 | 检测位置 | 处理 |
+|----------|----------|------|
+| **单函数内 ref 循环** | OwnershipChecker | ✅ 允许（泄漏可控） |
+| **spawn 内部 ref 循环** | OwnershipChecker | ✅ 允许（泄漏可控） |
+| **跨 spawn 参数/返回值 ref 循环** | CycleChecker（新增） | ❌ 检测并报错 |
 
-> **RFC-009 v7 核心规则**：跨 spawn 边的 ref 引用不能形成环。
+### 检测范围（只追踪边界）
 
-## 循环检测规则
+```
+只追踪 spawn 的参数和返回值：
 
-### 任务内循环（允许）
+spawn 参数 ────▶ spawn 内部
+                │
+                └──▶ spawn 返回值
 
-```yaoxiang
-# ✅ 允许：任务内循环引用（泄漏可控）
-type Node = Node(child: ?Node)
-
-main: () -> Void = () => {
-    a: Node = Node(None)
-    b: Node = Node(None)
-
-    # 任务内循环：允许
-    a.child = ref b
-    b.child = ref a
-
-    # 任务结束后，Arc 计数归零，值释放
-    # 泄漏是可控的
-}
+检测：参数和返回值之间的 ref 是否形成环
 ```
 
-### 跨任务循环（检测）
+### 不检测的情况
 
 ```yaoxiang
-# ❌ 错误：跨任务循环引用
-type Node = Node(child: ?Node)
+# ✅ 允许：单函数内循环
+main: () -> Void = () => {
+    a = Node(None)
+    b = Node(None)
+    a.child = ref b  # 单函数内，泄漏可控
+    b.child = ref a
+}
 
-# 任务 A 创建节点
-task_a: () -> Node = () => {
-    a: Node = Node(None)
+# ✅ 允许：spawn 内部循环
+task_with_cycle: () -> Node = () => {
+    a = Node(None)
+    b = Node(None)
+    a.child = ref b  # spawn 内部，泄漏可控
+    b.child = ref a
     a
 }
 
-# 任务 B 创建节点并引用 A
-task_b: (Node) -> Void = (a_ref) => {
-    b: Node = Node(None)
-    b.child = ref a_ref
-    # 如果 a_ref 又 ref b，就会形成循环
+# ✅ 允许：工作池（扇出，不是环）
+main: () -> Void = () => {
+    shared = ref config
+    workers = spawn for i in 0..10 {
+        process(shared)  # 多个任务共享同一个，不是环
+    }
 }
 
+# ❌ 检测：跨 spawn 循环
 main: () -> Void = () => {
-    a = spawn(task_a())
-    b = spawn(task_b(ref a))
-
-    # ❌ 编译错误：跨任务循环
-    # a 持有 b 的引用，b 持有 a 的引用
+    a = spawn(task_a())      # 返回值 ref_a
+    b = spawn(task_b(ref a)) # 参数 ref a，返回值 ref_b
+    a.child = ref b          # ref_a 持有 ref_b → 环！
 }
 ```
 
-### 检测原理
+## 检测原理
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -72,276 +73,221 @@ main: () -> Void = () => {
 │                                                                      │
 │  任务树构建：                                                         │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  spawn ──▶ Task A ──▶ ref ──▶ Node A                        │   │
+│  │  spawn ──▶ Task A (参数: [], 返回值: ref_a)                  │   │
 │  │       │                                                      │   │
-│  │       └──▶ Task B ──▶ ref ──▶ Node B ──▶ ref ──▶ Node A     │   │
+│  │       └──▶ Task B (参数: [ref_a], 返回值: ref_b)             │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 │                                                                      │
-│  边类型：                                                            │
-│  - 任务创建边：spawn ──▶ Task                                       │
-│  - 引用边：Task/Node ──▶ ref ──▶ Node                               │
+│  跨 spawn 边：                                                        │
+│  - Task B 的参数 ref_a 来自 Task A 的返回值                          │
+│  - 如果 ref_a 又持有 ref_b → 环                                     │
 │                                                                      │
 │  检测算法：                                                          │
-│  1. 构建任务图（所有 spawn 节点）                                    │
-│  2. 追踪所有 ref 引用的源和目标                                      │
-│  3. 检测跨任务边是否形成环                                           │
+│  1. 收集所有 spawn 的参数和返回值                                    │
+│  2. 构建跨 spawn 引用图                                             │
+│  3. 检测是否形成环                                                   │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 检查算法
+## 简化检查算法（只追踪边界）
 
 ```rust
+/// 循环检测器（只追踪 spawn 参数和返回值）
 struct CycleChecker {
-    /// 任务图
-    task_graph: TaskGraph,
-    /// 引用关系图
-    ref_graph: RefGraph,
-    /// 跨任务引用边
-    cross_task_edges: Vec<CrossTaskEdge>,
+    /// 跨 spawn 引用边：spawn 返回值 ──▶ ref
+    spawn_ref_edges: Vec<SpawnRefEdge>,
+    /// 跨 spawn 参数边：spawn ──▶ 参数 ref 的来源
+    spawn_param_edges: Vec<SpawnParamEdge>,
     /// 错误
-    errors: Vec<CycleError>,
+    errors: Vec<OwnershipError>,
 }
 
-#[derive(Debug)]
-struct TaskGraph {
-    /// 任务节点
-    tasks: HashMap<TaskId, TaskNode>,
-    /// 任务创建关系
-    spawn_edges: Vec<SpawnEdge>,
-}
-
-#[derive(Debug)]
-struct RefGraph {
-    /// 节点（任务或值）
-    nodes: HashMap<NodeId, RefNode>,
-    /// 引用边
-    edges: Vec<RefEdge>,
-}
-
+/// spawn 返回值持有外部 ref 的边
 #[derive(Debug, Clone)]
-struct CrossTaskEdge {
-    /// 源任务
-    from_task: TaskId,
-    /// 目标任务
-    to_task: TaskId,
-    /// 引用的值
-    target_value: ValueId,
-    /// 位置
+struct SpawnRefEdge {
+    /// spawn 任务 ID
+    spawn_id: ValueId,
+    /// 返回值持有的 ref（指向外部值）
+    ref_target: ValueId,
+    span: Span,
+}
+
+/// spawn 参数来自另一个 spawn 返回值
+#[derive(Debug, Clone)]
+struct SpawnParamEdge {
+    /// 接收参数的 spawn
+    consumer_spawn: ValueId,
+    /// 提供的 spawn 返回值
+    producer_spawn: ValueId,
     span: Span,
 }
 
 impl CycleChecker {
     /// 检查循环引用
-    fn check_cycles(&mut self) -> Result<(), CycleError> {
-        // 1. 构建任务图
-        self.build_task_graph()?;
+    fn check_cycles(&mut self, func: &FunctionIR) -> Vec<OwnershipError> {
+        self.errors.clear();
+        self.spawn_ref_edges.clear();
+        self.spawn_param_edges.clear();
 
-        // 2. 构建引用图
-        self.build_ref_graph()?;
+        // 1. 收集 spawn 相关信息
+        self.collect_spawn_edges(func);
 
-        // 3. 收集跨任务引用边
-        self.collect_cross_task_edges()?;
+        // 2. 构建跨 spawn 引用图
+        let graph = self.build_spawn_graph();
 
-        // 4. 检测跨任务循环
-        self.detect_cross_task_cycles()
-    }
-
-    /// 构建任务图
-    fn build_task_graph(&mut self) -> Result<(), CycleError> {
-        for spawn in self.all_spawn_exprs() {
-            let parent_task = self.current_task();
-            let child_task = spawn.task_id();
-
-            // 记录 spawn 边
-            self.task_graph.spawn_edges.push(SpawnEdge {
-                parent: parent_task,
-                child: child_task,
-                span: spawn.span,
-            });
-
-            // 添加任务节点
-            self.task_graph.tasks.insert(child_task, TaskNode {
-                id: child_task,
-                created_by: parent_task,
-                values: spawn.captured_values(),
+        // 3. 检测环
+        if self.has_cycle(&graph) {
+            self.errors.push(OwnershipError::CrossTaskCycle {
+                details: format!("循环引用检测：{:?}", graph),
+                span: (0, 0),
             });
         }
 
-        Ok(())
+        self.errors.clone()
     }
 
-    /// 构建引用图
-    fn build_ref_graph(&mut self) -> Result<(), CycleError> {
-        for ref_expr in self.all_ref_exprs() {
-            let source = ref_expr.source();
-            let target = ref_expr.target();
-            let target_task = self.get_value_task(target);
+    /// 收集 spawn 的参数和返回值信息
+    fn collect_spawn_edges(&mut self, func: &FunctionIR) {
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            for (instr_idx, instr) in block.instructions.iter().enumerate() {
+                match instr {
+                    // spawn 指令：收集参数和返回值
+                    Instruction::Spawn {
+                        task_id,
+                        args,
+                        result,
+                        ..
+                    } => {
+                        // 检查参数是否来自其他 spawn 的返回值
+                        for arg in args {
+                            if let Some(producer) = self.get_producer_spawn(arg) {
+                                self.spawn_param_edges.push(SpawnParamEdge {
+                                    consumer_spawn: *task_id,
+                                    producer_spawn: producer,
+                                    span: (block_idx, instr_idx),
+                                });
+                            }
+                        }
 
-            // 确定源节点类型
-            let source_node = if source.is_task() {
-                NodeId::Task(source.task_id())
-            } else {
-                NodeId::Value(source.value_id())
-            };
+                        // 检查返回值是否持有外部 ref
+                        if let Some(ret_val) = result {
+                            // 返回值的定义点
+                            if let Some(def) = self.get_value_definition(ret_val) {
+                                // 如果返回值持有的类型是 ref，追踪它
+                                if let Some(ref_target) = self.get_ref_target(ret_val) {
+                                    self.spawn_ref_edges.push(SpawnRefEdge {
+                                        spawn_id: *task_id,
+                                        ref_target,
+                                        span: (block_idx, instr_idx),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    // ref 指令：追踪 ref 的目标
+                    Instruction::Ref { dst, src } => {
+                        // dst 持有 src 的 ref
+                        // 如果 dst 是某个 spawn 的返回值，src 是外部值
+                        // 则记录这条边
+                        self.record_ref_edge(*dst, *src);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
 
-            // 确定目标节点
-            let target_node = NodeId::Value(target.value_id());
+    /// 构建跨 spawn 引用图
+    fn build_spawn_graph(&self) -> HashMap<ValueId, HashSet<ValueId>> {
+        let mut graph: HashMap<ValueId, HashSet<ValueId>> = HashMap::new();
 
-            // 记录引用边
-            self.ref_graph.edges.push(RefEdge {
-                from: source_node,
-                to: target_node,
-                span: ref_expr.span,
-            });
-
-            // 添加到节点映射
-            self.ref_graph.nodes.insert(source_node, RefNode {
-                id: source_node,
-                refs_to: vec![target_node],
-            });
+        // 参数边：producer → consumer（consumer 使用了 producer）
+        for edge in &self.spawn_param_edges {
+            graph
+                .entry(edge.producer_spawn)
+                .or_default()
+                .insert(edge.consumer_spawn);
         }
 
-        Ok(())
-    }
-
-    /// 收集跨任务引用边
-    fn collect_cross_task_edges(&mut self) -> Result<(), CycleError> {
-        for edge in &self.ref_graph.edges {
-            let from_task = self.get_edge_source_task(edge);
-            let to_task = self.get_edge_target_task(edge);
-
-            // 跨任务引用
-            if from_task != to_task {
-                self.cross_task_edges.push(CrossTaskEdge {
-                    from_task,
-                    to_task,
-                    target_value: edge.to_value(),
-                    span: edge.span,
-                });
+        // ref 边：spawn 返回值持有外部 ref
+        for edge in &self.spawn_ref_edges {
+            // ref_target 可能有多个来源，找到它所属的 spawn
+            if let Some(source_spawn) = self.find_spawn_owning_value(edge.ref_target) {
+                // source_spawn → edge.spawn_id（有 ref 关系）
+                graph
+                    .entry(source_spawn)
+                    .or_default()
+                    .insert(edge.spawn_id);
             }
         }
 
-        Ok(())
+        graph
     }
 
-    /// 检测跨任务循环（Tarjan SCC 算法）
-    fn detect_cross_task_cycles(&mut self) -> Result<(), CycleError> {
-        // 使用 Tarjan 算法找强连通分量（SCC）
-        let sccs = self.tarjan_scc(&self.cross_task_edges)?;
+    /// 检测是否有环（简化版：只检测 spawn 参数/返回值之间）
+    fn has_cycle(&self, graph: &HashMap<ValueId, HashSet<ValueId>>) -> bool {
+        // 使用 DFS 检测环
+        let mut visited = HashSet::new();
+        let mut recursion_stack = HashSet::new();
 
-        // 检查每个 SCC 是否包含跨任务引用
-        for scc in &sccs {
-            if self.is_cross_task_cycle(scc) {
-                return Err(CycleError::CrossTaskCycle {
-                    tasks: scc.tasks.clone(),
-                    edges: scc.edges.clone(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// 判断 SCC 是否构成跨任务循环
-    fn is_cross_task_cycle(&self, scc: &SCC) -> bool {
-        // 跨任务循环条件：
-        // 1. SCC 包含多个任务
-        // 2. 任务间有引用边形成环
-
-        if scc.tasks.len() <= 1 {
-            return false;
-        }
-
-        // 检查是否每个任务都可达其他任务
-        let tasks: HashSet<TaskId> = scc.tasks.iter().cloned().collect();
-
-        for edge in &scc.edges {
-            let from = self.get_edge_source_task(edge);
-            let to = self.get_edge_target_task(edge);
-
-            // 确实是跨任务边
-            if tasks.contains(&from) && tasks.contains(&to) {
-                return true;
+        for node in graph.keys() {
+            if !visited.contains(node) {
+                if self.detect_cycle_dfs(node, graph, &mut visited, &mut recursion_stack) {
+                    return true;
+                }
             }
         }
 
         false
     }
 
-    /// Tarjan SCC 算法
-    fn tarjan_scc(&self, edges: &[CrossTaskEdge]) -> Result<Vec<SCC>, CycleError> {
-        let mut index = 0;
-        let mut indices = HashMap::new();
-        let mut lowlink = HashMap::new();
-        let mut on_stack = HashSet::new();
-        let mut stack = Vec::new();
-        let mut sccs = Vec::new();
+    fn detect_cycle_dfs(
+        &self,
+        node: &ValueId,
+        graph: &HashMap<ValueId, HashSet<ValueId>>,
+        visited: &mut HashSet<ValueId>,
+        recursion_stack: &mut HashSet<ValueId>,
+    ) -> bool {
+        visited.insert(*node);
+        recursion_stack.insert(*node);
 
-        let nodes: HashSet<TaskId> = edges
-            .iter()
-            .flat_map(|e| vec![e.from_task, e.to_task])
-            .collect();
-
-        fn strongconnect(
-            node: TaskId,
-            edges: &[CrossTaskEdge],
-            index: &mut usize,
-            indices: &mut HashMap<TaskId, usize>,
-            lowlink: &mut HashMap<TaskId, usize>,
-            on_stack: &mut HashSet<TaskId>,
-            stack: &mut Vec<TaskId>,
-            sccs: &mut Vec<SCC>,
-        ) {
-            *index += 1;
-            indices.insert(node, *index);
-            lowlink.insert(node, *index);
-            stack.push(node);
-            on_stack.insert(node);
-
-            for edge in edges {
-                if edge.from_task == node {
-                    let successor = edge.to_task;
-                    if !indices.contains_key(&successor) {
-                        strongconnect(
-                            successor, edges, index, indices, lowlink,
-                            on_stack, stack, sccs,
-                        );
-                        lowlink.insert(node, min(*lowlink.get(&node).unwrap(), *lowlink.get(&successor).unwrap()));
-                    } else if on_stack.contains(&successor) {
-                        lowlink.insert(node, min(*lowlink.get(&node).unwrap(), *indices.get(&successor).unwrap()));
+        if let Some(edges) = graph.get(node) {
+            for &neighbor in edges {
+                if !visited.contains(&neighbor) {
+                    if self.detect_cycle_dfs(neighbor, graph, visited, recursion_stack) {
+                        return true;
                     }
+                } else if recursion_stack.contains(&neighbor) {
+                    // 找到环！
+                    return true;
                 }
-            }
-
-            if lowlink.get(&node) == indices.get(&node) {
-                let mut scc_tasks = Vec::new();
-                let mut scc_edges = Vec::new();
-                loop {
-                    let w = stack.pop().unwrap();
-                    on_stack.remove(&w);
-                    scc_tasks.push(w);
-                    if w == node {
-                        break;
-                    }
-                }
-                sccs.push(SCC {
-                    tasks: scc_tasks,
-                    edges: scc_edges,
-                });
             }
         }
 
-        for node in nodes {
-            if !indices.contains_key(&node) {
-                strongconnect(
-                    node, edges, &mut index, &mut indices, &mut lowlink,
-                    &mut on_stack, &mut stack, &mut sccs,
-                );
-            }
-        }
+        recursion_stack.remove(node);
+        false
+    }
 
-        Ok(sccs)
+    // 辅助方法
+    fn get_producer_spawn(&self, arg: &Operand) -> Option<ValueId> {
+        None // TODO: 实现
+    }
+
+    fn get_ref_target(&self, val: &Operand) -> Option<ValueId> {
+        None // TODO: 实现
+    }
+
+    fn record_ref_edge(&mut self, _dst: Operand, _src: Operand) {
+        // TODO: 实现
+    }
+
+    fn find_spawn_owning_value(&self, _val: ValueId) -> Option<ValueId> {
+        None // TODO: 实现
+    }
+
+    fn get_value_definition(&self, _val: &Operand) -> Option<Definition> {
+        None // TODO: 实现
     }
 }
 ```
@@ -349,23 +295,22 @@ impl CycleChecker {
 ## 错误类型
 
 ```rust
-#[derive(Debug, Clone, PartialEq)]
-pub enum CycleError {
-    /// 跨任务循环引用
-    CrossTaskCycle {
-        /// 循环中的任务
-        tasks: Vec<TaskId>,
-        /// 形成循环的边
-        edges: Vec<CrossTaskEdge>,
-    },
-    /// 循环路径详细信息
-    CyclePath {
-        /// 起始任务
-        start_task: TaskId,
+/// 所有权错误扩展
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OwnershipError {
+    // ... 现有错误类型 ...
+
+    /// 跨 spawn 循环引用
+    CrossSpawnCycle {
+        /// 循环中的 spawn
+        spawns: Vec<ValueId>,
         /// 循环路径
-        path: Vec<TaskId>,
+        path: Vec<ValueId>,
+        /// 错误位置
+        span: (usize, usize),
     },
 }
+```
 ```
 
 ## 错误信息示例
@@ -462,6 +407,7 @@ print("Cycle detection tests passed!")
 
 ## 相关文件
 
-- **src/core/ownership/cycle_check.rs**: 循环检测器
-- **src/core/ownership/ref.rs**: ref Arc 分析
-- **src/middle/dag/mod.rs**: DAG 分析（phase-09）
+- **src/middle/lifetime/cycle_check.rs**: 循环检测器（新增）
+- **src/middle/lifetime/mod.rs**: OwnershipChecker 集成
+- **src/middle/lifetime/error.rs**: CrossSpawnCycle 错误类型
+- **src/middle/ir.rs**: Spawn 指令扩展（添加 args 和 result）
