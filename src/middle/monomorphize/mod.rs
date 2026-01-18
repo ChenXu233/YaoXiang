@@ -1,20 +1,27 @@
 //! 单态化器
 //!
-//! 将泛型函数特化为具体类型的函数。
+//! 将泛型函数和泛型类型特化为具体类型的代码。
 //! 核心策略：
-//! 1. 按需特化：只对实际调用的类型组合生成代码
+//! 1. 按需特化：只对实际使用的类型组合生成代码
 //! 2. 代码共享：相同类型组合共享一份代码
-//! 3. 阈值控制：单函数特化数量上限为16
+//! 3. 类型单态化：支持泛型结构和枚举的类型实例化
 
 use crate::frontend::parser::ast::Type;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use std::collections::{HashMap, HashSet};
 
 // 导出 instance 模块
 pub mod instance;
 
-use self::instance::{FunctionId, GenericFunctionId, InstantiationRequest, SpecializationKey};
+// 导出 tests 模块
+#[cfg(test)]
+pub mod tests;
+
+use self::instance::{
+    FunctionId, GenericFunctionId, GenericTypeId, InstantiationRequest, SpecializationKey, TypeId,
+    TypeInstance,
+};
 
 /// 单态化器
 #[derive(Debug)]
@@ -36,6 +43,20 @@ pub struct Monomorphizer {
 
     /// 当前特化计数器
     next_function_id: usize,
+
+    /// ==================== 类型单态化相关 ====================
+
+    /// 已实例化的类型
+    type_instances: HashMap<TypeId, TypeInstance>,
+
+    /// 类型特化缓存：避免重复实例化类型
+    type_specialization_cache: HashMap<SpecializationKey, TypeId>,
+
+    /// 泛型类型集合（存储原始类型定义）
+    generic_types: HashMap<GenericTypeId, MonoType>,
+
+    /// 下一个类型ID计数器
+    next_type_id: usize,
 }
 
 impl Monomorphizer {
@@ -48,10 +69,15 @@ impl Monomorphizer {
             generic_functions: HashMap::new(),
             specialization_limit: 16,
             next_function_id: 0,
+            // 类型单态化相关字段
+            type_instances: HashMap::new(),
+            type_specialization_cache: HashMap::new(),
+            generic_types: HashMap::new(),
+            next_type_id: 0,
         }
     }
 
-    /// 单态化模块中的所有泛型函数
+    /// 单态化模块中的所有泛型函数和泛型类型
     pub fn monomorphize_module(
         &mut self,
         module: &ModuleIR,
@@ -59,13 +85,16 @@ impl Monomorphizer {
         // 1. 收集所有泛型函数
         self.collect_generic_functions(module);
 
-        // 2. 收集所有实例化请求
+        // 2. 收集所有泛型类型
+        self.collect_generic_types(module);
+
+        // 3. 收集所有实例化请求
         self.collect_instantiation_requests(module);
 
-        // 3. 处理实例化队列
+        // 4. 处理实例化队列
         self.process_instantiation_queue();
 
-        // 4. 生成最终模块
+        // 5. 生成最终模块
         self.build_output_module(module)
     }
 
@@ -662,6 +691,633 @@ impl Monomorphizer {
     /// 获取泛型函数数量
     pub fn generic_count(&self) -> usize {
         self.generic_functions.len()
+    }
+
+    // ==================== 类型单态化方法 ====================
+
+    /// 收集所有泛型类型定义
+    fn collect_generic_types(
+        &mut self,
+        module: &ModuleIR,
+    ) {
+        for ty in &module.types {
+            if self.contains_type_var_type(ty) {
+                let type_params = self.extract_type_params_from_type(ty);
+                let type_name = Self::get_type_name(ty);
+                let generic_id = GenericTypeId::new(type_name, type_params);
+                // 将 AST Type 转换为 MonoType
+                let mono_type = self.type_to_mono_type(ty);
+                self.generic_types.insert(generic_id, mono_type);
+            }
+        }
+    }
+
+    /// 将 AST Type 转换为 MonoType
+    #[allow(clippy::only_used_in_recursion)]
+    fn type_to_mono_type(
+        &self,
+        ty: &Type,
+    ) -> MonoType {
+        match ty {
+            Type::Name(name) => MonoType::TypeRef(name.clone()),
+            Type::Int(n) => MonoType::Int(*n),
+            Type::Float(n) => MonoType::Float(*n),
+            Type::Char => MonoType::Char,
+            Type::String => MonoType::String,
+            Type::Bytes => MonoType::Bytes,
+            Type::Bool => MonoType::Bool,
+            Type::Void => MonoType::Void,
+            Type::Struct(fields) => MonoType::Struct(StructType {
+                name: fields
+                    .first()
+                    .map(|(n, _)| n.clone())
+                    .unwrap_or_else(|| "Struct".to_string()),
+                fields: fields
+                    .iter()
+                    .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
+                    .collect(),
+            }),
+            Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
+                name: name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
+                    .collect(),
+            }),
+            Type::Union(variants) => MonoType::Union(
+                variants
+                    .iter()
+                    .filter_map(|(_, ty)| ty.as_ref().map(|t| self.type_to_mono_type(t)))
+                    .collect(),
+            ),
+            Type::Enum(variants) => MonoType::Enum(crate::frontend::typecheck::EnumType {
+                name: variants
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "Enum".to_string()),
+                variants: variants.clone(),
+            }),
+            Type::Variant(_) => {
+                // Variant is complex, represent as TypeRef for now
+                MonoType::TypeRef("Variant".to_string())
+            }
+            Type::Tuple(types) => {
+                MonoType::Tuple(types.iter().map(|t| self.type_to_mono_type(t)).collect())
+            }
+            Type::List(elem) => MonoType::List(Box::new(self.type_to_mono_type(elem))),
+            Type::Dict(key, value) => MonoType::Dict(
+                Box::new(self.type_to_mono_type(key)),
+                Box::new(self.type_to_mono_type(value)),
+            ),
+            Type::Set(elem) => MonoType::Set(Box::new(self.type_to_mono_type(elem))),
+            Type::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
+                params: params.iter().map(|t| self.type_to_mono_type(t)).collect(),
+                return_type: Box::new(self.type_to_mono_type(return_type)),
+                is_async: false, // AST doesn't track async, assume sync
+            },
+            Type::Option(inner) => {
+                // Option<T> as a special tagged type
+                MonoType::Union(vec![self.type_to_mono_type(inner)])
+            }
+            Type::Result(_, _) => {
+                // Result<T, E> as TypeRef for now
+                MonoType::TypeRef("Result".to_string())
+            }
+            Type::Generic { name, args } => {
+                let args_str = args
+                    .iter()
+                    .map(|t| self.type_to_mono_type(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                MonoType::TypeRef(format!("{}<{}>", name, args_str))
+            }
+            Type::Sum(types) => {
+                MonoType::Union(types.iter().map(|t| self.type_to_mono_type(t)).collect())
+            }
+        }
+    }
+
+    /// 获取类型的名称
+    fn get_type_name(ty: &Type) -> String {
+        match ty {
+            Type::Name(name) => name.clone(),
+            Type::Int(n) => format!("int{}", n),
+            Type::Float(n) => format!("float{}", n),
+            Type::Char => "char".to_string(),
+            Type::String => "string".to_string(),
+            Type::Bytes => "bytes".to_string(),
+            Type::Bool => "bool".to_string(),
+            Type::Void => "void".to_string(),
+            Type::Struct(fields) => {
+                if let Some((first_field, _)) = fields.first() {
+                    first_field.clone()
+                } else {
+                    "Struct".to_string()
+                }
+            }
+            Type::NamedStruct { name, .. } => name.clone(),
+            Type::Union(variants) => {
+                if let Some((first_variant, _)) = variants.first() {
+                    first_variant.clone()
+                } else {
+                    "Union".to_string()
+                }
+            }
+            Type::Enum(variants) => {
+                if let Some(first_variant) = variants.first() {
+                    first_variant.clone()
+                } else {
+                    "Enum".to_string()
+                }
+            }
+            Type::Variant(variants) => {
+                if let Some(first_variant) = variants.first() {
+                    first_variant.name.clone()
+                } else {
+                    "Variant".to_string()
+                }
+            }
+            Type::Tuple(types) => format!("tuple{}", types.len()),
+            Type::List(_) => "List".to_string(),
+            Type::Dict(_, _) => "Dict".to_string(),
+            Type::Set(_) => "Set".to_string(),
+            Type::Fn { .. } => "Fn".to_string(),
+            Type::Option(_) => "Option".to_string(),
+            Type::Result(_, _) => "Result".to_string(),
+            Type::Generic { name, .. } => name.clone(),
+            Type::Sum(_) => "Sum".to_string(),
+        }
+    }
+
+    /// 检查类型是否包含类型变量（AST Type 版本）
+    #[allow(clippy::only_used_in_recursion)]
+    fn contains_type_var_type(
+        &self,
+        ty: &Type,
+    ) -> bool {
+        match ty {
+            Type::Name(_) => false,
+            Type::Int(_)
+            | Type::Float(_)
+            | Type::Char
+            | Type::String
+            | Type::Bytes
+            | Type::Bool
+            | Type::Void => false,
+            Type::Struct(fields) | Type::NamedStruct { fields, .. } => fields
+                .iter()
+                .any(|(_, fty)| self.contains_type_var_type(fty)),
+            Type::Union(variants) => variants
+                .iter()
+                .any(|(_, ty)| ty.as_ref().is_some_and(|t| self.contains_type_var_type(t))),
+            Type::Enum(_) => false,
+            Type::Variant(_) => false,
+            Type::Tuple(types) => types.iter().any(|t| self.contains_type_var_type(t)),
+            Type::List(elem) => self.contains_type_var_type(elem),
+            Type::Dict(key, value) => {
+                self.contains_type_var_type(key) || self.contains_type_var_type(value)
+            }
+            Type::Set(elem) => self.contains_type_var_type(elem),
+            Type::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|t| self.contains_type_var_type(t))
+                    || self.contains_type_var_type(return_type)
+            }
+            Type::Option(inner) => self.contains_type_var_type(inner),
+            Type::Result(ok, err) => {
+                self.contains_type_var_type(ok) || self.contains_type_var_type(err)
+            }
+            Type::Generic { args, .. } => args.iter().any(|t| self.contains_type_var_type(t)),
+            Type::Sum(types) => types.iter().any(|t| self.contains_type_var_type(t)),
+        }
+    }
+
+    /// 从类型中提取类型参数（AST Type 版本）
+    fn extract_type_params_from_type(
+        &self,
+        ty: &Type,
+    ) -> Vec<String> {
+        let mut type_params = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        self.collect_type_vars_from_type(ty, &mut type_params, &mut seen);
+        type_params
+    }
+
+    /// 递归收集类型变量（AST Type 版本）
+    #[allow(clippy::only_used_in_recursion)]
+    fn collect_type_vars_from_type(
+        &self,
+        ty: &Type,
+        type_params: &mut Vec<String>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        match ty {
+            Type::Name(name) => {
+                // 假设大写字母开头的是类型参数
+                if name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                    && seen.insert(name.clone())
+                {
+                    type_params.push(name.clone());
+                }
+            }
+            Type::Struct(fields) | Type::NamedStruct { fields, .. } => {
+                fields
+                    .iter()
+                    .for_each(|(_, fty)| self.collect_type_vars_from_type(fty, type_params, seen));
+            }
+            Type::Union(variants) => {
+                variants.iter().for_each(|(_, ty)| {
+                    if let Some(t) = ty {
+                        self.collect_type_vars_from_type(t, type_params, seen);
+                    }
+                });
+            }
+            Type::Enum(_) => {}
+            Type::Variant(_) => {}
+            Type::Tuple(types) => types
+                .iter()
+                .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen)),
+            Type::List(elem) => self.collect_type_vars_from_type(elem, type_params, seen),
+            Type::Dict(key, value) => {
+                self.collect_type_vars_from_type(key, type_params, seen);
+                self.collect_type_vars_from_type(value, type_params, seen);
+            }
+            Type::Set(elem) => self.collect_type_vars_from_type(elem, type_params, seen),
+            Type::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .for_each(|p| self.collect_type_vars_from_type(p, type_params, seen));
+                self.collect_type_vars_from_type(return_type, type_params, seen);
+            }
+            Type::Option(inner) => self.collect_type_vars_from_type(inner, type_params, seen),
+            Type::Result(ok, err) => {
+                self.collect_type_vars_from_type(ok, type_params, seen);
+                self.collect_type_vars_from_type(err, type_params, seen);
+            }
+            Type::Generic { args, .. } => args
+                .iter()
+                .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen)),
+            Type::Sum(types) => types
+                .iter()
+                .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen)),
+            Type::Int(_)
+            | Type::Float(_)
+            | Type::Char
+            | Type::String
+            | Type::Bytes
+            | Type::Bool
+            | Type::Void => {}
+        }
+    }
+
+    /// 单态化泛型类型
+    pub fn monomorphize_type(
+        &mut self,
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
+    ) -> Option<MonoType> {
+        let cache_key = SpecializationKey::new(generic_id.name().to_string(), type_args.to_vec());
+        if let Some(cached_id) = self.type_specialization_cache.get(&cache_key) {
+            if let Some(instance) = self.type_instances.get(cached_id) {
+                return instance.get_mono_type().cloned();
+            }
+        }
+
+        let generic_type = self.generic_types.get(generic_id)?;
+        let mono_type = self.instantiate_type(generic_id, type_args, generic_type)?;
+
+        let type_id = self.generate_type_id(generic_id, type_args);
+        let mut instance =
+            TypeInstance::new(type_id.clone(), generic_id.clone(), type_args.to_vec());
+        instance.set_mono_type(mono_type.clone());
+
+        self.type_specialization_cache
+            .insert(cache_key, type_id.clone());
+        self.type_instances.insert(type_id, instance);
+
+        Some(mono_type)
+    }
+
+    /// 实例化具体类型
+    #[allow(clippy::only_used_in_recursion)]
+    fn instantiate_type(
+        &self,
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
+        generic_type: &MonoType,
+    ) -> Option<MonoType> {
+        let type_params = generic_id.type_params().to_vec();
+
+        match generic_type {
+            MonoType::Struct(struct_type) => {
+                let mono_fields: Vec<(String, MonoType)> = struct_type
+                    .fields
+                    .iter()
+                    .map(|(name, ty)| {
+                        (
+                            name.clone(),
+                            self.substitute_type_args(ty, type_args, &type_params),
+                        )
+                    })
+                    .collect();
+                Some(MonoType::Struct(StructType {
+                    name: self.generate_type_name(generic_id, type_args),
+                    fields: mono_fields,
+                }))
+            }
+            MonoType::Enum(enum_type) => Some(MonoType::Enum(EnumType {
+                name: self.generate_type_name(generic_id, type_args),
+                variants: enum_type.variants.clone(),
+            })),
+            MonoType::List(elem) => Some(MonoType::List(Box::new(self.substitute_type_args(
+                elem,
+                type_args,
+                &type_params,
+            )))),
+            MonoType::Dict(key, value) => Some(MonoType::Dict(
+                Box::new(self.substitute_type_args(key, type_args, &type_params)),
+                Box::new(self.substitute_type_args(value, type_args, &type_params)),
+            )),
+            MonoType::Set(elem) => Some(MonoType::Set(Box::new(self.substitute_type_args(
+                elem,
+                type_args,
+                &type_params,
+            )))),
+            MonoType::Tuple(types) => Some(MonoType::Tuple(
+                types
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, &type_params))
+                    .collect(),
+            )),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => Some(MonoType::Fn {
+                params: params
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, &type_params))
+                    .collect(),
+                return_type: Box::new(self.substitute_type_args(
+                    return_type,
+                    type_args,
+                    &type_params,
+                )),
+                is_async: *is_async,
+            }),
+            MonoType::Arc(inner) => Some(MonoType::Arc(Box::new(self.substitute_type_args(
+                inner,
+                type_args,
+                &type_params,
+            )))),
+            MonoType::Range { elem_type } => Some(MonoType::Range {
+                elem_type: Box::new(self.substitute_type_args(elem_type, type_args, &type_params)),
+            }),
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                let substituted: Vec<MonoType> = types
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, &type_params))
+                    .collect();
+                Some(if matches!(generic_type, MonoType::Union(_)) {
+                    MonoType::Union(substituted)
+                } else {
+                    MonoType::Intersection(substituted)
+                })
+            }
+            _ => Some(generic_type.clone()),
+        }
+    }
+
+    /// 递归替换类型中的泛型参数
+    #[allow(clippy::only_used_in_recursion)]
+    fn substitute_type_args(
+        &self,
+        ty: &MonoType,
+        type_args: &[MonoType],
+        type_params: &[String],
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeVar(tv) => {
+                let idx = tv.index();
+                if idx < type_args.len() {
+                    type_args[idx].clone()
+                } else {
+                    ty.clone()
+                }
+            }
+            MonoType::Struct(struct_type) => MonoType::Struct(StructType {
+                name: struct_type.name.clone(),
+                fields: struct_type
+                    .fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            self.substitute_type_args(field_ty, type_args, type_params),
+                        )
+                    })
+                    .collect(),
+            }),
+            MonoType::List(elem) => MonoType::List(Box::new(self.substitute_type_args(
+                elem,
+                type_args,
+                type_params,
+            ))),
+            MonoType::Dict(key, value) => MonoType::Dict(
+                Box::new(self.substitute_type_args(key, type_args, type_params)),
+                Box::new(self.substitute_type_args(value, type_args, type_params)),
+            ),
+            MonoType::Set(elem) => MonoType::Set(Box::new(self.substitute_type_args(
+                elem,
+                type_args,
+                type_params,
+            ))),
+            MonoType::Tuple(types) => MonoType::Tuple(
+                types
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, type_params))
+                    .collect(),
+            ),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, type_params))
+                    .collect(),
+                return_type: Box::new(self.substitute_type_args(
+                    return_type,
+                    type_args,
+                    type_params,
+                )),
+                is_async: *is_async,
+            },
+            MonoType::Arc(inner) => MonoType::Arc(Box::new(self.substitute_type_args(
+                inner,
+                type_args,
+                type_params,
+            ))),
+            MonoType::Range { elem_type } => MonoType::Range {
+                elem_type: Box::new(self.substitute_type_args(elem_type, type_args, type_params)),
+            },
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                let substituted: Vec<MonoType> = types
+                    .iter()
+                    .map(|ty| self.substitute_type_args(ty, type_args, type_params))
+                    .collect();
+                if matches!(ty, MonoType::Union(_)) {
+                    MonoType::Union(substituted)
+                } else {
+                    MonoType::Intersection(substituted)
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    /// 生成类型ID
+    fn generate_type_id(
+        &self,
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
+    ) -> TypeId {
+        TypeId::new(
+            self.generate_type_name(generic_id, type_args),
+            type_args.to_vec(),
+        )
+    }
+
+    /// 生成单态化类型名称
+    fn generate_type_name(
+        &self,
+        generic_id: &GenericTypeId,
+        type_args: &[MonoType],
+    ) -> String {
+        if type_args.is_empty() {
+            generic_id.name().to_string()
+        } else {
+            let args_str = type_args
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("{}_{}", generic_id.name(), args_str)
+        }
+    }
+
+    /// 注册单态化后的类型
+    pub fn register_monomorphized_type(
+        &mut self,
+        mono_type: MonoType,
+    ) -> TypeId {
+        let type_params = self.extract_type_params_from_mono_type(&mono_type);
+        let type_id = TypeId::new(mono_type.type_name(), vec![]);
+        let generic_id = GenericTypeId::new(mono_type.type_name(), type_params);
+        let mut instance = TypeInstance::new(type_id.clone(), generic_id, vec![]);
+        instance.set_mono_type(mono_type.clone());
+        self.type_instances.insert(type_id.clone(), instance);
+        type_id
+    }
+
+    /// 从 MonoType 提取类型参数
+    fn extract_type_params_from_mono_type(
+        &self,
+        ty: &MonoType,
+    ) -> Vec<String> {
+        let mut type_params = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        self.collect_type_vars_from_mono_type(ty, &mut type_params, &mut seen);
+        type_params
+    }
+
+    /// 递归收集 MonoType 中的类型变量
+    #[allow(clippy::only_used_in_recursion)]
+    fn collect_type_vars_from_mono_type(
+        &self,
+        ty: &MonoType,
+        type_params: &mut Vec<String>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        match ty {
+            MonoType::TypeVar(tv) => {
+                let name = format!("T{}", tv.index());
+                if seen.insert(name.clone()) {
+                    type_params.push(name);
+                }
+            }
+            MonoType::Struct(struct_type) => {
+                struct_type.fields.iter().for_each(|(_, field_ty)| {
+                    self.collect_type_vars_from_mono_type(field_ty, type_params, seen);
+                });
+            }
+            MonoType::Enum(_) => {}
+            MonoType::Tuple(types) => {
+                types
+                    .iter()
+                    .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
+            }
+            MonoType::List(elem) => {
+                self.collect_type_vars_from_mono_type(elem, type_params, seen);
+            }
+            MonoType::Dict(key, value) => {
+                self.collect_type_vars_from_mono_type(key, type_params, seen);
+                self.collect_type_vars_from_mono_type(value, type_params, seen);
+            }
+            MonoType::Set(elem) => {
+                self.collect_type_vars_from_mono_type(elem, type_params, seen);
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .for_each(|p| self.collect_type_vars_from_mono_type(p, type_params, seen));
+                self.collect_type_vars_from_mono_type(return_type, type_params, seen);
+            }
+            MonoType::Range { elem_type } => {
+                self.collect_type_vars_from_mono_type(elem_type, type_params, seen);
+            }
+            MonoType::TypeRef(_)
+            | MonoType::Void
+            | MonoType::Bool
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Bytes => {}
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                types
+                    .iter()
+                    .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
+            }
+            MonoType::Arc(inner) => {
+                self.collect_type_vars_from_mono_type(inner, type_params, seen);
+            }
+        }
+    }
+
+    /// 获取已实例化的类型数量
+    pub fn type_instance_count(&self) -> usize {
+        self.type_instances.len()
+    }
+
+    /// 获取泛型类型数量
+    pub fn generic_type_count(&self) -> usize {
+        self.generic_types.len()
     }
 }
 

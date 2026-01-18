@@ -21,10 +21,7 @@ mod specialization_key_tests {
 
     #[test]
     fn test_specialization_key_with_one_arg() {
-        let key = SpecializationKey::new(
-            "identity".to_string(),
-            vec![MonoType::Int(64)],
-        );
+        let key = SpecializationKey::new("identity".to_string(), vec![MonoType::Int(64)]);
         assert_eq!(key.to_string(), "identity<int64>");
     }
 
@@ -39,10 +36,7 @@ mod specialization_key_tests {
 
     #[test]
     fn test_specialization_key_with_string_type() {
-        let key = SpecializationKey::new(
-            "print".to_string(),
-            vec![MonoType::String],
-        );
+        let key = SpecializationKey::new("print".to_string(), vec![MonoType::String]);
         assert_eq!(key.to_string(), "print<string>");
     }
 
@@ -93,10 +87,7 @@ mod generic_function_id_tests {
 
     #[test]
     fn test_generic_function_id_with_one_param() {
-        let id = GenericFunctionId::new(
-            "identity".to_string(),
-            vec!["T".to_string()],
-        );
+        let id = GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]);
         assert_eq!(id.name(), "identity");
         assert_eq!(id.type_params(), vec!["T"]);
         assert_eq!(id.signature(), "identity<T>");
@@ -104,10 +95,7 @@ mod generic_function_id_tests {
 
     #[test]
     fn test_generic_function_id_with_multiple_params() {
-        let id = GenericFunctionId::new(
-            "pair".to_string(),
-            vec!["T".to_string(), "U".to_string()],
-        );
+        let id = GenericFunctionId::new("pair".to_string(), vec!["T".to_string(), "U".to_string()]);
         assert_eq!(id.signature(), "pair<T, U>");
     }
 
@@ -148,10 +136,7 @@ mod function_id_tests {
 
     #[test]
     fn test_function_id_with_one_arg() {
-        let id = FunctionId::new(
-            "identity".to_string(),
-            vec![MonoType::Int(64)],
-        );
+        let id = FunctionId::new("identity".to_string(), vec![MonoType::Int(64)]);
         assert_eq!(id.specialized_name(), "identity_int64");
     }
 
@@ -206,14 +191,11 @@ mod instantiation_request_tests {
 
     #[test]
     fn test_instantiation_request_basic() {
-        let generic_id = GenericFunctionId::new(
-            "identity".to_string(),
-            vec!["T".to_string()],
-        );
+        let generic_id = GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]);
         let type_args = vec![MonoType::Int(64)];
         let span = Span::dummy();
         let request = InstantiationRequest::new(generic_id.clone(), type_args.clone(), span);
-        
+
         assert_eq!(request.generic_id(), &generic_id);
         assert_eq!(request.type_args().len(), 1);
         assert!(matches!(request.type_args()[0], MonoType::Int(64)));
@@ -221,31 +203,26 @@ mod instantiation_request_tests {
 
     #[test]
     fn test_instantiation_request_specialization_key() {
-        let generic_id = GenericFunctionId::new(
-            "identity".to_string(),
-            vec!["T".to_string()],
-        );
+        let generic_id = GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]);
         let type_args = vec![MonoType::Int(64)];
         let span = Span::dummy();
         let request = InstantiationRequest::new(generic_id, type_args, span);
-        
+
         let key = request.specialization_key();
         assert_eq!(key.to_string(), "identity<int64>");
     }
 
     #[test]
     fn test_instantiation_request_multiple_type_args() {
-        let generic_id = GenericFunctionId::new(
-            "map".to_string(),
-            vec!["T".to_string(), "U".to_string()],
-        );
+        let generic_id =
+            GenericFunctionId::new("map".to_string(), vec!["T".to_string(), "U".to_string()]);
         let type_args = vec![MonoType::Int(32), MonoType::Float(64)];
         let span = Span::new(
             crate::util::span::Position::new(1, 1),
             crate::util::span::Position::new(1, 10),
         );
         let request = InstantiationRequest::new(generic_id, type_args, span);
-        
+
         assert_eq!(request.type_args().len(), 2);
     }
 
@@ -255,7 +232,7 @@ mod instantiation_request_tests {
         let type_args = vec![MonoType::Bool];
         let span = Span::dummy();
         let request = InstantiationRequest::new(generic_id, type_args, span);
-        
+
         let cloned = request.clone();
         assert_eq!(request.generic_id().name(), cloned.generic_id().name());
     }
@@ -267,13 +244,10 @@ mod function_instance_tests {
 
     #[test]
     fn test_function_instance_creation() {
-        let generic_id = GenericFunctionId::new(
-            "identity".to_string(),
-            vec!["T".to_string()],
-        );
+        let generic_id = GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]);
         let type_args = vec![MonoType::Int(64)];
         let id = FunctionId::new("identity_int64".to_string(), type_args.clone());
-        
+
         let instance = FunctionInstance::new(id, generic_id, type_args);
         assert!(instance.ir.is_none());
     }
@@ -283,7 +257,7 @@ mod function_instance_tests {
         let generic_id = GenericFunctionId::new("test".to_string(), vec![]);
         let id = FunctionId::new("test".to_string(), vec![]);
         let mut instance = FunctionInstance::new(id, generic_id, vec![]);
-        
+
         let ir = crate::middle::ir::FunctionIR {
             name: "test".to_string(),
             params: vec![],
@@ -315,7 +289,7 @@ mod function_instance_tests {
             blocks: vec![],
             entry: 0,
         };
-        
+
         instance.set_ir(ir);
         assert!(instance.get_ir().is_some());
         assert_eq!(instance.get_ir().unwrap().name, "test");
@@ -333,10 +307,8 @@ mod function_instance_tests {
 
     #[test]
     fn test_function_instance_with_type_args() {
-        let generic_id = GenericFunctionId::new(
-            "map".to_string(),
-            vec!["T".to_string(), "U".to_string()],
-        );
+        let generic_id =
+            GenericFunctionId::new("map".to_string(), vec!["T".to_string(), "U".to_string()]);
         let type_args = vec![MonoType::Int(64), MonoType::String];
         let id = FunctionId::new("map_int64_string".to_string(), type_args.clone());
         let instance = FunctionInstance::new(id.clone(), generic_id.clone(), type_args.clone());
@@ -356,7 +328,10 @@ mod function_instance_tests {
         let id2 = FunctionId::new("inc_float64".to_string(), vec![MonoType::Float(64)]);
         let instance2 = FunctionInstance::new(id2, generic_id.clone(), vec![MonoType::Float(64)]);
 
-        assert_ne!(instance1.id.specialized_name(), instance2.id.specialized_name());
+        assert_ne!(
+            instance1.id.specialized_name(),
+            instance2.id.specialized_name()
+        );
     }
 }
 
@@ -379,10 +354,7 @@ mod type_id_tests {
 
     #[test]
     fn test_type_id_with_multiple_args() {
-        let id = TypeId::new(
-            "Map".to_string(),
-            vec![MonoType::String, MonoType::Int(32)],
-        );
+        let id = TypeId::new("Map".to_string(), vec![MonoType::String, MonoType::Int(32)]);
         assert_eq!(id.specialized_name(), "Map_string_int32");
     }
 
@@ -509,10 +481,7 @@ mod generic_type_id_tests {
 
     #[test]
     fn test_generic_type_id_with_params() {
-        let id = GenericTypeId::new(
-            "Map".to_string(),
-            vec!["K".to_string(), "V".to_string()],
-        );
+        let id = GenericTypeId::new("Map".to_string(), vec!["K".to_string(), "V".to_string()]);
         assert_eq!(id.name(), "Map");
         assert_eq!(id.type_params().len(), 2);
         assert_eq!(id.type_params()[0], "K");

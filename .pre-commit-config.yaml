@@ -4,8 +4,8 @@ repos:
       - id: xtask-bump-version
         name: xtask bump-version
         entry: cargo xtask bump-version
-        language: system
-        files: '\.rs$'
+        language: rust
+        types: [rust]
         pass_filenames: false
 
       - id: cargo-fmt

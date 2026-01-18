@@ -235,6 +235,50 @@ impl fmt::Display for GenericFunctionId {
     }
 }
 
+/// 泛型类型ID
+///
+/// 用于唯一标识一个泛型类型（如 `List<T>`、`Option<T>`）
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericTypeId {
+    /// 类型名称
+    name: String,
+    /// 泛型参数列表（用于区分重载的泛型类型）
+    type_params: Vec<String>,
+}
+
+impl GenericTypeId {
+    /// 创建新的泛型类型ID
+    pub fn new(
+        name: String,
+        type_params: Vec<String>,
+    ) -> Self {
+        GenericTypeId { name, type_params }
+    }
+
+    /// 获取类型名称
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 获取泛型参数列表
+    pub fn type_params(&self) -> &[String] {
+        &self.type_params
+    }
+}
+
+impl fmt::Display for GenericTypeId {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        if self.type_params.is_empty() {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{}<{}>", self.name, self.type_params.join(", "))
+        }
+    }
+}
+
 /// 特化函数实例
 ///
 /// 表示一个泛型函数被特化后的具体函数
@@ -341,5 +385,114 @@ impl fmt::Display for FunctionId {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.specialized_name())
+    }
+}
+
+/// 类型ID
+///
+/// 用于唯一标识一个已特化的类型
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeId {
+    /// 类型名称
+    name: String,
+    /// 类型参数（用于生成唯一名称）
+    type_args: Vec<MonoType>,
+}
+
+impl TypeId {
+    /// 创建新的类型ID
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+    ) -> Self {
+        TypeId { name, type_args }
+    }
+
+    /// 获取类型名称
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 获取完整的特化名称
+    pub fn specialized_name(&self) -> String {
+        if self.type_args.is_empty() {
+            self.name.clone()
+        } else {
+            let args_str = self
+                .type_args
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("{}_{}", self.name, args_str)
+        }
+    }
+}
+
+impl fmt::Display for TypeId {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.specialized_name())
+    }
+}
+
+impl std::hash::Hash for TypeId {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name.hash(state);
+        for ty in &self.type_args {
+            ty.type_name().hash(state);
+        }
+    }
+}
+
+/// 类型实例
+///
+/// 表示一个泛型类型被特化后的具体类型
+#[derive(Debug, Clone)]
+pub struct TypeInstance {
+    /// 特化后的类型ID
+    pub id: TypeId,
+
+    /// 泛型类型ID
+    pub generic_id: GenericTypeId,
+
+    /// 使用的类型参数
+    pub type_args: Vec<MonoType>,
+
+    /// 实例化后的 MonoType（延迟生成）
+    pub mono_type: Option<MonoType>,
+}
+
+impl TypeInstance {
+    /// 创建新的类型实例
+    pub fn new(
+        id: TypeId,
+        generic_id: GenericTypeId,
+        type_args: Vec<MonoType>,
+    ) -> Self {
+        TypeInstance {
+            id,
+            generic_id,
+            type_args,
+            mono_type: None,
+        }
+    }
+
+    /// 设置单态类型
+    pub fn set_mono_type(
+        &mut self,
+        mono_type: MonoType,
+    ) {
+        self.mono_type = Some(mono_type);
+    }
+
+    /// 获取单态类型
+    pub fn get_mono_type(&self) -> Option<&MonoType> {
+        self.mono_type.as_ref()
     }
 }
