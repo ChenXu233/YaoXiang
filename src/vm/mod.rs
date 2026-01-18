@@ -6,6 +6,7 @@ pub use errors::{VMError, VMResult};
 pub use executor::{RegisterFile, VMConfig, VMStatus, Value, VM};
 pub use opcode::TypedOpcode;
 
+pub mod extfunc;
 pub mod inline_cache;
 pub mod opcode;
 

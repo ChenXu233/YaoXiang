@@ -5,6 +5,7 @@
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
+use crate::vm::extfunc;
 use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
 use std::collections::HashMap;
@@ -878,11 +879,22 @@ impl VM {
                     .find_function_by_id(func_id)
                     .unwrap_or_else(|| "print".to_string());
 
-                // 检查是否是内部函数
-                if func_name == "print" {
-                    // 调用 print 内部函数
+                // 优先检查外部函数注册表
+                if let Some(ext_func) = extfunc::EXTERNAL_FUNCTIONS.get(&func_name) {
+                    // 调用外部函数
+                    let result = (ext_func.func)(&args);
+                    // 处理返回值（写入目标寄存器）
+                    let dst = self.read_u8()?;
+                    self.regs.write(dst, result);
+                } else if func_name == "print" {
+                    // 调用 print 内部函数（向后兼容）
                     if let Some(first_arg) = args.first() {
                         self.call_print(first_arg)?;
+                    }
+                } else if func_name == "println" {
+                    // 调用 println 内部函数（向后兼容）
+                    if let Some(first_arg) = args.first() {
+                        self.call_println(first_arg)?;
                     }
                 } else if let Some(target_func) = self.functions.get(&func_name) {
                     // 调用用户定义函数 - 克隆函数以避免借用冲突
@@ -1078,30 +1090,76 @@ impl VM {
         &self,
         value: &Value,
     ) -> VMResult<()> {
+        self.print_value(value, false);
+        Ok(())
+    }
+
+    /// 调用 println 内部函数
+    fn call_println(
+        &self,
+        value: &Value,
+    ) -> VMResult<()> {
+        self.print_value(value, true);
+        Ok(())
+    }
+
+    /// 打印值的通用实现
+    fn print_value(
+        &self,
+        value: &Value,
+        newline: bool,
+    ) {
         match value {
             Value::String(s) => {
-                print!("{}", s);
+                if newline {
+                    println!("{}", s);
+                } else {
+                    print!("{}", s);
+                }
             }
             Value::Int(n) => {
-                print!("{}", n);
+                if newline {
+                    println!("{}", n);
+                } else {
+                    print!("{}", n);
+                }
             }
             Value::Float(f) => {
-                print!("{}", f);
+                if newline {
+                    println!("{}", f);
+                } else {
+                    print!("{}", f);
+                }
             }
             Value::Bool(b) => {
-                print!("{}", b);
+                if newline {
+                    println!("{}", b);
+                } else {
+                    print!("{}", b);
+                }
             }
             Value::Char(c) => {
-                print!("{}", c);
+                if newline {
+                    println!("{}", c);
+                } else {
+                    print!("{}", c);
+                }
             }
             Value::Void => {
-                print!("()");
+                if newline {
+                    println!("()");
+                } else {
+                    print!("()");
+                }
             }
             _ => {
-                print!("{:?}", value);
+                if newline {
+                    println!("{:?}", value);
+                } else {
+                    print!("{:?}", value);
+                }
             }
         }
-        Ok(())
     }
 
     /// 将 ConstValue 转换为 Value
