@@ -56,7 +56,7 @@ pub enum TypeBinding {
 /// 单态类型（具体类型）
 ///
 /// 不包含类型变量的具体类型，用于类型检查的最终结果
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MonoType {
     /// 空类型
     Void,
@@ -298,14 +298,14 @@ impl From<ast::Type> for MonoType {
 }
 
 /// 结构体类型
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructType {
     pub name: String,
     pub fields: Vec<(String, MonoType)>,
 }
 
 /// 枚举类型
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EnumType {
     pub name: String,
     pub variants: Vec<String>,

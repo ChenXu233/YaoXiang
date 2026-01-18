@@ -133,7 +133,7 @@ pub fn check_module(
 
     // 在内部作用域中执行类型检查，确保 checker 在访问 env 之前被 drop
     let (result, checker_errors) = {
-        let mut checker = TypeChecker::new(env.solver());
+        let mut checker = TypeChecker::new(env.solver(), "");
 
         // 添加环境变量到检查器
         for (name, poly) in vars {
@@ -216,7 +216,7 @@ pub fn check_function(
 ) -> Result<middle::FunctionIR, Vec<TypeError>> {
     // 在内部作用域中执行类型检查，确保 checker 在访问 env 之前被 drop
     let (result, checker_errors) = {
-        let mut checker = TypeChecker::new(env.solver());
+        let mut checker = TypeChecker::new(env.solver(), name);
         let result = checker.check_fn_def(name, params, return_type, body, is_async, None, false);
         let errors = checker.errors().to_vec();
         (result, errors)

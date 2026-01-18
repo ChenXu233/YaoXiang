@@ -98,6 +98,10 @@ pub enum TypeError {
     /// 模式匹配穷举性错误
     #[error("Non-exhaustive patterns: missing {} pattern(s)", .missing.len())]
     NonExhaustivePatterns { missing: Vec<String>, span: Span },
+
+    /// 导入错误
+    #[error("Import error: {message}")]
+    ImportError { message: String, span: Span },
 }
 
 impl TypeError {
@@ -121,6 +125,7 @@ impl TypeError {
             TypeError::InferenceError { span, .. } => *span,
             TypeError::CannotInferParamType { span, .. } => *span,
             TypeError::NonExhaustivePatterns { span, .. } => *span,
+            TypeError::ImportError { span, .. } => *span,
         }
     }
 
@@ -164,6 +169,14 @@ impl TypeError {
             found,
             span,
         }
+    }
+
+    /// 创建导入错误
+    pub fn import_error(
+        message: String,
+        span: Span,
+    ) -> Self {
+        TypeError::ImportError { message, span }
     }
 }
 
@@ -522,6 +535,13 @@ impl ErrorFormatter {
                     )
                 }
             }
+            TypeError::ImportError { message, span } => {
+                if self.verbose {
+                    format!("Import error: {} at {:?}", message, span)
+                } else {
+                    format!("Import error: {}", message)
+                }
+            }
         }
     }
 
@@ -589,6 +609,9 @@ impl From<TypeError> for Diagnostic {
             }
             TypeError::NonExhaustivePatterns { .. } => {
                 Diagnostic::error("E0017".to_string(), format!("{}", error), span)
+            }
+            TypeError::ImportError { .. } => {
+                Diagnostic::error("E0018".to_string(), format!("{}", error), span)
             }
         }
     }

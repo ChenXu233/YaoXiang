@@ -10,7 +10,7 @@ use super::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::middle;
 use crate::util::span::Span;
 use crate::util::i18n::{t_cur, MSG};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing::debug;
 
 /// 类型检查器
@@ -28,18 +28,57 @@ pub struct TypeChecker<'a> {
     generic_cache: HashMap<String, HashMap<String, PolyType>>,
     /// 收集的错误
     errors: Vec<TypeError>,
+    /// 导入追踪 - 模块导入信息
+    imports: Vec<ImportInfo>,
+    /// 当前模块的导出项
+    exports: HashSet<String>,
+    /// 模块名称
+    module_name: String,
+}
+
+/// 导入信息
+///
+/// 记录 use 语句导入的内容
+#[derive(Debug, Clone)]
+pub struct ImportInfo {
+    /// 导入路径
+    pub path: String,
+    /// 导入项名称（None 表示导入整个模块）
+    pub items: Option<Vec<String>>,
+    /// 别名（如果指定）
+    pub alias: Option<String>,
+    /// 源 span（用于错误定位）
+    pub span: Span,
+    /// 是否为公开导入
+    pub is_public: bool,
 }
 
 impl<'a> TypeChecker<'a> {
     /// 创建新的类型检查器
-    pub fn new(solver: &'a mut TypeConstraintSolver) -> Self {
+    pub fn new(
+        solver: &'a mut TypeConstraintSolver,
+        module_name: &str,
+    ) -> Self {
         TypeChecker {
             inferrer: TypeInferrer::new(solver),
             checked_functions: HashMap::new(),
             current_return_type: None,
             generic_cache: HashMap::new(),
             errors: Vec::new(),
+            imports: Vec::new(),
+            exports: HashSet::new(),
+            module_name: module_name.to_string(),
         }
+    }
+
+    /// 获取导入列表
+    pub fn imports(&self) -> &[ImportInfo] {
+        &self.imports
+    }
+
+    /// 获取模块名称
+    pub fn module_name(&self) -> &str {
+        &self.module_name
     }
 
     /// 获取错误列表
@@ -386,13 +425,122 @@ impl<'a> TypeChecker<'a> {
     #[allow(clippy::result_large_err)]
     fn check_use(
         &mut self,
-        _path: &str,
-        _items: Option<&[String]>,
-        _alias: Option<&str>,
-        _span: Span,
+        path: &str,
+        items: Option<&[String]>,
+        alias: Option<&str>,
+        span: Span,
     ) -> TypeResult<()> {
-        // TODO: 实现 use 语句检查
+        // 1. 验证模块路径语法
+        if !self.is_valid_module_path(path) {
+            self.add_error(TypeError::import_error(
+                format!("无效的模块路径: {}", path),
+                span,
+            ));
+            return Ok(());
+        }
+
+        // 2. 验证选择性导入语法
+        if let Some(import_items) = items {
+            if import_items.is_empty() {
+                self.add_error(TypeError::import_error("空的导入列表".to_string(), span));
+                return Ok(());
+            }
+
+            // 检查重复导入
+            let mut seen = HashSet::new();
+            for item in import_items {
+                if !seen.insert(item) {
+                    self.add_error(TypeError::import_error(format!("重复导入: {}", item), span));
+                }
+            }
+        }
+
+        // 3. 验证别名语法
+        if let Some(alias_name) = alias {
+            if alias_name.is_empty() {
+                self.add_error(TypeError::import_error("空的别名".to_string(), span));
+            } else if !alias_name.chars().next().unwrap().is_ascii_lowercase() {
+                self.add_error(TypeError::import_error("别名必须小写".to_string(), span));
+            }
+        }
+
+        // 4. 记录导入信息
+        let import_info = ImportInfo {
+            path: path.to_string(),
+            items: items.map(|v| v.to_vec()),
+            alias: alias.map(|s| s.to_string()),
+            span,
+            is_public: false,
+        };
+        self.imports.push(import_info);
+
+        debug!("Recorded use statement: path={}, items={:?}", path, items);
+
         Ok(())
+    }
+
+    /// 验证模块路径语法
+    fn is_valid_module_path(
+        &self,
+        path: &str,
+    ) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+        if path.starts_with("::") || path.ends_with("::") {
+            return false;
+        }
+        let parts: Vec<&str> = path.split("::").collect();
+        for part in parts {
+            if part.is_empty() {
+                return false;
+            }
+            if let Some(first_char) = part.chars().next() {
+                if !first_char.is_ascii_lowercase() && first_char != '_' {
+                    return false;
+                }
+            }
+            for c in part.chars() {
+                if !c.is_ascii_alphanumeric() && c != '_' {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// 记录导出项
+    pub fn record_export(
+        &mut self,
+        name: &str,
+    ) {
+        self.exports.insert(name.to_string());
+    }
+
+    /// 检查名称是否已导出
+    pub fn is_exported(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.exports.contains(name)
+    }
+
+    /// 获取导出项
+    pub fn exported_items(&self) -> &HashSet<String> {
+        &self.exports
+    }
+
+    /// 标记导入为公开导入
+    pub fn mark_import_public(
+        &mut self,
+        index: usize,
+    ) -> bool {
+        if index < self.imports.len() {
+            self.imports[index].is_public = true;
+            true
+        } else {
+            false
+        }
     }
 
     // =========================================================================

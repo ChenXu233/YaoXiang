@@ -10,7 +10,7 @@ fn create_dummy_span() -> Span {
 #[test]
 fn test_check_var_with_initializer() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // x = 42
     let stmt = ast::Stmt {
@@ -33,7 +33,7 @@ fn test_check_var_with_initializer() {
 #[test]
 fn test_check_var_with_type_annotation() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // x: Int = 42
     let stmt = ast::Stmt {
@@ -56,7 +56,7 @@ fn test_check_var_with_type_annotation() {
 #[test]
 fn test_check_var_type_mismatch() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // x: String = 42
     let stmt = ast::Stmt {
@@ -86,7 +86,7 @@ fn test_check_var_type_mismatch() {
 #[test]
 fn test_check_expr_stmt() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // 42
     let stmt = ast::Stmt {
@@ -103,7 +103,7 @@ fn test_check_expr_stmt() {
 #[test]
 fn test_check_type_alias() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // type MyInt = Int
     let type_def = ast::Stmt {
@@ -142,7 +142,7 @@ fn test_check_type_alias() {
 #[test]
 fn test_check_for_loop() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // for i in [1, 2, 3] { i }
     let stmt = ast::Stmt {
@@ -184,7 +184,7 @@ fn test_check_for_loop() {
 #[test]
 fn test_check_fn_def() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver);
+    let mut checker = TypeChecker::new(&mut solver, "test");
 
     // add(Int, Int) -> Int = (a, b) => a + b
     let stmt = ast::Stmt {
