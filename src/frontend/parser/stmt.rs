@@ -442,7 +442,7 @@ impl<'a> ParserState<'a> {
             ));
             None
         } else {
-            Some(parts.join("::"))
+            Some(parts.join("."))
         }
     }
 

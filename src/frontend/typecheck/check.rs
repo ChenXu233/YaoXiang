@@ -440,6 +440,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         // 2. 处理标准库导入
+        // 解析后的路径使用 "::" 分隔符，例如 "std.io"
         if path.starts_with("std.") {
             debug!("Detected std import: {}", path);
             return self.import_stdlib(path, items, alias, span);
@@ -499,7 +500,7 @@ impl<'a> TypeChecker<'a> {
 
         // 定义标准库函数签名
         let stdlib_functions: HashMap<&str, PolyType> = [
-            // std::io
+            // std.io
             (
                 "print",
                 PolyType::mono(MonoType::Fn {
@@ -564,7 +565,7 @@ impl<'a> TypeChecker<'a> {
             for item in &items {
                 if !functions_to_import.contains(item) {
                     self.add_error(TypeError::import_error(
-                        format!("std::{} 中不存在函数: {}", module, item),
+                        format!("std.{} 中不存在函数: {}", module, item),
                         span,
                     ));
                 }
@@ -606,10 +607,8 @@ impl<'a> TypeChecker<'a> {
         if path.is_empty() {
             return false;
         }
-        if path.starts_with("::") || path.ends_with("::") {
-            return false;
-        }
-        let parts: Vec<&str> = path.split("::").collect();
+        // 路径使用 "." 分隔符
+        let parts: Vec<&str> = path.split(".").collect();
         for part in parts {
             if part.is_empty() {
                 return false;
