@@ -439,7 +439,13 @@ impl<'a> TypeChecker<'a> {
             return Ok(());
         }
 
-        // 2. 验证选择性导入语法
+        // 2. 处理标准库导入
+        if path.starts_with("std.") {
+            debug!("Detected std import: {}", path);
+            return self.import_stdlib(path, items, alias, span);
+        }
+
+        // 3. 验证选择性导入语法
         if let Some(import_items) = items {
             if import_items.is_empty() {
                 self.add_error(TypeError::import_error("空的导入列表".to_string(), span));
@@ -455,7 +461,7 @@ impl<'a> TypeChecker<'a> {
             }
         }
 
-        // 3. 验证别名语法
+        // 4. 验证别名语法
         if let Some(alias_name) = alias {
             if alias_name.is_empty() {
                 self.add_error(TypeError::import_error("空的别名".to_string(), span));
@@ -464,7 +470,7 @@ impl<'a> TypeChecker<'a> {
             }
         }
 
-        // 4. 记录导入信息
+        // 5. 记录导入信息
         let import_info = ImportInfo {
             path: path.to_string(),
             items: items.map(|v| v.to_vec()),
@@ -475,6 +481,119 @@ impl<'a> TypeChecker<'a> {
         self.imports.push(import_info);
 
         debug!("Recorded use statement: path={}, items={:?}", path, items);
+
+        Ok(())
+    }
+
+    /// 导入标准库模块
+    #[allow(clippy::result_large_err)]
+    fn import_stdlib(
+        &mut self,
+        path: &str,
+        items: Option<&[String]>,
+        _alias: Option<&str>,
+        span: Span,
+    ) -> TypeResult<()> {
+        // 提取模块名：std.io -> io
+        let module = path.strip_prefix("std.").unwrap_or(path);
+
+        // 定义标准库函数签名
+        let stdlib_functions: HashMap<&str, PolyType> = [
+            // std::io
+            (
+                "print",
+                PolyType::mono(MonoType::Fn {
+                    params: vec![MonoType::String],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                }),
+            ),
+            (
+                "println",
+                PolyType::mono(MonoType::Fn {
+                    params: vec![MonoType::String],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                }),
+            ),
+            (
+                "read_line",
+                PolyType::mono(MonoType::Fn {
+                    params: vec![],
+                    return_type: Box::new(MonoType::String),
+                    is_async: false,
+                }),
+            ),
+            (
+                "read_file",
+                PolyType::mono(MonoType::Fn {
+                    params: vec![MonoType::String],
+                    return_type: Box::new(MonoType::String),
+                    is_async: false,
+                }),
+            ),
+            (
+                "write_file",
+                PolyType::mono(MonoType::Fn {
+                    params: vec![MonoType::String, MonoType::String],
+                    return_type: Box::new(MonoType::Bool),
+                    is_async: false,
+                }),
+            ),
+        ]
+        .into_iter()
+        .collect();
+
+        // 根据模块选择要导入的函数
+        let functions_to_import: Vec<&str> = match module {
+            "io" => vec!["print", "println", "read_line", "read_file", "write_file"],
+            _ => {
+                self.add_error(TypeError::import_error(
+                    format!("未知标准库模块: {}", module),
+                    span,
+                ));
+                return Ok(());
+            }
+        };
+
+        // 导入指定的函数或所有函数
+        let items_to_import = items.map(|v| v.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+
+        let target_functions: Vec<&str> = if let Some(items) = items_to_import {
+            // 只导入指定的函数
+            for item in &items {
+                if !functions_to_import.contains(item) {
+                    self.add_error(TypeError::import_error(
+                        format!("std::{} 中不存在函数: {}", module, item),
+                        span,
+                    ));
+                }
+            }
+            items
+        } else {
+            // 导入模块中的所有函数
+            functions_to_import.to_vec()
+        };
+
+        // 将函数添加到符号表
+        for func_name in &target_functions {
+            if let Some(poly_type) = stdlib_functions.get(func_name) {
+                self.inferrer
+                    .add_var(func_name.to_string(), poly_type.clone());
+            }
+        }
+
+        // 记录导入信息
+        let import_info = ImportInfo {
+            path: path.to_string(),
+            items: Some(target_functions.iter().map(|s| s.to_string()).collect()),
+            alias: None,
+            span,
+            is_public: false,
+        };
+        self.imports.push(import_info);
+
+        debug!("Imported stdlib: path={}, items={:?}", path, items);
 
         Ok(())
     }
