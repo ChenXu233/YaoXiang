@@ -1,6 +1,8 @@
 # Task 7.4: 闭包单态化 - 实现计划
 
-> **状态**: 📋 待实现
+> **状态**: ✅ 已完成
+> **实现文件**: [closure.rs](../../../../src/middle/monomorphize/closure.rs)
+> **测试文件**: [closure_monomorphize.rs](../../../../src/middle/monomorphize/tests/closure_monomorphize.rs)
 > **依赖**: task-07-03 (函数单态化)
 > **预估工作量**: 3-4 天
 
