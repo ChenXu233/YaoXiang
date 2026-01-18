@@ -27,9 +27,10 @@ fn show_help() {
 }
 
 fn bump_version() {
-    // 检查暂存区是否有 .rs 文件
+    // 检查是否有 .rs 文件被修改
+    // 注意：pre-commit 运行时文件还未 staged，所以用 git diff 而不是 git diff --cached
     let rs_files = Command::new("git")
-        .args(["diff", "--cached", "--name-only"])
+        .args(["diff", "--name-only"])
         .output()
         .expect("Failed to run git diff")
         .stdout;
@@ -39,7 +40,7 @@ fn bump_version() {
         .any(|f| f.ends_with(".rs"));
 
     if !has_rs_files {
-        println!("[SKIP] No .rs files staged, skipping version bump");
+        println!("[SKIP] No .rs files changed, skipping version bump");
         return;
     }
 
@@ -143,7 +144,7 @@ if "%COMMIT_SOURCE%"=="squash" goto :EOF
 if not "%SHA1%"=="" goto :EOF
 for /f "delims=" %%f in ('git diff --cached --name-only ^| findstr /r "\.rs$"') do set "RS_FOUND=1"
 if defined RS_FOUND (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%CD%\\.githooks\\prepare-commit-msg.ps1' %*"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%CD%\.githooks\prepare-commit-msg.ps1' %*"
 )
 popd
 exit /b 0
