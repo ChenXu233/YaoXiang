@@ -334,3 +334,221 @@ impl Default for SendSyncChecker {
         Self::new()
     }
 }
+
+// =========================================================================
+// 约束传播支持
+// =========================================================================
+
+use crate::frontend::typecheck::{SendSyncConstraint, SendSyncConstraintSolver};
+
+/// Send/Sync 约束传播结果
+#[derive(Debug, Clone, Default)]
+pub struct SendSyncPropagationResult {
+    /// 需要生成的 Send 特化版本
+    pub require_send_specialization: bool,
+    /// 需要生成的 Sync 特化版本
+    pub require_sync_specialization: bool,
+    /// 无法满足约束的类型
+    pub unsatisfied_types: Vec<(MonoType, SendSyncConstraint)>,
+}
+
+impl SendSyncPropagationResult {
+    /// 创建新的结果
+    pub fn new() -> Self {
+        Self {
+            require_send_specialization: false,
+            require_sync_specialization: false,
+            unsatisfied_types: Vec::new(),
+        }
+    }
+
+    /// 添加未满足的约束
+    pub fn add_unsatisfied(
+        &mut self,
+        ty: MonoType,
+        constraint: SendSyncConstraint,
+    ) {
+        if constraint.require_send {
+            self.require_send_specialization = true;
+        }
+        if constraint.require_sync {
+            self.require_sync_specialization = true;
+        }
+        self.unsatisfied_types.push((ty, constraint));
+    }
+
+    /// 是否可以满足约束
+    pub fn can_satisfy(&self) -> bool {
+        self.unsatisfied_types.is_empty()
+    }
+}
+
+/// Send/Sync 约束传播器
+///
+/// 负责：
+/// 1. 从 spawn 点收集 Send/Sync 约束
+/// 2. 将约束传播到泛型参数
+/// 3. 生成特化请求
+#[derive(Debug, Default)]
+pub struct SendSyncPropagator {
+    /// 收集的约束
+    constraints: Vec<(MonoType, SendSyncConstraint)>,
+}
+
+impl SendSyncPropagator {
+    /// 创建新的传播器
+    pub fn new() -> Self {
+        Self {
+            constraints: Vec::new(),
+        }
+    }
+
+    /// 重置状态
+    pub fn reset(&mut self) {
+        self.constraints.clear();
+    }
+
+    /// 添加 Send 约束
+    pub fn add_send_constraint(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        self.constraints
+            .push((ty.clone(), SendSyncConstraint::send_only()));
+    }
+
+    /// 添加 Sync 约束
+    pub fn add_sync_constraint(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        self.constraints
+            .push((ty.clone(), SendSyncConstraint::sync_only()));
+    }
+
+    /// 添加 Send + Sync 约束
+    pub fn add_send_sync_constraint(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        self.constraints
+            .push((ty.clone(), SendSyncConstraint::send_sync()));
+    }
+
+    /// 从约束求解器收集约束
+    pub fn collect_from_solver(
+        &mut self,
+        solver: &SendSyncConstraintSolver,
+        type_args: &[MonoType],
+    ) {
+        for ty in type_args {
+            let constraint = solver.get_constraint(ty);
+            if constraint.require_send || constraint.require_sync {
+                self.constraints.push((ty.clone(), constraint));
+            }
+        }
+    }
+
+    /// 传播约束到类型参数
+    ///
+    /// 约束传播规则：
+    /// - Vec[T] 约束 Send → T 约束 Send
+    /// - (T, U) 约束 Send → T 和 U 都约束 Send
+    /// - fn(T) -> U 约束 Send → T 和 U 都约束 Send
+    pub fn propagate(&self) -> Vec<(MonoType, SendSyncConstraint)> {
+        let mut propagated = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+
+        for (ty, constraint) in &self.constraints {
+            let key = format!("{:?}-{:?}", ty, constraint);
+            if visited.insert(key) {
+                self.propagate_type(ty, constraint, &mut propagated, &mut visited);
+            }
+        }
+
+        propagated
+    }
+
+    /// 递归传播约束到类型
+    #[allow(clippy::only_used_in_recursion)]
+    fn propagate_type(
+        &self,
+        ty: &MonoType,
+        constraint: &SendSyncConstraint,
+        result: &mut Vec<(MonoType, SendSyncConstraint)>,
+        visited: &mut std::collections::HashSet<String>,
+    ) {
+        // 添加当前类型的约束
+        result.push((ty.clone(), constraint.clone()));
+
+        // 递归传播到类型参数
+        match ty {
+            MonoType::Struct(s) => {
+                for (_, field_ty) in &s.fields {
+                    self.propagate_type(field_ty, constraint, result, visited);
+                }
+            }
+            MonoType::Tuple(types) => {
+                for elem_ty in types {
+                    self.propagate_type(elem_ty, constraint, result, visited);
+                }
+            }
+            MonoType::List(elem) | MonoType::Set(elem) => {
+                self.propagate_type(elem, constraint, result, visited);
+            }
+            MonoType::Dict(key, value) => {
+                self.propagate_type(key, constraint, result, visited);
+                self.propagate_type(value, constraint, result, visited);
+            }
+            MonoType::Range { elem_type } => {
+                self.propagate_type(elem_type, constraint, result, visited);
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                for param_ty in params {
+                    self.propagate_type(param_ty, constraint, result, visited);
+                }
+                self.propagate_type(return_type, constraint, result, visited);
+            }
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                for member_ty in types {
+                    self.propagate_type(member_ty, constraint, result, visited);
+                }
+            }
+            MonoType::Arc(inner) => {
+                self.propagate_type(inner, constraint, result, visited);
+            }
+            _ => {}
+        }
+    }
+
+    /// 验证约束是否可满足
+    ///
+    /// 返回不可满足的类型及其约束
+    pub fn verify_constraints(
+        &self,
+        checker: &SendSyncChecker,
+    ) -> SendSyncPropagationResult {
+        let mut result = SendSyncPropagationResult::new();
+        let propagated = self.propagate();
+
+        for (ty, constraint) in propagated {
+            let is_send = constraint.require_send && !checker.is_send(&ty);
+            let is_sync = constraint.require_sync && !checker.is_sync(&ty);
+
+            if is_send || is_sync {
+                result.add_unsatisfied(ty, constraint);
+            }
+        }
+
+        result
+    }
+
+    /// 获取所有收集的约束
+    pub fn constraints(&self) -> &[(MonoType, SendSyncConstraint)] {
+        &self.constraints
+    }
+}

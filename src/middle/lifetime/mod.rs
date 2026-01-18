@@ -18,14 +18,14 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 // 子模块
-mod clone;
-mod cycle_check;
-mod drop_semantics;
-mod error;
-mod move_semantics;
-mod mut_check;
-mod ref_semantics;
-mod send_sync;
+pub mod clone;
+pub mod cycle_check;
+pub mod drop_semantics;
+pub mod error;
+pub mod move_semantics;
+pub mod mut_check;
+pub mod ref_semantics;
+pub mod send_sync;
 
 pub use clone::*;
 pub use cycle_check::*;
