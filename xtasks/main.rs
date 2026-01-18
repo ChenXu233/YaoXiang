@@ -27,6 +27,14 @@ fn show_help() {
 }
 
 fn bump_version() {
+    // 获取项目根目录
+    let root = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .expect("Failed to run git rev-parse")
+        .stdout;
+    let root = String::from_utf8_lossy(&root).trim().to_string();
+
     // 检查是否有 .rs 文件被修改
     // 注意：pre-commit 运行时文件还未 staged，所以用 git diff 而不是 git diff --cached
     let rs_files = Command::new("git")
@@ -44,8 +52,8 @@ fn bump_version() {
         return;
     }
 
-    let cargo_path = Path::new("Cargo.toml");
-    let content = fs::read_to_string(cargo_path).expect("Failed to read Cargo.toml");
+    let cargo_path = Path::new(&root).join("Cargo.toml");
+    let content = fs::read_to_string(&cargo_path).expect("Failed to read Cargo.toml");
     let mut lines: Vec<String> = Vec::new();
     let mut updated = false;
 
@@ -79,10 +87,13 @@ fn bump_version() {
 
     if updated {
         let new_content = lines.join("\n");
-        fs::write(cargo_path, new_content).expect("Failed to write Cargo.toml");
-        // Stage
-        let _ = Command::new("git").args(["add", "Cargo.toml"]).status();
-        println!("[OK] Cargo.toml bumped and staged");
+        fs::write(&cargo_path, new_content).expect("Failed to write Cargo.toml");
+        // Stage the main Cargo.toml
+        let cargo_to_add = Path::new(&root).join("Cargo.toml");
+        let _ = Command::new("git")
+            .args(["add", &cargo_to_add.to_string_lossy()])
+            .status();
+        println!("[OK] main Cargo.toml bumped and staged");
     } else {
         println!("[SKIP] No version line found or already updated");
     }

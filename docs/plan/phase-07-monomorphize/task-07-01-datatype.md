@@ -1,9 +1,25 @@
 # Task 7.1: 单态化数据结构
 
 > **优先级**: P0
-> **状态**: ⏳ 待实现
+> **状态**: ✅ 已完成
 >
 > **参考**: [009-ownership-model.md](../design/accepted/009-ownership-model.md) - Arc 类型支持
+
+## 完成情况
+
+| 类型 | 位置 | 状态 |
+|------|------|------|
+| `GenericTypeId` | [instance.rs:238-280](src/middle/monomorphize/instance.rs#L238-L280) | ✅ 已实现 |
+| `TypeId` | [instance.rs:347-407](src/middle/monomorphize/instance.rs#L347-L407) | ✅ 已实现 |
+| `TypeInstance` | [instance.rs:409-454](src/middle/monomorphize/instance.rs#L409-L454) | ✅ 已实现 |
+| 单元测试 | [tests/instance.rs](src/middle/monomorphize/tests/instance.rs) | ✅ 28/28 通过 |
+
+## 验证结果
+
+```bash
+cargo test --package yaoxiang middle::monomorphize::tests::instance
+# test result: ok. 28 passed; 0 failed
+```
 
 ## 功能描述
 
