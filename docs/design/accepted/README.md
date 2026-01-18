@@ -11,6 +11,7 @@
 | 编号 | 标题 | 接受日期 | 状态 |
 |------|------|----------|------|
 | RFC-001 | [并作模型与错误处理系统](001-concurrent-model-error-handling.md) | 2025-01-06 | 已接受 |
+| RFC-007 | [函数定义语法统一方案](007-function-syntax-unification.md) | 2025-01-06 | 已接受 |
 | RFC-008 | [Runtime 并发模型与调度器脱耦设计](008-runtime-concurrency-model.md) | 2025-01-05 | 已接受 |
 | RFC-009 | [所有权模型 v7](009-ownership-model.md) | 2025-01-16 | 已接受 |
 
