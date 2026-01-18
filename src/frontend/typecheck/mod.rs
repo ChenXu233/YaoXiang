@@ -125,6 +125,8 @@ pub fn check_module(
         let mut new_env = TypeEnvironment::new();
         // 添加内置类型
         add_builtin_types(&mut new_env);
+        // 添加内置函数
+        add_builtin_functions(&mut new_env);
         Box::leak(Box::new(new_env))
     });
 
@@ -178,6 +180,56 @@ fn add_builtin_types(env: &mut TypeEnvironment) {
     env.add_type("string".to_string(), PolyType::mono(MonoType::String));
     env.add_type("bytes".to_string(), PolyType::mono(MonoType::Bytes));
     env.add_type("void".to_string(), PolyType::mono(MonoType::Void));
+}
+
+/// 添加内置函数到环境
+fn add_builtin_functions(env: &mut TypeEnvironment) {
+    // === std::io ===
+    // print<T>(T) -> Void
+    env.add_var(
+        "print".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![MonoType::String], // 使用 String 作为占位，具体类型在单态化时确定
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        }),
+    );
+    // println<T>(T) -> Void
+    env.add_var(
+        "println".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![MonoType::String],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        }),
+    );
+    // read_line() -> String
+    env.add_var(
+        "read_line".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![],
+            return_type: Box::new(MonoType::String),
+            is_async: false,
+        }),
+    );
+    // read_file(path: String) -> String
+    env.add_var(
+        "read_file".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![MonoType::String],
+            return_type: Box::new(MonoType::String),
+            is_async: false,
+        }),
+    );
+    // write_file(path: String, content: String) -> Bool
+    env.add_var(
+        "write_file".to_string(),
+        PolyType::mono(MonoType::Fn {
+            params: vec![MonoType::String, MonoType::String],
+            return_type: Box::new(MonoType::Bool),
+            is_async: false,
+        }),
+    );
 }
 
 /// 检查单个表达式

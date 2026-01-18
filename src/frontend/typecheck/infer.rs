@@ -7,7 +7,7 @@
 use super::super::lexer::tokens::Literal;
 use super::super::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
-use super::types::{MonoType, PolyType, TypeConstraintSolver};
+use super::types::{MonoType, PolyType, SendSyncConstraintSolver, TypeConstraintSolver};
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -18,12 +18,18 @@ use std::collections::HashMap;
 pub struct TypeInferrer<'a> {
     /// 类型约束求解器
     solver: &'a mut TypeConstraintSolver,
+    /// Send/Sync 约束求解器
+    send_sync_solver: SendSyncConstraintSolver,
     /// 变量环境栈：每一层是一个作用域
     scopes: Vec<HashMap<String, PolyType>>,
     /// 循环标签栈（用于 break/continue）
     loop_labels: Vec<String>,
     /// 当前函数的返回类型（用于 return 语句检查）
     pub current_return_type: Option<MonoType>,
+    /// 当前函数是否需要 Send 约束（spawn 函数）
+    current_fn_requires_send: bool,
+    /// 当前函数的泛型参数列表（用于约束传播）
+    current_fn_type_params: Vec<MonoType>,
 }
 
 impl<'a> TypeInferrer<'a> {
@@ -31,9 +37,12 @@ impl<'a> TypeInferrer<'a> {
     pub fn new(solver: &'a mut TypeConstraintSolver) -> Self {
         TypeInferrer {
             solver,
+            send_sync_solver: SendSyncConstraintSolver::new(),
             scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
             current_return_type: None,
+            current_fn_requires_send: false,
+            current_fn_type_params: Vec::new(),
         }
     }
 
@@ -45,6 +54,130 @@ impl<'a> TypeInferrer<'a> {
     /// 获取求解器引用（不可变）
     pub fn solver_ref(&self) -> &TypeConstraintSolver {
         self.solver
+    }
+
+    /// 获取 Send/Sync 约束求解器
+    pub fn send_sync_solver(&mut self) -> &mut SendSyncConstraintSolver {
+        &mut self.send_sync_solver
+    }
+
+    /// 检查类型是否满足 Send 约束
+    pub fn is_send(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        self.send_sync_solver.is_send(ty)
+    }
+
+    /// 检查类型是否满足 Sync 约束
+    pub fn is_sync(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        self.send_sync_solver.is_sync(ty)
+    }
+
+    /// 添加 Send 约束
+    pub fn add_send_constraint(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        self.send_sync_solver.add_send_constraint(ty);
+    }
+
+    /// 添加 Sync 约束
+    pub fn add_sync_constraint(
+        &mut self,
+        ty: &MonoType,
+    ) {
+        self.send_sync_solver.add_sync_constraint(ty);
+    }
+
+    /// 标记当前函数需要 Send 约束（用于 spawn 函数）
+    pub fn mark_current_fn_requires_send(&mut self) {
+        self.current_fn_requires_send = true;
+    }
+
+    /// 检查当前函数是否需要 Send 约束
+    pub fn current_fn_requires_send(&self) -> bool {
+        self.current_fn_requires_send
+    }
+
+    /// 设置当前函数的泛型参数
+    pub fn set_current_fn_type_params(
+        &mut self,
+        params: Vec<MonoType>,
+    ) {
+        self.current_fn_type_params = params;
+    }
+
+    /// 获取当前函数的泛型参数
+    pub fn current_fn_type_params(&self) -> &[MonoType] {
+        &self.current_fn_type_params
+    }
+
+    /// 检查泛型参数是否满足 Send 约束
+    ///
+    /// 对于 spawn 函数，所有泛型参数都必须满足 Send 约束
+    pub fn check_send_for_generic_params(&self) -> Vec<(MonoType, &'static str)> {
+        if !self.current_fn_requires_send {
+            return Vec::new();
+        }
+
+        let mut errors = Vec::new();
+        for ty in &self.current_fn_type_params {
+            if !self.is_send(ty) {
+                errors.push((ty.clone(), "not Send"));
+            }
+        }
+        errors
+    }
+
+    /// 检查作用域中的变量是否满足 Send 约束
+    ///
+    /// 用于 spawn 函数检查闭包捕获的变量
+    pub fn check_scope_for_send(
+        &mut self,
+        required_vars: &[String],
+    ) -> Vec<(String, MonoType, &'static str)> {
+        if !self.current_fn_requires_send {
+            return Vec::new();
+        }
+
+        let mut errors = Vec::new();
+        for var_name in required_vars {
+            // 在所有作用域中查找变量
+            for scope in self.scopes.iter().rev() {
+                if let Some(poly) = scope.get(var_name) {
+                    let ty = self.solver.instantiate(poly);
+                    if !self.is_send(&ty) {
+                        errors.push((var_name.clone(), ty, "not Send"));
+                    }
+                    break;
+                }
+            }
+        }
+        errors
+    }
+
+    /// 为所有作用域中的自由变量添加 Send 约束
+    ///
+    /// 当推断 spawn 函数时，闭包捕获的所有变量都必须满足 Send 约束
+    pub fn add_send_constraint_to_captured_vars(&mut self) {
+        if !self.current_fn_requires_send {
+            return;
+        }
+
+        // 遍历所有作用域中的变量
+        for scope in self.scopes.iter() {
+            for (_, poly) in scope.iter() {
+                // 对多态类型中的泛型变量添加 Send 约束
+                for binder in &poly.binders {
+                    self.send_sync_solver
+                        .add_send_constraint(&MonoType::TypeVar(*binder));
+                }
+            }
+        }
     }
 
     // =========================================================================
