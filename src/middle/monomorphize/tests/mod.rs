@@ -1,5 +1,10 @@
 //! 单态化测试模块
 //!
-//! instance.rs 有预存在的编译错误（API 已变更），暂时排除
+mod closure_monomorphize;
+mod cross_module;
+mod edge_cases;
+mod fn_monomorphize;
+mod global;
 mod instance;
+mod real_world;
 mod type_monomorphize;

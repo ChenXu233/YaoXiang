@@ -6,10 +6,9 @@
 //! - Arc 类型处理（所有权模型）
 //! - 类型缓存
 
-use crate::middle::monomorphize::{
-    Monomorphizer,
-    instance::{GenericTypeId},
-};
+use crate::middle::monomorphize::Monomorphizer;
+use crate::middle::monomorphize::type_mono::TypeMonomorphizer;
+use crate::middle::monomorphize::instance::GenericTypeId;
 use crate::frontend::typecheck::{MonoType, StructType, EnumType, TypeVar};
 
 /// 创建类型变量的辅助函数
