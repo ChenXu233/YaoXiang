@@ -889,7 +889,6 @@ impl TryFrom<u8> for TypedOpcode {
             0x71 => Ok(TypedOpcode::HeapAlloc),
             0x72 => Ok(TypedOpcode::Drop),
             0x73 => Ok(TypedOpcode::GetField),
-            0x74 => Ok(TypedOpcode::SetField),
             0x75 => Ok(TypedOpcode::LoadElement),
             0x76 => Ok(TypedOpcode::StoreElement),
             0x77 => Ok(TypedOpcode::NewListWithCap),

@@ -3,10 +3,11 @@
 //! This module contains the bytecode interpreter.
 
 pub use errors::{VMError, VMResult};
-pub use executor::{Opcode as ExecutorOpcode, VMConfig, VMStatus, Value, VM};
+pub use executor::{RegisterFile, VMConfig, VMStatus, Value, VM};
+pub use opcode::TypedOpcode;
 
 pub mod inline_cache;
-pub mod opcode; // 添加 opcode 模块
+pub mod opcode;
 
 mod errors;
 mod executor;

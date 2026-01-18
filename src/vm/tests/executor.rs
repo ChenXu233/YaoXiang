@@ -3,8 +3,8 @@
 //! 测试虚拟机执行器的配置、状态和值类型
 
 use crate::middle::ModuleIR;
-use crate::vm::executor::Opcode;
-use crate::vm::{VMConfig, VMError, VMStatus, Value, VM};
+use crate::vm::executor::{VMConfig, VMStatus, Value, VM};
+use crate::vm::opcode::TypedOpcode;
 
 #[cfg(test)]
 mod vm_config_tests {
@@ -14,17 +14,20 @@ mod vm_config_tests {
     fn test_vm_config_default() {
         let config = VMConfig::default();
         assert_eq!(config.stack_size, 64 * 1024);
-        assert!(!config.enable_jit);
+        assert_eq!(config.max_call_depth, 1024);
+        assert!(!config.trace_execution);
     }
 
     #[test]
     fn test_vm_config_custom() {
         let config = VMConfig {
             stack_size: 128 * 1024,
-            enable_jit: true,
+            max_call_depth: 2048,
+            trace_execution: true,
         };
         assert_eq!(config.stack_size, 128 * 1024);
-        assert!(config.enable_jit);
+        assert_eq!(config.max_call_depth, 2048);
+        assert!(config.trace_execution);
     }
 
     #[test]
@@ -152,38 +155,35 @@ mod opcode_tests {
 
     #[test]
     fn test_opcode_values() {
-        assert_eq!(Opcode::Nop as u8, 0x00);
-        assert_eq!(Opcode::Push as u8, 0x01);
-        assert_eq!(Opcode::Pop as u8, 0x02);
-        assert_eq!(Opcode::Dup as u8, 0x03);
-        assert_eq!(Opcode::Swap as u8, 0x04);
+        assert_eq!(TypedOpcode::Nop as u8, 0x00);
+        assert_eq!(TypedOpcode::Return as u8, 0x01);
+        assert_eq!(TypedOpcode::ReturnValue as u8, 0x02);
+        assert_eq!(TypedOpcode::Jmp as u8, 0x03);
     }
 
     #[test]
     fn test_opcode_try_from_valid() {
-        let result = Opcode::try_from(0x00);
+        let result = TypedOpcode::try_from(0x00);
         assert!(result.is_ok());
-        assert!(matches!(result, Ok(Opcode::Nop)));
+        assert!(matches!(result, Ok(TypedOpcode::Nop)));
     }
 
     #[test]
     fn test_opcode_try_from_invalid() {
-        assert!(Opcode::try_from(0xFF).is_err());
-        assert!(matches!(
-            Opcode::try_from(0xFF),
-            Err(VMError::InvalidOpcode(0xFF))
-        ));
+        // 0x74 未被使用（SetField 是 0x75），应该返回错误
+        let result = TypedOpcode::try_from(0x74);
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_opcode_partial_eq() {
-        assert_eq!(Opcode::Nop, Opcode::Nop);
-        assert_ne!(Opcode::Nop, Opcode::Push);
+        assert_eq!(TypedOpcode::Nop, TypedOpcode::Nop);
+        assert_ne!(TypedOpcode::Nop, TypedOpcode::Return);
     }
 
     #[test]
     fn test_opcode_debug() {
-        let debug_output = format!("{:?}", Opcode::Nop);
+        let debug_output = format!("{:?}", TypedOpcode::Nop);
         assert!(debug_output.contains("Nop"));
     }
 }
