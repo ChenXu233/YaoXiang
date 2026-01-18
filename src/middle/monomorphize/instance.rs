@@ -121,6 +121,70 @@ impl Hash for SpecializationKey {
     }
 }
 
+// ==================== 辅助函数 ====================
+
+/// 计算 MonoType 的哈希值
+#[allow(clippy::only_used_in_recursion)]
+fn type_name_hash<H: Hasher>(
+    ty: &MonoType,
+    state: &mut H,
+) {
+    match ty {
+        MonoType::Void => "void".hash(state),
+        MonoType::Bool => "bool".hash(state),
+        MonoType::Int(n) => format!("int{}", n).hash(state),
+        MonoType::Float(n) => format!("float{}", n).hash(state),
+        MonoType::Char => "char".hash(state),
+        MonoType::String => "string".hash(state),
+        MonoType::Bytes => "bytes".hash(state),
+        MonoType::Struct(s) => s.name.hash(state),
+        MonoType::Enum(e) => e.name.hash(state),
+        MonoType::Tuple(ts) => {
+            "tuple".hash(state);
+            for t in ts {
+                type_name_hash(t, state);
+            }
+        }
+        MonoType::List(t) => {
+            "list".hash(state);
+            type_name_hash(t, state);
+        }
+        MonoType::Dict(k, v) => {
+            "dict".hash(state);
+            type_name_hash(k, state);
+            type_name_hash(v, state);
+        }
+        MonoType::Set(t) => {
+            "set".hash(state);
+            type_name_hash(t, state);
+        }
+        MonoType::Fn { .. } => "fn".hash(state),
+        MonoType::Range { elem_type } => {
+            "range".hash(state);
+            type_name_hash(elem_type, state);
+        }
+        MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
+        MonoType::TypeRef(n) => n.hash(state),
+        // 联合类型和交集类型使用 TypeRef 的哈希方式
+        MonoType::Union(types) => {
+            "union".hash(state);
+            for t in types {
+                type_name_hash(t, state);
+            }
+        }
+        MonoType::Intersection(types) => {
+            "intersection".hash(state);
+            for t in types {
+                type_name_hash(t, state);
+            }
+        }
+        MonoType::Arc(t) => {
+            "arc".hash(state);
+            type_name_hash(t, state);
+        }
+    }
+}
+
 impl SpecializationKey {
     /// 辅助函数：计算类型名称的哈希值
     #[allow(clippy::only_used_in_recursion)]
@@ -129,60 +193,7 @@ impl SpecializationKey {
         ty: &MonoType,
         state: &mut H,
     ) {
-        match ty {
-            MonoType::Void => "void".hash(state),
-            MonoType::Bool => "bool".hash(state),
-            MonoType::Int(n) => format!("int{}", n).hash(state),
-            MonoType::Float(n) => format!("float{}", n).hash(state),
-            MonoType::Char => "char".hash(state),
-            MonoType::String => "string".hash(state),
-            MonoType::Bytes => "bytes".hash(state),
-            MonoType::Struct(s) => s.name.hash(state),
-            MonoType::Enum(e) => e.name.hash(state),
-            MonoType::Tuple(ts) => {
-                "tuple".hash(state);
-                for t in ts {
-                    self.type_name_hash(t, state);
-                }
-            }
-            MonoType::List(t) => {
-                "list".hash(state);
-                self.type_name_hash(t, state);
-            }
-            MonoType::Dict(k, v) => {
-                "dict".hash(state);
-                self.type_name_hash(k, state);
-                self.type_name_hash(v, state);
-            }
-            MonoType::Set(t) => {
-                "set".hash(state);
-                self.type_name_hash(t, state);
-            }
-            MonoType::Fn { .. } => "fn".hash(state),
-            MonoType::Range { elem_type } => {
-                "range".hash(state);
-                self.type_name_hash(elem_type, state);
-            }
-            MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
-            MonoType::TypeRef(n) => n.hash(state),
-            // 联合类型和交集类型使用 TypeRef 的哈希方式
-            MonoType::Union(types) => {
-                "union".hash(state);
-                for t in types {
-                    self.type_name_hash(t, state);
-                }
-            }
-            MonoType::Intersection(types) => {
-                "intersection".hash(state);
-                for t in types {
-                    self.type_name_hash(t, state);
-                }
-            }
-            MonoType::Arc(t) => {
-                "arc".hash(state);
-                self.type_name_hash(t, state);
-            }
-        }
+        type_name_hash(ty, state);
     }
 }
 
@@ -494,5 +505,316 @@ impl TypeInstance {
     /// 获取单态类型
     pub fn get_mono_type(&self) -> Option<&MonoType> {
         self.mono_type.as_ref()
+    }
+}
+
+// ==================== 闭包单态化相关 ====================
+
+use crate::middle::ir::{FunctionIR, Operand};
+
+/// 捕获变量
+///
+/// 表示闭包从外部环境捕获的变量
+#[derive(Debug, Clone)]
+pub struct CaptureVariable {
+    /// 变量名称（用于调试）
+    pub name: String,
+    /// 变量类型
+    pub mono_type: MonoType,
+    /// 捕获的值（操作数）
+    pub value: Operand,
+}
+
+impl CaptureVariable {
+    /// 创建新的捕获变量
+    pub fn new(
+        name: String,
+        mono_type: MonoType,
+        value: Operand,
+    ) -> Self {
+        CaptureVariable {
+            name,
+            mono_type,
+            value,
+        }
+    }
+}
+
+/// 泛型闭包ID
+///
+/// 用于唯一标识一个泛型闭包
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericClosureId {
+    /// 闭包名称（通常是生成闭包的函数名）
+    name: String,
+    /// 泛型参数列表
+    type_params: Vec<String>,
+    /// 捕获变量名称列表（用于调试）
+    capture_names: Vec<String>,
+}
+
+impl GenericClosureId {
+    /// 创建新的泛型闭包ID
+    pub fn new(
+        name: String,
+        type_params: Vec<String>,
+        capture_names: Vec<String>,
+    ) -> Self {
+        GenericClosureId {
+            name,
+            type_params,
+            capture_names,
+        }
+    }
+
+    /// 获取闭包名称
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 获取泛型参数列表
+    pub fn type_params(&self) -> &[String] {
+        &self.type_params
+    }
+
+    /// 获取捕获变量名称
+    pub fn capture_names(&self) -> &[String] {
+        &self.capture_names
+    }
+
+    /// 获取完整的签名
+    pub fn signature(&self) -> String {
+        let captures = if self.capture_names.is_empty() {
+            "".to_string()
+        } else {
+            format!("|[{}]|", self.capture_names.join(", "))
+        };
+        if self.type_params.is_empty() {
+            format!("{}{}", self.name, captures)
+        } else {
+            format!("{}<{}>{}", self.name, self.type_params.join(", "), captures)
+        }
+    }
+}
+
+impl fmt::Display for GenericClosureId {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.signature())
+    }
+}
+
+/// 闭包ID
+///
+/// 用于唯一标识一个已特化的闭包
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosureId {
+    /// 闭包名称
+    name: String,
+    /// 类型参数（用于生成唯一名称）
+    type_args: Vec<MonoType>,
+    /// 捕获变量类型（用于生成唯一名称）
+    capture_types: Vec<MonoType>,
+}
+
+impl ClosureId {
+    /// 创建新的闭包ID
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+        capture_types: Vec<MonoType>,
+    ) -> Self {
+        ClosureId {
+            name,
+            type_args,
+            capture_types,
+        }
+    }
+
+    /// 获取闭包名称
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 获取类型参数
+    pub fn type_args(&self) -> &[MonoType] {
+        &self.type_args
+    }
+
+    /// 获取捕获变量类型
+    pub fn capture_types(&self) -> &[MonoType] {
+        &self.capture_types
+    }
+
+    /// 获取完整的特化名称
+    pub fn specialized_name(&self) -> String {
+        let type_suffix = if self.type_args.is_empty() {
+            "".to_string()
+        } else {
+            let args_str = self
+                .type_args
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("_{}", args_str)
+        };
+
+        let capture_suffix = if self.capture_types.is_empty() {
+            "".to_string()
+        } else {
+            let caps_str = self
+                .capture_types
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join("_");
+            format!("_cap_{}", caps_str)
+        };
+
+        format!("{}{}{}", self.name, type_suffix, capture_suffix)
+    }
+}
+
+impl std::hash::Hash for ClosureId {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name.hash(state);
+        for ty in &self.type_args {
+            ty.type_name().hash(state);
+        }
+        for ty in &self.capture_types {
+            ty.type_name().hash(state);
+        }
+    }
+}
+
+impl fmt::Display for ClosureId {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.specialized_name())
+    }
+}
+
+/// 闭包实例
+///
+/// 表示一个泛型闭包被特化后的具体闭包
+#[derive(Debug, Clone)]
+pub struct ClosureInstance {
+    /// 特化后的闭包ID
+    pub id: ClosureId,
+    /// 泛型闭包ID
+    pub generic_id: GenericClosureId,
+    /// 使用的类型参数
+    pub type_args: Vec<MonoType>,
+    /// 捕获变量
+    pub capture_vars: Vec<CaptureVariable>,
+    /// 特化后的闭包体IR
+    pub body_ir: FunctionIR,
+}
+
+impl ClosureInstance {
+    /// 创建新的闭包实例
+    pub fn new(
+        id: ClosureId,
+        generic_id: GenericClosureId,
+        type_args: Vec<MonoType>,
+        capture_vars: Vec<CaptureVariable>,
+        body_ir: FunctionIR,
+    ) -> Self {
+        ClosureInstance {
+            id,
+            generic_id,
+            type_args,
+            capture_vars,
+            body_ir,
+        }
+    }
+}
+
+/// 闭包特化缓存键
+///
+/// 用于在缓存中唯一标识一个闭包特化版本
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosureSpecializationKey {
+    /// 闭包名称
+    pub name: String,
+    /// 类型参数
+    pub type_args: Vec<MonoType>,
+    /// 捕获变量类型
+    pub capture_types: Vec<MonoType>,
+}
+
+impl ClosureSpecializationKey {
+    /// 创建新的闭包特化缓存键
+    pub fn new(
+        name: String,
+        type_args: Vec<MonoType>,
+        capture_types: Vec<MonoType>,
+    ) -> Self {
+        ClosureSpecializationKey {
+            name,
+            type_args,
+            capture_types,
+        }
+    }
+
+    /// 生成字符串键
+    pub fn as_string(&self) -> String {
+        let type_str = if self.type_args.is_empty() {
+            "".to_string()
+        } else {
+            let args_str = self
+                .type_args
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("<{}>", args_str)
+        };
+
+        let capture_str = if self.capture_types.is_empty() {
+            "".to_string()
+        } else {
+            let caps_str = self
+                .capture_types
+                .iter()
+                .map(|t| t.type_name())
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("|[{}]|", caps_str)
+        };
+
+        format!("{}{}{}", self.name, type_str, capture_str)
+    }
+}
+
+impl Hash for ClosureSpecializationKey {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name.hash(state);
+        for ty in &self.type_args {
+            type_name_hash(ty, state);
+        }
+        for ty in &self.capture_types {
+            type_name_hash(ty, state);
+        }
+    }
+}
+
+impl fmt::Display for ClosureSpecializationKey {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.as_string())
     }
 }
