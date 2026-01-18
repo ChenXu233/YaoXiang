@@ -9,8 +9,7 @@
 use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncConstraintSolver};
 use crate::middle::lifetime::send_sync::{SendSyncChecker, SendSyncPropagator};
 use crate::middle::monomorphize::constraint::{
-    ConstraintCollector, ConstraintPropagationEngine, ConstraintPropagationResult,
-    SpecializationRequestCollector,
+    ConstraintCollector, ConstraintPropagationEngine, SpecializationRequestCollector,
 };
 use crate::util::span::Span;
 
