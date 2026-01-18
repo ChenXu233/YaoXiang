@@ -45,6 +45,134 @@ type Drawable = [
 
 ---
 
+## 接口与数据的组合
+
+### 核心概念
+
+接口 `[ serialize() -> String ]` 本质上是一组**方法签名**的集合。数据结构通过声明绑定来实现接口。
+
+```
+接口定义 Drawable:
+  draw(Surface) -> Void     → 需要: fn(Drawable, Surface) -> Void
+  bounding_box() -> Rect    → 需要: fn(Drawable) -> Rect
+
+数据结构 Point 实现 Drawable:
+  Point.draw = draw_function[0]        # this 在第 0 位
+  Point.bounding_box = bbox_function[0]
+```
+
+### 完整组合示例
+
+```yaoxiang
+# 1. 定义数据结构
+type Point = { x: Float, y: Float }
+
+# 2. 定义接口
+type Drawable = [
+    draw(Surface) -> Void,
+    bounding_box() -> Rect
+]
+
+# 3. 定义自由函数（底层实现）
+draw_point(Point, Surface) -> Void = (p, surface) => {
+    surface.draw_rect(p.x, p.y, 10, 10)
+}
+
+bbox_point(Point) -> Rect = (p) => {
+    Rect(p.x - 5, p.y - 5, 10, 10)
+}
+
+# 4. 实现接口：声明绑定（编译时检查）
+impl Point: Drawable
+
+# 编译器自动推导绑定：
+# Point.draw = draw_point[0]
+# Point.bounding_box = bbox_point[0]
+
+# 5. 使用
+let p = Point(100, 200)
+let surface = Surface.new()
+
+# 函数视角
+draw_point(p, surface)
+bbox_point(p)
+
+# OOP 视角（语法糖，自动展开）
+p.draw(surface)     # → draw_point(p, surface)
+p.bounding_box()    # → bbox_point(p)
+```
+
+### 多位置联合绑定（RFC-004）
+
+当函数参数顺序不匹配时，使用 `[n]` 语法指定绑定位置：
+
+```yaoxiang
+# 底层函数：Point 在第 1 位
+render_thing(Surface, Point) -> Void = (surface, p) => { ... }
+
+# 接口要求：draw(this, Surface)
+type Renderable = [ draw(Surface) -> Void ]
+
+# 绑定：翻转参数顺序
+impl Point: Renderable
+# 编译器推导：Point.draw = render_thing[1]
+# p.draw(s) → render_thing(s, p)
+
+# 多位置联合绑定
+distance(Point, Point) -> Float = (a, b) => { ... }
+type Distanceable = [ distance_to(Point) -> Float ]
+# Point.distance_to = distance[0, 1]
+# p1.distance_to(p2) → distance(p1, p2)
+
+# 占位符绑定
+process(Point, Int, Point) -> Point = (p1, _, p2) => { ... }
+Point.combine = process[0, _, 2]
+# p1.combine(5, p2) → process(p1, 5, p2)
+```
+
+### 编译时检查流程
+
+```
+impl Point: Drawable
+    │
+    ▼
+展开接口定义：需要 draw(Surface) -> Void, bounding_box() -> Rect
+    │
+    ▼
+查找 Point 上的绑定：
+  Point.draw = draw_point[0] ✅ 存在
+  Point.bounding_box = bbox_point[0] ✅ 存在
+    │
+    ▼
+类型检查：
+  draw_point(p: Point, surface: Surface) -> Void
+  参数匹配：Point 在第 0 位 ✅
+  返回类型：Void ✅
+    │
+    ├─ ✅ 通过
+    └─ ❌ 编译错误：Point 没有实现 Drawable.draw
+```
+
+**检查规则**：
+1. 接口的所有方法必须在数据类型上有对应绑定
+2. 绑定位置的参数类型必须与数据类型匹配
+3. 方法返回类型必须与接口定义一致
+4. 任一不满足 → 编译错误
+
+### 泛型约束
+
+```yaoxiang
+fn serialize_all[T: Serializable](items: List[T]) -> List[String] {
+    items.map(fn(item) => serialize(item))
+}
+
+type Point = { x: Float, y: Float }
+# 如果 Point 没有 serialize → 编译错误
+let result = serialize_all([Point(1, 2), Point(3, 4)])
+```
+
+---
+
 ## 实现步骤
 
 ### Phase 1: 词法分析器扩展
