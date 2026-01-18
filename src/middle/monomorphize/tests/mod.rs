@@ -1,6 +1,7 @@
 //! 单态化测试模块
 //!
 mod closure_monomorphize;
+mod constraint;
 mod cross_module;
 mod edge_cases;
 mod fn_monomorphize;

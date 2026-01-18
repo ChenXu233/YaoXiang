@@ -10,6 +10,8 @@ use std::collections::HashMap;
 
 // 导出子模块
 pub mod closure;
+pub mod constraint;
+pub mod cross_module;
 pub mod function;
 pub mod global;
 pub mod instance;
@@ -188,6 +190,146 @@ impl Monomorphizer {
     /// 获取已单态化的函数数量
     pub fn instantiated_function_count(&self) -> usize {
         self.instantiated_functions.len()
+    }
+
+    // ==================== Send/Sync 约束驱动单态化 ====================
+
+    /// 根据 Send/Sync 约束单态化泛型函数
+    ///
+    /// # Arguments
+    ///
+    /// * `generic_id` - 泛型函数ID
+    /// * `type_args` - 类型参数
+    /// * `send_constraints` - Send 约束（类型变量 -> 是否必须 Send）
+    /// * `sync_constraints` - Sync 约束（类型变量 -> 是否必须 Sync）
+    ///
+    /// # Returns
+    ///
+    /// 如果约束可以满足，返回特化后的函数ID；否则返回 None
+    pub fn monomorphize_with_send_sync_constraints(
+        &mut self,
+        generic_id: &GenericFunctionId,
+        type_args: &[MonoType],
+        send_constraints: &[(MonoType, bool)],
+        sync_constraints: &[(MonoType, bool)],
+    ) -> Option<FunctionId> {
+        // 1. 检查约束是否可以满足
+        if !self.can_satisfy_send_sync_constraints(type_args, send_constraints, sync_constraints) {
+            return None;
+        }
+
+        // 2. 生成特化后的类型参数（根据约束调整）
+        let specialized_types =
+            self.apply_send_sync_constraints(type_args, send_constraints, sync_constraints);
+
+        // 3. 执行单态化
+        self.monomorphize_function(generic_id, &specialized_types)
+    }
+
+    /// 检查是否可以满足 Send/Sync 约束
+    fn can_satisfy_send_sync_constraints(
+        &self,
+        _type_args: &[MonoType],
+        send_constraints: &[(MonoType, bool)],
+        sync_constraints: &[(MonoType, bool)],
+    ) -> bool {
+        // 检查 Send 约束
+        for (ty, require_send) in send_constraints {
+            if *require_send && !self.is_type_send(ty) {
+                return false;
+            }
+        }
+
+        // 检查 Sync 约束
+        for (ty, require_sync) in sync_constraints {
+            if *require_sync && !self.is_type_sync(ty) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// 检查类型是否满足 Send（复用 SendSyncChecker 的逻辑）
+    fn is_type_send(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        use crate::middle::lifetime::send_sync::SendSyncChecker;
+        let checker = SendSyncChecker::new();
+        checker.is_send(ty)
+    }
+
+    /// 检查类型是否满足 Sync
+    fn is_type_sync(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        use crate::middle::lifetime::send_sync::SendSyncChecker;
+        let checker = SendSyncChecker::new();
+        checker.is_sync(ty)
+    }
+
+    /// 根据 Send/Sync 约束调整类型参数
+    ///
+    /// 对于无法 Send 的类型，如果需要 Send 版本，会生成 Arc 包装
+    fn apply_send_sync_constraints(
+        &self,
+        type_args: &[MonoType],
+        _send_constraints: &[(MonoType, bool)],
+        _sync_constraints: &[(MonoType, bool)],
+    ) -> Vec<MonoType> {
+        // 当前实现直接返回原始类型
+        // 未来可以扩展：对于需要 Arc 包装的类型，生成 Arc<T> 类型
+        type_args.to_vec()
+    }
+
+    /// 为泛型函数生成 Send 特化版本
+    ///
+    /// 当泛型函数用于 spawn 时，生成 Send 版本
+    pub fn generate_send_specialization(
+        &mut self,
+        generic_id: &GenericFunctionId,
+        type_args: &[MonoType],
+    ) -> Option<FunctionId> {
+        // 构造 Send 约束
+        let send_constraints: Vec<(MonoType, bool)> =
+            type_args.iter().map(|ty| (ty.clone(), true)).collect();
+
+        self.monomorphize_with_send_sync_constraints(generic_id, type_args, &send_constraints, &[])
+    }
+
+    /// 为泛型函数生成 Sync 特化版本
+    ///
+    /// 当泛型函数需要跨线程共享引用时，生成 Sync 版本
+    pub fn generate_sync_specialization(
+        &mut self,
+        generic_id: &GenericFunctionId,
+        type_args: &[MonoType],
+    ) -> Option<FunctionId> {
+        // 构造 Sync 约束
+        let sync_constraints: Vec<(MonoType, bool)> =
+            type_args.iter().map(|ty| (ty.clone(), true)).collect();
+
+        self.monomorphize_with_send_sync_constraints(generic_id, type_args, &[], &sync_constraints)
+    }
+
+    /// 为泛型函数生成 Send + Sync 特化版本
+    pub fn generate_send_sync_specialization(
+        &mut self,
+        generic_id: &GenericFunctionId,
+        type_args: &[MonoType],
+    ) -> Option<FunctionId> {
+        let send_constraints: Vec<(MonoType, bool)> =
+            type_args.iter().map(|ty| (ty.clone(), true)).collect();
+        let sync_constraints = send_constraints.clone();
+
+        self.monomorphize_with_send_sync_constraints(
+            generic_id,
+            type_args,
+            &send_constraints,
+            &sync_constraints,
+        )
     }
 }
 

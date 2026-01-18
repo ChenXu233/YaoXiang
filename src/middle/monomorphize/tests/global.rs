@@ -1,13 +1,13 @@
 //! GlobalMonomorphizer 测试
 
 use crate::middle::ir::{BasicBlock, FunctionIR, ModuleIR};
-use crate::middle::monomorphize::global::GlobalMonomorphizer;
+use crate::middle::cross_module::CrossModuleMonomorphizer;
 use crate::middle::ModuleId;
 use crate::frontend::typecheck::{MonoType, TypeVar};
 
 #[test]
 fn test_register_module() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
@@ -17,7 +17,7 @@ fn test_register_module() {
 
 #[test]
 fn test_instance_sharing() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     // 注册模块
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));

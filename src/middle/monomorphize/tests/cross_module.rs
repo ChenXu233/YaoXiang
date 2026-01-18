@@ -5,7 +5,7 @@
 use crate::frontend::typecheck::{MonoType, TypeVar};
 use crate::middle::ir::{BasicBlock, FunctionIR};
 use crate::middle::module::{ModuleGraph, ModuleId};
-use crate::middle::monomorphize::global::{GlobalMonomorphizer, GlobalInstanceKey};
+use crate::middle::cross_module::{CrossModuleMonomorphizer, GlobalInstanceKey};
 use crate::middle::monomorphize::module_state::ModuleMonoState;
 use crate::middle::ModuleIR;
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ fn create_dummy_function(
 
 #[test]
 fn test_module_registration() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     // 注册模块
     let id_a = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("module_a.yx"));
@@ -45,7 +45,7 @@ fn test_module_registration() {
 
 #[test]
 fn test_collect_generic_functions() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
@@ -78,7 +78,7 @@ fn test_collect_generic_functions() {
 
 #[test]
 fn test_global_function_instantiation() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
@@ -115,7 +115,7 @@ fn test_global_function_instantiation() {
 
 #[test]
 fn test_instance_sharing() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
@@ -147,7 +147,7 @@ fn test_instance_sharing() {
 
 #[test]
 fn test_different_types_different_instances() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
@@ -179,7 +179,7 @@ fn test_different_types_different_instances() {
 
 #[test]
 fn test_multiple_type_parameters() {
-    let mut mono = GlobalMonomorphizer::new();
+    let mut mono = CrossModuleMonomorphizer::new();
 
     let id = mono.register_module(ModuleId::new(0), std::path::PathBuf::from("test.yx"));
 
