@@ -6,9 +6,8 @@ use super::super::lexer::tokens::Literal;
 use super::super::parser::ast;
 use super::errors::{TypeError, TypeResult};
 use super::infer::TypeInferrer;
-use super::types::{MonoType, PolyType, TypeConstraintSolver};
+use super::types::{MonoType, PolyType, TypeConstraintSolver, TypeVar};
 use crate::middle;
-use crate::middle::ir_gen::AstToIrGenerator;
 use crate::util::span::Span;
 use crate::util::i18n::{t_cur, MSG};
 use std::collections::{HashMap, HashSet};
@@ -35,6 +34,22 @@ pub struct TypeChecker<'a> {
     exports: HashSet<String>,
     /// 模块名称
     module_name: String,
+}
+
+/// 类型检查结果
+///
+/// 包含类型检查后的所有信息，用于后续 IR 生成
+#[derive(Debug, Clone, Default)]
+pub struct TypeCheckResult {
+    /// 导入列表
+    pub imports: Vec<ImportInfo>,
+    /// 导出项
+    pub exports: HashSet<String>,
+    /// 模块名称
+    pub module_name: String,
+    /// 类型检查器收集的变量绑定（用于 IR 生成）
+    /// key: 变量名, value: 多态类型
+    pub bindings: HashMap<String, PolyType>,
 }
 
 /// 导入信息
@@ -114,10 +129,13 @@ impl<'a> TypeChecker<'a> {
     // =========================================================================
 
     /// 检查整个模块
+    ///
+    /// 只执行类型检查，不生成 IR
+    /// 返回类型检查结果，供后续 IR 生成使用
     pub fn check_module(
         &mut self,
         module: &ast::Module,
-    ) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    ) -> Result<TypeCheckResult, Vec<TypeError>> {
         // 首先收集所有类型定义
         for stmt in &module.items {
             if let ast::StmtKind::TypeDef { name, definition } = &stmt.kind {
@@ -148,17 +166,15 @@ impl<'a> TypeChecker<'a> {
             return Err(self.errors.clone());
         }
 
-        // 使用 IR 生成器生成 IR
-        let mut generator = AstToIrGenerator::new();
-        generator.generate_module_ir(module).map_err(|e| {
-            e.into_iter()
-                .map(|e| TypeError::TypeMismatch {
-                    expected: MonoType::Void,
-                    found: MonoType::TypeRef(e.to_string()),
-                    span: Span::default(),
-                })
-                .collect()
-        })
+        // 构建类型检查结果
+        let result = TypeCheckResult {
+            imports: self.imports.clone(),
+            exports: self.exports.clone(),
+            module_name: self.module_name.clone(),
+            bindings: self.inferrer.get_all_bindings(),
+        };
+
+        Ok(result)
     }
 
     /// 添加类型定义
@@ -530,19 +546,25 @@ impl<'a> TypeChecker<'a> {
             // std.io
             (
                 "print",
-                PolyType::mono(MonoType::Fn {
-                    params: vec![MonoType::String],
-                    return_type: Box::new(MonoType::Void),
-                    is_async: false,
-                }),
+                PolyType::new(
+                    vec![TypeVar::new(0)],
+                    MonoType::Fn {
+                        params: vec![MonoType::TypeVar(TypeVar::new(0))],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    },
+                ),
             ),
             (
                 "println",
-                PolyType::mono(MonoType::Fn {
-                    params: vec![MonoType::String],
-                    return_type: Box::new(MonoType::Void),
-                    is_async: false,
-                }),
+                PolyType::new(
+                    vec![TypeVar::new(0)],
+                    MonoType::Fn {
+                        params: vec![MonoType::TypeVar(TypeVar::new(0))],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    },
+                ),
             ),
             (
                 "read_line",

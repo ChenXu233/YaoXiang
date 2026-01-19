@@ -20,7 +20,9 @@ pub use types::*;
 
 use super::parser::ast;
 use crate::middle;
+use crate::middle::ir_gen::AstToIrGenerator;
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
+use crate::util::span::Span;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -105,7 +107,7 @@ impl TypeEnvironment {
     }
 }
 
-/// 检查模块并生成 IR
+/// 检查模块
 ///
 /// # Arguments
 ///
@@ -114,11 +116,11 @@ impl TypeEnvironment {
 ///
 /// # Returns
 ///
-/// 成功返回 IR，失败返回错误列表
+/// 成功返回类型检查结果，失败返回错误列表
 pub fn check_module(
     ast: &ast::Module,
     env: Option<&mut TypeEnvironment>,
-) -> Result<middle::ModuleIR, Vec<TypeError>> {
+) -> Result<TypeCheckResult, Vec<TypeError>> {
     let item_count = ast.items.len();
     debug!("{}", t_cur(MSG::TypeCheckStart, Some(&[&item_count])));
     let env = env.unwrap_or_else(|| {
@@ -160,6 +162,53 @@ pub fn check_module(
     }
 }
 
+/// 从 AST 生成 IR
+///
+/// # Arguments
+///
+/// * `ast` - AST 模块
+/// * `_type_result` - 类型检查结果（预留用于符号表）
+///
+/// # Returns
+///
+/// 成功返回 IR，失败返回错误列表
+pub fn generate_ir(
+    ast: &ast::Module,
+    _type_result: &TypeCheckResult,
+) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    let mut generator = AstToIrGenerator::new();
+    generator.generate_module_ir(ast).map_err(|e| {
+        e.into_iter()
+            .map(|e| TypeError::TypeMismatch {
+                expected: MonoType::Void,
+                found: MonoType::TypeRef(e.to_string()),
+                span: Span::default(),
+            })
+            .collect()
+    })
+}
+
+/// 检查模块并生成 IR（组合函数，保持向后兼容）
+///
+/// # Arguments
+///
+/// * `ast` - AST 模块
+/// * `env` - 类型环境（可选，如果为 None 则创建新的）
+///
+/// # Returns
+///
+/// 成功返回 IR，失败返回错误列表
+pub fn check_and_generate_ir(
+    ast: &ast::Module,
+    env: Option<&mut TypeEnvironment>,
+) -> Result<middle::ModuleIR, Vec<TypeError>> {
+    // 先执行类型检查
+    let type_result = check_module(ast, env)?;
+
+    // 再生成 IR
+    generate_ir(ast, &type_result)
+}
+
 /// 添加内置类型到环境
 fn add_builtin_types(env: &mut TypeEnvironment) {
     // 数值类型
@@ -188,20 +237,26 @@ fn add_builtin_functions(env: &mut TypeEnvironment) {
     // print<T>(T) -> Void
     env.add_var(
         "print".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![MonoType::String], // 使用 String 作为占位，具体类型在单态化时确定
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        }),
+        PolyType::new(
+            vec![TypeVar::new(0)],
+            MonoType::Fn {
+                params: vec![MonoType::TypeVar(TypeVar::new(0))],
+                return_type: Box::new(MonoType::Void),
+                is_async: false,
+            },
+        ),
     );
     // println<T>(T) -> Void
     env.add_var(
         "println".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![MonoType::String],
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        }),
+        PolyType::new(
+            vec![TypeVar::new(0)],
+            MonoType::Fn {
+                params: vec![MonoType::TypeVar(TypeVar::new(0))],
+                return_type: Box::new(MonoType::Void),
+                is_async: false,
+            },
+        ),
     );
     // read_line() -> String
     env.add_var(

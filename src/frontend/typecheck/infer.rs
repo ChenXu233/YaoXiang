@@ -1195,4 +1195,18 @@ impl<'a> TypeInferrer<'a> {
         }
         None
     }
+
+    /// 获取所有变量绑定（用于 IR 生成）
+    ///
+    /// 合并所有作用域的绑定，返回完整的符号表
+    pub fn get_all_bindings(&self) -> HashMap<String, PolyType> {
+        let mut all_bindings = HashMap::new();
+        // 从内层到外层合并，外层覆盖内层同名绑定
+        for scope in self.scopes.iter() {
+            for (name, poly) in scope.iter() {
+                all_bindings.insert(name.clone(), poly.clone());
+            }
+        }
+        all_bindings
+    }
 }
