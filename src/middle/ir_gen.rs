@@ -465,26 +465,33 @@ impl AstToIrGenerator {
                     },
                     ast::BinOp::Assign => {
                         // 赋值操作: left = right
-                        // 注意：left 应该是一个变量（Expr::Var），right 是要赋值表达式
-                        // 查找左边的变量索引
+                        // Note: left should be a variable (Expr::Var), right is the expression to assign
+                        // Look up or create variable index
                         if let Expr::Var(var_name, _) = left.as_ref() {
-                            if let Some(local_idx) = self.lookup_local(var_name) {
-                                // 生成右侧表达式的 IR 到 right_reg
-                                self.generate_expr_ir(right, right_reg, instructions, constants)?;
-                                // 生成 Store 指令将右侧的值存储到局部变量
-                                instructions.push(Instruction::Store {
-                                    dst: Operand::Local(local_idx),
-                                    src: Operand::Local(right_reg),
-                                });
-                                // 将右侧的值复制到结果寄存器（赋值表达式的值）
-                                instructions.push(Instruction::Load {
-                                    dst: Operand::Local(result_reg),
-                                    src: Operand::Local(local_idx),
-                                });
-                                return Ok(());
-                            }
+                            let local_idx = if let Some(idx) = self.lookup_local(var_name) {
+                                idx
+                            } else {
+                                // Implicit declaration: allocate new register and register local
+                                let idx = self.next_temp_reg();
+                                self.register_local(var_name, idx);
+                                idx
+                            };
+
+                            // Generate IR for right-hand expression into right_reg
+                            self.generate_expr_ir(right, right_reg, instructions, constants)?;
+                            // Generate Store instruction
+                            instructions.push(Instruction::Store {
+                                dst: Operand::Local(local_idx),
+                                src: Operand::Local(right_reg),
+                            });
+                            // Load value to result register (value of assignment expression)
+                            instructions.push(Instruction::Load {
+                                dst: Operand::Local(result_reg),
+                                src: Operand::Local(local_idx),
+                            });
+                            return Ok(());
                         }
-                        // 如果找不到变量，使用默认行为
+                        // Default behavior if not Expr::Var (should not happen for valid Assign usually)
                         Instruction::Add {
                             dst: Operand::Local(result_reg),
                             lhs: Operand::Local(left_reg),

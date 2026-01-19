@@ -26,7 +26,10 @@ impl Compiler {
         Self::default()
     }
 
-    /// Compile source code to IR
+    /// Compile source code to IR (两阶段流程)
+    ///
+    /// 阶段1: 类型检查 - 检查类型正确性
+    /// 阶段2: IR 生成 - 生成中间表示
     pub fn compile(
         &mut self,
         source: &str,
@@ -39,8 +42,12 @@ impl Compiler {
         // Parsing
         let ast = parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
 
-        // Type checking
-        let module = typecheck::check_module(&ast, Some(&mut self.type_env))
+        // 阶段1: 类型检查
+        let _type_result = typecheck::check_module(&ast, Some(&mut self.type_env))
+            .map_err(|e| CompileError::TypeError(format!("{:?}", e)))?;
+
+        // 阶段2: IR 生成
+        let module = typecheck::generate_ir(&ast, &_type_result)
             .map_err(|e| CompileError::TypeError(format!("{:?}", e)))?;
 
         Ok(module)
