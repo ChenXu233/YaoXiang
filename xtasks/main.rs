@@ -27,6 +27,13 @@ fn show_help() {
 }
 
 fn bump_version() {
+    // 防止循环触发：同一个 commit message 流程中多次调用
+    if std::env::var("YAX_VERSION_BUMPED").is_ok() {
+        println!("[SKIP] Version already bumped in this cycle");
+        return;
+    }
+    std::env::set_var("YAX_VERSION_BUMPED", "1");
+
     // 获取项目根目录
     let root = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
@@ -124,6 +131,7 @@ cd "$(git rev-parse --show-toplevel)"
 rs_files=$(git diff --cached --name-only | grep -E '\.rs$' || true)
 if [ -n "$rs_files" ]; then
   echo "Rust files staged -> bumping Cargo.toml"
+  export YAX_VERSION_BUMPED=1
   exec cargo xtask bump-version
 fi
 "#;
@@ -138,6 +146,7 @@ Set-Location (git rev-parse --show-toplevel)
 $rs = git diff --cached --name-only | Select-String -Pattern '\.rs$' -Quiet
 if ($rs) {
   Write-Host 'Rust files staged -> bumping Cargo.toml'
+  $env:YAX_VERSION_BUMPED = "1"
   & cargo xtask bump-version
 }
 "#;
@@ -155,6 +164,7 @@ if "%COMMIT_SOURCE%"=="squash" goto :EOF
 if not "%SHA1%"=="" goto :EOF
 for /f "delims=" %%f in ('git diff --cached --name-only ^| findstr /r "\.rs$"') do set "RS_FOUND=1"
 if defined RS_FOUND (
+  set "YAX_VERSION_BUMPED=1"
   powershell -NoProfile -ExecutionPolicy Bypass -Command "& '%CD%\.githooks\prepare-commit-msg.ps1' %*"
 )
 popd

@@ -30,6 +30,53 @@ mod tokenizer {
     use std::iter::Peekable;
     use std::str::Chars;
 
+    /// Log a token for debugging
+    fn log_token(token: &Token) {
+        let (msg, arg) = match &token.kind {
+            TokenKind::Identifier(name) => (MSG::LexTokenIdentifier, name.clone()),
+            TokenKind::KwType
+            | TokenKind::KwPub
+            | TokenKind::KwUse
+            | TokenKind::KwSpawn
+            | TokenKind::KwRef
+            | TokenKind::KwMut
+            | TokenKind::KwIf
+            | TokenKind::KwElif
+            | TokenKind::KwElse
+            | TokenKind::KwMatch
+            | TokenKind::KwWhile
+            | TokenKind::KwFor
+            | TokenKind::KwIn
+            | TokenKind::KwReturn
+            | TokenKind::KwBreak
+            | TokenKind::KwContinue
+            | TokenKind::KwAs => (MSG::LexTokenKeyword, format!("{:?}", token.kind)),
+            TokenKind::IntLiteral(n) => (MSG::LexTokenNumber, n.to_string()),
+            TokenKind::FloatLiteral(f) => (MSG::LexTokenNumber, f.to_string()),
+            TokenKind::StringLiteral(s) => (MSG::LexTokenString, s.clone()),
+            TokenKind::CharLiteral(c) => (MSG::LexTokenChar, c.to_string()),
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Arrow
+            | TokenKind::FatArrow
+            | TokenKind::EqEq
+            | TokenKind::Neq
+            | TokenKind::Le
+            | TokenKind::Lt
+            | TokenKind::Ge
+            | TokenKind::Gt
+            | TokenKind::And
+            | TokenKind::Or
+            | TokenKind::Not
+            | TokenKind::ColonColon => (MSG::LexTokenOperator, format!("{:?}", token.kind)),
+            _ => (MSG::LexTokenPunctuation, format!("{:?}", token.kind)),
+        };
+        debug!("{}", t_cur(msg, Some(&[&arg])));
+    }
+
     pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
         let source_len = source.len();
         debug!("{}", t_cur(MSG::LexStart, Some(&[&source_len])));
@@ -37,6 +84,10 @@ mod tokenizer {
         let mut tokens = Vec::new();
 
         while let Some(token) = lexer.next_token() {
+            // Log each token (except EOF which is added later)
+            if !matches!(token.kind, TokenKind::Eof) {
+                log_token(&token);
+            }
             tokens.push(token);
         }
 

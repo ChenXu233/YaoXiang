@@ -1,12 +1,12 @@
 // Complex test case based on YaoXiang-book.md
 
 // Function definition with types
-add(Int, Int) -> Int = (a, b) => {
+add: (Int, Int) -> Int = (a, b) => {
     a + b
 }
 
 // Main function
-main() -> Void = () => {
+main: () -> Void = () => {
     // Variable assignment
     x = 10;
     y = 20;
