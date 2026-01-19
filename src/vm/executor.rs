@@ -245,6 +245,9 @@ impl VM {
         func: &FunctionIR,
         args: &[Value],
     ) -> VMResult<Value> {
+        let lang = get_lang();
+        debug!("{}", t(MSG::VmExecuteFn, lang, Some(&[&func.name])));
+
         // 检查调用深度
         if self.call_stack.len() >= self.config.max_call_depth {
             return Err(VMError::CallStackOverflow);
@@ -268,6 +271,12 @@ impl VM {
         for (i, arg) in args.iter().enumerate().take(func.params.len()) {
             if i < local_count {
                 frame.locals[i] = arg.clone();
+                // 同时写入寄存器，以便直接访问
+                self.regs.write(i as u8, arg.clone());
+                debug!(
+                    "{}",
+                    t(MSG::VmLoadArg, lang, Some(&[&i, &format!("{:?}", arg)]))
+                );
             }
         }
 
@@ -281,12 +290,22 @@ impl VM {
         let saved_func = self.current_func.take();
 
         // 压入新帧
+        debug!("{}", t(MSG::VmPushFrame, lang, Some(&[&func.name])));
+        debug!(
+            "{}",
+            t(
+                MSG::VmCallStack,
+                lang,
+                Some(&[&(self.call_stack.len() + 1)])
+            )
+        );
         self.call_stack.push(frame);
 
         // 执行函数体
         let result = self.execute_function_body(func)?;
 
         // 弹出帧
+        debug!("{}", t(MSG::VmPopFrame, lang, None));
         self.call_stack.pop();
 
         // 恢复状态
@@ -320,6 +339,17 @@ impl VM {
 
             // 解码并执行指令
             if let Ok(typed_opcode) = TypedOpcode::try_from(opcode) {
+                // 记录指令执行（仅在 trace 模式）
+                if self.config.trace_execution {
+                    debug!(
+                        "{}",
+                        t(
+                            MSG::VmExecInstruction,
+                            get_lang(),
+                            Some(&[&format!("{:?}", typed_opcode)])
+                        )
+                    );
+                }
                 self.execute_instruction(typed_opcode)?;
 
                 // 检查是否是返回指令
@@ -369,8 +399,8 @@ impl VM {
 
             // 加载常量
             Instr::Load { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst);
                 if let Operand::Const(const_val) = src {
-                    let dst_reg = self.operand_to_reg(dst);
                     // 查找常量索引
                     let mut const_idx = None;
                     for (i, existing) in self.constants.iter().enumerate() {
@@ -388,19 +418,28 @@ impl VM {
                     bytecode.push((idx & 0xFF) as u8);
                     bytecode.push(((idx >> 8) & 0xFF) as u8);
                 } else {
-                    let dst_reg = self.operand_to_reg(dst);
-                    let src_reg = self.operand_to_reg(src);
-                    bytecode.push(TOp::Mov as u8);
+                    // 加载局部变量
+                    let src_local = match src {
+                        Operand::Local(idx) => *idx as u8,
+                        _ => 0,
+                    };
+                    bytecode.push(TOp::LoadLocal as u8);
                     bytecode.push(dst_reg);
-                    bytecode.push(src_reg);
+                    bytecode.push(src_local);
                 }
             }
 
-            // 存储
-            Instr::Store { dst: _, src } => {
-                // Store 指令简化处理
-                let _src_reg = self.operand_to_reg(src);
-                bytecode.push(TOp::Nop as u8);
+            // 存储到局部变量
+            Instr::Store { dst, src } => {
+                // dst 是局部变量索引，src 是源操作数
+                let local_idx = match dst {
+                    Operand::Local(idx) => *idx as u8,
+                    _ => 0,
+                };
+                let src_reg = self.operand_to_reg(src);
+                bytecode.push(TOp::StoreLocal as u8);
+                bytecode.push(local_idx);
+                bytecode.push(src_reg);
             }
 
             // 算术运算
@@ -679,7 +718,23 @@ impl VM {
                 let dst = self.read_u8()?;
                 let src = self.read_u8()?;
                 let value = self.regs.read(src).clone();
-                self.regs.write(dst, value);
+                debug!(
+                    "{}",
+                    t(
+                        MSG::VmRegRead,
+                        get_lang(),
+                        Some(&[&src, &format!("{:?}", value)])
+                    )
+                );
+                self.regs.write(dst, value.clone());
+                debug!(
+                    "{}",
+                    t(
+                        MSG::VmRegWrite,
+                        get_lang(),
+                        Some(&[&dst, &format!("{:?}", value)])
+                    )
+                );
             }
 
             // 加载常量
@@ -688,7 +743,15 @@ impl VM {
                 let const_idx = self.read_u16()? as usize;
                 if let Some(const_val) = self.constants.get(const_idx) {
                     let value = self.const_to_value(const_val);
-                    self.regs.write(dst, value);
+                    self.regs.write(dst, value.clone());
+                    debug!(
+                        "{}",
+                        t(
+                            MSG::VmRegWrite,
+                            get_lang(),
+                            Some(&[&dst, &format!("{:?}", value)])
+                        )
+                    );
                 }
             }
 
@@ -699,7 +762,7 @@ impl VM {
                 if let Some(frame) = self.call_stack.last() {
                     if local_idx < frame.locals.len() {
                         let value = frame.locals[local_idx].clone();
-                        self.regs.write(dst, value);
+                        self.regs.write(dst, value.clone());
                     }
                 }
             }
@@ -708,9 +771,10 @@ impl VM {
             StoreLocal => {
                 let local_idx = self.read_u8()? as usize;
                 let src = self.read_u8()?;
+                let value = self.regs.read(src).clone();
                 if let Some(frame) = self.call_stack.last_mut() {
                     if local_idx < frame.locals.len() {
-                        frame.locals[local_idx] = self.regs.read(src).clone();
+                        frame.locals[local_idx] = value.clone();
                     }
                 }
             }
@@ -722,7 +786,23 @@ impl VM {
                 if let Some(frame) = self.call_stack.last() {
                     if arg_idx < frame.arg_count && arg_idx < frame.locals.len() {
                         let value = frame.locals[arg_idx].clone();
-                        self.regs.write(dst, value);
+                        debug!(
+                            "{}",
+                            t(
+                                MSG::VmLoadArg,
+                                get_lang(),
+                                Some(&[&arg_idx, &format!("{:?}", value)])
+                            )
+                        );
+                        self.regs.write(dst, value.clone());
+                        debug!(
+                            "{}",
+                            t(
+                                MSG::VmRegWrite,
+                                get_lang(),
+                                Some(&[&dst, &format!("{:?}", value)])
+                            )
+                        );
                     }
                 }
             }
@@ -1041,9 +1121,14 @@ impl VM {
     where
         F: FnOnce(i128, i128) -> Result<i128, VMError>,
     {
-        match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
+        let lhs_val = self.regs.read(lhs_reg);
+        let rhs_val = self.regs.read(rhs_reg);
+        match (lhs_val, rhs_val) {
             (Value::Int(a), Value::Int(b)) => op(*a, *b),
-            _ => Err(VMError::TypeError("integer".to_string())),
+            _ => Err(VMError::TypeError(format!(
+                "integer (lhs: {:?}, rhs: {:?})",
+                lhs_val, rhs_val
+            ))),
         }
     }
 
