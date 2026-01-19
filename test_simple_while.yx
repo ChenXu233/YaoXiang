@@ -1,0 +1,6 @@
+main: () -> Void = () => {
+    mut j = 0;
+    while j < 3 {
+        j = j + 1;
+    }
+}

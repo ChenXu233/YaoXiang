@@ -1,0 +1,5 @@
+use std.io
+
+main = () => {
+  print(42);
+}
