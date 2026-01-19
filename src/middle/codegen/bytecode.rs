@@ -3,8 +3,7 @@
 //! 定义 .yx (.42) 字节码文件格式并实现序列化。
 
 use crate::frontend::typecheck::MonoType;
-use crate::middle::codegen::generator::BytecodeGenerator;
-use crate::middle::ir::{ConstValue, ModuleIR};
+use crate::middle::ir::ConstValue;
 use std::io::{self, Write};
 
 /// 字节码文件头魔数 (YaoXiang ByteCode: YXBC)
@@ -37,6 +36,20 @@ pub struct FileHeader {
     pub section_count: u16,
     pub file_size: u32,
     pub checksum: u32,
+}
+
+impl Default for FileHeader {
+    fn default() -> Self {
+        Self {
+            magic: MAGIC,
+            version: VERSION,
+            flags: 0,
+            entry_point: 0,
+            section_count: 4,
+            file_size: 0,
+            checksum: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -78,64 +91,18 @@ impl BytecodeInstruction {
     }
 }
 
-impl BytecodeFile {
-    /// 从 IR 模块构建字节码文件
-    pub fn from_ir(module: &ModuleIR) -> Self {
-        // 1. 构建类型表
-        let type_table: Vec<MonoType> = module.types.iter().map(MonoTypeExt::from_ast).collect();
-
-        // 2. 构建常量池
-        let const_pool = module.constants.clone();
-
-        // 3. 构建代码段
-        let functions: Vec<FunctionCode> = module
-            .functions
+/// 将 FunctionCode 编码为字节序列
+impl FunctionCode {
+    /// 编码所有指令为字节码
+    pub fn encode_all(&self) -> Vec<u8> {
+        self.instructions
             .iter()
-            .map(|func| {
-                let generator = BytecodeGenerator::new(func);
-                generator.generate()
-            })
-            .collect();
-
-        // 4. 找到入口函数
-        let mut entry_point = 0;
-        for (idx, func) in module.functions.iter().enumerate() {
-            if func.name == "main" {
-                entry_point = idx;
-                break;
-            }
-        }
-
-        // 5. 计算文件大小（简化估算）
-        let header_size = 32;
-        let type_table_size = 4 + type_table.len() * 4;
-        let const_pool_size = 4 + const_pool.iter().map(|c| c.encoded_size()).sum::<usize>();
-        let code_section_size = 4 + functions
-            .iter()
-            .map(|f| {
-                4 + f.name.len() + 4 + f.params.len() * 4 + 4 + 4 + 4 + f.instructions.len() * 16
-            })
-            .sum::<usize>();
-
-        let file_size = header_size + type_table_size + const_pool_size + code_section_size;
-        let checksum = calculate_checksum(MAGIC, VERSION, file_size);
-
-        Self {
-            header: FileHeader {
-                magic: MAGIC,
-                version: VERSION,
-                flags: 0,
-                entry_point: entry_point as u32,
-                section_count: 4,
-                file_size: file_size as u32,
-                checksum,
-            },
-            type_table,
-            const_pool,
-            code_section: CodeSection { functions },
-        }
+            .flat_map(|instr| instr.encode())
+            .collect()
     }
+}
 
+impl BytecodeFile {
     /// 序列化到 Writer
     /// 格式设计：魔数大端序（方便调试），其他数据小端序（x86 性能优化）
     pub fn write_to<W: Write>(

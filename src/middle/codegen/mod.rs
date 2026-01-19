@@ -338,16 +338,10 @@ impl CodegenContext {
         let func_count = module.functions.len();
         debug!("{}", t(MSG::CodegenStart, lang, Some(&[&func_count])));
 
-        // 初始化常量池，从 IR 模块的常量开始
-        let mut constant_pool = ConstantPool::new();
-        for const_val in module.constants.clone() {
-            constant_pool.add(const_val);
-        }
-
         let mut ctx = CodegenContext {
             module,
             symbol_table: SymbolTable::new(),
-            constant_pool,
+            constant_pool: ConstantPool::new(),
             bytecode: Vec::new(),
             current_function: None,
             register_allocator: RegisterAllocator::new(),
@@ -1048,12 +1042,7 @@ pub const BYTECODE_VERSION: u32 = 2;
 impl Default for CodegenContext {
     fn default() -> Self {
         CodegenContext {
-            module: ModuleIR {
-                types: Vec::new(),
-                constants: Vec::new(),
-                globals: Vec::new(),
-                functions: Vec::new(),
-            },
+            module: ModuleIR::default(),
             symbol_table: SymbolTable::new(),
             constant_pool: ConstantPool::new(),
             bytecode: Vec::new(),
