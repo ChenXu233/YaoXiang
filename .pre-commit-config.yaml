@@ -1,13 +1,6 @@
 repos:
   - repo: local
     hooks:
-      - id: xtask-bump-version
-        name: xtask bump-version
-        entry: cargo run --manifest-path xtasks/Cargo.toml --bin cargo-xtask -- bump-version
-        language: rust
-        types: [rust]
-        pass_filenames: false
-
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt
