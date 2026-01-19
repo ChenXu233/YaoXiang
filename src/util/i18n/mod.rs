@@ -139,11 +139,29 @@ pub fn t_cur_simple(id: MSG) -> String {
 /// Macro for translated logging with arguments (using current language)
 #[macro_export]
 macro_rules! tlog {
-    ($level:expr, $id:expr) => {
-        tracing::$level!("{}", $crate::util::i18n::t_cur_simple($id));
+    (debug, $id:expr) => {
+        tracing::debug!("{}", $crate::util::i18n::t_cur_simple($id));
     };
-    ($level:expr, $id:expr, $($arg:expr),*) => {
-        tracing::$level!("{}", $crate::util::i18n::t_cur($id, Some(&[$(&$arg as &dyn std::fmt::Display),*])));
+    (info, $id:expr) => {
+        tracing::info!("{}", $crate::util::i18n::t_cur_simple($id));
+    };
+    (warn, $id:expr) => {
+        tracing::warn!("{}", $crate::util::i18n::t_cur_simple($id));
+    };
+    (error, $id:expr) => {
+        tracing::error!("{}", $crate::util::i18n::t_cur_simple($id));
+    };
+    (debug, $id:expr, $arg1:expr) => {
+        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
+    };
+    (info, $id:expr, $arg1:expr) => {
+        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
+    };
+    (warn, $id:expr, $arg1:expr) => {
+        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
+    };
+    (error, $id:expr, $arg1:expr) => {
+        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
     };
 }
 
@@ -186,17 +204,31 @@ pub enum MSG {
     ReadingFile,
     BuildBytecode,
     WritingBytecode,
-    DumpBytecode,
 
     // Lexer
     LexStart,
     LexComplete,
     LexCompleteWithTokens,
+    LexTokenIdentifier,
+    LexTokenKeyword,
+    LexTokenNumber,
+    LexTokenString,
+    LexTokenChar,
+    LexTokenOperator,
+    LexTokenPunctuation,
 
     // Parser
     ParserStart,
     ParserComplete,
     ParserCompleteWithItems,
+    ParserParseStmt,
+    ParserParseExpr,
+    ParserParseFnDef,
+    ParserParseLet,
+    ParserParseReturn,
+    ParserParseIf,
+    ParserParseLoop,
+    ParserParseBlock,
 
     // TypeCheck
     TypeCheckStart,
@@ -207,6 +239,11 @@ pub enum MSG {
     TypeCheckAnnotated,
     TypeCheckAddError,
     TypeCheckCallFnDef,
+    TypeCheckInferExpr,
+    TypeCheckInferFn,
+    TypeCheckAddConstraint,
+    TypeCheckSolveConstraints,
+    TypeCheckVarBinding,
 
     // Codegen
     CodegenStart,
@@ -215,10 +252,29 @@ pub enum MSG {
     CodegenConstPool,
     CodegenCodeSection,
     CodegenTypeTable,
+    CodegenGenFn,
+    CodegenGenBlock,
+    CodegenGenInstr,
+    CodegenRegAlloc,
+    CodegenAddConst,
 
     // VM
     VmStart,
     VmComplete,
+    VmExecuteFn,
+    VmExecInstruction,
+    VmCallStack,
+    VmPushFrame,
+    VmPopFrame,
+    VmLoadLocal,
+    VmStoreLocal,
+    VmLoadArg,
+    VmRegRead,
+    VmRegWrite,
+    VmPushStack,
+    VmPopStack,
+    VmCallFunc,
+    VmReturnFunc,
 
     // General
     CompilationStart,
@@ -235,13 +291,27 @@ impl MSG {
             MSG::ReadingFile => "reading_file",
             MSG::BuildBytecode => "build_bytecode",
             MSG::WritingBytecode => "writing_bytecode",
-            MSG::DumpBytecode => "dump_bytecode",
             MSG::LexStart => "lex_start",
             MSG::LexComplete => "lex_complete",
             MSG::LexCompleteWithTokens => "lex_complete_tokens",
+            MSG::LexTokenIdentifier => "lex_token_identifier",
+            MSG::LexTokenKeyword => "lex_token_keyword",
+            MSG::LexTokenNumber => "lex_token_number",
+            MSG::LexTokenString => "lex_token_string",
+            MSG::LexTokenChar => "lex_token_char",
+            MSG::LexTokenOperator => "lex_token_operator",
+            MSG::LexTokenPunctuation => "lex_token_punctuation",
             MSG::ParserStart => "parser_start",
             MSG::ParserComplete => "parser_complete",
             MSG::ParserCompleteWithItems => "parser_complete_items",
+            MSG::ParserParseStmt => "parser_parse_stmt",
+            MSG::ParserParseExpr => "parser_parse_expr",
+            MSG::ParserParseFnDef => "parser_parse_fn_def",
+            MSG::ParserParseLet => "parser_parse_let",
+            MSG::ParserParseReturn => "parser_parse_return",
+            MSG::ParserParseIf => "parser_parse_if",
+            MSG::ParserParseLoop => "parser_parse_loop",
+            MSG::ParserParseBlock => "parser_parse_block",
             MSG::TypeCheckStart => "typecheck_start",
             MSG::TypeCheckComplete => "typecheck_complete",
             MSG::TypeCheckProcessFn => "typecheck_process_fn",
@@ -250,14 +320,38 @@ impl MSG {
             MSG::TypeCheckAnnotated => "typecheck_annotated",
             MSG::TypeCheckAddError => "typecheck_add_error",
             MSG::TypeCheckCallFnDef => "typecheck_call_fndef",
+            MSG::TypeCheckInferExpr => "typecheck_infer_expr",
+            MSG::TypeCheckInferFn => "typecheck_infer_fn",
+            MSG::TypeCheckAddConstraint => "typecheck_add_constraint",
+            MSG::TypeCheckSolveConstraints => "typecheck_solve_constraints",
+            MSG::TypeCheckVarBinding => "typecheck_var_binding",
             MSG::CodegenStart => "codegen_start",
             MSG::CodegenComplete => "codegen_complete",
             MSG::CodegenFunctions => "codegen_functions",
             MSG::CodegenConstPool => "codegen_const_pool",
             MSG::CodegenCodeSection => "codegen_code_section",
             MSG::CodegenTypeTable => "codegen_type_table",
+            MSG::CodegenGenFn => "codegen_gen_fn",
+            MSG::CodegenGenBlock => "codegen_gen_block",
+            MSG::CodegenGenInstr => "codegen_gen_instr",
+            MSG::CodegenRegAlloc => "codegen_reg_alloc",
+            MSG::CodegenAddConst => "codegen_add_const",
             MSG::VmStart => "vm_start",
             MSG::VmComplete => "vm_complete",
+            MSG::VmExecuteFn => "vm_execute_fn",
+            MSG::VmExecInstruction => "vm_exec_instruction",
+            MSG::VmCallStack => "vm_call_stack",
+            MSG::VmPushFrame => "vm_push_frame",
+            MSG::VmPopFrame => "vm_pop_frame",
+            MSG::VmLoadLocal => "vm_load_local",
+            MSG::VmStoreLocal => "vm_store_local",
+            MSG::VmLoadArg => "vm_load_arg",
+            MSG::VmRegRead => "vm_reg_read",
+            MSG::VmRegWrite => "vm_reg_write",
+            MSG::VmPushStack => "vm_push_stack",
+            MSG::VmPopStack => "vm_pop_stack",
+            MSG::VmCallFunc => "vm_call_func",
+            MSG::VmReturnFunc => "vm_return_func",
             MSG::CompilationStart => "compilation_start",
             MSG::CompilingSource => "compiling_source",
             MSG::DebugRunCalled => "debug_run_called",

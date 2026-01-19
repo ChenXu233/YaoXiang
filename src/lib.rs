@@ -33,8 +33,8 @@ pub use anyhow::{Context, Result};
 pub use thiserror::Error;
 
 // Logging
-use tracing::debug;
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
+use tracing::debug;
 
 /// Language version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -127,10 +127,10 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     let path_str = path.display().to_string();
 
-    debug!("{}", t_cur(MSG::DumpBytecode, Some(&[&path_str])));
+    println!("=== Bytecode Dump for {} ===\n", path_str);
+
     let source = fs::read_to_string(path)
         .with_context(|| format!("Failed to read file: {}", path.display()))?;
-    debug!("{}", t_cur(MSG::ReadingFile, Some(&[&path_str])));
 
     // Compile
     let mut compiler = frontend::Compiler::new();
@@ -142,35 +142,54 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
 
-    // Dump human-readable format
-    println!("=== Bytecode Dump for {} ===", path.display());
-    println!("\n--- Header ---");
+    // Header
+    println!("--- Header ---");
     println!("Magic: 0x{:08X} (YXBC)", bytecode_file.header.magic);
     println!("Version: {}", bytecode_file.header.version);
     println!("Entry Point: {}", bytecode_file.header.entry_point);
     println!("File Size: {} bytes", bytecode_file.header.file_size);
-    println!("Flags: 0x{:08X}", bytecode_file.header.flags);
+    println!("Flags: 0x{:08X}\n", bytecode_file.header.flags);
 
-    println!("\n--- Type Table ({}) ---", bytecode_file.type_table.len());
+    // Type Table
+    println!(
+        "--- Type Table ({} entries) ---",
+        bytecode_file.type_table.len()
+    );
     for (i, ty) in bytecode_file.type_table.iter().enumerate() {
         println!("  [{}] {:?}", i, ty);
     }
+    if bytecode_file.type_table.is_empty() {
+        println!("  (empty)");
+    }
+    println!();
 
-    println!("\n--- Constants ({}) ---", bytecode_file.const_pool.len());
+    // Constants
+    println!(
+        "--- Constants ({} entries) ---",
+        bytecode_file.const_pool.len()
+    );
     for (i, c) in bytecode_file.const_pool.iter().enumerate() {
         println!("  [{}] {:?}", i, c);
     }
+    if bytecode_file.const_pool.is_empty() {
+        println!("  (empty)");
+    }
+    println!();
 
+    // Functions
     println!(
-        "\n--- Functions ({}) ---",
+        "--- Functions ({} entries) ---",
         bytecode_file.code_section.functions.len()
     );
     for (i, func) in bytecode_file.code_section.functions.iter().enumerate() {
-        println!("\n  Function {}: {}", i, func.name);
-        println!("    Params: {:?}", func.params);
-        println!("    Return: {:?}", func.return_type);
-        println!("    Local count: {}", func.local_count);
-        println!("    Instructions ({}):", func.instructions.len());
+        println!(
+            "Function {}: params={:?}, return={}, locals={}, instructions={}",
+            i,
+            func.params,
+            func.return_type,
+            func.local_count,
+            func.instructions.len()
+        );
 
         for (j, instr) in func.instructions.iter().enumerate() {
             let opcode_value = instr.opcode;
@@ -179,11 +198,11 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
                 .unwrap_or_else(|_| format!("Unknown(0x{:02X})", opcode_value));
 
             if instr.operands.is_empty() {
-                println!("    [{:4}] {}", j, opcode_name);
+                println!("  [{:3}] {}", j, opcode_name);
             } else {
                 let operands: Vec<String> =
                     instr.operands.iter().map(|b| format!("{}", b)).collect();
-                println!("    [{:4}] {} [{}]", j, opcode_name, operands.join(", "));
+                println!("  [{:3}] {} [{}]", j, opcode_name, operands.join(", "));
             }
         }
     }
