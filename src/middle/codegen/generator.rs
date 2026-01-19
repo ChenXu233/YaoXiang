@@ -239,7 +239,7 @@ impl<'a> BytecodeGenerator<'a> {
                     self.emit(TypedOpcode::Return, vec![]);
                 }
             }
-            Instruction::Call { dst, func: _, args } => {
+            Instruction::Call { dst, func, args } => {
                 // CallStatic: dst, func_id, base_arg_reg, arg_count
                 // We need to move args to contiguous registers if they aren't already.
                 // For simplicity, let's allocate a block of temp registers for args.
@@ -265,11 +265,12 @@ impl<'a> BytecodeGenerator<'a> {
                     0 // Discard result
                 };
 
-                // Resolve func
-                // Assuming func is a Const(Int) representing ID or Label
-                // Or a Global.
-                // For now, placeholder ID 0.
-                let func_id = 0u32;
+                // Resolve func from operand
+                let func_id = if let Operand::Const(ConstValue::Int(id)) = func {
+                    *id as u32
+                } else {
+                    0
+                };
 
                 let mut operands = vec![dst_reg];
                 operands.extend_from_slice(&func_id.to_le_bytes());
