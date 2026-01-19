@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 rust-version = "1.82"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -18,12 +18,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "yaoxiang"
 path = "src/main.rs"
-test = false
-
-# cargo xtask - for project maintenance scripts
-[[bin]]
-name = "cargo-xtask"
-path = "xtasks/main.rs"
 test = false
 
 [dev-dependencies]
