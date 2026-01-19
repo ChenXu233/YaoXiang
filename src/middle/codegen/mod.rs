@@ -337,10 +337,17 @@ impl CodegenContext {
         let lang = get_lang();
         let func_count = module.functions.len();
         debug!("{}", t(MSG::CodegenStart, lang, Some(&[&func_count])));
+
+        // 初始化常量池，从 IR 模块的常量开始
+        let mut constant_pool = ConstantPool::new();
+        for const_val in module.constants.clone() {
+            constant_pool.add(const_val);
+        }
+
         let mut ctx = CodegenContext {
             module,
             symbol_table: SymbolTable::new(),
-            constant_pool: ConstantPool::new(),
+            constant_pool,
             bytecode: Vec::new(),
             current_function: None,
             register_allocator: RegisterAllocator::new(),
@@ -367,12 +374,7 @@ impl CodegenContext {
         let func_count = self.module.functions.len();
         debug!("{}", t(MSG::CodegenFunctions, lang, Some(&[&func_count])));
 
-        // 1. 生成常量池
-        let const_pool = std::mem::take(&mut self.constant_pool.constants);
-        let const_count = const_pool.len();
-        debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
-
-        // 2. 生成代码段
+        // 1. 生成代码段（这会填充常量池）
         let mut code_section = CodeSection {
             functions: Vec::new(),
         };
@@ -383,6 +385,11 @@ impl CodegenContext {
         for func in functions {
             self.generate_function(&func, &mut code_section)?;
         }
+
+        // 2. 生成常量池（在代码段生成之后）
+        let const_pool = std::mem::take(&mut self.constant_pool.constants);
+        let const_count = const_pool.len();
+        debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
 
         // 3. 生成类型表
         let type_count = self.module.types.len();
@@ -471,11 +478,22 @@ impl CodegenContext {
                 // src 可以是常量或寄存器
                 match src {
                     Operand::Const(const_val) => {
-                        let const_idx = self.add_constant(const_val.clone());
-                        Ok(BytecodeInstruction::new(
-                            TypedOpcode::LoadConst,
-                            vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
-                        ))
+                        // 如果是 Int 类型的 ConstValue，说明它已经是常量池索引
+                        // 直接使用这个索引，不要再添加常量
+                        if let ConstValue::Int(idx) = const_val {
+                            let const_idx = *idx as usize;
+                            Ok(BytecodeInstruction::new(
+                                TypedOpcode::LoadConst,
+                                vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
+                            ))
+                        } else {
+                            // 其他类型的常量才需要添加到常量池
+                            let const_idx = self.add_constant(const_val.clone());
+                            Ok(BytecodeInstruction::new(
+                                TypedOpcode::LoadConst,
+                                vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
+                            ))
+                        }
                     }
                     _ => {
                         let src_reg = self.operand_to_reg(src)?;
@@ -670,7 +688,13 @@ impl CodegenContext {
                     0
                 };
                 let func_id = match func {
+                    // 用户定义函数或外部函数：func_id 是常量池索引
                     Operand::Const(ConstValue::Int(i)) => *i as u32,
+                    // 如果是字符串常量（外部函数名），添加到常量池并使用索引
+                    Operand::Const(ConstValue::String(name)) => {
+                        let const_idx = self.add_constant(ConstValue::String(name.clone()));
+                        const_idx as u32
+                    }
                     _ => 0,
                 };
                 let mut operands = vec![dst_reg];

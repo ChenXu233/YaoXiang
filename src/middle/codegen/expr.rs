@@ -411,9 +411,20 @@ impl CodegenContext {
             Expr::Var(name, _) => {
                 // 静态函数调用
                 // CallStatic: dst(1), func_id(u32, 4字节), base_arg_reg(1), arg_count(1)
-                let func_idx = self.function_indices.get(name).copied().unwrap_or(0);
+                // 首先尝试从用户定义函数中查找
+                let func_idx = self.function_indices.get(name).copied();
+
+                // 如果不是用户定义函数，尝试从常量池获取或添加
+                let func_id = if let Some(idx) = func_idx {
+                    idx as u32
+                } else {
+                    // 外部函数或标准库函数：添加到常量池
+                    let const_idx = self.add_constant(ConstValue::String(name.clone()));
+                    const_idx as u32
+                };
+
                 let mut operands = vec![dst as u8];
-                operands.extend_from_slice(&func_idx.to_le_bytes());
+                operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_regs.len() as u8);
                 self.emit(BytecodeInstruction::new(TypedOpcode::CallStatic, operands));
