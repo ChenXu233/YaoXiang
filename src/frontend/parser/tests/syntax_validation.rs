@@ -67,38 +67,6 @@ fn test_standard_syntax() {
 }
 
 #[test]
-fn test_legacy_syntax() {
-    // ========== 旧语法（不推荐，仅向后兼容） ==========
-    //
-    // 形式：name(Params) -> Ret = Lambda
-    // 这是旧版 MoonBit 风格的语法，为了兼容旧代码而保留。
-    //
-    // 不推荐原因：
-    // 1. 与标准语法不一致，增加学习成本
-    // 2. 参数类型位置不统一
-    // 3. 解析器需要额外处理两种形式
-    //
-    // 注意：旧语法可以省略返回类型让类型检查器推断
-
-    // 多参数旧语法
-    assert!(check_syntax("mul(Int, Int) -> Int = (a, b) => a * b"));
-
-    // 单参数旧语法
-    assert!(check_syntax("square(Int) -> Int = (x) => x * x"));
-
-    // 无参旧语法（可省略括号内内容）
-    assert!(check_syntax("empty2() -> Void = () => {}"));
-    assert!(check_syntax("get_random() -> Int = () => 42"));
-
-    // 旧语法 + Void 返回
-    assert!(check_syntax("say_hello() -> Void = () => print(\"hi\")"));
-
-    // 旧语法无参省略类型标注（解析放过，类型检查推断）
-    assert!(check_syntax("empty3() = () => {}"));
-    assert!(check_syntax("main = () => {}"));
-}
-
-#[test]
 fn test_inference_syntax() {
     // ========== 类型推断语法（解析层放过） ==========
     //
@@ -200,20 +168,6 @@ fn test_return_syntax() {
     }"
     ));
 
-    // 旧语法 + return 语句
-    assert!(check_syntax(
-        "mul(Int, Int) -> Int = (a, b) => { return a * b; }"
-    ));
-    assert!(check_syntax(
-        "square2(Int) -> Int = (x) => { return x * x; }"
-    ));
-    assert!(check_syntax("get_random2() -> Int = () => { return 42; }"));
-
-    // 旧语法 + return + Void
-    assert!(check_syntax(
-        "say_hello2() -> Void = () => { print(\"hi\"); return; }"
-    ));
-
     // return 语句的位置测试
     assert!(check_syntax(
         "early_return: Int -> Int = (x) => { if x < 0 { return 0; } x }"
@@ -235,18 +189,7 @@ fn test_type_inference_cases() {
     // 新语法无标注 - 单参数需要括号
     assert!(check_syntax("id = (x) => x"));
     assert!(check_syntax("apply = (f, x) => f(x)"));
+    assert!(check_syntax("apply = (f:Int, x:Int) => f+x"));
     assert!(check_syntax("const = () => 42"));
     assert!(check_syntax("nop = () => {}"));
-
-    // 旧语法无标注 - 解析放行
-    assert!(check_syntax("id2() = (x) => x"));
-    assert!(check_syntax("apply2() = (f, x) => f(x)"));
-    assert!(check_syntax("const2() = () => 42"));
-    assert!(check_syntax("nop2() = () => {}"));
-    assert!(check_syntax("add3() = (a, b) => a + b"));
-
-    // 混合形式 - 解析放行
-    assert!(check_syntax("partial(Int) = (x) => x"));
-    // 单参数带类型标注在旧语法中
-    assert!(check_syntax("partial2() = (x: Int) => x"));
 }

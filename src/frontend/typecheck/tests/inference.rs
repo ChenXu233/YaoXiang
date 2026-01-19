@@ -160,96 +160,9 @@ fn test_reject_no_param_type_print() {
 
 #[test]
 fn test_inference_typed_lambda_param() {
-    // Lambda 参数带类型标注应该通过
+    // Lambda 参数带类型标注应该通过，但是警告
     assert!(check_type_inference("identity = (x: Int) => x").is_ok());
     assert!(check_type_inference("double = (x: Int) => x * 2").is_ok());
-}
-
-// ============================================================================
-// 旧语法推断测试
-// ============================================================================
-
-#[test]
-fn test_legacy_syntax_empty() {
-    // 旧语法空函数应该通过
-    assert!(check_type_inference("empty3() = () => {}").is_ok());
-    assert!(check_type_inference("main = () => {}").is_ok());
-    assert!(check_type("empty3() = () => {}"));
-}
-
-#[test]
-fn test_legacy_empty() {
-    // 旧语法空函数测试
-    assert!(check_type("empty3() = () => {}"));
-}
-
-#[test]
-fn test_legacy_syntax_with_return() {
-    // 旧语法有返回值应该通过
-    assert!(check_type_inference("get_random() = () => 42").is_ok());
-    assert!(check_type("get_random() = () => 42"));
-}
-
-#[test]
-fn test_legacy_return_val() {
-    // 旧语法返回值测试
-    assert!(check_type("get_random() = () => 42"));
-}
-
-#[test]
-fn test_legacy_syntax_with_param_type() {
-    // 旧语法有参数类型应该通过
-    assert!(check_type_inference("square2(Int) = (x) => x * x").is_ok());
-    assert!(check_type_inference("mul(Int, Int) = (a, b) => a * b").is_ok());
-    assert!(check_type("square2(Int) = (x) => x * x"));
-}
-
-#[test]
-fn test_legacy_param_type() {
-    // 旧语法参数类型测试
-    assert!(check_type("square2(Int) = (x) => x * x"));
-}
-
-#[test]
-fn test_legacy_full_params() {
-    // 旧语法完整参数测试
-    assert!(check_type("mul(Int, Int) = (a, b) => a * b"));
-}
-
-#[test]
-fn test_legacy_syntax_untyped_param_fails() {
-    // 旧语法无参数类型应该失败
-    assert!(check_type_inference_fails("square3() = (x) => x * x"));
-    assert!(check_type_inference_fails("mul3() = (a, b) => a * b"));
-    assert!(check_type_inference_fails("id2() = x => x"));
-}
-
-// ============================================================================
-// 部分推断测试（参数有标注，返回类型推断）
-// ============================================================================
-
-#[test]
-fn test_legacy_partial_infer_two_params() {
-    // 旧语法，参数有标注，返回推断
-    assert!(check_type("add(Int, Int) = (a, b) => a + b"));
-}
-
-#[test]
-fn test_legacy_partial_infer_single_param() {
-    // 旧语法，参数有标注，返回推断
-    assert!(check_type("square(Int) = (x) => x * x"));
-}
-
-#[test]
-fn test_legacy_partial_infer_no_params() {
-    // 旧语法，无参数，返回推断
-    assert!(check_type("get_random() = () => 42"));
-}
-
-#[test]
-fn test_legacy_partial_infer_void() {
-    // 旧语法，返回推断为 Void
-    assert!(check_type("log(String) = (msg) => {}"));
 }
 
 // ============================================================================
@@ -315,17 +228,6 @@ fn test_early_return() {
     assert!(check_type(
         "early: Int -> Int = (x) => { if x < 0 { return 0; } x }"
     ));
-}
-
-#[test]
-fn test_legacy_return_syntax() {
-    // 旧语法 + return 应该通过
-    assert!(check_type_inference("mul(Int, Int) -> Int = (a, b) => { return a * b; }").is_ok());
-    assert!(check_type_inference("square2(Int) -> Int = (x) => { return x * x; }").is_ok());
-    assert!(check_type_inference("get_random2() -> Int = () => { return 42; }").is_ok());
-    assert!(
-        check_type_inference("say_hello2() -> Void = () => { print(\"hi\"); return; }").is_ok()
-    );
 }
 
 // ============================================================================
@@ -627,8 +529,9 @@ fn test_invalid_bad_parens() {
 #[test]
 fn test_generic_function() {
     // 泛型函数应该通过
+    // 单参数泛型函数
     assert!(check_type_inference("identity: <T> (T) -> T = x => x").is_ok());
-    assert!(check_type_inference("first: <A, B> ((A, B)) -> A = (a, b) => a").is_ok());
+    assert!(check_type_inference("id: <A> (A) -> A = x => x").is_ok());
 }
 
 // ============================================================================

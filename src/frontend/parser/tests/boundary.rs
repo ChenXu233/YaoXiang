@@ -34,7 +34,7 @@ fn test_deeply_nested_blocks() {
 /// Test many function parameters
 #[test]
 fn test_many_params() {
-    let expr = "foo(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Int = (a, b, c, d, e, f, g, h, i, j) => { 0 }";
+    let expr = "foo: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Int = (a, b, c, d, e, f, g, h, i, j) => { 0 }";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     if let Err(e) = &result {
@@ -158,13 +158,21 @@ fn test_tuple_type() {
     let expr = "x: (Int, String, Bool) = (1, \"hello\", true);";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
-    assert!(result.is_ok());
+    if let Err(e) = &result {
+        println!("Parse error: {:?}", e);
+    }
+    assert!(
+        result.is_ok(),
+        "Failed to parse: {}\nError: {:?}",
+        expr,
+        result.err()
+    );
 }
 
 /// Test optional type parameters
 #[test]
 fn test_optional_type_params() {
-    let expr = "foo(Int,) -> Int = (x) => { x }";
+    let expr = "foo: (Int,) -> Int = (x) => { x }";
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());

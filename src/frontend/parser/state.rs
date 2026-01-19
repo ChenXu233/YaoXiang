@@ -93,6 +93,24 @@ impl<'a> ParserState<'a> {
         self.tokens.get(self.pos + n)
     }
 
+    /// Save current position for backtracking
+    #[inline]
+    pub fn save_position(&self) -> usize {
+        self.pos
+    }
+
+    /// Restore saved position
+    #[inline]
+    pub fn restore_position(
+        &mut self,
+        pos: usize,
+    ) {
+        self.pos = pos;
+        if let Some(token) = self.current() {
+            self.current_span = token.span;
+        }
+    }
+
     /// Advance to next token
     #[inline]
     pub fn bump(&mut self) {
@@ -191,6 +209,12 @@ impl<'a> ParserState<'a> {
     #[inline]
     pub fn first_error(&self) -> Option<&super::ParseError> {
         self.errors.first()
+    }
+
+    /// Clear all errors (for backtracking)
+    #[inline]
+    pub fn clear_errors(&mut self) {
+        self.errors.clear();
     }
 
     /// Synchronize to next synchronization point

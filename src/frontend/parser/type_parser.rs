@@ -363,17 +363,17 @@ impl<'a> ParserState<'a> {
         }
 
         // Check for generic arguments or struct fields
-        let (_open, close) = if self.at(&TokenKind::Lt) {
-            (TokenKind::Lt, TokenKind::Gt)
+        let close = if self.at(&TokenKind::Lt) {
+            TokenKind::Gt
         } else if self.at(&TokenKind::LBracket) {
-            (TokenKind::LBracket, TokenKind::RBracket)
+            TokenKind::RBracket
         } else if self.at(&TokenKind::LParen) {
-            (TokenKind::LParen, TokenKind::RParen)
+            TokenKind::RParen
         } else {
             return Some(Type::Name(name));
         };
 
-        self.bump(); // consume open
+        self.bump(); // consume open delimiter
 
         let mut args = Vec::new();
         let mut named_fields = Vec::new();
@@ -411,6 +411,24 @@ impl<'a> ParserState<'a> {
 
         if !self.expect(&close) {
             return None;
+        }
+
+        // After consuming generic args, check if we should stop (for type annotations)
+        // This prevents consuming tokens like `=` that belong to the surrounding statement
+        if matches!(close, TokenKind::Gt) {
+            if let Some(
+                &TokenKind::Eq | &TokenKind::Colon | &TokenKind::Semicolon | &TokenKind::Comma,
+            ) = self.current().map(|t| &t.kind)
+            {
+                return if is_named {
+                    Some(Type::NamedStruct {
+                        name,
+                        fields: named_fields,
+                    })
+                } else {
+                    Some(Type::Generic { name, args })
+                };
+            }
         }
 
         if is_named {

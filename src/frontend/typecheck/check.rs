@@ -205,6 +205,23 @@ impl<'a> TypeChecker<'a> {
                         is_annotated,
                     )?;
                     Ok(())
+                } else if let ast::Expr::BinOp {
+                    op: ast::BinOp::Assign,
+                    left,
+                    right: _,
+                    ..
+                } = expr.as_ref()
+                {
+                    // 对于赋值表达式，先将变量添加到作用域，再推断类型
+                    if let ast::Expr::Var(name, _) = left.as_ref() {
+                        // 为变量创建类型变量并添加到作用域
+                        let ty = self.inferrer.solver().new_var();
+                        let poly = PolyType::mono(ty);
+                        self.inferrer.add_var(name.clone(), poly);
+                    }
+                    // 推断整个赋值表达式
+                    self.inferrer.infer_expr(expr)?;
+                    Ok(())
                 } else {
                     self.inferrer.infer_expr(expr)?;
                     Ok(())

@@ -683,20 +683,56 @@ impl<'a> TypeInferrer<'a> {
         label: Option<&str>,
         span: Span,
     ) -> TypeResult<MonoType> {
+        // 预扫描循环体中的变量声明和赋值，确保在推断条件之前变量已被添加到作用域
+        // 这对于像 `while i < n { i = i + 1; }` 这样的代码是必要的
+        // 注意：这里显式管理作用域，因为 while 循环需要在其 body 被推断之前添加变量
+
+        // 进入循环体作用域
+        self.enter_scope();
+
+        // 直接为循环体中发现的变量添加到当前作用域
+        for stmt in &body.stmts {
+            match &stmt.kind {
+                ast::StmtKind::Var { name, .. } => {
+                    // 带类型注解的变量声明：StmtKind::Var
+                    let ty = self.solver.new_var();
+                    let poly = PolyType::mono(ty);
+                    self.add_var(name.clone(), poly);
+                }
+                ast::StmtKind::Expr(expr) => {
+                    // 不带类型注解的赋值：StmtKind::Expr(BinOp::Assign(...))
+                    if let ast::Expr::BinOp { op, left, .. } = expr.as_ref() {
+                        if *op == BinOp::Assign {
+                            if let ast::Expr::Var(name, _) = left.as_ref() {
+                                let ty = self.solver.new_var();
+                                let poly = PolyType::mono(ty);
+                                self.add_var(name.clone(), poly);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         // 条件必须是布尔类型
         let cond_ty = self.infer_expr(condition)?;
 
         self.solver.add_constraint(cond_ty, MonoType::Bool, span);
 
-        // 推断循环体
-        // 注意：infer_block 会自动管理作用域，所以这里不再调用 enter_scope/exit_scope
+        // 推断循环体（注意：这里不管理作用域，因为我们已经管理了）
         if let Some(l) = label {
             self.loop_labels.push(l.to_string());
         }
-        let _body_ty = self.infer_block(body, true, None)?;
+
+        let _body_ty = self.infer_block(body, false, None)?;
+
         if label.is_some() {
             self.loop_labels.pop();
         }
+
+        // 退出循环体作用域
+        self.exit_scope();
 
         // while 表达式返回 Void
         Ok(MonoType::Void)
@@ -763,6 +799,20 @@ impl<'a> TypeInferrer<'a> {
         for stmt in &block.stmts {
             match &stmt.kind {
                 ast::StmtKind::Expr(expr) => {
+                    // 检查是否是赋值表达式：BinOp::Assign(Var(name), value)
+                    // 如果是，先将变量添加到作用域，再推断类型
+                    if let ast::Expr::BinOp {
+                        op: BinOp::Assign,
+                        left,
+                        ..
+                    } = expr.as_ref()
+                    {
+                        if let ast::Expr::Var(name, _) = left.as_ref() {
+                            let ty = self.solver.new_var();
+                            let poly = PolyType::mono(ty);
+                            self.add_var(name.clone(), poly);
+                        }
+                    }
                     // Expr 可能包含 While, For, Return, Break, Continue 等
                     let _ty = self.infer_expr(expr)?;
                 }
@@ -1127,6 +1177,7 @@ impl<'a> TypeInferrer<'a> {
         name: String,
         poly: PolyType,
     ) {
+        let _scope_count = self.scopes.len();
         if let Some(scope) = self.scopes.last_mut() {
             scope.insert(name, poly);
         }

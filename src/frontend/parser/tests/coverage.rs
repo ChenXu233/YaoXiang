@@ -198,7 +198,7 @@ fn test_parse_match_with_multiple_patterns() {
 
 #[test]
 fn test_parse_return_in_block() {
-    let tokens = tokenize("add(Int, Int) -> Int = (a, b) => { return a + b }").unwrap();
+    let tokens = tokenize("add: (Int, Int) -> Int = (a, b) => { return a + b }").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
 }

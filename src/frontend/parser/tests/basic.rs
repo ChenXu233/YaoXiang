@@ -234,7 +234,7 @@ fn test_parse_mut_var_statement() {
 /// Test parsing function definition
 #[test]
 fn test_parse_function_definition() {
-    let tokens = tokenize("add(Int, Int) -> Int = (a, b) => a + b").unwrap();
+    let tokens = tokenize("add: (Int, Int) -> Int = (a, b) => a + b").unwrap();
     let result = parse(&tokens);
     assert!(result.is_ok());
     let module = result.unwrap();
@@ -334,7 +334,11 @@ fn test_parse_type_annotation() {
 fn test_parse_generic_type() {
     let tokens = tokenize("list: List<Int> = [];").unwrap();
     let result = parse(&tokens);
-    assert!(result.is_ok());
+    assert!(
+        result.is_ok(),
+        "Failed to parse generic type: {:?}",
+        result.err()
+    );
 }
 
 /// Test parsing function type
@@ -342,7 +346,23 @@ fn test_parse_generic_type() {
 fn test_parse_fn_type() {
     let tokens = tokenize("f: (Int) -> Int = (x) => x;").unwrap();
     let result = parse(&tokens);
-    assert!(result.is_ok());
+    assert!(
+        result.is_ok(),
+        "Failed to parse function type: {:?}",
+        result.err()
+    );
+}
+
+// Test parsing function type
+#[test]
+fn test_parse_fn_type_without_params() {
+    let tokens = tokenize("f = () => print(\"Hello, World!\");").unwrap();
+    let result = parse(&tokens);
+    assert!(
+        result.is_ok(),
+        "Failed to parse function type: {:?}",
+        result.err()
+    );
 }
 
 /// Test parsing complex expression with operator precedence

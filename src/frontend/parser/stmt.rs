@@ -41,6 +41,7 @@ impl<'a> ParserState<'a> {
 
     /// Parse variable declaration: `[mut] name[: type] [= expr];`
     /// New syntax: `x: int = 42` or `mut y: int = 10`
+    /// Also handles function definition: `name: (ParamTypes) -> ReturnType = (params) => body`
     fn parse_var_stmt(
         &mut self,
         span: Span,
@@ -69,12 +70,59 @@ impl<'a> ParserState<'a> {
             None
         };
 
+        // Check for invalid syntax: name: Type (params) => body (missing =)
+        // Only report error if there's no = sign (i.e., it's likely a function definition missing =)
+        // If there IS an =, then ( might be part of a tuple value, not function params
+        if type_annotation.is_some() && self.at(&TokenKind::LParen) && !self.at(&TokenKind::Eq) {
+            // This looks like "name: Type (params) => body" which is missing the =
+            // Report an error
+            self.error(super::ParseError::UnexpectedToken(
+                self.current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
+            ));
+            return None;
+        }
+
         // Optional initializer
-        let initializer = if self.skip(&TokenKind::Eq) {
-            Some(Box::new(self.parse_expression(BP_LOWEST)?))
-        } else {
-            None
-        };
+        if self.skip(&TokenKind::Eq) {
+            // Check if this is a function definition: name: Type = (params) => body
+            // The key difference: after =, if we see ( and then later =>, it's a function
+            if self.at(&TokenKind::LParen) {
+                // Save current position to potentially backtrack
+                let saved_position = self.save_position();
+
+                // Try to parse as function definition
+                if let Some(fn_stmt) = self.parse_fn_stmt_with_name_and_type(
+                    name.clone(),
+                    type_annotation.clone(),
+                    span,
+                ) {
+                    self.skip(&TokenKind::Semicolon);
+                    return Some(fn_stmt);
+                }
+
+                // Function parsing failed, backtrack and clear errors
+                // The ( is likely the start of a tuple value, not function params
+                self.restore_position(saved_position);
+                self.clear_errors();
+            }
+
+            // Regular variable initializer: parse as expression
+            let initializer = Some(Box::new(self.parse_expression(BP_LOWEST)?));
+
+            self.skip(&TokenKind::Semicolon);
+
+            return Some(Stmt {
+                kind: StmtKind::Var {
+                    name,
+                    type_annotation,
+                    initializer,
+                    is_mut,
+                },
+                span,
+            });
+        }
 
         self.skip(&TokenKind::Semicolon);
 
@@ -82,7 +130,7 @@ impl<'a> ParserState<'a> {
             kind: StmtKind::Var {
                 name,
                 type_annotation,
-                initializer,
+                initializer: None,
                 is_mut,
             },
             span,
@@ -446,20 +494,24 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// Parse statement starting with identifier: function definition or expression
-    /// 新语法: `name = (params) => body`
+    /// Parse statement starting with identifier: function definition or expression or variable declaration
+    /// 语法:
+    /// - `name = (params) => body` - 函数定义，= 后是 (params) => body
+    /// - `name = expr` - 变量声明（如果没有类型注解）
+    /// - `name: type = expr` - 变量声明（带类型注解）
+    /// - `name expr` - 表达式语句
     fn parse_identifier_stmt(
         &mut self,
         span: Span,
     ) -> Option<Stmt> {
-        // Look ahead to determine what kind of statement this is
-        // 新语法: name = (params) => body
-        // 关键特征: identifier 后直接是 =
-
         let next = self.peek();
 
-        // Check for new syntax: identifier followed by =
+        // Check if identifier is followed by =
         if matches!(next.map(|t| &t.kind), Some(TokenKind::Eq)) {
+            // 这可能是变量声明或函数定义
+            // 保存当前位置以便回溯
+            let saved_position = self.save_position();
+
             // 消费 identifier
             let name = match self.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => n.clone(),
@@ -473,14 +525,222 @@ impl<'a> ParserState<'a> {
                 }
             };
             self.bump(); // consume identifier
-            self.bump(); // consume =
 
-            // 这是函数定义，调用 parse_fn_stmt
-            return self.parse_fn_stmt_with_name(name, span);
+            // 检查 = 后是否紧跟着 (，尝试解析为函数定义
+            if self.at(&TokenKind::Eq) {
+                self.bump(); // consume =
+
+                // 如果 = 后是 (，尝试解析为函数定义
+                if self.at(&TokenKind::LParen) {
+                    // 尝试解析为函数定义: name = (params) => body
+                    if let Some(stmt) = self.parse_fn_stmt_with_name(name.clone(), span) {
+                        self.skip(&TokenKind::Semicolon);
+                        return Some(stmt);
+                    }
+                    // 函数定义解析失败，回溯
+                    self.restore_position(saved_position);
+                    self.clear_errors();
+                } else if let Some(TokenKind::Identifier(_)) = self.current().map(|t| &t.kind) {
+                    // = 后是 identifier，可能是简单的函数定义: name = param => body
+                    // 保存位置以便回溯
+                    let saved_position2 = self.save_position();
+
+                    // 尝试解析为简单函数定义
+                    if let Some(stmt) = self.parse_fn_stmt_with_name_simple(name.clone(), span) {
+                        self.skip(&TokenKind::Semicolon);
+                        return Some(stmt);
+                    }
+
+                    // 回溯，尝试作为变量声明处理
+                    self.restore_position(saved_position2);
+                    self.clear_errors();
+                }
+            }
+
+            // 回溯并作为变量声明处理
+            self.restore_position(saved_position);
+            self.clear_errors();
+
+            // 调用 parse_var_stmt 来处理变量声明
+            return self.parse_var_stmt(span);
+        }
+
+        // Check for variable declaration: identifier followed by :
+        if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon)) {
+            // 调用 parse_var_stmt，它会消费 identifier 和 :
+            return self.parse_var_stmt(span);
+        }
+
+        // Check for function definition with type annotation: name(types) -> type = (params) => body
+        if matches!(next.map(|t| &t.kind), Some(TokenKind::LParen)) {
+            // 这可能是函数定义: name(types) -> type = (params) => body
+            // 保存位置以便回溯
+            let saved_position = self.save_position();
+
+            // 尝试解析为函数定义
+            if let Some(stmt) = self.parse_fn_stmt_with_type_anno(span) {
+                return Some(stmt);
+            }
+
+            // 回溯，尝试作为表达式解析
+            self.restore_position(saved_position);
+            self.clear_errors();
         }
 
         // Otherwise, parse as expression
         self.parse_expr_stmt(span)
+    }
+
+    /// Parse function definition with type annotation: `name(types) -> type = (params) => body`
+    fn parse_fn_stmt_with_type_anno(
+        &mut self,
+        span: Span,
+    ) -> Option<Stmt> {
+        // Parse function name
+        let name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => return None,
+        };
+        self.bump(); // consume function name
+
+        // Parse type parameters: (Type1, Type2, ...)
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+        let type_params = self.parse_type_param_list()?;
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Parse return type: -> Type
+        if !self.expect(&TokenKind::Arrow) {
+            return None;
+        }
+        let return_type = self.parse_type_anno()?;
+
+        // Parse function body: = (params) => body
+        if !self.expect(&TokenKind::Eq) {
+            return None;
+        }
+
+        // Parse params in parentheses
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+        let params = self.parse_fn_params()?;
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Expect fat arrow
+        if !self.expect(&TokenKind::FatArrow) {
+            return None;
+        }
+
+        // Parse body (expression or block)
+        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let body = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            body
+        } else {
+            let expr = self.parse_expression(BP_LOWEST)?;
+            (Vec::new(), Some(Box::new(expr)))
+        };
+
+        // Build function type annotation
+        let fn_type = Type::Fn {
+            params: type_params,
+            return_type: Box::new(return_type),
+        };
+
+        Some(Stmt {
+            kind: StmtKind::Fn {
+                name,
+                type_annotation: Some(fn_type),
+                params,
+                body: (stmts, expr),
+            },
+            span,
+        })
+    }
+
+    /// Parse a list of types (for function type parameters)
+    fn parse_type_param_list(&mut self) -> Option<Vec<Type>> {
+        let mut types = Vec::new();
+
+        while !self.at(&TokenKind::RParen) && !self.at_end() {
+            if !types.is_empty() && !self.expect(&TokenKind::Comma) {
+                return None;
+            }
+
+            if self.at(&TokenKind::RParen) {
+                break;
+            }
+
+            let ty = self.parse_type_anno()?;
+            types.push(ty);
+        }
+
+        Some(types)
+    }
+
+    /// Parse function definition with already parsed name (no parentheses around params)
+    /// Handles: `name = param => body` (single param without parentheses)
+    fn parse_fn_stmt_with_name_simple(
+        &mut self,
+        name: String,
+        span: Span,
+    ) -> Option<Stmt> {
+        // Parse single parameter name
+        let param_span = self.span();
+        let param_name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                return None;
+            }
+        };
+        self.bump(); // consume param name
+
+        // Expect fat arrow
+        if !self.expect(&TokenKind::FatArrow) {
+            return None;
+        }
+
+        // Parse body (expression or block)
+        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+            // Block body
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let body = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            body
+        } else {
+            // Single expression body
+            let expr = self.parse_expression(BP_LOWEST)?;
+            (Vec::new(), Some(Box::new(expr)))
+        };
+
+        Some(Stmt {
+            kind: StmtKind::Fn {
+                name,
+                type_annotation: None,
+                params: vec![Param {
+                    name: param_name,
+                    ty: None,
+                    span: param_span,
+                }],
+                body: (stmts, expr),
+            },
+            span,
+        })
     }
 
     /// Parse function definition with already parsed name
@@ -524,6 +784,55 @@ impl<'a> ParserState<'a> {
             kind: StmtKind::Fn {
                 name,
                 type_annotation: None,
+                params,
+                body: (stmts, expr),
+            },
+            span,
+        })
+    }
+
+    /// Parse function definition with already parsed name and type annotation
+    fn parse_fn_stmt_with_name_and_type(
+        &mut self,
+        name: String,
+        type_annotation: Option<Type>,
+        span: Span,
+    ) -> Option<Stmt> {
+        // Parse implementation: (params) => body
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+        let params = self.parse_fn_params()?;
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Expect fat arrow
+        if !self.expect(&TokenKind::FatArrow) {
+            return None;
+        }
+
+        // Parse body (expression or block)
+        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+            // Block body
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let body = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            body
+        } else {
+            // Single expression body
+            let expr = self.parse_expression(BP_LOWEST)?;
+            (Vec::new(), Some(Box::new(expr)))
+        };
+
+        Some(Stmt {
+            kind: StmtKind::Fn {
+                name,
+                type_annotation,
                 params,
                 body: (stmts, expr),
             },
