@@ -546,19 +546,22 @@ impl VM {
             Instr::Call { dst, func, args } => {
                 let dst_reg = dst.as_ref().map(|d| self.operand_to_reg(d)).unwrap_or(0);
 
-                // 解析函数名
+                // 解析函数名并添加到常量表
                 let func_name = match func {
                     Operand::Const(ConstValue::String(s)) => s.clone(),
                     _ => "print".to_string(),
                 };
 
-                // 简单的字符串哈希作为函数 ID
-                let func_id = self.hash_string(&func_name);
+                // 将函数名添加到常量表，使用索引作为 func_id
+                let func_id = self.add_constant(ConstValue::String(func_name))? as u32;
+
+                // 计算 base_arg_reg：第一个参数的寄存器
+                let base_arg_reg = args.first().map(|a| self.operand_to_reg(a)).unwrap_or(0);
 
                 bytecode.push(TOp::CallStatic as u8);
                 bytecode.push(dst_reg);
                 bytecode.extend_from_slice(&func_id.to_le_bytes());
-                bytecode.push(0); // base_arg_reg
+                bytecode.push(base_arg_reg);
                 bytecode.push(args.len() as u8);
             }
 
@@ -862,29 +865,38 @@ impl VM {
 
             // 函数调用
             CallStatic => {
-                let _dst = self.read_u8()?;
+                let dst = self.read_u8()?;
                 let func_id = self.read_u32()?;
-                let _base_arg_reg = self.read_u8()?;
+                let base_arg_reg = self.read_u8()?;
                 let arg_count = self.read_u8()?;
 
                 // 收集参数
                 let mut args = Vec::with_capacity(arg_count as usize);
                 for i in 0..arg_count {
-                    let arg_reg = i;
+                    let arg_reg = base_arg_reg + i;
                     args.push(self.regs.read(arg_reg).clone());
                 }
 
                 // 从函数 ID 解析函数名
-                let func_name = self
-                    .find_function_by_id(func_id)
-                    .unwrap_or_else(|| "print".to_string());
+                // 1. 先尝试从用户定义函数中查找
+                let func_name = self.find_function_by_id(func_id);
+
+                // 2. 如果没找到，尝试从常量池中查找（用于外部函数调用）
+                let func_name = if let Some(name) = func_name {
+                    name
+                } else if let Some(ConstValue::String(name)) = self.constants.get(func_id as usize)
+                {
+                    name.clone()
+                } else {
+                    // 如果不是有效常量，默认使用 "print"
+                    "print".to_string()
+                };
 
                 // 优先检查外部函数注册表
                 if let Some(ext_func) = extfunc::EXTERNAL_FUNCTIONS.get(&func_name) {
                     // 调用外部函数
                     let result = (ext_func.func)(&args);
                     // 处理返回值（写入目标寄存器）
-                    let dst = self.read_u8()?;
                     self.regs.write(dst, result);
                 } else if func_name == "print" {
                     // 调用 print 内部函数（向后兼容）
