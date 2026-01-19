@@ -136,7 +136,6 @@ impl AstToIrGenerator {
 
         Ok(ModuleIR {
             types: Vec::new(),
-            constants,
             globals: Vec::new(),
             functions,
         })

@@ -9,7 +9,6 @@ use crate::vm::opcode::TypedOpcode;
 fn test_function_definition() {
     let module = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![FunctionIR {
             name: "test_fn".to_string(),

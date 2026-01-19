@@ -68,7 +68,6 @@ mod vm_tests {
         // Create a minimal ModuleIR for testing
         let module = ModuleIR {
             types: vec![],
-            constants: vec![],
             globals: vec![],
             functions: vec![],
         };

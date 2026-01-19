@@ -6,7 +6,8 @@ use yaoxiang::middle::ir::ModuleIR;
 #[test]
 fn test_bytecode_serialization() {
     let module = ModuleIR::default();
-    let bytecode_file = BytecodeFile::from_ir(&module);
+    let mut ctx = CodegenContext::new(module);
+    let bytecode_file = ctx.generate().expect("Codegen failed");
 
     let mut buffer = Vec::new();
     bytecode_file

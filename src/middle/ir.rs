@@ -260,7 +260,6 @@ impl std::hash::Hash for ConstValue {
 #[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
     pub types: Vec<Type>,
-    pub constants: Vec<ConstValue>,
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
 }

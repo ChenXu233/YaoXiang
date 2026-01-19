@@ -65,7 +65,6 @@ fn test_collect_generic_functions() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func, non_generic],
     };
@@ -91,7 +90,6 @@ fn test_global_function_instantiation() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
     };
@@ -127,7 +125,6 @@ fn test_instance_sharing() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
     };
@@ -159,7 +156,6 @@ fn test_different_types_different_instances() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
     };
@@ -206,7 +202,6 @@ fn test_multiple_type_parameters() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
     };

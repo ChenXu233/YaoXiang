@@ -2,7 +2,8 @@
 //!
 //! 实现 YaoXiang VM 字节码执行器，支持寄存器架构和函数调用。
 
-use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::codegen::bytecode::FunctionCode;
+use crate::middle::ir::{ConstValue, ModuleIR, Operand};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::vm::extfunc;
@@ -138,8 +139,8 @@ pub struct VM {
     value_stack: Vec<Value>,
     /// 调用栈
     call_stack: Vec<Frame>,
-    /// 当前函数
-    current_func: Option<FunctionIR>,
+    /// 当前函数（使用预编码的字节码）
+    current_func: Option<FunctionCode>,
     /// 当前字节码
     bytecode: Vec<u8>,
     /// 指令指针
@@ -148,8 +149,8 @@ pub struct VM {
     constants: Vec<ConstValue>,
     /// 全局变量
     globals: HashMap<String, Value>,
-    /// 函数表
-    functions: HashMap<String, FunctionIR>,
+    /// 函数表（预编码的字节码）
+    functions: HashMap<String, FunctionCode>,
 }
 
 impl Default for VM {
@@ -201,13 +202,16 @@ impl VM {
         let func_count = module.functions.len();
         debug!("{}", t(MSG::VmStart, lang, Some(&[&func_count])));
 
-        // 初始化常量池
-        self.constants = module.constants.clone();
+        // 常量池为空 - 所有常量现在通过 CodegenContext 生成时动态添加
+        self.constants.clear();
 
-        // 初始化函数表
+        // 初始化函数表（使用 codegen 生成预编码的字节码）
+        use crate::middle::codegen::generator::BytecodeGenerator;
         self.functions.clear();
-        for func in &module.functions {
-            self.functions.insert(func.name.clone(), func.clone());
+        for func_ir in &module.functions {
+            let generator = BytecodeGenerator::new(func_ir);
+            let func_code = generator.generate();
+            self.functions.insert(func_ir.name.clone(), func_code);
         }
 
         // 初始化 globals
@@ -221,17 +225,15 @@ impl VM {
         // 查找 main 函数并执行
         self.status = VMStatus::Running;
 
-        // 使用引用避免移动问题
         let main_func = self
             .functions
             .get("main")
             .or_else(|| self.functions.get("_start"))
-            .or_else(|| self.functions.values().next());
+            .or_else(|| self.functions.values().next())
+            .cloned();
 
         if let Some(func) = main_func {
-            // 克隆函数以避免借用冲突
-            let func_clone = func.clone();
-            self.execute_function(&func_clone, &[])?;
+            self.execute_function(&func, &[])?;
         }
 
         self.status = VMStatus::Finished;
@@ -239,10 +241,10 @@ impl VM {
         Ok(())
     }
 
-    /// 执行函数
+    /// 执行函数（直接使用预编码的 FunctionCode）
     fn execute_function(
         &mut self,
-        func: &FunctionIR,
+        func: &FunctionCode,
         args: &[Value],
     ) -> VMResult<Value> {
         let lang = get_lang();
@@ -257,7 +259,7 @@ impl VM {
         let return_addr = self.ip;
         let caller_fp = self.call_stack.len();
         let arg_count = args.len();
-        let local_count = func.locals.len();
+        let local_count = func.local_count;
 
         let mut frame = Frame::new(
             func.name.clone(),
@@ -301,7 +303,7 @@ impl VM {
         );
         self.call_stack.push(frame);
 
-        // 执行函数体
+        // 执行函数体（直接使用预编码的字节码）
         let result = self.execute_function_body(func)?;
 
         // 弹出帧
@@ -315,31 +317,23 @@ impl VM {
         Ok(result)
     }
 
-    /// 执行函数体
+    /// 执行函数体（直接执行预编码字节码）
     fn execute_function_body(
         &mut self,
-        func: &FunctionIR,
+        func: &FunctionCode,
     ) -> VMResult<Value> {
         self.current_func = Some(func.clone());
-
-        // 生成字节码（直接从 IR 生成字节码）
-        let bytecode = self.generate_bytecode(func)?;
-        self.bytecode = bytecode;
+        self.bytecode = func.encode_all();
 
         loop {
-            // 检查是否超出字节码范围
             if self.ip >= self.bytecode.len() {
-                // 函数没有明确的返回，返回 Void
                 return Ok(Value::Void);
             }
 
-            // 获取并执行指令
             let opcode = self.bytecode[self.ip];
             self.ip += 1;
 
-            // 解码并执行指令
             if let Ok(typed_opcode) = TypedOpcode::try_from(opcode) {
-                // 记录指令执行（仅在 trace 模式）
                 if self.config.trace_execution {
                     debug!(
                         "{}",
@@ -352,7 +346,6 @@ impl VM {
                 }
                 self.execute_instruction(typed_opcode)?;
 
-                // 检查是否是返回指令
                 if self.should_return(&typed_opcode) {
                     return self.get_return_value(&typed_opcode);
                 }
@@ -360,295 +353,6 @@ impl VM {
                 return Err(VMError::InvalidOpcode(opcode));
             }
         }
-    }
-
-    /// 生成函数的字节码
-    fn generate_bytecode(
-        &mut self,
-        func: &FunctionIR,
-    ) -> Result<Vec<u8>, VMError> {
-        let mut bytecode = Vec::new();
-
-        for block in &func.blocks {
-            for instr in &block.instructions {
-                self.encode_instruction(instr, &mut bytecode)?;
-            }
-        }
-
-        Ok(bytecode)
-    }
-
-    /// 编码指令为字节码
-    fn encode_instruction(
-        &mut self,
-        instr: &Instruction,
-        bytecode: &mut Vec<u8>,
-    ) -> Result<(), VMError> {
-        use crate::middle::ir::Instruction as Instr;
-        use crate::vm::opcode::TypedOpcode as TOp;
-
-        match instr {
-            // 移动指令
-            Instr::Move { dst, src } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let src_reg = self.operand_to_reg(src);
-                bytecode.push(TOp::Mov as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(src_reg);
-            }
-
-            // 加载常量
-            Instr::Load { dst, src } => {
-                let dst_reg = self.operand_to_reg(dst);
-                if let Operand::Const(const_val) = src {
-                    // 查找常量索引
-                    let mut const_idx = None;
-                    for (i, existing) in self.constants.iter().enumerate() {
-                        if *existing == *const_val {
-                            const_idx = Some(i);
-                            break;
-                        }
-                    }
-                    let idx = const_idx.unwrap_or_else(|| {
-                        self.constants.push(const_val.clone());
-                        self.constants.len() - 1
-                    });
-                    bytecode.push(TOp::LoadConst as u8);
-                    bytecode.push(dst_reg);
-                    bytecode.push((idx & 0xFF) as u8);
-                    bytecode.push(((idx >> 8) & 0xFF) as u8);
-                } else {
-                    // 加载局部变量
-                    let src_local = match src {
-                        Operand::Local(idx) => *idx as u8,
-                        _ => 0,
-                    };
-                    bytecode.push(TOp::LoadLocal as u8);
-                    bytecode.push(dst_reg);
-                    bytecode.push(src_local);
-                }
-            }
-
-            // 存储到局部变量
-            Instr::Store { dst, src } => {
-                // dst 是局部变量索引，src 是源操作数
-                let local_idx = match dst {
-                    Operand::Local(idx) => *idx as u8,
-                    _ => 0,
-                };
-                let src_reg = self.operand_to_reg(src);
-                bytecode.push(TOp::StoreLocal as u8);
-                bytecode.push(local_idx);
-                bytecode.push(src_reg);
-            }
-
-            // 算术运算
-            Instr::Add { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Add as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Sub { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Sub as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Mul { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Mul as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Div { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Div as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            // 比较运算
-            Instr::Eq { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Eq as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Ne { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Ne as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Lt { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Lt as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Le { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Le as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Gt { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Gt as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            Instr::Ge { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Ge as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            // 跳转
-            Instr::Jmp(target) => {
-                let offset = *target as i32;
-                let bytes = offset.to_le_bytes();
-                bytecode.push(TOp::Jmp as u8);
-                bytecode.extend_from_slice(&bytes);
-            }
-
-            Instr::JmpIf(cond, target) => {
-                let cond_reg = self.operand_to_reg(cond);
-                let offset = *target as i16;
-                let bytes = offset.to_le_bytes();
-                bytecode.push(TOp::JmpIf as u8);
-                bytecode.push(cond_reg);
-                bytecode.extend_from_slice(&bytes);
-            }
-
-            Instr::JmpIfNot(cond, target) => {
-                let cond_reg = self.operand_to_reg(cond);
-                let offset = *target as i16;
-                let bytes = offset.to_le_bytes();
-                bytecode.push(TOp::JmpIfNot as u8);
-                bytecode.push(cond_reg);
-                bytecode.extend_from_slice(&bytes);
-            }
-
-            // 返回
-            Instr::Ret(val) => {
-                if let Some(v) = val {
-                    let reg = self.operand_to_reg(v);
-                    bytecode.push(TOp::ReturnValue as u8);
-                    bytecode.push(reg);
-                } else {
-                    bytecode.push(TOp::Return as u8);
-                }
-            }
-
-            // 函数调用
-            Instr::Call { dst, func, args } => {
-                let dst_reg = dst.as_ref().map(|d| self.operand_to_reg(d)).unwrap_or(0);
-
-                // 解析函数名并添加到常量表
-                let func_name = match func {
-                    Operand::Const(ConstValue::String(s)) => s.clone(),
-                    _ => "print".to_string(),
-                };
-
-                // 将函数名添加到常量表，使用索引作为 func_id
-                let func_id = self.add_constant(ConstValue::String(func_name))? as u32;
-
-                // 计算 base_arg_reg：第一个参数的寄存器
-                let base_arg_reg = args.first().map(|a| self.operand_to_reg(a)).unwrap_or(0);
-
-                bytecode.push(TOp::CallStatic as u8);
-                bytecode.push(dst_reg);
-                bytecode.extend_from_slice(&func_id.to_le_bytes());
-                bytecode.push(base_arg_reg);
-                bytecode.push(args.len() as u8);
-            }
-
-            // 栈操作
-            Instr::Push(operand) => {
-                let reg = self.operand_to_reg(operand);
-                bytecode.push(TOp::Mov as u8);
-                bytecode.push(reg);
-            }
-
-            Instr::Pop(_) => {
-                bytecode.push(TOp::Nop as u8);
-            }
-
-            Instr::Dup => {
-                bytecode.push(TOp::Nop as u8);
-            }
-
-            Instr::Swap => {
-                bytecode.push(TOp::Nop as u8);
-            }
-
-            // 类型操作
-            Instr::Neg { dst, src } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let src_reg = self.operand_to_reg(src);
-                bytecode.push(TOp::I64Neg as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(src_reg);
-            }
-
-            Instr::Mod { dst, lhs, rhs } => {
-                let dst_reg = self.operand_to_reg(dst);
-                let lhs_reg = self.operand_to_reg(lhs);
-                let rhs_reg = self.operand_to_reg(rhs);
-                bytecode.push(TOp::I64Rem as u8);
-                bytecode.push(dst_reg);
-                bytecode.push(lhs_reg);
-                bytecode.push(rhs_reg);
-            }
-
-            // 其他指令使用 Nop
-            _ => {
-                bytecode.push(TOp::Nop as u8);
-            }
-        }
-
-        Ok(())
     }
 
     /// 将操作数转换为寄存器编号
@@ -663,34 +367,6 @@ impl VM {
             Operand::Arg(idx) => *idx as u8,
             _ => 0,
         }
-    }
-
-    /// 简单的字符串哈希
-    fn hash_string(
-        &self,
-        s: &str,
-    ) -> u32 {
-        let mut hash = 0u32;
-        for c in s.bytes() {
-            hash = hash.wrapping_mul(31).wrapping_add(c as u32);
-        }
-        hash
-    }
-
-    /// 添加常量到常量池
-    fn add_constant(
-        &mut self,
-        const_val: ConstValue,
-    ) -> Result<usize, VMError> {
-        // 检查是否已存在
-        for (i, existing) in self.constants.iter().enumerate() {
-            if *existing == const_val {
-                return Ok(i);
-            }
-        }
-        // 添加新常量
-        self.constants.push(const_val.clone());
-        Ok(self.constants.len() - 1)
     }
 
     /// 执行指令
@@ -957,20 +633,14 @@ impl VM {
                     args.push(self.regs.read(arg_reg).clone());
                 }
 
-                // 从函数 ID 解析函数名
-                // 1. 先尝试从用户定义函数中查找
-                let func_name = self.find_function_by_id(func_id);
-
-                // 2. 如果没找到，尝试从常量池中查找（用于外部函数调用）
-                let func_name = if let Some(name) = func_name {
-                    name
-                } else if let Some(ConstValue::String(name)) = self.constants.get(func_id as usize)
-                {
-                    name.clone()
-                } else {
-                    // 如果不是有效常量，默认使用 "print"
-                    "print".to_string()
-                };
+                // 从函数 ID 解析函数名（从常量池查找）
+                let func_name =
+                    if let Some(ConstValue::String(name)) = self.constants.get(func_id as usize) {
+                        name.clone()
+                    } else {
+                        // 如果不是有效常量，默认使用 "print"
+                        "print".to_string()
+                    };
 
                 // 优先检查外部函数注册表
                 if let Some(ext_func) = extfunc::EXTERNAL_FUNCTIONS.get(&func_name) {
@@ -1046,21 +716,6 @@ impl VM {
         }
 
         Ok(())
-    }
-
-    /// 根据函数 ID 查找函数名
-    fn find_function_by_id(
-        &self,
-        func_id: u32,
-    ) -> Option<String> {
-        // 简化实现：遍历函数表
-        for name in self.functions.keys() {
-            let id = self.hash_string(name);
-            if id == func_id {
-                return Some(name.clone());
-            }
-        }
-        None
     }
 
     /// 读取 u8 操作数

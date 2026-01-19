@@ -173,7 +173,6 @@ mod codegen_tests {
         let module = ModuleIR::default();
         assert!(module.functions.is_empty());
         assert!(module.types.is_empty());
-        assert!(module.constants.is_empty());
     }
 
     #[test]

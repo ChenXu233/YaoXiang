@@ -616,7 +616,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         }
         ModuleIR {
             types: original_module.types.clone(),
-            constants: original_module.constants.clone(),
             globals: original_module.globals.clone(),
             functions: output_funcs,
         }

@@ -10,7 +10,6 @@ fn test_literal_generation() {
     // 创建模块 IR
     let module = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![FunctionIR {
             name: "test_literal".to_string(),
@@ -35,7 +34,6 @@ fn test_literal_generation() {
 fn test_variable_loading() {
     let module = ModuleIR {
         types: Vec::new(),
-        constants: vec![ConstValue::Int(42)],
         globals: Vec::new(),
         functions: vec![FunctionIR {
             name: "test_var".to_string(),
@@ -107,7 +105,6 @@ fn test_operand_counts() {
 fn test_bytecode_file_generation() {
     let module = ModuleIR {
         types: Vec::new(),
-        constants: vec![ConstValue::Int(0)],
         globals: Vec::new(),
         functions: vec![FunctionIR {
             name: "main".to_string(),

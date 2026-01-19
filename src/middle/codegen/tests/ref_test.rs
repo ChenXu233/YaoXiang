@@ -31,7 +31,6 @@ fn test_codegen_arc_new() {
 
     let module = ModuleIR {
         types: vec![],
-        constants: vec![],
         globals: vec![],
         functions: vec![func],
     };
@@ -65,7 +64,6 @@ fn test_codegen_arc_clone() {
 
     let module = ModuleIR {
         types: vec![],
-        constants: vec![],
         globals: vec![],
         functions: vec![func],
     };
@@ -96,7 +94,6 @@ fn test_codegen_arc_drop() {
 
     let module = ModuleIR {
         types: vec![],
-        constants: vec![],
         globals: vec![],
         functions: vec![func],
     };
@@ -141,7 +138,6 @@ fn test_arc_operation_sequence() {
 
     let module = ModuleIR {
         types: vec![],
-        constants: vec![],
         globals: vec![],
         functions: vec![func],
     };
@@ -180,7 +176,6 @@ fn test_ref_bytecode_generation() {
 
     let module = ModuleIR {
         types: vec![],
-        constants: vec![],
         globals: vec![],
         functions: vec![func],
     };

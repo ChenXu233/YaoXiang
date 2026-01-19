@@ -39,7 +39,6 @@ fn test_instance_sharing() {
 
     let ir = ModuleIR {
         types: Vec::new(),
-        constants: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
     };
