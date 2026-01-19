@@ -178,6 +178,50 @@ impl<'a> BytecodeGenerator<'a> {
                 let src_reg = self.load_operand(src);
                 self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
             }
+            Instruction::Store { dst, src } => {
+                // Store 指令：存储到局部变量 (StoreLocal)
+                // StoreLocal: src, local_idx
+                let local_idx = match dst {
+                    Operand::Local(idx) => *idx,
+                    _ => 0,
+                };
+                let src_reg = self.load_operand(src);
+                self.emit(TypedOpcode::StoreLocal, vec![src_reg, local_idx as u8]);
+            }
+            Instruction::Load { dst, src } => {
+                // Load 指令：处理常量加载和局部变量加载
+                match src {
+                    Operand::Const(c) => {
+                        let dst_reg = self.resolve_dst(dst);
+                        match c {
+                            ConstValue::Int(v) => {
+                                let val = *v as i64;
+                                let mut operands = vec![dst_reg];
+                                operands.extend_from_slice(&val.to_le_bytes());
+                                self.emit(TypedOpcode::I64Const, operands);
+                            }
+                            ConstValue::Float(v) => {
+                                let val = *v;
+                                let mut operands = vec![dst_reg];
+                                operands.extend_from_slice(&val.to_le_bytes());
+                                self.emit(TypedOpcode::F64Const, operands);
+                            }
+                            _ => {}
+                        }
+                    }
+                    Operand::Local(idx) => {
+                        // 从局部变量加载：使用 LoadLocal
+                        // LoadLocal: dst, local_idx
+                        let dst_reg = self.resolve_dst(dst);
+                        self.emit(TypedOpcode::LoadLocal, vec![dst_reg, *idx as u8]);
+                    }
+                    _ => {
+                        let dst_reg = self.resolve_dst(dst);
+                        let src_reg = self.load_operand(src);
+                        self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
+                    }
+                }
+            }
             Instruction::Jmp(label) => {
                 self.jumps_to_patch.push((self.instructions.len(), *label));
                 self.emit(TypedOpcode::Jmp, vec![0, 0, 0, 0]);

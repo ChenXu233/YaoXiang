@@ -14,6 +14,14 @@ use crate::frontend::parser::ast::{self, Expr};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::span::Span;
+use std::collections::HashMap;
+
+/// 符号表条目
+#[derive(Debug, Clone)]
+struct SymbolEntry {
+    name: String,
+    local_idx: usize,
+}
 
 /// IR 生成器配置
 #[derive(Debug, Default, Clone)]
@@ -36,6 +44,10 @@ impl IrGeneratorConfig {
 pub struct AstToIrGenerator {
     /// 配置
     config: IrGeneratorConfig,
+    /// 符号表（用于变量解析）
+    symbols: Vec<HashMap<String, SymbolEntry>>,
+    /// 下一个临时寄存器编号
+    next_temp: usize,
 }
 
 impl Default for AstToIrGenerator {
@@ -49,12 +61,61 @@ impl AstToIrGenerator {
     pub fn new() -> Self {
         Self {
             config: IrGeneratorConfig::default(),
+            symbols: vec![HashMap::new()], // 全局作用域
+            next_temp: 0,
         }
+    }
+
+    /// 进入新的作用域
+    fn enter_scope(&mut self) {
+        self.symbols.push(HashMap::new());
+    }
+
+    /// 退出当前作用域
+    fn exit_scope(&mut self) {
+        self.symbols.pop();
+    }
+
+    /// 注册局部变量
+    fn register_local(
+        &mut self,
+        name: &str,
+        local_idx: usize,
+    ) {
+        if let Some(scope) = self.symbols.last_mut() {
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    name: name.to_string(),
+                    local_idx,
+                },
+            );
+        }
+    }
+
+    /// 查找局部变量
+    fn lookup_local(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        for scope in self.symbols.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                return Some(entry.local_idx);
+            }
+        }
+        None
+    }
+
+    /// 获取下一个临时寄存器编号
+    fn next_temp_reg(&mut self) -> usize {
+        let reg = self.next_temp;
+        self.next_temp += 1;
+        reg
     }
 
     /// 从 AST 模块生成 IR 模块
     pub fn generate_module_ir(
-        &self,
+        &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<IrGenError>> {
         let mut functions = Vec::new();
@@ -83,7 +144,7 @@ impl AstToIrGenerator {
 
     /// 生成语句的 IR
     fn generate_stmt_ir(
-        &self,
+        &mut self,
         stmt: &ast::Stmt,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
@@ -118,7 +179,7 @@ impl AstToIrGenerator {
     /// 生成函数 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_function_ir(
-        &self,
+        &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
         params: &[ast::Param],
@@ -136,27 +197,51 @@ impl AstToIrGenerator {
         // 生成函数体指令
         let mut instructions = Vec::new();
 
-        // 为每个参数生成 LoadArg 指令
-        for (i, _param) in params.iter().enumerate() {
+        // 进入函数体作用域
+        self.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册
+        for (i, param) in params.iter().enumerate() {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
             });
+            // 存储到局部变量并注册
+            instructions.push(Instruction::Store {
+                dst: Operand::Local(i),
+                src: Operand::Local(i),
+            });
+            self.register_local(&param.name, i);
         }
+
+        // 记录局部变量起始位置（在参数之后）
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
 
         // 处理语句
         for stmt in stmts {
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
         }
 
+        // 退出函数体作用域
+        self.exit_scope();
+
         // 处理返回值表达式
         if let Some(e) = expr {
-            let result_reg = instructions.len();
+            let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
             instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
         } else {
             instructions.push(Instruction::Ret(None));
         }
+
+        // 计算局部变量总数（用于 VM 分配帧空间）
+        // 局部变量包括参数和函数体中声明的变量
+        // 参数数量 + 临时寄存器使用数量
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = (0..total_locals)
+            .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
+            .collect();
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -168,7 +253,7 @@ impl AstToIrGenerator {
                 .collect(),
             return_type,
             is_async: false,
-            locals: Vec::new(),
+            locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
                 instructions,
@@ -225,27 +310,39 @@ impl AstToIrGenerator {
     /// 生成局部语句 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_local_stmt_ir(
-        &self,
+        &mut self,
         stmt: &ast::Stmt,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), IrGenError> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
-                let result_reg = instructions.len();
+                let result_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, result_reg, instructions, constants)?;
             }
             ast::StmtKind::Var {
-                name: _,
+                name,
                 type_annotation: _,
                 initializer,
                 is_mut: _,
             } => {
                 // 生成变量声明指令
-                let var_idx = instructions.len();
+                let var_idx = self.next_temp_reg();
+                self.register_local(name, var_idx);
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions, constants)?;
+                } else {
+                    // 默认初始化为 0
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(var_idx),
+                        src: Operand::Const(ConstValue::Int(0)),
+                    });
                 }
+                // 生成 Store 指令将值存储到局部变量
+                instructions.push(Instruction::Store {
+                    dst: Operand::Local(var_idx),
+                    src: Operand::Local(var_idx),
+                });
             }
             ast::StmtKind::Fn {
                 name: _,
@@ -263,7 +360,7 @@ impl AstToIrGenerator {
     /// 生成表达式 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_expr_ir(
-        &self,
+        &mut self,
         expr: &ast::Expr,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -287,10 +384,15 @@ impl AstToIrGenerator {
                 });
             }
             Expr::Var(_, _) => {
-                // 变量加载
+                // 变量加载 - 查找符号表获取正确的局部变量索引
+                let local_idx = if let Expr::Var(name, _) = expr {
+                    self.lookup_local(name).unwrap_or(result_reg)
+                } else {
+                    result_reg
+                };
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
-                    src: Operand::Local(result_reg), // 简化处理
+                    src: Operand::Local(local_idx),
                 });
             }
             Expr::BinOp {
@@ -362,6 +464,34 @@ impl AstToIrGenerator {
                         lhs: Operand::Local(left_reg),
                         rhs: Operand::Local(right_reg),
                     },
+                    ast::BinOp::Assign => {
+                        // 赋值操作: left = right
+                        // 注意：left 应该是一个变量（Expr::Var），right 是要赋值表达式
+                        // 查找左边的变量索引
+                        if let Expr::Var(var_name, _) = left.as_ref() {
+                            if let Some(local_idx) = self.lookup_local(var_name) {
+                                // 生成右侧表达式的 IR 到 right_reg
+                                self.generate_expr_ir(right, right_reg, instructions, constants)?;
+                                // 生成 Store 指令将右侧的值存储到局部变量
+                                instructions.push(Instruction::Store {
+                                    dst: Operand::Local(local_idx),
+                                    src: Operand::Local(right_reg),
+                                });
+                                // 将右侧的值复制到结果寄存器（赋值表达式的值）
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(result_reg),
+                                    src: Operand::Local(local_idx),
+                                });
+                                return Ok(());
+                            }
+                        }
+                        // 如果找不到变量，使用默认行为
+                        Instruction::Add {
+                            dst: Operand::Local(result_reg),
+                            lhs: Operand::Local(left_reg),
+                            rhs: Operand::Local(right_reg),
+                        }
+                    }
                     _ => Instruction::Add {
                         dst: Operand::Local(result_reg),
                         lhs: Operand::Local(left_reg),

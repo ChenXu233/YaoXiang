@@ -149,7 +149,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         // 使用 IR 生成器生成 IR
-        let generator = AstToIrGenerator::new();
+        let mut generator = AstToIrGenerator::new();
         generator.generate_module_ir(module).map_err(|e| {
             e.into_iter()
                 .map(|e| TypeError::TypeMismatch {

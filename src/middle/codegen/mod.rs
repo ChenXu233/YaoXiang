@@ -419,6 +419,9 @@ impl CodegenContext {
         func: &FunctionIR,
         code_section: &mut CodeSection,
     ) -> Result<(), CodegenError> {
+        let lang = get_lang();
+        debug!("{}", t(MSG::CodegenGenFn, lang, Some(&[&func.name])));
+
         self.current_function = Some(func.clone());
         self.register_allocator = RegisterAllocator::new();
 
@@ -441,14 +444,31 @@ impl CodegenContext {
         &mut self,
         func: &FunctionIR,
     ) -> Result<Vec<BytecodeInstruction>, CodegenError> {
+        let lang = get_lang();
         let mut instructions = Vec::new();
 
-        for block in &func.blocks {
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            debug!("{}", t(MSG::CodegenGenBlock, lang, Some(&[&block_idx])));
+
             for instr in &block.instructions {
                 let bytecode_instr = self.translate_instruction(instr)?;
+                let instr_name = format!("{:?}", instr);
+                debug!("{}", t(MSG::CodegenGenInstr, lang, Some(&[&instr_name])));
                 instructions.push(bytecode_instr);
             }
         }
+
+        // Log register allocation
+        let next_local = self.register_allocator.next_local_id();
+        let next_temp = self.register_allocator.next_temp_id();
+        debug!(
+            "{}",
+            t(
+                MSG::CodegenRegAlloc,
+                lang,
+                Some(&[&format!("locals={}, temps={}", next_local, next_temp)])
+            )
+        );
 
         Ok(instructions)
     }
