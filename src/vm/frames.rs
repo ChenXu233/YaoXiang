@@ -1,6 +1,6 @@
 //! VM call frames
 
-use super::executor::Value;
+use crate::runtime::value::RuntimeValue;
 
 /// Call frame
 #[derive(Debug, Clone)]
@@ -12,7 +12,7 @@ pub struct Frame {
     /// Saved frame pointer
     pub saved_fp: usize,
     /// Local variables
-    pub locals: Vec<Value>,
+    pub locals: Vec<RuntimeValue>,
 }
 
 impl Frame {
@@ -21,7 +21,7 @@ impl Frame {
         name: String,
         return_addr: usize,
         saved_fp: usize,
-        locals: Vec<Value>,
+        locals: Vec<RuntimeValue>,
     ) -> Self {
         Self {
             name,

@@ -102,7 +102,7 @@ pub struct FunctionId(pub u32);
 pub struct TaskId(pub u32);
 
 /// Async state for lazy evaluation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum AsyncState {
     /// Synchronously ready value
     Ready(Box<RuntimeValue>),
@@ -113,7 +113,7 @@ pub enum AsyncState {
 }
 
 /// Async value for the concurrent model (RFC-001, RFC-008)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct AsyncValue {
     /// Actual value or computation task
     pub state: Box<AsyncState>,
@@ -122,7 +122,7 @@ pub struct AsyncValue {
 }
 
 /// Function value (closure with captured environment)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct FunctionValue {
     /// Function ID
     pub func_id: FunctionId,
@@ -542,6 +542,139 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Arc(inner) => write!(f, "arc({})", inner),
             RuntimeValue::Async(_) => write!(f, "async"),
             RuntimeValue::Ptr { kind, address, .. } => write!(f, "ptr({:?}, {:#x})", kind, address),
+        }
+    }
+}
+
+// ============================================================================
+// PartialEq Implementation
+// ============================================================================
+
+// Using bit patterns for Float to ensure consistent comparison (NaN handling)
+// Note: We treat NaN values as equal if they have the same bit pattern
+impl PartialEq for RuntimeValue {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        match (self, other) {
+            (RuntimeValue::Unit, RuntimeValue::Unit) => true,
+            (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => a == b,
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => a == b,
+            // Compare Float by bit pattern for consistent HashMap behavior
+            (RuntimeValue::Float(a), RuntimeValue::Float(b)) => a.to_bits() == b.to_bits(),
+            (RuntimeValue::Char(a), RuntimeValue::Char(b)) => a == b,
+            (RuntimeValue::String(a), RuntimeValue::String(b)) => a.as_ref() == b.as_ref(),
+            (RuntimeValue::Bytes(a), RuntimeValue::Bytes(b)) => a.as_ref() == b.as_ref(),
+            (RuntimeValue::Tuple(a), RuntimeValue::Tuple(b)) => a == b,
+            (RuntimeValue::Array(a), RuntimeValue::Array(b)) => a == b,
+            (RuntimeValue::List(a), RuntimeValue::List(b)) => a == b,
+            (RuntimeValue::Dict(a), RuntimeValue::Dict(b)) => {
+                if a.len() != b.len() {
+                    return false;
+                }
+                a.iter()
+                    .all(|(k, v)| b.get(k).map(|ov| v == ov).unwrap_or(false))
+            }
+            (
+                RuntimeValue::Struct {
+                    type_id: t1,
+                    fields: f1,
+                },
+                RuntimeValue::Struct {
+                    type_id: t2,
+                    fields: f2,
+                },
+            ) => t1 == t2 && f1 == f2,
+            (
+                RuntimeValue::Enum {
+                    type_id: t1,
+                    variant_id: v1,
+                    payload: p1,
+                },
+                RuntimeValue::Enum {
+                    type_id: t2,
+                    variant_id: v2,
+                    payload: p2,
+                },
+            ) => t1 == t2 && v1 == v2 && p1 == p2,
+            (RuntimeValue::Function(f1), RuntimeValue::Function(f2)) => f1 == f2,
+            (RuntimeValue::Arc(a), RuntimeValue::Arc(b)) => a == b,
+            (RuntimeValue::Async(a), RuntimeValue::Async(b)) => a == b,
+            (
+                RuntimeValue::Ptr {
+                    kind: k1,
+                    address: a1,
+                    type_id: t1,
+                },
+                RuntimeValue::Ptr {
+                    kind: k2,
+                    address: a2,
+                    type_id: t2,
+                },
+            ) => k1 == k2 && a1 == a2 && t1 == t2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for RuntimeValue {}
+
+// ============================================================================
+// Hash Implementation
+// ============================================================================
+
+use std::hash::{Hash, Hasher};
+
+impl Hash for RuntimeValue {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            RuntimeValue::Unit => {}
+            RuntimeValue::Bool(b) => b.hash(state),
+            RuntimeValue::Int(i) => i.hash(state),
+            // Hash Float by bit pattern for consistent HashMap behavior
+            RuntimeValue::Float(f) => f.to_bits().hash(state),
+            RuntimeValue::Char(c) => c.hash(state),
+            RuntimeValue::String(s) => s.as_ref().hash(state),
+            RuntimeValue::Bytes(b) => b.as_ref().hash(state),
+            RuntimeValue::Tuple(items) => items.len().hash(state),
+            RuntimeValue::Array(items) => items.len().hash(state),
+            RuntimeValue::List(items) => items.len().hash(state),
+            RuntimeValue::Dict(map) => map.len().hash(state),
+            RuntimeValue::Struct { type_id, fields } => {
+                type_id.hash(state);
+                fields.len().hash(state);
+            }
+            RuntimeValue::Enum {
+                type_id,
+                variant_id,
+                payload: _,
+            } => {
+                type_id.hash(state);
+                variant_id.hash(state);
+            }
+            RuntimeValue::Function(func) => func.func_id.hash(state),
+            RuntimeValue::Arc(inner) => {
+                // Hash by discriminant since Arc contents may differ
+                core::mem::discriminant(&**inner).hash(state);
+            }
+            RuntimeValue::Async(_) => {
+                // Async values don't participate in Dict key comparison
+                core::mem::discriminant(self).hash(state);
+            }
+            RuntimeValue::Ptr {
+                kind,
+                address,
+                type_id,
+            } => {
+                kind.hash(state);
+                address.hash(state);
+                type_id.hash(state);
+            }
         }
     }
 }

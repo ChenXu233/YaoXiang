@@ -2,8 +2,8 @@
 //!
 //! 测试虚拟机调用帧的创建和行为
 
+use crate::runtime::value::RuntimeValue;
 use crate::vm::frames::Frame;
-use crate::vm::Value;
 
 #[cfg(test)]
 mod frame_tests {
@@ -20,10 +20,14 @@ mod frame_tests {
 
     #[test]
     fn test_frame_with_locals() {
-        let locals = vec![Value::Int(1), Value::Int(2), Value::Bool(true)];
+        let locals = vec![
+            RuntimeValue::Int(1),
+            RuntimeValue::Int(2),
+            RuntimeValue::Bool(true),
+        ];
         let frame = Frame::new("func".to_string(), 0, 0, locals);
         assert_eq!(frame.locals.len(), 3);
-        assert!(matches!(frame.locals[0], Value::Int(1)));
+        assert!(matches!(frame.locals[0], RuntimeValue::Int(1)));
     }
 
     #[test]

@@ -3,8 +3,10 @@
 //! 测试虚拟机执行器的配置、状态和值类型
 
 use crate::middle::ModuleIR;
-use crate::vm::executor::{VMConfig, VMStatus, Value, VM};
+use crate::runtime::value::RuntimeValue;
+use crate::vm::executor::{VMConfig, VMStatus, VM};
 use crate::vm::opcode::TypedOpcode;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod vm_config_tests {
@@ -93,61 +95,61 @@ mod value_tests {
 
     #[test]
     fn test_value_void() {
-        let value = Value::Void;
-        assert!(matches!(value, Value::Void));
+        let value = RuntimeValue::Unit;
+        assert!(matches!(value, RuntimeValue::Unit));
     }
 
     #[test]
     fn test_value_bool() {
-        let true_val = Value::Bool(true);
-        let false_val = Value::Bool(false);
-        assert!(matches!(true_val, Value::Bool(true)));
-        assert!(matches!(false_val, Value::Bool(false)));
+        let true_val = RuntimeValue::Bool(true);
+        let false_val = RuntimeValue::Bool(false);
+        assert!(matches!(true_val, RuntimeValue::Bool(true)));
+        assert!(matches!(false_val, RuntimeValue::Bool(false)));
     }
 
     #[test]
     fn test_value_int() {
-        let value = Value::Int(42);
-        assert!(matches!(value, Value::Int(42)));
-        let negative = Value::Int(-100);
-        assert!(matches!(negative, Value::Int(-100)));
+        let value = RuntimeValue::Int(42);
+        assert!(matches!(value, RuntimeValue::Int(42)));
+        let negative = RuntimeValue::Int(-100);
+        assert!(matches!(negative, RuntimeValue::Int(-100)));
     }
 
     #[test]
     fn test_value_float() {
-        let value = Value::Float(3.14);
-        assert!(matches!(value, Value::Float(f) if (f - 3.14).abs() < 0.001));
+        let value = RuntimeValue::Float(3.14);
+        assert!(matches!(value, RuntimeValue::Float(f) if (f - 3.14).abs() < 0.001));
     }
 
     #[test]
     fn test_value_char() {
-        let value = Value::Char('中');
-        assert!(matches!(value, Value::Char('中')));
+        let value = RuntimeValue::Char('中' as u32);
+        assert!(matches!(value, RuntimeValue::Char(c) if c == '中' as u32));
     }
 
     #[test]
     fn test_value_string() {
-        let value = Value::String("hello".to_string());
-        assert!(matches!(value, Value::String(s) if s == "hello"));
+        let value = RuntimeValue::String(Arc::from("hello"));
+        assert!(matches!(value, RuntimeValue::String(s) if s.as_ref() == "hello"));
     }
 
     #[test]
     fn test_value_bytes() {
-        let value = Value::Bytes(vec![1, 2, 3]);
-        assert!(matches!(value, Value::Bytes(b) if b == vec![1, 2, 3]));
+        let value = RuntimeValue::Bytes(Arc::from(vec![1, 2, 3]));
+        assert!(matches!(value, RuntimeValue::Bytes(b) if b.as_ref() == vec![1, 2, 3]));
     }
 
     #[test]
     fn test_value_list() {
-        let value = Value::List(vec![Value::Int(1), Value::Int(2)]);
-        assert!(matches!(value, Value::List(list) if list.len() == 2));
+        let value = RuntimeValue::List(vec![RuntimeValue::Int(1), RuntimeValue::Int(2)]);
+        assert!(matches!(value, RuntimeValue::List(list) if list.len() == 2));
     }
 
     #[test]
     fn test_value_clone() {
-        let value = Value::Int(42);
+        let value = RuntimeValue::Int(42);
         let cloned = value.clone();
-        assert!(matches!(cloned, Value::Int(42)));
+        assert!(matches!(cloned, RuntimeValue::Int(42)));
     }
 }
 

@@ -2,16 +2,17 @@
 //!
 //! 将 Rust 标准库函数注册为 YaoXiang 可以调用的外部函数。
 
-use crate::vm::executor::Value;
+use crate::runtime::value::RuntimeValue;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// 外部函数定义
 pub struct ExternalFunction {
     /// 函数名
     pub name: &'static str,
     /// Rust 函数指针
-    pub func: fn(&[Value]) -> Value,
+    pub func: fn(&[RuntimeValue]) -> RuntimeValue,
 }
 
 /// 外部函数注册表
@@ -79,89 +80,93 @@ impl ExternalFunctionRegistry {
 
 // === std::io 实现 ===
 
-fn ext_print(args: &[Value]) -> Value {
+fn ext_print(args: &[RuntimeValue]) -> RuntimeValue {
     for arg in args {
         print_value(arg, false);
     }
-    Value::Void
+    RuntimeValue::Unit
 }
 
-fn ext_println(args: &[Value]) -> Value {
+fn ext_println(args: &[RuntimeValue]) -> RuntimeValue {
     for arg in args {
         print_value(arg, true);
     }
-    Value::Void
+    RuntimeValue::Unit
 }
 
-fn ext_read_line(_args: &[Value]) -> Value {
+fn ext_read_line(_args: &[RuntimeValue]) -> RuntimeValue {
     use std::io;
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input);
-    Value::String(input.trim_end().to_string())
+    RuntimeValue::String(Arc::from(input.trim_end()))
 }
 
-fn ext_read_file(args: &[Value]) -> Value {
-    if let Some(Value::String(path)) = args.first() {
+fn ext_read_file(args: &[RuntimeValue]) -> RuntimeValue {
+    if let Some(RuntimeValue::String(path)) = args.first() {
         use std::fs;
-        match fs::read_to_string(path) {
-            Ok(content) => Value::String(content),
-            Err(_) => Value::String(String::new()),
+        match fs::read_to_string(path.as_ref()) {
+            Ok(content) => RuntimeValue::String(Arc::from(content)),
+            Err(_) => RuntimeValue::String(Arc::from("")),
         }
     } else {
-        Value::String(String::new())
+        RuntimeValue::String(Arc::from(""))
     }
 }
 
-fn ext_write_file(args: &[Value]) -> Value {
-    if let (Some(Value::String(path)), Some(Value::String(content))) = (args.first(), args.get(1)) {
+fn ext_write_file(args: &[RuntimeValue]) -> RuntimeValue {
+    if let (Some(RuntimeValue::String(path)), Some(RuntimeValue::String(content))) =
+        (args.first(), args.get(1))
+    {
         use std::fs;
-        Value::Bool(fs::write(path, content).is_ok())
+        RuntimeValue::Bool(fs::write(path.as_ref(), content.as_ref()).is_ok())
     } else {
-        Value::Bool(false)
+        RuntimeValue::Bool(false)
     }
 }
 
 fn print_value(
-    value: &Value,
+    value: &RuntimeValue,
     newline: bool,
 ) {
     match value {
-        Value::String(s) => {
+        RuntimeValue::String(s) => {
             if newline {
                 println!("{}", s);
             } else {
                 print!("{}", s);
             }
         }
-        Value::Int(n) => {
+        RuntimeValue::Int(n) => {
             if newline {
                 println!("{}", n);
             } else {
                 print!("{}", n);
             }
         }
-        Value::Float(f) => {
+        RuntimeValue::Float(f) => {
             if newline {
                 println!("{}", f);
             } else {
                 print!("{}", f);
             }
         }
-        Value::Bool(b) => {
+        RuntimeValue::Bool(b) => {
             if newline {
                 println!("{}", b);
             } else {
                 print!("{}", b);
             }
         }
-        Value::Char(c) => {
-            if newline {
-                println!("{}", c);
-            } else {
-                print!("{}", c);
+        RuntimeValue::Char(c) => {
+            if let Some(ch) = char::from_u32(*c) {
+                if newline {
+                    println!("{}", ch);
+                } else {
+                    print!("{}", ch);
+                }
             }
         }
-        Value::Void => {
+        RuntimeValue::Unit => {
             if newline {
                 println!("()");
             } else {

@@ -4,6 +4,7 @@
 
 use crate::middle::codegen::bytecode::FunctionCode;
 use crate::middle::ir::{ConstValue, Operand};
+use crate::runtime::value::RuntimeValue;
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::vm::extfunc;
@@ -40,14 +41,14 @@ impl Default for VMConfig {
 #[derive(Debug, Clone)]
 pub struct RegisterFile {
     /// 通用寄存器
-    regs: Vec<Value>,
+    regs: Vec<RuntimeValue>,
 }
 
 impl RegisterFile {
     /// 创建新的寄存器文件
     pub fn new(count: usize) -> Self {
         Self {
-            regs: vec![Value::Void; count],
+            regs: vec![RuntimeValue::Unit; count],
         }
     }
 
@@ -55,15 +56,15 @@ impl RegisterFile {
     pub fn read(
         &self,
         idx: u8,
-    ) -> &Value {
-        self.regs.get(idx as usize).unwrap_or(&Value::Void)
+    ) -> &RuntimeValue {
+        self.regs.get(idx as usize).unwrap_or(&RuntimeValue::Unit)
     }
 
     /// 写入寄存器
     pub fn write(
         &mut self,
         idx: u8,
-        value: Value,
+        value: RuntimeValue,
     ) {
         let idx = idx as usize;
         if idx < self.regs.len() {
@@ -94,7 +95,7 @@ pub struct Frame {
     /// 参数数量
     pub arg_count: usize,
     /// 局部变量
-    pub locals: Vec<Value>,
+    pub locals: Vec<RuntimeValue>,
     /// 指令指针（恢复执行的位置）
     pub ip: usize,
 }
@@ -113,7 +114,7 @@ impl Frame {
             return_addr,
             caller_fp,
             arg_count,
-            locals: vec![Value::Void; local_count],
+            locals: vec![RuntimeValue::Unit; local_count],
             ip: 0,
         }
     }
@@ -136,7 +137,7 @@ pub struct VM {
     /// 寄存器文件
     regs: RegisterFile,
     /// 值栈（用于传递参数和临时存储）
-    value_stack: Vec<Value>,
+    value_stack: Vec<RuntimeValue>,
     /// 调用栈
     call_stack: Vec<Frame>,
     /// 当前函数（使用预编码的字节码）
@@ -148,7 +149,7 @@ pub struct VM {
     /// 常量池
     constants: Vec<ConstValue>,
     /// 全局变量
-    globals: HashMap<String, Value>,
+    globals: HashMap<String, RuntimeValue>,
     /// 函数表（预编码的字节码）
     functions: HashMap<String, FunctionCode>,
 }
@@ -242,8 +243,8 @@ impl VM {
     fn execute_function(
         &mut self,
         func: &FunctionCode,
-        args: &[Value],
-    ) -> VMResult<Value> {
+        args: &[RuntimeValue],
+    ) -> VMResult<RuntimeValue> {
         let lang = get_lang();
         debug!("{}", t(MSG::VmExecuteFn, lang, Some(&[&func.name])));
 
@@ -281,7 +282,7 @@ impl VM {
 
         // 初始化局部变量
         for i in func.params.len()..local_count {
-            frame.locals[i] = Value::Void;
+            frame.locals[i] = RuntimeValue::Unit;
         }
 
         // 保存当前状态
@@ -318,13 +319,13 @@ impl VM {
     fn execute_function_body(
         &mut self,
         func: &FunctionCode,
-    ) -> VMResult<Value> {
+    ) -> VMResult<RuntimeValue> {
         self.current_func = Some(func.clone());
         self.bytecode = func.encode_all();
 
         loop {
             if self.ip >= self.bytecode.len() {
-                return Ok(Value::Void);
+                return Ok(RuntimeValue::Unit);
             }
 
             let opcode = self.bytecode[self.ip];
@@ -431,22 +432,22 @@ impl VM {
             // 直接加载整数常量（I64）
             I64Const => {
                 let dst = self.read_u8()?;
-                let value = self.read_i64()? as i128;
-                self.regs.write(dst, Value::Int(value));
+                let value = self.read_i64()?;
+                self.regs.write(dst, RuntimeValue::Int(value));
             }
 
             // 直接加载浮点常量（F64）
             F64Const => {
                 let dst = self.read_u8()?;
                 let value = self.read_f64()?;
-                self.regs.write(dst, Value::Float(value));
+                self.regs.write(dst, RuntimeValue::Float(value));
             }
 
             // 直接加载整数常量（I32）
             I32Const => {
                 let dst = self.read_u8()?;
-                let value = self.read_i32()? as i128;
-                self.regs.write(dst, Value::Int(value));
+                let value = self.read_i32()? as i64;
+                self.regs.write(dst, RuntimeValue::Int(value));
             }
 
             // 加载局部变量
@@ -507,7 +508,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a + b))?;
-                self.regs.write(dst, Value::Int(result));
+                self.regs.write(dst, RuntimeValue::Int(result));
             }
 
             I64Sub => {
@@ -515,7 +516,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a - b))?;
-                self.regs.write(dst, Value::Int(result));
+                self.regs.write(dst, RuntimeValue::Int(result));
             }
 
             I64Mul => {
@@ -523,7 +524,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a * b))?;
-                self.regs.write(dst, Value::Int(result));
+                self.regs.write(dst, RuntimeValue::Int(result));
             }
 
             I64Div => {
@@ -537,7 +538,7 @@ impl VM {
                         Ok(a / b)
                     }
                 })?;
-                self.regs.write(dst, Value::Int(result));
+                self.regs.write(dst, RuntimeValue::Int(result));
             }
 
             I64Rem => {
@@ -551,14 +552,14 @@ impl VM {
                         Ok(a % b)
                     }
                 })?;
-                self.regs.write(dst, Value::Int(result));
+                self.regs.write(dst, RuntimeValue::Int(result));
             }
 
             I64Neg => {
                 let dst = self.read_u8()?;
                 let src = self.read_u8()?;
-                if let Value::Int(n) = self.regs.read(src) {
-                    self.regs.write(dst, Value::Int(-*n));
+                if let RuntimeValue::Int(n) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Int(-*n));
                 }
             }
 
@@ -568,7 +569,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a == b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             I64Ne => {
@@ -576,7 +577,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a != b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             I64Lt => {
@@ -584,7 +585,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a < b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             I64Le => {
@@ -592,7 +593,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a <= b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             I64Gt => {
@@ -600,7 +601,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a > b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             I64Ge => {
@@ -608,7 +609,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.compare_i64(lhs, rhs, |a, b| a >= b);
-                self.regs.write(dst, Value::Int(result as i128));
+                self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
             // 跳转指令
@@ -620,7 +621,7 @@ impl VM {
             JmpIf => {
                 let cond = self.read_u8()?;
                 let offset = self.read_i16()?;
-                if let Value::Int(n) = self.regs.read(cond) {
+                if let RuntimeValue::Int(n) = self.regs.read(cond) {
                     if *n != 0 {
                         self.ip = (self.ip as i32 + offset as i32) as usize;
                     }
@@ -630,7 +631,7 @@ impl VM {
             JmpIfNot => {
                 let cond = self.read_u8()?;
                 let offset = self.read_i16()?;
-                if let Value::Int(n) = self.regs.read(cond) {
+                if let RuntimeValue::Int(n) = self.regs.read(cond) {
                     if *n == 0 {
                         self.ip = (self.ip as i32 + offset as i32) as usize;
                     }
@@ -689,7 +690,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_f64(lhs, rhs, |a, b| Ok(a + b))?;
-                self.regs.write(dst, Value::Float(result));
+                self.regs.write(dst, RuntimeValue::Float(result));
             }
 
             F64Sub => {
@@ -697,7 +698,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_f64(lhs, rhs, |a, b| Ok(a - b))?;
-                self.regs.write(dst, Value::Float(result));
+                self.regs.write(dst, RuntimeValue::Float(result));
             }
 
             F64Mul => {
@@ -705,7 +706,7 @@ impl VM {
                 let lhs = self.read_u8()?;
                 let rhs = self.read_u8()?;
                 let result = self.binary_op_f64(lhs, rhs, |a, b| Ok(a * b))?;
-                self.regs.write(dst, Value::Float(result));
+                self.regs.write(dst, RuntimeValue::Float(result));
             }
 
             F64Div => {
@@ -719,7 +720,7 @@ impl VM {
                         Ok(a / b)
                     }
                 })?;
-                self.regs.write(dst, Value::Float(result));
+                self.regs.write(dst, RuntimeValue::Float(result));
             }
 
             // 其他指令
@@ -820,14 +821,14 @@ impl VM {
         lhs_reg: u8,
         rhs_reg: u8,
         op: F,
-    ) -> Result<i128, VMError>
+    ) -> Result<i64, VMError>
     where
-        F: FnOnce(i128, i128) -> Result<i128, VMError>,
+        F: FnOnce(i64, i64) -> Result<i64, VMError>,
     {
         let lhs_val = self.regs.read(lhs_reg);
         let rhs_val = self.regs.read(rhs_reg);
         match (lhs_val, rhs_val) {
-            (Value::Int(a), Value::Int(b)) => op(*a, *b),
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a, *b),
             _ => Err(VMError::TypeError(format!(
                 "integer (lhs: {:?}, rhs: {:?})",
                 lhs_val, rhs_val
@@ -846,8 +847,8 @@ impl VM {
         F: FnOnce(f64, f64) -> Result<f64, VMError>,
     {
         match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
-            (Value::Float(a), Value::Float(b)) => op(*a, *b),
-            (Value::Int(a), Value::Int(b)) => op(*a as f64, *b as f64),
+            (RuntimeValue::Float(a), RuntimeValue::Float(b)) => op(*a, *b),
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a as f64, *b as f64),
             _ => Err(VMError::TypeError("float".to_string())),
         }
     }
@@ -860,10 +861,10 @@ impl VM {
         op: F,
     ) -> bool
     where
-        F: FnOnce(i128, i128) -> bool,
+        F: FnOnce(i64, i64) -> bool,
     {
         match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
-            (Value::Int(a), Value::Int(b)) => op(*a, *b),
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a, *b),
             _ => false,
         }
     }
@@ -880,15 +881,15 @@ impl VM {
     fn get_return_value(
         &self,
         _opcode: &TypedOpcode,
-    ) -> VMResult<Value> {
+    ) -> VMResult<RuntimeValue> {
         // ReturnValue 指令的返回值已经在执行时处理
-        Ok(Value::Void)
+        Ok(RuntimeValue::Unit)
     }
 
     /// 调用 print 内部函数
     fn call_print(
         &self,
-        value: &Value,
+        value: &RuntimeValue,
     ) -> VMResult<()> {
         self.print_value(value, false);
         Ok(())
@@ -897,7 +898,7 @@ impl VM {
     /// 调用 println 内部函数
     fn call_println(
         &self,
-        value: &Value,
+        value: &RuntimeValue,
     ) -> VMResult<()> {
         self.print_value(value, true);
         Ok(())
@@ -906,46 +907,46 @@ impl VM {
     /// 打印值的通用实现
     fn print_value(
         &self,
-        value: &Value,
+        value: &RuntimeValue,
         newline: bool,
     ) {
         match value {
-            Value::String(s) => {
+            RuntimeValue::String(s) => {
                 if newline {
                     println!("{}", s);
                 } else {
                     print!("{}", s);
                 }
             }
-            Value::Int(n) => {
+            RuntimeValue::Int(n) => {
                 if newline {
                     println!("{}", n);
                 } else {
                     print!("{}", n);
                 }
             }
-            Value::Float(f) => {
+            RuntimeValue::Float(f) => {
                 if newline {
                     println!("{}", f);
                 } else {
                     print!("{}", f);
                 }
             }
-            Value::Bool(b) => {
+            RuntimeValue::Bool(b) => {
                 if newline {
                     println!("{}", b);
                 } else {
                     print!("{}", b);
                 }
             }
-            Value::Char(c) => {
+            RuntimeValue::Char(c) => {
                 if newline {
                     println!("{}", c);
                 } else {
                     print!("{}", c);
                 }
             }
-            Value::Void => {
+            RuntimeValue::Unit => {
                 if newline {
                     println!("()");
                 } else {
@@ -962,53 +963,20 @@ impl VM {
         }
     }
 
-    /// 将 ConstValue 转换为 Value
+    /// 将 ConstValue 转换为 RuntimeValue
     fn const_to_value(
         &self,
         const_val: &ConstValue,
-    ) -> Value {
+    ) -> RuntimeValue {
         match const_val {
-            ConstValue::Void => Value::Void,
-            ConstValue::Bool(b) => Value::Bool(*b),
-            ConstValue::Int(n) => Value::Int(*n),
-            ConstValue::Float(f) => Value::Float(*f),
-            ConstValue::Char(c) => Value::Char(*c),
-            ConstValue::String(s) => Value::String(s.clone()),
-            ConstValue::Bytes(b) => Value::Bytes(b.clone()),
+            ConstValue::Void => RuntimeValue::Unit,
+            ConstValue::Bool(b) => RuntimeValue::Bool(*b),
+            ConstValue::Int(n) => RuntimeValue::Int(*n as i64),
+            ConstValue::Float(f) => RuntimeValue::Float(*f),
+            ConstValue::Char(c) => RuntimeValue::Char(*c as u32),
+            ConstValue::String(s) => RuntimeValue::String(s.clone().into()),
+            ConstValue::Bytes(b) => RuntimeValue::Bytes(b.clone().into()),
         }
-    }
-}
-
-/// 运行时值
-#[derive(Debug, Clone)]
-pub enum Value {
-    /// 无值 / 单元类型
-    Void,
-    /// 布尔值
-    Bool(bool),
-    /// 整数（128位）
-    Int(i128),
-    /// 浮点数（64位）
-    Float(f64),
-    /// 字符
-    Char(char),
-    /// 字符串
-    String(String),
-    /// 字节数组
-    Bytes(Vec<u8>),
-    /// 列表
-    List(Vec<Value>),
-    /// 字典
-    Dict(HashMap<Value, Value>),
-}
-
-impl Value {
-    /// 检查是否需要 drop
-    pub fn needs_drop(&self) -> bool {
-        matches!(
-            self,
-            Value::String(_) | Value::Bytes(_) | Value::List(_) | Value::Dict(_)
-        )
     }
 }
 

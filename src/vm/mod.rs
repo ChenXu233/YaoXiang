@@ -3,8 +3,11 @@
 //! This module contains the bytecode interpreter.
 
 pub use errors::{VMError, VMResult};
-pub use executor::{RegisterFile, VMConfig, VMStatus, Value, VM};
+pub use executor::{RegisterFile, VMConfig, VMStatus, VM};
 pub use opcode::TypedOpcode;
+
+// Re-export RuntimeValue for VM use
+pub use crate::runtime::value::RuntimeValue;
 
 pub mod extfunc;
 pub mod inline_cache;
