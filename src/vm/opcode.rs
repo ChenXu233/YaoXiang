@@ -302,52 +302,70 @@ pub enum TypedOpcode {
     /// F64 大于等于比较
     F64Ge = 0x6B,
 
+    /// F32 相等比较
+    F32Eq = 0x6C,
+
+    /// F32 不等比较
+    F32Ne = 0x6D,
+
+    /// F32 小于比较
+    F32Lt = 0x6E,
+
+    /// F32 小于等于比较
+    F32Le = 0x6F,
+
+    /// F32 大于比较
+    F32Gt = 0x70,
+
+    /// F32 大于等于比较
+    F32Ge = 0x71,
+
     // =====================
-    // 内存与对象操作指令 (0x70-0x7F)
+    // 内存与对象操作指令 (0x72-0x7F)
     // =====================
     /// 栈上分配（值类型优化）
     /// 操作数：size (u16，分配大小)
-    StackAlloc = 0x70,
+    StackAlloc = 0x73,
 
     /// 堆分配（引用类型）
     /// 操作数：dst, type_id (u16，类型标识)
-    HeapAlloc = 0x71,
+    HeapAlloc = 0x72,
 
     /// 释放所有权（Drop）
     /// 操作数：reg
-    Drop = 0x72,
+    Drop = 0x74,
 
     /// 读取字段（静态偏移，极快）
     /// 操作数：dst, obj_reg, field_offset (u16)
-    GetField = 0x73,
+    GetField = 0x75,
 
     /// 写入字段
     /// 操作数：obj_reg, field_offset (u16), src_reg
-    SetField = 0x75,
+    SetField = 0x76,
 
     /// 加载元素（数组/列表）
     /// 操作数：dst, array_reg, index_reg
-    LoadElement = 0x76,
+    LoadElement = 0x77,
 
     /// 存储元素
     /// 操作数：array_reg, index_reg, src_reg
-    StoreElement = 0x77,
+    StoreElement = 0x78,
 
     /// 预分配容量的列表创建
     /// 操作数：dst, capacity (u16)
-    NewListWithCap = 0x78,
+    NewListWithCap = 0x7A,
 
     /// 创建 Arc（原子引用计数）
     /// 操作数：dst, src
-    ArcNew = 0x79,
+    ArcNew = 0x7B,
 
     /// 克隆 Arc（引用计数 +1）
     /// 操作数：dst, src
-    ArcClone = 0x7A,
+    ArcClone = 0x7C,
 
     /// 释放 Arc（引用计数 -1，归零时释放内存）
     /// 操作数：src
-    ArcDrop = 0x7B,
+    ArcDrop = 0x7D,
 
     // =====================
     // 函数调用指令 (0x80-0x8F)
@@ -559,6 +577,12 @@ impl TypedOpcode {
             TypedOpcode::F64Le => "F64Le",
             TypedOpcode::F64Gt => "F64Gt",
             TypedOpcode::F64Ge => "F64Ge",
+            TypedOpcode::F32Eq => "F32Eq",
+            TypedOpcode::F32Ne => "F32Ne",
+            TypedOpcode::F32Lt => "F32Lt",
+            TypedOpcode::F32Le => "F32Le",
+            TypedOpcode::F32Gt => "F32Gt",
+            TypedOpcode::F32Ge => "F32Ge",
             TypedOpcode::StackAlloc => "StackAlloc",
             TypedOpcode::HeapAlloc => "HeapAlloc",
             TypedOpcode::Drop => "Drop",
@@ -885,16 +909,25 @@ impl TryFrom<u8> for TypedOpcode {
             0x69 => Ok(TypedOpcode::F64Le),
             0x6A => Ok(TypedOpcode::F64Gt),
             0x6B => Ok(TypedOpcode::F64Ge),
-            0x70 => Ok(TypedOpcode::StackAlloc),
-            0x71 => Ok(TypedOpcode::HeapAlloc),
-            0x72 => Ok(TypedOpcode::Drop),
-            0x73 => Ok(TypedOpcode::GetField),
-            0x75 => Ok(TypedOpcode::LoadElement),
-            0x76 => Ok(TypedOpcode::StoreElement),
-            0x77 => Ok(TypedOpcode::NewListWithCap),
-            0x79 => Ok(TypedOpcode::ArcNew),
-            0x7A => Ok(TypedOpcode::ArcClone),
-            0x7B => Ok(TypedOpcode::ArcDrop),
+            // F32 比较指令 (0x6C-0x71)
+            0x6C => Ok(TypedOpcode::F32Eq),
+            0x6D => Ok(TypedOpcode::F32Ne),
+            0x6E => Ok(TypedOpcode::F32Lt),
+            0x6F => Ok(TypedOpcode::F32Le),
+            0x70 => Ok(TypedOpcode::F32Gt),
+            0x71 => Ok(TypedOpcode::F32Ge),
+            // 内存与对象操作指令 (0x72-0x7D)
+            0x72 => Ok(TypedOpcode::HeapAlloc),
+            0x73 => Ok(TypedOpcode::StackAlloc),
+            0x74 => Ok(TypedOpcode::Drop),
+            0x75 => Ok(TypedOpcode::GetField),
+            0x76 => Ok(TypedOpcode::SetField),
+            0x77 => Ok(TypedOpcode::LoadElement),
+            0x78 => Ok(TypedOpcode::StoreElement),
+            0x79 => Ok(TypedOpcode::NewListWithCap),
+            0x7A => Ok(TypedOpcode::ArcNew),
+            0x7B => Ok(TypedOpcode::ArcClone),
+            0x7C => Ok(TypedOpcode::ArcDrop),
             0x80 => Ok(TypedOpcode::CallStatic),
             0x81 => Ok(TypedOpcode::CallVirt),
             0x82 => Ok(TypedOpcode::CallDyn),

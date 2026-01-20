@@ -281,6 +281,28 @@ mod operand_count_tests {
     }
 
     #[test]
+    fn test_operand_count_i64_comparison() {
+        // I64 比较指令需要 3 个操作数: dst, lhs, rhs
+        assert_eq!(TypedOpcode::I64Eq.operand_count(), 3);
+        assert_eq!(TypedOpcode::I64Ne.operand_count(), 3);
+        assert_eq!(TypedOpcode::I64Lt.operand_count(), 3);
+        assert_eq!(TypedOpcode::I64Le.operand_count(), 3);
+        assert_eq!(TypedOpcode::I64Gt.operand_count(), 3);
+        assert_eq!(TypedOpcode::I64Ge.operand_count(), 3);
+    }
+
+    #[test]
+    fn test_operand_count_f64_comparison() {
+        // F64 比较指令需要 3 个操作数: dst, lhs, rhs
+        assert_eq!(TypedOpcode::F64Eq.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Ne.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Lt.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Le.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Gt.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Ge.operand_count(), 3);
+    }
+
+    #[test]
     fn test_operand_count_four() {
         assert_eq!(TypedOpcode::CallStatic.operand_count(), 4);
         assert_eq!(TypedOpcode::LoadElement.operand_count(), 4);
@@ -310,8 +332,9 @@ mod try_from_tests {
     fn test_try_from_invalid() {
         assert!(TypedOpcode::try_from(0x0F).is_err());
         assert!(TypedOpcode::try_from(0x1F).is_err());
-        assert!(TypedOpcode::try_from(0x6F).is_err());
-        // 0x79-0x7B 是 Arc 操作码，已被使用
+        // 0x7E 未被使用（已使用的编码: 0x72-0x7C）
+        assert!(TypedOpcode::try_from(0x7E).is_err());
+        // 0x89-0x8F 是函数调用操作码，已被使用
         assert!(TypedOpcode::try_from(0x89).is_err());
         assert!(TypedOpcode::try_from(0x96).is_err());
     }
