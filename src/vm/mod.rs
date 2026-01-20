@@ -9,14 +9,12 @@ pub use opcode::TypedOpcode;
 // Re-export RuntimeValue for VM use
 pub use crate::runtime::value::RuntimeValue;
 
-pub mod extfunc;
 pub mod inline_cache;
 pub mod opcode;
 
 mod errors;
 mod executor;
 mod frames;
-mod instructions;
 
 #[cfg(test)]
 mod tests;

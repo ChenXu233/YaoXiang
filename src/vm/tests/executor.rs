@@ -2,7 +2,6 @@
 //!
 //! 测试虚拟机执行器的配置、状态和值类型
 
-use crate::middle::ModuleIR;
 use crate::runtime::value::RuntimeValue;
 use crate::vm::executor::{VMConfig, VMStatus, VM};
 use crate::vm::opcode::TypedOpcode;

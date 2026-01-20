@@ -5,5 +5,4 @@
 pub mod errors;
 pub mod executor;
 pub mod frames;
-pub mod instructions;
 pub mod opcode;

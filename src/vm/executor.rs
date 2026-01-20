@@ -7,7 +7,7 @@ use crate::middle::ir::{ConstValue, Operand};
 use crate::runtime::value::RuntimeValue;
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
-use crate::vm::extfunc;
+use crate::runtime::extfunc;
 use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
 use std::collections::HashMap;
