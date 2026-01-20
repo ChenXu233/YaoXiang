@@ -48,7 +48,6 @@ pub enum ValueType {
     /// 数组（定长）
     Array {
         element: Box<ValueType>,
-        length: usize,
     },
     /// 动态数组
     List,
@@ -156,19 +155,14 @@ pub enum RuntimeValue {
     /// 函数闭包（捕获环境）
     Function(FunctionValue),
 
-    /// 不可变引用（单线程共享，Rc<RefCell<T>>）
-    ///
-    /// # 注意
-    /// 这是 `ref T` 的单线程版本，编译期保证不会跨线程使用
-    Ref(Rc<RefCell<RuntimeValue>>),
-
-    /// 线程安全引用计数（多线程共享，Arc<T>）
+    /// 线程安全引用计数（ref T 关键字的运行时实现）
     ///
     /// # 设计说明
     /// `ref T` 关键字在运行时使用 Arc 实现：
     /// - 编译期检查：跨 spawn 传递 ref 会检测循环引用
     /// - 运行时：使用 Arc 自动管理引用计数
-    Arc(Arc<RuntimeValue>),
+    /// - RFC-009: `ref p` 等价于 `Arc::new(p)`
+    Arc(RuntimeValue),
 
     /// 异步值（用于并作模型）
     ///
@@ -289,7 +283,9 @@ impl RuntimeValue {
             RuntimeValue::String(_) => ValueType::String,
             RuntimeValue::Bytes(_) => ValueType::Bytes,
             RuntimeValue::Tuple(fields) => ValueType::Tuple(fields.iter().map(|v| v.value_type()).collect()),
-            RuntimeValue::Array { .. } => ValueType::Array { element: Box::new(self.element_type()), length: 0 },
+            RuntimeValue::Array(fields) => ValueType::Array {
+                element: Box::new(fields.first().map(|v| v.value_type()).unwrap_or(ValueType::Unit)),
+            },
             RuntimeValue::List(_) => ValueType::List,
             RuntimeValue::Dict(_, _) => ValueType::Dict,
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
@@ -339,7 +335,7 @@ impl RuntimeValue {
     /// 获取 Arc 内部值
     pub fn as_arc(&self) -> Option<&RuntimeValue> {
         match self {
-            RuntimeValue::Arc(inner) => Some(inner),
+            Arc(inner) => Some(inner),
             _ => None,
         }
     }
@@ -414,8 +410,7 @@ impl RuntimeValue {
                 payload: Box::new((**payload).clone()),
             },
             RuntimeValue::Function(f) => RuntimeValue::Function(f.clone()),
-            // 共享引用需要特殊处理
-            RuntimeValue::Ref(cell) => RuntimeValue::Ref(cell.clone()),
+            // Arc 是 RuntimeValue 的包装，克隆 Arc 本身
             RuntimeValue::Arc(arc) => RuntimeValue::Arc(arc.clone()),
             RuntimeValue::Async(a) => RuntimeValue::Async(a.clone()),
             RuntimeValue::Ptr { kind, address, type_id } => RuntimeValue::Ptr {
@@ -426,15 +421,22 @@ impl RuntimeValue {
         }
     }
 
-    /// 创建 Arc（ref 关键字的运行时实现）
-    pub fn into_arc(self) -> RuntimeValue {
-        RuntimeValue::Arc(Arc::new(self))
+    /// 转换为 Arc（ref 关键字的运行时实现）
+    pub fn into_arc(self) -> Self {
+        Arc(self)
     }
 
-    /// 从 Arc 获取内部值
-    pub fn from_arc(arc: Arc<RuntimeValue>) -> RuntimeValue {
-        // Arc 可以直接作为 RuntimeValue
-        RuntimeValue::Arc(arc)
+    /// 从 RuntimeValue 获取 Arc 内部值
+    pub fn as_arc(&self) -> Option<&RuntimeValue> {
+        match self {
+            Arc(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// 检查是否是 Arc（ref 关键字）
+    pub fn is_arc(&self) -> bool {
+        matches!(self, Arc(_))
     }
 }
 ```
@@ -444,27 +446,31 @@ impl RuntimeValue {
 | RFC-009 设计 | RuntimeValue 表示 | 说明 |
 |-------------|-------------------|------|
 | Move 语义 | `RuntimeValue` 赋值 | 零拷贝，指针移动 |
-| `ref` 关键字 | `RuntimeValue::Arc` | Arc 实现引用计数 |
+| `ref` 关键字 | `RuntimeValue::Arc` | `Arc(RuntimeValue)`，RFC-009 规定 `ref p` = `Arc::new(p)` |
 | `ref T` 类型 | `ValueType::Arc(T)` | 类型系统表示 |
 | `clone()` | `RuntimeValue::clone()` | 深拷贝方法 |
 | `*T` 裸指针 | `RuntimeValue::Ptr` | unsafe 块中使用 |
-| Send/Sync | 自动满足 | 基本类型都满足 |
+| Send/Sync | 自动满足 | Arc 线程安全 |
 | 跨任务循环检测 | 编译期完成 | phase-05-ownership |
 
 ## 模块结构
 
 ```
-src/core/
-├── value.rs              # RuntimeValue 定义与核心实现
-├── value_type.rs         # ValueType 枚举
-├── async_value.rs        # AsyncValue 实现
-├── tests/
-│   ├── mod.rs
-│   ├── primitives.rs     # 基础类型测试
-│   ├── struct_enum.rs    # 结构体和枚举测试
-│   ├── ref_arc.rs        # ref/Arc 测试
-│   └── clone.rs          # clone() 测试
+src/runtime/value/
+├── mod.rs                # 模块入口
+├── value.rs              # RuntimeValue 与 ValueType 定义
+└── tests/
+    ├── mod.rs
+    ├── primitives.rs     # 基础类型测试
+    ├── struct_enum.rs    # 结构体和枚举测试
+    ├── ref_arc.rs        # ref/Arc 测试
+    └── clone.rs          # clone() 测试
 ```
+
+> **设计说明**：
+> - `RuntimeValue::Arc` 使用 `Arc<RuntimeValue>` 实现（RFC-009 规定 `ref p` = `Arc::new(p)`）
+> - `RuntimeValue::Ref` 已删除，单线程场景也使用 `Arc`
+> - 递归类型通过 `Box` 打破循环
 
 ## 验收测试
 
@@ -511,14 +517,17 @@ fn test_enum_value() {
 
 #[test]
 fn test_ref_arc() {
-    // ref 关键字 → Arc
+    // ref 关键字 → Arc(RuntimeValue)
     let inner = RuntimeValue::Int(42);
-    let arc = RuntimeValue::Arc(Arc::new(inner));
+    let arc = RuntimeValue::Arc(inner);
 
     // Arc 可以克隆（引用计数增加）
     let arc2 = arc.clone();
     assert!(matches!(arc, RuntimeValue::Arc(_)));
     assert!(matches!(arc2, RuntimeValue::Arc(_)));
+
+    // 从 Arc 获取内部值
+    assert_eq!(arc.as_arc().unwrap().to_int(), Some(42));
 }
 
 #[test]
@@ -546,6 +555,8 @@ fn test_async_value() {
 }
 ```
 
+> **设计说明**：验收测试中的 `point_type_id`、`result_type_id`、`TaskId` 需要在实际实现时定义。
+
 ## 依赖关系
 
 ```
@@ -554,3 +565,12 @@ phase-05-ownership ──► task-08-01-value-type
        └── 所有权检查 ───────► │
                              └── Runtime 表示 ──► phase-09-dag
 ```
+
+## 修改记录
+
+| 日期 | 修改内容 | 原因 |
+|------|----------|------|
+| 2026-01-20 | 删除 `RuntimeValue::Ref`，统一使用 `Arc` | RFC-009 规定 `ref` 关键字等价于 `Arc` |
+| 2026-01-20 | `Arc(Arc<RuntimeValue>)` 改为 `Arc(RuntimeValue)` | 消除双重 Arc 冗余 |
+| 2026-01-20 | 移除 `ValueType::Array.length` 字段 | 类型只描述结构，不描述实例大小 |
+| 2026-01-20 | 移除 `RuntimeValue::Array` 的命名结构 | 与其他集合类型保持一致使用 `Vec` |

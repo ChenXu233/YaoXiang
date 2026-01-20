@@ -18,3 +18,6 @@ main= () => {
 
   print("All tests passed!\n")
 }
+议用 i64，如果需要大整数可以后续加 BigInt 类型。
+
+然后制定计划。
