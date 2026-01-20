@@ -123,23 +123,27 @@ YaoXiang/
 │   │   │   ├── node_id.rs        # 节点 ID 管理
 │   │   │   ├── graph.rs          # 图操作
 │   │   │   └── tests/
+│   │   ├── extfunc/              # 外部函数（print, read, write）
 │   │   ├── scheduler/            # 任务调度器
 │   │   │   ├── mod.rs            # 调度器入口
 │   │   │   ├── task.rs           # 任务定义
 │   │   │   ├── queue.rs          # 任务队列
 │   │   │   ├── work_stealer.rs   # 工作窃取算法
 │   │   │   └── tests/
-│   │   └── memory/               # 内存管理
-│   │       ├── mod.rs            # 内存管理入口
+│   │   ├── memory/               # 内存管理
+│   │   │   ├── mod.rs            # 内存管理入口
+│   │   │   └── tests/
+│   │   └── value/                # 值类型（RuntimeValue）
+│   │       ├── mod.rs            # 值模块入口
+│   │       ├── runtime_value.rs  # 值类型定义
 │   │       └── tests/
 │   │
 │   ├── vm/                       # 虚拟机：字节码执行
 │   │   ├── mod.rs                # 虚拟机入口
 │   │   ├── executor.rs           # 执行器
 │   │   ├── frames.rs             # 调用帧
-│   │   ├── instructions.rs       # 指令集
-│   │   ├── opcode.rs             # 操作码定义
-│   │   ├── inline_cache.rs       # 内联缓存（类型优化）
+│   │   ├── opcode.rs             # 操作码定义（TypedOpcode）
+│   │   ├── inline_cache.rs       # 内联缓存（JIT 预留）
 │   │   ├── errors.rs             # VM 错误
 │   │   └── tests/
 │   │
@@ -184,8 +188,9 @@ YaoXiang/
 | `middle/optimizer/` | `middle/optimizer.rs` | 优化器为单文件，非目录 |
 | `middle/ir/` | `middle/ir.rs` | IR 为单文件，非目录 |
 | 无 `middle/lifetime/` | `middle/lifetime/` | 新增生命周期分析模块 |
-| 无 `vm/inline_cache.rs` | `vm/inline_cache.rs` | 新增内联缓存模块 |
-| `vm/instructions.rs` | `vm/instructions.rs` | 存在，指令集完整 |
+| `vm/instructions.rs` | 已删除 | 已废弃，被 TypedOpcode 替代 |
+| 无 `runtime/extfunc.rs` | `runtime/extfunc.rs` | 新增外部函数模块 |
+| 无 `runtime/value/` | `runtime/value/` | 新增值类型模块 |
 
 ---
 
@@ -642,24 +647,8 @@ pub struct CallFrame {
     pub closure: Option<Closure>,
 }
 
-// 值类型
-#[derive(Debug, Clone)]
-pub enum Value {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Char(char),
-    String(String),
-    Unit,
-    List(Rc<RefCell<Vec<Value>>>),
-    Dict(Rc<RefCell<HashMap<String, Value>>>),
-    Tuple(Vec<Value>),
-    Function(FuncId),
-    Closure(Closure),
-    Task(TaskId),
-    Ref(RefCell<Value>),
-    Object(HeapPtr),
-}
+// 值类型（使用 Runtime 提供的 RuntimeValue）
+// 详见 src/runtime/value/runtime_value.rs
 ```
 
 #### 3.4.2 调用帧 (frames.rs)
@@ -675,11 +664,8 @@ pub struct CallFrame {
 }
 ```
 
-#### 3.4.3 指令集 (instructions.rs)
-**职责**：定义所有虚拟机指令
-
-#### 3.4.4 操作码 (opcode.rs)
-**职责**：操作码常量定义
+#### 3.4.3 操作码 (opcode.rs)
+**职责**：定义 TypedOpcode 强类型操作码
 
 #### 3.4.5 内联缓存 (inline_cache.rs)
 **职责**：类型检查结果缓存，加速动态分发
@@ -870,7 +856,9 @@ runtime/
 
 ```
 vm/executor
-  ↓ (依赖 vm/frames, vm/instructions)
+  ↓ (依赖 vm/frames, vm/opcode)
+  ↓ (依赖 runtime/value::RuntimeValue)
+  ↓ (依赖 runtime/extfunc)
 
 runtime/scheduler
   ↓ (依赖 runtime/task, runtime/dag)
@@ -878,8 +866,11 @@ runtime/scheduler
 runtime/dag
   ↓ (管理并作依赖)
 
-runtime/memory
-  ↓ (被所有模块依赖)
+runtime/value
+  ↓ (RuntimeValue 类型定义，被所有模块依赖)
+
+runtime/extfunc
+  ↓ (外部函数，被 vm/executor 依赖)
 ```
 
 ### 6.3 Cargo.toml 依赖关系
@@ -918,8 +909,9 @@ src/middle/ir.rs                 # 扩展 IR
 src/middle/codegen/              # 生成字节码
 
 # 4. 运行时实现
-src/vm/instructions.rs           # 添加指令
-src/vm/executor.rs               # 执行逻辑
+src/runtime/extfunc.rs           # 添加外部函数
+src/vm/executor.rs               # 添加执行逻辑
+src/vm/opcode.rs                 # 添加操作码
 
 # 5. 测试
 tests/unit/codegen.rs            # 单元测试
