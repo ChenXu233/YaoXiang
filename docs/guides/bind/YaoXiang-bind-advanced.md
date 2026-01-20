@@ -1,9 +1,10 @@
 # YaoXiang 高级绑定特性与编译器实现
 
-> 版本：v1.0.0
+> 版本：v1.1.0
 > 状态：草案
 > 作者：晨煦
-> 日期：2025-01-04
+> 日期：2025-01-20
+> 更新：2025-01-20 - 位置索引从 0 开始（RFC-004）；统一类型语法（RFC-010）
 
 ---
 
@@ -42,10 +43,10 @@ process_coordinates((Float, Float)) -> String = (coord) => {
 }
 
 # 绑定到元组类型
-type Coord = Coord(x: Float, y: Float)
+type Coord = { x: Float, y: Float }
 
 # 自动解构绑定：Coord -> (Float, Float)
-Coord.describe = process_coordinates[1]
+Coord.describe = process_coordinates[0]
 
 # === 使用示例 ===
 
@@ -68,11 +69,11 @@ complex_match((Int, (String, Bool))) -> String = (data) => {
 }
 
 # 类型定义
-type Record = Record(id: Int, info: Info)
-type Info = Info(name: String, flag: Bool)
+type Record = { id: Int, info: Info }
+type Info = { name: String, flag: Bool }
 
 # 绑定：Record -> (Int, (String, Bool))
-Record.describe = complex_match[1]
+Record.describe = complex_match[0]
 
 # 使用
 r = Record(42, Info("test", true))
@@ -97,7 +98,7 @@ min_max(List[Int]) -> (Int, Int) = (list) => {
 }
 
 # 绑定到列表类型
-List[Int].range = min_max[1]
+List[Int].range = min_max[0]
 
 # === 使用示例 ===
 
@@ -122,7 +123,7 @@ stats(List[Float]) -> (mean: Float, std: Float, count: Int) = (list) => {
 }
 
 # 绑定
-List[Float].statistics = stats[1]
+List[Float].statistics = stats[0]
 
 # 使用
 data = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -136,6 +137,8 @@ data = [1.0, 2.0, 3.0, 4.0, 5.0]
 
 ### 3.1 基础多位置绑定
 
+**核心规则**：位置索引从 **0** 开始。
+
 ```yaoxiang
 # === 计算函数示例 ===
 
@@ -148,13 +151,13 @@ calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s, p
 
 # === Point 模块 ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
-# 绑定策略
-Point.calc1 = calculate[1, 2]    # 绑定 scale 和 point1
-Point.calc2 = calculate[1, 3]    # 绑定 scale 和 point2
-Point.calc3 = calculate[2, 3]    # 绑定 point1 和 point2
-Point.calc4 = calculate[1, 2, 4] # 绑定 scale, point1, x
+# 绑定策略（位置从 0 开始）
+Point.calc1 = calculate[0, 1]    # 绑定 scale 和 point1
+Point.calc2 = calculate[0, 2]    # 绑定 scale 和 point2
+Point.calc3 = calculate[1, 2]    # 绑定 point1 和 point2
+Point.calc4 = calculate[0, 1, 3] # 绑定 scale, point1, x
 
 # === 使用示例 ===
 
@@ -163,22 +166,22 @@ use Point
 p1 = Point(3.0, 4.0)
 p2 = Point(1.0, 2.0)
 
-# 1. 绑定[1,2] - 剩余3,4,5
+# 1. 绑定[0,1] - 剩余2,3,4
 f1 = p1.calc1(2.0)  # 绑定 scale=2.0, point1=p1
 # f1 需要: point2, x, y
 result1 = f1(p2, 10.0, 20.0)  # → calculate(2.0, p1, p2, 10.0, 20.0)
 
-# 2. 绑定[1,3] - 剩余2,4,5
+# 2. 绑定[0,2] - 剩余1,3,4
 f2 = p2.calc2(2.0)  # 绑定 scale=2.0, point2=p2
 # f2 需要: point1, x, y
 result2 = f2(p1, 10.0, 20.0)  # → calculate(2.0, p1, p2, 10.0, 20.0)
 
-# 3. 绑定[2,3] - 剩余1,4,5
+# 3. 绑定[1,2] - 剩余0,3,4
 f3 = p1.calc3(p2)  # 绑定 point1=p1, point2=p2
 # f3 需要: scale, x, y
 result3 = f3(2.0, 10.0, 20.0)  # → calculate(2.0, p1, p2, 10.0, 20.0)
 
-# 4. 绑定[1,2,4] - 剩余3,5
+# 4. 绑定[0,1,3] - 剩余2,4
 f4 = p1.calc4(2.0, 10.0)  # 绑定 scale=2.0, point1=p1, x=10.0
 # f4 需要: point2, y
 result4 = f4(p2, 20.0)  # → calculate(2.0, p1, p2, 10.0, 20.0)
@@ -195,17 +198,17 @@ calculate(scale: Float, a: Point, b: Point, x: Float, y: Float)
 
 # === 绑定示例 ===
 
-# 绑定位置 [1, 3]
-Point.method = calculate[1, 3]
-# 已绑定: 位置1 (a), 位置3 (x)
-# 剩余位置: 0 (scale), 2 (b), 4 (y)
+# 绑定位置 [0, 2]
+Point.method = calculate[0, 2]
+# 已绑定: 位置0 (scale), 位置2 (b)
+# 剩余位置: 1 (a), 3 (x), 4 (y)
 
 # 调用时
-method(scale_val, b_val, y_val)
-# 填入: scale_val -> 位置0, b_val -> 位置2, y_val -> 位置4
+method(a_val, x_val, y_val)
+# 填入: a_val -> 位置1, x_val -> 位置3, y_val -> 位置4
 
-# 最终: calculate(scale_val, p1, b_val, x_bound, y_val)
-# 其中 p1 是绑定的调用者，x_bound 是绑定的值
+# 最终: calculate(scale_bound, a_val, b_bound, x_val, y_val)
+# 其中 scale_bound 和 b_bound 是绑定的值
 ```
 
 ### 3.3 参数顺序可视化
@@ -215,19 +218,19 @@ method(scale_val, b_val, y_val)
 
 func: (p0, p1, p2, p3, p4) -> Result
 
-# 绑定 [1, 3]
-Type.method = func[1, 3]
+# 绑定 [0, 2]
+Type.method = func[0, 2]
 
-# 调用: obj.method(p0_val, p2_val, p4_val)
+# 调用: obj.method(p1_val, p3_val, p4_val)
 # 映射过程:
 #
 # 原始参数: [p0, p1, p2, p3, p4]
-# 绑定:     [  -, obj,  -,  -,  -]  (位置1, 3是obj)
-# 用户输入: [p0,  -, p2,  -, p4]    (剩余位置按顺序)
-# 结果:     [p0, obj, p2, obj, p4]  (合并)
+# 绑定:     [obj,  -, obj,  -,  -]  (位置0, 2是obj)
+# 用户输入: [ -, p1,  -, p3, p4]    (剩余位置按顺序)
+# 结果:     [obj, p1, obj, p3, p4]  (合并)
 #
-# 注意：位置3也被obj绑定，显示为obj
-# 但如果位置3需要不同的绑定值，需要使用占位符
+# 注意：位置2也被obj绑定，显示为obj
+# 但如果位置2需要不同的绑定值，需要使用占位符
 ```
 
 ---
@@ -244,16 +247,16 @@ func(Int, String, Bool, Float) -> String = (a, b, c, d) => {
 
 # === 绑定策略 ===
 
-# 只绑定第1和第4参数
-Type.partial = func[1, _, _, 4]
+# 只绑定第0和第3参数
+Type.partial = func[0, _, _, 3]
 # 或者使用命名占位符
-Type.partial2 = func[1, @skip, @skip, 4]
+Type.partial2 = func[0, @skip, @skip, 3]
 
 # === 使用示例 ===
 
-# 调用时，第2和第3参数由用户提供
+# 调用时，第1和第2参数由用户提供
 obj.partial("hello", true)  # → func(obj, "hello", true, _)
-# 需要继续填充第4参数
+# 需要继续填充第3参数
 
 # 或者一次性提供所有剩余参数
 obj.partial("hello", true, 3.14)  # → func(obj, "hello", true, 3.14)
@@ -273,17 +276,17 @@ complex(
 }
 
 # === 类型定义 ===
-type Info = Info(id: Int, name: String)
+type Info = { id: Int, name: String }
 
 # === 绑定策略 ===
 
-# 绑定第1和第2参数，但第2参数是元组，需要解构
+# 绑定第0和第1参数，但第1参数是元组，需要解构
 # 情况1：绑定整个元组
-Info.method1 = complex[1, 2]
+Info.method1 = complex[0, 1]
 # 使用：info.method1(2.0, true, 3.14) → complex(2.0, (info.id, info.name), true, 3.14)
 
 # 情况2：使用占位符跳过某些位置
-Info.method2 = complex[_, 2, _, 4]
+Info.method2 = complex[_, 1, _, 3]
 # 使用：info.method2(2.0, true) → complex(2.0, (info.id, info.name), true, _)
 ```
 
@@ -303,8 +306,8 @@ query(
 ) -> List[Record] = ...
 
 # 绑定：只关心 db 和 sql
-DB.query = query[1, 2]
-# 使用：db.query("SELECT * FROM users") 
+DB.query = query[0, 1]
+# 使用：db.query("SELECT * FROM users")
 # → query(db, "SELECT * FROM users", _, _, _, _)
 # 需要继续提供 params, limit, offset, timeout
 ```
@@ -318,13 +321,15 @@ DB.query = query[1, 2]
 ```yaoxiang
 # === 配置驱动绑定 ===
 
-const BINDING_MODE = 1  # 或 2
+const BINDING_MODE = 0  # 或 1 或 2
 
 # 根据配置选择绑定方式
-if BINDING_MODE == 1 {
-    Point.distance = distance[1]  # 绑定到第1参数
+if BINDING_MODE == 0 {
+    Point.distance = distance[0]  # 绑定到第0参数
+} else if BINDING_MODE == 1 {
+    Point.distance = distance[1]  # 绑定到第1参数（如果函数定义不同）
 } else {
-    Point.distance = distance[0]  # 绑定到第0参数（如果函数定义不同）
+    Point.distance = distance[2]  # 绑定到第2参数
 }
 
 # === 使用 ===
@@ -344,10 +349,10 @@ const FEATURE_ENABLED = true
 # 根据特性选择绑定
 if FEATURE_ENABLED {
     # 新版本：更多参数
-    DB.query = query_new[1, 2, 3]
+    DB.query = query_new[0, 1, 2]
 } else {
     # 旧版本：较少参数
-    DB.query = query_old[1, 2]
+    DB.query = query_old[0, 1]
 }
 
 # === 使用 ===
@@ -370,7 +375,7 @@ compare<T: Ord>(T, T) -> Ordering = (a, b) => {
 }
 
 # 泛型类型绑定
-List[T].compare = compare[1]
+List[T].compare = compare[0]
 
 # === 使用 ===
 
@@ -393,7 +398,7 @@ list1.compare(list2)  # → compare(list1, list2)
 // 伪代码：解析绑定声明
 fn parse_binding(expr: Expr) -> Result<Binding, ParseError> {
     // 语法: Type.method = function[positions]
-    
+
     // 解析左侧
     let (type_name, method_name) = match &expr.left {
         Expr::Binary {
@@ -403,7 +408,7 @@ fn parse_binding(expr: Expr) -> Result<Binding, ParseError> {
         } => (type_name, method_name),
         _ => return Err("Invalid left side"),
     };
-    
+
     // 解析右侧
     let (function_name, positions) = match &expr.right {
         Expr::Binary {
@@ -419,7 +424,7 @@ fn parse_binding(expr: Expr) -> Result<Binding, ParseError> {
         }
         _ => return Err("Invalid right side"),
     };
-    
+
     Ok(Binding {
         type_name: type_name.clone(),
         method_name: method_name.clone(),
@@ -430,11 +435,11 @@ fn parse_binding(expr: Expr) -> Result<Binding, ParseError> {
 
 fn parse_positions(index: &Expr) -> Result<Vec<Position>, ParseError> {
     // 支持多种格式:
-    // [1] -> vec![1]
-    // [1, 2, 3] -> vec![1, 2, 3]
-    // [1, _, 3] -> vec![1, Placeholder, 3]
-    // [1..3] -> vec![1, 2]  (范围)
-    
+    // [0] -> vec![0]
+    // [0, 1, 2] -> vec![0, 1, 2]
+    // [0, _, 2] -> vec![0, Placeholder, 2]
+    // [0..2] -> vec![0, 1]  (范围)
+
     match index {
         Expr::Integer(n) => Ok(vec![*n]),
         Expr::Tuple(elems) => {
@@ -468,14 +473,14 @@ fn generate_method_call(
             // 尝试自动绑定
             self.generate_auto_binding(obj_type, method_name)
         });
-    
+
     // 原函数签名
     let func_type = self.lookup_function_type(&binding.function_name);
     let param_count = func_type.param_types.len();
-    
+
     // 构建参数数组
     let mut final_args = vec![None; param_count];
-    
+
     // 1. 填入绑定的调用者到指定位置
     for &pos in &binding.positions {
         if pos < param_count {
@@ -484,7 +489,7 @@ fn generate_method_call(
             self.error("Binding position out of bounds");
         }
     }
-    
+
     // 2. 填入用户提供的参数到剩余位置
     let mut arg_idx = 0;
     for pos in 0..param_count {
@@ -502,7 +507,7 @@ fn generate_method_call(
             }
         }
     }
-    
+
     // 3. 生成函数调用
     Expr::Call(
         Box::new(Expr::Identifier(binding.function_name)),
@@ -530,7 +535,7 @@ fn generate_curried_call(
             (param_name, self.get_param_type(func_name, idx))
         })
         .collect();
-    
+
     // 闭包体
     let closure_body = Expr::Call(
         Box::new(Expr::Identifier(func_name)),
@@ -541,7 +546,7 @@ fn generate_curried_call(
             }))
             .collect(),
     );
-    
+
     Expr::Lambda {
         params: remaining_params,
         body: Box::new(closure_body),
@@ -566,9 +571,9 @@ fn generate_curried_call(
 2. 对于每个 position = i:
    - 获取 func 第 i 个参数的类型 T_i
    - 验证 Type 可以赋值给 T_i（类型兼容）
-   - 示例: Point.distance = compare[1]
+   - 示例: Point.distance = compare[0]
      # compare(T, T) -> Ordering
-     # 位置1参数类型: T
+     # 位置0参数类型: T
      # 绑定类型: Point
      # 验证: Point 是否满足 T 的约束
 
@@ -599,12 +604,12 @@ fn generate_curried_call(
 
 3. 类型匹配检查
    - 每个位置填入的值类型必须匹配对应参数类型
-   - 自动绑定: 检查 arg1 类型是否匹配 func 的第2个参数
+   - 自动绑定: 检查 arg1 类型是否匹配 func 的第1个参数
 
 4. 柯里化检查
    - 如果 args 数量 < 剩余参数数量
    - 返回一个函数类型，接收剩余参数
-   - 示例: obj.method(1, 2) 剩余3参数 → (T3, T4, T5) -> Result
+   - 示例: obj.method(1, 2) 剩余3参数 → (T2, T3, T4) -> Result
 ```
 
 ### 7.3 类型约束检查
@@ -616,7 +621,7 @@ fn generate_curried_call(
 compare<T: Ord>(T, T) -> Ordering = ...
 
 # 泛型绑定
-List[T].compare = compare[1]
+List[T].compare = compare[0]
 
 # 类型检查：
 1. 从绑定声明推断 T = List[T]
@@ -641,18 +646,18 @@ list1.compare(list2)
 
 func(Int, String, Float) -> String = (a, b, c) => "${a}: ${b} -> ${c}"
 
-# 绑定1个参数
-Type.method = func[1]
+# 绑定0个参数
+Type.method = func[]
 # 使用：obj.method("hello", 3.14) → func(obj, "hello", 3.14)
 
-# 绑定2个参数
-Type.method2 = func[1, 2]
+# 绑定1个参数
+Type.method2 = func[0]
 # 使用：obj.method2(3.14) → func(obj, "hello", 3.14)
-# 等待用户补充第2参数
+# 等待用户补充第1参数
 
 # === 场景 2：需要柯里化 ===
 
-Type.method3 = func[1]
+Type.method3 = func[0]
 # 使用：obj.method3() → 返回函数 (String, Float) -> String
 # 然后：obj.method3()("hello", 3.14) → func(obj, "hello", 3.14)
 ```
@@ -689,7 +694,7 @@ Point.method = func[0, 1, 2]
 identity<T>(T) -> T = (x) => x
 
 # 绑定泛型类型
-List[T].identity = identity[1]
+List[T].identity = identity[0]
 # 类型检查：
 # 1. T 是泛型参数
 # 2. 绑定到 List[T]
@@ -712,7 +717,7 @@ greet(name: String, greeting: String = "Hello") -> String = (n, g) => {
 }
 
 # 绑定
-Person.greet = greet[1]  # 绑定 name
+Person.greet = greet[0]  # 绑定 name
 
 # 使用
 person = Person("Alice")
@@ -728,17 +733,17 @@ person.greet("Hi")       # → greet("Alice", "Hi")     # 覆盖默认值
 # 函数1
 distance(Point, Point) -> Float = ...
 
-# 函数2  
+# 函数2
 distance(Point, Float) -> Float = (p, scale) => { ... }
 
 # 如果绑定
-Point.distance = distance[1]
+Point.distance = distance[0]
 
 # 问题：哪个 distance？
 # 解决方案：
 # 1. 要求函数名唯一（不支持重载）
 # 2. 或使用全限定名
-Point.distance = distance_point_point[1]
+Point.distance = distance_point_point[0]
 ```
 
 ---
@@ -751,23 +756,24 @@ Point.distance = distance_point_point[1]
 绑定声明 ::= 类型 '.' 标识符 '=' 函数名 '[' 位置列表 ']'
 
 类型 ::= 标识符
-       | 标识符 '<' 泛型参数列表 '>'
+       | 标识符 '[' 泛型参数列表 ']'
 
 函数名 ::= 标识符
 
 位置列表 ::= 位置 (',' 位置)*
            | 空
 
-位置 ::= 整数                      # 具体位置
-       | '_'                       # 占位符
-       | 标识符                    # 命名位置（未来扩展）
-       | 整数 '..' 整数           # 范围（未来扩展）
-       | '@' 标识符               # 命名占位符
+位置 ::= 整数（从 0 开始）      # 具体位置
+       | 负整数                  # 负数索引（-1 表示最后一个）
+       | '_'                     # 占位符
+       | 标识符                  # 命名位置（未来扩展）
+       | 整数 '..' 整数          # 范围（未来扩展）
+       | '@' 标识符              # 命名占位符
 
 泛型参数列表 ::= 泛型参数 (',' 泛型参数)*
 泛型参数 ::= 标识符 [':' trait_bound]
 
-整数 ::= 0 | 1 | 2 | ...
+整数 ::= 0 | 1 | 2 | ... | -1 | -2 | ...
 标识符 ::= [a-zA-Z_][a-zA-Z0-9_]*
 ```
 
@@ -776,7 +782,7 @@ Point.distance = distance_point_point[1]
 **规则 1：位置范围**
 - 位置从 0 开始计数
 - 最大位置必须小于函数参数个数
-- 负数位置无效
+- 负数位置从末尾倒数：-1 = 最后一个，-2 = 倒数第二个
 
 **规则 2：绑定类型兼容**
 - 绑定的类型必须是函数参数类型的子类型
@@ -794,16 +800,16 @@ Point.distance = distance_point_point[1]
 
 ```yaoxiang
 # ✅ 合法格式
-Point.distance = distance[1]
-Point.calc = calculate[1, 2, 3]
-Point.partial = func[1, _, 3]
-Point.range = func[1..4]
+Point.distance = distance[0]
+Point.calc = calculate[0, 1, 2]
+Point.partial = func[0, _, 2]
+Point.range = func[0..3]
+Point.negative = func[-1]          # 负数索引
 
 # ❌ 非法格式
-Point.wrong = func[1, 2, 3, 4, 5]  # 位置太多（超过阈值）
-Point.wrong = func[-1]            # 负数位置
-Point.wrong = func[0, 0]          # 重复位置（如果不允许）
-Point.wrong = func[1.5]           # 非整数位置
+Point.wrong = func[0, 1, 2, 3, 4, 5]  # 位置太多（超过阈值）
+Point.wrong = func[-3]                  # 负数超出范围（函数只有2参数）
+Point.wrong = func[0.5]                 # 非整数位置
 ```
 
 ---
@@ -819,7 +825,7 @@ Point.wrong = func[1.5]           # 非整数位置
 query(
     conn: Connection,
     sql: String,
-    params: List[Any],
+    params: List[Any>,
     limit: Int,
     offset: Int,
     timeout: Duration
@@ -830,16 +836,16 @@ query(
 
 # === 绑定到连接类型 ===
 
-type Connection = Connection(url: String)
+type Connection = { url: String }
 
 # 简单查询（绑定连接和SQL）
-Connection.simple_query = query[1, 2]
+Connection.simple_query = query[0, 1]
 
 # 带参数查询（绑定连接、SQL、参数）
-Connection.param_query = query[1, 2, 3]
+Connection.param_query = query[0, 1, 2]
 
 # 完整查询（绑定所有）
-Connection.full_query = query[1, 2, 3, 4, 5]
+Connection.full_query = query[0, 1, 2, 3, 4]
 
 # === 使用示例 ===
 
@@ -884,10 +890,10 @@ process(
 
 # === 绑定策略 ===
 
-type Pipeline = Pipeline(data: List[Int])
+type Pipeline = { data: List[Int] }
 
 # 绑定数据
-Pipeline.process = process[1]
+Pipeline.process = process[0]
 
 # === 使用示例 ===
 
@@ -926,12 +932,12 @@ validate(
 
 # === 类型定义 ===
 
-type Config = Config(values: Dict<String, Any>)
-type Rule = Rule(field: String, validator: (Any) -> Bool)
+type Config = { values: Dict<String, Any> }
+type Rule = { field: String, validator: (Any) -> Bool }
 
 # === 绑定 ===
 
-Config.validate = validate[1]
+Config.validate = validate[0]
 
 # === 使用 ===
 
@@ -962,10 +968,10 @@ solve(
 
 # === 绑定策略 ===
 
-type Quadratic = Quadratic(a: Float, b: Float, c: Float)
+type Quadratic = { a: Float, b: Float, c: Float }
 
 # 绑定系数
-Quadratic.solve = solve[1, 2, 3]
+Quadratic.solve = solve[0, 1, 2]
 
 # === 使用 ===
 
@@ -990,11 +996,21 @@ result3 = partial_eq(quadratic_formula)
 
 YaoXiang 的高级绑定特性提供了：
 
-1. **精准控制**：可以绑定到任意参数位置
+1. **精准控制**：可以绑定到任意参数位置（从 0 开始）
 2. **模式匹配友好**：支持元组解构绑定
 3. **灵活柯里化**：支持多位置联合绑定和占位符
 4. **类型安全**：编译时验证所有绑定
 5. **零运行时开销**：所有绑定在编译时解决
 6. **纯函数式**：保持函数式编程的纯粹性
+7. **负数索引**：支持 `[-1]` 表示最后一个参数
 
 这些特性让 YaoXiang 的绑定系统既强大又优雅，完美解决了柯里化绑定的所有挑战！
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 作者 | 变更说明 |
+|------|------|------|---------|
+| v1.0.0 | 2025-01-04 | 晨煦 | 初始版本 |
+| v1.1.0 | 2025-01-20 | 晨煦 | 位置索引从 0 开始（RFC-004）；统一类型语法为花括号（RFC-010） |

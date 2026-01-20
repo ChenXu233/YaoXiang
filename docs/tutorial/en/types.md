@@ -53,7 +53,7 @@ Define structs using constructor syntax:
 
 ```yaoxiang
 # Definition
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Construct values
 p1 = Point(3.0, 4.0)
@@ -67,9 +67,9 @@ y_coord = p1.y              # 4.0
 ### Nested Structs
 
 ```yaoxiang
-type Rectangle = Rectangle(width: Float, height: Float)
-type Circle = Circle(radius: Float)
-type Shape = Shape Rectangle | Circle
+type Rectangle = { width: Float, height: Float }
+type Circle = { radius: Float }
+type Shape = { Rectangle | Circle }
 
 # Usage
 rect = Rectangle(10.0, 20.0)
@@ -84,11 +84,11 @@ Define enum variants using `|`:
 
 ```yaoxiang
 # Simple enum
-type Color = red | green | blue
+type Color = { red | green | blue }
 
 # Variants with values
-type Result[T, E] = ok(T) | err(E)
-type Option[T] = some(T) | none
+type Result[T, E] = { ok(T) | err(E) }
+type Option[T] = { some(T) | none }
 
 # Usage
 success = ok(42)

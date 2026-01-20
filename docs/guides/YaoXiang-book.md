@@ -4,7 +4,7 @@
 > 状态：草稿
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2025-01-06 - 统一为新语法格式：name: type -> type = lambda
+> 更新：2025-01-20 - 位置索引从 0 开始（RFC-004）；统一类型语法（RFC-010）
 
 [English version](./YaoXiang-book-en.md)
 ---
@@ -82,8 +82,8 @@ add: (Int, Int) -> Int = (a, b) => a + b  # 函数声明
 inc: Int -> Int = x => x + 1               # 单参数函数
 
 # 统一类型语法：构造器即类型
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
 
 # 无感异步（并作函数）
 fetch_data: (String) -> JSON spawn = (url) => {
@@ -647,13 +647,13 @@ YaoXiang 的类型系统是层次化的：
 # 规则：用 | 分隔的都是构造器，构造器名(参数) 就是类型
 
 # === 零参数构造器（枚举风格）===
-type Color = red | green | blue              # 等价于 red() | green() | blue()
+type Color = { red | green | blue }              # 等价于 red() | green() | blue()
 
 # === 多参数构造器（结构体风格）===
-type Point = Point(x: Float, y: Float)       # 构造器就是类型
+type Point = { x: Float, y: Float }       # 构造器就是类型
 
 # === 泛型构造器 ===
-type Result[T, E] = ok(T) | err(E)           # 泛型联合
+type Result[T, E] = { ok(T) | err(E) }           # 泛型联合
 
 # === 混合构造器 ===
 type Shape = circle(Float) | rect(Float, Float)
@@ -1018,7 +1018,7 @@ YaoXiang 采用类似 Rust 的 **Send/Sync 类型约束**来保证线程安全�
 # Int, Float, Bool, String 都是 Send
 
 # 结构体自动派生 Send
-type Point = Point(x: Int, y: Float)
+type Point = { x: Int, y: Float }
 # Point 是 Send，因为 Int 和 Float 都是 Send
 
 # 包含非 Send 字段的类型不是 Send
@@ -1032,7 +1032,7 @@ type NonSend = NonSend(data: Rc[Int])
 
 ```yaoxiang
 # 基本类型都是 Sync
-type Point = Point(x: Int, y: Float)
+type Point = { x: Int, y: Float }
 # &Point 是 Sync，因为 &Int 和 &Float 都是 Sync
 
 # 包含内部可变性的类型
@@ -1071,7 +1071,7 @@ Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
 Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
 
 # 联合类型
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok(T) | err(E) }
 
 # Send 派生
 Result[T, E]: Send ⇐ T: Send 且 E: Send
@@ -1165,7 +1165,7 @@ YaoXiang 采用**纯函数式设计**，通过先进的绑定机制实现无缝�
 # === Point.yx (模块) ===
 
 # 统一语法：构造器就是类型
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 核心函数：第一个参数是操作的主体
 distance: (Point, Point) -> Float = (a, b) => {
@@ -1203,7 +1203,7 @@ YaoXiang 支持基于命名空间的自动绑定，**无需任何额外声明**�
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 核心函数
 distance: (Point, Point) -> Float = (a, b) => {
@@ -1268,7 +1268,7 @@ YaoXiang 提供**最优雅的绑定语法**，使用位置标记 `[n]` 来精确
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 核心函数
 distance: (Point, Point) -> Float = (a, b) => {
@@ -1286,15 +1286,15 @@ scale: (Point, Float) -> Point = (p, s) => {
 # 绑定语法：Type.method = func[position]
 # 表示：调用方法时，将调用者绑定到 func 的 [position] 参数
 
-Point.distance = distance[1]      # 绑定到第1个参数
-Point.add = add[1]                 # 绑定到第1个参数
-Point.scale = scale[1]             # 绑定到第1个参数
+Point.distance = distance[0]      # 绑定到第1个参数
+Point.add = add[0]                 # 绑定到第1个参数
+Point.scale = scale[0]             # 绑定到第1个参数
 ```
 
 **语义解析**：
-- `Point.distance = distance[1]`
+- `Point.distance = distance[0]`
   - `distance` 函数有两个参数：`distance(Point, Point)`
-  - `[1]` 表示调用者绑定到第1个参数
+  - `[0]` 表示调用者绑定到第1个参数
   - 使用：`p1.distance(p2)` → `distance(p1, p2)`
 
 #### 7.3.2 多位置联合绑定
@@ -1307,7 +1307,7 @@ calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s,
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 绑定多个位置
 Point.calc1 = calculate[1, 2]      # 绑定 scale 和 point1
@@ -1359,7 +1359,7 @@ func(p1_bound, p2_value, p3_bound, p4_value, p5_value)
 
 ```yaoxiang
 # ✅ 合法绑定
-Point.distance = distance[1]          # distance(Point, Point)
+Point.distance = distance[0]          # distance(Point, Point)
 Point.calc = calculate[1, 2]          # calculate(scale, Point, Point, ...)
 
 # ❌ 非法绑定（编译器报错）
@@ -1377,10 +1377,10 @@ distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) =
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 绑定策略：灵活控制每个位置
-Point.distance = distance[1]                    # 基础绑定
+Point.distance = distance[0]                    # 基础绑定
 Point.distance_scaled = distance_with_scale[2]  # 绑定到第2参数
 
 # === main.yx ===
@@ -1407,7 +1407,7 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # 链式调用
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 核心函数
 distance: (Point, Point) -> Float = (a, b) => {
@@ -1423,9 +1423,9 @@ scale: (Point, Float) -> Point = (p, s) => {
 }
 
 # 自动绑定（核心）
-Point.distance = distance[1]
-Point.add = add[1]
-Point.scale = scale[1]
+Point.distance = distance[0]
+Point.add = add[0]
+Point.scale = scale[0]
 
 # === Math.yx ===
 
@@ -1457,7 +1457,7 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 非 pub 函数
 internal_distance: (a: Point, b: Point) -> Float = (a, b) => {
@@ -1487,7 +1487,7 @@ p1.distance(p2)      # ✅ distance 是 pub，可自动绑定
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 distance: (Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
@@ -1720,7 +1720,7 @@ x: Int = 42                           # 变量
 name: String = "YaoXiang"             # 变量
 add: (Int, Int) -> Int = (a, b) => a + b  # 函数
 inc: Int -> Int = x => x + 1          # 函数
-type Point = Point(x: Float, y: Float) # 类型
+type Point = { x: Float, y: Float } # 类型
 ```
 
 #### 2. 声明与实现分离
@@ -1895,7 +1895,7 @@ pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
   (x :: rest) => f(x) :: map(f, rest)
 
 # 类型定义
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub distance: (Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1950,7 +1950,7 @@ add = (a: Float, b: Float) => a + b
 # AI需求：实现一个函数，计算两点间的曼哈顿距离
 
 # === AI看到推荐写法时 ===
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub manhattan: (Point, Point) -> Float = ???  # AI直接知道完整签名
 
 # AI生成：
@@ -1959,7 +1959,7 @@ pub manhattan: (Point, Point) -> Float = (a, b) => {
 }
 
 # === AI看到不推荐写法时 ===
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub manhattan = ???  # AI需要推断：参数类型？返回类型？
 
 # AI可能生成：
@@ -2034,7 +2034,7 @@ for i in 0..10 {
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 核心函数
 distance: (Point, Point) -> Float = (a, b) => {
@@ -2044,7 +2044,7 @@ distance: (Point, Point) -> Float = (a, b) => {
 }
 
 # 自动绑定
-Point.distance = distance[1]
+Point.distance = distance[0]
 
 # === main.yx ===
 
@@ -2073,7 +2073,7 @@ distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) =
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 Point.distance_scaled = distance_with_scale[2]  # 绑定到第2参数
 

@@ -1,10 +1,10 @@
 # YaoXiang (爻象) Programming Language Guide
 
-> Version: v1.1.0
+> Version: v1.2.0
 > Status: Draft
 > Author: Chen Xu
 > Date: 2024-12-31
-> Update: 2025-01-04 - Fixed generic syntax to `[T]`, removed `fn` keyword
+> Update: 2025-01-20 - Position indices start from 0 (RFC-004); Unified type syntax (RFC-010)
 
 ---
 
@@ -81,8 +81,8 @@ add: (Int, Int) -> Int = (a, b) => a + b  # Function declaration
 inc: Int -> Int = x => x + 1               # Single parameter function
 
 # Unified type syntax: constructor is type
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
 
 # Seamless async (concurrent function)
 fetch_data: (String) -> JSON spawn = (url) => {
@@ -646,13 +646,13 @@ YaoXiang's type system is hierarchical:
 # Rule: Separated by | are constructors, constructor_name(parameters) is the type
 
 # === Zero-parameter constructors (enum style) ===
-type Color = red | green | blue              # Equivalent to red() | green() | blue()
+type Color = { red | green | blue }              # Equivalent to red() | green() | blue()
 
 # === Multi-parameter constructors (struct style) ===
-type Point = Point(x: Float, y: Float)       # Constructor is the type
+type Point = { x: Float, y: Float }       # Constructor is the type
 
 # === Generic constructors ===
-type Result[T, E] = ok(T) | err(E)           # Generic union
+type Result[T, E] = { ok(T) | err(E) }           # Generic union
 
 # === Mixed constructors ===
 type Shape = circle(Float) | rect(Float, Float)
@@ -1102,7 +1102,7 @@ YaoXiang adopts **Send/Sync Type Constraints** similar to Rust to ensure thread 
 # Int, Float, Bool, String are all Send
 
 # Structs automatically derive Send
-type Point = Point(x: Int, y: Float)
+type Point = { x: Int, y: Float }
 # Point is Send because Int and Float are both Send
 
 # Types containing non-Send fields are not Send
@@ -1116,7 +1116,7 @@ type NonSend = NonSend(data: Rc[Int])
 
 ```yaoxiang
 # Basic types are all Sync
-type Point = Point(x: Int, y: Float)
+type Point = { x: Int, y: Float }
 # &Point is Sync because &Int and &Float are both Sync
 
 # Types with internal mutability
@@ -1155,7 +1155,7 @@ Struct[T1, T2]: Send ⇐ T1: Send and T2: Send
 Struct[T1, T2]: Sync ⇐ T1: Sync and T2: Sync
 
 # Union type
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok(T) | err(E) }
 
 # Send derivation
 Result[T, E]: Send ⇐ T: Send and E: Send
@@ -1249,7 +1249,7 @@ All operations are implemented through ordinary functions, with the first parame
 # === Point.yx (module) ===
 
 # Unified syntax: constructor is type
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Core function: first parameter is the subject of operation
 distance(Point, Point) -> Float = (a, b) => {
@@ -1283,7 +1283,7 @@ YaoXiang supports namespace-based automatic binding, **without any additional de
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Core function
 distance(Point, Point) -> Float = (a, b) => { ... }
@@ -1342,7 +1342,7 @@ YaoXiang provides **the most elegant binding syntax**, using position marker `[n
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Core function
 distance(Point, Point) -> Float = (a, b) => { ... }
@@ -1352,15 +1352,15 @@ scale(Point, Float) -> Point = (p, s) => { ... }
 # Binding syntax: Type.method = func[position]
 # Means: when calling method, bind caller to func's [position] parameter
 
-Point.distance = distance[1]      # Bind to 1st parameter
-Point.add = add[1]                 # Bind to 1st parameter
-Point.scale = scale[1]             # Bind to 1st parameter
+Point.distance = distance[0]      # Bind to 1st parameter
+Point.add = add[0]                 # Bind to 1st parameter
+Point.scale = scale[0]             # Bind to 1st parameter
 ```
 
 **Semantic Parsing:**
-- `Point.distance = distance[1]`
+- `Point.distance = distance[0]`
   - `distance` function has two parameters: `distance(Point, Point)`
-  - `[1]` means caller binds to 1st parameter
+  - `[0]` means caller binds to 1st parameter
   - Usage: `p1.distance(p2)` → `distance(p1, p2)`
 
 #### 7.3.2 Multi-Position Joint Binding
@@ -1373,7 +1373,7 @@ calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s, p
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Bind multiple positions
 Point.calc1 = calculate[1, 2]      # Bind scale and point1
@@ -1425,7 +1425,7 @@ func(p1_bound, p2_value, p3_bound, p4_value, p5_value)
 
 ```yaoxiang
 # ✅ Legal binding
-Point.distance = distance[1]          # distance(Point, Point)
+Point.distance = distance[0]          # distance(Point, Point)
 Point.calc = calculate[1, 2]          # calculate(scale, Point, Point, ...)
 
 # ❌ Illegal binding (compiler error)
@@ -1443,10 +1443,10 @@ distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => 
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Binding strategy: flexibly control each position
-Point.distance = distance[1]                    # Basic binding
+Point.distance = distance[0]                    # Basic binding
 Point.distance_scaled = distance_with_scale[2]  # Bind to 2nd parameter
 
 # === main.yx ===
@@ -1473,7 +1473,7 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # Chained call
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Core functions
 distance(Point, Point) -> Float = (a, b) => { ... }
@@ -1481,9 +1481,9 @@ add(Point, Point) -> Point = (a, b) => { ... }
 scale(Point, Float) -> Point = (p, s) => { ... }
 
 # Auto binding (core)
-Point.distance = distance[1]
-Point.add = add[1]
-Point.scale = scale[1]
+Point.distance = distance[0]
+Point.add = add[0]
+Point.scale = scale[0]
 
 # === Math.yx ===
 
@@ -1515,7 +1515,7 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Non-pub functions
 internal_distance(a: Point, b: Point) -> Float = (a, b) => { ... }
@@ -1537,7 +1537,7 @@ p1.distance(p2)      # ✅ distance is pub, can auto bind
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 distance(Point, Point) -> Float = (a, b) => { ... }
 
@@ -1766,7 +1766,7 @@ x: Int = 42                           # Variable
 name: String = "YaoXiang"             # Variable
 add: (Int, Int) -> Int = (a, b) => a + b  # Function
 inc: Int -> Int = x => x + 1          # Function
-type Point = Point(x: Float, y: Float) # Type
+type Point = { x: Float, y: Float } # Type
 ```
 
 #### 2. Separation of Declaration and Implementation
@@ -1941,7 +1941,7 @@ pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
   (x :: rest) => f(x) :: map(f, rest)
 
 # Type definitions
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub distance: (Point, Point) -> Float = (a, b) => {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1996,7 +1996,7 @@ add = (a: Float, b: Float) => a + b
 # AI Requirement: Implement a function calculating Manhattan distance between two points
 
 # === AI sees recommended写法 ===
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub manhattan: (Point, Point) -> Float = ???  # AI directly knows complete signature
 
 # AI generates:
@@ -2005,7 +2005,7 @@ pub manhattan: (Point, Point) -> Float = (a, b) => {
 }
 
 # === AI sees not recommended写法 ===
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 pub manhattan = ???  # AI needs to infer: parameter types? return type?
 
 # AI may generate:
@@ -2080,7 +2080,7 @@ for i in 0..10 {
 ```yaoxiang
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # Core function
 distance(Point, Point) -> Float = (a, b) => {
@@ -2090,7 +2090,7 @@ distance(Point, Point) -> Float = (a, b) => {
 }
 
 # Auto binding
-Point.distance = distance[1]
+Point.distance = distance[0]
 
 # === main.yx ===
 
@@ -2119,7 +2119,7 @@ distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => 
 
 # === Point.yx ===
 
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 Point.distance_scaled = distance_with_scale[2]  # Bind to 2nd parameter
 

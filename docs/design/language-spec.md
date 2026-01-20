@@ -880,6 +880,197 @@ match value {
 
 ---
 
+## 第十章：方法绑定
+
+### 10.1 绑定概述
+
+YaoXiang 采用**纯函数式设计**，所有操作都通过函数实现。绑定机制将函数关联到类型，使调用者可以像调用方法一样调用函数。
+
+```
+绑定声明 ::= 类型 '.' 标识符 '=' 函数名 '[' 位置列表 ']'
+位置列表 ::= 位置 (',' 位置)* ','?
+位置     ::= 整数（从 0 开始） | 负整数 | 占位符
+```
+
+**核心规则**：
+- 位置索引从 **0** 开始
+- 默认绑定到第 **0** 位（首个参数）
+- 支持负数索引 `[-1]` 表示最后一个参数
+- 多位置联合绑定 `[0, 1, 2]`
+- 占位符 `_` 表示跳过该位置
+
+### 10.2 绑定语法
+
+**语法**：
+```
+Type.method = func[position]
+Type.method = func[0, 1, 2]    # 多位置绑定
+Type.method = func[0, _, 2]   # 使用占位符
+Type.method = func[-1]        # 负数索引（最后一个参数）
+```
+
+**语义**：
+- `Type.method = func[0]` 表示调用 `obj.method(arg)` 时，`obj` 绑定到 `func` 的第 0 个参数
+- 剩余参数按原顺序填入
+
+### 10.3 绑定示例
+
+```yaoxiang
+# === 基础绑定 ===
+
+# 原始函数
+distance(Point, Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 绑定到 Point 类型（第 0 位）
+Point.distance = distance[0]
+
+# 使用
+p1 = Point(3.0, 4.0)
+p2 = Point(1.0, 2.0)
+d = p1.distance(p2)  # → distance(p1, p2)
+
+# === 多位置绑定 ===
+
+# 原始函数
+calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
+
+# 绑定多个位置
+Point.calc_scale = calculate[0]      # 只绑定 scale
+Point.calc_both = calculate[1, 2]    # 绑定两个 Point 参数
+
+# 使用
+f = p1.calc_scale(2.0)  # → calculate(2.0, p1, _, _, _)
+result = f(p2, 10.0, 20.0)  # → calculate(2.0, p1, p2, 10.0, 20.0)
+
+# === 柯里化（参数不足时自动返回函数）===
+
+# 绑定一个参数
+Point.distance_to = distance[0]
+
+# 使用 - 不提供第二个参数，返回柯里化函数
+f = p1.distance_to(p2)  # → distance(p1, p2) 直接调用
+f2 = p1.distance_to()   # → distance(p1, _) 返回函数 (Point) -> Float
+result = f2(p2)         # → distance(p1, p2)
+```
+
+### 10.4 绑定规则
+
+**位置规则**：
+| 规则 | 说明 |
+|------|------|
+| 位置从 0 开始 | `func[0]` 绑定第 1 个参数（索引 0） |
+| 最大位置 | 必须 < 函数参数个数 |
+| 负数索引 | `[-1]` 表示最后一个参数 |
+| 占位符 | `_` 跳过该位置，由用户提供 |
+
+**类型检查**：
+```yaoxiang
+# ✅ 合法绑定
+Point.distance = distance[0]          # distance(Point, Point)
+Point.calc = calculate[1, 2]          # calculate(Float, Point, Point, ...)
+
+# ❌ 非法绑定（编译错误）
+Point.wrong = distance[5]             # 5 >= 2（参数个数）
+Point.wrong = distance[0, 0]          # 重复位置（如果不允许）
+Point.wrong = distance[-2]            # -2 超出范围
+```
+
+### 10.5 自动绑定
+
+对于在模块中定义且首参数为模块类型的函数，自动支持方法调用语法：
+
+```yaoxiang
+# === Point.yx ===
+type Point = { x: Float, y: Float }
+
+# 首参数是 Point，自动支持方法调用
+distance(Point, Point) -> Float = (a, b) => { ... }
+add(Point, Point) -> Point = (a, b) => { ... }
+
+# === main.yx ===
+use Point
+
+p1 = Point(3.0, 4.0)
+p2 = Point(1.0, 2.0)
+
+# ✅ 自动绑定：p1.distance(p2) → distance(p1, p2)
+d = p1.distance(p2)
+# ✅ p1.add(p2) → add(p1, p2)
+p3 = p1.add(p2)
+```
+
+**自动绑定规则**：
+- 函数定义在模块文件中
+- 函数的第 0 个参数类型与模块名匹配
+- 函数必须为 `pub` 才能在模块外自动绑定
+
+### 10.6 绑定与柯里化的关系
+
+绑定天然支持柯里化。当调用时提供的参数少于剩余参数时，返回一个接受剩余参数的函数：
+
+```yaoxiang
+# 原始函数：5 个参数
+calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
+
+# 绑定：Point.calc = calculate[1, 2]
+# 绑定后剩余参数：scale, x, y
+
+# 调用场景
+p1.calc(2.0, 10.0, 20.0)              # 提供 3 个参数 → 直接调用
+p1.calc(2.0)                          # 提供 1 个参数 → 返回 (Float, Float) -> Float
+p1.calc()                             # 提供 0 个参数 → 返回 (Float, Float, Float) -> Float
+```
+
+---
+
+## 附录C：绑定语法速查
+
+### C.1 绑定声明
+
+```
+# 单位置绑定（默认绑定到第 0 位）
+Type.method = func[0]
+
+# 多位置绑定
+Type.method = func[0, 1, 2]
+
+# 使用占位符
+Type.method = func[0, _, 2]
+
+# 负数索引（最后一个参数）
+Type.method = func[-1]
+```
+
+### C.2 位置索引说明
+
+```
+函数参数：    (p0, p1, p2, p3, p4)
+              ↑  ↑  ↑  ↑  ↑
+索引：        0  1  2  3  4
+
+# 绑定 [1, 3]
+Type.method = func[1, 3]
+# 调用：obj.method(p0, p2, p4)
+# 映射：func(p0_bound, obj, p2, p3_bound, p4)
+```
+
+### C.3 调用形式
+
+```yaoxiang
+# 直接调用（提供所有剩余参数）
+result = p.method(arg1, arg2, arg3)
+
+# 柯里化（不提供或部分提供剩余参数）
+f = p.method(arg1)          # 返回接受剩余参数的函数
+result = f(arg2, arg3)
+```
+
+---
+
 ## 版本历史
 
 | 版本 | 日期 | 作者 | 变更说明 |
@@ -889,6 +1080,7 @@ match value {
 | v1.2.0 | 2025-01-05 | 沫郁酱 | 精简为纯规范，示例代码移至 tutorial/ 目录 |
 | v1.3.0 | 2025-01-05 | 沫郁酱 | 添加并作模型规范（三层并发架构、spawn语法、注解）；添加类型系统约束（Send/Sync）；添加并发安全类型（Mutex、Atomic）；更新错误处理（?运算符）；更新待实现特性列表 |
 | v1.4.0 | 2025-01-15 | 晨煦 | 更新所有权模型（默认Move + 显式ref=Arc）；添加unsafe关键字；删除生命周期 `'a` 和借用检查器；更新待实现特性列表 |
+| v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
 
 ---
 

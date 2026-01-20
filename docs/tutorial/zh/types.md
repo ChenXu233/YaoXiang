@@ -53,7 +53,7 @@ u: Uint8 = 255
 
 ```yaoxiang
 # 定义
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 构造值
 p1 = Point(3.0, 4.0)
@@ -67,9 +67,9 @@ y_coord = p1.y              # 4.0
 ### 嵌套结构体
 
 ```yaoxiang
-type Rectangle = Rectangle(width: Float, height: Float)
-type Circle = Circle(radius: Float)
-type Shape = Shape Rectangle | Circle
+type Rectangle = { width: Float, height: Float }
+type Circle = { radius: Float }
+type Shape = { Rectangle | Circle }
 
 # 使用
 rect = Rectangle(10.0, 20.0)
@@ -84,11 +84,11 @@ circle = Circle(5.0)
 
 ```yaoxiang
 # 简单枚举
-type Color = red | green | blue
+type Color = { red | green | blue }
 
 # 带值的变体
-type Result[T, E] = ok(T) | err(E)
-type Option[T] = some(T) | none
+type Result[T, E] = { ok(T) | err(E) }
+type Option[T] = { some(T) | none }
 
 # 使用
 success = ok(42)
