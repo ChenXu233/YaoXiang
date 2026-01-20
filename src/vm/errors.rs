@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use std::time::Duration;
-
+use crate::vm::opcode::TypedOpcode;
 // Re-export types from interrupt module for convenience
 pub use crate::runtime::interrupt::{AccessType, BreakpointId};
 
@@ -50,6 +50,9 @@ pub enum VMError {
 
     #[error("Invalid state: {0}")]
     InvalidState(String),
+
+    #[error("Unimplemented opcode: {0}")]
+    UnimplementedOpcode(TypedOpcode),
 
     // === Interrupt-related errors ===
     // These are returned when an interrupt is caught by the scheduler
