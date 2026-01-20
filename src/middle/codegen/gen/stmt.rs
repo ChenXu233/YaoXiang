@@ -1,8 +1,8 @@
 //! 语句代码生成
 //!
-//! 将语句转换为字节码指令
+//! 将语句转换为字节码指令。
 
-use super::{BytecodeInstruction, CodegenContext, CodegenError};
+use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param, Stmt, StmtKind, Type};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction};
@@ -17,7 +17,6 @@ impl CodegenContext {
     ) -> Result<(), CodegenError> {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
-                // 生成表达式语句
                 self.generate_expr(expr)?;
                 Ok(())
             }
@@ -40,30 +39,23 @@ impl CodegenContext {
                 body,
                 label,
             } => {
-                // For 循环由 control_flow.rs 中的 generate_for_stmt 处理
-                // 这里仅生成占位符，实际生成在表达式层面处理
                 let _ = (var, iterable, body, label);
                 Ok(())
             }
 
             StmtKind::TypeDef { name, definition } => {
-                // 类型定义在编译时处理，不生成运行时指令
                 self.register_type_definition(name, definition);
                 Ok(())
             }
 
             StmtKind::Module { name: _, items } => {
-                // 模块处理：收集所有定义
                 for item in items {
                     self.generate_stmt(item)?;
                 }
                 Ok(())
             }
 
-            StmtKind::Use { .. } => {
-                // use 语句在解析时处理，不生成字节码
-                Ok(())
-            }
+            StmtKind::Use { .. } => Ok(()),
 
             _ => Err(CodegenError::UnimplementedStmt {
                 stmt_type: format!("{:?}", stmt.kind),
@@ -79,58 +71,46 @@ impl CodegenContext {
         initializer: Option<&Expr>,
         is_mut: bool,
     ) -> Result<(), CodegenError> {
-        // 解析类型
         let ty = match type_annotation {
             Some(ta) => self.type_from_ast(ta),
-            None => {
-                // 从初始化表达式推断类型
-                match initializer {
-                    Some(init) => self.infer_expr_type(init)?,
-                    None => MonoType::Int(64), // 默认类型
-                }
-            }
+            None => match initializer {
+                Some(init) => self.infer_expr_type(init)?,
+                None => MonoType::Int(64),
+            },
         };
 
-        // 分配局部变量
         let local_idx = self.next_local();
 
-        // 如果有初始化表达式，生成它并存储
         if let Some(init) = initializer {
             let src = self.generate_expr(init)?;
-
-            // 根据类型决定分配方式
             let should_heap_allocate = self.should_heap_allocate_for_type(&ty);
 
             if should_heap_allocate {
-                // 堆分配
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::HeapAlloc,
                     vec![local_idx as u8],
                 ));
             } else {
-                // 栈分配
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::StackAlloc,
                     vec![local_idx as u8],
                 ));
             }
 
-            // 存储初始值
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::StoreLocal,
                 vec![self.operand_to_reg(&src)?, local_idx as u8],
             ));
         }
 
-        // 注册符号
-        self.symbol_table.insert(
+        self.symbols.insert(
             name.to_string(),
-            super::Symbol {
+            super::super::Symbol {
                 name: name.to_string(),
                 ty: ty.clone(),
-                storage: super::Storage::Local(local_idx),
+                storage: super::super::Storage::Local(local_idx),
                 is_mut,
-                scope_level: self.scope_level,
+                scope_level: self.symbols.scope_level(),
             },
         );
 
@@ -142,7 +122,6 @@ impl CodegenContext {
         &self,
         ty: &MonoType,
     ) -> bool {
-        // 大型对象或复杂类型需要堆分配
         match ty {
             MonoType::List(_) => true,
             MonoType::Dict(_, _) => true,
@@ -162,7 +141,7 @@ impl CodegenContext {
         match expr {
             Expr::Lit(literal, _) => Ok(self.infer_literal_type(literal)),
             Expr::Var(name, _) => {
-                if let Some(symbol) = self.symbol_table.get(name) {
+                if let Some(symbol) = self.symbols.symbol_table().get(name) {
                     Ok(symbol.ty.clone())
                 } else {
                     Err(CodegenError::SymbolNotFound { name: name.clone() })
@@ -179,7 +158,7 @@ impl CodegenContext {
                     }),
                 }
             }
-            _ => Ok(MonoType::Int(64)), // 默认推断为 Int64
+            _ => Ok(MonoType::Int(64)),
         }
     }
 
@@ -203,8 +182,6 @@ impl CodegenContext {
         _name: &str,
         _definition: &Type,
     ) {
-        // TODO: 实现类型定义注册
-        // 类型定义需要添加到模块的 types 列表中
     }
 
     /// 生成函数定义
@@ -215,7 +192,6 @@ impl CodegenContext {
         return_type: &Option<Type>,
         body: &Block,
     ) -> Result<(), CodegenError> {
-        // 创建函数IR
         let mut func_ir = FunctionIR {
             name: name.to_string(),
             params: Vec::new(),
@@ -226,15 +202,11 @@ impl CodegenContext {
             entry: 0,
         };
 
-        // 设置参数类型
         for param in params {
             func_ir.params.push(self.type_from_ast_option(&param.ty));
         }
 
-        // 生成函数体
         self.generate_block_to_ir(body, &mut func_ir)?;
-
-        // 添加到模块
         self.module.functions.push(func_ir);
 
         Ok(())
@@ -264,18 +236,11 @@ impl CodegenContext {
         };
 
         for stmt in &block.stmts {
-            match &stmt.kind {
-                StmtKind::Expr(expr) => {
-                    // 生成表达式
-                    let _operand = self.generate_expr(expr)?;
-                }
-                _ => {
-                    // 其他语句暂不处理
-                }
+            if let StmtKind::Expr(expr) = &stmt.kind {
+                let _operand = self.generate_expr(expr)?;
             }
         }
 
-        // 如果块有表达式，添加返回指令
         if let Some(expr) = &block.expr {
             let operand = self.generate_expr(expr)?;
             current_block

@@ -1,6 +1,6 @@
-//! Bytecode Generator
+//! IR Builder
 //!
-//! Translates Middle IR to Typed Bytecode.
+//! 将中间表示 IR 转换为类型化字节码的独立工具。
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::bytecode::{BytecodeInstruction, FunctionCode};
@@ -8,16 +8,24 @@ use crate::middle::ir::{ConstValue, FunctionIR, Instruction, Operand};
 use crate::vm::opcode::TypedOpcode;
 use std::collections::HashMap;
 
+/// 字节码生成器
+///
+/// 将 FunctionIR 翻译为类型化字节码。
 pub struct BytecodeGenerator<'a> {
     ir: &'a FunctionIR,
     instructions: Vec<BytecodeInstruction>,
-    label_map: HashMap<usize, usize>, // IR Label -> Bytecode Offset (instruction index)
-    jumps_to_patch: Vec<(usize, usize)>, // (Instruction Index, Target Label)
+    label_map: HashMap<usize, usize>,
+    jumps_to_patch: Vec<(usize, usize)>,
     next_reg: u8,
+    constants: &'a mut Vec<ConstValue>,
 }
 
 impl<'a> BytecodeGenerator<'a> {
-    pub fn new(ir: &'a FunctionIR) -> Self {
+    /// 创建新的字节码生成器
+    pub fn new(
+        ir: &'a FunctionIR,
+        constants: &'a mut Vec<ConstValue>,
+    ) -> Self {
         let param_count = ir.params.len();
         let local_count = ir.locals.len();
         Self {
@@ -26,11 +34,26 @@ impl<'a> BytecodeGenerator<'a> {
             label_map: HashMap::new(),
             jumps_to_patch: Vec::new(),
             next_reg: (param_count + local_count) as u8,
+            constants,
         }
     }
 
+    fn get_constant_index(
+        &mut self,
+        val: ConstValue,
+    ) -> u16 {
+        if let Some(idx) = self.constants.iter().position(|c| c == &val) {
+            idx as u16
+        } else {
+            let idx = self.constants.len();
+            self.constants.push(val);
+            idx as u16
+        }
+    }
+
+    /// 生成字节码
     pub fn generate(mut self) -> FunctionCode {
-        // First pass: generate instructions
+        // 第一遍：生成指令
         for block in &self.ir.blocks {
             self.label_map.insert(block.label, self.instructions.len());
             for instr in &block.instructions {
@@ -38,7 +61,7 @@ impl<'a> BytecodeGenerator<'a> {
             }
         }
 
-        // Patch jumps
+        // 修补跳转
         for (instr_idx, target_label) in self.jumps_to_patch {
             if let Some(&target_offset) = self.label_map.get(&target_label) {
                 let offset = target_offset as i32 - instr_idx as i32;
@@ -179,8 +202,6 @@ impl<'a> BytecodeGenerator<'a> {
                 self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
             }
             Instruction::Store { dst, src } => {
-                // Store 指令：存储到局部变量 (StoreLocal)
-                // StoreLocal: src, local_idx
                 let local_idx = match dst {
                     Operand::Local(idx) => *idx,
                     _ => 0,
@@ -188,40 +209,53 @@ impl<'a> BytecodeGenerator<'a> {
                 let src_reg = self.load_operand(src);
                 self.emit(TypedOpcode::StoreLocal, vec![src_reg, local_idx as u8]);
             }
-            Instruction::Load { dst, src } => {
-                // Load 指令：处理常量加载和局部变量加载
-                match src {
-                    Operand::Const(c) => {
-                        let dst_reg = self.resolve_dst(dst);
-                        match c {
-                            ConstValue::Int(v) => {
-                                let val = *v as i64;
-                                let mut operands = vec![dst_reg];
-                                operands.extend_from_slice(&val.to_le_bytes());
-                                self.emit(TypedOpcode::I64Const, operands);
-                            }
-                            ConstValue::Float(v) => {
-                                let val = *v;
-                                let mut operands = vec![dst_reg];
-                                operands.extend_from_slice(&val.to_le_bytes());
-                                self.emit(TypedOpcode::F64Const, operands);
-                            }
-                            _ => {}
+            Instruction::Load { dst, src } => match src {
+                Operand::Const(c) => {
+                    let dst_reg = self.resolve_dst(dst);
+                    match c {
+                        ConstValue::Int(v) => {
+                            let val = *v as i64;
+                            let mut operands = vec![dst_reg];
+                            operands.extend_from_slice(&val.to_le_bytes());
+                            self.emit(TypedOpcode::I64Const, operands);
                         }
-                    }
-                    Operand::Local(idx) => {
-                        // 从局部变量加载：使用 LoadLocal
-                        // LoadLocal: dst, local_idx
-                        let dst_reg = self.resolve_dst(dst);
-                        self.emit(TypedOpcode::LoadLocal, vec![dst_reg, *idx as u8]);
-                    }
-                    _ => {
-                        let dst_reg = self.resolve_dst(dst);
-                        let src_reg = self.load_operand(src);
-                        self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
+                        ConstValue::Float(v) => {
+                            let val = *v;
+                            let mut operands = vec![dst_reg];
+                            operands.extend_from_slice(&val.to_le_bytes());
+                            self.emit(TypedOpcode::F64Const, operands);
+                        }
+                        ConstValue::String(_) | ConstValue::Bytes(_) => {
+                            let idx = self.get_constant_index(c.clone());
+                            let mut operands = vec![dst_reg];
+                            operands.extend_from_slice(&idx.to_le_bytes());
+                            self.emit(TypedOpcode::LoadConst, operands);
+                        }
+                        ConstValue::Bool(b) => {
+                            let val = if *b { 1i64 } else { 0i64 };
+                            let mut operands = vec![dst_reg];
+                            operands.extend_from_slice(&val.to_le_bytes());
+                            self.emit(TypedOpcode::I64Const, operands);
+                        }
+                        ConstValue::Char(c) => {
+                            let val = *c as i64;
+                            let mut operands = vec![dst_reg];
+                            operands.extend_from_slice(&val.to_le_bytes());
+                            self.emit(TypedOpcode::I64Const, operands);
+                        }
+                        _ => {}
                     }
                 }
-            }
+                Operand::Local(idx) => {
+                    let dst_reg = self.resolve_dst(dst);
+                    self.emit(TypedOpcode::LoadLocal, vec![dst_reg, *idx as u8]);
+                }
+                _ => {
+                    let dst_reg = self.resolve_dst(dst);
+                    let src_reg = self.load_operand(src);
+                    self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
+                }
+            },
             Instruction::Jmp(label) => {
                 self.jumps_to_patch.push((self.instructions.len(), *label));
                 self.emit(TypedOpcode::Jmp, vec![0, 0, 0, 0]);
@@ -240,17 +274,12 @@ impl<'a> BytecodeGenerator<'a> {
                 }
             }
             Instruction::Call { dst, func, args } => {
-                // CallStatic: dst, func_id, base_arg_reg, arg_count
-                // We need to move args to contiguous registers if they aren't already.
-                // For simplicity, let's allocate a block of temp registers for args.
                 let arg_count = args.len();
                 let base_arg_reg = self.next_temp_reg();
-                // Reserve more regs
                 for _ in 1..arg_count {
                     self.next_temp_reg();
                 }
 
-                // Move args to these regs
                 for (i, arg) in args.iter().enumerate() {
                     let arg_reg = self.load_operand(arg);
                     let target_reg = base_arg_reg + i as u8;
@@ -262,26 +291,24 @@ impl<'a> BytecodeGenerator<'a> {
                 let dst_reg = if let Some(d) = dst {
                     self.resolve_dst(d)
                 } else {
-                    0 // Discard result
+                    0
                 };
 
-                // Resolve func from operand
-                let func_id = if let Operand::Const(ConstValue::Int(id)) = func {
-                    *id as u32
-                } else {
-                    0
+                let func_id = match func {
+                    Operand::Const(ConstValue::String(name)) => {
+                        self.get_constant_index(ConstValue::String(name.clone())) as u32
+                    }
+                    Operand::Const(ConstValue::Int(id)) => *id as u32,
+                    _ => 0,
                 };
 
                 let mut operands = vec![dst_reg];
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_count as u8);
-
                 self.emit(TypedOpcode::CallStatic, operands);
             }
-            _ => {
-                // TODO: Handle other instructions
-            }
+            _ => {}
         }
     }
 
@@ -324,7 +351,7 @@ impl<'a> BytecodeGenerator<'a> {
             Operand::Local(idx) => (*idx + self.ir.params.len()) as u8,
             Operand::Temp(idx) => (*idx + self.ir.params.len() + self.ir.locals.len()) as u8,
             Operand::Arg(idx) => *idx as u8,
-            _ => 0, // Should not happen for dst
+            _ => 0,
         }
     }
 
@@ -352,6 +379,18 @@ impl<'a> BytecodeGenerator<'a> {
                         operands.extend_from_slice(&val.to_le_bytes());
                         self.emit(TypedOpcode::F64Const, operands);
                     }
+                    ConstValue::Bool(b) => {
+                        let val = if *b { 1i64 } else { 0i64 };
+                        let mut operands = vec![reg];
+                        operands.extend_from_slice(&val.to_le_bytes());
+                        self.emit(TypedOpcode::I64Const, operands);
+                    }
+                    ConstValue::Char(c) => {
+                        let val = *c as i64;
+                        let mut operands = vec![reg];
+                        operands.extend_from_slice(&val.to_le_bytes());
+                        self.emit(TypedOpcode::I64Const, operands);
+                    }
                     _ => {}
                 }
                 reg
@@ -367,11 +406,12 @@ impl<'a> BytecodeGenerator<'a> {
         match op {
             Operand::Local(idx) => self.ir.locals.get(*idx).cloned().unwrap_or(MonoType::Void),
             Operand::Arg(idx) => self.ir.params.get(*idx).cloned().unwrap_or(MonoType::Void),
-            Operand::Temp(_) => MonoType::Int(64), // TODO: Track temp types
+            Operand::Temp(_) => MonoType::Int(64),
             Operand::Const(c) => match c {
                 ConstValue::Int(_) => MonoType::Int(64),
                 ConstValue::Float(_) => MonoType::Float(64),
                 ConstValue::Bool(_) => MonoType::Bool,
+                ConstValue::Char(_) => MonoType::Char,
                 _ => MonoType::Void,
             },
             _ => MonoType::Void,

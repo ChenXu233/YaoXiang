@@ -104,10 +104,10 @@ fn test_break_continue_labels() {
     let loop_label = 10;
     let end_label = 20;
 
-    ctx.current_loop_label = Some((loop_label, end_label));
+    ctx.flow.set_loop_label(loop_label, end_label);
 
-    assert_eq!(ctx.current_loop_label.unwrap().0, loop_label);
-    assert_eq!(ctx.current_loop_label.unwrap().1, end_label);
+    assert_eq!(ctx.flow.loop_label().unwrap().0, loop_label);
+    assert_eq!(ctx.flow.loop_label().unwrap().1, end_label);
 }
 
 /// 测试控制流指令分类

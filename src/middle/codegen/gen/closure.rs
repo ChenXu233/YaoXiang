@@ -2,7 +2,7 @@
 //!
 //! 处理闭包捕获和 Upvalue 生成。
 
-use super::{BytecodeInstruction, CodegenContext, CodegenError};
+use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param};
 use crate::middle::ir::{FunctionIR, Operand};
 use crate::vm::opcode::TypedOpcode;
@@ -14,7 +14,6 @@ impl CodegenContext {
         &mut self,
         func_expr: &Expr,
     ) -> Result<Operand, CodegenError> {
-        // 1. 提取 FnDef 表达式
         let (name, params, return_type, body, is_async) = match func_expr {
             Expr::FnDef {
                 name,
@@ -37,23 +36,16 @@ impl CodegenContext {
             }
         };
 
-        // 2. 分析捕获变量 (Upvalues)
         let upvalues = self.analyze_captures(&body)?;
-
-        // 3. 编译闭包函数体为独立的 FunctionIR
         let func_id = self.module.functions.len() as u32;
         self.compile_function_body(&name, &params, return_type, is_async, func_id)?;
 
-        // 4. 生成 MakeClosure 指令
-        // 操作数：dst(1), func_id(u32, 4字节), upvalue_count(1)
         let closure_reg = self.next_temp();
         let mut operands = vec![closure_reg as u8];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(upvalues.len() as u8);
         self.emit(BytecodeInstruction::new(TypedOpcode::MakeClosure, operands));
 
-        // 5. 填充 Upvalues
-        // StoreUpvalue: src, upvalue_idx (2 个操作数)
         for (i, upvalue) in upvalues.iter().enumerate() {
             let src_reg = self.operand_to_reg(&upvalue.source)?;
             self.emit(BytecodeInstruction::new(
@@ -66,13 +58,10 @@ impl CodegenContext {
     }
 
     /// 生成 CloseUpvalue 指令
-    ///
-    /// 将栈上的局部变量搬迁到堆上，使闭包可以在函数返回后访问
     pub fn generate_close_upvalue(
         &mut self,
         reg: u8,
     ) {
-        // CloseUpvalue: reg (1 个操作数)
         self.emit(BytecodeInstruction::new(
             TypedOpcode::CloseUpvalue,
             vec![reg],
@@ -85,18 +74,15 @@ impl CodegenContext {
         func_id: u32,
         args: &[Operand],
     ) -> Result<(), CodegenError> {
-        // TailCall: func_id(u32, 4字节), base_arg_reg(1), arg_count(1)
         let mut operands = vec![];
         operands.extend_from_slice(&func_id.to_le_bytes());
-        operands.push(0); // base_arg_reg - 简化处理
+        operands.push(0);
         operands.push(args.len() as u8);
         self.emit(BytecodeInstruction::new(TypedOpcode::TailCall, operands));
         Ok(())
     }
 
     /// 分析闭包捕获的变量
-    ///
-    /// 遍历函数体，找出所有引用的非局部变量
     fn analyze_captures(
         &self,
         body: &Block,
@@ -104,22 +90,19 @@ impl CodegenContext {
         let mut captures = Vec::new();
         let mut var_positions: HashMap<String, Operand> = HashMap::new();
 
-        // 收集当前作用域的变量
-        for (name, symbol) in &self.symbol_table.symbols {
+        for (name, symbol) in self.symbols.symbol_table().iter() {
             var_positions.insert(
                 name.clone(),
-                match symbol.storage {
-                    super::Storage::Local(id) => Operand::Local(id),
-                    super::Storage::Arg(id) => Operand::Arg(id),
-                    super::Storage::Temp(id) => Operand::Temp(id),
-                    super::Storage::Global(id) => Operand::Global(id),
+                match &symbol.storage {
+                    super::super::Storage::Local(id) => Operand::Local(*id),
+                    super::super::Storage::Arg(id) => Operand::Arg(*id),
+                    super::super::Storage::Temp(id) => Operand::Temp(*id),
+                    super::super::Storage::Global(id) => Operand::Global(*id),
                 },
             );
         }
 
-        // 递归收集函数体中引用的变量
         self.collect_captures_block(body, &var_positions, &mut captures);
-
         Ok(captures)
     }
 
@@ -147,9 +130,7 @@ impl CodegenContext {
                 self.collect_captures(left, var_positions, captures);
                 self.collect_captures(right, var_positions, captures);
             }
-            Expr::UnOp { expr, .. } => {
-                self.collect_captures(expr, var_positions, captures);
-            }
+            Expr::UnOp { expr, .. } => self.collect_captures(expr, var_positions, captures),
             Expr::Call { func, args, .. } => {
                 self.collect_captures(func, var_positions, captures);
                 for arg in args {
@@ -188,15 +169,9 @@ impl CodegenContext {
                     self.collect_captures(&arm.body, var_positions, captures);
                 }
             }
-            Expr::Block(block) => {
-                self.collect_captures_block(block, var_positions, captures);
-            }
-            Expr::Return(Some(value), _) => {
-                self.collect_captures(value, var_positions, captures);
-            }
-            Expr::Cast { expr, .. } => {
-                self.collect_captures(expr, var_positions, captures);
-            }
+            Expr::Block(block) => self.collect_captures_block(block, var_positions, captures),
+            Expr::Return(Some(value), _) => self.collect_captures(value, var_positions, captures),
+            Expr::Cast { expr, .. } => self.collect_captures(expr, var_positions, captures),
             Expr::Tuple(exprs, _) => {
                 for e in exprs {
                     self.collect_captures(e, var_positions, captures);
@@ -217,9 +192,7 @@ impl CodegenContext {
                 self.collect_captures(expr, var_positions, captures);
                 self.collect_captures(index, var_positions, captures);
             }
-            Expr::FieldAccess { expr, .. } => {
-                self.collect_captures(expr, var_positions, captures);
-            }
+            Expr::FieldAccess { expr, .. } => self.collect_captures(expr, var_positions, captures),
             _ => {}
         }
     }
@@ -249,9 +222,7 @@ impl CodegenContext {
         use crate::frontend::parser::ast::StmtKind;
 
         match &stmt.kind {
-            StmtKind::Expr(expr) => {
-                self.collect_captures(expr, var_positions, captures);
-            }
+            StmtKind::Expr(expr) => self.collect_captures(expr, var_positions, captures),
             StmtKind::Var { initializer, .. } => {
                 if let Some(init) = initializer {
                     self.collect_captures(init, var_positions, captures);
@@ -289,7 +260,6 @@ impl CodegenContext {
         is_async: bool,
         func_id: u32,
     ) -> Result<(), CodegenError> {
-        // 转换参数类型
         let params: Vec<_> = params
             .iter()
             .map(|p| {
@@ -300,13 +270,11 @@ impl CodegenContext {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // 转换返回类型
         let return_type = return_type
             .map_or(Ok(crate::frontend::typecheck::MonoType::Void), |t| {
                 Ok(crate::frontend::typecheck::MonoType::from(t))
             })?;
 
-        // 创建函数 IR
         let func_ir = FunctionIR {
             name: if name.is_empty() {
                 format!("closure_{}", func_id)
@@ -321,9 +289,7 @@ impl CodegenContext {
             entry: 0,
         };
 
-        // 添加到模块
         self.module.functions.push(func_ir);
-
         Ok(())
     }
 }

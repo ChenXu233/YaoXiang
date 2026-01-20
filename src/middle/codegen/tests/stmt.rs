@@ -121,13 +121,13 @@ fn test_scope_level() {
     let module = ModuleIR::default();
     let mut ctx = CodegenContext::new(module);
 
-    assert_eq!(ctx.scope_level, 0);
+    assert_eq!(ctx.symbols.scope_level(), 0);
 
-    ctx.scope_level += 1;
-    assert_eq!(ctx.scope_level, 1);
+    ctx.symbols.push_scope();
+    assert_eq!(ctx.symbols.scope_level(), 1);
 
-    ctx.scope_level += 1;
-    assert_eq!(ctx.scope_level, 2);
+    ctx.symbols.push_scope();
+    assert_eq!(ctx.symbols.scope_level(), 2);
 }
 
 /// 测试函数索引
@@ -158,8 +158,8 @@ fn test_function_indices() {
     let ctx = CodegenContext::new(module);
 
     // 检查函数索引
-    let main_idx = ctx.function_indices.get("main");
-    let helper_idx = ctx.function_indices.get("helper");
+    let main_idx = ctx.flow.function_indices().get("main");
+    let helper_idx = ctx.flow.function_indices().get("helper");
 
     assert!(main_idx.is_some());
     assert!(helper_idx.is_some());

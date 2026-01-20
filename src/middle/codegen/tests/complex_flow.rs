@@ -1,5 +1,5 @@
 use crate::frontend::typecheck::MonoType;
-use crate::middle::codegen::generator::BytecodeGenerator;
+use crate::middle::codegen::ir_builder::BytecodeGenerator;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::vm::opcode::TypedOpcode;
 
@@ -92,7 +92,8 @@ fn test_generate_complex_flow() {
     func.blocks.push(block2);
     func.blocks.push(block3);
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     // Verify we have instructions

@@ -4,7 +4,7 @@
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::bytecode::FunctionCode;
-use crate::middle::codegen::generator::BytecodeGenerator;
+use crate::middle::codegen::ir_builder::BytecodeGenerator;
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, Operand};
 use crate::vm::opcode::TypedOpcode;
 
@@ -34,7 +34,8 @@ fn test_generate_add() {
     };
     func.blocks.push(block);
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
@@ -58,7 +59,8 @@ fn test_bytecode_generator_new() {
         entry: 0,
     };
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     // 验证生成器可以通过函数名创建（通过生成结果验证）
     let code = generator.generate();
     assert_eq!(code.name, "test");
@@ -87,7 +89,8 @@ fn test_generate_sub() {
         entry: 0,
     };
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
@@ -117,7 +120,8 @@ fn test_generate_mul() {
         entry: 0,
     };
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
@@ -146,7 +150,8 @@ fn test_generate_move() {
         entry: 0,
     };
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
@@ -176,7 +181,8 @@ fn test_generate_jump() {
         entry: 0,
     };
 
-    let generator = BytecodeGenerator::new(&func);
+    let mut constants = Vec::new();
+    let generator = BytecodeGenerator::new(&func, &mut constants);
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);

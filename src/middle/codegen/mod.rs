@@ -13,14 +13,12 @@
 //! - 栈分配：默认行为
 //! - 堆分配：`Box[T]`、`Arc[T]` 等显式智能指针
 
+pub mod buffer;
 pub mod bytecode;
-pub mod closure;
-pub mod control_flow;
-pub mod expr;
-pub mod generator;
-pub mod loop_gen;
-pub mod stmt;
-pub mod switch;
+pub mod flow;
+pub mod ir_builder;
+
+pub mod gen;
 
 use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
@@ -28,52 +26,37 @@ use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
 use crate::vm::opcode::TypedOpcode;
-use std::collections::{HashMap, HashSet};
 use std::fmt;
 use tracing::debug;
+
+use self::buffer::BytecodeBuffer;
+use self::flow::{FlowManager, JumpTable, Storage, Symbol, SymbolScopeManager};
 
 /// 代码生成器
 ///
 /// 将中间表示（IR）转换为类型化字节码。
+/// 使用三个管理器分离职责：
+/// - BytecodeBuffer: 常量池和字节码缓冲区
+/// - SymbolScopeManager: 符号表和作用域
+/// - FlowManager: 寄存器分配、标签、跳转表
 pub struct CodegenContext {
     /// 当前模块
     module: ModuleIR,
 
-    /// 符号表
-    symbol_table: SymbolTable,
-
-    /// 常量池
-    constant_pool: ConstantPool,
-
-    /// 字节码缓冲区
-    bytecode: Vec<u8>,
-
     /// 当前函数
     current_function: Option<FunctionIR>,
 
-    /// 寄存器分配器
-    register_allocator: RegisterAllocator,
+    /// 字节码缓冲区（常量池 + 字节码）
+    bytecode_buffer: BytecodeBuffer,
 
-    /// 标签生成器
-    label_generator: LabelGenerator,
+    /// 符号表和作用域管理
+    symbols: SymbolScopeManager,
 
-    /// 字节码偏移追踪
-    code_offsets: HashMap<usize, usize>,
-
-    /// 跳转表
-    jump_tables: HashMap<u16, JumpTable>,
-
-    /// 函数索引
-    function_indices: HashMap<String, usize>,
+    /// 控制流管理（寄存器、标签、跳转表）
+    flow: FlowManager,
 
     /// 配置
     config: CodegenConfig,
-
-    /// 当前作用域级别
-    scope_level: usize,
-
-    /// 当前循环标签 (loop_label, end_label)，用于 break/continue
-    current_loop_label: Option<(usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,185 +78,6 @@ impl Default for CodegenConfig {
             generate_debug_info: false,
             enable_inline_cache: true,
         }
-    }
-}
-
-/// 符号表
-#[derive(Debug, Default)]
-struct SymbolTable {
-    /// 符号映射
-    symbols: HashMap<String, Symbol>,
-
-    /// 嵌套作用域
-    scopes: Vec<HashMap<String, Symbol>>,
-}
-
-/// 符号信息
-#[derive(Debug, Clone)]
-struct Symbol {
-    /// 符号名称
-    name: String,
-
-    /// 符号类型
-    ty: MonoType,
-
-    /// 存储位置
-    storage: Storage,
-
-    /// 是否可变
-    is_mut: bool,
-
-    /// 作用域级别
-    scope_level: usize,
-}
-
-/// 存储位置
-#[derive(Debug, Clone)]
-enum Storage {
-    /// 局部变量
-    Local(usize),
-
-    /// 参数
-    Arg(usize),
-
-    /// 临时寄存器
-    Temp(usize),
-
-    /// 全局变量
-    Global(usize),
-}
-
-/// 常量池
-#[derive(Debug, Default)]
-struct ConstantPool {
-    /// 常量列表
-    constants: Vec<ConstValue>,
-}
-
-impl ConstantPool {
-    fn new() -> Self {
-        ConstantPool {
-            constants: Vec::new(),
-        }
-    }
-
-    /// 添加常量并返回索引
-    fn add(
-        &mut self,
-        value: ConstValue,
-    ) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
-    }
-
-    /// 获取常量
-    fn get(
-        &self,
-        index: usize,
-    ) -> Option<&ConstValue> {
-        self.constants.get(index)
-    }
-
-    /// 构建常量池
-    fn build(self) -> Vec<ConstValue> {
-        self.constants
-    }
-}
-
-/// 寄存器分配器
-#[derive(Debug, Default)]
-struct RegisterAllocator {
-    /// 下一个局部变量ID
-    next_local: usize,
-
-    /// 下一个临时寄存器ID
-    next_temp: usize,
-
-    /// 分配的寄存器
-    allocated: HashSet<usize>,
-}
-
-impl RegisterAllocator {
-    fn new() -> Self {
-        RegisterAllocator {
-            next_local: 0,
-            next_temp: 0,
-            allocated: HashSet::new(),
-        }
-    }
-
-    /// 分配局部变量
-    fn alloc_local(&mut self) -> usize {
-        let id = self.next_local;
-        self.next_local += 1;
-        self.allocated.insert(id);
-        id
-    }
-
-    /// 分配临时寄存器
-    fn alloc_temp(&mut self) -> usize {
-        let id = self.next_temp;
-        self.next_temp += 1;
-        self.allocated.insert(id);
-        id
-    }
-
-    /// 获取下一个局部变量ID
-    fn next_local_id(&self) -> usize {
-        self.next_local
-    }
-
-    /// 获取下一个临时寄存器ID
-    fn next_temp_id(&self) -> usize {
-        self.next_temp
-    }
-}
-
-/// 标签生成器
-#[derive(Debug, Default)]
-struct LabelGenerator {
-    /// 下一个标签ID
-    next_label: usize,
-}
-
-impl LabelGenerator {
-    fn new() -> Self {
-        LabelGenerator { next_label: 0 }
-    }
-
-    /// 生成下一个标签
-    fn next(&mut self) -> usize {
-        let label = self.next_label;
-        self.next_label += 1;
-        label
-    }
-}
-
-/// 跳转表
-#[derive(Debug, Clone)]
-struct JumpTable {
-    /// 表索引
-    index: u16,
-
-    /// 跳转目标
-    entries: HashMap<usize, usize>,
-}
-
-impl JumpTable {
-    fn new(index: u16) -> Self {
-        JumpTable {
-            index,
-            entries: HashMap::new(),
-        }
-    }
-
-    /// 添加条目
-    fn add_entry(
-        &mut self,
-        key: usize,
-        target: usize,
-    ) {
-        self.entries.insert(key, target);
     }
 }
 
@@ -340,23 +144,16 @@ impl CodegenContext {
 
         let mut ctx = CodegenContext {
             module,
-            symbol_table: SymbolTable::new(),
-            constant_pool: ConstantPool::new(),
-            bytecode: Vec::new(),
             current_function: None,
-            register_allocator: RegisterAllocator::new(),
-            label_generator: LabelGenerator::new(),
-            code_offsets: HashMap::new(),
-            jump_tables: HashMap::new(),
-            function_indices: HashMap::new(),
+            bytecode_buffer: BytecodeBuffer::new(),
+            symbols: SymbolScopeManager::new(),
+            flow: FlowManager::new(),
             config: CodegenConfig::default(),
-            scope_level: 0,
-            current_loop_label: None,
         };
 
         // 为所有函数建立索引
         for (idx, func) in ctx.module.functions.iter().enumerate() {
-            ctx.function_indices.insert(func.name.clone(), idx);
+            ctx.flow.add_function_index(func.name.clone(), idx);
         }
 
         ctx
@@ -381,7 +178,7 @@ impl CodegenContext {
         }
 
         // 2. 生成常量池（在代码段生成之后）
-        let const_pool = std::mem::take(&mut self.constant_pool.constants);
+        let const_pool = self.bytecode_buffer.take_constant_pool();
         let const_count = const_pool.len();
         debug!("{}", t(MSG::CodegenConstPool, lang, Some(&[&const_count])));
 
@@ -417,7 +214,7 @@ impl CodegenContext {
         debug!("{}", t(MSG::CodegenGenFn, lang, Some(&[&func.name])));
 
         self.current_function = Some(func.clone());
-        self.register_allocator = RegisterAllocator::new();
+        self.flow.reset_registers();
 
         // 生成函数体
         let instructions = self.generate_instructions(func)?;
@@ -453,8 +250,8 @@ impl CodegenContext {
         }
 
         // Log register allocation
-        let next_local = self.register_allocator.next_local_id();
-        let next_temp = self.register_allocator.next_temp_id();
+        let next_local = self.flow.next_local_id();
+        let next_temp = self.flow.next_temp_id();
         debug!(
             "{}",
             t(
@@ -492,23 +289,21 @@ impl CodegenContext {
                 // src 可以是常量或寄存器
                 match src {
                     Operand::Const(const_val) => {
-                        // 如果是 Int 类型的 ConstValue，说明它已经是常量池索引
-                        // 直接使用这个索引，不要再添加常量
-                        if let ConstValue::Int(idx) = const_val {
-                            let const_idx = *idx as usize;
-                            Ok(BytecodeInstruction::new(
-                                TypedOpcode::LoadConst,
-                                vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
-                            ))
-                        } else {
-                            // 其他类型的常量才需要添加到常量池
-                            let const_idx = self.add_constant(const_val.clone());
-                            Ok(BytecodeInstruction::new(
-                                TypedOpcode::LoadConst,
-                                vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
-                            ))
-                        }
+                        // 常量统一放入常量池
+                        let const_idx = self.add_constant(const_val.clone());
+                        Ok(BytecodeInstruction::new(
+                            TypedOpcode::LoadConst,
+                            vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
+                        ))
                     }
+                    Operand::Local(local_idx) => Ok(BytecodeInstruction::new(
+                        TypedOpcode::LoadLocal,
+                        vec![dst_reg, *local_idx as u8],
+                    )),
+                    Operand::Arg(arg_idx) => Ok(BytecodeInstruction::new(
+                        TypedOpcode::LoadArg,
+                        vec![dst_reg, *arg_idx as u8],
+                    )),
                     _ => {
                         let src_reg = self.operand_to_reg(src)?;
                         Ok(BytecodeInstruction::new(
@@ -519,10 +314,17 @@ impl CodegenContext {
                 }
             }
 
-            Store { dst: _, src } => {
-                // Store 指令 dst 是存储目标，src 是源
-                let src_reg = self.operand_to_reg(src)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![src_reg])) // 简化
+            Store { dst, src } => {
+                // Store 指令：写入局部变量
+                if let Operand::Local(local_idx) = dst {
+                    let src_reg = self.operand_to_reg(src)?;
+                    Ok(BytecodeInstruction::new(
+                        TypedOpcode::StoreLocal,
+                        vec![*local_idx as u8, src_reg],
+                    ))
+                } else {
+                    Err(CodegenError::InvalidOperand)
+                }
             }
 
             // =====================
@@ -711,9 +513,14 @@ impl CodegenContext {
                     }
                     _ => 0,
                 };
+                let base_arg_reg = if let Some(first_arg) = args.first() {
+                    self.operand_to_reg(first_arg)?
+                } else {
+                    0
+                };
                 let mut operands = vec![dst_reg];
                 operands.extend_from_slice(&func_id.to_le_bytes());
-                operands.push(0); // base_arg_reg
+                operands.push(base_arg_reg); // base_arg_reg
                 operands.push(args.len() as u8);
                 Ok(BytecodeInstruction::new(TypedOpcode::CallStatic, operands))
             }
@@ -726,9 +533,14 @@ impl CodegenContext {
                     Operand::Const(ConstValue::Int(i)) => *i as u32,
                     _ => 0,
                 };
+                let base_arg_reg = if let Some(first_arg) = args.first() {
+                    self.operand_to_reg(first_arg)?
+                } else {
+                    0
+                };
                 let mut operands = vec![];
                 operands.extend_from_slice(&func_id.to_le_bytes());
-                operands.push(0); // base_arg_reg
+                operands.push(base_arg_reg); // base_arg_reg
                 operands.push(args.len() as u8);
                 Ok(BytecodeInstruction::new(TypedOpcode::TailCall, operands))
             }
@@ -1002,22 +814,22 @@ impl CodegenContext {
         &mut self,
         value: ConstValue,
     ) -> usize {
-        self.constant_pool.add(value)
+        self.bytecode_buffer.add_constant(value)
     }
 
     /// 获取下一个临时寄存器
     fn next_temp(&mut self) -> usize {
-        self.register_allocator.alloc_temp()
+        self.flow.alloc_temp()
     }
 
     /// 获取下一个局部变量
     fn next_local(&mut self) -> usize {
-        self.register_allocator.alloc_local()
+        self.flow.alloc_local()
     }
 
     /// 生成标签
     fn next_label(&mut self) -> usize {
-        self.label_generator.next()
+        self.flow.next_label()
     }
 
     /// 发射指令
@@ -1025,7 +837,7 @@ impl CodegenContext {
         &mut self,
         instr: BytecodeInstruction,
     ) {
-        self.bytecode.extend(instr.encode());
+        self.bytecode_buffer.emit(&instr.encode());
     }
 }
 
@@ -1043,57 +855,12 @@ impl Default for CodegenContext {
     fn default() -> Self {
         CodegenContext {
             module: ModuleIR::default(),
-            symbol_table: SymbolTable::new(),
-            constant_pool: ConstantPool::new(),
-            bytecode: Vec::new(),
             current_function: None,
-            register_allocator: RegisterAllocator::new(),
-            label_generator: LabelGenerator::new(),
-            code_offsets: HashMap::new(),
-            jump_tables: HashMap::new(),
-            function_indices: HashMap::new(),
+            bytecode_buffer: BytecodeBuffer::new(),
+            symbols: SymbolScopeManager::new(),
+            flow: FlowManager::new(),
             config: CodegenConfig::default(),
-            scope_level: 0,
-            current_loop_label: None,
         }
-    }
-}
-
-impl SymbolTable {
-    fn new() -> Self {
-        SymbolTable {
-            symbols: HashMap::new(),
-            scopes: vec![HashMap::new()],
-        }
-    }
-
-    fn insert(
-        &mut self,
-        name: String,
-        symbol: Symbol,
-    ) {
-        self.symbols.insert(name, symbol);
-    }
-
-    fn get(
-        &self,
-        name: &str,
-    ) -> Option<&Symbol> {
-        self.symbols.get(name)
-    }
-
-    fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new());
-    }
-
-    fn pop_scope(&mut self) {
-        if self.scopes.len() > 1 {
-            self.scopes.pop();
-        }
-    }
-
-    fn current_scope(&mut self) -> &mut HashMap<String, Symbol> {
-        self.scopes.last_mut().unwrap()
     }
 }
 

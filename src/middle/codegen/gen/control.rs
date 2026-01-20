@@ -1,8 +1,8 @@
 //! 控制流代码生成
 //!
-//! 将 if、while、for、match 等控制流结构转换为字节码指令。
+//! 将 if、while、for、match、switch 等控制流结构转换为字节码指令。
 
-use super::{BytecodeInstruction, CodegenContext, CodegenError};
+use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
 use crate::frontend::parser::ast::{Block, MatchArm, Pattern};
 use crate::middle::ir::Operand;
@@ -10,6 +10,7 @@ use crate::vm::opcode::TypedOpcode;
 
 /// 控制流代码生成实现
 impl CodegenContext {
+    /// 生成 if 语句
     fn generate_if_stmt(
         &mut self,
         condition: &Block,
@@ -17,60 +18,47 @@ impl CodegenContext {
         elif_branches: &[(Block, Block)],
         else_branch: Option<&Block>,
     ) -> Result<(), CodegenError> {
-        // 生成条件表达式
         let cond = self.generate_block(condition)?;
-
-        // 创建标签
         let end_label = self.next_label();
         let then_label = self.next_label();
 
-        // 条件为假则跳转到 then 分支
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::JmpIfNot,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::JmpIfNot,
             vec![self.operand_to_reg(&cond)?, then_label as u8],
         ));
 
-        // 生成 then 分支
         self.generate_block(then_branch)?;
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Jmp,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Jmp,
             vec![end_label as u8],
         ));
 
-        // 处理 elif 分支
         for (elif_cond, elif_body) in elif_branches {
             let elif_label = self.next_label();
-
-            // 生成 elif 条件
             let elif_cond_result = self.generate_block(elif_cond)?;
 
-            // 条件为假则跳转到下一个 elif 或 else
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::JmpIfNot,
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::JmpIfNot,
                 vec![self.operand_to_reg(&elif_cond_result)?, then_label as u8],
             ));
 
-            // 生成 elif 标签
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::Label,
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Label,
                 vec![elif_label as u8],
             ));
-
             self.generate_block(elif_body)?;
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::Jmp,
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Jmp,
                 vec![end_label as u8],
             ));
         }
 
-        // 生成 else 分支（如果有）
         if let Some(else_block) = else_branch {
             self.generate_block(else_block)?;
         }
 
-        // 结束标签
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Label,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
             vec![end_label as u8],
         ));
 
@@ -84,45 +72,37 @@ impl CodegenContext {
         body: &Block,
         _label: Option<&str>,
     ) -> Result<(), CodegenError> {
-        // 创建标签
         let loop_label = self.next_label();
         let end_label = self.next_label();
+        let prev_loop_label = self.flow.loop_label();
+        self.flow.set_loop_label(loop_label, end_label);
 
-        // 保存循环标签（用于 break/continue）
-        let prev_loop_label = self.current_loop_label.replace((loop_label, end_label));
-
-        // 循环开始标签
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Label,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
             vec![loop_label as u8],
         ));
-
-        // 生成条件
         let cond = self.generate_block(condition)?;
 
-        // 条件为假则跳出循环
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::JmpIfNot,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::JmpIfNot,
             vec![self.operand_to_reg(&cond)?, end_label as u8],
         ));
 
-        // 生成循环体
         self.generate_block(body)?;
-
-        // 跳回循环开始
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Jmp,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Jmp,
             vec![loop_label as u8],
         ));
-
-        // 循环结束标签
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Label,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
             vec![end_label as u8],
         ));
 
-        // 恢复循环标签
-        self.current_loop_label = prev_loop_label;
+        if let Some((loop_lbl, end_lbl)) = prev_loop_label {
+            self.flow.set_loop_label(loop_lbl, end_lbl);
+        } else {
+            self.flow.clear_loop_label();
+        }
 
         Ok(())
     }
@@ -134,90 +114,65 @@ impl CodegenContext {
         iterable: &Block,
         body: &Block,
     ) -> Result<(), CodegenError> {
-        // 创建标签
         let loop_label = self.next_label();
         let end_label = self.next_label();
+        let prev_loop_label = self.flow.loop_label();
+        self.flow.set_loop_label(loop_label, end_label);
 
-        // 保存循环标签
-        let prev_loop_label = self.current_loop_label.replace((loop_label, end_label));
-
-        // 生成可迭代对象
         self.generate_block(iterable)?;
-
-        // 循环开始
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Label,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
             vec![loop_label as u8],
         ));
-
-        // 生成循环体
         self.generate_block(body)?;
-
-        // 跳回循环开始
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Jmp,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Jmp,
             vec![loop_label as u8],
         ));
-
-        // 循环结束
-        self.emit(super::BytecodeInstruction::new(
-            crate::vm::opcode::TypedOpcode::Label,
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
             vec![end_label as u8],
         ));
 
-        // 恢复循环标签
-        self.current_loop_label = prev_loop_label;
+        if let Some((loop_lbl, end_lbl)) = prev_loop_label {
+            self.flow.set_loop_label(loop_lbl, end_lbl);
+        } else {
+            self.flow.clear_loop_label();
+        }
 
-        // 使用 var 避免未使用警告
         let _ = var;
         Ok(())
     }
 
     /// 生成 match 表达式
-    ///
-    /// 支持所有模式类型：字面量、构造器、守卫、嵌套等
-    /// 使用 TypeCheck + GetField + JmpIfNot 组合实现，不依赖专用 PAT_xxx 指令
     pub(super) fn generate_match_stmt(
         &mut self,
         expr: &Block,
         arms: &[MatchArm],
     ) -> Result<(), CodegenError> {
-        // 生成匹配表达式
         let match_reg = self.generate_block(expr)?;
-
-        // 结束标签
         let end_label = self.next_label();
 
-        // 为每个 arm 生成模式匹配代码
         for arm in arms {
             let next_arm_label = self.next_label();
             self.generate_pattern_match(&match_reg, &arm.pattern, next_arm_label)?;
-            // 模式匹配成功，生成 body
             let arm_block = Block {
                 stmts: Vec::new(),
                 expr: Some(Box::new(arm.body.clone())),
                 span: arm.span,
             };
             self.generate_block(&arm_block)?;
-            // 跳到结束
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Jmp,
                 vec![end_label as u8],
             ));
-            // 下一个 arm 的标签
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Label,
                 vec![next_arm_label as u8],
             ));
         }
 
-        // 所有模式都不匹配 - 运行时错误
-        self.emit(BytecodeInstruction::new(
-            TypedOpcode::Throw,
-            vec![0], // NonExhaustivePatterns error code
-        ));
-
-        // 结束标签
+        self.emit(BytecodeInstruction::new(TypedOpcode::Throw, vec![0]));
         self.emit(BytecodeInstruction::new(
             TypedOpcode::Label,
             vec![end_label as u8],
@@ -227,13 +182,6 @@ impl CodegenContext {
     }
 
     /// 生成模式匹配代码
-    ///
-    /// 为单个模式生成匹配测试代码。
-    /// 匹配成功则继续执行后续代码（arm body），匹配失败则跳转到 next_arm_label。
-    ///
-    /// - `value_reg`: 被匹配的值所在的寄存器
-    /// - `pattern`: 要匹配的模式
-    /// - `next_arm_label`: 匹配失败时跳转的标签
     fn generate_pattern_match(
         &mut self,
         value_reg: &Operand,
@@ -241,33 +189,17 @@ impl CodegenContext {
         next_arm_label: usize,
     ) -> Result<(), CodegenError> {
         match pattern {
-            // 通配符模式 `_` - 总是匹配
-            Pattern::Wildcard => {
-                // 什么都不做，直接继续执行
-            }
-
-            // 标识符模式 `x` - 绑定变量，总是匹配
-            Pattern::Identifier(name) => {
-                // 将值存储到变量的存储位置
-                self.generate_binding(value_reg, name)?;
-            }
-
-            // 字面量模式 `0`, `"hello"`, `true` 等
+            Pattern::Wildcard => {}
+            Pattern::Identifier(name) => self.generate_binding(value_reg, name)?,
             Pattern::Literal(literal) => {
-                self.generate_literal_pattern(value_reg, literal, next_arm_label)?;
+                self.generate_literal_pattern(value_reg, literal, next_arm_label)?
             }
-
-            // 元组模式 `(a, b, c)`
             Pattern::Tuple(patterns) => {
-                self.generate_tuple_pattern(value_reg, patterns, next_arm_label)?;
+                self.generate_tuple_pattern(value_reg, patterns, next_arm_label)?
             }
-
-            // 结构体模式 `Some(x)`, `Point { x, y }`
             Pattern::Struct { name, fields } => {
-                self.generate_struct_pattern(value_reg, name, fields, next_arm_label)?;
+                self.generate_struct_pattern(value_reg, name, fields, next_arm_label)?
             }
-
-            // 联合类型模式 `Ok(value)`, `Err(e)`
             Pattern::Union {
                 name,
                 variant,
@@ -281,18 +213,13 @@ impl CodegenContext {
                     next_arm_label,
                 )?;
             }
-
-            // 或模式 `A | B | C`
             Pattern::Or(patterns) => {
-                self.generate_or_pattern(value_reg, patterns, next_arm_label)?;
+                self.generate_or_pattern(value_reg, patterns, next_arm_label)?
             }
-
-            // 守卫模式 `x if x > 0`
             Pattern::Guard { pattern, condition } => {
-                self.generate_guard_pattern(value_reg, pattern, condition, next_arm_label)?;
+                self.generate_guard_pattern(value_reg, pattern, condition, next_arm_label)?
             }
         }
-
         Ok(())
     }
 
@@ -307,23 +234,18 @@ impl CodegenContext {
         let value_u8 = self.operand_to_reg(value_reg)?;
 
         match literal {
-            // 整数 literal
             Literal::Int(_n) => {
-                // 加载常量 *n
                 let const_reg = self.next_temp();
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::I64Const,
                     vec![const_reg as u8],
                 ));
-                // I64Eq: dst, lhs, rhs
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::I64Eq,
                     vec![cmp_reg as u8, value_u8, const_reg as u8],
                 ));
             }
-            // 布尔 literal
             Literal::Bool(b) => {
-                // 加载布尔常量 (0 或 1)
                 let const_reg = self.next_temp();
                 self.emit(BytecodeInstruction::new(
                     TypedOpcode::I64Const,
@@ -334,18 +256,12 @@ impl CodegenContext {
                     vec![cmp_reg as u8, value_u8, const_reg as u8],
                 ));
             }
-            // 其他字面量类型（字符串、浮点数、字符）
-            _ => {
-                // 简化处理：对于非整数字面量，总是失败
-                // TODO: 实现完整的字符串/浮点数比较
-                self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Const,
-                    vec![cmp_reg as u8, 0],
-                ));
-            }
+            _ => self.emit(BytecodeInstruction::new(
+                TypedOpcode::I64Const,
+                vec![cmp_reg as u8, 0],
+            )),
         }
 
-        // JmpIfNot: 如果比较结果为假，跳到下一个 arm
         self.emit(BytecodeInstruction::new(
             TypedOpcode::JmpIfNot,
             vec![cmp_reg as u8, fail_label as i16 as u8],
@@ -362,25 +278,20 @@ impl CodegenContext {
         _fail_label: usize,
     ) -> Result<(), CodegenError> {
         for (i, elem_pattern) in patterns.iter().enumerate() {
-            // 获取元组的第 i 个元素
             let elem_reg = self.next_temp();
             let value_u8 = self.operand_to_reg(value_reg)?;
 
-            // GetField: dst, src, field_offset
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::GetField,
                 vec![elem_reg as u8, value_u8, i as u8, 0],
             ));
 
-            // 递归匹配元素模式
             let next_elem_fail_label = self.next_label();
             self.generate_pattern_match(
                 &Operand::Temp(elem_reg),
                 elem_pattern,
                 next_elem_fail_label,
             )?;
-
-            // 元素匹配失败：发射下一个元素的失败标签
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Label,
                 vec![next_elem_fail_label as u8],
@@ -400,23 +311,17 @@ impl CodegenContext {
         let value_u8 = self.operand_to_reg(value_reg)?;
         let type_check_reg = self.next_temp();
 
-        // 1. TypeCheck: 检查类型是否匹配
-        // TypeCheck: obj_reg, type_id, dst
-        // TODO: 需要获取 name 对应的 type_id
         self.emit(BytecodeInstruction::new(
             TypedOpcode::TypeCheck,
             vec![value_u8, 0, type_check_reg as u8],
         ));
 
-        // 如果类型不匹配，跳到下一个 arm
         self.emit(BytecodeInstruction::new(
             TypedOpcode::JmpIfNot,
             vec![type_check_reg as u8, fail_label as i16 as u8],
         ));
 
-        // 2. 对每个字段进行模式匹配
         for (field_name, field_pattern) in fields {
-            // 获取字段值
             let field_reg = self.next_temp();
             let field_offset = self.get_field_offset(field_name);
 
@@ -430,14 +335,12 @@ impl CodegenContext {
                 ],
             ));
 
-            // 递归匹配字段模式
             let next_field_fail_label = self.next_label();
             self.generate_pattern_match(
                 &Operand::Temp(field_reg),
                 field_pattern,
                 next_field_fail_label,
             )?;
-
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Label,
                 vec![next_field_fail_label as u8],
@@ -447,7 +350,7 @@ impl CodegenContext {
         Ok(())
     }
 
-    /// 生成联合类型模式匹配 (代数数据类型)
+    /// 生成联合类型模式匹配
     fn generate_union_pattern(
         &mut self,
         value_reg: &Operand,
@@ -459,8 +362,6 @@ impl CodegenContext {
         let value_u8 = self.operand_to_reg(value_reg)?;
         let type_check_reg = self.next_temp();
 
-        // 1. TypeCheck: 检查变体类型
-        // TODO: 需要获取 (name, variant) 对应的 type_id
         self.emit(BytecodeInstruction::new(
             TypedOpcode::TypeCheck,
             vec![value_u8, 0, type_check_reg as u8],
@@ -471,10 +372,8 @@ impl CodegenContext {
             vec![type_check_reg as u8, fail_label as i16 as u8],
         ));
 
-        // 2. 如果有内部模式，匹配内部值
         if let Some(inner_pattern) = pattern {
             let inner_reg = self.next_temp();
-            // 获取变体的内部值（字段偏移 0）
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::GetField,
                 vec![inner_reg as u8, value_u8, 0, 0],
@@ -485,21 +384,19 @@ impl CodegenContext {
         Ok(())
     }
 
-    /// 生成或模式匹配 (A | B | C)
+    /// 生成或模式匹配
     fn generate_or_pattern(
         &mut self,
         value_reg: &Operand,
         patterns: &[Pattern],
         fail_label: usize,
     ) -> Result<(), CodegenError> {
-        // 或模式：依次尝试每个模式，任何一个成功就继续
         for pattern in patterns {
             let next_pattern_label = self.next_label();
             self.generate_pattern_match(value_reg, pattern, next_pattern_label)?;
-            // 这个 pattern 匹配成功，跳出或模式
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Jmp,
-                vec![fail_label as u8], // 跳到 or_pattern 成功后的位置
+                vec![fail_label as u8],
             ));
             self.emit(BytecodeInstruction::new(
                 TypedOpcode::Label,
@@ -509,7 +406,7 @@ impl CodegenContext {
         Ok(())
     }
 
-    /// 生成守卫模式匹配 (x if x > 0)
+    /// 生成守卫模式匹配
     fn generate_guard_pattern(
         &mut self,
         value_reg: &Operand,
@@ -517,16 +414,12 @@ impl CodegenContext {
         condition: &crate::frontend::parser::ast::Expr,
         fail_label: usize,
     ) -> Result<(), CodegenError> {
-        // 1. 先匹配模式（绑定变量）
         self.generate_pattern_match(value_reg, pattern, fail_label)?;
-
-        // 2. 再测试守卫条件
         let cond_reg = self.generate_expr(condition)?;
         self.emit(BytecodeInstruction::new(
             TypedOpcode::JmpIfNot,
             vec![self.operand_to_reg(&cond_reg)?, fail_label as i16 as u8],
         ));
-
         Ok(())
     }
 
@@ -536,24 +429,21 @@ impl CodegenContext {
         value_reg: &Operand,
         name: &str,
     ) -> Result<(), CodegenError> {
-        // 在符号表中查找变量，获取存储位置
-        if let Some(symbol) = self.symbol_table.get(name) {
-            match symbol.storage {
-                super::Storage::Local(id) => {
+        if let Some(symbol) = self.symbols.symbol_table().get(name) {
+            match &symbol.storage {
+                super::super::Storage::Local(id) => {
                     self.emit(BytecodeInstruction::new(
                         TypedOpcode::StoreLocal,
-                        vec![self.operand_to_reg(value_reg)?, id as u8],
+                        vec![self.operand_to_reg(value_reg)?, *id as u8],
                     ));
                 }
-                super::Storage::Temp(id) => {
+                super::super::Storage::Temp(id) => {
                     self.emit(BytecodeInstruction::new(
                         TypedOpcode::Mov,
-                        vec![id as u8, self.operand_to_reg(value_reg)?],
+                        vec![*id as u8, self.operand_to_reg(value_reg)?],
                     ));
                 }
-                _ => {
-                    // 其他存储类型暂不支持
-                }
+                _ => {}
             }
         }
         Ok(())
@@ -566,15 +456,12 @@ impl CodegenContext {
     ) -> Result<(), CodegenError> {
         if let Some(block) = value {
             let result = self.generate_block(block)?;
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::ReturnValue,
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::ReturnValue,
                 vec![self.operand_to_reg(&result)?],
             ));
         } else {
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::Return,
-                vec![],
-            ));
+            self.emit(BytecodeInstruction::new(TypedOpcode::Return, vec![]));
         }
         Ok(())
     }
@@ -584,9 +471,9 @@ impl CodegenContext {
         &mut self,
         _label: Option<&str>,
     ) -> Result<(), CodegenError> {
-        if let Some((_, end_label)) = self.current_loop_label {
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::Jmp,
+        if let Some((_, end_label)) = self.flow.loop_label() {
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Jmp,
                 vec![end_label as u8],
             ));
         }
@@ -598,9 +485,9 @@ impl CodegenContext {
         &mut self,
         _label: Option<&str>,
     ) -> Result<(), CodegenError> {
-        if let Some((loop_label, _)) = self.current_loop_label {
-            self.emit(super::BytecodeInstruction::new(
-                crate::vm::opcode::TypedOpcode::Jmp,
+        if let Some((loop_label, _)) = self.flow.loop_label() {
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Jmp,
                 vec![loop_label as u8],
             ));
         }
@@ -614,16 +501,188 @@ impl CodegenContext {
     ) -> Result<Operand, CodegenError> {
         let mut result = Operand::Temp(self.next_temp());
 
-        // 生成所有语句
         for stmt in &block.stmts {
             self.generate_stmt(stmt)?;
         }
 
-        // 生成尾表达式（如果有）
         if let Some(expr) = &block.expr {
             result = self.generate_expr(expr)?;
         }
 
         Ok(result)
+    }
+}
+
+// ===== Switch 语句（从 switch.rs 合并）=====
+
+use crate::frontend::parser::ast::Expr;
+
+impl CodegenContext {
+    /// 生成 Switch 语句
+    pub fn generate_switch(
+        &mut self,
+        cond: &Expr,
+        cases: &[(Expr, Expr)],
+        default: Option<&Expr>,
+    ) -> Result<Operand, CodegenError> {
+        let cond_reg = self.generate_expr(cond)?;
+
+        if let Some(table) = self.try_build_jump_table(cases) {
+            self.generate_jump_table_switch(cond_reg.clone(), cases, table, default)
+        } else {
+            self.generate_if_else_chain_switch(cond_reg, cases, default)
+        }
+    }
+
+    /// 尝试构建跳转表
+    fn try_build_jump_table(
+        &self,
+        cases: &[(Expr, Expr)],
+    ) -> Option<Vec<(i32, usize)>> {
+        let mut table = Vec::new();
+
+        for (idx, (value_expr, _body_expr)) in cases.iter().enumerate() {
+            if let Expr::Lit(Literal::Int(n), _) = value_expr {
+                table.push((*n as i32, idx));
+            } else {
+                return None;
+            }
+        }
+
+        if let Some((min, max)) = get_min_max(table.iter().map(|(v, _)| v)) {
+            let range = (*max as usize) as i32 - (*min as usize) as i32;
+            let count = table.len();
+
+            if range > count as i32 * 2 {
+                return None;
+            }
+        }
+
+        Some(table)
+    }
+
+    /// 生成跳转表 Switch 指令
+    fn generate_jump_table_switch(
+        &mut self,
+        cond_reg: Operand,
+        cases: &[(Expr, Expr)],
+        table: Vec<(i32, usize)>,
+        default: Option<&Expr>,
+    ) -> Result<Operand, CodegenError> {
+        let end_label = self.next_label();
+        let dst = self.next_temp();
+
+        let table_idx = self.flow.get_jump_table_index().unwrap_or(0);
+        let mut jump_table = super::super::JumpTable::new(table_idx);
+
+        let mut case_labels = Vec::new();
+        for (_, case_idx) in &table {
+            let arm_label = self.next_label();
+            case_labels.push((*case_idx, arm_label));
+            jump_table.add_entry(*case_idx, arm_label);
+        }
+
+        let default_label = if default.is_some() {
+            Some(self.next_label())
+        } else {
+            None
+        };
+        let default_offset = default_label.map_or(end_label as i32, |l| l as i32);
+
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Switch,
+            vec![
+                self.operand_to_reg(&cond_reg)?,
+                default_offset as u8,
+                table_idx as u8,
+            ],
+        ));
+
+        self.flow.add_jump_table(jump_table);
+
+        for (case_idx, _arm_label) in case_labels.iter() {
+            if *case_idx < cases.len() {
+                let (_value_expr, body_expr) = &cases[*case_idx];
+                self.generate_expr(body_expr)?;
+            }
+        }
+
+        if let Some(default_expr) = default {
+            self.generate_expr(default_expr)?;
+        }
+
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
+            vec![end_label as u8],
+        ));
+
+        Ok(Operand::Temp(dst))
+    }
+
+    /// 生成 If-Else 链（回退模式）
+    fn generate_if_else_chain_switch(
+        &mut self,
+        cond_reg: Operand,
+        cases: &[(Expr, Expr)],
+        default: Option<&Expr>,
+    ) -> Result<Operand, CodegenError> {
+        let end_label = self.next_label();
+
+        for (value_expr, body_expr) in cases {
+            let body_label = self.next_label();
+            let value_reg = self.generate_expr(value_expr)?;
+            let cmp_dst = self.next_temp();
+
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::I64Eq,
+                vec![
+                    cmp_dst as u8,
+                    self.operand_to_reg(&cond_reg)?,
+                    self.operand_to_reg(&value_reg)?,
+                ],
+            ));
+
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::JmpIfNot,
+                vec![cmp_dst as u8, body_label as i8 as u8],
+            ));
+
+            self.generate_expr(body_expr)?;
+            self.emit(BytecodeInstruction::new(
+                TypedOpcode::Jmp,
+                vec![end_label as u8],
+            ));
+        }
+
+        if let Some(default_expr) = default {
+            self.generate_expr(default_expr)?;
+        }
+
+        self.emit(BytecodeInstruction::new(
+            TypedOpcode::Label,
+            vec![end_label as u8],
+        ));
+
+        Ok(Operand::Temp(self.next_temp()))
+    }
+}
+
+/// 获取迭代器的最小值和最大值
+fn get_min_max<T: Copy + PartialOrd, I: Iterator<Item = T>>(mut iter: I) -> Option<(T, T)> {
+    match iter.next() {
+        None => None,
+        Some(first) => {
+            let mut min = first;
+            let mut max = first;
+            for item in iter {
+                if item < min {
+                    min = item;
+                }
+                if item > max {
+                    max = item;
+                }
+            }
+            Some((min, max))
+        }
     }
 }

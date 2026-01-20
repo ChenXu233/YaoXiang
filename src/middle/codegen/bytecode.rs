@@ -236,22 +236,24 @@ impl CompiledModule {
     /// 从 ModuleIR 生成编译后的模块
     ///
     /// 将 IR 转换为字节码，在编译阶段完成
-    pub fn from_ir(
-        ir: &crate::middle::ir::ModuleIR,
-        constants: Vec<ConstValue>,
-    ) -> Self {
-        use crate::middle::codegen::generator::BytecodeGenerator;
+    pub fn from_ir(ir: &crate::middle::ir::ModuleIR) -> Self {
+        use crate::middle::codegen::ir_builder::BytecodeGenerator;
 
-        let mut functions = Vec::new();
-        for func_ir in &ir.functions {
-            let generator = BytecodeGenerator::new(func_ir);
-            let func_code = generator.generate();
-            functions.push(func_code);
-        }
+        let mut constants = Vec::new();
+
+        let functions = ir
+            .functions
+            .iter()
+            .map(|func_ir| {
+                let generator = BytecodeGenerator::new(func_ir, &mut constants);
+                generator.generate()
+            })
+            .collect();
 
         CompiledModule {
             name: String::new(),
-            globals: ir.globals
+            globals: ir
+                .globals
                 .iter()
                 .map(|(name, ty, val)| (name.clone(), MonoType::from(ty.clone()), val.clone()))
                 .collect(),
@@ -261,7 +263,10 @@ impl CompiledModule {
     }
 
     /// 获取函数代码
-    pub fn get_function(&self, name: &str) -> Option<&FunctionCode> {
+    pub fn get_function(
+        &self,
+        name: &str,
+    ) -> Option<&FunctionCode> {
         self.functions.iter().find(|f| f.name == name)
     }
 }
