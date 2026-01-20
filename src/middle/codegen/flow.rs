@@ -17,7 +17,7 @@ impl LabelGenerator {
     pub fn new() -> Self {
         LabelGenerator { next_label: 0 }
     }
-    pub fn next(&mut self) -> usize {
+    pub fn next_label(&mut self) -> usize {
         let label = self.next_label;
         self.next_label += 1;
         label
@@ -104,6 +104,9 @@ impl JumpTable {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 /// 控制流管理器
@@ -148,7 +151,7 @@ impl FlowManager {
 
     // 标签生成
     pub fn next_label(&mut self) -> usize {
-        self.label_generator.next()
+        self.label_generator.next_label()
     }
 
     // 跳转表
@@ -361,10 +364,10 @@ mod tests {
     #[test]
     fn test_label_generator() {
         let mut gen = LabelGenerator::new();
-        assert_eq!(gen.next(), 0);
-        assert_eq!(gen.next(), 1);
+        assert_eq!(gen.next_label(), 0);
+        assert_eq!(gen.next_label(), 1);
         gen.reset();
-        assert_eq!(gen.next(), 0);
+        assert_eq!(gen.next_label(), 0);
     }
 
     #[test]
