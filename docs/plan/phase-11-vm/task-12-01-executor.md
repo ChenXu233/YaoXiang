@@ -1,7 +1,7 @@
 # Task 12.1: 执行器
 
 > **优先级**: P0
-> **状态**: ⚠️ 需重构
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -14,30 +14,45 @@
 struct VM {
     /// 字节码
     bytecode: Bytecode,
-    /// 寄存器
-    registers: Vec<Value>,
+    /// 寄存器文件
+    regs: RegisterFile,
     /// 栈帧栈
     frames: Vec<Frame>,
     /// 当前帧索引
     frame_index: usize,
     /// 程序计数器
     pc: usize,
-    /// 运行时接口
-    runtime: RuntimeInterface,
     /// VM 配置
     config: VMConfig,
+    /// 错误信息
+    error: Option<VMError>,
 }
 
-struct VMConfig {
-    /// 最大栈大小
-    max_stack_size: usize,
-    /// 最大帧深度
-    max_frame_depth: usize,
-    /// 启用调试模式
-    debug_mode: bool,
-    /// 启用 JIT（可选）
-    enable_jit: bool,
+/// 寄存器文件
+struct RegisterFile {
+    /// 通用寄存器
+    regs: Vec<RuntimeValue>,
 }
+
+/// VM 配置
+struct VMConfig {
+    /// 初始栈大小
+    stack_size: usize,
+    /// 最大调用深度
+    max_call_depth: usize,
+    /// 启用调试模式
+    trace_execution: bool,
+}
+```
+
+## 与 Runtime 的关系
+
+```rust
+// 使用 Runtime 提供的值类型
+use crate::runtime::value::RuntimeValue;
+
+// 使用 Runtime 提供的外部函数
+use crate::runtime::extfunc;
 ```
 
 ## 执行循环
@@ -45,36 +60,45 @@ struct VMConfig {
 ```rust
 impl VM {
     /// 执行字节码
-    pub fn run(&mut self) -> VMResult<Value> {
-        loop {
-            // 获取指令
-            let instruction = self.fetch_instruction()?;
-
-            // 译码
-            let opcode = instruction.opcode;
-
-            // 执行
-            self.execute(opcode, &instruction)?;
-
-            // 检查中断
-            self.check_interrupt()?;
-
-            // 检查是否结束
-            if self.is_halted() {
-                break;
-            }
-        }
-
-        self.pop_result()
+    pub fn execute_module(&mut self, module: &CompiledModule) -> VMResult<()> {
+        // 加载主函数
+        // 执行主函数
+        // 返回结果
     }
 
-    fn fetch_instruction(&self) -> Result<&Instruction, VMError> {
-        let pc = self.pc;
-        self.bytecode.get(pc).ok_or(VMError::InvalidPC(pc))
+    /// 执行单条指令
+    fn step(&mut self) -> VMResult<()> {
+        // 获取指令
+        let opcode = self.fetch_opcode()?;
+
+        // 执行指令
+        self.execute(opcode)?;
+
+        // 检查中断
+        self.check_interrupt()?;
+
+        Ok(())
+    }
+}
+```
+
+## 外部函数调用
+
+```rust
+impl VM {
+    /// 调用外部函数
+    fn call_external(&mut self, name: &str, args: &[RuntimeValue]) -> VMResult<RuntimeValue> {
+        if let Some(ext_func) = EXTERNAL_FUNCTIONS.get(name) {
+            Ok((ext_func.func)(args))
+        } else {
+            Err(VMError::ExternalFunctionNotFound(name.to_string()))
+        }
     }
 }
 ```
 
 ## 相关文件
 
-- `src/vm/executor.rs`
+- `src/vm/executor.rs` - 执行器实现
+- `src/vm/mod.rs` - 模块入口
+- `src/runtime/extfunc.rs` - 外部函数

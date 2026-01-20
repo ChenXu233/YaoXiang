@@ -5,15 +5,13 @@
 
 ## 功能描述
 
-处理虚拟机中断，包括 GC 请求、超时和调试断点。
+处理虚拟机中断，包括、超时和调试断点。
 
 ## 中断类型
 
 ```rust
 /// 中断类型
 enum Interrupt {
-    /// GC 请求
-    GcRequest(GcReason),
     /// 超时中断
     Timeout(Duration),
     /// 调试断点

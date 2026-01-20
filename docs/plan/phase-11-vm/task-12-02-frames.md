@@ -1,7 +1,7 @@
 # Task 12.2: 栈帧管理
 
 > **优先级**: P0
-> **状态**: ⚠️ 需重构
+> **状态**: ✅ 已实现
 
 ## 功能描述
 
@@ -11,63 +11,59 @@
 
 ```rust
 /// 栈帧
+#[derive(Debug, Clone)]
 struct Frame {
-    /// 函数信息
-    function: FunctionInfo,
-    /// 返回地址
-    return_address: usize,
-    /// 返回值寄存器
-    return_register: Option<Reg>,
-    /// 局部变量
-    locals: Vec<Value>,
-    /// 操作数栈
-    operand_stack: Vec<Value>,
-    /// 捕获变量
-    captures: Vec<Value>,
-    /// 调用者帧索引
-    caller_frame: Option<usize>,
-}
-
-struct FunctionInfo {
     /// 函数名称
     name: String,
-    /// 参数数量
-    param_count: usize,
-    /// 局部变量数量
-    local_count: usize,
-    /// 最大栈深度
-    max_stack_depth: usize,
-    /// 函数入口地址
-    entry_pc: usize,
+    /// 返回地址
+    return_addr: usize,
+    /// 保存的帧指针
+    saved_fp: usize,
+    /// 局部变量（使用 RuntimeValue）
+    locals: Vec<RuntimeValue>,
 }
+```
+
+## 与 Runtime 的关系
+
+```rust
+// 使用 Runtime 提供的值类型
+use crate::runtime::value::RuntimeValue;
 ```
 
 ## 栈帧操作
 
 ```rust
 impl Frame {
-    /// 推送操作数
-    pub fn push(&mut self, value: Value) {
-        self.operand_stack.push(value);
-    }
-
-    /// 弹出操作数
-    pub fn pop(&mut self) -> Option<Value> {
-        self.operand_stack.pop()
+    /// 创建新帧
+    pub fn new(
+        name: String,
+        return_addr: usize,
+        saved_fp: usize,
+        locals: Vec<RuntimeValue>,
+    ) -> Self {
+        Self {
+            name,
+            return_addr,
+            saved_fp,
+            locals,
+        }
     }
 
     /// 获取局部变量
-    pub fn get_local(&self, index: Reg) -> &Value {
-        &self.locals[index as usize]
+    pub fn get_local(&self, index: usize) -> Option<&RuntimeValue> {
+        self.locals.get(index)
     }
 
     /// 设置局部变量
-    pub fn set_local(&mut self, index: Reg, value: Value) {
-        self.locals[index as usize] = value;
+    pub fn set_local(&mut self, index: usize, value: RuntimeValue) {
+        if let Some(loc) = self.locals.get_mut(index) {
+            *loc = value;
+        }
     }
 }
 ```
 
 ## 相关文件
 
-- `src/vm/frame.rs`
+- `src/vm/frames.rs` - 栈帧实现

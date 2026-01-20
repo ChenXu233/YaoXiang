@@ -1,7 +1,7 @@
-# Phase 12: 虚拟机
+# Phase 11: 虚拟机
 
 > **模块路径**: `src/vm/`
-> **状态**: ⚠️ 需重构
+> **状态**: ✅ 已重构
 
 ## 概述
 
@@ -10,33 +10,58 @@
 ## 文件结构
 
 ```
-phase-12-vm/
-├── README.md                    # 本文档
-├── task-12-01-executor.md       # 执行器
-├── task-12-02-frames.md         # 栈帧管理
-├── task-12-03-opcodes.md        # 指令集
-└── task-12-04-interrupt.md      # 中断处理
+phase-11-vm/
+├── README.md              # 本文档
+├── task-12-01-executor.md # 执行器
+├── task-12-02-frames.md   # 栈帧管理
+├── task-12-03-opcodes.md  # 指令集
+└── task-12-04-interrupt.md # 中断处理
 ```
 
 ## 完成状态
 
 | Task | 名称 | 状态 |
 |------|------|------|
-| task-12-01 | 执行器 | ⚠️ 需重构 |
-| task-12-02 | 栈帧管理 | ⚠️ 需重构 |
-| task-12-03 | 指令集 | ⚠️ 需重构 |
+| task-12-01 | 执行器 | ✅ 已重构 |
+| task-12-02 | 栈帧管理 | ✅ 已重构 |
+| task-12-03 | 指令集 | ✅ 已实现 |
 | task-12-04 | 中断处理 | ⏳ 待实现 |
 
-## 架构问题
+## 架构说明
 
-**当前问题**：VM 模块中包含了 Runtime 组件（Value、Heap 等）。
+### 与 Runtime 的关系
 
-**期望架构**：
-- `vm/executor.rs`: VM 执行器（使用 Runtime 提供的 Value、Allocator）
-- `runtime/core/value.rs`: Value 类型（迁移自 vm/mod.rs）
-- `runtime/core/allocator.rs`: 内存分配器
+```
+┌─────────────────────────────────────────────────────┐
+│                      VM                              │
+│  ┌───────────────────────────────────────────────┐  │
+│  │ executor.rs - 执行器                           │  │
+│  │ frames.rs    - 调用帧                          │  │
+│  │ opcode.rs    - 字节码操作码                    │  │
+│  └───────────────────────────────────────────────┘  │
+│                         ↓                            │
+│              使用 Runtime 提供的类型                 │
+│  ┌───────────────────────────────────────────────┐  │
+│  │              Runtime (独立模块)                │  │
+│  │  value/       - RuntimeValue 类型             │  │
+│  │  extfunc/     - 外部函数（print等）           │  │
+│  │  memory/      - 内存管理                      │  │
+│  │  scheduler/   - 任务调度                      │  │
+│  │  dag/         - DAG 支持                      │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### 设计原则
+
+1. **VM 是解释器**：只负责字节码解释执行
+2. **Runtime 是核心**：提供值类型、内置函数、内存管理
+3. **extfunc 属于 Runtime**：AOT 打包时静态链接
 
 ## 相关文件
 
-- `src/vm/mod.rs` (当前混乱状态)
-- `src/vm/executor.rs` (当前实现)
+- `src/vm/mod.rs` - VM 模块入口
+- `src/vm/executor.rs` - 执行器实现
+- `src/vm/frames.rs` - 栈帧实现
+- `src/vm/opcode.rs` - 操作码定义
+- `src/runtime/` - Runtime 模块

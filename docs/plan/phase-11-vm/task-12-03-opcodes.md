@@ -1,7 +1,7 @@
 # Task 12.3: 指令集
 
 > **优先级**: P0
-> **状态**: ⚠️ 需重构
+> **状态**: ✅ 已实现（TypedOpcode）
 
 ## 功能描述
 
@@ -11,83 +11,88 @@
 
 | 分类 | 前缀 | 说明 |
 |------|------|------|
-| 常量 | `CONST` | 加载常量 |
-| 加载 | `LOAD` | 加载变量 |
-| 存储 | `STORE` | 存储变量 |
-| 算术 | `ADD`, `SUB`, ... | 算术运算 |
-| 比较 | `EQ`, `NE`, `LT`, ... | 比较运算 |
-| 逻辑 | `AND`, `OR`, `NOT` | 逻辑运算 |
-| 控制 | `JUMP`, `JMPF`, `JMPT` | 控制流 |
-| 函数 | `CALL`, `RET` | 函数调用 |
-| 对象 | `NEW`, `GET`, `SET` | 对象操作 |
-| 并发 | `SPAWN`, `AWAIT` | 并发原语 |
+| 控制流 | `Nop`, `Jump`, `Return` | 基本控制 |
+| 函数 | `Call`, `CallNative`, `ReturnValue` | 函数调用 |
+| 局部变量 | `LoadLocal`, `StoreLocal` | 局部变量访问 |
+| 常量 | `LoadConst` | 加载常量 |
+| 运算 | `Add`, `Sub`, `Mul`, ... | 算术运算 |
+| 比较 | `Eq`, `Ne`, `Lt`, ... | 比较运算 |
+| 类型 | `Cast`, `TypeCheck` | 类型操作 |
+| 并发 | `Spawn`, `Await` | 并发原语 |
 
-## 指令格式
+## TypedOpcode 枚举
 
 ```rust
-/// 字节码指令
-struct Instruction {
-    /// 操作码
-    opcode: Opcode,
-    /// 操作数
-    operands: Vec<Operand>,
-    /// 指令位置
-    pc: usize,
-}
+/// 字节码操作码（强类型）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TypedOpcode {
+    // 控制流
+    Nop = 0x00,
+    Return = 0x01,
+    ReturnValue = 0x02,
+    Jump = 0x03,
+    JumpIfFalse = 0x04,
+    JumpIfTrue = 0x05,
 
-enum Opcode {
-    // 常量指令
-    Const(ConstValue),
+    // 函数调用
+    Call = 0x10,
+    CallNative = 0x11,
+    CallMethod = 0x12,
 
-    // 加载/存储指令
-    Load(Reg, LoadSource),
-    Store(Reg, StoreTarget),
+    // 局部变量
+    LoadLocal = 0x20,
+    StoreLocal = 0x21,
+    LoadConst = 0x22,
+    LoadField = 0x23,
+    StoreField = 0x24,
 
-    // 算术指令
-    Add(Reg, Reg, Reg),        // dst = src1 + src2
-    Sub(Reg, Reg, Reg),
-    Mul(Reg, Reg, Reg),
-    Div(Reg, Reg, Reg),
-    Mod(Reg, Reg, Reg),
-    Neg(Reg, Reg),             // dst = -src
+    // 算术运算
+    Add = 0x30,
+    Sub = 0x31,
+    Mul = 0x32,
+    Div = 0x33,
+    Mod = 0x34,
+    Neg = 0x35,
 
-    // 比较指令
-    Eq(Reg, Reg, Reg),         // dst = src1 == src2
-    Ne(Reg, Reg, Reg),
-    Lt(Reg, Reg, Reg),
-    Le(Reg, Reg, Reg),
-    Gt(Reg, Reg, Reg),
-    Ge(Reg, Reg, Reg),
+    // 比较运算
+    Eq = 0x40,
+    Ne = 0x41,
+    Lt = 0x42,
+    Le = 0x43,
+    Gt = 0x44,
+    Ge = 0x45,
 
-    // 逻辑指令
-    And(Reg, Reg, Reg),
-    Or(Reg, Reg, Reg),
-    Not(Reg, Reg),
+    // 类型操作
+    Cast = 0x50,
+    TypeCheck = 0x51,
 
-    // 控制流指令
-    Jump(Label),
-    JumpIfFalse(Reg, Label),
+    // 并发原语
+    Spawn = 0x60,
+    Await = 0x61,
 
-    // 函数指令
-    Call {
-        func: FunctionRef,
-        args: Vec<Reg>,
-        result: Option<Reg>,
-    },
-    Return(Option<Reg>),
+    // 对象操作
+    NewObject = 0x70,
+    NewArray = 0x71,
+    NewMap = 0x72,
 
-    // 对象指令
-    New(HandleType, ResultReg),
-    GetField(Reg, FieldName, ResultReg),
-    SetField(Reg, FieldName, Reg),
-    Index(Reg, Reg, ResultReg),
+    // 内存操作
+    Alloc = 0x80,
+    Free = 0x81,
+    LoadPtr = 0x82,
+    StorePtr = 0x83,
 
-    // 并发指令
-    Spawn(FunctionRef, TaskIdReg),
-    Await(TaskIdReg, ResultReg),
+    // 扩展（用于自定义操作）
+    Extension0 = 0xE0,
+    Extension1 = 0xE1,
+    Extension2 = 0xE2,
+    Extension3 = 0xE3,
+
+    // 保留
+    Reserved = 0xFF,
 }
 ```
 
 ## 相关文件
 
-- `src/vm/opcodes.rs`
+- `src/vm/opcode.rs` - 操作码实现
