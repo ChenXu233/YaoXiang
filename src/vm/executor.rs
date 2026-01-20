@@ -3,7 +3,7 @@
 //! 实现 YaoXiang VM 字节码执行器，支持寄存器架构和函数调用。
 
 use crate::middle::codegen::bytecode::FunctionCode;
-use crate::middle::ir::{ConstValue, ModuleIR, Operand};
+use crate::middle::ir::{ConstValue, Operand};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::vm::extfunc;
@@ -193,30 +193,27 @@ impl VM {
         self.error.as_ref()
     }
 
-    /// 执行模块
+    /// 执行模块（接收预编译的 CompiledModule）
     pub fn execute_module(
         &mut self,
-        module: &ModuleIR,
+        compiled: &crate::middle::codegen::bytecode::CompiledModule,
     ) -> VMResult<()> {
         let lang = get_lang();
-        let func_count = module.functions.len();
+        let func_count = compiled.functions.len();
         debug!("{}", t(MSG::VmStart, lang, Some(&[&func_count])));
 
-        // 常量池为空 - 所有常量现在通过 CodegenContext 生成时动态添加
-        self.constants.clear();
+        // Load constants
+        self.constants = compiled.constants.clone();
 
-        // 初始化函数表（使用 codegen 生成预编码的字节码）
-        use crate::middle::codegen::generator::BytecodeGenerator;
+        // 直接使用预编译的函数代码（不再调用 BytecodeGenerator）
         self.functions.clear();
-        for func_ir in &module.functions {
-            let generator = BytecodeGenerator::new(func_ir);
-            let func_code = generator.generate();
-            self.functions.insert(func_ir.name.clone(), func_code);
+        for func in &compiled.functions {
+            self.functions.insert(func.name.clone(), func.clone());
         }
 
         // 初始化 globals
         self.globals.clear();
-        for (name, _ty, const_val) in &module.globals {
+        for (name, _ty, const_val) in &compiled.globals {
             if let Some(val) = const_val {
                 self.globals.insert(name.clone(), self.const_to_value(val));
             }
@@ -429,6 +426,27 @@ impl VM {
                         )
                     );
                 }
+            }
+
+            // 直接加载整数常量（I64）
+            I64Const => {
+                let dst = self.read_u8()?;
+                let value = self.read_i64()? as i128;
+                self.regs.write(dst, Value::Int(value));
+            }
+
+            // 直接加载浮点常量（F64）
+            F64Const => {
+                let dst = self.read_u8()?;
+                let value = self.read_f64()?;
+                self.regs.write(dst, Value::Float(value));
+            }
+
+            // 直接加载整数常量（I32）
+            I32Const => {
+                let dst = self.read_u8()?;
+                let value = self.read_i32()? as i128;
+                self.regs.write(dst, Value::Int(value));
             }
 
             // 加载局部变量
@@ -764,6 +782,36 @@ impl VM {
     /// 读取 i16 操作数
     fn read_i16(&mut self) -> Result<i16, VMError> {
         self.read_u16().map(|v| v as i16)
+    }
+
+    /// 读取 u64 操作数
+    fn read_u64(&mut self) -> Result<u64, VMError> {
+        if self.ip + 7 < self.bytecode.len() {
+            let val = u64::from_le_bytes([
+                self.bytecode[self.ip],
+                self.bytecode[self.ip + 1],
+                self.bytecode[self.ip + 2],
+                self.bytecode[self.ip + 3],
+                self.bytecode[self.ip + 4],
+                self.bytecode[self.ip + 5],
+                self.bytecode[self.ip + 6],
+                self.bytecode[self.ip + 7],
+            ]);
+            self.ip += 8;
+            Ok(val)
+        } else {
+            Err(VMError::InvalidOperand)
+        }
+    }
+
+    /// 读取 i64 操作数
+    fn read_i64(&mut self) -> Result<i64, VMError> {
+        self.read_u64().map(|v| v as i64)
+    }
+
+    /// 读取 f64 操作数
+    fn read_f64(&mut self) -> Result<f64, VMError> {
+        self.read_u64().map(f64::from_bits)
     }
 
     /// 二进制 I64 运算

@@ -64,13 +64,16 @@ mod vm_tests {
 
     #[test]
     fn test_vm_execute_module() {
+        use crate::middle::codegen::bytecode::CompiledModule;
+        use crate::middle::ir::ModuleIR;
+
         let mut vm = VM::new();
-        // Create a minimal ModuleIR for testing
-        let module = ModuleIR {
+        // Create a minimal CompiledModule for testing
+        let module = CompiledModule::from_ir(&ModuleIR {
             types: vec![],
             globals: vec![],
             functions: vec![],
-        };
+        });
         let result = vm.execute_module(&module);
         assert!(result.is_ok());
         assert_eq!(vm.status(), VMStatus::Finished);

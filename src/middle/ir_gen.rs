@@ -401,108 +401,99 @@ impl AstToIrGenerator {
                 span: _,
             } => {
                 // 二元运算
-                let left_reg = result_reg;
-                let right_reg = result_reg + 1;
-
-                self.generate_expr_ir(left, left_reg, instructions, constants)?;
-                self.generate_expr_ir(right, right_reg, instructions, constants)?;
-
                 let instr = match op {
-                    ast::BinOp::Add => Instruction::Add {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Sub => Instruction::Sub {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Mul => Instruction::Mul {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Div => Instruction::Div {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Mod => Instruction::Mod {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Eq => Instruction::Eq {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Neq => Instruction::Ne {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Lt => Instruction::Lt {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Le => Instruction::Le {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Gt => Instruction::Gt {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
-                    ast::BinOp::Ge => Instruction::Ge {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
                     ast::BinOp::Assign => {
-                        // 赋值操作: left = right
-                        // Note: left should be a variable (Expr::Var), right is the expression to assign
-                        // Look up or create variable index
                         if let Expr::Var(var_name, _) = left.as_ref() {
                             let local_idx = if let Some(idx) = self.lookup_local(var_name) {
                                 idx
                             } else {
-                                // Implicit declaration: allocate new register and register local
                                 let idx = self.next_temp_reg();
                                 self.register_local(var_name, idx);
                                 idx
                             };
-
-                            // Generate IR for right-hand expression into right_reg
-                            self.generate_expr_ir(right, right_reg, instructions, constants)?;
-                            // Generate Store instruction
+                            let val_reg = self.next_temp_reg();
+                            self.generate_expr_ir(right, val_reg, instructions, constants)?;
                             instructions.push(Instruction::Store {
                                 dst: Operand::Local(local_idx),
-                                src: Operand::Local(right_reg),
+                                src: Operand::Local(val_reg),
                             });
-                            // Load value to result register (value of assignment expression)
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),
                             });
-                            return Ok(());
                         }
-                        // Default behavior if not Expr::Var (should not happen for valid Assign usually)
-                        Instruction::Add {
-                            dst: Operand::Local(result_reg),
-                            lhs: Operand::Local(left_reg),
-                            rhs: Operand::Local(right_reg),
+                        return Ok(());
+                    }
+                    _ => {
+                        let left_reg = self.next_temp_reg();
+                        let right_reg = self.next_temp_reg();
+                        self.generate_expr_ir(left, left_reg, instructions, constants)?;
+                        self.generate_expr_ir(right, right_reg, instructions, constants)?;
+
+                        match op {
+                            ast::BinOp::Add => Instruction::Add {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Sub => Instruction::Sub {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Mul => Instruction::Mul {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Div => Instruction::Div {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Mod => Instruction::Mod {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Eq => Instruction::Eq {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Neq => Instruction::Ne {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Lt => Instruction::Lt {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Le => Instruction::Le {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Gt => Instruction::Gt {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            ast::BinOp::Ge => Instruction::Ge {
+                                dst: Operand::Local(result_reg),
+                                lhs: Operand::Local(left_reg),
+                                rhs: Operand::Local(right_reg),
+                            },
+                            // ast::BinOp::Assign case is handled above checking left/right generation.
+                            // This placeholder is just to remove the old duplicated block.
+                            _ => Instruction::Move {
+                                dst: Operand::Local(result_reg),
+                                src: Operand::Const(ConstValue::Int(0)),
+                            },
                         }
                     }
-                    _ => Instruction::Add {
-                        dst: Operand::Local(result_reg),
-                        lhs: Operand::Local(left_reg),
-                        rhs: Operand::Local(right_reg),
-                    },
                 };
                 instructions.push(instr);
             }
@@ -513,23 +504,23 @@ impl AstToIrGenerator {
             } => {
                 // 函数调用
                 let mut arg_regs = Vec::new();
-                for (i, arg) in args.iter().enumerate() {
-                    self.generate_expr_ir(arg, result_reg + i + 1, instructions, constants)?;
-                    arg_regs.push(Operand::Local(result_reg + i + 1));
+                for arg in args.iter() {
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
                 }
 
-                // 函数名添加到常量池，使用索引
-                let func_idx = if let Expr::Var(name, _) = func.as_ref() {
-                    let const_idx = constants.len();
-                    constants.push(ConstValue::String(name.clone()));
-                    const_idx as i128
+                // 直接将函数名作为 String 存储在 Operand 中
+                // 之前的实现试图使用 constants 索引，但 FunctionIR 并不保存 constants，导致索引失效
+                let func_operand = if let Expr::Var(name, _) = func.as_ref() {
+                    Operand::Const(ConstValue::String(name.clone()))
                 } else {
-                    0
+                    Operand::Const(ConstValue::Int(0))
                 };
 
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::Int(func_idx)),
+                    func: func_operand,
                     args: arg_regs,
                 });
             }

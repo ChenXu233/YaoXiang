@@ -95,7 +95,7 @@ CodegenContext
 
 ---
 
-### 3. VM Executor ↔ BytecodeGenerator 耦合
+### 3. VM Executor ↔ BytecodeGenerator 耦合 已修复
 
 **位置**: [src/vm/executor.rs:209-215](src/vm/executor.rs#L209-L215)
 

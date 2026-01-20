@@ -64,9 +64,11 @@ pub fn run(source: &str) -> Result<()> {
     let mut compiler = frontend::Compiler::new();
     debug!("{}", t_cur_simple(MSG::CompilationStart));
     let module = compiler.compile(source)?;
+    // Convert to CompiledModule (bytecode)
+    let compiled = crate::middle::codegen::bytecode::CompiledModule::from_ir(&module);
     let mut vm = vm::VM::new();
     debug!("{}", t_cur_simple(MSG::VmStart));
-    vm.execute_module(&module)?;
+    vm.execute_module(&compiled)?;
     debug!("{}", t_cur_simple(MSG::VmComplete));
     Ok(())
 }
