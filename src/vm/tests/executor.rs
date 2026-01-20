@@ -173,8 +173,8 @@ mod opcode_tests {
 
     #[test]
     fn test_opcode_try_from_invalid() {
-        // 0x74 未被使用（SetField 是 0x75），应该返回错误
-        let result = TypedOpcode::try_from(0x74);
+        // 0x7E 未被使用（ArcDrop 是 0x7C），应该返回错误
+        let result = TypedOpcode::try_from(0x7E);
         assert!(result.is_err());
     }
 
@@ -213,5 +213,290 @@ mod vm_status_tests {
     fn test_vm_status_debug() {
         let debug_output = format!("{:?}", VMStatus::Ready);
         assert!(debug_output.contains("Ready"));
+    }
+}
+
+// =====================
+// 指令执行集成测试
+// =====================
+
+#[cfg(test)]
+mod instruction_execution_tests {
+    use super::*;
+
+    mod opcode_encoding_tests {
+        use super::*;
+        use crate::vm::opcode::TypedOpcode;
+
+        #[test]
+        fn test_i32_opcodes_exist() {
+            // 验证 I32 操作码存在（不检查具体编码，只验证变体存在）
+            let _ = TypedOpcode::I32Add;
+            let _ = TypedOpcode::I32Sub;
+            let _ = TypedOpcode::I32Mul;
+            let _ = TypedOpcode::I32Div;
+            let _ = TypedOpcode::I32Rem;
+            let _ = TypedOpcode::I32Neg;
+        }
+
+        #[test]
+        fn test_i32_bitwise_opcodes_exist() {
+            let _ = TypedOpcode::I32And;
+            let _ = TypedOpcode::I32Or;
+            let _ = TypedOpcode::I32Xor;
+            let _ = TypedOpcode::I32Shl;
+            let _ = TypedOpcode::I32Sar;
+            let _ = TypedOpcode::I32Shr;
+        }
+
+        #[test]
+        fn test_i64_bitwise_opcodes_exist() {
+            let _ = TypedOpcode::I64And;
+            let _ = TypedOpcode::I64Or;
+            let _ = TypedOpcode::I64Xor;
+            let _ = TypedOpcode::I64Shl;
+            let _ = TypedOpcode::I64Sar;
+            let _ = TypedOpcode::I64Shr;
+        }
+
+        #[test]
+        fn test_f32_opcodes_exist() {
+            let _ = TypedOpcode::F32Add;
+            let _ = TypedOpcode::F32Sub;
+            let _ = TypedOpcode::F32Mul;
+            let _ = TypedOpcode::F32Div;
+            let _ = TypedOpcode::F32Rem;
+            let _ = TypedOpcode::F32Sqrt;
+            let _ = TypedOpcode::F32Neg;
+        }
+
+        #[test]
+        fn test_f32_comparison_opcodes_exist() {
+            let _ = TypedOpcode::F32Eq;
+            let _ = TypedOpcode::F32Ne;
+            let _ = TypedOpcode::F32Lt;
+            let _ = TypedOpcode::F32Le;
+            let _ = TypedOpcode::F32Gt;
+            let _ = TypedOpcode::F32Ge;
+        }
+
+        #[test]
+        fn test_f64_rem_exists() {
+            let _ = TypedOpcode::F64Rem;
+        }
+
+        #[test]
+        fn test_string_opcodes_exist() {
+            let _ = TypedOpcode::StringLength;
+            let _ = TypedOpcode::StringConcat;
+            let _ = TypedOpcode::StringEqual;
+            let _ = TypedOpcode::StringGetChar;
+            let _ = TypedOpcode::StringFromInt;
+            let _ = TypedOpcode::StringFromFloat;
+        }
+
+        #[test]
+        fn test_closure_opcodes_exist() {
+            let _ = TypedOpcode::MakeClosure;
+            let _ = TypedOpcode::LoadUpvalue;
+            let _ = TypedOpcode::StoreUpvalue;
+            let _ = TypedOpcode::CloseUpvalue;
+        }
+
+        #[test]
+        fn test_exception_opcodes_exist() {
+            let _ = TypedOpcode::TryBegin;
+            let _ = TypedOpcode::TryEnd;
+            let _ = TypedOpcode::Throw;
+            let _ = TypedOpcode::Rethrow;
+        }
+
+        #[test]
+        fn test_memory_opcodes_exist() {
+            let _ = TypedOpcode::StackAlloc;
+            let _ = TypedOpcode::HeapAlloc;
+            let _ = TypedOpcode::GetField;
+            let _ = TypedOpcode::SetField;
+        }
+
+        #[test]
+        fn test_arc_opcodes_exist() {
+            let _ = TypedOpcode::ArcNew;
+            let _ = TypedOpcode::ArcClone;
+            let _ = TypedOpcode::ArcDrop;
+        }
+
+        #[test]
+        fn test_type_opcodes_exist() {
+            let _ = TypedOpcode::TypeCheck;
+            let _ = TypedOpcode::TypeOf;
+            let _ = TypedOpcode::Cast;
+        }
+    }
+
+    mod opcode_parsing_tests {
+        use super::*;
+        use crate::vm::opcode::TypedOpcode;
+
+        #[test]
+        fn test_parse_known_opcodes() {
+            // 验证已知操作码可以正确解析
+            assert!(TypedOpcode::try_from(0x00).is_ok()); // Nop
+            assert!(TypedOpcode::try_from(0x01).is_ok()); // Return
+            assert!(TypedOpcode::try_from(0x03).is_ok()); // Jmp
+            assert!(TypedOpcode::try_from(0x10).is_ok()); // Mov
+        }
+
+        #[test]
+        fn test_parse_i32_opcodes() {
+            // 验证 I32 操作码解析
+            assert!(TypedOpcode::try_from(0x30).is_ok()); // I32Add
+            assert!(TypedOpcode::try_from(0x31).is_ok()); // I32Sub
+            assert!(TypedOpcode::try_from(0x32).is_ok()); // I32Mul
+            assert!(TypedOpcode::try_from(0x33).is_ok()); // I32Div
+            assert!(TypedOpcode::try_from(0x34).is_ok()); // I32Rem
+            assert!(TypedOpcode::try_from(0x35).is_ok()); // I32Neg
+        }
+
+        #[test]
+        fn test_parse_i32_bitwise_opcodes() {
+            assert!(TypedOpcode::try_from(0x36).is_ok()); // I32And
+            assert!(TypedOpcode::try_from(0x37).is_ok()); // I32Or
+            assert!(TypedOpcode::try_from(0x38).is_ok()); // I32Xor
+            assert!(TypedOpcode::try_from(0x39).is_ok()); // I32Shl
+            assert!(TypedOpcode::try_from(0x3A).is_ok()); // I32Sar
+            assert!(TypedOpcode::try_from(0x3B).is_ok()); // I32Shr
+        }
+
+        #[test]
+        fn test_parse_f32_opcodes() {
+            assert!(TypedOpcode::try_from(0x50).is_ok()); // F32Add
+            assert!(TypedOpcode::try_from(0x51).is_ok()); // F32Sub
+            assert!(TypedOpcode::try_from(0x52).is_ok()); // F32Mul
+            assert!(TypedOpcode::try_from(0x53).is_ok()); // F32Div
+            assert!(TypedOpcode::try_from(0x54).is_ok()); // F32Rem
+        }
+
+        #[test]
+        fn test_parse_f32_comparison_opcodes() {
+            assert!(TypedOpcode::try_from(0x6C).is_ok());
+            assert!(TypedOpcode::try_from(0x6D).is_ok());
+            assert!(TypedOpcode::try_from(0x6E).is_ok());
+            assert!(TypedOpcode::try_from(0x6F).is_ok());
+            assert!(TypedOpcode::try_from(0x70).is_ok());
+            assert!(TypedOpcode::try_from(0x71).is_ok());
+        }
+
+        #[test]
+        fn test_parse_string_opcodes() {
+            assert!(TypedOpcode::try_from(0x90).is_ok());
+            assert!(TypedOpcode::try_from(0x91).is_ok());
+            assert!(TypedOpcode::try_from(0x92).is_ok());
+            assert!(TypedOpcode::try_from(0x93).is_ok());
+            assert!(TypedOpcode::try_from(0x94).is_ok());
+            assert!(TypedOpcode::try_from(0x95).is_ok());
+        }
+
+        #[test]
+        fn test_parse_closure_opcodes() {
+            assert!(TypedOpcode::try_from(0x83).is_ok()); // MakeClosure
+            assert!(TypedOpcode::try_from(0x84).is_ok());
+            assert!(TypedOpcode::try_from(0x85).is_ok());
+            assert!(TypedOpcode::try_from(0x86).is_ok());
+        }
+
+        #[test]
+        fn test_parse_exception_opcodes() {
+            assert!(TypedOpcode::try_from(0xA0).is_ok());
+            assert!(TypedOpcode::try_from(0xA1).is_ok());
+            assert!(TypedOpcode::try_from(0xA2).is_ok());
+            assert!(TypedOpcode::try_from(0xA3).is_ok());
+        }
+
+        #[test]
+        fn test_parse_memory_opcodes() {
+            assert!(TypedOpcode::try_from(0x72).is_ok());
+            assert!(TypedOpcode::try_from(0x73).is_ok());
+            assert!(TypedOpcode::try_from(0x75).is_ok());
+            assert!(TypedOpcode::try_from(0x76).is_ok());
+        }
+
+        #[test]
+        fn test_parse_arc_opcodes() {
+            assert!(TypedOpcode::try_from(0x7A).is_ok()); // ArcNew
+            assert!(TypedOpcode::try_from(0x7B).is_ok()); // ArcClone
+            assert!(TypedOpcode::try_from(0x7C).is_ok()); // ArcDrop
+        }
+
+        #[test]
+        fn test_parse_type_opcodes() {
+            assert!(TypedOpcode::try_from(0xC0).is_ok()); // TypeCheck
+            assert!(TypedOpcode::try_from(0xC1).is_ok()); // Cast
+        }
+
+        #[test]
+        fn test_invalid_opcode_returns_error() {
+            // 验证无效操作码返回错误
+            assert!(TypedOpcode::try_from(0x7E).is_err()); // 未使用
+        }
+    }
+
+    mod opcode_name_tests {
+        use super::*;
+        use crate::vm::opcode::TypedOpcode;
+
+        #[test]
+        fn test_i32_opcode_names() {
+            assert_eq!(TypedOpcode::I32Add.name(), "I32Add");
+            assert_eq!(TypedOpcode::I32Sub.name(), "I32Sub");
+            assert_eq!(TypedOpcode::I32Mul.name(), "I32Mul");
+            assert_eq!(TypedOpcode::I32Div.name(), "I32Div");
+            assert_eq!(TypedOpcode::I32Rem.name(), "I32Rem");
+            assert_eq!(TypedOpcode::I32Neg.name(), "I32Neg");
+        }
+
+        #[test]
+        fn test_f32_opcode_names() {
+            assert_eq!(TypedOpcode::F32Add.name(), "F32Add");
+            assert_eq!(TypedOpcode::F32Sub.name(), "F32Sub");
+            assert_eq!(TypedOpcode::F32Mul.name(), "F32Mul");
+            assert_eq!(TypedOpcode::F32Div.name(), "F32Div");
+            assert_eq!(TypedOpcode::F32Rem.name(), "F32Rem");
+            assert_eq!(TypedOpcode::F32Sqrt.name(), "F32Sqrt");
+        }
+
+        #[test]
+        fn test_f32_comparison_names() {
+            assert_eq!(TypedOpcode::F32Eq.name(), "F32Eq");
+            assert_eq!(TypedOpcode::F32Ne.name(), "F32Ne");
+            assert_eq!(TypedOpcode::F32Lt.name(), "F32Lt");
+            assert_eq!(TypedOpcode::F32Le.name(), "F32Le");
+            assert_eq!(TypedOpcode::F32Gt.name(), "F32Gt");
+            assert_eq!(TypedOpcode::F32Ge.name(), "F32Ge");
+        }
+
+        #[test]
+        fn test_string_opcode_names() {
+            assert_eq!(TypedOpcode::StringLength.name(), "StringLength");
+            assert_eq!(TypedOpcode::StringConcat.name(), "StringConcat");
+            assert_eq!(TypedOpcode::StringEqual.name(), "StringEqual");
+            assert_eq!(TypedOpcode::StringGetChar.name(), "StringGetChar");
+        }
+
+        #[test]
+        fn test_exception_opcode_names() {
+            assert_eq!(TypedOpcode::TryBegin.name(), "TryBegin");
+            assert_eq!(TypedOpcode::TryEnd.name(), "TryEnd");
+            assert_eq!(TypedOpcode::Throw.name(), "Throw");
+            assert_eq!(TypedOpcode::Rethrow.name(), "Rethrow");
+        }
+
+        #[test]
+        fn test_closure_opcode_names() {
+            assert_eq!(TypedOpcode::MakeClosure.name(), "MakeClosure");
+            assert_eq!(TypedOpcode::LoadUpvalue.name(), "LoadUpvalue");
+            assert_eq!(TypedOpcode::StoreUpvalue.name(), "StoreUpvalue");
+            assert_eq!(TypedOpcode::CloseUpvalue.name(), "CloseUpvalue");
+        }
     }
 }

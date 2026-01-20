@@ -380,10 +380,17 @@ impl VM {
 
             // 返回指令
             Return => {
+                // 无返回值，压入 Unit 到值栈
+                self.value_stack.push(RuntimeValue::Unit);
                 return Ok(());
             }
 
             ReturnValue => {
+                // 从返回值寄存器读取返回值
+                let ret_reg = self.read_u8()?;
+                let ret_value = self.regs.read(ret_reg).clone();
+                // 压入返回值到值栈
+                self.value_stack.push(ret_value.clone());
                 return Ok(());
             }
 
@@ -563,6 +570,55 @@ impl VM {
                 }
             }
 
+            // I64 位运算
+            I64And => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a & b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I64Or => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a | b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I64Xor => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a ^ b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I64Shl => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a << b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I64Sar => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a >> b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I64Shr => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i64(lhs, rhs, |a, b| Ok(a >> b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
             // I64 比较运算
             I64Eq => {
                 let dst = self.read_u8()?;
@@ -612,6 +668,118 @@ impl VM {
                 self.regs.write(dst, RuntimeValue::Bool(result));
             }
 
+            // =====================
+            // I32 算术运算指令
+            // =====================
+            I32Add => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a + b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Sub => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a - b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Mul => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a * b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Div => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| {
+                    if b == 0 {
+                        Err(VMError::DivisionByZero)
+                    } else {
+                        Ok(a / b)
+                    }
+                })?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Rem => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| {
+                    if b == 0 {
+                        Err(VMError::DivisionByZero)
+                    } else {
+                        Ok(a % b)
+                    }
+                })?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Neg => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Int(n) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Int(-*n));
+                }
+            }
+
+            // I32 位运算
+            I32And => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a & b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Or => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a | b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Xor => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a ^ b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Shl => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a << b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Sar => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok(a >> b))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
+            I32Shr => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_i32(lhs, rhs, |a, b| Ok((a as i32 >> b) as i64))?;
+                self.regs.write(dst, RuntimeValue::Int(result));
+            }
+
             // 跳转指令
             Jmp => {
                 let offset = self.read_i32()?;
@@ -649,7 +817,10 @@ impl VM {
                 let mut args = Vec::with_capacity(arg_count as usize);
                 for i in 0..arg_count {
                     let arg_reg = base_arg_reg + i;
-                    args.push(self.regs.read(arg_reg).clone());
+                    let arg_value = self.regs.read(arg_reg).clone();
+                    args.push(arg_value.clone());
+                    // 将参数压入值栈
+                    self.value_stack.push(arg_value);
                 }
 
                 // 从函数 ID 解析函数名（从常量池查找）
@@ -665,22 +836,37 @@ impl VM {
                 if let Some(ext_func) = extfunc::EXTERNAL_FUNCTIONS.get(&func_name) {
                     // 调用外部函数
                     let result = (ext_func.func)(&args);
-                    // 处理返回值（写入目标寄存器）
-                    self.regs.write(dst, result);
+                    // 弹出参数
+                    for _ in 0..arg_count {
+                        self.value_stack.pop();
+                    }
+                    // 处理返回值（写入目标寄存器并压入值栈）
+                    self.regs.write(dst, result.clone());
+                    self.value_stack.push(result);
                 } else if func_name == "print" {
                     // 调用 print 内部函数（向后兼容）
                     if let Some(first_arg) = args.first() {
                         self.call_print(first_arg)?;
+                    }
+                    // 弹出参数
+                    for _ in 0..arg_count {
+                        self.value_stack.pop();
                     }
                 } else if func_name == "println" {
                     // 调用 println 内部函数（向后兼容）
                     if let Some(first_arg) = args.first() {
                         self.call_println(first_arg)?;
                     }
+                    // 弹出参数
+                    for _ in 0..arg_count {
+                        self.value_stack.pop();
+                    }
                 } else if let Some(target_func) = self.functions.get(&func_name) {
                     // 调用用户定义函数 - 克隆函数以避免借用冲突
                     let func_clone = target_func.clone();
-                    self.execute_function(&func_clone, &args)?;
+                    let result = self.execute_function(&func_clone, &args)?;
+                    // 函数返回值已压入值栈（在 ReturnValue 处理中）
+                    self.regs.write(dst, result.clone());
                 }
             }
 
@@ -723,15 +909,475 @@ impl VM {
                 self.regs.write(dst, RuntimeValue::Float(result));
             }
 
+            // F64 取模
+            F64Rem => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f64(lhs, rhs, |a, b| {
+                    if b == 0.0 {
+                        Err(VMError::DivisionByZero)
+                    } else {
+                        Ok(a % b)
+                    }
+                })?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            // F64 平方根
+            F64Sqrt => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Float(f) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Float(f.sqrt()));
+                }
+            }
+
+            // F64 取负
+            F64Neg => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Float(f) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Float(-f));
+                }
+            }
+
+            // F64 比较运算
+            F64Eq => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a == b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F64Ne => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a != b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F64Lt => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a < b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F64Le => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a <= b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F64Gt => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a > b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F64Ge => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f64(lhs, rhs, |a, b| a >= b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            // =====================
+            // F32 算术运算指令
+            // =====================
+            F32Add => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f32(lhs, rhs, |a, b| Ok(a + b))?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            F32Sub => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f32(lhs, rhs, |a, b| Ok(a - b))?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            F32Mul => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f32(lhs, rhs, |a, b| Ok(a * b))?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            F32Div => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f32(lhs, rhs, |a, b| {
+                    if b == 0.0 {
+                        Err(VMError::DivisionByZero)
+                    } else {
+                        Ok(a / b)
+                    }
+                })?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            F32Rem => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.binary_op_f32(lhs, rhs, |a, b| {
+                    if b == 0.0 {
+                        Err(VMError::DivisionByZero)
+                    } else {
+                        Ok(a % b)
+                    }
+                })?;
+                self.regs.write(dst, RuntimeValue::Float(result));
+            }
+
+            F32Sqrt => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Float(f) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Float(f.sqrt()));
+                }
+            }
+
+            F32Neg => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Float(f) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Float(-f));
+                }
+            }
+
+            F32Load => {
+                let dst = self.read_u8()?;
+                let base = self.read_u8()?;
+                let _offset = self.read_i16()?;
+                // F32Load: 从内存加载 F32（简化处理，暂不实现）
+                if let RuntimeValue::Float(f) = self.regs.read(base) {
+                    self.regs.write(dst, RuntimeValue::Float(*f));
+                }
+            }
+
+            F32Store => {
+                let _base = self.read_u8()?;
+                let _offset = self.read_i16()?;
+                let src = self.read_u8()?;
+                // F32Store: 存储到内存（简化处理，暂不实现）
+                let _ = self.regs.read(src);
+            }
+
+            F32Const => {
+                let dst = self.read_u8()?;
+                let value = self.read_f32()?;
+                self.regs.write(dst, RuntimeValue::Float(value));
+            }
+
+            // F32 比较运算
+            F32Eq => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a == b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F32Ne => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a != b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F32Lt => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a < b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F32Le => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a <= b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F32Gt => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a > b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            F32Ge => {
+                let dst = self.read_u8()?;
+                let lhs = self.read_u8()?;
+                let rhs = self.read_u8()?;
+                let result = self.compare_f32(lhs, rhs, |a, b| a >= b);
+                self.regs.write(dst, RuntimeValue::Bool(result));
+            }
+
+            // =====================
+            // 字符串操作指令
+            // =====================
+            StringLength => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::String(s) = self.regs.read(src) {
+                    self.regs.write(dst, RuntimeValue::Int(s.len() as i64));
+                }
+            }
+
+            StringConcat => {
+                let dst = self.read_u8()?;
+                let str1 = self.read_u8()?;
+                let str2 = self.read_u8()?;
+                match (self.regs.read(str1), self.regs.read(str2)) {
+                    (RuntimeValue::String(s1), RuntimeValue::String(s2)) => {
+                        let mut result = String::new();
+                        result.push_str(s1.as_ref());
+                        result.push_str(s2.as_ref());
+                        self.regs.write(dst, RuntimeValue::String(result.into()));
+                    }
+                    _ => return Err(VMError::TypeError("string".to_string())),
+                }
+            }
+
+            StringEqual => {
+                let dst = self.read_u8()?;
+                let str1 = self.read_u8()?;
+                let str2 = self.read_u8()?;
+                match (self.regs.read(str1), self.regs.read(str2)) {
+                    (RuntimeValue::String(s1), RuntimeValue::String(s2)) => {
+                        self.regs
+                            .write(dst, RuntimeValue::Bool(s1.as_ref() == s2.as_ref()));
+                    }
+                    _ => return Err(VMError::TypeError("string".to_string())),
+                }
+            }
+
+            StringGetChar => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                let idx = self.read_u8()?;
+                if let RuntimeValue::String(s) = self.regs.read(src) {
+                    if let Some(ch) = s.chars().nth(idx as usize) {
+                        self.regs.write(dst, RuntimeValue::Char(ch as u32));
+                    }
+                }
+            }
+
+            StringFromInt => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Int(n) = self.regs.read(src) {
+                    self.regs
+                        .write(dst, RuntimeValue::String(n.to_string().into()));
+                }
+            }
+
+            StringFromFloat => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                if let RuntimeValue::Float(f) = self.regs.read(src) {
+                    self.regs
+                        .write(dst, RuntimeValue::String(f.to_string().into()));
+                }
+            }
+
+            // =====================
+            // 闭包操作指令
+            // =====================
+            MakeClosure => {
+                let _dst = self.read_u8()?;
+                let _func_id = self.read_u32()?;
+                let _upvalue_count = self.read_u8()?;
+                // 闭包创建（简化处理）
+                self.regs.write(0, RuntimeValue::Unit);
+            }
+
+            LoadUpvalue => {
+                let dst = self.read_u8()?;
+                let _upvalue_idx = self.read_u8()?;
+                // Upvalue 加载（简化处理）
+                self.regs.write(dst, RuntimeValue::Unit);
+            }
+
+            StoreUpvalue => {
+                let _src = self.read_u8()?;
+                let _upvalue_idx = self.read_u8()?;
+                // Upvalue 存储（简化处理）
+            }
+
+            CloseUpvalue => {
+                let _reg = self.read_u8()?;
+                // 关闭 Upvalue（简化处理）
+            }
+
+            // =====================
+            // 异常处理指令
+            // =====================
+            TryBegin => {
+                let _catch_offset = self.read_u16()?;
+                // Try 块开始（简化处理）
+            }
+
+            TryEnd => {
+                // Try 块结束（简化处理）
+            }
+
+            Throw => {
+                let _exception_reg = self.read_u8()?;
+                // 抛出异常（简化处理）
+                return Err(VMError::RuntimeError("exception thrown".to_string()));
+            }
+
+            Rethrow => {
+                // 重新抛出异常（简化处理）
+                return Err(VMError::RuntimeError("exception rethrown".to_string()));
+            }
+
+            // =====================
+            // 内存与对象操作指令
+            // =====================
+            StackAlloc => {
+                let _size = self.read_u16()?;
+                // 栈分配（简化处理）
+            }
+
+            HeapAlloc => {
+                let _dst = self.read_u8()?;
+                let _type_id = self.read_u16()?;
+                // 堆分配（简化处理）
+            }
+
+            GetField => {
+                let dst = self.read_u8()?;
+                let obj_reg = self.read_u8()?;
+                let _field_offset = self.read_u16()?;
+                // 获取字段（简化处理）
+                if let RuntimeValue::List(lst) = self.regs.read(obj_reg).clone() {
+                    // 假设 offset 0 获取第一个元素
+                    if let Some(val) = lst.first() {
+                        self.regs.write(dst, val.clone());
+                    }
+                }
+            }
+
+            SetField => {
+                let _obj_reg = self.read_u8()?;
+                let _field_offset = self.read_u16()?;
+                let _src_reg = self.read_u8()?;
+                // 设置字段（简化处理）
+            }
+
+            LoadElement => {
+                let dst = self.read_u8()?;
+                let array_reg = self.read_u8()?;
+                let index_reg = self.read_u8()?;
+                match (self.regs.read(array_reg), self.regs.read(index_reg)) {
+                    (RuntimeValue::List(lst), RuntimeValue::Int(idx)) => {
+                        if let Some(val) = lst.get(*idx as usize) {
+                            self.regs.write(dst, val.clone());
+                        }
+                    }
+                    _ => return Err(VMError::TypeError("list or index".to_string())),
+                }
+            }
+
+            StoreElement => {
+                let _array_reg = self.read_u8()?;
+                let _index_reg = self.read_u8()?;
+                let _src_reg = self.read_u8()?;
+                // 存储元素（简化处理）
+            }
+
+            NewListWithCap => {
+                let _dst = self.read_u8()?;
+                let _capacity = self.read_u16()?;
+                // 预分配列表（简化处理）
+                self.regs.write(0, RuntimeValue::List(vec![]));
+            }
+
+            ArcNew => {
+                let _dst = self.read_u8()?;
+                let _src = self.read_u8()?;
+                // Arc 创建（简化处理）
+            }
+
+            ArcClone => {
+                let _dst = self.read_u8()?;
+                let _src = self.read_u8()?;
+                // Arc 克隆（简化处理）
+            }
+
+            ArcDrop => {
+                let _src = self.read_u8()?;
+                // Arc 释放（简化处理）
+            }
+
+            // =====================
+            // 类型操作指令
+            // =====================
+            TypeCheck => {
+                let _obj_reg = self.read_u8()?;
+                let _type_id = self.read_u16()?;
+                let _dst = self.read_u8()?;
+                // 类型检查（简化处理）
+            }
+
+            Cast => {
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+                let _target_type_id = self.read_u16()?;
+                // 类型转换（简化处理）
+                let value = self.regs.read(src).clone();
+                self.regs.write(dst, value);
+            }
+
+            TypeOf => {
+                let dst = self.read_u8()?;
+                let _type_id = self.read_u16()?;
+                // 类型获取（简化处理）
+                self.regs.write(dst, RuntimeValue::Unit);
+            }
+
+            // =====================
+            // 边界检查指令
+            // =====================
+            BoundsCheck => {
+                let _array_reg = self.read_u8()?;
+                let _index_reg = self.read_u8()?;
+                let _dst = self.read_u8()?;
+                // 边界检查（简化处理）
+            }
+
             // 其他指令
             Drop => {
                 let _reg = self.read_u8()?;
                 // 简化：忽略 Drop
             }
 
-            _ => {
-                // 未实现的指令
-            }
+            // 未实现的指令 - 返回错误而不是静默忽略
+            _ => return Err(VMError::UnimplementedOpcode(opcode)),
         }
 
         Ok(())
@@ -815,8 +1461,34 @@ impl VM {
         self.read_u64().map(f64::from_bits)
     }
 
+    /// 读取 f32 操作数
+    fn read_f32(&mut self) -> Result<f64, VMError> {
+        self.read_u32().map(|v| f32::from_bits(v) as f64)
+    }
+
     /// 二进制 I64 运算
     fn binary_op_i64<F>(
+        &self,
+        lhs_reg: u8,
+        rhs_reg: u8,
+        op: F,
+    ) -> Result<i64, VMError>
+    where
+        F: FnOnce(i64, i64) -> Result<i64, VMError>,
+    {
+        let lhs_val = self.regs.read(lhs_reg);
+        let rhs_val = self.regs.read(rhs_reg);
+        match (lhs_val, rhs_val) {
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a, *b),
+            _ => Err(VMError::TypeError(format!(
+                "integer (lhs: {:?}, rhs: {:?})",
+                lhs_val, rhs_val
+            ))),
+        }
+    }
+
+    /// 二进制 I32 运算
+    fn binary_op_i32<F>(
         &self,
         lhs_reg: u8,
         rhs_reg: u8,
@@ -853,6 +1525,23 @@ impl VM {
         }
     }
 
+    /// 二进制 F32 运算
+    fn binary_op_f32<F>(
+        &self,
+        lhs_reg: u8,
+        rhs_reg: u8,
+        op: F,
+    ) -> Result<f64, VMError>
+    where
+        F: FnOnce(f64, f64) -> Result<f64, VMError>,
+    {
+        match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
+            (RuntimeValue::Float(a), RuntimeValue::Float(b)) => op(*a, *b),
+            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a as f64, *b as f64),
+            _ => Err(VMError::TypeError("float".to_string())),
+        }
+    }
+
     /// I64 比较
     fn compare_i64<F>(
         &self,
@@ -865,6 +1554,38 @@ impl VM {
     {
         match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
             (RuntimeValue::Int(a), RuntimeValue::Int(b)) => op(*a, *b),
+            _ => false,
+        }
+    }
+
+    /// F32 比较
+    fn compare_f32<F>(
+        &self,
+        lhs_reg: u8,
+        rhs_reg: u8,
+        op: F,
+    ) -> bool
+    where
+        F: FnOnce(f64, f64) -> bool,
+    {
+        match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
+            (RuntimeValue::Float(a), RuntimeValue::Float(b)) => op(*a, *b),
+            _ => false,
+        }
+    }
+
+    /// F64 比较
+    fn compare_f64<F>(
+        &self,
+        lhs_reg: u8,
+        rhs_reg: u8,
+        op: F,
+    ) -> bool
+    where
+        F: FnOnce(f64, f64) -> bool,
+    {
+        match (self.regs.read(lhs_reg), self.regs.read(rhs_reg)) {
+            (RuntimeValue::Float(a), RuntimeValue::Float(b)) => op(*a, *b),
             _ => false,
         }
     }
