@@ -19,7 +19,8 @@
 7. [类型检查规则](#七类型检查规则)
 8. [边缘情况处理](#八边缘情况处理)
 9. [完整语法定义](#九完整语法定义)
-10. [实际应用示例](#十实际应用示例)
+10. [自动绑定（pub）](#十自动绑定pub)
+11. [实际应用示例](#十一实际应用示例)
 
 ---
 
@@ -814,9 +815,130 @@ Point.wrong = func[0.5]                 # 非整数位置
 
 ---
 
-## 十、实际应用示例
+## 十、自动绑定（pub）
 
-### 10.1 数据库查询构建器
+### 10.1 自动绑定机制
+
+使用 `pub` 关键字声明的函数会自动绑定到同文件定义的类型：
+
+```yaoxiang
+# point.yaoxiang
+
+type Point = { x: Float, y: Float }
+
+# pub 声明自动绑定到 Point
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
+    Point(x: self.x + dx, y: self.y + dy)
+}
+
+pub scale: (Point, Float) -> Point = (self, factor) => {
+    Point(x: self.x * factor, y: self.y * factor)
+}
+```
+
+**自动绑定规则**：
+1. 函数使用 `pub` 声明
+2. 函数参数包含目标类型
+3. 类型在同一文件定义
+4. 编译器自动推断绑定位置
+
+### 10.2 自动绑定推断
+
+```yaoxiang
+# math.yaoxiang
+
+type Point = { x: Float, y: Float }
+
+# 只有一个 Point 参数 → 绑定到第 0 位
+pub length: (Point) -> Float = (self) => {
+    (self.x * self.x + self.y * self.y).sqrt()
+}
+
+# 两个 Point 参数 → 绑定到第 0 位（第一个 Point）
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# Point 在第 1 位 → 绑定到第 1 位
+pub from_origin: (Float, Float, Point) -> Point = (x, y, self) => {
+    self
+}
+
+# 使用
+p1 = Point(x: 3.0, y: 4.0)
+p2 = Point(x: 1.0, y: 2.0)
+
+p1.distance(p2)     # → distance(p1, p2)
+len = p1.length()   # → length(p1)
+```
+
+### 10.3 手动覆盖自动绑定
+
+如果需要精确控制绑定位置，可以使用手动绑定：
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# 自动绑定（默认绑定到第 0 位）
+distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 手动覆盖绑定位置
+Point.symmetric_distance = distance[0, 1]
+
+# 或者如果函数签名是 distance(Vector, Point)
+# Point.distance = distance[1]  # 绑定到第 1 位
+```
+
+### 10.4 与 RFC-010 统一语法配合
+
+`pub` 自动绑定与统一类型语法完美配合：
+
+```yaoxiang
+# 完整示例
+
+type Drawable = {
+    draw: (Surface) -> Void
+}
+
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable    # 实现 Drawable 接口
+}
+
+# 自动绑定到 Point.draw
+pub draw: (Point, Surface) -> Void = (self, surface) => {
+    surface.plot(self.x, self.y)
+}
+
+# 自动绑定到 Point.translate
+pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
+    Point(x: self.x + dx, y: self.y + dy)
+}
+
+# 使用
+p = Point(x: 1.0, y: 2.0)
+p.draw(screen)                    # → draw(p, screen)
+p2 = p.translate(3.0, 4.0)        # → translate(p, 3.0, 4.0)
+```
+
+---
+
+## 十一、实际应用示例
+
+### 11.1 数据库查询构建器
 
 ```yaoxiang
 # === 数据库库 ===
@@ -873,7 +995,7 @@ quick_query = db.param_query("SELECT * FROM users WHERE active = $1")
 active_users = quick_query([true])
 ```
 
-### 10.2 管道处理
+### 11.2 管道处理
 
 ```yaoxiang
 # === 数据处理管道 ===
@@ -915,7 +1037,7 @@ double_then_sum = pipe.process(_, _, sum)
 # 使用时：double_then_sum(x => x * 2, x => x > 5)
 ```
 
-### 10.3 配置验证
+### 11.3 配置验证
 
 ```yaoxiang
 # === 配置系统 ===
@@ -951,7 +1073,7 @@ quick_validate = config.validate(rules, false, default_handler)
 result = quick_validate()
 ```
 
-### 10.4 数学计算库
+### 11.4 数学计算库
 
 ```yaoxiang
 # === 数学库 ===

@@ -124,13 +124,15 @@ right_shift = 5 >> 1          # 2
 ### 列表
 
 ```yaoxiang
-numbers: [Int] = [1, 2, 3, 4, 5]
-empty_list: [String] = []
+numbers: List[Int] = [1, 2, 3, 4, 5]
+empty_list: List[String] = []
 
 # 访问元素
 first = numbers[0]             # 1
 last = numbers[-1]             # 5
+```
 
+```yaoxiang
 # 修改列表
 mut nums = [1, 2, 3]
 nums.append(4)                 # [1, 2, 3, 4]

@@ -169,6 +169,19 @@ FieldList   ::= Field (',' Field)* ','?
 Field       ::= Identifier ':' TypeExpr
 ```
 
+**语法**：`type Name = { field1: Type1, field2: Type2, ... }`
+
+```yaoxiang
+# 简单结构体
+type Point = { x: Float, y: Float }
+
+# 空结构体
+type Empty = {}
+
+# 带泛型的结构体
+type Pair[T] = { first: T, second: T }
+```
+
 ### 3.4 枚举类型
 
 ```
@@ -176,11 +189,57 @@ EnumType    ::= '{' Variant ('|' Variant)* '}'
 Variant     ::= Identifier (':' TypeExpr)?
 ```
 
+**语法**：`type Name = { Variant1 | Variant2(params) | ... }`
+
+```yaoxiang
+# 无参变体
+type Color = { red | green | blue }
+
+# 有参变体
+type Option[T] = { some(T) | none }
+
+# 混合
+type Result[T, E] = { ok(T) | err(E) }
+
+# 无参变体等价于无参构造器
+type Bool = { true | false }
+```
+
 ### 3.5 接口类型
 
 ```
-InterfaceType ::= '[' FnSignature (',' FnSignature)* ']'
-FnSignature   ::= Identifier '(' ParamTypes? ')' '->' TypeExpr
+InterfaceType ::= '{' FnField (',' FnField)* ','?
+FnField       ::= Identifier ':' FnType
+FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
+```
+
+**语法**：接口是字段全为函数类型的记录类型
+
+```yaoxiang
+# 接口定义
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+# 空接口
+type EmptyInterface = {}
+```
+
+**接口实现**：类型通过在定义末尾列出接口名来实现接口
+
+```yaoxiang
+# 实现接口的类型
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable,        # 实现 Drawable 接口
+    Serializable     # 实现 Serializable 接口
+}
 ```
 
 ### 3.6 元组类型
@@ -221,6 +280,21 @@ TypeUnion     ::= TypeExpr '|' TypeExpr
 
 ```
 TypeIntersection ::= TypeExpr '&' TypeExpr
+```
+
+**语法**：类型交集 `A & B` 表示同时满足 A 和 B 的类型
+
+```yaoxiang
+# 接口组合
+type Drawable = { draw: (Surface) -> Void }
+type Serializable = { serialize: () -> String }
+type DrawableSerializable = Drawable & Serializable
+
+# 使用交集类型
+process[T: Drawable & Serializable](item: T) -> String = (item) => {
+    item.draw(screen)
+    item.serialize()
+}
 ```
 
 ---
@@ -398,7 +472,26 @@ ForStmt     ::= 'for' Identifier 'in' Expr Block
 
 ### 6.1 函数定义语法
 
-**形式一：类型集中式（推荐）**
+**统一模型**：`name: type = value`
+
+```
+Declaration ::= Identifier ':' Type '=' Expression
+```
+
+#### 6.1.1 变量声明
+
+```
+LetStmt ::= ('mut')? Identifier ':' TypeExpr '=' Expr
+```
+
+```yaoxiang
+# 变量声明
+x: Int = 42
+name: String = "YaoXiang"
+mut counter: Int = 0
+```
+
+#### 6.1.2 函数声明
 
 ```
 FunctionDef ::= Identifier ':' FnType '=' Lambda
@@ -409,11 +502,73 @@ ParamNames  ::= Identifier (',' Identifier)*
 ParamTypes  ::= TypeExpr (',' TypeExpr)*
 ```
 
-**形式二：简写式**
+```yaoxiang
+# 完整语法
+add: (Int, Int) -> Int = (a, b) => a + b
 
+# 单参数简写
+inc: Int -> Int = x => x + 1
+
+# 无参函数
+main: () -> Void = () => {
+    print("Hello")
+}
 ```
-FunctionDef ::= Identifier '(' ParamTypes? ')' '->' TypeExpr? '=' Lambda
+
+#### 6.1.4 普通方法定义
+
+**语法**：`name: (Type, ...) -> ReturnType = (params) => ...`
+
+```yaoxiang
+# 普通方法：不关联类型，作为独立函数
+distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
 ```
+
+#### 6.1.5 方法绑定
+
+**语法**：`Type.method = function[positions]`
+
+```yaoxiang
+# 绑定到第 0 位（默认）
+Point.distance = distance[0]
+
+# 绑定到第 1 位
+Point.transform = transform[1]
+
+# 多位置绑定
+Point.scale = scale[0, 1]
+
+# 使用占位符
+Point.calc = func[0, _, 2]
+```
+
+#### 6.1.6 pub 自动绑定
+
+使用 `pub` 声明的函数，编译器自动绑定到同文件定义的类型：
+
+```yaoxiang
+# 使用 pub 声明，编译器自动绑定
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 编译器自动推断：
+# 1. Point 在当前文件定义
+# 2. 函数参数包含 Point
+# 3. 执行 Point.distance = distance[0]
+
+# 调用
+d = distance(p1, p2)           # 函数式
+d2 = p1.distance(p2)           # OOP 语法糖
+```
+
+---
 
 ### 6.2 并作函数与注解
 
@@ -768,19 +923,26 @@ data = match fetch_data() {
 ### A.1 类型定义
 
 ```
-# === 数据类型（花括号） ===
+# === 记录类型（花括号） ===
 
 # 结构体
 type Point = { x: Float, y: Float }
 
-# 枚举
+# 枚举（变体类型）
 type Result[T, E] = { ok(T) | err(E) }
 type Status = { pending | processing | completed }
 
-# === 接口类型（方括号） ===
+# === 接口类型（花括号，字段全为函数） ===
 
 # 接口定义
-type Serializable = [ serialize() -> String ]
+type Serializable = { serialize: () -> String }
+
+# 实现接口的类型
+type Point = {
+    x: Float,
+    y: Float,
+    Serializable    # 实现 Serializable 接口
+}
 
 # === 函数类型 ===
 
@@ -797,7 +959,30 @@ name: (ParamTypes) -> ReturnType = (params) => body
 name(ParamTypes) -> ReturnType = (params) => body
 ```
 
-### A.3 模块
+### A.3 方法定义
+
+```
+# 类型方法
+Type.method: (Type, ...) -> ReturnType = (self, ...) => body
+
+# 普通方法
+name: (Type, ...) -> ReturnType = (params) => body
+```
+
+### A.4 方法绑定
+
+```
+# 单位置绑定
+Type.method = func[0]
+
+# 多位置绑定
+Type.method = func[0, 1]
+
+# pub 自动绑定
+pub name: (Type, ...) -> ReturnType = ...  # 自动绑定到 Type
+```
+
+### A.5 模块
 
 ```
 # 模块即文件
@@ -805,7 +990,7 @@ name(ParamTypes) -> ReturnType = (params) => body
 Import ::= 'use' ModuleRef
 ```
 
-### A.4 控制流
+### A.6 控制流
 
 ```
 if Expr Block (elif Expr Block)* (else Block)?
@@ -814,7 +999,7 @@ while Identifier in Expr Block Expr Block
 for
 ```
 
-### A.5 match 语法
+### A.7 match 语法
 
 ```
 match value {

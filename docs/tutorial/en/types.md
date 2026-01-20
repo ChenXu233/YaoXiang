@@ -1,23 +1,43 @@
 # Type System
 
-> Version: v1.0.0
-> Status: In Progress
+> Version: v2.0.0
+> Status: Updated (Based on RFC-010 Unified Type Syntax)
 
 ---
 
 ## Type Classification
 
-YaoXiang's types are divided into the following categories:
+YaoXiang's types are classified as follows:
 
 ```
 TypeExpr
 ├── Primitive
-├── Struct
+├── Record
 ├── Enum
+├── Interface
 ├── Tuple
 ├── Fn
 ├── Generic
 └── Union/Intersection
+```
+
+---
+
+## Unified Syntax: name: type = value
+
+YaoXiang uses a **minimal unified type syntax**: `name: type = value`
+
+```
+├── Variable/Function: name: type = value
+│   ├── x: Int = 42
+│   └── add: (Int, Int) -> Int = (a, b) => a + b
+│
+├── Type Definition: type Name = type_expression
+│   ├── type Point = { x: Float, y: Float }
+│   └── type Drawable = { draw: (Surface) -> Void }
+│
+└── Interface: Record type with all fields being function types
+    └── type Serializable = { serialize: () -> String }
 ```
 
 ---
@@ -35,7 +55,7 @@ TypeExpr
 | `Char` | Unicode character | 4 bytes | `'a'`, `'中'` |
 | `Bytes` | Raw bytes | Variable | `b"\x00\x01"` |
 
-### Integer with Bit Width
+### Width-Specified Integers
 
 ```yaoxiang
 x: Int8 = 127
@@ -47,33 +67,32 @@ u: Uint8 = 255
 
 ---
 
-## Struct Types
+## Record Types
 
-Define structs using constructor syntax:
+Define record types using curly braces `{}`:
 
 ```yaoxiang
 # Definition
 type Point = { x: Float, y: Float }
 
 # Construct values
-p1 = Point(3.0, 4.0)
-p2 = Point(x: 1.0, y: 2.0)
+p1: Point = Point(3.0, 4.0)
+p2: Point = Point(x: 1.0, y: 2.0)
 
-# Access members
-x_coord = p1.x              # 3.0
-y_coord = p1.y              # 4.0
+# Access fields
+x_coord: Float = p1.x              # 3.0
+y_coord: Float = p1.y              # 4.0
 ```
 
-### Nested Structs
+### Nested Record Types
 
 ```yaoxiang
 type Rectangle = { width: Float, height: Float }
 type Circle = { radius: Float }
-type Shape = { Rectangle | Circle }
 
 # Usage
-rect = Rectangle(10.0, 20.0)
-circle = Circle(5.0)
+rect: Rectangle = Rectangle(10.0, 20.0)
+circle: Circle = Circle(5.0)
 ```
 
 ---
@@ -91,25 +110,148 @@ type Result[T, E] = { ok(T) | err(E) }
 type Option[T] = { some(T) | none }
 
 # Usage
-success = ok(42)
-failure = err("not found")
-value = some(100)
-empty = none
+success: Result[Int, String] = ok(42)
+failure: Result[Int, String] = err("not found")
+value: Option[Int] = some(100)
+empty: Option[Int] = none
 ```
 
 ### Pattern Matching
 
 ```yaoxiang
-type Status = pending | processing | completed | failed(String)
+type Status = { pending | processing | completed | failed(String) }
 
 process: Status -> String = (status) => {
     match status {
-        pending => "Pending",
-        processing => "Processing",
-        completed => "Completed",
-        failed(msg) => "Failed: " + msg,
+        pending => "pending",
+        processing => "processing",
+        completed => "completed",
+        failed(msg) => "failed: " + msg,
     }
 }
+```
+
+---
+
+## Interface Types
+
+**Interface = Record type with all fields being function types**
+
+```yaoxiang
+# Interface definition
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+```
+
+### Types Implementing Interfaces
+
+List interface names in the type definition:
+
+```yaoxiang
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable,      # Implement Drawable interface
+    Serializable   # Implement Serializable interface
+}
+
+# Implement interface methods
+Point.draw: (Point, Surface) -> Void = (self, surface) => {
+    surface.plot(self.x, self.y)
+}
+
+Point.serialize: (Point) -> String = (self) => {
+    "Point(${self.x}, ${self.y})"
+}
+```
+
+### Empty Interface
+
+```yaoxiang
+type EmptyInterface = {}
+```
+
+---
+
+## Methods and Binding
+
+### Type Method Definition
+
+Use `Type.method: (Type, ...) -> ReturnType = ...` syntax:
+
+```yaoxiang
+# Type method: first parameter is self (caller)
+Point.draw: (Point, Surface) -> Void = (self, surface) => {
+    surface.plot(self.x, self.y)
+}
+
+Point.serialize: (Point) -> String = (self) => {
+    "Point(${self.x}, ${self.y})"
+}
+```
+
+### Position Binding [n]
+
+Bind functions to specific parameter positions of a type:
+
+```yaoxiang
+# Define standalone function
+distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# Bind to Point.distance (this bound to position 0)
+Point.distance: (Point, Point) -> Float = distance[0]
+
+# Call: functional style
+d1: Float = distance(p1, p2)
+
+# Call: OOP syntax sugar
+d2: Float = p1.distance(p2)
+```
+
+### Multi-Position Binding
+
+```yaoxiang
+# Function receives multiple Point parameters
+transform_points: (Point, Point, Float) -> Point = (p1, p2, factor) => {
+    Point(p1.x * factor, p1.y * factor)
+}
+
+# Bind multiple positions (automatic currying)
+Point.transform: (Point, Point, Float) -> Point = transform_points[0, 1]
+
+# Call
+p1.transform(p2)(2.0)  # → transform_points(p1, p2, 2.0)
+```
+
+### Auto-Binding pub
+
+Functions declared with `pub` are **automatically bound** to types defined in the same file:
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# Using pub declaration, compiler auto-binds to Point
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# Compiler infers: Point.distance = distance[0]
+
+# Now you can call:
+d1: Float = distance(p1, p2)      # Functional style
+d2: Float = p1.distance(p2)       # OOP syntax sugar
 ```
 
 ---
@@ -122,7 +264,7 @@ Point2D = (Float, Float)
 Triple = (Int, String, Bool)
 
 # Usage
-p = (3.0, 4.0)
+p: (Float, Float) = (3.0, 4.0)
 (x, y) = p
 ```
 
@@ -146,13 +288,27 @@ add: (Int, Int) -> Int = (a, b) => a + b
 
 ```yaoxiang
 # Define generics
-type List[T] = { elements: [T], length: Int }
+type List[T] = {
+    data: Array[T],
+    length: Int
+}
 type Map[K, V] = { keys: [K], values: [V] }
-type Result[T, E] = ok(T) | err(E)
+type Result[T, E] = { ok(T) | err(E) }
 
 # Usage
-numbers: List[Int] = [1, 2, 3]
-names: List[String] = ["Alice", "Bob"]
+numbers: List[Int] = List([1, 2, 3])
+names: List[String] = List(["Alice", "Bob"])
+```
+
+### Generic Functions
+
+```yaoxiang
+# Generic function
+identity: [T](T) -> T = (x) => x
+
+# Usage
+n: Int = identity(42)
+s: String = identity("hello")
 ```
 
 ---
@@ -182,14 +338,15 @@ print_number: Number -> String = (n) => {
 ## Type Intersection
 
 ```yaoxiang
+# Intersection type = type composition
 type Printable = { print: () -> Void }
 type Serializable = { to_json: () -> String }
 
 # Intersection type
 type Document = Printable & Serializable
 
-# Implementation
-type MyDoc = MyDoc(content: String) & {
+# Implement intersection type
+type MyDoc = { content: String } & {
     print: () -> Void = () => print(self.content)
     to_json: () -> String = () => '{"content": "' + self.content + '"}'
 }
@@ -197,13 +354,26 @@ type MyDoc = MyDoc(content: String) & {
 
 ---
 
-## Type Conversion
+## Type Casting
 
 ```yaoxiang
 # Using as
-int_to_float = 42 as Float        # 42.0
-float_to_int = 3.14 as Int        # 3
-string_to_int = "123" as Int      # 123
+int_to_float: Float = 42 as Float
+float_to_int: Int = 3.14 as Int
+string_to_int: Int = "123" as Int
+```
+
+---
+
+## Type Inference
+
+YaoXiang supports type inference, allowing you to omit type annotations:
+
+```yaoxiang
+x = 42              # Inferred as Int
+y = 3.14            # Inferred as Float
+z = "hello"         # Inferred as String
+p = Point(1.0, 2.0) # Inferred as Point
 ```
 
 ---

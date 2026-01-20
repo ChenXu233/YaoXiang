@@ -124,13 +124,15 @@ right_shift = 5 >> 1          # 2
 ### Lists
 
 ```yaoxiang
-numbers: [Int] = [1, 2, 3, 4, 5]
-empty_list: [String] = []
+numbers: List[Int] = [1, 2, 3, 4, 5]
+empty_list: List[String] = []
 
 # Access elements
 first = numbers[0]             # 1
 last = numbers[-1]             # 5
+```
 
+```yaoxiang
 # Modify list
 mut nums = [1, 2, 3]
 nums.append(4)                 # [1, 2, 3, 4]

@@ -102,27 +102,131 @@ inc: Int -> Int = x => x + 1
 
 ### 类型定义
 
-YaoXiang 使用构造器语法定义类型：
+YaoXiang 使用统一的 `name: type = value` 语法模型：
 
 ```yaoxiang
-# 结构体类型（使用花括号语法）
+# 变量声明
+x: Int = 42
+name: String = "YaoXiang"
+
+# 函数定义
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# 类型定义（使用花括号）
 type Point = { x: Float, y: Float }
+
+# 使用类型
+p: Point = Point(x: 1.0, y: 2.0)
+p.x  # 1.0
+p.y  # 2.0
+```
+
+#### 记录类型
+
+```yaoxiang
+# 结构体类型
+type Point = { x: Float, y: Float }
+type Rect = { x: Float, y: Float, width: Float, height: Float }
 
 # 使用
 p = Point(x: 3.0, y: 4.0)
-# 访问字段
-p.x  # 3.0
-p.y  # 4.0
+r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
+```
 
-# 枚举类型
+#### 接口定义
+
+接口是字段全为函数类型的记录类型：
+
+```yaoxiang
+# 定义接口
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+# 空接口
+type EmptyInterface = {}
+```
+
+#### 类型方法
+
+使用 `Type.method: (Type, ...) -> Return = ...` 语法定义类型方法：
+
+```yaoxiang
+# 类型定义
+type Point = { x: Float, y: Float }
+
+# 类型方法定义
+Point.draw: (Point, Surface) -> Void = (self, surface) => {
+    surface.plot(self.x, self.y)
+}
+
+Point.serialize: (Point) -> String = (self) => {
+    "Point(${self.x}, ${self.y})"
+}
+
+# 使用方法（语法糖）
+p = Point(x: 1.0, y: 2.0)
+p.draw(screen)           # → Point.draw(p, screen)
+str = p.serialize()      # → Point.serialize(p)
+```
+
+#### 自动绑定
+
+使用 `pub` 关键字声明的函数会自动绑定到同文件定义的类型：
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# pub 声明自动绑定到 Point
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 使用
+p1 = Point(x: 3.0, y: 4.0)
+p2 = Point(x: 1.0, y: 2.0)
+
+# 函数式调用
+d = distance(p1, p2)           # 3.606...
+
+# OOP 语法糖（自动绑定到 Point.distance）
+d2 = p1.distance(p2)           # → distance(p1, p2)
+```
+
+#### 枚举类型
+
+```yaoxiang
+# 简单枚举
 type Color = red | green | blue
 
-# 泛型类型
+# 带数据的枚举
 type Result[T, E] = ok(T) | err(E)
 
 # 使用泛型
 success: Result[Int, String] = ok(42)
 failure: Result[Int, String] = err("not found")
+```
+
+#### 泛型类型
+
+```yaoxiang
+# 泛型类型定义
+type List[T] = {
+    data: Array[T],
+    length: Int,
+    push: (List[T], T) -> Void
+}
+
+# 具体实例化
+type IntList = List(Int)
+type StringList = List(String)
 ```
 
 ### 控制流

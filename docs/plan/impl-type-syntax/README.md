@@ -1,6 +1,7 @@
 # 实现计划：统一类型语法
 
 > **任务 ID**: impl-type-syntax
+> **RFC**: [RFC-010 统一类型语法](../design/rfc/010-unified-type-syntax.md)
 > **状态**: 待开始
 > **优先级**: P0
 > **预计工时**: 2-3 周
@@ -9,9 +10,22 @@
 
 ## 目标
 
-实现 YaoXiang 的统一类型语法：
-- `{}` 定义数据结构（结构体、枚举、联合）
-- `[]` 定义接口类型
+实现 YaoXiang 的**统一类型语法**（RFC-010），统一数据结构体和枚举的定义方式：
+
+- `{}` 定义数据类型（结构体、枚举、联合）
+### 旧语法 → 新语法
+
+```yaoxiang
+# === 旧语法（构造器即类型）===
+type Point = Point(x: Float, y: Float)
+type Color = red | green | blue
+type Result[T, E] = ok(T) | err(E)
+
+# === 新语法（花括号）===
+type Point = { x: Float, y: Float }
+type Color = { red | green | blue }
+type Result[T, E] = { ok(T) | err(E) }
+```
 
 ---
 
@@ -23,9 +37,12 @@
 # 结构体
 type Point = { x: Float, y: Float }
 
-# 枚举
-type Result[T, E] = { ok(T) | err(E) }
+# 枚举（无载荷变体）
 type Color = { red | green | blue }
+
+# 枚举（有载荷变体）
+type Result[T, E] = { ok(T) | err(E) }
+type Option[T] = { some(T) | none }
 
 # 混合类型
 type Shape = { circle(Float) | rect(Float, Float) }
@@ -34,141 +51,28 @@ type Shape = { circle(Float) | rect(Float, Float) }
 ### 接口类型语法 (方括号)
 
 ```yaoxiang
-# 接口定义：方法签名集合
+# 单方法接口
 type Serializable = [ serialize() -> String ]
 
+# 多方法接口
 type Drawable = [
     draw(Surface) -> Void,
     bounding_box() -> Rect
 ]
 ```
 
----
+### 与 RFC-004（多位置绑定）的集成
 
-## 接口与数据的组合
-
-### 核心概念
-
-接口 `[ serialize() -> String ]` 本质上是一组**方法签名**的集合。数据结构通过声明绑定来实现接口。
-
-```
-接口定义 Drawable:
-  draw(Surface) -> Void     → 需要: fn(Drawable, Surface) -> Void
-  bounding_box() -> Rect    → 需要: fn(Drawable) -> Rect
-
-数据结构 Point 实现 Drawable:
-  Point.draw = draw_function[0]        # this 在第 0 位
-  Point.bounding_box = bbox_function[0]
-```
-
-### 完整组合示例
+绑定语法 `func[position]` 中的位置索引从 **0** 开始：
 
 ```yaoxiang
-# 1. 定义数据结构
-type Point = { x: Float, y: Float }
-
-# 2. 定义接口
-type Drawable = [
-    draw(Surface) -> Void,
-    bounding_box() -> Rect
-]
-
-# 3. 定义自由函数（底层实现）
-draw_point(Point, Surface) -> Void = (p, surface) => {
-    surface.draw_rect(p.x, p.y, 10, 10)
-}
-
-bbox_point(Point) -> Rect = (p) => {
-    Rect(p.x - 5, p.y - 5, 10, 10)
-}
-
-# 4. 实现接口：声明绑定（编译时检查）
-impl Point: Drawable
-
-# 编译器自动推导绑定：
-# Point.draw = draw_point[0]
-# Point.bounding_box = bbox_point[0]
-
-# 5. 使用
-let p = Point(100, 200)
-let surface = Surface.new()
-
-# 函数视角
-draw_point(p, surface)
-bbox_point(p)
-
-# OOP 视角（语法糖，自动展开）
-p.draw(surface)     # → draw_point(p, surface)
-p.bounding_box()    # → bbox_point(p)
-```
-
-### 多位置联合绑定（RFC-004）
-
-当函数参数顺序不匹配时，使用 `[n]` 语法指定绑定位置：
-
-```yaoxiang
-# 底层函数：Point 在第 1 位
-render_thing(Surface, Point) -> Void = (surface, p) => { ... }
-
-# 接口要求：draw(this, Surface)
-type Renderable = [ draw(Surface) -> Void ]
-
-# 绑定：翻转参数顺序
-impl Point: Renderable
-# 编译器推导：Point.draw = render_thing[1]
-# p.draw(s) → render_thing(s, p)
-
-# 多位置联合绑定
+# 原始函数：distance(Point, Point) -> Float
 distance(Point, Point) -> Float = (a, b) => { ... }
-type Distanceable = [ distance_to(Point) -> Float ]
-# Point.distance_to = distance[0, 1]
-# p1.distance_to(p2) → distance(p1, p2)
 
-# 占位符绑定
-process(Point, Int, Point) -> Point = (p1, _, p2) => { ... }
-Point.combine = process[0, _, 2]
-# p1.combine(5, p2) → process(p1, 5, p2)
-```
+# 绑定到 Point 类型（第 0 位）
+Point.distance = distance[0]
 
-### 编译时检查流程
-
-```
-impl Point: Drawable
-    │
-    ▼
-展开接口定义：需要 draw(Surface) -> Void, bounding_box() -> Rect
-    │
-    ▼
-查找 Point 上的绑定：
-  Point.draw = draw_point[0] ✅ 存在
-  Point.bounding_box = bbox_point[0] ✅ 存在
-    │
-    ▼
-类型检查：
-  draw_point(p: Point, surface: Surface) -> Void
-  参数匹配：Point 在第 0 位 ✅
-  返回类型：Void ✅
-    │
-    ├─ ✅ 通过
-    └─ ❌ 编译错误：Point 没有实现 Drawable.draw
-```
-
-**检查规则**：
-1. 接口的所有方法必须在数据类型上有对应绑定
-2. 绑定位置的参数类型必须与数据类型匹配
-3. 方法返回类型必须与接口定义一致
-4. 任一不满足 → 编译错误
-
-### 泛型约束
-
-```yaoxiang
-fn serialize_all[T: Serializable](items: List[T]) -> List[String] {
-    items.map(fn(item) => serialize(item))
-}
-
-type Point = { x: Float, y: Float }
-# 如果 Point 没有 serialize → 编译错误
-let result = serialize_all([Point(1, 2), Point(3, 4)])
+# 使用：p1.distance(p2) → distance(p1, p2)
 ```
 
 ---
@@ -179,11 +83,11 @@ let result = serialize_all([Point(1, 2), Point(3, 4)])
 
 **文件**: `src/frontend/lexer/`
 
-| 任务 | 描述 | 状态 |
-|------|------|------|
-| Token 扩展 | 添加 `LBRACE`(`{`), `RBRACE`(`}`), `LBRACK`(`[`), `RBRACK`(`]`) | 待开始 |
-| Token 识别 | 更新 tokenize 函数识别新分隔符 | 待开始 |
-| 位置信息 | 确保新 token 有正确的 span 信息 | 待开始 |
+| 任务 | 描述 | 状态 | 文件 |
+|------|------|------|------|
+| Token 扩展 | 添加 `LBRACE`(`{`), `RBRACE`(`}`), `LBRACK`(`[`), `RBRACK`(`]`) | 待开始 | `token.rs` |
+| Token 识别 | 更新 `tokenize` 函数识别新分隔符 | 待开始 | `mod.rs` |
+| 位置信息 | 确保新 token 有正确的 span 信息 | 待开始 | `span.rs` |
 
 **测试用例**:
 ```yaoxiang
@@ -197,34 +101,18 @@ type D = { x: Int      # 缺少右花括号
 type E = [ foo() -> Int  # 缺少右方括号
 ```
 
+---
+
 ### Phase 2: 语法分析器重构
 
 **文件**: `src/frontend/parser/`
 
-#### 2.1 更新类型定义解析
+#### 2.1 AST 结构调整
+
+**文件**: `src/frontend/ast/types.rs`
 
 ```rust
-// 原来的构造器语法
-// type Point = Point(x: Float, y: Float)
-// type Result[T, E] = ok(T) | err(E)
-
-// 新语法
-// type Point = { x: Float, y: Float }
-// type Result[T, E] = { ok(T) | err(E) }
-```
-
-| 任务 | 描述 | 状态 |
-|------|------|------|
-| parse_type_def | 重构类型定义解析函数 | 待开始 |
-| parse_struct_body | 解析 `{ x: Float, y: Float }` | 待开始 |
-| parse_enum_body | 解析 `{ ok(T) \| err(E) }` | 待开始 |
-| parse_interface_body | 解析 `[ serialize() -> String ]` | 待开始 |
-
-#### 2.2 AST 结构调整
-
-```rust
-// src/frontend/ast/types.rs
-
+// 新的 TypeDefBody 枚举
 pub enum TypeDefBody {
     Struct { fields: Vec<Field> },
     Enum { variants: Vec<Variant> },
@@ -238,7 +126,7 @@ pub struct Field {
 
 pub struct Variant {
     pub name: Ident,
-    pub payload: Option<TypeExpr>,
+    pub payload: Option<TypeExpr>,  // None 表示无载荷
 }
 
 pub struct FnSignature {
@@ -248,34 +136,98 @@ pub struct FnSignature {
 }
 ```
 
+#### 2.2 解析函数更新
+
+| 任务 | 描述 | 状态 | 相关文件 |
+|------|------|------|---------|
+| `parse_type_def` | 重构类型定义解析函数 | 待开始 | `type_def.rs` (新建) |
+| `parse_struct_body` | 解析 `{ x: Float, y: Float }` | 待开始 | `type_def.rs` |
+| `parse_enum_body` | 解析 `{ ok(T) \| err(E) }` | 待开始 | `type_def.rs` |
+| `parse_interface_body` | 解析 `[ serialize() -> String ]` | 待开始 | `type_def.rs` |
+| `parse_variant` | 解析变体 `ok(T)` 或 `red` | 待开始 | `type_def.rs` |
+
+**参考现有实现**: [task-02-05-types.md](../phase-02-parser/task-02-05-types.md)
+
+#### 2.3 模式匹配更新
+
+```yaoxiang
+# 新语法下的模式匹配
+let p: Point = Point(3.0, 4.0)
+match p {
+    { x, y } => x + y,  # 解构
+    _ => 0
+}
+```
+
+---
+
 ### Phase 3: 类型检查器更新
 
 **文件**: `src/frontend/typecheck/`
 
 | 任务 | 描述 | 状态 |
 |------|------|------|
-| 类型注册 | 更新类型注册逻辑 | 待开始 |
+| 类型注册 | 更新 `TypeDef` 注册逻辑 | 待开始 |
 | 字段访问 | 更新 `.field` 访问检查 | 待开始 |
 | 构造器检查 | 更新构造器调用检查 | 待开始 |
 | 模式匹配 | 更新解构模式匹配 | 待开始 |
 | 接口约束 | 实现接口类型约束检查 | 待开始 |
 
-#### 3.1 接口类型检查
+#### 3.1 类型注册更新
 
 ```rust
-// 当 T 出现在需要接口类型的位置时
-fn check_interface_constraint(value_type: Type, interface_type: InterfaceType) -> bool {
-    // 检查 value_type 是否实现了 interface_type 中所有方法
-    for method in interface_type.methods {
-        if !value_type.has_method(method.name, method.signature) {
-            return false;
-        }
-    }
-    true
+// 在 type_env.rs 中
+
+pub struct TypeEnvironment {
+    pub types: HashMap<String, TypeDef>,
+    // ...
+}
+
+pub struct TypeDef {
+    pub name: String,
+    pub body: TypeDefBody,  // Struct | Enum | Interface
+    // ...
 }
 ```
 
-### Phase 4: IR 和代码生成
+#### 3.2 构造器验证
+
+```rust
+// 验证类型构造调用
+fn check_constructor_call(
+    constructor: Ident,
+    args: Vec<Expr>,
+    expected_type: Option<Type>,
+) -> Type {
+    // 查找类型定义
+    let type_def = lookup_type(constructor.name)?;
+
+    match type_def.body {
+        TypeDefBody::Struct { fields } => {
+            // 验证字段数量和类型
+        }
+        TypeDefBody::Enum { variants } => {
+            // 验证变体存在性和载荷类型
+        }
+        _ => error!("Cannot construct interface type"),
+    }
+}
+```
+
+---
+
+### Phase 4: 单态化器更新
+
+**文件**: `src/frontend/monomorphize/`
+
+| 任务 | 描述 | 状态 |
+|------|------|------|
+| 泛型特化 | 更新泛型类型的单态化 | 待开始 |
+| 变体特化 | 更新枚举变体的单态化 | 待开始 |
+
+---
+
+### Phase 5: 代码生成更新
 
 **文件**: `src/middle/codegen/`
 
@@ -284,9 +236,10 @@ fn check_interface_constraint(value_type: Type, interface_type: InterfaceType) -
 | 结构体布局 | 生成结构体的内存布局信息 | 待开始 |
 | 枚举布局 | 生成枚举的 tag + payload 布局 | 待开始 |
 | 接口虚表 | 生成接口的虚表 (vtable) | 待开始 |
-| 方法派发 | 实现接口方法的动态派发 | 待开始 |
 
-### Phase 5: 测试覆盖
+---
+
+### Phase 6: 测试覆盖
 
 **文件**: `tests/unit/`
 
@@ -300,23 +253,15 @@ fn check_interface_constraint(value_type: Type, interface_type: InterfaceType) -
 
 ---
 
-## 兼容性
+## 验收标准
 
-### 废弃旧语法
-
-```yaoxiang
-# 旧语法 (废弃)
-type Point = Point(x: Float, y: Float)
-type Result[T, E] = ok(T) | err(E)
-
-# 新语法
-type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
-```
-
-**策略**:
-- v0.3: 新语法支持，提示旧语法废弃警告
-- v0.4: 移除旧语法支持
+- [ ] 词法分析器识别 `{`, `}`, `[`, `]` 作为分隔符
+- [ ] `type Point = { x: Float, y: Float }` 正确解析
+- [ ] `type Result[T, E] = { ok(T) | err(E) }` 正确解析
+- [ ] `type Serializable = [ serialize() -> String ]` 正确解析
+- [ ] 模式匹配解构 `{ x, y }` 正常工作
+- [ ] 所有现有测试通过
+- [ ] 新增 20+ 单元测试
 
 ---
 
@@ -325,29 +270,46 @@ type Result[T, E] = { ok(T) | err(E) }
 | 风险 | 影响 | 缓解措施 |
 |------|------|----------|
 | 语法冲突 | `{}` 同时用于 block 和类型定义 | 根据上下文解析，无歧义 |
+| 现有代码兼容 | 现有代码使用旧语法 | 渐进式迁移，先警告后移除 |
 | 性能开销 | 虚表派发可能有额外开销 | 单态化优化接口调用 |
 | 测试覆盖 | 新语法边界条件多 | 全面单元测试 |
 
 ---
 
-## 验收标准
+## 兼容性策略
 
-- [ ] 词法分析器识别 `{`, `}`, `[`, `]` 作为分隔符
-- [ ] `type Point = { x: Float, y: Float }` 正确解析
-- [ ] `type Result[T, E] = { ok(T) | err(E) }` 正确解析
-- [ ] `type Serializable = [ serialize() -> String ]` 正确解析
-- [ ] 模式匹配解构 `Point(x, y)` 正常工作
-- [ ] 所有现有测试通过
-- [ ] 新增 20+ 单元测试
+```yaoxiang
+# 旧语法 (废弃但兼容)
+type Point = Point(x: Float, y: Float)   # 编译警告
+type Result[T, E] = ok(T) | err(E)       # 编译警告
+
+# 新语法
+type Point = { x: Float, y: Float }
+type Result[T, E] = { ok(T) | err(E) }
+```
+
+**迁移策略**:
+- v0.3: 新语法支持，提示旧语法废弃警告
+- v0.4: 移除旧语法支持
 
 ---
 
 ## 进度追踪
 
-| 阶段 | 状态 | 完成日期 |
-|------|------|----------|
-| 词法分析器 | ⏳ | - |
-| 语法分析器 | ⏳ | - |
-| 类型检查器 | ⏳ | - |
-| IR/代码生成 | ⏳ | - |
-| 测试验收 | ⏳ | - |
+| 阶段 | 状态 | 完成日期 | 负责人 |
+|------|------|----------|--------|
+| 词法分析器 | ⏳ | - | - |
+| 语法分析器 | ⏳ | - | - |
+| 类型检查器 | ⏳ | - | - |
+| 单态化器 | ⏳ | - | - |
+| 代码生成 | ⏳ | - | - |
+| 测试验收 | ⏳ | - | - |
+
+---
+
+## 相关文档
+
+- [RFC-010 统一类型语法](../design/rfc/010-unified-type-syntax.md)
+- [RFC-004 多位置联合绑定](../design/rfc/004-curry-multi-position-binding.md)
+- [类型解析任务](../phase-02-parser/task-02-05-types.md)
+- [语言规范](../design/language-spec.md)

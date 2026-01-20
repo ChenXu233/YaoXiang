@@ -662,6 +662,24 @@ c: Color = green                              # Equivalent to green()
 p: Point = Point(1.0, 2.0)
 r: Result[Int, String] = ok(42)
 s: Shape = circle(5.0)
+
+# === Interface definition (record type with all function fields) ===
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+# === Interface implementation (list interface names at type end) ===
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable,        # Implements Drawable interface
+    Serializable     # Implements Serializable interface
+}
 ```
 
 ### 3.3 Type Operations
@@ -1532,7 +1550,57 @@ p1.distance(p2)      # ✅ distance is pub, can auto bind
 # p1.internal_distance(p2)  # ❌ Not pub, cannot bind
 ```
 
-#### 7.6.2 Binding Within Module
+#### 7.6.2 pub Auto-Binding Mechanism
+
+Functions declared with `pub` are automatically bound to types defined in the same file:
+
+```yaoxiang
+# === Point.yx ===
+
+type Point = { x: Float, y: Float }
+
+# Using pub declaration, compiler auto-binds
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
+    Point(self.x + dx, self.y + dy)
+}
+
+# Compiler automatically infers and executes bindings:
+# Point.distance = distance[0]
+# Point.translate = translate[0]
+
+# === main.yx ===
+
+use Point
+
+p1 = Point(3.0, 4.0)
+p2 = Point(1.0, 2.0)
+
+# ✅ Functional call
+d = distance(p1, p2)
+
+# ✅ OOP syntax sugar (auto-binding)
+d2 = p1.distance(p2)
+p3 = p1.translate(1.0, 1.0)
+```
+
+**Auto-Binding Rules**:
+1. Function is defined in the module file (same file as type)
+2. Function parameters include the type
+3. Exported with `pub`
+4. Compiler automatically executes `Type.method = function[0]`
+
+**Benefits**:
+- No need to manually write binding declarations
+- Cleaner code
+- Avoids binding omissions or errors
+
+#### 7.6.3 Binding Within Module
 
 ```yaoxiang
 # === Point.yx ===
@@ -2188,6 +2256,7 @@ result2 = p1.distance_scaled(2.0, p2)
 |---------|------|--------|-------------------|
 | v1.0.0 | 2024-12-31 | Chen Xu | Initial version |
 | v1.1.0 | 2025-01-04 | Moyu | Fixed generic syntax to `[T]` (not `<T>`); removed `fn` keyword; updated function definition examples |
+| v1.2.0 | 2025-01-20 | Chen Xu | Added unified type syntax (RFC-010): interface definition using braces `{ serialize: () -> String }`; interface implementation by listing interface names at type end; `pub` auto-binding mechanism |
 
 ---
 

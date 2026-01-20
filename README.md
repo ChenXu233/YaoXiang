@@ -139,13 +139,13 @@ Notes:
 ```yaoxiang
 # === Type Definitions ===
 
-# Data types (curly braces)
+# Record types (curly braces)
 type Point = { x: Float, y: Float }
 type Result[T, E] = { ok(T) | err(E) }
 type Color = { red | green | blue }
 
-# Interface types (square brackets)
-type Serializable = [ serialize() -> String ]
+# Interface types (all fields are function types)
+type Serializable = { serialize: () -> String }
 
 # Value construction
 p = Point(3.0, 4.0)
@@ -405,13 +405,13 @@ cargo run -- dump docs/examples/hello.yx                   # 转储 AST/字节�
 ```yaoxiang
 # === 类型定义 ===
 
-# 数据类型（花括号）
+# 记录类型（花括号）
 type Point = { x: Float, y: Float }
 type Result[T, E] = { ok(T) | err(E) }
 type Color = { red | green | blue }
 
-# 接口类型（方括号）
-type Serializable = [ serialize() -> String ]
+# 接口类型（字段全为函数类型）
+type Serializable = { serialize: () -> String }
 
 # 值构造
 p = Point(3.0, 4.0)

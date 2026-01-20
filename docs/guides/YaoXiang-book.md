@@ -663,6 +663,24 @@ c: Color = green                              # 等价于 green()
 p: Point = Point(1.0, 2.0)
 r: Result[Int, String] = ok(42)
 s: Shape = circle(5.0)
+
+# === 接口定义（字段全为函数的记录类型）===
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+# === 接口实现（类型末尾列出接口名）===
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable,        # 实现 Drawable 接口
+    Serializable     # 实现 Serializable 接口
+}
 ```
 
 ### 3.3 类型操作
@@ -1482,7 +1500,57 @@ p1.distance(p2)      # ✅ distance 是 pub，可自动绑定
 # p1.internal_distance(p2)  # ❌ 不是 pub，无法绑定
 ```
 
-#### 7.6.2 模块内绑定
+#### 7.6.2 pub 自动绑定机制
+
+使用 `pub` 声明的函数，编译器自动绑定到同文件定义的类型：
+
+```yaoxiang
+# === Point.yx ===
+
+type Point = { x: Float, y: Float }
+
+# 使用 pub 声明，编译器自动绑定
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
+    Point(self.x + dx, self.y + dy)
+}
+
+# 编译器自动推断并执行绑定：
+# Point.distance = distance[0]
+# Point.translate = translate[0]
+
+# === main.yx ===
+
+use Point
+
+p1 = Point(3.0, 4.0)
+p2 = Point(1.0, 2.0)
+
+# ✅ 函数式调用
+d = distance(p1, p2)
+
+# ✅ OOP 语法糖（自动绑定）
+d2 = p1.distance(p2)
+p3 = p1.translate(1.0, 1.0)
+```
+
+**自动绑定规则**：
+1. 函数在模块文件中定义（与类型同文件）
+2. 函数参数包含该类型
+3. 使用 `pub` 导出
+4. 编译器自动执行 `Type.method = function[0]`
+
+**好处**：
+- 无需手动编写绑定声明
+- 代码更简洁
+- 避免绑定遗忘或错误
+
+#### 7.6.3 模块内绑定
 
 ```yaoxiang
 # === Point.yx ===
@@ -2141,7 +2209,8 @@ result2 = p1.distance_scaled(2.0, p2)
 |------|------|------|---------|
 | v1.0.0 | 2024-12-31 | 晨煦 | 初始版本 |
 | v1.1.0 | 2025-01-04 | 沫郁酱 | 修正泛型语法为 `[T]`（而非 `<T>`）；移除 `fn` 关键字；更新函数定义示例 |
-| v1.2.0 | 2025-01-06 | 晨煦 | 统一为新语法格式：name: type -> type = lambda
+| v1.2.0 | 2025-01-06 | 晨煦 | 统一为新语法格式：name: type -> type = lambda |
+| v1.3.0 | 2025-01-20 | 晨煦 | 添加统一类型语法（RFC-010）：接口定义使用花括号 `{ serialize: () -> String }`；类型末尾列出接口名实现接口；`pub` 自动绑定机制 |
 
 ---
 

@@ -1,13 +1,30 @@
 # 函数与闭包
 
-> 版本：v1.0.0
-> 状态：编写中
+> 版本：v2.0.0
+> 状态：已更新（基于 RFC-010 统一类型语法 + RFC-004 位置绑定）
+
+---
+
+## 统一语法：name: type = value
+
+YaoXiang 所有声明都使用统一语法：
+
+```yaoxiang
+# 变量
+x: Int = 42
+
+# 函数
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# 类型方法
+Point.distance: (Point, Point) -> Float = (p1, p2) => ...
+```
 
 ---
 
 ## 函数定义
 
-### 形式一：类型集中式（推荐）
+### 完整形式（推荐）
 
 ```yaoxiang
 # 基本函数
@@ -25,7 +42,7 @@ fact: (Int) -> Int = (n) => {
 }
 ```
 
-### 形式二：简写式
+### 简写形式
 
 ```yaoxiang
 # 简写形式
@@ -43,13 +60,13 @@ greet(String) -> String = (name) => "Hello, " + name
 identity: [T](T) -> T = (x) => x
 
 # 使用
-n = identity(42)              # Int
-s = identity("hello")         # String
-b = identity(true)            # Bool
+n: Int = identity(42)              # Int
+s: String = identity("hello")       # String
+b: Bool = identity(true)            # Bool
 
 # 泛型高阶函数
-map: [T, U]((T) -> U, [T]) -> [U] = (f, list) => {
-    result: [U] = []
+map: [T, U]((T) -> U, List[T]) -> List[U] = (f, list) => {
+    result: List[U] = List()
     for item in list {
         result.append(f(item))
     }
@@ -57,7 +74,7 @@ map: [T, U]((T) -> U, [T]) -> [U] = (f, list) => {
 }
 
 # 使用
-doubled = map((x) => x * 2, [1, 2, 3])  # [2, 4, 6]
+doubled: List[Int] = map((x) => x * 2, List([1, 2, 3]))  # [2, 4, 6]
 ```
 
 ---
@@ -72,10 +89,10 @@ apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
 
 # 使用
 double: (Int) -> Int = x => x * 2
-result = apply(double, 5)     # 10
+result: Int = apply(double, 5)     # 10
 
 # 简写
-result2 = apply((x) => x + 1, 5)  # 6
+result2: Int = apply((x) => x + 1, 5)  # 6
 ```
 
 ### 返回函数
@@ -85,10 +102,10 @@ result2 = apply((x) => x + 1, 5)  # 6
 create_multiplier: (Int) -> (Int) -> Int = (factor) => (x) => x * factor
 
 # 使用
-double = create_multiplier(2)
-triple = create_multiplier(3)
-result1 = double(5)           # 10
-result2 = triple(5)           # 15
+double: (Int) -> Int = create_multiplier(2)
+triple: (Int) -> Int = create_multiplier(3)
+result1: Int = double(5)           # 10
+result2: Int = triple(5)           # 15
 ```
 
 ---
@@ -99,8 +116,8 @@ result2 = triple(5)           # 15
 
 ```yaoxiang
 # 创建闭包
-create_counter() -> () -> Int = () => {
-    mut count = 0
+create_counter: () -> () -> Int = () => {
+    mut count: Int = 0
     () => {
         count = count + 1
         count
@@ -108,22 +125,22 @@ create_counter() -> () -> Int = () => {
 }
 
 # 使用
-counter = create_counter()
-c1 = counter()                # 1
-c2 = counter()                # 2
-c3 = counter()                # 3
+counter: () -> Int = create_counter()
+c1: Int = counter()                # 1
+c2: Int = counter()                # 2
+c3: Int = counter()                # 3
 ```
 
 ### 捕获多个变量
 
 ```yaoxiang
-create_adder(base: Int) -> (Int) -> Int = (base) => {
+create_adder: (Int) -> (Int) -> Int = (base) => {
     add_to_base: (Int) -> Int = (x) => base + x
     add_to_base
 }
 
-add5 = create_adder(5)
-result = add5(10)             # 15
+add5: (Int) -> Int = create_adder(5)
+result: Int = add5(10)             # 15
 ```
 
 ---
@@ -137,58 +154,159 @@ YaoXiang 支持自动柯里化：
 add: (Int, Int) -> Int = (a, b) => a + b
 
 # 完全调用
-result1 = add(3, 5)           # 8
+result1: Int = add(3, 5)           # 8
 
 # 部分应用
 add5: (Int) -> Int = add(5)
-result2 = add5(10)            # 15
+result2: Int = add5(10)            # 15
 
 # 链式部分应用
 curried_add: (Int) -> (Int) -> Int = add
-add3 = curried_add(3)
-add5_more = add3(5)           # 8
+add3: (Int) -> Int = curried_add(3)
+add5_more: Int = add3(5)           # 8
 ```
 
 ---
 
-## 方法绑定
+## 方法与绑定
 
-### 位置绑定
+### 类型方法定义
+
+使用 `Type.method: (Type, ...) -> ReturnType = ...` 语法：
 
 ```yaoxiang
-type MathOps = MathOps(add: (Int, Int) -> Int, mul: (Int, Int) -> Int)
+type Point = { x: Float, y: Float }
 
-ops = MathOps(
-    add: (a, b) => a + b,
-    mul: (a, b) => a * b
-)
+# 类型方法：第一个参数是 self（调用者）
+Point.distance: (Point, Point) -> Float = (self, other) => {
+    dx = self.x - other.x
+    dy = self.y - other.y
+    (dx * dx + dy * dy).sqrt()
+}
 
 # 使用
-sum = ops.add(3, 5)           # 8
-product = ops.mul(3, 5)       # 15
+p1: Point = Point(3.0, 4.0)
+p2: Point = Point(1.0, 1.0)
+d: Float = p1.distance(p2)
 ```
+
+### 位置绑定 [n]
+
+将独立函数绑定到类型的特定参数位置：
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# 定义独立函数
+distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 绑定到 Point.distance（this 绑定到第 0 位）
+Point.distance: (Point, Point) -> Float = distance[0]
+
+# 调用：函数式
+d1: Float = distance(p1, p2)
+
+# 调用：OOP 语法糖
+d2: Float = p1.distance(p2)
+```
+
+### 指定绑定位置
+
+```yaoxiang
+# 函数签名是 transform(Vector, Point)
+transform: (Vector, Point) -> Point = (v, p) => {
+    Point(p.x + v.x, p.y + v.y)
+}
+
+# 绑定 Point.transform，将 this 绑定到第 1 位
+Point.transform: (Point, Vector) -> Point = transform[1]
+
+# 调用：p.transform(v) → transform(v, p)
+result: Point = p1.transform(v1)
+```
+
+### 多位置绑定
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# 函数接收多个 Point 参数
+scale_points: (Point, Point, Float) -> Point = (p1, p2, factor) => {
+    Point(p1.x * factor, p1.y * factor)
+}
+
+# 绑定多个位置（自动柯里化）
+Point.scale: (Point, Point, Float) -> Point = scale_points[0, 1]
+
+# 调用
+p1.scale(p2)(2.0)  # → scale_points(p1, p2, 2.0)
+```
+
+### 占位符 _
+
+跳过某些位置：
+
+```yaoxiang
+# 只绑定第 1 参数，保留第 0、2 参数
+Point.custom_op: (Point, Point, Float) -> Float = func[1, _]
+
+# 调用：p1.custom_op(p2, 0.5) → func(p1, p2, 0.5)
+```
+
+### 自动绑定 pub
+
+使用 `pub` 声明的函数**自动绑定**到同文件定义的类型：
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# 使用 pub 声明，编译器自动绑定到 Point
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# 编译器自动推断：Point.distance = distance[0]
+
+# 现在可以这样调用：
+d1: Float = distance(p1, p2)      # 函数式
+d2: Float = p1.distance(p2)       # OOP 语法糖
+```
+
+### 自动绑定规则
+
+| 函数声明 | 自动绑定结果 |
+|---------|-------------|
+| `pub distance: (Point, Point) -> Float = ...` | `Point.distance = distance[0]` |
+| `pub draw: (Point, Surface) -> Void = ...` | `Point.draw = draw[0]` |
+| `pub transform: (Vector, Point) -> Point = ...` | 需要手动指定位置 |
 
 ---
 
-## 内置函数
+## 内置方法
 
 ### 字符串函数
 
 ```yaoxiang
-len = "hello".length          # 5
-upper = "hello".to_upper()    # "HELLO"
-lower = "HELLO".to_lower()    # "hello"
+len: Int = "hello".length          # 5
+upper: String = "hello".to_upper()    # "HELLO"
+lower: String = "HELLO".to_lower()    # "hello"
 ```
 
 ### 列表函数
 
 ```yaoxiang
-numbers = [1, 2, 3, 4, 5]
+numbers: List[Int] = List([1, 2, 3, 4, 5])
 
-length = numbers.length       # 5
-first = numbers[0]            # 1
-last = numbers[-1]            # 5
-reversed = numbers.reversed() # [5, 4, 3, 2, 1]
+length: Int = numbers.length       # 5
+first: Int = numbers[0]            # 1
+last: Int = numbers[-1]            # 5
+reversed: List[Int] = numbers.reversed() # [5, 4, 3, 2, 1]
 ```
 
 ---
@@ -207,8 +325,8 @@ fib: (Int) -> Int = (n) => {
 }
 
 # 列表求和
-sum_list: ([Int]) -> Int = (list) => {
-    if list.length == 0 { 0 } else { list[0] + sum_list(list[1..]) }
+sum_list: (List[Int]) -> Int = (list) => {
+    if list.length == 0 { 0 } else { list[0] + sum_list(list.tail()) }
 }
 ```
 
@@ -216,6 +334,6 @@ sum_list: ([Int]) -> Int = (list) => {
 
 ## 下一步
 
-- [控制流](control-flow.md) - 条件与循环
+- [控制流](control-flow.md) - 条件、循环和模式匹配
 - [错误处理](error-handling.md) - Result 和 Option
 - [泛型编程](generics.md) - 更复杂的泛型模式

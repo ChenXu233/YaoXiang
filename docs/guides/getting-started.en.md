@@ -102,27 +102,131 @@ inc: Int -> Int = x => x + 1
 
 ### Type Definitions
 
-YaoXiang uses constructor syntax for type definitions:
+YaoXiang uses a unified `name: type = value` syntax model:
 
 ```yaoxiang
-# Struct type (using brace syntax)
+# Variable declaration
+x: Int = 42
+name: String = "YaoXiang"
+
+# Function definition
+add: (Int, Int) -> Int = (a, b) => a + b
+
+# Type definition (using braces)
 type Point = { x: Float, y: Float }
+
+# Using the type
+p: Point = Point(x: 1.0, y: 2.0)
+p.x  # 1.0
+p.y  # 2.0
+```
+
+#### Record Types
+
+```yaoxiang
+# Struct types
+type Point = { x: Float, y: Float }
+type Rect = { x: Float, y: Float, width: Float, height: Float }
 
 # Usage
 p = Point(x: 3.0, y: 4.0)
-# Access fields
-p.x  # 3.0
-p.y  # 4.0
+r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
+```
 
-# Enum type
+#### Interface Definitions
+
+Interfaces are record types where all fields are function types:
+
+```yaoxiang
+# Define interfaces
+type Drawable = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+# Empty interface
+type EmptyInterface = {}
+```
+
+#### Type Methods
+
+Use `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
+
+```yaoxiang
+# Type definition
+type Point = { x: Float, y: Float }
+
+# Type method definitions
+Point.draw: (Point, Surface) -> Void = (self, surface) => {
+    surface.plot(self.x, self.y)
+}
+
+Point.serialize: (Point) -> String = (self) => {
+    "Point(${self.x}, ${self.y})"
+}
+
+# Using methods (syntactic sugar)
+p = Point(x: 1.0, y: 2.0)
+p.draw(screen)           # → Point.draw(p, screen)
+str = p.serialize()      # → Point.serialize(p)
+```
+
+#### Auto-Binding
+
+Functions declared with `pub` are automatically bound to types defined in the same file:
+
+```yaoxiang
+type Point = { x: Float, y: Float }
+
+# pub declarations auto-bind to Point
+pub distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p1.x - p2.x
+    dy = p1.y - p2.y
+    (dx * dx + dy * dy).sqrt()
+}
+
+# Usage
+p1 = Point(x: 3.0, y: 4.0)
+p2 = Point(x: 1.0, y: 2.0)
+
+# Function-style call
+d = distance(p1, p2)           # 3.606...
+
+# OOP syntactic sugar (auto-bound to Point.distance)
+d2 = p1.distance(p2)           # → distance(p1, p2)
+```
+
+#### Enum Types
+
+```yaoxiang
+# Simple enums
 type Color = red | green | blue
 
-# Generic type
+# Enums with data
 type Result[T, E] = ok(T) | err(E)
 
 # Using generics
 success: Result[Int, String] = ok(42)
 failure: Result[Int, String] = err("not found")
+```
+
+#### Generic Types
+
+```yaoxiang
+# Generic type definitions
+type List[T] = {
+    data: Array[T],
+    length: Int,
+    push: (List[T], T) -> Void
+}
+
+# Concrete instantiations
+type IntList = List(Int)
+type StringList = List(String)
 ```
 
 ### Control Flow
