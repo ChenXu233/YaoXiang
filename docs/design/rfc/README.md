@@ -29,6 +29,7 @@
 | RFC-004 | [柯里化方法的多位置联合绑定设计](004-curry-multi-position-binding.md) | 晨煦 | 2025-01-05 | 草案 |
 | RFC-005 | [自动化CVE安全检查系统](005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 草案 |
 | RFC-006 | [文档站点建设与优化方案](006-documentation-site-optimization.md) | 晨煦 | 2025-01-05 | 草案 |
+| RFC-010 | [统一类型语法 - 方法即数据](010-unified-type-syntax.md) | 晨煦 | 2025-01-20 | 草案 |
 ---
 
 ## 审核中RFC
