@@ -4,6 +4,10 @@
 
 pub mod dag;
 pub mod extfunc;
+pub mod interrupt;
 pub mod memory;
 pub mod scheduler;
 pub mod value;
+
+#[cfg(test)]
+mod tests;

@@ -20,6 +20,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::runtime::dag::{ComputationDAG, DAGError, DAGNodeKind, NodeId};
+use crate::runtime::interrupt::{Interrupt, InterruptHandler, InterruptState};
 
 /// Scheduler configuration.
 #[derive(Debug, Clone)]
@@ -167,6 +168,8 @@ pub struct FlowScheduler {
     task_id_generator: Mutex<TaskIdGenerator>,
     /// Completed DAG nodes to track dependency readiness.
     completed_nodes: Arc<Mutex<HashSet<NodeId>>>,
+    /// Interrupt handler for VM interrupts (checked at DAG node boundaries).
+    interrupt_handler: InterruptHandler,
 }
 
 impl FlowScheduler {
@@ -203,6 +206,9 @@ impl FlowScheduler {
         // Track completed DAG nodes for dependency resolution
         let completed_nodes = Arc::new(Mutex::new(HashSet::new()));
 
+        // Create interrupt handler for VM interrupts
+        let interrupt_handler = Arc::new(InterruptState::new());
+
         // Spawn worker threads
         let workers = Self::spawn_workers(
             num_workers,
@@ -229,6 +235,7 @@ impl FlowScheduler {
             stats,
             task_id_generator,
             completed_nodes,
+            interrupt_handler,
         }
     }
 
@@ -581,6 +588,62 @@ impl FlowScheduler {
         for worker in self.workers.drain(..) {
             worker.join().expect("Worker thread panicked");
         }
+    }
+
+    // === Interrupt handling ===
+
+    /// Get the interrupt handler for setting interrupts from external systems.
+    ///
+    /// This returns an `Arc<InterruptState>` that can be shared across threads.
+    /// External systems (e.g., debugger, timeout monitor) can use this to inject
+    /// interrupts into the VM execution.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let scheduler = FlowScheduler::new();
+    /// let handler = scheduler.interrupt_handler();
+    ///
+    /// // In another thread:
+    /// handler.set_breakpoint(BreakpointId::new(1));
+    /// ```
+    #[inline]
+    pub fn interrupt_handler(&self) -> &InterruptHandler {
+        &self.interrupt_handler
+    }
+
+    /// Check and clear any pending interrupt.
+    ///
+    /// This is called by the scheduler at DAG node boundaries to check if an
+    /// interrupt has been injected. If an interrupt is found, it is cleared
+    /// and the scheduler can handle it appropriately.
+    ///
+    /// Returns `Some(Interrupt)` if an interrupt was pending, `None` otherwise.
+    ///
+    /// # Note
+    ///
+    /// This method atomically checks and clears the interrupt state, ensuring
+    /// thread-safe access from multiple worker threads.
+    #[inline]
+    pub fn check_interrupt(&self) -> Option<Interrupt> {
+        self.interrupt_handler.check_and_clear()
+    }
+
+    /// Check if there is a pending interrupt without clearing it.
+    ///
+    /// This is useful for debugging or when you need to inspect the interrupt
+    /// state without consuming it.
+    #[inline]
+    pub fn has_interrupt(&self) -> bool {
+        self.interrupt_handler.has_interrupt()
+    }
+
+    /// Clear any pending interrupt.
+    ///
+    /// This can be used to reset the interrupt state if needed.
+    #[inline]
+    pub fn clear_interrupt(&self) {
+        self.interrupt_handler.clear();
     }
 }
 
