@@ -15,7 +15,8 @@ phase-11-vm/
 ├── task-12-01-executor.md # 执行器
 ├── task-12-02-frames.md   # 栈帧管理
 ├── task-12-03-opcodes.md  # 指令集
-└── task-12-04-interrupt.md # 中断处理
+├── task-12-04-interrupt.md # 中断处理
+└── task-12-05-vm-completeness.md # 指令完整性与栈操作修复
 ```
 
 ## 完成状态
@@ -25,7 +26,8 @@ phase-11-vm/
 | task-12-01 | 执行器 | ✅ 已重构 |
 | task-12-02 | 栈帧管理 | ✅ 已重构 |
 | task-12-03 | 指令集 | ✅ 已实现 |
-| task-12-04 | 中断处理 | ⏳ 待实现 |
+| task-12-04 | 中断处理 | ✅ 已实现 |
+| task-12-05 | 指令完整性与栈操作修复 | ⏳ 待实施 |
 
 ## 架构说明
 
