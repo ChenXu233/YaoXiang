@@ -1,6 +1,10 @@
 //! VM errors
 
 use thiserror::Error;
+use std::time::Duration;
+
+// Re-export types from interrupt module for convenience
+pub use crate::runtime::interrupt::{AccessType, BreakpointId};
 
 /// VM result
 pub type VMResult<T> = Result<T, VMError>;
@@ -46,4 +50,20 @@ pub enum VMError {
 
     #[error("Invalid state: {0}")]
     InvalidState(String),
+
+    // === Interrupt-related errors ===
+    // These are returned when an interrupt is caught by the scheduler
+    #[error("Execution timeout after {0:?}")]
+    Timeout(Duration),
+
+    #[error("Breakpoint hit: {0}")]
+    Breakpoint(BreakpointId),
+
+    #[error("Memory access violation at address {addr:#018x} ({access})")]
+    MemoryViolation {
+        /// The memory address that was accessed
+        addr: usize,
+        /// The type of access that was attempted
+        access: AccessType,
+    },
 }
