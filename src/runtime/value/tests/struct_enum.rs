@@ -1,9 +1,10 @@
 //! Struct and Enum tests for RuntimeValue
 
 use std::sync::Arc;
+use std::collections::HashMap;
 use crate::runtime::value::{
     RuntimeValue, ValueType, TypeId, FunctionId, FunctionValue, AsyncValue, AsyncState, TaskId,
-    IntWidth, FloatWidth,
+    IntWidth, FloatWidth, Heap, HeapValue,
 };
 
 /// Helper to create a struct type ID for testing
@@ -24,20 +25,28 @@ fn test_task_id() -> TaskId {
 #[test]
 fn test_struct_value() {
     // type Point = Point(x: Float, y: Float)
+    let mut heap = Heap::new();
+    let fields_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Float(1.0),
+        RuntimeValue::Float(2.0),
+    ]));
     let p = RuntimeValue::Struct {
         type_id: test_type_id(),
-        fields: vec![RuntimeValue::Float(1.0), RuntimeValue::Float(2.0)],
+        fields: fields_handle,
     };
 
-    assert_eq!(p.value_type(), ValueType::Struct(test_type_id()));
+    assert_eq!(
+        p.value_type_with_heap(&heap),
+        ValueType::Struct(test_type_id())
+    );
 
-    // Test field access
-    assert!(p.struct_field(0).is_some());
-    assert!(p.struct_field(1).is_some());
-    assert!(p.struct_field(2).is_none()); // Out of bounds
+    // Test field access (with heap)
+    assert!(p.struct_field_with_heap(0, &heap).is_some());
+    assert!(p.struct_field_with_heap(1, &heap).is_some());
+    assert!(p.struct_field_with_heap(2, &heap).is_none()); // Out of bounds
 
     // Check field values
-    if let Some(f) = p.struct_field(0) {
+    if let Some(f) = p.struct_field_with_heap(0, &heap) {
         assert!(matches!(f, RuntimeValue::Float(_)));
     }
 }
@@ -46,25 +55,49 @@ fn test_struct_value() {
 fn test_struct_nested() {
     // type Point = Point(x: Float, y: Float)
     // type Rectangle = Rectangle(top_left: Point, bottom_right: Point)
-    let top_left = RuntimeValue::Struct {
+    let mut heap = Heap::new();
+
+    let top_left_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Float(0.0),
+        RuntimeValue::Float(1.0),
+    ]));
+    let _top_left = RuntimeValue::Struct {
         type_id: test_type_id(),
-        fields: vec![RuntimeValue::Float(0.0), RuntimeValue::Float(1.0)],
-    };
-    let bottom_right = RuntimeValue::Struct {
-        type_id: test_type_id(),
-        fields: vec![RuntimeValue::Float(2.0), RuntimeValue::Float(3.0)],
+        fields: top_left_handle,
     };
 
+    let bottom_right_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Float(2.0),
+        RuntimeValue::Float(3.0),
+    ]));
+    let _bottom_right = RuntimeValue::Struct {
+        type_id: test_type_id(),
+        fields: bottom_right_handle,
+    };
+
+    let rect_fields_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Struct {
+            type_id: test_type_id(),
+            fields: top_left_handle,
+        },
+        RuntimeValue::Struct {
+            type_id: test_type_id(),
+            fields: bottom_right_handle,
+        },
+    ]));
     let rectangle = RuntimeValue::Struct {
         type_id: TypeId(3), // Rectangle type
-        fields: vec![top_left.clone(), bottom_right],
+        fields: rect_fields_handle,
     };
 
-    assert_eq!(rectangle.value_type(), ValueType::Struct(TypeId(3)));
+    assert_eq!(
+        rectangle.value_type_with_heap(&heap),
+        ValueType::Struct(TypeId(3))
+    );
 
     // Access nested struct
-    let tl = rectangle.struct_field(0).unwrap();
-    let x = tl.struct_field(0).unwrap();
+    let tl = rectangle.struct_field_with_heap(0, &heap).unwrap();
+    let x = tl.struct_field_with_heap(0, &heap).unwrap();
     assert_eq!(x.to_float(), Some(0.0));
 }
 
@@ -114,11 +147,13 @@ fn test_enum_unit_payload() {
 
 #[test]
 fn test_tuple_value() {
-    let tuple = RuntimeValue::Tuple(vec![
+    let mut heap = Heap::new();
+    let tuple_handle = heap.allocate(HeapValue::Tuple(vec![
         RuntimeValue::Int(1),
         RuntimeValue::Float(2.0),
         RuntimeValue::Bool(true),
-    ]);
+    ]));
+    let tuple = RuntimeValue::Tuple(tuple_handle);
 
     let expected_type = ValueType::Tuple(vec![
         ValueType::Int(IntWidth::I64),
@@ -126,14 +161,16 @@ fn test_tuple_value() {
         ValueType::Bool,
     ]);
 
-    assert_eq!(tuple.value_type(), expected_type);
+    assert_eq!(tuple.value_type_with_heap(&heap), expected_type);
     assert!(matches!(tuple, RuntimeValue::Tuple(_)));
 }
 
 #[test]
 fn test_empty_tuple() {
-    let empty = RuntimeValue::Tuple(vec![]);
-    assert_eq!(empty.value_type(), ValueType::Tuple(vec![]));
+    let mut heap = Heap::new();
+    let empty_handle = heap.allocate(HeapValue::Tuple(vec![]));
+    let empty = RuntimeValue::Tuple(empty_handle);
+    assert_eq!(empty.value_type_with_heap(&heap), ValueType::Tuple(vec![]));
 }
 
 #[test]
@@ -217,8 +254,10 @@ fn test_async_error_value() {
 #[test]
 fn test_dict_value() {
     // Dict type exists and has correct type
-    let dict = RuntimeValue::Dict(std::collections::HashMap::new());
+    let mut heap = Heap::new();
+    let dict_handle = heap.allocate(HeapValue::Dict(HashMap::new()));
+    let dict = RuntimeValue::Dict(dict_handle);
 
-    assert_eq!(dict.value_type(), ValueType::Dict);
+    assert_eq!(dict.value_type_with_heap(&heap), ValueType::Dict);
     assert!(matches!(dict, RuntimeValue::Dict(_)));
 }

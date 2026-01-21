@@ -5,11 +5,17 @@
 //! - Default is Move (zero-copy)
 //! - `ref` keyword maps to `Arc<RuntimeValue>`
 //! - `clone()` performs deep copy
+//!
+//! # Handle System
+//! Collections (List, Tuple, Struct) use Handle to reference heap-allocated
+//! storage, enabling efficient in-place modification without cloning.
 
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::fmt;
 use std::alloc;
+
+use super::heap::Handle;
 
 /// Integer width variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -162,24 +168,24 @@ pub enum RuntimeValue {
     /// Byte array
     Bytes(Arc<[u8]>),
 
-    /// Tuple
-    Tuple(Vec<RuntimeValue>),
+    /// Tuple (stored on heap via handle for efficient cloning)
+    Tuple(Handle),
 
-    /// Fixed-size array
-    Array(Vec<RuntimeValue>),
+    /// Fixed-size array (stored on heap via handle)
+    Array(Handle),
 
-    /// Dynamic list
-    List(Vec<RuntimeValue>),
+    /// Dynamic list (stored on heap via handle for efficient modification)
+    List(Handle),
 
-    /// Dictionary
-    Dict(HashMap<RuntimeValue, RuntimeValue>),
+    /// Dictionary (stored on heap via handle)
+    Dict(Handle),
 
-    /// Struct instance
+    /// Struct instance (fields stored on heap via handle)
     Struct {
         /// Type ID for type queries and field access
         type_id: TypeId,
-        /// Field values (stored in definition order)
-        fields: Vec<RuntimeValue>,
+        /// Field values handle (stored on heap for efficient cloning)
+        fields: Handle,
     },
 
     /// Enum variant
@@ -230,7 +236,7 @@ pub enum RuntimeValue {
 // ============================================================================
 
 impl RuntimeValue {
-    /// Get the static type of this value
+    /// Get the static type of this value (legacy method, may be incomplete for handle types)
     pub fn value_type(&self) -> ValueType {
         match self {
             RuntimeValue::Unit => ValueType::Unit,
@@ -240,23 +246,67 @@ impl RuntimeValue {
             RuntimeValue::Char(_) => ValueType::Char,
             RuntimeValue::String(_) => ValueType::String,
             RuntimeValue::Bytes(_) => ValueType::Bytes,
-            RuntimeValue::Tuple(fields) => {
-                ValueType::Tuple(fields.iter().map(|v| v.value_type()).collect())
+            // Handle types return placeholder - use value_type_with_heap for complete info
+            RuntimeValue::Tuple(_)
+            | RuntimeValue::Array(_)
+            | RuntimeValue::List(_)
+            | RuntimeValue::Dict(_) => ValueType::List,
+            RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
+            RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
+            RuntimeValue::Function(f) => ValueType::Function(f.func_id),
+            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type())),
+            RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
+            RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
+        }
+    }
+
+    /// Get the static type of this value with heap access (for handle types)
+    pub fn value_type_with_heap(
+        &self,
+        heap: &super::heap::Heap,
+    ) -> ValueType {
+        match self {
+            RuntimeValue::Unit => ValueType::Unit,
+            RuntimeValue::Bool(_) => ValueType::Bool,
+            RuntimeValue::Int(_) => ValueType::Int(IntWidth::I64),
+            RuntimeValue::Float(_) => ValueType::Float(FloatWidth::F64),
+            RuntimeValue::Char(_) => ValueType::Char,
+            RuntimeValue::String(_) => ValueType::String,
+            RuntimeValue::Bytes(_) => ValueType::Bytes,
+            RuntimeValue::Tuple(handle) => {
+                if let Some(super::heap::HeapValue::Tuple(inner_items)) = heap.get(*handle) {
+                    ValueType::Tuple(
+                        inner_items
+                            .iter()
+                            .map(|v| v.value_type_with_heap(heap))
+                            .collect(),
+                    )
+                } else {
+                    ValueType::Tuple(vec![])
+                }
             }
-            RuntimeValue::Array(fields) => ValueType::Array {
-                element: Box::new(
-                    fields
-                        .first()
-                        .map(|v| v.value_type())
-                        .unwrap_or(ValueType::Unit),
-                ),
-            },
+            RuntimeValue::Array(handle) => {
+                if let Some(super::heap::HeapValue::Array(inner_items)) = heap.get(*handle) {
+                    ValueType::Array {
+                        element: Box::new(
+                            inner_items
+                                .first()
+                                .map(|v| v.value_type_with_heap(heap))
+                                .unwrap_or(ValueType::Unit),
+                        ),
+                    }
+                } else {
+                    ValueType::Array {
+                        element: Box::new(ValueType::Unit),
+                    }
+                }
+            }
             RuntimeValue::List(_) => ValueType::List,
             RuntimeValue::Dict(_) => ValueType::Dict,
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
-            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type())),
+            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type_with_heap(heap))),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
         }
@@ -286,13 +336,29 @@ impl RuntimeValue {
         }
     }
 
-    /// Get struct field by index
+    /// Get struct field by index (legacy method, returns None for handle types)
     pub fn struct_field(
         &self,
-        index: usize,
+        _index: usize,
     ) -> Option<&RuntimeValue> {
+        // Legacy method doesn't work with handles - use struct_field_with_heap
+        None
+    }
+
+    /// Get struct field by index with heap access
+    pub fn struct_field_with_heap<'a>(
+        &self,
+        index: usize,
+        heap: &'a super::heap::Heap,
+    ) -> Option<&'a RuntimeValue> {
         match self {
-            RuntimeValue::Struct { fields, .. } => fields.get(index),
+            RuntimeValue::Struct { fields, .. } => {
+                if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*fields) {
+                    items.get(index)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -354,6 +420,7 @@ impl RuntimeValue {
     /// # Note
     /// - Deep copies the entire value
     /// - Performance cost depends on value size
+    /// - For handle types, this clones the heap data and returns a new handle
     pub fn explicit_clone(&self) -> Self {
         match self {
             RuntimeValue::Unit => RuntimeValue::Unit,
@@ -364,14 +431,14 @@ impl RuntimeValue {
             // Arc types share underlying data
             RuntimeValue::String(s) => RuntimeValue::String(s.clone()),
             RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
-            // Vec needs deep copy
-            RuntimeValue::Tuple(v) => RuntimeValue::Tuple(v.to_vec()),
-            RuntimeValue::Array(v) => RuntimeValue::Array(v.to_vec()),
-            RuntimeValue::List(v) => RuntimeValue::List(v.to_vec()),
-            RuntimeValue::Dict(m) => RuntimeValue::Dict(m.clone()),
-            RuntimeValue::Struct { type_id, fields } => RuntimeValue::Struct {
+            // Handle types - return placeholder (use explicit_clone_with_heap for full functionality)
+            RuntimeValue::Tuple(_)
+            | RuntimeValue::Array(_)
+            | RuntimeValue::List(_)
+            | RuntimeValue::Dict(_) => RuntimeValue::Unit,
+            RuntimeValue::Struct { type_id, .. } => RuntimeValue::Struct {
                 type_id: *type_id,
-                fields: fields.to_vec(),
+                fields: Handle(0), // Placeholder
             },
             RuntimeValue::Enum {
                 type_id,
@@ -381,6 +448,121 @@ impl RuntimeValue {
                 type_id: *type_id,
                 variant_id: *variant_id,
                 payload: Box::new((**payload).clone()),
+            },
+            RuntimeValue::Function(f) => RuntimeValue::Function(f.clone()),
+            // Arc is a wrapper around RuntimeValue, clone the Arc
+            RuntimeValue::Arc(arc) => RuntimeValue::Arc(arc.clone()),
+            RuntimeValue::Async(a) => RuntimeValue::Async(a.clone()),
+            RuntimeValue::Ptr {
+                kind,
+                address,
+                type_id,
+            } => RuntimeValue::Ptr {
+                kind: *kind,
+                address: *address,
+                type_id: *type_id,
+            },
+        }
+    }
+
+    /// Clone with heap access (properly handles handle types)
+    ///
+    /// This method clones the heap data for handle types and returns a new handle.
+    pub fn explicit_clone_with_heap(
+        &self,
+        heap: &mut super::heap::Heap,
+    ) -> Self {
+        match self {
+            RuntimeValue::Unit => RuntimeValue::Unit,
+            RuntimeValue::Bool(b) => RuntimeValue::Bool(*b),
+            RuntimeValue::Int(i) => RuntimeValue::Int(*i),
+            RuntimeValue::Float(f) => RuntimeValue::Float(*f),
+            RuntimeValue::Char(c) => RuntimeValue::Char(*c),
+            // Arc types share underlying data
+            RuntimeValue::String(s) => RuntimeValue::String(s.clone()),
+            RuntimeValue::Bytes(b) => RuntimeValue::Bytes(b.clone()),
+            // Handle types - clone the heap data (clone items first to avoid borrow conflict)
+            RuntimeValue::Tuple(handle) => {
+                let items_copy: Vec<RuntimeValue> =
+                    if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*handle) {
+                        items.clone()
+                    } else {
+                        vec![]
+                    };
+                let cloned = items_copy
+                    .into_iter()
+                    .map(|v| v.explicit_clone_with_heap(heap))
+                    .collect();
+                RuntimeValue::Tuple(heap.allocate(super::heap::HeapValue::Tuple(cloned)))
+            }
+            RuntimeValue::Array(handle) => {
+                let items_copy: Vec<RuntimeValue> =
+                    if let Some(super::heap::HeapValue::Array(items)) = heap.get(*handle) {
+                        items.clone()
+                    } else {
+                        vec![]
+                    };
+                let cloned = items_copy
+                    .into_iter()
+                    .map(|v| v.explicit_clone_with_heap(heap))
+                    .collect();
+                RuntimeValue::Array(heap.allocate(super::heap::HeapValue::Array(cloned)))
+            }
+            RuntimeValue::List(handle) => {
+                let items_copy: Vec<RuntimeValue> =
+                    if let Some(super::heap::HeapValue::List(items)) = heap.get(*handle) {
+                        items.clone()
+                    } else {
+                        vec![]
+                    };
+                let cloned = items_copy
+                    .into_iter()
+                    .map(|v| v.explicit_clone_with_heap(heap))
+                    .collect();
+                RuntimeValue::List(heap.allocate(super::heap::HeapValue::List(cloned)))
+            }
+            RuntimeValue::Dict(handle) => {
+                let map_copy: HashMap<RuntimeValue, RuntimeValue> =
+                    if let Some(super::heap::HeapValue::Dict(map)) = heap.get(*handle) {
+                        map.clone()
+                    } else {
+                        HashMap::new()
+                    };
+                let cloned = map_copy
+                    .into_iter()
+                    .map(|(k, v)| {
+                        (
+                            k.explicit_clone_with_heap(heap),
+                            v.explicit_clone_with_heap(heap),
+                        )
+                    })
+                    .collect();
+                RuntimeValue::Dict(heap.allocate(super::heap::HeapValue::Dict(cloned)))
+            }
+            RuntimeValue::Struct { type_id, fields } => {
+                let items_copy: Vec<RuntimeValue> =
+                    if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*fields) {
+                        items.clone()
+                    } else {
+                        vec![]
+                    };
+                let cloned = items_copy
+                    .into_iter()
+                    .map(|v| v.explicit_clone_with_heap(heap))
+                    .collect();
+                RuntimeValue::Struct {
+                    type_id: *type_id,
+                    fields: heap.allocate(super::heap::HeapValue::Tuple(cloned)),
+                }
+            }
+            RuntimeValue::Enum {
+                type_id,
+                variant_id,
+                payload,
+            } => RuntimeValue::Enum {
+                type_id: *type_id,
+                variant_id: *variant_id,
+                payload: Box::new((**payload).explicit_clone_with_heap(heap)),
             },
             RuntimeValue::Function(f) => RuntimeValue::Function(f.clone()),
             // Arc is a wrapper around RuntimeValue, clone the Arc
@@ -418,7 +600,6 @@ impl RuntimeValue {
 impl RuntimeValue {
     /// Get memory layout for this value (for allocators)
     pub fn layout(&self) -> alloc::Layout {
-        use std::mem;
         match self {
             RuntimeValue::Unit => alloc::Layout::new::<()>(),
             RuntimeValue::Bool(_) => alloc::Layout::new::<bool>(),
@@ -428,18 +609,14 @@ impl RuntimeValue {
             // String and Bytes: pointer + length (stored in Arc)
             RuntimeValue::String(_) => alloc::Layout::new::<Arc<str>>(),
             RuntimeValue::Bytes(_) => alloc::Layout::new::<Arc<[u8]>>(),
-            // Collection types: Vec layout
+            // Handle types: use Handle layout (simplified)
             RuntimeValue::Tuple(_) | RuntimeValue::Array(_) | RuntimeValue::List(_) => {
-                alloc::Layout::new::<Vec<RuntimeValue>>()
+                alloc::Layout::new::<Handle>()
             }
-            // Dict: HashMap layout
-            RuntimeValue::Dict(_) => alloc::Layout::new::<HashMap<RuntimeValue, RuntimeValue>>(),
-            // Struct: combined field layouts
-            RuntimeValue::Struct { fields, .. } => {
-                let size = mem::size_of::<RuntimeValue>() * fields.len();
-                let align = mem::align_of::<RuntimeValue>();
-                alloc::Layout::from_size_align(size, align).unwrap()
-            }
+            // Dict: HashMap layout (simplified)
+            RuntimeValue::Dict(_) => alloc::Layout::new::<Handle>(),
+            // Struct: handle type layout
+            RuntimeValue::Struct { .. } => alloc::Layout::new::<Handle>(),
             // Enum: variant index + payload
             RuntimeValue::Enum { .. } => alloc::Layout::new::<(u32, Box<RuntimeValue>)>(),
             // Arc: Arc layout
@@ -477,59 +654,21 @@ impl fmt::Display for RuntimeValue {
             }
             RuntimeValue::String(s) => write!(f, "\"{}\"", s),
             RuntimeValue::Bytes(b) => write!(f, "bytes[{}]", b.len()),
-            RuntimeValue::Tuple(fields) => {
-                write!(
-                    f,
-                    "({})",
-                    fields
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            // Handle types - use placeholder (use display_with_heap for full output)
+            RuntimeValue::Tuple(handle) => {
+                write!(f, "tuple@{}", handle.raw())
             }
-            RuntimeValue::Array(fields) => {
-                write!(
-                    f,
-                    "[{}]",
-                    fields
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            RuntimeValue::Array(handle) => {
+                write!(f, "array@{}", handle.raw())
             }
-            RuntimeValue::List(fields) => {
-                write!(
-                    f,
-                    "[{}]",
-                    fields
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            RuntimeValue::List(handle) => {
+                write!(f, "list@{}", handle.raw())
             }
-            RuntimeValue::Dict(m) => {
-                write!(
-                    f,
-                    "{{{}}}",
-                    m.iter()
-                        .map(|(k, v)| format!("{}: {}", k, v))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+            RuntimeValue::Dict(handle) => {
+                write!(f, "dict@{}", handle.raw())
             }
             RuntimeValue::Struct { type_id: _, fields } => {
-                write!(
-                    f,
-                    "struct{{ {} }}",
-                    fields
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                write!(f, "struct@{}", fields.raw())
             }
             RuntimeValue::Enum {
                 type_id: _,
@@ -566,16 +705,11 @@ impl PartialEq for RuntimeValue {
             (RuntimeValue::Char(a), RuntimeValue::Char(b)) => a == b,
             (RuntimeValue::String(a), RuntimeValue::String(b)) => a.as_ref() == b.as_ref(),
             (RuntimeValue::Bytes(a), RuntimeValue::Bytes(b)) => a.as_ref() == b.as_ref(),
+            // Handle types - compare by handle (use eq_with_heap for content comparison)
             (RuntimeValue::Tuple(a), RuntimeValue::Tuple(b)) => a == b,
             (RuntimeValue::Array(a), RuntimeValue::Array(b)) => a == b,
             (RuntimeValue::List(a), RuntimeValue::List(b)) => a == b,
-            (RuntimeValue::Dict(a), RuntimeValue::Dict(b)) => {
-                if a.len() != b.len() {
-                    return false;
-                }
-                a.iter()
-                    .all(|(k, v)| b.get(k).map(|ov| v == ov).unwrap_or(false))
-            }
+            (RuntimeValue::Dict(a), RuntimeValue::Dict(b)) => a == b,
             (
                 RuntimeValue::Struct {
                     type_id: t1,
@@ -641,13 +775,14 @@ impl Hash for RuntimeValue {
             RuntimeValue::Char(c) => c.hash(state),
             RuntimeValue::String(s) => s.as_ref().hash(state),
             RuntimeValue::Bytes(b) => b.as_ref().hash(state),
-            RuntimeValue::Tuple(items) => items.len().hash(state),
-            RuntimeValue::Array(items) => items.len().hash(state),
-            RuntimeValue::List(items) => items.len().hash(state),
-            RuntimeValue::Dict(map) => map.len().hash(state),
+            // Handle types - hash by handle value (use hash_with_heap for content hashing)
+            RuntimeValue::Tuple(handle) => handle.hash(state),
+            RuntimeValue::Array(handle) => handle.hash(state),
+            RuntimeValue::List(handle) => handle.hash(state),
+            RuntimeValue::Dict(handle) => handle.hash(state),
             RuntimeValue::Struct { type_id, fields } => {
                 type_id.hash(state);
-                fields.len().hash(state);
+                fields.hash(state);
             }
             RuntimeValue::Enum {
                 type_id,

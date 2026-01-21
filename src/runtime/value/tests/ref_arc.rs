@@ -4,7 +4,7 @@
 //! of the `ref` keyword per RFC-009.
 
 use std::sync::Arc;
-use crate::runtime::value::{RuntimeValue, TypeId};
+use crate::runtime::value::{RuntimeValue, TypeId, Heap, HeapValue};
 
 #[test]
 fn test_arc_creation() {
@@ -91,18 +91,24 @@ fn test_arc_clone_shared() {
 #[test]
 fn test_arc_nested_values() {
     // Arc can contain any RuntimeValue
-    let list = RuntimeValue::List(vec![
+    let mut heap = Heap::new();
+    let list_handle = heap.allocate(HeapValue::List(vec![
         RuntimeValue::Int(1),
         RuntimeValue::Int(2),
         RuntimeValue::Int(3),
-    ]);
+    ]));
+    let list = RuntimeValue::List(list_handle);
 
     let arc_list = RuntimeValue::Arc(Arc::new(list));
 
     let inner_list = arc_list.as_arc().unwrap();
     match inner_list {
-        RuntimeValue::List(items) => {
-            assert_eq!(items.len(), 3);
+        RuntimeValue::List(handle) => {
+            if let Some(HeapValue::List(items)) = heap.get(*handle) {
+                assert_eq!(items.len(), 3);
+            } else {
+                panic!("Expected List in heap");
+            }
         }
         _ => panic!("Expected List"),
     }
@@ -111,9 +117,14 @@ fn test_arc_nested_values() {
 #[test]
 fn test_arc_struct() {
     // Arc can contain struct values
+    let mut heap = Heap::new();
+    let fields_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Float(1.0),
+        RuntimeValue::Float(2.0),
+    ]));
     let point = RuntimeValue::Struct {
         type_id: TypeId(1),
-        fields: vec![RuntimeValue::Float(1.0), RuntimeValue::Float(2.0)],
+        fields: fields_handle,
     };
 
     let arc_point = RuntimeValue::Arc(Arc::new(point));
@@ -121,7 +132,11 @@ fn test_arc_struct() {
     let inner = arc_point.as_arc().unwrap();
     match inner {
         RuntimeValue::Struct { fields, .. } => {
-            assert_eq!(fields.len(), 2);
+            if let Some(HeapValue::Tuple(items)) = heap.get(*fields) {
+                assert_eq!(items.len(), 2);
+            } else {
+                panic!("Expected Tuple in heap");
+            }
         }
         _ => panic!("Expected Struct"),
     }

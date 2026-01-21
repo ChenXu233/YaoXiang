@@ -4,7 +4,7 @@
 
 use crate::middle::codegen::bytecode::FunctionCode;
 use crate::middle::ir::{ConstValue, Operand};
-use crate::runtime::value::RuntimeValue;
+use crate::runtime::value::{RuntimeValue, Heap, HeapValue, Handle};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::runtime::extfunc;
@@ -158,6 +158,8 @@ pub struct VM {
     jump_tables: HashMap<u16, HashMap<i64, i32>>,
     /// 标签位置（用于 Label 指令）
     labels: HashMap<u16, usize>,
+    /// 堆存储（用于 List/Tuple/Struct/Dict）
+    heap: Heap,
 }
 
 impl Default for VM {
@@ -190,6 +192,7 @@ impl VM {
             memory: Vec::with_capacity(64 * 1024),
             jump_tables: HashMap::new(),
             labels: HashMap::new(),
+            heap: Heap::new(),
         }
     }
 
@@ -1541,14 +1544,33 @@ impl VM {
                 let field_offset = self.read_u16()? as usize;
 
                 let value = match self.regs.read(obj_reg).clone() {
-                    RuntimeValue::List(items) | RuntimeValue::Tuple(items) => items
-                        .get(field_offset)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit),
-                    RuntimeValue::Struct { fields, .. } => fields
-                        .get(field_offset)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit),
+                    RuntimeValue::List(handle) | RuntimeValue::Tuple(handle) => {
+                        let h = handle.0;
+                        if let Some(HeapValue::List(items)) = self.heap.get(Handle(h)) {
+                            items
+                                .get(field_offset)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        } else if let Some(HeapValue::Tuple(items)) = self.heap.get(Handle(h)) {
+                            items
+                                .get(field_offset)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        } else {
+                            RuntimeValue::Unit
+                        }
+                    }
+                    RuntimeValue::Struct { fields, .. } => {
+                        let h = fields.0;
+                        if let Some(HeapValue::Tuple(items)) = self.heap.get(Handle(h)) {
+                            items
+                                .get(field_offset)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        } else {
+                            RuntimeValue::Unit
+                        }
+                    }
                     _ => return Err(VMError::TypeError("list/tuple/struct".into())),
                 };
                 self.regs.write(dst, value);
@@ -1562,26 +1584,33 @@ impl VM {
                 let value = self.regs.read(src_reg).clone();
 
                 match self.regs.read(obj_reg).clone() {
-                    RuntimeValue::List(mut items) => {
-                        if field_offset >= items.len() {
-                            return Err(VMError::IndexOutOfBounds {
-                                index: field_offset,
-                                size: items.len(),
-                            });
+                    RuntimeValue::List(handle) => {
+                        let h = handle.0;
+                        if let Some(HeapValue::List(items)) = self.heap.get_mut(Handle(h)) {
+                            if field_offset >= items.len() {
+                                return Err(VMError::IndexOutOfBounds {
+                                    index: field_offset,
+                                    size: items.len(),
+                                });
+                            }
+                            items[field_offset] = value;
+                        } else {
+                            return Err(VMError::TypeError("list".into()));
                         }
-                        items[field_offset] = value;
-                        self.regs.write(obj_reg, RuntimeValue::List(items));
                     }
                     RuntimeValue::Struct {
-                        type_id,
-                        mut fields,
+                        type_id: _,
+                        fields: field_handle,
                     } => {
-                        if field_offset >= fields.len() {
-                            return Err(VMError::FieldNotFound(field_offset));
+                        let h = field_handle.0;
+                        if let Some(HeapValue::Tuple(items)) = self.heap.get_mut(Handle(h)) {
+                            if field_offset >= items.len() {
+                                return Err(VMError::FieldNotFound(field_offset));
+                            }
+                            items[field_offset] = value;
+                        } else {
+                            return Err(VMError::TypeError("struct fields".into()));
                         }
-                        fields[field_offset] = value;
-                        self.regs
-                            .write(obj_reg, RuntimeValue::Struct { type_id, fields });
                     }
                     _ => return Err(VMError::TypeError("list/struct".into())),
                 }
@@ -1592,9 +1621,12 @@ impl VM {
                 let array_reg = self.read_u8()?;
                 let index_reg = self.read_u8()?;
                 match (self.regs.read(array_reg), self.regs.read(index_reg)) {
-                    (RuntimeValue::List(lst), RuntimeValue::Int(idx)) => {
-                        if let Some(val) = lst.get(*idx as usize) {
-                            self.regs.write(dst, val.clone());
+                    (RuntimeValue::List(handle), RuntimeValue::Int(idx)) => {
+                        let h = handle.0;
+                        if let Some(HeapValue::List(items)) = self.heap.get(Handle(h)) {
+                            if let Some(val) = items.get(*idx as usize) {
+                                self.regs.write(dst, val.clone());
+                            }
                         }
                     }
                     _ => return Err(VMError::TypeError("list or index".to_string())),
@@ -1613,15 +1645,19 @@ impl VM {
                 };
 
                 match self.regs.read(array_reg).clone() {
-                    RuntimeValue::List(mut items) => {
-                        if idx >= items.len() {
-                            return Err(VMError::IndexOutOfBounds {
-                                index: idx,
-                                size: items.len(),
-                            });
+                    RuntimeValue::List(handle) => {
+                        let h = handle.0;
+                        if let Some(HeapValue::List(items)) = self.heap.get_mut(Handle(h)) {
+                            if idx >= items.len() {
+                                return Err(VMError::IndexOutOfBounds {
+                                    index: idx,
+                                    size: items.len(),
+                                });
+                            }
+                            items[idx] = value;
+                        } else {
+                            return Err(VMError::TypeError("list".into()));
                         }
-                        items[idx] = value;
-                        self.regs.write(array_reg, RuntimeValue::List(items));
                     }
                     _ => return Err(VMError::TypeError("list".into())),
                 }
@@ -1630,8 +1666,10 @@ impl VM {
             NewListWithCap => {
                 let dst = self.read_u8()?;
                 let capacity = self.read_u16()? as usize;
-                self.regs
-                    .write(dst, RuntimeValue::List(Vec::with_capacity(capacity)));
+                let handle = self
+                    .heap
+                    .allocate(HeapValue::List(Vec::with_capacity(capacity)));
+                self.regs.write(dst, RuntimeValue::List(handle));
             }
 
             ArcNew => {

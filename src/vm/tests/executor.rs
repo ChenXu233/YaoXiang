@@ -2,7 +2,7 @@
 //!
 //! 测试虚拟机执行器的配置、状态和值类型
 
-use crate::runtime::value::RuntimeValue;
+use crate::runtime::value::{RuntimeValue, Heap, HeapValue};
 use crate::vm::executor::{VMConfig, VMStatus, VM};
 use crate::vm::opcode::TypedOpcode;
 use std::sync::Arc;
@@ -140,8 +140,19 @@ mod value_tests {
 
     #[test]
     fn test_value_list() {
-        let value = RuntimeValue::List(vec![RuntimeValue::Int(1), RuntimeValue::Int(2)]);
-        assert!(matches!(value, RuntimeValue::List(list) if list.len() == 2));
+        let mut heap = Heap::new();
+        let handle = heap.allocate(HeapValue::List(vec![
+            RuntimeValue::Int(1),
+            RuntimeValue::Int(2),
+        ]));
+        let _value = RuntimeValue::List(handle);
+        // Verify list is stored in heap
+        match heap.get(handle) {
+            Some(HeapValue::List(items)) => {
+                assert_eq!(items.len(), 2);
+            }
+            _ => panic!("expected List in heap"),
+        }
     }
 
     #[test]

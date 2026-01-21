@@ -1,7 +1,7 @@
 //! clone() tests for RuntimeValue
 
 use std::sync::Arc;
-use crate::runtime::value::{RuntimeValue, TypeId, FunctionId, FunctionValue};
+use crate::runtime::value::{RuntimeValue, TypeId, FunctionId, FunctionValue, Heap, HeapValue};
 
 #[test]
 fn test_clone_primitives() {
@@ -52,35 +52,51 @@ fn test_clone_string() {
 
 #[test]
 fn test_clone_list() {
-    // Clone of list should be independent (deep copy)
-    let list1 = RuntimeValue::List(vec![
+    // Clone of list with Handle system is shallow - both point to same heap data
+    // This is expected behavior for Handle system (like pointers)
+    let mut heap = Heap::new();
+    let handle = heap.allocate(HeapValue::List(vec![
         RuntimeValue::Int(1),
         RuntimeValue::Int(2),
         RuntimeValue::Int(3),
-    ]);
+    ]));
+    let list1 = RuntimeValue::List(handle);
     let list2 = list1.clone();
 
-    // Both should be List with same length
-    match (&list1, &list2) {
-        (RuntimeValue::List(l1), RuntimeValue::List(l2)) => {
-            assert_eq!(l1.len(), 3);
-            assert_eq!(l2.len(), 3);
+    // Both should be List with same length (pointing to same heap data)
+    let l1 = heap.get(handle).unwrap();
+    let l2 = if let RuntimeValue::List(h) = list2 {
+        heap.get(h)
+    } else {
+        None
+    }
+    .unwrap();
+
+    match (l1, l2) {
+        (HeapValue::List(v1), HeapValue::List(v2)) => {
+            assert_eq!(v1.len(), 3);
+            assert_eq!(v2.len(), 3);
+            // Both point to same data
+            assert!(std::ptr::eq(&**v1, &**v2));
         }
         _ => panic!("Expected List"),
     }
 
-    // But independent (modifying one doesn't affect the other)
-    match list1 {
-        RuntimeValue::List(mut v) => {
-            v.push(RuntimeValue::Int(4));
-            assert_eq!(v.len(), 4);
+    // Modifying via list2 affects the shared heap data
+    match list2 {
+        RuntimeValue::List(h) => {
+            if let Some(HeapValue::List(v)) = heap.get_mut(h) {
+                v.push(RuntimeValue::Int(4));
+                assert_eq!(v.len(), 4);
+            }
         }
         _ => panic!(),
     }
 
-    match list2 {
-        RuntimeValue::List(v) => {
-            assert_eq!(v.len(), 3); // Original unchanged
+    // list1 now also sees the modification (same heap data)
+    match heap.get(handle) {
+        Some(HeapValue::List(v)) => {
+            assert_eq!(v.len(), 4); // Modified via list2
         }
         _ => panic!(),
     }
@@ -88,17 +104,30 @@ fn test_clone_list() {
 
 #[test]
 fn test_clone_struct() {
+    let mut heap = Heap::new();
+    let fields_handle = heap.allocate(HeapValue::Tuple(vec![
+        RuntimeValue::Int(10),
+        RuntimeValue::Float(20.0),
+    ]));
     let s1 = RuntimeValue::Struct {
         type_id: TypeId(1),
-        fields: vec![RuntimeValue::Int(10), RuntimeValue::Float(20.0)],
+        fields: fields_handle,
     };
     let s2 = s1.clone();
 
     // Both should be Struct with same field count
     match (&s1, &s2) {
         (RuntimeValue::Struct { fields: f1, .. }, RuntimeValue::Struct { fields: f2, .. }) => {
-            assert_eq!(f1.len(), 2);
-            assert_eq!(f2.len(), 2);
+            // Check via heap that both have 2 fields
+            let fields1 = heap.get(*f1).unwrap();
+            let fields2 = heap.get(*f2).unwrap();
+            match (fields1, fields2) {
+                (HeapValue::Tuple(v1), HeapValue::Tuple(v2)) => {
+                    assert_eq!(v1.len(), 2);
+                    assert_eq!(v2.len(), 2);
+                }
+                _ => panic!("Expected Tuple"),
+            }
         }
         _ => panic!("Expected Struct"),
     }
@@ -131,17 +160,26 @@ fn test_clone_arc() {
 
 #[test]
 fn test_clone_tuple() {
-    let t1 = RuntimeValue::Tuple(vec![
+    let mut heap = Heap::new();
+    let tuple_handle = heap.allocate(HeapValue::Tuple(vec![
         RuntimeValue::Int(1),
         RuntimeValue::Bool(true),
         RuntimeValue::String(Arc::from("test")),
-    ]);
+    ]));
+    let t1 = RuntimeValue::Tuple(tuple_handle);
     let t2 = t1.clone();
 
     match (t1, t2) {
-        (RuntimeValue::Tuple(v1), RuntimeValue::Tuple(v2)) => {
-            assert_eq!(v1.len(), 3);
-            assert_eq!(v2.len(), 3);
+        (RuntimeValue::Tuple(h1), RuntimeValue::Tuple(h2)) => {
+            let v1 = heap.get(h1).unwrap();
+            let v2 = heap.get(h2).unwrap();
+            match (v1, v2) {
+                (HeapValue::Tuple(v1_inner), HeapValue::Tuple(v2_inner)) => {
+                    assert_eq!(v1_inner.len(), 3);
+                    assert_eq!(v2_inner.len(), 3);
+                }
+                _ => panic!("Expected Tuple"),
+            }
         }
         _ => panic!("Expected Tuple"),
     }
