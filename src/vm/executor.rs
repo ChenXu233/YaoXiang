@@ -152,6 +152,12 @@ pub struct VM {
     globals: HashMap<String, RuntimeValue>,
     /// 函数表（预编码的字节码）
     functions: HashMap<String, FunctionCode>,
+    /// 内存空间（用于 Load/Store 指令）
+    memory: Vec<u8>,
+    /// 跳转表（用于 Switch 指令）
+    jump_tables: HashMap<u16, HashMap<i64, i32>>,
+    /// 标签位置（用于 Label 指令）
+    labels: HashMap<u16, usize>,
 }
 
 impl Default for VM {
@@ -181,6 +187,9 @@ impl VM {
             constants: Vec::new(),
             globals: HashMap::new(),
             functions: HashMap::new(),
+            memory: Vec::with_capacity(64 * 1024),
+            jump_tables: HashMap::new(),
+            labels: HashMap::new(),
         }
     }
 
@@ -806,6 +815,174 @@ impl VM {
                 }
             }
 
+            // =====================
+            // 控制流指令
+            // =====================
+
+            // Switch: 多分支跳转
+            // 操作数: reg (u8), table_idx (u16), default_offset (i16)
+            Switch => {
+                let reg = self.read_u8()?;
+                let table_idx = self.read_u16()?;
+                let default_offset = self.read_i16()?;
+
+                let value = match self.regs.read(reg) {
+                    RuntimeValue::Int(n) => *n,
+                    _ => {
+                        // 非整数值使用默认分支
+                        self.ip = (self.ip as i32 + default_offset as i32) as usize;
+                        return Ok(());
+                    }
+                };
+
+                // 查找跳转表
+                if let Some(jump_table) = self.jump_tables.get(&table_idx) {
+                    if let Some(&case_offset) = jump_table.get(&value) {
+                        // 找到匹配 case，跳转到目标地址
+                        self.ip = (self.ip as i32 + case_offset) as usize;
+                        return Ok(());
+                    }
+                }
+
+                // 默认跳转
+                self.ip = (self.ip as i32 + default_offset as i32) as usize;
+            }
+
+            // Label: 跳转标签（记录位置）
+            // 操作数: label_id (u16)
+            Label => {
+                let label_id = self.read_u16()?;
+                self.labels.insert(label_id, self.ip);
+            }
+
+            // LoopStart: 循环开始标记（无操作）
+            LoopStart => {
+                // 循环开始标记，不执行任何操作，仅用于调试/分析
+            }
+
+            // LoopInc: 循环递增
+            // 操作数: counter_reg (u8), step_reg (u8), iterations_reg (u8)
+            LoopInc => {
+                let counter_reg = self.read_u8()?;
+                let step_reg = self.read_u8()?;
+                let iterations_reg = self.read_u8()?;
+
+                let counter = match self.regs.read(counter_reg) {
+                    RuntimeValue::Int(n) => *n,
+                    _ => return Ok(()),
+                };
+                let step = match self.regs.read(step_reg) {
+                    RuntimeValue::Int(n) => *n,
+                    _ => return Ok(()),
+                };
+                let iterations = match self.regs.read(iterations_reg) {
+                    RuntimeValue::Int(n) => *n,
+                    _ => return Ok(()),
+                };
+
+                let new_counter = counter + step;
+                // 检查是否达到迭代次数
+                if step > 0 && new_counter >= iterations {
+                    // 循环结束，不执行循环体
+                    // 这里需要外部设置 loop_end_ip，暂时跳过
+                } else if step < 0 && new_counter <= iterations {
+                    // 倒序循环结束
+                } else {
+                    // 更新计数器，继续循环
+                    self.regs.write(counter_reg, RuntimeValue::Int(new_counter));
+                }
+            }
+
+            // Yield: 协程让出
+            Yield => {
+                // 协程让出，当前实现为无操作
+                // 完整实现需要保存 VM 状态并支持恢复
+            }
+
+            // =====================
+            // 函数调用指令
+            // =====================
+
+            // TailCall: 尾调用优化
+            // 操作数: func_id (u32), base_arg (u8), arg_count (u8), _pad (u8)
+            TailCall => {
+                let func_id = self.read_u32()?;
+                let base_arg = self.read_u8()?;
+                let arg_count = self.read_u8()?;
+                let _pad = self.read_u8()?; // 对齐填充
+
+                // 从函数 ID 解析函数名
+                let func_name =
+                    if let Some(ConstValue::String(name)) = self.constants.get(func_id as usize) {
+                        name.clone()
+                    } else {
+                        return Err(VMError::InvalidState(format!(
+                            "Invalid function ID: {}",
+                            func_id
+                        )));
+                    };
+
+                // 收集参数
+                let mut args = Vec::with_capacity(arg_count as usize);
+                for i in 0..arg_count {
+                    let arg_reg = base_arg + i;
+                    let arg_value = self.regs.read(arg_reg).clone();
+                    args.push(arg_value);
+                }
+
+                // 查找目标函数并 clone
+                let target_func = if let Some(func) = self.functions.get(&func_name) {
+                    func.clone()
+                } else {
+                    return Err(VMError::RuntimeError(format!(
+                        "Function not found: {}",
+                        func_name
+                    )));
+                };
+
+                // 验证参数数量
+                if target_func.params.len() != args.len() {
+                    return Err(VMError::RuntimeError(format!(
+                        "Argument count mismatch for tail call: expected {}, got {}",
+                        target_func.params.len(),
+                        args.len()
+                    )));
+                }
+
+                // 尾调用：复用当前栈帧
+                // 保存当前状态
+                let saved_bytecode = self.bytecode.clone();
+                let saved_ip = self.ip;
+                let saved_func = self.current_func.clone();
+
+                // 设置新函数
+                self.current_func = Some(target_func.clone());
+                self.bytecode = target_func.encode_all();
+                self.ip = 0;
+
+                // 初始化参数
+                for (i, arg) in args.iter().enumerate() {
+                    self.regs.write(i as u8, arg.clone());
+                }
+
+                // 初始化局部变量
+                let local_count = target_func.local_count;
+                for i in target_func.params.len()..local_count {
+                    self.regs.write(i as u8, RuntimeValue::Unit);
+                }
+
+                // 执行新函数体
+                let result = self.execute_function_body(&target_func)?;
+
+                // 恢复字节码和 IP
+                self.bytecode = saved_bytecode;
+                self.ip = saved_ip;
+                self.current_func = saved_func;
+
+                // 将返回值写入寄存器 0
+                self.regs.write(0, result);
+            }
+
             // 函数调用
             CallStatic => {
                 let dst = self.read_u8()?;
@@ -942,6 +1119,113 @@ impl VM {
                 }
             }
 
+            // =====================
+            // 内存读写指令
+            // =====================
+            // I64Load: dst = *(base + offset)
+            I64Load => {
+                let dst = self.read_u8()?;
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                if let RuntimeValue::Int(addr) = self.regs.read(base) {
+                    let addr = (*addr + offset as i64) as usize;
+                    if let Some(bytes) = self.memory_read_i64(addr) {
+                        self.regs.write(dst, RuntimeValue::Int(bytes));
+                    }
+                }
+            }
+
+            // I64Store: *(base + offset) = src
+            I64Store => {
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                let src = self.read_u8()?;
+                if let (RuntimeValue::Int(addr), RuntimeValue::Int(value)) =
+                    (self.regs.read(base), self.regs.read(src))
+                {
+                    let addr = (*addr + offset as i64) as usize;
+                    self.memory_write_i64(addr, *value);
+                }
+            }
+
+            // I32Load: dst = *(base + offset) as i32
+            I32Load => {
+                let dst = self.read_u8()?;
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                if let RuntimeValue::Int(addr) = self.regs.read(base) {
+                    let addr = (*addr + offset as i64) as usize;
+                    if let Some(bytes) = self.memory_read_i32(addr) {
+                        self.regs.write(dst, RuntimeValue::Int(bytes as i64));
+                    }
+                }
+            }
+
+            // I32Store: *(base + offset) = src as i32
+            I32Store => {
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                let src = self.read_u8()?;
+                if let (RuntimeValue::Int(addr), RuntimeValue::Int(value)) =
+                    (self.regs.read(base), self.regs.read(src))
+                {
+                    let addr = (*addr + offset as i64) as usize;
+                    self.memory_write_i32(addr, *value as i32);
+                }
+            }
+
+            // F64Load: dst = *(base + offset) as f64
+            F64Load => {
+                let dst = self.read_u8()?;
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                if let RuntimeValue::Int(addr) = self.regs.read(base) {
+                    let addr = (*addr + offset as i64) as usize;
+                    if let Some(bytes) = self.memory_read_f64(addr) {
+                        self.regs.write(dst, RuntimeValue::Float(bytes));
+                    }
+                }
+            }
+
+            // F64Store: *(base + offset) = src as f64
+            F64Store => {
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                let src = self.read_u8()?;
+                if let (RuntimeValue::Int(addr), RuntimeValue::Float(value)) =
+                    (self.regs.read(base), self.regs.read(src))
+                {
+                    let addr = (*addr + offset as i64) as usize;
+                    self.memory_write_f64(addr, *value);
+                }
+            }
+
+            // F32Load: dst = *(base + offset) as f32
+            F32Load => {
+                let dst = self.read_u8()?;
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                if let RuntimeValue::Int(addr) = self.regs.read(base) {
+                    let addr = (*addr + offset as i64) as usize;
+                    if let Some(bytes) = self.memory_read_f32(addr) {
+                        self.regs.write(dst, RuntimeValue::Float(bytes as f64));
+                    }
+                }
+            }
+
+            // F32Store: *(base + offset) = src as f32
+            F32Store => {
+                let base = self.read_u8()?;
+                let offset = self.read_i16()?;
+                let src = self.read_u8()?;
+                if let (RuntimeValue::Int(addr), RuntimeValue::Float(value)) =
+                    (self.regs.read(base), self.regs.read(src))
+                {
+                    let addr = (*addr + offset as i64) as usize;
+                    self.memory_write_f32(addr, *value as f32);
+                }
+            }
+
             // F64 比较运算
             F64Eq => {
                 let dst = self.read_u8()?;
@@ -1060,24 +1344,6 @@ impl VM {
                 if let RuntimeValue::Float(f) = self.regs.read(src) {
                     self.regs.write(dst, RuntimeValue::Float(-f));
                 }
-            }
-
-            F32Load => {
-                let dst = self.read_u8()?;
-                let base = self.read_u8()?;
-                let _offset = self.read_i16()?;
-                // F32Load: 从内存加载 F32（简化处理，暂不实现）
-                if let RuntimeValue::Float(f) = self.regs.read(base) {
-                    self.regs.write(dst, RuntimeValue::Float(*f));
-                }
-            }
-
-            F32Store => {
-                let _base = self.read_u8()?;
-                let _offset = self.read_i16()?;
-                let src = self.read_u8()?;
-                // F32Store: 存储到内存（简化处理，暂不实现）
-                let _ = self.regs.read(src);
             }
 
             F32Const => {
@@ -1272,21 +1538,53 @@ impl VM {
             GetField => {
                 let dst = self.read_u8()?;
                 let obj_reg = self.read_u8()?;
-                let _field_offset = self.read_u16()?;
-                // 获取字段（简化处理）
-                if let RuntimeValue::List(lst) = self.regs.read(obj_reg).clone() {
-                    // 假设 offset 0 获取第一个元素
-                    if let Some(val) = lst.first() {
-                        self.regs.write(dst, val.clone());
-                    }
-                }
+                let field_offset = self.read_u16()? as usize;
+
+                let value = match self.regs.read(obj_reg).clone() {
+                    RuntimeValue::List(items) | RuntimeValue::Tuple(items) => items
+                        .get(field_offset)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit),
+                    RuntimeValue::Struct { fields, .. } => fields
+                        .get(field_offset)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit),
+                    _ => return Err(VMError::TypeError("list/tuple/struct".into())),
+                };
+                self.regs.write(dst, value);
             }
 
             SetField => {
-                let _obj_reg = self.read_u8()?;
-                let _field_offset = self.read_u16()?;
-                let _src_reg = self.read_u8()?;
-                // 设置字段（简化处理）
+                let obj_reg = self.read_u8()?;
+                let field_offset = self.read_u16()? as usize;
+                let src_reg = self.read_u8()?;
+
+                let value = self.regs.read(src_reg).clone();
+
+                match self.regs.read(obj_reg).clone() {
+                    RuntimeValue::List(mut items) => {
+                        if field_offset >= items.len() {
+                            return Err(VMError::IndexOutOfBounds {
+                                index: field_offset,
+                                size: items.len(),
+                            });
+                        }
+                        items[field_offset] = value;
+                        self.regs.write(obj_reg, RuntimeValue::List(items));
+                    }
+                    RuntimeValue::Struct {
+                        type_id,
+                        mut fields,
+                    } => {
+                        if field_offset >= fields.len() {
+                            return Err(VMError::FieldNotFound(field_offset));
+                        }
+                        fields[field_offset] = value;
+                        self.regs
+                            .write(obj_reg, RuntimeValue::Struct { type_id, fields });
+                    }
+                    _ => return Err(VMError::TypeError("list/struct".into())),
+                }
             }
 
             LoadElement => {
@@ -1304,17 +1602,36 @@ impl VM {
             }
 
             StoreElement => {
-                let _array_reg = self.read_u8()?;
-                let _index_reg = self.read_u8()?;
-                let _src_reg = self.read_u8()?;
-                // 存储元素（简化处理）
+                let array_reg = self.read_u8()?;
+                let index_reg = self.read_u8()?;
+                let src_reg = self.read_u8()?;
+
+                let value = self.regs.read(src_reg).clone();
+                let idx = match self.regs.read(index_reg) {
+                    RuntimeValue::Int(n) => *n as usize,
+                    _ => return Err(VMError::TypeError("int".into())),
+                };
+
+                match self.regs.read(array_reg).clone() {
+                    RuntimeValue::List(mut items) => {
+                        if idx >= items.len() {
+                            return Err(VMError::IndexOutOfBounds {
+                                index: idx,
+                                size: items.len(),
+                            });
+                        }
+                        items[idx] = value;
+                        self.regs.write(array_reg, RuntimeValue::List(items));
+                    }
+                    _ => return Err(VMError::TypeError("list".into())),
+                }
             }
 
             NewListWithCap => {
-                let _dst = self.read_u8()?;
-                let _capacity = self.read_u16()?;
-                // 预分配列表（简化处理）
-                self.regs.write(0, RuntimeValue::List(vec![]));
+                let dst = self.read_u8()?;
+                let capacity = self.read_u16()? as usize;
+                self.regs
+                    .write(dst, RuntimeValue::List(Vec::with_capacity(capacity)));
             }
 
             ArcNew => {
@@ -1464,6 +1781,127 @@ impl VM {
     /// 读取 f32 操作数
     fn read_f32(&mut self) -> Result<f64, VMError> {
         self.read_u32().map(|v| f32::from_bits(v) as f64)
+    }
+
+    // =====================
+    // 内存读写辅助方法
+    // =====================
+
+    /// 从内存读取 i64
+    fn memory_read_i64(
+        &self,
+        addr: usize,
+    ) -> Option<i64> {
+        if addr + 8 <= self.memory.len() {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&self.memory[addr..addr + 8]);
+            Some(i64::from_le_bytes(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// 向内存写入 i64
+    fn memory_write_i64(
+        &mut self,
+        addr: usize,
+        value: i64,
+    ) {
+        let bytes = value.to_le_bytes();
+        if addr + 8 <= self.memory.len() {
+            self.memory[addr..addr + 8].copy_from_slice(&bytes);
+        } else if addr <= self.memory.len() {
+            // 扩展内存
+            self.memory.resize(addr + 8, 0);
+            self.memory[addr..addr + 8].copy_from_slice(&bytes);
+        }
+    }
+
+    /// 从内存读取 i32
+    fn memory_read_i32(
+        &self,
+        addr: usize,
+    ) -> Option<i32> {
+        if addr + 4 <= self.memory.len() {
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(&self.memory[addr..addr + 4]);
+            Some(i32::from_le_bytes(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// 向内存写入 i32
+    fn memory_write_i32(
+        &mut self,
+        addr: usize,
+        value: i32,
+    ) {
+        let bytes = value.to_le_bytes();
+        if addr + 4 <= self.memory.len() {
+            self.memory[addr..addr + 4].copy_from_slice(&bytes);
+        } else if addr <= self.memory.len() {
+            self.memory.resize(addr + 4, 0);
+            self.memory[addr..addr + 4].copy_from_slice(&bytes);
+        }
+    }
+
+    /// 从内存读取 f64
+    fn memory_read_f64(
+        &self,
+        addr: usize,
+    ) -> Option<f64> {
+        if addr + 8 <= self.memory.len() {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&self.memory[addr..addr + 8]);
+            Some(f64::from_le_bytes(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// 向内存写入 f64
+    fn memory_write_f64(
+        &mut self,
+        addr: usize,
+        value: f64,
+    ) {
+        let bytes = value.to_le_bytes();
+        if addr + 8 <= self.memory.len() {
+            self.memory[addr..addr + 8].copy_from_slice(&bytes);
+        } else if addr <= self.memory.len() {
+            self.memory.resize(addr + 8, 0);
+            self.memory[addr..addr + 8].copy_from_slice(&bytes);
+        }
+    }
+
+    /// 从内存读取 f32
+    fn memory_read_f32(
+        &self,
+        addr: usize,
+    ) -> Option<f32> {
+        if addr + 4 <= self.memory.len() {
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(&self.memory[addr..addr + 4]);
+            Some(f32::from_le_bytes(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// 向内存写入 f32
+    fn memory_write_f32(
+        &mut self,
+        addr: usize,
+        value: f32,
+    ) {
+        let bytes = value.to_le_bytes();
+        if addr + 4 <= self.memory.len() {
+            self.memory[addr..addr + 4].copy_from_slice(&bytes);
+        } else if addr <= self.memory.len() {
+            self.memory.resize(addr + 4, 0);
+            self.memory[addr..addr + 4].copy_from_slice(&bytes);
+        }
     }
 
     /// 二进制 I64 运算

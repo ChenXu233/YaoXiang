@@ -222,10 +222,8 @@ mod vm_status_tests {
 
 #[cfg(test)]
 mod instruction_execution_tests {
-    use super::*;
 
     mod opcode_encoding_tests {
-        use super::*;
         use crate::vm::opcode::TypedOpcode;
 
         #[test]
@@ -332,10 +330,20 @@ mod instruction_execution_tests {
             let _ = TypedOpcode::TypeOf;
             let _ = TypedOpcode::Cast;
         }
+
+        #[test]
+        fn test_control_flow_opcodes_exist() {
+            // Phase 1: 控制流指令
+            let _ = TypedOpcode::Switch; // 0x06 - 多分支跳转
+            let _ = TypedOpcode::LoopStart; // 0x07 - 循环开始
+            let _ = TypedOpcode::LoopInc; // 0x08 - 循环递增
+            let _ = TypedOpcode::TailCall; // 0x09 - 尾调用
+            let _ = TypedOpcode::Yield; // 0x0A - 协程让出
+            let _ = TypedOpcode::Label; // 0x0B - 标签定义
+        }
     }
 
     mod opcode_parsing_tests {
-        use super::*;
         use crate::vm::opcode::TypedOpcode;
 
         #[test]
@@ -435,6 +443,17 @@ mod instruction_execution_tests {
         }
 
         #[test]
+        fn test_parse_control_flow_opcodes() {
+            // Phase 1: 控制流指令解析测试
+            assert!(TypedOpcode::try_from(0x06).is_ok()); // Switch
+            assert!(TypedOpcode::try_from(0x07).is_ok()); // LoopStart
+            assert!(TypedOpcode::try_from(0x08).is_ok()); // LoopInc
+            assert!(TypedOpcode::try_from(0x09).is_ok()); // TailCall
+            assert!(TypedOpcode::try_from(0x0A).is_ok()); // Yield
+            assert!(TypedOpcode::try_from(0x0B).is_ok()); // Label
+        }
+
+        #[test]
         fn test_invalid_opcode_returns_error() {
             // 验证无效操作码返回错误
             assert!(TypedOpcode::try_from(0x7E).is_err()); // 未使用
@@ -442,7 +461,6 @@ mod instruction_execution_tests {
     }
 
     mod opcode_name_tests {
-        use super::*;
         use crate::vm::opcode::TypedOpcode;
 
         #[test]
@@ -497,6 +515,17 @@ mod instruction_execution_tests {
             assert_eq!(TypedOpcode::LoadUpvalue.name(), "LoadUpvalue");
             assert_eq!(TypedOpcode::StoreUpvalue.name(), "StoreUpvalue");
             assert_eq!(TypedOpcode::CloseUpvalue.name(), "CloseUpvalue");
+        }
+
+        #[test]
+        fn test_control_flow_opcode_names() {
+            // Phase 1: 控制流指令名称测试
+            assert_eq!(TypedOpcode::Switch.name(), "Switch");
+            assert_eq!(TypedOpcode::LoopStart.name(), "LoopStart");
+            assert_eq!(TypedOpcode::LoopInc.name(), "LoopInc");
+            assert_eq!(TypedOpcode::TailCall.name(), "TailCall");
+            assert_eq!(TypedOpcode::Yield.name(), "Yield");
+            assert_eq!(TypedOpcode::Label.name(), "Label");
         }
     }
 }
