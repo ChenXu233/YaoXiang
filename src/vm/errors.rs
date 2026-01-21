@@ -30,11 +30,19 @@ pub enum VMError {
     #[error("Type error: {0}")]
     TypeError(String),
 
-    #[error("Index out of bounds")]
-    IndexOutOfBounds,
+    #[error("Index out of bounds: index {index} >= size {size}")]
+    IndexOutOfBounds {
+        /// The invalid index that was accessed
+        index: usize,
+        /// The size of the collection
+        size: usize,
+    },
 
     #[error("Key not found")]
     KeyNotFound,
+
+    #[error("Field not found at index {0}")]
+    FieldNotFound(usize),
 
     #[error("Uninitialized variable")]
     UninitializedVariable,

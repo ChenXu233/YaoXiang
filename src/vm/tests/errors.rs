@@ -46,14 +46,23 @@ mod error_display_tests {
 
     #[test]
     fn test_vm_error_index_out_of_bounds() {
-        let error = VMError::IndexOutOfBounds;
-        assert_eq!(format!("{}", error), "Index out of bounds");
+        let error = VMError::IndexOutOfBounds { index: 5, size: 3 };
+        assert_eq!(
+            format!("{}", error),
+            "Index out of bounds: index 5 >= size 3"
+        );
     }
 
     #[test]
     fn test_vm_error_key_not_found() {
         let error = VMError::KeyNotFound;
         assert_eq!(format!("{}", error), "Key not found");
+    }
+
+    #[test]
+    fn test_vm_error_field_not_found() {
+        let error = VMError::FieldNotFound(2);
+        assert_eq!(format!("{}", error), "Field not found at index 2");
     }
 
     #[test]
