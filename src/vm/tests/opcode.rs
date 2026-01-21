@@ -310,8 +310,54 @@ mod operand_count_tests {
     }
 
     #[test]
+    fn test_operand_count_memory() {
+        // 内存 Load/Store 指令需要 3 个操作数
+        assert_eq!(TypedOpcode::I64Load.operand_count(), 3);
+        assert_eq!(TypedOpcode::I32Load.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Load.operand_count(), 3);
+        assert_eq!(TypedOpcode::F32Load.operand_count(), 3);
+
+        assert_eq!(TypedOpcode::I64Store.operand_count(), 3);
+        assert_eq!(TypedOpcode::I32Store.operand_count(), 3);
+        assert_eq!(TypedOpcode::F64Store.operand_count(), 3);
+        assert_eq!(TypedOpcode::F32Store.operand_count(), 3);
+    }
+
+    #[test]
     fn test_operand_count_five() {
         assert_eq!(TypedOpcode::TryBegin.operand_count(), 5);
+    }
+
+    #[test]
+    fn test_operand_count_jump() {
+        // JmpIfNot 需要 2 个操作数: cond_reg (u8), offset (i16)
+        assert_eq!(TypedOpcode::JmpIfNot.operand_count(), 2);
+        // Switch 需要 3 个操作数: reg (u8), table_idx (u16), default_offset (i16)
+        assert_eq!(TypedOpcode::Switch.operand_count(), 3);
+    }
+
+    #[test]
+    fn test_operand_count_call() {
+        // TailCall 需要 4 个操作数: func_id, base_arg, arg_count
+        assert_eq!(TypedOpcode::TailCall.operand_count(), 4);
+        // MakeClosure 需要 4 个操作数: dst, func_id, env_size, upvalue_count
+        assert_eq!(TypedOpcode::MakeClosure.operand_count(), 4);
+    }
+
+    #[test]
+    fn test_operand_count_control_flow() {
+        // Switch 需要 3 个操作数: reg (u8), table_idx (u16), default_offset (i16)
+        assert_eq!(TypedOpcode::Switch.operand_count(), 3);
+        // Label 需要 1 个操作数: label_id (u8)
+        assert_eq!(TypedOpcode::Label.operand_count(), 1);
+        // LoopStart 需要 4 个操作数: start_reg, end_reg, step_reg, exit_offset
+        assert_eq!(TypedOpcode::LoopStart.operand_count(), 4);
+        // LoopInc 需要 3 个操作数: dst, current, step
+        assert_eq!(TypedOpcode::LoopInc.operand_count(), 3);
+        // Yield 无操作数
+        assert_eq!(TypedOpcode::Yield.operand_count(), 0);
+        // TailCall 需要 4 个操作数
+        assert_eq!(TypedOpcode::TailCall.operand_count(), 4);
     }
 }
 
@@ -326,6 +372,17 @@ mod try_from_tests {
         assert_eq!(TypedOpcode::try_from(0x20), Ok(TypedOpcode::I64Add));
         assert_eq!(TypedOpcode::try_from(0x40), Ok(TypedOpcode::F64Add));
         assert_eq!(TypedOpcode::try_from(0xFF), Ok(TypedOpcode::Invalid));
+    }
+
+    #[test]
+    fn test_try_from_control_flow_opcodes() {
+        // 控制流指令 (0x06-0x0B)
+        assert_eq!(TypedOpcode::try_from(0x06), Ok(TypedOpcode::Switch));
+        assert_eq!(TypedOpcode::try_from(0x07), Ok(TypedOpcode::LoopStart));
+        assert_eq!(TypedOpcode::try_from(0x08), Ok(TypedOpcode::LoopInc));
+        assert_eq!(TypedOpcode::try_from(0x09), Ok(TypedOpcode::TailCall));
+        assert_eq!(TypedOpcode::try_from(0x0A), Ok(TypedOpcode::Yield));
+        assert_eq!(TypedOpcode::try_from(0x0B), Ok(TypedOpcode::Label));
     }
 
     #[test]
