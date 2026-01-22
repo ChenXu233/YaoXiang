@@ -798,6 +798,12 @@ impl TypedOpcode {
             TypedOpcode::I64Load | TypedOpcode::I64Store | TypedOpcode::I32Load | TypedOpcode::I32Store |
             TypedOpcode::F64Load | TypedOpcode::F64Store | TypedOpcode::F32Load | TypedOpcode::F32Store |
             TypedOpcode::GetField | TypedOpcode::SetField | TypedOpcode::NewListWithCap => 3,
+            // 2 个操作数
+            TypedOpcode::LoadUpvalue | // dst(u8), upvalue_idx(u8)
+            TypedOpcode::StoreUpvalue | // src(u8), upvalue_idx(u8)
+            TypedOpcode::StringLength | // dst(u8), src(u8)
+            TypedOpcode::StringFromInt | // dst(u8), src(u8)
+            TypedOpcode::StringFromFloat => 2, // dst(u8), src(u8)
             // 4 个操作数
             TypedOpcode::LoopStart | // 4 个操作数：start_reg, end_reg, step_reg, exit_offset
             TypedOpcode::TailCall | TypedOpcode::MakeClosure |
@@ -805,7 +811,8 @@ impl TypedOpcode {
             TypedOpcode::LoadElement | TypedOpcode::StoreElement |
             TypedOpcode::StringConcat | TypedOpcode::StringEqual | TypedOpcode::StringGetChar => 4,
             // 1 个操作数
-            TypedOpcode::TryBegin => 1, // 只读取 catch_offset (u16)
+            TypedOpcode::TryBegin | // 只读取 catch_offset (u16)
+            TypedOpcode::CloseUpvalue => 1, // reg(u8)
             // 处理未列出的变体
             _ => 0,
         }

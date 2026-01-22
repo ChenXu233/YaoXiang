@@ -195,3 +195,41 @@ fn test_bitwise_opcodes() {
     assert!(TypedOpcode::I64Shr.is_integer_op());
     assert!(TypedOpcode::I64Sar.is_integer_op());
 }
+
+/// 测试字符串操作码
+#[test]
+fn test_string_opcodes() {
+    use crate::vm::opcode::TypedOpcode;
+
+    // 字符串指令
+    assert_eq!(TypedOpcode::StringLength.name(), "StringLength");
+    assert_eq!(TypedOpcode::StringConcat.name(), "StringConcat");
+    assert_eq!(TypedOpcode::StringGetChar.name(), "StringGetChar");
+    assert_eq!(TypedOpcode::StringFromInt.name(), "StringFromInt");
+    assert_eq!(TypedOpcode::StringFromFloat.name(), "StringFromFloat");
+
+    // 操作数数量验证
+    assert_eq!(TypedOpcode::StringLength.operand_count(), 2);
+    assert_eq!(TypedOpcode::StringConcat.operand_count(), 4);
+    assert_eq!(TypedOpcode::StringGetChar.operand_count(), 4);
+    assert_eq!(TypedOpcode::StringFromInt.operand_count(), 2);
+    assert_eq!(TypedOpcode::StringFromFloat.operand_count(), 2);
+}
+
+/// 测试闭包 Upvalue 操作码
+#[test]
+fn test_upvalue_opcodes() {
+    use crate::vm::opcode::TypedOpcode;
+
+    // Upvalue 指令
+    assert_eq!(TypedOpcode::MakeClosure.name(), "MakeClosure");
+    assert_eq!(TypedOpcode::LoadUpvalue.name(), "LoadUpvalue");
+    assert_eq!(TypedOpcode::StoreUpvalue.name(), "StoreUpvalue");
+    assert_eq!(TypedOpcode::CloseUpvalue.name(), "CloseUpvalue");
+
+    // 操作数数量验证
+    assert_eq!(TypedOpcode::MakeClosure.operand_count(), 4);
+    assert_eq!(TypedOpcode::LoadUpvalue.operand_count(), 2);
+    assert_eq!(TypedOpcode::StoreUpvalue.operand_count(), 2);
+    assert_eq!(TypedOpcode::CloseUpvalue.operand_count(), 1);
+}
