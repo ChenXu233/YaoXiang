@@ -1,7 +1,7 @@
 # Task 8.3: 嵌入式运行时（即时执行器）
 
 > **优先级**: P1
-> **状态**: ⬜ 待开始
+> **状态**: ✅ 已完成
 > **模块**: `src/embedded/executor.rs`
 > **依赖**: task-08-01-value-type, task-08-02-allocator
 
@@ -22,104 +22,60 @@
 ```
 src/embedded/
 ├── mod.rs              # 导出入口
-└── executor.rs         # 即时执行器
+├── executor.rs         # 即时执行器
+└── tests/
+    └── executor.rs     # 测试
 ```
 
-## 实现内容
+## 实现进度
 
-### 1. EmbeddedRuntime 结构
+### ✅ P0: 核心基础（已完成）
+- [x] EmbeddedRuntime 结构
+- [x] Interpreter 结构
+- [x] Frame 结构（带 upvalue）
+- [x] 基础指令：Nop, Mov, LoadConst, LoadLocal, StoreLocal, LoadArg
+- [x] 控制流：Return, ReturnValue, Jmp, JmpIf, JmpIfNot
+- [x] 整数运算：I64/I32 Add/Sub/Mul/Div/Rem
+- [x] 整数位运算：I64And/Or/Xor/Shl/Sar/Shr, I64Neg
+- [x] 浮点运算：F64/F32 Add/Sub/Mul/Div/Rem/Sqrt/Neg
+- [x] 比较指令：I64/F64 Eq/Ne/Lt/Le/Gt/Ge, F32 比较
+- [x] 运行时错误类型
+- [x] P0 测试（5 个测试）
 
-```rust
-/// 嵌入式运行时
-pub struct EmbeddedRuntime {
-    /// 字节码解释器
-    interpreter: Interpreter,
-    /// 内存分配器
-    allocator: BumpAllocator,
-    /// 全局变量
-    globals: HashMap<GlobalId, RuntimeValue>,
-    /// 模块
-    modules: HashMap<ModuleId, CompiledModule>,
-    /// 函数表
-    functions: Vec<CompiledFunction>,
-}
-```
+### ✅ P1: 函数调用（已完成）
+- [x] CallStatic 指令
+- [x] MakeClosure 闭包创建
+- [x] LoadUpvalue / StoreUpvalue / CloseUpvalue
+- [x] CallDyn 动态调用
+- [x] CallVirt 虚函数调用
+- [x] TailCall 尾调用优化
+- [x] P1 测试（6 个新测试）
 
-### 2. Interpreter（字节码解释器）
+### ✅ P2: 内存与对象（已完成）
+- [x] StackAlloc 栈分配
+- [x] HeapAlloc 堆分配
+- [x] Drop 释放
+- [x] GetField / SetField 字段访问
+- [x] LoadElement / StoreElement 元素访问
+- [x] NewListWithCap 列表创建
+- [x] ArcNew / ArcClone / ArcDrop 引用计数
+- [x] P2 测试（11 个新测试）
 
-```rust
-struct Interpreter {
-    ip: usize,              // 指令指针
-    stack: Vec<RuntimeValue>, // 操作数栈
-    call_stack: Vec<Frame>,  // 调用栈
-}
+### ✅ P3: 字符串操作（已完成）
+- [x] StringLength 长度获取
+- [x] StringConcat 拼接
+- [x] StringEqual 相等比较
+- [x] StringGetChar 获取字符
+- [x] StringFromInt / StringFromFloat 类型转换
+- [x] P3 测试（6 个新测试）
 
-struct Frame {
-    func_id: FunctionId,
-    return_ip: usize,
-    locals: Vec<RuntimeValue>,
-}
-```
-
-### 3. 指令执行（所有操作码）
-
-需要实现完整的字节码指令集，包括：
-- 基础操作：Nop, Const, Load, Store
-- 算术运算：I64Add, I64Sub, I64Mul, I64Div, F64Add...
-- 比较运算：I64Eq, I64Lt...
-- 函数调用：CallStatic, CallIndirect, Return
-- 控制流：Branch, BranchIf, BranchTable
-- 数据操作：GetField, SetField, NewStruct, NewEnum...
-- 模式匹配：Match
-- 并发相关：Spawn（忽略，视为普通调用）, Await（不存在）
-
-### 4. 错误处理
-
-```rust
-enum RuntimeError {
-    StackUnderflow,
-    InvalidLocal(usize),
-    InvalidField(usize),
-    TypeMismatch,
-    FunctionNotFound(FunctionId),
-    MissingMain,
-    UnsupportedOpcode(TypedOpcode),
-    DivisionByZero,
-    // ...
-}
-```
-
-## 验收测试
-
-```rust
-#[test]
-fn test_basic_execution() {
-    let mut runtime = EmbeddedRuntime::new(64 * 1024);
-    let result = runtime.load_and_run(hello_world_module);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_spawn_ignored() {
-    // spawn 标记在嵌入式模式下被忽略
-    let mut runtime = EmbeddedRuntime::new(64 * 1024);
-    let result = runtime.load_and_run(spawn_module);
-    // 同步执行，结果不是 Async 值
-    assert_eq!(result, Ok(RuntimeValue::Int(42)));
-}
-
-#[test]
-fn test_all_opcodes() {
-    // 测试所有指令的执行
-}
-```
-
-## 与 RFC-008 对照
-
-| RFC-008 设计 | 实现 |
-|-------------|------|
-| 即时执行器 | ✅ EmbeddedRuntime |
-| 同步执行 | ✅ 顺序执行 |
-| 无 DAG | ✅ 不构建依赖图 |
-| 无调度器 | ✅ 解释器直接执行 |
-| spawn 忽略 | ✅ 视为普通调用 |
+### ✅ P4: 高级特性（已完成）
+- [x] Switch 分支表跳转
+- [x] LoopStart / LoopInc 循环优化
+- [x] TryBegin / TryEnd / Throw / Rethrow 异常处理
+- [x] BoundsCheck 边界检查
+- [x] TypeCheck / Cast 类型操作
+- [x] TypeOf 反射操作
+- [x] Spawn 指令（视为 CallStatic）
+- [x] Yield 指令（空操作）
+- [x] P4 测试（15 个新测试）

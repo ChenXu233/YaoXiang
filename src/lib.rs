@@ -19,6 +19,7 @@
 #![allow(dead_code)]
 
 // Public modules
+pub mod embedded;
 pub mod frontend;
 pub mod middle;
 pub mod runtime;
