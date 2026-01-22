@@ -97,7 +97,12 @@ fn test_operand_counts() {
     assert_eq!(TypedOpcode::F64Mul.operand_count(), 3);
 
     // 四操作数指令
-    assert_eq!(TypedOpcode::CallStatic.operand_count(), 4);
+    assert_eq!(TypedOpcode::LoadElement.operand_count(), 4);
+
+    // 五操作数指令（函数调用）
+    assert_eq!(TypedOpcode::CallStatic.operand_count(), 5);
+    assert_eq!(TypedOpcode::CallVirt.operand_count(), 5);
+    assert_eq!(TypedOpcode::CallDyn.operand_count(), 5);
 }
 
 /// 测试字节码文件生成

@@ -134,6 +134,25 @@ pub enum Instruction {
         func: Operand,
         args: Vec<Operand>,
     },
+    // =====================
+    // 虚函数调用指令
+    // =====================
+    /// 虚方法调用：通过 vtable 查找方法
+    /// obj: 对象寄存器
+    /// method_name: 方法名
+    /// args: 包含 obj 的完整参数列表
+    CallVirt {
+        dst: Option<Operand>,
+        obj: Operand,
+        method_name: String,
+        args: Vec<Operand>,
+    },
+    /// 动态调用：直接调用寄存器中的函数值（闭包）
+    CallDyn {
+        dst: Option<Operand>,
+        func: Operand,
+        args: Vec<Operand>,
+    },
     // 注意：根据 RFC-008，await 不是关键字
     // CallAsync 和 Await 指令已移除，由运行时自动处理
     TailCall {

@@ -305,9 +305,16 @@ mod operand_count_tests {
 
     #[test]
     fn test_operand_count_four() {
-        assert_eq!(TypedOpcode::CallStatic.operand_count(), 4);
         assert_eq!(TypedOpcode::LoadElement.operand_count(), 4);
         assert_eq!(TypedOpcode::StringConcat.operand_count(), 4);
+    }
+
+    #[test]
+    fn test_operand_count_five() {
+        // 函数调用指令需要 5 个操作数: dst, func_id, base_arg_reg, arg_count, (reserved)
+        assert_eq!(TypedOpcode::CallStatic.operand_count(), 5);
+        assert_eq!(TypedOpcode::CallVirt.operand_count(), 5);
+        assert_eq!(TypedOpcode::CallDyn.operand_count(), 5);
     }
 
     #[test]

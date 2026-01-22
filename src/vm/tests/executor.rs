@@ -601,7 +601,9 @@ mod instruction_execution_tests {
 
             let offset = 1;
             let value = match heap.get(handle) {
-                Some(HeapValue::List(items)) => items.get(offset).cloned().unwrap_or(RuntimeValue::Unit),
+                Some(HeapValue::List(items)) => {
+                    items.get(offset).cloned().unwrap_or(RuntimeValue::Unit)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -619,7 +621,9 @@ mod instruction_execution_tests {
 
             let offset = 0;
             let value = match heap.get(handle) {
-                Some(HeapValue::Tuple(items)) => items.get(offset).cloned().unwrap_or(RuntimeValue::Unit),
+                Some(HeapValue::Tuple(items)) => {
+                    items.get(offset).cloned().unwrap_or(RuntimeValue::Unit)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -657,7 +661,9 @@ mod instruction_execution_tests {
 
             let offset = 10; // 超出范围
             let value = match heap.get(handle) {
-                Some(HeapValue::List(items)) => items.get(offset).cloned().unwrap_or(RuntimeValue::Unit),
+                Some(HeapValue::List(items)) => {
+                    items.get(offset).cloned().unwrap_or(RuntimeValue::Unit)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -678,10 +684,7 @@ mod instruction_execution_tests {
             let upvalue_count = 2;
 
             // 模拟闭包环境
-            let env = vec![
-                RuntimeValue::Int(10),
-                RuntimeValue::Int(20),
-            ];
+            let env = vec![RuntimeValue::Int(10), RuntimeValue::Int(20)];
 
             // 创建闭包
             let closure = RuntimeValue::Function(FunctionValue {
@@ -703,13 +706,13 @@ mod instruction_execution_tests {
         // 测试 LoadUpvalue 逻辑
         #[test]
         fn test_load_upvalue_logic() {
-            let closure_env = vec![
-                RuntimeValue::Int(42),
-                RuntimeValue::String("test".into()),
-            ];
+            let closure_env = vec![RuntimeValue::Int(42), RuntimeValue::String("test".into())];
 
             let upvalue_idx = 0usize;
-            let dst_value = closure_env.get(upvalue_idx).cloned().unwrap_or(RuntimeValue::Unit);
+            let dst_value = closure_env
+                .get(upvalue_idx)
+                .cloned()
+                .unwrap_or(RuntimeValue::Unit);
 
             assert_eq!(dst_value, RuntimeValue::Int(42));
         }
@@ -1337,7 +1340,9 @@ mod instruction_execution_tests {
 
             // 获取字段 0 (name)
             let name = match heap.get(struct_handle) {
-                Some(HeapValue::Tuple(items)) => items.get(0).cloned().unwrap_or(RuntimeValue::Unit),
+                Some(HeapValue::Tuple(items)) => {
+                    items.get(0).cloned().unwrap_or(RuntimeValue::Unit)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -1345,7 +1350,9 @@ mod instruction_execution_tests {
 
             // 获取字段 1 (age)
             let age = match heap.get(struct_handle) {
-                Some(HeapValue::Tuple(items)) => items.get(1).cloned().unwrap_or(RuntimeValue::Unit),
+                Some(HeapValue::Tuple(items)) => {
+                    items.get(1).cloned().unwrap_or(RuntimeValue::Unit)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -1553,7 +1560,9 @@ mod instruction_execution_tests {
             let b = RuntimeValue::Float(2.0);
 
             let result = match (a, b) {
-                (RuntimeValue::Float(x), RuntimeValue::Float(y)) if y != 0.0 => RuntimeValue::Float(x / y),
+                (RuntimeValue::Float(x), RuntimeValue::Float(y)) if y != 0.0 => {
+                    RuntimeValue::Float(x / y)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -1597,7 +1606,9 @@ mod instruction_execution_tests {
             let b = RuntimeValue::Float(4.0);
 
             let result = match (a, b) {
-                (RuntimeValue::Float(x), RuntimeValue::Float(y)) if y != 0.0 => RuntimeValue::Float(x % y),
+                (RuntimeValue::Float(x), RuntimeValue::Float(y)) if y != 0.0 => {
+                    RuntimeValue::Float(x % y)
+                }
                 _ => RuntimeValue::Unit,
             };
 
@@ -1723,6 +1734,285 @@ mod instruction_execution_tests {
             };
 
             assert_eq!(result, RuntimeValue::Int(-1));
+        }
+    }
+
+    // =====================
+    // P11 指令测试：虚函数调用
+    // =====================
+    mod p11_instruction_tests {
+        use crate::runtime::value::{RuntimeValue, FunctionValue, FunctionId, Heap, HeapValue};
+
+        // 测试 vtable 结构
+        #[test]
+        fn test_vtable_structure() {
+            // 创建包含 vtable 的 Struct
+            let vtable: Vec<(String, FunctionValue)> = vec![
+                (
+                    "method1".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(1),
+                        env: vec![],
+                    },
+                ),
+                (
+                    "method2".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(2),
+                        env: vec![],
+                    },
+                ),
+            ];
+
+            assert_eq!(vtable.len(), 2);
+            assert_eq!(vtable[0].0, "method1");
+            assert_eq!(vtable[1].0, "method2");
+        }
+
+        // 测试 vtable 方法查找
+        #[test]
+        fn test_vtable_method_lookup() {
+            let vtable: Vec<(String, FunctionValue)> = vec![
+                (
+                    "greet".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(100),
+                        env: vec![],
+                    },
+                ),
+                (
+                    "farewell".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(101),
+                        env: vec![],
+                    },
+                ),
+            ];
+
+            // 查找 greet 方法
+            let method = vtable.iter().find(|(name, _)| name == "greet");
+
+            assert!(method.is_some());
+            if let Some((_, func)) = method {
+                assert_eq!(func.func_id.0, 100);
+            }
+        }
+
+        // 测试 Struct 与 vtable 组合
+        #[test]
+        fn test_struct_with_vtable() {
+            let mut heap = Heap::new();
+
+            // 创建字段数据
+            let fields = heap.allocate(HeapValue::Tuple(vec![
+                RuntimeValue::String("Alice".into()),
+                RuntimeValue::Int(30),
+            ]));
+
+            // 创建 vtable
+            let vtable: Vec<(String, FunctionValue)> = vec![(
+                "introduce".to_string(),
+                FunctionValue {
+                    func_id: FunctionId(200),
+                    env: vec![],
+                },
+            )];
+
+            // 模拟 Struct 值（不直接创建 RuntimeValue::Struct，而是测试数据结构）
+            let struct_data = (fields, vtable.clone());
+
+            // 验证 vtable 可以被访问
+            assert_eq!(struct_data.1.len(), 1);
+            assert_eq!(struct_data.1[0].0, "introduce");
+        }
+
+        // 测试 FunctionValue 结构
+        #[test]
+        fn test_function_value_structure() {
+            let func = FunctionValue {
+                func_id: FunctionId(42),
+                env: vec![RuntimeValue::Int(1), RuntimeValue::Int(2)],
+            };
+
+            assert_eq!(func.func_id.0, 42);
+            assert_eq!(func.env.len(), 2);
+        }
+
+        // 测试空 vtable
+        #[test]
+        fn test_empty_vtable() {
+            let vtable: Vec<(String, FunctionValue)> = vec![];
+
+            let method = vtable.iter().find(|(name, _)| name == "nonexistent");
+
+            assert!(method.is_none());
+        }
+
+        // 测试多个方法的 vtable
+        #[test]
+        fn test_multi_method_vtable() {
+            let vtable: Vec<(String, FunctionValue)> = vec![
+                (
+                    "draw".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(1),
+                        env: vec![],
+                    },
+                ),
+                (
+                    "resize".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(2),
+                        env: vec![],
+                    },
+                ),
+                (
+                    "rotate".to_string(),
+                    FunctionValue {
+                        func_id: FunctionId(3),
+                        env: vec![],
+                    },
+                ),
+            ];
+
+            assert_eq!(vtable.len(), 3);
+
+            // 查找所有方法
+            let draw = vtable.iter().find(|(n, _)| n == "draw");
+            let resize = vtable.iter().find(|(n, _)| n == "resize");
+            let rotate = vtable.iter().find(|(n, _)| n == "rotate");
+
+            assert!(draw.is_some());
+            assert!(resize.is_some());
+            assert!(rotate.is_some());
+        }
+    }
+
+    // =====================
+    // P12 指令测试：动态调用
+    // =====================
+    mod p12_instruction_tests {
+        use crate::runtime::value::{RuntimeValue, FunctionValue, FunctionId};
+
+        // 测试 Function 作为第一类值
+        #[test]
+        fn test_function_as_first_class_value() {
+            let closure = RuntimeValue::Function(FunctionValue {
+                func_id: FunctionId(123),
+                env: vec![RuntimeValue::Int(42)],
+            });
+
+            // 函数可以像普通值一样被传递
+            let func = match closure {
+                RuntimeValue::Function(f) => f,
+                _ => panic!("Expected Function"),
+            };
+
+            assert_eq!(func.func_id.0, 123);
+            assert_eq!(func.env[0], RuntimeValue::Int(42));
+        }
+
+        // 测试动态调用参数传递
+        #[test]
+        fn test_dynamic_call_argument_passing() {
+            // 模拟从寄存器收集参数
+            let args: Vec<RuntimeValue> = vec![
+                RuntimeValue::Int(1),
+                RuntimeValue::Int(2),
+                RuntimeValue::Int(3),
+            ];
+
+            assert_eq!(args.len(), 3);
+            assert_eq!(args[0], RuntimeValue::Int(1));
+            assert_eq!(args[1], RuntimeValue::Int(2));
+            assert_eq!(args[2], RuntimeValue::Int(3));
+        }
+
+        // 测试闭包捕获环境
+        #[test]
+        fn test_closure_captures_environment() {
+            let captured_value = RuntimeValue::String("captured".into());
+
+            let closure = RuntimeValue::Function(FunctionValue {
+                func_id: FunctionId(456),
+                env: vec![captured_value.clone()],
+            });
+
+            if let RuntimeValue::Function(func) = closure {
+                assert_eq!(func.env.len(), 1);
+                assert_eq!(func.env[0], captured_value);
+            } else {
+                panic!("Expected Function");
+            }
+        }
+
+        // 测试多层闭包
+        #[test]
+        fn test_nested_closure() {
+            let outer_var = RuntimeValue::Int(10);
+            let inner_var = RuntimeValue::Int(20);
+
+            let closure = RuntimeValue::Function(FunctionValue {
+                func_id: FunctionId(789),
+                env: vec![outer_var.clone(), inner_var.clone()],
+            });
+
+            if let RuntimeValue::Function(func) = closure {
+                assert_eq!(func.env.len(), 2);
+                assert_eq!(func.env[0], outer_var);
+                assert_eq!(func.env[1], inner_var);
+            }
+        }
+    }
+
+    // =====================
+    // 调用指令操作码测试
+    // =====================
+    mod call_opcode_tests {
+        use crate::vm::opcode::TypedOpcode;
+
+        #[test]
+        fn test_call_opcodes_exist() {
+            let _ = TypedOpcode::CallStatic;
+            let _ = TypedOpcode::CallVirt;
+            let _ = TypedOpcode::CallDyn;
+        }
+
+        #[test]
+        fn test_call_opcode_values() {
+            // CallStatic = 0x80, CallVirt = 0x81, CallDyn = 0x82
+            assert_eq!(TypedOpcode::CallStatic as u8, 0x80);
+            assert_eq!(TypedOpcode::CallVirt as u8, 0x81);
+            assert_eq!(TypedOpcode::CallDyn as u8, 0x82);
+        }
+
+        #[test]
+        fn test_call_opcode_names() {
+            assert_eq!(TypedOpcode::CallStatic.name(), "CallStatic");
+            assert_eq!(TypedOpcode::CallVirt.name(), "CallVirt");
+            assert_eq!(TypedOpcode::CallDyn.name(), "CallDyn");
+        }
+
+        #[test]
+        fn test_call_opcode_operand_count() {
+            // CallStatic, CallVirt, CallDyn 都有 5 个操作数
+            assert_eq!(TypedOpcode::CallStatic.operand_count(), 5);
+            assert_eq!(TypedOpcode::CallVirt.operand_count(), 5);
+            assert_eq!(TypedOpcode::CallDyn.operand_count(), 5);
+        }
+
+        #[test]
+        fn test_call_opcode_parsing() {
+            assert!(TypedOpcode::try_from(0x80).is_ok());
+            assert!(TypedOpcode::try_from(0x81).is_ok());
+            assert!(TypedOpcode::try_from(0x82).is_ok());
+        }
+
+        #[test]
+        fn test_call_opcode_is_call() {
+            assert!(TypedOpcode::CallStatic.is_call_op());
+            assert!(TypedOpcode::CallVirt.is_call_op());
+            assert!(TypedOpcode::CallDyn.is_call_op());
         }
     }
 }

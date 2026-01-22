@@ -1053,6 +1053,125 @@ impl VM {
                 }
             }
 
+            // =====================
+            // 虚函数调用指令
+            // =====================
+            CallVirt => {
+                let dst = self.read_u8()?;
+                let obj_reg = self.read_u8()?;
+                let name_idx = self.read_u16()?;
+                let base_arg_reg = self.read_u8()?;
+                let arg_count = self.read_u8()?;
+
+                // 从常量池获取方法名
+                let method_name = match self.constants.get(name_idx as usize) {
+                    Some(ConstValue::String(name)) => name.clone(),
+                    _ => {
+                        return Err(VMError::RuntimeError(format!(
+                            "Invalid method name index: {}",
+                            name_idx
+                        )));
+                    }
+                };
+
+                // 获取对象
+                let obj_value = self.regs.read(obj_reg).clone();
+
+                // 从对象 vtable 中查找方法
+                let func_id = match &obj_value {
+                    RuntimeValue::Struct { vtable, .. } => {
+                        match vtable.iter().find(|(name, _)| name == &method_name) {
+                            Some((_, func)) => func.func_id.0,
+                            None => {
+                                return Err(VMError::RuntimeError(format!(
+                                    "Method not found in vtable: {}",
+                                    method_name
+                                )));
+                            }
+                        }
+                    }
+                    RuntimeValue::Function(func) => func.func_id.0,
+                    _ => {
+                        return Err(VMError::TypeError("struct or function".into()));
+                    }
+                };
+
+                // 收集参数（从 base_arg_reg 开始的 arg_count 个参数）
+                let mut args = Vec::with_capacity(arg_count as usize);
+                for i in 0..arg_count {
+                    let arg_reg = base_arg_reg + i;
+                    let arg_value = self.regs.read(arg_reg).clone();
+                    args.push(arg_value.clone());
+                    self.value_stack.push(arg_value);
+                }
+
+                // 使用 func_id 作为索引从常量池获取函数名，然后查找函数
+                let func_name = match self.constants.get(func_id as usize) {
+                    Some(ConstValue::String(name)) => name.clone(),
+                    _ => {
+                        // 如果不是字符串，尝试用数字索引查找
+                        return Err(VMError::RuntimeError(format!(
+                            "Invalid function reference: {}",
+                            func_id
+                        )));
+                    }
+                };
+
+                // 从函数表查找并调用
+                if let Some(func_code) = self.functions.get(&func_name) {
+                    let func_clone = func_code.clone();
+                    let result = self.execute_function(&func_clone, &args)?;
+                    self.regs.write(dst, result.clone());
+                } else {
+                    return Err(VMError::RuntimeError(format!(
+                        "Function not found: {}",
+                        func_name
+                    )));
+                }
+            }
+
+            // =====================
+            // 动态调用指令
+            // =====================
+            CallDyn => {
+                let dst = self.read_u8()?;
+                let func_idx = self.read_u16()?;
+                let base_arg_reg = self.read_u8()?;
+                let arg_count = self.read_u8()?;
+
+                // 从 func_idx 在常量池中获取函数名
+                let func_name = match self.constants.get(func_idx as usize) {
+                    Some(ConstValue::String(name)) => name.clone(),
+                    _ => {
+                        return Err(VMError::RuntimeError(format!(
+                            "Invalid function index: {}",
+                            func_idx
+                        )));
+                    }
+                };
+
+                // 收集参数（第一个参数是函数值，后续是调用参数）
+                let mut args = Vec::with_capacity(arg_count as usize);
+                for i in 0..arg_count {
+                    let arg_reg = base_arg_reg + i;
+                    let arg_value = self.regs.read(arg_reg).clone();
+                    args.push(arg_value.clone());
+                    self.value_stack.push(arg_value);
+                }
+
+                // 从函数表查找并调用
+                if let Some(func_code) = self.functions.get(&func_name) {
+                    let func_clone = func_code.clone();
+                    let result = self.execute_function(&func_clone, &args)?;
+                    self.regs.write(dst, result.clone());
+                } else {
+                    return Err(VMError::RuntimeError(format!(
+                        "Function not found: {}",
+                        func_name
+                    )));
+                }
+            }
+
             // F64 算术运算
             F64Add => {
                 let dst = self.read_u8()?;
@@ -1663,6 +1782,7 @@ impl VM {
                     RuntimeValue::Struct {
                         type_id: _,
                         fields: field_handle,
+                        vtable: _,
                     } => {
                         let h = field_handle.0;
                         if let Some(HeapValue::Tuple(items)) = self.heap.get_mut(Handle(h)) {

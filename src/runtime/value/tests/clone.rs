@@ -112,6 +112,7 @@ fn test_clone_struct() {
     let s1 = RuntimeValue::Struct {
         type_id: TypeId(1),
         fields: fields_handle,
+        vtable: vec![],
     };
     let s2 = s1.clone();
 

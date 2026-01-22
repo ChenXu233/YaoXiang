@@ -33,6 +33,7 @@ fn test_struct_value() {
     let p = RuntimeValue::Struct {
         type_id: test_type_id(),
         fields: fields_handle,
+        vtable: vec![],
     };
 
     assert_eq!(
@@ -64,6 +65,7 @@ fn test_struct_nested() {
     let _top_left = RuntimeValue::Struct {
         type_id: test_type_id(),
         fields: top_left_handle,
+        vtable: vec![],
     };
 
     let bottom_right_handle = heap.allocate(HeapValue::Tuple(vec![
@@ -73,21 +75,25 @@ fn test_struct_nested() {
     let _bottom_right = RuntimeValue::Struct {
         type_id: test_type_id(),
         fields: bottom_right_handle,
+        vtable: vec![],
     };
 
     let rect_fields_handle = heap.allocate(HeapValue::Tuple(vec![
         RuntimeValue::Struct {
             type_id: test_type_id(),
             fields: top_left_handle,
+            vtable: vec![],
         },
         RuntimeValue::Struct {
             type_id: test_type_id(),
             fields: bottom_right_handle,
+            vtable: vec![],
         },
     ]));
     let rectangle = RuntimeValue::Struct {
         type_id: TypeId(3), // Rectangle type
         fields: rect_fields_handle,
+        vtable: vec![],
     };
 
     assert_eq!(

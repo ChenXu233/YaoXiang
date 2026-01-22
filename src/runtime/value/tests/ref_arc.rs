@@ -125,6 +125,7 @@ fn test_arc_struct() {
     let point = RuntimeValue::Struct {
         type_id: TypeId(1),
         fields: fields_handle,
+        vtable: vec![],
     };
 
     let arc_point = RuntimeValue::Arc(Arc::new(point));

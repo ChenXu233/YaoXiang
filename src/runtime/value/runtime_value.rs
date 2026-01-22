@@ -186,6 +186,8 @@ pub enum RuntimeValue {
         type_id: TypeId,
         /// Field values handle (stored on heap for efficient cloning)
         fields: Handle,
+        /// Virtual method table (method name -> function)
+        vtable: Vec<(String, FunctionValue)>,
     },
 
     /// Enum variant
@@ -399,6 +401,28 @@ impl RuntimeValue {
     pub fn is_arc(&self) -> bool {
         matches!(self, RuntimeValue::Arc(_))
     }
+
+    /// Get method from vtable by name
+    pub fn get_method(
+        &self,
+        name: &str,
+    ) -> Option<&FunctionValue> {
+        match self {
+            RuntimeValue::Struct { vtable, .. } => {
+                vtable.iter().find(|(n, _)| n == name).map(|(_, f)| f)
+            }
+            RuntimeValue::Function(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Get vtable reference for a struct
+    pub fn vtable(&self) -> Option<&Vec<(String, FunctionValue)>> {
+        match self {
+            RuntimeValue::Struct { vtable, .. } => Some(vtable),
+            _ => None,
+        }
+    }
 }
 
 // ============================================================================
@@ -436,9 +460,14 @@ impl RuntimeValue {
             | RuntimeValue::Array(_)
             | RuntimeValue::List(_)
             | RuntimeValue::Dict(_) => RuntimeValue::Unit,
-            RuntimeValue::Struct { type_id, .. } => RuntimeValue::Struct {
+            RuntimeValue::Struct {
+                type_id,
+                fields,
+                vtable,
+            } => RuntimeValue::Struct {
                 type_id: *type_id,
-                fields: Handle(0), // Placeholder
+                fields: *fields,
+                vtable: vtable.clone(),
             },
             RuntimeValue::Enum {
                 type_id,
@@ -539,7 +568,11 @@ impl RuntimeValue {
                     .collect();
                 RuntimeValue::Dict(heap.allocate(super::heap::HeapValue::Dict(cloned)))
             }
-            RuntimeValue::Struct { type_id, fields } => {
+            RuntimeValue::Struct {
+                type_id,
+                fields,
+                vtable,
+            } => {
                 let items_copy: Vec<RuntimeValue> =
                     if let Some(super::heap::HeapValue::Tuple(items)) = heap.get(*fields) {
                         items.clone()
@@ -553,6 +586,7 @@ impl RuntimeValue {
                 RuntimeValue::Struct {
                     type_id: *type_id,
                     fields: heap.allocate(super::heap::HeapValue::Tuple(cloned)),
+                    vtable: vtable.clone(),
                 }
             }
             RuntimeValue::Enum {
@@ -667,7 +701,11 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Dict(handle) => {
                 write!(f, "dict@{}", handle.raw())
             }
-            RuntimeValue::Struct { type_id: _, fields } => {
+            RuntimeValue::Struct {
+                type_id: _,
+                fields,
+                vtable: _,
+            } => {
                 write!(f, "struct@{}", fields.raw())
             }
             RuntimeValue::Enum {
@@ -714,10 +752,12 @@ impl PartialEq for RuntimeValue {
                 RuntimeValue::Struct {
                     type_id: t1,
                     fields: f1,
+                    vtable: _,
                 },
                 RuntimeValue::Struct {
                     type_id: t2,
                     fields: f2,
+                    vtable: _,
                 },
             ) => t1 == t2 && f1 == f2,
             (
@@ -780,7 +820,11 @@ impl Hash for RuntimeValue {
             RuntimeValue::Array(handle) => handle.hash(state),
             RuntimeValue::List(handle) => handle.hash(state),
             RuntimeValue::Dict(handle) => handle.hash(state),
-            RuntimeValue::Struct { type_id, fields } => {
+            RuntimeValue::Struct {
+                type_id,
+                fields,
+                vtable: _,
+            } => {
                 type_id.hash(state);
                 fields.hash(state);
             }

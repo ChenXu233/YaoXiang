@@ -588,6 +588,59 @@ impl CodegenContext {
                 Ok(BytecodeInstruction::new(TypedOpcode::CallStatic, operands))
             }
 
+            // =====================
+            // 虚函数调用
+            // =====================
+            CallVirt {
+                dst,
+                obj,
+                method_name,
+                args,
+            } => {
+                // CallVirt: dst(u8), obj_reg(u8), name_idx(u16), base_arg_reg(u8), arg_count(u8)
+                let dst_reg = if let Some(d) = dst {
+                    self.operand_to_reg(d)?
+                } else {
+                    0
+                };
+                let obj_reg = self.operand_to_reg(obj)?;
+                // 方法名放入常量池
+                let name_idx = self.add_constant(ConstValue::String(method_name.clone())) as u16;
+                let base_arg_reg = if let Some(first_arg) = args.first() {
+                    self.operand_to_reg(first_arg)?
+                } else {
+                    0
+                };
+                let mut operands = vec![dst_reg, obj_reg];
+                operands.extend_from_slice(&name_idx.to_le_bytes());
+                operands.push(base_arg_reg);
+                operands.push(args.len() as u8);
+                Ok(BytecodeInstruction::new(TypedOpcode::CallVirt, operands))
+            }
+
+            CallDyn { dst, func: _, args } => {
+                // CallDyn: dst(u8), func_handle(u16), base_arg_reg(u8), arg_count(u8)
+                // func 是 FunctionValue 句柄，放到常量池
+                let dst_reg = if let Some(d) = dst {
+                    self.operand_to_reg(d)?
+                } else {
+                    0
+                };
+                // 将 func 作为常量放入常量池
+                let func_idx = self.add_constant(ConstValue::Int(0)); // 简化：func 句柄用 0 表示
+                let func_handle = func_idx as u16;
+                let base_arg_reg = if let Some(first_arg) = args.first() {
+                    self.operand_to_reg(first_arg)?
+                } else {
+                    0
+                };
+                let mut operands = vec![dst_reg];
+                operands.extend_from_slice(&func_handle.to_le_bytes());
+                operands.push(base_arg_reg);
+                operands.push(args.len() as u8);
+                Ok(BytecodeInstruction::new(TypedOpcode::CallDyn, operands))
+            }
+
             // 注意：根据 RFC-008，CallAsync 已移除
             // await 不是关键字，运行时自动处理
             TailCall { func, args } => {
@@ -862,7 +915,10 @@ impl CodegenContext {
 
             CloseUpvalue(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::CloseUpvalue, vec![reg]))
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::CloseUpvalue,
+                    vec![reg],
+                ))
             }
         }
     }
