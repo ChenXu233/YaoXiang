@@ -165,3 +165,33 @@ fn test_function_indices() {
     assert!(helper_idx.is_some());
     assert_ne!(main_idx, helper_idx);
 }
+
+/// 测试位运算操作码
+#[test]
+fn test_bitwise_opcodes() {
+    use crate::vm::opcode::TypedOpcode;
+
+    // I64 位运算指令
+    assert_eq!(TypedOpcode::I64And.name(), "I64And");
+    assert_eq!(TypedOpcode::I64Or.name(), "I64Or");
+    assert_eq!(TypedOpcode::I64Xor.name(), "I64Xor");
+    assert_eq!(TypedOpcode::I64Shl.name(), "I64Shl");
+    assert_eq!(TypedOpcode::I64Shr.name(), "I64Shr");
+    assert_eq!(TypedOpcode::I64Sar.name(), "I64Sar");
+
+    // I32 位运算指令
+    assert_eq!(TypedOpcode::I32And.name(), "I32And");
+    assert_eq!(TypedOpcode::I32Or.name(), "I32Or");
+    assert_eq!(TypedOpcode::I32Xor.name(), "I32Xor");
+    assert_eq!(TypedOpcode::I32Shl.name(), "I32Shl");
+    assert_eq!(TypedOpcode::I32Shr.name(), "I32Shr");
+    assert_eq!(TypedOpcode::I32Sar.name(), "I32Sar");
+
+    // 操作数数量验证
+    assert!(TypedOpcode::I64And.is_integer_op());
+    assert!(TypedOpcode::I64Or.is_integer_op());
+    assert!(TypedOpcode::I64Xor.is_integer_op());
+    assert!(TypedOpcode::I64Shl.is_integer_op());
+    assert!(TypedOpcode::I64Shr.is_integer_op());
+    assert!(TypedOpcode::I64Sar.is_integer_op());
+}
