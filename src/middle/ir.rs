@@ -208,6 +208,43 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
+    // =====================
+    // 字符串指令
+    // =====================
+    StringLength {
+        dst: Operand,
+        src: Operand,
+    },
+    StringConcat {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    StringGetChar {
+        dst: Operand,
+        src: Operand,
+        index: Operand,
+    },
+    StringFromInt {
+        dst: Operand,
+        src: Operand,
+    },
+    StringFromFloat {
+        dst: Operand,
+        src: Operand,
+    },
+    // =====================
+    // 闭包 Upvalue 指令
+    // =====================
+    LoadUpvalue {
+        dst: Operand,
+        upvalue_idx: usize,
+    },
+    StoreUpvalue {
+        src: Operand,
+        upvalue_idx: usize,
+    },
+    CloseUpvalue(Operand),
 }
 
 /// Basic block

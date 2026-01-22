@@ -790,6 +790,80 @@ impl CodegenContext {
                 let reg = self.operand_to_reg(operand)?;
                 Ok(BytecodeInstruction::new(TypedOpcode::ArcDrop, vec![reg]))
             }
+
+            // =====================
+            // 字符串指令
+            // =====================
+            StringLength { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StringLength,
+                    vec![dst_reg, src_reg],
+                ))
+            }
+
+            StringConcat { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StringConcat,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            StringGetChar { dst, src, index } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                let index_reg = self.operand_to_reg(index)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StringGetChar,
+                    vec![dst_reg, src_reg, index_reg],
+                ))
+            }
+
+            StringFromInt { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StringFromInt,
+                    vec![dst_reg, src_reg],
+                ))
+            }
+
+            StringFromFloat { dst, src } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StringFromFloat,
+                    vec![dst_reg, src_reg],
+                ))
+            }
+
+            // =====================
+            // 闭包 Upvalue 指令
+            // =====================
+            LoadUpvalue { dst, upvalue_idx } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::LoadUpvalue,
+                    vec![dst_reg, *upvalue_idx as u8],
+                ))
+            }
+
+            StoreUpvalue { src, upvalue_idx } => {
+                let src_reg = self.operand_to_reg(src)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::StoreUpvalue,
+                    vec![src_reg, *upvalue_idx as u8],
+                ))
+            }
+
+            CloseUpvalue(operand) => {
+                let reg = self.operand_to_reg(operand)?;
+                Ok(BytecodeInstruction::new(TypedOpcode::CloseUpvalue, vec![reg]))
+            }
         }
     }
 
