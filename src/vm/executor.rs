@@ -1532,7 +1532,8 @@ impl VM {
 
                 // 确保 closure_env 有足够的空间
                 if upvalue_idx as usize >= self.closure_env.len() {
-                    self.closure_env.resize(upvalue_idx as usize + 1, RuntimeValue::Unit);
+                    self.closure_env
+                        .resize(upvalue_idx as usize + 1, RuntimeValue::Unit);
                 }
                 self.closure_env[upvalue_idx as usize] = value;
             }
@@ -1821,7 +1822,7 @@ impl VM {
                     3 => {
                         // I32 → I64
                         if let RuntimeValue::Int(n) = self.regs.read(src) {
-                            self.regs.write(dst, RuntimeValue::Int(*n as i64));
+                            self.regs.write(dst, RuntimeValue::Int(*n));
                         } else {
                             return Err(VMError::TypeError("int".into()));
                         }
@@ -1837,7 +1838,7 @@ impl VM {
                     5 => {
                         // F32 → F64
                         if let RuntimeValue::Float(f) = self.regs.read(src) {
-                            self.regs.write(dst, RuntimeValue::Float(*f as f64));
+                            self.regs.write(dst, RuntimeValue::Float(*f));
                         } else {
                             return Err(VMError::TypeError("float".into()));
                         }
