@@ -3,6 +3,15 @@
 //! This module implements region-based memory allocation for the ownership model.
 //! Memory is allocated in regions, and entire regions are deallocated at once
 //! when the scope ends, providing deterministic memory management without GC.
+//!
+//! # RFC-009 Compliance
+//! - Memory allocation/deallocation is separate from ownership semantics
+//! - `ref` keyword uses `Arc` at runtime (see runtime_value)
+//! - RAII is handled by Rust's Drop trait
+
+mod allocator;
+
+pub use allocator::{AllocError, Allocator, BumpAllocator, MemoryLayout};
 
 use std::mem;
 
@@ -146,6 +155,10 @@ impl Heap {
     }
 
     /// Allocate memory on the heap
+    ///
+    /// Returns the offset in the buffer, or None if allocation fails.
+    /// This is the internal method that works with raw sizes.
+    /// For the Allocator trait implementation, see `Allocator::alloc`.
     pub fn alloc(
         &mut self,
         size: usize,
@@ -212,6 +225,69 @@ impl Heap {
 impl Default for Heap {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// Allocator trait implementation
+// ============================================================================
+
+use core::ptr::NonNull;
+
+impl Allocator for Heap {
+    fn alloc(
+        &mut self,
+        layout: MemoryLayout,
+    ) -> Result<NonNull<u8>, AllocError> {
+        let size = layout.size();
+
+        // Try to allocate in current region
+        if let Some(offset) = Heap::alloc(self, size) {
+            // Safety: offset is valid within the buffer
+            let ptr = unsafe {
+                NonNull::new_unchecked(self.current_region.buffer.as_mut_ptr().add(offset))
+            };
+            return Ok(ptr);
+        }
+
+        // Current region is full, create a new one
+        self.free_regions
+            .push(std::mem::take(&mut self.current_region));
+
+        // Try again with new region
+        if let Some(offset) = Heap::alloc(self, size) {
+            self.total_allocations += 1;
+            // Safety: offset is valid within the new buffer
+            let ptr = unsafe {
+                NonNull::new_unchecked(self.current_region.buffer.as_mut_ptr().add(offset))
+            };
+            return Ok(ptr);
+        }
+
+        Err(AllocError::OutOfMemory)
+    }
+
+    fn alloc_zeroed(
+        &mut self,
+        layout: MemoryLayout,
+    ) -> Result<NonNull<u8>, AllocError> {
+        let ptr = Allocator::alloc(self, layout)?;
+        // Safety: ptr is valid and allocated
+        unsafe {
+            std::ptr::write_bytes(ptr.as_ptr(), 0, layout.size());
+        }
+        Ok(ptr)
+    }
+
+    fn dealloc(
+        &mut self,
+        ptr: NonNull<u8>,
+        layout: MemoryLayout,
+    ) {
+        // Region-based allocation doesn't support individual deallocation
+        // Memory is reclaimed when regions are dropped (on cleanup or Heap drop)
+        let _ = ptr;
+        let _ = layout;
     }
 }
 
