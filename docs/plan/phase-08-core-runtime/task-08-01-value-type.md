@@ -90,6 +90,25 @@ pub enum PtrKind {
 }
 ```
 
+## Handle 系统（堆分配引用）
+
+```rust
+/// 句柄类型（引用堆分配存储）
+///
+/// Tuple/Array/List/Dict/Struct 使用 Handle 引用堆数据：
+/// - 零拷贝 Move（只移动指针）
+/// - 高效 Clone（共享底层数据或浅拷贝）
+/// - 避免内存碎片
+///
+/// # 设计说明
+/// Handle 是对堆分配数据的轻量级引用，类似于指针但更安全：
+/// - 不直接暴露原始指针
+/// - 自动跟踪分配状态
+/// - 支持零拷贝语义
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Handle(pub(crate) usize);
+```
+
 ## RuntimeValue 结构
 
 ```rust
@@ -122,24 +141,26 @@ pub enum RuntimeValue {
     /// 字节数组
     Bytes(Arc<[u8]>),
 
-    /// 元组（存储为 Vec，惰性求值时可能优化）
-    Tuple(Vec<RuntimeValue>),
+    /// 元组（通过 Handle 引用堆分配数据）
+    Tuple(Handle),
 
-    /// 定长数组
-    Array(Vec<RuntimeValue>),
+    /// 定长数组（通过 Handle 引用堆分配数据）
+    Array(Handle),
 
-    /// 动态数组
-    List(Vec<RuntimeValue>),
+    /// 动态数组（通过 Handle 引用堆分配数据）
+    List(Handle),
 
-    /// 字典
-    Dict(HashMap<RuntimeValue, RuntimeValue>),
+    /// 字典（通过 Handle 引用堆分配数据）
+    Dict(Handle),
 
     /// 结构体实例
     Struct {
         /// 类型 ID（用于类型查询和字段访问）
         type_id: TypeId,
-        /// 字段值（按定义顺序存储）
-        fields: Vec<RuntimeValue>,
+        /// 字段值（通过 Handle 引用堆分配数据）
+        fields: Handle,
+        /// 虚函数表（方法名 -> 函数）
+        vtable: Vec<(String, FunctionValue)>,
     },
 
     /// 枚举变体
@@ -162,7 +183,8 @@ pub enum RuntimeValue {
     /// - 编译期检查：跨 spawn 传递 ref 会检测循环引用
     /// - 运行时：使用 Arc 自动管理引用计数
     /// - RFC-009: `ref p` 等价于 `Arc::new(p)`
-    Arc(RuntimeValue),
+    /// - 使用 `Arc<Arc<RuntimeValue>>` 打破递归类型
+    Arc(Arc<RuntimeValue>),
 
     /// 异步值（用于并作模型）
     ///
@@ -236,33 +258,27 @@ impl RuntimeValue {
             RuntimeValue::Int(_) => Layout::new::<i64>(),
             RuntimeValue::Float(_) => Layout::new::<f64>(),
             RuntimeValue::Char(_) => Layout::new::<u32>(),
-            // 字符串和字节数组：指针 + 长度
-            RuntimeValue::String(s) => Layout::for_value(&**s),
-            RuntimeValue::Bytes(b) => Layout::for_value(&**b),
-            // 集合类型：Vec 布局
-            RuntimeValue::Tuple(v) | RuntimeValue::Array(v) | RuntimeValue::List(v) => {
-                Layout::for_value(v)
+            // 字符串和字节数组：Arc 布局
+            RuntimeValue::String(_) => Layout::new::<Arc<str>>(),
+            RuntimeValue::Bytes(_) => Layout::new::<Arc<[u8]>>(),
+            // Handle 类型：Handle 布局（4字节）
+            RuntimeValue::Tuple(_) | RuntimeValue::Array(_) | RuntimeValue::List(_) => {
+                Layout::new::<Handle>()
             }
-            // 字典：HashMap 布局
-            RuntimeValue::Dict(m) => Layout::for_value(m),
-            // 结构体：字段布局的组合
-            RuntimeValue::Struct { type_id: _, fields } => {
-                let size = std::mem::size_of::<RuntimeValue>() * fields.len();
-                let align = std::mem::align_of::<RuntimeValue>();
-                Layout::from_size_align(size, align).unwrap()
-            }
+            // 字典：Handle 布局
+            RuntimeValue::Dict(_) => Layout::new::<Handle>(),
+            // 结构体：Handle 布局
+            RuntimeValue::Struct { .. } => Layout::new::<Handle>(),
             // 枚举：变体索引 + 载荷
-            RuntimeValue::Enum { .. } => {
-                Layout::new::<(u32, Box<RuntimeValue>)>()
-            }
-            // 共享引用：Arc 布局
-            RuntimeValue::Ref(_) | RuntimeValue::Arc(_) => Layout::new::<Arc<()>>(),
+            RuntimeValue::Enum { .. } => Layout::new::<(u32, Box<RuntimeValue>)>(),
+            // Arc：Arc 布局
+            RuntimeValue::Arc(_) => Layout::new::<Arc<RuntimeValue>>(),
             // 异步值：AsyncState 布局
             RuntimeValue::Async(_) => Layout::new::<AsyncState>(),
             // 裸指针
             RuntimeValue::Ptr { .. } => Layout::new::<usize>(),
             // 函数值
-            RuntimeValue::Function(f) => Layout::for_value(f),
+            RuntimeValue::Function(_) => Layout::new::<FunctionValue>(),
         }
     }
 }
@@ -273,7 +289,13 @@ impl RuntimeValue {
 ```rust
 impl RuntimeValue {
     /// 获取值的静态类型
-    pub fn value_type(&self) -> ValueType {
+    ///
+    /// # Arguments
+    /// * `heap` - 可选的堆引用，用于处理集合类型的完整类型信息
+    ///
+    /// 当提供 heap 时，集合类型（Tuple、Array）会解析其元素类型。
+    /// 当为 None 时，集合类型返回简化类型。
+    pub fn value_type(&self, heap: Option<&Heap>) -> ValueType {
         match self {
             RuntimeValue::Unit => ValueType::Unit,
             RuntimeValue::Bool(_) => ValueType::Bool,
@@ -282,30 +304,47 @@ impl RuntimeValue {
             RuntimeValue::Char(_) => ValueType::Char,
             RuntimeValue::String(_) => ValueType::String,
             RuntimeValue::Bytes(_) => ValueType::Bytes,
-            RuntimeValue::Tuple(fields) => ValueType::Tuple(fields.iter().map(|v| v.value_type()).collect()),
-            RuntimeValue::Array(fields) => ValueType::Array {
-                element: Box::new(fields.first().map(|v| v.value_type()).unwrap_or(ValueType::Unit)),
-            },
+            // Handle 类型：优先使用 heap 获取完整类型
+            RuntimeValue::Tuple(handle) => {
+                if let Some(h) = heap {
+                    if let Some(HeapValue::Tuple(items)) = h.get(*handle) {
+                        return ValueType::Tuple(items.iter().map(|v| v.value_type(heap)).collect());
+                    }
+                }
+                ValueType::Tuple(vec![])
+            }
+            RuntimeValue::Array(handle) => {
+                if let Some(h) = heap {
+                    if let Some(HeapValue::Array(items)) = h.get(*handle) {
+                        return ValueType::Array {
+                            element: Box::new(items.first().map(|v| v.value_type(heap)).unwrap_or(ValueType::Unit)),
+                        };
+                    }
+                }
+                ValueType::Array { element: Box::new(ValueType::Unit) }
+            }
             RuntimeValue::List(_) => ValueType::List,
-            RuntimeValue::Dict(_, _) => ValueType::Dict,
+            RuntimeValue::Dict(_) => ValueType::Dict,
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
-            RuntimeValue::Ref(inner) => ValueType::Ref(Box::new(inner.borrow().value_type())),
-            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type())),
+            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(heap))),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
         }
     }
 
-    /// 获取元素的类型（用于 Array/List）
-    fn element_type(&self) -> ValueType {
-        ValueType::Unit // 简化，实际需要类型系统支持
+    /// 获取值的静态类型（简便方法，不使用 heap）
+    ///
+    /// 对于集合类型（Tuple、Array），返回简化类型。
+    /// 使用 `value_type(Some(heap))` 获取完整类型信息。
+    pub fn value_type_simple(&self) -> ValueType {
+        self.value_type(None)
     }
 
     /// 检查值类型
     pub fn is_type(&self, ty: &ValueType) -> bool {
-        &self.value_type() == ty
+        &self.value_type(None) == ty
     }
 
     /// 获取枚举变体 ID
@@ -458,19 +497,22 @@ impl RuntimeValue {
 ```
 src/runtime/value/
 ├── mod.rs                # 模块入口
-├── value.rs              # RuntimeValue 与 ValueType 定义
+├── runtime_value.rs      # RuntimeValue 与 ValueType 定义
+├── heap.rs               # 堆分配系统（Handle 实现）
 └── tests/
     ├── mod.rs
     ├── primitives.rs     # 基础类型测试
     ├── struct_enum.rs    # 结构体和枚举测试
     ├── ref_arc.rs        # ref/Arc 测试
-    └── clone.rs          # clone() 测试
+    ├── clone.rs          # clone() 测试
+    └── handle.rs         # Handle 类型测试
 ```
 
 > **设计说明**：
-> - `RuntimeValue::Arc` 使用 `Arc<RuntimeValue>` 实现（RFC-009 规定 `ref p` = `Arc::new(p)`）
+> - `RuntimeValue::Arc` 使用 `Arc<Arc<RuntimeValue>>` 实现（RFC-009 规定 `ref p` = `Arc::new(p)`）
 > - `RuntimeValue::Ref` 已删除，单线程场景也使用 `Arc`
-> - 递归类型通过 `Box` 打破循环
+> - Tuple/Array/List/Dict/Struct 使用 `Handle` 引用堆分配数据
+> - 集合类型使用 Handle 而非 Vec，实现零拷贝 Move 和高效 Clone
 
 ## 验收测试
 
