@@ -238,34 +238,16 @@ pub enum RuntimeValue {
 // ============================================================================
 
 impl RuntimeValue {
-    /// Get the static type of this value (legacy method, may be incomplete for handle types)
-    pub fn value_type(&self) -> ValueType {
-        match self {
-            RuntimeValue::Unit => ValueType::Unit,
-            RuntimeValue::Bool(_) => ValueType::Bool,
-            RuntimeValue::Int(_) => ValueType::Int(IntWidth::I64),
-            RuntimeValue::Float(_) => ValueType::Float(FloatWidth::F64),
-            RuntimeValue::Char(_) => ValueType::Char,
-            RuntimeValue::String(_) => ValueType::String,
-            RuntimeValue::Bytes(_) => ValueType::Bytes,
-            // Handle types return placeholder - use value_type_with_heap for complete info
-            RuntimeValue::Tuple(_)
-            | RuntimeValue::Array(_)
-            | RuntimeValue::List(_)
-            | RuntimeValue::Dict(_) => ValueType::List,
-            RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
-            RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
-            RuntimeValue::Function(f) => ValueType::Function(f.func_id),
-            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type())),
-            RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
-            RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
-        }
-    }
-
-    /// Get the static type of this value with heap access (for handle types)
-    pub fn value_type_with_heap(
+    /// Get the static type of this value
+    ///
+    /// # Arguments
+    /// * `heap` - Optional reference to heap for handling collection types
+    ///
+    /// When heap is provided, collection types (Tuple, Array) will have their
+    /// element types resolved. When None, returns simplified types for collections.
+    pub fn value_type(
         &self,
-        heap: &super::heap::Heap,
+        heap: Option<&super::heap::Heap>,
     ) -> ValueType {
         match self {
             RuntimeValue::Unit => ValueType::Unit,
@@ -275,32 +257,32 @@ impl RuntimeValue {
             RuntimeValue::Char(_) => ValueType::Char,
             RuntimeValue::String(_) => ValueType::String,
             RuntimeValue::Bytes(_) => ValueType::Bytes,
+            // Handle types: use heap if available, otherwise simplified type
             RuntimeValue::Tuple(handle) => {
-                if let Some(super::heap::HeapValue::Tuple(inner_items)) = heap.get(*handle) {
-                    ValueType::Tuple(
-                        inner_items
-                            .iter()
-                            .map(|v| v.value_type_with_heap(heap))
-                            .collect(),
-                    )
-                } else {
-                    ValueType::Tuple(vec![])
+                if let Some(h) = heap {
+                    if let Some(super::heap::HeapValue::Tuple(items)) = h.get(*handle) {
+                        return ValueType::Tuple(
+                            items.iter().map(|v| v.value_type(heap)).collect(),
+                        );
+                    }
                 }
+                ValueType::Tuple(vec![])
             }
             RuntimeValue::Array(handle) => {
-                if let Some(super::heap::HeapValue::Array(inner_items)) = heap.get(*handle) {
-                    ValueType::Array {
-                        element: Box::new(
-                            inner_items
-                                .first()
-                                .map(|v| v.value_type_with_heap(heap))
-                                .unwrap_or(ValueType::Unit),
-                        ),
+                if let Some(h) = heap {
+                    if let Some(super::heap::HeapValue::Array(items)) = h.get(*handle) {
+                        return ValueType::Array {
+                            element: Box::new(
+                                items
+                                    .first()
+                                    .map(|v| v.value_type(heap))
+                                    .unwrap_or(ValueType::Unit),
+                            ),
+                        };
                     }
-                } else {
-                    ValueType::Array {
-                        element: Box::new(ValueType::Unit),
-                    }
+                }
+                ValueType::Array {
+                    element: Box::new(ValueType::Unit),
                 }
             }
             RuntimeValue::List(_) => ValueType::List,
@@ -308,10 +290,18 @@ impl RuntimeValue {
             RuntimeValue::Struct { type_id, .. } => ValueType::Struct(*type_id),
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
-            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type_with_heap(heap))),
+            RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(heap))),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
         }
+    }
+
+    /// Get the static type of this value (convenience method without heap)
+    ///
+    /// For collection types (Tuple, Array), this returns a simplified type.
+    /// Use `value_type(Some(heap))` for complete type information.
+    pub fn value_type_simple(&self) -> ValueType {
+        self.value_type(None)
     }
 
     /// Check if value matches a type
@@ -319,7 +309,7 @@ impl RuntimeValue {
         &self,
         ty: &ValueType,
     ) -> bool {
-        &self.value_type() == ty
+        &self.value_type(None) == ty
     }
 
     /// Get enum variant ID

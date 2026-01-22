@@ -36,10 +36,7 @@ fn test_struct_value() {
         vtable: vec![],
     };
 
-    assert_eq!(
-        p.value_type_with_heap(&heap),
-        ValueType::Struct(test_type_id())
-    );
+    assert_eq!(p.value_type(Some(&heap)), ValueType::Struct(test_type_id()));
 
     // Test field access (with heap)
     assert!(p.struct_field_with_heap(0, &heap).is_some());
@@ -97,7 +94,7 @@ fn test_struct_nested() {
     };
 
     assert_eq!(
-        rectangle.value_type_with_heap(&heap),
+        rectangle.value_type(Some(&heap)),
         ValueType::Struct(TypeId(3))
     );
 
@@ -116,7 +113,7 @@ fn test_enum_ok_variant() {
         payload: Box::new(RuntimeValue::Int(42)),
     };
 
-    assert_eq!(ok.value_type(), ValueType::Enum(result_type_id()));
+    assert_eq!(ok.value_type(None), ValueType::Enum(result_type_id()));
     assert_eq!(ok.enum_variant_id(), Some(0));
     assert_eq!(ok.enum_payload().map(|p| p.to_int()), Some(Some(42)));
 }
@@ -130,7 +127,7 @@ fn test_enum_err_variant() {
         payload: Box::new(RuntimeValue::String(Arc::from("error message"))),
     };
 
-    assert_eq!(err.value_type(), ValueType::Enum(result_type_id()));
+    assert_eq!(err.value_type(None), ValueType::Enum(result_type_id()));
     assert_eq!(err.enum_variant_id(), Some(1));
     assert!(err.enum_payload().unwrap().to_int().is_none());
 }
@@ -167,7 +164,7 @@ fn test_tuple_value() {
         ValueType::Bool,
     ]);
 
-    assert_eq!(tuple.value_type_with_heap(&heap), expected_type);
+    assert_eq!(tuple.value_type(Some(&heap)), expected_type);
     assert!(matches!(tuple, RuntimeValue::Tuple(_)));
 }
 
@@ -176,7 +173,7 @@ fn test_empty_tuple() {
     let mut heap = Heap::new();
     let empty_handle = heap.allocate(HeapValue::Tuple(vec![]));
     let empty = RuntimeValue::Tuple(empty_handle);
-    assert_eq!(empty.value_type_with_heap(&heap), ValueType::Tuple(vec![]));
+    assert_eq!(empty.value_type(Some(&heap)), ValueType::Tuple(vec![]));
 }
 
 #[test]
@@ -186,7 +183,7 @@ fn test_function_value() {
         env: vec![RuntimeValue::Int(100)],
     });
 
-    assert_eq!(func.value_type(), ValueType::Function(FunctionId(42)));
+    assert_eq!(func.value_type(None), ValueType::Function(FunctionId(42)));
     assert!(matches!(func, RuntimeValue::Function(_)));
 }
 
@@ -264,6 +261,6 @@ fn test_dict_value() {
     let dict_handle = heap.allocate(HeapValue::Dict(HashMap::new()));
     let dict = RuntimeValue::Dict(dict_handle);
 
-    assert_eq!(dict.value_type_with_heap(&heap), ValueType::Dict);
+    assert_eq!(dict.value_type(Some(&heap)), ValueType::Dict);
     assert!(matches!(dict, RuntimeValue::Dict(_)));
 }
