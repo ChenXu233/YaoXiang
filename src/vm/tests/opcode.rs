@@ -264,6 +264,7 @@ mod operand_count_tests {
     fn test_operand_count_one() {
         assert_eq!(TypedOpcode::ReturnValue.operand_count(), 1);
         assert_eq!(TypedOpcode::Throw.operand_count(), 1);
+        assert_eq!(TypedOpcode::TryBegin.operand_count(), 1);
     }
 
     #[test]
@@ -321,11 +322,6 @@ mod operand_count_tests {
         assert_eq!(TypedOpcode::I32Store.operand_count(), 3);
         assert_eq!(TypedOpcode::F64Store.operand_count(), 3);
         assert_eq!(TypedOpcode::F32Store.operand_count(), 3);
-    }
-
-    #[test]
-    fn test_operand_count_five() {
-        assert_eq!(TypedOpcode::TryBegin.operand_count(), 5);
     }
 
     #[test]

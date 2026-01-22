@@ -804,8 +804,8 @@ impl TypedOpcode {
             TypedOpcode::CallStatic | TypedOpcode::CallVirt | TypedOpcode::CallDyn |
             TypedOpcode::LoadElement | TypedOpcode::StoreElement |
             TypedOpcode::StringConcat | TypedOpcode::StringEqual | TypedOpcode::StringGetChar => 4,
-            // 5 个操作数
-            TypedOpcode::TryBegin => 5,
+            // 1 个操作数
+            TypedOpcode::TryBegin => 1, // 只读取 catch_offset (u16)
             // 处理未列出的变体
             _ => 0,
         }
