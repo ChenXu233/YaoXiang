@@ -4,7 +4,7 @@
 
 use crate::middle::codegen::bytecode::FunctionCode;
 use crate::middle::ir::{ConstValue, Operand};
-use crate::runtime::value::{RuntimeValue, Heap, HeapValue, Handle};
+use crate::runtime::value::{RuntimeValue, Heap, HeapValue, Handle, FunctionValue, FunctionId};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::runtime::extfunc;
@@ -160,6 +160,8 @@ pub struct VM {
     labels: HashMap<u16, usize>,
     /// 堆存储（用于 List/Tuple/Struct/Dict）
     heap: Heap,
+    /// 当前闭包环境（upvalue 存储）
+    closure_env: Vec<RuntimeValue>,
 }
 
 impl Default for VM {
@@ -193,6 +195,7 @@ impl VM {
             jump_tables: HashMap::new(),
             labels: HashMap::new(),
             heap: Heap::new(),
+            closure_env: Vec::new(),
         }
     }
 
@@ -1476,29 +1479,87 @@ impl VM {
             // 闭包操作指令
             // =====================
             MakeClosure => {
-                let _dst = self.read_u8()?;
-                let _func_id = self.read_u32()?;
-                let _upvalue_count = self.read_u8()?;
-                // 闭包创建（简化处理）
-                self.regs.write(0, RuntimeValue::Unit);
+                let dst = self.read_u8()?;
+                let func_id = self.read_u32()?;
+                let upvalue_count = self.read_u8()?;
+
+                // 从常量池获取函数名（用于错误信息）
+                let _func_name = match self.constants.get(func_id as usize) {
+                    Some(ConstValue::String(name)) => name.clone(),
+                    _ => {
+                        return Err(VMError::RuntimeError(format!(
+                            "Invalid function ID for closure: {}",
+                            func_id
+                        )));
+                    }
+                };
+
+                // 收集 upvalue（从 closure_env 中获取前 upvalue_count 个）
+                let mut env = Vec::with_capacity(upvalue_count as usize);
+                for i in 0..upvalue_count {
+                    if let Some(value) = self.closure_env.get(i as usize) {
+                        env.push(value.clone());
+                    } else {
+                        env.push(RuntimeValue::Unit);
+                    }
+                }
+
+                // 创建闭包
+                let closure = RuntimeValue::Function(FunctionValue {
+                    func_id: FunctionId(func_id),
+                    env,
+                });
+                self.regs.write(dst, closure);
             }
 
             LoadUpvalue => {
                 let dst = self.read_u8()?;
-                let _upvalue_idx = self.read_u8()?;
-                // Upvalue 加载（简化处理）
-                self.regs.write(dst, RuntimeValue::Unit);
+                let upvalue_idx = self.read_u8()?;
+
+                // 从闭包环境加载
+                if let Some(value) = self.closure_env.get(upvalue_idx as usize) {
+                    self.regs.write(dst, value.clone());
+                } else {
+                    self.regs.write(dst, RuntimeValue::Unit);
+                }
             }
 
             StoreUpvalue => {
-                let _src = self.read_u8()?;
-                let _upvalue_idx = self.read_u8()?;
-                // Upvalue 存储（简化处理）
+                let src = self.read_u8()?;
+                let upvalue_idx = self.read_u8()?;
+
+                let value = self.regs.read(src).clone();
+
+                // 确保 closure_env 有足够的空间
+                if upvalue_idx as usize >= self.closure_env.len() {
+                    self.closure_env.resize(upvalue_idx as usize + 1, RuntimeValue::Unit);
+                }
+                self.closure_env[upvalue_idx as usize] = value;
             }
 
             CloseUpvalue => {
-                let _reg = self.read_u8()?;
-                // 关闭 Upvalue（简化处理）
+                let reg = self.read_u8()?;
+
+                // 将栈上的变量移动到闭包环境（堆分配）
+                let value = self.regs.read(reg).clone();
+
+                // 找到一个空的 upvalue 位置或添加到末尾
+                let mut empty_idx = None;
+                for (i, v) in self.closure_env.iter().enumerate() {
+                    if matches!(v, RuntimeValue::Unit) {
+                        empty_idx = Some(i);
+                        break;
+                    }
+                }
+
+                match empty_idx {
+                    Some(idx) => {
+                        self.closure_env[idx] = value;
+                    }
+                    None => {
+                        self.closure_env.push(value);
+                    }
+                }
             }
 
             // =====================
@@ -1673,20 +1734,39 @@ impl VM {
             }
 
             ArcNew => {
-                let _dst = self.read_u8()?;
-                let _src = self.read_u8()?;
-                // Arc 创建（简化处理）
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+
+                // Arc 创建：将值包装成 Arc
+                // 对应 ref 关键字的运行时行为
+                let value = self.regs.read(src).clone();
+                let arc_value = value.into_arc();
+                self.regs.write(dst, arc_value);
             }
 
             ArcClone => {
-                let _dst = self.read_u8()?;
-                let _src = self.read_u8()?;
-                // Arc 克隆（简化处理）
+                let dst = self.read_u8()?;
+                let src = self.read_u8()?;
+
+                // Arc 克隆：增加引用计数
+                // 由于 RuntimeValue::Arc 内部使用 Arc，自动处理引用计数
+                if let RuntimeValue::Arc(arc_ref) = self.regs.read(src).clone() {
+                    // Arc::clone 会增加引用计数
+                    self.regs.write(dst, RuntimeValue::Arc(arc_ref));
+                } else {
+                    // 非 Arc 类型，clone 后创建新的 Arc
+                    let value = self.regs.read(src).clone();
+                    self.regs.write(dst, value.into_arc());
+                }
             }
 
             ArcDrop => {
-                let _src = self.read_u8()?;
-                // Arc 释放（简化处理）
+                let src = self.read_u8()?;
+
+                // Arc 释放：减少引用计数
+                // 由于使用 Rust 的 Arc，引用计数在 Arc 被 drop 时自动减少
+                // 这里只需要清除寄存器中的引用即可
+                self.regs.write(src, RuntimeValue::Unit);
             }
 
             // =====================
@@ -1702,10 +1782,73 @@ impl VM {
             Cast => {
                 let dst = self.read_u8()?;
                 let src = self.read_u8()?;
-                let _target_type_id = self.read_u16()?;
-                // 类型转换（简化处理）
-                let value = self.regs.read(src).clone();
-                self.regs.write(dst, value);
+                let target_type_id = self.read_u16()?;
+
+                // 类型转换
+                // target_type_id 定义：
+                // 0: I64 → F64
+                // 1: F64 → I64
+                // 2: I64 → I32
+                // 3: I32 → I64
+                // 4: F64 → F32
+                // 5: F32 → F64
+
+                match target_type_id {
+                    0 => {
+                        // I64 → F64
+                        if let RuntimeValue::Int(n) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Float(*n as f64));
+                        } else {
+                            return Err(VMError::TypeError("int".into()));
+                        }
+                    }
+                    1 => {
+                        // F64 → I64
+                        if let RuntimeValue::Float(f) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Int(*f as i64));
+                        } else {
+                            return Err(VMError::TypeError("float".into()));
+                        }
+                    }
+                    2 => {
+                        // I64 → I32
+                        if let RuntimeValue::Int(n) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Int(*n as i32 as i64));
+                        } else {
+                            return Err(VMError::TypeError("int".into()));
+                        }
+                    }
+                    3 => {
+                        // I32 → I64
+                        if let RuntimeValue::Int(n) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Int(*n as i64));
+                        } else {
+                            return Err(VMError::TypeError("int".into()));
+                        }
+                    }
+                    4 => {
+                        // F64 → F32
+                        if let RuntimeValue::Float(f) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Float(*f as f32 as f64));
+                        } else {
+                            return Err(VMError::TypeError("float".into()));
+                        }
+                    }
+                    5 => {
+                        // F32 → F64
+                        if let RuntimeValue::Float(f) = self.regs.read(src) {
+                            self.regs.write(dst, RuntimeValue::Float(*f as f64));
+                        } else {
+                            return Err(VMError::TypeError("float".into()));
+                        }
+                    }
+                    _ => {
+                        return Err(VMError::RuntimeError(format!(
+                            "Unsupported cast type: {}",
+                            target_type_id
+                        )));
+                    }
+                }
             }
 
             TypeOf => {

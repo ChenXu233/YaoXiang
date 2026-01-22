@@ -380,6 +380,69 @@ impl CodegenContext {
                 ))
             }
 
+            // =====================
+            // 位运算指令
+            // =====================
+            And { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64And,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            Or { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Or,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            Xor { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Xor,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            Shl { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Shl,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            Shr { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Shr,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
+            Sar { dst, lhs, rhs } => {
+                let dst_reg = self.operand_to_reg(dst)?;
+                let lhs_reg = self.operand_to_reg(lhs)?;
+                let rhs_reg = self.operand_to_reg(rhs)?;
+                Ok(BytecodeInstruction::new(
+                    TypedOpcode::I64Sar,
+                    vec![dst_reg, lhs_reg, rhs_reg],
+                ))
+            }
+
             Neg { dst, src } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;

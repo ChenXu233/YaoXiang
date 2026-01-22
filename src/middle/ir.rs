@@ -59,6 +59,39 @@ pub enum Instruction {
         lhs: Operand,
         rhs: Operand,
     },
+    // =====================
+    // 位运算指令
+    // =====================
+    And {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Or {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Xor {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Shl {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Shr {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Sar {
+        dst: Operand,
+        lhs: Operand,
+        rhs: Operand,
+    },
     Neg {
         dst: Operand,
         src: Operand,
