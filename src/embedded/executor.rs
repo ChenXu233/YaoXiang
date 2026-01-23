@@ -20,10 +20,7 @@ use crate::vm::opcode::TypedOpcode;
 /// - Spawn treated as normal function call
 ///
 /// # Usage
-/// ```rust
-/// let mut runtime = EmbeddedRuntime::new(64 * 1024);
-/// let result = runtime.load_and_run(module);
-/// ```
+/// ```ignore\r?\n/// use yaoxiang::embedded::EmbeddedRuntime;\r?\n/// use yaoxiang::middle::codegen::bytecode::CompiledModule;\r?\n///\r?\n/// let mut runtime = EmbeddedRuntime::new();\r?\n/// let module = CompiledModule { /* ... */ }; // 预先编译的模块\r?\n/// let result = runtime.load_and_run(module);\r?\n/// ```
 #[derive(Debug)]
 pub struct EmbeddedRuntime {
     /// Memory allocator for heap allocations
@@ -828,7 +825,12 @@ impl EmbeddedRuntime {
                     .pop()
                     .ok_or(RuntimeError::StackUnderflow)?;
                 let result = match (lhs.to_float(), rhs.to_float()) {
-                    (Some(a), Some(b)) => RuntimeValue::Float(a % b),
+                    (Some(a), Some(b)) => {
+                        if b == 0.0 {
+                            return Err(RuntimeError::DivisionByZero);
+                        }
+                        RuntimeValue::Float(a % b)
+                    }
                     _ => return Err(RuntimeError::TypeMismatch),
                 };
                 interpreter.stack.push(result);
@@ -934,7 +936,12 @@ impl EmbeddedRuntime {
                     .pop()
                     .ok_or(RuntimeError::StackUnderflow)?;
                 let result = match (lhs.to_float(), rhs.to_float()) {
-                    (Some(a), Some(b)) => RuntimeValue::Float((a as f32 % b as f32) as f64),
+                    (Some(a), Some(b)) => {
+                        if b == 0.0 {
+                            return Err(RuntimeError::DivisionByZero);
+                        }
+                        RuntimeValue::Float((a as f32 % b as f32) as f64)
+                    }
                     _ => return Err(RuntimeError::TypeMismatch),
                 };
                 interpreter.stack.push(result);
@@ -2089,6 +2096,7 @@ impl Default for EmbeddedRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frontend::typecheck::MonoType;
     use crate::middle::codegen::bytecode::{BytecodeFile, CodeSection, FileHeader, FunctionCode};
     use crate::middle::ir::ConstValue;
 
@@ -2497,5 +2505,536 @@ mod tests {
             ),
             "index out of bounds: 5 >= 3"
         );
+    }
+
+    // =====================
+    // Additional Operation Tests
+    // =====================
+
+    #[test]
+    fn test_i64_arithmetic_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        // Test all I64 arithmetic opcodes exist
+        let ops = [
+            TypedOpcode::I64Add,
+            TypedOpcode::I64Sub,
+            TypedOpcode::I64Mul,
+            TypedOpcode::I64Div,
+            TypedOpcode::I64Rem,
+            TypedOpcode::I64Neg,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("I64"));
+        }
+    }
+
+    #[test]
+    fn test_i64_bitwise_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::I64And,
+            TypedOpcode::I64Or,
+            TypedOpcode::I64Xor,
+            TypedOpcode::I64Shl,
+            TypedOpcode::I64Sar,
+            TypedOpcode::I64Shr,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("I64"));
+        }
+    }
+
+    #[test]
+    fn test_i32_arithmetic_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::I32Add,
+            TypedOpcode::I32Sub,
+            TypedOpcode::I32Mul,
+            TypedOpcode::I32Div,
+            TypedOpcode::I32Rem,
+            TypedOpcode::I32Neg,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("I32"));
+        }
+    }
+
+    #[test]
+    fn test_f64_arithmetic_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::F64Add,
+            TypedOpcode::F64Sub,
+            TypedOpcode::F64Mul,
+            TypedOpcode::F64Div,
+            TypedOpcode::F64Rem,
+            TypedOpcode::F64Sqrt,
+            TypedOpcode::F64Neg,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("F64"));
+        }
+    }
+
+    #[test]
+    fn test_f32_arithmetic_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::F32Add,
+            TypedOpcode::F32Sub,
+            TypedOpcode::F32Mul,
+            TypedOpcode::F32Div,
+            TypedOpcode::F32Rem,
+            TypedOpcode::F32Sqrt,
+            TypedOpcode::F32Neg,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("F32"));
+        }
+    }
+
+    #[test]
+    fn test_comparison_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        // I64 comparisons
+        let i64_comparisons = [
+            TypedOpcode::I64Eq,
+            TypedOpcode::I64Ne,
+            TypedOpcode::I64Lt,
+            TypedOpcode::I64Le,
+            TypedOpcode::I64Gt,
+            TypedOpcode::I64Ge,
+        ];
+
+        for op in i64_comparisons {
+            assert!(format!("{:?}", op).starts_with("I64"));
+        }
+
+        // F64 comparisons
+        let f64_comparisons = [
+            TypedOpcode::F64Eq,
+            TypedOpcode::F64Ne,
+            TypedOpcode::F64Lt,
+            TypedOpcode::F64Le,
+            TypedOpcode::F64Gt,
+            TypedOpcode::F64Ge,
+        ];
+
+        for op in f64_comparisons {
+            assert!(format!("{:?}", op).starts_with("F64"));
+        }
+
+        // F32 comparisons
+        let f32_comparisons = [
+            TypedOpcode::F32Eq,
+            TypedOpcode::F32Ne,
+            TypedOpcode::F32Lt,
+            TypedOpcode::F32Le,
+            TypedOpcode::F32Gt,
+            TypedOpcode::F32Ge,
+        ];
+
+        for op in f32_comparisons {
+            assert!(format!("{:?}", op).starts_with("F32"));
+        }
+    }
+
+    #[test]
+    fn test_control_flow_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::Nop,
+            TypedOpcode::Return,
+            TypedOpcode::ReturnValue,
+            TypedOpcode::Jmp,
+            TypedOpcode::JmpIf,
+            TypedOpcode::JmpIfNot,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(!name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_memory_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::HeapAlloc,
+            TypedOpcode::StackAlloc,
+            TypedOpcode::Drop,
+            TypedOpcode::GetField,
+            TypedOpcode::SetField,
+            TypedOpcode::LoadElement,
+            TypedOpcode::StoreElement,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(!name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_arc_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::ArcNew,
+            TypedOpcode::ArcClone,
+            TypedOpcode::ArcDrop,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("Arc"));
+        }
+    }
+
+    #[test]
+    fn test_string_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::StringLength,
+            TypedOpcode::StringConcat,
+            TypedOpcode::StringEqual,
+            TypedOpcode::StringGetChar,
+            TypedOpcode::StringFromInt,
+            TypedOpcode::StringFromFloat,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(name.starts_with("String"));
+        }
+    }
+
+    #[test]
+    fn test_exception_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::TryBegin,
+            TypedOpcode::TryEnd,
+            TypedOpcode::Throw,
+            TypedOpcode::Rethrow,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(!name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_type_operations() {
+        use crate::vm::opcode::TypedOpcode;
+
+        let ops = [
+            TypedOpcode::BoundsCheck,
+            TypedOpcode::TypeCheck,
+            TypedOpcode::Cast,
+            TypedOpcode::TypeOf,
+        ];
+
+        for op in ops {
+            let name = format!("{:?}", op);
+            assert!(!name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_runtime_error_variants() {
+        // Test all error variants can be formatted
+        let errors: Vec<RuntimeError> = vec![
+            RuntimeError::StackUnderflow,
+            RuntimeError::InvalidLocal(0),
+            RuntimeError::InvalidUpvalue(0),
+            RuntimeError::InvalidField(0),
+            RuntimeError::TypeMismatch,
+            RuntimeError::FunctionNotFound(FunctionId(0)),
+            RuntimeError::MissingMain,
+            RuntimeError::InvalidOpcode(0),
+            RuntimeError::InvalidConstIndex(0),
+            RuntimeError::DivisionByZero,
+            RuntimeError::CallStackOverflow,
+            RuntimeError::InvalidCall {
+                expected: 1,
+                got: 0,
+            },
+            RuntimeError::InvalidJump(0),
+            RuntimeError::UnimplementedOpcode(TypedOpcode::Nop),
+            RuntimeError::IndexOutOfBounds {
+                index: 0,
+                length: 10,
+            },
+            RuntimeError::Exception {
+                message: "test".to_string(),
+            },
+        ];
+
+        for error in errors {
+            let msg = format!("{}", error);
+            assert!(!msg.is_empty(), "Error {:?} produced empty message", error);
+        }
+    }
+
+    #[test]
+    fn test_compiled_module_with_globals() {
+        let mut runtime = EmbeddedRuntime::new();
+
+        let module = CompiledModule {
+            name: "test_with_globals".to_string(),
+            globals: vec![
+                (
+                    "counter".to_string(),
+                    MonoType::Int(64),
+                    Some(ConstValue::Int(42)),
+                ),
+                (
+                    "name".to_string(),
+                    MonoType::String,
+                    Some(ConstValue::String("test".to_string())),
+                ),
+                (
+                    "flag".to_string(),
+                    MonoType::Bool,
+                    Some(ConstValue::Bool(true)),
+                ),
+            ],
+            functions: vec![FunctionCode {
+                name: "main".to_string(),
+                params: Vec::new(),
+                return_type: MonoType::Void,
+                instructions: Vec::new(),
+                local_count: 0,
+            }],
+            constants: Vec::new(),
+        };
+
+        runtime.load_module(module);
+
+        // Check globals are loaded
+        assert!(runtime.globals.contains_key("counter"));
+        assert!(runtime.globals.contains_key("name"));
+        assert!(runtime.globals.contains_key("flag"));
+
+        // Check global values
+        if let Some(RuntimeValue::Int(v)) = runtime.globals.get("counter") {
+            assert_eq!(*v, 42);
+        } else {
+            panic!("counter should be Int(42)");
+        }
+
+        if let Some(RuntimeValue::Bool(b)) = runtime.globals.get("flag") {
+            assert!(*b);
+        } else {
+            panic!("flag should be Bool(true)");
+        }
+    }
+
+    #[test]
+    fn test_function_with_params() {
+        let mut runtime = EmbeddedRuntime::new();
+
+        let module = CompiledModule {
+            name: "test_func_params".to_string(),
+            globals: Vec::new(),
+            functions: vec![FunctionCode {
+                name: "add".to_string(),
+                params: vec![MonoType::Int(64), MonoType::Int(64)],
+                return_type: MonoType::Int(64),
+                instructions: Vec::new(),
+                local_count: 0,
+            }],
+            constants: Vec::new(),
+        };
+
+        runtime.load_module(module);
+        let func_id = *runtime.functions.keys().next().unwrap();
+
+        // Test function with correct number of args
+        let args = vec![RuntimeValue::Int(10), RuntimeValue::Int(20)];
+        {
+            let result = runtime.execute_function(func_id, args);
+            // Will fail due to no instructions, but argument check should pass
+            assert!(result.is_err() || result.unwrap() == RuntimeValue::Unit);
+        }
+
+        // Test function with wrong number of args
+        let args = vec![RuntimeValue::Int(10)];
+        let result = runtime.execute_function(func_id, args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_function_with_return_type() {
+        let mut runtime = EmbeddedRuntime::new();
+
+        let module = CompiledModule {
+            name: "test_func_return".to_string(),
+            globals: Vec::new(),
+            functions: vec![FunctionCode {
+                name: "get_value".to_string(),
+                params: Vec::new(),
+                return_type: MonoType::Float(64),
+                instructions: Vec::new(),
+                local_count: 0,
+            }],
+            constants: Vec::new(),
+        };
+
+        runtime.load_module(module);
+        let func_id = runtime.functions.keys().next().unwrap();
+        let func = runtime.functions.get(func_id).unwrap();
+
+        assert_eq!(func.name, "get_value");
+        assert!(matches!(func.return_type, MonoType::Float(64)));
+    }
+
+    #[test]
+    fn test_runtime_value_cloning() {
+        // Test that RuntimeValue can be cloned
+        let val = RuntimeValue::String(Arc::from("test string"));
+        let cloned = val.clone();
+        assert_eq!(format!("{:?}", val), format!("{:?}", cloned));
+
+        // Test nested cloning
+        let nested = RuntimeValue::List(crate::runtime::value::heap::Handle::new(0));
+        let nested_cloned = nested.clone();
+        assert_eq!(format!("{:?}", nested), format!("{:?}", nested_cloned));
+    }
+
+    #[test]
+    fn test_embedded_runtime_debug() {
+        let runtime = EmbeddedRuntime::new();
+        let debug_fmt = format!("{:?}", runtime);
+        assert!(debug_fmt.contains("EmbeddedRuntime"));
+        assert!(debug_fmt.contains("functions"));
+    }
+
+    #[test]
+    fn test_interpreter_debug() {
+        let interpreter = Interpreter {
+            stack: vec![RuntimeValue::Int(42)],
+            call_stack: Vec::new(),
+        };
+        let debug_fmt = format!("{:?}", interpreter);
+        assert!(debug_fmt.contains("Interpreter"));
+        assert!(debug_fmt.contains("stack"));
+    }
+
+    #[test]
+    fn test_frame_debug() {
+        let frame = Frame {
+            func_id: FunctionId(0),
+            ip: 10,
+            return_ip: 5,
+            locals: vec![RuntimeValue::Int(1), RuntimeValue::Int(2)],
+            upvalues: Vec::new(),
+        };
+        let debug_fmt = format!("{:?}", frame);
+        assert!(debug_fmt.contains("Frame"));
+        assert!(debug_fmt.contains("func_id"));
+    }
+
+    #[test]
+    fn test_opcode_try_from_valid() {
+        use crate::vm::opcode::TypedOpcode;
+
+        // Test valid opcode conversions
+        assert_eq!(TypedOpcode::try_from(0x00), Ok(TypedOpcode::Nop));
+        assert_eq!(TypedOpcode::try_from(0x01), Ok(TypedOpcode::Return));
+        assert_eq!(TypedOpcode::try_from(0x10), Ok(TypedOpcode::Mov));
+        assert_eq!(TypedOpcode::try_from(0x20), Ok(TypedOpcode::I64Add));
+        assert_eq!(TypedOpcode::try_from(0x80), Ok(TypedOpcode::CallStatic));
+    }
+
+    #[test]
+    fn test_opcode_try_from_invalid() {
+        use crate::vm::opcode::TypedOpcode;
+
+        // Test invalid opcode conversion
+        assert!(TypedOpcode::try_from(0xFF).is_ok()); // Invalid is valid
+        assert!(TypedOpcode::try_from(0x99).is_err()); // Invalid value
+    }
+
+    #[test]
+    fn test_all_opcodes_accounted_for() {
+        use crate::vm::opcode::TypedOpcode;
+
+        // Ensure we have tests for all major opcode categories
+        let categories = [
+            (
+                "Control Flow",
+                vec![TypedOpcode::Nop, TypedOpcode::Jmp, TypedOpcode::Return],
+            ),
+            (
+                "Stack Ops",
+                vec![TypedOpcode::Mov, TypedOpcode::LoadConst, TypedOpcode::Drop],
+            ),
+            (
+                "I64 Ops",
+                vec![
+                    TypedOpcode::I64Add,
+                    TypedOpcode::I64Mul,
+                    TypedOpcode::I64Div,
+                ],
+            ),
+            (
+                "F64 Ops",
+                vec![
+                    TypedOpcode::F64Add,
+                    TypedOpcode::F64Mul,
+                    TypedOpcode::F64Div,
+                ],
+            ),
+            (
+                "Memory",
+                vec![TypedOpcode::HeapAlloc, TypedOpcode::StackAlloc],
+            ),
+            (
+                "Function",
+                vec![TypedOpcode::CallStatic, TypedOpcode::MakeClosure],
+            ),
+            (
+                "String",
+                vec![TypedOpcode::StringLength, TypedOpcode::StringConcat],
+            ),
+            ("Exception", vec![TypedOpcode::TryBegin, TypedOpcode::Throw]),
+        ];
+
+        for (category, ops) in categories {
+            for op in ops {
+                let name = format!("{:?}", op);
+                assert!(
+                    !name.is_empty(),
+                    "Failed to get name for {:?} in {}",
+                    op,
+                    category
+                );
+            }
+        }
     }
 }

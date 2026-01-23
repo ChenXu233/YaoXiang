@@ -4,7 +4,7 @@
 
 use crate::middle::codegen::bytecode::FunctionCode;
 use crate::middle::ir::{ConstValue, Operand};
-use crate::runtime::value::{RuntimeValue, Heap, HeapValue, Handle, FunctionValue, FunctionId};
+use crate::runtime::value::{RuntimeValue, Heap, HeapValue, FunctionValue, FunctionId};
 use crate::vm::opcode::TypedOpcode;
 use crate::vm::errors::{VMError, VMResult};
 use crate::runtime::extfunc;
@@ -1725,14 +1725,18 @@ impl VM {
                 let field_offset = self.read_u16()? as usize;
 
                 let value = match self.regs.read(obj_reg).clone() {
-                    RuntimeValue::List(handle) | RuntimeValue::Tuple(handle) => {
-                        let h = handle.0;
-                        if let Some(HeapValue::List(items)) = self.heap.get(Handle(h)) {
+                    RuntimeValue::List(handle) => {
+                        if let Some(HeapValue::List(items)) = self.heap.get(handle) {
                             items
                                 .get(field_offset)
                                 .cloned()
                                 .unwrap_or(RuntimeValue::Unit)
-                        } else if let Some(HeapValue::Tuple(items)) = self.heap.get(Handle(h)) {
+                        } else {
+                            RuntimeValue::Unit
+                        }
+                    }
+                    RuntimeValue::Tuple(handle) => {
+                        if let Some(HeapValue::Tuple(items)) = self.heap.get(handle) {
                             items
                                 .get(field_offset)
                                 .cloned()
@@ -1742,8 +1746,7 @@ impl VM {
                         }
                     }
                     RuntimeValue::Struct { fields, .. } => {
-                        let h = fields.0;
-                        if let Some(HeapValue::Tuple(items)) = self.heap.get(Handle(h)) {
+                        if let Some(HeapValue::Struct(items)) = self.heap.get(fields) {
                             items
                                 .get(field_offset)
                                 .cloned()
@@ -1766,8 +1769,7 @@ impl VM {
 
                 match self.regs.read(obj_reg).clone() {
                     RuntimeValue::List(handle) => {
-                        let h = handle.0;
-                        if let Some(HeapValue::List(items)) = self.heap.get_mut(Handle(h)) {
+                        if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
                             if field_offset >= items.len() {
                                 return Err(VMError::IndexOutOfBounds {
                                     index: field_offset,
@@ -1784,8 +1786,7 @@ impl VM {
                         fields: field_handle,
                         vtable: _,
                     } => {
-                        let h = field_handle.0;
-                        if let Some(HeapValue::Tuple(items)) = self.heap.get_mut(Handle(h)) {
+                        if let Some(HeapValue::Struct(items)) = self.heap.get_mut(field_handle) {
                             if field_offset >= items.len() {
                                 return Err(VMError::FieldNotFound(field_offset));
                             }
@@ -1802,11 +1803,13 @@ impl VM {
                 let dst = self.read_u8()?;
                 let array_reg = self.read_u8()?;
                 let index_reg = self.read_u8()?;
-                match (self.regs.read(array_reg), self.regs.read(index_reg)) {
+                match (
+                    self.regs.read(array_reg).clone(),
+                    self.regs.read(index_reg).clone(),
+                ) {
                     (RuntimeValue::List(handle), RuntimeValue::Int(idx)) => {
-                        let h = handle.0;
-                        if let Some(HeapValue::List(items)) = self.heap.get(Handle(h)) {
-                            if let Some(val) = items.get(*idx as usize) {
+                        if let Some(HeapValue::List(items)) = self.heap.get(handle) {
+                            if let Some(val) = items.get(idx as usize) {
                                 self.regs.write(dst, val.clone());
                             }
                         }
@@ -1828,8 +1831,7 @@ impl VM {
 
                 match self.regs.read(array_reg).clone() {
                     RuntimeValue::List(handle) => {
-                        let h = handle.0;
-                        if let Some(HeapValue::List(items)) = self.heap.get_mut(Handle(h)) {
+                        if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
                             if idx >= items.len() {
                                 return Err(VMError::IndexOutOfBounds {
                                     index: idx,

@@ -105,7 +105,7 @@ pub struct FunctionId(pub u32);
 
 /// Task ID for async scheduling
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TaskId(pub u32);
+pub struct TaskId(pub usize);
 
 /// Async state for lazy evaluation
 #[derive(Debug, Clone, PartialEq, Hash)]

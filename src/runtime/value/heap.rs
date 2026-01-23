@@ -12,17 +12,18 @@ use std::fmt;
 ///
 /// Handles are opaque references that allow mutation of heap-allocated
 /// values without cloning. Each handle uniquely identifies a value.
+/// Using usize for platform-native pointer-sized integers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Handle(pub u32);
+pub struct Handle(pub usize);
 
 impl Handle {
     /// Create a new handle from a raw value
-    pub fn new(value: u32) -> Self {
+    pub fn new(value: usize) -> Self {
         Self(value)
     }
 
     /// Get the raw handle value
-    pub fn raw(&self) -> u32 {
+    pub fn raw(&self) -> usize {
         self.0
     }
 }
@@ -71,13 +72,18 @@ pub enum HeapValue {
     List(Vec<RuntimeValue>),
     /// Dictionary storage
     Dict(HashMap<RuntimeValue, RuntimeValue>),
+    /// Struct storage (field values)
+    Struct(Vec<RuntimeValue>),
 }
 
 impl HeapValue {
     /// Get the number of elements in this collection
     pub fn len(&self) -> usize {
         match self {
-            HeapValue::Tuple(v) | HeapValue::Array(v) | HeapValue::List(v) => v.len(),
+            HeapValue::Tuple(v)
+            | HeapValue::Array(v)
+            | HeapValue::List(v)
+            | HeapValue::Struct(v) => v.len(),
             HeapValue::Dict(m) => m.len(),
         }
     }
@@ -98,7 +104,7 @@ impl HeapValue {
 #[derive(Debug, Clone)]
 pub struct Heap {
     /// Handle generator for allocation
-    next_handle: u32,
+    next_handle: usize,
     /// Handle to value mapping (stores HeapValue for collections)
     values: HashMap<Handle, HeapValue>,
     /// Free list for handle reuse
@@ -115,7 +121,7 @@ impl Heap {
     /// Create a new empty heap
     pub fn new() -> Self {
         Self {
-            next_handle: 0,
+            next_handle: 0usize,
             values: HashMap::new(),
             free_list: Vec::new(),
         }
