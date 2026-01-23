@@ -4,6 +4,7 @@
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::ConstValue;
+use crate::backends::common::Opcode;
 use std::io::{self, Write};
 
 /// 字节码文件头魔数 (YaoXiang ByteCode: YXBC)
@@ -74,7 +75,7 @@ pub struct BytecodeInstruction {
 
 impl BytecodeInstruction {
     pub fn new(
-        opcode: crate::vm::opcode::TypedOpcode,
+        opcode: Opcode,
         operands: Vec<u8>,
     ) -> Self {
         Self {

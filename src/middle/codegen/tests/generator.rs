@@ -6,7 +6,7 @@ use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::bytecode::FunctionCode;
 use crate::middle::codegen::ir_builder::BytecodeGenerator;
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 #[test]
 fn test_generate_add() {
@@ -39,8 +39,8 @@ fn test_generate_add() {
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
-    assert_eq!(code.instructions[0].opcode, TypedOpcode::I64Add as u8);
-    assert_eq!(code.instructions[1].opcode, TypedOpcode::ReturnValue as u8);
+    assert_eq!(code.instructions[0].opcode, Opcode::I64Add as u8);
+    assert_eq!(code.instructions[1].opcode, Opcode::ReturnValue as u8);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn test_generate_sub() {
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
-    assert_eq!(code.instructions[0].opcode, TypedOpcode::I64Sub as u8);
+    assert_eq!(code.instructions[0].opcode, Opcode::I64Sub as u8);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn test_generate_mul() {
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
-    assert_eq!(code.instructions[0].opcode, TypedOpcode::F64Mul as u8);
+    assert_eq!(code.instructions[0].opcode, Opcode::F64Mul as u8);
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn test_generate_move() {
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
-    assert_eq!(code.instructions[0].opcode, TypedOpcode::Mov as u8);
+    assert_eq!(code.instructions[0].opcode, Opcode::Mov as u8);
 }
 
 #[test]
@@ -186,5 +186,5 @@ fn test_generate_jump() {
     let code = generator.generate();
 
     assert_eq!(code.instructions.len(), 2);
-    assert_eq!(code.instructions[0].opcode, TypedOpcode::Jmp as u8);
+    assert_eq!(code.instructions[0].opcode, Opcode::Jmp as u8);
 }

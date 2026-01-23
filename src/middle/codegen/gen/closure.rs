@@ -5,7 +5,7 @@
 use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param};
 use crate::middle::ir::{FunctionIR, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 use std::collections::HashMap;
 
 impl CodegenContext {
@@ -44,12 +44,12 @@ impl CodegenContext {
         let mut operands = vec![closure_reg as u8];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(upvalues.len() as u8);
-        self.emit(BytecodeInstruction::new(TypedOpcode::MakeClosure, operands));
+        self.emit(BytecodeInstruction::new(Opcode::MakeClosure, operands));
 
         for (i, upvalue) in upvalues.iter().enumerate() {
             let src_reg = self.operand_to_reg(&upvalue.source)?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::StoreUpvalue,
+                Opcode::StoreUpvalue,
                 vec![src_reg, i as u8],
             ));
         }
@@ -62,10 +62,7 @@ impl CodegenContext {
         &mut self,
         reg: u8,
     ) {
-        self.emit(BytecodeInstruction::new(
-            TypedOpcode::CloseUpvalue,
-            vec![reg],
-        ));
+        self.emit(BytecodeInstruction::new(Opcode::CloseUpvalue, vec![reg]));
     }
 
     /// 生成尾调用优化
@@ -78,7 +75,7 @@ impl CodegenContext {
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(0);
         operands.push(args.len() as u8);
-        self.emit(BytecodeInstruction::new(TypedOpcode::TailCall, operands));
+        self.emit(BytecodeInstruction::new(Opcode::TailCall, operands));
         Ok(())
     }
 

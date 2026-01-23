@@ -5,7 +5,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::bytecode::{BytecodeInstruction, FunctionCode};
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 use std::collections::HashMap;
 
 /// 字节码生成器
@@ -66,11 +66,11 @@ impl<'a> BytecodeGenerator<'a> {
             if let Some(&target_offset) = self.label_map.get(&target_label) {
                 let offset = target_offset as i32 - instr_idx as i32;
                 let instr = &mut self.instructions[instr_idx];
-                match TypedOpcode::try_from(instr.opcode).unwrap() {
-                    TypedOpcode::Jmp => {
+                match Opcode::try_from(instr.opcode).unwrap() {
+                    Opcode::Jmp => {
                         instr.operands = offset.to_le_bytes().to_vec();
                     }
-                    TypedOpcode::JmpIf | TypedOpcode::JmpIfNot => {
+                    Opcode::JmpIf | Opcode::JmpIfNot => {
                         let offset16 = offset as i16;
                         let bytes = offset16.to_le_bytes();
                         instr.operands[1] = bytes[0];
@@ -98,45 +98,45 @@ impl<'a> BytecodeGenerator<'a> {
             Instruction::Add { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Add,
-                    MonoType::Float(_) => TypedOpcode::F64Add,
-                    _ => TypedOpcode::I64Add,
+                    MonoType::Int(_) => Opcode::I64Add,
+                    MonoType::Float(_) => Opcode::F64Add,
+                    _ => Opcode::I64Add,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Sub { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Sub,
-                    MonoType::Float(_) => TypedOpcode::F64Sub,
-                    _ => TypedOpcode::I64Sub,
+                    MonoType::Int(_) => Opcode::I64Sub,
+                    MonoType::Float(_) => Opcode::F64Sub,
+                    _ => Opcode::I64Sub,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Mul { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Mul,
-                    MonoType::Float(_) => TypedOpcode::F64Mul,
-                    _ => TypedOpcode::I64Mul,
+                    MonoType::Int(_) => Opcode::I64Mul,
+                    MonoType::Float(_) => Opcode::F64Mul,
+                    _ => Opcode::I64Mul,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Div { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Div,
-                    MonoType::Float(_) => TypedOpcode::F64Div,
-                    _ => TypedOpcode::I64Div,
+                    MonoType::Int(_) => Opcode::I64Div,
+                    MonoType::Float(_) => Opcode::F64Div,
+                    _ => Opcode::I64Div,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Neg { dst, src } => {
                 let type_ = self.get_operand_type(src);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Neg,
-                    MonoType::Float(_) => TypedOpcode::F64Neg,
-                    _ => TypedOpcode::I64Neg,
+                    MonoType::Int(_) => Opcode::I64Neg,
+                    MonoType::Float(_) => Opcode::F64Neg,
+                    _ => Opcode::I64Neg,
                 };
                 let dst_reg = self.resolve_dst(dst);
                 let src_reg = self.load_operand(src);
@@ -145,61 +145,61 @@ impl<'a> BytecodeGenerator<'a> {
             Instruction::Eq { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Eq,
-                    MonoType::Float(_) => TypedOpcode::F64Eq,
-                    _ => TypedOpcode::I64Eq,
+                    MonoType::Int(_) => Opcode::I64Eq,
+                    MonoType::Float(_) => Opcode::F64Eq,
+                    _ => Opcode::I64Eq,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Ne { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Ne,
-                    MonoType::Float(_) => TypedOpcode::F64Ne,
-                    _ => TypedOpcode::I64Ne,
+                    MonoType::Int(_) => Opcode::I64Ne,
+                    MonoType::Float(_) => Opcode::F64Ne,
+                    _ => Opcode::I64Ne,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Lt { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Lt,
-                    MonoType::Float(_) => TypedOpcode::F64Lt,
-                    _ => TypedOpcode::I64Lt,
+                    MonoType::Int(_) => Opcode::I64Lt,
+                    MonoType::Float(_) => Opcode::F64Lt,
+                    _ => Opcode::I64Lt,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Le { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Le,
-                    MonoType::Float(_) => TypedOpcode::F64Le,
-                    _ => TypedOpcode::I64Le,
+                    MonoType::Int(_) => Opcode::I64Le,
+                    MonoType::Float(_) => Opcode::F64Le,
+                    _ => Opcode::I64Le,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Gt { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Gt,
-                    MonoType::Float(_) => TypedOpcode::F64Gt,
-                    _ => TypedOpcode::I64Gt,
+                    MonoType::Int(_) => Opcode::I64Gt,
+                    MonoType::Float(_) => Opcode::F64Gt,
+                    _ => Opcode::I64Gt,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Ge { dst, lhs, rhs } => {
                 let type_ = self.get_operand_type(lhs);
                 let opcode = match type_ {
-                    MonoType::Int(_) => TypedOpcode::I64Ge,
-                    MonoType::Float(_) => TypedOpcode::F64Ge,
-                    _ => TypedOpcode::I64Ge,
+                    MonoType::Int(_) => Opcode::I64Ge,
+                    MonoType::Float(_) => Opcode::F64Ge,
+                    _ => Opcode::I64Ge,
                 };
                 self.emit_arithmetic(opcode, dst, lhs, rhs);
             }
             Instruction::Move { dst, src } => {
                 let dst_reg = self.resolve_dst(dst);
                 let src_reg = self.load_operand(src);
-                self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
+                self.emit(Opcode::Mov, vec![dst_reg, src_reg]);
             }
             Instruction::Store { dst, src } => {
                 let local_idx = match dst {
@@ -207,7 +207,7 @@ impl<'a> BytecodeGenerator<'a> {
                     _ => 0,
                 };
                 let src_reg = self.load_operand(src);
-                self.emit(TypedOpcode::StoreLocal, vec![src_reg, local_idx as u8]);
+                self.emit(Opcode::StoreLocal, vec![src_reg, local_idx as u8]);
             }
             Instruction::Load { dst, src } => match src {
                 Operand::Const(c) => {
@@ -217,60 +217,60 @@ impl<'a> BytecodeGenerator<'a> {
                             let val = *v as i64;
                             let mut operands = vec![dst_reg];
                             operands.extend_from_slice(&val.to_le_bytes());
-                            self.emit(TypedOpcode::I64Const, operands);
+                            self.emit(Opcode::I64Const, operands);
                         }
                         ConstValue::Float(v) => {
                             let val = *v;
                             let mut operands = vec![dst_reg];
                             operands.extend_from_slice(&val.to_le_bytes());
-                            self.emit(TypedOpcode::F64Const, operands);
+                            self.emit(Opcode::F64Const, operands);
                         }
                         ConstValue::String(_) | ConstValue::Bytes(_) => {
                             let idx = self.get_constant_index(c.clone());
                             let mut operands = vec![dst_reg];
                             operands.extend_from_slice(&idx.to_le_bytes());
-                            self.emit(TypedOpcode::LoadConst, operands);
+                            self.emit(Opcode::LoadConst, operands);
                         }
                         ConstValue::Bool(b) => {
                             let val = if *b { 1i64 } else { 0i64 };
                             let mut operands = vec![dst_reg];
                             operands.extend_from_slice(&val.to_le_bytes());
-                            self.emit(TypedOpcode::I64Const, operands);
+                            self.emit(Opcode::I64Const, operands);
                         }
                         ConstValue::Char(c) => {
                             let val = *c as i64;
                             let mut operands = vec![dst_reg];
                             operands.extend_from_slice(&val.to_le_bytes());
-                            self.emit(TypedOpcode::I64Const, operands);
+                            self.emit(Opcode::I64Const, operands);
                         }
                         _ => {}
                     }
                 }
                 Operand::Local(idx) => {
                     let dst_reg = self.resolve_dst(dst);
-                    self.emit(TypedOpcode::LoadLocal, vec![dst_reg, *idx as u8]);
+                    self.emit(Opcode::LoadLocal, vec![dst_reg, *idx as u8]);
                 }
                 _ => {
                     let dst_reg = self.resolve_dst(dst);
                     let src_reg = self.load_operand(src);
-                    self.emit(TypedOpcode::Mov, vec![dst_reg, src_reg]);
+                    self.emit(Opcode::Mov, vec![dst_reg, src_reg]);
                 }
             },
             Instruction::Jmp(label) => {
                 self.jumps_to_patch.push((self.instructions.len(), *label));
-                self.emit(TypedOpcode::Jmp, vec![0, 0, 0, 0]);
+                self.emit(Opcode::Jmp, vec![0, 0, 0, 0]);
             }
             Instruction::JmpIf(cond, label) => {
                 let cond_reg = self.load_operand(cond);
                 self.jumps_to_patch.push((self.instructions.len(), *label));
-                self.emit(TypedOpcode::JmpIf, vec![cond_reg, 0, 0]);
+                self.emit(Opcode::JmpIf, vec![cond_reg, 0, 0]);
             }
             Instruction::Ret(val) => {
                 if let Some(val) = val {
                     let reg = self.load_operand(val);
-                    self.emit(TypedOpcode::ReturnValue, vec![reg]);
+                    self.emit(Opcode::ReturnValue, vec![reg]);
                 } else {
-                    self.emit(TypedOpcode::Return, vec![]);
+                    self.emit(Opcode::Return, vec![]);
                 }
             }
             Instruction::Call { dst, func, args } => {
@@ -284,7 +284,7 @@ impl<'a> BytecodeGenerator<'a> {
                     let arg_reg = self.load_operand(arg);
                     let target_reg = base_arg_reg + i as u8;
                     if arg_reg != target_reg {
-                        self.emit(TypedOpcode::Mov, vec![target_reg, arg_reg]);
+                        self.emit(Opcode::Mov, vec![target_reg, arg_reg]);
                     }
                 }
 
@@ -306,7 +306,7 @@ impl<'a> BytecodeGenerator<'a> {
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_count as u8);
-                self.emit(TypedOpcode::CallStatic, operands);
+                self.emit(Opcode::CallStatic, operands);
             }
             _ => {}
         }
@@ -314,7 +314,7 @@ impl<'a> BytecodeGenerator<'a> {
 
     fn emit_arithmetic(
         &mut self,
-        opcode: TypedOpcode,
+        opcode: Opcode,
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
@@ -327,7 +327,7 @@ impl<'a> BytecodeGenerator<'a> {
 
     fn emit(
         &mut self,
-        opcode: TypedOpcode,
+        opcode: Opcode,
         operands: Vec<u8>,
     ) {
         self.instructions.push(BytecodeInstruction {
@@ -371,25 +371,25 @@ impl<'a> BytecodeGenerator<'a> {
                         let val = *v as i64;
                         let mut operands = vec![reg];
                         operands.extend_from_slice(&val.to_le_bytes());
-                        self.emit(TypedOpcode::I64Const, operands);
+                        self.emit(Opcode::I64Const, operands);
                     }
                     ConstValue::Float(v) => {
                         let val = *v;
                         let mut operands = vec![reg];
                         operands.extend_from_slice(&val.to_le_bytes());
-                        self.emit(TypedOpcode::F64Const, operands);
+                        self.emit(Opcode::F64Const, operands);
                     }
                     ConstValue::Bool(b) => {
                         let val = if *b { 1i64 } else { 0i64 };
                         let mut operands = vec![reg];
                         operands.extend_from_slice(&val.to_le_bytes());
-                        self.emit(TypedOpcode::I64Const, operands);
+                        self.emit(Opcode::I64Const, operands);
                     }
                     ConstValue::Char(c) => {
                         let val = *c as i64;
                         let mut operands = vec![reg];
                         operands.extend_from_slice(&val.to_le_bytes());
-                        self.emit(TypedOpcode::I64Const, operands);
+                        self.emit(Opcode::I64Const, operands);
                     }
                     _ => {}
                 }

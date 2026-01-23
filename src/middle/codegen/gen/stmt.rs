@@ -6,7 +6,7 @@ use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Block, Expr, Param, Stmt, StmtKind, Type};
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 语句代码生成实现
 impl CodegenContext {
@@ -87,18 +87,18 @@ impl CodegenContext {
 
             if should_heap_allocate {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::HeapAlloc,
+                    Opcode::HeapAlloc,
                     vec![local_idx as u8],
                 ));
             } else {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::StackAlloc,
+                    Opcode::StackAlloc,
                     vec![local_idx as u8],
                 ));
             }
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::StoreLocal,
+                Opcode::StoreLocal,
                 vec![self.operand_to_reg(&src)?, local_idx as u8],
             ));
         }

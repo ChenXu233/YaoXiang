@@ -1,7 +1,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::ir_builder::BytecodeGenerator;
 use crate::middle::ir::{BasicBlock, FunctionIR, Instruction, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 #[test]
 fn test_generate_complex_flow() {
@@ -103,10 +103,10 @@ fn test_generate_complex_flow() {
     let opcodes: Vec<u8> = code.instructions.iter().map(|i| i.opcode).collect();
 
     // Should contain LoadConst, Gt, JumpIfFalse (or similar), Add, Jump, Mul, Jump, Ret
-    assert!(opcodes.contains(&(TypedOpcode::I64Gt as u8)));
-    assert!(opcodes.contains(&(TypedOpcode::JmpIf as u8)));
-    assert!(opcodes.contains(&(TypedOpcode::I64Add as u8)));
-    assert!(opcodes.contains(&(TypedOpcode::I64Mul as u8)));
-    assert!(opcodes.contains(&(TypedOpcode::Jmp as u8)));
-    assert!(opcodes.contains(&(TypedOpcode::ReturnValue as u8)));
+    assert!(opcodes.contains(&(Opcode::I64Gt as u8)));
+    assert!(opcodes.contains(&(Opcode::JmpIf as u8)));
+    assert!(opcodes.contains(&(Opcode::I64Add as u8)));
+    assert!(opcodes.contains(&(Opcode::I64Mul as u8)));
+    assert!(opcodes.contains(&(Opcode::Jmp as u8)));
+    assert!(opcodes.contains(&(Opcode::ReturnValue as u8)));
 }

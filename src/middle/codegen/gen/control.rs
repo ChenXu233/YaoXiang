@@ -6,7 +6,7 @@ use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::lexer::tokens::Literal;
 use crate::frontend::parser::ast::{Block, MatchArm, Pattern};
 use crate::middle::ir::Operand;
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 控制流代码生成实现
 impl CodegenContext {
@@ -23,34 +23,28 @@ impl CodegenContext {
         let then_label = self.next_label();
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![self.operand_to_reg(&cond)?, then_label as u8],
         ));
 
         self.generate_block(then_branch)?;
-        self.emit(BytecodeInstruction::new(
-            TypedOpcode::Jmp,
-            vec![end_label as u8],
-        ));
+        self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
 
         for (elif_cond, elif_body) in elif_branches {
             let elif_label = self.next_label();
             let elif_cond_result = self.generate_block(elif_cond)?;
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::JmpIfNot,
+                Opcode::JmpIfNot,
                 vec![self.operand_to_reg(&elif_cond_result)?, then_label as u8],
             ));
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Label,
+                Opcode::Label,
                 vec![elif_label as u8],
             ));
             self.generate_block(elif_body)?;
-            self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
-                vec![end_label as u8],
-            ));
+            self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
         }
 
         if let Some(else_block) = else_branch {
@@ -58,7 +52,7 @@ impl CodegenContext {
         }
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 
@@ -78,23 +72,23 @@ impl CodegenContext {
         self.flow.set_loop_label(loop_label, end_label);
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_label as u8],
         ));
         let cond = self.generate_block(condition)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![self.operand_to_reg(&cond)?, end_label as u8],
         ));
 
         self.generate_block(body)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Jmp,
+            Opcode::Jmp,
             vec![loop_label as u8],
         ));
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 
@@ -121,16 +115,16 @@ impl CodegenContext {
 
         self.generate_block(iterable)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_label as u8],
         ));
         self.generate_block(body)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Jmp,
+            Opcode::Jmp,
             vec![loop_label as u8],
         ));
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 
@@ -162,19 +156,16 @@ impl CodegenContext {
                 span: arm.span,
             };
             self.generate_block(&arm_block)?;
+            self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
-                vec![end_label as u8],
-            ));
-            self.emit(BytecodeInstruction::new(
-                TypedOpcode::Label,
+                Opcode::Label,
                 vec![next_arm_label as u8],
             ));
         }
 
-        self.emit(BytecodeInstruction::new(TypedOpcode::Throw, vec![0]));
+        self.emit(BytecodeInstruction::new(Opcode::Throw, vec![0]));
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 
@@ -237,33 +228,33 @@ impl CodegenContext {
             Literal::Int(_n) => {
                 let const_reg = self.next_temp();
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Const,
+                    Opcode::I64Const,
                     vec![const_reg as u8],
                 ));
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Eq,
+                    Opcode::I64Eq,
                     vec![cmp_reg as u8, value_u8, const_reg as u8],
                 ));
             }
             Literal::Bool(b) => {
                 let const_reg = self.next_temp();
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Const,
+                    Opcode::I64Const,
                     vec![const_reg as u8, if *b { 1 } else { 0 }],
                 ));
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Eq,
+                    Opcode::I64Eq,
                     vec![cmp_reg as u8, value_u8, const_reg as u8],
                 ));
             }
             _ => self.emit(BytecodeInstruction::new(
-                TypedOpcode::I64Const,
+                Opcode::I64Const,
                 vec![cmp_reg as u8, 0],
             )),
         }
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![cmp_reg as u8, fail_label as i16 as u8],
         ));
 
@@ -282,7 +273,7 @@ impl CodegenContext {
             let value_u8 = self.operand_to_reg(value_reg)?;
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::GetField,
+                Opcode::GetField,
                 vec![elem_reg as u8, value_u8, i as u8, 0],
             ));
 
@@ -293,7 +284,7 @@ impl CodegenContext {
                 next_elem_fail_label,
             )?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Label,
+                Opcode::Label,
                 vec![next_elem_fail_label as u8],
             ));
         }
@@ -312,12 +303,12 @@ impl CodegenContext {
         let type_check_reg = self.next_temp();
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::TypeCheck,
+            Opcode::TypeCheck,
             vec![value_u8, 0, type_check_reg as u8],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![type_check_reg as u8, fail_label as i16 as u8],
         ));
 
@@ -326,7 +317,7 @@ impl CodegenContext {
             let field_offset = self.get_field_offset(field_name);
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::GetField,
+                Opcode::GetField,
                 vec![
                     field_reg as u8,
                     value_u8,
@@ -342,7 +333,7 @@ impl CodegenContext {
                 next_field_fail_label,
             )?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Label,
+                Opcode::Label,
                 vec![next_field_fail_label as u8],
             ));
         }
@@ -363,19 +354,19 @@ impl CodegenContext {
         let type_check_reg = self.next_temp();
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::TypeCheck,
+            Opcode::TypeCheck,
             vec![value_u8, 0, type_check_reg as u8],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![type_check_reg as u8, fail_label as i16 as u8],
         ));
 
         if let Some(inner_pattern) = pattern {
             let inner_reg = self.next_temp();
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::GetField,
+                Opcode::GetField,
                 vec![inner_reg as u8, value_u8, 0, 0],
             ));
             self.generate_pattern_match(&Operand::Temp(inner_reg), inner_pattern, fail_label)?;
@@ -395,11 +386,11 @@ impl CodegenContext {
             let next_pattern_label = self.next_label();
             self.generate_pattern_match(value_reg, pattern, next_pattern_label)?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
+                Opcode::Jmp,
                 vec![fail_label as u8],
             ));
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Label,
+                Opcode::Label,
                 vec![next_pattern_label as u8],
             ));
         }
@@ -417,7 +408,7 @@ impl CodegenContext {
         self.generate_pattern_match(value_reg, pattern, fail_label)?;
         let cond_reg = self.generate_expr(condition)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![self.operand_to_reg(&cond_reg)?, fail_label as i16 as u8],
         ));
         Ok(())
@@ -433,13 +424,13 @@ impl CodegenContext {
             match &symbol.storage {
                 super::super::Storage::Local(id) => {
                     self.emit(BytecodeInstruction::new(
-                        TypedOpcode::StoreLocal,
+                        Opcode::StoreLocal,
                         vec![self.operand_to_reg(value_reg)?, *id as u8],
                     ));
                 }
                 super::super::Storage::Temp(id) => {
                     self.emit(BytecodeInstruction::new(
-                        TypedOpcode::Mov,
+                        Opcode::Mov,
                         vec![*id as u8, self.operand_to_reg(value_reg)?],
                     ));
                 }
@@ -457,11 +448,11 @@ impl CodegenContext {
         if let Some(block) = value {
             let result = self.generate_block(block)?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::ReturnValue,
+                Opcode::ReturnValue,
                 vec![self.operand_to_reg(&result)?],
             ));
         } else {
-            self.emit(BytecodeInstruction::new(TypedOpcode::Return, vec![]));
+            self.emit(BytecodeInstruction::new(Opcode::Return, vec![]));
         }
         Ok(())
     }
@@ -472,10 +463,7 @@ impl CodegenContext {
         _label: Option<&str>,
     ) -> Result<(), CodegenError> {
         if let Some((_, end_label)) = self.flow.loop_label() {
-            self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
-                vec![end_label as u8],
-            ));
+            self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
         }
         Ok(())
     }
@@ -487,7 +475,7 @@ impl CodegenContext {
     ) -> Result<(), CodegenError> {
         if let Some((loop_label, _)) = self.flow.loop_label() {
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
+                Opcode::Jmp,
                 vec![loop_label as u8],
             ));
         }
@@ -590,7 +578,7 @@ impl CodegenContext {
         let default_offset = default_label.map_or(end_label as i32, |l| l as i32);
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Switch,
+            Opcode::Switch,
             vec![
                 self.operand_to_reg(&cond_reg)?,
                 default_offset as u8,
@@ -612,7 +600,7 @@ impl CodegenContext {
         }
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 
@@ -634,7 +622,7 @@ impl CodegenContext {
             let cmp_dst = self.next_temp();
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::I64Eq,
+                Opcode::I64Eq,
                 vec![
                     cmp_dst as u8,
                     self.operand_to_reg(&cond_reg)?,
@@ -643,15 +631,12 @@ impl CodegenContext {
             ));
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::JmpIfNot,
+                Opcode::JmpIfNot,
                 vec![cmp_dst as u8, body_label as i8 as u8],
             ));
 
             self.generate_expr(body_expr)?;
-            self.emit(BytecodeInstruction::new(
-                TypedOpcode::Jmp,
-                vec![end_label as u8],
-            ));
+            self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
         }
 
         if let Some(default_expr) = default {
@@ -659,7 +644,7 @@ impl CodegenContext {
         }
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![end_label as u8],
         ));
 

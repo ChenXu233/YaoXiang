@@ -19,12 +19,10 @@
 #![allow(dead_code)]
 
 // Public modules
-pub mod embedded;
+pub mod backends;
 pub mod frontend;
 pub mod middle;
-pub mod runtime;
 pub mod std;
-pub mod vm;
 
 // Utility modules
 pub mod util;
@@ -32,6 +30,12 @@ pub mod util;
 // Re-exports
 pub use anyhow::{Context, Result};
 pub use thiserror::Error;
+
+// Backend re-exports
+pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
+pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
+pub use backends::interpreter::Interpreter;
+pub use backends::dev::{DevShell, Debugger, REPL};
 
 // Logging
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
@@ -65,11 +69,19 @@ pub fn run(source: &str) -> Result<()> {
     let mut compiler = frontend::Compiler::new();
     debug!("{}", t_cur_simple(MSG::CompilationStart));
     let module = compiler.compile(source)?;
-    // Convert to CompiledModule (bytecode)
-    let compiled = crate::middle::codegen::bytecode::CompiledModule::from_ir(&module);
-    let mut vm = vm::VM::new();
+    // Generate BytecodeModule using the new backend architecture
+    let mut ctx = crate::middle::codegen::CodegenContext::new(module);
+    let bytecode_file = ctx
+        .generate()
+        .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+
+    // Convert BytecodeFile to BytecodeModule
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+    // Use the new Interpreter backend
+    let mut interpreter = backends::interpreter::Interpreter::new();
     debug!("{}", t_cur_simple(MSG::VmStart));
-    vm.execute_module(&compiled)?;
+    interpreter.execute_module(&bytecode_module)?;
     debug!("{}", t_cur_simple(MSG::VmComplete));
     Ok(())
 }
@@ -125,90 +137,11 @@ pub fn build_bytecode(
 
 /// Dump bytecode for debugging
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    use crate::middle::codegen::CodegenContext;
-    use crate::vm::opcode::TypedOpcode;
-
+    // TODO: Update to use new backend architecture
+    // This function is temporarily disabled during migration
     let path_str = path.display().to_string();
-
     println!("=== Bytecode Dump for {} ===\n", path_str);
-
-    let source = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read file: {}", path.display()))?;
-
-    // Compile
-    let mut compiler = frontend::Compiler::new();
-    let module = compiler.compile(&source)?;
-
-    // Generate bytecode
-    let mut ctx = CodegenContext::new(module);
-    let bytecode_file = ctx
-        .generate()
-        .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
-
-    // Header
-    println!("--- Header ---");
-    println!("Magic: 0x{:08X} (YXBC)", bytecode_file.header.magic);
-    println!("Version: {}", bytecode_file.header.version);
-    println!("Entry Point: {}", bytecode_file.header.entry_point);
-    println!("File Size: {} bytes", bytecode_file.header.file_size);
-    println!("Flags: 0x{:08X}\n", bytecode_file.header.flags);
-
-    // Type Table
-    println!(
-        "--- Type Table ({} entries) ---",
-        bytecode_file.type_table.len()
-    );
-    for (i, ty) in bytecode_file.type_table.iter().enumerate() {
-        println!("  [{}] {:?}", i, ty);
-    }
-    if bytecode_file.type_table.is_empty() {
-        println!("  (empty)");
-    }
-    println!();
-
-    // Constants
-    println!(
-        "--- Constants ({} entries) ---",
-        bytecode_file.const_pool.len()
-    );
-    for (i, c) in bytecode_file.const_pool.iter().enumerate() {
-        println!("  [{}] {:?}", i, c);
-    }
-    if bytecode_file.const_pool.is_empty() {
-        println!("  (empty)");
-    }
-    println!();
-
-    // Functions
-    println!(
-        "--- Functions ({} entries) ---",
-        bytecode_file.code_section.functions.len()
-    );
-    for (i, func) in bytecode_file.code_section.functions.iter().enumerate() {
-        println!(
-            "Function {}: params={:?}, return={}, locals={}, instructions={}",
-            i,
-            func.params,
-            func.return_type,
-            func.local_count,
-            func.instructions.len()
-        );
-
-        for (j, instr) in func.instructions.iter().enumerate() {
-            let opcode_value = instr.opcode;
-            let opcode_name = TypedOpcode::try_from(opcode_value)
-                .map(|o| format!("{:?}", o))
-                .unwrap_or_else(|_| format!("Unknown(0x{:02X})", opcode_value));
-
-            if instr.operands.is_empty() {
-                println!("  [{:3}] {}", j, opcode_name);
-            } else {
-                let operands: Vec<String> =
-                    instr.operands.iter().map(|b| format!("{}", b)).collect();
-                println!("  [{:3}] {} [{}]", j, opcode_name, operands.join(", "));
-            }
-        }
-    }
-
+    println!("Note: This function is being updated to use the new backend architecture.");
+    println!("Please use the new debugging tools in backends/dev/ instead.");
     Ok(())
 }

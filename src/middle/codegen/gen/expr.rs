@@ -9,7 +9,7 @@ use crate::frontend::typecheck::check::infer_literal_type;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::codegen::BytecodeInstruction;
 use crate::middle::ir::{ConstValue, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 表达式代码生成实现
 impl CodegenContext {
@@ -106,7 +106,7 @@ impl CodegenContext {
         let const_idx = self.add_constant(literal_to_const_value(literal));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::LoadConst,
+            Opcode::LoadConst,
             vec![dst as u8, const_idx as u8],
         ));
 
@@ -126,14 +126,14 @@ impl CodegenContext {
             match symbol.storage {
                 super::super::Storage::Local(id) => {
                     self.emit(BytecodeInstruction::new(
-                        TypedOpcode::LoadLocal,
+                        Opcode::LoadLocal,
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
                 }
                 super::super::Storage::Arg(id) => {
                     self.emit(BytecodeInstruction::new(
-                        TypedOpcode::LoadArg,
+                        Opcode::LoadArg,
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
@@ -141,7 +141,7 @@ impl CodegenContext {
                 super::super::Storage::Temp(id) => Ok(Operand::Temp(id)),
                 super::super::Storage::Global(id) => {
                     self.emit(BytecodeInstruction::new(
-                        TypedOpcode::LoadLocal,
+                        Opcode::LoadLocal,
                         vec![dst as u8, id as u8],
                     ));
                     Ok(Operand::Temp(dst))
@@ -199,32 +199,32 @@ impl CodegenContext {
         let left_type = self.get_expr_type(left)?;
 
         let opcode = match (op, &left_type) {
-            (BinOp::Add, MonoType::Int(64)) => TypedOpcode::I64Add,
-            (BinOp::Add, MonoType::Float(64)) => TypedOpcode::F64Add,
-            (BinOp::Sub, MonoType::Int(64)) => TypedOpcode::I64Sub,
-            (BinOp::Sub, MonoType::Float(64)) => TypedOpcode::F64Sub,
-            (BinOp::Mul, MonoType::Int(64)) => TypedOpcode::I64Mul,
-            (BinOp::Mul, MonoType::Float(64)) => TypedOpcode::F64Mul,
-            (BinOp::Div, MonoType::Int(64)) => TypedOpcode::I64Div,
-            (BinOp::Div, MonoType::Float(64)) => TypedOpcode::F64Div,
-            (BinOp::Mod, MonoType::Int(64)) => TypedOpcode::I64Rem,
-            (BinOp::Eq, MonoType::Int(64)) => TypedOpcode::I64Eq,
-            (BinOp::Eq, MonoType::Float(64)) => TypedOpcode::F64Eq,
-            (BinOp::Neq, MonoType::Int(64)) => TypedOpcode::I64Ne,
-            (BinOp::Neq, MonoType::Float(64)) => TypedOpcode::F64Ne,
-            (BinOp::Lt, MonoType::Int(64)) => TypedOpcode::I64Lt,
-            (BinOp::Lt, MonoType::Float(64)) => TypedOpcode::F64Lt,
-            (BinOp::Le, MonoType::Int(64)) => TypedOpcode::I64Le,
-            (BinOp::Le, MonoType::Float(64)) => TypedOpcode::F64Le,
-            (BinOp::Gt, MonoType::Int(64)) => TypedOpcode::I64Gt,
-            (BinOp::Gt, MonoType::Float(64)) => TypedOpcode::F64Gt,
-            (BinOp::Ge, MonoType::Int(64)) => TypedOpcode::I64Ge,
-            (BinOp::Ge, MonoType::Float(64)) => TypedOpcode::F64Ge,
-            (BinOp::And, _) => TypedOpcode::I64Mul,
-            (BinOp::Or, _) => TypedOpcode::I64Add,
-            (BinOp::Range, _) => TypedOpcode::NewListWithCap,
+            (BinOp::Add, MonoType::Int(64)) => Opcode::I64Add,
+            (BinOp::Add, MonoType::Float(64)) => Opcode::F64Add,
+            (BinOp::Sub, MonoType::Int(64)) => Opcode::I64Sub,
+            (BinOp::Sub, MonoType::Float(64)) => Opcode::F64Sub,
+            (BinOp::Mul, MonoType::Int(64)) => Opcode::I64Mul,
+            (BinOp::Mul, MonoType::Float(64)) => Opcode::F64Mul,
+            (BinOp::Div, MonoType::Int(64)) => Opcode::I64Div,
+            (BinOp::Div, MonoType::Float(64)) => Opcode::F64Div,
+            (BinOp::Mod, MonoType::Int(64)) => Opcode::I64Rem,
+            (BinOp::Eq, MonoType::Int(64)) => Opcode::I64Eq,
+            (BinOp::Eq, MonoType::Float(64)) => Opcode::F64Eq,
+            (BinOp::Neq, MonoType::Int(64)) => Opcode::I64Ne,
+            (BinOp::Neq, MonoType::Float(64)) => Opcode::F64Ne,
+            (BinOp::Lt, MonoType::Int(64)) => Opcode::I64Lt,
+            (BinOp::Lt, MonoType::Float(64)) => Opcode::F64Lt,
+            (BinOp::Le, MonoType::Int(64)) => Opcode::I64Le,
+            (BinOp::Le, MonoType::Float(64)) => Opcode::F64Le,
+            (BinOp::Gt, MonoType::Int(64)) => Opcode::I64Gt,
+            (BinOp::Gt, MonoType::Float(64)) => Opcode::F64Gt,
+            (BinOp::Ge, MonoType::Int(64)) => Opcode::I64Ge,
+            (BinOp::Ge, MonoType::Float(64)) => Opcode::F64Ge,
+            (BinOp::And, _) => Opcode::I64Mul,
+            (BinOp::Or, _) => Opcode::I64Add,
+            (BinOp::Range, _) => Opcode::NewListWithCap,
             (BinOp::Assign, _) => return self.generate_assignment(left, right),
-            _ => TypedOpcode::I64Add,
+            _ => Opcode::I64Add,
         };
 
         self.emit(BytecodeInstruction::new(
@@ -253,7 +253,7 @@ impl CodegenContext {
                     match &symbol.storage {
                         super::super::Storage::Local(id) => {
                             self.emit(BytecodeInstruction::new(
-                                TypedOpcode::StoreLocal,
+                                Opcode::StoreLocal,
                                 vec![self.operand_to_reg(&src)?, *id as u8],
                             ));
                         }
@@ -269,7 +269,7 @@ impl CodegenContext {
                 let array = self.generate_expr(expr)?;
                 let idx = self.generate_expr(index)?;
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::StoreElement,
+                    Opcode::StoreElement,
                     vec![
                         self.operand_to_reg(&array)?,
                         self.operand_to_reg(&idx)?,
@@ -281,7 +281,7 @@ impl CodegenContext {
                 let obj = self.generate_expr(expr)?;
                 let field_offset = self.get_field_offset(field);
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::SetField,
+                    Opcode::SetField,
                     vec![
                         self.operand_to_reg(&obj)?,
                         field_offset as u8,
@@ -320,24 +320,24 @@ impl CodegenContext {
         match op {
             UnOp::Neg => {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Neg,
+                    Opcode::I64Neg,
                     vec![dst as u8, self.operand_to_reg(&src)?],
                 ));
             }
             UnOp::Pos => {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::Mov,
+                    Opcode::Mov,
                     vec![dst as u8, self.operand_to_reg(&src)?],
                 ));
             }
             UnOp::Not => {
                 let zero_reg = self.next_temp();
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Const,
+                    Opcode::I64Const,
                     vec![zero_reg as u8, 0, 0, 0, 0, 0, 0, 0, 0],
                 ));
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::I64Eq,
+                    Opcode::I64Eq,
                     vec![dst as u8, self.operand_to_reg(&src)?, zero_reg as u8],
                 ));
             }
@@ -367,7 +367,7 @@ impl CodegenContext {
             let target_reg = base_arg_reg + i as u8;
             if arg_reg != target_reg {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::Mov,
+                    Opcode::Mov,
                     vec![target_reg, arg_reg],
                 ));
             }
@@ -386,7 +386,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_regs.len() as u8);
-                self.emit(BytecodeInstruction::new(TypedOpcode::CallStatic, operands));
+                self.emit(BytecodeInstruction::new(Opcode::CallStatic, operands));
             }
             Expr::FieldAccess { expr, field, .. } => {
                 let obj = self.generate_expr(expr)?;
@@ -396,7 +396,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&field_offset.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_regs.len() as u8);
-                self.emit(BytecodeInstruction::new(TypedOpcode::CallVirt, operands));
+                self.emit(BytecodeInstruction::new(Opcode::CallVirt, operands));
             }
             _ => {
                 let name_idx = self.add_constant(ConstValue::String(format!("{:?}", func)));
@@ -405,7 +405,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&(name_idx as u16).to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_regs.len() as u8);
-                self.emit(BytecodeInstruction::new(TypedOpcode::CallDyn, operands));
+                self.emit(BytecodeInstruction::new(Opcode::CallDyn, operands));
             }
         }
 
@@ -423,7 +423,7 @@ impl CodegenContext {
 
         let dst = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::HeapAlloc,
+            Opcode::HeapAlloc,
             vec![dst as u8, 0, 0],
         ));
 
@@ -431,7 +431,7 @@ impl CodegenContext {
             let elem_reg = self.generate_expr(elem)?;
             let field_offset = i as u16;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::SetField,
+                Opcode::SetField,
                 vec![
                     dst as u8,
                     (field_offset & 0xFF) as u8,
@@ -452,14 +452,14 @@ impl CodegenContext {
         let dst = self.next_temp();
         let cap = exprs.len();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::NewListWithCap,
+            Opcode::NewListWithCap,
             vec![dst as u8, (cap & 0xFF) as u8, (cap >> 8) as u8],
         ));
 
         for (i, elem) in exprs.iter().enumerate() {
             let elem_reg = self.generate_expr(elem)?;
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::StoreElement,
+                Opcode::StoreElement,
                 vec![dst as u8, i as u8, self.operand_to_reg(&elem_reg)?],
             ));
         }
@@ -480,7 +480,7 @@ impl CodegenContext {
 
         if let Some(&dict_new_idx) = self.flow.function_indices().get("Dict.new") {
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::CallStatic,
+                Opcode::CallStatic,
                 vec![
                     dict_reg as u8,
                     (dict_new_idx & 0xFF) as u8,
@@ -494,7 +494,7 @@ impl CodegenContext {
         } else {
             let name_idx = self.add_constant(ConstValue::String("Dict.new".to_string()));
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::CallDyn,
+                Opcode::CallDyn,
                 vec![
                     dict_reg as u8,
                     0,
@@ -514,21 +514,21 @@ impl CodegenContext {
             self.next_temp();
 
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Mov,
+                Opcode::Mov,
                 vec![base_arg, dict_reg as u8],
             ));
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Mov,
+                Opcode::Mov,
                 vec![base_arg + 1, self.operand_to_reg(&key_reg)?],
             ));
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::Mov,
+                Opcode::Mov,
                 vec![base_arg + 2, self.operand_to_reg(&value_reg)?],
             ));
 
             if let Some(&dict_insert_idx) = self.flow.function_indices().get("Dict.insert") {
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::CallStatic,
+                    Opcode::CallStatic,
                     vec![
                         dict_reg as u8,
                         (dict_insert_idx & 0xFF) as u8,
@@ -542,7 +542,7 @@ impl CodegenContext {
             } else {
                 let name_idx = self.add_constant(ConstValue::String("Dict.insert".to_string()));
                 self.emit(BytecodeInstruction::new(
-                    TypedOpcode::CallDyn,
+                    Opcode::CallDyn,
                     vec![
                         dict_reg as u8,
                         0,
@@ -568,7 +568,7 @@ impl CodegenContext {
         let src = self.generate_expr(expr)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Cast,
+            Opcode::Cast,
             vec![dst as u8, self.operand_to_reg(&src)?, 0],
         ));
 
@@ -586,7 +586,7 @@ impl CodegenContext {
         let field_offset = self.get_field_offset(field);
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::GetField,
+            Opcode::GetField,
             vec![
                 dst as u8,
                 self.operand_to_reg(&obj)?,
@@ -609,12 +609,12 @@ impl CodegenContext {
         let idx = self.generate_expr(index)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::BoundsCheck,
+            Opcode::BoundsCheck,
             vec![self.operand_to_reg(&array)?, self.operand_to_reg(&idx)?],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::LoadElement,
+            Opcode::LoadElement,
             vec![
                 dst as u8,
                 self.operand_to_reg(&array)?,
@@ -636,34 +636,34 @@ impl CodegenContext {
         let type_check_reg = self.next_temp();
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::TypeCheck,
+            Opcode::TypeCheck,
             vec![self.operand_to_reg(&result_reg)?, 0, type_check_reg as u8],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![type_check_reg as u8, continue_label as i16 as u8],
         ));
 
         let error_reg = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::GetField,
+            Opcode::GetField,
             vec![error_reg as u8, self.operand_to_reg(&result_reg)?, 0, 0],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::ReturnValue,
+            Opcode::ReturnValue,
             vec![error_reg as u8],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![continue_label as u8],
         ));
 
         let ok_value_reg = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::GetField,
+            Opcode::GetField,
             vec![ok_value_reg as u8, self.operand_to_reg(&result_reg)?, 0, 0],
         ));
 
@@ -679,7 +679,7 @@ impl CodegenContext {
         let src = self.generate_expr(expr)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::ArcNew,
+            Opcode::ArcNew,
             vec![dst as u8, self.operand_to_reg(&src)?],
         ));
 

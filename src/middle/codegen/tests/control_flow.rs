@@ -1,7 +1,7 @@
 //! 控制流代码生成测试
 
 use crate::middle::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 测试 if 语句标签生成
 #[test]
@@ -70,26 +70,30 @@ fn test_match_label_generation() {
 /// 测试跳转指令操作数计数
 #[test]
 fn test_jump_operand_count() {
-    assert_eq!(TypedOpcode::Jmp.operand_count(), 0);
-    assert_eq!(TypedOpcode::JmpIf.operand_count(), 2);
-    assert_eq!(TypedOpcode::JmpIfNot.operand_count(), 2);
-    assert_eq!(TypedOpcode::Switch.operand_count(), 3);
+    // Test jump opcodes have correct operand counts
+    assert_eq!(Opcode::Jmp.operand_count(), 0);
+    assert_eq!(Opcode::JmpIf.operand_count(), 2);
+    assert_eq!(Opcode::JmpIfNot.operand_count(), 2);
+    assert_eq!(Opcode::Switch.operand_count(), 3);
 }
 
 /// 测试循环指令
 #[test]
 fn test_loop_opcodes() {
-    assert_eq!(TypedOpcode::LoopStart.name(), "LoopStart");
-    assert_eq!(TypedOpcode::LoopInc.name(), "LoopInc");
-    assert_eq!(TypedOpcode::LoopStart.operand_count(), 4);
-    assert_eq!(TypedOpcode::LoopInc.operand_count(), 3);
+    // Test loop opcodes exist and have correct names
+    assert_eq!(Opcode::LoopStart.name(), "LoopStart");
+    assert_eq!(Opcode::LoopInc.name(), "LoopInc");
+    // Test operand counts
+    assert_eq!(Opcode::LoopStart.operand_count(), 4);
+    assert_eq!(Opcode::LoopInc.operand_count(), 3);
 }
 
 /// 测试标签指令
 #[test]
 fn test_label_opcode() {
-    assert_eq!(TypedOpcode::Label.name(), "Label");
-    assert_eq!(TypedOpcode::Label.operand_count(), 1);
+    // Test label opcode exists and has correct properties
+    assert_eq!(Opcode::Label.name(), "Label");
+    assert_eq!(Opcode::Label.operand_count(), 1);
 }
 
 /// 测试 break/continue 标签支持
@@ -113,16 +117,16 @@ fn test_break_continue_labels() {
 /// 测试控制流指令分类
 #[test]
 fn test_control_flow_classification() {
-    // 跳转指令
-    assert!(TypedOpcode::Jmp.is_jump_op());
-    assert!(TypedOpcode::JmpIf.is_jump_op());
-    assert!(TypedOpcode::JmpIfNot.is_jump_op());
-    assert!(TypedOpcode::Switch.is_jump_op());
-    assert!(!TypedOpcode::Nop.is_jump_op());
+    // Test jump instructions
+    assert!(Opcode::Jmp.is_jump_op());
+    assert!(Opcode::JmpIf.is_jump_op());
+    assert!(Opcode::JmpIfNot.is_jump_op());
+    assert!(Opcode::Switch.is_jump_op());
+    assert!(!Opcode::Nop.is_jump_op());
 
-    // 循环指令
-    assert!(TypedOpcode::LoopStart.is_jump_op());
-    assert!(TypedOpcode::LoopInc.is_jump_op());
+    // Test loop instructions are jump instructions
+    assert!(Opcode::LoopStart.is_jump_op());
+    assert!(Opcode::LoopInc.is_jump_op());
 }
 
 /// 测试基本块指令生成

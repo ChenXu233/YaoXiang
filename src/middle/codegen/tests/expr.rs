@@ -2,7 +2,7 @@
 
 use crate::middle::codegen::{BytecodeFile, CodegenContext};
 use crate::middle::ir::{ConstValue, FunctionIR, ModuleIR, Operand};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 测试字面量生成
 #[test]
@@ -54,55 +54,59 @@ fn test_variable_loading() {
 /// 测试二元运算类型选择
 #[test]
 fn test_binop_type_selection() {
-    use crate::frontend::lexer::tokens::Literal;
-    use crate::frontend::parser::ast::{BinOp, Expr};
+    // Test I64 binary operations
+    assert_eq!(Opcode::I64Add.name(), "I64Add");
+    assert_eq!(Opcode::F64Add.name(), "F64Add");
+    assert_eq!(Opcode::I64Sub.name(), "I64Sub");
+    assert_eq!(Opcode::F64Sub.name(), "F64Sub");
+    assert_eq!(Opcode::I64Mul.name(), "I64Mul");
+    assert_eq!(Opcode::F64Mul.name(), "F64Mul");
 
-    // 验证 I64Add 指令存在
-    assert_eq!(TypedOpcode::I64Add.name(), "I64Add");
-    assert_eq!(TypedOpcode::F64Add.name(), "F64Add");
-    assert_eq!(TypedOpcode::I64Sub.name(), "I64Sub");
-    assert_eq!(TypedOpcode::F64Sub.name(), "F64Sub");
-    assert_eq!(TypedOpcode::I64Mul.name(), "I64Mul");
-    assert_eq!(TypedOpcode::F64Mul.name(), "F64Mul");
+    // Test they are numeric operations
+    assert!(Opcode::I64Add.is_numeric_op());
+    assert!(Opcode::F64Add.is_numeric_op());
 }
 
 /// 测试比较指令
 #[test]
 fn test_comparison_opcodes() {
-    assert_eq!(TypedOpcode::I64Eq.name(), "I64Eq");
-    assert_eq!(TypedOpcode::I64Ne.name(), "I64Ne");
-    assert_eq!(TypedOpcode::I64Lt.name(), "I64Lt");
-    assert_eq!(TypedOpcode::I64Le.name(), "I64Le");
-    assert_eq!(TypedOpcode::I64Gt.name(), "I64Gt");
-    assert_eq!(TypedOpcode::I64Ge.name(), "I64Ge");
-    assert_eq!(TypedOpcode::F64Eq.name(), "F64Eq");
-    assert_eq!(TypedOpcode::F64Ne.name(), "F64Ne");
+    // Test I64 comparison operations
+    assert_eq!(Opcode::I64Eq.name(), "I64Eq");
+    assert_eq!(Opcode::I64Ne.name(), "I64Ne");
+    assert_eq!(Opcode::I64Lt.name(), "I64Lt");
+    assert_eq!(Opcode::I64Le.name(), "I64Le");
+    assert_eq!(Opcode::I64Gt.name(), "I64Gt");
+    assert_eq!(Opcode::I64Ge.name(), "I64Ge");
+
+    // Test F64 comparison operations
+    assert_eq!(Opcode::F64Eq.name(), "F64Eq");
+    assert_eq!(Opcode::F64Ne.name(), "F64Ne");
 }
 
 /// 测试操作数数量
 #[test]
 fn test_operand_counts() {
-    // 无操作数指令
-    assert_eq!(TypedOpcode::Nop.operand_count(), 0);
-    assert_eq!(TypedOpcode::Return.operand_count(), 0);
+    // Test 0-operand instructions
+    assert_eq!(Opcode::Nop.operand_count(), 0);
+    assert_eq!(Opcode::Return.operand_count(), 0);
 
-    // 单操作数指令
-    assert_eq!(TypedOpcode::ReturnValue.operand_count(), 1);
+    // Test 1-operand instructions
+    assert_eq!(Opcode::ReturnValue.operand_count(), 1);
 
-    // 双操作数指令
-    assert_eq!(TypedOpcode::Mov.operand_count(), 2);
+    // Test 2-operand instructions
+    assert_eq!(Opcode::Mov.operand_count(), 2);
 
-    // 三操作数指令
-    assert_eq!(TypedOpcode::I64Add.operand_count(), 3);
-    assert_eq!(TypedOpcode::F64Mul.operand_count(), 3);
+    // Test 3-operand instructions
+    assert_eq!(Opcode::I64Add.operand_count(), 3);
+    assert_eq!(Opcode::F64Mul.operand_count(), 3);
 
-    // 四操作数指令
-    assert_eq!(TypedOpcode::LoadElement.operand_count(), 4);
+    // Test 4-operand instructions
+    assert_eq!(Opcode::LoadElement.operand_count(), 4);
 
-    // 五操作数指令（函数调用）
-    assert_eq!(TypedOpcode::CallStatic.operand_count(), 5);
-    assert_eq!(TypedOpcode::CallVirt.operand_count(), 5);
-    assert_eq!(TypedOpcode::CallDyn.operand_count(), 5);
+    // Test 5-operand instructions (function calls)
+    assert_eq!(Opcode::CallStatic.operand_count(), 5);
+    assert_eq!(Opcode::CallVirt.operand_count(), 5);
+    assert_eq!(Opcode::CallDyn.operand_count(), 5);
 }
 
 /// 测试字节码文件生成

@@ -5,7 +5,7 @@
 use crate::middle::codegen::{BytecodeInstruction, CodegenContext, CodegenError};
 use crate::frontend::parser::ast::{Expr, Stmt};
 use crate::middle::ir::Operand;
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 impl CodegenContext {
     /// 生成 For 循环
@@ -74,7 +74,7 @@ impl CodegenContext {
         } else {
             let dst = self.next_temp();
             self.emit(BytecodeInstruction::new(
-                TypedOpcode::LoadConst,
+                Opcode::LoadConst,
                 vec![dst as u8, one_idx as u8],
             ));
             Operand::Temp(dst)
@@ -82,7 +82,7 @@ impl CodegenContext {
 
         let current_reg = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Mov,
+            Opcode::Mov,
             vec![current_reg as u8, self.operand_to_reg(&start_reg)?],
         ));
 
@@ -99,7 +99,7 @@ impl CodegenContext {
         );
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::LoopStart,
+            Opcode::LoopStart,
             vec![
                 current_reg as u8,
                 self.operand_to_reg(&end_reg)?,
@@ -109,14 +109,14 @@ impl CodegenContext {
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::StoreLocal,
+            Opcode::StoreLocal,
             vec![current_reg as u8, local_idx as u8],
         ));
 
         self.generate_stmt(body)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::LoopInc,
+            Opcode::LoopInc,
             vec![
                 current_reg as u8,
                 self.operand_to_reg(&step_reg)?,
@@ -125,7 +125,7 @@ impl CodegenContext {
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_exit_label as u8],
         ));
 
@@ -156,29 +156,29 @@ impl CodegenContext {
         let iter_reg = self.next_temp();
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::CallStatic,
+            Opcode::CallStatic,
             vec![iter_reg as u8, 0, 0, 1],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_start_label as u8],
         ));
 
         let val_reg = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::CallStatic,
+            Opcode::CallStatic,
             vec![val_reg as u8, 0, 0, 1],
         ));
 
         let cmp_dst = self.next_temp();
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::I64Eq,
+            Opcode::I64Eq,
             vec![cmp_dst as u8, val_reg as u8, 0],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIf,
+            Opcode::JmpIf,
             vec![cmp_dst as u8, loop_exit_label as u8],
         ));
 
@@ -195,21 +195,21 @@ impl CodegenContext {
         );
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::StoreLocal,
+            Opcode::StoreLocal,
             vec![val_reg as u8, local_idx as u8],
         ));
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_body_label as u8],
         ));
         self.generate_stmt(body)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Jmp,
+            Opcode::Jmp,
             vec![loop_start_label as u8],
         ));
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_exit_label as u8],
         ));
 
@@ -235,23 +235,23 @@ impl CodegenContext {
         self.flow.set_loop_label(loop_start_label, loop_exit_label);
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_start_label as u8],
         ));
         let cond_reg = self.generate_expr(condition)?;
 
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::JmpIfNot,
+            Opcode::JmpIfNot,
             vec![self.operand_to_reg(&cond_reg)?, loop_exit_label as u8],
         ));
 
         self.generate_stmt(body)?;
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Jmp,
+            Opcode::Jmp,
             vec![loop_start_label as u8],
         ));
         self.emit(BytecodeInstruction::new(
-            TypedOpcode::Label,
+            Opcode::Label,
             vec![loop_exit_label as u8],
         ));
 

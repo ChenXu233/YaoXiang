@@ -2,7 +2,7 @@
 
 use crate::middle::codegen::CodegenContext;
 use crate::middle::ir::{FunctionIR, ModuleIR};
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 
 /// 测试函数定义生成
 #[test]
@@ -46,43 +46,47 @@ fn test_local_allocation() {
 /// 测试存储指令
 #[test]
 fn test_store_opcodes() {
-    assert_eq!(TypedOpcode::StoreLocal.name(), "StoreLocal");
-    assert_eq!(TypedOpcode::StoreElement.name(), "StoreElement");
-    assert!(TypedOpcode::StoreLocal.is_store_op());
-    assert!(TypedOpcode::StoreElement.is_store_op());
-    assert!(!TypedOpcode::Nop.is_store_op());
+    // Test store opcodes
+    assert_eq!(Opcode::StoreLocal.name(), "StoreLocal");
+    assert_eq!(Opcode::StoreElement.name(), "StoreElement");
+    assert!(Opcode::StoreLocal.is_store_op());
+    assert!(Opcode::StoreElement.is_store_op());
+    assert!(!Opcode::Nop.is_store_op());
 }
 
 /// 测试加载指令
 #[test]
 fn test_load_opcodes() {
-    assert_eq!(TypedOpcode::LoadLocal.name(), "LoadLocal");
-    assert_eq!(TypedOpcode::LoadArg.name(), "LoadArg");
-    assert_eq!(TypedOpcode::LoadConst.name(), "LoadConst");
-    assert!(TypedOpcode::LoadLocal.is_load_op());
-    assert!(TypedOpcode::LoadArg.is_load_op());
-    assert!(TypedOpcode::LoadConst.is_load_op());
+    // Test load opcodes
+    assert_eq!(Opcode::LoadLocal.name(), "LoadLocal");
+    assert_eq!(Opcode::LoadArg.name(), "LoadArg");
+    assert_eq!(Opcode::LoadConst.name(), "LoadConst");
+    assert!(Opcode::LoadLocal.is_load_op());
+    assert!(Opcode::LoadArg.is_load_op());
+    assert!(Opcode::LoadConst.is_load_op());
 }
 
 /// 测试内存分配指令
 #[test]
 fn test_memory_allocation_opcodes() {
-    assert_eq!(TypedOpcode::StackAlloc.name(), "StackAlloc");
-    assert_eq!(TypedOpcode::HeapAlloc.name(), "HeapAlloc");
-    assert_eq!(TypedOpcode::StackAlloc.operand_count(), 1);
-    assert_eq!(TypedOpcode::HeapAlloc.operand_count(), 2);
+    // Test memory allocation opcodes
+    assert_eq!(Opcode::StackAlloc.name(), "StackAlloc");
+    assert_eq!(Opcode::HeapAlloc.name(), "HeapAlloc");
+    assert_eq!(Opcode::StackAlloc.operand_count(), 1);
+    assert_eq!(Opcode::HeapAlloc.operand_count(), 2);
 }
 
 /// 测试返回指令
 #[test]
 fn test_return_opcodes() {
-    assert!(TypedOpcode::Return.is_return_op());
-    assert!(TypedOpcode::ReturnValue.is_return_op());
-    assert!(TypedOpcode::TailCall.is_return_op());
-    assert!(!TypedOpcode::Nop.is_return_op());
+    // Test return opcodes
+    assert!(Opcode::Return.is_return_op());
+    assert!(Opcode::ReturnValue.is_return_op());
+    assert!(Opcode::TailCall.is_return_op());
+    assert!(!Opcode::Nop.is_return_op());
 
-    assert_eq!(TypedOpcode::Return.operand_count(), 0);
-    assert_eq!(TypedOpcode::ReturnValue.operand_count(), 1);
+    assert_eq!(Opcode::Return.operand_count(), 0);
+    assert_eq!(Opcode::ReturnValue.operand_count(), 1);
 }
 
 /// 测试参数处理
@@ -169,67 +173,61 @@ fn test_function_indices() {
 /// 测试位运算操作码
 #[test]
 fn test_bitwise_opcodes() {
-    use crate::vm::opcode::TypedOpcode;
+    // Test I64 bitwise operations
+    assert_eq!(Opcode::I64And.name(), "I64And");
+    assert_eq!(Opcode::I64Or.name(), "I64Or");
+    assert_eq!(Opcode::I64Xor.name(), "I64Xor");
+    assert_eq!(Opcode::I64Shl.name(), "I64Shl");
+    assert_eq!(Opcode::I64Shr.name(), "I64Shr");
+    assert_eq!(Opcode::I64Sar.name(), "I64Sar");
 
-    // I64 位运算指令
-    assert_eq!(TypedOpcode::I64And.name(), "I64And");
-    assert_eq!(TypedOpcode::I64Or.name(), "I64Or");
-    assert_eq!(TypedOpcode::I64Xor.name(), "I64Xor");
-    assert_eq!(TypedOpcode::I64Shl.name(), "I64Shl");
-    assert_eq!(TypedOpcode::I64Shr.name(), "I64Shr");
-    assert_eq!(TypedOpcode::I64Sar.name(), "I64Sar");
+    // Test I32 bitwise operations
+    assert_eq!(Opcode::I32And.name(), "I32And");
+    assert_eq!(Opcode::I32Or.name(), "I32Or");
+    assert_eq!(Opcode::I32Xor.name(), "I32Xor");
+    assert_eq!(Opcode::I32Shl.name(), "I32Shl");
+    assert_eq!(Opcode::I32Shr.name(), "I32Shr");
+    assert_eq!(Opcode::I32Sar.name(), "I32Sar");
 
-    // I32 位运算指令
-    assert_eq!(TypedOpcode::I32And.name(), "I32And");
-    assert_eq!(TypedOpcode::I32Or.name(), "I32Or");
-    assert_eq!(TypedOpcode::I32Xor.name(), "I32Xor");
-    assert_eq!(TypedOpcode::I32Shl.name(), "I32Shl");
-    assert_eq!(TypedOpcode::I32Shr.name(), "I32Shr");
-    assert_eq!(TypedOpcode::I32Sar.name(), "I32Sar");
-
-    // 操作数数量验证
-    assert!(TypedOpcode::I64And.is_integer_op());
-    assert!(TypedOpcode::I64Or.is_integer_op());
-    assert!(TypedOpcode::I64Xor.is_integer_op());
-    assert!(TypedOpcode::I64Shl.is_integer_op());
-    assert!(TypedOpcode::I64Shr.is_integer_op());
-    assert!(TypedOpcode::I64Sar.is_integer_op());
+    // Test they are integer operations
+    assert!(Opcode::I64And.is_numeric_op());
+    assert!(Opcode::I64Or.is_numeric_op());
+    assert!(Opcode::I64Xor.is_numeric_op());
+    assert!(Opcode::I64Shl.is_numeric_op());
+    assert!(Opcode::I64Shr.is_numeric_op());
+    assert!(Opcode::I64Sar.is_numeric_op());
 }
 
 /// 测试字符串操作码
 #[test]
 fn test_string_opcodes() {
-    use crate::vm::opcode::TypedOpcode;
+    // Test string operations
+    assert_eq!(Opcode::StringLength.name(), "StringLength");
+    assert_eq!(Opcode::StringConcat.name(), "StringConcat");
+    assert_eq!(Opcode::StringGetChar.name(), "StringGetChar");
+    assert_eq!(Opcode::StringFromInt.name(), "StringFromInt");
+    assert_eq!(Opcode::StringFromFloat.name(), "StringFromFloat");
 
-    // 字符串指令
-    assert_eq!(TypedOpcode::StringLength.name(), "StringLength");
-    assert_eq!(TypedOpcode::StringConcat.name(), "StringConcat");
-    assert_eq!(TypedOpcode::StringGetChar.name(), "StringGetChar");
-    assert_eq!(TypedOpcode::StringFromInt.name(), "StringFromInt");
-    assert_eq!(TypedOpcode::StringFromFloat.name(), "StringFromFloat");
-
-    // 操作数数量验证
-    assert_eq!(TypedOpcode::StringLength.operand_count(), 2);
-    assert_eq!(TypedOpcode::StringConcat.operand_count(), 4);
-    assert_eq!(TypedOpcode::StringGetChar.operand_count(), 4);
-    assert_eq!(TypedOpcode::StringFromInt.operand_count(), 2);
-    assert_eq!(TypedOpcode::StringFromFloat.operand_count(), 2);
+    // Test operand counts
+    assert_eq!(Opcode::StringLength.operand_count(), 2);
+    assert_eq!(Opcode::StringConcat.operand_count(), 4);
+    assert_eq!(Opcode::StringGetChar.operand_count(), 4);
+    assert_eq!(Opcode::StringFromInt.operand_count(), 2);
+    assert_eq!(Opcode::StringFromFloat.operand_count(), 2);
 }
 
 /// 测试闭包 Upvalue 操作码
 #[test]
 fn test_upvalue_opcodes() {
-    use crate::vm::opcode::TypedOpcode;
+    // Test upvalue operations
+    assert_eq!(Opcode::MakeClosure.name(), "MakeClosure");
+    assert_eq!(Opcode::LoadUpvalue.name(), "LoadUpvalue");
+    assert_eq!(Opcode::StoreUpvalue.name(), "StoreUpvalue");
+    assert_eq!(Opcode::CloseUpvalue.name(), "CloseUpvalue");
 
-    // Upvalue 指令
-    assert_eq!(TypedOpcode::MakeClosure.name(), "MakeClosure");
-    assert_eq!(TypedOpcode::LoadUpvalue.name(), "LoadUpvalue");
-    assert_eq!(TypedOpcode::StoreUpvalue.name(), "StoreUpvalue");
-    assert_eq!(TypedOpcode::CloseUpvalue.name(), "CloseUpvalue");
-
-    // 操作数数量验证
-    assert_eq!(TypedOpcode::MakeClosure.operand_count(), 4);
-    assert_eq!(TypedOpcode::LoadUpvalue.operand_count(), 2);
-    assert_eq!(TypedOpcode::StoreUpvalue.operand_count(), 2);
-    assert_eq!(TypedOpcode::CloseUpvalue.operand_count(), 1);
+    // Test operand counts
+    assert_eq!(Opcode::MakeClosure.operand_count(), 4);
+    assert_eq!(Opcode::LoadUpvalue.operand_count(), 2);
+    assert_eq!(Opcode::StoreUpvalue.operand_count(), 2);
+    assert_eq!(Opcode::CloseUpvalue.operand_count(), 1);
 }

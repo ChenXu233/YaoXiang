@@ -25,7 +25,7 @@ use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
-use crate::vm::opcode::TypedOpcode;
+use crate::backends::common::Opcode;
 use std::fmt;
 use tracing::debug;
 
@@ -279,7 +279,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::Mov,
+                    Opcode::Mov,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -292,22 +292,22 @@ impl CodegenContext {
                         // 常量统一放入常量池
                         let const_idx = self.add_constant(const_val.clone());
                         Ok(BytecodeInstruction::new(
-                            TypedOpcode::LoadConst,
+                            Opcode::LoadConst,
                             vec![dst_reg, (const_idx as u16) as u8, (const_idx >> 8) as u8],
                         ))
                     }
                     Operand::Local(local_idx) => Ok(BytecodeInstruction::new(
-                        TypedOpcode::LoadLocal,
+                        Opcode::LoadLocal,
                         vec![dst_reg, *local_idx as u8],
                     )),
                     Operand::Arg(arg_idx) => Ok(BytecodeInstruction::new(
-                        TypedOpcode::LoadArg,
+                        Opcode::LoadArg,
                         vec![dst_reg, *arg_idx as u8],
                     )),
                     _ => {
                         let src_reg = self.operand_to_reg(src)?;
                         Ok(BytecodeInstruction::new(
-                            TypedOpcode::Mov,
+                            Opcode::Mov,
                             vec![dst_reg, src_reg],
                         ))
                     }
@@ -319,7 +319,7 @@ impl CodegenContext {
                 if let Operand::Local(local_idx) = dst {
                     let src_reg = self.operand_to_reg(src)?;
                     Ok(BytecodeInstruction::new(
-                        TypedOpcode::StoreLocal,
+                        Opcode::StoreLocal,
                         vec![*local_idx as u8, src_reg],
                     ))
                 } else {
@@ -335,7 +335,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Add,
+                    Opcode::I64Add,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -345,7 +345,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Sub,
+                    Opcode::I64Sub,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -355,7 +355,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Mul,
+                    Opcode::I64Mul,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -365,7 +365,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Div,
+                    Opcode::I64Div,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -375,7 +375,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Rem,
+                    Opcode::I64Rem,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -388,7 +388,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64And,
+                    Opcode::I64And,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -398,7 +398,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Or,
+                    Opcode::I64Or,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -408,7 +408,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Xor,
+                    Opcode::I64Xor,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -418,7 +418,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Shl,
+                    Opcode::I64Shl,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -428,7 +428,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Shr,
+                    Opcode::I64Shr,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -438,7 +438,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Sar,
+                    Opcode::I64Sar,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -447,7 +447,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Neg,
+                    Opcode::I64Neg,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -460,7 +460,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Eq,
+                    Opcode::I64Eq,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -470,7 +470,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Ne,
+                    Opcode::I64Ne,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -480,7 +480,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Lt,
+                    Opcode::I64Lt,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -490,7 +490,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Le,
+                    Opcode::I64Le,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -500,7 +500,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Gt,
+                    Opcode::I64Gt,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -510,7 +510,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::I64Ge,
+                    Opcode::I64Ge,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -521,7 +521,7 @@ impl CodegenContext {
             Jmp(target) => {
                 let offset = *target as i32;
                 let bytes = offset.to_le_bytes();
-                Ok(BytecodeInstruction::new(TypedOpcode::Jmp, bytes.to_vec()))
+                Ok(BytecodeInstruction::new(Opcode::Jmp, bytes.to_vec()))
             }
 
             JmpIf(cond, target) => {
@@ -529,7 +529,7 @@ impl CodegenContext {
                 let offset = *target as i32;
                 let offset_bytes = (offset as i16).to_le_bytes();
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::JmpIf,
+                    Opcode::JmpIf,
                     vec![cond_reg, offset_bytes[0], offset_bytes[1]],
                 ))
             }
@@ -539,7 +539,7 @@ impl CodegenContext {
                 let offset = *target as i32;
                 let offset_bytes = (offset as i16).to_le_bytes();
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::JmpIfNot,
+                    Opcode::JmpIfNot,
                     vec![cond_reg, offset_bytes[0], offset_bytes[1]],
                 ))
             }
@@ -547,12 +547,9 @@ impl CodegenContext {
             Ret(value) => {
                 if let Some(v) = value {
                     let reg = self.operand_to_reg(v)?;
-                    Ok(BytecodeInstruction::new(
-                        TypedOpcode::ReturnValue,
-                        vec![reg],
-                    ))
+                    Ok(BytecodeInstruction::new(Opcode::ReturnValue, vec![reg]))
                 } else {
-                    Ok(BytecodeInstruction::new(TypedOpcode::Return, vec![]))
+                    Ok(BytecodeInstruction::new(Opcode::Return, vec![]))
                 }
             }
 
@@ -585,7 +582,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg); // base_arg_reg
                 operands.push(args.len() as u8);
-                Ok(BytecodeInstruction::new(TypedOpcode::CallStatic, operands))
+                Ok(BytecodeInstruction::new(Opcode::CallStatic, operands))
             }
 
             // =====================
@@ -615,7 +612,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&name_idx.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(args.len() as u8);
-                Ok(BytecodeInstruction::new(TypedOpcode::CallVirt, operands))
+                Ok(BytecodeInstruction::new(Opcode::CallVirt, operands))
             }
 
             CallDyn { dst, func: _, args } => {
@@ -638,7 +635,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&func_handle.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(args.len() as u8);
-                Ok(BytecodeInstruction::new(TypedOpcode::CallDyn, operands))
+                Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
             }
 
             // 注意：根据 RFC-008，CallAsync 已移除
@@ -658,7 +655,7 @@ impl CodegenContext {
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg); // base_arg_reg
                 operands.push(args.len() as u8);
-                Ok(BytecodeInstruction::new(TypedOpcode::TailCall, operands))
+                Ok(BytecodeInstruction::new(Opcode::TailCall, operands))
             }
 
             // =====================
@@ -666,13 +663,10 @@ impl CodegenContext {
             // =====================
             Alloc { dst, size: _ } => {
                 let dst_reg = self.operand_to_reg(dst)?;
-                Ok(BytecodeInstruction::new(
-                    TypedOpcode::StackAlloc,
-                    vec![dst_reg],
-                ))
+                Ok(BytecodeInstruction::new(Opcode::StackAlloc, vec![dst_reg]))
             }
 
-            Free(_) => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
+            Free(_) => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
 
             AllocArray {
                 dst,
@@ -681,7 +675,7 @@ impl CodegenContext {
             } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::NewListWithCap,
+                    Opcode::NewListWithCap,
                     vec![dst_reg, 0, 0],
                 ))
             }
@@ -695,7 +689,7 @@ impl CodegenContext {
                 let src_reg = self.operand_to_reg(src)?;
                 let field_offset = *field as u16;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::GetField,
+                    Opcode::GetField,
                     vec![
                         dst_reg,
                         src_reg,
@@ -711,7 +705,7 @@ impl CodegenContext {
                 let src_reg = self.operand_to_reg(src)?;
                 let field_offset = *field as u16;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::SetField,
+                    Opcode::SetField,
                     vec![
                         dst_reg,
                         (field_offset & 0xFF) as u8,
@@ -727,7 +721,7 @@ impl CodegenContext {
                 let src_reg = self.operand_to_reg(src)?;
                 let index_reg = self.operand_to_reg(index)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::LoadElement,
+                    Opcode::LoadElement,
                     vec![dst_reg, src_reg, index_reg],
                 ))
             }
@@ -737,7 +731,7 @@ impl CodegenContext {
                 index: _,
                 src: _,
             } => Ok(BytecodeInstruction::new(
-                TypedOpcode::StoreElement,
+                Opcode::StoreElement,
                 vec![0, 0, 0],
             )),
 
@@ -752,15 +746,12 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::Cast,
+                    Opcode::Cast,
                     vec![dst_reg, src_reg, 0, 0],
                 ))
             }
 
-            TypeTest(_, _) => Ok(BytecodeInstruction::new(
-                TypedOpcode::TypeCheck,
-                vec![0, 0, 0],
-            )),
+            TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
 
             // =====================
             // 并发操作（基于 RFC-008）
@@ -769,10 +760,10 @@ impl CodegenContext {
             Spawn { func: _, .. } => {
                 // 根据 RFC-008，spawn 标记由运行时处理
                 // 编译产物是普通函数调用，调度器负责创建 Async[T]
-                Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![]))
+                Ok(BytecodeInstruction::new(Opcode::Nop, vec![]))
             }
 
-            Yield => Ok(BytecodeInstruction::new(TypedOpcode::Yield, vec![])),
+            Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             // =====================
             // 内存管理
@@ -780,7 +771,7 @@ impl CodegenContext {
             HeapAlloc { dst, type_id: _ } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::HeapAlloc,
+                    Opcode::HeapAlloc,
                     vec![dst_reg, 0, 0],
                 ))
             }
@@ -793,12 +784,12 @@ impl CodegenContext {
                 let mut operands = vec![dst_reg];
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(0); // upvalue_count
-                Ok(BytecodeInstruction::new(TypedOpcode::MakeClosure, operands))
+                Ok(BytecodeInstruction::new(Opcode::MakeClosure, operands))
             }
 
             Drop(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Drop, vec![reg]))
+                Ok(BytecodeInstruction::new(Opcode::Drop, vec![reg]))
             }
 
             // =====================
@@ -806,17 +797,17 @@ impl CodegenContext {
             // =====================
             Push(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
+                Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
             }
 
             Pop(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::Mov, vec![reg]))
+                Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
             }
 
-            Dup => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
+            Dup => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
 
-            Swap => Ok(BytecodeInstruction::new(TypedOpcode::Nop, vec![])),
+            Swap => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
 
             // =====================
             // Arc 指令
@@ -825,7 +816,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::ArcNew,
+                    Opcode::ArcNew,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -834,14 +825,14 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::ArcClone,
+                    Opcode::ArcClone,
                     vec![dst_reg, src_reg],
                 ))
             }
 
             ArcDrop(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(TypedOpcode::ArcDrop, vec![reg]))
+                Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
             }
 
             // =====================
@@ -851,7 +842,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StringLength,
+                    Opcode::StringLength,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -861,7 +852,7 @@ impl CodegenContext {
                 let lhs_reg = self.operand_to_reg(lhs)?;
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StringConcat,
+                    Opcode::StringConcat,
                     vec![dst_reg, lhs_reg, rhs_reg],
                 ))
             }
@@ -871,7 +862,7 @@ impl CodegenContext {
                 let src_reg = self.operand_to_reg(src)?;
                 let index_reg = self.operand_to_reg(index)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StringGetChar,
+                    Opcode::StringGetChar,
                     vec![dst_reg, src_reg, index_reg],
                 ))
             }
@@ -880,7 +871,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StringFromInt,
+                    Opcode::StringFromInt,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -889,7 +880,7 @@ impl CodegenContext {
                 let dst_reg = self.operand_to_reg(dst)?;
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StringFromFloat,
+                    Opcode::StringFromFloat,
                     vec![dst_reg, src_reg],
                 ))
             }
@@ -900,7 +891,7 @@ impl CodegenContext {
             LoadUpvalue { dst, upvalue_idx } => {
                 let dst_reg = self.operand_to_reg(dst)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::LoadUpvalue,
+                    Opcode::LoadUpvalue,
                     vec![dst_reg, *upvalue_idx as u8],
                 ))
             }
@@ -908,17 +899,14 @@ impl CodegenContext {
             StoreUpvalue { src, upvalue_idx } => {
                 let src_reg = self.operand_to_reg(src)?;
                 Ok(BytecodeInstruction::new(
-                    TypedOpcode::StoreUpvalue,
+                    Opcode::StoreUpvalue,
                     vec![src_reg, *upvalue_idx as u8],
                 ))
             }
 
             CloseUpvalue(operand) => {
                 let reg = self.operand_to_reg(operand)?;
-                Ok(BytecodeInstruction::new(
-                    TypedOpcode::CloseUpvalue,
-                    vec![reg],
-                ))
+                Ok(BytecodeInstruction::new(Opcode::CloseUpvalue, vec![reg]))
             }
         }
     }
