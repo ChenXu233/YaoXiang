@@ -1,0 +1,2 @@
+// Interrupt tests
+mod interrupt;
