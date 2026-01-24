@@ -36,14 +36,14 @@ impl<'a> ParserState<'a> {
         let (left_bp, prefix_fn) = match self.prefix_info() {
             Some(info) => info,
             None => {
-                self.error(super::ParseError::InvalidExpression);
+                self.error(super::ParseError::InvalidExpression { span: self.span() });
                 return None;
             }
         };
 
         // Only parse if prefix binding power meets minimum
         if left_bp < min_bp {
-            self.error(super::ParseError::InvalidExpression);
+            self.error(super::ParseError::InvalidExpression { span: self.span() });
             return None;
         }
 

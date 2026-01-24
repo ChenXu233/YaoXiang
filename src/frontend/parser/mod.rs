@@ -49,12 +49,14 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
             }
 
             // Report error for unexpected token
-            state.error(ParseError::UnexpectedToken(
-                state
+            let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+            state.error(ParseError::UnexpectedToken {
+                found: state
                     .current()
                     .map(|t| t.kind.clone())
                     .unwrap_or(TokenKind::Eof),
-            ));
+                span,
+            });
             state.synchronize();
             continue;
         }
@@ -76,12 +78,13 @@ pub fn parse(tokens: &[Token]) -> Result<Module, ParseError> {
             Err(error)
         } else {
             // Should not happen, but return a generic error
-            Err(ParseError::UnexpectedToken(
-                state
+            Err(ParseError::UnexpectedToken {
+                found: state
                     .current()
                     .map(|t| t.kind.clone())
                     .unwrap_or(TokenKind::Eof),
-            ))
+                span: state.current().map(|t| t.span).unwrap_or_else(Span::dummy),
+            })
         }
     } else {
         let span = if let Some(first) = items.first() {
@@ -130,7 +133,9 @@ pub fn parse_expression(tokens: &[Token]) -> Result<Expr, ParseError> {
             if let Some(error) = state.first_error().cloned() {
                 Err(error)
             } else {
-                Err(ParseError::InvalidExpression)
+                Err(ParseError::InvalidExpression {
+                    span: state.current().map(|t| t.span).unwrap_or_else(Span::dummy),
+                })
             }
         }
     }
@@ -139,32 +144,52 @@ pub fn parse_expression(tokens: &[Token]) -> Result<Expr, ParseError> {
 /// Parse error types
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum ParseError {
-    #[error("Unexpected token: {0:?}")]
-    UnexpectedToken(TokenKind),
+    #[error("Unexpected token: {found:?}")]
+    UnexpectedToken { found: TokenKind, span: Span },
 
-    #[error("Expected token: {0:?}, found: {1:?}")]
-    ExpectedToken(TokenKind, TokenKind),
+    #[error("Expected token: {expected:?}, found: {found:?}")]
+    ExpectedToken {
+        expected: TokenKind,
+        found: TokenKind,
+        span: Span,
+    },
 
     #[error("Unterminated block")]
-    UnterminatedBlock,
+    UnterminatedBlock { span: Span },
 
     #[error("Invalid expression")]
-    InvalidExpression,
+    InvalidExpression { span: Span },
 
     #[error("Invalid pattern")]
-    InvalidPattern,
+    InvalidPattern { span: Span },
 
     #[error("Invalid type annotation")]
-    InvalidType,
+    InvalidType { span: Span },
 
     #[error("Missing semicolon after statement")]
-    MissingSemicolon,
+    MissingSemicolon { span: Span },
 
     #[error("Unexpected end of input")]
-    UnexpectedEof,
+    UnexpectedEof { span: Span },
 
-    #[error("{0}")]
-    Generic(String),
+    #[error("{message}")]
+    Generic { message: String, span: Span },
+}
+
+impl ParseError {
+    pub fn span(&self) -> Span {
+        match self {
+            ParseError::UnexpectedToken { span, .. } => *span,
+            ParseError::ExpectedToken { span, .. } => *span,
+            ParseError::UnterminatedBlock { span } => *span,
+            ParseError::InvalidExpression { span } => *span,
+            ParseError::InvalidPattern { span } => *span,
+            ParseError::InvalidType { span } => *span,
+            ParseError::MissingSemicolon { span } => *span,
+            ParseError::UnexpectedEof { span } => *span,
+            ParseError::Generic { span, .. } => *span,
+        }
+    }
 }
 
 #[cfg(test)]

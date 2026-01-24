@@ -65,10 +65,17 @@ pub const NAME: &str = "YaoXiang (爻象)";
 /// }
 /// ```
 pub fn run(source: &str) -> Result<()> {
+    run_with_source_name("<input>", source)
+}
+
+fn run_with_source_name(
+    source_name: &str,
+    source: &str,
+) -> Result<()> {
     debug!("{}", t_cur_simple(MSG::DebugRunCalled));
     let mut compiler = frontend::Compiler::new();
     debug!("{}", t_cur_simple(MSG::CompilationStart));
-    let module = compiler.compile(source)?;
+    let module = compiler.compile_with_source(source_name, source)?;
     // Generate BytecodeModule using the new backend architecture
     let mut ctx = crate::middle::codegen::CodegenContext::new(module);
     let bytecode_file = ctx
@@ -96,7 +103,7 @@ pub fn run_file(path: &Path) -> Result<()> {
     let source = fs::read_to_string(path)
         .with_context(|| format!("Failed to read file: {}", path.display()))?;
     debug!("{}", t_cur(MSG::ReadingFile, Some(&[&path_str])));
-    run(&source)
+    run_with_source_name(&path_str, &source)
 }
 
 /// Build bytecode file (.42)
@@ -116,7 +123,7 @@ pub fn build_bytecode(
 
     // Compile
     let mut compiler = frontend::Compiler::new();
-    let module = compiler.compile(&source)?;
+    let module = compiler.compile_with_source(&source_path_str, &source)?;
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
@@ -148,7 +155,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // Compile
     let mut compiler = frontend::Compiler::new();
-    let module = compiler.compile(&source)?;
+    let module = compiler.compile_with_source(&path_str, &source)?;
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);

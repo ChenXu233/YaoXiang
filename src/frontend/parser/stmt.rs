@@ -53,11 +53,14 @@ impl<'a> ParserState<'a> {
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -76,11 +79,14 @@ impl<'a> ParserState<'a> {
         if type_annotation.is_some() && self.at(&TokenKind::LParen) && !self.at(&TokenKind::Eq) {
             // This looks like "name: Type (params) => body" which is missing the =
             // Report an error
-            self.error(super::ParseError::UnexpectedToken(
-                self.current()
+            let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+            self.error(super::ParseError::UnexpectedToken {
+                found: self
+                    .current()
                     .map(|t| t.kind.clone())
                     .unwrap_or(TokenKind::Eof),
-            ));
+                span,
+            });
             return None;
         }
 
@@ -152,11 +158,14 @@ impl<'a> ParserState<'a> {
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -276,11 +285,14 @@ impl<'a> ParserState<'a> {
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -383,11 +395,14 @@ impl<'a> ParserState<'a> {
         let name = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -483,11 +498,14 @@ impl<'a> ParserState<'a> {
         }
 
         if parts.is_empty() {
-            self.error(super::ParseError::UnexpectedToken(
-                self.current()
+            let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+            self.error(super::ParseError::UnexpectedToken {
+                found: self
+                    .current()
                     .map(|t| t.kind.clone())
                     .unwrap_or(TokenKind::Eof),
-            ));
+                span,
+            });
             None
         } else {
             Some(parts.join("."))
@@ -516,11 +534,14 @@ impl<'a> ParserState<'a> {
             let name = match self.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => n.clone(),
                 _ => {
-                    self.error(super::ParseError::UnexpectedToken(
-                        self.current()
+                    let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                    self.error(super::ParseError::UnexpectedToken {
+                        found: self
+                            .current()
                             .map(|t| t.kind.clone())
                             .unwrap_or(TokenKind::Eof),
-                    ));
+                        span,
+                    });
                     return None;
                 }
             };
@@ -960,11 +981,14 @@ impl<'a> ParserState<'a> {
         let var = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
-                        .map(|t| t.kind.clone())
-                        .unwrap_or(TokenKind::Eof),
-                ));
+                    let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                    self.error(super::ParseError::UnexpectedToken {
+                        found: self
+                            .current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof),
+                        span,
+                    });
                 return None;
             }
         };

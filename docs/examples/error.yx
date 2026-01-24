@@ -1,0 +1,9 @@
+
+main = () => {
+  print("Testing error handling\n")
+
+  // 报错：未定义变量
+  print(a)
+
+  print("All tests passed!\n")
+}

@@ -5,6 +5,7 @@
 use super::*;
 use crate::frontend::lexer::tokenize;
 use crate::frontend::parser::{parse, parse_expression, ParserState};
+use crate::util::span::Span;
 
 /// =========================================================================
 /// nud.rs 覆盖率补充测试 - 前缀操作符和字面量
@@ -477,10 +478,11 @@ fn test_state_first_error() {
     let mut state = ParserState::new(&tokens);
     use crate::frontend::parser::ParseError;
     use crate::frontend::lexer::tokens::TokenKind;
-    state.error(ParseError::ExpectedToken(
-        TokenKind::Plus,
-        TokenKind::IntLiteral(42),
-    ));
+    state.error(ParseError::ExpectedToken {
+        expected: TokenKind::Plus,
+        found: TokenKind::IntLiteral(42),
+        span: Span::dummy(),
+    });
     let first = state.first_error();
     assert!(first.is_some());
 }
@@ -491,14 +493,16 @@ fn test_state_into_errors() {
     let mut state = ParserState::new(&tokens);
     use crate::frontend::parser::ParseError;
     use crate::frontend::lexer::tokens::TokenKind;
-    state.error(ParseError::ExpectedToken(
-        TokenKind::Plus,
-        TokenKind::IntLiteral(42),
-    ));
-    state.error(ParseError::ExpectedToken(
-        TokenKind::Minus,
-        TokenKind::IntLiteral(42),
-    ));
+    state.error(ParseError::ExpectedToken {
+        expected: TokenKind::Plus,
+        found: TokenKind::IntLiteral(42),
+        span: Span::dummy(),
+    });
+    state.error(ParseError::ExpectedToken {
+        expected: TokenKind::Minus,
+        found: TokenKind::IntLiteral(42),
+        span: Span::dummy(),
+    });
     let errors = state.into_errors();
     assert_eq!(errors.len(), 2);
 }

@@ -454,11 +454,14 @@ impl<'a> ParserState<'a> {
                     s
                 }
                 _ => {
-                    self.error(super::ParseError::UnexpectedToken(
-                        self.current()
+                    let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                    self.error(super::ParseError::UnexpectedToken {
+                        found: self
+                            .current()
                             .map(|t| t.kind.clone())
                             .unwrap_or(TokenKind::Eof),
-                    ));
+                        span,
+                    });
                     return Some(Type::Int(64)); // default
                 }
             };
@@ -485,11 +488,14 @@ impl<'a> ParserState<'a> {
                     s
                 }
                 _ => {
-                    self.error(super::ParseError::UnexpectedToken(
-                        self.current()
+                    let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                    self.error(super::ParseError::UnexpectedToken {
+                        found: self
+                            .current()
                             .map(|t: &Token| t.kind.clone())
                             .unwrap_or(TokenKind::Eof),
-                    ));
+                        span,
+                    });
                     return Some(Type::Float(64)); // default
                 }
             };

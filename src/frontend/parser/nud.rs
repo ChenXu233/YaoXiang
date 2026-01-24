@@ -203,7 +203,9 @@ impl<'a> ParserState<'a> {
                     }
                     _ => {
                         // Invalid lambda parameter
-                        self.error(super::ParseError::InvalidExpression);
+                        self.error(super::ParseError::InvalidExpression {
+                            span: self.span(),
+                        });
                         return None;
                     }
                 }
@@ -267,11 +269,14 @@ impl<'a> ParserState<'a> {
         let var = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -644,7 +649,7 @@ impl<'a> ParserState<'a> {
                 Some(Pattern::Tuple(patterns))
             }
             _ => {
-                self.error(super::ParseError::InvalidPattern);
+                self.error(super::ParseError::InvalidPattern { span: self.span() });
                 None
             }
         }
@@ -688,11 +693,14 @@ impl<'a> ParserState<'a> {
         let var = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };

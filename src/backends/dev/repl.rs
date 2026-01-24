@@ -265,7 +265,7 @@ impl REPL {
 
         // Compile
         let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile(&wrapped) {
+        match compiler.compile_with_source("<repl>", &wrapped) {
             Ok(_module) => {
                 // In a full implementation, we'd execute with the interpreter
                 Ok(REPLResult::Ok)
@@ -292,7 +292,7 @@ impl REPL {
 
         // Compile
         let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile(&source) {
+        match compiler.compile_with_source(&path.display().to_string(), &source) {
             Ok(_module) => Ok(REPLResult::Ok),
             Err(e) => Ok(REPLResult::Error(format!("{}", e))),
         }

@@ -268,7 +268,7 @@ impl DevShell {
         let wrapped = code.to_string();
 
         let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile(&wrapped) {
+        match compiler.compile_with_source("<shell>", &wrapped) {
             Ok(_module) => {
                 // In a full implementation, we'd execute
                 ShellResult::Success

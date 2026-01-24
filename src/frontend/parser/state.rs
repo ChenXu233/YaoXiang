@@ -147,16 +147,18 @@ impl<'a> ParserState<'a> {
                 self.bump();
                 return true;
             } else {
-                self.error(super::ParseError::ExpectedToken(
-                    kind.clone(),
-                    token.kind.clone(),
-                ));
+                self.error(super::ParseError::ExpectedToken {
+                    expected: kind.clone(),
+                    found: token.kind.clone(),
+                    span: token.span,
+                });
             }
         } else {
-            self.error(super::ParseError::ExpectedToken(
-                kind.clone(),
-                TokenKind::Eof,
-            ));
+            self.error(super::ParseError::ExpectedToken {
+                expected: kind.clone(),
+                found: TokenKind::Eof,
+                span: self.current_span,
+            });
         }
         false
     }

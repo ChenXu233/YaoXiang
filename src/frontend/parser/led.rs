@@ -3,6 +3,7 @@
 use super::super::lexer::tokens::*;
 use super::ast::*;
 use super::state::*;
+use crate::util::span::Span;
 
 /// Extension trait for infix parsing
 pub trait InfixParser {
@@ -102,7 +103,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Or) => BinOp::Or,
             Some(TokenKind::DotDot) => BinOp::Range,
             _ => {
-                self.error(super::ParseError::InvalidExpression);
+                self.error(super::ParseError::InvalidExpression { span: self.span() });
                 return None;
             }
         };
@@ -202,11 +203,14 @@ impl<'a> ParserState<'a> {
         let field = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                self.error(super::ParseError::UnexpectedToken(
-                    self.current()
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
                         .map(|t| t.kind.clone())
                         .unwrap_or(TokenKind::Eof),
-                ));
+                    span,
+                });
                 return None;
             }
         };
@@ -311,9 +315,10 @@ impl<'a> ParserState<'a> {
                 span: var_span,
             },
             _ => {
-                self.error(super::ParseError::Generic(
-                    "Invalid lambda parameter".to_string(),
-                ));
+                self.error(super::ParseError::Generic {
+                    message: "Invalid lambda parameter".to_string(),
+                    span: self.span(),
+                });
                 return None;
             }
         };
