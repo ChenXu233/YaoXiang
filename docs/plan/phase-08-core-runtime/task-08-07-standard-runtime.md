@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: ⬜ 待开始
-> **模块**: `src/runtime/standard_runtime.rs`
+> **模块**: `src/middle/standard_runtime.rs`
 > **依赖**: task-08-04-scheduler-trait, task-08-05-single-thread-scheduler, task-08-06-multi-thread-scheduler, phase-09-dag
 
 ## 功能描述
@@ -19,7 +19,7 @@
 ### 文件结构
 
 ```
-src/runtime/
+src/middle/
 ├── mod.rs                  # 导出入口
 ├── standard_runtime.rs     # 标准运行时入口（本文档）
 ├── dag/                    # DAG 核心（phase-09）

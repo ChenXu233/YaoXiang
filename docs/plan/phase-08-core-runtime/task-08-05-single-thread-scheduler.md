@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: ⬜ 待开始
-> **模块**: `src/runtime/scheduler/single_thread.rs`
+> **模块**: `src/middle/scheduler/single_thread.rs`
 > **依赖**: task-08-04-scheduler-trait
 
 ## 功能描述

@@ -172,8 +172,8 @@ print("Concurrency bytecode tests passed!")
 
 ## 相关文件
 
-- **src/vm/opcode.rs**: TypedOpcode 枚举定义
-- **src/runtime/scheduler/**: 运行时调度器（不在 codegen 中）
+- **src/middle/opcode.rs**: TypedOpcode 枚举定义
+- **src/middle/scheduler/**: 运行时调度器（不在 codegen 中）
 - **src/middle/codegen/mod.rs**: spawn 标记处理（Spawn → Nop，符合 RFC-008）
 - **src/middle/ir.rs**: IR 定义（已移除 CallAsync 和 Await）
 - **RFC-008**: Runtime 并发模型详细设计

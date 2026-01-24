@@ -9,14 +9,14 @@
 
 ### 1.1 已实现组件
 
-根据对 [`src/runtime/scheduler/mod.rs`](src/runtime/scheduler/mod.rs)、[`src/std/concurrent.rs`](src/std/concurrent.rs) 和 [`src/vm/executor.rs`](src/vm/executor.rs) 的分析，当前 YaoXiang 项目已实现以下异步相关基础设施：
+根据对 [`src/middle/scheduler/mod.rs`](src/middle/scheduler/mod.rs)、[`src/std/concurrent.rs`](src/std/concurrent.rs) 和 [`src/middle/executor.rs`](src/middle/executor.rs) 的分析，当前 YaoXiang 项目已实现以下异步相关基础设施：
 
 | 组件 | 文件 | 状态 | 说明 |
 |------|------|------|------|
-| 任务调度器 | [`src/runtime/scheduler/mod.rs`](src/runtime/scheduler/mod.rs) | 基础框架 | 支持工作窃取的协程调度器骨架 |
+| 任务调度器 | [`src/middle/scheduler/mod.rs`](src/middle/scheduler/mod.rs) | 基础框架 | 支持工作窃取的协程调度器骨架 |
 | 并发原语 | [`src/std/concurrent.rs`](src/std/concurrent.rs) | 基础实现 | spawn、sleep、mutex、原子类型 |
-| 虚拟机执行器 | [`src/vm/executor.rs`](src/vm/executor.rs) | 骨架实现 | 包含异步操作码定义 |
-| 异步操作码 | [`Opcode`](src/vm/executor.rs:139) | 已定义 | CallAsync、Spawn、Await、Yield |
+| 虚拟机执行器 | [`src/middle/executor.rs`](src/middle/executor.rs) | 骨架实现 | 包含异步操作码定义 |
+| 异步操作码 | [`Opcode`](src/middle/executor.rs:139) | 已定义 | CallAsync、Spawn、Await、Yield |
 
 ### 1.2 当前架构问题
 
@@ -24,7 +24,7 @@
 
 #### 1.2.1 缺乏惰性求值计算图
 
-当前调度器 [`Scheduler`](src/runtime/scheduler/mod.rs:107) 仅实现了简单的任务队列管理，**未构建任何计算图结构**：
+当前调度器 [`Scheduler`](src/middle/scheduler/mod.rs:107) 仅实现了简单的任务队列管理，**未构建任何计算图结构**：
 
 ```rust
 // 当前实现：仅简单的任务队列
@@ -100,7 +100,7 @@ fn steal_or_get(...) -> Option<Arc<Task>> {
 #### 2.2.1 `Async[T]` 惰性代理类型
 
 ```rust
-// src/runtime/async/mod.rs
+// src/middle/async/mod.rs
 
 /// Async[T] - 惰性代理类型，实现"零传染性"
 /// 
@@ -152,7 +152,7 @@ impl<T: Send + 'static> std::ops::Deref for Async<T> {
 #### 2.2.2 计算图节点
 
 ```rust
-// src/runtime/dag/mod.rs
+// src/middle/dag/mod.rs
 
 /// 计算图节点
 #[derive(Debug)]
@@ -260,7 +260,7 @@ impl ComputationDAG {
 #### 2.2.3 智能调度器
 
 ```rust
-// src/runtime/scheduler/mod.rs
+// src/middle/scheduler/mod.rs
 
 /// 象流调度器 - 支持工作窃取和计算图感知
 pub struct FlowScheduler {
@@ -485,7 +485,7 @@ pub fn codegen_spawn_expr(&mut self, expr: &SpawnExpr) -> Vec<ByteCode> {
 #### 2.4.1 扩展操作码
 
 ```rust
-// src/vm/opcode.rs
+// src/middle/opcode.rs
 
 /// 扩展异步操作码
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

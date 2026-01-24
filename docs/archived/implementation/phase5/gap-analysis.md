@@ -47,7 +47,7 @@
 
 ## 三、Opcode 指令集详细分析
 
-**文件位置**：[src/vm/opcode.rs](src/vm/opcode.rs)
+**文件位置**：[src/middle/opcode.rs](src/middle/opcode.rs)
 
 ### 3.1 完全实现的指令类别
 
@@ -85,7 +85,7 @@
 
 ## 四、内联缓存机制详细分析
 
-**文件位置**：[src/vm/inline_cache.rs](src/vm/inline_cache.rs)
+**文件位置**：[src/middle/inline_cache.rs](src/middle/inline_cache.rs)
 
 ### 4.1 完全符合文档的结构定义
 
@@ -438,8 +438,8 @@ pub struct FileHeader {
 
 | 文件路径 | 说明 |
 |----------|------|
-| [src/vm/opcode.rs](src/vm/opcode.rs) | 字节码操作码定义 |
-| [src/vm/inline_cache.rs](src/vm/inline_cache.rs) | 内联缓存实现 |
+| [src/middle/opcode.rs](src/middle/opcode.rs) | 字节码操作码定义 |
+| [src/middle/inline_cache.rs](src/middle/inline_cache.rs) | 内联缓存实现 |
 | [src/middle/monomorphize/mod.rs](src/middle/monomorphize/mod.rs) | 单态化主模块 |
 | [src/middle/monomorphize/instance.rs](src/middle/monomorphize/instance.rs) | 单态化实例管理 |
 | [src/middle/escape_analysis/mod.rs](src/middle/escape_analysis/mod.rs) | 逃逸分析模块 |

@@ -501,7 +501,7 @@ pub enum TypeError {
 ### 5.3 运行时错误
 
 ```rust
-// src/vm/errors.rs
+// src/middle/errors.rs
 
 #[derive(Debug, Error, Clone)]
 pub enum RuntimeError {
@@ -718,7 +718,7 @@ fn main() {
 ### 7.2 运行时错误输出
 
 ```rust
-// src/vm/executor.rs
+// src/middle/executor.rs
 
 impl Executor {
     /// 执行并处理错误

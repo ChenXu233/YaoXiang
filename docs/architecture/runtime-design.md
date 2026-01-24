@@ -52,7 +52,7 @@ YaoXiang 运行时系统负责执行编译生成的字节码，并提供程序�
 ### 核心文件结构
 
 ```
-src/runtime/
+src/middle/
 ├── mod.rs                  # 运行时模块入口
 ├── dag/                    # 并作图（DAG）
 │   ├── mod.rs              # DAG 模块入口
@@ -70,7 +70,7 @@ src/runtime/
     ├── mod.rs              # 内存管理入口
     └── tests/
 
-src/vm/
+src/middle/
 ├── mod.rs                  # 虚拟机入口
 ├── executor.rs             # 执行器
 ├── frames.rs               # 调用帧
@@ -87,7 +87,7 @@ src/vm/
 
 ### 2.1 虚拟机架构
 
-**核心文件**：`src/vm/mod.rs`, `src/vm/executor.rs`
+**核心文件**：`src/middle/mod.rs`, `src/middle/executor.rs`
 
 YaoXiang 虚拟机采用基于栈的字节码解释器设计，兼顾执行效率和实现简洁性。
 
@@ -165,7 +165,7 @@ pub type VMResult<T> = Result<T, VMError>;
 
 ### 2.2 值类型系统
 
-**核心文件**：`src/vm/executor.rs`
+**核心文件**：`src/middle/executor.rs`
 
 ```rust
 /// 运行时代值
@@ -268,7 +268,7 @@ impl Value {
 
 ### 2.3 调用帧管理
 
-**核心文件**：`src/vm/frames.rs`
+**核心文件**：`src/middle/frames.rs`
 
 ```rust
 /// 调用帧
@@ -335,7 +335,7 @@ impl CallFrame {
 
 ### 2.4 指令集
 
-**核心文件**：`src/vm/instructions.rs`, `src/vm/opcode.rs`
+**核心文件**：`src/middle/instructions.rs`, `src/middle/opcode.rs`
 
 ```rust
 /// 虚拟机指令
@@ -639,7 +639,7 @@ pub enum Opcode {
 
 ### 2.5 执行器核心
 
-**核心文件**：`src/vm/executor.rs`
+**核心文件**：`src/middle/executor.rs`
 
 ```rust
 impl VM {
@@ -835,7 +835,7 @@ impl VM {
 
 ### 3.1 并作图 (DAG)
 
-**核心文件**：`src/runtime/dag/mod.rs`, `src/runtime/dag/node.rs`, `src/runtime/dag/graph.rs`
+**核心文件**：`src/middle/dag/mod.rs`, `src/middle/dag/node.rs`, `src/middle/dag/graph.rs`
 
 YaoXiang 的并作模型基于有向无环图（DAG）表示任务间的依赖关系。
 
@@ -1050,7 +1050,7 @@ impl ComputationDAG {
 
 ### 3.2 节点 ID 管理
 
-**核心文件**：`src/runtime/dag/node_id.rs`
+**核心文件**：`src/middle/dag/node_id.rs`
 
 ```rust
 /// 节点 ID
@@ -1093,7 +1093,7 @@ impl NodeIdGenerator {
 
 ### 4.1 调度器架构
 
-**核心文件**：`src/runtime/scheduler/mod.rs`, `src/runtime/scheduler/task.rs`, `src/runtime/scheduler/queue.rs`, `src/runtime/scheduler/work_stealer.rs`
+**核心文件**：`src/middle/scheduler/mod.rs`, `src/middle/scheduler/task.rs`, `src/middle/scheduler/queue.rs`, `src/middle/scheduler/work_stealer.rs`
 
 ```rust
 /// 调度器
@@ -1186,7 +1186,7 @@ impl SchedulerStats {
 
 ### 4.2 任务定义
 
-**核心文件**：`src/runtime/scheduler/task.rs`
+**核心文件**：`src/middle/scheduler/task.rs`
 
 ```rust
 /// 任务 ID
@@ -1338,7 +1338,7 @@ impl TaskBuilder {
 
 ### 4.3 任务队列
 
-**核心文件**：`src/runtime/scheduler/queue.rs`
+**核心文件**：`src/middle/scheduler/queue.rs`
 
 ```rust
 /// 任务队列
@@ -1441,7 +1441,7 @@ impl PriorityTaskQueue {
 
 ### 4.4 工作窃取算法
 
-**核心文件**：`src/runtime/scheduler/work_stealer.rs`
+**核心文件**：`src/middle/scheduler/work_stealer.rs`
 
 ```rust
 /// 工作窃取器
@@ -1585,7 +1585,7 @@ impl WorkStealer {
 
 ### 5.1 内存分配器
 
-**核心文件**：`src/runtime/memory/mod.rs`
+**核心文件**：`src/middle/memory/mod.rs`
 
 ```rust
 /// 内存管理模块
@@ -1860,7 +1860,7 @@ impl MemoryManager {
 
 ### 6.1 内联缓存设计
 
-**核心文件**：`src/vm/inline_cache.rs`
+**核心文件**：`src/middle/inline_cache.rs`
 
 ```rust
 /// 内联缓存
@@ -1987,7 +1987,7 @@ pub struct CacheStats {
 
 ### 8.1 错误类型
 
-**核心文件**：`src/vm/errors.rs`
+**核心文件**：`src/middle/errors.rs`
 
 ```rust
 /// 虚拟机错误

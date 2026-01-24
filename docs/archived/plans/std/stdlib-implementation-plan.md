@@ -112,7 +112,7 @@ pub mod net;
 VM 通过**外部函数调用**机制调用这些 Rust 函数：
 
 ```rust
-// src/vm/executor.rs
+// src/middle/executor.rs
 
 /// 外部函数调用
 fn op_call_external(&mut self, func_name: &str, arg_count: u8) -> Result<(), VMError> {
@@ -153,7 +153,7 @@ fn call_println(&mut self, args: Vec<Value>) -> Result<Value, VMError> {
 ### 3.3 外部函数注册表
 
 ```rust
-// src/vm/external_functions.rs
+// src/middle/external_functions.rs
 
 /// 外部函数签名
 type ExternalFunc = fn(Vec<Value>) -> Result<Value, VMError>;
@@ -240,7 +240,7 @@ TypedOpcode::StringFromFloat = 0x95, // 浮点数转字符串
 ### 4.2 指令实现示例
 
 ```rust
-// src/vm/executor.rs
+// src/middle/executor.rs
 
 impl VM {
     fn op_string_length(&mut self, frame: &mut CallFrame) -> Result<(), VMError> {
@@ -279,7 +279,7 @@ impl VM {
 ### 4.3 Print 指令
 
 ```rust
-// src/vm/executor.rs
+// src/middle/executor.rs
 
 fn op_print(&mut self, frame: &mut CallFrame) -> Result<(), VMError> {
     let value = frame.stack.pop().unwrap();
@@ -384,7 +384,7 @@ src/std/
 ├── concurrent.rs       # 并发函数
 └── net.rs              # 网络函数
 
-src/vm/
+src/middle/
 ├── mod.rs
 ├── executor.rs         # 指令执行（包含 intrinsic 实现）
 ├── external_functions.rs # 外部函数表

@@ -41,8 +41,8 @@ YaoXiang (爻象) is an **experimental programming language under active develop
 | P5 | Ownership System | ✅ Complete | `src/middle/lifetime/` |
 | P6 | Unsafe / FFI | 🔶 To Be Implemented | `src/middle/` |
 | P7-P10 | Optimization | ⏳ To Be Implemented | `src/middle/optim/` |
-| P11 | Virtual Machine | ⏳ To Be Implemented | `src/vm/` |
-| P12-19 | Runtime/Toolchain | ⏳ To Be Implemented | `src/runtime/` |
+| P11 | Virtual Machine | ⏳ To Be Implemented | `src/middle/` |
+| P12-19 | Runtime/Toolchain | ⏳ To Be Implemented | `src/middle/` |
 
 ## Module Details:
 - ✅ **Lexer**: Complete token support, supports all literals
@@ -337,8 +337,8 @@ YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**�
 | P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
 | P4 | 字节码生成器 | ✅ 进行中 | `src/middle/codegen/` |
 | P5-10 | 优化阶段 | 🔶 待实现 | `src/middle/` |
-| P11 | 虚拟机 | ⏳ 待实现 | `src/vm/` |
-| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/runtime/` |
+| P11 | 虚拟机 | ⏳ 待实现 | `src/middle/` |
+| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/middle/` |
 
 **各模块详情**:
 - ✅ **词法分析器**: Token 完整，支持所有字面量

@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: ⬜ 待开始
-> **模块**: `src/runtime/scheduler/trait.rs`
+> **模块**: `src/middle/scheduler/trait.rs`
 > **依赖**: task-08-01-value-type, task-08-02-allocator
 
 ## 功能描述
@@ -18,7 +18,7 @@
 ### 文件结构
 
 ```
-src/runtime/scheduler/
+src/middle/scheduler/
 ├── mod.rs              # 导出入口
 ├── trait.rs            # Scheduler Trait（本文档）
 ├── single_thread.rs    # 单线程实现

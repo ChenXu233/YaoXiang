@@ -452,38 +452,12 @@ yaoxiang/
 │   │       ├── mod.rs
 │   │       └── bytecode.rs
 │   │
-│   ├── vm/                       # 虚拟机模块
-│   │   ├── mod.rs
-│   │   ├── executor.rs           # 解释器核心
-│   │   ├── instructions.rs       # 指令集
-│   │   ├── stack.rs              # 栈管理
-│   │   ├── frames.rs             # 调用帧
-│   │   └── errors.rs             # 错误类型
-│   │
-│   ├── runtime/                  # 运行时模块
-│   │   ├── mod.rs
-│   │   ├── gc/                   # 垃圾回收器
-│   │   │   ├── mod.rs
-│   │   │   ├── collector.rs
-│   │   │   └── sweeper.rs
-│   │   ├── scheduler/            # 调度器
-│   │   │   ├── mod.rs
-│   │   │   ├── task.rs
-│   │   │   └── work_stealing.rs
-│   │   └── memory/               # 内存管理
-│   │       ├── mod.rs
-│   │       ├── heap.rs
-│   │       └── allocator.rs
+│   ├── backends/                # 后端模块
+│   │   └── dev/
+│   │       └── tui_repl/        # TUI REPL 开发工具
 │   │
 │   ├── std/                      # 标准库
-│   │   ├── mod.rs
-│   │   ├── io.rs
-│   │   ├── list.rs
-│   │   ├── dict.rs
-│   │   ├── string.rs
-│   │   ├── math.rs
-│   │   ├── net.rs
-│   │   └── concurrent.rs
+│   │   └── mod.rs
 │   │
 │   └── util/                     # 工具模块
 │       ├── mod.rs
@@ -574,7 +548,7 @@ rayon = "1.9"
 | 任务 | 详细说明 | 输出文件 | 验收标准 |
 |------|----------|----------|----------|
 | 创建 Cargo 项目 | 初始化 workspace，配置依赖 | `Cargo.toml` | `cargo build` 成功 |
-| 创建目录结构 | 按模块创建 src 子目录 | `src/frontend/`, `src/middle/`, `src/vm/`, `src/runtime/`, `src/std/` | 目录结构符合设计 |
+| 创建目录结构 | 按模块创建 src 子目录 | `src/frontend/`, `src/middle/`, `src/middle/`, `src/middle/`, `src/std/` | 目录结构符合设计 |
 | 配置依赖 | 添加必要依赖（logos 可选、parking_lot、crossbeam、rayon） | `Cargo.toml` | 依赖解析成功 |
 | 配置 CI/CD | GitHub Actions 自动构建测试 | `.github/workflows/ci.yml` | CI 通过 |
 | 配置代码风格 | rustfmt.toml、.clippy.toml | 配置文件 | `cargo fmt` + `cargo clippy` 通过 |
@@ -1272,15 +1246,15 @@ pub struct ModuleIR {
 
 | 任务 | 详细说明 | 输出文件 | 验收标准 |
 |------|----------|----------|----------|
-| 虚拟机核心 | 解释器循环、寄存器管理 | `src/vm/executor.rs` | 解释器运行正确 |
-| 指令实现 | 60+ 指令实现 | `src/vm/instructions.rs` | 所有指令工作 |
-| 调用栈 | Frame 管理 | `src/vm/frames.rs` | 函数调用正确 |
-| 错误处理 | 错误类型、错误传播 | `src/vm/errors.rs` | 错误信息友好 |
+| 虚拟机核心 | 解释器循环、寄存器管理 | `src/middle/executor.rs` | 解释器运行正确 |
+| 指令实现 | 60+ 指令实现 | `src/middle/instructions.rs` | 所有指令工作 |
+| 调用栈 | Frame 管理 | `src/middle/frames.rs` | 函数调用正确 |
+| 错误处理 | 错误类型、错误传播 | `src/middle/errors.rs` | 错误信息友好 |
 
 **核心数据结构**：
 
 ```rust
-// src/vm/executor.rs
+// src/middle/executor.rs
 
 pub struct VM {
     // 寄存器
@@ -1377,15 +1351,15 @@ macro_rules! dispatch {
 
 | 任务 | 详细说明 | 输出文件 | 验收标准 |
 |------|----------|----------|----------|
-| 内存管理 | 堆分配器、内存池 | `src/runtime/memory/mod.rs` | 分配正确 |
-| 垃圾回收 | 分代 GC、增量收集 | `src/runtime/gc/mod.rs` | GC 正常工作 |
-| 并发调度 | M:N 线程、工作窃取 | `src/runtime/scheduler/mod.rs` | 并发正确 |
+| 内存管理 | 堆分配器、内存池 | `src/middle/memory/mod.rs` | 分配正确 |
+| 垃圾回收 | 分代 GC、增量收集 | `src/middle/gc/mod.rs` | GC 正常工作 |
+| 并发调度 | M:N 线程、工作窃取 | `src/middle/scheduler/mod.rs` | 并发正确 |
 | 标准库核心 | IO、List、String | `src/std/mod.rs` | 标准库可用 |
 
 **垃圾回收器设计**：
 
 ```rust
-// src/runtime/gc/mod.rs
+// src/middle/gc/mod.rs
 
 pub struct GC {
     // 堆空间

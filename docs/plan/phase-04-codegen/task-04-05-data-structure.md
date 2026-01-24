@@ -170,7 +170,7 @@ print("Data structure bytecode tests passed!")
 
 ## 相关文件
 
-- **src/vm/opcode.rs**: TypedOpcode 枚举定义
+- **src/middle/opcode.rs**: TypedOpcode 枚举定义
 - **src/middle/codegen/bytecode.rs**: BytecodeInstruction 结构
 - **src/middle/codegen/generator.rs**: 数据结构生成逻辑
 - **标准库**: Dict/List 等复杂类型实现

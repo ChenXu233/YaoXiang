@@ -97,7 +97,7 @@ CodegenContext
 
 ### 3. VM Executor ↔ BytecodeGenerator 耦合 已修复
 
-**位置**: [src/vm/executor.rs:209-215](src/vm/executor.rs#L209-L215)
+**位置**: [src/middle/executor.rs:209-215](src/middle/executor.rs#L209-L215)
 
 ```rust
 // 问题代码：VM 执行器直接调用代码生成器
@@ -277,7 +277,7 @@ if label.is_some() {
 
 ### 8. VM 中的硬编码 "print" 分支
 
-**位置**: [src/vm/executor.rs:657-666](src/vm/executor.rs#L657-L666)
+**位置**: [src/middle/executor.rs:657-666](src/middle/executor.rs#L657-L666)
 
 ```rust
 } else if func_name == "print" {
@@ -387,13 +387,13 @@ pub enum ModuleStatus {
 | 1, 2 | src/frontend/typecheck/check.rs |
 | 1, 2 | src/frontend/typecheck/infer.rs |
 | 2 | src/middle/codegen/mod.rs |
-| 3 | src/vm/executor.rs |
+| 3 | src/middle/executor.rs |
 | 3 | src/middle/codegen/generator.rs |
 | 4 | src/middle/monomorphize/mod.rs |
 | 4 | src/middle/lifetime/send_sync.rs |
 | 6 | src/frontend/typecheck/check.rs |
 | 7 | src/frontend/typecheck/infer.rs |
-| 8 | src/vm/executor.rs |
+| 8 | src/middle/executor.rs |
 | 10 | src/middle/module/mod.rs |
 
 ---

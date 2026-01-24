@@ -2,7 +2,7 @@
 
 > **优先级**: P0
 > **状态**: ✅ 已完成
-> **模块**: `src/runtime/memory/allocator.rs`
+> **模块**: `src/middle/memory/allocator.rs`
 > **依赖**: task-08-01-value-type
 > **参考**: RFC-009 所有权模型
 
@@ -104,7 +104,7 @@ impl BumpAllocator {
 ### Heap 实现 Allocator
 
 ```rust
-// src/runtime/memory/mod.rs
+// src/middle/memory/mod.rs
 
 impl Allocator for Heap {
     fn alloc(&mut self, layout: MemoryLayout) -> Result<NonNull<u8>, AllocError> {
@@ -136,7 +136,7 @@ impl Allocator for Heap {
 ## 模块结构
 
 ```
-src/runtime/memory/
+src/middle/memory/
 ├── mod.rs              # Heap, Region, Allocator trait 实现
 ├── allocator.rs        # Allocator trait, MemoryLayout, BumpAllocator
 └── tests/

@@ -165,7 +165,7 @@
 ### 3.2 内联缓存数据结构
 
 ```rust
-// src/vm/inline_cache.rs
+// src/middle/inline_cache.rs
 
 /// 内联缓存槽
 ///
@@ -823,7 +823,7 @@ impl EscapeAnalyzer {
 ### 6.2 高性能指令集 (Typed Register-based ISA)
 
 ```rust
-// src/vm/opcode.rs
+// src/middle/opcode.rs
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -1060,7 +1060,7 @@ pub enum Opcode {
 |------|------|------|----------|
 | 单态化编译器 | `src/middle/monomorphize/mod.rs` | Monomorphizer | 泛型展开正确 |
 | 逃逸分析 | `src/middle/escape_analysis/mod.rs` | EscapeAnalyzer | 栈/堆分配正确 |
-| 定义 Opcode | `src/vm/opcode.rs` | Opcode 枚举 | 指令集完整 |
+| 定义 Opcode | `src/middle/opcode.rs` | Opcode 枚举 | 指令集完整 |
 | 基础代码生成 | `src/middle/codegen/mod.rs` | CodegenContext | I64/F64 指令正确 |
 | 单元测试 | `tests/unit/codegen.rs` | 测试用例 | 80%+ 覆盖 |
 
@@ -1068,7 +1068,7 @@ pub enum Opcode {
 
 | 任务 | 文件 | 输出 | 验收标准 |
 |------|------|------|----------|
-| 内联缓存 | `src/vm/inline_cache.rs` | InlineCacheManager | 缓存命中正确 |
+| 内联缓存 | `src/middle/inline_cache.rs` | InlineCacheManager | 缓存命中正确 |
 | 生命周期分析 | `src/middle/lifetime/mod.rs` | Retain/Release 插入 | 内存正确释放 |
 | Switch 指令 | `src/middle/codegen/switch.rs` | 查表跳转 | O(1) 匹配 |
 | LoopStart/LoopInc | `src/middle/codegen/loop.rs` | 循环优化 | 迭代器消除 |

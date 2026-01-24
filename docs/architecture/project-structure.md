@@ -115,47 +115,12 @@ YaoXiang/
 │   │   └── lifetime/             # 生命周期分析
 │   │       └── mod.rs
 │   │
-│   ├── runtime/                  # 运行时：执行、内存管理、并发
-│   │   ├── mod.rs                # 运行时模块入口
-│   │   ├── dag/                  # 并作图（DAG）
-│   │   │   ├── mod.rs            # DAG 模块入口
-│   │   │   ├── node.rs           # 节点定义
-│   │   │   ├── node_id.rs        # 节点 ID 管理
-│   │   │   ├── graph.rs          # 图操作
-│   │   │   └── tests/
-│   │   ├── extfunc/              # 外部函数（print, read, write）
-│   │   ├── scheduler/            # 任务调度器
-│   │   │   ├── mod.rs            # 调度器入口
-│   │   │   ├── task.rs           # 任务定义
-│   │   │   ├── queue.rs          # 任务队列
-│   │   │   ├── work_stealer.rs   # 工作窃取算法
-│   │   │   └── tests/
-│   │   ├── memory/               # 内存管理
-│   │   │   ├── mod.rs            # 内存管理入口
-│   │   │   └── tests/
-│   │   └── value/                # 值类型（RuntimeValue）
-│   │       ├── mod.rs            # 值模块入口
-│   │       ├── runtime_value.rs  # 值类型定义
-│   │       └── tests/
-│   │
-│   ├── vm/                       # 虚拟机：字节码执行
-│   │   ├── mod.rs                # 虚拟机入口
-│   │   ├── executor.rs           # 执行器
-│   │   ├── frames.rs             # 调用帧
-│   │   ├── opcode.rs             # 操作码定义（TypedOpcode）
-│   │   ├── inline_cache.rs       # 内联缓存（JIT 预留）
-│   │   ├── errors.rs             # VM 错误
-│   │   └── tests/
+│   ├── backends/                # 后端模块
+│   │   └── dev/
+│   │       └── tui_repl/        # TUI REPL 开发工具
 │   │
 │   ├── std/                      # 标准库
-│   │   ├── mod.rs                # 标准库入口
-│   │   ├── io.rs                 # 输入输出
-│   │   ├── string.rs             # 字符串操作
-│   │   ├── list.rs               # 列表操作
-│   │   ├── dict.rs               # 字典操作
-│   │   ├── math.rs               # 数学函数
-│   │   ├── concurrent.rs         # 并发原语
-│   │   └── net.rs                # 网络（实验性）
+│   │   └── mod.rs                # 标准库入口
 │   │
 │   ├── util/                     # 工具库
 │   │   ├── mod.rs                # 工具入口
@@ -525,7 +490,7 @@ pub enum TypedOpcode {
 **核心文件**：
 - `mod.rs` - 生命周期分析器
 
-### 3.3 运行时 (src/runtime/)
+### 3.3 运行时 (src/middle/)
 
 运行时负责程序执行时的资源管理和任务调度。
 
@@ -614,7 +579,7 @@ pub struct Scheduler {
 - **RAII**：自动资源管理
 - **可选 GC**：基于引用计数或标记清除
 
-### 3.4 虚拟机 (src/vm/)
+### 3.4 虚拟机 (src/middle/)
 
 虚拟机负责执行字节码。
 
@@ -648,7 +613,7 @@ pub struct CallFrame {
 }
 
 // 值类型（使用 Runtime 提供的 RuntimeValue）
-// 详见 src/runtime/value/runtime_value.rs
+// 详见 src/middle/value/runtime_value.rs
 ```
 
 #### 3.4.2 调用帧 (frames.rs)
@@ -896,7 +861,7 @@ runtime/extfunc
 
 ```bash
 # 1. 设计阶段
-docs/works/plans/your-feature.md  # 设计文档
+docs/plans/your-feature.md  # 设计文档
 
 # 2. 前端实现
 src/frontend/lexer/tokens.rs     # 添加 Token
@@ -909,9 +874,9 @@ src/middle/ir.rs                 # 扩展 IR
 src/middle/codegen/              # 生成字节码
 
 # 4. 运行时实现
-src/runtime/extfunc.rs           # 添加外部函数
-src/vm/executor.rs               # 添加执行逻辑
-src/vm/opcode.rs                 # 添加操作码
+src/middle/extfunc.rs           # 添加外部函数
+src/middle/executor.rs               # 添加执行逻辑
+src/middle/opcode.rs                 # 添加操作码
 
 # 5. 测试
 tests/unit/codegen.rs            # 单元测试

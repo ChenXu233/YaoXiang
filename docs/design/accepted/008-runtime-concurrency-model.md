@@ -302,7 +302,7 @@ create_vm_with_config: (config: VMConfig) -> VM = (config) => {
 ##### 方案 B：Rust 实现层面（编译器的 Rust 实现）
 
 ```rust
-// src/runtime/scheduler/mod.rs
+// src/middle/scheduler/mod.rs
 
 /// 调度器接口 - 通过泛型约束实现解耦
 /// 注意：这是 Rust 层面的实现细节，非 YaoXiang 语言特性
@@ -1163,7 +1163,7 @@ WorkStealer 应该放在 Core Runtime 还是 Full Runtime？
 
 ### 外部参考
 - [Rust async 运行时设计](https://tokio.rs/)
-- [Go 调度器设计](https://golang.org/src/runtime/proc.go)
+- [Go 调度器设计](https://golang.org/src/middle/proc.go)
 - [Swift Actor 模型](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html)
 
 ---

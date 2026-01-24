@@ -165,6 +165,6 @@ print("Function call bytecode tests passed!")
 
 ## 相关文件
 
-- **src/vm/opcode.rs**: TypedOpcode 枚举定义
+- **src/middle/opcode.rs**: TypedOpcode 枚举定义
 - **src/middle/codegen/bytecode.rs**: BytecodeInstruction 结构
 - **src/middle/codegen/generator.rs**: 函数调用生成逻辑

@@ -38,7 +38,7 @@ YaoXiang 的版本发布计划，从 v0.1 到 v1.0 的路线图。
 | P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
 | P2 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
 | P3 | 字节码生成器 | ⚠️ 基本完成 | `src/middle/codegen/` |
-| P4 | 虚拟机 | 🔶 进行中 | `src/vm/`, `src/runtime/` |
+| P4 | 虚拟机 | 🔶 进行中 | `src/middle/`, `src/middle/` |
 | P5 | 标准库 | ⚠️ 部分完成 | `src/std/` |
 
 **下一步优先**：完成 P3（函数调用、闭包）→ 完善 P4（指令实现、基本 GC）

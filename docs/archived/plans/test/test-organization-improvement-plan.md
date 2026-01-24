@@ -38,19 +38,14 @@ yaoxiang/
 │   │   ├── codegen/                ❌ 没有 tests 子目录
 │   │   ├── monomorphize/           ❌ 没有 tests 子目录
 │   │   ├── escape_analysis/        ❌ 没有 tests 子目录
+│   │   ├── lifetime/              ❌ 没有 tests 子目录
 │   │   └── ir.rs                   ❌ 没有配套测试
 │   │
-│   ├── vm/
-│   │   ├── errors.rs               ⚠️ 内联测试
-│   │   ├── executor.rs             ⚠️ 内联测试
-│   │   ├── frames.rs               ⚠️ 内联测试
-│   │   ├── instructions.rs         ⚠️ 内联测试
-│   │   └── opcode.rs               ⚠️ 内联测试
+│   ├── backends/
+│   │   └── dev/
+│   │       └── tui_repl/          ❌ 没有 tests 子目录
 │   │
-│   └── runtime/
-│       ├── gc/mod.rs               ⚠️ 内联测试
-│       ├── memory/mod.rs           ⚠️ 内联测试
-│       └── scheduler/mod.rs        ⚠️ 内联测试
+│   └── std/                        ❌ 没有 tests 目录
 │
 │   └── util/
 │       └── span.rs                 ⚠️ 内联测试
@@ -97,8 +92,8 @@ yaoxiang/
 
 | # | 问题 | 影响 | 位置 |
 |---|------|------|------|
-| 5 | **VM 缺少测试** | 虚拟机核心组件没有测试，执行逻辑无法验证 | `src/vm/` |
-| 6 | **Runtime 缺少测试** | GC、内存管理、调度器没有测试，运行时可靠性无法保证 | `src/runtime/` |
+| 5 | **VM 缺少测试** | 虚拟机核心组件没有测试，执行逻辑无法验证 | `src/middle/` |
+| 6 | **Runtime 缺少测试** | GC、内存管理、调度器没有测试，运行时可靠性无法保证 | `src/middle/` |
 | 7 | **缺少集成测试** | 没有端到端测试流程，无法验证完整编译管线 | `tests/` |
 | 8 | **测试命名不统一** | 有些用 `basic.rs`，有些用 `check.rs`，缺乏统一规范 | 多个位置 |
 
@@ -169,38 +164,12 @@ yaoxiang/
 │   │           ├── mod.rs
 │   │           └── instruction.rs  🔄 新增 - 指令测试
 │   │
-│   ├── vm/
-│   │   ├── opcode.rs
-│   │   ├── errors.rs
-│   │   ├── executor.rs
-│   │   ├── frames.rs
-│   │   ├── instructions.rs
-│   │   └── tests/                  🔄 新增 - 从内联测试迁移
-│   │       ├── mod.rs
-│   │       ├── opcode.rs           🔄 从 opcode.rs 迁移
-│   │       ├── errors.rs           🔄 从 errors.rs 迁移
-│   │       ├── executor.rs         🔄 从 executor.rs 迁移
-│   │       ├── frames.rs           🔄 从 frames.rs 迁移
-│   │       └── instructions.rs     🔄 从 instructions.rs 迁移
-│   │
-│   ├── runtime/
-│   │   ├── gc/
-│   │   │   ├── mod.rs
-│   │   │   └── tests/              🔄 新增 - 从内联测试迁移
-│   │   │       ├── mod.rs
-│   │   │       └── collector.rs    🔄 从 gc/mod.rs 迁移
-│   │   │
-│   │   ├── memory/
-│   │   │   ├── mod.rs
-│   │   │   └── tests/              🔄 新增 - 从内联测试迁移
-│   │   │       ├── mod.rs
-│   │   │       └── allocator.rs    🔄 从 memory/mod.rs 迁移
-│   │   │
-│   │   └── scheduler/
-│   │       ├── mod.rs
-│   │       └── tests/              🔄 新增 - 从内联测试迁移
-│   │           ├── mod.rs
-│   │           └── task.rs         🔄 从 scheduler/mod.rs 迁移
+│   ├── backends/
+│   │   └── dev/
+│   │       └── tui_repl/
+│   │           └── tests/          🔄 新增 - 为 REPL 添加测试
+│   │               ├── mod.rs
+│   │               └── repl.rs     🔄 新增 - REPL 功能测试
 │   │
 │   └── util/
 │       └── span.rs
@@ -298,14 +267,14 @@ mod binary_operation_tests {
 
 | 任务 | 源文件 | 目标目录 | 依赖 |
 |------|--------|---------|------|
-| 迁移 vm/opcode.rs 内联测试 | `src/vm/opcode.rs` | `src/vm/tests/opcode.rs` | 无 |
-| 迁移 vm/errors.rs 内联测试 | `src/vm/errors.rs` | `src/vm/tests/errors.rs` | 任务1 |
-| 迁移 vm/executor.rs 内联测试 | `src/vm/executor.rs` | `src/vm/tests/executor.rs` | 任务1 |
-| 迁移 vm/frames.rs 内联测试 | `src/vm/frames.rs` | `src/vm/tests/frames.rs` | 任务1 |
-| 迁移 vm/instructions.rs 内联测试 | `src/vm/instructions.rs` | `src/vm/tests/instructions.rs` | 任务1 |
-| 迁移 runtime/gc 内联测试 | `src/runtime/gc/mod.rs` | `src/runtime/gc/tests/mod.rs` | 无 |
-| 迁移 runtime/memory 内联测试 | `src/runtime/memory/mod.rs` | `src/runtime/memory/tests/mod.rs` | 任务6 |
-| 迁移 runtime/scheduler 内联测试 | `src/runtime/scheduler/mod.rs` | `src/runtime/scheduler/tests/mod.rs` | 任务6 |
+| 迁移 vm/opcode.rs 内联测试 | `src/middle/opcode.rs` | `src/middle/tests/opcode.rs` | 无 |
+| 迁移 vm/errors.rs 内联测试 | `src/middle/errors.rs` | `src/middle/tests/errors.rs` | 任务1 |
+| 迁移 vm/executor.rs 内联测试 | `src/middle/executor.rs` | `src/middle/tests/executor.rs` | 任务1 |
+| 迁移 vm/frames.rs 内联测试 | `src/middle/frames.rs` | `src/middle/tests/frames.rs` | 任务1 |
+| 迁移 vm/instructions.rs 内联测试 | `src/middle/instructions.rs` | `src/middle/tests/instructions.rs` | 任务1 |
+| 迁移 runtime/gc 内联测试 | `src/middle/gc/mod.rs` | `src/middle/gc/tests/mod.rs` | 无 |
+| 迁移 runtime/memory 内联测试 | `src/middle/memory/mod.rs` | `src/middle/memory/tests/mod.rs` | 任务6 |
+| 迁移 runtime/scheduler 内联测试 | `src/middle/scheduler/mod.rs` | `src/middle/scheduler/tests/mod.rs` | 任务6 |
 | 迁移 util/span 内联测试 | `src/util/span.rs` | `src/util/span/tests/mod.rs` | 无 |
 | 迁移 frontend/lexer 内联测试 | `src/frontend/lexer/mod.rs` | `src/frontend/lexer/tests/mod.rs` | 无 |
 | 迁移 monomorphize/instance 内联测试 | `src/middle/monomorphize/instance.rs` | `src/middle/monomorphize/tests/instance.rs` | 无 |
@@ -314,7 +283,7 @@ mod binary_operation_tests {
 
 | 任务 | 说明 | 依赖 |
 |------|------|------|
-| 拆分 opcode_tests | 移到 `src/vm/tests/opcode.rs` | 阶段一任务1 |
+| 拆分 opcode_tests | 移到 `src/middle/tests/opcode.rs` | 阶段一任务1 |
 | 拆分 monomorphize_tests | 移到 `src/middle/monomorphize/tests/` | 阶段一任务11 |
 | 拆分 escape_analysis_tests | 移到 `src/middle/escape_analysis/tests/` | 阶段一后新建 |
 | 拆分 codegen_tests | 移到 `src/middle/codegen/tests/` | 阶段一后新建 |
@@ -402,15 +371,15 @@ mod binary_operation_tests {
 │   └── unit/                       │   └── integration/  ← 只保留集成测试
 │       └── codegen.rs              │       ├── parser_typecheck.rs
 │                                   │       ├── codegen_vm.rs
-├── src/vm/opcode.rs                │       └── end_to_end.rs
+├── src/middle/opcode.rs                │       └── end_to_end.rs
 │   └── #[cfg(test)]                │
-│       mod tests { ... }           ├── src/vm/
+│       mod tests { ... }           ├── src/middle/
 │                                   │   └── tests/  ← 新增
-├── src/runtime/gc/mod.rs           │       ├── opcode.rs  ← 从 opcode.rs 迁移
+├── src/middle/gc/mod.rs           │       ├── opcode.rs  ← 从 opcode.rs 迁移
 │   └── #[cfg(test)]                │       ├── errors.rs  ← 从 errors.rs 迁移
 │       mod tests { ... }           │       └── executor.rs ← 从 executor.rs 迁移
 │   ... (12个文件)                   │
-│                                   └── src/runtime/gc/
+│                                   └── src/middle/gc/
 │                                       └── tests/  ← 新增
 │                                           └── collector.rs ← 从 mod.rs 迁移
 ```

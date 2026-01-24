@@ -117,7 +117,7 @@ print("Logic bytecode tests passed!")
 
 ## 相关文件
 
-- **src/vm/opcode.rs**: TypedOpcode 枚举定义
+- **src/middle/opcode.rs**: TypedOpcode 枚举定义
 - **src/middle/codegen/bytecode.rs**: BytecodeInstruction 结构
 - **src/middle/codegen/generator.rs**: 逻辑表达式生成逻辑
 - **src/middle/codegen/control_flow.rs**: 短路求值控制流处理

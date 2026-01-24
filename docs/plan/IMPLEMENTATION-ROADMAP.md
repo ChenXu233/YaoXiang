@@ -268,10 +268,10 @@
 | P4 | Codegen | `src/middle/codegen/` | 🔶 进行中 | 表达式/语句生成 |
 | P5 | Ownership System | `src/middle/lifetime/` | ✅ 已完成 | 所有权/循环检测/ref-Arc/SendSync |
 | P7 | Monomorphize | `src/middle/monomorphize/` | ✅ 已完成 | 泛型特化 |
-| P8 | Core Runtime | `src/runtime/` | ⏳ 待实现 | Value/Allocator/Ownership |
-| P9 | DAG | `src/runtime/dag/` | ✅ 已存在 | 惰性计算图 |
-| P10 | Scheduler | `src/runtime/scheduler/` | ✅ 已存在 | 任务调度 |
-| P11 | VM | `src/vm/` | ⏳ 待实现 | 字节码解释执行 |
+| P8 | Core Runtime | `src/middle/` | ⏳ 待实现 | Value/Allocator/Ownership |
+| P9 | DAG | `src/middle/dag/` | ✅ 已存在 | 惰性计算图 |
+| P10 | Scheduler | `src/middle/scheduler/` | ✅ 已存在 | 任务调度 |
+| P11 | VM | `src/middle/` | ⏳ 待实现 | 字节码解释执行 |
 
 ### 后期扩展（v0.5+，可推迟）
 
@@ -279,7 +279,7 @@
 |-------|------|------|------|
 | P6 | unsafe | `src/middle/unsafe/` | FFI/裸指针，后期实现 |
 | P12 | Embedded Runtime | `src/embedded/` | 即时执行器，无 DAG |
-| P13 | WorkStealer | `src/runtime/work_stealer/` | 工作窃取，负载均衡 |
+| P13 | WorkStealer | `src/middle/work_stealer/` | 工作窃取，负载均衡 |
 | P14 | @block | `src/std/sync/` | 强制同步执行 |
 | P15 | Stdlib | `src/std/` | core/io/net 等 |
 | P16 | JIT | `src/jit/` | 热点代码编译 |

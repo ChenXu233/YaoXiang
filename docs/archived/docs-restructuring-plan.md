@@ -77,7 +77,7 @@ docs/
 
 | 原位置 | 新位置 |
 |--------|--------|
-| `docs/works/plans/` | `docs/plans/` |
+| `docs/plans/` | `docs/plans/` |
 
 ### 3. 移动到 `implementation/`
 
@@ -95,7 +95,7 @@ docs/
 | `docs/guides/` | 用户指南已独立，保持不变 |
 | `docs/examples/` | 示例代码，保持不变 |
 | `docs/works/old/` | 历史归档，保留或删除 |
-| `docs/works/plans/async/` | 已提升到 `plans/async/` |
+| `docs/plans/async/` | 已提升到 `plans/async/` |
 
 ### 5. 可选：更新 `docs/README.md`
 
@@ -132,7 +132,7 @@ mv "docs/一个2006年出生者的语言设计观.md" docs/design/01-philosophy.
 
 ```bash
 # 移动 works/plans 到根级
-mv docs/works/plans/* docs/plans/
+mv docs/plans/* docs/plans/
 rmdir docs/works/plans
 ```
 

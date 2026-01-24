@@ -159,7 +159,7 @@ Point.calc = calculate[1, 2, 3]
 
 4. **第四周**：运行时探索
    - ✅ `runtime-design.md` 
-   - ✅ 阅读 `src/vm/` 和 `src/runtime/`
+   - ✅ 阅读 `src/middle/` 和 `src/middle/`
 
 ### 常见任务
 
@@ -304,7 +304,7 @@ YaoXiang-book.md → guides/getting-started.md
 ```
 文档 → 源代码
 ├── compiler-design.md → src/frontend/, src/middle/
-├── runtime-design.md → src/vm/, src/runtime/
+├── runtime-design.md → src/middle/, src/middle/
 ├── project-structure.md → 整个项目布局
 └── YaoXiang-book.md → 语言语义和语法
 ```

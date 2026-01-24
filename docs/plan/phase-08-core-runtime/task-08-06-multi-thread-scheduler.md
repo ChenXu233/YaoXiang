@@ -2,7 +2,7 @@
 
 > **优先级**: P1
 > **状态**: ⬜ 待开始
-> **模块**: `src/runtime/scheduler/multi_thread.rs`
+> **模块**: `src/middle/scheduler/multi_thread.rs`
 > **依赖**: task-08-05-single-thread-scheduler
 
 ## 功能描述

@@ -15,7 +15,7 @@ src/embedded/                # 🟢 嵌入式（无 DAG）
 ├── mod.rs
 └── executor.rs              # 即时执行器（task-08-03）
 
-src/runtime/                 # 🔵 标准运行时
+src/middle/                 # 🔵 标准运行时
 ├── mod.rs
 ├── standard_runtime.rs      # 标准运行时入口（task-08-07）
 └── scheduler/               # 调度器（泛型约束）
@@ -58,10 +58,10 @@ src/full/                    # 🟣 Full Runtime（可选）
 | 8.1 | [值类型系统](./task-08-01-value-type.md) | P0 | ⬜ | `src/core/value.rs` | 无 |
 | 8.2 | [内存分配器](./task-08-02-allocator-interface.md) | P0 | ⬜ | `src/core/allocator.rs` | 8.1 |
 | 8.3 | [嵌入式执行器](./task-08-03-embedded-executor.md) | P1 | ⬜ | `src/embedded/executor.rs` | 8.1, 8.2 |
-| 8.4 | [调度器接口](./task-08-04-scheduler-trait.md) | P1 | ⬜ | `src/runtime/scheduler/trait.rs` | 8.1 |
-| 8.5 | [单线程调度器](./task-08-05-single-thread-scheduler.md) | P1 | ⬜ | `src/runtime/scheduler/single_thread.rs` | 8.4 |
-| 8.6 | [多线程调度器](./task-08-06-multi-thread-scheduler.md) | P1 | ⬜ | `src/runtime/scheduler/multi_thread.rs` | 8.5 |
-| 8.7 | [标准运行时入口](./task-08-07-standard-runtime.md) | P1 | ⬜ | `src/runtime/standard_runtime.rs` | 8.4, 8.5, 8.6 |
+| 8.4 | [调度器接口](./task-08-04-scheduler-trait.md) | P1 | ⬜ | `src/middle/scheduler/trait.rs` | 8.1 |
+| 8.5 | [单线程调度器](./task-08-05-single-thread-scheduler.md) | P1 | ⬜ | `src/middle/scheduler/single_thread.rs` | 8.4 |
+| 8.6 | [多线程调度器](./task-08-06-multi-thread-scheduler.md) | P1 | ⬜ | `src/middle/scheduler/multi_thread.rs` | 8.5 |
+| 8.7 | [标准运行时入口](./task-08-07-standard-runtime.md) | P1 | ⬜ | `src/middle/standard_runtime.rs` | 8.4, 8.5, 8.6 |
 | 8.8 | [工作窃取](./task-08-08-work-stealer.md) | P2 | ⬜ | `src/full/work_stealer.rs` | 8.7 |
 
 ## 设计依据

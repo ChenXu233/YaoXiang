@@ -125,7 +125,7 @@ pub enum OwnershipError {
 | 4 | `src/middle/lifetime/error.rs` | 添加 `RefNonOwner` 错误 |
 | 5 | `src/middle/lifetime/mod.rs` | 添加 `RefChecker` |
 | 6 | `src/middle/codegen/expr.rs` | 生成 Arc 指令 |
-| 7 | `src/vm/instructions.rs` | 添加运行时支持 |
+| 7 | `src/middle/instructions.rs` | 添加运行时支持 |
 | 8 | 测试 | 验收测试 |
 
 ## 与 RFC-009 v7 对照
@@ -184,8 +184,8 @@ print("ref (Arc) tests passed!")
 - **src/middle/lifetime/error.rs**: `RefNonOwner` 错误
 - **src/middle/lifetime/ref_semantics.rs**: `RefChecker` 所有权检查
 - **src/middle/codegen/expr.rs**: `generate_ref` 代码生成
-- **src/vm/opcode.rs**: `ArcNew(0x79)`, `ArcClone(0x7A)`, `ArcDrop(0x7B)`
-- **src/vm/executor.rs**: `ArcValue` 运行时实现
+- **src/middle/opcode.rs**: `ArcNew(0x79)`, `ArcClone(0x7A)`, `ArcDrop(0x7B)`
+- **src/middle/executor.rs**: `ArcValue` 运行时实现
 
 ## 测试覆盖
 
@@ -193,4 +193,4 @@ print("ref (Arc) tests passed!")
 - **src/frontend/typecheck/tests/ref_test.rs**: TypeCheck 测试 (6个)
 - **src/middle/codegen/tests/ref_test.rs**: Codegen 测试 (5个)
 - **src/middle/lifetime/tests/ref_semantics.rs**: Lifetime 测试 (5个)
-- **src/vm/tests/arc.rs**: VM 测试 (9个)
+- **src/middle/tests/arc.rs**: VM 测试 (9个)

@@ -109,7 +109,7 @@ type E = [ foo() -> Int  # 缺少右方括号
 
 #### 2.1 AST 结构调整
 
-**文件**: `src/frontend/ast/types.rs`
+**文件**: `src/frontend/parser/types.rs`
 
 ```rust
 // 新的 TypeDefBody 枚举
@@ -218,7 +218,7 @@ fn check_constructor_call(
 
 ### Phase 4: 单态化器更新
 
-**文件**: `src/frontend/monomorphize/`
+**文件**: `src/middle/monomorphize/`
 
 | 任务 | 描述 | 状态 |
 |------|------|------|

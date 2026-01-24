@@ -225,7 +225,7 @@ print("Error handling bytecode tests passed!")
 
 ## 相关文件
 
-- **src/vm/opcode.rs**: TypedOpcode 枚举定义（TypeCheck, GetField, JmpIfNot, ReturnValue, Throw）
+- **src/middle/opcode.rs**: TypedOpcode 枚举定义（TypeCheck, GetField, JmpIfNot, ReturnValue, Throw）
 - **src/middle/codegen/mod.rs**: `?` 运算符生成逻辑（复用模式匹配）
 - **src/middle/codegen/control_flow.rs**: 模式匹配代码生成
 - **RFC-008**: Runtime 并发模型（同样的设计哲学：错误处理是类型问题）

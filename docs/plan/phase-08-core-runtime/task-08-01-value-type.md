@@ -495,7 +495,7 @@ impl RuntimeValue {
 ## 模块结构
 
 ```
-src/runtime/value/
+src/middle/value/
 ├── mod.rs                # 模块入口
 ├── runtime_value.rs      # RuntimeValue 与 ValueType 定义
 ├── heap.rs               # 堆分配系统（Handle 实现）
