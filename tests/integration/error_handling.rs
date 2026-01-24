@@ -526,7 +526,7 @@ fn test_match_in_while_loop_with_return() {
 #[test]
 fn test_complex_nested_control_flow_with_return() {
     // Test complex nested control flow with return in match
-    // Note: FIXED - Resolved infinite recursion in match arm processing
+    // Fixed: return/break/continue are now properly parsed as prefix expressions
     let source = r#"
         complex_func: (Int, Int, Int) -> Int = (x, y, z) => {
             if x > 0 {
