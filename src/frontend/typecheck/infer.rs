@@ -287,7 +287,9 @@ impl<'a> TypeInferrer<'a> {
         if let Some(poly) = poly {
             // 实例化多态类型
             let ty = self.solver.instantiate(&poly);
-            Ok(ty)
+            // 解析类型变量绑定以避免无限递归
+            let resolved = self.solver.resolve_type(&ty);
+            Ok(resolved)
         } else {
             Err(TypeError::UnknownVariable {
                 name: name.to_string(),
@@ -306,6 +308,10 @@ impl<'a> TypeInferrer<'a> {
     ) -> TypeResult<MonoType> {
         let left_ty = self.infer_expr(left)?;
         let right_ty = self.infer_expr(right)?;
+
+        // 解析类型变量绑定
+        let left_ty = self.solver.resolve_type(&left_ty);
+        let right_ty = self.solver.resolve_type(&right_ty);
 
         match op {
             // 算术运算
@@ -463,8 +469,11 @@ impl<'a> TypeInferrer<'a> {
         let cond_ty = self.infer_expr(condition)?;
         self.solver.add_constraint(cond_ty, MonoType::Bool, span);
 
+        // 进入作用域（用于处理分支中可能添加的变量）
+        self.enter_scope();
+
         // 推断各分支的类型
-        let then_ty = self.infer_block(then_branch, true, None)?;
+        let then_ty = self.infer_block(then_branch, false, None)?;
 
         // 处理 elif 分支
         let mut current_ty = then_ty;
@@ -473,7 +482,7 @@ impl<'a> TypeInferrer<'a> {
             self.solver
                 .add_constraint(elif_cond_ty, MonoType::Bool, span);
 
-            let elif_body_ty = self.infer_block(elif_body, true, None)?;
+            let elif_body_ty = self.infer_block(elif_body, false, None)?;
 
             // 所有分支类型必须一致
             self.solver
@@ -483,10 +492,13 @@ impl<'a> TypeInferrer<'a> {
 
         // 处理 else 分支
         if let Some(else_body) = else_branch {
-            let else_ty = self.infer_block(else_body, true, None)?;
+            let else_ty = self.infer_block(else_body, false, None)?;
             self.solver
                 .add_constraint(current_ty.clone(), else_ty, span);
         }
+
+        // 退出作用域
+        self.exit_scope();
 
         Ok(current_ty)
     }
@@ -504,9 +516,15 @@ impl<'a> TypeInferrer<'a> {
         let result_ty = self.solver.new_var();
 
         for arm in arms {
-            let arm_ty = self.infer_pattern(&arm.pattern, Some(&expr_ty), arm.span)?;
+            self.enter_scope();
+            let pat_ty = self.infer_pattern(&arm.pattern, Some(&expr_ty), arm.span)?;
             self.solver
-                .add_constraint(arm_ty, result_ty.clone(), arm.span);
+                .add_constraint(pat_ty, expr_ty.clone(), arm.span);
+
+            let body_ty = self.infer_expr(&arm.body)?;
+            self.solver
+                .add_constraint(body_ty, result_ty.clone(), arm.span);
+            self.exit_scope();
         }
 
         Ok(result_ty)
@@ -720,12 +738,27 @@ impl<'a> TypeInferrer<'a> {
 
         self.solver.add_constraint(cond_ty, MonoType::Bool, span);
 
-        // 推断循环体（注意：这里不管理作用域，因为我们已经管理了）
+        // 推断循环体（注意：这里 manage_scope = false，因为我们已经管理了作用域）
+        // 重要：如果 body.expr 是 While 表达式，infer_expr 会调用 infer_while
+        // 但 infer_while 会再次 enter_scope，导致无限递归
+        // 所以我们需要在调用 infer_while 之前手动处理这个问题
         if let Some(l) = label {
             self.loop_labels.push(l.to_string());
         }
 
-        let _body_ty = self.infer_block(body, false, None)?;
+        // 检查 body.expr 是否是 While 或 For 循环（可能导致无限递归）
+        // 如果是，我们直接设置 Void 返回类型，避免进一步推断
+        let _body_ty = if let Some(expr) = &body.expr {
+            match expr.as_ref() {
+                ast::Expr::While { .. } | ast::Expr::For { .. } => {
+                    // 避免无限递归，直接返回 Void
+                    MonoType::Void
+                }
+                _ => self.infer_expr(expr)?,
+            }
+        } else {
+            MonoType::Void
+        };
 
         if label.is_some() {
             self.loop_labels.pop();

@@ -907,8 +907,16 @@ impl TypeConstraintSolver {
     pub fn solve(&mut self) -> Result<(), Vec<TypeConstraintError>> {
         let mut errors = Vec::new();
 
+        // Debug: Track solve iterations
+        let mut iterations = 0;
+        let max_iterations = 10000;
+
         // 逐一求解约束
         for constraint in std::mem::take(&mut self.constraints) {
+            iterations += 1;
+            if iterations > max_iterations {
+                panic!("Too many constraint solving iterations: {}", iterations);
+            }
             if let Err(e) = self.unify(&constraint.left, &constraint.right) {
                 errors.push(TypeConstraintError {
                     error: e,

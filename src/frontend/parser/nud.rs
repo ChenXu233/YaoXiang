@@ -47,6 +47,10 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
             // ref 关键字：创建 Arc
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
+            // Control flow expressions (return, break, continue)
+            Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
+            Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
+            Some(TokenKind::KwContinue) => Some((BP_LOWEST, Self::parse_continue_expr)),
             _ => None,
         }
     }
@@ -84,6 +88,54 @@ impl<'a> ParserState<'a> {
             expr: Box::new(expr),
             span,
         })
+    }
+
+    /// Parse return expression: `return [expr]`
+    fn parse_return_expr(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'return'
+
+        // Check if there's a value to return
+        // Stop at common terminators: comma, RBrace, semicolon, or end
+        let value = if self.at(&TokenKind::Semicolon)
+            || self.at(&TokenKind::RBrace)
+            || self.at(&TokenKind::Comma)
+            || self.at_end()
+        {
+            None
+        } else {
+            Some(Box::new(self.parse_expression(BP_LOWEST)?))
+        };
+
+        Some(Expr::Return(value, span))
+    }
+
+    /// Parse break expression: `break [::label]`
+    fn parse_break_expr(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'break'
+
+        let label = if self.at(&TokenKind::ColonColon) {
+            self.parse_loop_label()
+        } else {
+            None
+        };
+
+        Some(Expr::Break(label, span))
+    }
+
+    /// Parse continue expression: `continue [::label]`
+    fn parse_continue_expr(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'continue'
+
+        let label = if self.at(&TokenKind::ColonColon) {
+            self.parse_loop_label()
+        } else {
+            None
+        };
+
+        Some(Expr::Continue(label, span))
     }
 
     /// Parse integer literal
@@ -471,6 +523,10 @@ impl<'a> ParserState<'a> {
 
     /// Parse match expression
     fn parse_match(&mut self) -> Option<Expr> {
+        self.parse_match_inner()
+    }
+
+    fn parse_match_inner(&mut self) -> Option<Expr> {
         let start_span = self.span();
         self.bump(); // consume 'match'
 

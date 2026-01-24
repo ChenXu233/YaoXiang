@@ -105,13 +105,18 @@ fn format_diagnostic(
     let line_index = span.start.line.saturating_sub(1);
     let line_text = source_file.content.lines().nth(line_index).unwrap_or("");
 
-    let col = span.start.column.max(1);
+    let line_len = line_text.chars().count();
+    let col = span.start.column.max(1).min(line_len.saturating_add(1));
     let end_col = if span.end.line == span.start.line && span.end.column > span.start.column {
         span.end.column
     } else {
-        col + 1
-    };
-    let caret_len = end_col.saturating_sub(col).max(1);
+        col.saturating_add(1)
+    }
+    .min(line_len.saturating_add(1));
+    let caret_len = end_col
+        .saturating_sub(col)
+        .max(1)
+        .min(line_len.saturating_add(1));
     let caret = format!(
         "{}{}",
         " ".repeat(col.saturating_sub(1)),
