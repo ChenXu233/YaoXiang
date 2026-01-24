@@ -30,7 +30,7 @@ YaoXiang 采用**极简统一的类型语法**：`name: type = value`
 ```
 ├── 变量/函数：name: type = value
 │   ├── x: Int = 42
-│   └── add: (Int, Int) -> Int = (a, b) => a + b
+│   └── add: (Int, Int) -> Int = (a, b) => { return a + b }
 │
 ├── 类型定义：type Name = type_expression
 │   ├── type Point = { x: Float, y: Float }
@@ -163,11 +163,11 @@ type Point = {
 
 # 实现接口方法
 Point.draw: (Point, Surface) -> Void = (self, surface) => {
-    surface.plot(self.x, self.y)
+    return surface.plot(self.x, self.y)
 }
 
 Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+    return "Point(${self.x}, ${self.y})"
 }
 ```
 
@@ -188,11 +188,11 @@ type EmptyInterface = {}
 ```yaoxiang
 # 类型方法：第一个参数是 self
 Point.draw: (Point, Surface) -> Void = (self, surface) => {
-    surface.plot(self.x, self.y)
+    return surface.plot(self.x, self.y)
 }
 
 Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+    return "Point(${self.x}, ${self.y})"
 }
 ```
 
@@ -205,7 +205,7 @@ Point.serialize: (Point) -> String = (self) => {
 distance: (Point, Point) -> Float = (p1, p2) => {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # 绑定到 Point.distance（this 绑定到第 0 位）
@@ -223,7 +223,7 @@ d2: Float = p1.distance(p2)
 ```yaoxiang
 # 函数接收多个 Point 参数
 transform_points: (Point, Point, Float) -> Point = (p1, p2, factor) => {
-    Point(p1.x * factor, p1.y * factor)
+    return Point(p1.x * factor, p1.y * factor)
 }
 
 # 绑定多个位置（自动柯里化）
@@ -239,7 +239,7 @@ p1.transform(p2)(2.0)  # → transform_points(p1, p2, 2.0)
 
 ```yaoxiang
 pub draw: (Point, Surface) -> Void = (self, surface) => {
-    surface.plot(self.x, self.y)
+    return surface.plot(self.x, self.y)
 }
 
 # 编译器自动推断 Point.draw = draw[0]
@@ -270,7 +270,7 @@ type Callback[T] = (T) -> Void
 type Predicate[T] = (T) -> Bool
 
 # 使用
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => { return a + b }
 ```
 
 ---
@@ -295,7 +295,7 @@ names: List[String] = List(["Alice", "Bob"])
 
 ```yaoxiang
 # 泛型函数
-identity: [T](T) -> T = (x) => x
+identity: [T](T) -> T = (x) => { return x }
 
 # 使用
 n: Int = identity(42)
@@ -317,7 +317,7 @@ n2: Number = 3.14
 
 # 模式匹配
 print_number: Number -> String = (n) => {
-    match n {
+    return match n {
         i: Int => "整数: " + i.to_string(),
         f: Float => "浮点数: " + f.to_string(),
     }
@@ -338,8 +338,8 @@ type Document = Printable & Serializable
 
 # 实现交集类型
 type MyDoc = { content: String } & {
-    print: () -> Void = () => print(self.content)
-    to_json: () -> String = () => '{"content": "' + self.content + '"}'
+    print: () -> Void = () => { return print(self.content) }
+    to_json: () -> String = () => { return '{"content": "' + self.content + '"}' }
 }
 ```
 

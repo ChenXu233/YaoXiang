@@ -121,17 +121,51 @@ y = 100  # 推断为 Int
 
 ```yaoxiang
 # 完整语法
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => { return a + b }
 
 # 带参数名
-greet: (String) -> String = (name) => "Hello, ${name}!"
+greet: (String) -> String = (name) => { return "Hello, ${name}!" }
 
 # 多参数
 calc: (x: Float, y: Float, op: String) -> Float = (x, y, op) => {
     match op {
-        "+" -> x + y,
-        "-" -> x - y,
-        _ -> 0.0
+        "+" -> return x + y,
+        "-" -> return x - y,
+        _ -> return 0.0
+    }
+}
+
+# 多行函数体
+calc2: (x: Float, y: Float) -> Float = (x, y) => {
+    if x > y {
+        return x
+    }
+    return y
+}
+```
+
+#### 返回规则
+
+所有函数必须显式使用 `return` 关键字返回值（除返回 `()` 的函数外）：
+
+```yaoxiang
+# 非 Void 返回类型 - 必须使用 return
+add: (Int, Int) -> Int = (a, b) => { return a + b }
+
+# Void 返回类型 - 可选使用 return（通常省略）
+print: (String) -> () = (msg) => {
+    # 不需要 return，或者可以写 return
+}
+
+# 单行表达式（推荐使用花括号和 return）
+greet: (String) -> String = (name) => { return "Hello, ${name}!" }
+
+# 多行函数体 - 必须使用 return
+max: (Int, Int) -> Int = (a, b) => {
+    if a > b {
+        return a
+    } else {
+        return b
     }
 }
 ```

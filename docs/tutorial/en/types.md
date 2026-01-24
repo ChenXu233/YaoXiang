@@ -30,7 +30,7 @@ YaoXiang uses a **minimal unified type syntax**: `name: type = value`
 ```
 ├── Variable/Function: name: type = value
 │   ├── x: Int = 42
-│   └── add: (Int, Int) -> Int = (a, b) => a + b
+│   └── add: (Int, Int) -> Int = (a, b) => { return a + b }
 │
 ├── Type Definition: type Name = type_expression
 │   ├── type Point = { x: Float, y: Float }
@@ -163,11 +163,11 @@ type Point = {
 
 # Implement interface methods
 Point.draw: (Point, Surface) -> Void = (self, surface) => {
-    surface.plot(self.x, self.y)
+    return surface.plot(self.x, self.y)
 }
 
 Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+    return "Point(${self.x}, ${self.y})"
 }
 ```
 
@@ -188,11 +188,11 @@ Use `Type.method: (Type, ...) -> ReturnType = ...` syntax:
 ```yaoxiang
 # Type method: first parameter is self (caller)
 Point.draw: (Point, Surface) -> Void = (self, surface) => {
-    surface.plot(self.x, self.y)
+    return surface.plot(self.x, self.y)
 }
 
 Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+    return "Point(${self.x}, ${self.y})"
 }
 ```
 
@@ -205,7 +205,7 @@ Bind functions to specific parameter positions of a type:
 distance: (Point, Point) -> Float = (p1, p2) => {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # Bind to Point.distance (this bound to position 0)
@@ -223,7 +223,7 @@ d2: Float = p1.distance(p2)
 ```yaoxiang
 # Function receives multiple Point parameters
 transform_points: (Point, Point, Float) -> Point = (p1, p2, factor) => {
-    Point(p1.x * factor, p1.y * factor)
+    return Point(p1.x * factor, p1.y * factor)
 }
 
 # Bind multiple positions (automatic currying)
@@ -244,7 +244,7 @@ type Point = { x: Float, y: Float }
 pub distance: (Point, Point) -> Float = (p1, p2) => {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # Compiler infers: Point.distance = distance[0]
@@ -279,7 +279,7 @@ type Callback[T] = (T) -> Void
 type Predicate[T] = (T) -> Bool
 
 # Usage
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => { return a + b }
 ```
 
 ---
@@ -304,7 +304,7 @@ names: List[String] = List(["Alice", "Bob"])
 
 ```yaoxiang
 # Generic function
-identity: [T](T) -> T = (x) => x
+identity: [T](T) -> T = (x) => { return x }
 
 # Usage
 n: Int = identity(42)
@@ -326,7 +326,7 @@ n2: Number = 3.14
 
 # Pattern matching
 print_number: Number -> String = (n) => {
-    match n {
+    return match n {
         i: Int => "Integer: " + i.to_string(),
         f: Float => "Float: " + f.to_string(),
     }
@@ -347,8 +347,8 @@ type Document = Printable & Serializable
 
 # Implement intersection type
 type MyDoc = { content: String } & {
-    print: () -> Void = () => print(self.content)
-    to_json: () -> String = () => '{"content": "' + self.content + '"}'
+    print: () -> Void = () => { return print(self.content) }
+    to_json: () -> String = () => { return '{"content": "' + self.content + '"}' }
 }
 ```
 

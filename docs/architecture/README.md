@@ -75,10 +75,10 @@ process_data() = {
 ### 4. 类型集中约定
 ```yaoxiang
 # ✅ 推荐：类型在声明中
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (Int, Int) -> Int = (a, b) => { return a + b }
 
 # ❌ 避免：类型在实现中
-add = (a: Int, b: Int) => a + b
+add = (a: Int, b: Int) => { return a + b }
 ```
 
 ### 5. 优雅的绑定语法
