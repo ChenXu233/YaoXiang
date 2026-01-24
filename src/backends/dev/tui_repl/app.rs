@@ -284,7 +284,7 @@ impl App {
         f: &mut Frame<'_>,
         area: ratatui::layout::Rect,
     ) {
-        let title = "  YaoXiang REPL v0.3.6  ";
+        let title = "  YaoXiang REPL v0.3.6 (Experimental)  ";
         let help = "  F1:Help | F2:Clear | F3:History | F4:Debug | Tab:Complete  ";
 
         let chunks = Layout::default()

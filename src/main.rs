@@ -78,21 +78,21 @@ enum Commands {
         file: PathBuf,
     },
 
-    /// Evaluate YaoXiang code from command line
+    /// Evaluate YaoXiang code from command line (not supported well yet)
     Eval {
         /// Code to evaluate
         #[arg(value_name = "CODE")]
         code: String,
     },
 
-    /// Check source file for errors (type checking)
+    /// Check source file for errors (type checking) (unsupported yet)
     Check {
         /// Source file to check
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },
 
-    /// Format source file
+    /// Format source file (unsupported yet)
     Format {
         /// Source file to format
         #[arg(value_name = "FILE")]
@@ -124,7 +124,7 @@ enum Commands {
     /// Print version information
     Version,
 
-    /// Start TUI REPL (default when no command is provided)
+    /// Start TUI REPL (default when no command is provided) (Experimental Feature)
     Repl,
 }
 
