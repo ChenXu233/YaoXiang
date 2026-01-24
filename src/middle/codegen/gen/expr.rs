@@ -364,8 +364,12 @@ impl CodegenContext {
         let dst = self.next_temp();
         let mut arg_regs = Vec::new();
         for arg in args {
-            let arg_reg = self.generate_expr(arg)?;
-            arg_regs.push(self.operand_to_reg(&arg_reg)?);
+            let arg_reg = self.generate_expr(arg).map_err(|e| {
+                eprintln!("generate_expr error: {:?}", e);
+                e
+            })?;
+            let reg = self.operand_to_reg(&arg_reg)?;
+            arg_regs.push(reg);
         }
 
         let base_arg_reg = self.next_temp() as u8;
@@ -384,17 +388,31 @@ impl CodegenContext {
 
         match func {
             Expr::Var(name, _) => {
-                let func_idx = self.flow.function_indices().get(name).copied();
-                let func_id = if let Some(idx) = func_idx {
-                    idx as u32
-                } else {
+                // Check if this is print or println (built-in void functions)
+                let is_builtin = matches!(name.as_str(), "print" | "println");
+
+                // For built-in functions, add the name to constants for runtime lookup
+                let func_id = if is_builtin {
                     let const_idx = self.add_constant(ConstValue::String(name.clone()));
                     const_idx as u32
+                } else {
+                    // For user-defined functions, use function index
+                    if let Some(idx) = self.flow.function_indices().get(name).copied() {
+                        idx as u32
+                    } else {
+                        let const_idx = self.add_constant(ConstValue::String(name.clone()));
+                        const_idx as u32
+                    }
                 };
+
                 let mut operands = vec![dst as u8];
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg);
                 operands.push(arg_regs.len() as u8);
+                // Add argument registers to operands (as u16)
+                for &arg_reg in &arg_regs {
+                    operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
+                }
                 self.emit(BytecodeInstruction::new(Opcode::CallStatic, operands));
             }
             Expr::FieldAccess { expr, field, .. } => {

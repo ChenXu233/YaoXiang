@@ -605,7 +605,7 @@ impl fmt::Display for RuntimeValue {
                     write!(f, "U+{:04X}", c)
                 }
             }
-            RuntimeValue::String(s) => write!(f, "\"{}\"", s),
+            RuntimeValue::String(s) => write!(f, "{}", s),
             RuntimeValue::Bytes(b) => write!(f, "bytes[{}]", b.len()),
             RuntimeValue::Tuple(handle) => {
                 write!(f, "tuple@{}", handle.raw())

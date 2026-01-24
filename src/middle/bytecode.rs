@@ -658,18 +658,177 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
         // Convert functions
         let mut functions = Vec::new();
         for func in file.code_section.functions {
+            // Decode instructions from BytecodeInstruction to BytecodeInstr
+            let mut decoded_instructions = Vec::new();
+            let mut ip = 0;
+            while ip < func.instructions.len() {
+                let instr = &func.instructions[ip];
+                // Decode the instruction based on opcode
+                match Opcode::try_from(instr.opcode) {
+                    Ok(opcode) => {
+                        match opcode {
+                            Opcode::CallStatic => {
+                                // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
+                                if instr.operands.len() >= 7 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_id = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let _base_arg_reg = instr.operands[5];
+                                    let arg_count = instr.operands[6] as usize;
+
+                                    // Create function reference from func_id
+                                    let func_ref = FunctionRef::Index(func_id);
+
+                                    // Parse arguments
+                                    let mut args = Vec::new();
+                                    for i in 0..arg_count {
+                                        if 7 + i * 2 + 1 < instr.operands.len() {
+                                            let arg_reg = u16::from_le_bytes([
+                                                instr.operands[7 + i * 2],
+                                                instr.operands[7 + i * 2 + 1],
+                                            ]);
+                                            args.push(Reg(arg_reg));
+                                        }
+                                    }
+
+                                    // Create CallStatic instruction
+                                    let dst_reg = if dst == 0 { None } else { Some(Reg(dst)) };
+                                    let call_instr = BytecodeInstr::CallStatic {
+                                        dst: dst_reg,
+                                        func: func_ref,
+                                        args,
+                                    };
+                                    decoded_instructions.push(call_instr);
+                                } else {
+                                    // Fallback: push Nop
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::Return => {
+                                decoded_instructions.push(BytecodeInstr::Return);
+                            }
+                            Opcode::LoadConst => {
+                                // LoadConst: dst(1) + const_idx(2)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let const_idx =
+                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
+                                    decoded_instructions.push(BytecodeInstr::LoadConst {
+                                        dst: Reg(dst),
+                                        const_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::Mov => {
+                                // Mov: dst(1) + src(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let src = instr.operands[1] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Mov {
+                                        dst: Reg(dst),
+                                        src: Reg(src),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::LoadLocal => {
+                                // LoadLocal: dst(1) + local_idx(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let local_idx = instr.operands[1];
+                                    decoded_instructions.push(BytecodeInstr::LoadLocal {
+                                        dst: Reg(dst),
+                                        local_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::StoreLocal => {
+                                // StoreLocal: local_idx(1) + src(1)
+                                if instr.operands.len() >= 2 {
+                                    let local_idx = instr.operands[0];
+                                    let src = instr.operands[1] as u16;
+                                    decoded_instructions.push(BytecodeInstr::StoreLocal {
+                                        local_idx,
+                                        src: Reg(src),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::LoadArg => {
+                                // LoadArg: dst(1) + arg_idx(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let arg_idx = instr.operands[1];
+                                    decoded_instructions.push(BytecodeInstr::LoadArg {
+                                        dst: Reg(dst),
+                                        arg_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::ReturnValue => {
+                                // ReturnValue: value(1) [legacy], or value(2)
+                                if instr.operands.len() >= 2 {
+                                    let value =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    decoded_instructions
+                                        .push(BytecodeInstr::ReturnValue { value: Reg(value) });
+                                } else if instr.operands.len() == 1 {
+                                    let value = instr.operands[0] as u16;
+                                    decoded_instructions
+                                        .push(BytecodeInstr::ReturnValue { value: Reg(value) });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Return);
+                                }
+                            }
+                            _ => {
+                                // For other opcodes, we need to implement decoding
+                                // For now, just use Nop as placeholder
+                                decoded_instructions.push(BytecodeInstr::Nop);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Unknown opcode, use Nop
+                        decoded_instructions.push(BytecodeInstr::Nop);
+                    }
+                }
+                ip += 1;
+            }
+
             let byte_func = BytecodeFunction {
                 name: func.name,
                 params: func.params.into_iter().map(|t| t.into()).collect(),
                 return_type: func.return_type.into(),
                 local_count: func.local_count,
-                upvalue_count: 0,               // Not stored in BytecodeFile
-                instructions: Vec::new(),       // Will be populated during execution
-                labels: HashMap::new(),         // Will be populated during execution
+                upvalue_count: 0, // Not stored in BytecodeFile
+                instructions: decoded_instructions,
+                labels: HashMap::new(), // Will be populated during execution
                 exception_handlers: Vec::new(), // Not implemented yet
             };
             functions.push(byte_func);
         }
+
+        // Determine entry point
+        let entry_point = if file.header.entry_point > 0 {
+            Some(file.header.entry_point as usize)
+        } else if file.header.entry_point == 0 && !functions.is_empty() {
+            // If entry_point is 0 but we have functions, use 0 as valid entry
+            Some(0)
+        } else {
+            None
+        };
 
         BytecodeModule {
             name,
@@ -677,11 +836,7 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
             functions,
             type_table: file.type_table.into_iter().map(|t| t.into()).collect(),
             globals: Vec::new(), // Not stored in BytecodeFile yet
-            entry_point: if file.header.entry_point > 0 {
-                Some(file.header.entry_point as usize)
-            } else {
-                None
-            },
+            entry_point,
         }
     }
 }

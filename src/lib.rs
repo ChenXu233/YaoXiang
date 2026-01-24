@@ -137,11 +137,193 @@ pub fn build_bytecode(
 
 /// Dump bytecode for debugging
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    // TODO: Update to use new backend architecture
-    // This function is temporarily disabled during migration
+    use crate::middle::codegen::CodegenContext;
+
     let path_str = path.display().to_string();
     println!("=== Bytecode Dump for {} ===\n", path_str);
-    println!("Note: This function is being updated to use the new backend architecture.");
-    println!("Please use the new debugging tools in backends/dev/ instead.");
+
+    // Read source file
+    let source = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+
+    // Compile
+    let mut compiler = frontend::Compiler::new();
+    let module = compiler.compile(&source)?;
+
+    // Generate bytecode
+    let mut ctx = CodegenContext::new(module);
+    let bytecode_file: crate::middle::codegen::bytecode::BytecodeFile = ctx
+        .generate()
+        .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+
+    // Dump header information
+    println!("File Header:");
+    println!("  Magic: 0x{:08x}", bytecode_file.header.magic);
+    println!("  Version: {}", bytecode_file.header.version);
+    println!("  Flags: 0x{:08x}", bytecode_file.header.flags);
+    println!("  Entry Point: {}", bytecode_file.header.entry_point);
+    println!("  Section Count: {}", bytecode_file.header.section_count);
+    println!("  File Size: {} bytes", bytecode_file.header.file_size);
+    println!();
+
+    // Dump type table
+    if !bytecode_file.type_table.is_empty() {
+        println!(
+            "=== Type Table ({} types) ===",
+            bytecode_file.type_table.len()
+        );
+        for (idx, ty) in bytecode_file.type_table.iter().enumerate() {
+            println!("[{:04}] {}", idx, dump_type_detail(ty));
+        }
+        println!();
+    }
+
+    // Dump constants
+    if !bytecode_file.const_pool.is_empty() {
+        println!(
+            "=== Constants ({} items) ===",
+            bytecode_file.const_pool.len()
+        );
+        for (idx, constant) in bytecode_file.const_pool.iter().enumerate() {
+            println!(
+                "[{:04}] {} = {:?}",
+                idx,
+                dump_const_detail(constant),
+                constant
+            );
+        }
+        println!();
+    }
+
+    // Dump functions
+    println!(
+        "=== Functions ({} functions) ===",
+        bytecode_file.code_section.functions.len()
+    );
+    for (func_idx, func) in bytecode_file.code_section.functions.iter().enumerate() {
+        println!("\nFunction #{}: {}", func_idx, func.name);
+        println!("  Parameters: {}", dump_params_detail(&func.params));
+        println!("  Return Type: {}", dump_type_detail(&func.return_type));
+        println!("  Local Count: {}", func.local_count);
+        println!("  Instructions: {}", func.instructions.len());
+
+        // Dump instructions in a more readable format
+        if !func.instructions.is_empty() {
+            println!("  Code:");
+            dump_instructions(&func.instructions);
+        }
+    }
+
     Ok(())
+}
+
+/// Dump type information in detail
+fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
+    match ty {
+        crate::frontend::typecheck::MonoType::Void => "void".to_string(),
+        crate::frontend::typecheck::MonoType::Bool => "bool".to_string(),
+        crate::frontend::typecheck::MonoType::Int(n) => format!("i{}", n),
+        crate::frontend::typecheck::MonoType::Float(n) => format!("f{}", n),
+        crate::frontend::typecheck::MonoType::Char => "char".to_string(),
+        crate::frontend::typecheck::MonoType::String => "String".to_string(),
+        crate::frontend::typecheck::MonoType::Bytes => "bytes".to_string(),
+        crate::frontend::typecheck::MonoType::Struct(struct_type) => {
+            format!("struct {:?}", struct_type)
+        }
+        crate::frontend::typecheck::MonoType::Enum(enum_type) => format!("enum {:?}", enum_type),
+        crate::frontend::typecheck::MonoType::Tuple(types) => {
+            let inner = types
+                .iter()
+                .map(dump_type_detail)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", inner)
+        }
+        crate::frontend::typecheck::MonoType::List(elem) => format!("[{}]", dump_type_detail(elem)),
+        crate::frontend::typecheck::MonoType::Dict(key, value) => {
+            format!("[{}: {}]", dump_type_detail(key), dump_type_detail(value))
+        }
+        crate::frontend::typecheck::MonoType::Set(elem) => {
+            format!("{{{}}}", dump_type_detail(elem))
+        }
+        crate::frontend::typecheck::MonoType::Fn {
+            params,
+            return_type,
+            is_async,
+        } => {
+            let params_str = params
+                .iter()
+                .map(dump_type_detail)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let ret_str = dump_type_detail(return_type);
+            let async_str = if *is_async { "async " } else { "" };
+            format!("{}fn({}) -> {}", async_str, params_str, ret_str)
+        }
+        crate::frontend::typecheck::MonoType::TypeRef(name) => name.clone(),
+        crate::frontend::typecheck::MonoType::TypeVar(var) => format!("T{:?}", var),
+        crate::frontend::typecheck::MonoType::Range { elem_type } => {
+            format!("{}..", dump_type_detail(elem_type))
+        }
+        crate::frontend::typecheck::MonoType::Union(types) => {
+            let inner = types
+                .iter()
+                .map(dump_type_detail)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            format!("({})", inner)
+        }
+        crate::frontend::typecheck::MonoType::Intersection(types) => {
+            let inner = types
+                .iter()
+                .map(dump_type_detail)
+                .collect::<Vec<_>>()
+                .join(" & ");
+            format!("({})", inner)
+        }
+        crate::frontend::typecheck::MonoType::Arc(inner) => {
+            format!("Arc<{}>", dump_type_detail(inner))
+        }
+    }
+}
+
+/// Dump constant information in detail
+fn dump_const_detail(constant: &crate::middle::ir::ConstValue) -> &'static str {
+    match constant {
+        crate::middle::ir::ConstValue::Void => "void",
+        crate::middle::ir::ConstValue::Bool(_) => "bool",
+        crate::middle::ir::ConstValue::Int(_) => "int",
+        crate::middle::ir::ConstValue::Float(_) => "float",
+        crate::middle::ir::ConstValue::Char(_) => "char",
+        crate::middle::ir::ConstValue::String(_) => "String",
+        crate::middle::ir::ConstValue::Bytes(_) => "bytes",
+    }
+}
+
+/// Dump function parameters in detail
+fn dump_params_detail(params: &[crate::frontend::typecheck::MonoType]) -> String {
+    if params.is_empty() {
+        "()".to_string()
+    } else {
+        let param_strs = params.iter().map(dump_type_detail).collect::<Vec<_>>();
+        format!("({})", param_strs.join(", "))
+    }
+}
+
+/// Dump instructions in a readable format with opcode names
+fn dump_instructions(instructions: &[crate::middle::codegen::bytecode::BytecodeInstruction]) {
+    for (instr_idx, instr) in instructions.iter().enumerate() {
+        // Try to decode the opcode
+        match Opcode::try_from(instr.opcode) {
+            Ok(opcode) => {
+                println!("    [{:04}] {:?}", instr_idx, opcode);
+            }
+            Err(_) => {
+                println!(
+                    "    [{:04}] Unknown opcode: 0x{:02x}",
+                    instr_idx, instr.opcode
+                );
+            }
+        }
+    }
 }

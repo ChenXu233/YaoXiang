@@ -563,7 +563,7 @@ impl CodegenContext {
             // 函数调用
             // =====================
             Call { dst, func, args } => {
-                // Call: dst(1), func_id(4), base_arg_reg(1), arg_count(1)
+                // Call: dst(1), func_id(4), base_arg_reg(1), arg_count(1), args(2*count)
                 let dst_reg = if let Some(d) = dst {
                     self.operand_to_reg(d)?
                 } else {
@@ -588,6 +588,11 @@ impl CodegenContext {
                 operands.extend_from_slice(&func_id.to_le_bytes());
                 operands.push(base_arg_reg); // base_arg_reg
                 operands.push(args.len() as u8);
+                // 添加参数寄存器 (每个参数2字节)
+                for arg in args {
+                    let arg_reg = self.operand_to_reg(arg)?;
+                    operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
+                }
                 Ok(BytecodeInstruction::new(Opcode::CallStatic, operands))
             }
 

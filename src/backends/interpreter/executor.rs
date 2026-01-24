@@ -427,32 +427,55 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::CallStatic {
-                    dst: _,
+                    dst,
                     func: func_ref,
                     args: arg_regs,
                 } => {
                     let func_name = match func_ref {
                         FunctionRef::Static { name, .. } => name.clone(),
                         FunctionRef::Index(idx) => {
-                            // Look up by index (future)
-                            format!("fn_{}", idx)
+                            // Try to get function name from constants
+                            if let Some(crate::middle::bytecode::ConstValue::String(s)) =
+                                self.constants.get(*idx as usize)
+                            {
+                                s.clone()
+                            } else {
+                                format!("fn_{}", idx)
+                            }
                         }
                     };
 
+                    // Collect arguments
+                    let call_args: Vec<RuntimeValue> = arg_regs
+                        .iter()
+                        .map(|r| {
+                            frame
+                                .registers
+                                .get(r.0 as usize)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        })
+                        .collect();
+
+                    // Handle built-in functions (like print)
+                    if func_name == "print" {
+                        // Execute print function
+                        if !call_args.is_empty() {
+                            print!("{}", call_args[0]);
+                        }
+                        // Set return value to Unit if dst is Some
+                        if let Some(dst_reg) = dst {
+                            frame
+                                .registers
+                                .resize(dst_reg.index() as usize + 1, RuntimeValue::Unit);
+                            frame.registers[dst_reg.index() as usize] = RuntimeValue::Unit;
+                        }
+                        frame.advance();
+                        continue;
+                    }
+
                     // Resolve function
                     if let Some(target_func) = self.functions.get(&func_name) {
-                        // Collect arguments
-                        let call_args: Vec<RuntimeValue> = arg_regs
-                            .iter()
-                            .map(|r| {
-                                frame
-                                    .registers
-                                    .get(r.0 as usize)
-                                    .cloned()
-                                    .unwrap_or(RuntimeValue::Unit)
-                            })
-                            .collect();
-
                         // Create new frame
                         let mut new_frame = Frame::with_args(target_func.clone(), &call_args);
                         new_frame.set_entry_ip(frame.ip);
