@@ -107,6 +107,9 @@ pub enum CodegenError {
 
     /// 无效的操作数
     InvalidOperand,
+
+    /// 寄存器溢出
+    RegisterOverflow { id: usize, limit: u8 },
 }
 
 impl fmt::Display for CodegenError {
@@ -129,6 +132,9 @@ impl fmt::Display for CodegenError {
             }
             CodegenError::OutOfRegisters => write!(f, "寄存器不足"),
             CodegenError::InvalidOperand => write!(f, "无效的操作数"),
+            CodegenError::RegisterOverflow { id, limit } => {
+                write!(f, "寄存器编号 {} 超过最大限制 ({})", id, limit)
+            }
         }
     }
 }
@@ -917,9 +923,33 @@ impl CodegenContext {
         operand: &Operand,
     ) -> Result<u8, CodegenError> {
         match operand {
-            Operand::Local(id) => Ok(*id as u8),
-            Operand::Temp(id) => Ok(*id as u8),
-            Operand::Arg(id) => Ok(*id as u8),
+            Operand::Local(id) => {
+                if *id > 255 {
+                    return Err(CodegenError::RegisterOverflow {
+                        id: *id,
+                        limit: 255,
+                    });
+                }
+                Ok(*id as u8)
+            }
+            Operand::Temp(id) => {
+                if *id > 255 {
+                    return Err(CodegenError::RegisterOverflow {
+                        id: *id,
+                        limit: 255,
+                    });
+                }
+                Ok(*id as u8)
+            }
+            Operand::Arg(id) => {
+                if *id > 255 {
+                    return Err(CodegenError::RegisterOverflow {
+                        id: *id,
+                        limit: 255,
+                    });
+                }
+                Ok(*id as u8)
+            }
             _ => Err(CodegenError::InvalidOperand),
         }
     }

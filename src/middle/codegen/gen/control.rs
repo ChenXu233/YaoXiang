@@ -150,12 +150,9 @@ impl CodegenContext {
         for arm in arms {
             let next_arm_label = self.next_label();
             self.generate_pattern_match(&match_reg, &arm.pattern, next_arm_label)?;
-            let arm_block = Block {
-                stmts: Vec::new(),
-                expr: Some(Box::new(arm.body.clone())),
-                span: arm.span,
-            };
-            self.generate_block(&arm_block)?;
+            // 直接生成 arm.body 的代码，而不是包装在 Block 中
+            // 这样可以避免当 arm.body 本身就是 Block 时的无限递归
+            self.generate_expr(&arm.body)?;
             self.emit(BytecodeInstruction::new(Opcode::Jmp, vec![end_label as u8]));
             self.emit(BytecodeInstruction::new(
                 Opcode::Label,

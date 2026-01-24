@@ -74,9 +74,18 @@ impl CodegenContext {
                 Ok(Operand::Temp(self.next_temp()))
             }
             Expr::Block(block) => self.generate_block(block),
-            Expr::Return(_, _) => Err(CodegenError::UnimplementedExpr {
-                expr_type: "Return".to_string(),
-            }),
+            Expr::Return(value, _) => {
+                if let Some(val) = value {
+                    let operand = self.generate_expr(val)?;
+                    self.emit(BytecodeInstruction::new(
+                        Opcode::ReturnValue,
+                        vec![self.operand_to_reg(&operand)?],
+                    ));
+                } else {
+                    self.emit(BytecodeInstruction::new(Opcode::Return, vec![]));
+                }
+                Ok(Operand::Temp(self.next_temp()))
+            }
             Expr::Break(_, _) => Err(CodegenError::UnimplementedExpr {
                 expr_type: "Break".to_string(),
             }),
