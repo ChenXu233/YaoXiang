@@ -80,8 +80,13 @@ impl TuiREPL {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
                         // 处理按键事件
-                        if let Some(Action::Quit) = self.app.handle_key_event(key.code) {
-                            return self.quit();
+                        match self.app.handle_key_event(key) {
+                            Some(Action::Quit) => return self.quit(),
+                            Some(Action::Execute) => self.app.execute_input(&self.compiler),
+                            Some(Action::SwitchScreen(id)) => self.app.switch_screen(id),
+                            Some(Action::Clear) => self.app.clear_output(),
+                            Some(Action::ToggleDebug) => self.app.toggle_debug(),
+                            _ => {}
                         }
                     }
                 }

@@ -2,7 +2,7 @@
 //!
 //! 浏览和管理历史记录
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 /// 历史屏幕
 #[derive(Debug)]
@@ -25,10 +25,10 @@ impl HistoryScreen {
     /// 处理按键事件
     pub fn handle_key_event(
         &mut self,
-        key_code: KeyCode,
+        key: KeyEvent,
         _input_buffer: &mut String,
     ) {
-        match key_code {
+        match key.code {
             KeyCode::Char('/') => {
                 self.filter_mode = !self.filter_mode;
             }

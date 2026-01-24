@@ -16,7 +16,7 @@ pub use tui::TuiREPL;
 pub use engine::{IncrementalCompiler, ModuleBuilder, SymbolCache, Profiler};
 
 // 重新导出组件
-pub use components::{HistoryPanel, InputWindow, DebugPanel, OutputConsole};
+pub use components::{HistoryPanel, DebugPanel, OutputConsole};
 
 // 重新导出屏幕
 pub use screens::{MainScreen, HistoryScreen, DebugScreen, HelpScreen};

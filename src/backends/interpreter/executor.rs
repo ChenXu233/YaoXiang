@@ -4,6 +4,7 @@
 //! It follows the standard fetch-decode-execute cycle.
 
 use std::collections::HashMap;
+use std::fmt;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::middle::bytecode::{
@@ -23,7 +24,6 @@ const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 /// - A heap for dynamically allocated objects
 /// - A call stack for function calls
 /// - A constant pool for literals
-#[derive(Debug)]
 pub struct Interpreter {
     /// Heap for dynamic allocation
     heap: Heap,
@@ -41,6 +41,35 @@ pub struct Interpreter {
     config: ExecutorConfig,
     /// Breakpoints
     breakpoints: HashMap<usize, ()>,
+    /// Standard output
+    #[allow(dead_code)] // Might be unused if only accessed via write!
+    stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
+}
+
+impl fmt::Debug for Interpreter {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("Interpreter")
+            .field("heap", &self.heap)
+            .field("call_stack", &self.call_stack)
+            .field("constants", &self.constants)
+            .field("functions", &self.functions)
+            .field("type_table", &self.type_table)
+            .field("state", &self.state)
+            .field("config", &self.config)
+            .field("breakpoints", &self.breakpoints)
+            .field(
+                "stdout",
+                &if self.stdout.is_some() {
+                    "Some(...)"
+                } else {
+                    "None"
+                },
+            )
+            .finish()
+    }
 }
 
 impl Default for Interpreter {
@@ -66,7 +95,16 @@ impl Interpreter {
             state: ExecutionState::default(),
             config,
             breakpoints: HashMap::new(),
+            stdout: None, // Default to stdout (handled by None check)
         }
+    }
+
+    /// Set standard output redirect
+    pub fn set_stdout(
+        &mut self,
+        stdout: std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>,
+    ) {
+        self.stdout = Some(stdout);
     }
 
     /// Push a frame onto the call stack
@@ -465,10 +503,28 @@ impl Executor for Interpreter {
                         .collect();
 
                     // Handle built-in functions (like print)
-                    if func_name == "print" {
-                        if !call_args.is_empty() {
-                            print!("{}", call_args[0]);
+                    if func_name == "print" || func_name == "println" {
+                        // For print/println, we join all arguments with space
+                        let output = call_args
+                            .iter()
+                            .map(|arg| format!("{}", arg))
+                            .collect::<Vec<String>>()
+                            .join(" ");
+
+                        if let Some(stdout_arc) = &self.stdout {
+                            if let Ok(mut lock) = stdout_arc.lock() {
+                                if func_name == "println" {
+                                    let _ = writeln!(lock, "{}", output);
+                                } else {
+                                    let _ = write!(lock, "{}", output);
+                                }
+                            }
+                        } else if func_name == "println" {
+                            println!("{}", output);
+                        } else {
+                            print!("{}", output);
                         }
+
                         if let Some(dst_reg) = dst {
                             frame
                                 .registers

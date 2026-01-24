@@ -2,7 +2,7 @@
 //!
 //! 显示帮助文档和快捷键参考
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 /// 帮助屏幕
 #[derive(Debug)]
@@ -22,10 +22,10 @@ impl HelpScreen {
     /// 处理按键事件
     pub fn handle_key_event(
         &mut self,
-        key_code: KeyCode,
+        key: KeyEvent,
         _input_buffer: &mut String,
     ) {
-        match key_code {
+        match key.code {
             KeyCode::Char('1') => self.current_page = HelpPage::Overview,
             KeyCode::Char('2') => self.current_page = HelpPage::Shortcuts,
             KeyCode::Char('3') => self.current_page = HelpPage::Commands,

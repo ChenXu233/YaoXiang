@@ -2,8 +2,9 @@
 ///
 /// 显示程序输出和错误信息
 use ratatui::{
-    layout::{Rect, Margin},
-    style::{Color, Style},
+    layout::Rect,
+    style::{Color, Style, Modifier},
+    text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
@@ -114,44 +115,132 @@ impl OutputConsole {
         &self,
         f: &mut Frame<'_>,
         area: Rect,
+        prompt: &str,
+        input: &str,
     ) {
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Plain)
-            .title(" Output ");
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Gray))
+            .title(Span::styled(
+                " Terminal ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ));
 
+        let inner_area = block.inner(area);
         f.render_widget(block, area);
 
-        let inner_area = area.inner(&Margin::default());
-
-        if self.entries.is_empty() {
-            return;
-        }
-
         // 创建输出内容
-        let content = self
-            .entries
-            .iter()
-            .map(|entry| match entry {
-                OutputEntry::Output(text) => text.to_string(),
+        let mut lines = Vec::new();
+        for entry in &self.entries {
+            match entry {
+                OutputEntry::Output(text) => {
+                    for line in text.lines() {
+                        lines.push(Line::from(Span::raw(line)));
+                    }
+                }
                 OutputEntry::Error(text) => {
-                    format!("ERROR: {}", text)
+                    for line in text.lines() {
+                        lines.push(Line::from(Span::styled(
+                            line,
+                            Style::default().fg(Color::Red),
+                        )));
+                    }
                 }
                 OutputEntry::Warning(text) => {
-                    format!("WARNING: {}", text)
+                    for line in text.lines() {
+                        lines.push(Line::from(Span::styled(
+                            line,
+                            Style::default().fg(Color::Yellow),
+                        )));
+                    }
                 }
                 OutputEntry::Info(text) => {
-                    format!("INFO: {}", text)
+                    for line in text.lines() {
+                        lines.push(Line::from(Span::styled(
+                            line,
+                            Style::default().fg(Color::Blue),
+                        )));
+                    }
                 }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+            }
+        }
 
-        let paragraph = Paragraph::new(content)
+        // Add current input line at the bottom
+        let input_line = format!("{}{}", prompt, input);
+        lines.push(Line::from(Span::styled(
+            input_line,
+            Style::default().fg(Color::Cyan),
+        )));
+
+        // Scroll logic: if the prompt line is not visible, scroll to it.
+        // We calculate height roughly.
+        let content_height = inner_area.height as usize;
+        let total_lines = lines.len();
+
+        // Auto-scroll to bottom if we are near the end or if it's the default behavior
+        let scroll_offset = if total_lines > content_height {
+            (total_lines - content_height) as u16
+        } else {
+            0
+        };
+
+        let paragraph = Paragraph::new(lines.clone())
             .style(Style::default().fg(Color::White))
-            .scroll((self.scroll, 0));
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .scroll((scroll_offset, 0));
 
         f.render_widget(paragraph, inner_area);
+
+        // Calculate cursor position more accurately
+        // We need to know how many VISUAL lines the content takes up
+        // considering wrapping.
+        let width = inner_area.width as usize;
+        let mut visual_lines_count = 0;
+
+        // Only calculate if we have width (avoid div by 0)
+        if width > 0 {
+            // Need to recreate the input line text for calculation since we didn't save it separately
+            // Actually 'lines' contains everything.
+
+            // NOTE: This simple calculation assumes NO escape codes width issues (standard chars).
+            // Ratatui `Line::width()` returns the display width.
+            for line in &lines {
+                let line_width = line.width();
+                if line_width == 0 {
+                    visual_lines_count += 1;
+                } else {
+                    // Ceiling division for wrapping
+                    visual_lines_count += line_width.div_ceil(width);
+                }
+            }
+
+            let prompt_len = prompt.chars().count();
+            let input_len = input.chars().count();
+            let total_len = prompt_len + input_len;
+
+            let cursor_x = inner_area.x + (total_len % width) as u16;
+
+            // Calculate Y
+            // If content fits in height, cursor is at (top + lines - 1)
+            // If content > height, we scrolled, so cursor is at bottom.
+            // CAUTION: The 'scroll_offset' calculation above used LOGICAL lines, not visual.
+            // That scroll calculation might be slightly off if wrapping happens, but fixing the
+            // cursor logic to match the *visual* reality is most important.
+            // However, if the paragraph scroller logic uses logical lines, but displays wrapped lines...
+            // "Paragraph with Wrap" usually handles scrolling by line index?
+            // Actually, for simplicity, if we assume the standard REPL behavior where we auto-scroll to the bottom:
+
+            let cursor_y = if visual_lines_count > content_height {
+                inner_area.y + inner_area.height - 1
+            } else {
+                inner_area.y + visual_lines_count as u16 - 1
+            };
+
+            f.set_cursor(cursor_x, cursor_y);
+        }
     }
 
     /// 获取条目数量

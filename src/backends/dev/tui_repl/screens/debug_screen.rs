@@ -2,7 +2,7 @@
 //!
 //! 显示详细的调试信息
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 /// 调试屏幕
 #[derive(Debug)]
@@ -22,10 +22,10 @@ impl DebugScreen {
     /// 处理按键事件
     pub fn handle_key_event(
         &mut self,
-        key_code: KeyCode,
+        key: KeyEvent,
         _input_buffer: &mut String,
     ) {
-        match key_code {
+        match key.code {
             KeyCode::Tab | KeyCode::Right => {
                 self.next_tab();
             }

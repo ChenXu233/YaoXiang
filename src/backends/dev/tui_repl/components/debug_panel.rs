@@ -3,8 +3,9 @@ use std::sync::Arc;
 ///
 /// 显示调试信息，包括调用栈、变量和性能统计
 use ratatui::{
-    layout::{Rect, Margin},
-    style::{Color, Style},
+    layout::Rect,
+    style::{Color, Style, Modifier},
+    text::Span,
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
@@ -64,18 +65,23 @@ impl DebugPanel {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Plain)
-            .title(" Debug ");
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Magenta))
+            .title(Span::styled(
+                " Debug ",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ));
 
+        let inner_area = block.inner(area);
         f.render_widget(block, area);
-
-        let inner_area = area.inner(&Margin::default());
 
         // 获取调试信息
         let debug_info = self.get_debug_info(compiler);
 
         let paragraph = Paragraph::new(debug_info)
-            .style(Style::default().fg(Color::Green))
+            .style(Style::default().fg(Color::LightGreen))
             .scroll((0, 0));
 
         f.render_widget(paragraph, inner_area);

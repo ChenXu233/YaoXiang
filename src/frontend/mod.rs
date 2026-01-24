@@ -14,17 +14,28 @@ pub mod parser;
 pub mod typecheck;
 
 /// Compiler context
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Compiler {
     /// Type environment
     type_env: typecheck::TypeEnvironment,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Compiler {
     /// Create a new compiler
     #[inline]
     pub fn new() -> Self {
-        Self::default()
+        let mut type_env = typecheck::TypeEnvironment::new();
+        // 初始化内置类型和函数
+        typecheck::add_builtin_types(&mut type_env);
+        typecheck::add_builtin_functions(&mut type_env);
+
+        Self { type_env }
     }
 
     /// Compile source code to IR with source name (for diagnostics)

@@ -4,9 +4,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
-#[cfg(feature = "tui")]
-use yaoxiang::TuiREPL;
+use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, TuiREPL, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::set_lang_from_string;
 
@@ -200,19 +198,10 @@ fn main() -> Result<()> {
             println!("{} {}", NAME, VERSION);
         }
         Commands::Repl => {
-            #[cfg(feature = "tui")]
-            {
-                info!("Starting TUI REPL");
-                let mut repl = TuiREPL::new().context("Failed to create TUI REPL")?;
-                repl.run().context("Failed to run TUI REPL")?;
-                info!("TUI REPL exited successfully");
-            }
-            #[cfg(not(feature = "tui"))]
-            {
-                return Err(anyhow::anyhow!(
-                    "TUI REPL is disabled. Rebuild with --features tui to enable it."
-                ));
-            }
+            info!("Starting TUI REPL");
+            let mut repl = TuiREPL::new().context("Failed to create TUI REPL")?;
+            repl.run().context("Failed to run TUI REPL")?;
+            info!("TUI REPL exited successfully");
         }
     }
 

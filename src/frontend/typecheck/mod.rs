@@ -210,7 +210,7 @@ pub fn check_and_generate_ir(
 }
 
 /// 添加内置类型到环境
-fn add_builtin_types(env: &mut TypeEnvironment) {
+pub fn add_builtin_types(env: &mut TypeEnvironment) {
     // 数值类型
     env.add_type("int8".to_string(), PolyType::mono(MonoType::Int(8)));
     env.add_type("int16".to_string(), PolyType::mono(MonoType::Int(16)));
@@ -232,7 +232,7 @@ fn add_builtin_types(env: &mut TypeEnvironment) {
 }
 
 /// 添加内置函数到环境
-fn add_builtin_functions(env: &mut TypeEnvironment) {
+pub fn add_builtin_functions(env: &mut TypeEnvironment) {
     // === std::io ===
     // print<T>(T) -> Void
     env.add_var(

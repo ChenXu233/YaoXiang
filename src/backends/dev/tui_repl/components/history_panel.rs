@@ -3,8 +3,9 @@ use std::sync::Arc;
 ///
 /// 显示和管理 REPL 历史记录
 use ratatui::{
-    layout::{Rect, Margin},
-    style::{Color, Style},
+    layout::Rect,
+    style::{Color, Style, Modifier},
+    text::Span,
     widgets::{Block, BorderType, Borders, List, ListItem},
     Frame,
 };
@@ -90,12 +91,17 @@ impl HistoryPanel {
     ) {
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Plain)
-            .title(" History ");
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Yellow))
+            .title(Span::styled(
+                " History ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ));
 
+        let inner_area = block.inner(area);
         f.render_widget(block, area);
-
-        let inner_area = area.inner(&Margin::default());
 
         if self.entries.is_empty() {
             return;
@@ -108,22 +114,29 @@ impl HistoryPanel {
             .enumerate()
             .map(|(i, entry)| {
                 let style = if i == self.selected_idx {
-                    Style::default().bg(Color::Blue).fg(Color::White)
-                } else {
                     Style::default()
+                        .bg(Color::DarkGray)
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Gray)
                 };
 
-                let content = if let Some(output) = &entry.output {
-                    format!("> {}  =>  {}", entry.input, output)
+                // 简单的截断处理，防止太长
+                let input_preview = if entry.input.len() > 30 {
+                    format!("{}...", &entry.input[0..27])
                 } else {
-                    format!("> {}", entry.input)
+                    entry.input.clone()
                 };
+
+                let content = format!(" {}: {}", i + 1, input_preview);
 
                 ListItem::new(content).style(style)
             })
             .collect();
 
-        let list = List::new(items).block(Block::default().borders(Borders::BOTTOM));
+        // 这里不需要额外的 block，因为外层已经画了
+        let list = List::new(items);
 
         f.render_widget(list, inner_area);
     }

@@ -35,11 +35,7 @@ pub use thiserror::Error;
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
 pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
 pub use backends::interpreter::Interpreter;
-pub use backends::dev::{DevShell, Debugger, REPL};
-
-// TUI REPL re-exports
-#[cfg(feature = "tui")]
-pub use backends::dev::tui_repl::TuiREPL;
+pub use backends::dev::{DevShell, Debugger, REPL, TuiREPL};
 
 // Logging
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};

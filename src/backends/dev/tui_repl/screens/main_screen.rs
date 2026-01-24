@@ -2,7 +2,7 @@
 //!
 //! REPL 的主输入和输出界面
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 /// 主屏幕
 #[derive(Debug)]
@@ -22,10 +22,10 @@ impl MainScreen {
     /// 处理按键事件
     pub fn handle_key_event(
         &mut self,
-        key_code: KeyCode,
+        key: KeyEvent,
         input_buffer: &mut String,
     ) {
-        match key_code {
+        match key.code {
             // 功能键
             KeyCode::Tab => {
                 // 自动补全
@@ -39,13 +39,12 @@ impl MainScreen {
                 input_buffer.pop();
             }
             KeyCode::Left => {
-                // 光标向左移动（简化处理）
-                if !input_buffer.is_empty() {
-                    input_buffer.remove(input_buffer.len().saturating_sub(1));
-                }
+                // 光标向左移动 - 由于 input_window 渲染时使用的是 input_buffer
+                // 且没有 synchronized cursor pos, 这里暂时不处理或者只做删除是不对的
+                // 为了避免误操作，这里暂时不做任何事情，或者需要实现真正的光标移动
             }
             KeyCode::Right => {
-                // 光标向右移动（暂时忽略）
+                // 光标向右移动
             }
 
             // 处理普通字符输入
