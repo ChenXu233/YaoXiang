@@ -11,6 +11,7 @@ use crate::middle::bytecode::{
     ConstValue,
 };
 use crate::backends::interpreter::Frame;
+use crate::backends::interpreter::frames::MAX_LOCALS;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
@@ -282,6 +283,12 @@ impl Executor for Interpreter {
         func: &BytecodeFunction,
         args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
+        if func.local_count > MAX_LOCALS {
+            return Err(ExecutorError::Runtime(format!(
+                "Too many locals in function '{}': {}",
+                func.name, func.local_count
+            )));
+        }
         // Create new frame
         let mut frame = Frame::with_args(func.clone(), args);
 
@@ -459,11 +466,9 @@ impl Executor for Interpreter {
 
                     // Handle built-in functions (like print)
                     if func_name == "print" {
-                        // Execute print function
                         if !call_args.is_empty() {
                             print!("{}", call_args[0]);
                         }
-                        // Set return value to Unit if dst is Some
                         if let Some(dst_reg) = dst {
                             frame
                                 .registers
@@ -474,19 +479,16 @@ impl Executor for Interpreter {
                         continue;
                     }
 
-                    // Resolve function
-                    if let Some(target_func) = self.functions.get(&func_name) {
-                        // Create new frame
-                        let mut new_frame = Frame::with_args(target_func.clone(), &call_args);
-                        new_frame.set_entry_ip(frame.ip);
-
-                        // Store return IP
-                        let _return_ip = frame.ip + 1;
-
-                        // Push frame
-                        self.push_frame(new_frame)?;
-
-                        // Continue with new frame (will be processed in next iteration)
+                    // Resolve function and execute immediately to avoid re-executing call site
+                    if let Some(target_func) = self.functions.get(&func_name).cloned() {
+                        let result = self.execute_function(&target_func, &call_args)?;
+                        if let Some(dst_reg) = dst {
+                            frame
+                                .registers
+                                .resize(dst_reg.index() as usize + 1, RuntimeValue::Unit);
+                            frame.registers[dst_reg.index() as usize] = result;
+                        }
+                        frame.advance();
                         continue;
                     } else {
                         return Err(ExecutorError::FunctionNotFound(func_name));

@@ -6,7 +6,7 @@ use crate::backends::common::RuntimeValue;
 use crate::middle::bytecode::{BytecodeFunction, Label};
 
 /// Maximum number of local variables
-const MAX_LOCALS: usize = 256;
+pub const MAX_LOCALS: usize = 256;
 
 /// Call frame for function execution
 ///

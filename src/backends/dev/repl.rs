@@ -1,6 +1,6 @@
 //! REPL (Read-Eval-Print Loop) for YaoXiang
 //!
-//! This module provides an interactive REPL for YaoXiang.
+//! This module provides a simple interactive REPL for YaoXiang.
 //! It allows users to enter code snippets and see results immediately.
 
 use std::io::{self, Write};
