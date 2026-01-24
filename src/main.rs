@@ -5,6 +5,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, NAME, VERSION};
+#[cfg(feature = "tui")]
+use yaoxiang::TuiREPL;
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::set_lang_from_string;
 
@@ -54,7 +56,7 @@ impl From<LangArg> for String {
 #[command(about = NAME, long_about = None)]
 struct Args {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 
     /// Enable verbose output
     #[arg(short, long)]
@@ -123,6 +125,9 @@ enum Commands {
 
     /// Print version information
     Version,
+
+    /// Start TUI REPL (default when no command is provided)
+    Repl,
 }
 
 fn main() -> Result<()> {
@@ -155,7 +160,10 @@ fn main() -> Result<()> {
         info!("Host: {}", std::env::consts::OS);
     }
 
-    match args.command {
+    // 如果没有提供子命令，启动 TUI REPL
+    let command = args.command.unwrap_or(Commands::Repl);
+
+    match command {
         Commands::Run { file } => {
             info!("Run command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to run: {}", file.display()))?;
@@ -190,6 +198,21 @@ fn main() -> Result<()> {
         }
         Commands::Version => {
             println!("{} {}", NAME, VERSION);
+        }
+        Commands::Repl => {
+            #[cfg(feature = "tui")]
+            {
+                info!("Starting TUI REPL");
+                let mut repl = TuiREPL::new().context("Failed to create TUI REPL")?;
+                repl.run().context("Failed to run TUI REPL")?;
+                info!("TUI REPL exited successfully");
+            }
+            #[cfg(not(feature = "tui"))]
+            {
+                return Err(anyhow::anyhow!(
+                    "TUI REPL is disabled. Rebuild with --features tui to enable it."
+                ));
+            }
         }
     }
 
