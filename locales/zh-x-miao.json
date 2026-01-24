@@ -67,5 +67,20 @@
   "vm_return_func": "喵~函数返回啦喵~ 喵呜~ (>^ω^<)",
   "compilation_start": "编译开始喵，终于轮到本喵出场~ 闪耀登场！ (๑>◡<๑)",
   "compiling_source": "编译中喵~ {0} 字节的源代码正在被本喵消化~ 啊呜 (^w^)",
-  "debug_run_called": "呀~ run() 被召唤啦喵~ 遵命主人！ (ฅ>ω<ฅ)♡"
+  "debug_run_called": "呀~ run() 被召唤啦喵~ 遵命主人！ (ฅ>ω<ฅ)♡",
+  "error_unknown_variable": "喵呜~未知的变量 {0} 喵~ (,,>︿<,,)",
+  "error_unknown_type": "喵~不认识的类型 {0} 喵~ ฅ(๑>◡<๑)ฅ",
+  "error_type_mismatch": "喵~类型不对付呢，期望 {0} 但拿到 {1} 啦喵~ (´▽`ʃ♡ƪ)",
+  "error_arity_mismatch": "喵~参数数量不对喵，期望 {0} 个但发现 {1} 个ฅ(>ω<ฅ)",
+  "error_index_out_of_bounds": "喵~索引越界啦，{0} 超出范围了喵~ 大小是 {1} 呢 (,,>︿<,,)",
+  "error_unknown_field": "喵呜~不认识的字段 '{0}' 出现在 '{1}' 中喵~ (≧▽≦)",
+  "error_recursive_type": "喵~递归类型定义啦，{0} 喵~ (ฅ>ω<ฅ)",
+  "error_unsupported_op": "喵~不支持的操作 {0} 喵~ 本喵做不到啦~ 呜~ (´；ω；`)",
+  "error_non_exhaustive_patterns": "喵~模式匹配不完整喵，缺少 {0} 个模式喵~ 喵呜~ (>^ω^<)",
+  "error_import_error": "喵~导入错误啦：{0} 喵~ (,,>︿<,,)",
+  "error_inference_failed": "喵~类型推断失败啦：{0} 喵~ 本喵搞不定啦~ (´；ω；`)",
+  "error_cannot_infer_param_type": "喵~推断不出参数 '{0}' 的类型喵，参数没写类型注解喵~ 而且用法也不对喵~ (ฅ>ω<ฅ)",
+  "help_did_you_mean": "喵~您是想说 {0} 吗？ (｡･ω･｡)",
+  "help_similar_variables": "喵~相似的变量：{0} 喵~ (*^▽^*)",
+  "help_in_scope": "喵~作用域里：{0} 喵~ nyan~"
 }

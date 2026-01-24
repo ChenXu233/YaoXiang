@@ -280,6 +280,23 @@ pub enum MSG {
     CompilationStart,
     CompilingSource,
     DebugRunCalled,
+
+    // Error messages
+    ErrorUnknownVariable,
+    ErrorUnknownType,
+    ErrorTypeMismatch,
+    ErrorArityMismatch,
+    ErrorIndexOutOfBounds,
+    ErrorUnknownField,
+    ErrorRecursiveType,
+    ErrorUnsupportedOp,
+    ErrorNonExhaustivePatterns,
+    ErrorImportError,
+    ErrorInferenceFailed,
+    ErrorCannotInferParamType,
+    HelpDidYouMean,
+    HelpSimilarVariables,
+    HelpInScope,
 }
 
 impl MSG {
@@ -355,6 +372,23 @@ impl MSG {
             MSG::CompilationStart => "compilation_start",
             MSG::CompilingSource => "compiling_source",
             MSG::DebugRunCalled => "debug_run_called",
+
+            // Error messages
+            MSG::ErrorUnknownVariable => "error_unknown_variable",
+            MSG::ErrorUnknownType => "error_unknown_type",
+            MSG::ErrorTypeMismatch => "error_type_mismatch",
+            MSG::ErrorArityMismatch => "error_arity_mismatch",
+            MSG::ErrorIndexOutOfBounds => "error_index_out_of_bounds",
+            MSG::ErrorUnknownField => "error_unknown_field",
+            MSG::ErrorRecursiveType => "error_recursive_type",
+            MSG::ErrorUnsupportedOp => "error_unsupported_op",
+            MSG::ErrorNonExhaustivePatterns => "error_non_exhaustive_patterns",
+            MSG::ErrorImportError => "error_import_error",
+            MSG::ErrorInferenceFailed => "error_inference_failed",
+            MSG::ErrorCannotInferParamType => "error_cannot_infer_param_type",
+            MSG::HelpDidYouMean => "help_did_you_mean",
+            MSG::HelpSimilarVariables => "help_similar_variables",
+            MSG::HelpInScope => "help_in_scope",
         }
     }
 }

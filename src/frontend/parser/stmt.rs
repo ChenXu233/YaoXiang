@@ -981,14 +981,14 @@ impl<'a> ParserState<'a> {
         let var = match self.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                    let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
-                    self.error(super::ParseError::UnexpectedToken {
-                        found: self
-                            .current()
-                            .map(|t| t.kind.clone())
-                            .unwrap_or(TokenKind::Eof),
-                        span,
-                    });
+                let span = self.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.error(super::ParseError::UnexpectedToken {
+                    found: self
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
+                    span,
+                });
                 return None;
             }
         };

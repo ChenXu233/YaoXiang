@@ -4,7 +4,7 @@
 //! The frontend transforms source code into an intermediate representation (IR).
 
 use crate::middle;
-use crate::util::span::{SourceFile, Span};
+use crate::util::span::SourceFile;
 use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 use tracing::debug;
@@ -39,12 +39,11 @@ impl Compiler {
         let source_file = SourceFile::new(source_name.to_string(), source.to_string());
 
         // Lexical analysis
-        let tokens = lexer::tokenize(source)
-            .map_err(|e| CompileError::LexError(e.to_string()))?;
+        let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
 
         // Parsing
         let ast = parser::parse(&tokens).map_err(|e| {
-            let message = format_diagnostic(&source_file, e.span(), &e.to_string());
+            let message = format_parse_error(&source_file, e.span(), &e.to_string());
             CompileError::ParseError(message)
         })?;
 
@@ -84,26 +83,27 @@ fn format_type_errors(
         if idx > 0 {
             out.push('\n');
         }
-        out.push_str(&format_diagnostic(source_file, err.span(), &err.to_string()));
+        let suggestions = err.get_suggestions(None);
+        out.push_str(&format_diagnostic(source_file, err, suggestions.as_ref()));
     }
     out
 }
 
 fn format_diagnostic(
     source_file: &SourceFile,
-    span: Span,
-    message: &str,
+    error: &typecheck::TypeError,
+    suggestions: Option<&Vec<String>>,
 ) -> String {
+    let span = error.span();
+    let message = error.to_i18n_message();
+    let error_code = error.error_code();
+
     if span.is_dummy() {
-        return format!("{}: error: {}", source_file.name, message);
+        return format!("error[{}]: {}\n", error_code, message);
     }
 
     let line_index = span.start.line.saturating_sub(1);
-    let line_text = source_file
-        .content
-        .lines()
-        .nth(line_index)
-        .unwrap_or("");
+    let line_text = source_file.content.lines().nth(line_index).unwrap_or("");
 
     let col = span.start.column.max(1);
     let end_col = if span.end.line == span.start.line && span.end.column > span.start.column {
@@ -112,25 +112,87 @@ fn format_diagnostic(
         col + 1
     };
     let caret_len = end_col.saturating_sub(col).max(1);
-    let caret = format!("{}{}", " ".repeat(col.saturating_sub(1)), "^".repeat(caret_len));
+    let caret = format!(
+        "{}{}",
+        " ".repeat(col.saturating_sub(1)),
+        "^".repeat(caret_len)
+    );
 
     let line_no = span.start.line;
     let line_no_width = line_no.to_string().len().max(1);
-    let gutter = format!("{:>width$} |", line_no, width = line_no_width);
-    let empty_gutter = format!("{:>width$} |", "", width = line_no_width);
+    let gutter = format!("{:>width$} │", line_no, width = line_no_width);
+    let empty_gutter = format!("{:>width$} │", "", width = line_no_width);
 
-    format!(
-        "{}:{}:{}: error: {}\n{}\n{} {}\n{} {}",
-        source_file.name,
-        span.start.line,
-        span.start.column,
-        message,
-        empty_gutter,
-        gutter,
-        line_text,
-        empty_gutter,
-        caret
-    )
+    let mut out = String::new();
+
+    // Header line with error code
+    out.push_str(&format!("error[{}]: {}\n", error_code, message));
+
+    // Location and code snippet
+    out.push_str(&format!(
+        "  ┌─> {}:{}:{}\n",
+        source_file.name, span.start.line, span.start.column
+    ));
+    out.push_str("  │\n");
+    out.push_str(&format!("{} {}\n", gutter, line_text));
+    out.push_str(&format!("{} {}\n", empty_gutter, caret));
+    out.push_str("  │\n");
+
+    // Suggestions
+    if let Some(suggestions) = suggestions {
+        if !suggestions.is_empty() {
+            out.push_str("  = help: ");
+            out.push_str(&suggestions.join(", "));
+            out.push('\n');
+        }
+    }
+
+    out
+}
+
+/// Format parse errors (simpler format for now)
+fn format_parse_error(
+    source_file: &SourceFile,
+    span: crate::util::span::Span,
+    message: &str,
+) -> String {
+    if span.is_dummy() {
+        return format!("error[E0100]: {}\n", message);
+    }
+
+    let line_index = span.start.line.saturating_sub(1);
+    let line_text = source_file.content.lines().nth(line_index).unwrap_or("");
+
+    let col = span.start.column.max(1);
+    let end_col = if span.end.line == span.start.line && span.end.column > span.start.column {
+        span.end.column
+    } else {
+        col + 1
+    };
+    let caret_len = end_col.saturating_sub(col).max(1);
+    let caret = format!(
+        "{}{}",
+        " ".repeat(col.saturating_sub(1)),
+        "^".repeat(caret_len)
+    );
+
+    let line_no = span.start.line;
+    let line_no_width = line_no.to_string().len().max(1);
+    let gutter = format!("{:>width$} │", line_no, width = line_no_width);
+    let empty_gutter = format!("{:>width$} │", "", width = line_no_width);
+
+    let mut out = String::new();
+    out.push_str(&format!("error[E0100]: {}\n", message));
+    out.push_str(&format!(
+        "  ┌─> {}:{}:{}\n",
+        source_file.name, span.start.line, span.start.column
+    ));
+    out.push_str("  │\n");
+    out.push_str(&format!("{} {}\n", gutter, line_text));
+    out.push_str(&format!("{} {}\n", empty_gutter, caret));
+    out.push_str("  │\n");
+
+    out
 }
 
 /// Compilation errors

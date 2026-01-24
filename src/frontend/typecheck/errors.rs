@@ -4,6 +4,7 @@
 
 use super::types::MonoType;
 use crate::util::span::Span;
+use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 
 /// 类型错误
@@ -126,6 +127,101 @@ impl TypeError {
             TypeError::CannotInferParamType { span, .. } => *span,
             TypeError::NonExhaustivePatterns { span, .. } => *span,
             TypeError::ImportError { span, .. } => *span,
+        }
+    }
+
+    /// 获取国际化的错误消息
+    pub fn to_i18n_message(&self) -> String {
+        match self {
+            TypeError::TypeMismatch {
+                expected, found, ..
+            } => t_cur(
+                MSG::ErrorTypeMismatch,
+                Some(&[&expected.type_name(), &found.type_name()]),
+            ),
+            TypeError::UnknownVariable { name, .. } => {
+                t_cur(MSG::ErrorUnknownVariable, Some(&[name]))
+            }
+            TypeError::UnknownType { name, .. } => t_cur(MSG::ErrorUnknownType, Some(&[name])),
+            TypeError::ArityMismatch {
+                expected, found, ..
+            } => t_cur(
+                MSG::ErrorArityMismatch,
+                Some(&[&expected.to_string(), &found.to_string()]),
+            ),
+            TypeError::RecursiveType { name, .. } => t_cur(MSG::ErrorRecursiveType, Some(&[name])),
+            TypeError::UnsupportedOp { op, .. } => t_cur(MSG::ErrorUnsupportedOp, Some(&[op])),
+            TypeError::GenericConstraint { constraint, .. } => constraint.clone(),
+            TypeError::InfiniteType { var, ty, .. } => {
+                format!("{} = {}", var, ty.type_name())
+            }
+            TypeError::UnboundTypeVar { var, .. } => var.clone(),
+            TypeError::UnknownLabel { name, .. } => {
+                format!("Unknown label: {}", name)
+            }
+            TypeError::UnknownField {
+                struct_name,
+                field_name,
+                ..
+            } => t_cur(MSG::ErrorUnknownField, Some(&[field_name, struct_name])),
+            TypeError::IndexOutOfBounds { index, size, .. } => t_cur(
+                MSG::ErrorIndexOutOfBounds,
+                Some(&[&index.to_string(), &size.to_string()]),
+            ),
+            TypeError::CallError { message, .. } => message.clone(),
+            TypeError::AssignmentError { message, .. } => message.clone(),
+            TypeError::InferenceError { message, .. } => {
+                t_cur(MSG::ErrorInferenceFailed, Some(&[message]))
+            }
+            TypeError::CannotInferParamType { name, .. } => {
+                t_cur(MSG::ErrorCannotInferParamType, Some(&[name]))
+            }
+            TypeError::NonExhaustivePatterns { missing, .. } => t_cur(
+                MSG::ErrorNonExhaustivePatterns,
+                Some(&[&missing.len().to_string()]),
+            ),
+            TypeError::ImportError { message, .. } => {
+                t_cur(MSG::ErrorImportError, Some(&[message]))
+            }
+        }
+    }
+
+    /// 获取智能建议（目前主要针对 UnknownVariable）
+    pub fn get_suggestions(
+        &self,
+        _scope_vars: Option<&[String]>,
+    ) -> Option<Vec<String>> {
+        match self {
+            TypeError::UnknownVariable { .. } => {
+                // TODO: 实现作用域变量查找
+                // 目前返回空的建议列表
+                Some(Vec::new())
+            }
+            _ => None,
+        }
+    }
+
+    /// 获取错误代码（用于错误编号）
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            TypeError::TypeMismatch { .. } => "E0001",
+            TypeError::UnknownVariable { .. } => "E0002",
+            TypeError::UnknownType { .. } => "E0003",
+            TypeError::ArityMismatch { .. } => "E0004",
+            TypeError::RecursiveType { .. } => "E0005",
+            TypeError::UnsupportedOp { .. } => "E0006",
+            TypeError::GenericConstraint { .. } => "E0007",
+            TypeError::InfiniteType { .. } => "E0008",
+            TypeError::UnboundTypeVar { .. } => "E0009",
+            TypeError::UnknownLabel { .. } => "E0010",
+            TypeError::UnknownField { .. } => "E0011",
+            TypeError::IndexOutOfBounds { .. } => "E0012",
+            TypeError::CallError { .. } => "E0013",
+            TypeError::AssignmentError { .. } => "E0014",
+            TypeError::InferenceError { .. } => "E0015",
+            TypeError::CannotInferParamType { .. } => "E0016",
+            TypeError::NonExhaustivePatterns { .. } => "E0017",
+            TypeError::ImportError { .. } => "E0018",
         }
     }
 

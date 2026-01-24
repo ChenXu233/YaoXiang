@@ -203,9 +203,7 @@ impl<'a> ParserState<'a> {
                     }
                     _ => {
                         // Invalid lambda parameter
-                        self.error(super::ParseError::InvalidExpression {
-                            span: self.span(),
-                        });
+                        self.error(super::ParseError::InvalidExpression { span: self.span() });
                         return None;
                     }
                 }

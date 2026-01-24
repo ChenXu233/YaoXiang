@@ -67,5 +67,20 @@
   "vm_return_func": "Function return",
   "compilation_start": "Starting compilation",
   "compiling_source": "Compiling source code ({0} bytes)",
-  "debug_run_called": "run() called"
+  "debug_run_called": "run() called",
+  "error_unknown_variable": "Unknown variable: {0}",
+  "error_unknown_type": "Unknown type: {0}",
+  "error_type_mismatch": "Type mismatch: expected {0}, found {1}",
+  "error_arity_mismatch": "Arity mismatch: expected {0} arguments, found {1}",
+  "error_index_out_of_bounds": "Index out of bounds: {0} (size: {1})",
+  "error_unknown_field": "Unknown field '{0}' in '{1}'",
+  "error_recursive_type": "Recursive type definition: {0}",
+  "error_unsupported_op": "Unsupported operation: {0}",
+  "error_non_exhaustive_patterns": "Non-exhaustive patterns: missing {0} pattern(s)",
+  "error_import_error": "Import error: {0}",
+  "error_inference_failed": "Inference failed: {0}",
+  "error_cannot_infer_param_type": "Cannot infer type for parameter '{0}': parameter has no type annotation and is not used in a way that allows inference",
+  "help_did_you_mean": "did you mean {0}?",
+  "help_similar_variables": "similar variables: {0}",
+  "help_in_scope": "in scope: {0}"
 }

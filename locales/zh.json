@@ -67,5 +67,20 @@
   "vm_return_func": "函数返回",
   "compilation_start": "开始编译",
   "compiling_source": "正在编译源代码（{0} 字节）",
-  "debug_run_called": "run() 被调用"
+  "debug_run_called": "run() 被调用",
+  "error_unknown_variable": "未知变量：{0}",
+  "error_unknown_type": "未知类型：{0}",
+  "error_type_mismatch": "类型不匹配：期望 {0}，但发现 {1}",
+  "error_arity_mismatch": "参数数量不匹配：期望 {0} 个参数，但发现 {1} 个",
+  "error_index_out_of_bounds": "索引越界：{0}（大小：{1}）",
+  "error_unknown_field": "未知字段 '{0}' 在 '{1}' 中",
+  "error_recursive_type": "递归类型定义：{0}",
+  "error_unsupported_op": "不支持的操作：{0}",
+  "error_non_exhaustive_patterns": "模式匹配不完整：缺少 {0} 个模式",
+  "error_import_error": "导入错误：{0}",
+  "error_inference_failed": "类型推断失败：{0}",
+  "error_cannot_infer_param_type": "无法推断参数 '{0}' 的类型：参数没有类型注解，并且使用方式不允许推断",
+  "help_did_you_mean": "您是指 {0} 吗？",
+  "help_similar_variables": "相似变量：{0}",
+  "help_in_scope": "作用域中：{0}"
 }
