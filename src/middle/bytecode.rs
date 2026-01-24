@@ -660,6 +660,7 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
         for func in file.code_section.functions {
             // Decode instructions from BytecodeInstruction to BytecodeInstr
             let mut decoded_instructions = Vec::new();
+            let mut labels = std::collections::HashMap::new();
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -667,6 +668,112 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
                 match Opcode::try_from(instr.opcode) {
                     Ok(opcode) => {
                         match opcode {
+                            Opcode::Label => {
+                                if !instr.operands.is_empty() {
+                                    let label = u32::from_le_bytes([
+                                        instr.operands[0],
+                                        *instr.operands.get(1).unwrap_or(&0),
+                                        *instr.operands.get(2).unwrap_or(&0),
+                                        *instr.operands.get(3).unwrap_or(&0),
+                                    ]);
+                                    labels.insert(Label(label), decoded_instructions.len());
+                                }
+                            }
+                            Opcode::Jmp => {
+                                if !instr.operands.is_empty() {
+                                    let target = u32::from_le_bytes([
+                                        instr.operands[0],
+                                        *instr.operands.get(1).unwrap_or(&0),
+                                        *instr.operands.get(2).unwrap_or(&0),
+                                        *instr.operands.get(3).unwrap_or(&0),
+                                    ]);
+                                    decoded_instructions.push(BytecodeInstr::Jmp {
+                                        target: Label(target),
+                                    });
+                                }
+                            }
+                            Opcode::JmpIf => {
+                                if instr.operands.len() >= 5 {
+                                    let cond = instr.operands[0] as u16;
+                                    let target = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    decoded_instructions.push(BytecodeInstr::JmpIf {
+                                        cond: Reg(cond),
+                                        target: Label(target),
+                                    });
+                                }
+                            }
+                            Opcode::JmpIfNot => {
+                                if instr.operands.len() >= 5 {
+                                    let cond = instr.operands[0] as u16;
+                                    let target = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    decoded_instructions.push(BytecodeInstr::JmpIfNot {
+                                        cond: Reg(cond),
+                                        target: Label(target),
+                                    });
+                                }
+                            }
+                            Opcode::I64Add => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Add,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Sub => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Sub,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Gt => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Gt,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Eq => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Eq,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
                             Opcode::CallStatic => {
                                 // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
                                 if instr.operands.len() >= 7 {
@@ -814,7 +921,7 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
                 local_count: func.local_count,
                 upvalue_count: 0, // Not stored in BytecodeFile
                 instructions: decoded_instructions,
-                labels: HashMap::new(), // Will be populated during execution
+                labels,                         // Populated from Opcode::Label
                 exception_handlers: Vec::new(), // Not implemented yet
             };
             functions.push(byte_func);

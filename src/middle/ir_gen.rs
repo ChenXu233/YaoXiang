@@ -238,6 +238,16 @@ impl AstToIrGenerator {
         // 局部变量包括参数和函数体中声明的变量
         // 参数数量 + 临时寄存器使用数量
         let total_locals = self.next_temp;
+        const MAX_LOCALS: usize = 65_535;
+        if total_locals > MAX_LOCALS {
+            return Err(IrGenError::InternalError {
+                message: format!(
+                    "too many locals allocated in function '{}': {}",
+                    name, total_locals
+                ),
+                span: Span::dummy(),
+            });
+        }
         let locals_types: Vec<MonoType> = (0..total_locals)
             .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
             .collect();

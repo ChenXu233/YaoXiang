@@ -70,8 +70,9 @@ impl CodegenContext {
                     expr: Some(Box::new(expr.as_ref().clone())),
                     span: Default::default(),
                 };
-                self.generate_match_stmt(&match_expr, arms)?;
-                Ok(Operand::Temp(self.next_temp()))
+                let result_op = Operand::Temp(self.next_temp());
+                self.generate_match_stmt(&match_expr, arms, Some(result_op.clone()))?;
+                Ok(result_op)
             }
             Expr::Block(block) => self.generate_block(block),
             Expr::Return(value, _) => {
@@ -107,7 +108,7 @@ impl CodegenContext {
     }
 
     /// 生成字面量
-    fn generate_literal(
+    pub(super) fn generate_literal(
         &mut self,
         literal: &Literal,
     ) -> Result<Operand, CodegenError> {
