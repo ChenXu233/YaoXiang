@@ -6,9 +6,8 @@
 use yaoxiang::backends::common::{RuntimeValue, Heap, Handle};
 use yaoxiang::backends::{ExecutorConfig, ExecutionState};
 use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use yaoxiang::middle::ir::{ConstValue, Type as IrType};
+use yaoxiang::middle::ir::ConstValue;
 use yaoxiang::middle::ir;
-use std::sync::Arc;
 
 #[test]
 fn test_executor_config_default() {

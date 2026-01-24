@@ -3,8 +3,8 @@
 //! Tests for the code generation pipeline from high-level IR to bytecode.
 
 use yaoxiang::middle::codegen::CodegenContext;
-use yaoxiang::middle::ir::{ModuleIR, ConstValue, Type as IrType};
-use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeInstr, Reg, Label};
+use yaoxiang::middle::ir::ModuleIR;
+use yaoxiang::middle::bytecode::{BytecodeInstr, Reg, Label};
 use yaoxiang::backends::common::Opcode;
 
 #[test]

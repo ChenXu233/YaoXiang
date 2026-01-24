@@ -13,9 +13,7 @@ fn test_interpreter_creation() {
 #[test]
 fn test_simple_function() {
     // Test that we can compile a simple function
-    let source = r#"
-        main() -> () = () => {}
-    "#;
+    let source = r#"main: () -> () = () => {}"#;
 
     let result = run(source);
 
@@ -38,8 +36,8 @@ fn test_simple_function() {
 fn test_function_with_parameters() {
     // Test that we can define and compile a function with parameters
     let source = r#"
-        add(a: Int, b: Int) -> Int = (a, b) => { return a }
-        main() -> () = () => { let result = add(5, 10) }
+        add: (Int, Int) -> Int = (a, b) => { return a }
+        main: () -> () = () => { let result = add(5, 10) }
     "#;
 
     let result = run(source);
@@ -62,11 +60,7 @@ fn test_function_with_parameters() {
 #[test]
 fn test_conditional_statement() {
     // Test that we can compile conditional statements
-    let source = r#"
-        main() -> () = () => {
-            if true {}
-        }
-    "#;
+    let source = r#"main: () -> () = () => { if true {} }"#;
 
     let result = run(source);
 
@@ -87,11 +81,7 @@ fn test_conditional_statement() {
 #[test]
 fn test_loop_statement() {
     // Test that we can compile loop statements
-    let source = r#"
-        main() -> () = () => {
-            while true {}
-        }
-    "#;
+    let source = r#"main: () -> () = () => { while true {} }"#;
 
     let result = run(source);
 
