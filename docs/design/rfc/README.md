@@ -35,8 +35,6 @@
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-003 | [版本规划与实现建议](003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
-| RFC-004 | [柯里化方法的多位置联合绑定设计](004-curry-multi-position-binding.md) | 晨煦 | 2025-01-05 | 审核中 |
-| RFC-010 | [统一类型语法 - 方法即数据](010-unified-type-syntax.md) | 晨煦 | 2025-01-20 | 审核中 |
 
 
 ---
@@ -45,10 +43,12 @@
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-001 | [并作模型与错误处理系统](001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 审核中 |
-| RFC-008 | [Runtime 并发模型与调度器脱耦设计](008-runtime-concurrency-model.md) | 晨煦 | 2025-01-05 | 已接受 |
-| RFC-009 | [所有权模型 v7](009-ownership-model.md) | 晨煦 | 2025-01-05 | 审核中 |
+| RFC-001 | [并作模型与错误处理系统](001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 已接受 |
+| RFC-004 | [柯里化方法的多位置联合绑定设计](004-curry-multi-position-binding.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-007 | [函数定义语法统一方案](007-function-syntax-unification.md) | 晨煦 | 2025-01-05 | 已接受 |
+| RFC-008 | [Runtime 并发模型与调度器脱耦设计](008-runtime-concurrency-model.md) | 晨煦 | 2025-01-05 | 已接受 |
+| RFC-009 | [所有权模型 v7](009-ownership-model.md) | 晨煦 | 2025-01-05 | 已接受 |
+| RFC-011 | [泛型系统设计 - 零成本抽象与宏替代](011-generic-type-system.md) | 晨煦 | 2025-01-25 | 已接受 |
 
 ---
 
