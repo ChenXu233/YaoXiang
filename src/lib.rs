@@ -77,7 +77,7 @@ fn run_with_source_name(
     debug!("{}", t_cur_simple(MSG::CompilationStart));
     let module = compiler.compile_with_source(source_name, source)?;
     // Generate BytecodeModule using the new backend architecture
-    let mut ctx = crate::middle::codegen::CodegenContext::new(module);
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     let bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -111,7 +111,7 @@ pub fn build_bytecode(
     source_path: &Path,
     output_path: &Path,
 ) -> Result<()> {
-    use crate::middle::codegen::CodegenContext;
+    use crate::middle::passes::codegen::CodegenContext;
 
     let source_path_str = source_path.display().to_string();
     let output_path_str = output_path.display().to_string();
@@ -144,7 +144,7 @@ pub fn build_bytecode(
 
 /// Dump bytecode for debugging
 pub fn dump_bytecode(path: &Path) -> Result<()> {
-    use crate::middle::codegen::CodegenContext;
+    use crate::middle::passes::codegen::CodegenContext;
 
     let path_str = path.display().to_string();
     println!("=== Bytecode Dump for {} ===\n", path_str);
@@ -159,7 +159,7 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
-    let bytecode_file: crate::middle::codegen::bytecode::BytecodeFile = ctx
+    let bytecode_file: crate::middle::passes::codegen::bytecode::BytecodeFile = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
 
@@ -295,15 +295,15 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
 }
 
 /// Dump constant information in detail
-fn dump_const_detail(constant: &crate::middle::ir::ConstValue) -> &'static str {
+fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static str {
     match constant {
-        crate::middle::ir::ConstValue::Void => "void",
-        crate::middle::ir::ConstValue::Bool(_) => "bool",
-        crate::middle::ir::ConstValue::Int(_) => "int",
-        crate::middle::ir::ConstValue::Float(_) => "float",
-        crate::middle::ir::ConstValue::Char(_) => "char",
-        crate::middle::ir::ConstValue::String(_) => "String",
-        crate::middle::ir::ConstValue::Bytes(_) => "bytes",
+        crate::middle::core::ir::ConstValue::Void => "void",
+        crate::middle::core::ir::ConstValue::Bool(_) => "bool",
+        crate::middle::core::ir::ConstValue::Int(_) => "int",
+        crate::middle::core::ir::ConstValue::Float(_) => "float",
+        crate::middle::core::ir::ConstValue::Char(_) => "char",
+        crate::middle::core::ir::ConstValue::String(_) => "String",
+        crate::middle::core::ir::ConstValue::Bytes(_) => "bytes",
     }
 }
 
@@ -318,7 +318,9 @@ fn dump_params_detail(params: &[crate::frontend::typecheck::MonoType]) -> String
 }
 
 /// Dump instructions in a readable format with opcode names
-fn dump_instructions(instructions: &[crate::middle::codegen::bytecode::BytecodeInstruction]) {
+fn dump_instructions(
+    instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction]
+) {
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         match Opcode::try_from(instr.opcode) {

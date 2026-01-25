@@ -36,7 +36,7 @@ pub struct Interpreter {
     /// Function table (name -> function)
     functions: HashMap<String, BytecodeFunction>,
     /// Type table
-    type_table: Vec<crate::middle::ir::Type>,
+    type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
     state: ExecutionState,
     /// Configuration
@@ -1084,7 +1084,7 @@ mod tests {
         let func_idx = module.add_function(BytecodeFunction {
             name: "main".to_string(),
             params: vec![],
-            return_type: crate::middle::ir::Type::Void,
+            return_type: crate::middle::core::ir::Type::Void,
             local_count: 1,
             upvalue_count: 0,
             instructions: vec![

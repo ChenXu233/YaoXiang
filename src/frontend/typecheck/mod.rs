@@ -20,7 +20,7 @@ pub use types::*;
 
 use super::parser::ast;
 use crate::middle;
-use crate::middle::ir_gen::AstToIrGenerator;
+use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
 use crate::util::span::Span;
 use std::collections::HashMap;

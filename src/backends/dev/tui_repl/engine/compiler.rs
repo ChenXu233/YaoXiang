@@ -183,7 +183,7 @@ impl IncrementalCompiler {
 
         match compile_result {
             Ok(module_ir) => {
-                let mut ctx = crate::middle::codegen::CodegenContext::new(module_ir);
+                let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module_ir);
                 match ctx.generate() {
                     Ok(bytecode_file) => {
                         let bytecode_module =

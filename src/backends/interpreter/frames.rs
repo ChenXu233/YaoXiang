@@ -165,7 +165,7 @@ mod tests {
         BytecodeFunction {
             name: "test".to_string(),
             params: vec![],
-            return_type: crate::middle::ir::Type::Void,
+            return_type: crate::middle::core::ir::Type::Void,
             local_count: 2,
             upvalue_count: 0,
             instructions: vec![],
