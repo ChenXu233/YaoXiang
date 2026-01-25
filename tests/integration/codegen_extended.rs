@@ -3,7 +3,7 @@
 //! Tests for the code generation pipeline from high-level IR to bytecode.
 
 use yaoxiang::middle::codegen::CodegenContext;
-use yaoxiang::middle::ir::ModuleIR;
+use yaoxiang::middle::ModuleIR;
 use yaoxiang::middle::bytecode::{BytecodeInstr, Reg, Label};
 use yaoxiang::backends::common::Opcode;
 
@@ -53,7 +53,7 @@ fn test_bytecode_instruction_opcodes() {
 
 #[test]
 fn test_constant_pool_types() {
-    use yaoxiang::middle::ir::ConstValue;
+    use yaoxiang::middle::ConstValue;
 
     // Test various constant types
     let int_val = ConstValue::Int(42);
@@ -70,7 +70,7 @@ fn test_constant_pool_types() {
 
 #[test]
 fn test_ir_types() {
-    use yaoxiang::middle::ir::Type as IrType;
+    use yaoxiang::middle::Type as IrType;
 
     // Test that various IR types can be created
     let _int_type = IrType::Int;

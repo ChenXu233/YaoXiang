@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 use yaoxiang::middle::codegen::bytecode::BytecodeFile;
 use yaoxiang::middle::codegen::CodegenContext;
-use yaoxiang::middle::ir::ModuleIR;
+use yaoxiang::middle::ModuleIR;
 
 #[test]
 fn test_bytecode_serialization() {

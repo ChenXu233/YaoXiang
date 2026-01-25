@@ -228,6 +228,19 @@ impl OwnershipAnalyzer {
         self.scope_vars = HashSet::new();
         self.drop_points = HashMap::new();
 
+        // 0. 为函数参数创建定义（参数在函数入口处被定义）
+        for (idx, _) in func.params.iter().enumerate() {
+            self.definitions.insert(
+                Operand::Arg(idx),
+                Definition {
+                    position: (0, 0), // 参数在函数开始处定义
+                    ty: None,
+                    escapes: false,
+                    is_moved: false,
+                },
+            );
+        }
+
         // 1. 构建活跃变量分析
         self.liveness_analysis(func);
 
@@ -407,6 +420,48 @@ impl OwnershipAnalyzer {
                     .insert(src.clone(), Lifetime::new(pos, pos));
             }
 
+            // Store：初始化局部变量，记录定义
+            Instruction::Store { dst, .. } => {
+                // 记录 dst 的定义（初始化）
+                self.definitions.insert(
+                    dst.clone(),
+                    Definition {
+                        position: pos,
+                        ty: None,
+                        escapes: false,
+                        is_moved: false,
+                    },
+                );
+            }
+
+            // StoreIndex：存储到索引位置
+            Instruction::StoreIndex { dst, .. } => {
+                // 记录 dst 的定义
+                self.definitions.insert(
+                    dst.clone(),
+                    Definition {
+                        position: pos,
+                        ty: None,
+                        escapes: false,
+                        is_moved: false,
+                    },
+                );
+            }
+
+            // StoreField：存储到字段
+            Instruction::StoreField { dst, .. } => {
+                // 记录 dst 的定义
+                self.definitions.insert(
+                    dst.clone(),
+                    Definition {
+                        position: pos,
+                        ty: None,
+                        escapes: false,
+                        is_moved: false,
+                    },
+                );
+            }
+
             // 函数调用：返回值拥有参数的所有权
             Instruction::Call {
                 dst: Some(d), args, ..
@@ -442,6 +497,21 @@ impl OwnershipAnalyzer {
                         .insert(arg.clone());
                 }
             }
+
+            // 返回指令：记录返回值定义
+            Instruction::Ret(Some(value)) => {
+                // 记录返回值的定义（无论是常量、参数还是局部变量）
+                self.definitions.insert(
+                    value.clone(),
+                    Definition {
+                        position: pos,
+                        ty: None,
+                        escapes: false,
+                        is_moved: false,
+                    },
+                );
+            }
+            Instruction::Ret(None) => {}
 
             // 堆分配：新变量拥有新内存的所有权
             Instruction::HeapAlloc { dst, .. } => {

@@ -318,9 +318,12 @@ impl<'a> TypeChecker<'a> {
                             unreachable!()
                         }
                     } else {
+                        // 类型标注存在但不是函数类型，无法处理
                         Ok(())
                     }
                 } else {
+                    // 没有类型标注，也需要检查函数（但标记为未标注）
+                    self.check_fn_def(name, params, None, &body, false, None, false)?;
                     Ok(())
                 }
             }
@@ -799,6 +802,20 @@ impl<'a> TypeChecker<'a> {
         self.current_return_type = Some(return_ty.clone());
         self.inferrer.current_return_type = Some(return_ty.clone());
 
+        // 保存 param_types 的副本用于注册函数
+        let registered_param_types = param_types.clone();
+
+        // 创建推断的函数类型（用于注册，支持递归）
+        let inferred_fn_type = MonoType::Fn {
+            params: registered_param_types.clone(),
+            return_type: Box::new(return_ty.clone()),
+            is_async,
+        };
+
+        // 在进入函数体作用域之前注册函数（支持递归调用）
+        self.inferrer
+            .add_var(name.to_string(), PolyType::mono(inferred_fn_type.clone()));
+
         // 进入函数体作用域
         self.inferrer.enter_scope();
 
@@ -864,9 +881,9 @@ impl<'a> TypeChecker<'a> {
             )
         );
         if !is_annotated {
-            for (param_name, param_idx, _param_ty) in &untyped_params {
+            if let Some((param_name, param_idx, _param_ty)) = untyped_params.first() {
                 debug!("{}", t_cur(MSG::TypeCheckAddError, Some(&[param_name])));
-                self.add_error(TypeError::CannotInferParamType {
+                return Err(TypeError::CannotInferParamType {
                     name: param_name.clone(),
                     span: params[*param_idx].span,
                 });
@@ -879,20 +896,6 @@ impl<'a> TypeChecker<'a> {
         // 恢复之前的返回类型
         self.current_return_type = prev_return_type;
         self.inferrer.current_return_type = prev_inferrer_return_type;
-
-        // 保存 param_types 的副本用于注册函数
-        let registered_param_types = param_types.clone();
-
-        // 创建推断的函数类型
-        let inferred_fn_type = MonoType::Fn {
-            params: registered_param_types.clone(),
-            return_type: Box::new(return_ty.clone()),
-            is_async,
-        };
-
-        // 注册函数到外层作用域（支持递归）
-        self.inferrer
-            .add_var(name.to_string(), PolyType::mono(inferred_fn_type));
 
         // 生成函数 IR
         let fn_ir = middle::FunctionIR {

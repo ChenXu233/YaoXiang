@@ -6,8 +6,7 @@
 use yaoxiang::backends::common::{RuntimeValue, Heap, Handle};
 use yaoxiang::backends::{ExecutorConfig, ExecutionState};
 use yaoxiang::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use yaoxiang::middle::ir::ConstValue;
-use yaoxiang::middle::ir;
+use yaoxiang::middle::{ConstValue, Type};
 
 #[test]
 fn test_executor_config_default() {
@@ -96,8 +95,8 @@ fn test_bytecode_module_add_function() {
 
     let func = BytecodeFunction {
         name: "test_func".to_string(),
-        params: vec![ir::Type::Int(0), ir::Type::Int(0)],
-        return_type: ir::Type::Int(0),
+        params: vec![Type::Int(0), Type::Int(0)],
+        return_type: Type::Int(0),
         local_count: 0,
         upvalue_count: 0,
         instructions: vec![],
@@ -140,7 +139,7 @@ fn test_handle_display() {
 
 #[test]
 fn test_const_value_types() {
-    use yaoxiang::middle::ir::ConstValue;
+    use yaoxiang::middle::ConstValue;
 
     // Test various constant types
     let int_val = ConstValue::Int(42);
