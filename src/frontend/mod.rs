@@ -138,21 +138,26 @@ fn format_diagnostic(
     let line_no_width = line_no.to_string().len().max(1);
     let gutter = format!("{:>width$} │", line_no, width = line_no_width);
     let empty_gutter = format!("{:>width$} │", "", width = line_no_width);
+    let padding = " ".repeat(line_no_width + 1);
 
     let mut out = String::new();
 
     // Header line with error code
     out.push_str(&format!("error[{}]: {}\n", error_code, message));
 
-    // Location and code snippet
+    // Location and code snippet - 使用与行号相同的宽度格式化
     out.push_str(&format!(
-        "  ┌─> {}:{}:{}\n",
-        source_file.name, span.start.line, span.start.column
+        "{}┌─> {}:{:>width$}:{}\n",
+        padding,
+        source_file.name,
+        span.start.line,
+        span.start.column,
+        width = line_no_width
     ));
-    out.push_str("  │\n");
+    out.push_str(&format!("{}\n", empty_gutter));
     out.push_str(&format!("{} {}\n", gutter, line_text));
     out.push_str(&format!("{} {}\n", empty_gutter, caret));
-    out.push_str("  │\n");
+    out.push_str(&format!("{}\n", empty_gutter));
 
     // Suggestions
     if let Some(suggestions) = suggestions {
@@ -196,17 +201,22 @@ fn format_parse_error(
     let line_no_width = line_no.to_string().len().max(1);
     let gutter = format!("{:>width$} │", line_no, width = line_no_width);
     let empty_gutter = format!("{:>width$} │", "", width = line_no_width);
+    let padding = " ".repeat(line_no_width + 1);
 
     let mut out = String::new();
     out.push_str(&format!("error[E0100]: {}\n", message));
     out.push_str(&format!(
-        "  ┌─> {}:{}:{}\n",
-        source_file.name, span.start.line, span.start.column
+        "{}┌─> {}:{:>width$}::{}\n",
+        padding,
+        source_file.name,
+        span.start.line,
+        span.start.column,
+        width = line_no_width
     ));
-    out.push_str("  │\n");
+    out.push_str(&format!("{}\n", empty_gutter));
     out.push_str(&format!("{} {}\n", gutter, line_text));
     out.push_str(&format!("{} {}\n", empty_gutter, caret));
-    out.push_str("  │\n");
+    out.push_str(&format!("{}\n", empty_gutter));
 
     out
 }

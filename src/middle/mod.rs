@@ -6,17 +6,14 @@
 
 pub mod bytecode;
 pub mod codegen;
-pub mod escape_analysis;
 pub mod ir;
 pub mod ir_gen;
 pub mod lifetime;
 pub mod module;
 pub mod monomorphize;
-pub mod optimizer;
 
 pub use bytecode::*;
 pub use codegen::*;
-pub use escape_analysis::*;
 pub use ir::*;
 pub use ir_gen::*;
 pub use lifetime::*;

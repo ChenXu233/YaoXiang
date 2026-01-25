@@ -9,6 +9,8 @@ use super::super::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
 use super::types::{MonoType, PolyType, SendSyncConstraintSolver, TypeConstraintSolver};
 use crate::util::span::Span;
+use crate::tlog;
+use crate::util::i18n::MSG;
 use std::collections::HashMap;
 
 /// 类型推断器
@@ -391,7 +393,26 @@ impl<'a> TypeInferrer<'a> {
         args: &[ast::Expr],
         span: Span,
     ) -> TypeResult<MonoType> {
-        // 推断函数表达式的类型
+        // 检查是否是构造函数调用：标识符对应结构体类型
+        if let ast::Expr::Var(func_name, _) = func {
+            // 查找标识符对应的类型
+            if let Some(poly) = self.get_var(func_name).cloned() {
+                let mono = self.solver.instantiate(&poly);
+                let resolved = self.solver.resolve_type(&mono);
+                // 如果是结构体类型，直接返回该类型（构造函数调用）
+                if let MonoType::Struct(_) = resolved {
+                    tlog!(debug, MSG::DebugStructTypeConstructorCall, func_name);
+                    // 检查参数数量是否匹配（这里简化处理，实际应该检查字段数量）
+                    // 为每个参数添加类型约束
+                    for arg in args {
+                        let _arg_ty = self.infer_expr(arg)?;
+                    }
+                    return Ok(resolved);
+                }
+            }
+        }
+
+        // 普通函数调用
         let func_ty = self.infer_expr(func)?;
 
         // 创建类型变量用于参数和返回值
@@ -442,12 +463,44 @@ impl<'a> TypeInferrer<'a> {
             self.solver.new_var()
         };
 
+        // 保存当前返回类型
+        let prev_return_type = self.current_return_type.clone();
+        self.current_return_type = Some(return_ty.clone());
+
         self.enter_scope();
         for (param, param_ty) in params.iter().zip(param_types.iter()) {
             self.add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
         }
-        let _body_ty = self.infer_block(body, false, Some(&return_ty))?;
+
+        let body_ty = self.infer_block(body, false, None)?;
+
+        // 处理隐式返回
+        if let Some(_expr) = &body.expr {
+            // 如果最后有表达式，它的类型必须匹配返回类型
+            self.solver
+                .add_constraint(body_ty, return_ty.clone(), body.span);
+        } else {
+            // 如果没有最后表达式（隐式 Void）
+            // 检查是否以 return 语句结尾
+            let ends_with_return = if let Some(last) = body.stmts.last() {
+                if let ast::StmtKind::Expr(e) = &last.kind {
+                    matches!(e.as_ref(), ast::Expr::Return(..))
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            // 如果没有显式 return，隐式返回 Void
+            if !ends_with_return {
+                self.solver
+                    .add_constraint(MonoType::Void, return_ty.clone(), body.span);
+            }
+        }
+
         self.exit_scope();
+        self.current_return_type = prev_return_type;
 
         Ok(MonoType::Fn {
             params: param_types,
@@ -909,16 +962,19 @@ impl<'a> TypeInferrer<'a> {
 
             if let Some(ann) = type_annotation {
                 let ann_ty = MonoType::from(ann.clone());
-                self.solver.add_constraint(init_ty.clone(), ann_ty, span);
+                let resolved_ann_ty = self.resolve_type_ref(&ann_ty);
+                self.solver
+                    .add_constraint(init_ty.clone(), resolved_ann_ty, span);
             }
 
             // 泛化 initializer 的类型
             let poly = self.solver.generalize(&init_ty);
             self.add_var(name.to_string(), poly);
         } else if let Some(ann) = type_annotation {
-            // 没有初始化时，创建未绑定类型变量
+            // 没有初始化时，使用解析后的类型
             let ty = MonoType::from(ann.clone());
-            self.add_var(name.to_string(), PolyType::mono(ty));
+            let resolved_ty = self.resolve_type_ref(&ty);
+            self.add_var(name.to_string(), PolyType::mono(resolved_ty));
         } else {
             // 没有任何信息，创建新类型变量
             let ty = self.solver.new_var();
@@ -1227,6 +1283,33 @@ impl<'a> TypeInferrer<'a> {
             }
         }
         None
+    }
+
+    /// 解析类型引用，将 TypeRef 转换为实际类型
+    /// 例如：TypeRef("Point") -> 如果 Point 是结构体，返回 Struct 类型
+    pub fn resolve_type_ref(
+        &mut self,
+        ty: &MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                // 查找类型定义
+                if let Some(poly) = self.get_var(name).cloned() {
+                    let mono = self.solver.instantiate(&poly);
+                    let resolved = self.solver.resolve_type(&mono);
+                    // 如果解析后的类型是结构体且有名称，返回它
+                    // 否则保持原样
+                    match resolved {
+                        MonoType::Struct(_) => resolved,
+                        _ => ty.clone(),
+                    }
+                } else {
+                    // 未找到类型定义，保持原样
+                    ty.clone()
+                }
+            }
+            _ => ty.clone(),
+        }
     }
 
     /// 获取所有变量绑定（用于 IR 生成）

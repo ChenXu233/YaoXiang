@@ -10,6 +10,7 @@ use super::types::{MonoType, PolyType, TypeConstraintSolver, TypeVar};
 use crate::middle;
 use crate::util::span::Span;
 use crate::util::i18n::{t_cur, MSG};
+use crate::tlog;
 use std::collections::{HashMap, HashSet};
 use tracing::debug;
 
@@ -198,8 +199,12 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         stmt: &ast::Stmt,
     ) -> TypeResult<()> {
+        // Debug: log statement checking with structured output
+        tlog!(debug, MSG::DebugCheckingStmt);
+
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
+                tlog!(debug, MSG::DebugStmtExpr);
                 if let ast::Expr::FnDef {
                     name,
                     params,
@@ -249,117 +254,75 @@ impl<'a> TypeChecker<'a> {
                 params,
                 body: (stmts, expr),
             } => {
-                debug!("{}", t_cur(MSG::TypeCheckProcessFn, Some(&[&name])));
+                tlog!(debug, MSG::DebugStmtFn, name);
 
-                // 1. Extract params and return type from annotation if available
-                let (annotated_params, annotated_return) = if let Some(ast::Type::Fn {
-                    params,
-                    return_type,
-                    ..
-                }) = type_annotation
-                {
-                    (Some(params), Some(return_type.as_ref()))
-                } else {
-                    (None, None)
-                };
-
-                // 2. Prepare parameter types for the function signature
-                let param_types: Vec<MonoType> = if let Some(a_params) = annotated_params {
-                    if a_params.len() == params.len() {
-                        a_params.iter().map(|t| MonoType::from(t.clone())).collect()
-                    } else {
-                        // Mismatch in count, fallback to params or error?
-                        // For now, fallback to inferring from params if counts don't match,
-                        // but ideally this should be an error caught by parser/validation.
-                        // Given parser checks count, we can assume they match or use params.
-                        params
-                            .iter()
-                            .map(|p| {
-                                if let Some(ty) = &p.ty {
-                                    MonoType::from(ty.clone())
-                                } else {
-                                    self.inferrer.solver().new_var()
-                                }
-                            })
-                            .collect()
+                // 检查是否与已存在的结构体类型同名
+                if let Some(existing) = self.inferrer.get_var(name) {
+                    if let MonoType::Struct(_) = existing.body {
+                        return Err(TypeError::UnknownVariable {
+                            name: format!("'{}' is already defined as a struct type", name),
+                            span: stmt.span,
+                        });
                     }
-                } else {
-                    params
-                        .iter()
-                        .map(|p| {
-                            if let Some(ty) = &p.ty {
-                                MonoType::from(ty.clone())
-                            } else {
-                                self.inferrer.solver().new_var()
-                            }
-                        })
-                        .collect()
-                };
-
-                // 3. Prepare return type for the function signature
-                // Handle "_" as "inferred" (None)
-                let expected_return_type = if let Some(ty) = annotated_return {
-                    if let ast::Type::Name(n) = ty {
-                        if n == "_" {
-                            None
-                        } else {
-                            Some(ty)
-                        }
-                    } else {
-                        Some(ty)
-                    }
-                } else {
-                    None
-                };
-
-                let return_ty = if let Some(ty) = expected_return_type {
-                    MonoType::from(ty.clone())
-                } else {
-                    self.inferrer.solver().new_var()
-                };
-
-                // 4. Construct the inferred function type
-                let fn_type = MonoType::Fn {
-                    params: param_types.clone(),
-                    return_type: Box::new(return_ty),
-                    is_async: false,
-                };
-
-                // 5. If there is an annotation, constrain the inferred type to it
-                if let Some(ann) = type_annotation {
-                    let ann_ty = MonoType::from(ann.clone());
-                    self.inferrer
-                        .solver()
-                        .add_constraint(fn_type.clone(), ann_ty, stmt.span);
                 }
 
-                // 6. Register the function in the scope
-                self.inferrer.add_var(name.clone(), PolyType::mono(fn_type));
-
+                // Create the function body block
                 let body = ast::Block {
                     stmts: stmts.clone(),
                     expr: expr.clone(),
                     span: stmt.span,
                 };
 
-                // Pass the constrained param_types to check_fn_def so inner scope matches outer signature
-                debug!(
-                    "{}",
-                    t_cur(
-                        MSG::TypeCheckCallFnDef,
-                        Some(&[&annotated_params.is_some()])
-                    )
-                );
-                self.check_fn_def(
-                    name,
-                    params,
-                    expected_return_type,
-                    &body,
-                    false,
-                    Some(param_types),
-                    annotated_params.is_some(),
-                )?;
-                Ok(())
+                // For unified syntax, we need to handle the type annotation specially
+                // We'll convert this to a FnDef expression and delegate to the Expr handler
+                #[allow(clippy::collapsible_match)]
+                if let Some(ref type_annotation) = type_annotation {
+                    if let ast::Type::Fn {
+                        params: _,
+                        return_type,
+                    } = type_annotation
+                    {
+                        // Create a FnDef expression from the unified syntax
+                        let fn_def_expr = ast::Expr::FnDef {
+                            name: name.clone(),
+                            params: params.clone(),
+                            return_type: Some(*return_type.clone()),
+                            body: Box::new(body),
+                            is_async: false,
+                            span: stmt.span,
+                        };
+
+                        // Delegate to the Expr handler for FnDef
+                        if let ast::Expr::FnDef {
+                            name,
+                            params,
+                            return_type,
+                            body,
+                            is_async,
+                            span: _,
+                        } = fn_def_expr
+                        {
+                            // 有返回类型标注表示有完整类型签名
+                            let is_annotated = return_type.is_some();
+                            self.check_fn_def(
+                                &name,
+                                &params,
+                                return_type.as_ref(),
+                                &body,
+                                is_async,
+                                None,
+                                is_annotated,
+                            )?;
+                            Ok(())
+                        } else {
+                            unreachable!()
+                        }
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Ok(())
+                }
             }
             ast::StmtKind::Var {
                 name,
@@ -413,14 +376,27 @@ impl<'a> TypeChecker<'a> {
         initializer: Option<&ast::Expr>,
         span: Span,
     ) -> TypeResult<()> {
+        // 检查是否与已存在的结构体类型同名
+        if let Some(existing) = self.inferrer.get_var(name) {
+            if let MonoType::Struct(_) = existing.body {
+                return Err(TypeError::UnknownVariable {
+                    name: format!("'{}' is already defined as a struct type", name),
+                    span,
+                });
+            }
+        }
+
         if let Some(init) = initializer {
             let init_ty = self.inferrer.infer_expr(init)?;
 
             if let Some(ann) = type_annotation {
                 let ann_ty = MonoType::from(ann.clone());
+                // 解析类型注解中的 TypeRef，转换为实际类型
+                // 这确保了结构体类型匹配：TypeRef("Point") 与 Struct(Point)
+                let resolved_ann_ty = self.inferrer.resolve_type_ref(&ann_ty);
                 self.inferrer
                     .solver()
-                    .add_constraint(init_ty.clone(), ann_ty, span);
+                    .add_constraint(init_ty.clone(), resolved_ann_ty, span);
             }
 
             // 泛化 initializer 的类型
@@ -429,7 +405,10 @@ impl<'a> TypeChecker<'a> {
         } else if let Some(ann) = type_annotation {
             // 没有初始化时，使用类型注解
             let ty = MonoType::from(ann.clone());
-            self.inferrer.add_var(name.to_string(), PolyType::mono(ty));
+            // 解析类型注解中的 TypeRef
+            let resolved_ty = self.inferrer.resolve_type_ref(&ty);
+            self.inferrer
+                .add_var(name.to_string(), PolyType::mono(resolved_ty));
         } else {
             // 没有任何信息，创建新类型变量
             let ty = self.inferrer.solver().new_var();
@@ -448,7 +427,46 @@ impl<'a> TypeChecker<'a> {
         _span: Span,
     ) -> TypeResult<()> {
         let ty = MonoType::from(definition.clone());
-        self.inferrer.add_var(name.to_string(), PolyType::mono(ty));
+        tlog!(debug, MSG::DebugCheckingType, &name);
+
+        // 为 RFC-010 统一类型语法创建隐式构造函数
+        // 当定义结构体类型时，自动创建一个构造函数函数
+        match ty {
+            MonoType::Struct(mut struct_type) => {
+                // 设置结构体名称
+                struct_type.name = name.to_string();
+
+                // 提取字段类型列表
+                let field_types: Vec<MonoType> = struct_type
+                    .fields
+                    .iter()
+                    .map(|(_, field_ty)| field_ty.clone())
+                    .collect();
+
+                // 创建构造函数类型: (FieldTypes...) -> StructType
+                let _constructor_type = MonoType::Fn {
+                    params: field_types.clone(),
+                    return_type: Box::new(MonoType::Struct(struct_type.clone())),
+                    is_async: false,
+                };
+
+                // 注册结构体类型到作用域（使用 TypeRef）
+                tlog!(debug, MSG::DebugStructType, &name);
+                self.inferrer.add_var(
+                    name.to_string(),
+                    PolyType::mono(MonoType::Struct(struct_type)),
+                );
+
+                // 不注册构造函数函数到作用域，完全自动化
+                // 构造函数在 IR 生成时自动创建，对用户完全透明
+            }
+            _ => {
+                // 非结构体类型，直接注册
+                tlog!(debug, MSG::DebugNonStructType, &name);
+                self.inferrer.add_var(name.to_string(), PolyType::mono(ty));
+            }
+        }
+
         Ok(())
     }
 
@@ -745,7 +763,9 @@ impl<'a> TypeChecker<'a> {
                 .iter()
                 .map(|p| {
                     if let Some(ty) = &p.ty {
-                        MonoType::from(ty.clone())
+                        let ann_ty = MonoType::from(ty.clone());
+                        // 解析参数类型注解中的 TypeRef
+                        self.inferrer.resolve_type_ref(&ann_ty)
                     } else {
                         self.inferrer.solver().new_var()
                     }
@@ -765,7 +785,10 @@ impl<'a> TypeChecker<'a> {
         // 处理返回类型
         let (return_ty, _inferred_return_ty) = if let Some(ty) = return_type {
             // 有标注类型，使用标注类型
-            (MonoType::from(ty.clone()), None)
+            let ann_ty = MonoType::from(ty.clone());
+            // 解析类型注解中的 TypeRef，转换为实际类型
+            let resolved_ann_ty = self.inferrer.resolve_type_ref(&ann_ty);
+            (resolved_ann_ty, None)
         } else {
             // 无标注类型，需要从函数体推断
             let inferred = self.inferrer.solver().new_var();
@@ -792,11 +815,11 @@ impl<'a> TypeChecker<'a> {
         let body_ty = self.inferrer.infer_block(body, true, None)?;
 
         // 检查隐式返回（最后表达式或 Void）
-        if let Some(expr) = &body.expr {
+        if let Some(_expr) = &body.expr {
             // 如果最后表达式是 `return`，则该 return 已在 infer_return 中
             // 对当前返回类型添加了约束，因此不需要（也不应）再将
             // 块的类型与返回类型约束在一起 — 否则会把 `Void` 约束到返回类型。
-            if let ast::Expr::Return(_, _) = expr.as_ref() {
+            if let ast::Expr::Return(_, _) = _expr.as_ref() {
                 // diverging via explicit return; nothing to do here
             } else {
                 // 有最后表达式，约束其类型为返回类型
@@ -811,12 +834,17 @@ impl<'a> TypeChecker<'a> {
             // 如果不是发散的，则隐式返回 Void
             // Consider the function diverging if any top-level statement in the
             // block is an explicit `return`.
-            let is_diverging = body.stmts.iter().any(|s| match &s.kind {
-                ast::StmtKind::Expr(e) => matches!(e.as_ref(), ast::Expr::Return(_, _)),
-                _ => false,
-            });
+            let ends_with_return = if let Some(last) = body.stmts.last() {
+                if let ast::StmtKind::Expr(e) = &last.kind {
+                    matches!(e.as_ref(), ast::Expr::Return(..))
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
 
-            if !is_diverging {
+            if !ends_with_return {
                 self.inferrer
                     .solver()
                     .add_constraint(MonoType::Void, return_ty.clone(), body.span);
@@ -851,6 +879,20 @@ impl<'a> TypeChecker<'a> {
         // 恢复之前的返回类型
         self.current_return_type = prev_return_type;
         self.inferrer.current_return_type = prev_inferrer_return_type;
+
+        // 保存 param_types 的副本用于注册函数
+        let registered_param_types = param_types.clone();
+
+        // 创建推断的函数类型
+        let inferred_fn_type = MonoType::Fn {
+            params: registered_param_types.clone(),
+            return_type: Box::new(return_ty.clone()),
+            is_async,
+        };
+
+        // 注册函数到外层作用域（支持递归）
+        self.inferrer
+            .add_var(name.to_string(), PolyType::mono(inferred_fn_type));
 
         // 生成函数 IR
         let fn_ir = middle::FunctionIR {

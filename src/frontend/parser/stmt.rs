@@ -92,29 +92,75 @@ impl<'a> ParserState<'a> {
 
         // Optional initializer
         if self.skip(&TokenKind::Eq) {
-            // Check if this is a function definition: name: Type = (params) => body
-            // The key difference: after =, if we see ( and then later =>, it's a function
-            if self.at(&TokenKind::LParen) {
-                // Save current position to potentially backtrack
-                let saved_position = self.save_position();
+            // Check if this might be a function definition with unified syntax:
+            // name: (ParamTypes) -> ReturnType = (params) => body
+            // We need to check if:
+            // 1. Type annotation is a function type
+            // 2. Initializer is a lambda expression
 
-                // Try to parse as function definition
-                if let Some(fn_stmt) = self.parse_fn_stmt_with_name_and_type(
-                    name.clone(),
-                    type_annotation.clone(),
-                    span,
-                ) {
-                    self.skip(&TokenKind::Semicolon);
-                    return Some(fn_stmt);
+            let saved_position = self.save_position();
+            let init_opt = self.parse_expression(BP_LOWEST);
+
+            if let Some(initializer) = init_opt {
+                if let Some(ref type_ann) = type_annotation {
+                    // Check if initializer is a lambda expression
+                    if let Expr::FnDef { .. } = &initializer {
+                        // Check if type annotation is a function type
+                        if let Type::Fn {
+                            params: type_params,
+                            return_type: _,
+                        } = type_ann
+                        {
+                            // This is a function definition with unified syntax
+                            // Extract parameters from the lambda expression
+                            if let Expr::FnDef {
+                                name: _,
+                                params: lambda_params,
+                                return_type: _,
+                                body,
+                                is_async: _,
+                                ..
+                            } = &initializer
+                            {
+                                // Merge type information from type annotation with parameter names from lambda
+                                // type_params contains the types, lambda_params contains the names
+                                let mut merged_params = Vec::new();
+
+                                for (i, lambda_param) in lambda_params.iter().enumerate() {
+                                    if let Some(ty) = type_params.get(i) {
+                                        // Use the type from the annotation
+                                        merged_params.push(Param {
+                                            name: lambda_param.name.clone(),
+                                            ty: Some(ty.clone()),
+                                            span: lambda_param.span,
+                                        });
+                                    } else {
+                                        // No type in annotation, keep as is
+                                        merged_params.push(lambda_param.clone());
+                                    }
+                                }
+
+                                // Create a function statement with type annotation
+                                self.skip(&TokenKind::Semicolon);
+                                return Some(Stmt {
+                                    kind: StmtKind::Fn {
+                                        name,
+                                        type_annotation: type_annotation.clone(),
+                                        params: merged_params,
+                                        body: (body.stmts.clone(), body.expr.clone()),
+                                    },
+                                    span,
+                                });
+                            }
+                        }
+                    }
                 }
-
-                // Function parsing failed, backtrack and clear errors
-                // The ( is likely the start of a tuple value, not function params
-                self.restore_position(saved_position);
-                self.clear_errors();
             }
 
-            // Regular variable initializer: parse as expression
+            // If not a function definition, restore and parse as regular variable
+            self.restore_position(saved_position);
+            self.clear_errors();
+
             let initializer = Some(Box::new(self.parse_expression(BP_LOWEST)?));
 
             self.skip(&TokenKind::Semicolon);

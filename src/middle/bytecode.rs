@@ -723,10 +723,13 @@ impl From<crate::middle::codegen::bytecode::BytecodeFile> for BytecodeModule {
                                 }
                             }
                             Opcode::I64Add => {
-                                if instr.operands.len() >= 3 {
-                                    let dst = instr.operands[0] as u16;
-                                    let lhs = instr.operands[1] as u16;
-                                    let rhs = instr.operands[2] as u16;
+                                if instr.operands.len() >= 6 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let lhs =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    let rhs =
+                                        u16::from_le_bytes([instr.operands[4], instr.operands[5]]);
                                     decoded_instructions.push(BytecodeInstr::BinaryOp {
                                         op: BinaryOp::Add,
                                         dst: Reg(dst),

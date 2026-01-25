@@ -209,69 +209,6 @@ trait MonoTypeExt {
     fn from_ast(ast_type: &crate::frontend::parser::ast::Type) -> Self;
 }
 
-// ============================================================================
-// 编译后的模块结构（解耦 VM 和代码生成器）
-// ============================================================================
-
-/// 编译后的模块
-///
-/// 包含预生成的字节码，VM 直接执行，不需要知道如何生成字节码
-///
-/// **架构意义**：
-/// - 编译时：Frontend → BytecodeGenerator → CompiledModule
-/// - 运行时：VM 只接收 CompiledModule 执行
-/// - 分离编译时和运行时，关注点分离
-#[derive(Debug, Clone)]
-pub struct CompiledModule {
-    /// 模块名称
-    pub name: String,
-    /// 全局变量
-    pub globals: Vec<(String, MonoType, Option<ConstValue>)>,
-    /// 编译后的函数列表
-    pub functions: Vec<FunctionCode>,
-    /// 常量池
-    pub constants: Vec<ConstValue>,
-}
-
-impl CompiledModule {
-    /// 从 ModuleIR 生成编译后的模块
-    ///
-    /// 将 IR 转换为字节码，在编译阶段完成
-    pub fn from_ir(ir: &crate::middle::ir::ModuleIR) -> Self {
-        use crate::middle::codegen::ir_builder::BytecodeGenerator;
-
-        let mut constants = Vec::new();
-
-        let functions = ir
-            .functions
-            .iter()
-            .map(|func_ir| {
-                let generator = BytecodeGenerator::new(func_ir, &mut constants);
-                generator.generate()
-            })
-            .collect();
-
-        CompiledModule {
-            name: String::new(),
-            globals: ir
-                .globals
-                .iter()
-                .map(|(name, ty, val)| (name.clone(), MonoType::from(ty.clone()), val.clone()))
-                .collect(),
-            functions,
-            constants,
-        }
-    }
-
-    /// 获取函数代码
-    pub fn get_function(
-        &self,
-        name: &str,
-    ) -> Option<&FunctionCode> {
-        self.functions.iter().find(|f| f.name == name)
-    }
-}
-
 impl MonoTypeExt for MonoType {
     fn to_type_id(&self) -> u32 {
         match self {

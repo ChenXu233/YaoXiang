@@ -16,21 +16,19 @@
 pub mod buffer;
 pub mod bytecode;
 pub mod flow;
-pub mod ir_builder;
-
-pub mod gen;
 
 use crate::frontend::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::i18n::{t, t_simple, MSG};
 use crate::util::logger::get_lang;
+use crate::tlog;
 use crate::backends::common::Opcode;
 use std::fmt;
 use tracing::debug;
 
 use self::buffer::BytecodeBuffer;
-use self::flow::{FlowManager, JumpTable, Storage, Symbol, SymbolScopeManager};
+use self::flow::{FlowManager, SymbolScopeManager};
 
 /// 代码生成器
 ///
@@ -277,6 +275,8 @@ impl CodegenContext {
     ) -> Result<BytecodeInstruction, CodegenError> {
         use Instruction::*;
 
+        tlog!(debug, MSG::DebugTranslatingInstr, &format!("{:?}", instr));
+
         match instr {
             // =====================
             // 移动和加载
@@ -342,7 +342,11 @@ impl CodegenContext {
                 let rhs_reg = self.operand_to_reg(rhs)?;
                 Ok(BytecodeInstruction::new(
                     Opcode::I64Add,
-                    vec![dst_reg, lhs_reg, rhs_reg],
+                    vec![
+                        dst_reg, 0, // dst_reg 作为 u16 (little-endian)
+                        lhs_reg, 0, // lhs_reg 作为 u16 (little-endian)
+                        rhs_reg, 0, // rhs_reg 作为 u16 (little-endian)
+                    ],
                 ))
             }
 

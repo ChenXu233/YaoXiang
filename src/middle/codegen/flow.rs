@@ -205,6 +205,12 @@ impl FlowManager {
     pub fn function_indices(&self) -> &HashMap<String, usize> {
         &self.function_indices
     }
+    pub fn function_index_exists(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.function_indices.contains_key(name)
+    }
 
     // 循环标签
     pub fn set_loop_label(

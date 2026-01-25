@@ -13,6 +13,8 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
+use crate::util::i18n::MSG;
+use crate::tlog;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
@@ -171,6 +173,16 @@ impl Interpreter {
         op: BinaryOp,
         frame: &mut Frame,
     ) -> ExecutorResult<()> {
+        eprintln!(
+            "DEBUG: exec_binary_op called! dst={:?}, lhs={:?}, rhs={:?}, op={:?}",
+            dst, lhs, rhs, op
+        );
+        eprintln!(
+            "DEBUG: registers.len={}, lhs_idx={}, rhs_idx={}",
+            frame.registers.len(),
+            lhs.0 as usize,
+            rhs.0 as usize
+        );
         let a = frame
             .registers
             .get(lhs.0 as usize)
@@ -182,8 +194,19 @@ impl Interpreter {
             .cloned()
             .unwrap_or(RuntimeValue::Unit);
 
+        eprintln!("DEBUG: lhs_value={:?}, rhs_value={:?}", a, b);
+
+        tlog!(
+            debug,
+            MSG::DebugExecBinaryOp,
+            &format!("{:?}, {:?}, {:?}", &a, &b, &op)
+        );
+
         let result = match (op, a, b) {
-            (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l + r),
+            (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
+                RuntimeValue::Int(l + r)
+            }
             (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l - r),
             (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l * r),
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
@@ -295,8 +318,15 @@ impl Executor for Interpreter {
 
         // Add functions
         for func in &module.functions {
+            tlog!(debug, MSG::DebugLoadingFunction, &func.name);
             self.functions.insert(func.name.clone(), func.clone());
         }
+        tlog!(debug, MSG::DebugTotalFunctions, &self.functions.len());
+        tlog!(
+            debug,
+            MSG::DebugAvailableFunctions,
+            &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
+        );
 
         // Add types
         self.type_table.extend(module.type_table.clone());
@@ -339,6 +369,12 @@ impl Executor for Interpreter {
         // Execute instructions
         while frame.ip < frame.function.instructions.len() {
             let instr = &frame.function.instructions[frame.ip];
+
+            tlog!(
+                debug,
+                MSG::VmExecInstruction,
+                &format!("{} in function '{}': {:?}", frame.ip, func.name, instr)
+            );
 
             // Check breakpoint
             if self.breakpoints.contains_key(&frame.ip) {
@@ -452,6 +488,7 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::BinaryOp { dst, lhs, rhs, op } => {
+                    eprintln!("DEBUG: Matched BinaryOp!");
                     self.exec_binary_op(*dst, *lhs, *rhs, *op, &mut frame)?;
                     frame.advance();
                 }
@@ -536,8 +573,52 @@ impl Executor for Interpreter {
                     }
 
                     // Resolve function and execute immediately to avoid re-executing call site
-                    if let Some(target_func) = self.functions.get(&func_name).cloned() {
+                    let mut lookup_name = func_name.clone();
+
+                    // Special handling for struct constructors:
+                    // If "Point" is not found, try "Point_constructor"
+                    if !self.functions.contains_key(&func_name) {
+                        let constructor_name = format!("{}_constructor", func_name);
+                        if self.functions.contains_key(&constructor_name) {
+                            lookup_name = constructor_name.clone();
+                        }
+                    }
+
+                    tlog!(
+                        debug,
+                        MSG::DebugFunctionLookup,
+                        &format!("{}, {}", func_name, lookup_name)
+                    );
+                    tlog!(
+                        debug,
+                        MSG::DebugAvailableFunctions,
+                        &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
+                    );
+
+                    if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
+                        tlog!(debug, MSG::DebugFunctionFound, &lookup_name);
+                        tlog!(
+                            debug,
+                            MSG::DebugAvailableFunctions,
+                            &format!(
+                                "name={}, instructions={}",
+                                lookup_name,
+                                target_func.instructions.len()
+                            )
+                        );
+                        tlog!(
+                            debug,
+                            MSG::DebugFunctionCall,
+                            &lookup_name,
+                            &format!("{:?}", call_args)
+                        );
                         let result = self.execute_function(&target_func, &call_args)?;
+                        tlog!(
+                            debug,
+                            MSG::DebugFunctionReturn,
+                            &lookup_name,
+                            &format!("{:?}", result)
+                        );
                         if let Some(dst_reg) = dst {
                             frame
                                 .registers

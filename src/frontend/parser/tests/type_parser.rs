@@ -401,3 +401,190 @@ fn test_parse_type_with_spaces() {
     let result = parse_type_anno(&tokens);
     assert!(result.is_some());
 }
+
+// =========================================================================
+// RFC-010: 统一类型语法测试
+// =========================================================================
+
+#[test]
+fn test_parse_struct_type_rfc010() {
+    // 结构体：type Point = { x: Float, y: Float }
+    let tokens = tokenize("{ x: Float, y: Float }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].0, "x");
+            assert_eq!(fields[1].0, "y");
+        }
+        _ => panic!("Expected Struct type"),
+    }
+}
+
+#[test]
+fn test_parse_enum_simple_variants_rfc010() {
+    // 简单枚举：type Color = { red | green | blue }
+    let tokens = tokenize("{ red | green | blue }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Variant(variants) => {
+            assert_eq!(variants.len(), 3);
+            assert_eq!(variants[0].name, "red");
+            assert_eq!(variants[1].name, "green");
+            assert_eq!(variants[2].name, "blue");
+            // 简单变体没有参数
+            assert_eq!(variants[0].params.len(), 0);
+        }
+        _ => panic!("Expected Variant type"),
+    }
+}
+
+#[test]
+fn test_parse_enum_with_payload_rfc010() {
+    // 带载荷的枚举：type Result[T, E] = { ok(T) | err(E) }
+    let tokens = tokenize("{ ok(Int) | err(String) }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Variant(variants) => {
+            assert_eq!(variants.len(), 2);
+            assert_eq!(variants[0].name, "ok");
+            assert_eq!(variants[1].name, "err");
+            // ok 变体有载荷
+            assert_eq!(variants[0].params.len(), 1);
+        }
+        _ => panic!("Expected Variant type"),
+    }
+}
+
+#[test]
+fn test_parse_interface_rfc010() {
+    // 接口：type Drawable = { draw: (Surface) -> Void }
+    let tokens = tokenize("{ draw: (Surface) -> Void }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].0, "draw");
+            // 检查字段类型是函数类型
+            match &fields[0].1 {
+                crate::frontend::parser::ast::Type::Fn {
+                    params,
+                    return_type,
+                    ..
+                } => {
+                    assert_eq!(params.len(), 1);
+                    assert!(matches!(
+                        **return_type,
+                        crate::frontend::parser::ast::Type::Void
+                    ));
+                }
+                _ => panic!("Expected Fn type for interface method"),
+            }
+        }
+        _ => panic!("Expected Struct type for interface"),
+    }
+}
+
+#[test]
+fn test_parse_nested_struct_rfc010() {
+    // 嵌套结构体
+    let tokens = tokenize("{ x: { a: Int, b: Int }, y: Float }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].0, "x");
+            // x 字段也是结构体
+            match &fields[0].1 {
+                crate::frontend::parser::ast::Type::Struct(nested_fields) => {
+                    assert_eq!(nested_fields.len(), 2);
+                }
+                _ => panic!("Expected nested Struct"),
+            }
+        }
+        _ => panic!("Expected Struct type"),
+    }
+}
+
+#[test]
+fn test_parse_mixed_enum_variants_rfc010() {
+    // 混合枚举：既有载荷变体，也有无载荷变体
+    let tokens = tokenize("{ some(Int) | none }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Variant(variants) => {
+            assert_eq!(variants.len(), 2);
+            assert_eq!(variants[0].name, "some");
+            assert_eq!(variants[1].name, "none");
+            // some 有载荷，none 没有
+            assert_eq!(variants[0].params.len(), 1);
+            assert_eq!(variants[1].params.len(), 0);
+        }
+        _ => panic!("Expected Variant type"),
+    }
+}
+
+#[test]
+fn test_parse_generic_struct_rfc010() {
+    // 泛型结构体：type Box[T] = { value: T }
+    let tokens = tokenize("{ value: Int }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].0, "value");
+        }
+        _ => panic!("Expected Struct type"),
+    }
+}
+
+#[test]
+fn test_parse_enum_single_variant_rfc010() {
+    // 单变体枚举
+    let tokens = tokenize("{ single }").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Variant(variants) => {
+            assert_eq!(variants.len(), 1);
+            assert_eq!(variants[0].name, "single");
+        }
+        _ => panic!("Expected Variant type"),
+    }
+}
+
+#[test]
+fn test_parse_struct_empty_rfc010() {
+    // 空结构体
+    let tokens = tokenize("{}").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            assert_eq!(fields.len(), 0);
+        }
+        _ => panic!("Expected Struct type"),
+    }
+}
+
+#[test]
+fn test_parse_enum_empty_rfc010() {
+    // 空枚举（虽然不太实用，但应该能解析）
+    let tokens = tokenize("{}").unwrap();
+    let result = parse_type_anno(&tokens);
+    assert!(result.is_some());
+    match result.unwrap() {
+        crate::frontend::parser::ast::Type::Struct(fields) => {
+            // 空的花括号解析为结构体，不是枚举
+            assert_eq!(fields.len(), 0);
+        }
+        _ => panic!("Expected Struct type"),
+    }
+}

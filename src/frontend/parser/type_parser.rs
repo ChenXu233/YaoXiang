@@ -291,39 +291,106 @@ impl<'a> ParserState<'a> {
         Some(Type::List(Box::new(inner_type)))
     }
 
-    /// Parse struct type: `{ field: Type, ... }`
+    /// Parse struct type: `{ field: Type, ... }` or enum variants: `{ red | green | blue }`
+    /// Supports RFC-010 unified type syntax with `{ }` for all type definitions
     fn parse_struct_type(
         &mut self,
         _span: Span,
     ) -> Option<Type> {
         self.bump(); // consume '{'
 
+        // Check if this is an enum variant list by peeking at the first non-whitespace token
+        // Enum: { red | green | blue } - identifiers separated by |
+        // Struct: { x: Float, y: Float } - name: Type pairs separated by ,
+
+        let mut is_enum_variant = false;
         let mut fields = Vec::new();
+        let mut variants = Vec::new();
 
-        while !self.at(&TokenKind::RBrace) && !self.at_end() {
-            let name = match self.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => n.clone(),
-                _ => return None,
-            };
-            self.bump();
+        // Determine type by looking at first item
+        // Variants can be followed by: | (pipe), } (close brace), or ( (parenthesis for payload)
+        let first_item_is_variant = self
+            .current()
+            .map(|t| matches!(t.kind, TokenKind::Identifier(_)))
+            .unwrap_or(false)
+            && self
+                .peek_nth(1)
+                .map(|t| {
+                    matches!(
+                        t.kind,
+                        TokenKind::Pipe | TokenKind::RBrace | TokenKind::LParen
+                    )
+                })
+                .unwrap_or(false);
 
-            if !self.expect(&TokenKind::Colon) {
+        if first_item_is_variant {
+            is_enum_variant = true;
+        }
+
+        if is_enum_variant {
+            // Parse enum variants: { red | green | blue }
+            while !self.at(&TokenKind::RBrace) && !self.at_end() {
+                let variant_name = match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(n)) => n.clone(),
+                    _ => return None,
+                };
+                self.bump(); // consume identifier
+
+                // Check if variant has payload: `VariantName(Type)`
+                let mut params = Vec::new();
+                if self.at(&TokenKind::LParen) {
+                    self.bump(); // consume '('
+                    let payload_type = self.parse_type()?;
+                    if !self.expect(&TokenKind::RParen) {
+                        return None;
+                    }
+                    params.push((None, payload_type));
+                }
+
+                variants.push(VariantDef {
+                    name: variant_name,
+                    params,
+                    span: self.span(),
+                });
+
+                // Stop if no more variants
+                if !self.skip(&TokenKind::Pipe) {
+                    break;
+                }
+            }
+
+            if !self.expect(&TokenKind::RBrace) {
                 return None;
             }
 
-            let ty = self.parse_type()?;
-            fields.push((name, ty));
+            Some(Type::Variant(variants))
+        } else {
+            // Parse struct fields: { x: Float, y: Float }
+            while !self.at(&TokenKind::RBrace) && !self.at_end() {
+                let field_name = match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(n)) => n.clone(),
+                    _ => return None,
+                };
+                self.bump(); // consume identifier
 
-            if !self.skip(&TokenKind::Comma) {
-                break;
+                if !self.expect(&TokenKind::Colon) {
+                    return None;
+                }
+
+                let field_type = self.parse_type()?;
+                fields.push((field_name, field_type));
+
+                if !self.skip(&TokenKind::Comma) {
+                    break;
+                }
             }
-        }
 
-        if !self.expect(&TokenKind::RBrace) {
-            return None;
-        }
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
 
-        Some(Type::Struct(fields))
+            Some(Type::Struct(fields))
+        }
     }
 
     /// Parse named type or generic type

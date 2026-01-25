@@ -163,6 +163,42 @@ macro_rules! tlog {
     (error, $id:expr, $arg1:expr) => {
         tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1])));
     };
+    (debug, $id:expr, $arg1:expr, $arg2:expr) => {
+        tracing::debug!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
+    };
+    (info, $id:expr, $arg1:expr, $arg2:expr) => {
+        tracing::info!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
+    };
+    (warn, $id:expr, $arg1:expr, $arg2:expr) => {
+        tracing::warn!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
+    };
+    (error, $id:expr, $arg1:expr, $arg2:expr) => {
+        tracing::error!("{}", $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2])));
+    };
+    (debug, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
+        tracing::debug!(
+            "{}",
+            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
+        );
+    };
+    (info, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
+        tracing::info!(
+            "{}",
+            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
+        );
+    };
+    (warn, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
+        tracing::warn!(
+            "{}",
+            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
+        );
+    };
+    (error, $id:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
+        tracing::error!(
+            "{}",
+            $crate::util::i18n::t_cur($id, Some(&[$arg1, $arg2, $arg3]))
+        );
+    };
 }
 
 /// Convenience function to get current language from env or default
@@ -281,6 +317,26 @@ pub enum MSG {
     CompilingSource,
     DebugRunCalled,
 
+    // Debug logging
+    DebugCheckingStmt,
+    DebugStmtExpr,
+    DebugStmtFn,
+    DebugCheckingType,
+    DebugStructType,
+    DebugNonStructType,
+    DebugLoadingFunction,
+    DebugTotalFunctions,
+    DebugAvailableFunctions,
+    DebugFunctionLookup,
+    DebugFunctionFound,
+    DebugFunctionCall,
+    DebugFunctionReturn,
+    DebugExecBinaryOp,
+    DebugAddingNumbers,
+    DebugStructTypeConstructorCall,
+    DebugTranslatingInstr,
+    DebugGeneratingIRBinOp,
+
     // Error messages
     ErrorUnknownVariable,
     ErrorUnknownType,
@@ -372,6 +428,26 @@ impl MSG {
             MSG::CompilationStart => "compilation_start",
             MSG::CompilingSource => "compiling_source",
             MSG::DebugRunCalled => "debug_run_called",
+
+            // Debug logging
+            MSG::DebugCheckingStmt => "debug_checking_stmt",
+            MSG::DebugStmtExpr => "debug_stmt_expr",
+            MSG::DebugStmtFn => "debug_stmt_fn",
+            MSG::DebugCheckingType => "debug_checking_type",
+            MSG::DebugStructType => "debug_struct_type",
+            MSG::DebugNonStructType => "debug_non_struct_type",
+            MSG::DebugLoadingFunction => "debug_loading_function",
+            MSG::DebugTotalFunctions => "debug_total_functions",
+            MSG::DebugAvailableFunctions => "debug_available_functions",
+            MSG::DebugFunctionLookup => "debug_function_lookup",
+            MSG::DebugFunctionFound => "debug_function_found",
+            MSG::DebugFunctionCall => "debug_function_call",
+            MSG::DebugFunctionReturn => "debug_function_return",
+            MSG::DebugExecBinaryOp => "debug_exec_binary_op",
+            MSG::DebugAddingNumbers => "debug_adding_numbers",
+            MSG::DebugStructTypeConstructorCall => "debug_struct_type_constructor_call",
+            MSG::DebugTranslatingInstr => "debug_translating_instr",
+            MSG::DebugGeneratingIRBinOp => "debug_generating_ir_binop",
 
             // Error messages
             MSG::ErrorUnknownVariable => "error_unknown_variable",

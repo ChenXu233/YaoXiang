@@ -8,6 +8,7 @@ mod ref_test;
 mod state;
 mod syntax_validation;
 mod type_parser;
+mod unified_syntax_debug;
 
 pub use basic::*;
 pub use boundary::*;
