@@ -2,8 +2,12 @@
 //!
 //! 测试生命周期分析和所有权检查功能
 
+mod closure_ownership;
+mod complex_lifetime;
+mod cross_function_ownership;
 mod cycle_check;
 mod drop_semantics;
+mod generic_ownership;
 mod move_semantics;
 mod mut_check;
 mod ref_semantics;
@@ -66,13 +70,13 @@ fn create_test_function() -> FunctionIR {
 fn test_lifetime_analysis() {
     let func = create_test_function();
     let mut analyzer = OwnershipAnalyzer::new();
-    let result = analyzer.analyze_function(&func);
+    let _result = analyzer.analyze_function(&func);
 
     // 验证分析结果包含 drop points
-    println!("Drop points: {:?}", result.drop_points);
+    println!("Drop points: {:?}", _result.drop_points);
 
     // 至少应该有一些分析结果
-    assert!(result.definitions.len() > 0 || result.drop_points.len() > 0);
+    assert!(_result.definitions.len() > 0 || _result.drop_points.len() > 0);
 }
 
 #[test]
