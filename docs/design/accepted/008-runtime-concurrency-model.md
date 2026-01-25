@@ -3,11 +3,12 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-05（更新：记录运行时切换机制、类型约束 RFC、调度器接口标准化等新决策）
+> **最后更新**: 2025-01-25（更新：集成RFC-011泛型系统，类型约束已定义）
 
 > **参考**:
 > - [RFC-001: 并作模型与错误处理系统](../rfc/001-concurrent-model-error-handling.md)
 > - [RFC-003: 版本规划与实现建议](../rfc/003-version-planning.md)
+> - [RFC-011: 泛型系统设计](../rfc/011-generic-type-system.md) **类型约束已定义**
 
 ## 摘要
 
@@ -392,15 +393,15 @@ impl Scheduler for MultiThreadScheduler {
 > - **Rust 层面**：使用 trait `Scheduler` 作为泛型约束
 > - 两者语义一致：编译期多态，无运行时开销
 >
-> **⚠️ 语言特性待定**：YaoXiang 当前不支持泛型类型约束，调度器脱耦需要以下方案之一：
-> - 方案 A：扩展语言添加类型约束语法 `[S: Scheduler]`
-> - 方案 B：使用配置参数 + match 分支选择调度器
-> - 方案 C：使用 Rust trait 在编译器实现层处理（不暴露给语言层面）
+> **✅ 已解决**：YaoXiang 泛型类型约束已在RFC-011中定义，调度器脱耦方案：
+> - **方案 A**：使用RFC-011的类型约束语法 `[S: Scheduler]`
+> - 方案 B：使用配置参数 + match 分支选择调度器（备用方案）
+> - 方案 C：使用 Rust trait 在编译器实现层处理（备用方案）
 
 #### VM 使用泛型调度器
 
 ```yaoxiang
-# 方案 A：理想设计（需要语言扩展类型约束）
+# 方案 A：RFC-011设计（已定义类型约束）
 # VM: [S: Scheduler](scheduler: S) -> VM = (scheduler) => { ... }
 # single_vm = VM[SingleThreadScheduler](SingleThreadScheduler)
 # multi_vm = VM[MultiThreadScheduler](MultiThreadScheduler(num_workers: 4))
@@ -814,7 +815,7 @@ struct VM {
 - [x] 编译阶段是否相同？（决议：是，所有运行时共享同一套前端）
 - [x] 调度器脱耦是否需要 Trait？（决议：**不需要**，使用 YaoXiang 泛型直接实现）
 - [x] 运行时切换机制设计（决议：泛型 + 条件编译 + 向下切换）
-- [x] 泛型类型约束 `[S: Scheduler]`（决议：开新 RFC 讨论）
+- [x] 泛型类型约束 `[S: Scheduler]`（RFC-011已定义）
 - [x] **运行时切换 API**：运行时切换在标准库内实现
 - [x] **单线程模式优化**：DAG 本身就是额外开销，num_workers=1 与 >=1 时开销一致
 - [x] **调度模式切换**：num_workers 切换时自动增加调度器核心，同步/异步/并行语法无区别，由调度器自动处理
@@ -824,7 +825,7 @@ struct VM {
 # 待讨论问题
 
 > **说明**：以下问题应在其他 RFC 讨论，不在本 RFC 范围内：
-> - 泛型类型约束语法 → 新 RFC 讨论（已决议）
+> - 泛型类型约束语法 → RFC-011已定义（已决议）
 > - @block API 设计 → RFC-001 或标准库 RFC
 > - 异常/错误传播 → RFC-001 错误处理
 > - 调试器支持 → 调试器 RFC
@@ -936,7 +937,7 @@ WorkStealer 应该放在 Core Runtime 还是 Full Runtime？
 - ✅ **零运行时开销**（编译期多态）
 - ✅ **无需 Trait 概念**（利用 YaoXiang 泛型）
 - ✅ 调度器类型在编译期确定，运行时无开销
-- ⚠️ **待语言扩展**：YaoXiang 当前不支持泛型类型约束（如 `S: Scheduler`）
+- ✅ **已支持**：YaoXiang 泛型类型约束已在 RFC-011 中定义（如 `S: Scheduler`）
 
 ---
 
@@ -1091,7 +1092,7 @@ WorkStealer 应该放在 Core Runtime 还是 Full Runtime？
 
 #### 决议
 
-- ✅ **泛型类型约束**：需要开新 RFC 讨论 `[S: Scheduler]` 语法
+- ✅ **泛型类型约束**：已在 RFC-011 中详细定义 `[S: Scheduler]` 语法
 - ✅ **调度器接口标准化**：移到 RFC-003 版本规划中讨论
 - ✅ 遵循"一切皆是类型"的设计哲学
 
@@ -1142,7 +1143,7 @@ WorkStealer 应该放在 Core Runtime 还是 Full Runtime？
 | 嵌入式设计 | 即时执行，无 DAG 调度 | 2025-01-05 | 晨煦 |
 | 编译阶段 | 所有运行时共享同一套前端 | 2025-01-05 | 晨煦 |
 | 运行时分层 | Embedded / Standard / Full 三层 | 2025-01-05 | 沫郁酱 |
-| **类型约束 RFC** | `[S: Scheduler]` 需要新 RFC 讨论 | 2025-01-05 | 晨煦 |
+| **类型约束 RFC** | RFC-011 已定义 `[S: Scheduler]` 语法 | 2025-01-25 | 晨煦 |
 | **调度器接口** | 移到 RFC-003 讨论 | 2025-01-05 | 晨煦 |
 | **编译标记保留** | 保留 DAG 标记支持运行时切换 | 2025-01-05 | 晨煦 |
 | **运行时切换** | 在标准库内实现（泛型 + 条件编译 + 向下切换） | 2025-01-05 | 晨煦 |

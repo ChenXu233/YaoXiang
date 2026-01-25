@@ -1,9 +1,9 @@
 # RFC-010: 统一类型语法 - name: type = value 模型
 
-> **状态**: 草案
+> **状态**: 审核中
 > **作者**: 晨煦
 > **创建日期**: 2025-01-20
-> **最后更新**: 2025-01-20
+> **最后更新**: 2025-01-25（集成RFC-011泛型系统，补充泛型依赖说明）
 
 ## 摘要
 
@@ -77,6 +77,30 @@ let s: Drawable = p      # 接口赋值
 2. **简洁优雅**：`name: type = value` 对称美学
 3. **无需新关键字**：复用现有语法元素
 4. **理论优雅**：类型本身也是 Type 类型的值
+5. **泛型友好**：与泛型系统（RFC-011）无缝集成
+
+### 与泛型系统的集成
+
+RFC-010的统一语法模型与RFC-011的泛型系统设计**天然契合**，泛型参数可以无缝融入统一模型：
+
+```yaoxiang
+# 基础泛型（RFC-011 Phase 1）
+type List[T] = { data: Array[T], length: Int }
+
+# 泛型函数
+map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = ...
+
+# 类型约束（RFC-011 Phase 2）
+clone: [T: Clone](value: T) -> T = value.clone()
+
+# Const泛型（RFC-011 Phase 4）
+type Array[T, N: Int] = { data: T[N], length: N }
+```
+
+**依赖关系**：
+- RFC-011 Phase 1（基础泛型）是RFC-010的**强依赖**
+- 无基础泛型，RFC-010的泛型示例无法编译
+- 建议：RFC-011 Phase 1 与 RFC-010 同步实现
 
 ## 提案
 
@@ -318,18 +342,18 @@ func process[T: Drawable & Serializable](item: T) -> String {
 #### 8. 泛型类型
 
 ```yaoxiang
-# 泛型类型
+# 基础泛型（RFC-011 Phase 1）
 type List[T] = {
     data: Array[T],
     length: Int,
-    push: (List[T], T) -> Void,
-    get: (List[T], Int) -> Maybe[T]
+    push: [T](List[T], T) -> Void,
+    get: [T](List[T], Int) -> Maybe[T]
 }
 
-# 具体实例化
-type IntList = List(Int)
+# 具体实例化（RFC-011语法）
+type IntList = List[Int]
 
-# 泛型方法
+# 泛型方法（RFC-011语法）
 List.push[T]: (List[T], T) -> Void = (self, item) => {
     self.data.append(item)
     self.length = self.length + 1
