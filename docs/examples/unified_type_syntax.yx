@@ -1,0 +1,87 @@
+// RFC-010: 统一类型语法示例
+// 展示 name: type = value 模型的统一语法
+
+// ======== 1. 变量定义 ========
+
+// 使用统一语法：name: type = value
+x: Int = 42
+name: String = "Alice"
+flag: Bool = true
+
+// ======== 2. 函数定义 ========
+
+// 使用统一语法：name: (params) -> ReturnType = (params) => { body }
+add: (Int, Int) -> Int = (a, b) => {
+    return a + b
+}
+
+// 带类型推导的函数
+greet: (String) -> String = (name) => {
+    return "Hello, ${name}!"
+}
+
+// ======== 3. 类型定义（结构体） ========
+
+// 使用花括号定义结构体
+type Point = {
+    x: Float,
+    y: Float
+}
+
+// ======== 4. 类型定义（枚举） ========
+
+// 简单枚举（无载荷变体）
+type Color = {
+    red | green | blue
+}
+
+// 复杂枚举（有载荷变体）
+type Result = {
+    ok(Int) | err(String)
+}
+
+// Option 枚举
+type Option = {
+    some(String) | none
+}
+
+// ======== 5. 接口定义 ========
+
+// 接口是字段全为函数类型的记录类型
+type Drawable = {
+    draw: () -> Void
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+// ======== 6. 方法定义 ========
+
+// 类型方法：关联到特定类型
+draw: (Point) -> Void = (self) => {
+    return
+}
+
+serialize: (Point) -> String = (self) => {
+    return "Point"
+}
+
+// 普通方法
+distance: (Point, Point) -> Float = (p1, p2) => {
+    1.0
+}
+
+// ======== 7. 使用示例 ========
+
+main: () -> Void = () => {
+    // 基本变量赋值
+    p: Point = Point(1.0, 2.0);
+
+    // 函数调用
+    sum: Int = add(10, 20);
+    print(sum);
+    message: String = greet("World");
+
+    return
+}
