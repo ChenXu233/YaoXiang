@@ -24,5 +24,50 @@
   "vm_exec_instruction": "执行指令：{0}",
   "compilation_start": "编译伊始",
   "compiling_source": "正在编译，源码 {0} 字节",
-  "debug_run_called": "run() 已被调用"
+  "debug_run_called": "run() 已被调用",
+
+  "help_did_you_mean": "汝之意，其为{0}乎？",
+  "help_similar_variables": "相近之变量：{0}",
+  "help_in_scope": "所在之域：{0}",
+
+  "bytecode_dump_header": "=== {0}之字节码转储 ===",
+  "bytecode_dump_type_table": "=== 类型表（共{0}类）===",
+  "bytecode_dump_constants": "=== 常量（共{0}项）===",
+  "bytecode_dump_functions": "=== 函数（共{0}个）===",
+  "bytecode_file_header": "文件头：",
+  "bytecode_magic": "  魔数：0x{0:08x}",
+  "bytecode_version": "  版本：{0}",
+  "bytecode_flags": "  标志：0x{0:08x}",
+  "bytecode_entry_point": "  入口点：{0}",
+  "bytecode_section_count": "  段数：{0}",
+  "bytecode_file_size": "  文件大小：{0}字节",
+  "bytecode_type_count": "  类型表：{0}类",
+  "bytecode_const_count": "  常量池：{0}个",
+  "bytecode_func_count": "  函数：{0}",
+  "bytecode_func_name": "[{0:04}] {1}",
+  "bytecode_func_params": "  参数：{0}",
+  "bytecode_func_return_type": "  返回类型：{0}",
+  "bytecode_func_local_count": "  局部变量数：{0}",
+  "bytecode_func_instr_count": "  指令数：{0}",
+  "bytecode_func_code": "  代码：",
+  "bytecode_instr_index": "    [{0:04}] {1}",
+  "bytecode_unknown_opcode": "    [{0:04}] 未知指令：0x{1:02x}",
+
+  "repl_welcome": "YaoXiang REPL v0.3.0",
+  "repl_help": "输入 :help 以观可用之令，:quit 以退。",
+  "repl_error": "错误：{0}",
+  "repl_unknown_command": "未知之令：{0}",
+
+  "shell_welcome": "YaoXiang 开发 Shell v0.3.0",
+  "shell_help": "输入 :help 以观可用之令。",
+  "shell_exec_time": "执行耗时：{0:?}",
+  "shell_loaded": "已加载：{0}",
+  "shell_debug_start": "开启调试会话：{0}",
+  "shell_debug_cmd": "可用之令：\n  (r)un    - 运行至下一断点\n  (s)tep   - 单步执行\n  (n)ext   - 步过函数调用\n  (o)ut    - 跳出当前函数\n  (b)reak  - 列出断点\n  (b)reak <n> - 在第n行设断点\n  (c)ont   - 继续执行\n  (q)uit   - 退出调试器",
+
+  "debug_binary_op": "调试：左值={0:?}, 右值={1:?}",
+  "debug_registers": "调试：寄存器.len={0}, 左索引={1}, 右索引={2}",
+  "debug_match": "调试：匹配二元操作！",
+
+  "formatter_not_implemented": "格式化器尚未实现"
 }

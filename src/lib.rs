@@ -147,7 +147,8 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
     use crate::middle::passes::codegen::CodegenContext;
 
     let path_str = path.display().to_string();
-    println!("=== Bytecode Dump for {} ===\n", path_str);
+    tracing::info!("{}", t_cur(MSG::BytecodeDumpHeader, Some(&[&path_str])));
+    tracing::info!("");
 
     // Read source file
     let source = fs::read_to_string(path)
@@ -164,59 +165,117 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
 
     // Dump header information
-    println!("File Header:");
-    println!("  Magic: 0x{:08x}", bytecode_file.header.magic);
-    println!("  Version: {}", bytecode_file.header.version);
-    println!("  Flags: 0x{:08x}", bytecode_file.header.flags);
-    println!("  Entry Point: {}", bytecode_file.header.entry_point);
-    println!("  Section Count: {}", bytecode_file.header.section_count);
-    println!("  File Size: {} bytes", bytecode_file.header.file_size);
-    println!();
+    tracing::info!("{}", t_cur_simple(MSG::BytecodeFileHeader));
+    tracing::info!(
+        "{}",
+        t_cur(MSG::BytecodeMagic, Some(&[&bytecode_file.header.magic]))
+    );
+    tracing::info!(
+        "{}",
+        t_cur(MSG::BytecodeVersion, Some(&[&bytecode_file.header.version]))
+    );
+    tracing::info!(
+        "{}",
+        t_cur(MSG::BytecodeFlags, Some(&[&bytecode_file.header.flags]))
+    );
+    tracing::info!(
+        "{}",
+        t_cur(
+            MSG::BytecodeEntryPoint,
+            Some(&[&bytecode_file.header.entry_point])
+        )
+    );
+    tracing::info!(
+        "{}",
+        t_cur(
+            MSG::BytecodeSectionCount,
+            Some(&[&bytecode_file.header.section_count])
+        )
+    );
+    tracing::info!(
+        "{}",
+        t_cur(
+            MSG::BytecodeFileSize,
+            Some(&[&bytecode_file.header.file_size])
+        )
+    );
+    tracing::info!("");
 
     // Dump type table
     if !bytecode_file.type_table.is_empty() {
-        println!(
-            "=== Type Table ({} types) ===",
-            bytecode_file.type_table.len()
+        tracing::info!(
+            "{}",
+            t_cur(
+                MSG::BytecodeDumpTypeTable,
+                Some(&[&bytecode_file.type_table.len()])
+            )
         );
         for (idx, ty) in bytecode_file.type_table.iter().enumerate() {
-            println!("[{:04}] {}", idx, dump_type_detail(ty));
+            tracing::info!("[{:04}] {}", idx, dump_type_detail(ty));
         }
-        println!();
+        tracing::info!("");
     }
 
     // Dump constants
     if !bytecode_file.const_pool.is_empty() {
-        println!(
-            "=== Constants ({} items) ===",
-            bytecode_file.const_pool.len()
+        tracing::info!(
+            "{}",
+            t_cur(
+                MSG::BytecodeDumpConstants,
+                Some(&[&bytecode_file.const_pool.len()])
+            )
         );
         for (idx, constant) in bytecode_file.const_pool.iter().enumerate() {
-            println!(
+            tracing::info!(
                 "[{:04}] {} = {:?}",
                 idx,
                 dump_const_detail(constant),
                 constant
             );
         }
-        println!();
+        tracing::info!("");
     }
 
     // Dump functions
-    println!(
-        "=== Functions ({} functions) ===",
-        bytecode_file.code_section.functions.len()
+    tracing::info!(
+        "{}",
+        t_cur(
+            MSG::BytecodeDumpFunctions,
+            Some(&[&bytecode_file.code_section.functions.len()])
+        )
     );
     for (func_idx, func) in bytecode_file.code_section.functions.iter().enumerate() {
-        println!("\nFunction #{}: {}", func_idx, func.name);
-        println!("  Parameters: {}", dump_params_detail(&func.params));
-        println!("  Return Type: {}", dump_type_detail(&func.return_type));
-        println!("  Local Count: {}", func.local_count);
-        println!("  Instructions: {}", func.instructions.len());
+        tracing::info!("");
+        tracing::info!("Function #{}: {}", func_idx, func.name);
+        tracing::info!(
+            "{}",
+            t_cur(
+                MSG::BytecodeFuncParams,
+                Some(&[&dump_params_detail(&func.params)])
+            )
+        );
+        tracing::info!(
+            "{}",
+            t_cur(
+                MSG::BytecodeFuncReturnType,
+                Some(&[&dump_type_detail(&func.return_type)])
+            )
+        );
+        tracing::info!(
+            "{}",
+            t_cur(MSG::BytecodeFuncLocalCount, Some(&[&func.local_count]))
+        );
+        tracing::info!(
+            "{}",
+            t_cur(
+                MSG::BytecodeFuncInstrCount,
+                Some(&[&func.instructions.len()])
+            )
+        );
 
         // Dump instructions in a more readable format
         if !func.instructions.is_empty() {
-            println!("  Code:");
+            tracing::info!("{}", t_cur_simple(MSG::BytecodeFuncCode));
             dump_instructions(&func.instructions);
         }
     }
@@ -325,12 +384,18 @@ fn dump_instructions(
         // Try to decode the opcode
         match Opcode::try_from(instr.opcode) {
             Ok(opcode) => {
-                println!("    [{:04}] {:?}", instr_idx, opcode);
+                tracing::info!(
+                    "{}",
+                    t_cur(MSG::BytecodeInstrIndex, Some(&[&instr_idx, &opcode]))
+                );
             }
             Err(_) => {
-                println!(
-                    "    [{:04}] Unknown opcode: 0x{:02x}",
-                    instr_idx, instr.opcode
+                tracing::info!(
+                    "{}",
+                    t_cur(
+                        MSG::BytecodeUnknownOpcode,
+                        Some(&[&instr_idx, &instr.opcode])
+                    )
                 );
             }
         }

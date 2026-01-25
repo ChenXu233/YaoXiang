@@ -173,15 +173,12 @@ impl Interpreter {
         op: BinaryOp,
         frame: &mut Frame,
     ) -> ExecutorResult<()> {
-        eprintln!(
-            "DEBUG: exec_binary_op called! dst={:?}, lhs={:?}, rhs={:?}, op={:?}",
-            dst, lhs, rhs, op
-        );
-        eprintln!(
-            "DEBUG: registers.len={}, lhs_idx={}, rhs_idx={}",
-            frame.registers.len(),
-            lhs.0 as usize,
-            rhs.0 as usize
+        tlog!(
+            debug,
+            MSG::DebugRegisters,
+            &frame.registers.len(),
+            &(lhs.0 as usize),
+            &(rhs.0 as usize)
         );
         let a = frame
             .registers
@@ -194,7 +191,7 @@ impl Interpreter {
             .cloned()
             .unwrap_or(RuntimeValue::Unit);
 
-        eprintln!("DEBUG: lhs_value={:?}, rhs_value={:?}", a, b);
+        tlog!(debug, MSG::DebugBinaryOp, &a, &b);
 
         tlog!(
             debug,
@@ -338,7 +335,7 @@ impl Executor for Interpreter {
                 let result = self.execute_function(entry_func, &[])?;
                 // Print result if not unit
                 if !matches!(result, RuntimeValue::Unit) {
-                    println!("{}", result);
+                    tracing::info!("{}", result);
                 }
             }
         }
@@ -488,7 +485,7 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::BinaryOp { dst, lhs, rhs, op } => {
-                    eprintln!("DEBUG: Matched BinaryOp!");
+                    tlog!(debug, MSG::DebugMatch);
                     self.exec_binary_op(*dst, *lhs, *rhs, *op, &mut frame)?;
                     frame.advance();
                 }

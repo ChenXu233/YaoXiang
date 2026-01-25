@@ -100,5 +100,46 @@
   "error_cannot_infer_param_type": "Cannot infer type for parameter '{0}': parameter has no type annotation and is not used in a way that allows inference",
   "help_did_you_mean": "did you mean {0}?",
   "help_similar_variables": "similar variables: {0}",
-  "help_in_scope": "in scope: {0}"
+  "help_in_scope": "in scope: {0}",
+
+  "bytecode_dump_header": "=== Bytecode Dump for {0} ===",
+  "bytecode_dump_type_table": "=== Type Table ({0} types) ===",
+  "bytecode_dump_constants": "=== Constants ({0} items) ===",
+  "bytecode_dump_functions": "=== Functions ({0} functions) ===",
+  "bytecode_file_header": "File Header:",
+  "bytecode_magic": "  Magic: 0x{0:08x}",
+  "bytecode_version": "  Version: {0}",
+  "bytecode_flags": "  Flags: 0x{0:08x}",
+  "bytecode_entry_point": "  Entry Point: {0}",
+  "bytecode_section_count": "  Section Count: {0}",
+  "bytecode_file_size": "  File Size: {0} bytes",
+  "bytecode_type_count": "  Type Table: {0} types",
+  "bytecode_const_count": "  Constant Pool: {0} constants",
+  "bytecode_func_count": "  Functions: {0}",
+  "bytecode_func_name": "[{0:04}] {1}",
+  "bytecode_func_params": "  Parameters: {0}",
+  "bytecode_func_return_type": "  Return Type: {0}",
+  "bytecode_func_local_count": "  Local Count: {0}",
+  "bytecode_func_instr_count": "  Instructions: {0}",
+  "bytecode_func_code": "  Code:",
+  "bytecode_instr_index": "    [{0:04}] {1}",
+  "bytecode_unknown_opcode": "    [{0:04}] Unknown opcode: 0x{1:02x}",
+
+  "repl_welcome": "YaoXiang REPL v0.3.0",
+  "repl_help": "Type :help for available commands, :quit to exit.",
+  "repl_error": "Error: {0}",
+  "repl_unknown_command": "Unknown command: {0}",
+
+  "shell_welcome": "YaoXiang Development Shell v0.3.0",
+  "shell_help": "Type :help for available commands.",
+  "shell_exec_time": "Executed in {0:?}",
+  "shell_loaded": "Loaded: {0}",
+  "shell_debug_start": "Starting debug session for: {0}",
+  "shell_debug_cmd": "Available commands:\n  (r)un    - Run to next breakpoint\n  (s)tep   - Step one instruction\n  (n)ext   - Step over function calls\n  (o)ut    - Step out of current function\n  (b)reak  - List breakpoints\n  (b)reak <n> - Add breakpoint at line n\n  (c)ont   - Continue execution\n  (q)uit   - Exit debugger",
+
+  "debug_binary_op": "DEBUG: lhs_value={0:?}, rhs_value={1:?}",
+  "debug_registers": "DEBUG: registers.len={0}, lhs_idx={1}, rhs_idx={2}",
+  "debug_match": "DEBUG: Matched BinaryOp!",
+
+  "formatter_not_implemented": "Formatter not implemented yet"
 }

@@ -353,6 +353,50 @@ pub enum MSG {
     HelpDidYouMean,
     HelpSimilarVariables,
     HelpInScope,
+
+    // Bytecode dump messages
+    BytecodeDumpHeader,
+    BytecodeDumpTypeTable,
+    BytecodeDumpConstants,
+    BytecodeDumpFunctions,
+    BytecodeFileHeader,
+    BytecodeMagic,
+    BytecodeVersion,
+    BytecodeFlags,
+    BytecodeEntryPoint,
+    BytecodeSectionCount,
+    BytecodeFileSize,
+    BytecodeTypeCount,
+    BytecodeConstCount,
+    BytecodeFuncCount,
+    BytecodeFuncName,
+    BytecodeFuncParams,
+    BytecodeFuncReturnType,
+    BytecodeFuncLocalCount,
+    BytecodeFuncInstrCount,
+    BytecodeFuncCode,
+    BytecodeInstrIndex,
+    BytecodeUnknownOpcode,
+
+    // REPL and Shell messages
+    ReplWelcome,
+    ReplHelp,
+    ReplError,
+    ReplUnknownCommand,
+    ShellWelcome,
+    ShellHelp,
+    ShellExecTime,
+    ShellLoaded,
+    ShellDebugStart,
+    ShellDebugCmd,
+
+    // Debug messages
+    DebugBinaryOp,
+    DebugRegisters,
+    DebugMatch,
+
+    // Other messages
+    FormatterNotImplemented,
 }
 
 impl MSG {
@@ -465,6 +509,50 @@ impl MSG {
             MSG::HelpDidYouMean => "help_did_you_mean",
             MSG::HelpSimilarVariables => "help_similar_variables",
             MSG::HelpInScope => "help_in_scope",
+
+            // Bytecode dump messages
+            MSG::BytecodeDumpHeader => "bytecode_dump_header",
+            MSG::BytecodeDumpTypeTable => "bytecode_dump_type_table",
+            MSG::BytecodeDumpConstants => "bytecode_dump_constants",
+            MSG::BytecodeDumpFunctions => "bytecode_dump_functions",
+            MSG::BytecodeFileHeader => "bytecode_file_header",
+            MSG::BytecodeMagic => "bytecode_magic",
+            MSG::BytecodeVersion => "bytecode_version",
+            MSG::BytecodeFlags => "bytecode_flags",
+            MSG::BytecodeEntryPoint => "bytecode_entry_point",
+            MSG::BytecodeSectionCount => "bytecode_section_count",
+            MSG::BytecodeFileSize => "bytecode_file_size",
+            MSG::BytecodeTypeCount => "bytecode_type_count",
+            MSG::BytecodeConstCount => "bytecode_const_count",
+            MSG::BytecodeFuncCount => "bytecode_func_count",
+            MSG::BytecodeFuncName => "bytecode_func_name",
+            MSG::BytecodeFuncParams => "bytecode_func_params",
+            MSG::BytecodeFuncReturnType => "bytecode_func_return_type",
+            MSG::BytecodeFuncLocalCount => "bytecode_func_local_count",
+            MSG::BytecodeFuncInstrCount => "bytecode_func_instr_count",
+            MSG::BytecodeFuncCode => "bytecode_func_code",
+            MSG::BytecodeInstrIndex => "bytecode_instr_index",
+            MSG::BytecodeUnknownOpcode => "bytecode_unknown_opcode",
+
+            // REPL and Shell messages
+            MSG::ReplWelcome => "repl_welcome",
+            MSG::ReplHelp => "repl_help",
+            MSG::ReplError => "repl_error",
+            MSG::ReplUnknownCommand => "repl_unknown_command",
+            MSG::ShellWelcome => "shell_welcome",
+            MSG::ShellHelp => "shell_help",
+            MSG::ShellExecTime => "shell_exec_time",
+            MSG::ShellLoaded => "shell_loaded",
+            MSG::ShellDebugStart => "shell_debug_start",
+            MSG::ShellDebugCmd => "shell_debug_cmd",
+
+            // Debug messages
+            MSG::DebugBinaryOp => "debug_binary_op",
+            MSG::DebugRegisters => "debug_registers",
+            MSG::DebugMatch => "debug_match",
+
+            // Other messages
+            MSG::FormatterNotImplemented => "formatter_not_implemented",
         }
     }
 }

@@ -100,5 +100,46 @@
   "error_cannot_infer_param_type": "喵~推断不出参数 '{0}' 的类型喵，参数没写类型注解喵~ 而且用法也不对喵~ (ฅ>ω<ฅ)",
   "help_did_you_mean": "喵~您是想说 {0} 吗？ (｡･ω･｡)",
   "help_similar_variables": "喵~相似的变量：{0} 喵~ (*^▽^*)",
-  "help_in_scope": "喵~作用域里：{0} 喵~ nyan~"
+  "help_in_scope": "喵~作用域里：{0} 喵~ nyan~",
+
+  "bytecode_dump_header": "喵~{0} 的字节码转储来啦喵~ ฅ(๑>◡<๑)ฅ",
+  "bytecode_dump_type_table": "喵~类型表喵~ 共 {0} 个类型呢 (*^▽^*)",
+  "bytecode_dump_constants": "喵~常量表喵~ 共 {0} 个常量ฅ(>ω<ฅ)",
+  "bytecode_dump_functions": "喵~函数表喵~ 共 {0} 个函数喵 (๑>◡<๑)",
+  "bytecode_file_header": "喵~文件头信息喵~ (,,>︿<,,)",
+  "bytecode_magic": "  喵~魔数：0x{0:08x} 喵~ (≧▽≦)",
+  "bytecode_version": "  喵~版本：{0} 喵~ nyan~",
+  "bytecode_flags": "  喵~标志：0x{0:08x} 喵~ (^w^)",
+  "bytecode_entry_point": "  喵~入口点：{0} 喵~ (,,>︿<,,)",
+  "bytecode_section_count": "  喵~段数：{0} 喵~ ฅ(๑>◡<๑)ฅ",
+  "bytecode_file_size": "  喵~文件大小：{0} 字节喵~ (*^▽^*)",
+  "bytecode_type_count": "  喵~类型表：{0} 个类型喵~ (๑>◡<๑)",
+  "bytecode_const_count": "  喵~常量池：{0} 个常量喵~ (≧▽≦)",
+  "bytecode_func_count": "  喵~函数数：{0} 喵~ nyan~",
+  "bytecode_func_name": "喵~[{0:04}] {1} 喵~ (^w^)",
+  "bytecode_func_params": "  喵~参数：{0} 喵~ (,,>︿<,,)",
+  "bytecode_func_return_type": "  喵~返回类型：{0} 喵~ ฅ(๑>◡<๑)ฅ",
+  "bytecode_func_local_count": "  喵~局部变量：{0} 个喵~ (*^▽^*)",
+  "bytecode_func_instr_count": "  喵~指令数：{0} 个喵~ (๑>◡<๑)",
+  "bytecode_func_code": "  喵~代码段喵~ (,,>︿<,,)",
+  "bytecode_instr_index": "    喵~[{0:04}] {1} 喵~ (≧▽≦)",
+  "bytecode_unknown_opcode": "    喵~[{0:04}] 未知操作码：0x{1:02x} 喵~ 喵呜~ (>^ω^<)",
+
+  "repl_welcome": "喵~YaoXiang REPL v0.3.0 闪亮登场喵~ ฅ(๑>◡<๑)ฅ",
+  "repl_help": "喵~输入 :help 查看命令喵~ 输入 :quit 退出喵~ (｡･ω･｡)",
+  "repl_error": "喵~错误啦：{0} 喵~ 呜~ (´；ω；`)",
+  "repl_unknown_command": "喵~不认识的命令：{0} 喵~ (,,>︿<,,)",
+
+  "shell_welcome": "喵~YaoXiang 开发 Shell v0.3.0 喵~ (≧▽≦)",
+  "shell_help": "喵~输入 :help 查看可用命令喵~ (｡･ω･｡)",
+  "shell_exec_time": "喵~执行耗时：{0:?} 喵~ (*^▽^*)",
+  "shell_loaded": "喵~加载完成：{0} 喵~ 锵锵！ (๑>◡<๑)",
+  "shell_debug_start": "喵~开始调试会话：{0} 喵~ ฅ(๑>◡<๑)ฅ",
+  "shell_debug_cmd": "喵~可用命令喵：\n  (r)un    - 运行到下个断点喵\n  (s)tep   - 单步执行喵\n  (n)ext   - 步过函数调用喵\n  (o)ut    - 跳出当前函数喵\n  (b)reak  - 列出断点喵\n  (b)reak <n> - 在第 n 行设置断点喵\n  (c)ont   - 继续执行喵\n  (q)uit   - 退出调试器喵~ 喵呜~ (>^ω^<)",
+
+  "debug_binary_op": "喵~调试：左值={0:?}, 右值={1:?} 喵~ (๑>◡<๑)",
+  "debug_registers": "喵~调试：寄存器.len={0}, 左索引={1}, 右索引={2} 喵~ nyan~",
+  "debug_match": "喵~调试：匹配二元操作啦！喵~ (*^▽^*)",
+
+  "formatter_not_implemented": "喵~格式化器还没实现呢喵~ 呜~ (´；ω；`)"
 }

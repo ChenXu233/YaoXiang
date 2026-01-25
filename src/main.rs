@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, TuiREPL, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
-use yaoxiang::util::i18n::set_lang_from_string;
+use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -180,7 +180,7 @@ fn main() -> Result<()> {
         }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter
-            eprintln!("Formatter not implemented yet");
+            tracing::warn!("{}", t_cur_simple(MSG::FormatterNotImplemented));
         }
         Commands::Dump { file } => {
             dump_bytecode(&file).with_context(|| format!("Failed to dump: {}", file.display()))?;
