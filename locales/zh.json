@@ -141,5 +141,66 @@
   "debug_registers": "调试：寄存器.len={0}, 左索引={1}, 右索引={2}",
   "debug_match": "调试：匹配二元操作！",
 
-  "formatter_not_implemented": "格式化器尚未实现"
+  "formatter_not_implemented": "格式化器尚未实现",
+
+  "stage1_start": "=== 阶段 1：错误和警告信息 ===",
+  "stage1_complete": "=== 阶段 1 完成：错误和警告信息 ===",
+  "stage2_start": "=== 阶段 2：用户可见消息 ===",
+  "stage2_complete": "=== 阶段 2 完成：用户可见消息 ===",
+  "stage3_start": "=== 阶段 3：调试信息和其他模块 ===",
+  "stage3_complete": "=== 阶段 3 完成：调试信息和其他模块 ===",
+  "all_stages_complete": "=== 所有阶段完成！Print 替换为 Logger 任务结束 ===",
+
+  "bytecode_decode_i64add": "调试解码：I64Add 操作数.len = {0}",
+  "bytecode_decode_i64add_too_short": "调试解码：I64Add 操作数太短，跳过",
+
+  "ir_gen_enter_scope": "调试 IR 生成：进入作用域，符号栈深度之前：{0}",
+  "ir_gen_exit_scope": "调试 IR 生成：退出作用域，符号栈深度：{0}",
+  "ir_gen_register_local": "调试 IR 生成：注册局部变量 '{0}'，local_idx={1}",
+  "ir_gen_lookup_local": "调试 IR 生成：查找局部变量 '{0}' -> local_idx={1}",
+  "ir_gen_lookup_local_not_found": "调试 IR 生成：查找局部变量 '{0}' -> None",
+  "ir_gen_before_process_stmt": "调试 IR 生成：处理语句前，符号深度={0}",
+  "ir_gen_after_process_stmt": "调试 IR 生成：处理语句后，符号深度={0}",
+  "ir_gen_about_to_exit_scope": "调试 IR 生成：即将退出作用域，符号深度={0}",
+  "ir_gen_after_exit_scope": "调试 IR 生成：退出作用域后，符号深度={0}",
+
+  "repl_available_commands": "可用命令：",
+  "repl_exit_command": "  :quit, :q   - 退出 REPL",
+  "repl_help_command": "  :help, :h   - 显示帮助消息",
+  "repl_history_command": "  :history    - 显示输入历史",
+  "repl_clear_command": "  :clear      - 清空输入缓冲区",
+
+  "shell_exiting": "\\n正在退出...",
+  "shell_available_commands": "Shell 命令：",
+  "shell_exit_command": "  :quit, :q, exit   - 退出 shell",
+  "shell_clear_command": "  :clear            - 清屏",
+  "shell_cd_command": "  :cd <dir>         - 切换目录",
+  "shell_pwd_command": "  :pwd              - 打印工作目录",
+  "shell_ls_command": "  :ls [dir]         - 列出目录内容",
+  "shell_code_commands": "代码命令：",
+  "shell_run_command": "  :run <file>       - 运行 YaoXiang 文件",
+  "shell_load_command": "  :load <file>      - 加载 YaoXiang 文件",
+  "shell_debug_command": "  :debug <file>     - 调试 YaoXiang 文件",
+  "shell_break_command": "  :break <fn> <n>   - 设置断点",
+  "shell_repl_command": "  :repl             - 切换到 REPL 模式",
+  "shell_other_input": "任何其他输入都将作为 YaoXiang 代码进行求值。",
+
+  "debugger_at_location": "  位置 {0}:{1}",
+  "debugger_locals": "  局部变量：",
+  "debugger_call_stack": "  调用栈：",
+
+  "parser_test_parsed_params": "解析参数：{0:?}",
+  "parser_test_parsed_return_type": "解析返回类型：{0:?}",
+  "parser_test_parsed_as_var": "解析为变量而不是函数",
+  "parser_test_name": "名称：{0}",
+  "parser_test_annotation": "注解：{0:?}",
+
+  "repl_value": "{0}",
+  "repl_prompt": "{0}",
+  "repl_history_entry": "[{0}] {1}",
+
+  "shell_exec_time": "执行时间：{0:?}",
+  "shell_loaded": "已加载：{0}",
+  "shell_debug_start": "开始调试会话：{0}",
+  "shell_debug_cmd": "可用命令：\n  (r)un    - 运行到下一个断点\n  (s)tep   - 单步执行\n  (n)ext   - 步过函数调用\n  (o)ut    - 跳出当前函数\n  (b)reak  - 列出断点\n  (b)reak <n> - 在第 n 行设置断点\n  (c)ont   - 继续执行\n  (q)uit   - 退出调试器"
 }

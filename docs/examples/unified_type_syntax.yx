@@ -82,7 +82,9 @@ main: () -> Void = () => {
 
     // 函数调用
     sum: Int = add(10, 20);
+    print("这是输出的和:");
     print(sum);
+    print("\n");
     message: String = greet("World");
 
     return
