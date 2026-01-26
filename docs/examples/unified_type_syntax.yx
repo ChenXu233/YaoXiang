@@ -1,28 +1,18 @@
 // RFC-010: 统一类型语法示例
 // 展示 name: type = value 模型的统一语法
-//
-// 运行方式：
-//   cargo run --bin yaoxiang -- run docs/examples/unified_type_syntax.yx
-//
-// 注意：
-//   - 当前版本支持类型注解语法，但函数调用功能有限
-//   - 建议使用直接计算代替复杂的函数调用
-//   - 顶层变量会被自动打印，局部变量不会
 
 use std.io
 
 // ======== 1. 变量定义 ========
 
 // 使用统一语法：name: type = value
-// 注意：顶层变量会被自动打印，如需避免请将变量定义放在函数内部
-// x: Int = 42
-// name: String = "Alice"
-// flag: Bool = true
+x: Int = 42
+name: String = "Alice"
+flag: Bool = true
 
 // ======== 2. 函数定义 ========
 
 // 使用统一语法：name: (params) -> ReturnType = (params) => { body }
-// 注意：当前版本建议使用简化语法以确保兼容性
 add: (Int, Int) -> Int = (a, b) => {
     return a + b
 }
@@ -87,44 +77,13 @@ distance: (Point, Point) -> Float = (p1, p2) => {
 // ======== 7. 使用示例 ========
 
 main: () -> Void = () => {
-    // 基本变量赋值（使用局部变量避免顶层打印）
-    x: Int = 42
-    name: String = "Alice"
-    flag: Bool = true
+    // 基本变量赋值
     p: Point = Point(1.0, 2.0);
 
-    // 函数调用演示
-    // 注意：由于当前版本函数调用的实现问题，我们使用直接计算来演示
-    // 正确的函数调用语法应该是：
-    // sum: Int = add(10, 20);
-    // print(sum);
-    //
-    // 但当前版本存在以下问题：
-    // 1. 变量赋值语句 x = 42 在函数内部无法正确工作
-    // 2. 函数调用 add(10, 20) 无法返回正确值
-    // 3. 需要修复解释器中的变量存储和读取机制
-    //
-    // 临时解决方案：使用直接计算代替函数调用
+    // 函数调用
+    sum: Int = add(10, 20);
+    print(sum);
+    message: String = greet("World");
 
-    // 使用直接计算进行演示
-    print("=== 变量定义演示 ===")
-    print("x =")
-    print(x)
-    print("name =")
-    print(name)
-    print("flag =")
-    print(flag)
-
-    print("\n=== 计算演示 ===")
-    print("10 + 20 =")
-    print(10 + 20)
-
-    print("\n=== 结构体演示 ===")
-    print("Point created: x=1.0, y=2.0")
-
-    print("\n=== 字符串插值演示 ===")
-    print("Hello, World!")
-
-    print("\n=== 程序执行完成 ===")
     return
 }
