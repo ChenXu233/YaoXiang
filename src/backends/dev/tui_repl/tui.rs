@@ -61,7 +61,7 @@ impl TuiREPL {
 
             // 绘制界面
             self.terminal.draw(|f| {
-                self.app.render(f, f.size(), &self.compiler);
+                self.app.render(f, f.area(), &self.compiler);
             })?;
 
             // 检查是否超时

@@ -239,7 +239,7 @@ impl OutputConsole {
                 inner_area.y + visual_lines_count as u16 - 1
             };
 
-            f.set_cursor(cursor_x, cursor_y);
+            f.set_cursor_position((cursor_x, cursor_y));
         }
     }
 
