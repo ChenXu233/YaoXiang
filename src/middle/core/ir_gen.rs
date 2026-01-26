@@ -70,12 +70,28 @@ impl AstToIrGenerator {
 
     /// 进入新的作用域
     fn enter_scope(&mut self) {
+        eprintln!(
+            "DEBUG IR gen: enter_scope, symbols stack depth before: {}",
+            self.symbols.len()
+        );
         self.symbols.push(HashMap::new());
+        eprintln!(
+            "DEBUG IR gen: enter_scope, symbols stack depth after: {}",
+            self.symbols.len()
+        );
     }
 
     /// 退出当前作用域
     fn exit_scope(&mut self) {
+        eprintln!(
+            "DEBUG IR gen: exit_scope, symbols stack depth: {}",
+            self.symbols.len()
+        );
         self.symbols.pop();
+        eprintln!(
+            "DEBUG IR gen: after exit_scope, symbols stack depth: {}",
+            self.symbols.len()
+        );
     }
 
     /// 注册局部变量
@@ -84,6 +100,10 @@ impl AstToIrGenerator {
         name: &str,
         local_idx: usize,
     ) {
+        eprintln!(
+            "DEBUG IR gen: register_local '{}' with local_idx={}",
+            name, local_idx
+        );
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(
                 name.to_string(),
@@ -102,9 +122,14 @@ impl AstToIrGenerator {
     ) -> Option<usize> {
         for scope in self.symbols.iter().rev() {
             if let Some(entry) = scope.get(name) {
+                eprintln!(
+                    "DEBUG IR gen: lookup_local '{}' -> local_idx={}",
+                    name, entry.local_idx
+                );
                 return Some(entry.local_idx);
             }
         }
+        eprintln!("DEBUG IR gen: lookup_local '{}' -> None", name);
         None
     }
 
@@ -224,20 +249,39 @@ impl AstToIrGenerator {
 
         // 处理语句
         for stmt in stmts {
+            eprintln!(
+                "DEBUG IR gen: before processing stmt, symbols depth={}",
+                self.symbols.len()
+            );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            eprintln!(
+                "DEBUG IR gen: after processing stmt, symbols depth={}",
+                self.symbols.len()
+            );
         }
 
-        // 退出函数体作用域
-        self.exit_scope();
-
         // 处理返回值表达式
+        // 注意：即使 expr 是 Some(Return(...))，也会被处理，
+        // 因为 Return 本身就是表达式，会生成 Ret 指令
         if let Some(e) = expr {
             let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+            // 注意：generate_expr_ir 会为 Return 表达式添加 Ret 指令，
+            // 所以这里不需要额外添加 Ret 指令
         } else {
             instructions.push(Instruction::Ret(None));
         }
+
+        // 退出函数体作用域
+        eprintln!(
+            "DEBUG IR gen: about to exit_scope, symbols depth={}",
+            self.symbols.len()
+        );
+        self.exit_scope();
+        eprintln!(
+            "DEBUG IR gen: after exit_scope, symbols depth={}",
+            self.symbols.len()
+        );
 
         // 计算局部变量总数（用于 VM 分配帧空间）
         // 局部变量包括参数和函数体中声明的变量
@@ -602,6 +646,8 @@ impl AstToIrGenerator {
                     Operand::Const(ConstValue::Int(0))
                 };
 
+                // 确保 Call 指令有 dst 寄存器，即使当前上下文可能不需要结果
+                // 这是为了正确处理嵌套函数调用，如 print(add(10, 20))
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
                     func: func_operand,

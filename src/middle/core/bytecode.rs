@@ -723,6 +723,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 }
                             }
                             Opcode::I64Add => {
+                                eprintln!(
+                                    "DEBUG decode: I64Add operands.len = {}",
+                                    instr.operands.len()
+                                );
                                 if instr.operands.len() >= 6 {
                                     let dst =
                                         u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
@@ -736,6 +740,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         lhs: Reg(lhs),
                                         rhs: Reg(rhs),
                                     });
+                                } else {
+                                    eprintln!("DEBUG decode: I64Add operands too short, skipping");
                                 }
                             }
                             Opcode::I64Sub => {
@@ -806,7 +812,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     }
 
                                     // Create CallStatic instruction
-                                    let dst_reg = if dst == 0 { None } else { Some(Reg(dst)) };
+                                    // Note: dst=0 is a valid register (reg 0), not None
+                                    // The distinction between "has return value" and "no return value"
+                                    // should be determined by the function signature, not the dst register
+                                    let dst_reg = Some(Reg(dst));
                                     let call_instr = BytecodeInstr::CallStatic {
                                         dst: dst_reg,
                                         func: func_ref,
