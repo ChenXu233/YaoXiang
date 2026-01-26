@@ -204,6 +204,156 @@ pub struct OwnershipAnalyzer {
     drop_points: HashMap<usize, Vec<Operand>>,
 }
 
+/// 从指令中提取所有操作数（包括dst、src、索引等）
+fn extract_operands(instr: &Instruction) -> Vec<Operand> {
+    match instr {
+        // 二元运算：dst = lhs op rhs
+        Instruction::Add { dst, lhs, rhs }
+        | Instruction::Sub { dst, lhs, rhs }
+        | Instruction::Mul { dst, lhs, rhs }
+        | Instruction::Div { dst, lhs, rhs }
+        | Instruction::Mod { dst, lhs, rhs }
+        | Instruction::And { dst, lhs, rhs }
+        | Instruction::Or { dst, lhs, rhs }
+        | Instruction::Xor { dst, lhs, rhs }
+        | Instruction::Shl { dst, lhs, rhs }
+        | Instruction::Shr { dst, lhs, rhs }
+        | Instruction::Sar { dst, lhs, rhs }
+        | Instruction::Eq { dst, lhs, rhs }
+        | Instruction::Ne { dst, lhs, rhs }
+        | Instruction::Lt { dst, lhs, rhs }
+        | Instruction::Le { dst, lhs, rhs }
+        | Instruction::Gt { dst, lhs, rhs }
+        | Instruction::Ge { dst, lhs, rhs }
+        | Instruction::StringConcat { dst, lhs, rhs } => {
+            vec![dst.clone(), lhs.clone(), rhs.clone()]
+        }
+
+        // 一元运算：dst = op src
+        Instruction::Move { dst, src }
+        | Instruction::Load { dst, src }
+        | Instruction::Neg { dst, src }
+        | Instruction::Cast { dst, src, .. }
+        | Instruction::StringLength { dst, src }
+        | Instruction::StringFromInt { dst, src }
+        | Instruction::StringFromFloat { dst, src }
+        | Instruction::ArcClone { dst, src } => vec![dst.clone(), src.clone()],
+
+        // 堆分配：dst = HeapAlloc(type_id)
+        Instruction::HeapAlloc { dst, .. } => vec![dst.clone()],
+
+        // 存储指令：dst = src
+        Instruction::Store { dst, src } => vec![dst.clone(), src.clone()],
+        Instruction::StoreField { dst, src, .. } => vec![dst.clone(), src.clone()],
+        Instruction::Drop(src) | Instruction::ArcDrop(src) | Instruction::CloseUpvalue(src) => {
+            vec![src.clone()]
+        }
+
+        // 索引访问：dst[index] = src 或 dst = src[index]
+        Instruction::LoadIndex { dst, src, index }
+        | Instruction::StoreIndex { dst, index, src } => {
+            vec![dst.clone(), src.clone(), index.clone()]
+        }
+
+        // 数组分配：dst = new Array(size)
+        Instruction::AllocArray { dst, size, .. } => vec![dst.clone(), size.clone()],
+
+        // 函数调用：dst = func(args...)
+        Instruction::Call { dst, args, .. } => {
+            let mut ops = Vec::new();
+            if let Some(d) = dst {
+                ops.push(d.clone());
+            }
+            ops.extend(args.iter().cloned());
+            ops
+        }
+
+        // 虚函数调用：dst = obj.method(args...)
+        Instruction::CallVirt { dst, obj, args, .. } => {
+            let mut ops = vec![obj.clone()];
+            ops.extend(args.iter().cloned());
+            if let Some(d) = dst {
+                ops.push(d.clone());
+            }
+            ops
+        }
+
+        // 动态调用：dst = func_ptr(args...)
+        Instruction::CallDyn { dst, func, args } => {
+            let mut ops = vec![func.clone()];
+            ops.extend(args.iter().cloned());
+            if let Some(d) = dst {
+                ops.push(d.clone());
+            }
+            ops
+        }
+
+        // 尾调用：func(args...)
+        Instruction::TailCall { func, args } => {
+            let mut ops = vec![func.clone()];
+            ops.extend(args.iter().cloned());
+            ops
+        }
+
+        //：result = spawn Spawn func(args...)
+        Instruction::Spawn { func, args, result } => {
+            let mut ops = vec![func.clone(), result.clone()];
+            ops.extend(args.iter().cloned());
+            ops
+        }
+
+        // MakeClosure：dst = closure(func, env...)
+        Instruction::MakeClosure { dst, env, .. } => {
+            let mut ops = vec![dst.clone()];
+            ops.extend(env.iter().cloned());
+            ops
+        }
+
+        // 返回值
+        Instruction::Ret(value) => {
+            if let Some(v) = value {
+                vec![v.clone()]
+            } else {
+                Vec::new()
+            }
+        }
+
+        // Upvalue访问
+        Instruction::LoadUpvalue { dst, .. } => vec![dst.clone()],
+        Instruction::StoreUpvalue { src, .. } => vec![src.clone()],
+
+        // 条件跳转
+        Instruction::JmpIf(v, _) | Instruction::JmpIfNot(v, _) => vec![v.clone()],
+
+        // 单个操作数
+        Instruction::Push(v) | Instruction::Pop(v) => vec![v.clone()],
+
+        // 无操作数的指令
+        Instruction::Dup | Instruction::Swap | Instruction::Yield => Vec::new(),
+
+        // 简单的跳转
+        Instruction::Jmp(_) => Vec::new(),
+
+        // 堆分配
+        Instruction::Alloc { dst, size } => vec![dst.clone(), size.clone()],
+        Instruction::Free(v) => vec![v.clone()],
+
+        // 类型测试
+        Instruction::TypeTest(v, _) => vec![v.clone()],
+
+        // 字符串操作
+        Instruction::StringGetChar { dst, src, index } => {
+            vec![dst.clone(), src.clone(), index.clone()]
+        }
+
+        // 字段访问
+        Instruction::LoadField { dst, src, .. } => vec![dst.clone(), src.clone()],
+
+        // Arc操作
+        Instruction::ArcNew { dst, src } => vec![dst.clone(), src.clone()],
+    }
+}
+
 impl OwnershipAnalyzer {
     /// 创建新的所有权分析器
     pub fn new() -> Self {
@@ -214,6 +364,45 @@ impl OwnershipAnalyzer {
             scope_vars: HashSet::new(),
             drop_points: HashMap::new(),
         }
+    }
+
+    /// 辅助函数：为操作数创建定义
+    #[inline]
+    fn create_definition(
+        &mut self,
+        operand: Operand,
+        position: (usize, usize),
+    ) {
+        self.definitions.insert(
+            operand,
+            Definition {
+                position,
+                ty: None,
+                escapes: false,
+                is_moved: false,
+            },
+        );
+    }
+
+    /// 辅助函数：扫描函数找出最大临时变量索引
+    fn find_max_temp_index(
+        &self,
+        func: &FunctionIR,
+    ) -> usize {
+        let mut max_index = 0;
+        for block in &func.blocks {
+            for instr in &block.instructions {
+                let operands = extract_operands(instr);
+                for operand in operands {
+                    if let Operand::Temp(idx) = operand {
+                        if idx > max_index {
+                            max_index = idx;
+                        }
+                    }
+                }
+            }
+        }
+        max_index
     }
 
     /// 分析函数的所有权
@@ -228,17 +417,23 @@ impl OwnershipAnalyzer {
         self.scope_vars = HashSet::new();
         self.drop_points = HashMap::new();
 
-        // 0. 为函数参数创建定义（参数在函数入口处被定义）
+        // 0. 为所有变量创建定义点
+        // 函数参数在入口处定义
         for (idx, _) in func.params.iter().enumerate() {
-            self.definitions.insert(
-                Operand::Arg(idx),
-                Definition {
-                    position: (0, 0), // 参数在函数开始处定义
-                    ty: None,
-                    escapes: false,
-                    is_moved: false,
-                },
-            );
+            self.create_definition(Operand::Arg(idx), (0, 0));
+        }
+
+        // 局部变量在声明处定义
+        for (idx, _) in func.locals.iter().enumerate() {
+            self.create_definition(Operand::Local(idx), (1, idx));
+        }
+
+        // 临时变量通过扫描指令确定其索引范围
+        let max_temp_index = self.find_max_temp_index(func);
+
+        // 为所有临时变量创建定义
+        for idx in 0..=max_temp_index {
+            self.create_definition(Operand::Temp(idx), (1, idx));
         }
 
         // 1. 构建活跃变量分析
