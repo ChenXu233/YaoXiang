@@ -1,0 +1,12 @@
+use std.io
+
+add: (Int, Int) -> Int = (a, b) => {
+    return a + b
+}
+
+main: () -> Void = () => {
+    sum: Int = add(10, 20);
+    print(sum);
+
+    return
+}

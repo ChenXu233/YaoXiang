@@ -1,0 +1,11 @@
+use std.io
+
+f: () -> Int = () => {
+    return 42
+}
+
+main: () -> Void = () => {
+    print("Hello");
+    x: Int = f()
+    return
+}

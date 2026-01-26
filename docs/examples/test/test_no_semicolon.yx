@@ -1,0 +1,16 @@
+use std.io
+
+add: (Int, Int) -> Int = (a, b) => {
+    return a + b
+}
+
+greet: (String) -> String = (name) => {
+    return "Hello, ${name}!"
+}
+
+main: () -> Void = () => {
+    sum: Int = add(10, 20)
+    print(sum)
+    message: String = greet("World")
+    return
+}

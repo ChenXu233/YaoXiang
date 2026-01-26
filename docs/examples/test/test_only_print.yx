@@ -1,0 +1,6 @@
+use std.io
+
+main: () -> Void = () => {
+    print("Hello");
+    return
+}

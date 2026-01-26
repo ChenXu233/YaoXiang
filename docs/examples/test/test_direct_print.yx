@@ -1,0 +1,10 @@
+use std.io
+
+greet: () -> String = () => {
+    return "Hello"
+}
+
+main: () -> Void = () => {
+    print(greet());
+    return
+}

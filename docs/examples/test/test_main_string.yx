@@ -1,0 +1,9 @@
+use std.io
+
+greet: () -> String = () => {
+    return "Hello"
+}
+
+main: () -> String = () => {
+    return "Main result"
+}

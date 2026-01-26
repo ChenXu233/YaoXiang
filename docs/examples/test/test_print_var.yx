@@ -1,0 +1,8 @@
+use std.io
+
+main: () -> Void = () => {
+    x: Int = 42;
+    print(x);
+
+    return
+}

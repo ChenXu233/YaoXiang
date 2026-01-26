@@ -1,0 +1,12 @@
+use std.io
+
+type Point = {
+    x: Float,
+    y: Float
+}
+
+main: () -> Void = () => {
+    p: Point = Point(1.0, 2.0);
+    print("After")
+    return
+}
