@@ -171,7 +171,7 @@ impl AstToIrGenerator {
         _expr: &ast::Expr,
         field_name: &str,
     ) -> Option<usize> {
-        use crate::frontend::typecheck::MonoType;
+        
 
         // 简化处理：假设常见字段名
         // x -> 0, y -> 1, value -> 2 等
@@ -277,9 +277,10 @@ impl AstToIrGenerator {
     }
 
     /// 生成方法 IR
+    #[allow(clippy::too_many_arguments)]
     fn generate_method_ir(
         &mut self,
-        type_name: &str,
+        _type_name: &str,
         method_name: &str,
         method_type: &ast::Type,
         params: &[ast::Param],
@@ -853,7 +854,7 @@ impl AstToIrGenerator {
                 // 尝试从类型信息中获取字段索引
                 // 简化处理：使用字段名的哈希值作为索引（临时方案）
                 // 在真正的实现中，需要完整的类型信息来查找字段位置
-                let field_index = self.resolve_field_index(expr, &field).unwrap_or(0);
+                let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
 
                 // 使用 LoadField 指令加载字段
                 instructions.push(Instruction::LoadField {
