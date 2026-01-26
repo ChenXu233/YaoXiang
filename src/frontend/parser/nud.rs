@@ -218,6 +218,76 @@ impl<'a> ParserState<'a> {
             return Some(Expr::Tuple(vec![], start_span));
         }
 
+        // Try to parse as lambda parameter list with type annotations
+        // Save position before attempting param list parsing
+        let param_list_start = self.save_position();
+
+        // Attempt to parse parameter list
+        let mut params = Vec::new();
+        let mut is_param_list = true;
+
+        loop {
+            if self.at(&TokenKind::RParen) {
+                // End of parameter list
+                self.bump(); // consume RParen
+                break;
+            }
+
+            // Parse parameter: identifier [: type]
+            let param_name = match self.current().map(|t| &t.kind) {
+                Some(TokenKind::Identifier(n)) => n.clone(),
+                _ => {
+                    // Not a parameter list
+                    is_param_list = false;
+                    self.restore_position(param_list_start);
+                    break;
+                }
+            };
+            self.bump(); // consume identifier
+
+            // Parse optional type annotation
+            let param_type = if self.skip(&TokenKind::Colon) {
+                self.parse_type_anno()
+            } else {
+                None
+            };
+
+            // Get parameter span
+            let param_span = self.span();
+
+            params.push(Param {
+                name: param_name,
+                ty: param_type,
+                span: param_span,
+            });
+
+            // Check for comma or closing paren
+            if self.at(&TokenKind::Comma) {
+                self.bump(); // consume comma
+                continue;
+            } else if self.at(&TokenKind::RParen) {
+                self.bump(); // consume RParen
+                break;
+            } else {
+                // Invalid syntax
+                is_param_list = false;
+                self.restore_position(param_list_start);
+                break;
+            }
+        }
+
+        // If we successfully parsed a parameter list and next token is =>, it's a lambda
+        if is_param_list && self.at(&TokenKind::FatArrow) {
+            return self.parse_lambda_body(params, start_span);
+        }
+
+        // If param parsing succeeded but it's not a lambda, restore position and parse normally
+        // This handles cases like (a, b, c) = (1, 2, 3) which is tuple destructuring, not a lambda
+        if is_param_list && !self.at(&TokenKind::FatArrow) {
+            self.restore_position(param_list_start);
+        }
+
+        // We're rewound to after '(', now parse normally
         // Single element in parens: (expr)
         let first = self.parse_expression(BP_LOWEST)?;
 
@@ -241,10 +311,7 @@ impl<'a> ParserState<'a> {
             // Convert expressions to params
             let mut params = Vec::new();
             for expr in elements {
-                // We only support simple identifiers as params for now in this syntax
-                // TODO: Support type annotations in lambda params if needed, e.g. (x: Int) => ...
-                // But that would require parsing as Type or special handling.
-                // For now, assume untyped params or simple identifiers.
+                // Support both simple identifiers and typed parameters: (x: Int) => ...
                 match expr {
                     Expr::Var(name, span) => {
                         params.push(Param {
@@ -254,7 +321,7 @@ impl<'a> ParserState<'a> {
                         });
                     }
                     _ => {
-                        // Invalid lambda parameter
+                        // Invalid lambda parameter - we don't support complex expressions as params
                         self.error(super::ParseError::InvalidExpression { span: self.span() });
                         return None;
                     }
