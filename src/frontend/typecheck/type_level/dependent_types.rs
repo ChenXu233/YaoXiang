@@ -251,7 +251,10 @@ impl DependentType {
     pub fn to_type_family(&self) -> Result<TypeFamily, TypeLevelError> {
         match self {
             DependentType::Base(ty) => Ok(TypeFamily::concrete(ty.clone())),
-            DependentType::Vector { elem_type, length: _ } => {
+            DependentType::Vector {
+                elem_type,
+                length: _,
+            } => {
                 let elem_family = elem_type.to_type_family()?;
                 Ok(TypeFamily::list(elem_family))
             }

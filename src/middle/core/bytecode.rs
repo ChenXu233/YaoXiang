@@ -10,6 +10,8 @@
 //! - Can be interpreted or compiled further
 
 use std::collections::HashMap;
+use crate::tlog;
+use crate::util::i18n::MSG;
 use crate::backends::common::Opcode;
 
 // Re-export types for conversion
@@ -723,9 +725,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                 }
                             }
                             Opcode::I64Add => {
-                                eprintln!(
-                                    "DEBUG decode: I64Add operands.len = {}",
-                                    instr.operands.len()
+                                tlog!(
+                                    debug,
+                                    MSG::BytecodeDecodeI64Add,
+                                    &instr.operands.len().to_string()
                                 );
                                 if instr.operands.len() >= 6 {
                                     let dst =
@@ -741,7 +744,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         rhs: Reg(rhs),
                                     });
                                 } else {
-                                    eprintln!("DEBUG decode: I64Add operands too short, skipping");
+                                    tlog!(warn, MSG::BytecodeDecodeI64AddTooShort);
                                 }
                             }
                             Opcode::I64Sub => {

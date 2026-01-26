@@ -202,6 +202,18 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Sum(types) => {
                 MonoType::Union(types.iter().map(|t| self.type_to_mono_type(t)).collect())
             }
+            AstType::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => MonoType::AssocType {
+                host_type: Box::new(self.type_to_mono_type(host_type)),
+                assoc_name: assoc_name.clone(),
+                assoc_args: assoc_args
+                    .iter()
+                    .map(|t| self.type_to_mono_type(t))
+                    .collect(),
+            },
         }
     }
 
@@ -241,6 +253,14 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Result(_, _) => "Result".to_string(),
             AstType::Generic { name, .. } => name.clone(),
             AstType::Sum(_) => "Sum".to_string(),
+            AstType::AssocType {
+                host_type,
+                assoc_name,
+                ..
+            } => {
+                // 递归调用get_type_name来获取宿主类型名称
+                Self::get_type_name(host_type) + "::" + assoc_name
+            }
         }
     }
 
@@ -286,6 +306,14 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Generic { args, .. } => args.iter().any(|t| self.contains_type_var_type(t)),
             AstType::Sum(types) => types.iter().any(|t| self.contains_type_var_type(t)),
+            AstType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                self.contains_type_var_type(host_type)
+                    || assoc_args.iter().any(|t| self.contains_type_var_type(t))
+            }
         }
     }
 
@@ -357,6 +385,16 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Sum(types) => types
                 .iter()
                 .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen)),
+            AstType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                self.collect_type_vars_from_type(host_type, type_params, seen);
+                assoc_args
+                    .iter()
+                    .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen));
+            }
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -678,6 +716,16 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
             }
             MonoType::Arc(inner) => self.collect_type_vars_from_mono_type(inner, type_params, seen),
+            MonoType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                self.collect_type_vars_from_mono_type(host_type, type_params, seen);
+                assoc_args
+                    .iter()
+                    .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
+            }
         }
     }
 

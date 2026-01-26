@@ -72,8 +72,8 @@ fn test_generic_struct() {
 
     // 简化测试：检查类型定义是否正确
     let ty = env.get_type("Point").unwrap();
-    // PolyType 没有 has_generics 方法，但我们可以检查 binders
-    assert_eq!(ty.binders.len(), 1);
+    // PolyType 没有 has_generics 方法，但我们可以检查 type_binders
+    assert_eq!(ty.type_binders.len(), 1);
 }
 
 /// 测试泛型字典
@@ -288,7 +288,7 @@ fn test_generic_struct_fields() {
 
     let poly = PolyType::new(vec![t_var], struct_type);
     // 检查泛型参数数量
-    assert_eq!(poly.binders.len(), 1);
+    assert_eq!(poly.type_binders.len(), 1);
 }
 
 /// 测试多层泛型特化
@@ -364,7 +364,7 @@ fn test_no_generic_params() {
     let poly = PolyType::new(vec![], fn_type);
 
     // 无泛型参数
-    assert_eq!(poly.binders.len(), 0);
+    assert_eq!(poly.type_binders.len(), 0);
 }
 
 /// 测试泛型变量绑定
@@ -425,7 +425,7 @@ fn test_generic_struct_type_get() {
 
     // 获取并验证
     let retrieved = env.get_type("Container").unwrap();
-    assert_eq!(retrieved.binders.len(), 1);
+    assert_eq!(retrieved.type_binders.len(), 1);
 }
 
 /// 测试类型变量递归解析
@@ -576,7 +576,7 @@ fn test_polytype_binders_count() {
     };
 
     let poly = PolyType::new(vec![t1, t2, t3], fn_type);
-    assert_eq!(poly.binders.len(), 3);
+    assert_eq!(poly.type_binders.len(), 3);
 }
 
 /// 测试求解器统一操作

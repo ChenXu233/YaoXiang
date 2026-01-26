@@ -12,11 +12,15 @@ pub mod specialize;
 mod tests;
 pub mod types;
 
+// 类型级计算模块 (RFC-011 Phase 5)
+pub mod type_level;
+
 pub use check::*;
 pub use errors::*;
 pub use infer::*;
 pub use specialize::*;
 pub use types::*;
+pub use type_level::*;
 
 use super::parser::ast;
 use crate::middle;
@@ -232,59 +236,10 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
 }
 
 /// 添加内置函数到环境
-pub fn add_builtin_functions(env: &mut TypeEnvironment) {
-    // === std::io ===
-    // print<T>(T) -> Void
-    env.add_var(
-        "print".to_string(),
-        PolyType::new(
-            vec![TypeVar::new(0)],
-            MonoType::Fn {
-                params: vec![MonoType::TypeVar(TypeVar::new(0))],
-                return_type: Box::new(MonoType::Void),
-                is_async: false,
-            },
-        ),
-    );
-    // println<T>(T) -> Void
-    env.add_var(
-        "println".to_string(),
-        PolyType::new(
-            vec![TypeVar::new(0)],
-            MonoType::Fn {
-                params: vec![MonoType::TypeVar(TypeVar::new(0))],
-                return_type: Box::new(MonoType::Void),
-                is_async: false,
-            },
-        ),
-    );
-    // read_line() -> String
-    env.add_var(
-        "read_line".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![],
-            return_type: Box::new(MonoType::String),
-            is_async: false,
-        }),
-    );
-    // read_file(path: String) -> String
-    env.add_var(
-        "read_file".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![MonoType::String],
-            return_type: Box::new(MonoType::String),
-            is_async: false,
-        }),
-    );
-    // write_file(path: String, content: String) -> Bool
-    env.add_var(
-        "write_file".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![MonoType::String, MonoType::String],
-            return_type: Box::new(MonoType::Bool),
-            is_async: false,
-        }),
-    );
+#[allow(dead_code)]
+pub fn add_builtin_functions(_env: &mut TypeEnvironment) {
+    // Note: IO functions have been moved to std::io module
+    // Users should import them using: from std.io import print, println, read_line, etc.
 }
 
 /// 检查单个表达式

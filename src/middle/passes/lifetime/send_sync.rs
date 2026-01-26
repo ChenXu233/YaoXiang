@@ -220,6 +220,8 @@ impl SendSyncChecker {
             // 类型变量和类型引用：保守假设为 Send（类型检查已验证）
             MonoType::TypeVar(_) => true,
             MonoType::TypeRef(_) => true,
+            // 关联类型需要检查宿主类型
+            MonoType::AssocType { host_type, .. } => self.is_send(host_type),
         }
     }
 
@@ -273,6 +275,8 @@ impl SendSyncChecker {
             // 类型变量和类型引用：保守假设为 Sync
             MonoType::TypeVar(_) => true,
             MonoType::TypeRef(_) => true,
+            // 关联类型需要检查宿主类型
+            MonoType::AssocType { host_type, .. } => self.is_sync(host_type),
         }
     }
 

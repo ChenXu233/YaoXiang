@@ -46,9 +46,9 @@ impl GenericSpecializer {
         solver: &mut TypeConstraintSolver,
     ) -> TypeResult<MonoType> {
         // 检查参数数量是否匹配
-        if poly.binders.len() != args.len() {
+        if poly.type_binders.len() != args.len() {
             return Err(super::errors::TypeError::ArityMismatch {
-                expected: poly.binders.len(),
+                expected: poly.type_binders.len(),
                 found: args.len(),
                 span: crate::util::span::Span::default(),
             });
@@ -56,7 +56,7 @@ impl GenericSpecializer {
 
         // 构建替换映射
         let substitution: HashMap<_, _> = poly
-            .binders
+            .type_binders
             .iter()
             .zip(args.iter())
             .map(|(var, arg)| (*var, arg.clone()))
@@ -162,7 +162,7 @@ impl GenericSpecializer {
         args: &[MonoType],
     ) -> String {
         let binders_str = poly
-            .binders
+            .type_binders
             .iter()
             .map(|v| format!("{}", v))
             .collect::<Vec<_>>()
@@ -207,12 +207,12 @@ impl Default for GenericSpecializer {
 impl PolyType {
     /// 检车是否包含泛型变量
     pub fn has_generics(&self) -> bool {
-        !self.binders.is_empty()
+        !self.type_binders.is_empty()
     }
 
     /// 获取泛型变量的数量
     pub fn num_generics(&self) -> usize {
-        self.binders.len()
+        self.type_binders.len()
     }
 
     /// 检查类型是否包含特定泛型变量
@@ -220,7 +220,7 @@ impl PolyType {
         &self,
         var: &TypeVar,
     ) -> bool {
-        self.binders.contains(var)
+        self.type_binders.contains(var)
     }
 
     /// 替换类型体中的泛型变量
@@ -231,7 +231,7 @@ impl PolyType {
     ) -> PolyType {
         let substitution: HashMap<_, _> = vec![(var, ty)].into_iter().collect();
         let body = substitute_mono_type(&self.body, &substitution);
-        PolyType::new(self.binders.clone(), body)
+        PolyType::new(self.type_binders.clone(), body)
     }
 }
 
@@ -468,6 +468,18 @@ impl SpecializationKey {
             MonoType::Arc(t) => {
                 "arc".hash(state);
                 self.type_name_hash(t, state);
+            }
+            MonoType::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => {
+                "assoc_type".hash(state);
+                self.type_name_hash(host_type, state);
+                assoc_name.hash(state);
+                for t in assoc_args {
+                    self.type_name_hash(t, state);
+                }
             }
         }
     }

@@ -4,6 +4,8 @@ mod tests {
     use crate::frontend::parser::ParserState;
     use crate::frontend::parser::ast::*;
     use crate::frontend::parser::stmt::*;
+    use crate::tlog;
+    use crate::util::i18n::MSG;
 
     #[test]
     fn test_parse_fn_type_unified() {
@@ -21,8 +23,12 @@ mod tests {
                 return_type,
             } => {
                 assert_eq!(params.len(), 2);
-                println!("Parsed params: {:?}", params);
-                println!("Parsed return_type: {:?}", return_type);
+                tlog!(info, MSG::ParserTestParsedParams, &format!("{:?}", params));
+                tlog!(
+                    info,
+                    MSG::ParserTestParsedReturnType,
+                    &format!("{:?}", return_type)
+                );
             }
             _ => panic!("Expected Type::Fn, found {:?}", ty),
         }
@@ -55,9 +61,13 @@ mod tests {
                 initializer,
                 ..
             } => {
-                println!("Parsed as Var instead of Fn");
-                println!("Name: {}", name);
-                println!("Annotation: {:?}", type_annotation);
+                tlog!(info, MSG::ParserTestParsedAsVar);
+                tlog!(info, MSG::ParserTestName, &name.to_string());
+                tlog!(
+                    info,
+                    MSG::ParserTestAnnotation,
+                    &format!("{:?}", type_annotation)
+                );
                 panic!("Should be parsed as Fn");
             }
             _ => panic!("Unexpected stmt kind: {:?}", stmt.kind),

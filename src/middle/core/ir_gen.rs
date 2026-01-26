@@ -70,28 +70,16 @@ impl AstToIrGenerator {
 
     /// 进入新的作用域
     fn enter_scope(&mut self) {
-        eprintln!(
-            "DEBUG IR gen: enter_scope, symbols stack depth before: {}",
-            self.symbols.len()
-        );
+        tlog!(debug, MSG::IrGenEnterScope, &self.symbols.len().to_string());
         self.symbols.push(HashMap::new());
-        eprintln!(
-            "DEBUG IR gen: enter_scope, symbols stack depth after: {}",
-            self.symbols.len()
-        );
+        tlog!(debug, MSG::IrGenEnterScope, &self.symbols.len().to_string());
     }
 
     /// 退出当前作用域
     fn exit_scope(&mut self) {
-        eprintln!(
-            "DEBUG IR gen: exit_scope, symbols stack depth: {}",
-            self.symbols.len()
-        );
+        tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
         self.symbols.pop();
-        eprintln!(
-            "DEBUG IR gen: after exit_scope, symbols stack depth: {}",
-            self.symbols.len()
-        );
+        tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
     }
 
     /// 注册局部变量
@@ -100,9 +88,11 @@ impl AstToIrGenerator {
         name: &str,
         local_idx: usize,
     ) {
-        eprintln!(
-            "DEBUG IR gen: register_local '{}' with local_idx={}",
-            name, local_idx
+        tlog!(
+            debug,
+            MSG::IrGenRegisterLocal,
+            &name.to_string(),
+            &local_idx.to_string()
         );
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(
@@ -122,14 +112,16 @@ impl AstToIrGenerator {
     ) -> Option<usize> {
         for scope in self.symbols.iter().rev() {
             if let Some(entry) = scope.get(name) {
-                eprintln!(
-                    "DEBUG IR gen: lookup_local '{}' -> local_idx={}",
-                    name, entry.local_idx
+                tlog!(
+                    debug,
+                    MSG::IrGenLookupLocal,
+                    &name.to_string(),
+                    &entry.local_idx.to_string()
                 );
                 return Some(entry.local_idx);
             }
         }
-        eprintln!("DEBUG IR gen: lookup_local '{}' -> None", name);
+        tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
         None
     }
 
@@ -145,6 +137,8 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<IrGenError>> {
+        tlog!(info, MSG::Stage1Start);
+
         let mut functions = Vec::new();
         let mut errors = Vec::new();
         let mut constants = Vec::new();
@@ -249,14 +243,16 @@ impl AstToIrGenerator {
 
         // 处理语句
         for stmt in stmts {
-            eprintln!(
-                "DEBUG IR gen: before processing stmt, symbols depth={}",
-                self.symbols.len()
+            tlog!(
+                debug,
+                MSG::IrGenBeforeProcessStmt,
+                &self.symbols.len().to_string()
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
-            eprintln!(
-                "DEBUG IR gen: after processing stmt, symbols depth={}",
-                self.symbols.len()
+            tlog!(
+                debug,
+                MSG::IrGenAfterProcessStmt,
+                &self.symbols.len().to_string()
             );
         }
 
@@ -273,14 +269,16 @@ impl AstToIrGenerator {
         }
 
         // 退出函数体作用域
-        eprintln!(
-            "DEBUG IR gen: about to exit_scope, symbols depth={}",
-            self.symbols.len()
+        tlog!(
+            debug,
+            MSG::IrGenAboutToExitScope,
+            &self.symbols.len().to_string()
         );
         self.exit_scope();
-        eprintln!(
-            "DEBUG IR gen: after exit_scope, symbols depth={}",
-            self.symbols.len()
+        tlog!(
+            debug,
+            MSG::IrGenAfterExitScope,
+            &self.symbols.len().to_string()
         );
 
         // 计算局部变量总数（用于 VM 分配帧空间）
@@ -319,6 +317,8 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
+
+        tlog!(info, MSG::Stage1Complete);
 
         Ok(Some(func_ir))
     }

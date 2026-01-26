@@ -415,7 +415,7 @@ fn test_mono_type_type_name_type_ref() {
 #[test]
 fn test_poly_type_mono() {
     let poly = PolyType::mono(MonoType::Int(64));
-    assert!(poly.binders.is_empty());
+    assert!(poly.type_binders.is_empty());
     assert_eq!(poly.body, MonoType::Int(64));
 }
 
@@ -431,7 +431,7 @@ fn test_poly_type_new() {
             is_async: false,
         },
     );
-    assert_eq!(poly.binders.len(), 2);
+    assert_eq!(poly.type_binders.len(), 2);
 }
 
 #[test]
@@ -490,7 +490,7 @@ fn test_type_constraint_solver_generalize() {
     let solver = TypeConstraintSolver::new();
     let ty = MonoType::Int(64);
     let poly = solver.generalize(&ty);
-    assert!(poly.binders.is_empty());
+    assert!(poly.type_binders.is_empty());
 }
 
 // =========================================================================

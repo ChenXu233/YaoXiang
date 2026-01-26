@@ -320,12 +320,13 @@ impl TypeLevelArithmetic {
             }
         }
     }
-
-
 }
 
 impl fmt::Display for TypeLevelArithmetic {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             TypeLevelArithmetic::Nat(n) => write!(f, "{}", n),
             TypeLevelArithmetic::Var { name, .. } => write!(f, "{}", name),

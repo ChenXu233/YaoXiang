@@ -12,6 +12,7 @@ use super::super::parser::ast;
 use crate::util::span::Span;
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 
 /// 类型变量（用于类型推断）
 ///
@@ -37,6 +38,321 @@ impl fmt::Display for TypeVar {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "t{}", self.0)
+    }
+}
+
+/// Const泛型变量（用于Const泛型参数）
+///
+/// 每个Const变量有一个唯一的索引和类型，用于在类型环境中追踪Const参数
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConstVar(usize);
+
+impl ConstVar {
+    /// 创建新的Const变量
+    pub fn new(index: usize) -> Self {
+        ConstVar(index)
+    }
+
+    /// 获取变量的索引
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
+
+impl fmt::Display for ConstVar {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "c{}", self.0)
+    }
+}
+
+/// Const值（编译期常量）
+#[derive(Debug, Clone)]
+pub enum ConstValue {
+    /// 整数常量
+    Int(i128),
+    /// 布尔常量
+    Bool(bool),
+    /// 浮点常量
+    Float(f32),
+}
+
+impl ConstValue {
+    /// 检查是否是数值类型
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, ConstValue::Int(_) | ConstValue::Float(_))
+    }
+
+    /// 获取Const值的类型
+    pub fn kind(&self) -> ConstKind {
+        match self {
+            ConstValue::Int(_) => ConstKind::Int(None),
+            ConstValue::Bool(_) => ConstKind::Bool,
+            ConstValue::Float(_) => ConstKind::Float(None),
+        }
+    }
+}
+
+impl PartialEq for ConstValue {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        match (self, other) {
+            (ConstValue::Int(a), ConstValue::Int(b)) => a == b,
+            (ConstValue::Bool(a), ConstValue::Bool(b)) => a == b,
+            (ConstValue::Float(a), ConstValue::Float(b)) => a.to_bits() == b.to_bits(),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConstValue {}
+
+impl Hash for ConstValue {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        match self {
+            ConstValue::Int(n) => {
+                // 使用整数哈希
+                n.hash(state);
+            }
+            ConstValue::Bool(b) => {
+                // 使用布尔哈希
+                b.hash(state);
+            }
+            ConstValue::Float(f) => {
+                // 使用浮点数的位模式哈希
+                f.to_bits().hash(state);
+            }
+        }
+    }
+}
+
+impl fmt::Display for ConstValue {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            ConstValue::Int(n) => write!(f, "{}", n),
+            ConstValue::Bool(b) => write!(f, "{}", b),
+            ConstValue::Float(v) => write!(f, "{}", v),
+        }
+    }
+}
+
+/// Const表达式（编译期可求值的表达式）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstExpr {
+    /// 字面量常量
+    Lit(ConstValue),
+    /// Const变量引用
+    Var(ConstVar),
+    /// 二元运算
+    BinOp {
+        op: BinOp,
+        left: Box<ConstExpr>,
+        right: Box<ConstExpr>,
+    },
+    /// 一元运算
+    UnOp { op: UnOp, expr: Box<ConstExpr> },
+    /// 函数调用（仅限const函数）
+    Call { func: String, args: Vec<ConstExpr> },
+    /// 条件表达式
+    If {
+        condition: Box<ConstExpr>,
+        then_branch: Box<ConstExpr>,
+        else_branch: Box<ConstExpr>,
+    },
+    /// 范围表达式
+    Range {
+        start: Box<ConstExpr>,
+        end: Box<ConstExpr>,
+    },
+}
+
+/// 二元运算符
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BinOp {
+    /// 算术运算
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    /// 比较运算
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    /// 逻辑运算
+    And,
+    Or,
+    /// 位运算
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+}
+
+impl BinOp {
+    /// 检查是否是算术运算
+    pub fn is_arithmetic(&self) -> bool {
+        matches!(
+            self,
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
+        )
+    }
+
+    /// 检查是否是比较运算
+    pub fn is_comparison(&self) -> bool {
+        matches!(
+            self,
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+        )
+    }
+
+    /// 检查是否是逻辑运算
+    pub fn is_logical(&self) -> bool {
+        matches!(self, BinOp::And | BinOp::Or)
+    }
+
+    /// 获取运算符的字符串表示
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BinOp::Add => "+",
+            BinOp::Sub => "-",
+            BinOp::Mul => "*",
+            BinOp::Div => "/",
+            BinOp::Mod => "%",
+            BinOp::Eq => "==",
+            BinOp::Ne => "!=",
+            BinOp::Lt => "<",
+            BinOp::Le => "<=",
+            BinOp::Gt => ">",
+            BinOp::Ge => ">=",
+            BinOp::And => "&&",
+            BinOp::Or => "||",
+            BinOp::BitAnd => "&",
+            BinOp::BitOr => "|",
+            BinOp::BitXor => "^",
+            BinOp::Shl => "<<",
+            BinOp::Shr => ">>",
+        }
+    }
+}
+
+impl fmt::Display for BinOp {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// 一元运算符
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UnOp {
+    /// 负号
+    Neg,
+    /// 逻辑非
+    Not,
+    /// 位反
+    BitNot,
+}
+
+impl UnOp {
+    /// 获取运算符的字符串表示
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UnOp::Neg => "-",
+            UnOp::Not => "!",
+            UnOp::BitNot => "~",
+        }
+    }
+}
+
+impl fmt::Display for UnOp {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Const泛型变量的类型约束
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConstKind {
+    /// 整数类型（可带位宽约束）
+    Int(Option<usize>),
+    /// 布尔类型
+    Bool,
+    /// 浮点类型（可带位宽约束）
+    Float(Option<usize>),
+}
+
+impl ConstKind {
+    /// 检查是否匹配给定的ConstValue
+    pub fn matches(
+        &self,
+        value: &ConstValue,
+    ) -> bool {
+        matches!(
+            (self, value),
+            (ConstKind::Int(_), ConstValue::Int(_))
+                | (ConstKind::Bool, ConstValue::Bool(_))
+                | (ConstKind::Float(_), ConstValue::Float(_))
+        )
+    }
+
+    /// 获取类型的字符串表示
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ConstKind::Int(_) => "Int",
+            ConstKind::Bool => "Bool",
+            ConstKind::Float(_) => "Float",
+        }
+    }
+}
+
+/// Const泛型变量（包含名称、类型约束和索引）
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ConstVarDef {
+    /// 变量名称
+    pub name: String,
+    /// 类型约束
+    pub kind: ConstKind,
+    /// 变量索引
+    pub index: usize,
+}
+
+impl ConstVarDef {
+    /// 创建新的Const变量定义
+    pub fn new(
+        name: String,
+        kind: ConstKind,
+        index: usize,
+    ) -> Self {
+        ConstVarDef { name, kind, index }
+    }
+}
+
+impl fmt::Display for ConstVarDef {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -108,6 +424,15 @@ pub enum MonoType {
     Intersection(Vec<MonoType>),
     /// Arc 类型（原子引用计数）
     Arc(Box<MonoType>),
+    /// 关联类型访问（如 T::Item）
+    AssocType {
+        /// 宿主类型
+        host_type: Box<MonoType>,
+        /// 关联类型名称
+        assoc_name: String,
+        /// 关联类型参数（如果有关联类型也是泛型的）
+        assoc_args: Vec<MonoType>,
+    },
 }
 
 impl MonoType {
@@ -185,6 +510,25 @@ impl MonoType {
                 )
             }
             MonoType::Arc(t) => format!("Arc<{}>", t.type_name()),
+            MonoType::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => {
+                let args_str = if assoc_args.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<{}>",
+                        assoc_args
+                            .iter()
+                            .map(|t| t.type_name())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                format!("{}::{}{}", host_type.type_name(), assoc_name, args_str)
+            }
         }
     }
 }
@@ -274,6 +618,15 @@ impl From<ast::Type> for MonoType {
                         .join(", ")
                 ))
             }
+            ast::Type::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => MonoType::AssocType {
+                host_type: Box::new(MonoType::from(*host_type)),
+                assoc_name,
+                assoc_args: assoc_args.into_iter().map(MonoType::from).collect(),
+            },
             // NamedStruct and Sum types (placeholder implementations)
             ast::Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name,
@@ -311,32 +664,107 @@ pub struct EnumType {
     pub variants: Vec<String>,
 }
 
-/// 多态类型（带泛型参数）
+/// 多态类型（带泛型参数和Const泛型参数）
 ///
-/// 包含泛型变量列表和类型体，用于表示泛型函数或泛型类型的签名
+/// 包含泛型变量列表、Const泛型变量列表和类型体，用于表示泛型函数或泛型类型的签名
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolyType {
-    /// 泛型变量列表（按顺序）
-    pub binders: Vec<TypeVar>,
+    /// 类型泛型变量列表（按顺序）
+    pub type_binders: Vec<TypeVar>,
+    /// Const泛型变量列表（按顺序）
+    pub const_binders: Vec<ConstVarDef>,
     /// 类型体
     pub body: MonoType,
 }
 
 impl PolyType {
-    /// 创建新的多态类型
+    /// 创建新的多态类型（仅类型泛型）
     pub fn new(
-        binders: Vec<TypeVar>,
+        type_binders: Vec<TypeVar>,
         body: MonoType,
     ) -> Self {
-        PolyType { binders, body }
+        PolyType {
+            type_binders,
+            const_binders: Vec::new(),
+            body,
+        }
+    }
+
+    /// 创建新的多态类型（包含Const泛型）
+    pub fn new_with_const(
+        type_binders: Vec<TypeVar>,
+        const_binders: Vec<ConstVarDef>,
+        body: MonoType,
+    ) -> Self {
+        PolyType {
+            type_binders,
+            const_binders,
+            body,
+        }
     }
 
     /// 创建无泛型的多态类型
     pub fn mono(body: MonoType) -> Self {
         PolyType {
-            binders: Vec::new(),
+            type_binders: Vec::new(),
+            const_binders: Vec::new(),
             body,
         }
+    }
+
+    /// 实例化多态类型（替换类型泛型参数）
+    pub fn instantiate(
+        &self,
+        solver: &mut TypeConstraintSolver,
+    ) -> MonoType {
+        let substitution: HashMap<_, _> = self
+            .type_binders
+            .iter()
+            .map(|var| (*var, solver.new_var()))
+            .collect();
+
+        solver.substitute_type(&self.body, &substitution)
+    }
+
+    /// 实例化多态类型（同时替换类型泛型和Const泛型参数）
+    pub fn instantiate_with_const(
+        &self,
+        solver: &mut TypeConstraintSolver,
+        const_args: &[ConstValue],
+    ) -> Result<MonoType, ConstEvalError> {
+        // 验证Const参数数量
+        if const_args.len() != self.const_binders.len() {
+            return Err(ConstEvalError::ArgCountMismatch {
+                expected: self.const_binders.len(),
+                found: const_args.len(),
+                span: Span::default(),
+            });
+        }
+
+        // 验证Const参数类型
+        for (arg, binder) in const_args.iter().zip(self.const_binders.iter()) {
+            if !binder.kind.matches(arg) {
+                return Err(ConstEvalError::TypeMismatch {
+                    expected: binder.kind.type_name().to_string(),
+                    found: arg.kind().type_name().to_string(),
+                    span: Span::default(),
+                });
+            }
+        }
+
+        // 实例化类型参数
+        let substitution: HashMap<_, _> = self
+            .type_binders
+            .iter()
+            .map(|var| (*var, solver.new_var()))
+            .collect();
+
+        let body = solver.substitute_type(&self.body, &substitution);
+
+        // TODO: 替换Const参数在类型中的出现
+        // 这需要更复杂的处理逻辑来替换类型中的Const参数引用
+
+        Ok(body)
     }
 }
 
@@ -644,6 +1072,8 @@ impl SendSyncConstraintSolver {
             MonoType::TypeRef(_) => true,
             // 类型变量需要根据约束判断
             MonoType::TypeVar(_) => true, // 保守假设
+            // 关联类型需要检查宿主类型
+            MonoType::AssocType { host_type, .. } => self.is_send(host_type),
         }
     }
 
@@ -687,6 +1117,8 @@ impl SendSyncConstraintSolver {
             MonoType::TypeRef(_) => true,
             // 类型变量保守假设为 Sync
             MonoType::TypeVar(_) => true,
+            // 关联类型需要检查宿主类型
+            MonoType::AssocType { host_type, .. } => self.is_sync(host_type),
         }
     }
 
@@ -1140,7 +1572,7 @@ impl TypeConstraintSolver {
         poly: &PolyType,
     ) -> MonoType {
         let substitution: HashMap<_, _> = poly
-            .binders
+            .type_binders
             .iter()
             .map(|var| (*var, self.new_var()))
             .collect();
@@ -1395,5 +1827,94 @@ impl fmt::Display for TypeConstraintError {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{} at {:?}", self.error, self.span)
+    }
+}
+
+/// Const求值错误
+#[derive(Debug, Clone)]
+pub enum ConstEvalError {
+    /// 除零错误
+    DivisionByZero { span: Span },
+    /// 整数溢出
+    Overflow {
+        value: String,
+        ty: String,
+        span: Span,
+    },
+    /// 未定义的Const变量
+    UndefinedVariable { name: String, span: Span },
+    /// 递归深度超限
+    RecursionTooDeep {
+        depth: usize,
+        max_depth: usize,
+        span: Span,
+    },
+    /// 类型不匹配
+    TypeMismatch {
+        expected: String,
+        found: String,
+        span: Span,
+    },
+    /// 参数数量不匹配
+    ArgCountMismatch {
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+    /// 非Const函数调用
+    NonConstFunctionCall { func: String, span: Span },
+    /// 无法求值
+    CannotEvaluate { reason: String, span: Span },
+}
+
+impl fmt::Display for ConstEvalError {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            ConstEvalError::DivisionByZero { .. } => {
+                write!(f, "division by zero")
+            }
+            ConstEvalError::Overflow { value, ty, .. } => {
+                write!(f, "integer overflow: value {} overflows type {}", value, ty)
+            }
+            ConstEvalError::UndefinedVariable { name, .. } => {
+                write!(f, "undefined constant variable: {}", name)
+            }
+            ConstEvalError::RecursionTooDeep {
+                depth, max_depth, ..
+            } => {
+                write!(
+                    f,
+                    "constant evaluation exceeded recursion limit: {} > {}",
+                    depth, max_depth
+                )
+            }
+            ConstEvalError::TypeMismatch {
+                expected, found, ..
+            } => {
+                write!(f, "type mismatch: expected {}, found {}", expected, found)
+            }
+            ConstEvalError::ArgCountMismatch {
+                expected, found, ..
+            } => {
+                write!(
+                    f,
+                    "argument count mismatch: expected {}, found {}",
+                    expected, found
+                )
+            }
+            ConstEvalError::NonConstFunctionCall { func, .. } => {
+                write!(
+                    f,
+                    "cannot call non-const function '{}' in constant expression",
+                    func
+                )
+            }
+            ConstEvalError::CannotEvaluate { reason, .. } => {
+                write!(f, "cannot evaluate constant expression: {}", reason)
+            }
+        }
     }
 }

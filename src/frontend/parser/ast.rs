@@ -217,6 +217,15 @@ pub enum Type {
         name: String,
         args: Vec<Type>,
     },
+    /// 关联类型访问（如 T::Item）
+    AssocType {
+        /// 宿主类型
+        host_type: Box<Type>,
+        /// 关联类型名称
+        assoc_name: String,
+        /// 关联类型参数（如果有关联类型也是泛型的）
+        assoc_args: Vec<Type>,
+    },
     Sum(Vec<Type>),
 }
 

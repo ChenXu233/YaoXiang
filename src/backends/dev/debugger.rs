@@ -11,6 +11,8 @@ use crate::backends::{DebuggableExecutor, StepMode, FrameInfo, ExecutorResult, E
 use crate::backends::common::{RuntimeValue, Heap};
 use crate::backends::interpreter::Interpreter;
 use crate::middle::bytecode::BytecodeModule;
+use crate::tlog;
+use crate::util::i18n::MSG;
 
 /// Debugger state for a debugging session
 #[derive(Debug, Clone, Default)]
@@ -183,21 +185,31 @@ impl Debugger {
     /// Print the current location
     pub fn print_location(&self) {
         if let Some(func_name) = self.current_function() {
-            println!("  at {}:{}", func_name, self.current_ip());
+            tlog!(
+                info,
+                MSG::DebuggerAtLocation,
+                &func_name.to_string(),
+                &self.current_ip().to_string()
+            );
         }
     }
 
     /// Print local variables
     pub fn print_locals(&self) {
-        println!("  Locals:");
+        tlog!(info, MSG::DebuggerLocals);
         // In a full implementation, we'd print actual local values
     }
 
     /// Print the call stack
     pub fn print_backtrace(&self) {
-        println!("  Call stack:");
+        tlog!(info, MSG::DebuggerCallStack);
         if let Some(func_name) = self.current_function() {
-            println!("    #0  {} at {}", func_name, self.current_ip());
+            tlog!(
+                info,
+                MSG::DebuggerAtLocation,
+                &func_name.to_string(),
+                &self.current_ip().to_string()
+            );
         }
     }
 }

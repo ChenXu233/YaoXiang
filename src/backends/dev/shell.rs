@@ -7,6 +7,8 @@ use std::path::Path;
 use std::io::{self, Write};
 use crate::backends::dev::{Debugger, REPL};
 use crate::backends::common::RuntimeValue;
+use crate::tlog;
+use crate::util::i18n::MSG;
 
 /// Shell configuration
 #[derive(Debug, Clone)]
@@ -83,9 +85,9 @@ impl DevShell {
 
     /// Run the shell
     pub fn run(&mut self) -> Result<(), io::Error> {
-        println!("YaoXiang Development Shell v0.3.0");
-        println!("Type :help for available commands.");
-        println!();
+        tlog!(info, MSG::ShellWelcome);
+        tlog!(info, MSG::ShellHelp);
+        tlog!(info, MSG::ShellExiting);
 
         loop {
             print!("{}", self.config.prompt);
@@ -94,7 +96,6 @@ impl DevShell {
             let mut line = String::new();
             if io::stdin().read_line(&mut line)? == 0 {
                 // Ctrl-D
-                println!("\nExiting...");
                 break;
             }
 
@@ -109,10 +110,10 @@ impl DevShell {
             match self.execute_command(&line) {
                 ShellResult::Exit => break,
                 ShellResult::Error(e) => {
-                    println!("Error: {}", e);
+                    tlog!(info, MSG::ShellError, &e.to_string());
                 }
                 ShellResult::Value(v) => {
-                    println!("{}", v);
+                    tlog!(info, MSG::ReplValue, &v.to_string());
                 }
                 ShellResult::Success => {}
             }
@@ -164,12 +165,12 @@ impl DevShell {
                         return ShellResult::Error("Failed to get current directory".to_string());
                     }
                 } else {
-                    println!("{}", self.cwd.display());
+                    tlog!(info, MSG::ShellPwdCommand, &self.cwd.display().to_string());
                 }
                 ShellResult::Success
             }
             ":pwd" | "pwd" => {
-                println!("{}", self.cwd.display());
+                tlog!(info, MSG::ShellPwdCommand, &self.cwd.display().to_string());
                 ShellResult::Success
             }
             ":ls" | "ls" => {
@@ -182,10 +183,15 @@ impl DevShell {
                     for entry in entries.filter_map(|e| e.ok()) {
                         let path = entry.path();
                         let is_dir = path.is_dir();
-                        println!(
-                            "{} {}",
-                            if is_dir { "[DIR]" } else { "    " },
-                            entry.file_name().to_string_lossy()
+                        tlog!(
+                            info,
+                            MSG::ShellLsCommand,
+                            &if is_dir {
+                                "[DIR]".to_string()
+                            } else {
+                                "    ".to_string()
+                            },
+                            &entry.file_name().to_string_lossy()
                         );
                     }
                 }
@@ -239,24 +245,20 @@ impl DevShell {
 
     /// Print help message
     fn print_help(&self) {
-        println!("YaoXiang Development Shell");
-        println!();
-        println!("Shell Commands:");
-        println!("  :help, :h         - Show this help");
-        println!("  :quit, :q, exit   - Exit the shell");
-        println!("  :clear            - Clear the screen");
-        println!("  :cd <dir>         - Change directory");
-        println!("  :pwd              - Print working directory");
-        println!("  :ls [dir]         - List directory contents");
-        println!();
-        println!("Code Commands:");
-        println!("  :run <file>       - Run a YaoXiang file");
-        println!("  :load <file>      - Load a YaoXiang file");
-        println!("  :debug <file>     - Debug a YaoXiang file");
-        println!("  :break <fn> <n>   - Set breakpoint");
-        println!("  :repl             - Switch to REPL mode");
-        println!();
-        println!("Any other input is evaluated as YaoXiang code.");
+        tlog!(info, MSG::ShellWelcome);
+        tlog!(info, MSG::ShellAvailableCommands);
+        tlog!(info, MSG::ShellExitCommand);
+        tlog!(info, MSG::ShellClearCommand);
+        tlog!(info, MSG::ShellCdCommand);
+        tlog!(info, MSG::ShellPwdCommand);
+        tlog!(info, MSG::ShellLsCommand);
+        tlog!(info, MSG::ShellCodeCommands);
+        tlog!(info, MSG::ShellRunCommand);
+        tlog!(info, MSG::ShellLoadCommand);
+        tlog!(info, MSG::ShellDebugCommand);
+        tlog!(info, MSG::ShellBreakCommand);
+        tlog!(info, MSG::ShellReplCommand);
+        tlog!(info, MSG::ShellOtherInput);
     }
 
     /// Evaluate code directly
@@ -291,7 +293,7 @@ impl DevShell {
         let elapsed = start.elapsed();
 
         if self.config.show_timing {
-            println!("Executed in {:?}", elapsed);
+            tlog!(info, MSG::ShellExecTime, &format!("{:?}", elapsed));
         }
 
         match result {
@@ -311,7 +313,7 @@ impl DevShell {
 
         match self.repl.load_file(path) {
             Ok(_) => {
-                println!("Loaded: {}", path.display());
+                tlog!(info, MSG::ShellLoaded, &path.display().to_string());
                 ShellResult::Success
             }
             Err(e) => ShellResult::Error(format!("IO error: {}", e)),
@@ -327,16 +329,8 @@ impl DevShell {
             return ShellResult::Error(format!("File not found: {}", path.display()));
         }
 
-        println!("Starting debug session for: {}", path.display());
-        println!("Available commands:");
-        println!("  (r)un    - Run to next breakpoint");
-        println!("  (s)tep   - Step one instruction");
-        println!("  (n)ext   - Step over function calls");
-        println!("  (o)ut    - Step out of current function");
-        println!("  (b)reak  - List breakpoints");
-        println!("  (b)reak <n> - Add breakpoint at line n");
-        println!("  (c)ont   - Continue execution");
-        println!("  (q)uit   - Exit debugger");
+        tlog!(info, MSG::ShellDebugStart, &path.display().to_string());
+        tlog!(info, MSG::ShellDebugCommand);
 
         ShellResult::Success
     }

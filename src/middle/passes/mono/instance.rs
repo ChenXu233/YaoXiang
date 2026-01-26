@@ -182,6 +182,18 @@ fn type_name_hash<H: Hasher>(
             "arc".hash(state);
             type_name_hash(t, state);
         }
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => {
+            "assoc_type".hash(state);
+            type_name_hash(host_type, state);
+            assoc_name.hash(state);
+            for t in assoc_args {
+                type_name_hash(t, state);
+            }
+        }
     }
 }
 

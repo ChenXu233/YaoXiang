@@ -7,6 +7,7 @@ use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, TuiREPL, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
+use yaoxiang::tlog;
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -129,6 +130,9 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
+    tlog!(info, MSG::Stage2Start);
+    tlog!(info, MSG::Stage3Start);
+
     let args = Args::parse();
 
     // Set language first (before logger init)
@@ -195,7 +199,7 @@ fn main() -> Result<()> {
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
         Commands::Version => {
-            println!("{} {}", NAME, VERSION);
+            info!("{} {}", NAME, VERSION);
         }
         Commands::Repl => {
             info!("Starting TUI REPL");
@@ -204,6 +208,10 @@ fn main() -> Result<()> {
             info!("TUI REPL exited successfully");
         }
     }
+
+    tlog!(info, MSG::Stage2Complete);
+    tlog!(info, MSG::Stage3Complete);
+    tlog!(info, MSG::AllStagesComplete);
 
     Ok(())
 }

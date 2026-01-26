@@ -397,6 +397,14 @@ impl ModuleMonoState {
             Type::Result(_, _) => "Result".to_string(),
             Type::Generic { name, .. } => name.clone(),
             Type::Sum(_) => "Sum".to_string(),
+            Type::AssocType {
+                host_type,
+                assoc_name,
+                ..
+            } => {
+                // 递归调用get_type_name来获取宿主类型名称
+                Self::get_type_name(host_type) + "::" + assoc_name
+            }
         }
     }
 

@@ -5,6 +5,8 @@
 
 use std::io::{self, Write};
 use std::path::Path;
+use crate::tlog;
+use crate::util::i18n::MSG;
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::Interpreter;
 
@@ -94,15 +96,14 @@ impl REPL {
 
     /// Run the REPL
     pub fn run(&mut self) -> Result<(), io::Error> {
-        println!("YaoXiang REPL v0.3.0");
-        println!("Type :help for available commands, :quit to exit.");
-        println!();
+        tlog!(info, MSG::ReplWelcome);
+        tlog!(info, MSG::ReplHelp);
 
         loop {
             match self.read_line()? {
                 REPLResult::Exit => break,
                 REPLResult::Error(e) => {
-                    println!("Error: {}", e);
+                    tlog!(info, MSG::ReplError, &e.to_string());
                     self.buffer.clear();
                     self.line_count = 0;
                 }
@@ -111,7 +112,7 @@ impl REPL {
                     self.line_count = 0;
                 }
                 REPLResult::Value(v) => {
-                    println!("{}", v);
+                    tlog!(info, MSG::ReplValue, &v.to_string());
                     self.buffer.clear();
                     self.line_count = 0;
                 }
@@ -129,7 +130,7 @@ impl REPL {
             &self.config.multi_line_prompt
         };
 
-        print!("{}", prompt);
+        tlog!(debug, MSG::ReplPrompt, &prompt.to_string());
         io::stdout().flush()?;
 
         let mut line = String::new();
@@ -230,11 +231,11 @@ impl REPL {
         match command {
             ":quit" | ":q" => Ok(REPLResult::Exit),
             ":help" | ":h" => {
-                println!("Available commands:");
-                println!("  :quit, :q   - Exit the REPL");
-                println!("  :help, :h   - Show this help message");
-                println!("  :clear      - Clear the input buffer");
-                println!("  :history    - Show input history");
+                tlog!(info, MSG::ReplAvailableCommands);
+                tlog!(info, MSG::ReplExitCommand);
+                tlog!(info, MSG::ReplHelpCommand);
+                tlog!(info, MSG::ReplClearCommand);
+                tlog!(info, MSG::ReplHistoryCommand);
                 Ok(REPLResult::Ok)
             }
             ":clear" | ":c" => {
@@ -244,12 +245,17 @@ impl REPL {
             }
             ":history" | ":hist" => {
                 for (i, line) in self.history.iter().enumerate() {
-                    println!("  {}: {}", i, line);
+                    tlog!(
+                        info,
+                        MSG::ReplHistoryEntry,
+                        &i.to_string(),
+                        &line.to_string()
+                    );
                 }
                 Ok(REPLResult::Ok)
             }
             _ => {
-                println!("Unknown command: {}", command);
+                tlog!(info, MSG::ReplUnknownCommand, &command.to_string());
                 Ok(REPLResult::Ok)
             }
         }

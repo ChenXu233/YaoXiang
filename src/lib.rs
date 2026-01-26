@@ -350,6 +350,30 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
         crate::frontend::typecheck::MonoType::Arc(inner) => {
             format!("Arc<{}>", dump_type_detail(inner))
         }
+        crate::frontend::typecheck::MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => {
+            let args_str = if assoc_args.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    assoc_args
+                        .iter()
+                        .map(dump_type_detail)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            format!(
+                "{}::{}{}",
+                dump_type_detail(host_type),
+                assoc_name,
+                args_str
+            )
+        }
     }
 }
 

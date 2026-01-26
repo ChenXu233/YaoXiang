@@ -3,6 +3,8 @@
 use super::*;
 use crate::frontend::lexer::tokenize;
 use crate::frontend::parser::{parse, parse_expression};
+use crate::tlog;
+use crate::util::i18n::MSG;
 
 /// Test deeply nested parentheses
 #[test]
@@ -38,7 +40,7 @@ fn test_many_params() {
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     if let Err(e) = &result {
-        println!("Parse error: {:?}", e);
+        tlog!(info, MSG::ReplError, &format!("Parse error: {:?}", e));
     }
     assert!(result.is_ok());
 }
@@ -159,7 +161,7 @@ fn test_tuple_type() {
     let tokens = tokenize(expr).unwrap();
     let result = parse(&tokens);
     if let Err(e) = &result {
-        println!("Parse error: {:?}", e);
+        tlog!(info, MSG::ReplError, &format!("Parse error: {:?}", e));
     }
     assert!(
         result.is_ok(),

@@ -297,6 +297,85 @@ pub enum MSG {
     // VM
     VmStart,
     VmComplete,
+
+    // Debug/Print replacements
+    Stage1Start,
+    Stage1Complete,
+    Stage2Start,
+    Stage2Complete,
+    Stage3Start,
+    Stage3Complete,
+    AllStagesComplete,
+
+    // Bytecode
+    BytecodeDecodeI64Add,
+    BytecodeDecodeI64AddTooShort,
+
+    // IR Gen
+    IrGenEnterScope,
+    IrGenExitScope,
+    IrGenRegisterLocal,
+    IrGenLookupLocal,
+    IrGenLookupLocalNotFound,
+    IrGenBeforeProcessStmt,
+    IrGenAfterProcessStmt,
+    IrGenAboutToExitScope,
+    IrGenAfterExitScope,
+
+    // REPL
+    ReplWelcome,
+    ReplHelp,
+    ReplError,
+    ReplUnknownCommand,
+    ReplAvailableCommands,
+    ReplExitCommand,
+    ReplHelpCommand,
+    ReplHistoryCommand,
+    ReplClearCommand,
+
+    // Shell
+    ShellWelcome,
+    ShellHelp,
+    ShellExiting,
+    ShellError,
+    ShellAvailableCommands,
+    ShellExitCommand,
+    ShellClearCommand,
+    ShellCdCommand,
+    ShellPwdCommand,
+    ShellLsCommand,
+    ShellCodeCommands,
+    ShellRunCommand,
+    ShellLoadCommand,
+    ShellDebugCommand,
+    ShellBreakCommand,
+    ShellReplCommand,
+    ShellOtherInput,
+
+    // Debugger
+    DebuggerAtLocation,
+    DebuggerLocals,
+    DebuggerCallStack,
+
+    // Parser Tests
+    ParserTestParsedParams,
+    ParserTestParsedReturnType,
+    ParserTestParsedAsVar,
+    ParserTestName,
+    ParserTestAnnotation,
+
+    // REPL Additional
+    ReplValue,
+    ReplPrompt,
+    ReplHistoryEntry,
+
+    // Shell Additional
+    ShellExecTime,
+    ShellLoaded,
+    ShellDebugStart,
+    ShellDebugCmd,
+
+    // VM Additional
     VmExecuteFn,
     VmExecInstruction,
     VmCallStack,
@@ -377,18 +456,6 @@ pub enum MSG {
     BytecodeFuncCode,
     BytecodeInstrIndex,
     BytecodeUnknownOpcode,
-
-    // REPL and Shell messages
-    ReplWelcome,
-    ReplHelp,
-    ReplError,
-    ReplUnknownCommand,
-    ShellWelcome,
-    ShellHelp,
-    ShellExecTime,
-    ShellLoaded,
-    ShellDebugStart,
-    ShellDebugCmd,
 
     // Debug messages
     DebugBinaryOp,
@@ -535,16 +602,7 @@ impl MSG {
             MSG::BytecodeUnknownOpcode => "bytecode_unknown_opcode",
 
             // REPL and Shell messages
-            MSG::ReplWelcome => "repl_welcome",
-            MSG::ReplHelp => "repl_help",
-            MSG::ReplError => "repl_error",
-            MSG::ReplUnknownCommand => "repl_unknown_command",
-            MSG::ShellWelcome => "shell_welcome",
-            MSG::ShellHelp => "shell_help",
             MSG::ShellExecTime => "shell_exec_time",
-            MSG::ShellLoaded => "shell_loaded",
-            MSG::ShellDebugStart => "shell_debug_start",
-            MSG::ShellDebugCmd => "shell_debug_cmd",
 
             // Debug messages
             MSG::DebugBinaryOp => "debug_binary_op",
@@ -553,6 +611,16 @@ impl MSG {
 
             // Other messages
             MSG::FormatterNotImplemented => "formatter_not_implemented",
+
+            // Stage messages
+            MSG::Stage1Start => "stage1_start",
+            MSG::Stage1Complete => "stage1_complete",
+            MSG::Stage2Start => "stage2_start",
+            MSG::Stage2Complete => "stage2_complete",
+            MSG::Stage3Start => "stage3_start",
+            MSG::Stage3Complete => "stage3_complete",
+
+            _ => "unknown_message",
         }
     }
 }

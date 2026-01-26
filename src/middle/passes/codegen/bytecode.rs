@@ -233,6 +233,7 @@ impl MonoTypeExt for MonoType {
             MonoType::Union(_) => 40,
             MonoType::Intersection(_) => 40,
             MonoType::Arc(_) => 45,
+            MonoType::AssocType { .. } => 46, // 使用新的类型ID
         }
     }
 

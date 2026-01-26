@@ -489,6 +489,15 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             MonoType::TypeRef(format!("{}<{}>", name, args_str))
         }
         Type::Sum(types) => MonoType::Union(types.iter().map(ast_type_to_mono_type).collect()),
+        Type::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(ast_type_to_mono_type(host_type)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args.iter().map(ast_type_to_mono_type).collect(),
+        },
     }
 }
 

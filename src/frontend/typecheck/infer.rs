@@ -174,7 +174,7 @@ impl<'a> TypeInferrer<'a> {
         for scope in self.scopes.iter() {
             for (_, poly) in scope.iter() {
                 // 对多态类型中的泛型变量添加 Send 约束
-                for binder in &poly.binders {
+                for binder in &poly.type_binders {
                     self.send_sync_solver
                         .add_send_constraint(&MonoType::TypeVar(*binder));
                 }
