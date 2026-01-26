@@ -72,6 +72,7 @@ fn test_arc_is_send_sync() {
                 ("x".to_string(), MonoType::Int(64)),
                 ("y".to_string(), MonoType::Int(64)),
             ],
+            methods: HashMap::new(),
         },
     )));
     assert!(checker.is_send(&arc_struct));
@@ -89,6 +90,7 @@ fn test_struct_types() {
             ("x".to_string(), MonoType::Int(64)),
             ("y".to_string(), MonoType::Float(64)),
         ],
+        methods: HashMap::new(),
     });
     assert!(checker.is_send(&point));
     assert!(checker.is_sync(&point));
