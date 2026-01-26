@@ -1107,6 +1107,7 @@ pub fn unop_result_type(
 impl<'a> TypeChecker<'a> {
     /// 检查方法绑定: `Type.method: (Type, ...) -> ReturnType = (params) => body`
     #[allow(clippy::result_large_err)]
+    #[allow(clippy::too_many_arguments)]
     fn check_method_bind(
         &mut self,
         type_name: &str,

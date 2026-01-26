@@ -443,7 +443,9 @@ impl<'a> TypeInferrer<'a> {
                                 let params_len = params.len();
                                 let args_len = args.len();
 
+                                #[allow(unused_assignments)]
                                 let mut params_to_bind = Vec::new();
+                                #[allow(unused_variables)]
                                 let mut auto_bind = false;
 
                                 if params_len == args_len + 1 {
