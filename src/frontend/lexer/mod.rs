@@ -834,8 +834,23 @@ mod tokenizer {
         }
 
         fn scan_string(&mut self) -> Option<Token> {
-            let mut value = String::new();
             let start_pos = self.position();
+
+            // Check for multi-line string (""")
+            // We need to peek ahead to see if we have """
+            let mut chars = self.chars.clone();
+            let c0 = chars.next();
+            let c1 = chars.next();
+            let c2 = chars.next();
+            if c0 == Some('"') && c1 == Some('"') && c2 == Some('"') {
+                // Skip the first three characters (""")
+                self.advance();
+                self.advance();
+                self.advance();
+                return self.scan_multi_line_string();
+            }
+
+            let mut value = String::new();
 
             while let Some(&c) = self.peek() {
                 match c {
@@ -961,6 +976,70 @@ mod tokenizer {
             });
             Some(Token {
                 kind: TokenKind::Error("Unterminated string".to_string()),
+                span: self.span(),
+                literal: None,
+            })
+        }
+
+        fn scan_multi_line_string(&mut self) -> Option<Token> {
+            let start_pos = self.position();
+            let mut value = String::new();
+
+            // The opening """ has already been consumed by scan_string
+            // Now we just need to read the content and find the closing """
+
+            while let Some(c) = self.advance() {
+                // Check for closing """
+                if c == '"' {
+                    let peek1 = self.peek().copied();
+                    let peek2 = self.peek_next();
+                    if peek1 == Some('"') && peek2 == Some('"') {
+                        // Consume the closing """
+                        self.advance();
+                        self.advance();
+                        return Some(Token {
+                            kind: TokenKind::StringLiteral(value.clone()),
+                            span: Span::new(
+                                Position::with_offset(
+                                    self.start_line,
+                                    self.start_column,
+                                    self.start_offset,
+                                ),
+                                self.position(),
+                            ),
+                            literal: Some(Literal::String(value.clone())),
+                        });
+                    } else {
+                        // This is just a single quote inside the string
+                        value.push(c);
+                    }
+                } else if c == '\\' {
+                    // Handle escape sequences
+                    if let Some(escaped) = self.advance() {
+                        match escaped {
+                            '\\' => value.push('\\'),
+                            '"' => value.push('"'),
+                            '\'' => value.push('\''),
+                            'n' => value.push('\n'),
+                            't' => value.push('\t'),
+                            'r' => value.push('\r'),
+                            _ => {
+                                // For unrecognized escape sequences, keep both the backslash and the character
+                                value.push('\\');
+                                value.push(escaped);
+                            }
+                        }
+                    }
+                } else {
+                    value.push(c);
+                }
+            }
+
+            self.error = Some(LexError::UnterminatedString {
+                position: format!("{}:{}", start_pos.line, start_pos.column),
+            });
+            Some(Token {
+                kind: TokenKind::Error("Unterminated multi-line string".to_string()),
                 span: self.span(),
                 literal: None,
             })

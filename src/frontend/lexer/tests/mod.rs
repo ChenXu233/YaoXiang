@@ -951,6 +951,120 @@ mod lexer_literals_tests {
         assert!(matches!(tokens[0].kind, TokenKind::BoolLiteral(true)));
         assert!(matches!(tokens[1].kind, TokenKind::BoolLiteral(false)));
     }
+
+    #[test]
+    fn test_multi_line_string_basic() {
+        let tokens = tokenize("\"\"\"hello\nworld\"\"\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\nworld");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_empty() {
+        let tokens = tokenize("\"\"\"\"\"\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_with_content() {
+        let source = r#"""
+line 1
+line 2
+line 3
+"""#;
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "line 1\nline 2\nline 3\n");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_with_quotes() {
+        let tokens = tokenize("\"\"\"hello \"world\"\"\"\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello \"world\"");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_with_escaped_quotes() {
+        let tokens = tokenize(r#""""hello \"world\""""#).unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, r#"hello "world"#);
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_json_like() {
+        let source = r#"""
+{
+    "name": "张三",
+    "age": 30
+}
+"""#;
+        let tokens = tokenize(source).unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert!(s.contains('"'));
+            assert!(s.contains("name"));
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_with_escapes() {
+        let tokens = tokenize("\"\"\"hello\\nworld\"\"\"").unwrap();
+        assert_eq!(tokens.len(), 2);
+        if let TokenKind::StringLiteral(s) = &tokens[0].kind {
+            assert_eq!(s, "hello\nworld");
+        } else {
+            panic!("Expected string literal");
+        }
+    }
+
+    #[test]
+    fn test_multi_line_string_unterminated() {
+        let result = tokenize("\"\"\"hello world");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multi_line_string_in_code() {
+        let source = r#"
+let json = """
+{
+    "key": "value"
+}
+"""
+println(json)
+"#;
+        let tokens = tokenize(source).unwrap();
+        // Should have: let, identifier(json), =, string, identifier(println), (, identifier(json), ), EOF
+        assert!(tokens.len() > 5);
+        let has_string = tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::StringLiteral(_)));
+        assert!(has_string);
+    }
 }
 
 #[cfg(test)]
