@@ -665,7 +665,7 @@ impl fmt::Display for RuntimeValue {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         match self {
-            RuntimeValue::Unit => write!(f, "unit"),
+            RuntimeValue::Unit => write!(f, "()"),
             RuntimeValue::Bool(b) => write!(f, "{}", b),
             RuntimeValue::Int(i) => write!(f, "{}", i),
             RuntimeValue::Float(fl) => write!(f, "{}", fl),
