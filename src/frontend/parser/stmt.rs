@@ -632,9 +632,41 @@ impl<'a> ParserState<'a> {
             return self.parse_var_stmt(span);
         }
 
-        // Check for variable declaration: identifier followed by :
+        // Check for variable declaration or method binding: identifier followed by :
         if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon)) {
-            // 调用 parse_var_stmt，它会消费 identifier 和 :
+            // Check if this is a method binding: Type.method:
+            let saved_position = self.save_position();
+            let _name = match self.current().map(|t| &t.kind) {
+                Some(TokenKind::Identifier(n)) => n.clone(),
+                _ => return self.parse_var_stmt(span),
+            };
+            self.bump(); // consume identifier
+
+            // Check for dot: Type.method:
+            if self.skip(&TokenKind::Dot) {
+                let _method_name = match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(n)) => n.clone(),
+                    _ => {
+                        // Not a method binding, restore and parse as var
+                        self.restore_position(saved_position);
+                        self.clear_errors();
+                        return self.parse_var_stmt(span);
+                    }
+                };
+                self.bump(); // consume method name
+
+                // Check for colon: Type.method:
+                if self.at(&TokenKind::Colon) {
+                    // This is a method binding!
+                    self.restore_position(saved_position);
+                    self.clear_errors();
+                    return self.parse_method_bind(span);
+                }
+            }
+
+            // Not a method binding, restore and parse as variable declaration
+            self.restore_position(saved_position);
+            self.clear_errors();
             return self.parse_var_stmt(span);
         }
 
@@ -1087,11 +1119,165 @@ impl<'a> ParserState<'a> {
         })
     }
 
+    /// Parse method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
+    fn parse_method_bind(
+        &mut self,
+        span: Span,
+    ) -> Option<Stmt> {
+        // Parse type name
+        let type_name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => return None,
+        };
+        self.bump(); // consume type name
+
+        // Expect dot
+        if !self.expect(&TokenKind::Dot) {
+            return None;
+        }
+
+        // Parse method name
+        let method_name = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => return None,
+        };
+        self.bump(); // consume method name
+
+        // Expect colon
+        if !self.expect(&TokenKind::Colon) {
+            return None;
+        }
+
+        // Parse method type annotation
+        let method_type = self.parse_type_anno()?;
+
+        // Expect equals sign
+        if !self.expect(&TokenKind::Eq) {
+            return None;
+        }
+
+        // Parse method body parameters
+        if !self.expect(&TokenKind::LParen) {
+            return None;
+        }
+        let params = self.parse_fn_params()?;
+        if !self.expect(&TokenKind::RParen) {
+            return None;
+        }
+
+        // Expect fat arrow
+        if !self.expect(&TokenKind::FatArrow) {
+            return None;
+        }
+
+        // Parse body (expression or block)
+        let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let body = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            body
+        } else {
+            let expr = self.parse_expression(BP_LOWEST)?;
+            (Vec::new(), Some(Box::new(expr)))
+        };
+
+        self.skip(&TokenKind::Semicolon);
+
+        Some(Stmt {
+            kind: StmtKind::MethodBind {
+                type_name,
+                method_name,
+                method_type,
+                params,
+                body: (stmts, expr),
+            },
+            span,
+        })
+    }
+
     /// Parse expression statement
     fn parse_expr_stmt(
         &mut self,
         span: Span,
     ) -> Option<Stmt> {
+        let saved_position = self.save_position();
+        let expr = self.parse_expression(BP_LOWEST)?;
+
+        // Check if this is a method binding: field_access followed by :
+        if self.at(&TokenKind::Colon) {
+            // 检查表达式是否为字段访问
+            if let Expr::FieldAccess {
+                expr: type_expr,
+                field,
+                ..
+            } = expr
+            {
+                // 提取类型名
+                if let Expr::Var(type_name, _) = *type_expr {
+                    // 这看起来像方法绑定语法！Type.method: ...
+                    self.bump(); // consume colon
+
+                    // 解析方法类型注解
+                    let method_type = self.parse_type_anno()?;
+
+                    // Expect equals sign
+                    if !self.expect(&TokenKind::Eq) {
+                        return None;
+                    }
+
+                    // Parse method body parameters
+                    if !self.expect(&TokenKind::LParen) {
+                        return None;
+                    }
+                    let params = self.parse_fn_params()?;
+                    if !self.expect(&TokenKind::RParen) {
+                        return None;
+                    }
+
+                    // Expect fat arrow
+                    if !self.expect(&TokenKind::FatArrow) {
+                        return None;
+                    }
+
+                    // Parse body (expression or block)
+                    let (stmts, expr) = if self.at(&TokenKind::LBrace) {
+                        if !self.expect(&TokenKind::LBrace) {
+                            return None;
+                        }
+                        let body = self.parse_block_body()?;
+                        if !self.expect(&TokenKind::RBrace) {
+                            return None;
+                        }
+                        body
+                    } else {
+                        let expr = self.parse_expression(BP_LOWEST)?;
+                        (Vec::new(), Some(Box::new(expr)))
+                    };
+
+                    self.skip(&TokenKind::Semicolon);
+
+                    return Some(Stmt {
+                        kind: StmtKind::MethodBind {
+                            type_name,
+                            method_name: field,
+                            method_type,
+                            params,
+                            body: (stmts, expr),
+                        },
+                        span,
+                    });
+                }
+            }
+        }
+
+        // Not a method binding, restore position and parse as normal expression
+        self.restore_position(saved_position);
+        self.clear_errors();
+
         let expr = self.parse_expression(BP_LOWEST)?;
 
         // Handle statement-terminating semicolon

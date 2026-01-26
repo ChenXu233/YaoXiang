@@ -1,0 +1,16 @@
+// 简单测试 - 正确的方法定义语法
+type Point = {
+    x: Float,
+    y: Float
+}
+
+// 方法定义：方法签名中不包含 self，方法体参数列表中才包含 self
+Point.get_x: (Point) -> Float = (self) => self.x
+Point.get_y: (Point) -> Float = (self) => self.y
+
+main: () -> Void = () => {
+    p: Point = Point(1.0, 2.0)
+    x: Float = Point.get_x()
+    y: Float = Point.get_y()
+    return
+}

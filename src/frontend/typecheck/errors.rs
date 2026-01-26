@@ -103,6 +103,23 @@ pub enum TypeError {
     /// 导入错误
     #[error("Import error: {message}")]
     ImportError { message: String, span: Span },
+
+    /// 方法签名无效错误
+    #[error("Invalid method signature: {method_name}")]
+    InvalidMethodSignature { method_name: String, span: Span },
+
+    /// 方法需要 self 参数错误
+    #[error("Method '{method_name}' needs a self parameter")]
+    MethodNeedsSelf { method_name: String, span: Span },
+
+    /// self 类型不匹配错误
+    #[error("Invalid self type for {method_name}: expected {expected:?}, found {found:?}")]
+    InvalidSelfType {
+        method_name: String,
+        expected: MonoType,
+        found: MonoType,
+        span: Span,
+    },
 }
 
 impl TypeError {
@@ -127,6 +144,9 @@ impl TypeError {
             TypeError::CannotInferParamType { span, .. } => *span,
             TypeError::NonExhaustivePatterns { span, .. } => *span,
             TypeError::ImportError { span, .. } => *span,
+            TypeError::InvalidMethodSignature { span, .. } => *span,
+            TypeError::MethodNeedsSelf { span, .. } => *span,
+            TypeError::InvalidSelfType { span, .. } => *span,
         }
     }
 
@@ -183,6 +203,23 @@ impl TypeError {
             TypeError::ImportError { message, .. } => {
                 t_cur(MSG::ErrorImportError, Some(&[message]))
             }
+            TypeError::InvalidMethodSignature { method_name, .. } => {
+                format!("Invalid method signature: {}", method_name)
+            }
+            TypeError::MethodNeedsSelf { method_name, .. } => {
+                format!("Method '{}' needs a self parameter", method_name)
+            }
+            TypeError::InvalidSelfType {
+                method_name,
+                expected,
+                found,
+                ..
+            } => {
+                format!(
+                    "Invalid self type for {}: expected {:?}, found {:?}",
+                    method_name, expected, found
+                )
+            }
         }
     }
 
@@ -222,6 +259,9 @@ impl TypeError {
             TypeError::CannotInferParamType { .. } => "E0016",
             TypeError::NonExhaustivePatterns { .. } => "E0017",
             TypeError::ImportError { .. } => "E0018",
+            TypeError::InvalidMethodSignature { .. } => "E0019",
+            TypeError::MethodNeedsSelf { .. } => "E0020",
+            TypeError::InvalidSelfType { .. } => "E0021",
         }
     }
 
@@ -638,6 +678,44 @@ impl ErrorFormatter {
                     format!("Import error: {}", message)
                 }
             }
+            TypeError::InvalidMethodSignature { method_name, span } => {
+                if self.verbose {
+                    format!(
+                        "Invalid method signature for '{}' at {:?}",
+                        method_name, span
+                    )
+                } else {
+                    format!("Invalid method signature for '{}'", method_name)
+                }
+            }
+            TypeError::MethodNeedsSelf { method_name, span } => {
+                if self.verbose {
+                    format!(
+                        "Method '{}' needs a self parameter at {:?}",
+                        method_name, span
+                    )
+                } else {
+                    format!("Method '{}' needs a self parameter", method_name)
+                }
+            }
+            TypeError::InvalidSelfType {
+                method_name,
+                expected,
+                found,
+                span,
+            } => {
+                if self.verbose {
+                    format!(
+                        "Invalid self type for '{}': expected {:?}, found {:?} at {:?}",
+                        method_name, expected, found, span
+                    )
+                } else {
+                    format!(
+                        "Invalid self type for '{}': expected {:?}, found {:?}",
+                        method_name, expected, found
+                    )
+                }
+            }
         }
     }
 
@@ -708,6 +786,15 @@ impl From<TypeError> for Diagnostic {
             }
             TypeError::ImportError { .. } => {
                 Diagnostic::error("E0018".to_string(), format!("{}", error), span)
+            }
+            TypeError::InvalidMethodSignature { .. } => {
+                Diagnostic::error("E0019".to_string(), format!("{}", error), span)
+            }
+            TypeError::MethodNeedsSelf { .. } => {
+                Diagnostic::error("E0020".to_string(), format!("{}", error), span)
+            }
+            TypeError::InvalidSelfType { .. } => {
+                Diagnostic::error("E0021".to_string(), format!("{}", error), span)
             }
         }
     }

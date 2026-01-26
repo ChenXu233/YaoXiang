@@ -569,6 +569,7 @@ impl From<ast::Type> for MonoType {
                     .into_iter()
                     .map(|(n, t)| (n, MonoType::from(t)))
                     .collect(),
+                methods: HashMap::new(),
             }),
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
                 name: String::new(),
@@ -634,6 +635,7 @@ impl From<ast::Type> for MonoType {
                     .into_iter()
                     .map(|(n, t)| (n, MonoType::from(t)))
                     .collect(),
+                methods: HashMap::new(),
             }),
             ast::Type::Sum(types) => {
                 // Sum type - treat as union for now
@@ -651,10 +653,34 @@ impl From<ast::Type> for MonoType {
 }
 
 /// 结构体类型
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct StructType {
     pub name: String,
     pub fields: Vec<(String, MonoType)>,
+    /// 方法表：方法名 -> 方法类型
+    pub methods: HashMap<String, PolyType>,
+}
+
+// 为 StructType 实现自定义的 Hash 和 Eq
+impl PartialEq for StructType {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name == other.name && self.fields == other.fields
+    }
+}
+
+impl Eq for StructType {}
+
+impl Hash for StructType {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        self.name.hash(state);
+        self.fields.hash(state);
+    }
 }
 
 /// 枚举类型
@@ -1288,6 +1314,7 @@ impl TypeConstraintSolver {
                     .iter()
                     .map(|(n, t)| (n.clone(), self.expand_type(t)))
                     .collect(),
+                methods: s.methods.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),
@@ -1602,6 +1629,7 @@ impl TypeConstraintSolver {
                     .iter()
                     .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution)))
                     .collect(),
+                methods: s.methods.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),

@@ -412,6 +412,115 @@ impl<'a> TypeInferrer<'a> {
             }
         }
 
+        // 检查是否是类型级方法调用：Type.method(args)
+        // 这种语法允许直接通过类型名调用方法，无需显式传入 self
+        if let ast::Expr::FieldAccess { expr, field, .. } = func {
+            // 检查 expr 是否为类型名（变量）
+            if let ast::Expr::Var(type_name, _) = &**expr {
+                // 查找类型定义
+                if let Some(poly) = self.get_var(type_name).cloned() {
+                    let mono = self.solver.instantiate(&poly);
+                    let resolved = self.solver.resolve_type(&mono);
+
+                    // 如果是结构体类型，查找方法
+                    if let MonoType::Struct(ref struct_type) = resolved {
+                        // 从方法表中查找方法
+                        if let Some(method) = struct_type.methods.get(field) {
+                            let method_type = self.solver.instantiate(method);
+
+                            // 方法类型应该是 Fn，我们需要处理参数绑定
+                            if let MonoType::Fn {
+                                params,
+                                return_type,
+                                ..
+                            } = method_type
+                            {
+                                // 自动绑定机制：
+                                // 1. 如果方法签名参数数量 = 调用参数数量 + 1，说明第一个是 self，自动绑定
+                                // 2. 如果参数数量相等，尝试找到第一个匹配 self 类型的参数，自动绑定
+                                // 3. 如果参数数量不匹配，报错
+
+                                let params_len = params.len();
+                                let args_len = args.len();
+
+                                let mut params_to_bind = Vec::new();
+                                let mut auto_bind = false;
+
+                                if params_len == args_len + 1 {
+                                    // 情况1：第一个参数是 self，自动绑定
+                                    params_to_bind = params[1..].to_vec();
+                                    auto_bind = true;
+                                } else if params_len == args_len {
+                                    // 情况2：参数数量相等，检查是否有可自动绑定的参数
+                                    let mut self_param_index = None;
+                                    for (i, param) in params.iter().enumerate() {
+                                        if self.solver.unify(param, &resolved).is_ok() {
+                                            self_param_index = Some(i);
+                                            break;
+                                        }
+                                    }
+
+                                    if let Some(idx) = self_param_index {
+                                        // 找到了可自动绑定的参数
+                                        let mut new_params = params.clone();
+                                        new_params.remove(idx);
+                                        params_to_bind = new_params;
+                                        auto_bind = true;
+                                    } else {
+                                        // 没有可自动绑定的参数，按普通方式处理
+                                        params_to_bind = params.clone();
+                                    }
+                                } else {
+                                    // 参数数量不匹配
+                                    return Err(TypeError::CallError {
+                                        message: format!(
+                                            "Method {}.{} expects {} arguments, but {} provided",
+                                            type_name, field, params_len, args_len
+                                        ),
+                                        span,
+                                    });
+                                }
+
+                                // 为每个参数添加类型约束
+                                for (arg, param_ty) in args.iter().zip(params_to_bind.iter()) {
+                                    let arg_ty = self.infer_expr(arg)?;
+                                    self.solver.add_constraint(arg_ty, param_ty.clone(), span);
+                                }
+
+                                return Ok(*return_type.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 如果不是类型级方法调用，则按普通字段访问处理
+            // 首先推断字段的类型
+            let field_ty = self.infer_field_access(expr, field, span)?;
+
+            // 如果字段类型是函数，则处理方法调用
+            // 创建类型变量用于参数和返回值
+            let param_tys: Vec<MonoType> = args.iter().map(|_| self.solver.new_var()).collect();
+            let return_ty = self.solver.new_var();
+
+            // 构建函数类型约束
+            let expected_fn_ty = MonoType::Fn {
+                params: param_tys.clone(),
+                return_type: Box::new(return_ty.clone()),
+                is_async: false,
+            };
+
+            self.solver.add_constraint(field_ty, expected_fn_ty, span);
+
+            // 为每个参数添加类型约束
+            for (arg, param_ty) in args.iter().zip(param_tys.iter()) {
+                let arg_ty = self.infer_expr(arg)?;
+                self.solver.add_constraint(arg_ty, param_ty.clone(), span);
+            }
+
+            return Ok(return_ty);
+        }
+
         // 普通函数调用
         let func_ty = self.infer_expr(func)?;
 
@@ -1164,11 +1273,30 @@ impl<'a> TypeInferrer<'a> {
 
         match &expr_ty {
             MonoType::Struct(s) => {
+                // 首先检查字段
                 for (name, ty) in &s.fields {
                     if name == field {
                         return Ok(ty.clone());
                     }
                 }
+
+                // 然后检查方法
+                if let Some(method) = s.methods.get(field) {
+                    // 方法返回 MonoType::Fn，我们返回整个函数类型
+                    let method_type = self.solver().instantiate(method);
+                    match method_type {
+                        MonoType::Fn { .. } => {
+                            return Ok(method_type);
+                        }
+                        _ => {
+                            return Err(TypeError::CallError {
+                                message: format!("{} is not a method", field),
+                                span,
+                            });
+                        }
+                    }
+                }
+
                 Err(TypeError::UnknownField {
                     struct_name: s.name.clone(),
                     field_name: field.to_string(),
@@ -1279,6 +1407,19 @@ impl<'a> TypeInferrer<'a> {
     ) -> Option<&PolyType> {
         for scope in self.scopes.iter().rev() {
             if let Some(poly) = scope.get(name) {
+                return Some(poly);
+            }
+        }
+        None
+    }
+
+    /// 获取变量类型（可变引用）
+    pub fn get_var_mut(
+        &mut self,
+        name: &str,
+    ) -> Option<&mut PolyType> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(poly) = scope.get_mut(name) {
                 return Some(poly);
             }
         }

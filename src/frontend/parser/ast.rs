@@ -173,6 +173,19 @@ pub enum StmtKind {
         params: Vec<Param>,
         body: (Vec<Stmt>, Option<Box<Expr>>),
     },
+    /// Method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
+    MethodBind {
+        /// 类型名称
+        type_name: String,
+        /// 方法名称
+        method_name: String,
+        /// 方法类型（包含 self 参数）
+        method_type: Type,
+        /// 方法参数（不包含 self）
+        params: Vec<Param>,
+        /// 方法体
+        body: (Vec<Stmt>, Option<Box<Expr>>),
+    },
 }
 
 /// Variant constructor definition (for variant types)

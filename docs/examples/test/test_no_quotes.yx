@@ -1,0 +1,19 @@
+// 测试多行字符串功能（无引号版本）
+use std.io
+
+main = () => {
+    // 测试基本的多行字符串
+    json = """
+    {
+        name: 张三,
+        age: 30
+    }
+    """
+    println(json)
+
+    // 测试空的多行字符串
+    empty = """"""
+    println("Empty string length: " + empty.length().to_string())
+
+    println("\n=== 多行字符串测试成功！ ===")
+}

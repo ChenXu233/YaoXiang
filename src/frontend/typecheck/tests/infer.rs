@@ -729,6 +729,7 @@ fn test_infer_field_access() {
             ("x".to_string(), MonoType::Int(64)),
             ("y".to_string(), MonoType::Int(64)),
         ],
+        methods: HashMap::new(),
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 
@@ -753,6 +754,7 @@ fn test_infer_unknown_field() {
     let struct_type = MonoType::Struct(StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Int(64))],
+        methods: HashMap::new(),
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 

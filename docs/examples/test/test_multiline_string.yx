@@ -1,0 +1,23 @@
+// 测试多行字符串功能
+from std.io import println
+
+fn main() {
+    // 测试基本的多行字符串
+    let json = """
+    {
+        "name": "张三",
+        "age": 30
+    }
+    """
+    println(json)
+
+    // 测试空的多行字符串
+    let empty = """"""
+    println("Empty string length: " + empty.length().to_string())
+
+    // 测试包含引号的多行字符串
+    let quote_test = """这是"引号"测试"""
+    println(quote_test)
+
+    println("\n=== 多行字符串测试成功！ ===")
+}

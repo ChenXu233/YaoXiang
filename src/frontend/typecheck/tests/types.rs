@@ -217,6 +217,7 @@ fn test_mono_type_struct() {
             ("x".to_string(), MonoType::Int(64)),
             ("y".to_string(), MonoType::Int(64)),
         ],
+        methods: HashMap::new(),
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.name == "Point"));
 }
@@ -226,6 +227,7 @@ fn test_mono_type_struct_empty() {
     let ty = MonoType::Struct(StructType {
         name: "Empty".to_string(),
         fields: vec![],
+        methods: HashMap::new(),
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.fields.is_empty()));
 }

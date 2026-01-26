@@ -367,6 +367,21 @@ impl<'a> TypeChecker<'a> {
             ast::StmtKind::Use { path, items, alias } => {
                 self.check_use(path, items.as_deref(), alias.as_deref(), stmt.span)
             }
+            ast::StmtKind::MethodBind {
+                type_name,
+                method_name,
+                method_type,
+                params,
+                body: (stmts, expr),
+            } => self.check_method_bind(
+                type_name,
+                method_name,
+                method_type,
+                params,
+                stmts,
+                expr.as_deref(),
+                stmt.span,
+            ),
         }
     }
 
@@ -1086,5 +1101,128 @@ pub fn unop_result_type(
                 None
             }
         }
+    }
+}
+
+impl<'a> TypeChecker<'a> {
+    /// 检查方法绑定: `Type.method: (Type, ...) -> ReturnType = (params) => body`
+    #[allow(clippy::result_large_err)]
+    fn check_method_bind(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        method_type: &ast::Type,
+        params: &[ast::Param],
+        body_stmts: &[ast::Stmt],
+        body_expr: Option<&ast::Expr>,
+        span: Span,
+    ) -> TypeResult<()> {
+        // 1. 检查类型是否存在
+        let type_var = self
+            .inferrer
+            .get_var(type_name)
+            .ok_or_else(|| TypeError::UnknownType {
+                name: type_name.to_string(),
+                span,
+            })?;
+
+        // Clone the type_var to avoid borrow conflicts
+        let type_var_body = type_var.body.clone();
+
+        // 2. 获取方法的返回类型
+        let method_type_ast = MonoType::from(method_type.clone());
+        let (method_params, return_type) = match &method_type_ast.clone() {
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => (params.clone(), return_type.clone()),
+            _ => {
+                return Err(TypeError::InvalidMethodSignature {
+                    method_name: format!("{}.{}", type_name, method_name),
+                    span,
+                });
+            }
+        };
+
+        // 3. 方法签名就是用户定义的签名，不包含 self
+        //    self 参数在调用时会自动绑定，无需显式添加
+
+        // 创建方法的类型（直接使用用户定义的签名）
+        let method_signature_type = MonoType::Fn {
+            params: method_params.clone(),
+            return_type: return_type.clone(),
+            is_async: false,
+        };
+
+        // 4. 创建方法的多态类型（使用用户定义的签名）
+        let method_poly_type = PolyType::mono(method_signature_type.clone());
+
+        // 5. 将方法添加到类型的方法表中（命名空间机制）
+        // 注意：不注册为 "Type.method" 格式的全局变量
+        if let MonoType::Struct(ref mut struct_type) =
+            self.inferrer.get_var_mut(type_name).unwrap().body
+        {
+            struct_type
+                .methods
+                .insert(method_name.to_string(), method_poly_type);
+        } else {
+            // 如果类型不是结构体，报错
+            return Err(TypeError::InvalidMethodSignature {
+                method_name: format!("{}.{}", type_name, method_name),
+                span,
+            });
+        }
+
+        // 6. 检查方法体
+        // 为 self 参数创建绑定
+        let self_param_name = if let Some(param) = params.first() {
+            param.name.clone()
+        } else {
+            // 如果没有提供参数名，使用默认的 "self"
+            "self".to_string()
+        };
+
+        let self_poly = PolyType::mono(type_var_body);
+        self.inferrer.add_var(self_param_name.clone(), self_poly);
+
+        // 检查其他参数
+        for (_i, param) in params.iter().enumerate().skip(1) {
+            if let Some(param_type) = &param.ty {
+                let param_poly = PolyType::mono(MonoType::from(param_type.clone()));
+                self.inferrer.add_var(param.name.clone(), param_poly);
+            }
+        }
+
+        // 检查方法体
+        if let Some(expr) = body_expr {
+            let _body_ty = self.inferrer.infer_expr(expr)?;
+        } else if !body_stmts.is_empty() {
+            let block = ast::Block {
+                stmts: body_stmts.to_vec(),
+                expr: None,
+                span,
+            };
+            let _body_ty = self.inferrer.infer_block(&block, false, None)?;
+        }
+
+        debug!(
+            "Checked method bind: {}.{} -> {:?}",
+            type_name, method_name, return_type
+        );
+
+        Ok(())
+    }
+
+    /// 检查两个类型是否匹配
+    fn type_matches(
+        &self,
+        left: &MonoType,
+        right: &MonoType,
+        _span: Span,
+    ) -> TypeResult<bool> {
+        // 简化实现：直接比较类型
+        // 更复杂的实现需要考虑类型泛化和实例化
+        Ok(left == right)
     }
 }

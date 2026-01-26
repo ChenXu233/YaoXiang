@@ -119,6 +119,7 @@ impl GenericSpecializer {
                     .iter()
                     .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution, _solver)))
                     .collect(),
+                methods: s.methods.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(super::types::EnumType {
                 name: e.name.clone(),
@@ -255,6 +256,7 @@ fn substitute_mono_type(
                 .iter()
                 .map(|(n, t)| (n.clone(), substitute_mono_type(t, substitution)))
                 .collect(),
+            methods: s.methods.clone(),
         }),
         MonoType::Enum(e) => MonoType::Enum(super::types::EnumType {
             name: e.name.clone(),

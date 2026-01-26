@@ -440,6 +440,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
                 .iter()
                 .map(|(n, ty)| (n.clone(), ast_type_to_mono_type(ty)))
                 .collect(),
+            methods: HashMap::new(),
         }),
         Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
             name: name.clone(),
@@ -447,6 +448,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
                 .iter()
                 .map(|(n, ty)| (n.clone(), ast_type_to_mono_type(ty)))
                 .collect(),
+            methods: HashMap::new(),
         }),
         Type::Union(variants) => MonoType::Union(
             variants
@@ -653,6 +655,7 @@ fn substitute_type_with_map(
                     (name.clone(), substitute_type_with_map(field_ty, type_map))
                 })
                 .collect(),
+            methods: struct_type.methods.clone(),
         }),
         MonoType::List(elem) => MonoType::List(Box::new(substitute_type_with_map(elem, type_map))),
         MonoType::Dict(key, value) => MonoType::Dict(

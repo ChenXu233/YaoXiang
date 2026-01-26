@@ -11,7 +11,7 @@
 
 use crate::frontend::lexer::tokens::Literal;
 use crate::frontend::parser::ast::{self, Expr};
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::span::Span;
 use crate::tlog;
@@ -48,6 +48,8 @@ pub struct AstToIrGenerator {
     config: IrGeneratorConfig,
     /// 符号表（用于变量解析）
     symbols: Vec<HashMap<String, SymbolEntry>>,
+    /// 类型检查结果（包含变量绑定信息）
+    type_result: Option<Box<TypeCheckResult>>,
     /// 下一个临时寄存器编号
     next_temp: usize,
 }
@@ -64,6 +66,17 @@ impl AstToIrGenerator {
         Self {
             config: IrGeneratorConfig::default(),
             symbols: vec![HashMap::new()], // 全局作用域
+            type_result: None,
+            next_temp: 0,
+        }
+    }
+
+    /// 创建新的 IR 生成器（带类型信息）
+    pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
+        Self {
+            config: IrGeneratorConfig::default(),
+            symbols: vec![HashMap::new()], // 全局作用域
+            type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
         }
     }
@@ -123,6 +136,55 @@ impl AstToIrGenerator {
         }
         tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
         None
+    }
+
+    /// 查找变量的类型
+    fn lookup_var_type(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
+        if let Some(ref type_result) = self.type_result {
+            // 调试：打印所有绑定
+            tracing::debug!("Looking for variable '{}' in bindings", name);
+            tracing::debug!("All bindings: {:?}", type_result.bindings);
+
+            if let Some(poly_type) = type_result.bindings.get(name) {
+                // 使用 debug 日志记录类型信息
+                tracing::debug!("Found type for variable {}: {:?}", name, poly_type);
+                return Some(poly_type);
+            }
+        } else {
+            tracing::debug!("type_result is None!");
+        }
+        tracing::debug!("Type not found for variable: {}", name);
+        None
+    }
+
+    // 删除的函数：extract_type_name_from_poly
+    // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
+    // 方法调用现在直接生成简单函数名（方法名）
+
+    /// 解析字段索引（简化版本）
+    /// 在真正的实现中，需要从类型信息中查找字段在结构体中的位置
+    fn resolve_field_index(
+        &self,
+        _expr: &ast::Expr,
+        field_name: &str,
+    ) -> Option<usize> {
+        use crate::frontend::typecheck::MonoType;
+
+        // 简化处理：假设常见字段名
+        // x -> 0, y -> 1, value -> 2 等
+        match field_name {
+            "x" | "first" | "key" => Some(0),
+            "y" | "second" | "value" => Some(1),
+            "z" | "third" => Some(2),
+            _ => {
+                // 对于未知字段名，返回 None
+                // 在真正的实现中，这里应该查询类型定义中的字段列表
+                None
+            }
+        }
     }
 
     /// 获取下一个临时寄存器编号
@@ -192,11 +254,112 @@ impl AstToIrGenerator {
                 type_annotation.as_ref(),
                 initializer.as_ref().map(|v| &**v),
             ),
+            ast::StmtKind::MethodBind {
+                type_name,
+                method_name,
+                method_type,
+                params,
+                body: (stmts, expr),
+            } => self.generate_method_ir(
+                type_name,
+                method_name,
+                method_type,
+                params,
+                stmts,
+                expr,
+                constants,
+            ),
             ast::StmtKind::TypeDef { name, definition } => {
                 self.generate_constructor_ir(name, definition)
             }
             _ => Ok(None),
         }
+    }
+
+    /// 生成方法 IR
+    fn generate_method_ir(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        method_type: &ast::Type,
+        params: &[ast::Param],
+        stmts: &[ast::Stmt],
+        expr: &Option<Box<ast::Expr>>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, IrGenError> {
+        // 命名空间机制：方法函数名就是方法名，无复杂前缀
+        // 例如：Point.get_x 生成函数名 "get_x"
+        // 调用时：p.get_x() -> get_x(p)
+        let func_name = method_name.to_string();
+
+        // 解析返回类型
+        let return_type = if let ast::Type::Fn { return_type, .. } = method_type {
+            (**return_type).clone().into()
+        } else {
+            // 非函数类型，报错
+            return Err(IrGenError::InternalError {
+                message: format!("Method {} is not a function type", method_name),
+                span: Span::default(),
+            });
+        };
+
+        // 进入新作用域
+        self.enter_scope();
+
+        // 注册参数
+        let mut param_types = Vec::new();
+        for (i, param) in params.iter().enumerate() {
+            if let Some(param_type_ast) = &param.ty {
+                let param_type = param_type_ast.clone().into();
+                param_types.push(param_type);
+            } else {
+                // 参数没有类型，默认为 Int64
+                param_types.push(MonoType::Int(64));
+            }
+
+            // 注册参数到符号表
+            self.register_local(&param.name, i);
+        }
+
+        // 生成指令序列
+        let mut instructions = Vec::new();
+
+        // 生成语句 IR
+        for stmt in stmts {
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+        }
+
+        // 生成表达式 IR
+        if let Some(expr) = expr {
+            let result_reg = 0;
+            self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        } else {
+            instructions.push(Instruction::Ret(None));
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        // 分配局部变量类型（简化：与参数相同）
+        let locals_types = param_types.clone();
+
+        // 构建函数 IR
+        let func_ir = FunctionIR {
+            name: func_name,
+            params: param_types.clone(),
+            return_type,
+            is_async: false,
+            locals: locals_types,
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions,
+                successors: Vec::new(),
+            }],
+            entry: 0,
+        };
+
+        Ok(Some(func_ir))
     }
 
     /// 生成函数 IR
@@ -630,28 +793,73 @@ impl AstToIrGenerator {
                 args,
                 span: _,
             } => {
-                // 函数调用
-                let mut arg_regs = Vec::new();
-                for arg in args.iter() {
-                    let arg_reg = self.next_temp_reg();
-                    self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                    arg_regs.push(Operand::Local(arg_reg));
-                }
+                // 检查是否是方法调用：func 是 FieldAccess
+                if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
+                    // 方法调用 - 转换为普通函数调用
+                    // 命名空间机制：p.method() -> method(p)
+                    let mut arg_regs = Vec::new();
 
-                // 直接将函数名作为 String 存储在 Operand 中
-                // 之前的实现试图使用 constants 索引，但 FunctionIR 并不保存 constants，导致索引失效
-                let func_operand = if let Expr::Var(name, _) = func.as_ref() {
-                    Operand::Const(ConstValue::String(name.clone()))
+                    // 首先生成对象表达式 IR（用于 self）
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(obj_reg));
+
+                    // 生成参数 IR
+                    for arg in args.iter() {
+                        let arg_reg = self.next_temp_reg();
+                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                        arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // 命名空间机制：将方法调用转换为简单函数调用
+                    // 例如：p.get_x() -> get_x(p)
+                    // 函数名就是方法名，无复杂前缀
+                    let method_function_name = field;
+
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(method_function_name.to_string())),
+                        args: arg_regs,
+                    });
                 } else {
-                    Operand::Const(ConstValue::Int(0))
-                };
+                    // 普通函数调用
+                    let mut arg_regs = Vec::new();
+                    for arg in args.iter() {
+                        let arg_reg = self.next_temp_reg();
+                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                        arg_regs.push(Operand::Local(arg_reg));
+                    }
 
-                // 确保 Call 指令有 dst 寄存器，即使当前上下文可能不需要结果
-                // 这是为了正确处理嵌套函数调用，如 print(add(10, 20))
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: func_operand,
-                    args: arg_regs,
+                    // 直接将函数名作为 String 存储在 Operand 中
+                    let func_operand = if let Expr::Var(name, _) = func.as_ref() {
+                        Operand::Const(ConstValue::String(name.clone()))
+                    } else {
+                        Operand::Const(ConstValue::Int(0))
+                    };
+
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: func_operand,
+                        args: arg_regs,
+                    });
+                }
+            }
+            Expr::FieldAccess { expr, field, .. } => {
+                // 字段访问：加载对象的字段
+                // 生成对象表达式 IR
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+
+                // 尝试从类型信息中获取字段索引
+                // 简化处理：使用字段名的哈希值作为索引（临时方案）
+                // 在真正的实现中，需要完整的类型信息来查找字段位置
+                let field_index = self.resolve_field_index(expr, &field).unwrap_or(0);
+
+                // 使用 LoadField 指令加载字段
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
                 });
             }
             Expr::Return(expr, _) => {

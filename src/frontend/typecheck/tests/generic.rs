@@ -66,6 +66,7 @@ fn test_generic_struct() {
                 ("x".to_string(), MonoType::TypeVar(t_var)),
                 ("y".to_string(), MonoType::TypeVar(t_var)),
             ],
+            methods: HashMap::new(),
         }),
     );
     env.add_type("Point".to_string(), point_type);
@@ -171,6 +172,7 @@ fn test_type_environment_types() {
     let point_type = PolyType::mono(MonoType::Struct(StructType {
         name: "Point".to_string(),
         fields: vec![],
+        methods: HashMap::new(),
     }));
     env.add_type("Point".to_string(), point_type.clone());
 
@@ -284,6 +286,7 @@ fn test_generic_struct_fields() {
             ("first".to_string(), MonoType::TypeVar(t_var)),
             ("second".to_string(), MonoType::TypeVar(t_var)),
         ],
+        methods: HashMap::new(),
     });
 
     let poly = PolyType::new(vec![t_var], struct_type);
@@ -419,6 +422,7 @@ fn test_generic_struct_type_get() {
     let struct_type = MonoType::Struct(StructType {
         name: "Container".to_string(),
         fields: vec![("value".to_string(), MonoType::TypeVar(t_var))],
+        methods: HashMap::new(),
     });
     let poly = PolyType::new(vec![t_var], struct_type);
     env.add_type("Container".to_string(), poly);

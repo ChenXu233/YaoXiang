@@ -1,0 +1,61 @@
+// RFC-010 统一类型语法测试
+// 使用 name: type = value 模型
+
+// 1. 变量定义
+x: Int = 42
+name: String = "Alice"
+flag: Bool = true
+
+// 2. 函数定义
+add: (Int, Int) -> Int = (a, b) => {
+    return a + b
+}
+
+greet: (String) -> String = (name) => {
+    return "Hello, ${name}!"
+}
+
+// 3. 类型定义（结构体）
+type Point = {
+    x: Float,
+    y: Float
+}
+
+// 4. 类型定义（枚举）
+type Color = {
+    red | green | blue
+}
+
+type Result[T, E] = {
+    ok(T) | err(E)
+}
+
+type Option[T] = {
+    some(T) | none
+}
+
+// 5. 接口定义
+type Drawable = {
+    draw: () -> Void
+}
+
+type Serializable = {
+    serialize: () -> String
+}
+
+// 6. 普通函数
+distance: (Point, Point) -> Float = (p1, p2) => {
+    1.0
+}
+
+// 7. 主函数
+main: () -> Void = () => {
+    // 基本变量赋值
+    p: Point = Point(1.0, 2.0);
+
+    // 函数调用
+    sum: Int = add(10, 20);
+    message: String = greet("World");
+
+    return
+}

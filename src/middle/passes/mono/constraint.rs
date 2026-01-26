@@ -334,7 +334,7 @@ impl ConstraintPropagationEngine {
 /// 特化请求
 ///
 /// 描述需要生成的特化版本
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SpecializationRequest {
     /// 泛型函数/类型的标识
     pub generic_name: String,

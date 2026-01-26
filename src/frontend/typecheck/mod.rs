@@ -24,7 +24,6 @@ pub use type_level::*;
 
 use super::parser::ast;
 use crate::middle;
-use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -171,16 +170,16 @@ pub fn check_module(
 /// # Arguments
 ///
 /// * `ast` - AST 模块
-/// * `_type_result` - 类型检查结果（预留用于符号表）
+/// * `type_result` - 类型检查结果（包含变量绑定信息）
 ///
 /// # Returns
 ///
 /// 成功返回 IR，失败返回错误列表
 pub fn generate_ir(
     ast: &ast::Module,
-    _type_result: &TypeCheckResult,
+    type_result: &TypeCheckResult,
 ) -> Result<middle::ModuleIR, Vec<TypeError>> {
-    let mut generator = AstToIrGenerator::new();
+    let mut generator = middle::core::AstToIrGenerator::new_with_type_result(type_result);
     generator.generate_module_ir(ast).map_err(|e| {
         e.into_iter()
             .map(|e| TypeError::TypeMismatch {

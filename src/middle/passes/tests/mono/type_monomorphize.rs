@@ -6,10 +6,12 @@
 //! - Arc 类型处理（所有权模型）
 //! - 类型缓存
 
+use std::collections::HashMap;
+
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::passes::mono::type_mono::TypeMonomorphizer;
 use crate::middle::passes::mono::instance::GenericTypeId;
-use crate::frontend::typecheck::{MonoType, StructType, EnumType, TypeVar};
+use crate::frontend::typecheck::{MonoType, StructType, EnumType, TypeVar, PolyType};
 
 /// 创建类型变量的辅助函数
 fn make_type_var(index: usize) -> TypeVar {
@@ -66,6 +68,7 @@ fn test_monomorphize_simple_struct() {
             ("x".to_string(), type_var(0)),
             ("y".to_string(), type_var(0)),
         ],
+        methods: HashMap::new(),
     });
 
     // 注册泛型类型
@@ -103,6 +106,7 @@ fn test_monomorphize_multi_param_struct() {
             ("key".to_string(), type_var(0)),
             ("value".to_string(), type_var(1)),
         ],
+        methods: HashMap::new(),
     });
 
     // 注册泛型类型

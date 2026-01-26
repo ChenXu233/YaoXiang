@@ -6,6 +6,7 @@ use crate::frontend::parser::ast::Type as AstType;
 use crate::frontend::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::ModuleIR;
 use crate::middle::passes::mono::instance::{GenericTypeId, SpecializationKey, TypeId, TypeInstance};
+use std::collections::HashMap;
 
 /// 类型单态化相关trait
 pub trait TypeMonomorphizer {
@@ -149,6 +150,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .iter()
                     .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
                     .collect(),
+                methods: HashMap::new(),
             }),
             AstType::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name: name.clone(),
@@ -156,6 +158,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .iter()
                     .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
                     .collect(),
+                methods: HashMap::new(),
             }),
             AstType::Union(variants) => MonoType::Union(
                 variants
@@ -456,6 +459,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 Some(MonoType::Struct(StructType {
                     name: self.generate_type_name(generic_id, type_args),
                     fields: mono_fields,
+                    methods: HashMap::new(),
                 }))
             }
             MonoType::Enum(enum_type) => Some(MonoType::Enum(EnumType {
@@ -549,6 +553,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                         )
                     })
                     .collect(),
+                methods: struct_type.methods.clone(),
             }),
             MonoType::List(elem) => MonoType::List(Box::new(self.substitute_type_args(
                 elem,
