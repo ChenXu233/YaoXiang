@@ -3,7 +3,7 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-05
+> **最后更新**: 2026-01-27
 
 ## 摘要
 
@@ -62,24 +62,42 @@ Point.distance = distance  # 等价于 distance[0]
 
 ### 核心设计：默认绑定 + 可选位置指定
 
-#### 默认绑定到第 0 位
+#### 默认绑定到第一个类型匹配的位置
 
-**默认行为**：`Type.method = function` 等价于 `function[0]`
+**默认行为**：`Type.method = function` 自动查找第一个和该类型匹配的位置并绑定
 
 ```yaoxiang
-# 默认绑定到第 0 位（最常见的场景）
-Point.distance = distance           # 等价于 distance[0]
+# 默认绑定第一个类型匹配的位置
+Point.distance = distance           # 编译器自动查找第一个 Point 参数位置
 p1.distance(p2)                     # → distance(p1, p2)
 
-# 只有需要特殊位置时才写 [positions]
-Point.transform = transform[1]      # this 绑定到第 1 位
-p1.transform(v1)                    # → transform(v1, p1)
+# 如果函数有两个 Point 参数，绑定到第一个匹配的位置
+distance(Point, Point) -> Float = (a, b) => { ... }
+# 绑定：Point.distance = distance
+# 调用：p1.distance(p2) → distance(p1, p2) ✓
+
+# 只有需要特殊位置（不是第一个匹配）时才显式指定
+Point.compare = distance[1]        # 绑定到第二个 Point 参数
+p1.compare(p2)                    # → distance(p2, p1)
+```
+
+**绑定失败处理**：
+- **找不到匹配类型**：如果函数参数中没有该类型，报错或警告
+- **工厂函数模式**：如果没有参数匹配，可能作为工厂函数使用
+
+```yaoxiang
+# 情况1：找不到匹配类型
+create_point() -> Point = () => { ... }
+Point.create = create_point        # 错误：没有 Point 类型参数
+
+# 情况2：工厂函数模式（可选）
+Point.create = create_point        # 作为工厂函数，调用：Point.create()
 ```
 
 **好处**：
-- 99% 的方法调用不需要写 `[0]`
-- OOP 程序员迁移无压力，符合直觉
-- 简洁优先，复杂场景才用高级语法
+- 智能绑定：根据类型自动匹配，符合直觉
+- 类型安全：只有类型匹配才绑定，避免错误
+- 灵活控制：当默认绑定不是期望行为时，可显式指定位置
 
 #### 自动柯里化绑定
 
@@ -245,17 +263,39 @@ struct Binding {
 
 fn parse_binding(expr: Expr) -> Binding {
     // 格式：Type.method = function[positions]
+    // 或：Type.method = function（默认自动查找类型匹配位置）
 
     let (type_name, method_name) = parse_left_side(expr.left);
     let (function_name, positions) = parse_right_side(expr.right);
+
+    // 如果没有指定位置，自动查找第一个类型匹配的位置
+    let final_positions = match positions {
+        Some(pos) => normalize_positions(pos),
+        None => auto_find_matching_positions(type_name, function_name),
+    };
 
     Binding {
         type_name,
         method_name,
         function_name,
-        positions: normalize_positions(positions),
+        positions: final_positions,
         is_partial: has_remaining_params(positions, function_name),
     }
+}
+
+fn auto_find_matching_positions(type_name: &str, function_name: &str) -> Vec<usize> {
+    // 查找函数签名中第一个匹配 type_name 的位置
+    let func = find_function(function_name);
+
+    for (idx, param) in func.params.iter().enumerate() {
+        if param.type_ == type_name {
+            return vec![idx];
+        }
+    }
+
+    // 如果没找到匹配，返回错误或空向量
+    // 编译器将根据配置决定是报错、警告还是视为工厂函数
+    vec![]
 }
 ```
 
@@ -301,14 +341,22 @@ fn check_binding_type_compatibility(
     binding: &Binding,
     func: &Function
 ) -> Result<(), TypeError> {
-    // 1. 验证所有位置索引有效
+    // 1. 如果是自动查找位置（未显式指定），检查是否找到匹配
+    if binding.positions.is_empty() {
+        return Err(TypeError::NoMatchingParameter(
+            binding.type_name.clone(),
+            func.name.clone()
+        ));
+    }
+
+    // 2. 验证所有位置索引有效
     for pos in &binding.positions {
         if *pos >= func.params.len() {
             return Err(TypeError::InvalidBindingPosition(*pos));
         }
     }
 
-    // 2. 检查绑定位置的类型兼容性
+    // 3. 检查绑定位置的类型兼容性
     for pos in &binding.positions {
         let param_type = &func.params[*pos].type_;
         let binding_type = &binding.type_name;
@@ -320,7 +368,7 @@ fn check_binding_type_compatibility(
         }
     }
 
-    // 3. 检查方法调用参数与剩余参数匹配
+    // 4. 检查方法调用参数与剩余参数匹配
     Ok(())
 }
 ```
@@ -330,7 +378,7 @@ fn check_binding_type_compatibility(
 | 场景 | 绑定语法 | 调用 | 转换为 |
 |------|---------|------|--------|
 | 默认绑定 | `Point.distance = distance` | `p1.distance(p2)` | `distance(p1, p2)` |
-| 单位置 | `Point.distance = distance[0]` | `p1.distance(p2)` | `distance(p1, p2)` |
+| 自动匹配 | `Point.transform = transform` | `p.transform(v)` | `transform(p, v)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
 | 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
 | 多位置 | `Point.transform = transform[0, 1]` | `p.transform(v)` | `transform(p, v)` |
@@ -338,6 +386,7 @@ fn check_binding_type_compatibility(
 | 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
 
 **说明**：
+- **默认绑定**：自动查找第一个类型匹配的位置
 - `[0]`：this 绑定到第 0 位（第一个参数）
 - `[1]`：this 绑定到第 1 位（第二个参数）
 - `[-1]`：this 绑定到最后一位（从末尾计数）
@@ -346,9 +395,9 @@ fn check_binding_type_compatibility(
 
 ### 优点
 
-- **默认简单**：默认绑定到第 0 位，99% 场景不需要写 `[positions]`
+- **智能默认绑定**：默认绑定第一个类型匹配的位置，无需显式指定 `[positions]`
 - **精确控制**：可以绑定到任意参数位置，灵活度高
-- **类型安全**：编译时完全类型检查
+- **类型安全**：编译时完全类型检查，只有类型匹配才绑定
 - **语法简洁**：`[position]` 语法直观易懂
 - **无 `self` 关键字**：保持语言简洁性
 - **柯里化友好**：天然支持部分应用和链式调用
@@ -425,6 +474,8 @@ fn check_binding_type_compatibility(
 | 占位符 | `_` | 简洁，通用符号 |
 | 范围语法 | 实现 | 批量绑定，如 `[0..2]` |
 | 语法风格 | 中缀 `Type.method = func[positions]` | 与 `name = expr` 风格统一 |
+| **默认绑定逻辑** | **绑定第一个类型匹配的位置** | **更智能、更安全，符合直觉** |
+| **绑定失败处理** | **找不到匹配时报错/警告/工厂函数** | **根据上下文灵活处理** |
 
 ### 附录B：术语表
 
@@ -433,6 +484,8 @@ fn check_binding_type_compatibility(
 | 绑定位置 | 函数参数列表中的索引位置 |
 | 联合绑定 | 将类型绑定到多个参数位置 |
 | 部分应用 | 只提供部分参数，返回待完成调用的函数 |
+| **类型匹配绑定** | **默认绑定逻辑：自动查找第一个与调用者类型匹配的位置** |
+| **工厂函数绑定** | **当函数参数中没有匹配类型时，作为构造器使用** |
 
 ---
 
