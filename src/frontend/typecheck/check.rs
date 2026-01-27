@@ -382,6 +382,19 @@ impl<'a> TypeChecker<'a> {
                 expr.as_deref(),
                 stmt.span,
             ),
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                span: _,
+            } => self.check_if_stmt(
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch.as_deref(),
+                stmt.span,
+            ),
         }
     }
 
@@ -1226,5 +1239,59 @@ impl<'a> TypeChecker<'a> {
         // 简化实现：直接比较类型
         // 更复杂的实现需要考虑类型泛化和实例化
         Ok(left == right)
+    }
+
+    /// 检查 if 语句: `if condition { then_branch } elif branches else_branch`
+    /// 语句形式的 if 必须返回 Void 类型
+    #[allow(clippy::result_large_err)]
+    fn check_if_stmt(
+        &mut self,
+        condition: &ast::Expr,
+        then_branch: &ast::Block,
+        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_branch: Option<&ast::Block>,
+        span: Span,
+    ) -> TypeResult<()> {
+        // 1. 检查条件必须是布尔类型
+        let cond_ty = self.inferrer.infer_expr(condition)?;
+        self.inferrer
+            .solver()
+            .add_constraint(cond_ty, MonoType::Bool, span);
+
+        // 2. 进入作用域（用于处理分支中可能添加的变量）
+        self.inferrer.enter_scope();
+
+        // 3. 检查 then 分支，类型必须是 Void
+        let then_ty = self.inferrer.infer_block(then_branch, false, None)?;
+        self.inferrer
+            .solver()
+            .add_constraint(then_ty, MonoType::Void, span);
+
+        // 4. 检查 elif 分支
+        for (elif_cond, elif_body) in elif_branches {
+            let elif_cond_ty = self.inferrer.infer_expr(elif_cond)?;
+            self.inferrer
+                .solver()
+                .add_constraint(elif_cond_ty, MonoType::Bool, span);
+
+            let elif_body_ty = self.inferrer.infer_block(elif_body, false, None)?;
+            self.inferrer
+                .solver()
+                .add_constraint(elif_body_ty, MonoType::Void, span);
+        }
+
+        // 5. 检查 else 分支（如果存在）
+        if let Some(else_body) = else_branch {
+            let else_ty = self.inferrer.infer_block(else_body, false, None)?;
+            self.inferrer
+                .solver()
+                .add_constraint(else_ty, MonoType::Void, span);
+        }
+
+        // 6. 退出作用域
+        self.inferrer.exit_scope();
+
+        debug!("Checked if statement at {:?}", span);
+        Ok(())
     }
 }

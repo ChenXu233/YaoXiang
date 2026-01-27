@@ -24,6 +24,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwContinue) => self.parse_continue_stmt(start_span),
             // for loop
             Some(TokenKind::KwFor) => self.parse_for_stmt(start_span),
+            // if statement
+            Some(TokenKind::KwIf) => self.parse_if_stmt(start_span),
             // block as statement
             Some(TokenKind::LBrace) => self.parse_block_stmt(start_span),
             // variable declaration: [mut] identifier [: type] [= expr]
@@ -1285,6 +1287,81 @@ impl<'a> ParserState<'a> {
 
         Some(Stmt {
             kind: StmtKind::Expr(Box::new(expr)),
+            span,
+        })
+    }
+
+    /// Parse if statement: `if condition { then_branch } elif branches else_branch`
+    fn parse_if_stmt(
+        &mut self,
+        span: Span,
+    ) -> Option<Stmt> {
+        self.bump(); // consume 'if'
+
+        let condition = self.parse_expression(BP_LOWEST)?;
+
+        if !self.expect(&TokenKind::LBrace) {
+            return None;
+        }
+
+        // Already past LBrace, use parse_block_body directly
+        let (then_stmts, then_expr) = self.parse_block_body()?;
+
+        if !self.expect(&TokenKind::RBrace) {
+            return None;
+        }
+
+        let then_branch = Block {
+            stmts: then_stmts,
+            expr: then_expr,
+            span,
+        };
+
+        // Parse elif branches
+        let mut elif_branches = Vec::new();
+        while self.skip(&TokenKind::KwElif) {
+            let elif_condition = self.parse_expression(BP_LOWEST)?;
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let (elif_stmts, elif_expr) = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            let elif_body = Block {
+                stmts: elif_stmts,
+                expr: elif_expr,
+                span: self.span(),
+            };
+            elif_branches.push((Box::new(elif_condition), Box::new(elif_body)));
+        }
+
+        // Parse else branch
+        let else_branch = if self.skip(&TokenKind::KwElse) {
+            if !self.expect(&TokenKind::LBrace) {
+                return None;
+            }
+            let (else_stmts, else_expr) = self.parse_block_body()?;
+            if !self.expect(&TokenKind::RBrace) {
+                return None;
+            }
+            Some(Box::new(Block {
+                stmts: else_stmts,
+                expr: else_expr,
+                span: self.span(),
+            }))
+        } else {
+            None
+        };
+
+        Some(Stmt {
+            kind: StmtKind::If {
+                condition: Box::new(condition),
+                then_branch: Box::new(then_branch),
+                elif_branches,
+                else_branch,
+                span,
+            },
             span,
         })
     }

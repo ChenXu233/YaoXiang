@@ -639,9 +639,123 @@ impl AstToIrGenerator {
             } => {
                 // 嵌套函数（简化处理）
             }
+            ast::StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                span: _,
+            } => {
+                // 生成 if 语句的 IR
+                self.generate_if_stmt_ir(
+                    condition,
+                    then_branch,
+                    elif_branches,
+                    else_branch.as_deref(),
+                    instructions,
+                    constants,
+                )?;
+            }
             // 处理其他语句类型
             _ => {}
         }
+        Ok(())
+    }
+
+    /// 生成 if 语句的 IR
+    fn generate_if_stmt_ir(
+        &mut self,
+        condition: &ast::Expr,
+        then_branch: &ast::Block,
+        elif_branches: &[(Box<ast::Expr>, Box<ast::Block>)],
+        else_branch: Option<&ast::Block>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), IrGenError> {
+        // 进入新的作用域
+        self.enter_scope();
+
+        // 评估条件
+        let condition_reg = self.next_temp_reg();
+        self.generate_expr_ir(condition, condition_reg, instructions, constants)?;
+
+        // 计算需要跳转的位置
+        let mut jump_targets = Vec::new();
+
+        // 生成 then 分支
+        let _then_start = instructions.len();
+        self.generate_block_ir(then_branch, instructions, constants)?;
+
+        // 如果有 else 分支，需要在 then 分支结束后跳转到 if 语句结束
+        if else_branch.is_some() || !elif_branches.is_empty() {
+            instructions.push(Instruction::Jmp(0)); // 占位符，稍后填充
+            jump_targets.push(instructions.len() - 1);
+        }
+
+        // 生成 elif 分支
+        let mut elif_starts = Vec::new();
+        for (elif_condition, elif_body) in elif_branches {
+            elif_starts.push(instructions.len());
+
+            // 评估 elif 条件
+            let elif_condition_reg = self.next_temp_reg();
+            self.generate_expr_ir(elif_condition, elif_condition_reg, instructions, constants)?;
+
+            // 生成 elif 分支
+            self.generate_block_ir(elif_body, instructions, constants)?;
+
+            // 如果还有更多分支或 else 分支，需要跳转
+            if else_branch.is_some() || !elif_branches.is_empty() {
+                instructions.push(Instruction::Jmp(0)); // 占位符
+                jump_targets.push(instructions.len() - 1);
+            }
+        }
+
+        // 生成 else 分支
+        let _else_start = else_branch.map(|_else_body| instructions.len());
+
+        if let Some(else_body) = else_branch {
+            self.generate_block_ir(else_body, instructions, constants)?;
+        }
+
+        // 填充所有跳转目标的地址
+        let if_end = instructions.len();
+        for jump_target in jump_targets {
+            if let Instruction::Jmp(ref mut target) = instructions[jump_target] {
+                *target = if_end;
+            }
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        Ok(())
+    }
+
+    /// 生成代码块的 IR
+    fn generate_block_ir(
+        &mut self,
+        block: &ast::Block,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), IrGenError> {
+        // 进入新的作用域
+        self.enter_scope();
+
+        // 生成语句
+        for stmt in &block.stmts {
+            self.generate_local_stmt_ir(stmt, instructions, constants)?;
+        }
+
+        // 生成表达式（如果有）
+        if let Some(expr) = &block.expr {
+            let result_reg = self.next_temp_reg();
+            self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
         Ok(())
     }
 

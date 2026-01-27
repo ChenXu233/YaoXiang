@@ -186,6 +186,14 @@ pub enum StmtKind {
         /// 方法体
         body: (Vec<Stmt>, Option<Box<Expr>>),
     },
+    /// If statement: `if condition { then_branch } elif branches else_branch`
+    If {
+        condition: Box<Expr>,
+        then_branch: Box<Block>,
+        elif_branches: Vec<(Box<Expr>, Box<Block>)>,
+        else_branch: Option<Box<Block>>,
+        span: Span,
+    },
 }
 
 /// Variant constructor definition (for variant types)
