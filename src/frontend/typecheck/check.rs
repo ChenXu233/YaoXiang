@@ -1216,6 +1216,7 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// 检查两个类型是否匹配
+    #[allow(clippy::result_large_err)]
     fn type_matches(
         &self,
         left: &MonoType,

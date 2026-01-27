@@ -1,5 +1,7 @@
 //! Send/Sync 检查器单元测试
 
+use std::collections::HashMap;
+
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::SendSyncChecker;

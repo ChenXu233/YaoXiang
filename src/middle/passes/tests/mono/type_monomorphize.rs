@@ -2,12 +2,7 @@
 // 这个文件包含了基本的导入和辅助函数
 // 原始文件在测试过程中被意外删除
 
-use std::collections::HashMap;
-
-use crate::middle::passes::mono::Monomorphizer;
-use crate::middle::passes::mono::type_mono::TypeMonomorphizer;
-use crate::middle::passes::mono::instance::GenericTypeId;
-use crate::frontend::typecheck::{MonoType, StructType, EnumType, TypeVar, PolyType};
+use crate::frontend::typecheck::{MonoType, TypeVar};
 
 /// 创建类型变量的辅助函数
 fn make_type_var(index: usize) -> TypeVar {

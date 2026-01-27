@@ -171,8 +171,6 @@ impl AstToIrGenerator {
         _expr: &ast::Expr,
         field_name: &str,
     ) -> Option<usize> {
-        
-
         // 简化处理：假设常见字段名
         // x -> 0, y -> 1, value -> 2 等
         match field_name {

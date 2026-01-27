@@ -445,13 +445,10 @@ impl<'a> TypeInferrer<'a> {
 
                                 #[allow(unused_assignments)]
                                 let mut params_to_bind = Vec::new();
-                                #[allow(unused_variables)]
-                                let mut auto_bind = false;
 
                                 if params_len == args_len + 1 {
                                     // 情况1：第一个参数是 self，自动绑定
                                     params_to_bind = params[1..].to_vec();
-                                    auto_bind = true;
                                 } else if params_len == args_len {
                                     // 情况2：参数数量相等，检查是否有可自动绑定的参数
                                     let mut self_param_index = None;
@@ -467,7 +464,6 @@ impl<'a> TypeInferrer<'a> {
                                         let mut new_params = params.clone();
                                         new_params.remove(idx);
                                         params_to_bind = new_params;
-                                        auto_bind = true;
                                     } else {
                                         // 没有可自动绑定的参数，按普通方式处理
                                         params_to_bind = params.clone();

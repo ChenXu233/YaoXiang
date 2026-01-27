@@ -170,6 +170,8 @@ mod tokenizer {
         }
 
         fn peek_next(&mut self) -> Option<char> {
+            // Get the character after the next one
+            // If peek() is position n, then peek_next() should return position n+1
             self.chars.clone().nth(1)
         }
 
@@ -837,16 +839,21 @@ mod tokenizer {
             let start_pos = self.position();
 
             // Check for multi-line string (""")
-            // We need to peek ahead to see if we have """
-            let mut chars = self.chars.clone();
-            let c0 = chars.next();
-            let c1 = chars.next();
-            let c2 = chars.next();
-            if c0 == Some('"') && c1 == Some('"') && c2 == Some('"') {
-                // Skip the first three characters (""")
-                self.advance();
-                self.advance();
-                self.advance();
+            // NOTE: The first '"' has already been consumed by next_token before calling this
+            // So we need to check if the next TWO characters are also '"'
+            let c0 = self.chars.peek().copied();
+            let chars_copy = self.chars.clone();
+            let chars_vec: Vec<char> = chars_copy.collect();
+
+            // Check if we have two more quotes (for a total of three)
+            // c0 is the second quote (first was consumed by next_token)
+            let has_three_quotes = c0 == Some('"') && chars_vec.get(1) == Some(&'"');
+
+            if has_three_quotes {
+                // Skip the remaining two characters of the opening """
+                // (The first '"' was already consumed by next_token)
+                self.chars.next(); // Skip second quote
+                self.chars.next(); // Skip third quote
                 return self.scan_multi_line_string();
             }
 
@@ -991,12 +998,17 @@ mod tokenizer {
             while let Some(c) = self.advance() {
                 // Check for closing """
                 if c == '"' {
-                    let peek1 = self.peek().copied();
-                    let peek2 = self.peek_next();
-                    if peek1 == Some('"') && peek2 == Some('"') {
-                        // Consume the closing """
-                        self.advance();
-                        self.advance();
+                    // Check if we have two more quotes
+                    let actual_peek1 = self.chars.peek().copied();
+                    let mut temp_clone = self.chars.clone();
+                    let actual_peek2 = temp_clone.nth(1);
+
+                    if actual_peek1 == Some('"') && actual_peek2 == Some('"') {
+                        // Found closing """
+                        // Clear any previous error and consume the remaining two quotes
+                        self.error = None;
+                        self.advance(); // consume second quote
+                        self.advance(); // consume third quote
                         return Some(Token {
                             kind: TokenKind::StringLiteral(value.clone()),
                             span: Span::new(
