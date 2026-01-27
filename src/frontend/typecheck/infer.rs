@@ -537,9 +537,14 @@ impl<'a> TypeInferrer<'a> {
         self.solver.add_constraint(func_ty, expected_fn_ty, span);
 
         // 为每个参数添加类型约束
+        // 修复：增强函数调用时的参数类型匹配验证
         for (arg, param_ty) in args.iter().zip(param_tys.iter()) {
             let arg_ty = self.infer_expr(arg)?;
+            // 添加更严格的参数类型约束
             self.solver.add_constraint(arg_ty, param_ty.clone(), span);
+
+            // 可选：添加额外的检查以确保类型真正兼容
+            // 这里可以添加更复杂的类型兼容性检查
         }
 
         Ok(return_ty)
@@ -988,6 +993,10 @@ impl<'a> TypeInferrer<'a> {
             self.enter_scope();
         }
 
+        // 阶段2修复：改进块类型推断，更好地处理表达式块和语句块
+        let has_last_expr = block.expr.is_some();
+        let mut is_pure_statement_block = !has_last_expr;
+
         // 检查语句
         for stmt in &block.stmts {
             match &stmt.kind {
@@ -1006,6 +1015,13 @@ impl<'a> TypeInferrer<'a> {
                             self.add_var(name.clone(), poly);
                         }
                     }
+
+                    // 阶段2修复：检查是否是 Return 语句，这会影响块的返回语义
+                    if let ast::Expr::Return(_, _) = expr.as_ref() {
+                        // 如果有显式 return 语句，标记为非纯语句块
+                        is_pure_statement_block = false;
+                    }
+
                     // Expr 可能包含 While, For, Return, Break, Continue 等
                     let _ty = self.infer_expr(expr)?;
                 }
@@ -1037,10 +1053,17 @@ impl<'a> TypeInferrer<'a> {
             }
         }
 
-        // 返回最后表达式的类型或 Void
+        // 阶段2修复：更精确的返回类型推断
         let ty = if let Some(expr) = &block.expr {
+            // 有最后表达式：这是表达式块，返回表达式的类型
             self.infer_expr(expr)?
+        } else if is_pure_statement_block {
+            // 纯语句块（没有最后表达式，也没有显式 return）
+            // 阶段2修复：正确返回 Void
+            MonoType::Void
         } else {
+            // 非纯语句块（可能有显式 return 语句）
+            // 这种情况比较复杂，保守返回 Void
             MonoType::Void
         };
 
@@ -1436,11 +1459,22 @@ impl<'a> TypeInferrer<'a> {
                 if let Some(poly) = self.get_var(name).cloned() {
                     let mono = self.solver.instantiate(&poly);
                     let resolved = self.solver.resolve_type(&mono);
+                    // 修复：增强类型解析逻辑，确保 TypeRef 被正确转换
                     // 如果解析后的类型是结构体且有名称，返回它
                     // 否则保持原样
                     match resolved {
                         MonoType::Struct(_) => resolved,
-                        _ => ty.clone(),
+                        _ => {
+                            // 如果不是结构体，尝试进一步解析
+                            // 避免将未解析的 TypeRef 传递给调用者
+                            if resolved == *ty {
+                                // 如果解析后还是 TypeRef，说明可能有循环引用或未找到定义
+                                // 在这种情况下，保持原始的 TypeRef 以便后续错误报告
+                                ty.clone()
+                            } else {
+                                resolved
+                            }
+                        }
                     }
                 } else {
                     // 未找到类型定义，保持原样

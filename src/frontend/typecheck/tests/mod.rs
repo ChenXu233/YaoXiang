@@ -9,4 +9,5 @@ mod infer;
 mod inference;
 mod ref_test;
 mod scope;
+mod typecheck_fixes;
 mod types;

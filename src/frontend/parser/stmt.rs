@@ -672,13 +672,13 @@ impl<'a> ParserState<'a> {
             return self.parse_var_stmt(span);
         }
 
-        // Check for function definition with type annotation: name(types) -> type = (params) => body
+        // Check for function definition with type annotation: name:(types) -> type = (params) => body
+        // 修复：检测函数名后跟左括号的情况，可能是旧语法或错误语法
         if matches!(next.map(|t| &t.kind), Some(TokenKind::LParen)) {
-            // 这可能是函数定义: name(types) -> type = (params) => body
             // 保存位置以便回溯
             let saved_position = self.save_position();
 
-            // 尝试解析为函数定义
+            // 尝试解析为函数定义（标准形式）
             if let Some(stmt) = self.parse_fn_stmt_with_type_anno(span) {
                 return Some(stmt);
             }
@@ -702,7 +702,33 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => return None,
         };
-        self.bump(); // consume function name
+
+        // 检测旧语法：name(params) -> type = lambda
+        // 如果函数名后直接跟左括号，这是旧语法，应该报错
+        if self.at(&TokenKind::LParen) {
+            // 这是旧语法，报告错误
+            let error_span = self.span();
+            self.error(super::ParseError::Generic {
+                message: format!(
+                    "检测到旧函数定义语法: {}(params) -> type = (params) => body\n\
+                    \n错误: 旧语法已被废弃，不符合统一函数语法设计\n\
+                    建议: 使用新语法: {}:(ParamTypes) -> ReturnType = (params) => {{ ... }}\n",
+                    name, name
+                ),
+                span: error_span,
+            });
+            return None;
+        }
+
+        // 确保函数名后有冒号（标准形式）
+        if !self.at(&TokenKind::Colon) {
+            return None;
+        }
+
+        self.bump(); // consume colon
+
+        // 阶段4新增：检查旧语法模式 name(params) -> type = lambda
+        // 这应该在新语法中通过 : 来区分，但为了安全起见，在这里也检查
 
         // Parse type parameters: (Type1, Type2, ...)
         if !self.expect(&TokenKind::LParen) {
@@ -718,6 +744,11 @@ impl<'a> ParserState<'a> {
             return None;
         }
         let return_type = self.parse_type_anno()?;
+
+        // 检查这是否可能是旧语法模式
+        // 旧语法: name(params) -> type = (params) => body
+        // 新语法: name:(params) -> type = (params) => body
+        // 注意：新语法中，标识符后面应该有 :，但我们在这里处理的是已经确认有 (:) 的情况
 
         // Parse function body: = (params) => body
         if !self.expect(&TokenKind::Eq) {
