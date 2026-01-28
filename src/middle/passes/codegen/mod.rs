@@ -242,16 +242,30 @@ impl CodegenContext {
         let lang = get_lang();
         let mut instructions = Vec::new();
 
+        // 映射 IR 指令索引 -> Bytecode 指令索引 （针对第一个基本块）
+        // 假设目前 IR 生成器只生成一个基本块
+        let mut ir_to_bytecode_map = std::collections::HashMap::new();
+
+        // 扁平化所有 IR 指令并建立映射
+        let mut global_ir_index = 0;
+
         for (block_idx, block) in func.blocks.iter().enumerate() {
             debug!("{}", t(MSG::CodegenGenBlock, lang, Some(&[&block_idx])));
 
             for instr in &block.instructions {
+                // 记录当前 IR 指令对应的起始 Bytecode 指令索引
+                ir_to_bytecode_map.insert(global_ir_index, instructions.len());
+                global_ir_index += 1;
+
                 let bytecode_instr = self.translate_instruction(instr)?;
                 let instr_name = format!("{:?}", instr);
                 debug!("{}", t(MSG::CodegenGenInstr, lang, Some(&[&instr_name])));
                 instructions.push(bytecode_instr);
             }
         }
+
+        // 记录结束位置映射 (用于跳到函数末尾)
+        ir_to_bytecode_map.insert(global_ir_index, instructions.len());
 
         // Log register allocation
         let next_local = self.flow.next_local_id();
@@ -265,6 +279,54 @@ impl CodegenContext {
             )
         );
 
+        // 第二遍扫描：回填跳转偏移量
+        // 注意：这里假设 translate_instruction 生成的时候，offset 字段填入的是 target IR index
+        // 因为 translate_instruction 使用 `offset = target - current_pos`，而 current_pos 始终为 0
+
+        for (i, instr) in instructions.iter_mut().enumerate() {
+            // 直接比较 u8 值
+            if instr.opcode == Opcode::Jmp as u8 {
+                // 读取 target IR index (当前存储在 operands 中)
+                let target_ir_index = i32::from_le_bytes([
+                    instr.operands[0],
+                    instr.operands[1],
+                    instr.operands[2],
+                    instr.operands[3],
+                ]) as usize;
+
+                if let Some(&target_bytecode_index) = ir_to_bytecode_map.get(&target_ir_index) {
+                    let offset = (target_bytecode_index as i32) - (i as i32);
+                    let bytes = offset.to_le_bytes();
+                    instr.operands[0] = bytes[0];
+                    instr.operands[1] = bytes[1];
+                    instr.operands[2] = bytes[2];
+                    instr.operands[3] = bytes[3];
+                } else {
+                    debug!("Jump target IR index {} not found in map", target_ir_index);
+                }
+            } else if instr.opcode == Opcode::JmpIf as u8 || instr.opcode == Opcode::JmpIfNot as u8
+            {
+                // 读取 target IR index (在 operands[1..5])
+                let target_ir_index = i32::from_le_bytes([
+                    instr.operands[1],
+                    instr.operands[2],
+                    instr.operands[3],
+                    instr.operands[4],
+                ]) as usize;
+
+                if let Some(&target_bytecode_index) = ir_to_bytecode_map.get(&target_ir_index) {
+                    let offset = (target_bytecode_index as i32) - (i as i32);
+                    let bytes = offset.to_le_bytes();
+                    instr.operands[1] = bytes[0];
+                    instr.operands[2] = bytes[1];
+                    instr.operands[3] = bytes[2];
+                    instr.operands[4] = bytes[3];
+                } else {
+                    debug!("Jump target IR index {} not found in map", target_ir_index);
+                }
+            }
+        }
+
         Ok(instructions)
     }
 
@@ -274,6 +336,9 @@ impl CodegenContext {
         instr: &Instruction,
     ) -> Result<BytecodeInstruction, CodegenError> {
         use Instruction::*;
+
+        // 获取当前指令位置（在字节码缓冲区中的位置）
+        let current_pos = self.bytecode_buffer.bytecode().len();
 
         tlog!(debug, MSG::DebugTranslatingInstr, &format!("{:?}", instr));
 
@@ -529,28 +594,51 @@ impl CodegenContext {
             // 控制流
             // =====================
             Jmp(target) => {
-                let offset = *target as i32;
-                let bytes = offset.to_le_bytes();
-                Ok(BytecodeInstruction::new(Opcode::Jmp, bytes.to_vec()))
+                // 计算相对偏移量：目标指令位置 - 当前指令位置
+                let offset = (*target as i32) - (current_pos as i32);
+                let offset_bytes = offset.to_le_bytes();
+                Ok(BytecodeInstruction::new(
+                    Opcode::Jmp,
+                    vec![
+                        offset_bytes[0],
+                        offset_bytes[1],
+                        offset_bytes[2],
+                        offset_bytes[3],
+                    ],
+                ))
             }
 
             JmpIf(cond, target) => {
                 let cond_reg = self.operand_to_reg(cond)?;
-                let offset = *target as i32;
-                let offset_bytes = (offset as i16).to_le_bytes();
+                // 计算相对偏移量：目标指令位置 - 当前指令位置
+                let offset = (*target as i32) - (current_pos as i32);
+                let offset_bytes = offset.to_le_bytes();
                 Ok(BytecodeInstruction::new(
                     Opcode::JmpIf,
-                    vec![cond_reg, offset_bytes[0], offset_bytes[1]],
+                    vec![
+                        cond_reg,
+                        offset_bytes[0],
+                        offset_bytes[1],
+                        offset_bytes[2],
+                        offset_bytes[3],
+                    ],
                 ))
             }
 
             JmpIfNot(cond, target) => {
                 let cond_reg = self.operand_to_reg(cond)?;
-                let offset = *target as i32;
-                let offset_bytes = (offset as i16).to_le_bytes();
+                // 计算相对偏移量：目标指令位置 - 当前指令位置
+                let offset = (*target as i32) - (current_pos as i32);
+                let offset_bytes = offset.to_le_bytes();
                 Ok(BytecodeInstruction::new(
                     Opcode::JmpIfNot,
-                    vec![cond_reg, offset_bytes[0], offset_bytes[1]],
+                    vec![
+                        cond_reg,
+                        offset_bytes[0],
+                        offset_bytes[1],
+                        offset_bytes[2],
+                        offset_bytes[3],
+                    ],
                 ))
             }
 

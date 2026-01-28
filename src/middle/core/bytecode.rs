@@ -760,6 +760,32 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     });
                                 }
                             }
+                            Opcode::I64Lt => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Lt,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Le => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Le,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
                             Opcode::I64Gt => {
                                 if instr.operands.len() >= 3 {
                                     let dst = instr.operands[0] as u16;
@@ -767,6 +793,32 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     let rhs = instr.operands[2] as u16;
                                     decoded_instructions.push(BytecodeInstr::Compare {
                                         cmp: CompareOp::Gt,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Ge => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Ge,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Ne => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::Compare {
+                                        cmp: CompareOp::Ne,
                                         dst: Reg(dst),
                                         lhs: Reg(lhs),
                                         rhs: Reg(rhs),

@@ -316,6 +316,7 @@ impl RuntimeValue {
     pub fn to_bool(&self) -> Option<bool> {
         match self {
             RuntimeValue::Bool(b) => Some(*b),
+            RuntimeValue::Int(i) => Some(*i != 0),
             _ => None,
         }
     }

@@ -282,24 +282,24 @@ impl Interpreter {
 
         let result = match (cmp, a, b) {
             (CompareOp::Eq, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l == r { 1 } else { 0 })
+                RuntimeValue::Bool(l == r)
             }
             (CompareOp::Ne, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l != r { 1 } else { 0 })
+                RuntimeValue::Bool(l != r)
             }
             (CompareOp::Lt, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l < r { 1 } else { 0 })
+                RuntimeValue::Bool(l < r)
             }
             (CompareOp::Le, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l <= r { 1 } else { 0 })
+                RuntimeValue::Bool(l <= r)
             }
             (CompareOp::Gt, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l > r { 1 } else { 0 })
+                RuntimeValue::Bool(l > r)
             }
             (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Int(if l >= r { 1 } else { 0 })
+                RuntimeValue::Bool(l >= r)
             }
-            _ => RuntimeValue::Int(0),
+            _ => RuntimeValue::Bool(false),
         };
 
         frame
@@ -403,23 +403,47 @@ impl Executor for Interpreter {
                     return Ok(result);
                 }
                 BytecodeInstr::Jmp { target } => {
-                    if let Some(&offset) = frame.function.labels.get(target) {
-                        frame.ip = offset;
-                    } else {
-                        frame.advance();
-                    }
+                    // target 是相对偏移量，直接使用
+                    let offset = i32::from_le_bytes([
+                        target.0 as u8,
+                        (target.0 >> 8) as u8,
+                        (target.0 >> 16) as u8,
+                        (target.0 >> 24) as u8,
+                    ]);
+                    let target_ip = ((frame.ip as i32) + offset) as usize;
+                    tracing::debug!(
+                        "Jmp: jumping to offset {} (target_ip: {})",
+                        offset,
+                        target_ip
+                    );
+                    frame.ip = target_ip;
+                    continue;
                 }
                 BytecodeInstr::JmpIf { cond, target } => {
                     let c = frame
                         .registers
                         .get(cond.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0);
-                    if c != 0 {
-                        if let Some(&offset) = frame.function.labels.get(target) {
-                            frame.ip = offset;
-                            continue;
-                        }
+                        .and_then(|v| v.to_bool())
+                        .unwrap_or(false);
+                    tracing::debug!("JmpIf: cond={}, target={:?}", c, target);
+                    if c {
+                        // target 是相对偏移量，直接使用
+                        let offset = i32::from_le_bytes([
+                            target.0 as u8,
+                            (target.0 >> 8) as u8,
+                            (target.0 >> 16) as u8,
+                            (target.0 >> 24) as u8,
+                        ]);
+                        let target_ip = ((frame.ip as i32) + offset) as usize;
+                        tracing::debug!(
+                            "JmpIf: jumping to offset {} (target_ip: {})",
+                            offset,
+                            target_ip
+                        );
+                        frame.ip = target_ip;
+                        continue;
+                    } else {
+                        tracing::debug!("JmpIf: condition false, falling through");
                     }
                     frame.advance();
                 }
@@ -427,13 +451,27 @@ impl Executor for Interpreter {
                     let c = frame
                         .registers
                         .get(cond.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0);
-                    if c == 0 {
-                        if let Some(&offset) = frame.function.labels.get(target) {
-                            frame.ip = offset;
-                            continue;
-                        }
+                        .and_then(|v| v.to_bool())
+                        .unwrap_or(false);
+                    tracing::debug!("JmpIfNot: cond={}, target={:?}", c, target);
+                    if !c {
+                        // target 是相对偏移量，直接使用
+                        let offset = i32::from_le_bytes([
+                            target.0 as u8,
+                            (target.0 >> 8) as u8,
+                            (target.0 >> 16) as u8,
+                            (target.0 >> 24) as u8,
+                        ]);
+                        let target_ip = ((frame.ip as i32) + offset) as usize;
+                        tracing::debug!(
+                            "JmpIfNot: jumping to offset {} (target_ip: {})",
+                            offset,
+                            target_ip
+                        );
+                        frame.ip = target_ip;
+                        continue;
+                    } else {
+                        tracing::debug!("JmpIfNot: condition true, falling through");
                     }
                     frame.advance();
                 }
