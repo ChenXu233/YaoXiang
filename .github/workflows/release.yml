@@ -66,6 +66,10 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             bin_name: yaoxiang-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            bin_name: yaoxiang-linux-arm64
+            install_deps: true
           - target: x86_64-apple-darwin
             os: macos-latest
             bin_name: yaoxiang-macos-x86_64
@@ -83,6 +87,12 @@ jobs:
         with:
           toolchain: 1.90.0
           targets: ${{ matrix.target }}
+
+      - name: Install cross-compile dependencies (Linux ARM64)
+        if: matrix.install_deps == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v4
