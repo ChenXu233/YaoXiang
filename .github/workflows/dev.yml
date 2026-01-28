@@ -112,6 +112,23 @@ jobs:
           toolchain: 1.90.0
           targets: ${{ matrix.target }}
 
+      # macOS 交叉编译需要 Apple SDK 工具链
+      - name: Install Apple cross-compile toolchain (Linux)
+        if: matrix.os == 'ubuntu-latest' && contains(matrix.target, 'apple-darwin')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y crossbuild-essential-apple-darwin || true
+
+      - name: Configure Apple linker for macOS target (Linux)
+        if: matrix.os == 'ubuntu-latest' && contains(matrix.target, 'apple-darwin')
+        run: |
+          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=/usr/bin/x86_64-apple-darwin-clang" >> $GITHUB_ENV
+
+      # Windows MSVC 工具链
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install cross-compile dependencies (Linux ARM64)
         if: matrix.install_deps == true
         run: |
