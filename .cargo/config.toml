@@ -1,34 +1,53 @@
 [build]
-# 默认目标
+# 默认目标目录
 # target-dir = "target"
 
+# =============================================================================
+# 交叉编译配置（仅包含 CI 支持的目标）
+# =============================================================================
+
+# Linux ARM64 - CI 支持
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
-
-[target.aarch64-unknown-linux-musl]
-linker = "aarch64-linux-musl-gcc"
-
+# Windows x86_64 - 使用 MSVC（与 CI 一致，推荐）
+# 注意：Windows 交叉编译需要安装 mingw 工具链
+# apt install gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 ar = "x86_64-w64-mingw32-ar"
 
-[target.aarch64-pc-windows-gnu]
-linker = "aarch64-w64-mingw32-gcc"
-ar = "aarch64-w64-mingw32-ar"
+# macOS 交叉编译需要安装 Apple SDK 和工具链
+# Linux: apt install crossbuild-essential-apple-darwin
+# [target.x86_64-apple-darwin]
+# linker = "x86_64-apple-darwin-clang"
+# ar = "x86_64-apple-darwin-ar"
+#
+# [target.aarch64-apple-darwin]
+# linker = "aarch64-apple-darwin-clang"
+# ar = "aarch64-apple-darwin-ar"
 
-[target.x86_64-apple-darwin]
-linker = "x86_64-apple-darwin-clang"
-ar = "x86_64-apple-darwin-ar"
-
-[target.aarch64-apple-darwin]
-linker = "aarch64-apple-darwin-clang"
-ar = "aarch64-apple-darwin-ar"
+# =============================================================================
+# 优化配置
+# =============================================================================
 
 [profile.release]
+# 链接时优化，减小二进制体积
 lto = true
+# 最高优化级别
 opt-level = 3
+# 剥离符号表
 strip = true
+# 单 codegen unit 以获得最佳优化
 codegen-units = 1
+
+# Debug 优化 - 保持调试信息但启用优化
+[profile.dev]
+opt-level = 1
+
+# =============================================================================
+# 依赖版本锁定（可选）
+# =============================================================================
+
+# [patch."https://github.com/rust-lang/crates.io-index"]
+# 某些依赖可以指向本地路径或 fork
