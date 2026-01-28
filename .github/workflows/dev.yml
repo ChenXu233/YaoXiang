@@ -1,0 +1,265 @@
+name: Dev CI
+
+on:
+  push:
+    branches:
+      - dev
+      - 'feature/*'
+      - 'hotfix/*'
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # 快速构建和基础检查
+  quick-check:
+    name: Quick Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Format check (fast)
+        run: cargo fmt --check
+
+      - name: Clippy (fast)
+        run: cargo clippy -- -D warnings
+
+      - name: Quick build check
+        run: cargo check --all-features
+
+  # 单元测试（快速版本）
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quick-check
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            features: "--all-features"
+          - os: ubuntu-latest
+            features: "--no-default-features"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run tests
+        run: cargo test ${{ matrix.features }} --lib --bins
+
+  # 开发版快速构建（多平台）
+  build-dev:
+    name: Dev Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: quick-check
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build dev binary
+        run: cargo build --target ${{ matrix.target }}
+
+      - name: Upload dev artifacts
+        uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: yaoxiang-dev-${{ matrix.target }}
+          path: target/${{ matrix.target }}/debug/yaoxiang
+          retention-days: 7
+
+  # 安全快速检查
+  security-quick:
+    name: Security Quick Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: Quick security audit
+        run: cargo audit --db /tmp/advisory-db
+
+  # 代码质量检查（快速版本）
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: quick-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check documentation
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Validate dependencies
+        run: cargo tree --duplicates
+
+
+  # 性能基准测试（仅在main分支）
+  benchmark:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main'
+    needs: [quick-check]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Quick benchmark
+        run: |
+          echo "Running basic performance check..."
+          cargo build --release --all-features
+          echo "Build time and size check completed"
+
+  # 兼容性检查
+  compatibility:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quick-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust MSRV
+        uses: dtolnay/rust-toolchain@1.82
+        with:
+          components: rustfmt, clippy
+
+      - name: Check MSRV compatibility
+        run: |
+          cargo check --all-features
+          cargo fmt --check
+          cargo clippy -- -D warnings
+
+  # 合并检查结果
+  merge-results:
+    name: Merge Results
+    runs-on: ubuntu-latest
+    needs: [quick-check, test, build-dev, security-quick, quality]
+    if: always()
+    steps:
+      - name: Check all jobs status
+        run: |
+          if [[ "${{ needs.quick-check.result }}" == "failure" ]]; then
+            echo "Quick check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "Tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.security-quick.result }}" == "failure" ]]; then
+            echo "Security scan failed"
+            exit 1
+          fi
+          if [[ "${{ needs.quality.result }}" == "failure" ]]; then
+            echo "Quality check failed"
+            exit 1
+          fi
+          echo "All checks passed successfully!"

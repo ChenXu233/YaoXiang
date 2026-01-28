@@ -1024,6 +1024,27 @@ impl From<crate::frontend::typecheck::MonoType> for IrType {
     }
 }
 
+impl std::fmt::Display for BinaryOp {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            BinaryOp::Add => write!(f, "Add"),
+            BinaryOp::Sub => write!(f, "Sub"),
+            BinaryOp::Mul => write!(f, "Mul"),
+            BinaryOp::Div => write!(f, "Div"),
+            BinaryOp::Rem => write!(f, "Rem"),
+            BinaryOp::And => write!(f, "And"),
+            BinaryOp::Or => write!(f, "Or"),
+            BinaryOp::Xor => write!(f, "Xor"),
+            BinaryOp::Shl => write!(f, "Shl"),
+            BinaryOp::Sar => write!(f, "Sar"),
+            BinaryOp::Shr => write!(f, "Shr"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

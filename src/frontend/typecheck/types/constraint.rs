@@ -110,7 +110,7 @@ impl SendSyncConstraint {
         is_send: bool,
         is_sync: bool,
     ) -> bool {
-        (self.require_send || !is_send) && (self.require_sync || !is_sync)
+        (!self.require_send || is_send) && (!self.require_sync || is_sync)
     }
 }
 
@@ -172,6 +172,25 @@ impl SendSyncSolver {
             MonoType::Arc(inner) => {
                 // Arc 内部类型需要满足约束（因为 Arc 可以跨线程共享）
                 self.add_constraint(inner, require_send, require_sync);
+            }
+            MonoType::List(elem) => {
+                // 列表：约束传播到元素类型
+                self.add_constraint(elem, require_send, require_sync);
+            }
+            MonoType::Dict(key, value) => {
+                // 字典：约束传播到键和值类型
+                self.add_constraint(key, require_send, require_sync);
+                self.add_constraint(value, require_send, require_sync);
+            }
+            MonoType::Set(elem) => {
+                // 集合：约束传播到元素类型
+                self.add_constraint(elem, require_send, require_sync);
+            }
+            MonoType::Tuple(types) => {
+                // 元组：约束传播到所有元素类型
+                for elem_ty in types {
+                    self.add_constraint(elem_ty, require_send, require_sync);
+                }
             }
             // 基本类型、类型引用等不需要额外处理
             // 它们默认满足 Send/Sync

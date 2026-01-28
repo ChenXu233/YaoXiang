@@ -390,6 +390,12 @@ pub enum MSG {
     VmPopStack,
     VmCallFunc,
     VmReturnFunc,
+    VmBinaryOp,
+    VmI64Add,
+    VmExecutingFunction,
+    VmFunctionReturned,
+    VmStoringResult,
+    VmRegistersAfter,
 
     // General
     CompilationStart,
@@ -536,6 +542,12 @@ impl MSG {
             MSG::VmPopStack => "vm_pop_stack",
             MSG::VmCallFunc => "vm_call_func",
             MSG::VmReturnFunc => "vm_return_func",
+            MSG::VmBinaryOp => "vm_binary_op",
+            MSG::VmI64Add => "vm_i64_add",
+            MSG::VmExecutingFunction => "vm_executing_function",
+            MSG::VmFunctionReturned => "vm_function_returned",
+            MSG::VmStoringResult => "vm_storing_result",
+            MSG::VmRegistersAfter => "vm_registers_after",
             MSG::CompilationStart => "compilation_start",
             MSG::CompilingSource => "compiling_source",
             MSG::DebugRunCalled => "debug_run_called",
@@ -604,6 +616,46 @@ impl MSG {
             // REPL and Shell messages
             MSG::ShellExecTime => "shell_exec_time",
 
+            // Debugger messages
+            MSG::DebuggerAtLocation => "debugger_at_location",
+            MSG::DebuggerLocals => "debugger_locals",
+            MSG::DebuggerCallStack => "debugger_call_stack",
+
+            // REPL messages
+            MSG::ReplWelcome => "repl_welcome",
+            MSG::ReplHelp => "repl_help",
+            MSG::ReplError => "repl_error",
+            MSG::ReplUnknownCommand => "repl_unknown_command",
+            MSG::ReplAvailableCommands => "repl_available_commands",
+            MSG::ReplExitCommand => "repl_exit_command",
+            MSG::ReplHelpCommand => "repl_help_command",
+            MSG::ReplHistoryCommand => "repl_history_command",
+            MSG::ReplClearCommand => "repl_clear_command",
+            MSG::ReplValue => "repl_value",
+            MSG::ReplPrompt => "repl_prompt",
+            MSG::ReplHistoryEntry => "repl_history_entry",
+
+            // Shell messages
+            MSG::ShellWelcome => "shell_welcome",
+            MSG::ShellHelp => "shell_help",
+            MSG::ShellExiting => "shell_exiting",
+            MSG::ShellError => "shell_error",
+            MSG::ShellAvailableCommands => "shell_available_commands",
+            MSG::ShellExitCommand => "shell_exit_command",
+            MSG::ShellClearCommand => "shell_clear_command",
+            MSG::ShellCdCommand => "shell_cd_command",
+            MSG::ShellPwdCommand => "shell_pwd_command",
+            MSG::ShellLsCommand => "shell_ls_command",
+            MSG::ShellCodeCommands => "shell_code_commands",
+            MSG::ShellRunCommand => "shell_run_command",
+            MSG::ShellLoadCommand => "shell_load_command",
+            MSG::ShellDebugCommand => "shell_debug_command",
+            MSG::ShellBreakCommand => "shell_break_command",
+            MSG::ShellReplCommand => "shell_repl_command",
+            MSG::ShellOtherInput => "shell_other_input",
+            MSG::ShellDebugStart => "shell_debug_start",
+            MSG::ShellDebugCmd => "shell_debug_cmd",
+
             // Debug messages
             MSG::DebugBinaryOp => "debug_binary_op",
             MSG::DebugRegisters => "debug_registers",
@@ -619,6 +671,7 @@ impl MSG {
             MSG::Stage2Complete => "stage2_complete",
             MSG::Stage3Start => "stage3_start",
             MSG::Stage3Complete => "stage3_complete",
+            MSG::AllStagesComplete => "all_stages_complete",
 
             _ => "unknown_message",
         }

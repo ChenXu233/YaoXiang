@@ -21,9 +21,10 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      # Optional: enable cargo test (commented out by default because it's slow)
-      #- id: cargo-test
-      #  name: cargo test
-      #  entry: cargo test --all --quiet
-      #  language: system
-      #  always_run: false
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --all --quiet
+        language: system
+        types: [rust]
+        pass_filenames: false
+        always_run: false

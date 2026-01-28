@@ -68,7 +68,6 @@ clap = { version = "4.5.54", features = ["derive"] }
 # TUI - 终端用户界面
 ratatui = { version = "0.30.0", features = ["serde"] }
 crossterm = "0.29.0"
-syntect = "5.0"
 owo-colors = "4.0"
 
 # 异步运行时

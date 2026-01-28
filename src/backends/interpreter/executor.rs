@@ -191,10 +191,6 @@ impl Interpreter {
             .cloned()
             .unwrap_or(RuntimeValue::Unit);
 
-        eprintln!(
-            "DEBUG exec_binary_op: operands a={:?}, b={:?}, op={:?}",
-            a, b, op
-        );
         tlog!(debug, MSG::DebugBinaryOp, &a, &b);
 
         tlog!(
@@ -206,7 +202,7 @@ impl Interpreter {
         let result = match (op, a, b) {
             (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
-                eprintln!("DEBUG I64Add: Adding {} + {}", l, r);
+                tlog!(debug, MSG::VmI64Add, &l, &r);
                 RuntimeValue::Int(l + r)
             }
             (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l - r),
@@ -496,12 +492,12 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::LoadLocal { dst, local_idx } => {
-                    eprintln!("DEBUG LoadLocal: dst={:?}, local_idx={}", dst, local_idx);
+                    tlog!(debug, MSG::VmLoadLocal, dst, local_idx);
                     let val = frame
                         .get_local(*local_idx as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    eprintln!("DEBUG LoadLocal: loaded value={:?}", val);
+                    tlog!(debug, MSG::VmLoadLocal, dst, &val);
                     frame
                         .registers
                         .resize(dst.0 as usize + 1, RuntimeValue::Unit);
@@ -509,34 +505,28 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::StoreLocal { local_idx, src } => {
-                    eprintln!(
-                        "DEBUG StoreLocal: local_idx={}, src={:?}, registers.len={}",
+                    tlog!(
+                        debug,
+                        MSG::VmStoreLocal,
                         local_idx,
                         src,
-                        frame.registers.len()
+                        &frame.registers.len()
                     );
                     let val = frame
                         .registers
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    eprintln!("DEBUG StoreLocal: storing value={:?}", val);
                     frame.set_local(*local_idx as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::LoadArg { dst, arg_idx } => {
-                    eprintln!(
-                        "DEBUG LoadArg: dst={:?}, arg_idx={}, args.len={}",
-                        dst,
-                        arg_idx,
-                        args.len()
-                    );
+                    tlog!(debug, MSG::VmLoadArg, dst, arg_idx, &args.len());
                     let val = if (*arg_idx as usize) < args.len() {
                         args[*arg_idx as usize].clone()
                     } else {
                         RuntimeValue::Unit
                     };
-                    eprintln!("DEBUG LoadArg: loaded value={:?}", val);
                     frame
                         .registers
                         .resize(dst.0 as usize + 1, RuntimeValue::Unit);
@@ -544,10 +534,7 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::BinaryOp { dst, lhs, rhs, op } => {
-                    eprintln!(
-                        "DEBUG executor: Executing BinaryOp {:?} dst={:?}, lhs={:?}, rhs={:?}",
-                        op, dst, lhs, rhs
-                    );
+                    tlog!(debug, MSG::VmBinaryOp, op);
                     tlog!(debug, MSG::DebugMatch);
                     self.exec_binary_op(*dst, *lhs, *rhs, *op, &mut frame)?;
                     frame.advance();
@@ -672,12 +659,19 @@ impl Executor for Interpreter {
                             &lookup_name,
                             &format!("{:?}", call_args)
                         );
-                        eprintln!(
-                            "DEBUG: Executing function '{}' with args {:?}",
-                            lookup_name, call_args
+                        tlog!(
+                            debug,
+                            MSG::VmExecutingFunction,
+                            &lookup_name,
+                            &format!("{:?}", call_args)
                         );
                         let result = self.execute_function(&target_func, &call_args)?;
-                        eprintln!("DEBUG: Function '{}' returned {:?}", lookup_name, result);
+                        tlog!(
+                            debug,
+                            MSG::VmFunctionReturned,
+                            &lookup_name,
+                            &format!("{:?}", result)
+                        );
                         tlog!(
                             debug,
                             MSG::DebugFunctionReturn,
@@ -685,12 +679,16 @@ impl Executor for Interpreter {
                             &format!("{:?}", result)
                         );
                         if let Some(dst_reg) = dst {
-                            eprintln!("DEBUG: Storing result to register {:?}", dst_reg);
+                            tlog!(debug, MSG::VmStoringResult, &format!("{:?}", dst_reg));
                             frame
                                 .registers
                                 .resize(dst_reg.index() as usize + 1, RuntimeValue::Unit);
                             frame.registers[dst_reg.index() as usize] = result;
-                            eprintln!("DEBUG: Registers after storing: {:?}", frame.registers);
+                            tlog!(
+                                debug,
+                                MSG::VmRegistersAfter,
+                                &format!("{:?}", frame.registers)
+                            );
                         }
                         frame.advance();
                         continue;
