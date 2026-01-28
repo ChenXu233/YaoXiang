@@ -7,7 +7,7 @@
 use super::super::lexer::tokens::Literal;
 use super::super::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
-use super::types::{MonoType, PolyType, SendSyncConstraintSolver, TypeConstraintSolver};
+use super::types::{MonoType, PolyType, SendSyncSolver, TypeConstraintSolver};
 use crate::util::span::Span;
 use crate::tlog;
 use crate::util::i18n::MSG;
@@ -21,7 +21,7 @@ pub struct TypeInferrer<'a> {
     /// 类型约束求解器
     solver: &'a mut TypeConstraintSolver,
     /// Send/Sync 约束求解器
-    send_sync_solver: SendSyncConstraintSolver,
+    send_sync_solver: SendSyncSolver,
     /// 变量环境栈：每一层是一个作用域
     scopes: Vec<HashMap<String, PolyType>>,
     /// 循环标签栈（用于 break/continue）
@@ -39,7 +39,7 @@ impl<'a> TypeInferrer<'a> {
     pub fn new(solver: &'a mut TypeConstraintSolver) -> Self {
         TypeInferrer {
             solver,
-            send_sync_solver: SendSyncConstraintSolver::new(),
+            send_sync_solver: SendSyncSolver::new(),
             scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
             current_return_type: None,
@@ -59,7 +59,7 @@ impl<'a> TypeInferrer<'a> {
     }
 
     /// 获取 Send/Sync 约束求解器
-    pub fn send_sync_solver(&mut self) -> &mut SendSyncConstraintSolver {
+    pub fn send_sync_solver(&mut self) -> &mut SendSyncSolver {
         &mut self.send_sync_solver
     }
 

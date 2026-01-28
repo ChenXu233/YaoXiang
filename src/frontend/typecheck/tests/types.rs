@@ -491,7 +491,7 @@ fn test_type_constraint_solver_new_var() {
 
 #[test]
 fn test_type_constraint_solver_generalize() {
-    let solver = TypeConstraintSolver::new();
+    let mut solver = TypeConstraintSolver::new();
     let ty = MonoType::Int(64);
     let poly = solver.generalize(&ty);
     assert!(poly.type_binders.is_empty());

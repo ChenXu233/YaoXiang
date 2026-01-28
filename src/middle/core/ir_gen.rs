@@ -246,6 +246,8 @@ impl AstToIrGenerator {
             return Err(errors);
         }
 
+        tlog!(info, MSG::Stage1Complete);
+
         Ok(ModuleIR {
             types: Vec::new(),
             globals: Vec::new(),
@@ -511,8 +513,6 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
-
-        tlog!(info, MSG::Stage1Complete);
 
         Ok(Some(func_ir))
     }

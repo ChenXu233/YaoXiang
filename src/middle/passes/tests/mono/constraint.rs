@@ -6,7 +6,7 @@
 //! - 约束传播到泛型参数
 //! - 约束验证和特化请求生成
 
-use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncConstraintSolver};
+use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncSolver};
 use crate::middle::passes::lifetime::send_sync::{SendSyncChecker, SendSyncPropagator};
 use crate::middle::passes::mono::constraint::{
     ConstraintCollector, ConstraintPropagationEngine, SpecializationRequestCollector,
@@ -94,13 +94,13 @@ fn test_constraint_satisfaction() {
 }
 
 // =========================================================================
-// SendSyncConstraintSolver 测试
+// SendSyncSolver 测试
 // =========================================================================
 
 /// 测试：基本类型 Send 检查
 #[test]
 fn test_basic_type_is_send() {
-    let solver = SendSyncConstraintSolver::new();
+    let solver = SendSyncSolver::new();
 
     assert!(solver.is_send(&int_type()));
     assert!(solver.is_send(&float_type()));
@@ -112,7 +112,7 @@ fn test_basic_type_is_send() {
 /// 测试：列表类型 Send 检查
 #[test]
 fn test_list_is_send() {
-    let solver = SendSyncConstraintSolver::new();
+    let solver = SendSyncSolver::new();
 
     // List<Int> 是 Send
     assert!(solver.is_send(&list_type(int_type())));
@@ -124,7 +124,7 @@ fn test_list_is_send() {
 /// 测试：添加 Send 约束传播到类型参数
 #[test]
 fn test_send_constraint_propagation() {
-    let mut solver = SendSyncConstraintSolver::new();
+    let mut solver = SendSyncSolver::new();
 
     // 为 List<T> 添加 Send 约束
     let list_t = list_type(MonoType::TypeVar(crate::frontend::typecheck::TypeVar::new(
@@ -140,7 +140,7 @@ fn test_send_constraint_propagation() {
 /// 测试：函数类型 Send 检查
 #[test]
 fn test_fn_type_is_send() {
-    let solver = SendSyncConstraintSolver::new();
+    let solver = SendSyncSolver::new();
 
     let closure_type = fn_type(vec![int_type()], int_type());
     assert!(solver.is_send(&closure_type));
@@ -175,7 +175,7 @@ fn test_constraint_propagation() {
 #[test]
 fn test_collect_from_solver() {
     let mut propagator = SendSyncPropagator::new();
-    let mut solver = SendSyncConstraintSolver::new();
+    let mut solver = SendSyncSolver::new();
 
     // 添加约束到求解器
     let t_var = MonoType::TypeVar(crate::frontend::typecheck::TypeVar::new(0));
@@ -394,7 +394,7 @@ fn test_full_propagation_flow() {
 /// 测试：泛型函数约束传播
 #[test]
 fn test_generic_function_constraint_propagation() {
-    let mut solver = SendSyncConstraintSolver::new();
+    let mut solver = SendSyncSolver::new();
     let mut propagator = SendSyncPropagator::new();
 
     // 模拟泛型函数用于 spawn
@@ -421,7 +421,7 @@ fn test_generic_function_constraint_propagation() {
 /// 测试：嵌套类型的 Send 约束传播
 #[test]
 fn test_nested_type_constraint_propagation() {
-    let mut solver = SendSyncConstraintSolver::new();
+    let mut solver = SendSyncSolver::new();
 
     // Vec<List<T>> 必须 Send → List<T> 必须 Send → T 必须 Send
     let nested_type = list_type(list_type(MonoType::TypeVar(

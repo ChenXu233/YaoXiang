@@ -10,7 +10,7 @@
 //! - 实用：约束从 spawn 点自然产生，不需要显式标注
 //! - 零负担：用户代码不需要任何改变
 
-use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncConstraintSolver};
+use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncSolver};
 use crate::middle::passes::lifetime::send_sync::{SendSyncChecker, SendSyncPropagator};
 use std::collections::HashSet;
 use crate::util::span::Span;
@@ -311,7 +311,7 @@ impl ConstraintPropagationEngine {
     /// 用于集成类型检查阶段的 Send/Sync 约束
     pub fn collect_from_type_solver(
         &mut self,
-        solver: &SendSyncConstraintSolver,
+        solver: &SendSyncSolver,
         type_args: &[MonoType],
     ) {
         for ty in type_args {

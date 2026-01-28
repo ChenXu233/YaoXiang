@@ -12,15 +12,16 @@ pub mod specialize;
 mod tests;
 pub mod types;
 
-// 类型级计算模块 (RFC-011 Phase 5)
-pub mod type_level;
-
 pub use check::*;
 pub use errors::*;
 pub use infer::*;
 pub use specialize::*;
-pub use types::*;
-pub use type_level::*;
+pub use types::var::{TypeVar, ConstVar};
+pub use types::const_data::{ConstValue, ConstExpr, ConstKind, ConstVarDef, BinOp, UnOp};
+pub use types::mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
+pub use types::constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};
+pub use types::solver::TypeConstraintSolver;
+pub use types::error::{TypeMismatch, TypeConstraintError, ConstEvalError};
 
 use super::parser::ast;
 use crate::middle;

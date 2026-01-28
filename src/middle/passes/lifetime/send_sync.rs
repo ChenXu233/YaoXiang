@@ -343,7 +343,7 @@ impl Default for SendSyncChecker {
 // 约束传播支持
 // =========================================================================
 
-use crate::frontend::typecheck::{SendSyncConstraint, SendSyncConstraintSolver};
+use crate::frontend::typecheck::{SendSyncConstraint, SendSyncSolver};
 
 /// Send/Sync 约束传播结果
 #[derive(Debug, Clone, Default)]
@@ -442,7 +442,7 @@ impl SendSyncPropagator {
     /// 从约束求解器收集约束
     pub fn collect_from_solver(
         &mut self,
-        solver: &SendSyncConstraintSolver,
+        solver: &SendSyncSolver,
         type_args: &[MonoType],
     ) {
         for ty in type_args {
