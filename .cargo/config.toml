@@ -18,14 +18,13 @@ linker = "x86_64-w64-mingw32-gcc"
 ar = "x86_64-w64-mingw32-ar"
 
 # macOS 交叉编译需要安装 Apple SDK 和工具链
-# Linux: apt install crossbuild-essential-apple-darwin
-# [target.x86_64-apple-darwin]
-# linker = "x86_64-apple-darwin-clang"
-# ar = "x86_64-apple-darwin-ar"
-#
-# [target.aarch64-apple-darwin]
-# linker = "aarch64-apple-darwin-clang"
-# ar = "aarch64-apple-darwin-ar"
+# Linux: 需要使用 osxcross 或专门的工具链
+# macOS: 使用系统 clang，无需额外配置
+[target.x86_64-apple-darwin]
+# linker = "clang"  # macOS 上默认使用系统 clang
+
+[target.aarch64-apple-darwin]
+# linker = "clang"  # macOS 上默认使用系统 clang
 
 # =============================================================================
 # 优化配置
