@@ -587,10 +587,15 @@ impl<'a> TypeInferrer<'a> {
         let body_ty = self.infer_block(body, false, None)?;
 
         // 处理隐式返回
-        if let Some(_expr) = &body.expr {
-            // 如果最后有表达式，它的类型必须匹配返回类型
-            self.solver
-                .add_constraint(body_ty, return_ty.clone(), body.span);
+        if let Some(expr) = &body.expr {
+            // 如果最后表达式是 `return`，则该 return 已在 infer_return 中
+            // 对当前返回类型添加了约束，因此不需要（也不应）再将
+            // 块的类型与返回类型约束在一起 — 否则会把 `Void` 约束到返回类型。
+            if !matches!(expr.as_ref(), ast::Expr::Return(..)) {
+                // 如果最后有表达式（且不是 return），它的类型必须匹配返回类型
+                self.solver
+                    .add_constraint(body_ty, return_ty.clone(), body.span);
+            }
         } else {
             // 如果没有最后表达式（隐式 Void）
             // 检查是否以 return 语句结尾
@@ -1047,7 +1052,37 @@ impl<'a> TypeInferrer<'a> {
                     // 推断 for 循环
                     self.infer_for(var, iterable, body, block.span)?;
                 }
-                // Fn, TypeDef, Use 等已在 check_stmt 中处理
+                ast::StmtKind::Fn {
+                    name,
+                    type_annotation,
+                    params,
+                    body: (stmts, expr),
+                } => {
+                    // 处理嵌套函数定义
+                    // 构建函数体的 Block
+                    let fn_body = ast::Block {
+                        stmts: stmts.clone(),
+                        expr: expr.clone(),
+                        span: stmt.span,
+                    };
+
+                    // 从类型注解中提取返回类型
+                    let return_type =
+                        if let Some(ast::Type::Fn { return_type, .. }) = type_annotation {
+                            Some(return_type.as_ref().clone())
+                        } else {
+                            None
+                        };
+
+                    // 推断函数类型
+                    let fn_ty =
+                        self.infer_fn_def_expr(params, return_type.as_ref(), &fn_body, stmt.span)?;
+
+                    // 将函数添加到当前作用域
+                    let poly = PolyType::mono(fn_ty);
+                    self.add_var(name.clone(), poly);
+                }
+                // TypeDef, Use 等已在 check_stmt 中处理
                 // While, Return, Break, Continue 作为 Expr 的一部分处理
                 _ => {}
             }

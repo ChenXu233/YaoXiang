@@ -626,12 +626,14 @@ impl<'a> ParserState<'a> {
                 }
             }
 
-            // 回溯并作为变量声明处理
+            // 回溯并作为普通赋值表达式处理
             self.restore_position(saved_position);
             self.clear_errors();
 
-            // 调用 parse_var_stmt 来处理变量声明
-            return self.parse_var_stmt(span);
+            // 修正：如果不是函数定义，也不是带类型的变量声明，也不是带 mut 的变量声明
+            // 那么 name = expr 应该被解析为赋值表达式，而不是隐式变量声明
+            // 这样可以确保重新赋值（如 count = count - 1）能够正确更新现有变量，而不是创建新变量
+            return self.parse_expr_stmt(span);
         }
 
         // Check for variable declaration or method binding: identifier followed by :

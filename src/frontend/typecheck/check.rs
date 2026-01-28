@@ -884,10 +884,22 @@ impl<'a> TypeChecker<'a> {
             }
         } else {
             // 无最后表达式（纯语句块）
+            // 检查最后一个语句是否是 return 语句
+            let ends_with_return = if let Some(last) = body.stmts.last() {
+                if let ast::StmtKind::Expr(e) = &last.kind {
+                    matches!(e.as_ref(), ast::Expr::Return(..))
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
             // 阶段2修复：简化逻辑，infer_block 已经正确返回了 Void
             // 这里只需要验证返回类型与声明的类型一致
-            if return_ty != MonoType::Void {
-                // 如果声明的返回类型不是 Void，但函数体是语句块，则报错
+            // 但如果以 return 语句结尾，则不需要添加 Void 约束
+            if return_ty != MonoType::Void && !ends_with_return {
+                // 如果声明的返回类型不是 Void，但函数体是语句块且没有显式 return，则报错
                 self.inferrer
                     .solver()
                     .add_constraint(MonoType::Void, return_ty.clone(), body.span);
