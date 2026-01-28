@@ -102,7 +102,7 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: x86_64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2022
     steps:
       - uses: actions/checkout@v4
 
@@ -124,10 +124,7 @@ jobs:
         run: |
           echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=/usr/bin/x86_64-apple-darwin-clang" >> $GITHUB_ENV
 
-      # Windows MSVC 工具链
-      - name: Setup MSVC (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
+      # windows-2022 自带 Visual Studio Build Tools，无需额外配置
 
       - name: Install cross-compile dependencies (Linux ARM64)
         if: matrix.install_deps == true
