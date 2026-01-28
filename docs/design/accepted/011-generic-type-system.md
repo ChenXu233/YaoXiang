@@ -15,7 +15,7 @@
 - **关联类型**：`type Iterator[T] = { Item: T, next: () -> Option[T] }`
 - **Const泛型**：`[T, N: Int]` 编译期常量参数，Const函数
 - **条件类型**：`type If[C: Bool, T, E]` 类型级计算，类型族
-- **模板特化**：`impl[T: Int] for Array[T]` 平台/类型特定优化
+- **函数重载特化**：具体类型自动特化，平台特定优化
 
 **价值**：
 - 零成本抽象：编译期单态化，无运行时开销
@@ -269,19 +269,18 @@ collect:}
 }
 
 # Array的Iterator实现
-impl[T] for Array[T] {
-    type Item = T
+# 使用函数重载方式实现
+type Item: [T](arr: Array[T]) -> T = (arr) => arr.data[0]
 
-    has_next: (self) -> Bool = self.index < self.length
+has_next: [T](self: Array[T]) -> Bool = (self) => self.index < self.length
 
-    next: (self) -> Option[T] = {
-        if self.has_next() {
-            item = self.data[self.index]
-            self.index = self.index + 1
-            Some(item)
-        } else {
-            None
-        }
+next: [T](self: Array[T]) -> Option[T] = (self) => {
+    if has_next(self) {
+        item = self.data[self.index]
+        self.index = self.index + 1
+        Some(item)
+    } else {
+        None
     }
 }
 ```
@@ -381,31 +380,27 @@ static_assert(IntArray.length == 10)  # 编译期验证
 #### 4.3 Const泛型特化
 
 ```yaoxiang
-# 小数组优化
-impl[T, N: Int] for Array[T, N] {
-    # 通用实现
-    sum: () -> T = {
-        result = Zero::zero()
-        for item in self.data {
-            result = result + item
-        }
-        result
+# 小数组优化：使用函数重载实现Const泛型特化
+
+# 通用实现
+sum: [T, N: Int](arr: Array[T, N]) -> T = (arr) => {
+    result = Zero::zero()
+    for item in arr.data {
+        result = result + item
     }
+    result
+}
 
-    # N=1 特化
-    #[const_generic(N = 1)]
-    sum: () -> T = self.data[0]
+# N=1 特化
+sum: [T](arr: Array[T, 1]) -> T = (arr) => arr.data[0]
 
-    # N=2 特化
-    #[const_generic(N = 2)]
-    sum: () -> T = self.data[0] + self.data[1]
+# N=2 特化
+sum: [T](arr: Array[T, 2]) -> T = (arr) => arr.data[0] + arr.data[1]
 
-    # 小数组循环展开
-    #[const_generic(N <= 4)]
-    sum: () -> T = {
-        # 编译器优化：展开循环
-        self.data[0] + self.data[1] + self.data[2] + self.data[3]
-    }
+# 小数组循环展开（N <= 4）
+sum: [T, N: Int](arr: Array[T, N]) -> T = (arr) => {
+    # 编译器优化：展开循环
+    arr.data[0] + arr.data[1] + arr.data[2] + arr.data[3]
 }
 ```
 
@@ -467,7 +462,7 @@ type Three = Succ(Succ(Succ(Zero)))
 type Five = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 ```
 
-### 6. 模板特化
+### 6. 函数重载特化
 
 #### 6.1 基本特化
 
@@ -791,11 +786,9 @@ macro_rules! impl_debug {
 }
 
 # ✅ 泛型方案：自动派生
-impl[T: fields...] for Point {
-    # 编译器自动生成
-    debug_fmt: (self, f: &mut Formatter) -> Result = {
-        write!(f, "Point {{ x: {:?}, y: {:?} }}", self.x, self.y)
-    }
+# 使用函数重载方式自动派生
+debug_fmt: [T: fields...](self: Point[T]) -> String = (self) => {
+    "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
 }
 
 # 使用
@@ -900,66 +893,64 @@ type List[T] = {
 }
 
 # ======== 2. 实现泛型方法 ========
-impl[T] for List[T] {
-    push: (self, item) => {
-        if self.length >= self.data.length {
-            # 扩容
-            new_data = Array[T](self.data.length * 2)
-            for i in 0..self.length {
-                new_data[i] = self.data[i]
-            }
-            self.data = new_data
-        }
-        self.data[self.length] = item
-        self.length = self.length + 1
-    }
+# 使用函数重载方式实现泛型方法
 
-    pop: (self) => {
-        if self.length > 0 {
-            self.length = self.length - 1
-            Some(self.data[self.length])
-        } else {
-            None
-        }
-    }
-
-    map: [T, R](self, f: Fn(T) -> R) -> List[R] = {
-        result = List[R]()
+push: [T](self: List[T], item: T) -> Void = (self, item) => {
+    if self.length >= self.data.length {
+        # 扩容
+        new_data = Array[T](self.data.length * 2)
         for i in 0..self.length {
-            result.push(f(self.data[i]))
+            new_data[i] = self.data[i]
         }
-        result
+        self.data = new_data
     }
+    self.data[self.length] = item
+    self.length = self.length + 1
+}
 
-    filter: [T](self, predicate: Fn(T) -> Bool) -> List[T] = {
-        result = List[T]()
-        for i in 0..self.length {
-            if predicate(self.data[i]) {
-                result.push(self.data[i])
-            }
-        }
-        result
+pop: [T](self: List[T]) -> Option[T] = (self) => {
+    if self.length > 0 {
+        self.length = self.length - 1
+        Some(self.data[self.length])
+    } else {
+        None
     }
+}
 
-    fold: [T, U](self, initial: U, f: Fn(U, T) -> U) -> U = {
-        result = initial
-        for i in 0..self.length {
-            result = f(result, self.data[i])
-        }
-        result
+map: [T, R](self: List[T], f: Fn(T) -> R) -> List[R] = (self, f) => {
+    result = List[R]()
+    for i in 0..self.length {
+        result.push(f(self.data[i]))
     }
+    result
+}
+
+filter: [T](self: List[T], predicate: Fn(T) -> Bool) -> List[T] = (self, predicate) => {
+    result = List[T]()
+    for i in 0..self.length {
+        if predicate(self.data[i]) {
+            result.push(self.data[i])
+        }
+    }
+    result
+}
+
+fold: [T, U](self: List[T], initial: U, f: Fn(U, T) -> U) -> U = (self, initial, f) => {
+    result = initial
+    for i in 0..self.length {
+        result = f(result, self.data[i])
+    }
+    result
 }
 
 # ======== 3. 类型约束使用 ========
 # 实现Clone for List
-impl[T: Clone] for List[T] {
-    clone: (self) -> List[T] = {
-        result = List[T]()
-        for i in 0..self.length {
-            result.push(self.data[i].clone())
-        }
-        result
+clone: [T: Clone](self: List[T]) -> List[T] = (self) => {
+    result = List[T]()
+    for i in 0..self.length {
+        result.push(self.data[i].clone())
     }
+    result
 }
 
 # ======== 4. 使用示例 ========
@@ -1024,15 +1015,14 @@ quicksort: [T: Clone](array: Array[T], cmp: Comparator[T]) -> Array[T] = {
 }
 
 # ======== 2. IntComparator实现 ========
-impl for Comparator[Int] {
-    compare: (a: Int, b: Int) -> Int = {
-        if a < b {
-            -1
-        } else if a > b {
-            1
-        } else {
-            0
-        }
+# 使用函数重载实现
+compare: (a: Int, b: Int) -> Int = (a, b) => {
+    if a < b {
+        -1
+    } else if a > b {
+        1
+    } else {
+        0
     }
 }
 
