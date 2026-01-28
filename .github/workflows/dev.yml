@@ -194,10 +194,14 @@ jobs:
           toolchain: 1.90.0
           targets: x86_64-pc-windows-gnu
 
-      - name: Install mingw
+      - name: Install mingw (full toolchain)
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64-x86-64-dev
+          sudo apt-get install -y \
+            mingw-w64-x86-64-dev \
+            mingw-w64-tools \
+            gcc-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64
 
       - name: Cache cargo registry
         uses: actions/cache@v4
