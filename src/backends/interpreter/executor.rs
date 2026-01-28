@@ -249,10 +249,7 @@ impl Interpreter {
             _ => RuntimeValue::Unit,
         };
 
-        frame
-            .registers
-            .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-        frame.registers[dst.0 as usize] = result;
+        frame.set_register(dst.0 as usize, result);
         Ok(())
     }
 
@@ -298,10 +295,7 @@ impl Interpreter {
             _ => RuntimeValue::Bool(false),
         };
 
-        frame
-            .registers
-            .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-        frame.registers[dst.0 as usize] = result;
+        frame.set_register(dst.0 as usize, result);
         Ok(())
     }
 }
@@ -477,18 +471,12 @@ impl Executor for Interpreter {
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::LoadConst { dst, const_idx } => {
                     let val = self.load_constant(*const_idx);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::LoadLocal { dst, local_idx } => {
@@ -498,10 +486,7 @@ impl Executor for Interpreter {
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
                     tlog!(debug, MSG::VmLoadLocal, dst, &val);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::StoreLocal { local_idx, src } => {
@@ -527,10 +512,7 @@ impl Executor for Interpreter {
                     } else {
                         RuntimeValue::Unit
                     };
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::BinaryOp { dst, lhs, rhs, op } => {
@@ -549,10 +531,7 @@ impl Executor for Interpreter {
                         .get(src.0 as usize)
                         .and_then(|v| v.to_int())
                         .unwrap_or(0);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::Int(-val);
+                    frame.set_register(dst.0 as usize, RuntimeValue::Int(-val));
                     frame.advance();
                 }
                 BytecodeInstr::CallStatic {
@@ -610,10 +589,7 @@ impl Executor for Interpreter {
                         }
 
                         if let Some(dst_reg) = dst {
-                            frame
-                                .registers
-                                .resize(dst_reg.index() as usize + 1, RuntimeValue::Unit);
-                            frame.registers[dst_reg.index() as usize] = RuntimeValue::Unit;
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
                         }
                         frame.advance();
                         continue;
@@ -680,10 +656,7 @@ impl Executor for Interpreter {
                         );
                         if let Some(dst_reg) = dst {
                             tlog!(debug, MSG::VmStoringResult, &format!("{:?}", dst_reg));
-                            frame
-                                .registers
-                                .resize(dst_reg.index() as usize + 1, RuntimeValue::Unit);
-                            frame.registers[dst_reg.index() as usize] = result;
+                            frame.set_register(dst_reg.index() as usize, result);
                             tlog!(
                                 debug,
                                 MSG::VmRegistersAfter,
@@ -700,10 +673,7 @@ impl Executor for Interpreter {
                     let handle = self
                         .heap
                         .allocate(HeapValue::List(Vec::with_capacity(*capacity as usize)));
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::List(handle);
+                    frame.set_register(dst.0 as usize, RuntimeValue::List(handle));
                     frame.advance();
                 }
                 BytecodeInstr::LoadElement { dst, array, index } => {
@@ -721,10 +691,7 @@ impl Executor for Interpreter {
                     if let RuntimeValue::List(handle) = arr {
                         if let Some(HeapValue::List(items)) = self.heap.get(handle) {
                             if idx < items.len() {
-                                frame
-                                    .registers
-                                    .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                                frame.registers[dst.0 as usize] = items[idx].clone();
+                                frame.set_register(dst.0 as usize, items[idx].clone());
                             }
                         }
                     }
@@ -773,11 +740,10 @@ impl Executor for Interpreter {
                     if let RuntimeValue::Struct { fields, .. } = obj {
                         if let Some(HeapValue::Tuple(items)) = self.heap.get(fields) {
                             if (*field_idx as usize) < items.len() {
-                                frame
-                                    .registers
-                                    .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                                frame.registers[dst.0 as usize] =
-                                    items[*field_idx as usize].clone();
+                                frame.set_register(
+                                    dst.0 as usize,
+                                    items[*field_idx as usize].clone(),
+                                );
                             }
                         }
                     }
@@ -831,11 +797,10 @@ impl Executor for Interpreter {
                         })
                         .unwrap_or_default();
 
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] =
-                        RuntimeValue::String(format!("{}{}", s1, s2).into());
+                    frame.set_register(
+                        dst.0 as usize,
+                        RuntimeValue::String(format!("{}{}", s1, s2).into()),
+                    );
                     frame.advance();
                 }
                 BytecodeInstr::StringLength { dst, src } => {
@@ -851,10 +816,7 @@ impl Executor for Interpreter {
                         })
                         .unwrap_or_default();
 
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::Int(s.len() as i64);
+                    frame.set_register(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
                     frame.advance();
                 }
                 BytecodeInstr::Drop { value: _ } => {
@@ -862,10 +824,7 @@ impl Executor for Interpreter {
                 }
                 BytecodeInstr::HeapAlloc { dst, type_id: _ } => {
                     let handle = self.heap.allocate(HeapValue::Tuple(Vec::new()));
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::Tuple(handle);
+                    frame.set_register(dst.0 as usize, RuntimeValue::Tuple(handle));
                     frame.advance();
                 }
                 BytecodeInstr::ArcNew { dst, src } => {
@@ -874,10 +833,7 @@ impl Executor for Interpreter {
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val.into_arc();
+                    frame.set_register(dst.0 as usize, val.into_arc());
                     frame.advance();
                 }
                 BytecodeInstr::ArcClone { dst, src } => {
@@ -887,10 +843,7 @@ impl Executor for Interpreter {
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
                     if let RuntimeValue::Arc(inner) = val {
-                        frame
-                            .registers
-                            .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                        frame.registers[dst.0 as usize] = RuntimeValue::Arc(inner);
+                        frame.set_register(dst.0 as usize, RuntimeValue::Arc(inner));
                     }
                     frame.advance();
                 }
@@ -917,10 +870,7 @@ impl Executor for Interpreter {
                             func_id,
                             env: Vec::new(),
                         });
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = closure;
+                    frame.set_register(dst.0 as usize, closure);
                     frame.advance();
                 }
                 BytecodeInstr::TypeOf { dst, src } => {
@@ -931,10 +881,7 @@ impl Executor for Interpreter {
                         .unwrap_or(RuntimeValue::Unit);
                     let type_id = self.type_table.len() as u32;
                     // Simplified: just push a placeholder
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::Int(type_id as i64);
+                    frame.set_register(dst.0 as usize, RuntimeValue::Int(type_id as i64));
                     frame.advance();
                 }
                 BytecodeInstr::Cast {
@@ -947,10 +894,7 @@ impl Executor for Interpreter {
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::StringFromInt { dst, src } => {
@@ -960,9 +904,7 @@ impl Executor for Interpreter {
                         .and_then(|v| v.to_int())
                         .unwrap_or(0);
                     frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::String(val.to_string().into());
+                        .set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                     frame.advance();
                 }
                 BytecodeInstr::StringFromFloat { dst, src } => {
@@ -972,9 +914,7 @@ impl Executor for Interpreter {
                         .and_then(|v| v.to_float())
                         .unwrap_or(0.0);
                     frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = RuntimeValue::String(val.to_string().into());
+                        .set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                     frame.advance();
                 }
                 BytecodeInstr::TryBegin { catch_target: _ } => {
@@ -1003,10 +943,7 @@ impl Executor for Interpreter {
                 } => {
                     // Simplified: upvalues are stored in the current frame for closures
                     let val = frame.get_upvalue(0).cloned().unwrap_or(RuntimeValue::Unit);
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = val;
+                    frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::StoreUpvalue {
@@ -1058,11 +995,10 @@ impl Executor for Interpreter {
                         })
                         .unwrap_or_default();
 
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] =
-                        RuntimeValue::Int(if s1 == s2 { 1 } else { 0 });
+                    frame.set_register(
+                        dst.0 as usize,
+                        RuntimeValue::Int(if s1 == s2 { 1 } else { 0 }),
+                    );
                     frame.advance();
                 }
                 BytecodeInstr::StringGetChar { dst, src, index: _ } => {
@@ -1078,14 +1014,13 @@ impl Executor for Interpreter {
                         })
                         .unwrap_or_default();
 
-                    frame
-                        .registers
-                        .resize(dst.0 as usize + 1, RuntimeValue::Unit);
-                    frame.registers[dst.0 as usize] = s
-                        .chars()
-                        .next()
-                        .map(|c| RuntimeValue::Char(c as u32))
-                        .unwrap_or(RuntimeValue::Unit);
+                    frame.set_register(
+                        dst.0 as usize,
+                        s.chars()
+                            .next()
+                            .map(|c| RuntimeValue::Char(c as u32))
+                            .unwrap_or(RuntimeValue::Unit),
+                    );
                     frame.advance();
                 }
                 BytecodeInstr::CallVirt {

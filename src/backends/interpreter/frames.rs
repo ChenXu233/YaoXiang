@@ -101,6 +101,18 @@ impl Frame {
         self.locals[index] = value;
     }
 
+    /// Set a register value, extending the register file if necessary
+    pub fn set_register(
+        &mut self,
+        index: usize,
+        value: RuntimeValue,
+    ) {
+        if index >= self.registers.len() {
+            self.registers.resize(index + 1, RuntimeValue::Unit);
+        }
+        self.registers[index] = value;
+    }
+
     /// Get an upvalue
     pub fn get_upvalue(
         &self,

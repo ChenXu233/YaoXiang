@@ -688,6 +688,21 @@ impl AstToIrGenerator {
                     constants,
                 )?;
             }
+            ast::StmtKind::For {
+                var,
+                iterable,
+                body,
+                label: _,
+            } => {
+                self.generate_for_loop_ir(
+                    var,
+                    iterable,
+                    body,
+                    None, // No result needed for statement
+                    instructions,
+                    constants,
+                )?;
+            }
             // 处理其他语句类型
             _ => {}
         }
@@ -933,6 +948,151 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// Generate While expression IR
+    fn generate_while_expr_ir(
+        &mut self,
+        condition: &ast::Expr,
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), IrGenError> {
+        // Label: condition_check
+        let loop_start_idx = instructions.len();
+
+        // Evaluate condition
+        let cond_reg = self.next_temp_reg();
+        self.generate_expr_ir(condition, cond_reg, instructions, constants)?;
+
+        // Jump to end if false
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0)); // Placeholder
+
+        // Body
+        self.generate_block_ir(body, instructions, constants)?;
+
+        // Jump back to start
+        instructions.push(Instruction::Jmp(loop_start_idx));
+
+        // Fix JmpIfNot target
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+            *target = end_idx;
+        }
+
+        // While loop returns void/unit (0)
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Int(0)),
+        });
+
+        Ok(())
+    }
+
+    /// Generate For loop IR (simplified range loop)
+    fn generate_for_loop_ir(
+        &mut self,
+        var_name: &str,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: Option<usize>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), IrGenError> {
+        // Check for range loop: var in start..end
+        if let ast::Expr::BinOp {
+            op: ast::BinOp::Range,
+            left,
+            right,
+            ..
+        } = iterable
+        {
+            // Desugar to while loop logic
+            self.enter_scope();
+
+            // 1. Initialize loop var = start
+            let var_reg = self.next_temp_reg();
+            self.register_local(var_name, var_reg);
+            self.generate_expr_ir(left, var_reg, instructions, constants)?;
+
+            // 2. Initialize limit = end
+            let limit_reg = self.next_temp_reg();
+            self.generate_expr_ir(right, limit_reg, instructions, constants)?;
+
+            // Store initial value to local so body can access it
+            instructions.push(Instruction::Store {
+                dst: Operand::Local(var_reg),
+                src: Operand::Local(var_reg),
+            });
+
+            // Loop start label
+            let loop_start_idx = instructions.len();
+
+            // 3. Condition check: var < limit
+            let cond_reg = self.next_temp_reg();
+            instructions.push(Instruction::Lt {
+                dst: Operand::Local(cond_reg),
+                lhs: Operand::Local(var_reg),
+                rhs: Operand::Local(limit_reg),
+            });
+
+            // 4. Jump to end if false
+            let jump_end_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
+
+            // 5. Body
+            self.generate_block_ir(body, instructions, constants)?;
+
+            // 6. Increment var
+            let one_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(one_reg),
+                src: Operand::Const(ConstValue::Int(1)),
+            });
+            instructions.push(Instruction::Add {
+                dst: Operand::Local(var_reg),
+                lhs: Operand::Local(var_reg),
+                rhs: Operand::Local(one_reg),
+            });
+
+            // Store updated value to local for next iteration body access
+            instructions.push(Instruction::Store {
+                dst: Operand::Local(var_reg),
+                src: Operand::Local(var_reg),
+            });
+
+            // 7. Jump back
+            instructions.push(Instruction::Jmp(loop_start_idx));
+
+            // 8. Fix jump
+            let end_idx = instructions.len();
+            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+                *target = end_idx;
+            }
+
+            self.exit_scope();
+
+            // If expression, load unit
+            if let Some(reg) = result_reg {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(reg),
+                    src: Operand::Const(ConstValue::Int(0)),
+                });
+            }
+
+            Ok(())
+        } else {
+            // Treat as void/0 if not range (TODO: generic iterator)
+            if let Some(reg) = result_reg {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(reg),
+                    src: Operand::Const(ConstValue::Int(0)),
+                });
+            }
+            Ok(())
+        }
+    }
+
     /// 生成表达式 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_expr_ir(
@@ -1172,6 +1332,30 @@ impl AstToIrGenerator {
                     elif_branches,
                     else_branch.as_deref(),
                     result_reg,
+                    instructions,
+                    constants,
+                )?;
+            }
+            Expr::While {
+                condition,
+                body,
+                label: _,
+                span: _,
+            } => {
+                self.generate_while_expr_ir(condition, body, result_reg, instructions, constants)?;
+            }
+            Expr::For {
+                var,
+                iterable,
+                body,
+                label: _,
+                span: _,
+            } => {
+                self.generate_for_loop_ir(
+                    var,
+                    iterable,
+                    body,
+                    Some(result_reg),
                     instructions,
                     constants,
                 )?;

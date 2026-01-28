@@ -155,7 +155,7 @@
   "stage2_complete": "喵~=== 阶段 2 完成：用户可见消息 === 喵~ (≧∀≦)ゞ",
   "stage3_start": "喵~=== 阶段 3：调试信息和其他模块 === 喵~",
   "stage3_complete": "喵~=== 阶段 3 完成：调试信息和其他模块 === 喵~ (≧∀≦)ゞ",
-  "all_stages_complete": "喵~=== 所有阶段完成！Print 替换为 Logger 任务结束 === 喵~ 耶~(๑•̀ㅂ•́)و✧",
+  "all_stages_complete": "喵~=== 所有阶段完成！=== 喵~ 耶~(๑•̀ㅂ•́)و✧",
 
   "bytecode_decode_i64add": "喵~调试解码：I64Add 操作数.len = {0} 喵~",
   "bytecode_decode_i64add_too_short": "喵~调试解码：I64Add 操作数太短，跳过啦喵~",
