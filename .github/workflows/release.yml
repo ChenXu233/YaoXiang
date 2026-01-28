@@ -254,8 +254,7 @@ jobs:
         run: cargo test --doc --all-features
 
       - name: Benchmarks
-        run: cargo bench --all-features -- --exit-code-from-test
-
+        run: cargo bench --all-features
   # 发布到GitHub Releases
   github-release:
     name: Create GitHub Release
