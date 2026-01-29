@@ -203,10 +203,5 @@
 
   "repl_value": "喵~{0} 喵~",
   "repl_prompt": "喵~{0} 喵~",
-  "repl_history_entry": "喵~[{0}] {1} 喵~",
-
-  "shell_exec_time": "喵~执行时间：{0:?} 喵~",
-  "shell_loaded": "喵~加载完成：{0} 喵~",
-  "shell_debug_start": "喵~开始调试会话：{0} 喵~",
-  "shell_debug_cmd": "喵~可用命令喵：\n  (r)un    - 运行到下个断点喵\n  (s)tep   - 单步执行喵\n  (n)ext   - 步过函数调用喵\n  (o)ut    - 跳出当前函数喵\n  (b)reak  - 列出断点喵\n  (b)reak <n> - 在第 n 行设置断点喵\n  (c)ont   - 继续执行喵\n  (q)uit   - 退出调试器喵~ 喵呜~"
+  "repl_history_entry": "喵~[{0}] {1} 喵~"
 }

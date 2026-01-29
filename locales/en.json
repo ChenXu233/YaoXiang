@@ -203,10 +203,5 @@
 
   "repl_value": "{0}",
   "repl_prompt": "{0}",
-  "repl_history_entry": "[{0}] {1}",
-
-  "shell_exec_time": "Executed in {0:?}",
-  "shell_loaded": "Loaded: {0}",
-  "shell_debug_start": "Starting debug session for: {0}",
-  "shell_debug_cmd": "Available commands:\n  (r)un    - Run to next breakpoint\n  (s)tep   - Step one instruction\n  (n)ext   - Step over function calls\n  (o)ut    - Step out of current function\n  (b)reak  - List breakpoints\n  (b)reak <n> - Add breakpoint at line n\n  (c)ont   - Continue execution\n  (q)uit   - Exit debugger"
+  "repl_history_entry": "[{0}] {1}"
 }

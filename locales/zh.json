@@ -203,10 +203,5 @@
 
   "repl_value": "{0}",
   "repl_prompt": "{0}",
-  "repl_history_entry": "[{0}] {1}",
-
-  "shell_exec_time": "执行时间：{0:?}",
-  "shell_loaded": "已加载：{0}",
-  "shell_debug_start": "开始调试会话：{0}",
-  "shell_debug_cmd": "可用命令：\n  (r)un    - 运行到下一个断点\n  (s)tep   - 单步执行\n  (n)ext   - 步过函数调用\n  (o)ut    - 跳出当前函数\n  (b)reak  - 列出断点\n  (b)reak <n> - 在第 n 行设置断点\n  (c)ont   - 继续执行\n  (q)uit   - 退出调试器"
+  "repl_history_entry": "[{0}] {1}"
 }
