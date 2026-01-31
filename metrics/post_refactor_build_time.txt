@@ -1,0 +1,134 @@
+   Compiling yaoxiang v0.4.4 (E:\git\YaoXiang)
+warning: unused imports: `hex_digit_value` and `is_hex_digit`
+ --> src\frontend\core\lexer\tokenizer.rs:6:129
+  |
+6 | ... is_identifier_start, is_identifier_char, is_digit, is_hex_digit, hex_digit_value};
+  |                                                        ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: hidden lifetime parameters in types are deprecated
+  --> src\frontend\core\lexer\literals.rs:10:35
+   |
+10 |     lexer: &mut super::tokenizer::Lexer,
+   |                 ------------------^^^^^
+   |                 |
+   |                 expected lifetime parameter
+   |
+note: the lint level is defined here
+  --> src\lib.rs:18:9
+   |
+18 | #![warn(rust_2018_idioms)]
+   |         ^^^^^^^^^^^^^^^^
+   = note: `#[warn(elided_lifetimes_in_paths)]` implied by `#[warn(rust_2018_idioms)]`
+help: indicate the anonymous lifetime
+   |
+10 |     lexer: &mut super::tokenizer::Lexer<'_>,
+   |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+  --> src\frontend\core\lexer\literals.rs:48:35
+   |
+48 |     lexer: &mut super::tokenizer::Lexer,
+   |                 ------------------^^^^^
+   |                 |
+   |                 expected lifetime parameter
+   |
+help: indicate the anonymous lifetime
+   |
+48 |     lexer: &mut super::tokenizer::Lexer<'_>,
+   |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:109:35
+    |
+109 |     lexer: &mut super::tokenizer::Lexer,
+    |                 ------------------^^^^^
+    |                 |
+    |                 expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+109 |     lexer: &mut super::tokenizer::Lexer<'_>,
+    |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:171:35
+    |
+171 |     lexer: &mut super::tokenizer::Lexer,
+    |                 ------------------^^^^^
+    |                 |
+    |                 expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+171 |     lexer: &mut super::tokenizer::Lexer<'_>,
+    |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:237:35
+    |
+237 |     lexer: &mut super::tokenizer::Lexer,
+    |                 ------------------^^^^^
+    |                 |
+    |                 expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+237 |     lexer: &mut super::tokenizer::Lexer<'_>,
+    |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:375:35
+    |
+375 |     lexer: &mut super::tokenizer::Lexer,
+    |                 ------------------^^^^^
+    |                 |
+    |                 expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+375 |     lexer: &mut super::tokenizer::Lexer<'_>,
+    |                                        ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:464:50
+    |
+464 | pub fn scan_string(lexer: &mut super::tokenizer::Lexer) -> Option<Token> {
+    |                                ------------------^^^^^
+    |                                |
+    |                                expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+464 | pub fn scan_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
+    |                                                       ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:618:57
+    |
+618 | fn scan_multi_line_string(lexer: &mut super::tokenizer::Lexer) -> Option<Token> {
+    |                                       ------------------^^^^^
+    |                                       |
+    |                                       expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+618 | fn scan_multi_line_string(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
+    |                                                              ++++
+
+warning: hidden lifetime parameters in types are deprecated
+   --> src\frontend\core\lexer\literals.rs:688:48
+    |
+688 | pub fn scan_char(lexer: &mut super::tokenizer::Lexer) -> Option<Token> {
+    |                              ------------------^^^^^
+    |                              |
+    |                              expected lifetime parameter
+    |
+help: indicate the anonymous lifetime
+    |
+688 | pub fn scan_char(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
+    |                                                     ++++
+
+warning: `yaoxiang` (lib) generated 10 warnings (run `cargo fix --lib -p yaoxiang` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 55.48s

@@ -9,9 +9,10 @@ use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 use tracing::debug;
 
-pub mod lexer;
-pub mod parser;
 pub mod typecheck;
+
+// Refactored core modules with RFC support
+pub mod core;
 
 /// Compiler context
 #[derive(Debug)]
@@ -49,14 +50,13 @@ impl Compiler {
 
         let source_file = SourceFile::new(source_name.to_string(), source.to_string());
 
-        // Lexical analysis
-        let tokens = lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
+        // Lexical analysis - Using new refactored lexer with RFC support
+        let tokens =
+            core::lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))?;
 
-        // Parsing
-        let ast = parser::parse(&tokens).map_err(|e| {
-            let message = format_parse_error(&source_file, e.span(), &e.to_string());
-            CompileError::ParseError(message)
-        })?;
+        // Parsing - Using new refactored parser with RFC support
+        let ast =
+            core::parser::parse(&tokens).map_err(|e| CompileError::ParseError(e.to_string()))?;
 
         // 阶段1: 类型检查
         let type_result = typecheck::check_module(&ast, Some(&mut self.type_env)).map_err(|e| {

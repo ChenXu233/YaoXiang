@@ -1,4 +1,4 @@
-use crate::frontend::parser::ast;
+use crate::frontend::core::parser::ast;
 use crate::frontend::typecheck::infer::TypeInferrer;
 use crate::frontend::typecheck::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::util::span::Span;

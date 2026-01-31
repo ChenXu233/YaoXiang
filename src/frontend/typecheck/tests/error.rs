@@ -1,7 +1,7 @@
 //! 错误收集测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::*;
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::*;
 use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 

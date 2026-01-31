@@ -206,7 +206,7 @@ impl ConstValueExt for ConstValue {
 
 trait MonoTypeExt {
     fn to_type_id(&self) -> u32;
-    fn from_ast(ast_type: &crate::frontend::parser::ast::Type) -> Self;
+    fn from_ast(ast_type: &crate::frontend::core::parser::ast::Type) -> Self;
 }
 
 impl MonoTypeExt for MonoType {
@@ -237,7 +237,7 @@ impl MonoTypeExt for MonoType {
         }
     }
 
-    fn from_ast(ast_type: &crate::frontend::parser::ast::Type) -> Self {
+    fn from_ast(ast_type: &crate::frontend::core::parser::ast::Type) -> Self {
         MonoType::from(ast_type.clone())
     }
 }

@@ -6,7 +6,7 @@
 //! 2. 模块状态追踪：每个模块独立追踪其泛型定义和实例化状态
 //! 3. 跨模块实例化：在定义模块中实例化，使用模块引用结果
 
-use crate::frontend::parser::ast::Type;
+use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::{check, EnumType, MonoType, StructType};
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR};
 use crate::middle::passes::module::{ModuleGraph, ModuleId};

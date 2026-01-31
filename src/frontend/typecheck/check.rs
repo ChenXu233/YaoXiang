@@ -2,8 +2,8 @@
 //!
 //! 实现语句的类型检查和函数定义的类型验证
 
-use super::super::lexer::tokens::Literal;
-use super::super::parser::ast;
+use super::super::core::lexer::tokens::Literal;
+use super::super::core::parser::ast;
 use super::errors::{TypeError, TypeResult};
 use super::infer::TypeInferrer;
 use super::types::{MonoType, PolyType, TypeConstraintSolver, TypeVar};
@@ -418,21 +418,34 @@ impl<'a> TypeChecker<'a> {
         }
 
         if let Some(init) = initializer {
-            let init_ty = self.inferrer.infer_expr(init)?;
-
+            // For recursive functions: if we have a type annotation and the initializer
+            // is a lambda, add the function to the environment FIRST so recursive calls work
             if let Some(ann) = type_annotation {
                 let ann_ty = MonoType::from(ann.clone());
-                // 解析类型注解中的 TypeRef，转换为实际类型
-                // 这确保了结构体类型匹配：TypeRef("Point") 与 Struct(Point)
                 let resolved_ann_ty = self.inferrer.resolve_type_ref(&ann_ty);
+
+                // Add the variable with its annotated type BEFORE inferring the initializer
+                // This enables recursive function definitions
+                self.inferrer
+                    .add_var(name.to_string(), PolyType::mono(resolved_ann_ty.clone()));
+
+                // Now infer the initializer (recursive calls will find the function)
+                let init_ty = self.inferrer.infer_expr(init)?;
+
+                // Add constraint that initializer matches the annotation
                 self.inferrer
                     .solver()
                     .add_constraint(init_ty.clone(), resolved_ann_ty, span);
-            }
 
-            // 泛化 initializer 的类型
-            let poly = self.inferrer.solver().generalize(&init_ty);
-            self.inferrer.add_var(name.to_string(), poly);
+                // Update with generalized type
+                let poly = self.inferrer.solver().generalize(&init_ty);
+                self.inferrer.add_var(name.to_string(), poly);
+            } else {
+                // No type annotation - infer as before
+                let init_ty = self.inferrer.infer_expr(init)?;
+                let poly = self.inferrer.solver().generalize(&init_ty);
+                self.inferrer.add_var(name.to_string(), poly);
+            }
         } else if let Some(ann) = type_annotation {
             // 没有初始化时，使用类型注解
             let ty = MonoType::from(ann.clone());

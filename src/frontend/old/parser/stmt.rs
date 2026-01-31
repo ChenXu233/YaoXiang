@@ -479,7 +479,7 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    /// Parse use import: `use path;` or `use path::{item1, item2};`
+    /// Parse use import: `use path;` or `use path.{item1, item2};`
     fn parse_use_stmt(
         &mut self,
         span: Span,
@@ -488,7 +488,7 @@ impl<'a> ParserState<'a> {
 
         let path = self.parse_use_path()?;
 
-        // Parse import items: use path::{item1, item2};
+        // Parse import items: use path.{item1, item2};
         let items = if self.skip(&TokenKind::LBrace) {
             let mut items = Vec::new();
             while !self.at(&TokenKind::RBrace) && !self.at_end() {

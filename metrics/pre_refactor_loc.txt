@@ -1,0 +1,4 @@
+代码行数统计 (重构前):
+  1270 src/frontend/lexer/mod.rs
+  1401 src/frontend/parser/stmt.rs
+  2671 total

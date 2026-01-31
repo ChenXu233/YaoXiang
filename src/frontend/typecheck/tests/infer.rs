@@ -1,7 +1,7 @@
 //! 类型推断器详细测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, Block, Expr, Pattern, Stmt, StmtKind, UnOp};
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Pattern, Stmt, StmtKind, UnOp};
 use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 
@@ -658,7 +658,7 @@ fn test_infer_cast() {
     let mut inferrer = TypeInferrer::new(&mut solver);
 
     let expr = Expr::Lit(Literal::Int(42), Span::default());
-    let target_type = crate::frontend::parser::ast::Type::Int(64);
+    let target_type = crate::frontend::core::parser::ast::Type::Int(64);
     let cast = Expr::Cast {
         expr: Box::new(expr),
         target_type: *Box::new(target_type),
@@ -678,7 +678,7 @@ fn test_infer_type_cast() {
     let expr = Expr::Lit(Literal::Int(42), Span::default());
     let cast = Expr::Cast {
         expr: Box::new(expr),
-        target_type: *Box::new(crate::frontend::parser::ast::Type::Float(64)),
+        target_type: *Box::new(crate::frontend::core::parser::ast::Type::Float(64)),
         span: Span::default(),
     };
 
@@ -874,7 +874,7 @@ fn test_infer_var_decl_with_annotation() {
     inferrer
         .infer_var_decl(
             "x",
-            Some(&crate::frontend::parser::ast::Type::Int(64)),
+            Some(&crate::frontend::core::parser::ast::Type::Int(64)),
             Some(&Expr::Lit(Literal::Int(42), Span::default())),
             Span::default(),
         )
@@ -894,7 +894,7 @@ fn test_infer_var_decl_no_initializer() {
     inferrer
         .infer_var_decl(
             "x",
-            Some(&crate::frontend::parser::ast::Type::Int(64)),
+            Some(&crate::frontend::core::parser::ast::Type::Int(64)),
             None,
             Span::default(),
         )
@@ -1012,18 +1012,18 @@ fn test_infer_fn_def() {
     let fn_def = Expr::FnDef {
         name: "add".to_string(),
         params: vec![
-            crate::frontend::parser::ast::Param {
+            crate::frontend::core::parser::ast::Param {
                 name: "a".to_string(),
                 ty: None,
                 span: Span::default(),
             },
-            crate::frontend::parser::ast::Param {
+            crate::frontend::core::parser::ast::Param {
                 name: "b".to_string(),
                 ty: None,
                 span: Span::default(),
             },
         ],
-        return_type: Some(crate::frontend::parser::ast::Type::Int(64)),
+        return_type: Some(crate::frontend::core::parser::ast::Type::Int(64)),
         body: Box::new(Block {
             stmts: vec![],
             expr: Some(Box::new(Expr::Lit(Literal::Int(0), Span::default()))),

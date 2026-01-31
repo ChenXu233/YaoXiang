@@ -9,8 +9,8 @@
 //! 2. 简洁直接：IR 结构简单，生成逻辑清晰
 //! 3. 可测试性：独立的模块便于单元测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{self, Expr};
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::span::Span;
