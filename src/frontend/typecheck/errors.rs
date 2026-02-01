@@ -2,7 +2,7 @@
 //!
 //! 定义类型检查过程中的所有错误类型
 
-use super::types::MonoType;
+use crate::frontend::core::type_system::MonoType;
 use crate::util::span::Span;
 use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
@@ -15,8 +15,8 @@ pub enum TypeError {
     /// 类型不匹配错误
     #[error("Type mismatch: expected {expected:?}, found {found:?}")]
     TypeMismatch {
-        expected: MonoType,
-        found: MonoType,
+        expected: Box<MonoType>,
+        found: Box<MonoType>,
         span: Span,
     },
 
@@ -52,7 +52,7 @@ pub enum TypeError {
     #[error("Infinite type: {var} = {ty}")]
     InfiniteType {
         var: String,
-        ty: MonoType,
+        ty: Box<MonoType>,
         span: Span,
     },
 
@@ -116,8 +116,8 @@ pub enum TypeError {
     #[error("Invalid self type for {method_name}: expected {expected:?}, found {found:?}")]
     InvalidSelfType {
         method_name: String,
-        expected: MonoType,
-        found: MonoType,
+        expected: Box<MonoType>,
+        found: Box<MonoType>,
         span: Span,
     },
 }
@@ -267,8 +267,8 @@ impl TypeError {
 
     /// 创建类型不匹配错误
     pub fn type_mismatch(
-        expected: MonoType,
-        found: MonoType,
+        expected: Box<MonoType>,
+        found: Box<MonoType>,
         span: Span,
     ) -> Self {
         TypeError::TypeMismatch {

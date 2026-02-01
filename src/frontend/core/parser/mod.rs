@@ -7,6 +7,8 @@ pub mod ast;
 pub mod parser_state;
 pub mod pratt;
 pub mod statements;
+#[cfg(test)]
+pub mod tests;
 
 // Re-export commonly used items
 pub use parser_state::{ParserState, ParseError};

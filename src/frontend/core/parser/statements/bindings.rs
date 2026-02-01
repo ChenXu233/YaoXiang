@@ -4,6 +4,7 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::statements::declarations::parse_type_annotation;
 use crate::util::span::Span;
 
 /// Parse method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
@@ -201,54 +202,6 @@ impl BindingPositionValidator {
         }
         Ok(())
     }
-}
-
-// Helper functions (should be in declarations.rs, duplicated here for completeness)
-fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
-    match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(name)) => {
-            let name = name.clone();
-            state.bump();
-            Some(Type::Name(name))
-        }
-        Some(TokenKind::LParen) => parse_tuple_type(state),
-        Some(TokenKind::LBrace) => parse_struct_type(state),
-        _ => None,
-    }
-}
-
-fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
-    state.skip(&TokenKind::LParen);
-    let mut types = Vec::new();
-    if !state.at(&TokenKind::RParen) {
-        while let Some(ty) = parse_type_annotation(state) {
-            types.push(ty);
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    }
-    state.skip(&TokenKind::RParen);
-    Some(Type::Tuple(types))
-}
-
-fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
-    state.skip(&TokenKind::LBrace);
-    let mut fields = Vec::new();
-    if !state.at(&TokenKind::RBrace) {
-        while let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
-            let name = name.clone();
-            state.bump();
-            state.skip(&TokenKind::Colon);
-            let field_type = parse_type_annotation(state)?;
-            fields.push((name, field_type));
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    }
-    state.skip(&TokenKind::RBrace);
-    Some(Type::Struct(fields))
 }
 
 fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {

@@ -1,4 +1,4 @@
-use crate::frontend::parser::ast;
+use crate::frontend::core::parser::ast;
 use crate::frontend::typecheck::check::TypeChecker;
 use crate::frontend::typecheck::types::TypeConstraintSolver;
 use crate::util::span::{Position, Span};
@@ -18,7 +18,7 @@ fn test_check_var_with_initializer() {
             name: "x".to_string(),
             type_annotation: None,
             initializer: Some(Box::new(ast::Expr::Lit(
-                crate::frontend::lexer::tokens::Literal::Int(42),
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
             ))),
             is_mut: false,
@@ -41,7 +41,7 @@ fn test_check_var_with_type_annotation() {
             name: "x".to_string(),
             type_annotation: Some(ast::Type::Name("Int".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
-                crate::frontend::lexer::tokens::Literal::Int(42),
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
             ))),
             is_mut: false,
@@ -64,7 +64,7 @@ fn test_check_var_type_mismatch() {
             name: "x".to_string(),
             type_annotation: Some(ast::Type::Name("String".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
-                crate::frontend::lexer::tokens::Literal::Int(42),
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
             ))),
             is_mut: false,
@@ -91,7 +91,7 @@ fn test_check_expr_stmt() {
     // 42
     let stmt = ast::Stmt {
         kind: ast::StmtKind::Expr(Box::new(ast::Expr::Lit(
-            crate::frontend::lexer::tokens::Literal::Int(42),
+            crate::frontend::core::lexer::tokens::Literal::Int(42),
             create_dummy_span(),
         ))),
         span: create_dummy_span(),
@@ -120,7 +120,7 @@ fn test_check_type_alias() {
             name: "x".to_string(),
             type_annotation: Some(ast::Type::Name("MyInt".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
-                crate::frontend::lexer::tokens::Literal::Int(42),
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
             ))),
             is_mut: false,
@@ -151,15 +151,15 @@ fn test_check_for_loop() {
             iterable: Box::new(ast::Expr::List(
                 vec![
                     ast::Expr::Lit(
-                        crate::frontend::lexer::tokens::Literal::Int(1),
+                        crate::frontend::core::lexer::tokens::Literal::Int(1),
                         create_dummy_span(),
                     ),
                     ast::Expr::Lit(
-                        crate::frontend::lexer::tokens::Literal::Int(2),
+                        crate::frontend::core::lexer::tokens::Literal::Int(2),
                         create_dummy_span(),
                     ),
                     ast::Expr::Lit(
-                        crate::frontend::lexer::tokens::Literal::Int(3),
+                        crate::frontend::core::lexer::tokens::Literal::Int(3),
                         create_dummy_span(),
                     ),
                 ],

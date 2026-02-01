@@ -1,7 +1,7 @@
 //! 基础类型推断测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{BinOp, Expr, UnOp};
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
 use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 

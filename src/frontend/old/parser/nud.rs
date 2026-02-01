@@ -639,7 +639,8 @@ impl<'a> ParserState<'a> {
             return None;
         }
 
-        let body = self.parse_expression(BP_LOWEST)?;
+        // Parse body as block expression (supports both => expr and => { block })
+        let body = self.parse_block_expr()?;
 
         self.skip(&TokenKind::Semicolon);
 

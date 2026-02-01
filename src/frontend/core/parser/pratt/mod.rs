@@ -120,6 +120,7 @@ impl ParserState<'_> {
                     | TokenKind::And
                     | TokenKind::Or
                     | TokenKind::Eq
+                    | TokenKind::DotDot
             ) {
                 break;
             }
@@ -145,6 +146,7 @@ impl ParserState<'_> {
     ) -> (u8, u8) {
         match kind {
             TokenKind::Eq => (BP_ASSIGN, BP_ASSIGN),
+            TokenKind::DotDot => (BP_RANGE, BP_RANGE),
             TokenKind::Or => (BP_LOGICAL_OR, BP_LOGICAL_OR),
             TokenKind::And => (BP_LOGICAL_AND, BP_LOGICAL_AND),
             TokenKind::EqEq | TokenKind::Neq => (BP_EQUALITY, BP_EQUALITY),
@@ -175,6 +177,9 @@ impl ParserState<'_> {
             TokenKind::Gt => Some(BinOp::Gt),
             TokenKind::Le => Some(BinOp::Le),
             TokenKind::Ge => Some(BinOp::Ge),
+            TokenKind::And => Some(BinOp::And),
+            TokenKind::Or => Some(BinOp::Or),
+            TokenKind::DotDot => Some(BinOp::Range),
             _ => None,
         }
     }

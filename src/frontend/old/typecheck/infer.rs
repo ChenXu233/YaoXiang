@@ -4,8 +4,8 @@
 
 #![allow(clippy::result_large_err)]
 
-use super::super::lexer::tokens::Literal;
-use super::super::parser::ast::{self, BinOp, UnOp};
+use super::super::core::lexer::tokens::Literal;
+use super::super::core::parser::ast::{self, BinOp, UnOp};
 use super::errors::{TypeError, TypeResult};
 use super::types::{MonoType, PolyType, SendSyncSolver, TypeConstraintSolver};
 use crate::util::span::Span;
@@ -257,6 +257,7 @@ impl<'a> TypeInferrer<'a> {
             ast::Expr::ListComp { .. } => unimplemented!("List comprehension type inference"),
             ast::Expr::Try { expr, span } => self.infer_try(expr, *span),
             ast::Expr::Ref { expr, span } => self.infer_ref(expr, *span),
+            ast::Expr::Lambda { params, body, span } => self.infer_lambda(params, body, *span),
         }
     }
 
@@ -691,7 +692,8 @@ impl<'a> TypeInferrer<'a> {
             self.solver
                 .add_constraint(pat_ty, expr_ty.clone(), arm.span);
 
-            let body_ty = self.infer_expr(&arm.body)?;
+            // arm.body 现在是 Block 类型，使用 infer_block 推断
+            let body_ty = self.infer_block(&arm.body, false, Some(&result_ty))?;
             self.solver
                 .add_constraint(body_ty, result_ty.clone(), arm.span);
             self.exit_scope();
@@ -1422,6 +1424,78 @@ impl<'a> TypeInferrer<'a> {
         let inner_ty = self.infer_expr(expr)?;
         // ref 创建 Arc，返回 Arc<T>
         Ok(MonoType::Arc(Box::new(inner_ty)))
+    }
+
+    /// 推断 lambda 表达式的类型
+    fn infer_lambda(
+        &mut self,
+        params: &[ast::Param],
+        body: &ast::Block,
+        span: Span,
+    ) -> TypeResult<MonoType> {
+        // 进入新作用域以处理 lambda 参数
+        self.enter_scope();
+
+        // 为每个参数创建类型变量
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .map(|p| {
+                if let Some(ty) = &p.ty {
+                    MonoType::from(ty.clone())
+                } else {
+                    self.solver.new_var()
+                }
+            })
+            .collect();
+
+        // 先泛化参数类型，再添加到作用域
+        for (param, param_ty) in params.iter().zip(param_types.iter()) {
+            let poly = self.solver.generalize(param_ty);
+            self.add_var(param.name.clone(), poly);
+        }
+
+        // 创建返回类型变量并设置当前返回类型（支持 return 语句）
+        let return_ty = self.solver.new_var();
+        let prev_return_type = self.current_return_type.clone();
+        self.current_return_type = Some(return_ty.clone());
+
+        // 推断 lambda 体的类型
+        let body_ty = self.infer_block(body, false, None)?;
+
+        // 处理隐式返回：如果块有最后表达式（且不是 return），它的类型必须匹配返回类型
+        if let Some(expr) = &body.expr {
+            if !matches!(expr.as_ref(), ast::Expr::Return(..)) {
+                self.solver.add_constraint(body_ty, return_ty.clone(), span);
+            }
+        } else {
+            // 检查是否以 return 语句结尾
+            let ends_with_return = if let Some(last) = body.stmts.last() {
+                if let ast::StmtKind::Expr(e) = &last.kind {
+                    matches!(e.as_ref(), ast::Expr::Return(..))
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            // 如果没有显式 return，隐式返回 Void
+            if !ends_with_return {
+                self.solver
+                    .add_constraint(MonoType::Void, return_ty.clone(), span);
+            }
+        }
+
+        // 恢复返回类型并退出作用域
+        self.current_return_type = prev_return_type;
+        self.exit_scope();
+
+        // 构建函数类型
+        Ok(MonoType::Fn {
+            params: param_types,
+            return_type: Box::new(return_ty),
+            is_async: false,
+        })
     }
 
     // =========================================================================

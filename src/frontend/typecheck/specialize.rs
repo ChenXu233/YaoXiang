@@ -4,11 +4,15 @@
 
 #![allow(clippy::result_large_err)]
 
-use super::errors::TypeResult;
-use super::types::{MonoType, PolyType, TypeConstraintSolver, TypeVar};
+use crate::frontend::core::type_system::{
+    MonoType, PolyType, StructType, EnumType, TypeConstraintSolver, TypeVar,
+};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
+
+// 类型别名
+type TypeResult = Result<MonoType, crate::frontend::typecheck::errors::TypeError>;
 
 /// 泛型特化器
 ///
@@ -44,7 +48,7 @@ impl GenericSpecializer {
         poly: &PolyType,
         args: &[MonoType],
         solver: &mut TypeConstraintSolver,
-    ) -> TypeResult<MonoType> {
+    ) -> TypeResult {
         // 检查参数数量是否匹配
         if poly.type_binders.len() != args.len() {
             return Err(super::errors::TypeError::ArityMismatch {
@@ -74,7 +78,7 @@ impl GenericSpecializer {
         poly: &PolyType,
         args: &[MonoType],
         solver: &mut TypeConstraintSolver,
-    ) -> TypeResult<MonoType> {
+    ) -> TypeResult {
         // 生成签名
         let signature = self.signature(poly, args);
 
@@ -112,7 +116,7 @@ impl GenericSpecializer {
                     ty.clone()
                 }
             }
-            MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
+            MonoType::Struct(s) => MonoType::Struct(StructType {
                 name: s.name.clone(),
                 fields: s
                     .fields
@@ -121,7 +125,7 @@ impl GenericSpecializer {
                     .collect(),
                 methods: s.methods.clone(),
             }),
-            MonoType::Enum(e) => MonoType::Enum(super::types::EnumType {
+            MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),
                 variants: e.variants.clone(),
             }),
@@ -249,7 +253,7 @@ fn substitute_mono_type(
                 ty.clone()
             }
         }
-        MonoType::Struct(s) => MonoType::Struct(super::types::StructType {
+        MonoType::Struct(s) => MonoType::Struct(StructType {
             name: s.name.clone(),
             fields: s
                 .fields
@@ -258,7 +262,7 @@ fn substitute_mono_type(
                 .collect(),
             methods: s.methods.clone(),
         }),
-        MonoType::Enum(e) => MonoType::Enum(super::types::EnumType {
+        MonoType::Enum(e) => MonoType::Enum(EnumType {
             name: e.name.clone(),
             variants: e.variants.clone(),
         }),

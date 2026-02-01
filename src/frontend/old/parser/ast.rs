@@ -270,7 +270,7 @@ pub struct Param {
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pattern: Pattern,
-    pub body: Expr,
+    pub body: Block,
     pub span: Span,
 }
 

@@ -7,6 +7,7 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::pratt::precedence::*;
 use crate::frontend::core::parser::ParseError;
+use crate::frontend::core::parser::statements::TypeStatementParser;
 
 /// Extension trait for infix parsing
 pub trait InfixParser {
@@ -362,18 +363,5 @@ impl<'a> ParserState<'a> {
         };
 
         Some(Block { stmts, expr, span })
-    }
-
-    /// Parse type annotation (used in cast expressions)
-    fn parse_type_annotation(&mut self) -> Option<Type> {
-        // Simplified type parser
-        // In a full implementation, this would call the full type parser
-        let token = self.current().cloned()?;
-        if let TokenKind::Identifier(name) = token.kind {
-            self.bump();
-            Some(Type::Name(name))
-        } else {
-            None
-        }
     }
 }

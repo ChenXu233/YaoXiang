@@ -7,12 +7,8 @@ pub mod parser;
 
 pub use crate::frontend::core::parser::*;
 
-// Integration tests for RFC features
-#[cfg(test)]
-pub mod tests;
-
 // TODO: Add other modules as they are refactored
-// pub mod type_system;
+pub mod type_system;
 // pub mod const_eval;
 
 // Re-export commonly used items

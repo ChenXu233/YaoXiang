@@ -57,6 +57,7 @@ impl<'a> ParserState<'a> {
 
     pub fn at_end(&self) -> bool {
         self.pos >= self.tokens.len()
+            || matches!(self.current().map(|t| &t.kind), Some(TokenKind::Eof))
     }
 
     pub fn current(&self) -> Option<&Token> {

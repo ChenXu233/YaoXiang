@@ -41,6 +41,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::BoolLiteral(_)) => Some((BP_HIGHEST, Self::parse_bool_literal)),
             // Identifier or path
             Some(TokenKind::Identifier(_)) => Some((BP_HIGHEST, Self::parse_identifier)),
+            // Wildcard pattern (_)
+            Some(TokenKind::Underscore) => Some((BP_HIGHEST, Self::parse_wildcard)),
             // Grouped expression or tuple
             Some(TokenKind::LParen) => Some((BP_HIGHEST, Self::parse_group_or_tuple)),
             // List literal or list comprehension
@@ -175,6 +177,13 @@ impl<'a> ParserState<'a> {
         } else {
             None
         }
+    }
+
+    /// Parse wildcard pattern expression (_)
+    fn parse_wildcard(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume '_'
+        Some(Expr::Var("_".to_string(), span))
     }
 
     /// Parse integer literal expression
@@ -531,22 +540,27 @@ impl<'a> ParserState<'a> {
         let mut arms = Vec::new();
 
         while !self.at(&TokenKind::RBrace) && !self.at_end() {
-            // Parse pattern
-            let pattern = self.parse_expression(BP_LOWEST)?;
+            // Parse pattern - use BP_LAMBDA + 1 to prevent => from being parsed as lambda
+            // Lambda binding power is 11, so we use 12 to stop before =>
+            let pattern = self.parse_expression(12)?;
 
             self.expect(&TokenKind::FatArrow);
 
-            // Parse body expression
-            let body = self.parse_expression(BP_LOWEST)?;
+            // Parse body - can be a block expression or a simple expression
+            let body = if self.at(&TokenKind::LBrace) {
+                self.parse_block_expr()?
+            } else {
+                // Simple expression body - use lower precedence for the body
+                let body_expr = self.parse_expression(BP_LOWEST)?;
+                Block {
+                    stmts: Vec::new(),
+                    expr: Some(Box::new(body_expr)),
+                    span: self.span(),
+                }
+            };
 
             arms.push(MatchArm {
-                pattern: if let Expr::Var(name, _) = pattern {
-                    Pattern::Identifier(name)
-                } else {
-                    // For now, use a simple pattern from the expression
-                    // In a full implementation, you'd have a proper pattern parser
-                    Pattern::Wildcard
-                },
+                pattern: self.expr_to_pattern(&pattern),
                 body,
                 span: self.span(),
             });
@@ -615,6 +629,52 @@ impl<'a> ParserState<'a> {
                 expr: None,
                 span: self.span(),
             })
+        }
+    }
+
+    /// Convert an expression to a pattern for match arms
+    #[allow(clippy::only_used_in_recursion)]
+    fn expr_to_pattern(
+        &self,
+        expr: &Expr,
+    ) -> Pattern {
+        match expr {
+            Expr::Var(name, _) => {
+                if name == "_" {
+                    Pattern::Wildcard
+                } else {
+                    Pattern::Identifier(name.clone())
+                }
+            }
+            Expr::Lit(lit, _) => Pattern::Literal(lit.clone()),
+            Expr::Tuple(elements, _) => {
+                let patterns = elements.iter().map(|e| self.expr_to_pattern(e)).collect();
+                Pattern::Tuple(patterns)
+            }
+            Expr::Call { func, args, .. } => {
+                // Constructor pattern: Name(patterns)
+                if let Expr::Var(name, _) = func.as_ref() {
+                    if args.len() == 1 {
+                        Pattern::Union {
+                            name: name.clone(),
+                            variant: name.clone(),
+                            pattern: Some(Box::new(self.expr_to_pattern(&args[0]))),
+                        }
+                    } else {
+                        // Multiple args -> tuple pattern inside union
+                        let tuple_pattern =
+                            Pattern::Tuple(args.iter().map(|e| self.expr_to_pattern(e)).collect());
+                        Pattern::Union {
+                            name: name.clone(),
+                            variant: name.clone(),
+                            pattern: Some(Box::new(tuple_pattern)),
+                        }
+                    }
+                } else {
+                    Pattern::Wildcard
+                }
+            }
+            _ => Pattern::Wildcard,
         }
     }
 }

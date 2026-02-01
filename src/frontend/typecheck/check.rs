@@ -155,8 +155,8 @@ impl<'a> TypeChecker<'a> {
         self.inferrer.solver().solve().map_err(|e| {
             e.into_iter()
                 .map(|e| TypeError::TypeMismatch {
-                    expected: e.error.left,
-                    found: e.error.right,
+                    expected: Box::new(e.error.left),
+                    found: Box::new(e.error.right),
                     span: e.span,
                 })
                 .collect::<Vec<_>>()

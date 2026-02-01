@@ -1,13 +1,16 @@
 //! 类型检查器测试模块
-#![allow(unused_imports)]
+//!
+//! 迁移自 old/typecheck/tests/
 
 mod basic;
-mod check;
-mod error;
-mod generic;
-mod infer;
+mod errors;
+mod generics;
 mod inference;
-mod ref_test;
 mod scope;
-mod typecheck_fixes;
-mod types;
+
+// 重新导出主要测试
+pub use basic::*;
+pub use inference::*;
+pub use generics::*;
+pub use errors::*;
+pub use scope::*;

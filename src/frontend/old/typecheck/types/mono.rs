@@ -5,7 +5,7 @@
 //! - StructType: 结构体类型
 //! - EnumType: 枚举类型
 
-use super::super::super::parser::ast;
+use super::super::super::core::parser::ast;
 use super::var::TypeVar;
 use super::const_data::{ConstVarDef, ConstValue};
 use std::collections::HashMap;

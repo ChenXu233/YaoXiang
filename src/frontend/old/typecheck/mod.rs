@@ -23,7 +23,7 @@ pub use types::constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};
 pub use types::solver::TypeConstraintSolver;
 pub use types::error::{TypeMismatch, TypeConstraintError, ConstEvalError};
 
-use super::parser::ast;
+use super::core::parser::ast;
 use crate::middle;
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
 use crate::util::span::Span;

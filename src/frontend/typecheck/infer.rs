@@ -692,7 +692,8 @@ impl<'a> TypeInferrer<'a> {
             self.solver
                 .add_constraint(pat_ty, expr_ty.clone(), arm.span);
 
-            let body_ty = self.infer_expr(&arm.body)?;
+            // arm.body 现在是 Block 类型，使用 infer_block 推断
+            let body_ty = self.infer_block(&arm.body, false, Some(&result_ty))?;
             self.solver
                 .add_constraint(body_ty, result_ty.clone(), arm.span);
             self.exit_scope();

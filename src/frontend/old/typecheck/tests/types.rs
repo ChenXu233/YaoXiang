@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::parser::ast;
+use crate::frontend::core::parser::ast;
 use crate::frontend::typecheck::types::*;
 use crate::util::span::Span;
 

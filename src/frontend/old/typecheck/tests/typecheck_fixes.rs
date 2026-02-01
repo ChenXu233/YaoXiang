@@ -2,8 +2,8 @@
 //!
 //! 验证类型检查器修复后的正确行为
 
-use crate::frontend::lexer::tokenize;
-use crate::frontend::parser::parse;
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::typecheck::check::TypeChecker;
 use crate::frontend::typecheck::types::TypeConstraintSolver;
 use crate::util::span::{Position, Span};

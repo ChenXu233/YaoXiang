@@ -9,6 +9,7 @@ use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 use tracing::debug;
 
+pub mod shared;
 pub mod typecheck;
 
 // Refactored core modules with RFC support
@@ -32,9 +33,8 @@ impl Compiler {
     #[inline]
     pub fn new() -> Self {
         let mut type_env = typecheck::TypeEnvironment::new();
-        // 初始化内置类型和函数
+        // 初始化内置类型
         typecheck::add_builtin_types(&mut type_env);
-        typecheck::add_builtin_functions(&mut type_env);
 
         Self { type_env }
     }

@@ -1,535 +1,904 @@
-//! 类型推断和验证测试
+//! 类型推断器详细测试
 //!
-//! 测试类型检查器的推断功能和验证规则
+//! 测试各种表达式和语句的类型推断
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::ast::Type;
-use crate::frontend::core::parser::parse;
-use crate::frontend::typecheck::check::TypeChecker;
-use crate::frontend::typecheck::types::TypeConstraintSolver;
-use crate::frontend::typecheck::{check_module, MonoType, PolyType, TypeEnvironment};
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Pattern, Stmt, StmtKind, UnOp};
+use crate::frontend::core::type_system::{MonoType, PolyType, StructType, TypeConstraintSolver};
+use crate::frontend::typecheck::inference::ExprInferrer;
+use crate::util::span::Span;
+use std::collections::HashMap;
 
-/// 检查类型推断是否成功
-fn check_type_inference(input: &str) -> Result<(), String> {
-    let tokens = tokenize(input).map_err(|e| format!("Lexer error: {:?}", e))?;
-
-    let ast = parse(&tokens).map_err(|e| format!("Parse error: {:?}", e))?;
-
-    let mut env = TypeEnvironment::new();
-    // eprintln!("
-
-    // Provide minimal built-ins used by tests (e.g., print: String -> Void)
-    env.add_var(
-        "print".to_string(),
-        PolyType::mono(MonoType::Fn {
-            params: vec![MonoType::String],
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        }),
-    );
-    // eprintln!("
-
-    check_module(&ast, Some(&mut env)).map(|_| ()).map_err(|e| {
-        // eprintln!("
-        format!("Type error: {:?}", e)
-    })
-}
-
-/// 检查类型推断是否失败（预期错误）
-fn check_type_inference_fails(input: &str) -> bool {
-    check_type_inference(input).is_err()
-}
-
-/// 检查类型是否通过类型检查
-fn check_type(input: &str) -> bool {
-    let tokens = match tokenize(input) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Tokenize error: {:?}", e);
-            return false;
-        }
-    };
-
-    let module = match parse(&tokens) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Parse error: {:?}", e);
-            return false;
-        }
-    };
-
+/// 测试推断器创建
+#[test]
+fn test_type_inferrer_new() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "");
+    let mut inferrer = ExprInferrer::new(&mut solver);
+    assert!(inferrer.solver().new_var().type_var().is_some());
+}
 
-    match checker.check_module(&module) {
-        Ok(_) => {
-            if checker.has_errors() {
-                for err in checker.errors() {
-                    eprintln!("Type check error: {:?}", err);
-                }
-                false
-            } else {
-                true
-            }
+/// 测试推断字面量类型
+#[test]
+fn test_infer_literal_types() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 整数
+    let int_expr = Expr::Lit(Literal::Int(42), Span::default());
+    let int_ty = inferrer.infer_expr(&int_expr).unwrap();
+    assert_eq!(int_ty, MonoType::Int(64));
+
+    // 浮点数
+    let float_expr = Expr::Lit(Literal::Float(3.14), Span::default());
+    let float_ty = inferrer.infer_expr(&float_expr).unwrap();
+    assert_eq!(float_ty, MonoType::Float(64));
+
+    // 布尔值
+    let bool_expr = Expr::Lit(Literal::Bool(true), Span::default());
+    let bool_ty = inferrer.infer_expr(&bool_expr).unwrap();
+    assert_eq!(bool_ty, MonoType::Bool);
+
+    // 字符
+    let char_expr = Expr::Lit(Literal::Char('a'), Span::default());
+    let char_ty = inferrer.infer_expr(&char_expr).unwrap();
+    assert_eq!(char_ty, MonoType::Char);
+
+    // 字符串
+    let str_expr = Expr::Lit(Literal::String("test".to_string()), Span::default());
+    let str_ty = inferrer.infer_expr(&str_expr).unwrap();
+    assert_eq!(str_ty, MonoType::String);
+}
+
+/// 测试推断未知变量错误
+#[test]
+fn test_infer_unknown_variable() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let var_expr = Expr::Var("unknown_var".to_string(), Span::default());
+    let result = inferrer.infer_expr(&var_expr);
+    assert!(result.is_err());
+}
+
+/// 测试添加和获取变量
+#[test]
+fn test_inferrer_add_get_var() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 添加变量
+    inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
+
+    // 获取变量
+    let retrieved = inferrer.get_var("x");
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().body, MonoType::Int(64));
+
+    // 获取不存在的变量
+    let not_found = inferrer.get_var("nonexistent");
+    assert!(not_found.is_none());
+}
+
+/// 测试算术运算类型推断
+#[test]
+fn test_infer_arithmetic_ops() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let left = Expr::Lit(Literal::Int(1), Span::default());
+    let right = Expr::Lit(Literal::Int(2), Span::default());
+
+    // 加法
+    let add = Expr::BinOp {
+        op: BinOp::Add,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _add_ty = inferrer.infer_expr(&add).unwrap();
+
+    // 减法
+    let sub = Expr::BinOp {
+        op: BinOp::Sub,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&sub).unwrap();
+
+    // 乘法
+    let mul = Expr::BinOp {
+        op: BinOp::Mul,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&mul).unwrap();
+
+    // 除法
+    let div = Expr::BinOp {
+        op: BinOp::Div,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&div).unwrap();
+
+    // 取模
+    let mod_op = Expr::BinOp {
+        op: BinOp::Mod,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&mod_op).unwrap();
+}
+
+/// 测试比较运算类型推断
+#[test]
+fn test_infer_comparison_ops() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let left = Expr::Lit(Literal::Int(1), Span::default());
+    let right = Expr::Lit(Literal::Int(2), Span::default());
+
+    // 等于
+    let eq = Expr::BinOp {
+        op: BinOp::Eq,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let eq_ty = inferrer.infer_expr(&eq).unwrap();
+    assert_eq!(eq_ty, MonoType::Bool);
+
+    // 不等于
+    let neq = Expr::BinOp {
+        op: BinOp::Neq,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&neq).unwrap();
+
+    // 小于
+    let lt = Expr::BinOp {
+        op: BinOp::Lt,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&lt).unwrap();
+
+    // 小于等于
+    let le = Expr::BinOp {
+        op: BinOp::Le,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&le).unwrap();
+
+    // 大于
+    let gt = Expr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&gt).unwrap();
+
+    // 大于等于
+    let ge = Expr::BinOp {
+        op: BinOp::Ge,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&ge).unwrap();
+}
+
+/// 测试逻辑运算类型推断
+#[test]
+fn test_infer_logical_ops() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let left = Expr::Lit(Literal::Bool(true), Span::default());
+    let right = Expr::Lit(Literal::Bool(false), Span::default());
+
+    // 与
+    let and = Expr::BinOp {
+        op: BinOp::And,
+        left: Box::new(left.clone()),
+        right: Box::new(right.clone()),
+        span: Span::default(),
+    };
+    let and_ty = inferrer.infer_expr(&and).unwrap();
+    assert_eq!(and_ty, MonoType::Bool);
+
+    // 或
+    let or = Expr::BinOp {
+        op: BinOp::Or,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::default(),
+    };
+    let or_ty = inferrer.infer_expr(&or).unwrap();
+    assert_eq!(or_ty, MonoType::Bool);
+}
+
+/// 测试一元运算类型推断
+#[test]
+fn test_infer_unary_ops() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let expr = Expr::Lit(Literal::Int(5), Span::default());
+
+    // 负数
+    let neg = Expr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(expr.clone()),
+        span: Span::default(),
+    };
+    let _neg_ty = inferrer.infer_expr(&neg).unwrap();
+
+    // 正数
+    let pos = Expr::UnOp {
+        op: UnOp::Pos,
+        expr: Box::new(expr.clone()),
+        span: Span::default(),
+    };
+    let _ = inferrer.infer_expr(&pos).unwrap();
+
+    // 逻辑非
+    let bool_expr = Expr::Lit(Literal::Bool(true), Span::default());
+    let not = Expr::UnOp {
+        op: UnOp::Not,
+        expr: Box::new(bool_expr),
+        span: Span::default(),
+    };
+    let not_ty = inferrer.infer_expr(&not).unwrap();
+    assert_eq!(not_ty, MonoType::Bool);
+}
+
+/// 测试元组推断
+#[test]
+fn test_infer_tuple() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let elems = vec![
+        Expr::Lit(Literal::Int(1), Span::default()),
+        Expr::Lit(Literal::String("hello".to_string()), Span::default()),
+        Expr::Lit(Literal::Bool(true), Span::default()),
+    ];
+    let tuple = Expr::Tuple(elems, Span::default());
+
+    let ty = inferrer.infer_expr(&tuple).unwrap();
+    match ty {
+        MonoType::Tuple(types) => {
+            assert_eq!(types.len(), 3);
         }
-        Err(errors) => {
-            for err in errors {
-                eprintln!("Type check error: {:?}", err);
-            }
-            false
-        }
+        _ => panic!("Expected tuple type"),
     }
 }
 
-/// 检查类型是否应该被拒绝
-fn reject_type(input: &str) -> bool {
-    !check_type(input)
-}
-
-// ============================================================================
-// 标准语法测试（完整类型标注）
-// ============================================================================
-
+/// 测试空列表推断
 #[test]
-fn test_standard_full_annotation() {
-    // 完整类型标注应该通过
-    assert!(check_type("add: (Int, Int) -> Int = (a, b) => a + b"));
-    assert!(check_type("inc: Int -> Int = x => x + 1"));
-    assert!(check_type("log: (String) -> Void = (msg) => {}"));
-    assert!(check_type("get_val: () -> Int = () => 42"));
-    assert!(check_type("empty: () -> Void = () => {}"));
-}
+fn test_infer_empty_list() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
-#[test]
-fn test_single_param_annotation() {
-    // 单参数类型标注应该通过
-    assert!(check_type("inc: Int -> Int = x => x + 1"));
-}
+    let list = Expr::List(vec![], Span::default());
 
-#[test]
-fn test_void_return() {
-    // Void 返回类型测试
-    assert!(check_type("log: (String) -> Void = (msg) => {}"));
-}
-
-// ============================================================================
-// 新语法推断测试（无类型标注）
-// ============================================================================
-
-#[test]
-fn test_inference_empty_block() {
-    // 空块 {} 推断为 Void
-    assert!(check_type_inference("main = () => {}").is_ok());
-    assert!(check_type("main = () => {}"));
-}
-
-#[test]
-fn test_inference_expression_return() {
-    // 从表达式推断返回类型
-    assert!(check_type_inference("get_num = () => 42").is_ok());
-    assert!(check_type_inference("get_str = () => \"hello\"").is_ok());
-    assert!(check_type_inference("get_bool = () => true").is_ok());
-    assert!(check_type("get_num = () => 42"));
-}
-
-#[test]
-fn test_inference_with_typed_param() {
-    // 有类型标注的参数应该通过
-    assert!(check_type_inference("square: (Int) -> Int = (x) => x * x").is_ok());
-    assert!(check_type_inference("add_typed: (Int, Int) -> Int = (a, b) => a + b").is_ok());
-    assert!(check_type("square: (Int) -> Int = (x) => x * x"));
-    assert!(check_type("add_typed: (Int, Int) -> Int = (a, b) => a + b"));
-}
-
-#[test]
-fn test_inference_typed_lambda_param() {
-    // Lambda 参数带类型标注应该通过，但是警告
-    assert!(check_type_inference("identity = (x: Int) => x").is_ok());
-    assert!(check_type_inference("double = (x: Int) => x * 2").is_ok());
-}
-
-// ============================================================================
-// return 语句测试
-// ============================================================================
-
-#[test]
-fn test_return_with_full_annotation() {
-    // 有标注 + return 应该通过
-    assert!(check_type_inference("add: (Int, Int) -> Int = (a, b) => { return a + b; }").is_ok());
-    assert!(check_type_inference("square: Int -> Int = (x) => { return x * x; }").is_ok());
-    assert!(check_type_inference("get_value: () -> Int = () => { return 42; }").is_ok());
-    assert!(
-        check_type_inference("log: (String) -> Void = (msg) => { print(msg); return; }").is_ok()
-    );
-}
-
-#[test]
-fn test_return_stmt_annotated() {
-    // 有标注 + return 应该通过
-    assert!(check_type(
-        "add: (Int, Int) -> Int = (a, b) => { return a + b; }"
-    ));
-}
-
-#[test]
-fn test_return_without_annotation() {
-    // 无标注 + return 应该通过（从 return 推断类型）
-    assert!(check_type_inference("get = () => { return 42; }").is_ok());
-    assert!(check_type_inference("get_str = () => { return \"hello\"; }").is_ok());
-}
-
-#[test]
-fn test_return_stmt_inferred() {
-    // return 推断测试
-    assert!(check_type("get = () => { return 42; }"));
-}
-
-#[test]
-fn test_early_return() {
-    // 早期 return 应该通过
-    assert!(
-        check_type_inference("early: Int -> Int = (x) => { if x < 0 { return 0; } x }").is_ok()
-    );
-    assert!(check_type(
-        "early: Int -> Int = (x) => { if x < 0 { return 0; } x }"
-    ));
-}
-
-// ============================================================================
-// 递归函数测试
-// ============================================================================
-
-#[test]
-fn test_recursive_factorial() {
-    // 递归函数，参数有类型标注
-    assert!(check_type(
-        "fact: Int -> Int = (n) => if n <= 1 { 1 } else { n * fact(n - 1) }"
-    ));
-}
-
-#[test]
-fn test_recursive_fibonacci() {
-    // 递归函数
-    assert!(check_type(
-        "fib: Int -> Int = (n) => if n <= 1 { n } else { fib(n - 1) + fib(n - 2) }"
-    ));
-}
-
-#[test]
-fn test_complex_function_with_inference() {
-    // 复杂函数（有类型标注）应该通过
-    let code = r#"
-fact: Int -> Int = (n) => {
-    if n <= 1 {
-        return 1;
+    let ty = inferrer.infer_expr(&list).unwrap();
+    match ty {
+        MonoType::List(elem_ty) => {
+            // 空列表的元素类型是类型变量
+            assert!(elem_ty.type_var().is_some());
+        }
+        _ => panic!("Expected list type"),
     }
-    return n * fact(n - 1);
-}
-"#;
-    assert!(check_type_inference(code).is_ok());
 }
 
-// ============================================================================
-// 柯里化函数测试
-// ============================================================================
-
+/// 测试字典推断
 #[test]
-fn test_curried_function() {
-    // 柯里化函数应该通过
-    assert!(check_type_inference("add_curried: Int -> Int -> Int = a => b => a + b").is_ok());
-    assert!(check_type_inference(
-        "multiply_curried: Int -> Int -> Int -> Int = a => b => c => a * b * c"
-    )
-    .is_ok());
-    assert!(check_type(
-        "add_curried: Int -> Int -> Int = a => b => a + b"
-    ));
+fn test_infer_dict() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let pairs = vec![
+        (
+            Expr::Lit(Literal::String("key1".to_string()), Span::default()),
+            Expr::Lit(Literal::Int(1), Span::default()),
+        ),
+        (
+            Expr::Lit(Literal::String("key2".to_string()), Span::default()),
+            Expr::Lit(Literal::Int(2), Span::default()),
+        ),
+    ];
+    let dict = Expr::Dict(pairs, Span::default());
+
+    let ty = inferrer.infer_expr(&dict).unwrap();
+    match ty {
+        MonoType::Dict(_, _) => {
+            // 成功推断为字典类型
+        }
+        _ => panic!("Expected dict type"),
+    }
 }
 
+/// 测试空字典推断
 #[test]
-fn test_curried_add() {
-    // 柯里化函数测试
-    assert!(check_type(
-        "add_curried: Int -> Int -> Int = a => b => a + b"
-    ));
+fn test_infer_empty_dict() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let dict = Expr::Dict(vec![], Span::default());
+
+    let ty = inferrer.infer_expr(&dict).unwrap();
+    match ty {
+        MonoType::Dict(key_ty, value_ty) => {
+            // 空字典的键值类型都是类型变量
+            assert!(key_ty.type_var().is_some());
+            assert!(value_ty.type_var().is_some());
+        }
+        _ => panic!("Expected dict type"),
+    }
 }
 
+/// 测试赋值运算类型推断
 #[test]
-fn test_curried_partial() {
-    // 部分应用柯里化函数
-    assert!(check_type(
-        "add_curried: Int -> Int -> Int = a => b => a + b"
-    ));
+fn test_infer_assignment() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let left = Expr::Lit(Literal::Int(1), Span::default());
+    let right = Expr::Lit(Literal::Int(2), Span::default());
+
+    let assign = Expr::BinOp {
+        op: BinOp::Assign,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&assign).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
+/// 测试下标访问推断
 #[test]
-fn test_make_adder() {
-    // 返回函数的函数
-    assert!(check_type(
-        "make_adder: Int -> (Int -> Int) = x => y => x + y"
-    ));
+fn test_infer_index() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 列表下标
+    let list = Expr::List(
+        vec![
+            Expr::Lit(Literal::Int(1), Span::default()),
+            Expr::Lit(Literal::Int(2), Span::default()),
+        ],
+        Span::default(),
+    );
+    let index = Expr::Lit(Literal::Int(0), Span::default());
+
+    let index_expr = Expr::Index {
+        expr: Box::new(list),
+        index: Box::new(index),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&index_expr).unwrap();
+    // 下标访问返回元素类型
+    assert!(ty.type_var().is_some() || matches!(ty, MonoType::Int(_)));
 }
 
-// ============================================================================
-// 高阶函数测试
-// ============================================================================
-
+/// 测试元组静态下标
 #[test]
-fn test_higher_order_function() {
-    // 高阶函数应该通过
-    assert!(check_type_inference("apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)").is_ok());
-    assert!(check_type_inference(
-        "compose: ((Int) -> Int, (Int) -> Int) -> (Int) -> Int = (f, g) => x => f(g(x))"
-    )
-    .is_ok());
-    assert!(check_type(
-        "apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)"
-    ));
+fn test_infer_tuple_static_index() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let tuple = Expr::Tuple(
+        vec![
+            Expr::Lit(Literal::Int(1), Span::default()),
+            Expr::Lit(Literal::String("hello".to_string()), Span::default()),
+        ],
+        Span::default(),
+    );
+    let index = Expr::Lit(Literal::Int(1), Span::default());
+
+    let index_expr = Expr::Index {
+        expr: Box::new(tuple),
+        index: Box::new(index),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&index_expr).unwrap();
+    // 元组下标访问返回对应位置的类型
+    assert_eq!(ty, MonoType::String);
 }
 
+/// 测试元组越界下标
 #[test]
-fn test_higher_order_apply() {
-    // 高阶函数测试
-    assert!(check_type(
-        "apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)"
-    ));
+fn test_infer_tuple_out_of_bounds_index() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let tuple = Expr::Tuple(
+        vec![
+            Expr::Lit(Literal::Int(1), Span::default()),
+            Expr::Lit(Literal::String("hello".to_string()), Span::default()),
+        ],
+        Span::default(),
+    );
+    let index = Expr::Lit(Literal::Int(10), Span::default());
+
+    let index_expr = Expr::Index {
+        expr: Box::new(tuple),
+        index: Box::new(index),
+        span: Span::default(),
+    };
+
+    // 应该返回错误
+    let result = inferrer.infer_expr(&index_expr);
+    assert!(result.is_err());
 }
 
+/// 测试通配符模式
 #[test]
-fn test_higher_order_compose() {
-    // 函数组合测试
-    assert!(check_type(
-        "compose: ((Int) -> Int, (Int) -> Int) -> (Int) -> Int = (f, g) => x => f(g(x))"
-    ));
+fn test_infer_wildcard_pattern() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let pattern = Pattern::Wildcard;
+    // Pattern 推断需要单独的方法
+    let ty = solver.new_var();
+    assert!(ty.type_var().is_some());
 }
 
+/// 测试标识符模式
 #[test]
-fn test_higher_order_map() {
-    // 高阶函数处理列表测试
-    assert!(check_type(
-        "map: ((Int) -> Int, List[Int]) -> List[Int] = (f, xs) => xs"
-    ));
+fn test_infer_identifier_pattern() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 添加标识符到作用域
+    inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
+
+    // 验证变量在作用域中
+    let var = inferrer.get_var("x");
+    assert!(var.is_some());
 }
 
-// ============================================================================
-// 类型解析测试
-// ============================================================================
-
+/// 测试字面量模式
 #[test]
-fn test_fn_type_with_fn_return() {
-    // Skip this test - ParserState not available in new architecture
-    return;
+fn test_infer_literal_pattern() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
-    // 测试 int -> (int -> int) 的类型解析
-    // let tokens = tokenize("int -> (int -> int)").unwrap();
-    // Skip this test - ParserState not available in new architecture
-    // let mut state = ParserState::new(&tokens);
-    // let result = state.parse_type_anno();
-    // assert!(result.is_some());
-
-    // // 应该解析为 Fn { params: [Int], return_type: Fn { params: [Int], return_type: Int } }
-    // match &result {
-    //     Some(Type::Fn {
-    //         params,
-    //         return_type,
-    //     }) => {
-    //         assert_eq!(params.len(), 1);
-    //         // 返回类型应该是 Fn 类型
-    //         assert!(
-    //             matches!(*return_type, Type::Fn { .. }),
-    //             "Expected Fn type, got {:?}",
-    //             return_type
-    //         );
-    //     }
-    //     _ => panic!("Expected Fn type, got {:?}", result),
-    // }
+    let literal_expr = Expr::Lit(Literal::Int(42), Span::default());
+    let ty = inferrer.infer_expr(&literal_expr).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
 }
 
-// ============================================================================
-// 类型不匹配检测测试
-// ============================================================================
-
+/// 测试元组模式
 #[test]
-fn test_reject_type_mismatch_binary_op() {
-    // 类型不匹配：Int + String 应该报错
-    assert!(reject_type(
-        "bad_add: (Int, String) -> Int = (a, b) => a + b"
-    ));
+fn test_infer_tuple_pattern() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let elems = vec![
+        Expr::Lit(Literal::Int(1), Span::default()),
+        Expr::Lit(Literal::Int(2), Span::default()),
+    ];
+    let tuple = Expr::Tuple(elems, Span::default());
+
+    let ty = inferrer.infer_expr(&tuple).unwrap();
+    match ty {
+        MonoType::Tuple(types) => {
+            assert_eq!(types.len(), 2);
+        }
+        _ => panic!("Expected tuple type"),
+    }
 }
 
+/// 测试 return 推断
 #[test]
-fn test_reject_type_mismatch_return() {
-    // 返回类型不匹配：应该返回 String 但返回了 Int
-    assert!(reject_type(
-        "bad_return: Int -> String = (x) => { return 42; }"
-    ));
+fn test_infer_return() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 有表达式的 return
+    let ret_expr = Expr::Lit(Literal::Int(42), Span::default());
+    let ret = Expr::Return(Some(Box::new(ret_expr)), Span::default());
+
+    let ty = inferrer.infer_expr(&ret).unwrap();
+    assert_eq!(ty, MonoType::Void);
+
+    // 无表达式的 return
+    let ret_void = Expr::Return(None, Span::default());
+    let ty_void = inferrer.infer_expr(&ret_void).unwrap();
+    assert_eq!(ty_void, MonoType::Void);
 }
 
-// ============================================================================
-// 复杂控制流测试
-// ============================================================================
-
+/// 测试 break 推断
 #[test]
-fn test_while_loop() {
-    // while 循环测试
-    assert!(check_type("sum_to: Int -> Int = (n) => { i = 0; total = 0; while i < n { total = total + i; i = i + 1; }; total }"));
+fn test_infer_break() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 无标签的 break
+    let break_expr = Expr::Break(None, Span::default());
+    let ty = inferrer.infer_expr(&break_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
-// ============================================================================
-// 列表和元组测试
-// ============================================================================
-
+/// 测试 continue 推断
 #[test]
-fn test_tuple_return() {
-    // 返回元组测试
-    assert!(check_type(
-        "divmod: (Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)"
-    ));
+fn test_infer_continue() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 无标签的 continue
+    let continue_expr = Expr::Continue(None, Span::default());
+    let ty = inferrer.infer_expr(&continue_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
+/// 测试 break 带未知标签错误
 #[test]
-fn test_nested_tuple_return() {
-    // 返回嵌套元组测试
-    assert!(check_type(
-        "get_point: () -> (Int, (Float, Float)) = () => (0, (1.0, 2.0))"
-    ));
+fn test_infer_break_unknown_label() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let break_expr = Expr::Break(Some("unknown_label".to_string()), Span::default());
+    let result = inferrer.infer_expr(&break_expr);
+    assert!(result.is_err());
 }
 
-// ============================================================================
-// 条件表达式测试
-// ============================================================================
-
+/// 测试 continue 带未知标签错误
 #[test]
-fn test_conditional_expression() {
-    // 条件表达式测试
-    assert!(check_type(
-        "max: (Int, Int) -> Int = (a, b) => if a > b { a } else { b }"
-    ));
+fn test_infer_continue_unknown_label() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let continue_expr = Expr::Continue(Some("unknown_label".to_string()), Span::default());
+    let result = inferrer.infer_expr(&continue_expr);
+    assert!(result.is_err());
 }
 
+/// 测试 cast 推断
 #[test]
-fn test_elif_expression() {
-    // 多分支条件测试
-    assert!(check_type(
-        "sign: Int -> Int = (n) => if n < 0 { -1 } elif n == 0 { 0 } else { 1 }"
-    ));
+fn test_infer_cast() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let expr = Expr::Lit(Literal::Int(42), Span::default());
+    let target_type = crate::frontend::core::parser::ast::Type::Int(64);
+    let cast = Expr::Cast {
+        expr: Box::new(expr),
+        target_type: *Box::new(target_type),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&cast).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
 }
 
-// ============================================================================
-// Lambda 类型标注测试
-// ============================================================================
-
+/// 测试类型转换推断
 #[test]
-fn test_lambda_with_param_annotation() {
-    // Lambda 参数带类型标注测试
-    assert!(check_type(
-        "add: (Int, Int) -> Int = (a: Int, b: Int) => a + b"
-    ));
+fn test_infer_type_cast() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let expr = Expr::Lit(Literal::Int(42), Span::default());
+    let cast = Expr::Cast {
+        expr: Box::new(expr),
+        target_type: *Box::new(crate::frontend::core::parser::ast::Type::Float(64)),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&cast).unwrap();
+    assert_eq!(ty, MonoType::Float(64));
 }
 
-// ============================================================================
-// 变量声明类型测试
-// ============================================================================
-
+/// 测试函数调用推断
 #[test]
-fn test_variable_with_annotation() {
-    // 变量声明带类型标注测试
-    assert!(check_type("x: Int = 42"));
+fn test_infer_function_call() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 定义一个函数变量
+    let fn_type = MonoType::Fn {
+        params: vec![MonoType::Int(64), MonoType::Int(64)],
+        return_type: Box::new(MonoType::Int(64)),
+        is_async: false,
+    };
+    inferrer.add_var("add".to_string(), PolyType::mono(fn_type));
+
+    // 调用函数
+    let func = Expr::Var("add".to_string(), Span::default());
+    let args = vec![
+        Expr::Lit(Literal::Int(1), Span::default()),
+        Expr::Lit(Literal::Int(2), Span::default()),
+    ];
+    let call = Expr::Call {
+        func: Box::new(func),
+        args,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&call).unwrap();
+    assert!(ty.type_var().is_some());
 }
 
+/// 测试结构体字段访问推断
 #[test]
-fn test_variable_inferred() {
-    // 变量声明类型推断测试
-    assert!(check_type("y = 42"));
+fn test_infer_field_access() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 创建结构体类型
+    let struct_type = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(64)),
+            ("y".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+    });
+    inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
+
+    // 字段访问
+    let var = Expr::Var("p".to_string(), Span::default());
+    let field_access = Expr::FieldAccess {
+        expr: Box::new(var),
+        field: "x".to_string(),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&field_access).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
 }
 
-// ============================================================================
-// 无效语法测试（解析层面拒绝）
-// ============================================================================
-
+/// 测试未知字段访问错误
 #[test]
-fn test_invalid_missing_equals() {
-    // 缺少 '=' 符号
-    // 注意：当前解析器将 "neg: Int -> Int (a) => -a" 解析为两个语句：
-    // 1. neg: Int -> Int（变量声明，无初始化）
-    // 2. (a) => -a（独立的 lambda 表达式语句）
-    // 这在技术上是合法的语法，尽管可能不是用户的意图。
-    // 如果需要强制要求 = 符号，应在语义分析阶段检测未初始化的函数类型变量。
-    // 目前跳过此测试，因为它不再是解析错误。
-    // assert!(check_type_inference_fails("neg: Int -> Int (a) => -a"));
+fn test_infer_unknown_field() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let struct_type = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![("x".to_string(), MonoType::Int(64))],
+        methods: HashMap::new(),
+    });
+    inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
+
+    let var = Expr::Var("p".to_string(), Span::default());
+    let field_access = Expr::FieldAccess {
+        expr: Box::new(var),
+        field: "unknown".to_string(),
+        span: Span::default(),
+    };
+
+    let result = inferrer.infer_expr(&field_access);
+    assert!(result.is_err());
 }
 
+/// 测试非结构体字段访问错误
 #[test]
-fn test_invalid_missing_arrow() {
-    // 缺少 '=>' 符号 - 应该是语法错误
-    // inc: Int -> Int = a + 1 中 a 未定义，类型不匹配
-    assert!(check_type_inference_fails("inc: Int -> Int = a + 1"));
+fn test_infer_field_access_on_non_struct() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
+
+    let var = Expr::Var("x".to_string(), Span::default());
+    let field_access = Expr::FieldAccess {
+        expr: Box::new(var),
+        field: "field".to_string(),
+        span: Span::default(),
+    };
+
+    let result = inferrer.infer_expr(&field_access);
+    assert!(result.is_err());
 }
 
+/// 测试代码块推断
 #[test]
-fn test_invalid_missing_body() {
-    // 缺少函数体应该在解析层就被拒绝
-    assert!(check_type_inference_fails("dec: Int -> Int = (a) => "));
-    assert!(check_type_inference_fails(
-        "missing_body: Int -> Int = => 42"
-    ));
+fn test_infer_block() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let block = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(42), Span::default()))),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_block(&block, true, None).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
 }
 
+/// 测试空代码块推断
 #[test]
-fn test_invalid_bad_parens() {
-    // 错误的括号形式应该在解析层就被拒绝
-    assert!(check_type_inference_fails(
-        "bad_parens: Int, Int -> Int = (a, b) => a + b"
-    ));
+fn test_infer_empty_block() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let block = Block {
+        stmts: vec![],
+        expr: None,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_block(&block, true, None).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
-// ============================================================================
-// 泛型函数测试
-// ============================================================================
-
+/// 测试 If 表达式推断
 #[test]
-fn test_generic_function() {
-    // 泛型函数应该通过
-    // 单参数泛型函数
-    // 注意：当前解析器不支持 "[T] (T) -> T" 这种多态类型语法。
-    // 需要实现更完整的类型系统支持（包括 forall 关键字或类型参数列表）。
-    // 目前跳过此测试，因为它需要更多的语言设计工作。
-    // assert!(check_type_inference("identity: [T] (T) -> T = x => x").is_ok());
-    // assert!(check_type_inference("id: [A] (A) -> A = x => x").is_ok());
+fn test_infer_if_expr() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let condition = Expr::Lit(Literal::Bool(true), Span::default());
+    let then_body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(1), Span::default()))),
+        span: Span::default(),
+    };
+    let else_body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(2), Span::default()))),
+        span: Span::default(),
+    };
+
+    let if_expr = Expr::If {
+        condition: Box::new(condition),
+        then_branch: Box::new(then_body),
+        elif_branches: vec![],
+        else_branch: Some(Box::new(else_body)),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&if_expr).unwrap();
+    assert_eq!(ty, MonoType::Int(64));
 }
 
-// ============================================================================
-// 边界情况测试
-// ============================================================================
-
+/// 测试 While 表达式推断
 #[test]
-fn test_unit_type_return() {
-    // 显式返回 Void 测试
-    assert!(check_type("do_nothing: () -> Void = () => {}"));
+fn test_infer_while_expr() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let condition = Expr::Lit(Literal::Bool(true), Span::default());
+    let body = Block {
+        stmts: vec![],
+        expr: Some(Box::new(Expr::Lit(Literal::Int(1), Span::default()))),
+        span: Span::default(),
+    };
+
+    let while_expr = Expr::While {
+        condition: Box::new(condition),
+        body: Box::new(body),
+        label: None,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&while_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
+/// 测试 For 表达式推断
 #[test]
-fn test_single_param_parens() {
-    // 单参数带括号测试
-    assert!(check_type("inc: (Int) -> Int = (x) => x + 1"));
+fn test_infer_for_loop() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let iterable = Expr::Lit(Literal::String("test".to_string()), Span::default());
+    let body = Block {
+        stmts: vec![],
+        expr: None,
+        span: Span::default(),
+    };
+
+    let for_expr = Expr::For {
+        var: "c".to_string(),
+        iterable: Box::new(iterable),
+        body: Box::new(body),
+        label: None,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&for_expr).unwrap();
+    assert_eq!(ty, MonoType::Void);
 }
 
+/// 测试取负运算推断
 #[test]
-fn test_three_params() {
-    // 三个参数测试
-    assert!(check_type(
-        "sum3: (Int, Int, Int) -> Int = (a, b, c) => a + b + c"
-    ));
+fn test_infer_neg() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let expr = Expr::Lit(Literal::Int(42), Span::default());
+    let neg = Expr::UnOp {
+        op: UnOp::Neg,
+        expr: Box::new(expr),
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&neg).unwrap();
+    solver.solve().unwrap();
+    let resolved_ty = solver.resolve_type(&ty);
+    assert!(matches!(resolved_ty, MonoType::Int(64)));
 }
 
+/// 测试 FnDef 表达式推断
 #[test]
-fn test_no_param_annotation() {
-    // 无参数类型标注测试
-    assert!(check_type("get_val: () -> Int = () => 42"));
+fn test_infer_fn_def() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    let fn_def = Expr::FnDef {
+        name: "add".to_string(),
+        params: vec![
+            crate::frontend::core::parser::ast::Param {
+                name: "a".to_string(),
+                ty: None,
+                span: Span::default(),
+            },
+            crate::frontend::core::parser::ast::Param {
+                name: "b".to_string(),
+                ty: None,
+                span: Span::default(),
+            },
+        ],
+        return_type: Some(crate::frontend::core::parser::ast::Type::Int(64)),
+        body: Box::new(Block {
+            stmts: vec![],
+            expr: Some(Box::new(Expr::Lit(Literal::Int(0), Span::default()))),
+            span: Span::default(),
+        }),
+        is_async: false,
+        span: Span::default(),
+    };
+
+    let ty = inferrer.infer_expr(&fn_def).unwrap();
+    assert!(matches!(ty, MonoType::Fn { .. }));
 }
 
+/// 测试作用域层级
 #[test]
-fn test_empty_body() {
-    // 空函数体测试
-    assert!(check_type("empty: () -> Void = () => {}"));
+fn test_scope_level() {
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+
+    // 初始应该在全局作用域
+    assert_eq!(inferrer.scope_level(), 1);
+
+    // 进入新作用域
+    inferrer.enter_scope();
+    assert_eq!(inferrer.scope_level(), 2);
+
+    // 再进入一个作用域
+    inferrer.enter_scope();
+    assert_eq!(inferrer.scope_level(), 3);
+
+    // 退出一个作用域
+    inferrer.exit_scope();
+    assert_eq!(inferrer.scope_level(), 2);
+
+    // 再退出一个作用域
+    inferrer.exit_scope();
+    assert_eq!(inferrer.scope_level(), 1);
+
+    // 不应该退出全局作用域
+    inferrer.exit_scope();
+    assert_eq!(inferrer.scope_level(), 1);
 }

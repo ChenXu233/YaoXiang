@@ -1,15 +1,18 @@
 //! 基础类型推断测试
+//!
+//! 测试字面量、二元运算、一元运算等基础类型推断
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
-use crate::frontend::typecheck::*;
+use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::typecheck::inference::ExprInferrer;
 use crate::util::span::Span;
 
 /// 测试字面量类型推断
 #[test]
 fn test_literal_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 整数
     let int_lit = Expr::Lit(Literal::Int(42), Span::default());
@@ -18,21 +21,21 @@ fn test_literal_inference() {
 
     // 浮点数
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
     let float_lit = Expr::Lit(Literal::Float(3.14), Span::default());
     let float_ty = inferrer.infer_expr(&float_lit).unwrap();
     assert_eq!(float_ty, MonoType::Float(64));
 
     // 布尔值
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
     let bool_lit = Expr::Lit(Literal::Bool(true), Span::default());
     let bool_ty = inferrer.infer_expr(&bool_lit).unwrap();
     assert_eq!(bool_ty, MonoType::Bool);
 
     // 字符串
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
     let str_lit = Expr::Lit(Literal::String("hello".to_string()), Span::default());
     let str_ty = inferrer.infer_expr(&str_lit).unwrap();
     assert_eq!(str_ty, MonoType::String);
@@ -43,7 +46,7 @@ fn test_literal_inference() {
 fn test_binop_inference() {
     // 加法
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Int(1), Span::default());
     let right = Expr::Lit(Literal::Int(2), Span::default());
@@ -66,7 +69,7 @@ fn test_binop_inference() {
 #[test]
 fn test_comparison_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Int(1), Span::default());
     let right = Expr::Lit(Literal::Int(2), Span::default());
@@ -87,7 +90,7 @@ fn test_comparison_inference() {
 #[test]
 fn test_logical_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Bool(true), Span::default());
     let right = Expr::Lit(Literal::Bool(false), Span::default());
@@ -106,7 +109,7 @@ fn test_logical_inference() {
 #[test]
 fn test_tuple_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let elems = vec![
         Expr::Lit(Literal::Int(1), Span::default()),
@@ -127,7 +130,7 @@ fn test_tuple_inference() {
 #[test]
 fn test_list_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let elems = vec![
         Expr::Lit(Literal::Int(1), Span::default()),
@@ -186,7 +189,7 @@ fn test_type_resolution() {
 #[test]
 fn test_unop_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 负数
     let expr = Expr::Lit(Literal::Int(5), Span::default());
@@ -206,7 +209,7 @@ fn test_unop_inference() {
 #[test]
 fn test_string_concat() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::String("hello".to_string()), Span::default());
     let right = Expr::Lit(Literal::String(" world".to_string()), Span::default());
@@ -225,19 +228,21 @@ fn test_string_concat() {
 /// 测试变量引用
 #[test]
 fn test_variable_reference() {
-    // 使用 TypeEnvironment 来添加变量
-    let mut env = TypeEnvironment::new();
-    env.add_var("my_var".to_string(), PolyType::mono(MonoType::Int(64)));
+    // 使用 ExprInferrer 来添加变量
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
+    inferrer.add_var("my_var".to_string(), PolyType::mono(MonoType::Int(64)));
 
-    // 我们使用 TypeEnvironment 的 get_var 来验证
-    let retrieved = env.get_var("my_var").unwrap();
+    // 我们使用 ExprInferrer 的 get_var 来验证
+    let retrieved = inferrer.get_var("my_var").unwrap();
     assert_eq!(retrieved.body, MonoType::Int(64));
 }
 
 /// 测试函数调用类型推断
 #[test]
 fn test_function_call_inference() {
-    let mut env = TypeEnvironment::new();
+    let mut solver = TypeConstraintSolver::new();
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 添加函数到环境
     let fn_type = PolyType::mono(MonoType::Fn {
@@ -245,11 +250,11 @@ fn test_function_call_inference() {
         return_type: Box::new(MonoType::Int(64)),
         is_async: false,
     });
-    env.add_var("add".to_string(), fn_type);
+    inferrer.add_var("add".to_string(), fn_type);
 
-    // 注意：TypeInferrer 内部维护自己的 vars 环境
+    // 注意：ExprInferrer 内部维护自己的 vars 环境
     // 这里我们只验证类型环境的基本功能
-    let retrieved = env.get_var("add");
+    let retrieved = inferrer.get_var("add");
     assert!(retrieved.is_some());
 }
 
@@ -278,7 +283,7 @@ fn test_type_annotation() {
 #[test]
 fn test_mixed_type_list() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 混合类型列表
     let elems = vec![
@@ -298,7 +303,7 @@ fn test_mixed_type_list() {
 #[test]
 fn test_division_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Int(10), Span::default());
     let right = Expr::Lit(Literal::Int(3), Span::default());
@@ -320,7 +325,7 @@ fn test_division_inference() {
 #[test]
 fn test_modulo_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Int(10), Span::default());
     let right = Expr::Lit(Literal::Int(3), Span::default());
@@ -342,7 +347,7 @@ fn test_modulo_inference() {
 #[test]
 fn test_float_binop_inference() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let left = Expr::Lit(Literal::Float(3.14), Span::default());
     let right = Expr::Lit(Literal::Float(2.0), Span::default());
@@ -362,7 +367,7 @@ fn test_float_binop_inference() {
 #[test]
 fn test_empty_tuple() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     let tuple = Expr::Tuple(vec![], Span::default());
 
@@ -410,17 +415,17 @@ fn test_add_constraint() {
     assert_eq!(resolved, MonoType::Int(64));
 }
 
-/// 测试类型推断器创建
+/// 测试推断器创建
 #[test]
 fn test_type_inferrer_creation() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 验证推断器创建成功
     assert!(inferrer.solver().new_var().type_var().is_some());
 }
 
-/// 测试类型求解器创建
+/// 测试求解器创建
 #[test]
 fn test_solver_creation() {
     let mut solver = TypeConstraintSolver::new();
@@ -450,7 +455,10 @@ fn test_solver_get_binding() {
 
     // 未绑定时应该是 Unbound
     let binding = solver.get_binding(gvar);
-    assert!(matches!(binding, Some(TypeBinding::Unbound)));
+    assert!(matches!(
+        binding,
+        Some(crate::frontend::core::type_system::TypeBinding::Unbound)
+    ));
 }
 
 /// 测试绑定后获取绑定
@@ -464,18 +472,18 @@ fn test_solver_get_binding_after_bind() {
     // 绑定后应该是 Bound
     let binding = solver.get_binding(gvar);
     match binding {
-        Some(TypeBinding::Bound(ty)) => {
+        Some(crate::frontend::core::type_system::TypeBinding::Bound(ty)) => {
             assert_eq!(*ty, MonoType::Int(64));
         }
         _ => panic!("Expected bound type"),
     }
 }
 
-/// 测试类型推断器获取求解器
+/// 测试推断器获取求解器
 #[test]
 fn test_inferrer_get_solver() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // 获取求解器并使用
     let new_var = inferrer.solver().new_var();

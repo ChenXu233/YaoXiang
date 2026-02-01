@@ -11,6 +11,67 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
 
+/// 检测是否是旧的函数定义语法: `name(Types) -> ReturnType = ...`
+/// 通过向前看来检测这种模式
+fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
+    // 保存当前位置
+    let saved = state.save_position();
+
+    // 跳过标识符
+    state.bump();
+
+    // 检查是否是 (
+    if !state.at(&TokenKind::LParen) {
+        state.restore_position(saved);
+        return false;
+    }
+    state.bump(); // consume '('
+
+    // 跳过括号内的内容，计算括号深度
+    let mut paren_depth = 1;
+    while paren_depth > 0 && !state.at_end() {
+        if state.at(&TokenKind::LParen) {
+            paren_depth += 1;
+        } else if state.at(&TokenKind::RParen) {
+            paren_depth -= 1;
+        }
+        state.bump();
+    }
+
+    // 检查括号后是否是 ->，这是旧语法的特征
+    // 新语法在括号前有冒号: name: (Types) -> ...
+    let is_old = state.at(&TokenKind::Arrow);
+
+    // 恢复位置
+    state.restore_position(saved);
+
+    is_old
+}
+
+/// 跳过旧函数语法的整个声明
+fn skip_old_function_syntax(state: &mut ParserState<'_>) {
+    // 跳过直到找到分号或遇到新的语句开始
+    while !state.at_end() {
+        if state.at(&TokenKind::Semicolon) {
+            state.bump();
+            break;
+        }
+        // 遇到新语句的关键字时停止
+        if matches!(
+            state.current().map(|t| &t.kind),
+            Some(TokenKind::KwType)
+                | Some(TokenKind::KwUse)
+                | Some(TokenKind::KwMut)
+                | Some(TokenKind::KwReturn)
+                | Some(TokenKind::KwBreak)
+                | Some(TokenKind::KwContinue)
+        ) {
+            break;
+        }
+        state.bump();
+    }
+}
+
 /// Parse variable declaration: `[mut] name[: type] [= expr];`
 /// Function definition: `name: (ParamTypes) -> ReturnType = (params) => body;`
 pub fn parse_var_stmt(
@@ -43,17 +104,32 @@ pub fn parse_var_stmt(
         None
     };
 
-    // Check for invalid syntax: name: Type (params) => body (missing =)
-    if type_annotation.is_some() && state.at(&TokenKind::LParen) && !state.at(&TokenKind::Eq) {
-        let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
-        state.error(ParseError::UnexpectedToken {
-            found: state
-                .current()
-                .map(|t| t.kind.clone())
-                .unwrap_or(TokenKind::Eof),
-            span,
-        });
-        return None;
+    // Check for invalid syntax after type annotation.
+    // Valid tokens after type annotation: `=`, `;`, newline/EOF
+    // Invalid tokens include:
+    // 1. `(` without `=` - e.g., `name: Type (params) => body` (missing =)
+    // 2. `=>` without `=` - e.g., `name: Type(params) => body` (type parser consumed params)
+    // 3. `,` - e.g., `name: Int, Int -> Int` (invalid type syntax with bare comma)
+    // 4. Identifier - e.g., `name: (Int)Int -> Int` (invalid type syntax)
+    if type_annotation.is_some() {
+        let is_invalid = state.at(&TokenKind::LParen)
+            || state.at(&TokenKind::FatArrow)
+            || state.at(&TokenKind::Comma)
+            || matches!(
+                state.current().map(|t| &t.kind),
+                Some(TokenKind::Identifier(_))
+            );
+        if is_invalid && !state.at(&TokenKind::Eq) {
+            let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
+            state.error(ParseError::UnexpectedToken {
+                found: state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
+                span,
+            });
+            return None;
+        }
     }
 
     // Optional initializer
@@ -366,10 +442,28 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<String> {
 /// - `name = expr` - 变量声明（如果没有类型注解）
 /// - `name: type = expr` - 变量声明（带类型注解）
 /// - `name expr` - 表达式语句
+///
+/// 旧语法 `name(types) -> type = ...` 被明确拒绝
 pub fn parse_identifier_stmt(
     state: &mut ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
+    // 首先检测并拒绝旧语法: identifier( 后跟类型参数和 ->
+    // 旧语法示例: add(Int, Int) -> Int = (a, b) => a + b
+    // 必须在获取 next 之前检查，避免借用冲突
+    if let Some(TokenKind::LParen) = state.peek().map(|t| &t.kind) {
+        // 检查这是否是旧的函数定义语法
+        if is_old_function_syntax(state) {
+            state.error(ParseError::Message(
+                "旧语法已弃用。请使用新语法: `name: (Types) -> ReturnType = (params) => body`"
+                    .to_string(),
+            ));
+            // 跳过整个旧语法声明
+            skip_old_function_syntax(state);
+            return None;
+        }
+    }
+
     let next = state.peek();
 
     // Check if identifier is followed by =
@@ -616,10 +710,29 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 });
             }
 
-            // Check for function type: (Params) -> ReturnType
+            // Check for constructor/struct type: Name(params) or Name(x: Type, ...)
             if state.at(&TokenKind::LParen) {
-                if let Some(fn_type) = parse_fn_type(state) {
-                    return Some(fn_type);
+                // Look ahead to determine if this is a named struct (has field names)
+                // or a generic constructor (just types)
+                let saved = state.save_position();
+                state.bump(); // consume '('
+
+                // Check if the first thing looks like "identifier:" (named field)
+                let has_named_fields =
+                    if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                        matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
+                    } else {
+                        false
+                    };
+
+                state.restore_position(saved);
+
+                if has_named_fields {
+                    // Parse as named struct: Name(x: Type, y: Type)
+                    return parse_named_struct_type(name, state);
+                } else {
+                    // Parse as generic constructor: Name(Type1, Type2)
+                    return parse_constructor_type(name, state);
                 }
             }
 
@@ -721,6 +834,62 @@ fn parse_generic_type_bracket(
     }
 
     state.skip(&TokenKind::RBracket); // consume ']'
+
+    Some(Type::Generic { name, args })
+}
+
+/// Parse named struct type: `Name(x: Type, y: Type)`
+fn parse_named_struct_type(
+    name: String,
+    state: &mut ParserState<'_>,
+) -> Option<Type> {
+    state.bump(); // consume '('
+
+    let mut fields = Vec::new();
+
+    while !state.at(&TokenKind::RParen) && !state.at_end() {
+        let field_name = match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => break,
+        };
+        state.bump();
+
+        if !state.expect(&TokenKind::Colon) {
+            return None;
+        }
+
+        let field_type = parse_type_annotation(state)?;
+        fields.push((field_name, field_type));
+
+        if !state.skip(&TokenKind::Comma) {
+            break;
+        }
+    }
+
+    state.expect(&TokenKind::RParen);
+
+    Some(Type::NamedStruct { name, fields })
+}
+
+/// Parse constructor type: `Name(Type1, Type2)`
+fn parse_constructor_type(
+    name: String,
+    state: &mut ParserState<'_>,
+) -> Option<Type> {
+    state.bump(); // consume '('
+
+    let mut args = Vec::new();
+
+    while !state.at(&TokenKind::RParen) && !state.at_end() {
+        let arg = parse_type_annotation(state)?;
+        args.push(arg);
+
+        if !state.skip(&TokenKind::Comma) {
+            break;
+        }
+    }
+
+    state.expect(&TokenKind::RParen);
 
     Some(Type::Generic { name, args })
 }
