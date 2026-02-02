@@ -2,7 +2,7 @@
 //!
 //! 提供函数单态化相关的辅助函数和trait
 
-use crate::frontend::parser::ast::Type as AstType;
+use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};

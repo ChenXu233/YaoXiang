@@ -149,14 +149,6 @@
 
   "formatter_not_implemented": "Formatter not implemented yet",
 
-  "stage1_start": "=== 阶段 1: 错误和警告信息 ===",
-  "stage1_complete": "=== 阶段 1 完成: 错误和警告信息 ===",
-  "stage2_start": "=== 阶段 2: 用户可见消息 ===",
-  "stage2_complete": "=== 阶段 2 完成: 用户可见消息 ===",
-  "stage3_start": "=== 阶段 3: 调试信息和其他模块 ===",
-  "stage3_complete": "=== 阶段 3 完成: 调试信息和其他模块 ===",
-  "all_stages_complete": "=== 所有阶段完成！ ===",
-
   "bytecode_decode_i64add": "DEBUG decode: I64Add operands.len = {0}",
   "bytecode_decode_i64add_too_short": "DEBUG decode: I64Add operands too short, skipping",
 
@@ -203,10 +195,5 @@
 
   "repl_value": "{0}",
   "repl_prompt": "{0}",
-  "repl_history_entry": "[{0}] {1}",
-
-  "shell_exec_time": "Executed in {0:?}",
-  "shell_loaded": "Loaded: {0}",
-  "shell_debug_start": "Starting debug session for: {0}",
-  "shell_debug_cmd": "Available commands:\n  (r)un    - Run to next breakpoint\n  (s)tep   - Step one instruction\n  (n)ext   - Step over function calls\n  (o)ut    - Step out of current function\n  (b)reak  - List breakpoints\n  (b)reak <n> - Add breakpoint at line n\n  (c)ont   - Continue execution\n  (q)uit   - Exit debugger"
+  "repl_history_entry": "[{0}] {1}"
 }

@@ -9,13 +9,13 @@
 //! 2. 简洁直接：IR 结构简单，生成逻辑清晰
 //! 3. 可测试性：独立的模块便于单元测试
 
-use crate::frontend::lexer::tokens::Literal;
-use crate::frontend::parser::ast::{self, Expr};
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
-use crate::util::span::Span;
 use crate::tlog;
 use crate::util::i18n::MSG;
+use crate::util::span::Span;
 use std::collections::HashMap;
 
 /// 符号表条目
@@ -228,8 +228,6 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<IrGenError>> {
-        tlog!(info, MSG::Stage1Start);
-
         let mut functions = Vec::new();
         let mut errors = Vec::new();
         let mut constants = Vec::new();
@@ -245,8 +243,6 @@ impl AstToIrGenerator {
         if !errors.is_empty() {
             return Err(errors);
         }
-
-        tlog!(info, MSG::Stage1Complete);
 
         Ok(ModuleIR {
             types: Vec::new(),
@@ -645,9 +641,18 @@ impl AstToIrGenerator {
                 initializer,
                 is_mut: _,
             } => {
-                // 生成变量声明指令
-                let var_idx = self.next_temp_reg();
-                self.register_local(name, var_idx);
+                // 检查变量是否已经存在于当前或外层作用域
+                // 如果存在，这是赋值操作而不是新声明
+                let var_idx = if let Some(existing_idx) = self.lookup_local(name) {
+                    // 变量已存在，复用其索引（这是赋值操作）
+                    existing_idx
+                } else {
+                    // 新变量声明，分配新索引
+                    let idx = self.next_temp_reg();
+                    self.register_local(name, idx);
+                    idx
+                };
+
                 if let Some(expr) = initializer {
                     self.generate_expr_ir(expr, var_idx, instructions, constants)?;
                 } else {
@@ -1407,3 +1412,25 @@ impl std::fmt::Display for IrGenError {
 }
 
 impl std::error::Error for IrGenError {}
+
+/// 从 AST 模块生成 IR
+///
+/// 这是编译器流程中的关键入口点：
+/// 类型检查 → IR 生成 → 代码生成
+pub fn generate_ir(
+    ast: &crate::frontend::core::parser::ast::Module,
+    result: &crate::frontend::typecheck::TypeCheckResult,
+) -> Result<crate::middle::ModuleIR, Vec<crate::frontend::typecheck::TypeError>> {
+    use crate::util::span::Span;
+
+    let mut generator = AstToIrGenerator::new_with_type_result(result);
+    generator.generate_module_ir(ast).map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|e| crate::frontend::typecheck::TypeError::InferenceError {
+                message: e.to_string(),
+                span: Span::default(),
+            })
+            .collect()
+    })
+}
