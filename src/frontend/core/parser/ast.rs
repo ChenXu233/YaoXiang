@@ -310,3 +310,12 @@ pub struct Module {
     pub items: Vec<Stmt>,
     pub span: Span,
 }
+
+impl Default for Module {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            span: Span::dummy(),
+        }
+    }
+}

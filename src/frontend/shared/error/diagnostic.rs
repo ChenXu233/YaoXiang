@@ -30,6 +30,32 @@ impl Severity {
     }
 }
 
+impl From<i32> for Severity {
+    fn from(val: i32) -> Self {
+        match val {
+            1 => Severity::Error,
+            2 => Severity::Warning,
+            3 => Severity::Info,
+            4 => Severity::Hint,
+            _ => Severity::Info,
+        }
+    }
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            Severity::Error => write!(f, "error"),
+            Severity::Warning => write!(f, "warning"),
+            Severity::Info => write!(f, "info"),
+            Severity::Hint => write!(f, "hint"),
+        }
+    }
+}
+
 /// 诊断信息
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
