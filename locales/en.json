@@ -149,14 +149,6 @@
 
   "formatter_not_implemented": "Formatter not implemented yet",
 
-  "stage1_start": "=== 阶段 1: 错误和警告信息 ===",
-  "stage1_complete": "=== 阶段 1 完成: 错误和警告信息 ===",
-  "stage2_start": "=== 阶段 2: 用户可见消息 ===",
-  "stage2_complete": "=== 阶段 2 完成: 用户可见消息 ===",
-  "stage3_start": "=== 阶段 3: 调试信息和其他模块 ===",
-  "stage3_complete": "=== 阶段 3 完成: 调试信息和其他模块 ===",
-  "all_stages_complete": "=== 所有阶段完成！ ===",
-
   "bytecode_decode_i64add": "DEBUG decode: I64Add operands.len = {0}",
   "bytecode_decode_i64add_too_short": "DEBUG decode: I64Add operands too short, skipping",
 

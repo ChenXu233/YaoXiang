@@ -157,7 +157,7 @@ impl Compiler {
         ast: &super::core::parser::Module,
         type_result: &super::typecheck::TypeCheckResult,
     ) -> Result<middle::ModuleIR, Vec<super::typecheck::TypeError>> {
-        super::typecheck::generate_ir(ast, type_result)
+        middle::generate_ir(ast, type_result)
     }
 
     /// 检查是否可以进行增量编译

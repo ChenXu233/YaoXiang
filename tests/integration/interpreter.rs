@@ -81,7 +81,9 @@ fn test_conditional_statement() {
 #[test]
 fn test_loop_statement() {
     // Test that we can compile loop statements
-    let source = r#"main: () -> () = () => { while true {} }"#;
+    // Note: we use 'while false' to avoid infinite loop during execution
+    // since run() executes the code, not just compiles it
+    let source = r#"main: () -> () = () => { while false {} }"#;
 
     let result = run(source);
 

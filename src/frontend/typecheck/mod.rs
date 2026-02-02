@@ -475,15 +475,6 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
         .insert("string".to_string(), PolyType::mono(MonoType::String));
 }
 
-/// 生成 IR
-pub fn generate_ir(
-    _ast: &crate::frontend::core::parser::ast::Module,
-    _result: &TypeCheckResult,
-) -> Result<crate::middle::ModuleIR, Vec<TypeError>> {
-    // TODO: 实现 IR 生成
-    Ok(crate::middle::ModuleIR::default())
-}
-
 /// 类型检查结果
 #[derive(Debug, Clone, Default)]
 pub struct TypeCheckResult {

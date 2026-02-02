@@ -453,7 +453,7 @@ impl Pipeline {
         let _source_file = SourceFile::new(source_name.to_string(), source.to_string());
         let _ = _source_file;
 
-        match typecheck::generate_ir(ast, type_result) {
+        match middle::generate_ir(ast, type_result) {
             Ok(ir) => {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::IRGeneration, duration));
