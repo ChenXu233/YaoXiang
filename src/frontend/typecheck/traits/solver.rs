@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 特质求解器
 //!
 //! 实现特质约束求解
@@ -50,10 +52,11 @@ impl TraitSolver {
             Ok(())
         } else {
             Err(
-                crate::frontend::shared::error::diagnostic::Diagnostic::error(format!(
-                    "Cannot satisfy trait constraint: {}",
-                    constraint.name
-                )),
+                crate::frontend::shared::error::diagnostic::Diagnostic::error(
+                    "E0602".to_string(),
+                    format!("Cannot satisfy trait constraint: {}", constraint.name),
+                    None,
+                ),
             )
         }
     }

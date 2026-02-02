@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 语句类型推断
 //!
 //! 实现各种语句的类型推断

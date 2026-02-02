@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 兼容性检查
 //!
 //! 检查类型之间的兼容性

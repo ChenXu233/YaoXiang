@@ -15,6 +15,9 @@ pub mod typecheck;
 // Refactored core modules with RFC support
 pub mod core;
 
+// RFC-011 Advanced Type Level (条件类型、类型级计算、Const泛型)
+pub mod type_level;
+
 /// Compiler context
 #[derive(Debug)]
 pub struct Compiler {

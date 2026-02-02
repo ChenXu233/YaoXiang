@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 赋值检查
 //!
 //! 检查赋值语句的类型正确性

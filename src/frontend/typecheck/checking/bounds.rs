@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! RFC-011 类型边界检查
 //!
 //! 检查泛型类型边界和约束
@@ -35,10 +37,11 @@ impl BoundsChecker {
         for bound in bounds {
             if !self.trait_solver.check_trait(ty, bound) {
                 return Err(
-                    crate::frontend::shared::error::diagnostic::Diagnostic::error(format!(
-                        "Type does not satisfy trait bound: {}",
-                        bound
-                    )),
+                    crate::frontend::shared::error::diagnostic::Diagnostic::error(
+                        "E0601".to_string(),
+                        format!("Type does not satisfy trait bound: {}", bound),
+                        None,
+                    ),
                 );
             }
         }

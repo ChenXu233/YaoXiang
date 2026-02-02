@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 模式匹配推断
 //!
 //! 实现模式匹配的类型推断

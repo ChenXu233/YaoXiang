@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! RFC-011 泛型推断
 //!
 //! 实现泛型函数的类型推断

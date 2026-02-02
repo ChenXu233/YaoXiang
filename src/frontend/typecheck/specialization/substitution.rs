@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 替换逻辑
 //!
 //! 实现类型替换算法

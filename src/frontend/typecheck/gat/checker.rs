@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! GAT 检查器
 //!
 //! 实现 Generic Associated Types 检查
@@ -137,10 +139,14 @@ impl GATChecker {
         // 检查关联类型是否在容器中定义
         if !self.is_associated_type_defined(container, assoc_type) {
             return Err(
-                crate::frontend::shared::error::diagnostic::Diagnostic::error(format!(
-                    "Associated type {} not found in container {}",
-                    assoc_type, container
-                )),
+                crate::frontend::shared::error::diagnostic::Diagnostic::error(
+                    "E0801".to_string(),
+                    format!(
+                        "Associated type {} not found in container {}",
+                        assoc_type, container
+                    ),
+                    None,
+                ),
             );
         }
 

@@ -55,7 +55,7 @@ pub struct TypeEnvironment {
     pub vars: HashMap<String, crate::frontend::core::type_system::PolyType>,
     pub types: HashMap<String, crate::frontend::core::type_system::PolyType>,
     pub solver: crate::frontend::core::type_system::TypeConstraintSolver,
-    pub errors: ErrorCollector,
+    pub errors: TypeErrorCollector,
     /// 导入追踪 - 模块导入信息
     pub imports: Vec<ImportInfo>,
     /// 当前模块的导出项

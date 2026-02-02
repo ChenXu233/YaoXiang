@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 统一 Result 类型
 //!
 //! 为前端模块提供统一的错误处理
@@ -26,6 +28,8 @@ impl<T, E: std::fmt::Display> ResultExt<T, E> for Result<T, E> {
     where
         F: FnOnce() -> String,
     {
-        self.map_err(|err| Diagnostic::error(format!("{}: {}", f(), err)))
+        self.map_err(|err| {
+            Diagnostic::error("E0000".to_string(), format!("{}: {}", f(), err), None)
+        })
     }
 }

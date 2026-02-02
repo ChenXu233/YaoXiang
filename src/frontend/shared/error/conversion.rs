@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 错误转换
 //!
 //! 提供不同错误类型之间的转换
@@ -11,12 +13,12 @@ pub trait ErrorConvert<T> {
 
 impl<T> ErrorConvert<T> for Result<T, String> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(Diagnostic::error)
+        self.map_err(|msg| Diagnostic::error("E0000".to_string(), msg, None))
     }
 }
 
 impl<T> ErrorConvert<T> for Result<T, &str> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| Diagnostic::error(msg.to_string()))
+        self.map_err(|msg| Diagnostic::error("E0000".to_string(), msg.to_string(), None))
     }
 }

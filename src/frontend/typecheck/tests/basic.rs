@@ -1,11 +1,10 @@
 //! 基础类型推断测试
-//!
-//! 测试字面量、二元运算、一元运算等基础类型推断
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
-use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver, TypeBinding};
 use crate::frontend::typecheck::inference::ExprInferrer;
+use crate::frontend::typecheck::*;
 use crate::util::span::Span;
 
 /// 测试字面量类型推断
@@ -228,21 +227,19 @@ fn test_string_concat() {
 /// 测试变量引用
 #[test]
 fn test_variable_reference() {
-    // 使用 ExprInferrer 来添加变量
-    let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
-    inferrer.add_var("my_var".to_string(), PolyType::mono(MonoType::Int(64)));
+    // 使用 TypeEnvironment 来添加变量
+    let mut env = TypeEnvironment::new();
+    env.add_var("my_var".to_string(), PolyType::mono(MonoType::Int(64)));
 
-    // 我们使用 ExprInferrer 的 get_var 来验证
-    let retrieved = inferrer.get_var("my_var").unwrap();
+    // 我们使用 TypeEnvironment 的 get_var 来验证
+    let retrieved = env.get_var("my_var").unwrap();
     assert_eq!(retrieved.body, MonoType::Int(64));
 }
 
 /// 测试函数调用类型推断
 #[test]
 fn test_function_call_inference() {
-    let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let mut env = TypeEnvironment::new();
 
     // 添加函数到环境
     let fn_type = PolyType::mono(MonoType::Fn {
@@ -250,11 +247,11 @@ fn test_function_call_inference() {
         return_type: Box::new(MonoType::Int(64)),
         is_async: false,
     });
-    inferrer.add_var("add".to_string(), fn_type);
+    env.add_var("add".to_string(), fn_type);
 
-    // 注意：ExprInferrer 内部维护自己的 vars 环境
+    // 注意：TypeInferrer 内部维护自己的 vars 环境
     // 这里我们只验证类型环境的基本功能
-    let retrieved = inferrer.get_var("add");
+    let retrieved = env.get_var("add");
     assert!(retrieved.is_some());
 }
 
@@ -415,7 +412,7 @@ fn test_add_constraint() {
     assert_eq!(resolved, MonoType::Int(64));
 }
 
-/// 测试推断器创建
+/// 测试类型推断器创建
 #[test]
 fn test_type_inferrer_creation() {
     let mut solver = TypeConstraintSolver::new();
@@ -425,7 +422,7 @@ fn test_type_inferrer_creation() {
     assert!(inferrer.solver().new_var().type_var().is_some());
 }
 
-/// 测试求解器创建
+/// 测试类型求解器创建
 #[test]
 fn test_solver_creation() {
     let mut solver = TypeConstraintSolver::new();
@@ -455,10 +452,7 @@ fn test_solver_get_binding() {
 
     // 未绑定时应该是 Unbound
     let binding = solver.get_binding(gvar);
-    assert!(matches!(
-        binding,
-        Some(crate::frontend::core::type_system::TypeBinding::Unbound)
-    ));
+    assert!(matches!(binding, Some(TypeBinding::Unbound)));
 }
 
 /// 测试绑定后获取绑定
@@ -472,14 +466,14 @@ fn test_solver_get_binding_after_bind() {
     // 绑定后应该是 Bound
     let binding = solver.get_binding(gvar);
     match binding {
-        Some(crate::frontend::core::type_system::TypeBinding::Bound(ty)) => {
+        Some(TypeBinding::Bound(ty)) => {
             assert_eq!(*ty, MonoType::Int(64));
         }
         _ => panic!("Expected bound type"),
     }
 }
 
-/// 测试推断器获取求解器
+/// 测试类型推断器获取求解器
 #[test]
 fn test_inferrer_get_solver() {
     let mut solver = TypeConstraintSolver::new();

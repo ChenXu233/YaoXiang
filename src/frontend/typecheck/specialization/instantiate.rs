@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 实例化算法
 //!
 //! 实现泛型实例化
@@ -36,7 +38,9 @@ impl Instantiator {
         if !self.can_instantiate(generic, args) {
             return Err(
                 crate::frontend::shared::error::diagnostic::Diagnostic::error(
+                    "E0701".to_string(),
                     "Cannot instantiate generic type with given arguments".to_string(),
+                    None,
                 ),
             );
         }
@@ -105,7 +109,7 @@ impl Instantiator {
                     .fields
                     .iter()
                     .map(|(name, field_ty)| {
-                        Ok((
+                        Ok::<_, crate::frontend::shared::error::Diagnostic>((
                             name.clone(),
                             self.substitute_generic_params(field_ty, args)?,
                         ))

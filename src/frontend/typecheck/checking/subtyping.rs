@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 子类型检查
 //!
 //! 实现子类型关系的检查

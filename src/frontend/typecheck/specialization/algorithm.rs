@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 特化算法
 //!
 //! 实现泛型特化的核心算法

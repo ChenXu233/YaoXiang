@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 一致性检查
 //!
 //! 实现特质一致性检查

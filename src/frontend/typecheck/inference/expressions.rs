@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 //! 表达式类型推断
 //!
 //! 实现各种表达式的类型推断
@@ -156,7 +158,9 @@ impl<'a> ExprInferrer<'a> {
                     Ok(MonoType::Bool)
                 } else {
                     Err(Diagnostic::error(
+                        "E0500".to_string(),
                         "Logical operation requires boolean operands".to_string(),
+                        None,
                     ))
                 }
             }
@@ -192,7 +196,9 @@ impl<'a> ExprInferrer<'a> {
                     Ok(MonoType::Bool)
                 } else {
                     Err(Diagnostic::error(
+                        "E0501".to_string(),
                         "Logical NOT requires boolean operand".to_string(),
+                        None,
                     ))
                 }
             }
@@ -217,10 +223,11 @@ impl<'a> ExprInferrer<'a> {
                     Ok(resolved)
                 } else {
                     // 返回错误
-                    Err(crate::frontend::shared::error::Diagnostic::error(format!(
-                        "Unknown variable: {}",
-                        name
-                    )))
+                    Err(crate::frontend::shared::error::Diagnostic::error(
+                        "E0002".to_string(),
+                        format!("Unknown variable: {}", name),
+                        None,
+                    ))
                 }
             }
 
@@ -315,11 +322,15 @@ impl<'a> ExprInferrer<'a> {
                             if *i >= 0 && (*i as usize) < types.len() {
                                 Ok(types[*i as usize].clone())
                             } else {
-                                Err(Diagnostic::error(format!(
-                                    "Tuple index {} out of bounds for tuple of length {}",
-                                    i,
-                                    types.len()
-                                )))
+                                Err(Diagnostic::error(
+                                    "E0012".to_string(),
+                                    format!(
+                                        "Tuple index {} out of bounds for tuple of length {}",
+                                        i,
+                                        types.len()
+                                    ),
+                                    None,
+                                ))
                             }
                         } else {
                             // 动态下标：返回类型变量
@@ -345,13 +356,16 @@ impl<'a> ExprInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
-                        Err(Diagnostic::error(format!(
-                            "Unknown field '{}' in struct '{}'",
-                            field, struct_type.name
-                        )))
+                        Err(Diagnostic::error(
+                            "E0011".to_string(),
+                            format!("Unknown field '{}' in struct '{}'", field, struct_type.name),
+                            None,
+                        ))
                     }
                     _ => Err(Diagnostic::error(
+                        "E0502".to_string(),
                         "Cannot access field on non-struct type".to_string(),
+                        None,
                     )),
                 }
             }
@@ -376,7 +390,9 @@ impl<'a> ExprInferrer<'a> {
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
                     return Err(Diagnostic::error(
+                        "E0503".to_string(),
                         "If condition must be boolean".to_string(),
+                        None,
                     ));
                 }
 
@@ -388,7 +404,9 @@ impl<'a> ExprInferrer<'a> {
                     let elif_cond_ty = self.infer_expr(elif_cond)?;
                     if elif_cond_ty != MonoType::Bool {
                         return Err(Diagnostic::error(
+                            "E0504".to_string(),
                             "Elif condition must be boolean".to_string(),
+                            None,
                         ));
                     }
                     let _ = self.infer_block(elif_block, true, None)?;
@@ -414,7 +432,9 @@ impl<'a> ExprInferrer<'a> {
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
                     return Err(Diagnostic::error(
+                        "E0505".to_string(),
                         "While condition must be boolean".to_string(),
+                        None,
                     ));
                 }
 
@@ -473,7 +493,11 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(Diagnostic::error(format!("Unknown label '{}'", l)));
+                        return Err(Diagnostic::error(
+                            "E0010".to_string(),
+                            format!("Unknown label '{}'", l),
+                            None,
+                        ));
                     }
                 }
                 Ok(MonoType::Void)
@@ -485,7 +509,11 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(Diagnostic::error(format!("Unknown label '{}'", l)));
+                        return Err(Diagnostic::error(
+                            "E0010".to_string(),
+                            format!("Unknown label '{}'", l),
+                            None,
+                        ));
                     }
                 }
                 Ok(MonoType::Void)
