@@ -119,7 +119,9 @@ impl Compiler {
             // 取第一个错误作为主要诊断
             let first_error = result.errors.first();
             let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
-            let error_message = result.errors.iter()
+            let error_message = result
+                .errors
+                .iter()
                 .map(|e| format!("{}", e))
                 .collect::<Vec<_>>()
                 .join("\n");

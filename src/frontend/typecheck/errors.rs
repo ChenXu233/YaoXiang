@@ -419,9 +419,11 @@ impl From<TypeError> for Diagnostic {
             TypeError::InvalidSelfType { .. } => {
                 Diagnostic::error("E0021".to_string(), format!("{}", error), span)
             }
-            TypeError::Diagnostic { code, message, span } => {
-                Diagnostic::error(code.clone(), message.clone(), Some(*span))
-            }
+            TypeError::Diagnostic {
+                code,
+                message,
+                span,
+            } => Diagnostic::error(code.clone(), message.clone(), Some(*span)),
         }
     }
 }

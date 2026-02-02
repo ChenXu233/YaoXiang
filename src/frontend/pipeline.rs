@@ -20,7 +20,10 @@ pub enum PipelineError {
 }
 
 impl fmt::Display for PipelineError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             PipelineError::LexParse(msg) => write!(f, "{}", msg),
             PipelineError::TypeCheck(err) => write!(f, "{}", err),
@@ -284,7 +287,11 @@ impl Pipeline {
         let lex_result = self.run_lexing(source_name, source, &mut phase_durations);
         if !lex_result.is_success() {
             return CompilationResult::failed(
-                lex_result.errors.into_iter().map(PipelineError::LexParse).collect(),
+                lex_result
+                    .errors
+                    .into_iter()
+                    .map(PipelineError::LexParse)
+                    .collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -293,7 +300,11 @@ impl Pipeline {
         let parse_result = self.run_parsing(source_name, &lex_result.tokens, &mut phase_durations);
         if !parse_result.is_success() {
             return CompilationResult::failed(
-                parse_result.errors.into_iter().map(PipelineError::LexParse).collect(),
+                parse_result
+                    .errors
+                    .into_iter()
+                    .map(PipelineError::LexParse)
+                    .collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -303,7 +314,11 @@ impl Pipeline {
             self.run_typecheck(source_name, source, &parse_result.ast, &mut phase_durations);
         if !typecheck_result.is_success() {
             return CompilationResult::failed(
-                typecheck_result.errors.into_iter().map(PipelineError::TypeCheck).collect(),
+                typecheck_result
+                    .errors
+                    .into_iter()
+                    .map(PipelineError::TypeCheck)
+                    .collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -330,7 +345,9 @@ impl Pipeline {
             CompilationResult::success(ir_result.ir.unwrap(), phase_durations, total_ms)
         } else {
             // IR 生成错误被归类为类型检查错误
-            let pipeline_errors: Vec<PipelineError> = ir_result.errors.into_iter()
+            let pipeline_errors: Vec<PipelineError> = ir_result
+                .errors
+                .into_iter()
                 .map(PipelineError::TypeCheck)
                 .collect();
             CompilationResult::failed(pipeline_errors, phase_durations, total_ms)
