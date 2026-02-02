@@ -4,7 +4,7 @@
 //!
 //! 实现各种表达式的类型推断
 
-use crate::frontend::shared::error::{Diagnostic, Result};
+use crate::util::diagnostic::{Diagnostic, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 use std::collections::HashMap;
@@ -215,7 +215,7 @@ impl<'a> ExprInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Lit(lit, _) => self.infer_literal(lit),
 
             // 变量
-            crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+            crate::frontend::core::parser::ast::Expr::Var(name, span) => {
                 let poly = self.get_var(name).cloned();
                 if let Some(poly) = poly {
                     let ty = self.solver.instantiate(&poly);
@@ -223,10 +223,10 @@ impl<'a> ExprInferrer<'a> {
                     Ok(resolved)
                 } else {
                     // 返回错误
-                    Err(crate::frontend::shared::error::Diagnostic::error(
+                    Err(crate::util::diagnostic::Diagnostic::error(
                         "E0002".to_string(),
                         format!("Unknown variable: {}", name),
-                        None,
+                        Some(*span),
                     ))
                 }
             }
@@ -371,9 +371,7 @@ impl<'a> ExprInferrer<'a> {
             }
 
             // 函数调用
-            crate::frontend::core::parser::ast::Expr::Call {
-                func, args, ..
-            } => {
+            crate::frontend::core::parser::ast::Expr::Call { func, args, .. } => {
                 // 检查函数表达式
                 let _func_ty = self.infer_expr(func)?;
 

@@ -9,4 +9,4 @@ pub mod higher_rank;
 pub use checker::GATChecker;
 pub use higher_rank::{HigherRankChecker, HigherRankError};
 
-pub use crate::frontend::shared::error::Result;
+pub use crate::util::diagnostic::Result;

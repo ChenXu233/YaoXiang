@@ -4,7 +4,7 @@
 //!
 //! 实现各种语句的类型推断
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::parser::ast;
 use crate::frontend::core::type_system::MonoType;
 use std::collections::HashMap;

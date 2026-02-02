@@ -4,9 +4,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, TuiREPL, NAME, VERSION};
+use yaoxiang::{build_bytecode, dump_bytecode, run, TuiREPL, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
+use yaoxiang::util::diagnostic::{run_file_with_diagnostics, check_file_with_diagnostics};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -163,14 +164,13 @@ fn main() -> Result<()> {
 
     match command {
         Commands::Run { file } => {
-            run_file(&file).with_context(|| format!("Failed to run: {}", file.display()))?;
+            run_file_with_diagnostics(&file)?;
         }
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
         }
         Commands::Check { file } => {
-            // TODO: Implement type checking without execution
-            run_file(&file).with_context(|| format!("Failed to check: {}", file.display()))?;
+            check_file_with_diagnostics(&file)?;
         }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter

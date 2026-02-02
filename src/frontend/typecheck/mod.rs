@@ -288,15 +288,19 @@ impl TypeChecker {
                 } = expr.as_ref()
                 {
                     let fn_ty = MonoType::Fn {
-                        params: params.iter().map(|p| {
-                            p.ty.as_ref()
-                                .map(|t| MonoType::from(t.clone()))
-                                .unwrap_or_else(|| self.env.solver().new_var())
-                        }).collect(),
+                        params: params
+                            .iter()
+                            .map(|p| {
+                                p.ty.as_ref()
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .unwrap_or_else(|| self.env.solver().new_var())
+                            })
+                            .collect(),
                         return_type: Box::new(
-                            return_type.as_ref()
+                            return_type
+                                .as_ref()
                                 .map(|t| MonoType::from(t.clone()))
-                                .unwrap_or_else(|| self.env.solver().new_var())
+                                .unwrap_or_else(|| self.env.solver().new_var()),
                         ),
                         is_async: *is_async,
                     };
@@ -311,13 +315,18 @@ impl TypeChecker {
                 } = expr.as_ref()
                 {
                     if let crate::frontend::core::parser::ast::Expr::Var(name, _) = left.as_ref() {
-                        if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } = right.as_ref() {
+                        if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } =
+                            right.as_ref()
+                        {
                             let fn_ty = MonoType::Fn {
-                                params: params.iter().map(|p| {
-                                    p.ty.as_ref()
-                                        .map(|t| MonoType::from(t.clone()))
-                                        .unwrap_or_else(|| self.env.solver().new_var())
-                                }).collect(),
+                                params: params
+                                    .iter()
+                                    .map(|p| {
+                                        p.ty.as_ref()
+                                            .map(|t| MonoType::from(t.clone()))
+                                            .unwrap_or_else(|| self.env.solver().new_var())
+                                    })
+                                    .collect(),
                                 return_type: Box::new(self.env.solver().new_var()),
                                 is_async: false,
                             };
@@ -340,26 +349,35 @@ impl TypeChecker {
                     } = type_ann
                     {
                         (
-                            param_tys.iter().map(|t| MonoType::from(t.clone())).collect(),
+                            param_tys
+                                .iter()
+                                .map(|t| MonoType::from(t.clone()))
+                                .collect(),
                             MonoType::from(*return_type.clone()),
                         )
                     } else {
                         (
-                            params.iter().map(|p| {
-                                p.ty.as_ref()
-                                    .map(|t| MonoType::from(t.clone()))
-                                    .unwrap_or_else(|| self.env.solver().new_var())
-                            }).collect(),
+                            params
+                                .iter()
+                                .map(|p| {
+                                    p.ty.as_ref()
+                                        .map(|t| MonoType::from(t.clone()))
+                                        .unwrap_or_else(|| self.env.solver().new_var())
+                                })
+                                .collect(),
                             self.env.solver().new_var(),
                         )
                     }
                 } else {
                     (
-                        params.iter().map(|p| {
-                            p.ty.as_ref()
-                                .map(|t| MonoType::from(t.clone()))
-                                .unwrap_or_else(|| self.env.solver().new_var())
-                        }).collect(),
+                        params
+                            .iter()
+                            .map(|p| {
+                                p.ty.as_ref()
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .unwrap_or_else(|| self.env.solver().new_var())
+                            })
+                            .collect(),
                         self.env.solver().new_var(),
                     )
                 };
@@ -383,8 +401,10 @@ impl TypeChecker {
                         return_type: Box::new(MonoType::Void),
                         is_async: false,
                     };
-                    self.env.add_var("print".to_string(), PolyType::mono(print_ty.clone()));
-                    self.env.add_var("println".to_string(), PolyType::mono(print_ty));
+                    self.env
+                        .add_var("print".to_string(), PolyType::mono(print_ty.clone()));
+                    self.env
+                        .add_var("println".to_string(), PolyType::mono(print_ty));
                 }
             }
             _ => {}
@@ -441,8 +461,9 @@ pub fn infer_expression(
     match inferrer.infer_expr(expr) {
         Ok(ty) => Ok(ty),
         Err(diagnostic) => {
-            // 转换Diagnostic到TypeError
-            let type_err = TypeError::InferenceError {
+            // 转换Diagnostic到TypeError，保留原始错误代码
+            let type_err = TypeError::Diagnostic {
+                code: diagnostic.code.clone(),
                 message: diagnostic.message,
                 span: diagnostic.span.unwrap_or_default(),
             };

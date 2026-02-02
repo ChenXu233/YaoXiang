@@ -8,7 +8,6 @@
 //! - [`core`] - 核心算法层（词法分析器、解析器、类型系统）
 //! - [`typecheck`] - 类型检查层
 //! - [`type_level`] - 类型级计算（RFC-011）
-//! - [`shared`] - 共享工具层
 //! - [`config`] - 编译配置
 //! - [`pipeline`] - 编译流水线
 //! - [`events`] - 事件系统
@@ -62,8 +61,8 @@ pub mod typecheck;
 // 类型级计算（RFC-011）
 pub mod type_level;
 
-// 共享工具层
-pub mod shared;
+// 诊断系统
+pub use crate::util::diagnostic;
 
 // 编译配置
 pub mod config;

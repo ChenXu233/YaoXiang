@@ -4,7 +4,7 @@
 //!
 //! 实现子类型关系的检查
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
 
 /// 子类型检查器

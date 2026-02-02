@@ -3,7 +3,7 @@
 //! 定义类型检查过程中的所有错误类型
 
 use crate::frontend::core::type_system::MonoType;
-use crate::frontend::shared::error::{Diagnostic, ErrorCollector, SpannedError};
+use crate::util::diagnostic::{Diagnostic, ErrorCollector, SpannedError};
 use crate::util::span::Span;
 use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
@@ -128,6 +128,14 @@ pub enum TypeError {
         found: Box<MonoType>,
         span: Span,
     },
+
+    /// 包装的诊断错误（用于保留原始诊断信息）
+    #[error("{message}")]
+    Diagnostic {
+        code: String,
+        message: String,
+        span: Span,
+    },
 }
 
 impl TypeError {
@@ -155,6 +163,7 @@ impl TypeError {
             TypeError::InvalidMethodSignature { span, .. } => *span,
             TypeError::MethodNeedsSelf { span, .. } => *span,
             TypeError::InvalidSelfType { span, .. } => *span,
+            TypeError::Diagnostic { span, .. } => *span,
         }
     }
 
@@ -228,6 +237,7 @@ impl TypeError {
                     method_name, expected, found
                 )
             }
+            TypeError::Diagnostic { message, .. } => message.clone(),
         }
     }
 
@@ -247,29 +257,30 @@ impl TypeError {
     }
 
     /// 获取错误代码（用于错误编号）
-    pub fn error_code(&self) -> &'static str {
+    pub fn error_code(&self) -> String {
         match self {
-            TypeError::TypeMismatch { .. } => "E0001",
-            TypeError::UnknownVariable { .. } => "E0002",
-            TypeError::UnknownType { .. } => "E0003",
-            TypeError::ArityMismatch { .. } => "E0004",
-            TypeError::RecursiveType { .. } => "E0005",
-            TypeError::UnsupportedOp { .. } => "E0006",
-            TypeError::GenericConstraint { .. } => "E0007",
-            TypeError::InfiniteType { .. } => "E0008",
-            TypeError::UnboundTypeVar { .. } => "E0009",
-            TypeError::UnknownLabel { .. } => "E0010",
-            TypeError::UnknownField { .. } => "E0011",
-            TypeError::IndexOutOfBounds { .. } => "E0012",
-            TypeError::CallError { .. } => "E0013",
-            TypeError::AssignmentError { .. } => "E0014",
-            TypeError::InferenceError { .. } => "E0015",
-            TypeError::CannotInferParamType { .. } => "E0016",
-            TypeError::NonExhaustivePatterns { .. } => "E0017",
-            TypeError::ImportError { .. } => "E0018",
-            TypeError::InvalidMethodSignature { .. } => "E0019",
-            TypeError::MethodNeedsSelf { .. } => "E0020",
-            TypeError::InvalidSelfType { .. } => "E0021",
+            TypeError::TypeMismatch { .. } => "E0001".to_string(),
+            TypeError::UnknownVariable { .. } => "E0002".to_string(),
+            TypeError::UnknownType { .. } => "E0003".to_string(),
+            TypeError::ArityMismatch { .. } => "E0004".to_string(),
+            TypeError::RecursiveType { .. } => "E0005".to_string(),
+            TypeError::UnsupportedOp { .. } => "E0006".to_string(),
+            TypeError::GenericConstraint { .. } => "E0007".to_string(),
+            TypeError::InfiniteType { .. } => "E0008".to_string(),
+            TypeError::UnboundTypeVar { .. } => "E0009".to_string(),
+            TypeError::UnknownLabel { .. } => "E0010".to_string(),
+            TypeError::UnknownField { .. } => "E0011".to_string(),
+            TypeError::IndexOutOfBounds { .. } => "E0012".to_string(),
+            TypeError::CallError { .. } => "E0013".to_string(),
+            TypeError::AssignmentError { .. } => "E0014".to_string(),
+            TypeError::InferenceError { .. } => "E0015".to_string(),
+            TypeError::CannotInferParamType { .. } => "E0016".to_string(),
+            TypeError::NonExhaustivePatterns { .. } => "E0017".to_string(),
+            TypeError::ImportError { .. } => "E0018".to_string(),
+            TypeError::InvalidMethodSignature { .. } => "E0019".to_string(),
+            TypeError::MethodNeedsSelf { .. } => "E0020".to_string(),
+            TypeError::InvalidSelfType { .. } => "E0021".to_string(),
+            TypeError::Diagnostic { code, .. } => code.clone(),
         }
     }
 
@@ -407,6 +418,9 @@ impl From<TypeError> for Diagnostic {
             }
             TypeError::InvalidSelfType { .. } => {
                 Diagnostic::error("E0021".to_string(), format!("{}", error), span)
+            }
+            TypeError::Diagnostic { code, message, span } => {
+                Diagnostic::error(code.clone(), message.clone(), Some(*span))
             }
         }
     }

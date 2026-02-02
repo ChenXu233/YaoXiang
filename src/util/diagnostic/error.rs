@@ -1,6 +1,6 @@
-//! 统一诊断信息
+//! 诊断数据结构
 //!
-//! 为前端模块提供统一的错误报告机制
+//! 提供统一的错误报告机制
 
 use crate::util::span::Span;
 
@@ -72,13 +72,29 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    /// 创建新的诊断信息
+    pub fn new(
+        severity: Severity,
+        code: String,
+        message: String,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            severity,
+            code,
+            message,
+            span,
+            related: Vec::new(),
+        }
+    }
+
     /// 创建错误诊断
     pub fn error(
         code: String,
         message: String,
         span: Option<Span>,
     ) -> Self {
-        Diagnostic {
+        Self {
             severity: Severity::Error,
             code,
             message,
@@ -93,7 +109,7 @@ impl Diagnostic {
         message: String,
         span: Option<Span>,
     ) -> Self {
-        Diagnostic {
+        Self {
             severity: Severity::Warning,
             code,
             message,

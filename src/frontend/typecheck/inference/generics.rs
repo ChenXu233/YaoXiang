@@ -4,7 +4,7 @@
 //!
 //! 实现泛型函数的类型推断
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
 
 /// 泛型推断器

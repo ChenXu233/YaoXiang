@@ -14,7 +14,7 @@ pub use compatibility::CompatibilityChecker;
 pub use bounds::BoundsChecker;
 
 pub use crate::frontend::typecheck::TypeError;
-pub use crate::frontend::shared::error::Result;
+pub use crate::util::diagnostic::Result;
 
 use std::collections::HashMap;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
@@ -48,12 +48,19 @@ impl BodyChecker {
     }
 
     /// 添加变量
-    pub fn add_var(&mut self, name: String, poly: PolyType) {
+    pub fn add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
         self.vars.insert(name, poly);
     }
 
     /// 获取变量
-    pub fn get_var(&self, name: &str) -> Option<&PolyType> {
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&PolyType> {
         self.vars.get(name)
     }
 
@@ -79,10 +86,13 @@ impl BodyChecker {
 
         // 添加参数到环境
         for param in params {
-            let param_ty = param.ty.as_ref()
+            let param_ty = param
+                .ty
+                .as_ref()
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
-            self.vars.insert(param.name.clone(), PolyType::mono(param_ty));
+            self.vars
+                .insert(param.name.clone(), PolyType::mono(param_ty));
         }
 
         // 检查函数体语句
@@ -99,31 +109,63 @@ impl BodyChecker {
     }
 
     /// 检查语句
-    pub fn check_stmt(&mut self, stmt: &Stmt) -> Result<(), TypeError> {
+    pub fn check_stmt(
+        &mut self,
+        stmt: &Stmt,
+    ) -> Result<(), TypeError> {
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                self.check_expr_stmt(expr)
-            }
-            crate::frontend::core::parser::ast::StmtKind::Fn { name, type_annotation, params, body: (stmts, expr) } => {
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
+            crate::frontend::core::parser::ast::StmtKind::Fn {
+                name,
+                type_annotation,
+                params,
+                body: (stmts, expr),
+            } => {
                 let body = Block {
                     stmts: stmts.to_vec(),
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                self.check_fn_stmt(name, type_annotation.as_ref(), params, &stmts, body, stmt.span)
+                self.check_fn_stmt(
+                    name,
+                    type_annotation.as_ref(),
+                    params,
+                    stmts,
+                    body,
+                    stmt.span,
+                )
             }
-            crate::frontend::core::parser::ast::StmtKind::Var { name, type_annotation, initializer, .. } => {
-                self.check_var_stmt(name, type_annotation.as_ref(), initializer.as_deref())
-            }
-            crate::frontend::core::parser::ast::StmtKind::For { var, iterable, body, .. } => {
-                self.check_for_stmt(var, iterable, body)
-            }
-            crate::frontend::core::parser::ast::StmtKind::If { condition, then_branch, elif_branches, else_branch, span } => {
+            crate::frontend::core::parser::ast::StmtKind::Var {
+                name,
+                type_annotation,
+                initializer,
+                ..
+            } => self.check_var_stmt(name, type_annotation.as_ref(), initializer.as_deref()),
+            crate::frontend::core::parser::ast::StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => self.check_for_stmt(var, iterable, body),
+            crate::frontend::core::parser::ast::StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                span,
+            } => {
                 // 转换 Vec<...> 到 slice
-                let elif_refs: Vec<(&Expr, &Block)> = elif_branches.iter()
+                let elif_refs: Vec<(&Expr, &Block)> = elif_branches
+                    .iter()
                     .map(|(e, b)| (e.as_ref(), b.as_ref()))
                     .collect();
-                self.check_if_stmt(condition, then_branch, &elif_refs, else_branch.as_deref(), *span)
+                self.check_if_stmt(
+                    condition,
+                    then_branch,
+                    &elif_refs,
+                    else_branch.as_deref(),
+                    *span,
+                )
             }
             crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(()),
             crate::frontend::core::parser::ast::StmtKind::TypeDef { .. } => Ok(()),
@@ -132,13 +174,22 @@ impl BodyChecker {
     }
 
     /// 检查表达式语句
-    fn check_expr_stmt(&mut self, expr: &Expr) -> Result<(), TypeError> {
+    fn check_expr_stmt(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<(), TypeError> {
         match expr {
-            Expr::FnDef { name, params, body, .. } => {
+            Expr::FnDef {
+                name, params, body, ..
+            } => {
                 self.check_fn_def(name, params, body)?;
                 Ok(())
             }
-            Expr::BinOp { op: crate::frontend::core::parser::ast::BinOp::Assign, left, .. } => {
+            Expr::BinOp {
+                op: crate::frontend::core::parser::ast::BinOp::Assign,
+                left,
+                ..
+            } => {
                 if let Expr::Var(name, _) = left.as_ref() {
                     let ty = self.solver.new_var();
                     self.vars.insert(name.clone(), PolyType::mono(ty));
@@ -174,18 +225,18 @@ impl BodyChecker {
         }
 
         // 处理类型注解
-        if let Some(type_annotation) = type_annotation {
-            if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = type_annotation {
-                let fn_def_expr = Expr::FnDef {
-                    name: name.to_string(),
-                    params: params.to_vec(),
-                    return_type: Some(*return_type.clone()),
-                    body: Box::new(body),
-                    is_async: false,
-                    span: _span,
-                };
-                return self.check_expr(&fn_def_expr).map(|_| ());
-            }
+        if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
+            type_annotation
+        {
+            let fn_def_expr = Expr::FnDef {
+                name: name.to_string(),
+                params: params.to_vec(),
+                return_type: Some(*return_type.clone()),
+                body: Box::new(body),
+                is_async: false,
+                span: _span,
+            };
+            return self.check_expr(&fn_def_expr).map(|_| ());
         }
 
         self.check_fn_def(name, params, &body)
@@ -274,7 +325,10 @@ impl BodyChecker {
     }
 
     /// 检查代码块
-    fn check_block(&mut self, block: &Block) -> Result<(), TypeError> {
+    fn check_block(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), TypeError> {
         for stmt in &block.stmts {
             self.check_stmt(stmt)?;
         }
@@ -285,7 +339,10 @@ impl BodyChecker {
     }
 
     /// 检查表达式
-    pub fn check_expr(&mut self, expr: &Expr) -> Result<MonoType, TypeError> {
+    pub fn check_expr(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<MonoType, TypeError> {
         let vars_clone = self.vars.clone();
         let mut inferrer =
             crate::frontend::typecheck::inference::ExprInferrer::new(&mut self.solver);
@@ -296,7 +353,8 @@ impl BodyChecker {
 
         match inferrer.infer_expr(expr) {
             Ok(ty) => Ok(ty),
-            Err(diagnostic) => Err(TypeError::InferenceError {
+            Err(diagnostic) => Err(TypeError::Diagnostic {
+                code: diagnostic.code.clone(),
                 message: diagnostic.message,
                 span: diagnostic.span.unwrap_or_default(),
             }),

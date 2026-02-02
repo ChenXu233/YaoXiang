@@ -4,7 +4,7 @@
 //!
 //! 实现类型替换算法
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::{MonoType, TypeVar, StructType, EnumType};
 
 /// 替换结果

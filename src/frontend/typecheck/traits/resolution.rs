@@ -2,7 +2,7 @@
 //!
 //! 实现特质解析和查找
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 
 /// 特质解析错误
 #[derive(Debug, Clone)]

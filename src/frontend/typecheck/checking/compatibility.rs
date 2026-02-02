@@ -4,7 +4,7 @@
 //!
 //! 检查类型之间的兼容性
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
 
 /// 兼容性检查器

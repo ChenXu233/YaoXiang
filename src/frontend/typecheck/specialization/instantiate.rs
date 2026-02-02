@@ -4,7 +4,7 @@
 //!
 //! 实现泛型实例化
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::{MonoType, StructType, EnumType};
 
 /// 实例化结果
@@ -32,13 +32,11 @@ impl Instantiator {
     ) -> Result<InstanceResult> {
         // 检查是否可以实例化
         if !self.can_instantiate(generic, args) {
-            return Err(
-                crate::frontend::shared::error::diagnostic::Diagnostic::error(
-                    "E0701".to_string(),
-                    "Cannot instantiate generic type with given arguments".to_string(),
-                    None,
-                ),
-            );
+            return Err(crate::util::diagnostic::Diagnostic::error(
+                "E0701".to_string(),
+                "Cannot instantiate generic type with given arguments".to_string(),
+                None,
+            ));
         }
 
         // 执行实例化：用具体类型替换泛型参数
@@ -116,7 +114,7 @@ impl Instantiator {
                     .fields
                     .iter()
                     .map(|(name, field_ty)| {
-                        Ok::<_, crate::frontend::shared::error::Diagnostic>((
+                        Ok::<_, crate::util::diagnostic::Diagnostic>((
                             name.clone(),
                             self.substitute_generic_params(field_ty, args)?,
                         ))

@@ -2,7 +2,7 @@
 //!
 //! 实现高阶类型检查
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 
 /// 高阶类型错误
 #[derive(Debug, Clone)]

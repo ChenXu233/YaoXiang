@@ -4,7 +4,7 @@
 //!
 //! 实现泛型特化的核心算法
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::{MonoType, PolyType, StructType, EnumType, TypeVar};
 use std::collections::HashMap;
 
@@ -34,17 +34,15 @@ impl SpecializationAlgorithm {
         // 构建替换映射
         self.substitution.clear();
         if poly.type_binders.len() != args.len() {
-            return Err(
-                crate::frontend::shared::error::diagnostic::Diagnostic::error(
-                    "E0701".to_string(),
-                    format!(
-                        "Generic parameter arity mismatch: expected {}, found {}",
-                        poly.type_binders.len(),
-                        args.len()
-                    ),
-                    None,
+            return Err(crate::util::diagnostic::Diagnostic::error(
+                "E0701".to_string(),
+                format!(
+                    "Generic parameter arity mismatch: expected {}, found {}",
+                    poly.type_binders.len(),
+                    args.len()
                 ),
-            );
+                None,
+            ));
         }
 
         for (var, arg) in poly.type_binders.iter().zip(args.iter()) {

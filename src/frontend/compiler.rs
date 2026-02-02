@@ -3,6 +3,7 @@
 //! 事件驱动的编译器实现，提供细粒度的事件系统用于 IDE 和 LSP 集成。
 
 use crate::middle;
+use crate::util::diagnostic::Diagnostic;
 use crate::util::i18n::{t_cur, MSG};
 use thiserror::Error;
 use tracing::debug;
@@ -115,7 +116,14 @@ impl Compiler {
         if result.is_success() {
             Ok(result.ir.unwrap())
         } else {
-            Err(CompileError::TypeError(result.errors.join("\n")))
+            // 取第一个错误作为主要诊断
+            let first_error = result.errors.first();
+            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
+            let error_message = result.errors.iter()
+                .map(|e| format!("{}", e))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(CompileError::TypeError(error_message, first_diagnostic))
         }
     }
 
@@ -205,7 +213,7 @@ pub enum CompileError {
 
     /// 类型错误
     #[error("Type error: {0}")]
-    TypeError(String),
+    TypeError(String, Option<Box<Diagnostic>>),
 
     /// IR 生成错误
     #[error("IR generation error: {0}")]
@@ -213,11 +221,38 @@ pub enum CompileError {
 
     /// 取消编译
     #[error("Compilation cancelled")]
-    Cancelled,
+    Cancelled(String),
 
     /// 内部错误
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+impl CompileError {
+    /// 检查是否是类型错误
+    pub fn is_type_error(&self) -> bool {
+        matches!(self, CompileError::TypeError(_, _))
+    }
+
+    /// 获取错误消息
+    pub fn message(&self) -> &str {
+        match self {
+            CompileError::LexError(msg) => msg,
+            CompileError::ParseError(msg) => msg,
+            CompileError::TypeError(msg, _) => msg,
+            CompileError::IRError(msg) => msg,
+            CompileError::Cancelled(msg) => msg,
+            CompileError::Internal(msg) => msg,
+        }
+    }
+
+    /// 获取诊断信息（如果有）
+    pub fn diagnostic(&self) -> Option<&Diagnostic> {
+        match self {
+            CompileError::TypeError(_, diag) => diag.as_deref(),
+            _ => None,
+        }
+    }
 }
 
 /// 编译进度信息

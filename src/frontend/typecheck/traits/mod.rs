@@ -13,4 +13,4 @@ pub use coherence::{CoherenceChecker, OrphanChecker};
 pub use object_safety::{ObjectSafetyChecker, ObjectSafetyError};
 pub use resolution::{TraitResolver, TraitResolutionError};
 
-pub use crate::frontend::shared::error::Result;
+pub use crate::util::diagnostic::Result;

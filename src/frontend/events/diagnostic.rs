@@ -2,7 +2,7 @@
 
 use super::{Event, EventMetadata, EventType};
 use crate::util::span::Span;
-use crate::frontend::shared::error::diagnostic::Severity;
+use crate::util::diagnostic::Severity;
 
 /// 诊断代码（用于标识特定错误类型）
 #[derive(Debug, Clone)]

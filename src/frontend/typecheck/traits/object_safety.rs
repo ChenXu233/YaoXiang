@@ -2,7 +2,7 @@
 //!
 //! 实现特质对象安全性检查
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 
 /// 对象安全错误
 #[derive(Debug, Clone)]

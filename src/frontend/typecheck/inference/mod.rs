@@ -31,4 +31,4 @@ pub use generics::GenericInferrer;
 
 pub use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 pub use crate::frontend::typecheck::TypeError;
-pub use crate::frontend::shared::error::Result;
+pub use crate::util::diagnostic::Result;

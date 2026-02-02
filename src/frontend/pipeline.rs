@@ -4,7 +4,40 @@
 
 use crate::middle;
 use crate::util::span::SourceFile;
+use crate::util::diagnostic::Diagnostic;
+use super::typecheck::TypeError;
 use super::{config::CompileConfig, events::*, typecheck};
+
+/// 管道错误类型
+#[derive(Debug, Clone)]
+pub enum PipelineError {
+    /// 词法/解析错误
+    LexParse(String),
+    /// 类型检查错误
+    TypeCheck(TypeError),
+    /// IR 生成错误
+    IRGeneration(String),
+}
+
+impl fmt::Display for PipelineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PipelineError::LexParse(msg) => write!(f, "{}", msg),
+            PipelineError::TypeCheck(err) => write!(f, "{}", err),
+            PipelineError::IRGeneration(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl PipelineError {
+    /// 获取诊断信息（如果是类型检查错误）
+    pub fn diagnostic(&self) -> Option<Diagnostic> {
+        match self {
+            PipelineError::TypeCheck(err) => Some(Diagnostic::from(err.clone())),
+            _ => None,
+        }
+    }
+}
 use std::path::{Path, PathBuf};
 
 /// 流水线状态
@@ -61,8 +94,8 @@ pub struct CompilationResult {
     pub phase_durations: Vec<(CompilationPhase, u64)>,
     /// 总耗时（毫秒）
     pub total_duration_ms: u64,
-    /// 错误消息
-    pub errors: Vec<String>,
+    /// 错误
+    pub errors: Vec<PipelineError>,
     /// 警告消息
     pub warnings: Vec<String>,
 }
@@ -103,7 +136,7 @@ impl CompilationResult {
 
     /// 创建失败结果
     pub fn failed(
-        errors: Vec<String>,
+        errors: Vec<PipelineError>,
         durations: Vec<(CompilationPhase, u64)>,
         total_ms: u64,
     ) -> Self {
@@ -251,7 +284,7 @@ impl Pipeline {
         let lex_result = self.run_lexing(source_name, source, &mut phase_durations);
         if !lex_result.is_success() {
             return CompilationResult::failed(
-                lex_result.errors,
+                lex_result.errors.into_iter().map(PipelineError::LexParse).collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -260,7 +293,7 @@ impl Pipeline {
         let parse_result = self.run_parsing(source_name, &lex_result.tokens, &mut phase_durations);
         if !parse_result.is_success() {
             return CompilationResult::failed(
-                parse_result.errors,
+                parse_result.errors.into_iter().map(PipelineError::LexParse).collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -270,7 +303,7 @@ impl Pipeline {
             self.run_typecheck(source_name, source, &parse_result.ast, &mut phase_durations);
         if !typecheck_result.is_success() {
             return CompilationResult::failed(
-                typecheck_result.errors,
+                typecheck_result.errors.into_iter().map(PipelineError::TypeCheck).collect(),
                 phase_durations,
                 start_time.elapsed().as_millis() as u64,
             );
@@ -296,7 +329,11 @@ impl Pipeline {
         if ir_result.is_success() {
             CompilationResult::success(ir_result.ir.unwrap(), phase_durations, total_ms)
         } else {
-            CompilationResult::failed(ir_result.errors, phase_durations, total_ms)
+            // IR 生成错误被归类为类型检查错误
+            let pipeline_errors: Vec<PipelineError> = ir_result.errors.into_iter()
+                .map(PipelineError::TypeCheck)
+                .collect();
+            CompilationResult::failed(pipeline_errors, phase_durations, total_ms)
         }
     }
 
@@ -413,6 +450,7 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::TypeChecking, duration));
 
+                // 保留原始 TypeError，同时发送字符串消息给事件总线
                 let error_messages: Vec<String> = errors.iter().map(|e| format!("{}", e)).collect();
 
                 self.event_bus.emit(TypeCheckingComplete::new(
@@ -430,7 +468,7 @@ impl Pipeline {
                     ));
                 }
 
-                TypecheckResult::failed(error_messages)
+                TypecheckResult::failed(errors)
             }
         }
     }
@@ -483,7 +521,8 @@ impl Pipeline {
                     ));
                 }
 
-                IRResult::failed(error_messages)
+                // IR 生成错误被归类为类型检查错误（因为它们源于类型检查）
+                IRResult::failed(errors)
             }
         }
     }
@@ -575,7 +614,7 @@ impl ParseResult {
 /// 类型检查结果
 struct TypecheckResult {
     type_result: typecheck::TypeCheckResult,
-    errors: Vec<String>,
+    errors: Vec<TypeError>,
 }
 
 impl TypecheckResult {
@@ -586,7 +625,7 @@ impl TypecheckResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<TypeError>) -> Self {
         Self {
             type_result: typecheck::TypeCheckResult::default(),
             errors,
@@ -601,7 +640,7 @@ impl TypecheckResult {
 /// IR 生成结果
 struct IRResult {
     ir: Option<middle::ModuleIR>,
-    errors: Vec<String>,
+    errors: Vec<TypeError>,
 }
 
 impl IRResult {
@@ -612,7 +651,7 @@ impl IRResult {
         }
     }
 
-    fn failed(errors: Vec<String>) -> Self {
+    fn failed(errors: Vec<TypeError>) -> Self {
         Self { ir: None, errors }
     }
 

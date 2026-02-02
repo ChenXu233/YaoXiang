@@ -4,7 +4,7 @@
 //!
 //! 实现特质约束求解
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
 use std::collections::HashMap;
 
@@ -51,13 +51,11 @@ impl TraitSolver {
                 .insert(constraint.name.clone(), constraint.clone());
             Ok(())
         } else {
-            Err(
-                crate::frontend::shared::error::diagnostic::Diagnostic::error(
-                    "E0602".to_string(),
-                    format!("Cannot satisfy trait constraint: {}", constraint.name),
-                    None,
-                ),
-            )
+            Err(crate::util::diagnostic::Diagnostic::error(
+                "E0602".to_string(),
+                format!("Cannot satisfy trait constraint: {}", constraint.name),
+                None,
+            ))
         }
     }
 

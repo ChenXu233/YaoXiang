@@ -4,7 +4,7 @@
 //!
 //! 提供不同错误类型之间的转换
 
-use crate::frontend::shared::error::Diagnostic;
+use super::error::Diagnostic;
 
 /// 错误转换trait
 pub trait ErrorConvert<T> {

@@ -2,7 +2,7 @@
 
 use crate::frontend::typecheck::TypeError;
 use crate::frontend::typecheck::TypeErrorCollector;
-use crate::frontend::shared::error::Warning;
+use crate::util::diagnostic::Warning;
 use crate::frontend::typecheck::MonoType;
 use crate::util::span::Span;
 
@@ -30,11 +30,11 @@ fn test_multiple_error_collection() {
 #[test]
 fn test_diagnostic_generation() {
     let error = TypeError::unknown_variable("test_var".to_string(), Span::default());
-    let diagnostic: crate::frontend::shared::error::Diagnostic = error.into();
+    let diagnostic: crate::util::diagnostic::Diagnostic = error.into();
 
     assert_eq!(
         diagnostic.severity,
-        crate::frontend::shared::error::Severity::Error
+        crate::util::diagnostic::Severity::Error
     );
     assert!(!diagnostic.message.is_empty());
 }
@@ -112,10 +112,10 @@ fn test_diagnostic_from_type_error() {
         Span::default(),
     );
 
-    let diagnostic: crate::frontend::shared::error::Diagnostic = error.into();
+    let diagnostic: crate::util::diagnostic::Diagnostic = error.into();
     assert_eq!(
         diagnostic.severity,
-        crate::frontend::shared::error::Severity::Error
+        crate::util::diagnostic::Severity::Error
     );
     assert!(!diagnostic.message.is_empty());
 }
@@ -124,10 +124,10 @@ fn test_diagnostic_from_type_error() {
 #[test]
 fn test_severity_levels() {
     // 测试 Severity 的 Debug 和 Display 实现
-    let error_str = format!("{:?}", crate::frontend::shared::error::Severity::Error);
+    let error_str = format!("{:?}", crate::util::diagnostic::Severity::Error);
     assert!(error_str.contains("Error"));
 
-    let warning_str = format!("{:?}", crate::frontend::shared::error::Severity::Warning);
+    let warning_str = format!("{:?}", crate::util::diagnostic::Severity::Warning);
     assert!(warning_str.contains("Warning"));
 }
 
@@ -184,7 +184,7 @@ fn test_diagnostic_code_format() {
         Box::new(MonoType::String),
         Span::default(),
     );
-    let diagnostic: crate::frontend::shared::error::Diagnostic = error.into();
+    let diagnostic: crate::util::diagnostic::Diagnostic = error.into();
 
     // 错误码应该是 E001 格式
     assert!(diagnostic.code.starts_with("E"));
@@ -218,7 +218,7 @@ fn test_type_error_variants() {
 #[test]
 fn test_diagnostic_related() {
     let error = TypeError::unknown_variable("test".to_string(), Span::default());
-    let diagnostic: crate::frontend::shared::error::Diagnostic = error.into();
+    let diagnostic: crate::util::diagnostic::Diagnostic = error.into();
 
     // 相关诊断应该为空
     assert!(diagnostic.related.is_empty());

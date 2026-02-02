@@ -4,7 +4,7 @@
 //!
 //! 实现特质一致性检查
 
-use crate::frontend::shared::error::Result;
+use crate::util::diagnostic::Result;
 
 /// 一致性检查器
 pub struct CoherenceChecker;
