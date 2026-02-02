@@ -5,7 +5,7 @@
 //! 实现类型替换算法
 
 use crate::frontend::shared::error::Result;
-use crate::frontend::core::type_system::{MonoType, TypeVar};
+use crate::frontend::core::type_system::{MonoType, TypeVar, StructType, EnumType};
 
 /// 替换结果
 pub struct SubstitutionResult {
@@ -14,13 +14,8 @@ pub struct SubstitutionResult {
 }
 
 /// 替换器
+#[derive(Debug, Default)]
 pub struct Substituter;
-
-impl Default for Substituter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Substituter {
     /// 创建新的替换器
@@ -61,6 +56,13 @@ impl Substituter {
                     .map(|t| self.substitute_internal(t, var, replacement))
                     .collect(),
             ),
+            MonoType::Dict(k, v) => MonoType::Dict(
+                Box::new(self.substitute_internal(k, var, replacement)),
+                Box::new(self.substitute_internal(v, var, replacement)),
+            ),
+            MonoType::Set(t) => {
+                MonoType::Set(Box::new(self.substitute_internal(t, var, replacement)))
+            }
             MonoType::Fn {
                 params,
                 return_type,
@@ -86,11 +88,33 @@ impl Substituter {
                         (name.clone(), self.substitute_internal(ty, var, replacement))
                     })
                     .collect();
-                MonoType::Struct(crate::frontend::core::type_system::StructType {
+                MonoType::Struct(StructType {
                     name: struct_type.name.clone(),
                     fields: new_fields,
                     methods: struct_type.methods.clone(),
                 })
+            }
+            MonoType::Enum(e) => MonoType::Enum(EnumType {
+                name: e.name.clone(),
+                variants: e.variants.clone(),
+            }),
+            MonoType::Range { elem_type } => MonoType::Range {
+                elem_type: Box::new(self.substitute_internal(elem_type, var, replacement)),
+            },
+            MonoType::Union(types) => MonoType::Union(
+                types
+                    .iter()
+                    .map(|t| self.substitute_internal(t, var, replacement))
+                    .collect(),
+            ),
+            MonoType::Intersection(types) => MonoType::Intersection(
+                types
+                    .iter()
+                    .map(|t| self.substitute_internal(t, var, replacement))
+                    .collect(),
+            ),
+            MonoType::Arc(t) => {
+                MonoType::Arc(Box::new(self.substitute_internal(t, var, replacement)))
             }
             _ => ty.clone(),
         }

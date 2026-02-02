@@ -298,15 +298,6 @@ pub enum MSG {
     VmStart,
     VmComplete,
 
-    // Debug/Print replacements
-    Stage1Start,
-    Stage1Complete,
-    Stage2Start,
-    Stage2Complete,
-    Stage3Start,
-    Stage3Complete,
-    AllStagesComplete,
-
     // Bytecode
     BytecodeDecodeI64Add,
     BytecodeDecodeI64AddTooShort,
@@ -663,15 +654,6 @@ impl MSG {
 
             // Other messages
             MSG::FormatterNotImplemented => "formatter_not_implemented",
-
-            // Stage messages
-            MSG::Stage1Start => "stage1_start",
-            MSG::Stage1Complete => "stage1_complete",
-            MSG::Stage2Start => "stage2_start",
-            MSG::Stage2Complete => "stage2_complete",
-            MSG::Stage3Start => "stage3_start",
-            MSG::Stage3Complete => "stage3_complete",
-            MSG::AllStagesComplete => "all_stages_complete",
 
             _ => "unknown_message",
         }

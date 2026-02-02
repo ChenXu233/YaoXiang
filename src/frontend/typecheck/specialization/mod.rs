@@ -12,4 +12,4 @@ pub use substitution::{Substituter, SubstitutionResult};
 pub use instantiate::{Instantiator, InstanceResult};
 
 pub use crate::frontend::shared::error::Result;
-pub use crate::frontend::core::type_system::{MonoType, PolyType};
+pub use crate::frontend::core::type_system::{MonoType, PolyType, TypeVar};

@@ -14,8 +14,6 @@ use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::span::Span;
-use crate::tlog;
-use crate::util::i18n::MSG;
 use std::collections::HashMap;
 
 /// 符号表条目
@@ -228,8 +226,6 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) -> Result<ModuleIR, Vec<IrGenError>> {
-        tlog!(info, MSG::Stage1Start);
-
         let mut functions = Vec::new();
         let mut errors = Vec::new();
         let mut constants = Vec::new();
@@ -245,8 +241,6 @@ impl AstToIrGenerator {
         if !errors.is_empty() {
             return Err(errors);
         }
-
-        tlog!(info, MSG::Stage1Complete);
 
         Ok(ModuleIR {
             types: Vec::new(),

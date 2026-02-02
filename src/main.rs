@@ -7,7 +7,6 @@ use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, run_file, TuiREPL, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
-use yaoxiang::tlog;
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -130,9 +129,6 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    tlog!(info, MSG::Stage2Start);
-    tlog!(info, MSG::Stage3Start);
-
     let args = Args::parse();
 
     // Set language first (before logger init)
@@ -167,20 +163,14 @@ fn main() -> Result<()> {
 
     match command {
         Commands::Run { file } => {
-            info!("Run command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to run: {}", file.display()))?;
-            info!("Run command completed successfully!");
         }
         Commands::Eval { code } => {
-            info!("Eval command received");
             run(&code).context("Failed to evaluate code")?;
-            info!("Eval command completed successfully!");
         }
         Commands::Check { file } => {
             // TODO: Implement type checking without execution
-            info!("Check command received: {:?}", file);
             run_file(&file).with_context(|| format!("Failed to check: {}", file.display()))?;
-            info!("Check passed!");
         }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter
@@ -202,16 +192,10 @@ fn main() -> Result<()> {
             info!("{} {}", NAME, VERSION);
         }
         Commands::Repl => {
-            info!("Starting TUI REPL");
             let mut repl = TuiREPL::new().context("Failed to create TUI REPL")?;
             repl.run().context("Failed to run TUI REPL")?;
-            info!("TUI REPL exited successfully");
         }
     }
-
-    tlog!(info, MSG::Stage2Complete);
-    tlog!(info, MSG::Stage3Complete);
-    tlog!(info, MSG::AllStagesComplete);
 
     Ok(())
 }

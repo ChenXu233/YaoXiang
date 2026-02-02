@@ -5,22 +5,18 @@
 //! 实现泛型实例化
 
 use crate::frontend::shared::error::Result;
-use crate::frontend::core::type_system::MonoType;
+use crate::frontend::core::type_system::{MonoType, StructType, EnumType};
 
 /// 实例化结果
+#[derive(Debug, Clone)]
 pub struct InstanceResult {
     pub instance: MonoType,
     pub generic: MonoType,
 }
 
 /// 实例化算法
+#[derive(Debug, Default)]
 pub struct Instantiator;
-
-impl Default for Instantiator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Instantiator {
     /// 创建新的实例化器
@@ -87,6 +83,17 @@ impl Instantiator {
                 Ok(MonoType::Tuple(new_types))
             }
 
+            MonoType::Dict(k, v) => {
+                let new_k = self.substitute_generic_params(k, args)?;
+                let new_v = self.substitute_generic_params(v, args)?;
+                Ok(MonoType::Dict(Box::new(new_k), Box::new(new_v)))
+            }
+
+            MonoType::Set(t) => {
+                let new_t = self.substitute_generic_params(t, args)?;
+                Ok(MonoType::Set(Box::new(new_t)))
+            }
+
             MonoType::Fn {
                 params,
                 return_type,
@@ -115,13 +122,44 @@ impl Instantiator {
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(MonoType::Struct(
-                    crate::frontend::core::type_system::StructType {
-                        name: struct_type.name.clone(),
-                        fields: new_fields,
-                        methods: struct_type.methods.clone(),
-                    },
-                ))
+                Ok(MonoType::Struct(StructType {
+                    name: struct_type.name.clone(),
+                    fields: new_fields,
+                    methods: struct_type.methods.clone(),
+                }))
+            }
+
+            MonoType::Enum(e) => Ok(MonoType::Enum(EnumType {
+                name: e.name.clone(),
+                variants: e.variants.clone(),
+            })),
+
+            MonoType::Range { elem_type } => {
+                let new_elem = self.substitute_generic_params(elem_type, args)?;
+                Ok(MonoType::Range {
+                    elem_type: Box::new(new_elem),
+                })
+            }
+
+            MonoType::Union(types) => {
+                let new_types = types
+                    .iter()
+                    .map(|t| self.substitute_generic_params(t, args))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(MonoType::Union(new_types))
+            }
+
+            MonoType::Intersection(types) => {
+                let new_types = types
+                    .iter()
+                    .map(|t| self.substitute_generic_params(t, args))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(MonoType::Intersection(new_types))
+            }
+
+            MonoType::Arc(t) => {
+                let new_t = self.substitute_generic_params(t, args)?;
+                Ok(MonoType::Arc(Box::new(new_t)))
             }
 
             _ => Ok(ty.clone()),
@@ -148,6 +186,8 @@ impl Instantiator {
             MonoType::TypeVar(_) => true,
             MonoType::List(inner) => self.contains_type_vars(inner),
             MonoType::Tuple(types) => types.iter().any(|t| self.contains_type_vars(t)),
+            MonoType::Dict(k, v) => self.contains_type_vars(k) || self.contains_type_vars(v),
+            MonoType::Set(t) => self.contains_type_vars(t),
             MonoType::Fn {
                 params,
                 return_type,
@@ -160,6 +200,11 @@ impl Instantiator {
                 .fields
                 .iter()
                 .any(|(_, field_ty)| self.contains_type_vars(field_ty)),
+            MonoType::Range { elem_type } => self.contains_type_vars(elem_type),
+            MonoType::Union(types) | MonoType::Intersection(types) => {
+                types.iter().any(|t| self.contains_type_vars(t))
+            }
+            MonoType::Arc(t) => self.contains_type_vars(t),
             _ => false,
         }
     }
