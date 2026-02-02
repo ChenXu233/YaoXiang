@@ -372,8 +372,16 @@ impl<'a> ExprInferrer<'a> {
 
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call {
-                func: _, args: _, ..
+                func, args, ..
             } => {
+                // 检查函数表达式
+                let _func_ty = self.infer_expr(func)?;
+
+                // 检查所有参数表达式
+                for arg in args {
+                    self.infer_expr(arg)?;
+                }
+
                 // 函数调用返回类型变量（具体类型需要在调用点确定）
                 Ok(self.solver.new_var())
             }

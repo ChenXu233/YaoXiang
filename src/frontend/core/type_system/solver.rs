@@ -12,7 +12,7 @@ use std::collections::HashMap;
 /// 类型约束求解器（union-find 实现）
 ///
 /// 负责管理类型变量的绑定和约束求解
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TypeConstraintSolver {
     /// 类型变量的绑定状态
     bindings: Vec<TypeBinding>,

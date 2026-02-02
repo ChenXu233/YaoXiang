@@ -8,6 +8,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::frontend::core::parser::ast::{Module, Expr};
+
 // 导入推断模块
 pub mod inference;
 
@@ -34,7 +36,6 @@ pub mod errors;
 mod tests;
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
-// 注意：不导出 BinOp/UnOp 以避免与 parser 冲突
 pub use crate::frontend::core::type_system::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
     TypeConstraintSolver, SendSyncConstraint, SendSyncSolver, TypeMismatch, TypeConstraintError,
@@ -52,9 +53,9 @@ pub use errors::*;
 // 类型环境
 #[derive(Debug, Default)]
 pub struct TypeEnvironment {
-    pub vars: HashMap<String, crate::frontend::core::type_system::PolyType>,
-    pub types: HashMap<String, crate::frontend::core::type_system::PolyType>,
-    pub solver: crate::frontend::core::type_system::TypeConstraintSolver,
+    pub vars: HashMap<String, PolyType>,
+    pub types: HashMap<String, PolyType>,
+    pub solver: TypeConstraintSolver,
     pub errors: TypeErrorCollector,
     /// 导入追踪 - 模块导入信息
     pub imports: Vec<ImportInfo>,
@@ -82,7 +83,7 @@ impl TypeEnvironment {
     pub fn add_var(
         &mut self,
         name: String,
-        poly: crate::frontend::core::type_system::PolyType,
+        poly: PolyType,
     ) {
         self.vars.insert(name, poly);
     }
@@ -91,12 +92,12 @@ impl TypeEnvironment {
     pub fn get_var(
         &self,
         name: &str,
-    ) -> Option<&crate::frontend::core::type_system::PolyType> {
+    ) -> Option<&PolyType> {
         self.vars.get(name)
     }
 
     /// 获取求解器
-    pub fn solver(&mut self) -> &mut crate::frontend::core::type_system::TypeConstraintSolver {
+    pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         &mut self.solver
     }
 
@@ -104,7 +105,7 @@ impl TypeEnvironment {
     pub fn add_type(
         &mut self,
         name: String,
-        poly: crate::frontend::core::type_system::PolyType,
+        poly: PolyType,
     ) {
         self.types.insert(name, poly);
     }
@@ -113,14 +114,14 @@ impl TypeEnvironment {
     pub fn get_type(
         &self,
         name: &str,
-    ) -> Option<&crate::frontend::core::type_system::PolyType> {
+    ) -> Option<&PolyType> {
         self.types.get(name)
     }
 }
 
 /// 类型检查器
 ///
-/// 负责检查模块、函数和语句的类型正确性
+/// 负责模块级类型检查编排，协调前置收集和函数体检查
 pub struct TypeChecker {
     /// 当前环境
     env: TypeEnvironment,
@@ -130,6 +131,8 @@ pub struct TypeChecker {
     current_return_type: Option<MonoType>,
     /// 泛型函数缓存
     generic_cache: HashMap<String, HashMap<String, PolyType>>,
+    /// 函数体检查器
+    body_checker: Option<checking::BodyChecker>,
 }
 
 impl TypeChecker {
@@ -143,6 +146,7 @@ impl TypeChecker {
             checked_functions: HashMap::new(),
             current_return_type: None,
             generic_cache: HashMap::new(),
+            body_checker: None,
         }
     }
 
@@ -183,12 +187,28 @@ impl TypeChecker {
         self.env.errors.errors()
     }
 
+    /// 检查单个语句（委托给 BodyChecker）
+    pub fn check_stmt(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) -> Result<(), TypeError> {
+        self.body_checker_mut().check_stmt(stmt)
+    }
+
+    /// 获取函数体检查器
+    fn body_checker(&mut self) -> &mut checking::BodyChecker {
+        if self.body_checker.is_none() {
+            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
+        }
+        self.body_checker.as_mut().unwrap()
+    }
+
     /// 检查整个模块
     pub fn check_module(
         &mut self,
-        module: &crate::frontend::core::parser::ast::Module,
+        module: &Module,
     ) -> Result<TypeCheckResult, Vec<TypeError>> {
-        // 首先收集所有类型定义
+        // 第一遍：收集所有类型定义
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::TypeDef { name, definition } =
                 &stmt.kind
@@ -197,9 +217,23 @@ impl TypeChecker {
             }
         }
 
-        // 然后检查所有语句
+        // 第二遍：收集所有函数签名（使其可被前向引用）
         for stmt in &module.items {
-            if let Err(e) = self.check_stmt(stmt) {
+            self.collect_function_signature(stmt);
+        }
+
+        // 初始化函数体检查器
+        let body_checker = checking::BodyChecker::new(self.env.solver());
+        *self.body_checker_mut() = body_checker;
+
+        // 将环境中的变量同步到 body_checker
+        for (name, poly) in self.env.vars.clone() {
+            self.body_checker_mut().add_var(name, poly);
+        }
+
+        // 第三遍：检查所有语句（包括函数体）
+        for stmt in &module.items {
+            if let Err(e) = self.body_checker_mut().check_stmt(stmt) {
                 self.add_error(e);
             }
         }
@@ -229,6 +263,134 @@ impl TypeChecker {
         Ok(result)
     }
 
+    /// 获取 body_checker 的可变引用
+    fn body_checker_mut(&mut self) -> &mut checking::BodyChecker {
+        if self.body_checker.is_none() {
+            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
+        }
+        self.body_checker.as_mut().unwrap()
+    }
+
+    /// 收集函数签名（第一遍扫描）
+    fn collect_function_signature(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) {
+        match &stmt.kind {
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
+                // 处理函数定义表达式
+                if let crate::frontend::core::parser::ast::Expr::FnDef {
+                    name,
+                    params,
+                    return_type,
+                    is_async,
+                    ..
+                } = expr.as_ref()
+                {
+                    let fn_ty = MonoType::Fn {
+                        params: params.iter().map(|p| {
+                            p.ty.as_ref()
+                                .map(|t| MonoType::from(t.clone()))
+                                .unwrap_or_else(|| self.env.solver().new_var())
+                        }).collect(),
+                        return_type: Box::new(
+                            return_type.as_ref()
+                                .map(|t| MonoType::from(t.clone()))
+                                .unwrap_or_else(|| self.env.solver().new_var())
+                        ),
+                        is_async: *is_async,
+                    };
+                    self.env.add_var(name.clone(), PolyType::mono(fn_ty));
+                }
+                // 处理 Lambda 赋值 (name = (params) => body)
+                else if let crate::frontend::core::parser::ast::Expr::BinOp {
+                    op: crate::frontend::core::parser::ast::BinOp::Assign,
+                    left,
+                    right,
+                    ..
+                } = expr.as_ref()
+                {
+                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = left.as_ref() {
+                        if let crate::frontend::core::parser::ast::Expr::Lambda { params, .. } = right.as_ref() {
+                            let fn_ty = MonoType::Fn {
+                                params: params.iter().map(|p| {
+                                    p.ty.as_ref()
+                                        .map(|t| MonoType::from(t.clone()))
+                                        .unwrap_or_else(|| self.env.solver().new_var())
+                                }).collect(),
+                                return_type: Box::new(self.env.solver().new_var()),
+                                is_async: false,
+                            };
+                            self.env.add_var(name.clone(), PolyType::mono(fn_ty));
+                        }
+                    }
+                }
+            }
+            crate::frontend::core::parser::ast::StmtKind::Fn {
+                name,
+                type_annotation,
+                params,
+                ..
+            } => {
+                // 处理统一函数语法
+                let (param_types, return_type) = if let Some(type_ann) = type_annotation {
+                    if let crate::frontend::core::parser::ast::Type::Fn {
+                        params: param_tys,
+                        return_type,
+                    } = type_ann
+                    {
+                        (
+                            param_tys.iter().map(|t| MonoType::from(t.clone())).collect(),
+                            MonoType::from(*return_type.clone()),
+                        )
+                    } else {
+                        (
+                            params.iter().map(|p| {
+                                p.ty.as_ref()
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .unwrap_or_else(|| self.env.solver().new_var())
+                            }).collect(),
+                            self.env.solver().new_var(),
+                        )
+                    }
+                } else {
+                    (
+                        params.iter().map(|p| {
+                            p.ty.as_ref()
+                                .map(|t| MonoType::from(t.clone()))
+                                .unwrap_or_else(|| self.env.solver().new_var())
+                        }).collect(),
+                        self.env.solver().new_var(),
+                    )
+                };
+
+                let fn_ty = MonoType::Fn {
+                    params: param_types,
+                    return_type: Box::new(return_type),
+                    is_async: false,
+                };
+                self.env.add_var(name.clone(), PolyType::mono(fn_ty));
+            }
+            crate::frontend::core::parser::ast::StmtKind::Use {
+                path,
+                items: _,
+                alias: _,
+            } => {
+                // 处理 use std.io - 添加 print/println 函数
+                if path == "std.io" {
+                    let print_ty = MonoType::Fn {
+                        params: vec![self.env.solver().new_var()],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    };
+                    self.env.add_var("print".to_string(), PolyType::mono(print_ty.clone()));
+                    self.env.add_var("println".to_string(), PolyType::mono(print_ty));
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// 添加类型定义
     fn add_type_definition(
         &mut self,
@@ -239,208 +401,34 @@ impl TypeChecker {
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         self.env.add_type(name.to_string(), poly);
     }
-
-    /// 检查语句
-    pub fn check_stmt(
-        &mut self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<(), TypeError> {
-        match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                // 检查函数定义
-                if let crate::frontend::core::parser::ast::Expr::FnDef {
-                    name,
-                    params,
-                    return_type,
-                    body,
-                    is_async,
-                    span: _,
-                } = expr.as_ref()
-                {
-                    // 有返回类型标注表示有完整类型签名
-                    let is_annotated = return_type.is_some();
-                    self.check_fn_def(
-                        name,
-                        params,
-                        return_type.as_ref(),
-                        body,
-                        *is_async,
-                        None,
-                        is_annotated,
-                    )?;
-                    Ok(())
-                } else if let crate::frontend::core::parser::ast::Expr::BinOp {
-                    op: crate::frontend::core::parser::ast::BinOp::Assign,
-                    left,
-                    right: _,
-                    ..
-                } = expr.as_ref()
-                {
-                    // 对于赋值表达式，先将变量添加到作用域，再推断类型
-                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = left.as_ref() {
-                        // 为变量创建类型变量并添加到作用域
-                        let ty = self.env.solver().new_var();
-                        let poly = PolyType::mono(ty);
-                        self.env.add_var(name.clone(), poly);
-                    }
-                    // 推断整个赋值表达式
-                    self.check_expr(expr)?;
-                    Ok(())
-                } else {
-                    self.check_expr(expr)?;
-                    Ok(())
-                }
-            }
-            crate::frontend::core::parser::ast::StmtKind::Fn {
-                name,
-                type_annotation,
-                params,
-                body: (stmts, expr),
-            } => {
-                // 检查是否与已存在的结构体类型同名
-                if let Some(existing) = self.env.get_var(name) {
-                    if let MonoType::Struct(_) = existing.body {
-                        return Err(TypeError::UnknownVariable {
-                            name: format!("'{}' is already defined as a struct type", name),
-                            span: stmt.span,
-                        });
-                    }
-                }
-
-                // Create the function body block
-                let body = crate::frontend::core::parser::ast::Block {
-                    stmts: stmts.clone(),
-                    expr: expr.clone(),
-                    span: stmt.span,
-                };
-
-                // For unified syntax, we need to handle the type annotation specially
-                // We'll convert this to a FnDef expression and delegate to the Expr handler
-                #[allow(clippy::collapsible_match)]
-                if let Some(ref type_annotation) = type_annotation {
-                    if let crate::frontend::core::parser::ast::Type::Fn {
-                        params: _,
-                        return_type,
-                    } = type_annotation
-                    {
-                        // Create a FnDef expression from the unified syntax
-                        let fn_def_expr = crate::frontend::core::parser::ast::Expr::FnDef {
-                            name: name.clone(),
-                            params: params.clone(),
-                            return_type: Some(*return_type.clone()),
-                            body: Box::new(body),
-                            is_async: false,
-                            span: stmt.span,
-                        };
-
-                        // Delegate to the Expr handler for FnDef
-                        let _ = self.check_expr(&fn_def_expr)?;
-                        return Ok(());
-                    }
-                }
-
-                // 如果没有类型注解，使用原有逻辑
-                let is_async = false;
-                let return_type = None;
-                let is_annotated = false;
-
-                self.check_fn_def(
-                    name,
-                    params,
-                    return_type.as_ref(),
-                    &body,
-                    is_async,
-                    None,
-                    is_annotated,
-                )?;
-                Ok(())
-            }
-            _ => {
-                // TODO: 实现其他语句类型的检查
-                Ok(())
-            }
-        }
-    }
-
-    /// 检查表达式
-    pub fn check_expr(
-        &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-    ) -> Result<MonoType, TypeError> {
-        // 克隆环境变量避免借用冲突
-        let vars_clone = self.env.vars.clone();
-        let mut inferrer =
-            crate::frontend::typecheck::inference::ExprInferrer::new(self.env.solver());
-        // 添加环境中的变量到推断器
-        for (name, poly) in vars_clone {
-            inferrer.add_var(name, poly);
-        }
-        match inferrer.infer_expr(expr) {
-            Ok(ty) => Ok(ty),
-            Err(diagnostic) => {
-                // 转换Diagnostic到TypeError
-                let type_err = TypeError::InferenceError {
-                    message: diagnostic.message,
-                    span: diagnostic.span.unwrap_or_default(),
-                };
-                Err(type_err)
-            }
-        }
-    }
-
-    /// 检查函数定义
-    #[allow(clippy::too_many_arguments)]
-    fn check_fn_def(
-        &mut self,
-        name: &str,
-        _params: &[crate::frontend::core::parser::ast::Param],
-        _return_type: Option<&crate::frontend::core::parser::ast::Type>,
-        _body: &crate::frontend::core::parser::ast::Block,
-        _is_async: bool,
-        _span: Option<crate::util::span::Span>,
-        _is_annotated: bool,
-    ) -> Result<(), TypeError> {
-        // 检查递归调用
-        if self.checked_functions.contains_key(name) {
-            return Err(TypeError::RecursiveType {
-                name: name.to_string(),
-                span: crate::util::span::Span::default(),
-            });
-        }
-
-        // 标记函数为已检查
-        self.checked_functions.insert(name.to_string(), true);
-
-        // TODO: 实现完整的函数类型检查逻辑
-        // 这包括：
-        // 1. 检查参数类型
-        // 2. 检查返回类型
-        // 3. 检查函数体
-
-        // 临时实现：假设函数检查通过
-        Ok(())
-    }
 }
 
 /// 检查模块
 #[allow(unused_variables)]
 pub fn check_module(
-    _ast: &crate::frontend::core::parser::ast::Module,
+    ast: &Module,
     env: Option<&mut TypeEnvironment>,
 ) -> Result<TypeCheckResult, Vec<TypeError>> {
-    let env = env.unwrap_or_else(|| {
-        let mut new_env = TypeEnvironment::new();
-        add_builtin_types(&mut new_env);
-        Box::leak(Box::new(new_env))
-    });
+    // 使用 TypeChecker 进行完整的模块检查
+    let mut checker = TypeChecker::new("main");
 
-    // TODO: 使用新架构实现模块检查
-    Ok(TypeCheckResult::default())
+    // 如果提供了外部环境，将其变量和类型导入到 checker 中
+    if let Some(ext_env) = env {
+        for (name, poly) in &ext_env.vars {
+            checker.env().add_var(name.clone(), poly.clone());
+        }
+        for (name, poly) in &ext_env.types {
+            checker.env().add_type(name.clone(), poly.clone());
+        }
+    }
+
+    // 执行模块检查
+    checker.check_module(ast)
 }
 
 /// 检查单个表达式
 pub fn infer_expression(
-    expr: &crate::frontend::core::parser::ast::Expr,
+    expr: &Expr,
     env: &mut TypeEnvironment,
 ) -> Result<MonoType, Vec<TypeError>> {
     // 克隆环境变量，避免借用冲突
@@ -473,13 +461,17 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
         .insert("bool".to_string(), PolyType::mono(MonoType::Bool));
     env.types
         .insert("string".to_string(), PolyType::mono(MonoType::String));
+    env.types
+        .insert("void".to_string(), PolyType::mono(MonoType::Void));
+    env.types
+        .insert("char".to_string(), PolyType::mono(MonoType::Char));
 }
 
 /// 类型检查结果
 #[derive(Debug, Clone, Default)]
 pub struct TypeCheckResult {
     pub module_name: String,
-    pub bindings: std::collections::HashMap<String, crate::frontend::core::type_system::PolyType>,
+    pub bindings: HashMap<String, PolyType>,
 }
 
 /// 导入信息
