@@ -1,12 +1,10 @@
-use crate::frontend::parser::ast;
-use crate::frontend::typecheck::infer::TypeInferrer;
-use crate::frontend::typecheck::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::util::span::Span;
+use crate::frontend::typecheck::inference::ExprInferrer;
+use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 
 #[test]
 fn test_scope_shadowing() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // Global scope: x = Int
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -34,7 +32,7 @@ fn test_scope_shadowing() {
 #[test]
 fn test_nested_scopes() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = TypeInferrer::new(&mut solver);
+    let mut inferrer = ExprInferrer::new(&mut solver);
 
     // Global: a = Int
     inferrer.add_var("a".to_string(), PolyType::mono(MonoType::Int(64)));

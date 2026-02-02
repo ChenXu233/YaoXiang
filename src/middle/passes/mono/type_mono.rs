@@ -2,7 +2,7 @@
 //!
 //! 提供类型单态化相关的辅助函数和trait
 
-use crate::frontend::parser::ast::Type as AstType;
+use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::ModuleIR;
 use crate::middle::passes::mono::instance::{GenericTypeId, SpecializationKey, TypeId, TypeInstance};

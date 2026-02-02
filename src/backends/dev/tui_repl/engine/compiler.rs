@@ -178,7 +178,7 @@ impl IncrementalCompiler {
 
         let compile_result = {
             let mut compiler = self.compiler.write().unwrap();
-            compiler.compile(&source_to_compile)
+            compiler.compile("<input>", &source_to_compile)
         };
 
         match compile_result {

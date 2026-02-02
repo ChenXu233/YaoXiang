@@ -24,7 +24,6 @@ pub mod frontend;
 pub mod middle;
 pub mod std;
 
-// Utility modules
 pub mod util;
 
 // Re-exports

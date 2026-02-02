@@ -2,7 +2,7 @@
 //!
 //! 管理单个模块的泛型定义和实例化状态
 
-use crate::frontend::parser::ast::Type;
+use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::{MonoType, StructType};
 use crate::middle::core::ir::FunctionIR;
 use crate::middle::passes::module::ModuleId;

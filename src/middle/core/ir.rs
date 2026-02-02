@@ -1,6 +1,6 @@
 //! Intermediate Representation
 
-pub use crate::frontend::parser::ast::Type;
+pub use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
 
 /// Instruction operand

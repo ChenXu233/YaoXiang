@@ -2,10 +2,10 @@
 //!
 //! 验证类型检查器修复后的正确行为
 
-use crate::frontend::lexer::tokenize;
-use crate::frontend::parser::parse;
-use crate::frontend::typecheck::check::TypeChecker;
-use crate::frontend::typecheck::types::TypeConstraintSolver;
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
+use crate::frontend::typecheck::TypeChecker;
+use crate::frontend::core::type_system::TypeConstraintSolver;
 use crate::util::span::{Position, Span};
 
 fn create_dummy_span() -> Span {
@@ -16,7 +16,7 @@ fn create_dummy_span() -> Span {
 #[test]
 fn test_fn_param_type_checking() {
     let code = r#"
-        add:(Int, Int) -> Int = (a, b) => a + b 
+        add:(Int, Int) -> Int = (a, b) => a + b
         main = () => {
             result: Int = add(5, 10)
         }
@@ -29,7 +29,7 @@ fn test_fn_param_type_checking() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -43,8 +43,8 @@ fn test_fn_param_type_checking() {
 #[test]
 fn test_fn_return_type_consistency() {
     let code = r#"
-        get_number:() -> Int = () => 42 
-        get_string:() -> String = () => "hello" 
+        get_number:() -> Int = () => 42
+        get_string:() -> String = () => "hello"
         main = () => {
             num: Int = get_number()
             str: String = get_string()
@@ -58,7 +58,7 @@ fn test_fn_return_type_consistency() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -86,7 +86,7 @@ fn test_statement_block_void_return() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -100,7 +100,7 @@ fn test_statement_block_void_return() {
 #[test]
 fn test_expression_fn_return() {
     let code = r#"
-        double:(Int) -> Int = (x) => x * 2 
+        double:(Int) -> Int = (x) => x * 2
         main = () => {
             result: Int = double(21)
         }
@@ -113,7 +113,7 @@ fn test_expression_fn_return() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -127,7 +127,7 @@ fn test_expression_fn_return() {
 #[test]
 fn test_fn_call_param_type_matching() {
     let code = r#"
-        concat:(String, String) -> String = (a, b) => a + b 
+        concat:(String, String) -> String = (a, b) => a + b
         main = () => {
             greeting: String = "Hello, "
             name: String = "World"
@@ -142,7 +142,7 @@ fn test_fn_call_param_type_matching() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -156,8 +156,8 @@ fn test_fn_call_param_type_matching() {
 #[test]
 fn test_nested_fn_calls() {
     let code = r#"
-        square:(Int) -> Int = (x) => x * x 
-        cube:(Int) -> Int = (x) => x * square(x) 
+        square:(Int) -> Int = (x) => x * x
+        cube:(Int) -> Int = (x) => x * square(x)
         main = () => {
             result: Int = cube(3)  // 应该是 27
         }
@@ -170,7 +170,7 @@ fn test_nested_fn_calls() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -184,7 +184,7 @@ fn test_nested_fn_calls() {
 #[test]
 fn test_complex_block_expression() {
     let code = r#"
-        max:(Int, Int) -> Int = (a, b) =>  a 
+        max:(Int, Int) -> Int = (a, b) =>  a
         main = () => {
             larger: Int = max(15, 25)
         }
@@ -197,7 +197,7 @@ fn test_complex_block_expression() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -211,7 +211,7 @@ fn test_complex_block_expression() {
 #[test]
 fn test_fn_param_annotations() {
     let code = r#"
-        process:(Int, String, Bool) -> Int = (num, text, flag) => num 
+        process:(Int, String, Bool) -> Int = (num, text, flag) => num
         main = () => {
             x: Int = 42
         }
@@ -224,7 +224,7 @@ fn test_fn_param_annotations() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -254,7 +254,7 @@ fn test_fn_return_annotation_validation() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -268,7 +268,7 @@ fn test_fn_return_annotation_validation() {
 #[test]
 fn test_no_param_function() {
     let code = r#"
-        get_number:() -> Int = () => 42 
+        get_number:() -> Int = () => 42
         main = () => {
             y: Int = get_number()
         }
@@ -281,7 +281,7 @@ fn test_no_param_function() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -313,7 +313,7 @@ fn test_function_type_inference() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -344,7 +344,7 @@ fn test_mixed_expr_stmt_block() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -374,7 +374,7 @@ fn test_fn_variable_scope() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -407,7 +407,7 @@ fn test_complex_nested_blocks() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 
@@ -439,7 +439,7 @@ fn test_block_var_type_annotations() {
 
     let module = result.unwrap();
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = TypeChecker::new(&mut solver, "test");
+    let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
 

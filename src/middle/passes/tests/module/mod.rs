@@ -1,6 +1,5 @@
 //! Module 系统测试
 
-use super::*;
 use std::path::PathBuf;
 use crate::middle::passes::module::{ModuleId, ModuleGraph, ModuleGraphError};
 

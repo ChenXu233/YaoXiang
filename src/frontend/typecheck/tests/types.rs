@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::parser::ast;
-use crate::frontend::typecheck::types::*;
+use crate::frontend::core::parser::ast;
+use crate::frontend::core::type_system::*;
 use crate::util::span::Span;
 
 fn create_dummy_span() -> Span {

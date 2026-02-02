@@ -336,7 +336,7 @@ fn test_use_after_move_in_cast() {
         Instruction::Cast {
             dst: Operand::Temp(1),
             src: Operand::Local(0),
-            target_type: crate::frontend::parser::ast::Type::Float(64),
+            target_type: crate::frontend::core::parser::ast::Type::Float(64),
         },
     ];
 

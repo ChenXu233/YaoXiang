@@ -17,7 +17,7 @@ pub mod buffer;
 pub mod bytecode;
 pub mod flow;
 
-use crate::frontend::parser::ast::Type;
+use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::util::i18n::{t, t_simple, MSG};
