@@ -1,5 +1,3 @@
 use std.io
 
-main: () -> Int = () => {
-    return 42
-}
+main = 42

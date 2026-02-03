@@ -5,12 +5,11 @@ type Point = {
 }
 
 // 方法定义：方法签名中不包含 self，方法体参数列表中才包含 self
-Point.get_x: (Point) -> Float = (self) => self.x
-Point.get_y: (Point) -> Float = (self) => self.y
+Point.get_x: (self: Point) -> Float = self.x
+Point.get_y: (self: Point) -> Float = self.y
 
-main: () -> Void = () => {
+main = {
     p: Point = Point(1.0, 2.0)
     x: Float = Point.get_x()
     y: Float = Point.get_y()
-    return
 }

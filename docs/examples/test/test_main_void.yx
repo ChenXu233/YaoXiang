@@ -1,5 +1,3 @@
 use std.io
 
-main: () -> Void = () => {
-    return
-}
+main = {}

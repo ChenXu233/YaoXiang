@@ -1,32 +1,32 @@
 // Complex test case based on YaoXiang-book.md
 
 // Function definition with types
-add: (Int, Int) -> Int = (a, b) => {
+add: (a: Int, b: Int) -> Int = {
     a + b
 }
 
 // Main function
-main: () -> Void = () => {
+main: () -> Void = {
     // Variable assignment
     x = 10;
     y = 20;
-    
+
     // Function call
     sum = add(x, y);
-    
+
     // If expression
     status = if sum > 25 {
         "Greater than 25"
     } else {
         "Less or equal to 25"
     };
-    
+
     // Loop with range
     total = 0;
     for i in 0..5 {
         total = total + i;
     }
-    
+
     // While loop
     count = 0;
     j = 0;
@@ -34,4 +34,4 @@ main: () -> Void = () => {
         count = count + 1;
         j = j + 1;
     }
-};
+}

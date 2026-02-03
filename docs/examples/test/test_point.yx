@@ -5,8 +5,7 @@ type Point = {
     y: Float
 }
 
-main: () -> Void = () => {
-    p: Point = Point(1.0, 2.0);
+main = {
+    p: Point = Point(1.0, 2.0)
     print("After")
-    return
 }
