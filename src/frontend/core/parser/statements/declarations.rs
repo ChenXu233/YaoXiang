@@ -329,6 +329,7 @@ fn parse_var_stmt_with_pub(
 
         if let Some(initializer) = init_opt {
             if let Some(ref type_annotation) = type_annotation {
+                // Check if type annotation is a function type
                 if let Type::Fn {
                     params: type_params,
                     return_type: _,
@@ -356,7 +357,7 @@ fn parse_var_stmt_with_pub(
                             kind: StmtKind::Fn {
                                 name,
                                 generic_params,
-                                type_annotation: type_annotation.clone(),
+                                type_annotation: Some(type_annotation.clone()),
                                 params: merged_params,
                                 body: (body.stmts.clone(), body.expr.clone()),
                                 is_pub: final_is_pub,
@@ -384,7 +385,7 @@ fn parse_var_stmt_with_pub(
                             kind: StmtKind::Fn {
                                 name,
                                 generic_params,
-                                type_annotation: type_annotation.clone(),
+                                type_annotation: Some(type_annotation.clone()),
                                 params,
                                 body: (Vec::new(), Some(Box::new(initializer))),
                                 is_pub: final_is_pub,
@@ -392,6 +393,7 @@ fn parse_var_stmt_with_pub(
                             span,
                         });
                     }
+                }
             }
         }
 
