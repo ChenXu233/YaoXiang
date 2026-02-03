@@ -90,7 +90,7 @@ fn test_pub_fn_auto_binds() {
     let code = r#"
         type Point = Point(x: Float, y: Float)
 
-        pub distance: (Point, Point) -> Float = (self, other) => 0.0
+        pub distance: (self: Point, other: Point) -> Float = (self, other) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -197,9 +197,9 @@ fn test_multiple_pub_fn_same_type() {
     let code = r#"
         type Point = Point(x: Float, y: Float)
 
-        pub length: (Point) -> Float = (p) => 0.0
-        pub normalize: (Point) -> Point = (p) => p
-        pub dot: (Point, Point) -> Float = (a, b) => 0.0
+        pub length: (p: Point) -> Float = (p) => 0.0
+        pub normalize: (p: Point) -> Point = (p) => p
+        pub dot: (a: Point, b: Point) -> Float = (a, b) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -242,7 +242,7 @@ fn test_pub_fn_auto_binds_to_counter() {
     let code = r#"
         type Point = Point(x: Float, y: Float)
 
-        pub length: (Point) -> Float = (p) => 0.0
+        pub length: (p: Point) -> Float = (p) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -300,7 +300,7 @@ fn test_type_and_methods_separate_exports() {
     let code = r#"
         type Vector = Vector(x: Float, y: Float)
 
-        pub magnitude: (Vector) -> Float = (v) => 0.0
+        pub magnitude: (v:Vector) -> Float = (v) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -331,7 +331,7 @@ fn test_nested_type_exports() {
         type Outer = Outer(inner: Inner)
         type Inner = Inner(value: Int)
 
-        pub get_value: (Outer) -> Int = (o) => 0
+        pub get_value: (o:Outer) -> Int = (o) => 0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -449,8 +449,8 @@ fn test_mixed_visibility() {
         type PublicType = PublicType(value: Int)
         type PrivateType = PrivateType(value: Int)
 
-        pub public_fn: (PublicType) -> Int = (p) => 0
-        private_fn: (PrivateType) -> Int = (p) => 0
+        pub public_fn: (p: PublicType) -> Int = (p) => 0
+        private_fn: (p: PrivateType) -> Int = (p) => 0
 
         pub use_public: () -> Int = () => 0
     "#;
@@ -502,9 +502,9 @@ fn test_method_complex_params() {
     let code = r#"
         type Tree = Tree(left: Tree, right: Tree, value: Int)
 
-        pub height: (Tree) -> Int = (t) => 0
-        pub sum: (Tree) -> Int = (t) => 0
-        pub contains: (Tree, Int) -> Bool = (t, v) => true
+        pub height: (t: Tree) -> Int = (t) => 0
+        pub sum: (t: Tree) -> Int = (t) => 0
+        pub contains: (t: Tree, v: Int) -> Bool = (t, v) => true
     "#;
 
     let tokens = tokenize(code).unwrap();
