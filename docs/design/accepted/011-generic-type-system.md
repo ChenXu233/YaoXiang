@@ -98,25 +98,33 @@ map: [T, R](container: Container[T], f: Fn(T) -> R) -> Container[R] = {
 #### 1.1 泛型类型参数
 
 ```yaoxiang
-# 泛型类型定义
-type Option[T] = Some(T) | None
+# 泛型类型定义（统一使用记录类型语法）
+type Option[T] = {
+    some: (T) -> Self,
+    none: () -> Self
+}
 
-type Result[T, E] = Ok(T) | Err(E)
+type Result[T, E] = {
+    ok: (T) -> Self,
+    err: (E) -> Self
+}
 
 type List[T] = {
     data: Array[T],
     length: Int,
-    push: [T](List[T], T) -> Void,
-    get: [T](List[T], Int) -> Option[T],
+    push: [T](self: List[T], item: T) -> Void,
+    get: [T](self: List[T], index: Int) -> Option[T],
 }
 
-# 泛型函数
-map: [T, R](opt: Option[T], f: Fn(T) -> R) -> Option[R] = match opt {
-    Some(x) => Some(f(x)),
-    None => None,
+# 泛型函数（参数名在签名中声明）
+map: [T, R](opt: Option[T], f: Fn(T) -> R) -> Option[R] = {
+    return match opt {
+        some => Option.some(f(some)),
+        none => Option.none(),
+    }
 }
 
-# 泛型约束
+# 泛型约束（直接表达式，单行可省略 return）
 clone: [T: Clone](value: T) -> T = value.clone()
 
 # 多类型参数
@@ -141,30 +149,36 @@ result = map[Int, Int](Some(42), (x) => x + 1)
 
 ```yaoxiang
 # 源代码
-map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = ...
+map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = {
+    result = List[R]()
+    for x in list {
+        result.push(f(x))
+    }
+    return result
+}
 
 # 使用点
 int_list = List(1, 2, 3)
 doubled = map(int_list, (x) => x * 2)  # 实例化 map[Int, Int]
 
 string_list = List("a", "b", "c")
-uppercased = map(string_list, (x) => x.to_uppercase())  # 实例化 map[String, String]
+uppercased = map(string_list, (s) => s.to_uppercase())  # 实例化 map[String, String]
 
 # 编译后（等价代码）
-map_Int_Int: (List[Int], Fn(Int) -> Int) -> List[Int] = (list, f) => {
+map_Int_Int: (list: List[Int], f: Fn(Int) -> Int) -> List[Int] = {
     result = List[Int]()
     for x in list {
         result.push(f(x))
     }
-    result
+    return result
 }
 
-map_String_String: (List[String], Fn(String) -> String) -> List[String] = (list, f) => {
+map_String_String: (list: List[String], f: Fn(String) -> String) -> List[String] = {
     result = List[String]()
-    for x in list {
-        result.push(f(x))
+    for s in list {
+        result.push(f(s))
     }
-    result
+    return result
 }
 ```
 
@@ -173,7 +187,7 @@ map_String_String: (List[String], Fn(String) -> String) -> List[String] = (list,
 #### 2.1 单一约束
 
 ```yaoxiang
-# 基本trait定义
+# 基本trait定义（接口类型）
 type Clone = {
     clone: (Self) -> Self,
 }
@@ -209,7 +223,7 @@ sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
     # 实现排序算法
     result = list.clone()
     quicksort(&mut result)
-    result
+    return result
 }
 
 # 函数类型约束
@@ -218,7 +232,7 @@ map: [T, R: FnMut(T)](array: Array[T], f: R) -> Array[R] = {
     for item in array {
         result.push(f(item))
     }
-    result
+    return result
 }
 
 # 使用
@@ -250,13 +264,13 @@ composed = compose(
 #### 3.1 关联类型定义
 
 ```yaoxiang
-# Iterator trait
+# Iterator trait（使用记录类型语法）
 type Iterator[T] = {
     Item: T,  # 关联类型
     next: (Self) -> Option[T],
     has_next: (Self) -> Bool,
-关联类型
-collect:}
+    collect: [T](Self) -> List[T],
+}
 
 # 使用 [T, I: Iterator[T]](iter: I) -> List[T] = {
     result = List[T]()
@@ -265,23 +279,27 @@ collect:}
             result.push(item)
         }
     }
-    result
+    return result
 }
 
 # Array的Iterator实现
-# 使用函数重载方式实现
-type Item: [T](arr: Array[T]) -> T = (arr) => arr.data[0]
+# 使用方法语法糖：Array.Item, Array.next, Array.has_next
+Array.has_next: [T](self: Array[T]) -> Bool = {
+    return self.index < self.length
+}
 
-has_next: [T](self: Array[T]) -> Bool = (self) => self.index < self.length
-
-next: [T](self: Array[T]) -> Option[T] = (self) => {
+Array.next: [T](self: Array[T]) -> Option[T] = {
     if has_next(self) {
         item = self.data[self.index]
         self.index = self.index + 1
-        Some(item)
+        return Option.some(item)
     } else {
-        None
+        return Option.none()
     }
+}
+
+Array.Item: [T](arr: Array[T]) -> T = {
+    return arr.data[0]
 }
 ```
 
@@ -332,7 +350,7 @@ identity_matrix: [N: Int, T: Add + Zero](size: N) -> Array[Array[T, N], N] = {
         }
         matrix.push(row)
     }
-    matrix
+    return matrix
 }
 
 # 使用
@@ -342,15 +360,17 @@ identity_matrix: [N: Int, T: Add + Zero](size: N) -> Array[Array[T, N], N] = {
 #### 4.2 Const函数
 
 ```yaoxiang
-# 编译期函数
-const fn add(a: Int, b: Int) -> Int = a + b
+# 编译期函数（const fn）
+const add: (a: Int, b: Int) -> Int = a + b
 
-const fn multiply(a: Int, b: Int) -> Int = a * b
+const multiply: (a: Int, b: Int) -> Int = a * b
 
 # 递归Const函数
-const factorial: (Int) -> Int = (n) => match n {
-    0 => 1,
-    _ => n * factorial(n - 1),
+const factorial: (n: Int) -> Int = {
+    return match n {
+        0 => 1,
+        _ => n * factorial(n - 1),
+    }
 }
 
 # 编译期计算
@@ -383,24 +403,24 @@ static_assert(IntArray.length == 10)  # 编译期验证
 # 小数组优化：使用函数重载实现Const泛型特化
 
 # 通用实现
-sum: [T, N: Int](arr: Array[T, N]) -> T = (arr) => {
+sum: [T, N: Int](arr: Array[T, N]) -> T = {
     result = Zero::zero()
     for item in arr.data {
         result = result + item
     }
-    result
+    return result
 }
 
 # N=1 特化
-sum: [T](arr: Array[T, 1]) -> T = (arr) => arr.data[0]
+sum: [T](arr: Array[T, 1]) -> T = arr.data[0]
 
 # N=2 特化
-sum: [T](arr: Array[T, 2]) -> T = (arr) => arr.data[0] + arr.data[1]
+sum: [T](arr: Array[T, 2]) -> T = arr.data[0] + arr.data[1]
 
 # 小数组循环展开（N <= 4）
-sum: [T, N: Int](arr: Array[T, N]) -> T = (arr) => {
+sum: [T, N: Int](arr: Array[T, N]) -> T = {
     # 编译器优化：展开循环
-    arr.data[0] + arr.data[1] + arr.data[2] + arr.data[3]
+    return arr.data[0] + arr.data[1] + arr.data[2] + arr.data[3]
 }
 ```
 
@@ -468,23 +488,23 @@ type Five = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 
 ```yaoxiang
 # 基本特化：使用函数重载（编译器自动选择）
-sum: (arr: Array[Int]) -> Int = (arr) => {
+sum: (arr: Array[Int]) -> Int = {
     # 编译为更高效的代码
-    native_sum_int(arr.data, arr.length)
+    return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array[Float]) -> Float = (arr) => {
+sum: (arr: Array[Float]) -> Float = {
     # 使用SIMD指令
-    simd_sum_float(arr.data, arr.length)
+    return simd_sum_float(arr.data, arr.length)
 }
 
 # 通用实现
-sum: [T](arr: Array[T]) -> T = (arr) => {
+sum: [T](arr: Array[T]) -> T = {
     result = Zero::zero()
     for item in arr {
         result = result + item
     }
-    result
+    return result
 }
 ```
 
@@ -492,26 +512,26 @@ sum: [T](arr: Array[T]) -> T = (arr) => {
 
 ```yaoxiang
 # 平台特化：使用#[cfg]属性
-sum: [T](arr: Array[T]) -> T = (arr) => {
-    basic_sum_iter(arr)
+sum: [T](arr: Array[T]) -> T = {
+    return basic_sum_iter(arr)
 }
 
 # x86_64特定优化
 #[cfg(target_arch = "x86_64")]
-sum: (arr: Array[T]) -> T = (arr) => {
-    avx2_sum(arr.data, arr.length)
+sum: (arr: Array[T]) -> T = {
+    return avx2_sum(arr.data, arr.length)
 }
 
 # ARM特定优化
 #[cfg(target_arch = "aarch64")]
-sum: (arr: Array[T]) -> T = (arr) => {
-    neon_sum(arr.data, arr.length)
+sum: (arr: Array[T]) -> T = {
+    return neon_sum(arr.data, arr.length)
 }
 
 # RISC-V特定优化
 #[cfg(target_arch = "riscv64")]
-sum: (arr: Array[T]) -> T = (arr) => {
-    riscv_vec_sum(arr.data, arr.length)
+sum: (arr: Array[T]) -> T = {
+    return riscv_vec_sum(arr.data, arr.length)
 }
 ```
 
@@ -521,21 +541,21 @@ sum: (arr: Array[T]) -> T = (arr) => {
 # 完全符合RFC-010语法的特化方式：函数重载
 
 # 具体类型特化
-sum: (arr: Array[Int]) -> Int = (arr) => {
-    native_sum_int(arr.data, arr.length)
+sum: (arr: Array[Int]) -> Int = {
+    return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array[Float]) -> Float = (arr) => {
-    simd_sum_float(arr.data, arr.length)
+sum: (arr: Array[Float]) -> Float = {
+    return simd_sum_float(arr.data, arr.length)
 }
 
 # 泛型实现（编译器自动选择最优）
-sum: [T](arr: Array[T]) -> T = (arr) => {
+sum: [T](arr: Array[T]) -> T = {
     result = Zero::zero()
     for item in arr {
         result = result + item
     }
-    result
+    return result
 }
 
 # 使用时完全透明
@@ -553,20 +573,20 @@ sum(float_arr)    # 选择 sum: (Array[Float]) -> Float
 
 ```yaoxiang
 # ======== 源代码 ========
-sum: (arr: Array[Int]) -> Int = (arr) => {
-    native_sum_int(arr.data, arr.length)
+sum: (arr: Array[Int]) -> Int = {
+    return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array[Float]) -> Float = (arr) => {
-    simd_sum_float(arr.data, arr.length)
+sum: (arr: Array[Float]) -> Float = {
+    return simd_sum_float(arr.data, arr.length)
 }
 
-sum: [T](arr: Array[T]) -> T = (arr) => {
+sum: [T](arr: Array[T]) -> T = {
     result = Zero::zero()
     for item in arr {
         result = result + item
     }
-    result
+    return result
 }
 
 # 使用
@@ -610,15 +630,15 @@ result = native_sum_int(int_arr.data, int_arr.length)
 
 ```yaoxiang
 # 性能敏感的数值计算
-fibonacci: (n: Int) -> Int = (n) => {
-    if n <= 1 { n }
-    else { fibonacci(n - 1) + fibonacci(n - 2) }
+fibonacci: (n: Int) -> Int = {
+    if n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-fibonacci: (n: Float) -> Float = (n) => {
+fibonacci: (n: Float) -> Float = {
     # 使用Binet公式
     phi = (1.0 + 5.0.sqrt()) / 2.0
-    (phi.pow(n) - (-phi).pow(-n)) / 5.0.sqrt()
+    return (phi.pow(n) - (-phi).pow(-n)) / 5.0.sqrt()
 }
 
 # 编译器自动选择并内联
@@ -692,8 +712,8 @@ uppercased = map(string_list, (s) => s.to_uppercase())  # 需要 map[String, Str
 # 这些泛型实例不会被生成
 
 # 编译后只包含被使用的实例
-map_Int_Int: (List[Int], Fn(Int) -> Int) -> List[Int] = ...
-map_String_String: (List[String], Fn(String) -> String) = List[String] = ...
+map_Int_Int: (list: List[Int], f: Fn(Int) -> Int) -> List[Int] = ...
+map_String_String: (list: List[String], f: Fn(String) -> String) -> List[String] = ...
 ```
 
 #### 7.3 Const泛型DCE
@@ -787,8 +807,8 @@ macro_rules! impl_debug {
 
 # ✅ 泛型方案：自动派生
 # 使用函数重载方式自动派生
-debug_fmt: [T: fields...](self: Point[T]) -> String = (self) => {
-    "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
+debug_fmt: [T: fields...](self: Point[T]) -> String = {
+    return "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
 }
 
 # 使用
@@ -820,16 +840,16 @@ type Element = {
 }
 
 create_element: (tag: String) -> Element = {
-    Element(tag, HashMap::new(), List::new(), None)
+    return Element(tag, HashMap::new(), List::new(), None)
 }
 
 with_class: [E: Element](elem: E, class: String) -> E = {
     elem.attrs.insert("class", class)
-    elem
+    return elem
 }
 
 with_text: [E: Element](elem: E, text: String) -> E = {
-    E { text: Some(text), ..elem }
+    return E { text: Some(text), ..elem }
 }
 
 # 构建DOM
@@ -876,26 +896,33 @@ result_type = Add[Int, Float]  # 推导为 Float
 
 ```yaoxiang
 # ======== 1. 定义泛型容器 ========
-type Result[T, E] = Ok(T) | Err(E)
+# 使用记录类型语法
+type Result[T, E] = {
+    ok: (T) -> Self,
+    err: (E) -> Self,
+}
 
-type Option[T] = Some(T) | None
+type Option[T] = {
+    some: (T) -> Self,
+    none: () -> Self,
+}
 
 type List[T] = {
     data: Array[T],
     length: Int,
 
-    # 泛型方法
-    push: [T](List[T], T) -> Void,
-    pop: [T](List[T]) -> Option[T],
-    map: [T, R](List[T], Fn(T) -> R) -> List[R],
-    filter: [T](List[T], Fn(T) -> Bool) -> List[T],
-    fold: [T, U](List[T], U, Fn(U, T) -> U) -> U,
+    # 泛型方法（使用 Type.method 语法）
+    push: [T](self: List[T], item: T) -> Void,
+    pop: [T](self: List[T]) -> Option[T],
+    map: [T, R](self: List[T], f: Fn(T) -> R) -> List[R],
+    filter: [T](self: List[T], predicate: Fn(T) -> Bool) -> List[T],
+    fold: [T, U](self: List[T], initial: U, f: Fn(U, T) -> U) -> U,
 }
 
 # ======== 2. 实现泛型方法 ========
-# 使用函数重载方式实现泛型方法
+# 使用 Type.method 语法糖：自动关联到 List 类型
 
-push: [T](self: List[T], item: T) -> Void = (self, item) => {
+List.push: [T](self: List[T], item: T) -> Void = {
     if self.length >= self.data.length {
         # 扩容
         new_data = Array[T](self.data.length * 2)
@@ -908,49 +935,49 @@ push: [T](self: List[T], item: T) -> Void = (self, item) => {
     self.length = self.length + 1
 }
 
-pop: [T](self: List[T]) -> Option[T] = (self) => {
+List.pop: [T](self: List[T]) -> Option[T] = {
     if self.length > 0 {
         self.length = self.length - 1
-        Some(self.data[self.length])
+        return Option.some(self.data[self.length])
     } else {
-        None
+        return Option.none()
     }
 }
 
-map: [T, R](self: List[T], f: Fn(T) -> R) -> List[R] = (self, f) => {
+List.map: [T, R](self: List[T], f: Fn(T) -> R) -> List[R] = {
     result = List[R]()
     for i in 0..self.length {
         result.push(f(self.data[i]))
     }
-    result
+    return result
 }
 
-filter: [T](self: List[T], predicate: Fn(T) -> Bool) -> List[T] = (self, predicate) => {
+List.filter: [T](self: List[T], predicate: Fn(T) -> Bool) -> List[T] = {
     result = List[T]()
     for i in 0..self.length {
         if predicate(self.data[i]) {
             result.push(self.data[i])
         }
     }
-    result
+    return result
 }
 
-fold: [T, U](self: List[T], initial: U, f: Fn(U, T) -> U) -> U = (self, initial, f) => {
+List.fold: [T, U](self: List[T], initial: U, f: Fn(U, T) -> U) -> U = {
     result = initial
     for i in 0..self.length {
         result = f(result, self.data[i])
     }
-    result
+    return result
 }
 
 # ======== 3. 类型约束使用 ========
-# 实现Clone for List
-clone: [T: Clone](self: List[T]) -> List[T] = (self) => {
+# 实现 Clone for List
+List.clone: [T: Clone](self: List[T]) -> List[T] = {
     result = List[T]()
     for i in 0..self.length {
         result.push(self.data[i].clone())
     }
-    result
+    return result
 }
 
 # ======== 4. 使用示例 ========
@@ -1011,18 +1038,18 @@ quicksort: [T: Clone](array: Array[T], cmp: Comparator[T]) -> Array[T] = {
     result = sorted_left.clone()
     result.push(pivot)
     result.extend(sorted_right)
-    result
+    return result
 }
 
 # ======== 2. IntComparator实现 ========
 # 使用函数重载实现
-compare: (a: Int, b: Int) -> Int = (a, b) => {
+compare: (a: Int, b: Int) -> Int = {
     if a < b {
-        -1
+        return -1
     } else if a > b {
-        1
+        return 1
     } else {
-        0
+        return 0
     }
 }
 
@@ -1050,7 +1077,7 @@ type Matrix[T, Rows: Int, Cols: Int] = {
     },
 
     # 矩阵运算
-    multiply: [T: Add + Multiply + Zero, M: Int](self, other: Matrix[T, Cols, M]) -> Matrix[T, Rows, M] = {
+    multiply: [T: Add + Multiply + Zero, M: Int](self: Matrix[T, Rows, Cols], other: Matrix[T, Cols, M]) -> Matrix[T, Rows, M] = {
         result = Matrix[T, Rows, M]()
         for i in 0..Rows {
             for j in 0..M {
@@ -1061,7 +1088,7 @@ type Matrix[T, Rows: Int, Cols: Int] = {
                 result.data[i][j] = sum
             }
         }
-        result
+        return result
     }
 }
 
@@ -1077,7 +1104,7 @@ identity: [T: Add + Multiply + One, N: Int](size: N) -> Matrix[T, N, N] = {
             }
         }
     }
-    matrix
+    return matrix
 }
 
 # ======== 3. 使用示例 ========
@@ -1687,21 +1714,29 @@ impl TypeLevelComputer {
 ### 语法BNF
 
 ```bnf
+# 泛型参数（支持约束）
 generic_params ::= '[' identifier (',' identifier)* ']'
-                | '[' identifier ':' type_bound (',' identifier ':' type_bound)* ']'
+                 | '[' identifier ':' type_bound (',' identifier ':' type_bound)* ']'
 
 type_bound ::= identifier
              | identifier '+' identifier ('+' identifier)*
 
-const_param ::= identifier ':' type
+# 参数声明（类型 + 可选名字）
+parameter ::= identifier ':' type
 
-generic_function ::= identifier generic_params? ':' type '=' expression
+parameters ::= parameter (',' parameter)*
 
+# 函数声明：name [泛型] (参数列表) -> 返回类型 = 函数体
+function ::= identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
+
+# 方法声明：Type.method [泛型] (参数列表) -> 返回类型 = 函数体
+method ::= identifier '.' identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
+
+# 类型定义
 generic_type ::= 'type' identifier generic_params? '=' type_expression
 
-impl ::= 'impl' generic_params? type_bound? 'for' type '{' implementation '}'
-
-const_fn ::= 'const' 'fn' identifier generic_params? '(' parameters? ')' '->' type '=' expression
+# 编译期函数
+const_fn ::= 'const' identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
 ```
 
 ### 示例代码库
@@ -1716,41 +1751,41 @@ type HashMap[K, V] = {
     buckets: Array[List[(K, V)]],
     size: Int,
 
-    get: [K: Eq + Hash](HashMap[K, V], K) -> Option[V],
-    insert: [K: Eq + Hash](HashMap[K, V], K, V) -> Void,
-    remove: [K: Eq + Hash](HashMap[K, V], K) -> Option[V>,
+    get: [K: Eq + Hash](self: HashMap[K, V], key: K) -> Option[V],
+    insert: [K: Eq + Hash](self: HashMap[K, V], key: K, value: V) -> Void,
+    remove: [K: Eq + Hash](self: HashMap[K, V], key: K) -> Option[V],
 }
 
 type HashSet[T] = {
     map: HashMap[T, Void],
 
-    insert: [T: Eq + Hash](HashSet[T], T) -> Void,
-    contains: [T: Eq + Hash](HashSet[T], T) -> Bool,
-    remove: [T: Eq + Hash](HashSet[T], T) -> Bool,
+    insert: [T: Eq + Hash](self: HashSet[T], value: T) -> Void,
+    contains: [T: Eq + Hash](self: HashSet[T], value: T) -> Bool,
+    remove: [T: Eq + Hash](self: HashSet[T], value: T) -> Bool,
 }
 
 # 泛型算法
-sort: [T: Clone + PartialOrd](List[T]) -> List[T] = {
+sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
     # 实现排序算法
 }
 
-binary_search: [T: PartialOrd](Array[T], T) -> Option[Int] = {
+binary_search: [T: PartialOrd](array: Array[T], target: T) -> Option[Int] = {
     # 实现二分查找
 }
 
 # 函数式操作
-filter_map: [T, R](List[T], Fn(T) -> Option[R]) -> List[R] = {
+filter_map: [T, R](list: List[T], f: Fn(T) -> Option[R]) -> List[R] = {
     result = List[R]()
     for item in list {
         if let Some(mapped) = f(item) {
             result.push(mapped)
         }
     }
-    result
+    return result
 }
 
 # 异步泛型
-async_map: [T, R](List[T], Fn(T) -> Promise[R]) -> Promise[List[R]] = {
+async_map: [T, R](list: List[T], f: Fn(T) -> Promise[R]) -> Promise[List[R]] = {
     # 异步map操作
 }
 ```
@@ -1759,7 +1794,7 @@ async_map: [T, R](List[T], Fn(T) -> Promise[R]) -> Promise[List[R]] = {
 
 ```yaoxiang
 # 泛型性能测试
-benchmark_map: () -> Void = () => {
+benchmark_map: () -> Void = {
     # 测试泛型map性能
     array = Array[Int](1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
@@ -1775,7 +1810,7 @@ benchmark_map: () -> Void = () => {
 }
 
 # 编译期计算性能测试
-benchmark_const: () -> Void = () => {
+benchmark_const: () -> Void = {
     # 测试Const泛型性能
     start = compile_time()
 

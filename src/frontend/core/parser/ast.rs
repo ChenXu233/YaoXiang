@@ -174,11 +174,14 @@ pub enum StmtKind {
         alias: Option<String>,
     },
     /// Function definition: `name: Type = (params) => body`
+    /// With pub modifier: `pub name: Type = (params) => body` - auto-binds to first param type
     Fn {
         name: String,
+        generic_params: Vec<GenericParam>,
         type_annotation: Option<Type>,
         params: Vec<Param>,
         body: (Vec<Stmt>, Option<Box<Expr>>),
+        is_pub: bool, // 是否公开导出并自动绑定到类型
     },
     /// Method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
     MethodBind {
@@ -209,6 +212,13 @@ pub struct VariantDef {
     pub name: String,
     pub params: Vec<(Option<String>, Type)>,
     pub span: Span,
+}
+
+/// Generic parameter with constraints: `[T: Clone]` or `[T: Clone & Serializable]`
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub name: String,
+    pub constraints: Vec<Type>,
 }
 
 /// Type

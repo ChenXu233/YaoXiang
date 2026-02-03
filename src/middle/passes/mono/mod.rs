@@ -12,10 +12,13 @@ use std::collections::HashMap;
 pub mod closure;
 pub mod constraint;
 pub mod cross_module;
+pub mod dce; // 死代码消除
 pub mod function;
 pub mod global;
 pub mod instance;
+pub mod instantiation_graph; // 实例化图
 pub mod module_state;
+pub mod reachability; // 可达性分析
 pub mod type_mono;
 
 use self::instance::{
@@ -29,6 +32,8 @@ use crate::middle::core::ir::{FunctionIR, ModuleIR};
 
 use self::function::FunctionMonomorphizer;
 use self::type_mono::TypeMonomorphizer;
+
+use self::dce::{DceConfig, DcePass};
 
 /// 单态化器
 #[derive(Debug)]
@@ -75,6 +80,14 @@ pub struct Monomorphizer {
 
     /// 下一个闭包ID计数器
     next_closure_id: usize,
+
+    /// ==================== DCE 相关 ====================
+
+    /// DCE 配置
+    dce_config: DceConfig,
+
+    /// DCE 统计信息（可访问）
+    dce_stats: Option<dce::DceStats>,
 }
 
 impl Monomorphizer {
@@ -96,6 +109,33 @@ impl Monomorphizer {
             closure_specialization_cache: HashMap::new(),
             generic_closures: HashMap::new(),
             next_closure_id: 0,
+            // DCE 相关字段
+            dce_config: DceConfig::default(),
+            dce_stats: None,
+        }
+    }
+
+    /// 创建带配置的单态化器
+    pub fn with_dce_config(config: DceConfig) -> Self {
+        Monomorphizer {
+            instantiated_functions: HashMap::new(),
+            instantiation_queue: Vec::new(),
+            specialization_cache: HashMap::new(),
+            generic_functions: HashMap::new(),
+            next_function_id: 0,
+            // 类型单态化相关字段
+            type_instances: HashMap::new(),
+            type_specialization_cache: HashMap::new(),
+            generic_types: HashMap::new(),
+            next_type_id: 0,
+            // 闭包单态化相关字段
+            instantiated_closures: HashMap::new(),
+            closure_specialization_cache: HashMap::new(),
+            generic_closures: HashMap::new(),
+            next_closure_id: 0,
+            // DCE 相关字段
+            dce_config: config,
+            dce_stats: None,
         }
     }
 
@@ -108,7 +148,92 @@ impl Monomorphizer {
         self.collect_generic_types(module);
         self.collect_instantiation_requests(module);
         self.process_instantiation_queue();
-        self.build_output_module(module)
+
+        // 执行 DCE（死代码消除）
+        self.run_dce(module)
+    }
+
+    /// 运行 DCE（死代码消除）
+    ///
+    /// 在单态化完成后，消除未使用的泛型实例
+    fn run_dce(
+        &mut self,
+        module: &ModuleIR,
+    ) -> ModuleIR {
+        if !self.dce_config.enabled {
+            return self.build_output_module(module);
+        }
+
+        // 确定入口点
+        let entry_points = self.find_entry_points();
+
+        // 创建 DCE Pass
+        let mut dce_pass = DcePass::new(self.dce_config.clone());
+
+        // 运行 DCE，获取保留的实例
+        let kept_functions = self.instantiated_functions.clone();
+        let kept_types: HashMap<TypeId, MonoType> = self
+            .type_instances
+            .iter()
+            .filter_map(|(id, inst)| inst.get_mono_type().map(|ty| (id.clone(), ty.clone())))
+            .collect();
+
+        let result = dce_pass.run_on_module(module, &kept_functions, &kept_types, &entry_points);
+
+        // 保存统计信息
+        self.dce_stats = Some(result.stats);
+
+        // 使用 DCE 过滤后的结果构建输出模块
+        self.build_output_module_with_filtered_instances(
+            module,
+            result.kept_functions,
+            result.kept_types,
+        )
+    }
+
+    /// 查找入口点函数
+    fn find_entry_points(&self) -> Vec<FunctionId> {
+        let mut entries = Vec::new();
+
+        // 查找 main 函数
+        if let Some((id, _)) = self
+            .instantiated_functions
+            .iter()
+            .find(|(id, _)| id.name() == "main")
+        {
+            entries.push(id.clone());
+        }
+
+        // 查找其他入口点（导出的函数）
+        // TODO: 实现更完整的入口点检测
+
+        entries
+    }
+
+    /// 使用过滤后的实例构建输出模块
+    fn build_output_module_with_filtered_instances(
+        &self,
+        original_module: &ModuleIR,
+        kept_functions: HashMap<FunctionId, FunctionIR>,
+        _kept_types: HashMap<TypeId, MonoType>,
+    ) -> ModuleIR {
+        let mut output_funcs: Vec<FunctionIR> = original_module
+            .functions
+            .iter()
+            .filter(|f| !self.is_generic_function(f))
+            .cloned()
+            .collect();
+
+        // 添加保留下来的实例化函数
+        for func in kept_functions.values() {
+            output_funcs.push(func.clone());
+        }
+
+        ModuleIR {
+            types: original_module.types.clone(),
+            globals: original_module.globals.clone(),
+            functions: output_funcs,
+        }
     }
 
     /// 收集所有泛型函数
@@ -187,6 +312,36 @@ impl Monomorphizer {
     /// 获取已单态化的函数数量
     pub fn instantiated_function_count(&self) -> usize {
         self.instantiated_functions.len()
+    }
+
+    // ==================== DCE 相关 API ====================
+
+    /// 获取 DCE 统计信息
+    pub fn dce_stats(&self) -> Option<&dce::DceStats> {
+        self.dce_stats.as_ref()
+    }
+
+    /// 设置 DCE 配置
+    pub fn set_dce_config(
+        &mut self,
+        config: DceConfig,
+    ) {
+        self.dce_config = config;
+    }
+
+    /// 获取当前 DCE 配置
+    pub fn dce_config(&self) -> &DceConfig {
+        &self.dce_config
+    }
+
+    /// 启用 DCE
+    pub fn enable_dce(&mut self) {
+        self.dce_config.enabled = true;
+    }
+
+    /// 禁用 DCE
+    pub fn disable_dce(&mut self) {
+        self.dce_config.enabled = false;
     }
 
     // ==================== Send/Sync 约束驱动单态化 ====================
@@ -379,5 +534,125 @@ impl Monomorphizer {
 impl Default for Monomorphizer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod dce_tests {
+    use super::*;
+    use crate::middle::core::ir::BasicBlock;
+
+    #[test]
+    fn test_dce_integration() {
+        // 创建单态化器，启用 DCE
+        let mut mono = Monomorphizer::with_dce_config(DceConfig::default());
+
+        // 插入泛型函数
+        let map_ir = FunctionIR {
+            name: "map".to_string(),
+            params: vec![MonoType::List(Box::new(MonoType::Int(32)))],
+            return_type: MonoType::List(Box::new(MonoType::Int(32))),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![],
+            entry: 0,
+        };
+        let map_id = GenericFunctionId::new("map".to_string(), vec!["T".to_string()]);
+        mono.test_insert_generic_function(map_id.clone(), map_ir);
+
+        // 插入另一个泛型函数（不会被调用）
+        let unused_ir = FunctionIR {
+            name: "unused_function".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            is_async: false,
+            locals: vec![],
+            blocks: vec![],
+            entry: 0,
+        };
+        let unused_id = GenericFunctionId::new("unused_function".to_string(), vec![]);
+        mono.test_insert_generic_function(unused_id.clone(), unused_ir);
+
+        // 模拟实例化 map[Int]（通过直接插入）
+        let map_int_id = FunctionId::new("map".to_string(), vec![MonoType::Int(32)]);
+        let map_int_ir = FunctionIR {
+            name: "map_int".to_string(),
+            params: vec![MonoType::List(Box::new(MonoType::Int(32)))],
+            return_type: MonoType::List(Box::new(MonoType::Int(32))),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![],
+            entry: 0,
+        };
+        mono.instantiated_functions
+            .insert(map_int_id.clone(), map_int_ir);
+
+        // 模拟实例化 unused_function（不会被调用）
+        let unused_inst_id = FunctionId::new("unused_function".to_string(), vec![]);
+        let unused_inst_ir = FunctionIR {
+            name: "unused_function".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            is_async: false,
+            locals: vec![],
+            blocks: vec![],
+            entry: 0,
+        };
+        mono.instantiated_functions
+            .insert(unused_inst_id.clone(), unused_inst_ir);
+
+        // 验证实例化数量
+        assert_eq!(mono.instantiated_functions.len(), 2);
+
+        // DCE 统计应该为空（还没运行 DCE）
+        assert!(mono.dce_stats().is_none());
+
+        // 验证 DCE 配置
+        assert!(mono.dce_config().enabled);
+    }
+
+    #[test]
+    fn test_dce_with_disabled_config() {
+        // 创建单态化器，禁用 DCE
+        let mut mono = Monomorphizer::with_dce_config(DceConfig {
+            enabled: false,
+            ..Default::default()
+        });
+
+        // 插入一些函数
+        let ir = FunctionIR {
+            name: "test".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            is_async: false,
+            locals: vec![],
+            blocks: vec![],
+            entry: 0,
+        };
+        let id = FunctionId::new("test".to_string(), vec![]);
+        mono.instantiated_functions.insert(id.clone(), ir);
+
+        // 禁用 DCE
+        mono.disable_dce();
+        assert!(!mono.dce_config().enabled);
+
+        // 启用 DCE
+        mono.enable_dce();
+        assert!(mono.dce_config().enabled);
+    }
+
+    #[test]
+    fn test_dce_config_modes() {
+        // 开发模式
+        let dev_config = DceConfig::development();
+        assert!(dev_config.enabled);
+        assert!(!dev_config.enable_bloat_control);
+        assert!(dev_config.print_stats);
+
+        // 发布模式
+        let release_config = DceConfig::release();
+        assert!(release_config.enabled);
+        assert!(release_config.enable_bloat_control);
+        assert!(!release_config.print_stats);
     }
 }

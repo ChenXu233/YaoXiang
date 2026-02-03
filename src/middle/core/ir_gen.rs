@@ -260,9 +260,11 @@ impl AstToIrGenerator {
         match &stmt.kind {
             ast::StmtKind::Fn {
                 name,
+                generic_params: _,
                 type_annotation,
                 params,
                 body: (stmts, expr),
+                is_pub: _,
             } => self.generate_function_ir(
                 name,
                 type_annotation.as_ref(),
@@ -670,9 +672,11 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::Fn {
                 name: _,
+                generic_params: _,
                 type_annotation: _,
                 params: _,
                 body: _,
+                is_pub: _,
             } => {
                 // 嵌套函数（简化处理）
             }

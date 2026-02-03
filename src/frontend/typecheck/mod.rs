@@ -58,9 +58,13 @@ pub struct TypeEnvironment {
     pub solver: TypeConstraintSolver,
     pub errors: TypeErrorCollector,
     /// 导入追踪 - 模块导入信息
+    /// 包含源模块ID用于访问控制
     pub imports: Vec<ImportInfo>,
     /// 当前模块的导出项
     pub exports: HashSet<String>,
+    /// 方法绑定关系: "Type.method" -> FunctionType
+    /// 用于存储显式绑定和 pub 自动绑定
+    pub method_bindings: HashMap<String, crate::frontend::core::type_system::MonoType>,
     /// 模块名称
     pub module_name: String,
 }
@@ -116,6 +120,71 @@ impl TypeEnvironment {
         name: &str,
     ) -> Option<&PolyType> {
         self.types.get(name)
+    }
+
+    /// 添加方法绑定
+    /// 例如: Point.distance = distance 存储为 "Point.distance" -> fn_type
+    pub fn add_method_binding(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        fn_type: MonoType,
+    ) {
+        let key = format!("{}.{}", type_name, method_name);
+        self.method_bindings.insert(key.clone(), fn_type);
+        // 方法绑定也导出
+        self.exports.insert(key);
+    }
+
+    /// 获取方法绑定
+    pub fn get_method_binding(
+        &self,
+        type_name: &str,
+        method_name: &str,
+    ) -> Option<&MonoType> {
+        let key = format!("{}.{}", type_name, method_name);
+        self.method_bindings.get(&key)
+    }
+
+    /// 添加导出项
+    pub fn add_export(
+        &mut self,
+        name: &str,
+    ) {
+        self.exports.insert(name.to_string());
+    }
+
+    /// 检查是否是导出项
+    pub fn is_exported(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.exports.contains(name)
+    }
+
+    /// 检查名称是否可见（可从当前模块访问）
+    ///
+    /// 一个名称在以下情况下可见：
+    /// 1. 在当前模块中定义
+    /// 2. 被当前模块导出
+    /// 3. 从导入了该名称的模块导入
+    pub fn is_visible(
+        &self,
+        name: &str,
+    ) -> bool {
+        // 当前模块定义的变量总是可见的
+        if self.vars.contains_key(name) {
+            return true;
+        }
+        // 当前模块定义的类型总是可见的
+        if self.types.contains_key(name) {
+            return true;
+        }
+        // 当前模块导出的内容可见
+        if self.exports.contains(name) {
+            return true;
+        }
+        false
     }
 }
 
@@ -221,6 +290,9 @@ impl TypeChecker {
         for stmt in &module.items {
             self.collect_function_signature(stmt);
         }
+
+        // 收集所有导出项
+        self.collect_exports(module);
 
         // 初始化函数体检查器
         let body_checker = checking::BodyChecker::new(self.env.solver());
@@ -339,6 +411,7 @@ impl TypeChecker {
                 name,
                 type_annotation,
                 params,
+                is_pub,
                 ..
             } => {
                 // 处理统一函数语法
@@ -348,46 +421,46 @@ impl TypeChecker {
                         return_type,
                     } = type_ann
                     {
-                        (
-                            param_tys
-                                .iter()
-                                .map(|t| MonoType::from(t.clone()))
-                                .collect(),
-                            MonoType::from(*return_type.clone()),
-                        )
+                        let pts: Vec<MonoType> = param_tys
+                            .iter()
+                            .map(|t| MonoType::from(t.clone()))
+                            .collect();
+                        (pts, MonoType::from(*return_type.clone()))
                     } else {
-                        (
-                            params
-                                .iter()
-                                .map(|p| {
-                                    p.ty.as_ref()
-                                        .map(|t| MonoType::from(t.clone()))
-                                        .unwrap_or_else(|| self.env.solver().new_var())
-                                })
-                                .collect(),
-                            self.env.solver().new_var(),
-                        )
-                    }
-                } else {
-                    (
-                        params
+                        let pts: Vec<MonoType> = params
                             .iter()
                             .map(|p| {
                                 p.ty.as_ref()
                                     .map(|t| MonoType::from(t.clone()))
                                     .unwrap_or_else(|| self.env.solver().new_var())
                             })
-                            .collect(),
-                        self.env.solver().new_var(),
-                    )
+                            .collect();
+                        (pts, self.env.solver().new_var())
+                    }
+                } else {
+                    let pts: Vec<MonoType> = params
+                        .iter()
+                        .map(|p| {
+                            p.ty.as_ref()
+                                .map(|t| MonoType::from(t.clone()))
+                                .unwrap_or_else(|| self.env.solver().new_var())
+                        })
+                        .collect();
+                    (pts, self.env.solver().new_var())
                 };
 
                 let fn_ty = MonoType::Fn {
-                    params: param_types,
+                    params: param_types.clone(),
                     return_type: Box::new(return_type),
                     is_async: false,
                 };
-                self.env.add_var(name.clone(), PolyType::mono(fn_ty));
+                self.env
+                    .add_var(name.clone(), PolyType::mono(fn_ty.clone()));
+
+                // 处理 pub 自动绑定
+                if *is_pub {
+                    self.auto_bind_to_type(name, &param_types, fn_ty);
+                }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
@@ -421,19 +494,78 @@ impl TypeChecker {
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         self.env.add_type(name.to_string(), poly);
     }
+
+    /// 自动将函数绑定到类型
+    /// pub 函数的默认行为：绑定到第一个参数的类型
+    /// 例如: pub distance: (Point, Point) -> Float 自动绑定为 Point.distance
+    fn auto_bind_to_type(
+        &mut self,
+        fn_name: &str,
+        param_types: &[MonoType],
+        fn_type: MonoType,
+    ) {
+        if param_types.is_empty() {
+            // 无参数函数无法自动绑定（工厂函数模式需要特殊处理）
+            return;
+        }
+
+        // 获取第一个参数的类型名称
+        let first_param_ty = &param_types[0];
+        let type_name = match first_param_ty {
+            MonoType::TypeRef(name) => name.clone(),
+            _ => return, // 无法确定绑定目标类型
+        };
+
+        // 检查该类型是否在当前模块中定义
+        if self.env.types.contains_key(&type_name) {
+            // 绑定方法到类型
+            self.env.add_method_binding(&type_name, fn_name, fn_type);
+        }
+    }
+
+    /// 收集模块的所有导出项
+    fn collect_exports(
+        &mut self,
+        module: &Module,
+    ) {
+        for stmt in &module.items {
+            match &stmt.kind {
+                // pub 函数导出函数名
+                crate::frontend::core::parser::ast::StmtKind::Fn { name, is_pub, .. }
+                    if *is_pub =>
+                {
+                    self.env.add_export(name);
+                }
+                // 类型定义默认导出
+                crate::frontend::core::parser::ast::StmtKind::TypeDef { name, .. } => {
+                    self.env.add_export(name);
+                }
+                // 方法绑定导出为 Type.method
+                crate::frontend::core::parser::ast::StmtKind::MethodBind {
+                    type_name,
+                    method_name,
+                    ..
+                } => {
+                    self.env
+                        .add_export(&format!("{}.{}", type_name, method_name));
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 /// 检查模块
 #[allow(unused_variables)]
 pub fn check_module(
     ast: &Module,
-    env: Option<&mut TypeEnvironment>,
+    env: &mut Option<TypeEnvironment>,
 ) -> Result<TypeCheckResult, Vec<TypeError>> {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = TypeChecker::new("main");
 
     // 如果提供了外部环境，将其变量和类型导入到 checker 中
-    if let Some(ext_env) = env {
+    if let Some(ref mut ext_env) = env {
         for (name, poly) in &ext_env.vars {
             checker.env().add_var(name.clone(), poly.clone());
         }
@@ -443,7 +575,15 @@ pub fn check_module(
     }
 
     // 执行模块检查
-    checker.check_module(ast)
+    let result = checker.check_module(ast)?;
+
+    // 将 exports 和 method_bindings 导回传入的环境
+    if let Some(ref mut ext_env) = env {
+        ext_env.exports = checker.env.exports.clone();
+        ext_env.method_bindings = checker.env.method_bindings.clone();
+    }
+
+    Ok(result)
 }
 
 /// 检查单个表达式
@@ -498,7 +638,10 @@ pub struct TypeCheckResult {
 /// 导入信息
 #[derive(Debug, Clone)]
 pub struct ImportInfo {
+    /// 导入路径（如 "std.io"）
     pub path: String,
+    /// 导入的具体项（如 ["print", "println"]），None 表示全部
     pub items: Option<Vec<String>>,
+    /// 模块别名
     pub alias: Option<String>,
 }

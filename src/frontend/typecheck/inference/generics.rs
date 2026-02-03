@@ -6,9 +6,14 @@
 
 use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
+use crate::frontend::typecheck::checking::bounds::BoundsChecker;
+use crate::frontend::typecheck::errors::TypeError;
+use crate::util::span::Span;
 
 /// 泛型推断器
-pub struct GenericInferrer;
+pub struct GenericInferrer {
+    bounds_checker: BoundsChecker,
+}
 
 impl Default for GenericInferrer {
     fn default() -> Self {
@@ -19,7 +24,9 @@ impl Default for GenericInferrer {
 impl GenericInferrer {
     /// 创建新的泛型推断器
     pub fn new() -> Self {
-        Self
+        Self {
+            bounds_checker: BoundsChecker::new(),
+        }
     }
 
     /// 推断泛型函数类型
@@ -50,5 +57,28 @@ impl GenericInferrer {
         Ok(MonoType::TypeVar(
             crate::frontend::core::type_system::var::TypeVar::new(0),
         ))
+    }
+
+    /// 检查泛型约束
+    ///
+    /// 在泛型函数实例化时，检查实际类型是否满足约束
+    /// 约束格式：[T: ConstraintName](item: T)
+    pub fn check_type_constraint(
+        &mut self,
+        actual_type: &MonoType,
+        constraint_type: &MonoType,
+        span: Span,
+    ) -> Result<()> {
+        self.bounds_checker
+            .check_constraint(actual_type, constraint_type)
+            .map_err(|e| {
+                TypeError::ConstraintCheck {
+                    type_name: e.type_name,
+                    constraint_name: e.constraint_name,
+                    reason: e.reason,
+                    span,
+                }
+                .into()
+            })
     }
 }
