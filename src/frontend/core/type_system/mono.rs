@@ -105,6 +105,39 @@ impl MonoType {
         )
     }
 
+    /// 判断是否是约束类型（所有字段都是函数类型）
+    ///
+    /// 约束类型 = 接口，定义为所有字段都是函数类型的记录类型
+    pub fn is_constraint(&self) -> bool {
+        match self {
+            // 结构体类型：检查所有字段是否都是函数类型
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .all(|(_, ty)| matches!(ty, MonoType::Fn { .. })),
+            // TypeRef 指向的可能是约束类型（需要结合类型环境判断）
+            // 这里返回 false，具体判断在类型检查时结合环境确定
+            MonoType::TypeRef(_) => false,
+            _ => false,
+        }
+    }
+
+    /// 获取约束的所有要求字段
+    /// 返回字段名和类型的列表
+    pub fn constraint_fields(&self) -> Vec<(String, &MonoType)> {
+        match self {
+            MonoType::Struct(s) => {
+                // 只返回函数字段
+                s.fields
+                    .iter()
+                    .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
+                    .map(|(name, ty)| (name.clone(), ty))
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// 获取类型的字符串描述
     pub fn type_name(&self) -> String {
         match self {
