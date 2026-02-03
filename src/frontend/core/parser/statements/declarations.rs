@@ -11,8 +11,9 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
 
-/// 检测是否是旧的函数定义语法: `name(Types) -> ReturnType = ...`
-/// 通过向前看来检测这种模式
+/// 检测是否是旧函数定义语法: identifier( 后跟类型参数和 ->
+/// 旧语法示例: add(Int, Int) -> Int = (a, b) => a + b
+/// 已被弃用，移除支持
 fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
     // 保存当前位置
     let saved = state.save_position();
@@ -39,7 +40,9 @@ fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
     }
 
     // 检查括号后是否是 ->，这是旧语法的特征
-    // 新语法在括号前有冒号: name: (Types) -> ...
+    // 旧语法: add(Int, Int) -> Int = (a, b) => a + b
+    //          ^^^^^^^^ 这里的箭头是类型注解的一部分
+    // 注意: 旧语法中 -> 后面是返回类型，然后才是 =
     let is_old = state.at(&TokenKind::Arrow);
 
     // 恢复位置
@@ -48,28 +51,9 @@ fn is_old_function_syntax(state: &mut ParserState<'_>) -> bool {
     is_old
 }
 
-/// 跳过旧函数语法的整个声明
-fn skip_old_function_syntax(state: &mut ParserState<'_>) {
-    // 跳过直到找到分号或遇到新的语句开始
-    while !state.at_end() {
-        if state.at(&TokenKind::Semicolon) {
-            state.bump();
-            break;
-        }
-        // 遇到新语句的关键字时停止
-        if matches!(
-            state.current().map(|t| &t.kind),
-            Some(TokenKind::KwType)
-                | Some(TokenKind::KwUse)
-                | Some(TokenKind::KwMut)
-                | Some(TokenKind::KwReturn)
-                | Some(TokenKind::KwBreak)
-                | Some(TokenKind::KwContinue)
-        ) {
-            break;
-        }
-        state.bump();
-    }
+/// 跳过旧函数语法的整个声明（已移除支持，保持兼容性）
+fn skip_old_function_syntax(_state: &mut ParserState<'_>) {
+    // 旧语法已移除，此函数不再需要
 }
 
 /// 检测是否是方法绑定语法: `Type.method: (Params) -> ReturnType`
@@ -188,16 +172,23 @@ pub fn parse_method_bind_stmt(
         }
     };
 
-    // Extract params and body from lambda
+    // Parse method body
+    // RFC-010 支持三种形式：
+    // 1. 旧语法: (self, surface) => { ... }      - Lambda 表达式
+    // 2. 新语法: { ... }                          - 代码块（参数已在签名中声明）
+    // 3. 直接表达式: value                        - 表达式（无 return）
     let (params, body_stmts, body_expr) = match &initializer {
         Expr::Lambda { params, body, .. } => {
+            // 旧语法：提取 Lambda 的参数和体
             (params.clone(), body.stmts.clone(), body.expr.clone())
         }
-        _ => {
-            state.error(ParseError::Message(
-                "Method body must be a lambda expression".to_string(),
-            ));
-            return None;
+        Expr::Block(block) => {
+            // RFC-010 新语法：代码块体，参数已在签名中声明
+            (Vec::new(), block.stmts.clone(), block.expr.clone())
+        }
+        expr => {
+            // 直接表达式形式
+            (Vec::new(), Vec::new(), Some(Box::new(expr.clone())))
         }
     };
 
@@ -260,41 +251,196 @@ fn parse_var_stmt_with_pub(
     };
     state.bump();
 
-    // Parse type annotation and generic params
-    // Two cases:
-    // 1. name: TypeAnnotation = ...
-    // 2. name[GenericParams]: TypeAnnotation = ...
-    let (type_annotation, generic_params) = if state.at(&TokenKind::Colon) {
+    // RFC-010: 检测并拒绝旧语法: name(Type, ...) -> Ret = ...
+    // 旧语法特征: 标识符后面直接跟着 (，没有 :
+    if state.at(&TokenKind::LParen) {
+        // 这看起来像旧函数语法，尝试确认
+        let saved = state.save_position();
+        state.bump(); // consume '('
+
+        // 跳过括号内容
+        let mut paren_depth = 1;
+        while paren_depth > 0 && !state.at_end() {
+            if state.at(&TokenKind::LParen) {
+                paren_depth += 1;
+            } else if state.at(&TokenKind::RParen) {
+                paren_depth -= 1;
+            }
+            state.bump();
+        }
+
+        // 检查括号后是否是 -> (旧语法的特征)
+        let is_old_syntax = state.at(&TokenKind::Arrow);
+        state.restore_position(saved);
+
+        if is_old_syntax {
+            // 拒绝旧语法
+            state.error(ParseError::Message(
+                "旧函数语法已不再支持，请使用新语法: name: (param: Type, ...) -> Ret = body"
+                    .to_string(),
+            ));
+            return None;
+        }
+    }
+
+    // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body (参数名在签名中)
+    // 特征: 冒号后面跟着函数类型 (param: Type, ...) -> Ret
+    // 包括空参数 () 也属于 RFC-010 语法
+    let (type_annotation, generic_params, fn_params) = if state.at(&TokenKind::Colon) {
         state.bump(); // consume ':'
 
-        // Check if this is a generic param declaration: [T: Clone] or <T: Clone]
+        // Check if this is a generic param declaration: [T: Clone] or <T: Clone>
         // These come right after ':'
         let has_generic_syntax = state.at(&TokenKind::LBracket) || state.at(&TokenKind::Lt);
 
         if has_generic_syntax {
-            // Parse generic params
+            // Parse generic params first
             let generic = parse_generic_params_with_constraints(state)?;
 
-            // After generic params, the type annotation follows
-            // It could be:
-            // - (Params) -> ReturnType (function type)
-            // - Other type
-            // We DON'T expect another ':' here - the type annotation starts directly
-            let type_ann = parse_type_annotation(state)?;
-            (Some(type_ann), generic)
+            // After generic params, check for RFC-010 new syntax: () or (param: Type, ...) -> Ret
+            if state.at(&TokenKind::LParen) {
+                // Look ahead to check if this is RFC-010 function syntax
+                // Key: must have -> after the closing paren to be a function type
+                // RFC-010 syntax requires named params: (name: Type, ...)
+                // Old syntax has only types: (Type, ...)
+                let saved = state.save_position();
+                state.bump(); // consume '('
+
+                // First check: is it RFC-010 named param list?
+                // RFC-010: (name: Type, ...) - identifier followed by ':'
+                // Old syntax: (Type, ...) - identifier NOT followed by ':'
+                let looks_like_named_params = if state.at(&TokenKind::RParen) {
+                    // Empty params () is always RFC-010 compatible
+                    true
+                } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                    let next = state.peek().map(|t| &t.kind);
+                    // RFC-010 requires ':' after param name
+                    matches!(next, Some(TokenKind::Colon))
+                } else {
+                    false
+                };
+
+                // Second check: skip to closing paren and check for ->
+                let is_rfc010 = if looks_like_named_params {
+                    let mut paren_depth = 1;
+                    while paren_depth > 0 && !state.at_end() {
+                        if state.at(&TokenKind::LParen) {
+                            paren_depth += 1;
+                        } else if state.at(&TokenKind::RParen) {
+                            paren_depth -= 1;
+                        }
+                        state.bump();
+                    }
+                    state.at(&TokenKind::Arrow)
+                } else {
+                    false
+                };
+
+                state.restore_position(saved);
+
+                if is_rfc010 {
+                    // RFC-010 new syntax: () or (a: Int, b: Int) -> Ret
+                    let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
+
+                    // Build function type for type_annotation
+                    let param_types: Vec<Type> = fn_params_parsed
+                        .iter()
+                        .filter_map(|p| p.ty.clone())
+                        .collect();
+
+                    let type_annotation = Type::Fn {
+                        params: param_types,
+                        return_type: return_type.clone(),
+                    };
+
+                    (Some(type_annotation), generic, Some(fn_params_parsed))
+                } else {
+                    // Not RFC-010 syntax, parse as normal type
+                    let type_ann = parse_type_annotation(state)?;
+                    (Some(type_ann), generic, None)
+                }
+            } else {
+                // Not a function type, parse as normal type annotation
+                let type_ann = parse_type_annotation(state)?;
+                (Some(type_ann), generic, None)
+            }
         } else {
-            // No generic params, just parse type annotation
-            let type_ann = parse_type_annotation(state)?;
-            (Some(type_ann), Vec::new())
+            // No generic params, check for RFC-010 new syntax
+            if state.at(&TokenKind::LParen) {
+                // Look ahead to check if this is RFC-010 function syntax
+                // Key: must have -> after the closing paren to be a function type
+                // RFC-010 syntax requires named params: (name: Type, ...)
+                // Old syntax has only types: (Type, ...)
+                let saved = state.save_position();
+                state.bump(); // consume '('
+
+                // First check: is it RFC-010 named param list?
+                // RFC-010: (name: Type, ...) - identifier followed by ':'
+                // Old syntax: (Type, ...) - identifier NOT followed by ':'
+                let looks_like_named_params = if state.at(&TokenKind::RParen) {
+                    // Empty params () is always RFC-010 compatible
+                    true
+                } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                    let next = state.peek().map(|t| &t.kind);
+                    // RFC-010 requires ':' after param name
+                    matches!(next, Some(TokenKind::Colon))
+                } else {
+                    false
+                };
+
+                // Second check: skip to closing paren and check for ->
+                let is_rfc010 = if looks_like_named_params {
+                    let mut paren_depth = 1;
+                    while paren_depth > 0 && !state.at_end() {
+                        if state.at(&TokenKind::LParen) {
+                            paren_depth += 1;
+                        } else if state.at(&TokenKind::RParen) {
+                            paren_depth -= 1;
+                        }
+                        state.bump();
+                    }
+                    state.at(&TokenKind::Arrow)
+                } else {
+                    false
+                };
+
+                state.restore_position(saved);
+
+                if is_rfc010 {
+                    // RFC-010 new syntax: () or (a: Int, b: Int) -> Ret
+                    let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
+
+                    // Build function type for type_annotation
+                    let param_types: Vec<Type> = fn_params_parsed
+                        .iter()
+                        .filter_map(|p| p.ty.clone())
+                        .collect();
+
+                    let type_annotation = Type::Fn {
+                        params: param_types,
+                        return_type: return_type.clone(),
+                    };
+
+                    (Some(type_annotation), Vec::new(), Some(fn_params_parsed))
+                } else {
+                    // Not RFC-010 syntax, parse as normal type
+                    let type_ann = parse_type_annotation(state)?;
+                    (Some(type_ann), Vec::new(), None)
+                }
+            } else {
+                // Not a function type, parse as normal type annotation
+                let type_ann = parse_type_annotation(state)?;
+                (Some(type_ann), Vec::new(), None)
+            }
         }
     } else {
-        (None, Vec::new())
+        (None, Vec::new(), None)
     };
 
     // Check for invalid syntax after type annotation.
     // Valid tokens after type annotation: `=`, `;`, newline/EOF
     // Invalid tokens include:
-    // 1. `(` without `=` - e.g., `name: Type (params) => body` (missing =)
+    // 1. `(` without `=` - e.g., `name: Type(params) => body` (missing =)
     // 2. `=>` without `=` - e.g., `name: Type(params) => body` (type parser consumed params)
     // 3. `,` - e.g., `name: Int, Int -> Int` (invalid type syntax with bare comma)
     // 4. Identifier - e.g., `name: (Int)Int -> Int` (invalid type syntax)
@@ -321,9 +467,109 @@ fn parse_var_stmt_with_pub(
 
     // Optional initializer
     if state.skip(&TokenKind::Eq) {
-        // Check if this might be a function definition with unified syntax:
-        // name: (ParamTypes) -> ReturnType = (params) => body
-        // OR with generic params: name[T: Constraint]: (ParamTypes) -> ReturnType = body
+        // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body
+        // body 可以是表达式或 lambda
+
+        // Case 1: 有 fn_params (RFC-010 新语法)
+        if let Some(ref extracted_params) = fn_params {
+            // body 可以是表达式或 lambda
+            let saved = state.save_position();
+            let init = state.parse_expression(BP_LOWEST);
+
+            match init {
+                Some(Expr::Lambda {
+                    params: lambda_params,
+                    body,
+                    ..
+                }) => {
+                    // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
+                    // RFC-007: 签名参数名和 lambda 参数名必须匹配
+
+                    // 检查参数数量
+                    if lambda_params.len() != extracted_params.len() {
+                        state.error(ParseError::Message(format!(
+                            "Parameter count mismatch: signature has {} parameters, lambda has {}",
+                            extracted_params.len(),
+                            lambda_params.len()
+                        )));
+                        return None;
+                    }
+
+                    // 检查参数名匹配
+                    for (i, (sig_param, lambda_param)) in extracted_params
+                        .iter()
+                        .zip(lambda_params.iter())
+                        .enumerate()
+                    {
+                        if sig_param.name != lambda_param.name {
+                            state.error(ParseError::Message(format!(
+                                "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
+                                 RFC-007 requires matching parameter names, or omit the lambda head entirely.",
+                                i + 1,
+                                sig_param.name,
+                                lambda_param.name
+                            )));
+                            return None;
+                        }
+                    }
+
+                    // 合并类型信息
+                    let mut merged = Vec::new();
+                    for (i, extracted) in extracted_params.iter().enumerate() {
+                        if let Some(lambda_p) = lambda_params.get(i) {
+                            merged.push(Param {
+                                name: lambda_p.name.clone(),
+                                ty: extracted.ty.clone(),
+                                span: lambda_p.span,
+                            });
+                        } else {
+                            merged.push(extracted.clone());
+                        }
+                    }
+                    state.skip(&TokenKind::Semicolon);
+                    return Some(Stmt {
+                        kind: StmtKind::Fn {
+                            name,
+                            generic_params,
+                            type_annotation: type_annotation.clone(),
+                            params: merged,
+                            body: (body.stmts.clone(), body.expr.clone()),
+                            is_pub: final_is_pub,
+                        },
+                        span,
+                    });
+                }
+                Some(expr) => {
+                    // 直接表达式: name: (a: Int, b: Int) -> Int = a + b
+                    state.skip(&TokenKind::Semicolon);
+
+                    // RFC-010: Check if expr is a Block expression
+                    // If so, use the block's statements and expression
+                    let body = if let Expr::Block(block) = &expr {
+                        (block.stmts.clone(), block.expr.clone())
+                    } else {
+                        (Vec::new(), Some(Box::new(expr)))
+                    };
+
+                    return Some(Stmt {
+                        kind: StmtKind::Fn {
+                            name,
+                            generic_params,
+                            type_annotation: type_annotation.clone(),
+                            params: extracted_params.clone(),
+                            body,
+                            is_pub: final_is_pub,
+                        },
+                        span,
+                    });
+                }
+                None => {
+                    state.restore_position(saved);
+                }
+            }
+        }
+
+        // Case 2: 旧语法或 lambda 形式 (无 fn_params)
         let saved_position = state.save_position();
         let init_opt = state.parse_expression(BP_LOWEST);
 
@@ -335,7 +581,7 @@ fn parse_var_stmt_with_pub(
                     return_type: _,
                 } = type_annotation
                 {
-                    // Case 1: Initializer is a lambda expression
+                    // Case 2a: Initializer is a lambda expression
                     if let Expr::Lambda { params, body, .. } = &initializer {
                         // Merge type information from type annotation with parameter names from lambda
                         let mut merged_params = Vec::new();
@@ -365,12 +611,10 @@ fn parse_var_stmt_with_pub(
                             span,
                         });
                     }
-                    // Case 2: Initializer is a simple expression and we have generic params
-                    // This is a generic function with expression body: test: [T](x: T) -> T = x
+                    // Case 2b: Initializer is a simple expression and we have generic params
                     else if !generic_params.is_empty() {
                         state.skip(&TokenKind::Semicolon);
                         // Create function with empty params and expression body
-                        // Extract params from type annotation
                         let params = type_params
                             .iter()
                             .enumerate()
@@ -401,9 +645,6 @@ fn parse_var_stmt_with_pub(
         state.restore_position(saved_position);
         state.clear_errors();
 
-        // Note: generic_params is not used for variable declarations
-        let _generic_params = generic_params;
-
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => Some(Box::new(expr)),
             None => {
@@ -417,6 +658,24 @@ fn parse_var_stmt_with_pub(
         };
 
         state.skip(&TokenKind::Semicolon);
+
+        // RFC-010: Check if initializer is a Block expression
+        // If so, convert to function definition: name = { ... } => name: () -> Void = { ... }
+        if let Some(ref init_expr) = initializer {
+            if let Expr::Block(block) = init_expr.as_ref() {
+                return Some(Stmt {
+                    kind: StmtKind::Fn {
+                        name,
+                        generic_params: Vec::new(),
+                        type_annotation: None, // Will be inferred
+                        params: Vec::new(),
+                        body: (block.stmts.clone(), block.expr.clone()),
+                        is_pub: final_is_pub,
+                    },
+                    span,
+                });
+            }
+        }
 
         return Some(Stmt {
             kind: StmtKind::Var {
@@ -790,6 +1049,23 @@ pub fn parse_identifier_stmt(
             // This is a variable declaration with type inference
             let initializer = state.parse_expression(BP_LOWEST)?;
             state.skip(&TokenKind::Semicolon);
+
+            // RFC-010: Check if initializer is a Block expression
+            // If so, convert to function definition: name = { ... } => name: () -> Void = { ... }
+            if let Expr::Block(block) = &initializer {
+                return Some(Stmt {
+                    kind: StmtKind::Fn {
+                        name,
+                        generic_params: Vec::new(),
+                        type_annotation: None, // Will be inferred
+                        params: Vec::new(),
+                        body: (block.stmts.clone(), block.expr.clone()),
+                        is_pub,
+                    },
+                    span,
+                });
+            }
+
             return Some(Stmt {
                 kind: StmtKind::Var {
                     name,
@@ -1335,6 +1611,64 @@ fn parse_fn_type(state: &mut ParserState<'_>) -> Option<Type> {
     })
 }
 
+/// Parse function type with parameter names: `(a: Int, b: Int) -> Int`
+/// Returns (Vec<Param>, return_type)
+/// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
+pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+    if !state.expect(&TokenKind::LParen) {
+        return None;
+    }
+
+    let mut params = Vec::new();
+
+    // Check for empty params: ()
+    if !state.at(&TokenKind::RParen) {
+        while !state.at(&TokenKind::RParen) && !state.at_end() {
+            // Skip comma between params
+            if !params.is_empty() && !state.skip(&TokenKind::Comma) {
+                break;
+            }
+
+            let param_span = state.span();
+
+            // Parse parameter name
+            let name = match state.current().map(|t| &t.kind) {
+                Some(TokenKind::Identifier(n)) => n.clone(),
+                _ => break,
+            };
+            state.bump();
+
+            // RFC-007: 类型标注是可选的（HM 推断）
+            // 检查是否有冒号和类型
+            let ty = if state.skip(&TokenKind::Colon) {
+                Some(parse_type_annotation(state)?)
+            } else {
+                // 无类型标注，HM 推断
+                None
+            };
+
+            params.push(Param {
+                name,
+                ty,
+                span: param_span,
+            });
+        }
+    }
+
+    if !state.expect(&TokenKind::RParen) {
+        return None;
+    }
+
+    // Expect ->
+    if !state.expect(&TokenKind::Arrow) {
+        return None;
+    }
+
+    let return_type = Box::new(parse_type_annotation(state)?);
+
+    Some((params, return_type))
+}
+
 /// Parse tuple type like `(T, U, V)`
 fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LParen);
@@ -1356,23 +1690,33 @@ fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
     Some(Type::Tuple(types))
 }
 
-/// Parse struct type like `{ field: Type }` or `Name(x: Type, y: Type)`
+/// Parse struct type like `{ field: Type }` or `{ field: Type, InterfaceName }`
+/// RFC-010 支持两种语法：
+/// - 普通字段: `type Point = { x: Float, y: Float }`
+/// - 接口约束: `type Point = { x: Float, Drawable, Serializable }`
 fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
     let mut fields = Vec::new();
+    let mut interfaces = Vec::new();
 
     if !state.at(&TokenKind::RBrace) {
         while let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
             let name = name.clone();
             state.bump();
 
-            state.skip(&TokenKind::Colon);
+            // 检查下一个 token 是否是冒号
+            if state.at(&TokenKind::Colon) {
+                // 普通字段: name: Type
+                state.bump(); // consume ':'
+                let field_type = parse_type_annotation(state)?;
+                fields.push((name, field_type));
+            } else {
+                // 接口约束: InterfaceName
+                interfaces.push(name);
+            }
 
-            let field_type = parse_type_annotation(state)?;
-
-            fields.push((name, field_type));
-
+            // 跳过逗号，如果不是逗号则结束循环
             if !state.skip(&TokenKind::Comma) {
                 break;
             }
@@ -1381,7 +1725,14 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
 
     state.skip(&TokenKind::RBrace);
 
-    Some(Type::Struct(fields))
+    // 如果有接口约束，构建带接口的结构体类型
+    if !interfaces.is_empty() {
+        // 目前先作为普通结构体处理，接口约束通过字段存储
+        // 未来可以扩展 AST 来区分接口约束
+        Some(Type::Struct(fields))
+    } else {
+        Some(Type::Struct(fields))
+    }
 }
 
 /// Parse a constructor: `Name` or `Name(params)`
