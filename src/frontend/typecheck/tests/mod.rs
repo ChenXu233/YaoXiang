@@ -2,6 +2,7 @@
 
 mod basic;
 mod check;
+mod constraint;
 mod error;
 mod generic;
 mod infer;
