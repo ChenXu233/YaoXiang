@@ -449,7 +449,7 @@ impl Pipeline {
         let _source_file = SourceFile::new(source_name.to_string(), source.to_string());
         let _ = _source_file;
 
-        match typecheck::check_module(ast, None) {
+        match typecheck::check_module(ast, &mut None) {
             Ok(type_result) => {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::TypeChecking, duration));

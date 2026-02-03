@@ -82,7 +82,7 @@ cargo run --example hello
 
 ```bash
 # Basic tokenization and parsing only
-echo 'main: () -> Void = () => { print("Hello") }' | cargo run -- eval
+echo 'main: () -> Void = { print("Hello") }' | cargo run -- eval
 
 # Build bytecode (partial implementation)
 cargo run -- build docs/examples/hello.yx -o hello.42
@@ -152,10 +152,10 @@ p = Point(3.0, 4.0)
 r = ok("success")
 
 # === Functions ===
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # === Entry Point ===
-main: () -> Void = () => {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -418,22 +418,22 @@ p = Point(3.0, 4.0)
 r = ok("success")
 
 # === 函数 ===
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # === 入口点 ===
-main: () -> Void = () => {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 
 # === 并作模型：同步语法，异步本质 ===
 
 # 使用 spawn 标记异步函数
-fetch_data: (String) -> JSON spawn = (url) => {
+fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
 # 自动并行：多个 spawn 调用自动并行执行
-process_users_and_posts: () -> Void spawn = () => {
+process_users_and_posts: () -> Void spawn = {
     users = fetch_data("https://api.example.com/users")
     posts = fetch_data("https://api.example.com/posts")
 
@@ -443,7 +443,7 @@ process_users_and_posts: () -> Void spawn = () => {
 }
 
 # 并发构造块：显式并行
-compute_all: () -> (Int, Int, Int) spawn = () => {
+compute_all: () -> (Int, Int, Int) spawn = {
     (a, b, c) = spawn {
         heavy_calc(1),
         heavy_calc(2),
@@ -454,7 +454,7 @@ compute_all: () -> (Int, Int, Int) spawn = () => {
 
 # === 泛型 ===
 
-identity: [T](T) -> T = (x) => x
+identity: [T](x: T) -> T = x
 ```
 
 ---

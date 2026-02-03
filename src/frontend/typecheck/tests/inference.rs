@@ -28,7 +28,7 @@ fn check_type_inference(input: &str) -> Result<(), String> {
     );
     // eprintln!("
 
-    check_module(&ast, Some(&mut env)).map(|_| ()).map_err(|e| {
+    check_module(&ast, &mut Some(env)).map(|_| ()).map_err(|e| {
         // eprintln!("
         format!("Type error: {:?}", e)
     })

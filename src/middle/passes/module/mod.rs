@@ -6,6 +6,17 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+/// 方法绑定信息
+#[derive(Debug, Clone)]
+pub struct MethodBindingInfo {
+    /// 类型名称
+    pub type_name: String,
+    /// 方法名称
+    pub method_name: String,
+    /// 函数类型
+    pub fn_type: crate::frontend::core::type_system::MonoType,
+}
+
 /// 模块ID - 唯一标识一个编译模块
 ///
 /// 使用 newtype 模式，内部是 usize，支持从 0 开始的索引
@@ -217,6 +228,10 @@ pub struct ModuleGraph {
     path_to_id: HashMap<PathBuf, ModuleId>,
     /// 下一个可用的模块ID
     next_module_id: usize,
+    /// 导出表: module_id -> 导出项集合
+    exports: HashMap<ModuleId, HashSet<String>>,
+    /// 方法绑定表: module_id -> (name -> MethodBinding)
+    method_bindings: HashMap<ModuleId, HashMap<String, MethodBindingInfo>>,
 }
 
 impl ModuleGraph {
@@ -227,6 +242,8 @@ impl ModuleGraph {
             edges: Vec::new(),
             path_to_id: HashMap::new(),
             next_module_id: 0,
+            exports: HashMap::new(),
+            method_bindings: HashMap::new(),
         }
     }
 
@@ -343,7 +360,93 @@ impl ModuleGraph {
         self.nodes.get(&id).map(|n| &n.source_path)
     }
 
-    /// 获取模块的数量
+    /// 添加导出项
+    pub fn add_export(
+        &mut self,
+        module_id: ModuleId,
+        name: &str,
+    ) {
+        self.exports
+            .entry(module_id)
+            .or_default()
+            .insert(name.to_string());
+    }
+
+    /// 批量添加导出项
+    pub fn add_exports(
+        &mut self,
+        module_id: ModuleId,
+        names: &[&str],
+    ) {
+        let exports = self.exports.entry(module_id).or_default();
+        for name in names {
+            exports.insert(name.to_string());
+        }
+    }
+
+    /// 检查名称是否被模块导出
+    pub fn is_exported(
+        &self,
+        module_id: ModuleId,
+        name: &str,
+    ) -> bool {
+        self.exports
+            .get(&module_id)
+            .map(|s| s.contains(name))
+            .unwrap_or(false)
+    }
+
+    /// 获取模块的所有导出项
+    pub fn get_exports(
+        &self,
+        module_id: ModuleId,
+    ) -> Option<&HashSet<String>> {
+        self.exports.get(&module_id)
+    }
+
+    /// 添加方法绑定
+    pub fn add_method_binding(
+        &mut self,
+        module_id: ModuleId,
+        type_name: &str,
+        method_name: &str,
+        fn_type: crate::frontend::core::type_system::MonoType,
+    ) {
+        let key = format!("{}.{}", type_name, method_name);
+        let info = MethodBindingInfo {
+            type_name: type_name.to_string(),
+            method_name: method_name.to_string(),
+            fn_type,
+        };
+        self.method_bindings
+            .entry(module_id)
+            .or_default()
+            .insert(key, info);
+    }
+
+    /// 获取模块的方法绑定
+    pub fn get_method_bindings(
+        &self,
+        module_id: ModuleId,
+    ) -> Option<&HashMap<String, MethodBindingInfo>> {
+        self.method_bindings.get(&module_id)
+    }
+
+    /// 检查方法绑定是否存在
+    pub fn has_method_binding(
+        &self,
+        module_id: ModuleId,
+        type_name: &str,
+        method_name: &str,
+    ) -> bool {
+        let key = format!("{}.{}", type_name, method_name);
+        self.method_bindings
+            .get(&module_id)
+            .map(|m| m.contains_key(&key))
+            .unwrap_or(false)
+    }
+
+    /// 获取模块数量
     pub fn len(&self) -> usize {
         self.nodes.len()
     }
@@ -518,5 +621,64 @@ impl ModuleGraph {
         }
 
         Ok(closure)
+    }
+
+    /// 验证模块的导入是否有效
+    ///
+    /// 检查 use 语句中导入的项是否被源模块导出
+    /// 返回无效导入的列表
+    pub fn validate_imports(
+        &self,
+        use_stmt: &crate::frontend::core::parser::ast::StmtKind,
+    ) -> Vec<String> {
+        let mut invalid_imports = Vec::new();
+
+        if let crate::frontend::core::parser::ast::StmtKind::Use { path, items, .. } = use_stmt {
+            // 查找源模块
+            let source_module = self.find_module_by_path(path);
+            if source_module.is_none() {
+                // 模块不存在，记录错误
+                invalid_imports.push(format!("Module '{}' not found", path));
+                return invalid_imports;
+            }
+
+            let source_id = source_module.unwrap();
+            let exports = match self.get_exports(source_id) {
+                Some(e) => e,
+                None => {
+                    // 模块没有导出任何内容
+                    if items.is_some() && !items.as_ref().unwrap().is_empty() {
+                        invalid_imports.push(format!("Module '{}' exports nothing", path));
+                    }
+                    return invalid_imports;
+                }
+            };
+
+            // 检查每个导入项
+            if let Some(ref import_items) = items {
+                for item in import_items {
+                    if !exports.contains(item) {
+                        invalid_imports
+                            .push(format!("'{}' is not exported by module '{}'", item, path));
+                    }
+                }
+            }
+        }
+
+        invalid_imports
+    }
+
+    /// 通过路径查找模块ID
+    fn find_module_by_path(
+        &self,
+        path: &str,
+    ) -> Option<ModuleId> {
+        // 遍历所有模块，匹配名称
+        for (&id, node) in &self.nodes {
+            if node.name == path || path.starts_with(&node.name) {
+                return Some(id);
+            }
+        }
+        None
     }
 }

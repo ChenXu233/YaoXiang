@@ -7,6 +7,16 @@
 use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::typecheck::traits::solver::TraitSolver;
+use crate::util::span::Span;
+
+/// 约束检查错误
+#[derive(Debug, Clone)]
+pub struct ConstraintCheckError {
+    pub type_name: String,
+    pub constraint_name: String,
+    pub reason: String,
+    pub span: Span,
+}
 
 /// 边界检查器
 pub struct BoundsChecker {
@@ -82,5 +92,136 @@ impl BoundsChecker {
         self.check_const_bounds(ty, const_bounds)?;
 
         Ok(())
+    }
+
+    /// 检查类型是否满足约束（结构化匹配 - 鸭子类型）
+    ///
+    /// 规则：类型的字段必须包含约束要求的所有方法（函数字段）
+    /// 方法签名需要兼容（参数和返回值类型匹配）
+    pub fn check_constraint(
+        &mut self,
+        ty: &MonoType,
+        constraint: &MonoType,
+    ) -> Result<(), ConstraintCheckError> {
+        let constraint_fields = constraint.constraint_fields();
+
+        // 如果约束没有字段，任何类型都满足（空约束）
+        if constraint_fields.is_empty() {
+            return Ok(());
+        }
+
+        // 获取待检查类型的函数字段
+        let type_fn_fields = match ty {
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
+                .map(|(name, ty)| (name.clone(), ty))
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+
+        // 检查每个约束字段是否存在且签名兼容
+        let mut missing_fields = Vec::new();
+        let mut mismatched_fields = Vec::new();
+
+        for (field_name, constraint_fn) in constraint_fields {
+            // 在类型中查找同名方法
+            let type_fn = type_fn_fields.iter().find(|(name, _)| name == &field_name);
+
+            match type_fn {
+                Some((_, found_fn)) => {
+                    // 检查函数签名兼容性
+                    if !Self::fn_signatures_compatible(found_fn, constraint_fn) {
+                        mismatched_fields.push((
+                            field_name,
+                            constraint_fn.type_name(),
+                            found_fn.type_name(),
+                        ));
+                    }
+                }
+                None => {
+                    missing_fields.push(field_name);
+                }
+            }
+        }
+
+        if !missing_fields.is_empty() || !mismatched_fields.is_empty() {
+            let constraint_name = constraint.type_name();
+            let type_name = ty.type_name();
+
+            let reason = if !missing_fields.is_empty() && !mismatched_fields.is_empty() {
+                format!(
+                    "missing methods: {:?}, methods with incompatible signatures: {:?}",
+                    missing_fields,
+                    mismatched_fields
+                        .iter()
+                        .map(|(n, _, _)| n)
+                        .collect::<Vec<_>>()
+                )
+            } else if !missing_fields.is_empty() {
+                format!("missing methods: {:?}", missing_fields)
+            } else {
+                format!(
+                    "methods with incompatible signatures: {:?}",
+                    mismatched_fields
+                        .iter()
+                        .map(|(n, e, f)| format!("{} (expected {}, found {})", n, e, f))
+                        .collect::<Vec<_>>()
+                )
+            };
+
+            return Err(ConstraintCheckError {
+                type_name,
+                constraint_name,
+                reason,
+                span: Span::default(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// 检查两个函数签名是否兼容
+    ///
+    /// 约束的签名和类型的签名兼容：
+    /// - 参数数量相同（或类型的参数包含约束的第一个参数作为 self）
+    /// - 返回类型相同
+    fn fn_signatures_compatible(
+        found_fn: &MonoType,
+        constraint_fn: &MonoType,
+    ) -> bool {
+        match (found_fn, constraint_fn) {
+            (
+                MonoType::Fn {
+                    params: found_params,
+                    return_type: found_return,
+                    ..
+                },
+                MonoType::Fn {
+                    params: constraint_params,
+                    return_type: constraint_return,
+                    ..
+                },
+            ) => {
+                // 检查返回类型
+                if found_return != constraint_return {
+                    return false;
+                }
+
+                // 检查参数数量
+                // 约束签名通常不包含 self，类型签名可能包含 self 作为第一个参数
+                if found_params.len() == constraint_params.len() {
+                    // 参数数量相同，直接比较
+                    found_params == constraint_params
+                } else if found_params.len() == constraint_params.len() + 1 {
+                    // 类型签名多一个参数（可能是 self），跳过第一个参数比较
+                    &found_params[1..] == constraint_params
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 }

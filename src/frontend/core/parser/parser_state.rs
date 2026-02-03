@@ -213,6 +213,7 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwIf) => parse_if_stmt(self, start_span),
             Some(TokenKind::LBrace) => parse_block_stmt(self, start_span),
             Some(TokenKind::KwMut) => parse_var_stmt(self, start_span),
+            Some(TokenKind::KwPub) => parse_identifier_stmt(self, start_span), // pub 声明由 parse_identifier_stmt 处理
             Some(TokenKind::Identifier(_)) => parse_identifier_stmt(self, start_span),
             Some(TokenKind::Eof) | None => None,
             Some(_) => parse_expr_stmt(self, start_span),

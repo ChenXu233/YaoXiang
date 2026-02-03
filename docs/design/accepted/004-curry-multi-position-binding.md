@@ -44,11 +44,11 @@ Point.distance = distance[0]   # this 绑定到第 0 位
 
 ```yaoxiang
 # 现有设计的问题：
-type Point = Point(x: Float, y: Float)
-type Vector = Vector(x: Float, y: Float, z: Float)
+type Point = { x: Float, y: Float }
+type Vector = { x: Float, y: Float, z: Float }
 
-distance(Point, Point) -> Float = (a, b) => { ... }
-transform(Point, Vector) -> Float = (p, v) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
+transform: (p: Point, v: Vector) -> Point = { ... }
 
 # 只能绑定到第一个参数
 Point.distance = distance  # 等价于 distance[0]
@@ -72,7 +72,11 @@ Point.distance = distance           # 编译器自动查找第一个 Point 参�
 p1.distance(p2)                     # → distance(p1, p2)
 
 # 如果函数有两个 Point 参数，绑定到第一个匹配的位置
-distance(Point, Point) -> Float = (a, b) => { ... }
+distance: (a: Point, b: Point) -> Float = {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    return (dx * dx + dy * dy).sqrt()
+}
 # 绑定：Point.distance = distance
 # 调用：p1.distance(p2) → distance(p1, p2) ✓
 
@@ -87,7 +91,7 @@ p1.compare(p2)                    # → distance(p2, p1)
 
 ```yaoxiang
 # 情况1：找不到匹配类型
-create_point() -> Point = () => { ... }
+create_point: () -> Point = { ... }
 Point.create = create_point        # 错误：没有 Point 类型参数
 
 # 情况2：工厂函数模式（可选）
@@ -104,11 +108,11 @@ Point.create = create_point        # 作为工厂函数，调用：Point.create(
 当函数参数数量 > 绑定位置数量时，自动生成柯里化函数：
 
 ```yaoxiang
-type Point = Point(x: Float, y: Float)
+type Point = { x: Float, y: Float }
 
 # 基础函数：3 个参数
-scale(Point, Point, Float) -> Point = (p, s, factor) => {
-    Point(p.x * factor, p.y * factor)
+scale: (p: Point, s: Point, factor: Float) -> Point = {
+    return Point(p.x * factor, p.y * factor)
 }
 
 # 绑定时自动柯里化
@@ -163,14 +167,14 @@ Point.transform = transform[1, 2]      # 绑定到第1,2参数
 ```yaoxiang
 # === 完整示例 ===
 
-type Point = Point(x: Float, y: Float)
-type Vector = Vector(x: Float, y: Float, z: Float)
+type Point = { x: Float, y: Float }
+type Vector = { x: Float, y: Float, z: Float }
 
 # 1. 基础距离计算
-distance(Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # 绑定：Point.distance = distance[1]
@@ -179,8 +183,8 @@ distance(Point, Point) -> Float = (a, b) => {
 Point.distance = distance[0]
 
 # 2. 变换操作（多位置绑定）
-transform(Point, Vector) -> Point = (p, v) => {
-    Point(p.x + v.x, p.y + v.y)
+transform: (p: Point, v: Vector) -> Point = {
+    return Point(p.x + v.x, p.y + v.y)
 }
 
 # 绑定 Point.transform = transform[1]
@@ -189,8 +193,8 @@ transform(Point, Vector) -> Point = (p, v) => {
 # 调用：p.transform(v) → transform(p, v) ✓
 
 # 3. 复杂多参数函数
-multiply(Point, Point, Float) -> Point = (a, b, s) => {
-    Point(a.x * s, a.y * s)
+multiply: (a: Point, b: Point, s: Float) -> Point = {
+    return Point(a.x * s, a.y * s)
 }
 
 # 只绑定第1参数（Point类型），保留第3参数
@@ -198,10 +202,10 @@ Point.scale = multiply[0, _, 2]
 # 调用：p1.scale(p2, 2.0) → multiply(p1, p2, 2.0)
 
 # 4. 跨类型绑定
-type Circle = Circle(center: Point, radius: Float)
+type Circle = { center: Point, radius: Float }
 
-distance(Circle, Circle) -> Float = (a, b) => {
-    a.center.distance(b.center) - a.radius - b.radius
+distance: (a: Circle, b: Circle) -> Float = {
+    return a.center.distance(b.center) - a.radius - b.radius
 }
 
 # 将距离方法绑定到 Circle 类型
@@ -215,8 +219,8 @@ Circle.distance = distance[0, 1]
 # === 元组解构绑定 ===
 
 # 函数接收元组参数
-process_coordinates((Float, Float)) -> String = (coord) => {
-    match coord {
+process_coordinates: (coord: (Float, Float)) -> String = {
+    return match coord {
         (0.0, 0.0) -> "origin"
         (x, 0.0) -> "on x-axis at ${x}"
         (0.0, y) -> "on y-axis at ${y}"
@@ -224,7 +228,7 @@ process_coordinates((Float, Float)) -> String = (coord) => {
     }
 }
 
-type Coord = Coord(x: Float, y: Float)
+type Coord = { x: Float, y: Float }
 
 # 自动解构绑定：Coord -> (Float, Float)
 Coord.describe = process_coordinates[1]
@@ -236,10 +240,10 @@ Coord.describe = process_coordinates[1]
 ```yaoxiang
 # === 多返回值绑定 ===
 
-min_max(List[Int]) -> (Int, Int) = (list) => {
+min_max: (list: List[Int]) -> (Int, Int) = {
     min = list.reduce(Int.MAX, (a, b) => if a < b then a else b)
     max = list.reduce(Int.MIN, (a, b) => if a > b then a else b)
-    (min, max)
+    return (min, max)
 }
 
 List[Int].range = min_max[1]

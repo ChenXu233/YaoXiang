@@ -285,13 +285,8 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 **语法**：类型交集 `A & B` 表示同时满足 A 和 B 的类型
 
 ```yaoxiang
-# 接口组合
-type Drawable = { draw: (Surface) -> Void }
-type Serializable = { serialize: () -> String }
-type DrawableSerializable = Drawable & Serializable
-
-# 使用交集类型
-process[T: Drawable & Serializable](item: T) -> String = (item) => {
+# === 依赖类型示例 ===
+process[T: Drawable & Serializable](item: T) -> String = {
     item.draw(screen)
     item.serialize()
 }
@@ -503,25 +498,25 @@ ParamTypes  ::= TypeExpr (',' TypeExpr)*
 ```
 
 ```yaoxiang
-# 完整语法
-add: (Int, Int) -> Int = (a, b) => a + b
+# 完整语法：参数名在签名中
+add: (a: Int, b: Int) -> Int = a + b
 
-# 单参数简写
-inc: Int -> Int = x => x + 1
+# 单参数
+inc: (x: Int) -> Int = x + 1
 
 # 无参函数
-main: () -> Void = () => {
+main: () -> Void = {
     print("Hello")
 }
 ```
 
 #### 6.1.4 普通方法定义
 
-**语法**：`name: (Type, ...) -> ReturnType = (params) => ...`
+**语法**：`name: (Type, ...) -> ReturnType = { ... }`
 
 ```yaoxiang
 # 普通方法：不关联类型，作为独立函数
-distance: (Point, Point) -> Float = (p1, p2) => {
+distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
@@ -552,7 +547,7 @@ Point.calc = func[0, _, 2]
 
 ```yaoxiang
 # 使用 pub 声明，编译器自动绑定
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
@@ -591,13 +586,13 @@ Annotation  ::= 'block' | 'eager'
 
 ```
 # 并作函数：可并发执行
-fetch_data: (String) -> JSON spawn = (url) => { ... }
+fetch_data: (url: String) -> JSON spawn = { ... }
 
 # @block 同步函数：完全顺序执行
-main: () -> Void @block = () => { ... }
+main: () -> Void @block = { ... }
 
 # @eager 急切函数：立即执行
-compute: (Int) -> Int @eager = (n) => { ... }
+compute: (n: Int) -> Int @eager = { ... }
 ```
 
 #### 6.2.2 spawn 块
@@ -644,7 +639,7 @@ ErrorPropagate ::= Expr '?'
 **示例**：
 
 ```
-process() -> Result[Data, Error] = {
+process: (p: Point) -> Result[Data, Error] = {
     data = fetch_data()?      # 自动传播错误
     transform(data)?
 }
@@ -696,12 +691,12 @@ p: Point = Point(1.0, 2.0)
 p2 = p              # Move，p 失效
 
 # 函数传参 = Move
-process(Point) -> Void = (p) => {
+process: (p: Point) -> Void = {
     # p 的所有权转移进来
 }
 
 # 返回值 = Move
-create() -> Point = () => {
+create: () -> Point = {
     p = Point(1.0, 2.0)
     return p        # Move，所有权转移
 }
@@ -953,20 +948,20 @@ type Adder = (Int, Int) -> Int
 
 ```
 # 形式一：类型集中式（推荐）
-name: (ParamTypes) -> ReturnType = (params) => body
+name: (param1: Type1, param2: Type2) -> ReturnType = body
 
-# 形式二：简写式
-name(ParamTypes) -> ReturnType = (params) => body
+# 形式二：简写式（参数名省略）
+name: (Type1, Type2) -> ReturnType = (params) => body
 ```
 
 ### A.3 方法定义
 
 ```
 # 类型方法
-Type.method: (Type, ...) -> ReturnType = (self, ...) => body
+Type.method: (self: Type, ...) -> ReturnType = { ... }
 
 # 普通方法
-name: (Type, ...) -> ReturnType = (params) => body
+name: (Type, ...) -> ReturnType = { ... }
 ```
 
 ### A.4 方法绑定
@@ -979,7 +974,7 @@ Type.method = func[0]
 Type.method = func[0, 1]
 
 # pub 自动绑定
-pub name: (Type, ...) -> ReturnType = ...  # 自动绑定到 Type
+pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 ```
 
 ### A.5 模块
@@ -1104,7 +1099,7 @@ Type.method = func[-1]        # 负数索引（最后一个参数）
 # === 基础绑定 ===
 
 # 原始函数
-distance(Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1121,7 +1116,7 @@ d = p1.distance(p2)  # → distance(p1, p2)
 # === 多位置绑定 ===
 
 # 原始函数
-calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
+calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
 
 # 绑定多个位置
 Point.calc_scale = calculate[0]      # 只绑定 scale
@@ -1173,8 +1168,8 @@ Point.wrong = distance[-2]            # -2 超出范围
 type Point = { x: Float, y: Float }
 
 # 首参数是 Point，自动支持方法调用
-distance(Point, Point) -> Float = (a, b) => { ... }
-add(Point, Point) -> Point = (a, b) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
+add: (a: Point, b: Point) -> Point = { ... }
 
 # === main.yx ===
 use Point
@@ -1199,7 +1194,7 @@ p3 = p1.add(p2)
 
 ```yaoxiang
 # 原始函数：5 个参数
-calculate(scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
+calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
 
 # 绑定：Point.calc = calculate[1, 2]
 # 绑定后剩余参数：scale, x, y

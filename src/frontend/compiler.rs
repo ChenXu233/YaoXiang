@@ -156,7 +156,7 @@ impl Compiler {
         &mut self,
         ast: &super::core::parser::Module,
     ) -> Result<super::typecheck::TypeCheckResult, Vec<super::typecheck::TypeError>> {
-        super::typecheck::check_module(ast, None)
+        super::typecheck::check_module(ast, &mut None)
     }
 
     /// 生成 IR

@@ -133,9 +133,11 @@ impl StmtInferrer {
             }
             ast::StmtKind::Fn {
                 name,
+                generic_params: _,
                 type_annotation,
                 params: _,
                 body: _,
+                is_pub: _,
             } => {
                 // TODO: 推断函数类型
                 let fn_type = type_annotation

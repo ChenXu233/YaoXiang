@@ -56,6 +56,19 @@ pub enum TypeError {
     #[error("Generic constraint violated: {constraint}")]
     GenericConstraint { constraint: String, span: Span },
 
+    /// 约束检查错误（RFC-011）
+    #[error("Type '{type_name}' does not satisfy constraint '{constraint_name}': {reason}")]
+    ConstraintCheck {
+        type_name: String,
+        constraint_name: String,
+        reason: String,
+        span: Span,
+    },
+
+    /// 约束类型在非泛型上下文使用错误
+    #[error("Constraint type '{constraint_name}' can only be used in generic context")]
+    ConstraintInNonGenericContext { constraint_name: String, span: Span },
+
     /// 无限类型错误
     #[error("Infinite type: {var} = {ty}")]
     InfiniteType {
@@ -149,6 +162,8 @@ impl TypeError {
             TypeError::RecursiveType { span, .. } => *span,
             TypeError::UnsupportedOp { span, .. } => *span,
             TypeError::GenericConstraint { span, .. } => *span,
+            TypeError::ConstraintCheck { span, .. } => *span,
+            TypeError::ConstraintInNonGenericContext { span, .. } => *span,
             TypeError::InfiniteType { span, .. } => *span,
             TypeError::UnboundTypeVar { span, .. } => *span,
             TypeError::UnknownLabel { span, .. } => *span,
@@ -189,6 +204,25 @@ impl TypeError {
             TypeError::RecursiveType { name, .. } => t_cur(MSG::ErrorRecursiveType, Some(&[name])),
             TypeError::UnsupportedOp { op, .. } => t_cur(MSG::ErrorUnsupportedOp, Some(&[op])),
             TypeError::GenericConstraint { constraint, .. } => constraint.clone(),
+            TypeError::ConstraintCheck {
+                type_name,
+                constraint_name,
+                reason,
+                ..
+            } => {
+                format!(
+                    "Type '{}' does not satisfy constraint '{}': {}",
+                    type_name, constraint_name, reason
+                )
+            }
+            TypeError::ConstraintInNonGenericContext {
+                constraint_name, ..
+            } => {
+                format!(
+                    "Constraint type '{}' can only be used in generic context",
+                    constraint_name
+                )
+            }
             TypeError::InfiniteType { var, ty, .. } => {
                 format!("{} = {}", var, ty.type_name())
             }
@@ -266,6 +300,8 @@ impl TypeError {
             TypeError::RecursiveType { .. } => "E0005".to_string(),
             TypeError::UnsupportedOp { .. } => "E0006".to_string(),
             TypeError::GenericConstraint { .. } => "E0007".to_string(),
+            TypeError::ConstraintCheck { .. } => "E0022".to_string(),
+            TypeError::ConstraintInNonGenericContext { .. } => "E0023".to_string(),
             TypeError::InfiniteType { .. } => "E0008".to_string(),
             TypeError::UnboundTypeVar { .. } => "E0009".to_string(),
             TypeError::UnknownLabel { .. } => "E0010".to_string(),
@@ -376,6 +412,12 @@ impl From<TypeError> for Diagnostic {
             }
             TypeError::GenericConstraint { .. } => {
                 Diagnostic::error("E0007".to_string(), format!("{}", error), span)
+            }
+            TypeError::ConstraintCheck { .. } => {
+                Diagnostic::error("E0022".to_string(), format!("{}", error), span)
+            }
+            TypeError::ConstraintInNonGenericContext { .. } => {
+                Diagnostic::error("E0023".to_string(), format!("{}", error), span)
             }
             TypeError::InfiniteType { .. } => {
                 Diagnostic::error("E0008".to_string(), format!("{}", error), span)
