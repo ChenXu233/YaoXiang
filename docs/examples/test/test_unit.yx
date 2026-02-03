@@ -1,13 +1,10 @@
 use std.io
 
-add: (Int, Int) -> Int = (a, b) => {
-    return a + b
-}
+add: (a: Int, b: Int) -> Int = a + b
 
-main: () -> Void = () => {
+main = {
     print("Before")
     result: Int = add(10, 20)
     print(result)
     print("After")
-    return
 }
