@@ -55,7 +55,7 @@ Point.serialize: (Point) -> String = (self) => {
 # 使用
 p: Point = Point(1.0, 2.0)
 p.draw(screen)           # 语法糖 → Point.draw(p, screen)
-let s: Drawable = p      # 接口赋值
+s: Drawable = p      # 接口赋值
 ```
 
 ## 动机
@@ -567,9 +567,6 @@ custom: CustomPoint = CustomPoint(
     1.0,
     2.0
 )
-
-# 可以赋值给 Drawable（鸭子类型）
-let d: Drawable = custom  # 只要有 draw 方法即可
 ```
 
 ### 语法变化
@@ -617,14 +614,6 @@ Point.draw = (self, surface) => surface.plot(self.x, self.y)
 # 3. IDE 提示
 # IDE 自动提示缺失的方法
 ```
-
-## 替代方案
-
-| 方案 | 描述 | 为什么不选 |
-|------|------|-----------|
-| 分离语法 | 变量、函数、类型用不同语法 | 碎片化，不统一 |
-| impl 关键字 | `impl Point: Drawable` | 增加关键字 |
-| with 关键字 | `type Point with Drawable = ...` | 增加关键字 |
 
 ## 实现策略
 
