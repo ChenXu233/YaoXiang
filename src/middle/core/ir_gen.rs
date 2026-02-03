@@ -260,6 +260,7 @@ impl AstToIrGenerator {
         match &stmt.kind {
             ast::StmtKind::Fn {
                 name,
+                generic_params: _,
                 type_annotation,
                 params,
                 body: (stmts, expr),
@@ -670,6 +671,7 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::Fn {
                 name: _,
+                generic_params: _,
                 type_annotation: _,
                 params: _,
                 body: _,

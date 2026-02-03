@@ -133,6 +133,7 @@ impl StmtInferrer {
             }
             ast::StmtKind::Fn {
                 name,
+                generic_params: _,
                 type_annotation,
                 params: _,
                 body: _,

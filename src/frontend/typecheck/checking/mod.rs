@@ -117,6 +117,7 @@ impl BodyChecker {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
             crate::frontend::core::parser::ast::StmtKind::Fn {
                 name,
+                generic_params: _,
                 type_annotation,
                 params,
                 body: (stmts, expr),
