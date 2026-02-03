@@ -12,10 +12,13 @@ use std::collections::HashMap;
 pub mod closure;
 pub mod constraint;
 pub mod cross_module;
+pub mod dce;          // 死代码消除
 pub mod function;
 pub mod global;
 pub mod instance;
+pub mod instantiation_graph;  // 实例化图
 pub mod module_state;
+pub mod reachability;         // 可达性分析
 pub mod type_mono;
 
 use self::instance::{
