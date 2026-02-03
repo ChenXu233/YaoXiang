@@ -3,7 +3,7 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-01-27
+> **最后更新**: 2026-02-03（与 RFC-010 统一语法对齐：参数名在签名中声明）
 
 ## 摘要
 
@@ -39,6 +39,7 @@ Point.distance = distance[0]   # this 绑定到第 0 位
 - 不引入 `self` 关键字，保持语言简洁性
 - 完全函数化：方法调用本质是参数传递
 - `[0]`, `[1]`, `[-1]` 灵活控制 this 绑定位置
+- **语法统一**：函数定义使用 `name: (params) -> Return = body` 格式
 
 ### 当前的问题
 
@@ -111,7 +112,7 @@ Point.create = create_point        # 作为工厂函数，调用：Point.create(
 type Point = { x: Float, y: Float }
 
 # 基础函数：3 个参数
-scale: (p: Point, s: Point, factor: Float) -> Point = {
+scale: (p: Point, factor: Float) -> Point = {
     return Point(p.x * factor, p.y * factor)
 }
 
@@ -120,12 +121,11 @@ Point.scale = scale[0, 1]   # Point 绑定到第 0、1 位，第 2 位保留
 
 # 调用时自动部分应用
 p1 = Point(2.0, 3.0)
-p2 = Point(1.0, 1.0)
-scaled = p1.scale(p2)       # → scale(p1, p2, ?) 返回柯里化函数
-result = scaled(2.0)        # → scale(p1, p2, 2.0)
+scaled = p1.scale(2.0)       # → scale(p1, 2.0) 直接调用
+result = scaled              # → Point(4.0, 6.0)
 
 # 链式调用更优雅
-result = p1.scale(p2)(2.0)  # 一步到位
+result = Point(2.0, 3.0).scale(2.0)  # → Point(4.0, 6.0)
 ```
 
 ### 位置索引绑定语法
@@ -193,13 +193,13 @@ transform: (p: Point, v: Vector) -> Point = {
 # 调用：p.transform(v) → transform(p, v) ✓
 
 # 3. 复杂多参数函数
-multiply: (a: Point, b: Point, s: Float) -> Point = {
+multiply: (a: Point, s: Float) -> Point = {
     return Point(a.x * s, a.y * s)
 }
 
 # 只绑定第1参数（Point类型），保留第3参数
-Point.scale = multiply[0, _, 2]
-# 调用：p1.scale(p2, 2.0) → multiply(p1, p2, 2.0)
+Point.scale = multiply[0, _]
+# 调用：p.scale(2.0) → multiply(p, 2.0)
 
 # 4. 跨类型绑定
 type Circle = { center: Point, radius: Float }
@@ -246,7 +246,7 @@ min_max: (list: List[Int]) -> (Int, Int) = {
     return (min, max)
 }
 
-List[Int].range = min_max[1]
+List.range: [T](self: List[T]) -> (T, T) = min_max[1]
 # 使用：(min_val, max_val) = list.range()
 ```
 
@@ -385,8 +385,8 @@ fn check_binding_type_compatibility(
 | 自动匹配 | `Point.transform = transform` | `p.transform(v)` | `transform(p, v)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
 | 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
-| 多位置 | `Point.transform = transform[0, 1]` | `p.transform(v)` | `transform(p, v)` |
-| 自动柯里化 | `Point.scale = scale[0, 1]` | `p.scale(other)(2.0)` | `scale(p, other, 2.0)` |
+| 多位置 | `Point.transform = transform[0, _]` | `p.transform(v)` | `transform(p, v)` |
+| 自动柯里化 | `Point.scale = scale[0, _]` | `p.scale(2.0)` | `scale(p, 2.0)` |
 | 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
 
 **说明**：
@@ -477,9 +477,10 @@ fn check_binding_type_compatibility(
 | 负数索引 | 支持 | 灵活，从末尾计数 |
 | 占位符 | `_` | 简洁，通用符号 |
 | 范围语法 | 实现 | 批量绑定，如 `[0..2]` |
-| 语法风格 | 中缀 `Type.method = func[positions]` | 与 `name = expr` 风格统一 |
+| 语法风格 | 中缀 `Type.method = func[positions]` | 与 RFC-010 统一 |
 | **默认绑定逻辑** | **绑定第一个类型匹配的位置** | **更智能、更安全，符合直觉** |
 | **绑定失败处理** | **找不到匹配时报错/警告/工厂函数** | **根据上下文灵活处理** |
+| **函数语法** | **参数名在签名中 `name: (params) -> Return`** | **与 RFC-010 统一** |
 
 ### 附录B：术语表
 
@@ -488,6 +489,7 @@ fn check_binding_type_compatibility(
 | 绑定位置 | 函数参数列表中的索引位置 |
 | 联合绑定 | 将类型绑定到多个参数位置 |
 | 部分应用 | 只提供部分参数，返回待完成调用的函数 |
+| **统一语法** | **`name: (params) -> Return = body`，参数名在签名中声明** |
 | **类型匹配绑定** | **默认绑定逻辑：自动查找第一个与调用者类型匹配的位置** |
 | **工厂函数绑定** | **当函数参数中没有匹配类型时，作为构造器使用** |
 
