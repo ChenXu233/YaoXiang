@@ -583,6 +583,78 @@ custom: CustomPoint = CustomPoint(
 | `type Result[T, E] = ok(T) \| err(E)` | `type Result[T, E] = { ok: (T) -> Self, err: (E) -> Self }` |
 | 需要 `impl` 关键字 | 无需关键字，接口名写在类型体后 |
 
+## 语法设计说明：具名函数本质是 Lambda 的语法糖
+
+### 核心理解
+
+**具名函数和 Lambda 表达式是同一个东西！** 唯一的区别是：具名函数给 Lambda 取了个名字。
+
+```yaoxiang
+# 这两者本质完全相同
+add: (a: Int, b: Int) -> Int = a + b           # 具名函数（推荐）
+add: (Int, Int) -> Int = (a, b) => a + b        # Lambda 形式（完全等价）
+```
+
+### 语法糖模型
+
+```
+# 具名函数 = Lambda + 名字
+name: (Params) -> ReturnType = body
+
+# 本质上是
+name: (Params) -> ReturnType = (params) => body
+```
+
+**关键点**：当签名完整声明了参数类型，Lambda 头部的参数名就变成了冗余，可以省略。
+
+### 参数作用域规则
+
+**参数覆盖外层变量**：签名中的参数作用域覆盖函数体，内部作用域优先级更高。
+
+```yaoxiang
+x = 10  # 外层变量
+
+double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
+```
+
+### 标注位置灵活
+
+类型标注可以在以下任一位置，**至少标注一处即可**：
+
+| 标注位置 | 形式 | 说明 |
+|----------|------|------|
+| 仅签名 | `double: (x: Int) -> Int = x * 2` | ✅ 推荐 |
+| 仅 Lambda 头 | `double = (x: Int) => x * 2` | ✅ 合法 |
+| 两边都标 | `double: (x: Int) -> Int = (x) => x * 2` | ✅ 冗余但允许 |
+
+### 完整示例
+
+```yaoxiang
+# ✅ 推荐：签名完整，Lambda 头部省略
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
+main: () -> Void = { print("hi") }
+
+# ✅ 合法：签名只声明类型，Lambda 补全参数名
+add: (Int, Int) -> Int = (a, b) => a + b
+inc: Int -> Int = (x) => x + 1
+
+# ✅ 合法：Lambda 头中标注类型
+double = (x: Int) => x * 2
+
+# ✅ 合法：两边都标注
+double: (x: Int) -> Int = (x) => x * 2
+```
+
+### 设计优势
+
+| 特性 | 优势 |
+|------|------|
+| **简洁** | 签名完整时无需重复写参数名 |
+| **灵活** | 保留 Lambda 形式，喜欢哪个用哪个 |
+| **一致** | 与变量声明 `x: Int = 42` 保持统一模式 |
+| **直观** | `name: Type = body` 直接对应"名为 name，类型 Type，值为 body" |
+
 ## 权衡
 
 ### 优点
