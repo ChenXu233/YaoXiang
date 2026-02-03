@@ -15,8 +15,9 @@ fn create_dummy_span() -> Span {
 /// 测试函数参数类型检查
 #[test]
 fn test_fn_param_type_checking() {
+    // RFC-007: 参数名在签名中声明
     let code = r#"
-        add:(Int, Int) -> Int = (a, b) => a + b
+        add: (a: Int, b: Int) -> Int = (a, b) => a + b
         main = () => {
             result: Int = add(5, 10)
         }
@@ -42,9 +43,10 @@ fn test_fn_param_type_checking() {
 /// 测试函数返回类型一致性
 #[test]
 fn test_fn_return_type_consistency() {
+    // RFC-007: 空参数函数
     let code = r#"
-        get_number:() -> Int = () => 42
-        get_string:() -> String = () => "hello"
+        get_number: () -> Int = () => 42
+        get_string: () -> String = () => "hello"
         main = () => {
             num: Int = get_number()
             str: String = get_string()
@@ -99,8 +101,9 @@ fn test_statement_block_void_return() {
 /// 测试表达式函数返回
 #[test]
 fn test_expression_fn_return() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        double:(Int) -> Int = (x) => x * 2
+        double: (x: Int) -> Int = (x) => x * 2
         main = () => {
             result: Int = double(21)
         }
@@ -126,8 +129,9 @@ fn test_expression_fn_return() {
 /// 测试函数调用参数类型匹配
 #[test]
 fn test_fn_call_param_type_matching() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        concat:(String, String) -> String = (a, b) => a + b
+        concat: (a: String, b: String) -> String = (a, b) => a + b
         main = () => {
             greeting: String = "Hello, "
             name: String = "World"
@@ -155,9 +159,10 @@ fn test_fn_call_param_type_matching() {
 /// 测试嵌套函数调用
 #[test]
 fn test_nested_fn_calls() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        square:(Int) -> Int = (x) => x * x
-        cube:(Int) -> Int = (x) => x * square(x)
+        square: (x: Int) -> Int = (x) => x * x
+        cube: (x: Int) -> Int = (x) => x * square(x)
         main = () => {
             result: Int = cube(3)  // 应该是 27
         }
@@ -183,8 +188,9 @@ fn test_nested_fn_calls() {
 /// 测试复杂块表达式
 #[test]
 fn test_complex_block_expression() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        max:(Int, Int) -> Int = (a, b) =>  a
+        max: (a: Int, b: Int) -> Int = (a, b) => a
         main = () => {
             larger: Int = max(15, 25)
         }
@@ -210,8 +216,9 @@ fn test_complex_block_expression() {
 /// 测试函数参数类型注解
 #[test]
 fn test_fn_param_annotations() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        process:(Int, String, Bool) -> Int = (num, text, flag) => num
+        process: (num: Int, text: String, flag: Bool) -> Int = (num, text, flag) => num
         main = () => {
             x: Int = 42
         }
@@ -237,8 +244,9 @@ fn test_fn_param_annotations() {
 /// 测试函数返回类型注解验证
 #[test]
 fn test_fn_return_annotation_validation() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        add:(Int, Int) -> Int = (a, b) => {
+        add: (a: Int, b: Int) -> Int = (a, b) => {
             result: Int = a + b
             return result
         }
@@ -267,8 +275,9 @@ fn test_fn_return_annotation_validation() {
 /// 测试无参数函数
 #[test]
 fn test_no_param_function() {
+    // RFC-007: 空参数函数
     let code = r#"
-        get_number:() -> Int = () => 42
+        get_number: () -> Int = () => 42
         main = () => {
             y: Int = get_number()
         }
@@ -294,8 +303,9 @@ fn test_no_param_function() {
 /// 测试函数类型推断
 #[test]
 fn test_function_type_inference() {
+    // RFC-007: 空参数函数
     let code = r#"
-        calculate:() -> Int = () => {
+        calculate: () -> Int = () => {
             x: Int = 10
             y: Int = 20
             product: Int = x * y
@@ -326,8 +336,9 @@ fn test_function_type_inference() {
 /// 测试混合表达式和语句块
 #[test]
 fn test_mixed_expr_stmt_block() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        compute:(Int) -> Int = (input) => {
+        compute: (input: Int) -> Int = (input) => {
             temp: Int = input * 2
             result: Int = temp + 10
             return result
@@ -357,8 +368,9 @@ fn test_mixed_expr_stmt_block() {
 /// 测试嵌套函数作用域
 #[test]
 fn test_fn_variable_scope() {
+    // RFC-007: 参数名在签名中
     let code = r#"
-        simple_nested:(Int, Int) -> Int = (x, y) => {
+        simple_nested: (x: Int, y: Int) -> Int = (x, y) => {
             temp: Int = x + y
             return temp
         }
@@ -387,9 +399,10 @@ fn test_fn_variable_scope() {
 /// 测试复杂嵌套块
 #[test]
 fn test_complex_nested_blocks() {
+    // RFC-007: 空参数函数
     let code = r#"
-        outer_func:() -> Int = () => {
-            inner_block:() -> Int = () => {
+        outer_func: () -> Int = () => {
+            inner_block: () -> Int = () => {
                 value: Int = 42
                 return value
             }
@@ -420,8 +433,9 @@ fn test_complex_nested_blocks() {
 /// 测试块变量类型注解
 #[test]
 fn test_block_var_type_annotations() {
+    // RFC-007: 空参数函数
     let code = r#"
-        test_func:() -> Int = () => {
+        test_func: () -> Int = () => {
             a: Int = 10
             b: Int = 20
             c: Int = a + b
