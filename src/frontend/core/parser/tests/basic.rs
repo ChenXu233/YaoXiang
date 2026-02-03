@@ -242,10 +242,11 @@ mod parser_basic_tests {
         assert!(result.is_ok());
     }
 
-    /// Test parsing function definition
+    /// Test parsing function definition (RFC-010 syntax)
     #[test]
     fn test_parse_function_definition() {
-        let tokens = tokenize("add: (Int, Int) -> Int = (a, b) => a + b").unwrap();
+        // RFC-010 new syntax: parameter names in signature, direct expression body
+        let tokens = tokenize("add: (a: Int, b: Int) -> Int = a + b").unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
         let module = result.unwrap();
@@ -336,6 +337,34 @@ mod parser_basic_tests {
         assert!(result.is_ok());
     }
 
+    /// Test parsing struct type definition (RFC-010)
+    #[test]
+    fn test_parse_struct_type_definition() {
+        let tokens = tokenize("type Point = { x: Float, y: Float }").unwrap();
+        let result = parse(&tokens);
+        assert!(result.is_ok());
+        let module = result.unwrap();
+        assert_eq!(module.items.len(), 1);
+    }
+
+    /// Test parsing struct type with interface constraint (RFC-010)
+    #[test]
+    fn test_parse_struct_with_interface_constraint() {
+        let tokens = tokenize("type Point = { x: Float, Drawable, Serializable }").unwrap();
+        let result = parse(&tokens);
+        assert!(result.is_ok());
+        let module = result.unwrap();
+        assert_eq!(module.items.len(), 1);
+    }
+
+    /// Test parsing empty struct type (RFC-010)
+    #[test]
+    fn test_parse_empty_struct_type() {
+        let tokens = tokenize("type Empty = {}").unwrap();
+        let result = parse(&tokens);
+        assert!(result.is_ok());
+    }
+
     /// Test parsing type annotation
     #[test]
     fn test_parse_type_annotation() {
@@ -356,10 +385,11 @@ mod parser_basic_tests {
         );
     }
 
-    /// Test parsing function type
+    /// Test parsing function type (RFC-010 syntax)
     #[test]
     fn test_parse_fn_type() {
-        let tokens = tokenize("f: (Int) -> Int = (x) => x;").unwrap();
+        // RFC-010 new syntax: parameter name in signature
+        let tokens = tokenize("f: (x: Int) -> Int = x;").unwrap();
         let result = parse(&tokens);
         assert!(
             result.is_ok(),
