@@ -1,7 +1,6 @@
 use std.io
 
-main: () -> Void = () => {
+main = {
     print("A")
     print("B")
-    return
 }

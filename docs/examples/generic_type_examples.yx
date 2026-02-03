@@ -1,35 +1,39 @@
-//! YaoXiang泛型系统使用示例 (RFC-011)
-//!
-//! 本文件展示了YaoXiang语言中各种泛型功能的使用方法
-//! 包括基础泛型、Const泛型、类型级计算和依赖类型
+// RFC-011: 泛型类型示例
+// 展示泛型语法：泛型类型和泛型函数
+
+use std.io
 
 // ============================================================================
 // Phase 1-3: 基础泛型系统
 // ============================================================================
 
 // 基础泛型函数
-identity[T](x: T) -> T = {
-    x
-}
+identity: [T](x: T) -> T = x
 
 // 多参数泛型函数
-pair[T, U](first: T, second: U) -> (T, U) = {
-    (first, second)
+pair: [T, U](first: T, second: U) -> (T, U) = (first, second)
+
+// 泛型Option类型（新语法：type Name = { ... }）
+type Option = {
+    some(T) | none
 }
 
-// 泛型Option类型
-type Option[T] = Some(T) | None
+// 泛型Result类型（新语法）
+type Result = {
+    ok(T) | err(E)
+}
 
-// 泛型Result类型
-type Result[T, E] = Ok(T) | Err(E)
-
-// 泛型List类型
-type List[T] = Nil | Cons(T, List[T])
+// 泛型List类型（新语法）
+type List = {
+    nil | cons(T, List)
+}
 
 // 泛型Map函数
-map[T, R](list: List[T], f: Fn(T) -> R) -> List[R] = match list {
-    Nil => Nil,
-    Cons(head, tail) => Cons(f(head), map(tail, f))
+map: [T, R](list: List, f: (T) -> R) -> List = {
+    match list {
+        nil => nil,
+        cons(head, tail) => cons(f(head), map(tail, f))
+    }
 }
 
 // ============================================================================
@@ -50,12 +54,12 @@ type Matrix[T, R: Int, C: Int] = {
 }
 
 // 编译期计算函数
-const fn factorial(n: Int) -> Int = match n {
+const factorial: (n: Int) -> Int = match n {
     0 => 1,
     _ => n * factorial(n - 1)
 }
 
-const fn fibonacci(n: Int) -> Int = match n {
+const fibonacci: (n: Int) -> Int = match n {
     0 => 0,
     1 => 1,
     _ => fibonacci(n - 1) + fibonacci(n - 2)
@@ -86,24 +90,26 @@ type If[C: Bool, T, E] = match C {
 }
 
 // 类型级自然数
-type Nat = Zero | Succ(Nat)
+type Nat = {
+    zero | succ(Nat)
+}
 
 type Add[A: Nat, B: Nat] = match (A, B) {
-    (Zero, B) => B,
-    (Succ(A'), B) => Succ(Add[A', B])
+    (zero, B) => B,
+    (succ(A'), B) => succ(Add[A', B])
 }
 
 type Mult[A: Nat, B: Nat] = match (A, B) {
-    (Zero, _) => Zero,
-    (Succ(A'), B) => Add[B, Mult[A', B]]
+    (zero, _) => zero,
+    (succ(A'), B) => Add[B, Mult[A', B]]
 }
 
 // 类型级比较
 type Lt[A: Nat, B: Nat] = match (A, B) {
-    (Zero, Zero) => False,
-    (Zero, Succ(_)) => True,
-    (Succ(_), Zero) => False,
-    (Succ(A'), Succ(B')) => Lt[A', B']
+    (zero, zero) => False,
+    (zero, succ(_)) => True,
+    (succ(_), zero) => False,
+    (succ(A'), succ(B')) => Lt[A', B']
 }
 
 // 非空类型
@@ -111,15 +117,15 @@ type NonEmpty[T] = If[T != Void, T, Never]
 
 // 固定大小向量（依赖类型）
 type Vector[T, N: Nat] = match N {
-    Zero => Nil,
-    Succ(_) => Cons(T, Vector[T, N])
+    zero => nil,
+    succ(_) => cons(T, Vector[T, N])
 }
 
 // 创建固定大小向量
-vector_3: Vector[Int, Succ(Succ(Succ(Zero)))] = Cons(1, Cons(2, Cons(3, Nil)))
+vector_3: Vector[Int, succ(succ(succ(zero)))] = cons(1, cons(2, cons(3, nil)))
 
 // 类型级算术示例
-type_size: Nat = Add[Succ(Succ(Zero)), Succ(Succ(Succ(Zero)))]  // 2 + 3 = 5
+type_size: Nat = Add[succ(succ(zero)), succ(succ(succ(zero)))]  // 2 + 3 = 5
 
 // ============================================================================
 // 实际应用示例
@@ -132,13 +138,10 @@ type Buffer[T, N: Int] = {
     size: N
 }
 
-create_buffer[T, N: Int](initial_value: T) -> Buffer[T, N] = {
+create_buffer: [T, N: Int](initial_value: T) -> Buffer[T, N] = {
     static_assert(N > 0)
-    Buffer {
-        data: Array {
-            data: T[N],
-            length: N
-        },
+    Buffer[T, N] {
+        data: Array[T, N] { data: T[N], length: N },
         capacity: N,
         size: N
     }
@@ -224,8 +227,8 @@ static_assert(StateMachine[5, 10].transitions.length == 10)
 
 // AVL树节点（平衡二叉搜索树）
 type AVLNode[T, Height: Nat] = match Height {
-    Zero => Empty,
-    Succ(_) => Node {
+    zero => empty,
+    succ(_) => node {
         value: T,
         left: AVLNode[T, Height],
         right: AVLNode[T, Height],
@@ -234,14 +237,14 @@ type AVLNode[T, Height: Nat] = match Height {
 }
 
 // 编译期树高度验证
-static_assert(AVLNode[Int, Succ(Zero)].height == Succ(Zero))
+static_assert(AVLNode[Int, succ(zero)].height == succ(zero))
 
 // B+树节点
 type BPlusNode[T, Order: Int, KeyCount: Int] = {
     keys: Array[T, KeyCount],
     children: Array[BPlusNode[T, Order, KeyCount], KeyCount + 1],
     is_leaf: Bool,
-    next_leaf: Option[BPlusNode[T, Order, KeyCount]']
+    next_leaf: Option[BPlusNode[T, Order, KeyCount]]
 }
 
 static_assert(BPlusNode[String, 4, 3].keys.length == 3)
@@ -289,7 +292,7 @@ static_assert(SmallArray[Int, 16].is_inline == true)
 static_assert(SmallArray[Int, 64].is_inline == false)
 
 // 编译期缓存大小计算
-const fn calculate_cache_size(associativity: Int, block_size: Int, total_size: Int) -> Int = {
+const calculate_cache_size: (associativity: Int, block_size: Int, total_size: Int) -> Int = {
     associativity * block_size * total_size
 }
 
@@ -301,7 +304,7 @@ static_assert(L1_CACHE_SIZE == 8192)
 // ============================================================================
 
 // 编译期除零检查
-type SafeDiv[A: Nat, B: Nat] = if B == Zero {
+type SafeDiv[A: Nat, B: Nat] = if B == zero {
     Error[DivisionByZero]
 } else {
     Nat

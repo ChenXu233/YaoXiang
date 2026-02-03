@@ -1,2 +1,0 @@
-// Minimal test with type annotation
-main: () -> () = () => {}

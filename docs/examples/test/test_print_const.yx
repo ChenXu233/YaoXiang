@@ -1,7 +1,5 @@
 use std.io
 
-main: () -> Void = () => {
-    print(42);
-
-    return
+main = {
+    print(42)
 }

@@ -226,6 +226,17 @@ impl BodyChecker {
             }
         }
 
+        // 首先添加函数参数到变量环境
+        for param in params {
+            let param_ty = param
+                .ty
+                .as_ref()
+                .map(|t| MonoType::from(t.clone()))
+                .unwrap_or_else(|| self.solver.new_var());
+            self.vars
+                .insert(param.name.clone(), PolyType::mono(param_ty));
+        }
+
         // 处理类型注解
         if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
             type_annotation

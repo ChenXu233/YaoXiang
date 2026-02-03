@@ -16,15 +16,6 @@ pub use bindings::*;
 pub trait StatementParser {
     /// Parse a statement with RFC support
     fn parse_statement(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt>;
-
-    /// Parse RFC-004 binding syntax
-    fn parse_binding(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt>;
-
-    /// Parse RFC-010 unified syntax
-    fn parse_unified_syntax(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt>;
-
-    /// Parse RFC-011 generic syntax
-    fn parse_generic_syntax(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt>;
 }
 
 /// Bridge implementation to connect ParserState with statement parsing methods
@@ -49,6 +40,8 @@ impl StatementParser for ParserState<'_> {
             Some(TokenKind::KwContinue) => control_flow::parse_continue_stmt(self, start_span),
             // for loop
             Some(TokenKind::KwFor) => control_flow::parse_for_stmt(self, start_span),
+            // while loop
+            Some(TokenKind::KwWhile) => control_flow::parse_while_stmt(self, start_span),
             // if statement
             Some(TokenKind::KwIf) => control_flow::parse_if_stmt(self, start_span),
             // block as statement
@@ -65,17 +58,5 @@ impl StatementParser for ParserState<'_> {
             // expression statement
             Some(_) => declarations::parse_expr_stmt(self, start_span),
         }
-    }
-
-    fn parse_binding(&mut self) -> Option<Stmt> {
-        None
-    }
-
-    fn parse_unified_syntax(&mut self) -> Option<Stmt> {
-        None
-    }
-
-    fn parse_generic_syntax(&mut self) -> Option<Stmt> {
-        None
     }
 }

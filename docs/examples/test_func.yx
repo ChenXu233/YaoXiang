@@ -1,5 +1,5 @@
 // Test function with content
-add: (Int, Int) -> Int = (a, b) => {
-    result = a + b;
-    result;
+add: (a: Int, b: Int) -> Int = {
+    result = a + b
+    result
 }
