@@ -77,19 +77,19 @@ x: Int = 10
 x = 20                                # ❌ Compile error! Immutable
 
 # Unified declaration syntax: identifier: Type = expression
-add: (Int, Int) -> Int = (a, b) => a + b  # Function declaration
-inc: Int -> Int = x => x + 1               # Single parameter function
+add: (a: Int, b: Int) -> Int = a + b  # Function declaration
+inc: (x: Int) -> Int = x + 1               # Single parameter function
 
 # Unified type syntax: constructor is type
 type Point = { x: Float, y: Float }
 type Result[T, E] = { ok(T) | err(E) }
 
 # Seamless async (concurrent function)
-fetch_data: (String) -> JSON spawn = (url) => {
+fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-main: () -> Void = () => {
+main: () -> Void = {
     # Value construction: exactly the same as function calls
     p = Point(3.0, 4.0)
     r = ok("success")
@@ -100,13 +100,13 @@ main: () -> Void = () => {
 }
 
 # Generic function
-identity: [T](T) -> T = x => x
+identity: [T](x: T) -> T = x
 
 # Higher-order function
-apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
+apply: (f: (Int) -> Int, x: Int) -> Int = f(x)
 
 # Currying
-add_curried: Int -> Int -> Int = a => b => a + b
+add_curried: (a: Int) -> (b: Int) -> Int = a + b
 ```
 
 ---
@@ -130,12 +130,12 @@ x: Int = 42
 MyList: type = List(Int)
 
 # Functions are mappings between types
-add(Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Modules are combinations of types (using files as modules)
 # Math.yx
 pi: Float = 3.14159
-sqrt(Float) -> Float = (x) => { ... }
+sqrt: (x: Float) -> Float = { ... }
 ```
 
 ### 2.2 Mathematical Abstraction
@@ -169,7 +169,7 @@ YaoXiang guarantees zero-cost abstraction, meaning high-level abstractions do no
 
 ```yaoxiang
 # Generic expansion (monomorphization)
-identity[T](T) -> T = (x) => x
+identity: [T](x: T) -> T = x
 
 # Usage
 int_val = identity(42)      # Expands to identity(Int) -> Int
@@ -188,10 +188,10 @@ x = 42
 name = "YaoXiang"
 
 # Concise function definition
-greet: String -> String = (name) => "Hello, " + name
+greet: (name: String) -> String = "Hello, " + name
 
 # Pattern matching
-classify: Int -> String = (n) => {
+classify: (n: Int) -> String = {
     match n {
         0 -> "zero"
         1 -> "one"
@@ -222,12 +222,12 @@ YaoXiang adopts the design convention of **"Declaration First, Type Centralizati
 
 ```yaoxiang
 # ✅ Correct: Type information unified in declaration line
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 #   └─────────────────┘   └─────────────┘
 #       Complete type signature         Implementation logic
 
 # ❌ Avoid: Type information scattered in implementation
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 #     └───────────────┘
 #     Types mixed in implementation
 ```
@@ -257,16 +257,16 @@ name: String = "YaoXiang"
 mut counter: Int = 0
 
 # Function declaration
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
-getAnswer: () -> Int = () => 42
-log: (String) -> Void = msg => print(msg)
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
+getAnswer: () -> Int = 42
+log: (msg: String) -> Void = print(msg)
 
 # === Old Syntax (Compatible) ===
 # Only for functions, format: name(Types) -> Ret = Lambda
-add(Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 square(Int) -> Int = (x) => x * x
-empty() -> Void = () => {}
+empty: () -> Void = {}
 getRandom() -> Int = () => 42
 ```
 
@@ -295,8 +295,8 @@ Return Type ::= Type | Function Type | 'Void'
 
 ```yaoxiang
 # Generic function: <type parameter> prefix
-identity: [T](T) -> T = x => x
-map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+identity: [T](x: T) -> T = x
+map: [A, B](f: (A) -> B, xs: List[A]) -> List[B] = case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
@@ -332,21 +332,21 @@ Parameter ::= Identifier [':' Type]               # Optional type annotation
 # === Basic Function Declaration ===
 
 # Basic function (new syntax)
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Single parameter function (two forms)
-inc: Int -> Int = x => x + 1
-inc2: (Int) -> Int = (x) => x + 1
+inc: (x: Int) -> Int = x + 1
+inc2: (x: Int) -> Int = x + 1
 
 # No-parameter function
-getAnswer: () -> Int = () => 42
+getAnswer: () -> Int = 42
 
 # No return value function
-log: (String) -> Void = msg => print(msg)
+log: (msg: String) -> Void = print(msg)
 
 # === Recursive Functions ===
 # Recursion naturally supported in lambda
-fact: Int -> Int = (n) =>
+fact: (n: Int) -> Int =
   if n <= 1 then 1 else n * fact(n - 1)
 
 # === Higher-Order Functions and Function Type Assignment ===
@@ -356,23 +356,23 @@ IntToInt: Type = Int -> Int
 IntBinaryOp: Type = (Int, Int) -> Int
 
 # Higher-order function declaration
-applyTwice: (IntToInt, Int) -> Int = (f, x) => f(f(x))
+applyTwice: (f: IntToInt, x: Int) -> Int = f(f(x))
 
 # Curried function
-addCurried: Int -> Int -> Int = a => b => a + b
+addCurried: (a: Int) -> (b: Int) -> Int = a + b
 
 # Function composition
-compose: (Int -> Int, Int -> Int) -> Int -> Int =
-  (f, g) => x => f(g(x))
+compose: (f: Int -> Int, g: Int -> Int) -> (x: Int) -> Int =
+  f(g(x))
 
 # Function returning function
-makeAdder: Int -> (Int -> Int) =
-  x => y => x + y
+makeAdder: (x: Int) -> (y: Int) -> Int =
+  x + y
 
 # === Generic Functions ===
 
 # Generic function
-identity: [T](T) -> T = x => x
+identity: [T](x: T) -> T = x
 
 # Generic higher-order function
 map: [A, B]((A) -> B, List[A]) -> List[B] =
@@ -408,15 +408,15 @@ Reducer: Type = [A, B](B, A) -> B
 # === Old Syntax Examples (Backward Compatible Only) ===
 # Not recommended for new code
 
-mul(Int, Int) -> Int = (a, b) => a * b    # Multi-parameter
+mul: (a: Int, b: Int) -> Int = a * b    # Multi-parameter
 square(Int) -> Int = (x) => x * x          # Single parameter
-empty() -> Void = () => {}                  # No-parameter
+empty: () -> Void = {}                  # No-parameter
 get_random() -> Int = () => 42              # With return value
 
 # Equivalent new syntax (recommended)
-mul: (Int, Int) -> Int = (a, b) => a * b
+mul: (a: Int, b: Int) -> Int = a * b
 square: (Int) -> Int = (x) => x * x
-empty: () -> Void = () => {}
+empty: () -> Void = {}
 get_random: () -> Int = () => 42
 ```
 
@@ -477,7 +477,7 @@ YaoXiang adopts a **dual-layer processing** strategy: the parsing layer is lenie
 | Scenario | Parameter Inference | Return Inference | Parse Result | Type Check Result | Recommended Level |
 |----------|---------------------|------------------|--------------|-------------------|-------------------|
 | **Standard Function** | Uses annotated type | Uses annotated type | ✅ | ✅ | ⭐⭐⭐⭐⭐ |
-| `add: (Int, Int) -> Int = (a, b) => a + b` | | | | | |
+| `add: (a: Int, b: Int) -> Int = a + b` | | | | | |
 | **Partial Inference** | Uses annotated type | Inferred from expression | ✅ | ✅ | ⭐⭐⭐⭐ |
 | `add: (Int, Int) = (a, b) => a + b` | | | | | |
 | `inc: Int -> Int = x => x + 1` | | | | | |
@@ -487,7 +487,7 @@ YaoXiang adopts a **dual-layer processing** strategy: the parsing layer is lenie
 | `square(Int) = (x) => x * x` | | | | | |
 | **Parameters Without Annotation** | **Cannot infer** | - | ✅ | ❌ Error | ❌ Forbidden |
 | `add = (a, b) => a + b` | | | | | |
-| `identity = x => x` | | | | | |
+| `identity: [T](x: T) -> T = x` | | | | | |
 | **Block Without Return Annotation** | - | Inferred from block content | ✅ | ✅ | ⭐⭐⭐⭐ |
 | `main = () => {}` | | | | | |
 | `get = () => { return 42; }` | | | | | |
@@ -530,13 +530,13 @@ Type Checking Layer: Validates semantics
 # === Inference Success ===
 
 # Standard form
-main: () -> Void = () => {}                    # Complete annotation
+main: () -> Void = {}                    # Complete annotation
 num: () -> Int = () => 42                      # Complete annotation
-inc: Int -> Int = x => x + 1                   # Single parameter shorthand
+inc: (x: Int) -> Int = x + 1                   # Single parameter shorthand
 
 # Partial inference (new syntax)
 add: (Int, Int) = (a, b) => a + b              # Parameters annotated, return inferred
-square: Int -> Int = x => x * x                # Parameters annotated, return inferred
+square: (x: Int) -> Int = x * x                # Parameters annotated, return inferred
 get_answer: () = () => 42                      # Parameters annotated (empty), return inferred
 
 # Partial inference (old syntax, compatible)
@@ -544,7 +544,7 @@ add2(Int, Int) = (a, b) => a + b               # Parameters annotated, return in
 square2(Int) = (x) => x * x                    # Parameters annotated, return inferred
 
 # Inferred from return
-fact: Int -> Int = (n) => {
+fact: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * fact(n - 1)
 }
@@ -553,13 +553,13 @@ fact: Int -> Int = (n) => {
 
 # Parameters cannot be inferred (passes parsing, fails type checking)
 add = (a, b) => a + b                          # ✗ Parameters without type
-identity = x => x                              # ✗ Parameters without type
+identity: [T](x: T) -> T = x                              # ✗ Parameters without type
 
 # Block without explicit return
-no_return = (x: Int) => { x }                  # ✗ Block has no return, cannot infer implicit return
+no_return: (x: Int) -> Int = { x }                  # ✗ Block has no return, cannot infer implicit return
 
 # Completely cannot infer
-bad_fn = x => x                                # ✗ Both parameters and return cannot be inferred
+bad_fn: [T](x: T) -> T = x                                # ✗ Both parameters and return cannot be inferred
 ```
 
 #### 2.5.9 Old Syntax (Backward Compatibility)
@@ -587,14 +587,14 @@ Old Syntax ::= Identifier '(' [Parameter Type List] ')' '->' Return Type '=' Lam
 **Migration Suggestions:**
 ```yaoxiang
 # Old code (not recommended)
-mul(Int, Int) -> Int = (a, b) => a * b
+mul: (a: Int, b: Int) -> Int = a * b
 square(Int) -> Int = (x) => x * x
-empty() -> Void = () => {}
+empty: () -> Void = {}
 
 # New code (recommended)
-mul: (Int, Int) -> Int = (a, b) => a * b
+mul: (a: Int, b: Int) -> Int = a * b
 square: (Int) -> Int = (x) => x * x
-empty: () -> Void = () => {}
+empty: () -> Void = {}
 ```
 
 ---
@@ -690,7 +690,7 @@ MyInt = Int
 MyList = List(Int)
 
 # Type reflection (constructor pattern matching)
-describe_type(type) -> String = (t) => {
+describe_type: (t: type) -> String = {
     match t {
         Point(x, y) -> "Point with x=" + x + ", y=" + y
         red -> "Red color"
@@ -711,10 +711,10 @@ y = 3.14                  # Inferred as Float
 z = "hello"               # Inferred as String
 
 # Function return type inference
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Generic inference
-first: [T](List[T]) -> Option[T] = (list) => {
+first: [T](list: List[T]) -> Option[T] = {
     if list.length > 0 { some(list[0]) } else { none }
 }
 ```
@@ -763,18 +763,18 @@ p2 = p              # Move, p is now invalid
 # print(p.x)        # ❌ Error: p no longer owns the value
 
 # === Parameter = Move ===
-process(p: Point) -> Point = (p) => {
+process: (p: Point) -> Point = {
     p.transform()   # p is the parameter, Move
 }
 
-main: () -> Void = () => {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     result = process(p)
     # p is moved into process(), cannot use p here
 }
 
 # === Return = Move ===
-create_point: () -> Point = () => {
+create_point: () -> Point = {
     p = Point(1.0, 2.0)
     return p        # Move, p's ownership transferred to caller
 }
@@ -861,7 +861,7 @@ unsafe {
 
 ```yaoxiang
 # RAII automatic release
-with_file: (String) -> String = (path) => {
+with_file: (path: String) -> String = {
     file = File.open(path)  # Auto open
     content = file.read_all()
     # Function ends, file auto closes
@@ -906,7 +906,7 @@ YaoXiang eliminates complex lifetime annotations and borrow checking:
 # fn returns_ref(&Point) -> &Point { ... }  # Needs 'a annotation
 
 # YaoXiang solution:
-create_point: () -> Point = () => {
+create_point: () -> Point = {
     p = Point(1.0, 2.0)
     return p                    # Move, ownership transfer, no lifetime needed
 }
@@ -939,10 +939,10 @@ All programs are transformed into a **Directed Acyclic Computation Graph (DAG)**
 
 ```yaoxiang
 # Compiler automatically builds concurrent graph
-fetch_user() -> User spawn = (id) => { ... }
-fetch_posts(User) -> Posts spawn = (user) => { ... }
+fetch_user: (id: Int) -> User spawn = { ... }
+fetch_posts: (user: User) -> Posts spawn = { ... }
 
-main() -> Void = () => {
+main: () -> Void = {
     user = fetch_user(1)     # Node A (Async[User])
     posts = fetch_posts(user) # Node B (Async[Posts]), depends on A
 
@@ -962,9 +962,9 @@ Any function call marked with `spawn fn` immediately returns a value of type `As
 
 ```yaoxiang
 # Concurrent value usage example
-fetch_data(String) -> JSON spawn = (url) => { ... }
+fetch_data: (url: String) -> JSON spawn = { ... }
 
-main() -> Void = () => {
+main: () -> Void = {
     data = fetch_data("url")  # Async[JSON]
 
     # Async[JSON] can be directly used as JSON
@@ -989,13 +989,13 @@ The `spawn` keyword has三重 semantics, the only bridge connecting synchronous 
 # Use spawn to mark concurrent function
 # Syntax exactly the same as normal functions, no extra burden
 
-fetch_api(String) -> JSON spawn = (url) => {
+fetch_api: (url: String) -> JSON spawn = {
     response = HTTP.get(url)
     JSON.parse(response.body)
 }
 
 # Nested concurrent calls
-process_user(Int) -> Report spawn = (user_id) => {
+process_user: (user_id: Int) -> Report spawn = {
     user = fetch_user(user_id)     # Async[User]
     profile = fetch_profile(user)  # Async[Profile], depends on user
     generate_report(user, profile) # Depends on profile
@@ -1008,7 +1008,7 @@ process_user(Int) -> Report spawn = (user_id) => {
 # spawn { } - Explicit parallel construct
 # All expressions in the block execute concurrently as independent tasks
 
-compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
+compute_all: (a: Int, b: Int) -> (Int, Int, Int) spawn = {
     # Three independent calculations execute in parallel
     (x, y, z) = spawn {
         heavy_calc(a),        # Task 1
@@ -1025,7 +1025,7 @@ compute_all(Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
 # spawn for - Data parallel loop
 # Each iteration executes as independent task in parallel
 
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: (n: Int) -> Int spawn = {
     total = spawn for i in 0..n {
         fibonacci(i)          # Each iteration parallel
     }
@@ -1039,7 +1039,7 @@ parallel_sum(Int) -> Int spawn = (n) => {
 # spawn for - Data parallel loop
 # Each iteration executes as independent task in parallel
 
-parallel_sum(Int) -> Int spawn = (n) => {
+parallel_sum: (n: Int) -> Int spawn = {
     total = spawn for i in 0..n {
         fibonacci(i)          # Each iteration parallel
     }
@@ -1047,7 +1047,7 @@ parallel_sum(Int) -> Int spawn = (n) => {
 }
 
 # Matrix multiplication parallelization
-matmul[[A: Matrix], [B: Matrix]] -> Matrix spawn = (A, B) => {
+matmul: [A: Matrix, B: Matrix](A: Matrix, B: Matrix) -> Matrix spawn = {
     result = spawn for i in 0..A.rows {
         row = spawn for j in 0..B.cols {
             dot_product(A.row(i), B.col(j))
@@ -1063,7 +1063,7 @@ matmul[[A: Matrix], [B: Matrix]] -> Matrix spawn = (A, B) => {
 ```yaoxiang
 # No explicit await needed, compiler automatically inserts wait points
 
-main() -> Void = () => {
+main: () -> Void = {
     # Auto parallel: two independent requests execute in parallel
     users = fetch_users()      # Async[List[User]]
     posts = fetch_posts()      # Async[List[Post]]
@@ -1077,7 +1077,7 @@ main() -> Void = () => {
 }
 
 # Wait in conditional branches
-process_data() -> Void spawn = () => {
+process_data: () -> Void spawn = {
     data = fetch_data()        # Async[Data]
 
     if data.is_valid {         # Wait for data to be ready
@@ -1092,17 +1092,17 @@ process_data() -> Void spawn = () => {
 
 ```yaoxiang
 # Wait for all tasks to complete
-await_all[List[T]](List[Async[T]]) -> List[T] = (tasks) => {
+await_all: [T](tasks: List[Async[T]]) -> List[T] = {
     # Barrier wait
 }
 
 # Wait for any one to complete
-await_any[List[T]](List[Async[T]]) -> T = (tasks) => {
+await_any: [T](tasks: List[Async[T]]) -> T = {
     # Return first completed result
 }
 
 # Timeout control
-with_timeout[T](Async[T], Duration) -> Option[T] = (task, timeout) => {
+with_timeout: [T](task: Async[T], timeout: Duration) -> Option[T] = {
     # Return None on timeout
 }
 ```
@@ -1196,7 +1196,7 @@ Result[T, E]: Send ⇐ T: Send and E: Send
 # Thread-safe counter example
 type SafeCounter = SafeCounter(mutex: Mutex[Int])
 
-main() -> Void = () => {
+main: () -> Void = {
     counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
 
     # Concurrent updates
@@ -1219,7 +1219,7 @@ main() -> Void = () => {
 # Runtime will assign them to dedicated block thread pool
 
 @block
-read_large_file(String) -> String = (path) => {
+read_large_file: (path: String) -> String = {
     # This call will not block the core scheduler
     file = File.open(path)
     content = file.read_all()
@@ -1237,7 +1237,7 @@ read_large_file(String) -> String = (path) => {
 # Modules use files as boundaries
 # Math.yx file
 pub pi: Float = 3.14159
-pub sqrt(Float) -> Float = (x) => { ... }
+pub sqrt: (x: Float) -> Float = { ... }
 ```
 
 ### 6.2 Module Import
@@ -1270,22 +1270,22 @@ All operations are implemented through ordinary functions, with the first parame
 type Point = { x: Float, y: Float }
 
 # Core function: first parameter is the subject of operation
-distance(Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-add(Point, Point) -> Point = (a, b) => {
+add: (a: Point, b: Point) -> Point = {
     Point(a.x + b.x, a.y + b.y)
 }
 
-scale(Point, Float) -> Point = (p, s) => {
+scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
 # More complex functions
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
+distance_with_scale: (s: Float, a: Point, b: Point) -> Float = {
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
     (dx * dx + dy * dy).sqrt()
@@ -1304,13 +1304,13 @@ YaoXiang supports namespace-based automatic binding, **without any additional de
 type Point = { x: Float, y: Float }
 
 # Core function
-distance(Point, Point) -> Float = (a, b) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
 
 # === main.yx ===
 
 use Point
 
-main() -> Void = () => {
+main: () -> Void = {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
 
@@ -1340,7 +1340,7 @@ dot_product_internal(v1: Vector, v2: Vector) -> Float = (a, b) => {
 
 use Vector
 
-main() -> Void = () => {
+main: () -> Void = {
     v1 = Vector(1.0, 0.0, 0.0)
     v2 = Vector(0.0, 1.0, 0.0)
 
@@ -1363,9 +1363,9 @@ YaoXiang provides **the most elegant binding syntax**, using position marker `[n
 type Point = { x: Float, y: Float }
 
 # Core function
-distance(Point, Point) -> Float = (a, b) => { ... }
-add(Point, Point) -> Point = (a, b) => { ... }
-scale(Point, Float) -> Point = (p, s) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
+add: (a: Point, b: Point) -> Point = { ... }
+scale: (p: Point, s: Float) -> Point = { ... }
 
 # Binding syntax: Type.method = func[position]
 # Means: when calling method, bind caller to func's [position] parameter
@@ -1457,7 +1457,7 @@ Point.wrong = distance[1, 2, 3, 4]    # Exceeds function parameter count
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
+distance_with_scale: (s: Float, a: Point, b: Point) -> Float = { ... }
 
 # === Point.yx ===
 
@@ -1494,9 +1494,9 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # Chained call
 type Point = { x: Float, y: Float }
 
 # Core functions
-distance(Point, Point) -> Float = (a, b) => { ... }
-add(Point, Point) -> Point = (a, b) => { ... }
-scale(Point, Float) -> Point = (p, s) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
+add: (a: Point, b: Point) -> Point = { ... }
+scale: (p: Point, s: Float) -> Point = { ... }
 
 # Auto binding (core)
 Point.distance = distance[0]
@@ -1536,10 +1536,10 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 type Point = { x: Float, y: Float }
 
 # Non-pub functions
-internal_distance(a: Point, b: Point) -> Float = (a, b) => { ... }
+internal_distance: (a: Point, b: Point) -> Float = { ... }
 
 # pub functions
-pub distance(a: Point, b: Point) -> Float = (a, b) => { ... }
+pub distance: (a: Point, b: Point) -> Float = { ... }
 
 # === main.yx ===
 
@@ -1607,7 +1607,7 @@ p3 = p1.translate(1.0, 1.0)
 
 type Point = { x: Float, y: Float }
 
-distance(Point, Point) -> Float = (a, b) => { ... }
+distance: (a: Point, b: Point) -> Float = { ... }
 
 # Within module, all functions are visible
 # But auto binding only works for pub exported functions outside
@@ -1666,19 +1666,19 @@ YaoXiang's syntax design especially considers AI code generation and modificatio
 # ✅ Recommended: Use complete new syntax declaration + type centralization convention
 # AI can accurately understand intent, generate complete type information
 
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
-empty: () -> Void = () => {}
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
+empty: () -> Void = {}
 
 # ❌ Avoid: Omitting type annotations or scattered types
 # AI cannot determine parameter types, may generate wrong code
 add = (a, b) => a + b          # Parameters without type
-identity = x => x              # Parameters without type
-add2 = (a: Int, b: Int) => a + b  # Types scattered in implementation
+identity: [T](x: T) -> T = x              # Parameters without type
+add2: (a: Int, b: Int) -> Int = a + b  # Types scattered in implementation
 
 # ⚠️ Compatible: Old syntax only for maintenance
 # AI should prioritize generating new syntax + type centralization convention
-mul(Int, Int) -> Int = (a, b) => a * b  # Not recommended in new code
+mul: (a: Int, b: Int) -> Int = a * b  # Not recommended in new code
 ```
 
 **AI Advantages of Type Centralization Convention:**
@@ -1760,12 +1760,12 @@ get_bad = () => { 42 }           # Block has no return, cannot infer
 
 # 3. Parameters must have type annotation (new syntax)
 # ✅ Correct
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
 
 # ❌ Error
 add = (a, b) => a + b            # Parameters without type
-identity = x => x                # Parameters without type
+identity: [T](x: T) -> T = x                # Parameters without type
 ```
 
 #### 8.2.5 AI Generation Recommended Patterns
@@ -1806,7 +1806,7 @@ function_name: () -> Void = () => {}
 # AI-friendly error
 # Missing type annotation for parameter 'a'
 # Suggestion: add ': Int' or similar type to '(a, b) => a + b'
-# Correct version: add: (Int, Int) -> Int = (a, b) => a + b
+# Correct version: add: (a: Int, b: Int) -> Int = a + b
 ```
 
 ---
@@ -1819,10 +1819,10 @@ YaoXiang's core design convention is **"Declaration First, Type Centralization"*
 
 ```yaoxiang
 # ✅ Core convention: Type information unified in declaration line
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ❌ Avoid: Type information scattered in implementation
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 ```
 
 ### 9.2 Five Core Advantages of the Convention
@@ -1832,15 +1832,15 @@ add = (a: Int, b: Int) => a + b
 # All declarations follow same format
 x: Int = 42                           # Variable
 name: String = "YaoXiang"             # Variable
-add: (Int, Int) -> Int = (a, b) => a + b  # Function
-inc: Int -> Int = x => x + 1          # Function
+add: (a: Int, b: Int) -> Int = a + b  # Function
+inc: (x: Int) -> Int = x + 1          # Function
 type Point = { x: Float, y: Float } # Type
 ```
 
 #### 2. Separation of Declaration and Implementation
 ```yaoxiang
 # Declaration line provides complete type information
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 # └────────────────────┘
 #   Complete function signature
 
@@ -1856,26 +1856,26 @@ add: (Int, Int) -> Int = (a, b) => a + b
 # 3. Modify type → Only change declaration line, not affect implementation
 
 # Contrast: Scattered type approach
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 # AI needs: Analyze implementation body to extract type information → More complex, error-prone
 ```
 
 #### 4. Safer Modifications
 ```yaoxiang
 # Modify parameter type
-# Original: add: (Int, Int) -> Int = (a, b) => a + b
+# Original: add: (a: Int, b: Int) -> Int = a + b
 # Modified: add: (Float, Float) -> Float = (a, b) => a + b
 # Implementation: (a, b) => a + b  No modification needed!
 
 # If types are scattered:
-# Original: add = (a: Int, b: Int) => a + b
-# Modified: add = (a: Float, b: Float) => a + b  # Need to change two places
+# Original: add: (a: Int, b: Int) -> Int = a + b
+# Modified: add: (a: Float, b: Float) -> Float = a + b  # Need to change two places
 ```
 
 #### 5. Currying-Friendly
 ```yaoxiang
 # Currying type is clear at a glance
-add_curried: Int -> Int -> Int = a => b => a + b
+add_curried: (a: Int) -> (b: Int) -> Int = a + b
 #              └─────────────┘
 #              Currying signature
 
@@ -1888,11 +1888,11 @@ compose: (Int -> Int, Int -> Int) -> Int -> Int = (f, g) => x => f(g(x))
 #### Rule1: Parameters must have type specified in declaration
 ```yaoxiang
 # ✅ Correct
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ❌ Error
 add = (a, b) => a + b            # Parameter types missing
-identity = x => x                # Parameter types missing
+identity: [T](x: T) -> T = x                # Parameter types missing
 ```
 
 #### Rule2: Return type can be inferred but recommended to annotate
@@ -1910,13 +1910,13 @@ empty: () = () => {}
 #### Rule3: Lambda internal type annotations are temporary
 ```yaoxiang
 # ✅ Correct: Depends on types in declaration
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ⚠️ Acceptable but not recommended: Duplicate annotation in Lambda
 add: (Int, Int) -> Int = (a: Int, b: Int) => a + b
 
 # ❌ Error: Missing declaration annotation
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 ```
 
 #### Rule4: Old syntax follows same philosophy
@@ -1925,7 +1925,7 @@ add = (a: Int, b: Int) => a + b
 # Although format is different, philosophy is consistent:
 # - Declaration line contains main type information
 # - Implementation body is relatively concise
-add(Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 ```
 
 ### 9.4 Relationship Between Convention and Type Inference
@@ -1934,7 +1934,7 @@ add(Int, Int) -> Int = (a, b) => a + b
 # Convention does not prevent type inference, but guides inference direction
 
 # 1. Complete annotation (no inference)
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 2. Partial inference (declaration provides parameter types)
 add: (Int, Int) = (a, b) => a + b  # Return type inferred
@@ -1955,7 +1955,7 @@ empty: () = () => {}  # Inferred as () -> Void
 
 2. **Fill implementation** → No type analysis needed
    ```
-   Implementation: add: (Int, Int) -> Int = (a, b) => a + b
+   Implementation: add: (a: Int, b: Int) -> Int = a + b
    ```
 
 3. **Type modification** → Only change declaration
@@ -1994,14 +1994,14 @@ This convention embodies YaoXiang's core philosophy:
 # === Recommended: Type Centralization Convention ===
 
 # Module declarations
-pub add: (Int, Int) -> Int = (a, b) => a + b
-pub multiply: (Int, Int) -> Int = (a, b) => a * b
+pub add: (a: Int, b: Int) -> Int = a + b
+pub multiply: (a: Int, b: Int) -> Int = a * b
 
 # Higher-order functions
 pub apply_twice: (Int -> Int, Int) -> Int = (f, x) => f(f(x))
 
 # Curried functions
-pub make_adder: Int -> (Int -> Int) = x => y => x + y
+pub make_adder: (x: Int) -> (y: Int) -> Int = x + y
 
 # Generic functions
 pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
@@ -2010,7 +2010,7 @@ pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
 
 # Type definitions
 type Point = { x: Float, y: Float }
-pub distance: (Point, Point) -> Float = (a, b) => {
+pub distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -2019,7 +2019,7 @@ pub distance: (Point, Point) -> Float = (a, b) => {
 # === Not Recommended: Scattered Types ===
 
 # Parameter types in Lambda
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 multiply = (a: Int, b: Int) => a * b
 
 # Higher-order function types scattered
@@ -2041,7 +2041,7 @@ map = [A, B](f: (A) -> B, xs: List[A]) => List[B] => case xs of
 
 # === Recommended: Only need to change declaration line ===
 # Original
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Modified
 add: (Float, Float) -> Float = (a, b) => a + b
@@ -2050,10 +2050,10 @@ add: (Float, Float) -> Float = (a, b) => a + b
 
 # === Not Recommended: Need to change multiple places ===
 # Original
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Modified
-add = (a: Float, b: Float) => a + b
+add: (a: Float, b: Float) -> Float = a + b
 #     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 #     All parameter types need modification
 ```
@@ -2068,7 +2068,7 @@ type Point = { x: Float, y: Float }
 pub manhattan: (Point, Point) -> Float = ???  # AI directly knows complete signature
 
 # AI generates:
-pub manhattan: (Point, Point) -> Float = (a, b) => {
+pub manhattan: (a: Point, b: Point) -> Float = {
     (a.x - b.x).abs() + (a.y - b.y).abs()
 }
 
@@ -2105,7 +2105,7 @@ When writing YaoXiang code, use the following checklist:
 # hello.yx
 use std.io
 
-main: () -> Void = () => {
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -2126,7 +2126,7 @@ name = "YaoXiang"         # Auto inferred as String
 pi = 3.14159              # Auto inferred as Float
 
 # Functions (using new syntax)
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Conditionals
 if x > 0 {
@@ -2151,7 +2151,7 @@ for i in 0..10 {
 type Point = { x: Float, y: Float }
 
 # Core function
-distance(Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -2164,7 +2164,7 @@ Point.distance = distance[0]
 
 use Point
 
-main() -> Void = () => {
+main: () -> Void = {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
 
@@ -2179,7 +2179,7 @@ main() -> Void = () => {
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale(scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
+distance_with_scale: (s: Float, a: Point, b: Point) -> Float = {
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
     (dx * dx + dy * dy).sqrt()

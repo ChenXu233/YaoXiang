@@ -44,8 +44,8 @@ Create a file `hello.yx`:
 # hello.yx
 use std.io
 
-# Function definition: name: (types) -> return_type = (params) => body
-main: () -> Void = () => {
+# Function definition: name: (param: Type, ...) -> return_type = { ... }
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -91,13 +91,13 @@ counter = counter + 1     # ✅ OK
 
 ```yaoxiang
 # Function definition syntax
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Call
 result = add(1, 2)        # result = 3
 
 # Single parameter function
-inc: Int -> Int = x => x + 1
+inc: (x: Int) -> Int = x + 1
 ```
 
 ### Type Definitions
@@ -110,7 +110,7 @@ x: Int = 42
 name: String = "YaoXiang"
 
 # Function definition
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Type definition (using braces)
 type Point = { x: Float, y: Float }
@@ -161,11 +161,11 @@ Use `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 type Point = { x: Float, y: Float }
 
 # Type method definitions
-Point.draw: (Point, Surface) -> Void = (self, surface) => {
+Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-Point.serialize: (Point) -> String = (self) => {
+Point.serialize: (self: Point) -> String = {
     "Point(${self.x}, ${self.y})"
 }
 
@@ -183,7 +183,7 @@ Functions declared with `pub` are automatically bound to types defined in the sa
 type Point = { x: Float, y: Float }
 
 # pub declarations auto-bind to Point
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
@@ -288,12 +288,12 @@ YaoXiang's unique feature: functions marked with `spawn` automatically gain asyn
 
 ```yaoxiang
 # Define concurrent function (auto-async execution)
-fetch_data: (String) -> JSON spawn = (url) => {
+fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
 # Call concurrent function (auto-parallel, no await needed)
-main: () -> Void = () => {
+main: () -> Void = {
     # Two calls execute automatically in parallel
     user = fetch_user(1)     # Auto-parallel
     posts = fetch_posts()    # Auto-parallel
@@ -330,7 +330,7 @@ x = 20                       # ✅ OK
 
 ```yaoxiang
 # Full form (recommended)
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # Short form (type inference)
 add = (a, b) => a + b

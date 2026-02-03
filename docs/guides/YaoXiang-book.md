@@ -78,19 +78,19 @@ x: Int = 10
 x = 20                                # ❌ 编译错误！不可变
 
 # 统一声明语法：标识符: 类型 = 表达式
-add: (Int, Int) -> Int = (a, b) => a + b  # 函数声明
-inc: Int -> Int = x => x + 1               # 单参数函数
+add: (a: Int, b: Int) -> Int = a + b  # 函数声明
+inc: (x: Int) -> Int = x + 1               # 单参数函数
 
 # 统一类型语法：构造器即类型
 type Point = { x: Float, y: Float }
 type Result[T, E] = { ok(T) | err(E) }
 
 # 无感异步（并作函数）
-fetch_data: (String) -> JSON spawn = (url) => {
+fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-main: () -> Void = () => {
+main: () -> Void = {
     # 值构造：与函数调用完全相同
     p = Point(3.0, 4.0)
     r = ok("success")
@@ -101,13 +101,13 @@ main: () -> Void = () => {
 }
 
 # 泛型函数
-identity: [T](T) -> T = x => x
+identity: [T](x: T) -> T = x
 
 # 高阶函数
-apply: ((Int) -> Int, Int) -> Int = (f, x) => f(x)
+apply: (f: (Int) -> Int, x: Int) -> Int = f(x)
 
 # 柯里化
-add_curried: Int -> Int -> Int = a => b => a + b
+add_curried: (a: Int) -> (b: Int) -> Int = a + b
 ```
 
 ---
@@ -131,12 +131,12 @@ x: Int = 42
 MyList: type = List(Int)
 
 # 函数是类型之间的映射
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 模块是类型的组合（使用文件作为模块）
 # Math.yx
 pi: Float = 3.14159
-sqrt: (Float) -> Float = (x) => { ... }
+sqrt: (x: Float) -> Float = { ... }
 ```
 
 ### 2.2 数学抽象
@@ -170,7 +170,7 @@ YaoXiang 保证零成本抽象，即高层次的抽象不会带来运行时的�
 
 ```yaoxiang
 # 泛型展开（单态化）
-identity: [T](T) -> T = x => x
+identity: [T](x: T) -> T = x
 
 # 使用
 int_val = identity(42)      # 展开为 identity(Int) -> Int
@@ -189,10 +189,10 @@ x = 42
 name = "YaoXiang"
 
 # 简洁的函数定义
-greet: String -> String = (name) => "Hello, " + name
+greet: (name: String) -> String = "Hello, " + name
 
 # 模式匹配
-classify: Int -> String = (n) => {
+classify: (n: Int) -> String = {
     match n {
         0 -> "zero"
         1 -> "one"
@@ -223,12 +223,12 @@ YaoXiang 采用**"声明优先，类型集中"**的设计约定：
 
 ```yaoxiang
 # ✅ 正确：类型信息统一在声明行
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 #   └─────────────────┘   └─────────────┘
 #       完整类型签名         实现逻辑
 
 # ❌ 避免：类型信息分散在实现中
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 #     └───────────────┘
 #     类型混在实现体中
 ```
@@ -258,10 +258,10 @@ name: String = "YaoXiang"
 mut counter: Int = 0
 
 # 函数声明
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
-getAnswer: () -> Int = () => 42
-log: (String) -> Void = msg => print(msg)
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
+getAnswer: () -> Int = 42
+log: (msg: String) -> Void = print(msg)
 
 # === 旧语法（兼容）===
 # 仅用于函数，格式：name(Types) -> Ret = Lambda
@@ -296,8 +296,8 @@ getRandom() -> Int = () => 42
 
 ```yaoxiang
 # 泛型函数：<类型参数> 前缀
-identity: [T](T) -> T = x => x
-map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+identity: [T](x: T) -> T = x
+map: [A, B](f: (A) -> B, xs: List[A]) -> List[B] = case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
@@ -333,51 +333,51 @@ Lambda ::= '(' 参数列表 ')' '=>' 表达式
 # === 基本函数声明 ===
 
 # 基础函数（新语法）
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 单参数函数（两种形式）
-inc: Int -> Int = x => x + 1
-inc2: (Int) -> Int = (x) => x + 1
+inc: (x: Int) -> Int = x + 1
+inc2: (x: Int) -> Int = x + 1
 
 # 无参函数
-getAnswer: () -> Int = () => 42
+getAnswer: () -> Int = 42
 
 # 无返回值函数
-log: (String) -> Void = msg => print(msg)
+log: (msg: String) -> Void = print(msg)
 
 # === 递归函数 ===
 # 递归在 lambda 中自然支持
-fact: Int -> Int = (n) =>
+fact: (n: Int) -> Int =
   if n <= 1 then 1 else n * fact(n - 1)
 
 # === 高阶函数与函数类型赋值 ===
 
 # 函数类型作为一等公民
-IntToInt: Type = Int -> Int
+IntToInt: Type = (Int) -> Int
 IntBinaryOp: Type = (Int, Int) -> Int
 
 # 高阶函数声明
-applyTwice: (IntToInt, Int) -> Int = (f, x) => f(f(x))
+applyTwice: (f: IntToInt, x: Int) -> Int = f(f(x))
 
 # 柯里化函数
-addCurried: Int -> Int -> Int = a => b => a + b
+addCurried: (a: Int) -> (b: Int) -> Int = a + b
 
 # 函数组合
-compose: (Int -> Int, Int -> Int) -> Int -> Int =
-  (f, g) => x => f(g(x))
+compose: (f: Int -> Int, g: Int -> Int) -> (x: Int) -> Int =
+  f(g(x))
 
 # 返回函数的函数
-makeAdder: Int -> (Int -> Int) =
-  x => y => x + y
+makeAdder: (x: Int) -> (y: Int) -> Int =
+  x + y
 
 # === 泛型函数 ===
 
 # 泛型函数
-identity: [T](T) -> T = x => x
+identity: [T](x: T) -> T = x
 
 # 泛型高阶函数
-map: [A, B]((A) -> B, List[A]) -> List[B] =
-  (f, xs) => case xs of
+map: [A, B](f: (A) -> B, xs: List[A]) -> List[B] =
+  case xs of
     [] => []
     (x :: rest) => f(x) :: map(f, rest)
 
@@ -385,24 +385,24 @@ map: [A, B]((A) -> B, List[A]) -> List[B] =
 Transformer: Type = [A, B](A) -> B
 
 # 使用泛型类型
-applyTransformer: [A, B](Transformer[A, B], A) -> B =
-  (f, x) => f(x)
+applyTransformer: [A, B](f: Transformer[A, B], x: A) -> B =
+  f(x)
 
 # === 复杂类型示例 ===
 
 # 嵌套函数类型
-higherOrder: ((Int) -> Int) -> (Int) -> Int =
+higherOrder: [A](f: (A) -> Int) -> (A) -> Int =
   f => x => f(x) + 1
 
 # 多参数高阶函数
-zipWith: [A, B, C]((A, B) -> C, List[A], List[B]) -> List[C] =
-  (f, xs, ys) => case (xs, ys) of
+zipWith: [A, B, C](f: (A, B) -> C, xs: List[A], ys: List[B]) -> List[C] =
+  case (xs, ys) of
     ([], _) => []
     (_, []) => []
     (x::xs', y::ys') => f(x, y) :: zipWith(f, xs', ys')
 
 # 函数类型别名
-Predicate: Type = [T] (T) -> Bool
+Predicate: Type = [T](T) -> Bool
 Mapper: Type = [A, B](A) -> B
 Reducer: Type = [A, B](B, A) -> B
 
@@ -415,10 +415,10 @@ empty() -> Void = () => {}                  # 无参
 get_random() -> Int = () => 42              # 有返回值
 
 # 等效的新语法（推荐）
-mul: (Int, Int) -> Int = (a, b) => a * b
-square: (Int) -> Int = (x) => x * x
-empty: () -> Void = () => {}
-get_random: () -> Int = () => 42
+mul: (a: Int, b: Int) -> Int = a * b
+square: (x: Int) -> Int = x * x
+empty: () -> Void = {}
+get_random: () -> Int = 42
 ```
 
 #### 2.5.7 语法解析规则
@@ -466,7 +466,7 @@ YaoXiang 采用**双层处理**策略：解析层宽松放过，类型检查层�
 - 解析器只验证语法结构，不进行类型推断
 - 缺少类型标注的声明，类型标注字段为 `None`
 - 所有符合基础语法结构的声明都能通过解析
-- **关键点**：`add = (a, b) => a + b` 在解析层是**合法**的
+- **关键点**：`add: (a: Int, b: Int) -> Int = a + b` 在解析层是**合法**的
 
 **类型检查层规则：**
 - 验证语义正确性，包括类型完整性
@@ -478,17 +478,17 @@ YaoXiang 采用**双层处理**策略：解析层宽松放过，类型检查层�
 | 场景 | 参数推断 | 返回推断 | 解析结果 | 类型检查结果 | 推荐程度 |
 |------|---------|---------|----------|-------------|---------|
 | **标准函数** | 使用标注类型 | 使用标注类型 | ✅ | ✅ | ⭐⭐⭐⭐⭐ |
-| `add: (Int, Int) -> Int = (a, b) => a + b` | | | | | |
+| `add: (a: Int, b: Int) -> Int = a + b` | | | | | |
 | **部分推断** | 使用标注类型 | 从表达式推断 | ✅ | ✅ | ⭐⭐⭐⭐ |
 | `add: (Int, Int) = (a, b) => a + b` | | | | | |
-| `inc: Int -> Int = x => x + 1` | | | | | |
+| `inc: (x: Int) -> Int = x + 1` | | | | | |
 | `get: () = () => 42` | | | | | |
 | **旧语法部分推断** | 使用标注类型 | 从表达式推断 | ✅ | ✅ | ⭐⭐⭐ (兼容) |
 | `add(Int, Int) = (a, b) => a + b` | | | | | |
 | `square(Int) = (x) => x * x` | | | | | |
 | **参数无标注** | **无法推断** | - | ✅ | ❌ 错误 | ❌ 禁止 |
-| `add = (a, b) => a + b` | | | | | |
-| `identity = x => x` | | | | | |
+| `add: (a: Int, b: Int) -> Int = a + b` | | | | | |
+| `identity: [T](x: T) -> T = x` | | | | | |
 | **无返回标注的块** | - | 从块内容推断 | ✅ | ✅ | ⭐⭐⭐⭐ |
 | `main = () => {}` | | | | | |
 | `get = () => { return 42; }` | | | | | |
@@ -533,11 +533,11 @@ YaoXiang 采用**双层处理**策略：解析层宽松放过，类型检查层�
 # 标准形式
 main: () -> Void = () => {}                    # 完整标注
 num: () -> Int = () => 42                      # 完整标注
-inc: Int -> Int = x => x + 1                   # 单参数简写
+inc: (x: Int) -> Int = x + 1                   # 单参数简写
 
 # 部分推断（新语法）
 add: (Int, Int) = (a, b) => a + b              # 参数有标注，返回推断
-square: Int -> Int = x => x * x                # 参数有标注，返回推断
+square: (x: Int) -> Int = x * x                # 参数有标注，返回推断
 get_answer: () = () => 42                      # 参数有标注（空），返回推断
 
 # 部分推断（旧语法，兼容）
@@ -553,14 +553,14 @@ fact: Int -> Int = (n) => {
 # === 推断失败 ===
 
 # 参数无法推断（解析通过，类型检查失败）
-add = (a, b) => a + b                          # ✗ 参数无类型
-identity = x => x                              # ✗ 参数无类型
+add: (a: Int, b: Int) -> Int = a + b                          # ✗ 参数无类型
+identity: [T](x: T) -> T = x                              # ✗ 参数无类型
 
 # 无显式返回的块
 no_return = (x: Int) => { x }                  # ✗ 块无 return，无法推断隐式返回
 
 # 全无法推断
-bad_fn = x => x                                # ✗ 参数和返回都无法推断
+bad_fn: [T](x: T) -> T = x                                # ✗ 参数和返回都无法推断
 ```
 
 #### 2.5.9 旧语法（向后兼容）
@@ -712,7 +712,7 @@ y = 3.14                  # 推断为 Float
 z = "hello"               # 推断为 String
 
 # 函数返回值推断
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 泛型推断
 first: [T](List[T]) -> Option[T] = (list) => {
@@ -750,12 +750,12 @@ p: Point = Point(1.0, 2.0)
 p2 = p              # Move，p 失效
 
 # 函数传参 = Move
-process(Point) -> Void = (p) => {
+process: (p: Point) -> Void = {
     # p 的所有权转移进来
 }
 
 # 返回值 = Move
-create() -> Point = () => {
+create: () -> Point = {
     p = Point(1.0, 2.0)
     return p        # Move，所有权转移
 }
@@ -801,7 +801,7 @@ unsafe {
 
 ```yaoxiang
 # RAII 自动释放
-with_file: (String) -> String = (path) => {
+with_file: (path: String) -> String = {
     file = File.open(path)  # 自动打开
     content = file.read_all()
     # 函数结束，file 自动关闭
@@ -1008,17 +1008,17 @@ process_data: spawn () -> Void = () => {
 
 ```yaoxiang
 # 等待所有任务完成
-await_all: [T](List[Async[T]]) -> List[T] = (tasks) => {
+await_all: [T](tasks: List[Async[T]]) -> List[T] = {
     # Barrier 等待
 }
 
 # 等待任意一个完成
-await_any: [T](List[Async[T]]) -> T = (tasks) => {
+await_any: [T](tasks: List[Async[T]]) -> T = {
     # 返回第一个完成的结果
 }
 
 # 超时控制
-with_timeout: [T](Async[T], Duration) -> Option[T] = (task, timeout) => {
+with_timeout: [T](task: Async[T], timeout: Duration) -> Option[T] = {
     # 超时返回 None
 }
 ```
@@ -1135,7 +1135,7 @@ main: () -> Void = () => {
 # 运行时会将其分配到专用阻塞线程池
 
 @block
-read_large_file: (String) -> String = (path) => {
+read_large_file: (path: String) -> String = {
     # 此调用不会阻塞核心调度器
     file = File.open(path)
     content = file.read_all()
@@ -1153,7 +1153,7 @@ read_large_file: (String) -> String = (path) => {
 # 模块使用文件作为边界
 # Math.yx 文件
 pub pi: Float = 3.14159
-pub sqrt(Float) -> Float = (x) => { ... }
+pub sqrt: (x: Float) -> Float = { ... }
 ```
 
 ### 6.2 模块导入
@@ -1186,26 +1186,22 @@ YaoXiang 采用**纯函数式设计**，通过先进的绑定机制实现无缝�
 type Point = { x: Float, y: Float }
 
 # 核心函数：第一个参数是操作的主体
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-add: (Point, Point) -> Point = (a, b) => {
+add: (a: Point, b: Point) -> Point = {
     Point(a.x + b.x, a.y + b.y)
 }
 
-scale: (Point, Float) -> Point = (p, s) => {
+scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
 # 更复杂的函数
-distance_with_scale: (Float, Point, Point) -> Float = (s, p1, p2) => {
-    dx = (p1.x - p2.x) * s
-    dy = (p1.y - p2.y) * s
-    (dx * dx + dy * dy).sqrt()
-}
+distance_with_scale: (s: Float, p1: Point, p2: Point) -> Float = {
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
     (dx * dx + dy * dy).sqrt()
@@ -1224,7 +1220,7 @@ YaoXiang 支持基于命名空间的自动绑定，**无需任何额外声明**�
 type Point = { x: Float, y: Float }
 
 # 核心函数
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1234,10 +1230,10 @@ distance: (Point, Point) -> Float = (a, b) => {
 
 use Point
 
-main: () -> Void = () => {
+main: () -> Void = {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
-    
+
     # ✅ 自动绑定：直接调用方法
     result = p1.distance(p2)  # 解析为 distance(p1, p2)
 }
@@ -1256,9 +1252,7 @@ main: () -> Void = () => {
 type Vector = Vector(x: Float, y: Float, z: Float)
 
 # 内部辅助函数，不希望自动绑定
-dot_product_internal: (Vector, Vector) -> Float = (a, b) => {
-    a.x * b.x + a.y * b.y + a.z * b.z
-}
+dot_product_internal: (a: Vector, b: Vector) -> Float = {
     a.x * b.x + a.y * b.y + a.z * b.z
 }
 
@@ -1266,13 +1260,13 @@ dot_product_internal: (Vector, Vector) -> Float = (a, b) => {
 
 use Vector
 
-main: () -> Void = () => {
+main: () -> Void = {
     v1 = Vector(1.0, 0.0, 0.0)
     v2 = Vector(0.0, 1.0, 0.0)
-    
+
     # ❌ 无法绑定：非 pub 函数不会自动绑定
     # v1.dot_product_internal(v2)  # 编译错误！
-    
+
     # ✅ 必须直接调用（在模块外部不可见）
 }
 ```
@@ -1289,15 +1283,15 @@ YaoXiang 提供**最优雅的绑定语法**，使用位置标记 `[n]` 来精确
 type Point = { x: Float, y: Float }
 
 # 核心函数
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
-add: (Point, Point) -> Point = (a, b) => {
+add: (a: Point, b: Point) -> Point = {
     Point(a.x + b.x, a.y + b.y)
 }
-scale: (Point, Float) -> Point = (p, s) => {
+scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
@@ -1321,7 +1315,7 @@ Point.scale = scale[0]             # 绑定到第1个参数
 # === Math.yx ===
 
 # 函数：scale, point1, point2, extra1, extra2
-calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = (s, p1, p2, x, y) => { ... }
+calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = { ... }
 
 # === Point.yx ===
 
@@ -1329,7 +1323,7 @@ type Point = { x: Float, y: Float }
 
 # 绑定多个位置
 Point.calc1 = calculate[1, 2]      # 绑定 scale 和 point1
-Point.calc2 = calculate[1, 3]      # 绑定 scale 和 point2  
+Point.calc2 = calculate[1, 3]      # 绑定 scale 和 point2
 Point.calc3 = calculate[2, 3]      # 绑定 point1 和 point2
 
 # === main.yx ===
@@ -1391,7 +1385,7 @@ Point.wrong = distance[1, 2, 3, 4]    # 超出函数参数个数
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
+distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = { ... }
 
 # === Point.yx ===
 
@@ -1428,15 +1422,15 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # 链式调用
 type Point = { x: Float, y: Float }
 
 # 核心函数
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
-add: (Point, Point) -> Point = (a, b) => {
+add: (a: Point, b: Point) -> Point = {
     Point(a.x + b.x, a.y + b.y)
 }
-scale: (Point, Float) -> Point = (p, s) => {
+scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
@@ -1448,7 +1442,7 @@ Point.scale = scale[0]
 # === Math.yx ===
 
 # 全局函数
-multiply_by_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => { ... }
+multiply_by_scale: (scale: Float, a: Point, b: Point) -> Float = { ... }
 
 # === main.yx ===
 
@@ -1478,14 +1472,14 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 type Point = { x: Float, y: Float }
 
 # 非 pub 函数
-internal_distance: (a: Point, b: Point) -> Float = (a, b) => {
+internal_distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
 # pub 函数
-pub distance: (a: Point, b: Point) -> Float = (a, b) => {
+pub distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1510,13 +1504,13 @@ p1.distance(p2)      # ✅ distance 是 pub，可自动绑定
 type Point = { x: Float, y: Float }
 
 # 使用 pub 声明，编译器自动绑定
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
+pub translate: (self: Point, dx: Float, dy: Float) -> Point = {
     Point(self.x + dx, self.y + dy)
 }
 
@@ -1557,7 +1551,7 @@ p3 = p1.translate(1.0, 1.0)
 
 type Point = { x: Float, y: Float }
 
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1620,15 +1614,15 @@ YaoXiang 的语法设计特别考虑了 AI 代码生成和修改的需求：
 # ✅ 推荐：使用完整的新语法声明 + 类型集中约定
 # AI可以准确理解意图，生成完整类型信息
 
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
-empty: () -> Void = () => {}
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
+empty: () -> Void = {}
 
 # ❌ 避免：省略类型标注或类型分散
 # AI无法确定参数类型，可能生成错误代码
-add = (a, b) => a + b          # 参数无类型
-identity = x => x              # 参数无类型
-add2 = (a: Int, b: Int) => a + b  # 类型分散在实现中
+add: (a: Int, b: Int) -> Int = a + b          # 参数无类型
+identity: [T](x: T) -> T = x              # 参数无类型
+add2: (a: Int, b: Int) -> Int = a + b  # 类型分散在实现中
 
 # ⚠️ 兼容：旧语法仅用于维护
 # AI应优先生成新语法 + 类型集中约定
@@ -1697,7 +1691,7 @@ if condition    # 缺少花括号
 
 # 1. 禁止省略括号
 # ✅ 正确
-foo: (T) -> T = (x) => x
+foo: [T](x: T) -> T = x
 my_list = [1, 2, 3]
 
 # ❌ 错误（禁止）
@@ -1706,20 +1700,20 @@ my_list = [1 2 3]       # 列表必须有逗号
 
 # 2. 必须显式返回类型或可推断的形式
 # ✅ 正确
-get_num: () -> Int = () => 42
-get_num2: () = () => 42          # 返回类型可推断
+get_num: () -> Int = 42
+get_num2: () = 42          # 返回类型可推断
 
 # ❌ 错误
 get_bad = () => { 42 }           # 块中无return，无法推断
 
 # 3. 参数必须有类型标注（新语法）
 # ✅ 正确
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = x => x + 1
+add: (a: Int, b: Int) -> Int = a + b
+inc: (x: Int) -> Int = x + 1
 
 # ❌ 错误
-add = (a, b) => a + b            # 参数无类型
-identity = x => x                # 参数无类型
+add: (a: Int, b: Int) -> Int = a + b            # 参数无类型
+identity: [T](x: T) -> T = x                # 参数无类型
 ```
 
 #### 8.2.5 AI生成推荐模式
@@ -1728,25 +1722,25 @@ identity = x => x                # 参数无类型
 # AI生成函数时的标准模板
 
 # 模式1：完整类型标注
-function_name: (ParamType1, ParamType2, ...) -> ReturnType = (param1, param2, ...) => {
+function_name: (param1: ParamType1, param2: ParamType2, ...) -> ReturnType = {
     # 函数体
     return expression
 }
 
 # 模式2：返回类型推断
-function_name: (ParamType1, ParamType2) = (param1, param2) => {
+function_name: (param1: ParamType1, param2: ParamType2) = {
     # 函数体
     return expression
 }
 
 # 模式3：单参数简写
-function_name: ParamType -> ReturnType = param => expression
+function_name: (param: ParamType) -> ReturnType = expression
 
 # 模式4：无参函数
-function_name: () -> ReturnType = () => expression
+function_name: () -> ReturnType = expression
 
 # 模式5：空函数
-function_name: () -> Void = () => {}
+function_name: () -> Void = {}
 ```
 
 ### 8.3 错误消息的AI友好性
@@ -1760,7 +1754,7 @@ function_name: () -> Void = () => {}
 # AI友好的错误
 # Missing type annotation for parameter 'a'
 # Suggestion: add ': Int' or similar type to '(a, b) => a + b'
-# Correct version: add: (Int, Int) -> Int = (a, b) => a + b
+# Correct version: add: (a: Int, b: Int) -> Int = a + b
 ```
 
 ---
@@ -1773,10 +1767,10 @@ YaoXiang 的核心设计约定是**"声明优先，类型集中"**。这个约�
 
 ```yaoxiang
 # ✅ 核心约定：类型信息统一在声明行
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ❌ 避免：类型信息分散在实现中
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 ```
 
 ### 9.2 约定的五个核心优势
@@ -1786,15 +1780,15 @@ add = (a: Int, b: Int) => a + b
 # 所有声明都遵循相同格式
 x: Int = 42                           # 变量
 name: String = "YaoXiang"             # 变量
-add: (Int, Int) -> Int = (a, b) => a + b  # 函数
-inc: Int -> Int = x => x + 1          # 函数
+add: (a: Int, b: Int) -> Int = a + b  # 函数
+inc: (x: Int) -> Int = x + 1          # 函数
 type Point = { x: Float, y: Float } # 类型
 ```
 
 #### 2. 声明与实现分离
 ```yaoxiang
 # 声明行提供完整类型信息
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 # └────────────────────┘
 #   完整的函数签名
 
@@ -1810,26 +1804,26 @@ add: (Int, Int) -> Int = (a, b) => a + b
 # 3. 修改类型 → 只改声明行，不影响实现
 
 # 对比：类型分散方式
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 # AI需要：分析实现体提取类型信息 → 更复杂，易出错
 ```
 
 #### 4. 修改更安全
 ```yaoxiang
 # 修改参数类型
-# 原来: add: (Int, Int) -> Int = (a, b) => a + b
+# 原来: add: (a: Int, b: Int) -> Int = a + b
 # 修改: add: (Float, Float) -> Float = (a, b) => a + b
 # 实现体: (a, b) => a + b  无需修改！
 
 # 如果类型分散：
-# 原来: add = (a: Int, b: Int) => a + b
-# 修改: add = (a: Float, b: Float) => a + b  # 需要改两处
+# 原来: add: (a: Int, b: Int) -> Int = a + b
+# 修改: add: (a: Float, b: Float) -> Float = a + b  # 需要改两处
 ```
 
 #### 5. 柯里化友好
 ```yaoxiang
 # 柯里化类型一目了然
-add_curried: Int -> Int -> Int = a => b => a + b
+add_curried: (a: Int) -> (b: Int) -> Int = a + b
 #              └─────────────┘
 #              柯里化签名
 
@@ -1842,11 +1836,11 @@ compose: (Int -> Int, Int -> Int) -> Int -> Int = (f, g) => x => f(g(x))
 #### 规则1：参数必须在声明中指定类型
 ```yaoxiang
 # ✅ 正确
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ❌ 错误
-add = (a, b) => a + b            # 参数类型缺失
-identity = x => x                # 参数类型缺失
+add: (a: Int, b: Int) -> Int = a + b            # 参数类型缺失
+identity: [T](x: T) -> T = x                # 参数类型缺失
 ```
 
 #### 规则2：返回类型可推断但推荐标注
@@ -1864,13 +1858,13 @@ empty: () = () => {}
 #### 规则3：Lambda内部类型注解是临时的
 ```yaoxiang
 # ✅ 正确：依赖声明中的类型
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # ⚠️ 可以但不推荐：Lambda内重复标注
 add: (Int, Int) -> Int = (a: Int, b: Int) => a + b
 
 # ❌ 错误：缺少声明标注
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 ```
 
 #### 规则4：旧语法遵循相同理念
@@ -1888,7 +1882,7 @@ add(Int, Int) -> Int = (a, b) => a + b
 # 约定不阻止类型推断，而是引导推断方向
 
 # 1. 完整标注（不推断）
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 2. 部分推断（声明提供参数类型）
 add: (Int, Int) = (a, b) => a + b  # 返回类型推断
@@ -1909,7 +1903,7 @@ empty: () = () => {}  # 推断为 () -> Void
 
 2. **填充实现** → 无需类型分析
    ```
-   实现：add: (Int, Int) -> Int = (a, b) => a + b
+   实现：add: (a: Int, b: Int) -> Int = a + b
    ```
 
 3. **类型修改** → 只改声明
@@ -1948,23 +1942,23 @@ AI需要：
 # === 推荐做法：类型集中约定 ===
 
 # 模块声明
-pub add: (Int, Int) -> Int = (a, b) => a + b
-pub multiply: (Int, Int) -> Int = (a, b) => a * b
+pub add: (a: Int, b: Int) -> Int = a + b
+pub multiply: (a: Int, b: Int) -> Int = a * b
 
 # 高阶函数
-pub apply_twice: (Int -> Int, Int) -> Int = (f, x) => f(f(x))
+pub apply_twice: (f: Int -> Int, x: Int) -> Int = f(f(x))
 
 # 柯里化函数
-pub make_adder: Int -> (Int -> Int) = x => y => x + y
+pub make_adder: (x: Int) -> (Int) -> Int = y => x + y
 
 # 泛型函数
-pub map: [A, B]((A) -> B, List[A]) -> List[B] = (f, xs) => case xs of
+pub map: [A, B](f: (A) -> B, xs: List[A]) -> List[B] = case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
 # 类型定义
 type Point = { x: Float, y: Float }
-pub distance: (Point, Point) -> Float = (a, b) => {
+pub distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -1973,7 +1967,7 @@ pub distance: (Point, Point) -> Float = (a, b) => {
 # === 不推荐做法：类型分散 ===
 
 # 参数类型在Lambda中
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 multiply = (a: Int, b: Int) => a * b
 
 # 高阶函数类型分散
@@ -1995,19 +1989,19 @@ map = [A, B](f: (A) -> B, xs: List[A]) => List[B] => case xs of
 
 # === 推荐做法：只需改声明行 ===
 # 原来
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 修改后
-add: (Float, Float) -> Float = (a, b) => a + b
+add: (a: Float, b: Float) -> Float = a + b
 #              ↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑↑
 #              声明行修改          实现体保持不变
 
 # === 不推荐做法：需要改多处 ===
 # 原来
-add = (a: Int, b: Int) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 修改后
-add = (a: Float, b: Float) => a + b
+add: (a: Float, b: Float) -> Float = a + b
 #     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 #     所有参数类型都需要修改
 ```
@@ -2019,10 +2013,10 @@ add = (a: Float, b: Float) => a + b
 
 # === AI看到推荐写法时 ===
 type Point = { x: Float, y: Float }
-pub manhattan: (Point, Point) -> Float = ???  # AI直接知道完整签名
+pub manhattan: (a: Point, b: Point) -> Float = ???  # AI直接知道完整签名
 
 # AI生成：
-pub manhattan: (Point, Point) -> Float = (a, b) => {
+pub manhattan: (a: Point, b: Point) -> Float = {
     (a.x - b.x).abs() + (a.y - b.y).abs()
 }
 
@@ -2059,7 +2053,7 @@ pub manhattan = (a: Point, b: Point) => Float => {
 # hello.yx
 use std.io
 
-main: () -> Void = () => {
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -2080,7 +2074,7 @@ name = "YaoXiang"         # 自动推断为 String
 pi = 3.14159              # 自动推断为 Float
 
 # 函数（使用新语法）
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 条件
 if x > 0 {
@@ -2105,7 +2099,7 @@ for i in 0..10 {
 type Point = { x: Float, y: Float }
 
 # 核心函数
-distance: (Point, Point) -> Float = (a, b) => {
+distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
@@ -2118,10 +2112,10 @@ Point.distance = distance[0]
 
 use Point
 
-main: () -> Void = () => {
+main: () -> Void = {
     p1 = Point(3.0, 4.0)
     p2 = Point(1.0, 2.0)
-    
+
     # 使用绑定
     d = p1.distance(p2)  # distance(p1, p2)
     print(d)
@@ -2133,9 +2127,9 @@ main: () -> Void = () => {
 ```yaoxiang
 # === Math.yx ===
 
-distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = (s, p1, p2) => {
-    dx = (p1.x - p2.x) * s
-    dy = (p1.y - p2.y) * s
+distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = {
+    dx = (p1.x - p2.x) * scale
+    dy = (p1.y - p2.y) * scale
     (dx * dx + dy * dy).sqrt()
 }
 

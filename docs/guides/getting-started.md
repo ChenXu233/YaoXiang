@@ -44,8 +44,8 @@ cargo test
 # hello.yx
 use std.io
 
-# 函数定义: name: (types) -> return_type = (params) => body
-main: () -> Void = () => {
+# 函数定义: name: (param: Type, ...) -> return_type = { ... }
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -91,13 +91,13 @@ counter = counter + 1     # ✅ OK
 
 ```yaoxiang
 # 函数定义语法
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 调用
 result = add(1, 2)        # result = 3
 
 # 单参数函数
-inc: Int -> Int = x => x + 1
+inc: (x: Int) -> Int = x + 1
 ```
 
 ### 类型定义
@@ -110,7 +110,7 @@ x: Int = 42
 name: String = "YaoXiang"
 
 # 函数定义
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 类型定义（使用花括号）
 type Point = { x: Float, y: Float }
@@ -161,11 +161,11 @@ type EmptyInterface = {}
 type Point = { x: Float, y: Float }
 
 # 类型方法定义
-Point.draw: (Point, Surface) -> Void = (self, surface) => {
+Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-Point.serialize: (Point) -> String = (self) => {
+Point.serialize: (self: Point) -> String = {
     "Point(${self.x}, ${self.y})"
 }
 
@@ -183,7 +183,7 @@ str = p.serialize()      # → Point.serialize(p)
 type Point = { x: Float, y: Float }
 
 # pub 声明自动绑定到 Point
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
@@ -288,12 +288,12 @@ YaoXiang 的独特特性：使用 `spawn` 标记的函数自动获得异步能�
 
 ```yaoxiang
 # 定义并作函数（自动异步执行）
-fetch_data: (String) -> JSON spawn = (url) => {
+fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
 # 调用并作函数（自动并行，无需 await）
-main: () -> Void = () => {
+main: () -> Void = {
     # 两次调用自动并行执行
     user = fetch_user(1)     # 自动并行
     posts = fetch_posts()    # 自动并行
@@ -330,7 +330,7 @@ x = 20                       # ✅ OK
 
 ```yaoxiang
 # 完整形式（推荐）
-add: (Int, Int) -> Int = (a, b) => a + b
+add: (a: Int, b: Int) -> Int = a + b
 
 # 简短形式（类型推断）
 add = (a, b) => a + b

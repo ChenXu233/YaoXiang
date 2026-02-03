@@ -3,7 +3,7 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-20
-> **最后更新**: 2025-01-25（集成RFC-011泛型系统，补充泛型依赖说明）
+> **最后更新**: 2025-02-03（统一语法风格：参数名在签名中声明，函数体用 = { ... }）
 
 ## 摘要
 
@@ -12,10 +12,10 @@
 核心思想：
 - 变量/函数：`name: type = value`
 - 类型定义：`type Name = { ... }`
-- 接口定义：`type InterfaceName = { method: (...) -> ... }`
-- 类型方法：`Type.method: (Type, ...) -> ReturnType = (self, ...) => ...`
-- 普通方法：`name: (Type, ...) -> ReturnType = (param, ...) => ...`
-- 自动绑定：`pub name: (Type, ...) -> ReturnType = ...` → 自动绑定到类型
+- 接口定义：`type InterfaceName = { method: (param: Type) -> Ret }`
+- 类型方法：`Type.method: (self: Type, param: Type) -> Ret = { ... }`
+- 普通方法：`name: (param: Type) -> Ret = { ... }`
+- 自动绑定：`pub name: (param: Type) -> Ret = ...` → 自动绑定到类型
 
 ```yaoxiang
 # 核心语法：统一 + 区分
@@ -23,8 +23,8 @@
 # 变量
 x: Int = 42
 
-# 函数
-add: (Int, Int) -> Int = (a, b) => a + b
+# 函数（参数名在签名中）
+add: (a: Int, b: Int) -> Int = a + b
 
 # 类型定义（type 关键字前置，更直观）
 type Point = {
@@ -36,20 +36,20 @@ type Point = {
 
 # 接口定义
 type Drawable = {
-    draw: (Surface) -> Void
+    draw: (self: Self, surface: Surface) -> Void
 }
 
 type Serializable = {
-    serialize: () -> String
+    serialize: (self: Self) -> String
 }
 
-# 方法定义
-Point.draw: (Point, Surface) -> Void = (self, surface) => {
+# 方法定义（使用 Type.method 语法糖）
+Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+Point.serialize: (self: Point) -> String = {
+    return "Point(${self.x}, ${self.y})"
 }
 
 # 使用
@@ -117,14 +117,14 @@ type Array[T, N: Int] = { data: T[N], length: N }
 │   ├── type Point = { x: Float, y: Float }
 │   └── type Drawable = { draw: (Surface) -> Void }
 │
-├── 类型方法：Type.method: (Type, ...) -> Return = ...
-│   └── Point.draw: (Point, Surface) -> Void = (self, s) => ...
+├── 类型方法：Type.method: (self: Type, ...) -> Return = ...
+│   └── Point.draw: (self: Point, surface: Surface) -> Void = ...
 │
-├── 普通方法：name: (Type, ...) -> Return = ...
-│   └── distance: (Point, Point) -> Float = (p1, p2) => ...
+├── 普通方法：name: (param: Type, ...) -> Return = ...
+│   └── distance: (p1: Point, p2: Point) -> Float = ...
 │
-└── 自动绑定：pub name: (Type, ...) -> Return = ...
-    └── pub draw: (Point, Surface) -> Void = ...  → 自动绑定到 Point.draw
+└── 自动绑定：pub name: (param: Type, ...) -> Return = ...
+    └── pub draw: (self: Point, surface: Surface) -> Void = ...  → 自动绑定到 Point.draw
 ```
 
 ### 语法定义
@@ -144,23 +144,27 @@ y = 100  # 推断为 Int
 #### 2. 函数定义
 
 ```yaoxiang
-# 完整语法
-add: (Int, Int) -> Int = (a, b) => { return a + b }
+# 完整语法（参数名在签名中声明）
+add: (a: Int, b: Int) -> Int = {
+    return a + b
+}
 
 # 带参数名
-greet: (String) -> String = (name) => { return "Hello, ${name}!" }
+greet: (name: String) -> String = {
+    return "Hello, ${name}!"
+}
 
 # 多参数
-calc: (x: Float, y: Float, op: String) -> Float = (x, y, op) => {
-    match op {
-        "+" -> return x + y,
-        "-" -> return x - y,
-        _ -> return 0.0
+calc: (x: Float, y: Float, op: String) -> Float = {
+    return match op {
+        "+" -> x + y,
+        "-" -> x - y,
+        _ -> 0.0
     }
 }
 
 # 多行函数体
-calc2: (x: Float, y: Float) -> Float = (x, y) => {
+calc2: (x: Float, y: Float) -> Float = {
     if x > y {
         return x
     }
@@ -174,18 +178,20 @@ calc2: (x: Float, y: Float) -> Float = (x, y) => {
 
 ```yaoxiang
 # 非 Void 返回类型 - 必须使用 return
-add: (Int, Int) -> Int = (a, b) => { return a + b }
-
-# Void 返回类型 - 可选使用 return（通常省略）
-print: (String) -> () = (msg) => {
-    # 不需要 return，或者可以写 return
+add: (a: Int, b: Int) -> Int = {
+    return a + b
 }
 
-# 单行表达式（推荐使用花括号和 return）
-greet: (String) -> String = (name) => { return "Hello, ${name}!" }
+# Void 返回类型 - 可选使用 return（通常省略）
+print: (msg: String) -> Void = {
+    # 不需要 return
+}
+
+# 单行表达式（直接返回值，无需 return）
+greet: (name: String) -> String = "Hello, ${name}!"
 
 # 多行函数体 - 必须使用 return
-max: (Int, Int) -> Int = (a, b) => {
+max: (a: Int, b: Int) -> Int = {
     if a > b {
         return a
     } else {
@@ -235,25 +241,25 @@ type Empty = {}
 #### 5. 方法定义
 
 ```yaoxiang
-# 类型方法：关联到特定类型
-Point.draw: (Point, Surface) -> Void = (self, surface) => {
+# 类型方法：关联到特定类型（使用 Type.method 语法）
+Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-Point.serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+Point.serialize: (self: Point) -> String = {
+    return "Point(${self.x}, ${self.y})"
 }
 
 # 普通方法：不关联类型，作为独立函数
-distance: (Point, Point) -> Float = (p1, p2) => {
+distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # 类型推导（可省略）
-Point.draw = (self, surface) => surface.plot(self.x, self.y)
-Point.serialize = (self) => "Point(${self.x}, ${self.y})"
+Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
+Point.serialize = (self: Point) => "Point(${self.x}, ${self.y})"
 ```
 
 #### 6. 方法绑定：普通方法 ↔ 类型方法
@@ -264,10 +270,10 @@ Point.serialize = (self) => "Point(${self.x}, ${self.y})"
 
 ```yaoxiang
 # 使用 pub 声明，编译器自动绑定
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # 编译器自动推断：
@@ -287,7 +293,7 @@ d2 = p1.distance(p2)  # → distance(p1, p2)
 
 ```yaoxiang
 # 显式绑定（用于非 pub 或需要指定位置）
-distance: (Point, Point) -> Float = (p1, p2) => ...
+distance: (p1: Point, p2: Point) -> Float = ...
 Point.distance = distance[0]
 
 # 或指定绑定位置
@@ -298,7 +304,7 @@ Point.distance = distance[0]
 
 ```yaoxiang
 # 函数接收多个 Point 参数
-transform_points: (Point, Point, Float) -> Point = (p1, p2, factor) => {
+transform_points: (p1: Point, p2: Point, factor: Float) -> Point = {
     # ...
 }
 
@@ -313,12 +319,12 @@ p1.transform(p2)(2.0)  # → transform_points(p1, p2, 2.0)
 
 ```yaoxiang
 # 类型方法
-Point.draw: (Point, Surface) -> Void = (self, surface) => {
+Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
 # 提取为普通函数（不绑定 this）
-draw_point: (Point, Surface) -> Void = Point.draw
+draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 
 # 或绑定到特定位置
 # 如果 transform(Vector, Point) 的签名是 transform(v, p)
@@ -346,24 +352,24 @@ func process[T: Drawable & Serializable](item: T) -> String {
 type List[T] = {
     data: Array[T],
     length: Int,
-    push: [T](List[T], T) -> Void,
-    get: [T](List[T], Int) -> Maybe[T]
+    push: [T](self: List[T], item: T) -> Void,
+    get: [T](self: List[T], index: Int) -> Maybe[T]
 }
 
 # 具体实例化（RFC-011语法）
 type IntList = List[Int]
 
 # 泛型方法（RFC-011语法）
-List.push[T]: (List[T], T) -> Void = (self, item) => {
+List.push: [T](self: List[T], item: T) -> Void = {
     self.data.append(item)
     self.length = self.length + 1
 }
 
-List.get[T]: (List[T], Int) -> Maybe[T] = (self, index) => {
+List.get: [T](self: List[T], index: Int) -> Maybe[T] = {
     if index >= 0 && index < self.length {
-        Maybe.Just(self.data[index])
+        return Maybe.Just(self.data[index])
     } else {
-        Maybe.Nothing
+        return Maybe.Nothing
     }
 }
 ```
@@ -376,17 +382,17 @@ List.get[T]: (List[T], Int) -> Maybe[T] = (self, index) => {
 # ======== 1. 接口定义 ========
 
 type Drawable = {
-    draw: (Surface) -> Void,
-    bounding_box: () -> Rect
+    draw: (self: Self, surface: Surface) -> Void,
+    bounding_box: (self: Self) -> Rect
 }
 
 type Serializable = {
-    serialize: () -> String
+    serialize: (self: Self) -> String
 }
 
 type Transformable = {
-    translate: (Transformable, Float, Float) -> Transformable,
-    scale: (Transformable, Float) -> Transformable
+    translate: (self: Self, dx: Float, dy: Float) -> Self,
+    scale: (self: Self, factor: Float) -> Self
 }
 
 # ======== 2. 类型定义 ========
@@ -414,50 +420,50 @@ type Rect = {
 # 使用 pub 声明，编译器自动绑定到类型
 # 绑定规则：第一个 Point 参数 → 方法名取函数名
 
-pub draw: (Point, Surface) -> Void = (self, surface) => {
+pub draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-pub bounding_box: (Point) -> Rect = (self) => {
-    Rect(self.x - 1, self.y - 1, 2, 2)
+pub bounding_box: (self: Point) -> Rect = {
+    return Rect(self.x - 1, self.y - 1, 2, 2)
 }
 
-pub serialize: (Point) -> String = (self) => {
-    "Point(${self.x}, ${self.y})"
+pub serialize: (self: Point) -> String = {
+    return "Point(${self.x}, ${self.y})"
 }
 
-pub translate: (Point, Float, Float) -> Point = (self, dx, dy) => {
-    Point(self.x + dx, self.y + dy)
+pub translate: (self: Point, dx: Float, dy: Float) -> Point = {
+    return Point(self.x + dx, self.y + dy)
 }
 
-pub scale: (Point, Float) -> Point = (self, factor) => {
-    Point(self.x * factor, self.y * factor)
+pub scale: (self: Point, factor: Float) -> Point = {
+    return Point(self.x * factor, self.y * factor)
 }
 
 # 普通方法（pub，自动绑定到 Point.distance）
-pub distance: (Point, Point) -> Float = (p1, p2) => {
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 # Rect 的方法
-pub draw: (Rect, Surface) -> Void = (self, surface) => {
+pub draw: (self: Rect, surface: Surface) -> Void = {
     surface.draw_rect(self.x, self.y, self.width, self.height)
 }
 
-pub bounding_box: (Rect) -> Rect = (self) => self
+pub bounding_box: (self: Rect) -> Rect = self
 
-pub serialize: (Rect) -> String = (self) => {
-    "Rect(${self.x}, ${self.y}, ${self.width}, ${self.height})"
+pub serialize: (self: Rect) -> String = {
+    return "Rect(${self.x}, ${self.y}, ${self.width}, ${self.height})"
 }
 
-pub translate: (Rect, Float, Float) -> Rect = (self, dx, dy) => {
-    Rect(self.x + dx, self.y + dy, self.width, self.height)
+pub translate: (self: Rect, dx: Float, dy: Float) -> Rect = {
+    return Rect(self.x + dx, self.y + dy, self.width, self.height)
 }
 
-pub scale: (Rect, Float) -> Rect = (self, factor) => {
-    Rect(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
+pub scale: (self: Rect, factor: Float) -> Rect = {
+    return Rect(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
 }
 
 # ======== 4. 使用 ========
@@ -557,13 +563,13 @@ fn check_type_implements_interface(
 ```yaoxiang
 # 只要有相同方法，就可以赋值给接口类型
 type CustomPoint = {
-    draw: (CustomPoint, Surface) -> Void,
+    draw: (self: CustomPoint, surface: Surface) -> Void,
     x: Float,
     y: Float
 }
 
 custom: CustomPoint = CustomPoint(
-    (self, s) => s.plot(self.x, self.y),
+    (self, surface) => surface.plot(self.x, self.y),
     1.0,
     2.0
 )
@@ -604,12 +610,12 @@ custom: CustomPoint = CustomPoint(
 # 1. 清晰的错误信息
 # 编译错误示例：
 # Error: Point does not implement Serializable
-#   Required method 'serialize: () -> String' not found
+#   Required method 'serialize: (self: Point) -> String' not found
 #   Note: Define Point.serialize to implement Serializable
 
 # 2. 类型推导
 # 可以省略类型，由编译器推导
-Point.draw = (self, surface) => surface.plot(self.x, self.y)
+Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 
 # 3. IDE 提示
 # IDE 自动提示缺失的方法
@@ -668,9 +674,9 @@ Point.draw = (self, surface) => surface.plot(self.x, self.y)
 ```bnf
 program ::= statement*
 
-statement ::= type_declaration | declaration | expression
+statement ::= type_declaration | function | expression
 
-# 类型定义：type Name = type_expression
+# 类型定义：type Name = { ... }
 type_declaration ::= 'type' identifier type_params? '=' type_expression
 
 type_params ::= '[' identifier (',' identifier)* ']'
@@ -682,8 +688,15 @@ type_expression ::= identifier
 type_field ::= identifier ':' type_expression
              | identifier   # 接口约束
 
-# 变量/函数声明：name: type = value
-declaration ::= identifier ':' type '=' expression
+# 函数声明：name: (param: Type, ...) -> Ret = { ... }
+# 参数名在签名中声明，函数体直接使用参数名
+function ::= identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
+
+generic_params ::= '[' identifier (',' identifier)* ']'
+
+parameters ::= parameter (',' parameter)*
+
+parameter ::= identifier ':' type
 
 type ::= identifier
        | '(' type (',' type)* ')' '->' type
@@ -700,10 +713,6 @@ expression ::= literal
               | '{' field ':' expression (',' field ':' expression)* '}'
 
 lambda ::= '(' parameters? ')' '=>' block
-
-parameters ::= parameter (',' parameter)*
-
-parameter ::= identifier ':' type
 
 block ::= expression | '{' expression* '}'
 ```

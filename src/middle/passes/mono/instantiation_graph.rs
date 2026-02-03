@@ -8,9 +8,7 @@ use std::hash::Hash;
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::middle::passes::mono::instance::{
-    FunctionId, GenericFunctionId, GenericTypeId, TypeId,
-};
+use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 
 /// 实例化图中的节点
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -70,7 +68,10 @@ pub struct FunctionInstanceNode {
 
 impl FunctionInstanceNode {
     /// 创建新的函数实例化节点
-    pub fn new(generic_id: GenericFunctionId, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        generic_id: GenericFunctionId,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         Self {
             generic_id,
             type_args,
@@ -80,11 +81,7 @@ impl FunctionInstanceNode {
 
     /// 获取特化后的名称
     pub fn specialized_name(&self) -> String {
-        let type_args_str: Vec<String> = self
-            .type_args
-            .iter()
-            .map(|t| t.type_name())
-            .collect();
+        let type_args_str: Vec<String> = self.type_args.iter().map(|t| t.type_name()).collect();
         format!("{}_{}", self.generic_id.name(), type_args_str.join("_"))
     }
 
@@ -95,14 +92,20 @@ impl FunctionInstanceNode {
 }
 
 impl Hash for FunctionInstanceNode {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.generic_id.name().hash(state);
         self.type_args_key().hash(state);
     }
 }
 
 impl PartialEq for FunctionInstanceNode {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.generic_id.name() == other.generic_id.name()
             && self.type_args_key() == other.type_args_key()
     }
@@ -123,7 +126,10 @@ pub struct TypeInstanceNode {
 
 impl TypeInstanceNode {
     /// 创建新的类型实例化节点
-    pub fn new(generic_id: GenericTypeId, type_args: Vec<MonoType>) -> Self {
+    pub fn new(
+        generic_id: GenericTypeId,
+        type_args: Vec<MonoType>,
+    ) -> Self {
         Self {
             generic_id,
             type_args,
@@ -133,11 +139,7 @@ impl TypeInstanceNode {
 
     /// 获取特化后的名称
     pub fn specialized_name(&self) -> String {
-        let type_args_str: Vec<String> = self
-            .type_args
-            .iter()
-            .map(|t| t.type_name())
-            .collect();
+        let type_args_str: Vec<String> = self.type_args.iter().map(|t| t.type_name()).collect();
         format!("{}_{}", self.generic_id.name(), type_args_str.join("_"))
     }
 
@@ -148,14 +150,20 @@ impl TypeInstanceNode {
 }
 
 impl Hash for TypeInstanceNode {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.generic_id.name().hash(state);
         self.type_args_key().hash(state);
     }
 }
 
 impl PartialEq for TypeInstanceNode {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.generic_id.name() == other.generic_id.name()
             && self.type_args_key() == other.type_args_key()
     }
@@ -198,10 +206,8 @@ impl InstantiationGraph {
     ) -> FunctionInstanceNode {
         let node = InstanceNode::Function(FunctionInstanceNode::new(generic_id, type_args));
         self.nodes.insert(node.clone());
-        self.edges.entry(node.clone()).or_insert_with(HashSet::new);
-        self.reverse_edges
-            .entry(node.clone())
-            .or_insert_with(HashSet::new);
+        self.edges.entry(node.clone()).or_default();
+        self.reverse_edges.entry(node.clone()).or_default();
 
         // 返回函数节点（剥离包装）
         if let InstanceNode::Function(f) = node {
@@ -219,10 +225,8 @@ impl InstantiationGraph {
     ) -> TypeInstanceNode {
         let node = InstanceNode::Type(TypeInstanceNode::new(generic_id, type_args));
         self.nodes.insert(node.clone());
-        self.edges.entry(node.clone()).or_insert_with(HashSet::new);
-        self.reverse_edges
-            .entry(node.clone())
-            .or_insert_with(HashSet::new);
+        self.edges.entry(node.clone()).or_default();
+        self.reverse_edges.entry(node.clone()).or_default();
 
         // 返回类型节点（剥离包装）
         if let InstanceNode::Type(t) = node {
@@ -235,7 +239,11 @@ impl InstantiationGraph {
     /// 添加依赖边：A 使用 B
     ///
     /// 在实例化 A 时，需要实例化 B
-    pub fn add_dependency(&mut self, user: &InstanceNode, used: &InstanceNode) {
+    pub fn add_dependency(
+        &mut self,
+        user: &InstanceNode,
+        used: &InstanceNode,
+    ) {
         // 确保两个节点都存在
         if !self.nodes.contains(user) {
             self.nodes.insert(user.clone());
@@ -260,28 +268,36 @@ impl InstantiationGraph {
     }
 
     /// 批量添加依赖边
-    pub fn add_dependencies(&mut self, user: &InstanceNode, used: &[InstanceNode]) {
+    pub fn add_dependencies(
+        &mut self,
+        user: &InstanceNode,
+        used: &[InstanceNode],
+    ) {
         for u in used {
             self.add_dependency(user, u);
         }
     }
 
     /// 标记入口点
-    pub fn add_entry_point(&mut self, node: InstanceNode) {
+    pub fn add_entry_point(
+        &mut self,
+        node: InstanceNode,
+    ) {
         if self.nodes.contains(&node) {
             self.entry_points.insert(node);
         } else {
             self.nodes.insert(node.clone());
             self.edges.insert(node.clone(), HashSet::new());
-            self.reverse_edges
-                .entry(node.clone())
-                .or_insert_with(HashSet::new);
+            self.reverse_edges.entry(node.clone()).or_default();
             self.entry_points.insert(node);
         }
     }
 
     /// 从函数IR中提取依赖的类型
-    pub fn extract_dependencies_from_function(&self, ir: &FunctionIR) -> Vec<MonoType> {
+    pub fn extract_dependencies_from_function(
+        &self,
+        ir: &FunctionIR,
+    ) -> Vec<MonoType> {
         let mut dependencies = Vec::new();
 
         for block in &ir.blocks {
@@ -301,12 +317,20 @@ impl InstantiationGraph {
     ) {
         match inst {
             // 函数调用
-            Instruction::Call { func, args: _, dst: _ } => {
+            Instruction::Call {
+                func: _,
+                args: _,
+                dst: _,
+            } => {
                 // 从 func Operand 提取类型
                 // 这需要解析 Operand 的类型信息
             }
             // 动态调用
-            Instruction::CallDyn { func: _, args: _, dst: _ } => {
+            Instruction::CallDyn {
+                func: _,
+                args: _,
+                dst: _,
+            } => {
                 // 从 func Operand 提取类型
             }
             // 虚方法调用
@@ -319,12 +343,11 @@ impl InstantiationGraph {
                 // 从 obj 提取类型
             }
             // 返回指令可能包含类型
-            Instruction::Ret(opt) => {
-                if let Some(op) = opt {
-                    // 从 Operand 提取类型
-                    self.extract_type_from_operand(op, deps);
-                }
+            Instruction::Ret(Some(op)) => {
+                // 从 Operand 提取类型
+                self.extract_type_from_operand(op, deps);
             }
+            Instruction::Ret(None) => {}
             // 分配指令包含类型信息
             Instruction::Alloc { size: _, dst } => {
                 self.extract_type_from_operand(dst, deps);
@@ -345,7 +368,11 @@ impl InstantiationGraph {
     }
 
     /// 从操作数提取类型
-    fn extract_type_from_operand(&self, _op: &Operand, _deps: &mut Vec<MonoType>) {
+    fn extract_type_from_operand(
+        &self,
+        _op: &Operand,
+        _deps: &mut Vec<MonoType>,
+    ) {
         // Operand 本身不直接包含类型信息
         // 类型信息需要从 FunctionIR.params 和 locals 获取
         // 这里留空实现，实际使用时需要传入类型上下文
@@ -362,12 +389,18 @@ impl InstantiationGraph {
     }
 
     /// 获取节点的依赖（该节点使用了哪些节点）
-    pub fn dependencies(&self, node: &InstanceNode) -> Option<&HashSet<InstanceNode>> {
+    pub fn dependencies(
+        &self,
+        node: &InstanceNode,
+    ) -> Option<&HashSet<InstanceNode>> {
         self.edges.get(node)
     }
 
     /// 获取使用该节点的节点（被哪些节点使用）
-    pub fn dependents(&self, node: &InstanceNode) -> Option<&HashSet<InstanceNode>> {
+    pub fn dependents(
+        &self,
+        node: &InstanceNode,
+    ) -> Option<&HashSet<InstanceNode>> {
         self.reverse_edges.get(node)
     }
 
@@ -419,7 +452,10 @@ impl<'a> InstantiationGraphBuilder<'a> {
     }
 
     /// 设置外部图（用于跨模块分析）
-    pub fn with_external_graph(mut self, graph: &'a InstantiationGraph) -> Self {
+    pub fn with_external_graph(
+        mut self,
+        graph: &'a InstantiationGraph,
+    ) -> Self {
         self.external_graph = Some(graph);
         self
     }
@@ -435,7 +471,11 @@ impl<'a> InstantiationGraphBuilder<'a> {
     }
 
     /// 注册泛型类型
-    pub fn register_generic_type(&mut self, generic_id: GenericTypeId, ty: MonoType) {
+    pub fn register_generic_type(
+        &mut self,
+        generic_id: GenericTypeId,
+        ty: MonoType,
+    ) {
         self.generic_types
             .insert(generic_id.name().to_string(), (generic_id, ty));
     }
@@ -452,7 +492,7 @@ impl<'a> InstantiationGraphBuilder<'a> {
         let mut graph = InstantiationGraph::new();
 
         // 1. 添加所有实例化节点
-        for (func_id, ir) in instantiated_functions {
+        for func_id in instantiated_functions.keys() {
             let generic_id = GenericFunctionId::new(
                 func_id.name().to_string(),
                 vec![], // TODO: 从 func_id 提取类型参数
@@ -477,7 +517,7 @@ impl<'a> InstantiationGraphBuilder<'a> {
             let deps = graph.extract_dependencies_from_function(ir);
             let dep_nodes: Vec<InstanceNode> = deps
                 .iter()
-                .filter_map(|ty| Self::type_to_instance_node(ty))
+                .filter_map(Self::type_to_instance_node)
                 .collect();
 
             graph.add_dependencies(&node, &dep_nodes);
@@ -502,13 +542,13 @@ impl<'a> InstantiationGraphBuilder<'a> {
     }
 
     /// 从 MonoType 提取类型参数
-    fn extract_type_args_from_type(ty: &MonoType) -> Vec<MonoType> {
+    fn extract_type_args_from_type(_ty: &MonoType) -> Vec<MonoType> {
         // TODO: 实现从 MonoType 提取类型参数
         vec![]
     }
 
     /// 将类型转换为实例化节点
-    fn type_to_instance_node(ty: &MonoType) -> Option<InstanceNode> {
+    fn type_to_instance_node(_ty: &MonoType) -> Option<InstanceNode> {
         // TODO: 实现类型到实例化节点的转换
         None
     }
@@ -523,10 +563,7 @@ mod tests {
     #[test]
     fn test_function_instance_node() {
         let generic_id = GenericFunctionId::new("map".to_string(), vec!["T".to_string()]);
-        let type_args = vec![
-            MonoType::Int(32),
-            MonoType::String,
-        ];
+        let type_args = vec![MonoType::Int(32), MonoType::String];
 
         let node = FunctionInstanceNode::new(generic_id, type_args.clone());
         assert_eq!(node.specialized_name(), "map_int32_string");
@@ -582,18 +619,12 @@ mod tests {
         let mut graph = InstantiationGraph::new();
 
         // 创建链式依赖：A -> B -> C
-        let node_a = graph.add_function_node(
-            GenericFunctionId::new("a".to_string(), vec![]),
-            vec![],
-        );
-        let node_b = graph.add_function_node(
-            GenericFunctionId::new("b".to_string(), vec![]),
-            vec![],
-        );
-        let node_c = graph.add_function_node(
-            GenericFunctionId::new("c".to_string(), vec![]),
-            vec![],
-        );
+        let node_a =
+            graph.add_function_node(GenericFunctionId::new("a".to_string(), vec![]), vec![]);
+        let node_b =
+            graph.add_function_node(GenericFunctionId::new("b".to_string(), vec![]), vec![]);
+        let node_c =
+            graph.add_function_node(GenericFunctionId::new("c".to_string(), vec![]), vec![]);
 
         let node_a = InstanceNode::Function(node_a);
         let node_b = InstanceNode::Function(node_b);

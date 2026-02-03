@@ -41,7 +41,10 @@ impl ReachabilityAnalysis {
     }
 
     /// 获取节点的深度
-    pub fn depth(&self, node: &InstanceNode) -> Option<&usize> {
+    pub fn depth(
+        &self,
+        node: &InstanceNode,
+    ) -> Option<&usize> {
         self.depth.get(node)
     }
 
@@ -51,12 +54,18 @@ impl ReachabilityAnalysis {
     }
 
     /// 检查节点是否可达
-    pub fn is_reachable(&self, node: &InstanceNode) -> bool {
+    pub fn is_reachable(
+        &self,
+        node: &InstanceNode,
+    ) -> bool {
         self.reachable.contains(node)
     }
 
     /// 检查节点是否不可达
-    pub fn is_unreachable(&self, node: &InstanceNode) -> bool {
+    pub fn is_unreachable(
+        &self,
+        node: &InstanceNode,
+    ) -> bool {
         self.unreachable.contains(node)
     }
 
@@ -108,7 +117,10 @@ impl ReachabilityAnalyzer {
     /// 分析实例化图的可达性
     ///
     /// 使用 BFS 从所有入口点开始遍历，标记所有可达节点
-    pub fn analyze(&self, graph: &InstantiationGraph) -> ReachabilityAnalysis {
+    pub fn analyze(
+        &self,
+        graph: &InstantiationGraph,
+    ) -> ReachabilityAnalysis {
         let mut analysis = ReachabilityAnalysis::new();
 
         // 收集所有节点
@@ -135,10 +147,7 @@ impl ReachabilityAnalyzer {
 
         // BFS
         while let Some(current) = queue.pop_front() {
-            let current_depth = *analysis
-                .depth
-                .get(&current)
-                .expect("节点已在分析中");
+            let current_depth = *analysis.depth.get(&current).expect("节点已在分析中");
 
             // 获取当前节点的依赖
             if let Some(dependencies) = graph.dependencies(&current) {
@@ -154,10 +163,7 @@ impl ReachabilityAnalyzer {
         }
 
         // 不可达节点 = 所有节点 - 可达节点
-        analysis.unreachable = all_nodes
-            .difference(&analysis.reachable)
-            .cloned()
-            .collect();
+        analysis.unreachable = all_nodes.difference(&analysis.reachable).cloned().collect();
 
         analysis
     }
@@ -185,11 +191,7 @@ impl ReachabilityAnalyzer {
         }
 
         while let Some(current) = queue.pop_front() {
-            let current_depth = analysis
-                .depth
-                .get(&current)
-                .copied()
-                .unwrap_or(0);
+            let current_depth = analysis.depth.get(&current).copied().unwrap_or(0);
 
             if let Some(dependencies) = graph.dependencies(&current) {
                 for dep in dependencies {
@@ -205,10 +207,7 @@ impl ReachabilityAnalyzer {
 
         // 更新不可达节点
         let all_nodes: HashSet<InstanceNode> = graph.all_nodes().clone();
-        analysis.unreachable = all_nodes
-            .difference(&analysis.reachable)
-            .cloned()
-            .collect();
+        analysis.unreachable = all_nodes.difference(&analysis.reachable).cloned().collect();
 
         analysis
     }
@@ -244,18 +243,27 @@ impl DeadCodeEliminator {
     }
 
     /// 设置是否保留入口点
-    pub fn with_keep_entry_points(mut self, keep: bool) -> Self {
+    pub fn with_keep_entry_points(
+        mut self,
+        keep: bool,
+    ) -> Self {
         self.keep_entry_points = keep;
         self
     }
 
     /// 添加保留的节点
-    pub fn preserve(&mut self, node: InstanceNode) {
+    pub fn preserve(
+        &mut self,
+        node: InstanceNode,
+    ) {
         self.preserved_nodes.insert(node);
     }
 
     /// 批量添加保留的节点
-    pub fn preserve_all(&mut self, nodes: &[InstanceNode]) {
+    pub fn preserve_all(
+        &mut self,
+        nodes: &[InstanceNode],
+    ) {
         for node in nodes {
             self.preserved_nodes.insert(node.clone());
         }
@@ -264,7 +272,10 @@ impl DeadCodeEliminator {
     /// 消除死代码
     ///
     /// 返回应该保留的节点
-    pub fn eliminate(&self, graph: &InstantiationGraph) -> HashSet<InstanceNode> {
+    pub fn eliminate(
+        &self,
+        graph: &InstantiationGraph,
+    ) -> HashSet<InstanceNode> {
         let analysis = self.analyzer.analyze(graph);
 
         // 保留可达的节点
@@ -308,7 +319,10 @@ impl DeadCodeEliminator {
     }
 
     /// 仅进行分析，不消除
-    pub fn analyze(&self, graph: &InstantiationGraph) -> ReachabilityAnalysis {
+    pub fn analyze(
+        &self,
+        graph: &InstantiationGraph,
+    ) -> ReachabilityAnalysis {
         self.analyzer.analyze(graph)
     }
 }
@@ -321,7 +335,7 @@ pub struct CodeBloatEstimator {
     /// 每个实例的平均大小（估算）
     average_instance_size: HashMap<String, usize>,
     /// 膨胀阈值（字节）
-   膨胀_threshold: usize,
+    膨胀_threshold: usize,
 }
 
 impl CodeBloatEstimator {
@@ -334,13 +348,20 @@ impl CodeBloatEstimator {
     }
 
     /// 设置膨胀阈值
-    pub fn with_threshold(mut self, threshold: usize) -> Self {
+    pub fn with_threshold(
+        mut self,
+        threshold: usize,
+    ) -> Self {
         self.膨胀_threshold = threshold;
         self
     }
 
     /// 注册实例大小
-    pub fn register_instance_size(&mut self, generic_name: &str, size: usize) {
+    pub fn register_instance_size(
+        &mut self,
+        generic_name: &str,
+        size: usize,
+    ) {
         self.average_instance_size
             .insert(generic_name.to_string(), size);
     }
@@ -348,7 +369,7 @@ impl CodeBloatEstimator {
     /// 估算代码膨胀
     pub fn estimate_bloat(
         &self,
-        graph: &InstantiationGraph,
+        _graph: &InstantiationGraph,
         instances: &HashSet<InstanceNode>,
     ) -> usize {
         let mut total_size = 0;
@@ -367,7 +388,11 @@ impl CodeBloatEstimator {
     }
 
     /// 检查是否超过膨胀阈值
-    pub fn exceeds_threshold(&self, graph: &InstantiationGraph, instances: &HashSet<InstanceNode>) -> bool {
+    pub fn exceeds_threshold(
+        &self,
+        graph: &InstantiationGraph,
+        instances: &HashSet<InstanceNode>,
+    ) -> bool {
         self.estimate_bloat(graph, instances) > self.膨胀_threshold
     }
 }
@@ -416,7 +441,7 @@ impl CrossModuleReachabilityAnalyzer {
 
     /// 分析跨模块可达性
     pub fn analyze_cross_module(&self) -> HashMap<String, HashSet<InstanceNode>> {
-        let mut module_reachable: HashMap<String, HashSet<InstanceNode>> = HashMap::new();
+        let module_reachable: HashMap<String, HashSet<InstanceNode>> = HashMap::new();
 
         // TODO: 实现跨模块分析
         // 1. 从入口模块开始（包含 main 的模块）
@@ -427,10 +452,11 @@ impl CrossModuleReachabilityAnalyzer {
     }
 
     /// 获取模块的可达实例
-    pub fn get_module_reachable(&self, module_name: &str) -> Option<&HashSet<InstanceNode>> {
-        self.module_graphs
-            .get(module_name)
-            .map(|g| g.all_nodes())
+    pub fn get_module_reachable(
+        &self,
+        module_name: &str,
+    ) -> Option<&HashSet<InstanceNode>> {
+        self.module_graphs.get(module_name).map(|g| g.all_nodes())
     }
 }
 

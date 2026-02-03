@@ -13,9 +13,7 @@ use std::path::PathBuf;
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, ModuleIR};
-use crate::middle::passes::mono::instance::{
-    FunctionId, GenericFunctionId, GenericTypeId, TypeId,
-};
+use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 
 use super::instantiation_graph::{InstantiationGraph, InstanceNode};
 use super::reachability::{DeadCodeEliminator, ReachabilityAnalysis};
@@ -108,7 +106,10 @@ impl DceStats {
     }
 
     /// 从分析结果更新统计
-    pub fn update_from_analysis(&mut self, analysis: &ReachabilityAnalysis) {
+    pub fn update_from_analysis(
+        &mut self,
+        analysis: &ReachabilityAnalysis,
+    ) {
         self.entry_points = analysis.entry_points().len();
         self.max_depth = analysis.max_depth();
         self.elimination_rate = analysis.elimination_rate();
@@ -185,14 +186,15 @@ impl DcePass {
         }
 
         // 1. 构建实例化图
-        let mut graph = self.build_instantiation_graph(module, instantiated_functions, instantiated_types);
+        let mut graph =
+            self.build_instantiation_graph(module, instantiated_functions, instantiated_types);
 
         // 2. 标记入口点
         self.mark_entry_points(&mut graph, entry_points);
 
         // 3. 执行可达性分析
-        let eliminator = DeadCodeEliminator::new()
-            .with_keep_entry_points(self.config.keep_entry_points);
+        let eliminator =
+            DeadCodeEliminator::new().with_keep_entry_points(self.config.keep_entry_points);
 
         let (kept_nodes, analysis) = eliminator.eliminate_with_analysis(&graph);
 
@@ -233,7 +235,7 @@ impl DcePass {
     /// 构建实例化图
     fn build_instantiation_graph(
         &self,
-        module: &ModuleIR,
+        _module: &ModuleIR,
         instantiated_functions: &HashMap<FunctionId, FunctionIR>,
         instantiated_types: &HashMap<TypeId, MonoType>,
     ) -> InstantiationGraph {
@@ -276,10 +278,11 @@ impl DcePass {
     ) {
         for entry in entry_points {
             let type_args = self.extract_entry_type_args(entry);
-            let node = InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
-                GenericFunctionId::new(entry.name().to_string(), vec![]),
-                type_args,
-            ));
+            let node =
+                InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
+                    GenericFunctionId::new(entry.name().to_string(), vec![]),
+                    type_args,
+                ));
             graph.add_entry_point(node);
         }
     }
@@ -293,10 +296,11 @@ impl DcePass {
         let mut kept = HashMap::new();
 
         for (func_id, ir) in instantiated_functions {
-            let node = InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
-                GenericFunctionId::new(func_id.name().to_string(), vec![]),
-                self.extract_function_type_args(func_id, ir),
-            ));
+            let node =
+                InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
+                    GenericFunctionId::new(func_id.name().to_string(), vec![]),
+                    self.extract_function_type_args(func_id, ir),
+                ));
 
             if kept_nodes.contains(&node) {
                 kept.insert(func_id.clone(), ir.clone());
@@ -357,19 +361,29 @@ impl DcePass {
     }
 
     /// 从函数ID提取类型参数
-    fn extract_function_type_args(&self, _func_id: &FunctionId, _ir: &FunctionIR) -> Vec<MonoType> {
+    fn extract_function_type_args(
+        &self,
+        _func_id: &FunctionId,
+        _ir: &FunctionIR,
+    ) -> Vec<MonoType> {
         // TODO: 从 FunctionId 和 FunctionIR 提取类型参数
         vec![]
     }
 
     /// 从入口函数ID提取类型参数
-    fn extract_entry_type_args(&self, _func_id: &FunctionId) -> Vec<MonoType> {
+    fn extract_entry_type_args(
+        &self,
+        _func_id: &FunctionId,
+    ) -> Vec<MonoType> {
         // TODO: 提取入口函数的类型参数
         vec![]
     }
 
     /// 从类型提取类型参数
-    fn extract_type_args(&self, _ty: &MonoType) -> Vec<MonoType> {
+    fn extract_type_args(
+        &self,
+        _ty: &MonoType,
+    ) -> Vec<MonoType> {
         // TODO: 从 MonoType 提取类型参数
         vec![]
     }
@@ -377,7 +391,7 @@ impl DcePass {
     /// 将类型转换为实例化节点
     fn type_to_instance_node(
         &self,
-        ty: &MonoType,
+        _ty: &MonoType,
         _graph: &InstantiationGraph,
     ) -> Option<InstanceNode> {
         // TODO: 实现类型到实例化节点的转换
@@ -395,7 +409,8 @@ impl DcePass {
         kept_types: usize,
     ) {
         self.stats.total_instances = total_functions + total_types;
-        self.stats.eliminated_instances = total_functions + total_types - kept_functions - kept_types;
+        self.stats.eliminated_instances =
+            total_functions + total_types - kept_functions - kept_types;
         self.stats.kept_instances = kept_functions + kept_types;
         self.stats.function_instances = total_functions;
         self.stats.type_instances = total_types;
@@ -473,7 +488,11 @@ impl CrossModuleDce {
     }
 
     /// 注册模块的 DCE 结果
-    pub fn register_module_result(&mut self, module_path: PathBuf, result: DceResult) {
+    pub fn register_module_result(
+        &mut self,
+        module_path: PathBuf,
+        result: DceResult,
+    ) {
         self.module_results.insert(module_path, result);
     }
 
@@ -486,10 +505,11 @@ impl CrossModuleDce {
         // 收集所有保留的实例
         for result in self.module_results.values() {
             for func_id in result.kept_functions.keys() {
-                let node = InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
-                    GenericFunctionId::new(func_id.name().to_string(), vec![]),
-                    vec![],
-                ));
+                let node =
+                    InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
+                        GenericFunctionId::new(func_id.name().to_string(), vec![]),
+                        vec![],
+                    ));
                 kept.insert(node);
             }
 
