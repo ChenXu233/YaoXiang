@@ -74,6 +74,7 @@ fn skip_old_function_syntax(state: &mut ParserState<'_>) {
 
 /// Parse variable declaration: `[mut] name[: type] [= expr];`
 /// Function definition: `name: (ParamTypes) -> ReturnType = (params) => body;`
+/// Generic function: `name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
 pub fn parse_var_stmt(
     state: &mut ParserState<'_>,
     span: Span,
@@ -97,11 +98,35 @@ pub fn parse_var_stmt(
     };
     state.bump();
 
-    // Optional type annotation
-    let type_annotation = if state.skip(&TokenKind::Colon) {
-        parse_type_annotation(state)
+    // Parse type annotation and generic params
+    // Two cases:
+    // 1. name: TypeAnnotation = ...
+    // 2. name[GenericParams]: TypeAnnotation = ...
+    let (type_annotation, generic_params) = if state.at(&TokenKind::Colon) {
+        state.bump(); // consume ':'
+
+        // Check if this is a generic param declaration: [T: Clone] or <T: Clone]
+        // These come right after ':'
+        let has_generic_syntax = state.at(&TokenKind::LBracket) || state.at(&TokenKind::Lt);
+
+        if has_generic_syntax {
+            // Parse generic params
+            let generic = parse_generic_params_with_constraints(state)?;
+
+            // After generic params, the type annotation follows
+            // It could be:
+            // - (Params) -> ReturnType (function type)
+            // - Other type
+            // We DON'T expect another ':' here - the type annotation starts directly
+            let type_ann = parse_type_annotation(state)?;
+            (Some(type_ann), generic)
+        } else {
+            // No generic params, just parse type annotation
+            let type_ann = parse_type_annotation(state)?;
+            (Some(type_ann), Vec::new())
+        }
     } else {
-        None
+        (None, Vec::new())
     };
 
     // Check for invalid syntax after type annotation.
@@ -136,19 +161,20 @@ pub fn parse_var_stmt(
     if state.skip(&TokenKind::Eq) {
         // Check if this might be a function definition with unified syntax:
         // name: (ParamTypes) -> ReturnType = (params) => body
+        // OR with generic params: name[T: Constraint]: (ParamTypes) -> ReturnType = body
         let saved_position = state.save_position();
         let init_opt = state.parse_expression(BP_LOWEST);
 
         if let Some(initializer) = init_opt {
             if let Some(ref type_ann) = type_annotation {
-                // Check if initializer is a lambda expression
-                if let Expr::Lambda { params, body, .. } = &initializer {
-                    // Check if type annotation is a function type
-                    if let Type::Fn {
-                        params: type_params,
-                        return_type: _,
-                    } = type_ann
-                    {
+                // Check if type annotation is a function type
+                if let Type::Fn {
+                    params: type_params,
+                    return_type: _,
+                } = type_ann
+                {
+                    // Case 1: Initializer is a lambda expression
+                    if let Expr::Lambda { params, body, .. } = &initializer {
                         // Merge type information from type annotation with parameter names from lambda
                         let mut merged_params = Vec::new();
 
@@ -168,9 +194,33 @@ pub fn parse_var_stmt(
                         return Some(Stmt {
                             kind: StmtKind::Fn {
                                 name,
+                                generic_params,
                                 type_annotation: type_annotation.clone(),
                                 params: merged_params,
                                 body: (body.stmts.clone(), body.expr.clone()),
+                            },
+                            span,
+                        });
+                    }
+                    // Case 2: Initializer is a simple expression and we have generic params
+                    // This is a generic function with expression body: test: [T](x: T) -> T = x
+                    else if !generic_params.is_empty() {
+                        state.skip(&TokenKind::Semicolon);
+                        // Create function with empty params and expression body
+                        // Extract params from type annotation
+                        let params = type_params.iter().enumerate().map(|(i, ty)| Param {
+                            name: format!("__param_{}", i),
+                            ty: Some(ty.clone()),
+                            span: Span::dummy(),
+                        }).collect();
+
+                        return Some(Stmt {
+                            kind: StmtKind::Fn {
+                                name,
+                                generic_params,
+                                type_annotation: type_annotation.clone(),
+                                params,
+                                body: (Vec::new(), Some(Box::new(initializer))),
                             },
                             span,
                         });
@@ -182,6 +232,9 @@ pub fn parse_var_stmt(
         // If not a function definition, restore and parse as regular variable
         state.restore_position(saved_position);
         state.clear_errors();
+
+        // Note: generic_params is not used for variable declarations
+        let _generic_params = generic_params;
 
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => Some(Box::new(expr)),
@@ -289,6 +342,44 @@ fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>>
     }
 
     if !state.expect(&open) {
+        return None;
+    }
+
+    Some(params)
+}
+
+/// Parse generic parameters with constraints: `[T: Clone]`
+pub fn parse_generic_params_with_constraints(
+    state: &mut ParserState<'_>,
+) -> Option<Vec<GenericParam>> {
+    if !state.at(&TokenKind::LBracket) {
+        return Some(Vec::new());
+    }
+    state.bump(); // consume '['
+
+    let mut params = Vec::new();
+
+    while !state.at(&TokenKind::RBracket) && !state.at_end() {
+        // Parse parameter name
+        let name = match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => break,
+        };
+        state.bump();
+
+        // Parse constraint: `T: Clone`
+        let mut constraints = Vec::new();
+        if state.skip(&TokenKind::Colon) {
+            if let Some(constraint) = parse_type_annotation(state) {
+                constraints.push(constraint);
+            }
+        }
+
+        params.push(GenericParam { name, constraints });
+        state.skip(&TokenKind::Comma);
+    }
+
+    if !state.expect(&TokenKind::RBracket) {
         return None;
     }
 
@@ -564,6 +655,7 @@ pub fn parse_fn_stmt_with_name(
     Some(Stmt {
         kind: StmtKind::Fn {
             name,
+            generic_params: Vec::new(),
             type_annotation: None,
             params,
             body: (stmts, expr),
@@ -595,6 +687,7 @@ pub fn parse_fn_stmt_with_name_simple(
     Some(Stmt {
         kind: StmtKind::Fn {
             name,
+            generic_params: Vec::new(),
             type_annotation: None,
             params: vec![Param {
                 name: param_name,
@@ -741,7 +834,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
         Some(TokenKind::LParen) => {
             // This could be either:
             // 1. A tuple type: (T, U, V)
-            // 2. A function type: (Params) -> ReturnType
+            // 2. A function type: (Params) -> ReturnType where Params may have names like (value: T)
             // We need to look ahead to check for ->
 
             let saved = state.save_position();
@@ -749,14 +842,53 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             // Try to parse as the parameter list of a function type
             state.bump(); // consume '('
 
+            // Special case: check if first token is Identifier followed by Colon
+            // This indicates named parameters like (value: T, x: Int)
+            let has_named_params = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
+            } else {
+                false
+            };
+
             let mut param_types = Vec::new();
 
-            if !state.at(&TokenKind::RParen) {
-                while let Some(ty) = parse_type_annotation(state) {
-                    param_types.push(ty);
+            if has_named_params {
+                // Parse named parameters: (name: Type, name: Type, ...) -> ReturnType
+                // For function type annotation, we only care about the types
+                while !state.at(&TokenKind::RParen) && !state.at_end() {
+                    // Skip parameter name
+                    if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
+                        state.bump(); // consume name
 
-                    if !state.skip(&TokenKind::Comma) {
+                        // Expect colon and type
+                        if !state.skip(&TokenKind::Colon) {
+                            break;
+                        }
+
+                        // Parse the type
+                        if let Some(ty) = parse_type_annotation(state) {
+                            param_types.push(ty);
+                        } else {
+                            break;
+                        }
+
+                        // Skip comma if present
+                        if !state.skip(&TokenKind::Comma) {
+                            break;
+                        }
+                    } else {
                         break;
+                    }
+                }
+            } else {
+                // Parse types without names: (Type, Type, ...) -> ReturnType
+                if !state.at(&TokenKind::RParen) {
+                    while let Some(ty) = parse_type_annotation(state) {
+                        param_types.push(ty);
+
+                        if !state.skip(&TokenKind::Comma) {
+                            break;
+                        }
                     }
                 }
             }
@@ -785,6 +917,88 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             }
         }
         Some(TokenKind::LBrace) => parse_struct_type(state),
+        Some(TokenKind::LBracket) => {
+            // This could be a function type with generic params: [T, U](params) -> ReturnType
+            // Or it could be a tuple/list type starting with bracket
+            let saved = state.save_position();
+            state.bump(); // consume '['
+
+            // Check if this looks like a function type: [...](...) -> ...
+            // We need to see if there's a ']' followed by '('
+            let looks_like_fn_type = state.at(&TokenKind::RBracket)
+                || {
+                    // Try to parse one element, then check if ']' and '(' follow
+                    if let Some(_) = parse_type_annotation(state) {
+                        state.at(&TokenKind::RBracket) && {
+                            // Peek after ']'
+                            let saved2 = state.save_position();
+                            state.bump(); // consume ']'
+                            let result = state.at(&TokenKind::LParen);
+                            state.restore_position(saved2);
+                            result
+                        }
+                    } else {
+                        false
+                    }
+                };
+
+            if looks_like_fn_type {
+                // It's a function type with generic params, reparse from scratch
+                state.restore_position(saved);
+                state.bump(); // consume '['
+
+                // Parse generic param types inside [...]
+                let mut param_types = Vec::new();
+                if !state.at(&TokenKind::RBracket) {
+                    while let Some(ty) = parse_type_annotation(state) {
+                        param_types.push(ty);
+                        if !state.skip(&TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                if !state.expect(&TokenKind::RBracket) {
+                    return None;
+                }
+
+                // Now expect (params) -> ReturnType
+                if !state.expect(&TokenKind::LParen) {
+                    return None;
+                }
+
+                let mut fn_param_types = Vec::new();
+                if !state.at(&TokenKind::RParen) {
+                    while let Some(ty) = parse_type_annotation(state) {
+                        fn_param_types.push(ty);
+                        if !state.skip(&TokenKind::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                if !state.expect(&TokenKind::RParen) {
+                    return None;
+                }
+
+                if !state.expect(&TokenKind::Arrow) {
+                    return None;
+                }
+
+                let return_type = Box::new(parse_type_annotation(state)?);
+
+                // Return function type with parsed params
+                Some(Type::Fn {
+                    params: fn_param_types,
+                    return_type,
+                })
+            } else {
+                // Not a function type, try to parse as tuple type
+                state.restore_position(saved);
+                // But since we don't handle [T, U, V] tuple syntax, return None
+                None
+            }
+        }
         // Note: fn type uses (Params) -> ReturnType syntax, not `fn` keyword
         _ => None,
     }

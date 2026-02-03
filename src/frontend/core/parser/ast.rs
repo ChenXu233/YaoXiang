@@ -176,6 +176,7 @@ pub enum StmtKind {
     /// Function definition: `name: Type = (params) => body`
     Fn {
         name: String,
+        generic_params: Vec<GenericParam>,
         type_annotation: Option<Type>,
         params: Vec<Param>,
         body: (Vec<Stmt>, Option<Box<Expr>>),
@@ -209,6 +210,13 @@ pub struct VariantDef {
     pub name: String,
     pub params: Vec<(Option<String>, Type)>,
     pub span: Span,
+}
+
+/// Generic parameter with constraints: `[T: Clone]` or `[T: Clone & Serializable]`
+#[derive(Debug, Clone)]
+pub struct GenericParam {
+    pub name: String,
+    pub constraints: Vec<Type>,
 }
 
 /// Type
