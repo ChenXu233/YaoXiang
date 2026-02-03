@@ -12,6 +12,7 @@ pub use precedence::*;
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::statements::TypeStatementParser;
 
 /// Public entry point for expression parsing
 pub fn parse_expression_impl(
@@ -46,6 +47,77 @@ impl ParserState<'_> {
                 left = Expr::Call {
                     func: Box::new(left),
                     args,
+                    span: _token.span,
+                };
+                continue;
+            }
+
+            // Handle field access: expr.field
+            if matches!(_token.kind, TokenKind::Dot) {
+                if BP_CALL < min_bp {
+                    break;
+                }
+                self.bump(); // consume '.'
+                let field = match self.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(name)) => name.clone(),
+                    _ => {
+                        self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
+                            found: self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                            span: self.span(),
+                        });
+                        return None;
+                    }
+                };
+                self.bump(); // consume field name
+                left = Expr::FieldAccess {
+                    expr: Box::new(left),
+                    field,
+                    span: _token.span,
+                };
+                continue;
+            }
+
+            // Handle indexing: expr[index]
+            if matches!(_token.kind, TokenKind::LBracket) {
+                if BP_CALL < min_bp {
+                    break;
+                }
+                self.bump(); // consume '['
+                let index = self.parse_expression(BP_LOWEST)?;
+                if !self.skip(&TokenKind::RBracket) {
+                    return None;
+                }
+                left = Expr::Index {
+                    expr: Box::new(left),
+                    index: Box::new(index),
+                    span: _token.span,
+                };
+                continue;
+            }
+
+            // Handle try operator: expr?
+            if matches!(_token.kind, TokenKind::Question) {
+                if BP_CALL < min_bp {
+                    break;
+                }
+                self.bump(); // consume '?'
+                left = Expr::Try {
+                    expr: Box::new(left),
+                    span: _token.span,
+                };
+                continue;
+            }
+
+            // Handle type cast: expr as Type
+            if matches!(_token.kind, TokenKind::KwAs) {
+                if BP_TERM < min_bp {
+                    break;
+                }
+                self.bump(); // consume 'as'
+                let ty = self.parse_type_annotation()?;
+                left = Expr::Cast {
+                    expr: Box::new(left),
+                    target_type: ty,
                     span: _token.span,
                 };
                 continue;
