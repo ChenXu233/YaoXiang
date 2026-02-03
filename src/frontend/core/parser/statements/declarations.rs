@@ -72,6 +72,149 @@ fn skip_old_function_syntax(state: &mut ParserState<'_>) {
     }
 }
 
+/// 检测是否是方法绑定语法: `Type.method: (Params) -> ReturnType`
+/// 模式: Identifier . Identifier :
+fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
+    let saved = state.save_position();
+
+    // 检查是否是 Identifier (类型名)
+    let has_type_name = matches!(
+        state.current().map(|t| &t.kind),
+        Some(TokenKind::Identifier(_))
+    );
+
+    if has_type_name {
+        state.bump(); // consume type name
+
+        // 检查是否是点号
+        let has_dot = state.at(&TokenKind::Dot);
+        if has_dot {
+            state.bump(); // consume dot
+
+            // 检查是否是 Identifier (方法名)
+            let has_method_name = matches!(
+                state.current().map(|t| &t.kind),
+                Some(TokenKind::Identifier(_))
+            );
+
+            if has_method_name {
+                state.bump(); // consume method name
+
+                // 检查是否是冒号 (类型注解开始)
+                let has_colon = state.at(&TokenKind::Colon);
+                state.restore_position(saved);
+                return has_colon;
+            }
+        }
+    }
+
+    state.restore_position(saved);
+    false
+}
+
+/// Parse method binding statement: `Type.method: (Params) -> ReturnType = (params) => body`
+/// Example: `Point.draw: (Point, Surface) -> Void = (self, surface) => { ... }`
+pub fn parse_method_bind_stmt(
+    state: &mut ParserState<'_>,
+    span: Span,
+) -> Option<Stmt> {
+    // Parse type name
+    let type_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => {
+            state.error(ParseError::UnexpectedToken {
+                found: state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
+                span: state.span(),
+            });
+            return None;
+        }
+    };
+    state.bump(); // consume type name
+
+    // Expect dot
+    if !state.expect(&TokenKind::Dot) {
+        return None;
+    }
+
+    // Parse method name
+    let method_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => {
+            state.error(ParseError::UnexpectedToken {
+                found: state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof),
+                span: state.span(),
+            });
+            return None;
+        }
+    };
+    state.bump(); // consume method name
+
+    // Expect colon
+    if !state.expect(&TokenKind::Colon) {
+        return None;
+    }
+
+    // Parse method type annotation
+    let method_type = match parse_type_annotation(state) {
+        Some(t) => t,
+        None => {
+            state.error(ParseError::Message(
+                "Expected type annotation after ':' in method binding".to_string(),
+            ));
+            return None;
+        }
+    };
+
+    // Expect equals sign
+    if !state.expect(&TokenKind::Eq) {
+        return None;
+    }
+
+    // Parse method body - should be a lambda expression: (params) => body
+    // We need to parse this as an expression and extract the lambda
+    let initializer = match state.parse_expression(BP_LOWEST) {
+        Some(expr) => expr,
+        None => {
+            state.error(ParseError::Message(
+                "Expected method body after '=' in method binding".to_string(),
+            ));
+            return None;
+        }
+    };
+
+    // Extract params and body from lambda
+    let (params, body_stmts, body_expr) = match &initializer {
+        Expr::Lambda { params, body, .. } => {
+            (params.clone(), body.stmts.clone(), body.expr.clone())
+        }
+        _ => {
+            state.error(ParseError::Message(
+                "Method body must be a lambda expression".to_string(),
+            ));
+            return None;
+        }
+    };
+
+    state.skip(&TokenKind::Semicolon);
+
+    Some(Stmt {
+        kind: StmtKind::MethodBind {
+            type_name,
+            method_name,
+            method_type,
+            params,
+            body: (body_stmts, body_expr),
+        },
+        span,
+    })
+}
+
 /// Parse variable declaration: `[mut] name[: type] [= expr];`
 /// Function definition: `name: (ParamTypes) -> ReturnType = (params) => body;`
 /// Generic function: `name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
@@ -208,11 +351,15 @@ pub fn parse_var_stmt(
                         state.skip(&TokenKind::Semicolon);
                         // Create function with empty params and expression body
                         // Extract params from type annotation
-                        let params = type_params.iter().enumerate().map(|(i, ty)| Param {
-                            name: format!("__param_{}", i),
-                            ty: Some(ty.clone()),
-                            span: Span::dummy(),
-                        }).collect();
+                        let params = type_params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, ty)| Param {
+                                name: format!("__param_{}", i),
+                                ty: Some(ty.clone()),
+                                span: Span::dummy(),
+                            })
+                            .collect();
 
                         return Some(Stmt {
                             kind: StmtKind::Fn {
@@ -350,7 +497,7 @@ fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>>
 
 /// Parse generic parameters with constraints: `[T: Clone]`
 pub fn parse_generic_params_with_constraints(
-    state: &mut ParserState<'_>,
+    state: &mut ParserState<'_>
 ) -> Option<Vec<GenericParam>> {
     if !state.at(&TokenKind::LBracket) {
         return Some(Vec::new());
@@ -553,6 +700,11 @@ pub fn parse_identifier_stmt(
             skip_old_function_syntax(state);
             return None;
         }
+    }
+
+    // 检测方法绑定语法: Type.method: ...
+    if is_method_bind_syntax(state) {
+        return parse_method_bind_stmt(state, span);
     }
 
     let next = state.peek();
@@ -844,11 +996,12 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Special case: check if first token is Identifier followed by Colon
             // This indicates named parameters like (value: T, x: Int)
-            let has_named_params = if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-                matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
-            } else {
-                false
-            };
+            let has_named_params =
+                if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
+                    matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
+                } else {
+                    false
+                };
 
             let mut param_types = Vec::new();
 
@@ -925,22 +1078,21 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Check if this looks like a function type: [...](...) -> ...
             // We need to see if there's a ']' followed by '('
-            let looks_like_fn_type = state.at(&TokenKind::RBracket)
-                || {
-                    // Try to parse one element, then check if ']' and '(' follow
-                    if let Some(_) = parse_type_annotation(state) {
-                        state.at(&TokenKind::RBracket) && {
-                            // Peek after ']'
-                            let saved2 = state.save_position();
-                            state.bump(); // consume ']'
-                            let result = state.at(&TokenKind::LParen);
-                            state.restore_position(saved2);
-                            result
-                        }
-                    } else {
-                        false
+            let looks_like_fn_type = state.at(&TokenKind::RBracket) || {
+                // Try to parse one element, then check if ']' and '(' follow
+                if parse_type_annotation(state).is_some() {
+                    state.at(&TokenKind::RBracket) && {
+                        // Peek after ']'
+                        let saved2 = state.save_position();
+                        state.bump(); // consume ']'
+                        let result = state.at(&TokenKind::LParen);
+                        state.restore_position(saved2);
+                        result
                     }
-                };
+                } else {
+                    false
+                }
+            };
 
             if looks_like_fn_type {
                 // It's a function type with generic params, reparse from scratch
