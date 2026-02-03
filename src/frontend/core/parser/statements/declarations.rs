@@ -215,15 +215,34 @@ pub fn parse_method_bind_stmt(
     })
 }
 
-/// Parse variable declaration: `[mut] name[: type] [= expr];`
-/// Function definition: `name: (ParamTypes) -> ReturnType = (params) => body;`
-/// Generic function: `name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
+/// Parse variable declaration: `[mut] [pub] name[: type] [= expr];`
+/// Function definition: `[pub] name: (ParamTypes) -> ReturnType = (params) => body;`
+/// Generic function: `[pub] name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
 pub fn parse_var_stmt(
     state: &mut ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
+    parse_var_stmt_with_pub(state, span, None)
+}
+
+/// Parse variable declaration with optional pre-detected pub modifier
+fn parse_var_stmt_with_pub(
+    state: &mut ParserState<'_>,
+    span: Span,
+    pre_detected_pub: Option<bool>,
+) -> Option<Stmt> {
     // Check for mutability
     let is_mut = state.skip(&TokenKind::KwMut);
+
+    // Check for pub modifier (only if not already detected)
+    // 如果 pre_detected_pub 为 Some(true)，说明 pub 已被调用者消费
+    let final_is_pub = if pre_detected_pub == Some(true) {
+        // pub already consumed by caller, skip detection but keep true
+        state.skip(&TokenKind::KwPub);
+        true
+    } else {
+        state.skip(&TokenKind::KwPub)
+    };
 
     // Parse variable name (identifier)
     let name = match state.current().map(|t| &t.kind) {
@@ -309,12 +328,11 @@ pub fn parse_var_stmt(
         let init_opt = state.parse_expression(BP_LOWEST);
 
         if let Some(initializer) = init_opt {
-            if let Some(ref type_ann) = type_annotation {
-                // Check if type annotation is a function type
+            if let Some(ref type_annotation) = type_annotation {
                 if let Type::Fn {
                     params: type_params,
                     return_type: _,
-                } = type_ann
+                } = type_annotation
                 {
                     // Case 1: Initializer is a lambda expression
                     if let Expr::Lambda { params, body, .. } = &initializer {
@@ -341,6 +359,7 @@ pub fn parse_var_stmt(
                                 type_annotation: type_annotation.clone(),
                                 params: merged_params,
                                 body: (body.stmts.clone(), body.expr.clone()),
+                                is_pub: final_is_pub,
                             },
                             span,
                         });
@@ -368,11 +387,11 @@ pub fn parse_var_stmt(
                                 type_annotation: type_annotation.clone(),
                                 params,
                                 body: (Vec::new(), Some(Box::new(initializer))),
+                                is_pub: final_is_pub,
                             },
                             span,
                         });
                     }
-                }
             }
         }
 
@@ -676,7 +695,8 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<String> {
 
 /// Parse statement starting with identifier: function definition or expression or variable declaration
 /// Syntax:
-/// - `name = (params) => body` - 函数定义，= 后是 (params) => body
+/// - `pub name = (params) => body` - pub 函数定义，自动绑定到类型
+/// - `name = (params) => body` - 函数定义
 /// - `name = expr` - 变量声明（如果没有类型注解）
 /// - `name: type = expr` - 变量声明（带类型注解）
 /// - `name expr` - 表达式语句
@@ -707,6 +727,16 @@ pub fn parse_identifier_stmt(
         return parse_method_bind_stmt(state, span);
     }
 
+    // 检测 pub 关键字
+    // 先检查当前 token 是否是 pub
+    let is_pub = if matches!(state.current().map(|t| &t.kind), Some(TokenKind::KwPub)) {
+        state.bump(); // 消费 pub
+        true
+    } else {
+        false
+    };
+
+    // 获取当前 token（应该是标识符）
     let next = state.peek();
 
     // Check if identifier is followed by =
@@ -734,7 +764,7 @@ pub fn parse_identifier_stmt(
 
             // If = is followed by (, try to parse as function definition
             if state.at(&TokenKind::LParen) {
-                if let Some(stmt) = parse_fn_stmt_with_name(state, name.clone(), span) {
+                if let Some(stmt) = parse_fn_stmt_with_name(state, name.clone(), span, is_pub) {
                     state.skip(&TokenKind::Semicolon);
                     return Some(stmt);
                 }
@@ -743,7 +773,9 @@ pub fn parse_identifier_stmt(
             } else if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
                 let saved_position2 = state.save_position();
 
-                if let Some(stmt) = parse_fn_stmt_with_name_simple(state, name.clone(), span) {
+                if let Some(stmt) =
+                    parse_fn_stmt_with_name_simple(state, name.clone(), span, is_pub)
+                {
                     state.skip(&TokenKind::Semicolon);
                     return Some(stmt);
                 }
@@ -776,7 +808,8 @@ pub fn parse_identifier_stmt(
 
     // Check for variable declaration: identifier followed by :
     if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon)) {
-        return parse_var_stmt(state, span);
+        // 传递已检测到的 is_pub 给 parse_var_stmt
+        return parse_var_stmt_with_pub(state, span, Some(is_pub));
     }
 
     // Otherwise, parse as expression
@@ -784,11 +817,12 @@ pub fn parse_identifier_stmt(
 }
 
 /// Parse function definition with already parsed name
-/// Handles: `name = (params) => body`
+/// Handles: `[pub] name = (params) => body`
 pub fn parse_fn_stmt_with_name(
     state: &mut ParserState<'_>,
     name: String,
     span: Span,
+    is_pub: bool,
 ) -> Option<Stmt> {
     if !state.expect(&TokenKind::LParen) {
         return None;
@@ -811,17 +845,19 @@ pub fn parse_fn_stmt_with_name(
             type_annotation: None,
             params,
             body: (stmts, expr),
+            is_pub,
         },
         span,
     })
 }
 
 /// Parse function definition with already parsed name (simple form)
-/// Handles: `name = param => body` (single param without parentheses)
+/// Handles: `[pub] name = param => body` (single param without parentheses)
 pub fn parse_fn_stmt_with_name_simple(
     state: &mut ParserState<'_>,
     name: String,
     span: Span,
+    is_pub: bool,
 ) -> Option<Stmt> {
     let param_span = state.span();
     let param_name = match state.current().map(|t| &t.kind) {
@@ -847,6 +883,7 @@ pub fn parse_fn_stmt_with_name_simple(
                 span: param_span,
             }],
             body: (stmts, expr),
+            is_pub,
         },
         span,
     })
@@ -1010,7 +1047,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 // For function type annotation, we only care about the types
                 while !state.at(&TokenKind::RParen) && !state.at_end() {
                     // Skip parameter name
-                    if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
+                    if let Some(TokenKind::Identifier(_name)) = state.current().map(|t| &t.kind) {
                         state.bump(); // consume name
 
                         // Expect colon and type

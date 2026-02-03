@@ -121,6 +121,7 @@ impl BodyChecker {
                 type_annotation,
                 params,
                 body: (stmts, expr),
+                is_pub: _,
             } => {
                 let body = Block {
                     stmts: stmts.to_vec(),

@@ -62,7 +62,10 @@ impl ParserState<'_> {
                     Some(TokenKind::Identifier(name)) => name.clone(),
                     _ => {
                         self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
-                            found: self.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                            found: self
+                                .current()
+                                .map(|t| t.kind.clone())
+                                .unwrap_or(TokenKind::Eof),
                             span: self.span(),
                         });
                         return None;
