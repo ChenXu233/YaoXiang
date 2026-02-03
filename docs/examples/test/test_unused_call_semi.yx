@@ -1,10 +1,7 @@
 use std.io
 
-greet: (String) -> String = (name) => {
-    return "Hello"
-}
+greet: (name: String) -> String = "Hello"
 
-main: () -> Void = () => {
-    greet("World");
-    return
+main = {
+    greet("World")
 }

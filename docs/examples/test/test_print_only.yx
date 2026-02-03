@@ -1,11 +1,7 @@
 use std.io
 
-add: (Int, Int) -> Int = (a, b) => {
-    return a + b
-}
+add: (a: Int, b: Int) -> Int = a + b
 
-main: () -> Void = () => {
-    sum: Int = add(10, 20);
-
-    return
+main = {
+    sum: Int = add(10, 20)
 }

@@ -1,9 +1,5 @@
 use std.io
 
-greet: () -> String = () => {
-    return "Hello"
-}
+greet = "Hello"
 
-main: () -> String = () => {
-    return "Main result"
-}
+main = "Main result"

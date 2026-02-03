@@ -3,10 +3,9 @@ type Point = {
     y: Float
 }
 
-Point.get_x: (Point) -> Float = (self) => self.x
+Point.get_x: (self: Point) -> Float = self.x
 
-main: () -> Void = () => {
+main = {
     p: Point = Point(1.0, 2.0)
     x: Float = p.get_x()
-    return
 }
