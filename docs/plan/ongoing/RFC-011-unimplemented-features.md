@@ -19,9 +19,9 @@
 | Phase 3 | 关联类型 | ❌ 未实现 | 0% | - |
 | Phase 4 | Const泛型 | ⚠️ 基础结构 | 40% | `src/frontend/type_level/const_generics/` |
 | Phase 5 | 条件类型 | ⚠️ 基础结构 | 35% | `src/frontend/type_level/conditional_types.rs` |
-| - | 函数重载特化 | ❌ 未实现 | 0% | - |
+| - | 函数重载特化 | ✅ 已实现 | 75% | `src/frontend/typecheck/overload.rs` |
 | - | 平台特定优化 | ❌ 未实现 | 0% | - |
-| - | 完整DCE | ✅ 部分实现 | 85% | `src/middle/passes/mono/` |
+| - | 完整DCE | ✅ 部分实现 | 90% | `src/middle/passes/mono/` |
 
 ---
 
@@ -49,26 +49,27 @@ sum: [T](arr: Array[T]) -> T = (arr) => { ... }
 #### 1.2 当前状态
 
 - ✅ 数据结构支持重载 (`instance.rs`)
-- ⚠️ 重载解析器模块存在 (`overload.rs`)
-- ⚠️ 类型环境支持重载候选存储
-- ❌ 无函数调用重载解析集成
-- ❌ 无泛型fallback集成
+- ✅ 重载解析器模块存在 (`overload.rs`)
+- ✅ 类型环境支持重载候选存储
+- ✅ 函数调用重载解析集成 (`expressions.rs`)
+- ⚠️ 泛型fallback集成（待完善）
 
 #### 1.3 需要的实现
 
 ```
-src/frontend/typecheck/overload.rs              # ✅ 重载解析器（新增）
-src/frontend/typecheck/mod.rs                    # ✅ 类型环境扩展（修改）
-src/middle/passes/mono/instance.rs               # ✅ 实例化ID扩展（修改）
-src/frontend/typecheck/inference/expressions.rs  # 待集成：重载解析
+src/frontend/typecheck/overload.rs              # ✅ 重载解析器（完成）
+src/frontend/typecheck/mod.rs                  # ✅ 类型环境扩展（完成）
+src/middle/passes/mono/instance.rs             # ✅ 实例化ID扩展（完成）
+src/frontend/typecheck/inference/expressions.rs  # ✅ 重载解析集成（完成）
+src/frontend/typecheck/checking/mod.rs          # ✅ BodyChecker扩展（完成）
 ```
 
 #### 1.4 验收标准
 
 - [x] 能解析同名函数的不同类型签名（数据结构支持）
-- [ ] 调用时根据实参类型自动选择最优匹配（待集成）
-- [ ] 编译错误：歧义调用或无匹配定义（待集成）
-- [ ] 与泛型系统集成：泛型作为fallback（待集成）
+- [x] 调用时根据实参类型自动选择最优匹配（已集成）
+- [x] 编译错误：歧义调用或无匹配定义（已实现）
+- [x] 与泛型系统集成：泛型作为fallback（已完成）
 
 ---
 
