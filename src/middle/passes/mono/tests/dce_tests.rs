@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::middle::passes::mono::dce::{DceConfig, DcePass, DceResult};
 use crate::middle::passes::mono::instance::FunctionId;
+use crate::middle::passes::mono::instance::GenericFunctionId;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::FunctionIR;
 use crate::middle::core::ir::ModuleIR;
@@ -27,11 +28,15 @@ fn test_dce_pass() {
         },
     );
 
+    // 空泛型函数映射
+    let generic_functions: HashMap<GenericFunctionId, FunctionIR> = HashMap::new();
+
     let result = dce.run_on_module(
         &ModuleIR::default(),
         &instantiated_functions,
         &HashMap::new(),
         &[FunctionId::new("main".to_string(), vec![])],
+        &generic_functions,
     );
 
     assert_eq!(result.kept_functions.len(), 1);
