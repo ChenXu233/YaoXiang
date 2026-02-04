@@ -30,6 +30,9 @@ pub struct BodyChecker {
     vars: HashMap<String, PolyType>,
     /// 已检查的函数
     checked_functions: HashMap<String, bool>,
+    /// 重载候选存储
+    overload_candidates:
+        HashMap<String, Vec<crate::frontend::typecheck::overload::OverloadCandidate>>,
 }
 
 impl BodyChecker {
@@ -39,6 +42,7 @@ impl BodyChecker {
             solver: solver.clone(),
             vars: HashMap::new(),
             checked_functions: HashMap::new(),
+            overload_candidates: HashMap::new(),
         }
     }
 
@@ -357,8 +361,11 @@ impl BodyChecker {
         expr: &Expr,
     ) -> Result<MonoType, TypeError> {
         let vars_clone = self.vars.clone();
-        let mut inferrer =
-            crate::frontend::typecheck::inference::ExprInferrer::new(&mut self.solver);
+        let overload_candidates_clone = self.overload_candidates.clone();
+        let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+            &mut self.solver,
+            &overload_candidates_clone,
+        );
 
         for (name, poly) in vars_clone {
             inferrer.add_var(name, poly);

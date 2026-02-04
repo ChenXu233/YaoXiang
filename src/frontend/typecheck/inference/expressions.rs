@@ -7,6 +7,7 @@
 use crate::util::diagnostic::{Diagnostic, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::typecheck::overload;
 use std::collections::HashMap;
 
 /// 表达式类型推断器
@@ -16,15 +17,21 @@ pub struct ExprInferrer<'a> {
     scopes: Vec<HashMap<String, PolyType>>,
     /// 当前活跃的循环标签
     loop_labels: Vec<String>,
+    /// 重载候选存储引用
+    overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
 }
 
 impl<'a> ExprInferrer<'a> {
     /// 创建新的表达式推断器
-    pub fn new(solver: &'a mut TypeConstraintSolver) -> Self {
+    pub fn new(
+        solver: &'a mut TypeConstraintSolver,
+        overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
+    ) -> Self {
         Self {
             solver,
             scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
+            overload_candidates,
         }
     }
 
@@ -372,14 +379,51 @@ impl<'a> ExprInferrer<'a> {
 
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call { func, args, .. } => {
-                // 检查函数表达式
+                // 1. 首先推断函数表达式
                 let _func_ty = self.infer_expr(func)?;
 
-                // 检查所有参数表达式
-                for arg in args {
-                    self.infer_expr(arg)?;
+                // 2. 推断所有参数类型
+                let arg_types: Vec<MonoType> = args
+                    .iter()
+                    .map(|arg| self.infer_expr(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // 3. 尝试重载解析
+                // 检查 func 是否为标识符
+                if let crate::frontend::core::parser::ast::Expr::Var(name, _) = &**func {
+                    // 尝试从重载候选解析
+                    if overload::has_overloads(self.overload_candidates, name) {
+                        match overload::resolve_overload_from_env(
+                            self.overload_candidates,
+                            name,
+                            &arg_types,
+                        ) {
+                            Ok(candidate) => {
+                                // 重载解析成功，返回匹配的返回类型
+                                return Ok(candidate.return_type.clone());
+                            }
+                            Err(_e) => {
+                                // 重载解析失败，尝试泛型 fallback
+                                if let Some(generic_candidate) = overload::resolve_generic_fallback(
+                                    self.overload_candidates,
+                                    name,
+                                    &arg_types,
+                                ) {
+                                    // 泛型实例化成功，返回实例化后的返回类型
+                                    let return_type = overload::instantiate_return_type(
+                                        generic_candidate,
+                                        &arg_types,
+                                    );
+                                    return Ok(return_type);
+                                }
+                                // 无匹配，返回类型变量
+                                return Ok(self.solver.new_var());
+                            }
+                        }
+                    }
                 }
 
+                // 4. 非重载情况或重载失败：
                 // 函数调用返回类型变量（具体类型需要在调用点确定）
                 Ok(self.solver.new_var())
             }

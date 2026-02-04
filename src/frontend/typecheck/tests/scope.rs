@@ -1,10 +1,13 @@
+use std::collections::HashMap;
 use crate::frontend::typecheck::inference::ExprInferrer;
+use crate::frontend::typecheck::overload;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 
 #[test]
 fn test_scope_shadowing() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // Global scope: x = Int
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -32,7 +35,8 @@ fn test_scope_shadowing() {
 #[test]
 fn test_nested_scopes() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // Global: a = Int
     inferrer.add_var("a".to_string(), PolyType::mono(MonoType::Int(64)));

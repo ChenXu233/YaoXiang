@@ -504,7 +504,7 @@ impl TypeChecker {
 
     /// 自动将函数绑定到类型
     /// pub 函数的默认行为：绑定到第一个参数的类型
-    /// 例如: pub distance: (Point, Point) -> Float 自动绑定为 Point.distance
+    /// 例如: pub distance: (p1: Point, p2: Point) -> Float 自动绑定为 Point.distance
     fn auto_bind_to_type(
         &mut self,
         fn_name: &str,
@@ -600,7 +600,11 @@ pub fn infer_expression(
 ) -> Result<MonoType, Vec<TypeError>> {
     // 克隆环境变量，避免借用冲突
     let vars_clone = env.vars.clone();
-    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(env.solver());
+    let overload_candidates_clone = env.overload_candidates.clone();
+    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+        env.solver(),
+        &overload_candidates_clone,
+    );
     // 添加环境中的变量到推断器
     for (name, poly) in vars_clone {
         inferrer.add_var(name, poly);
