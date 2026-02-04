@@ -58,6 +58,10 @@ impl GenericSize {
                 .cloned()
                 .ok_or("Void not found".to_string()),
             MonoType::TypeRef(name) => {
+                // 检查是否是 Array<T, N> 类型
+                if let Some((elem_type, count)) = self.parse_array_type(name) {
+                    return self.size_of_array(elem_type.as_ref(), count);
+                }
                 // 对于类型引用，尝试查找基础大小
                 self.base_sizes
                     .get(name.as_str())
@@ -71,10 +75,81 @@ impl GenericSize {
                 }
                 Ok(total)
             }
+            MonoType::List(_elem_type) => {
+                // List<T> 大小未知（动态大小），返回错误
+                Err("Cannot compute size of dynamic List type".to_string())
+            }
             MonoType::TypeVar(_) => Err("Cannot compute size of type variable".to_string()),
             MonoType::Fn { .. } => Ok(8), // 指针
             _ => Err(format!("Unknown type: {:?}", ty)),
         }
+    }
+
+    /// 解析 Array<T, N> 类型的元素类型和数量
+    fn parse_array_type(
+        &self,
+        type_name: &str,
+    ) -> Option<(Box<MonoType>, usize)> {
+        if !type_name.starts_with("Array<") {
+            return None;
+        }
+
+        // 提取泛型参数部分
+        let args_str = &type_name["Array<".len()..type_name.len().saturating_sub(1)];
+
+        // 分割参数，找到元素类型和数量
+        let mut args = Vec::new();
+        let mut current = String::new();
+        let mut depth = 0;
+
+        for c in args_str.chars() {
+            match c {
+                ',' if depth == 0 => {
+                    if !current.trim().is_empty() {
+                        args.push(current.trim().to_string());
+                    }
+                    current = String::new();
+                }
+                '<' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                '>' => {
+                    if depth == 0 {
+                        break;
+                    }
+                    depth -= 1;
+                    current.push(c);
+                }
+                _ => current.push(c),
+            }
+        }
+
+        if !current.trim().is_empty() {
+            args.push(current.trim().to_string());
+        }
+
+        if args.len() < 2 {
+            return None;
+        }
+
+        // 解析元素类型
+        let elem_type = Box::new(MonoType::TypeRef(args[0].clone()));
+
+        // 解析数组长度（尝试解析为整数）
+        let count = args[1].parse::<usize>().ok()?;
+
+        Some((elem_type, count))
+    }
+
+    /// 计算数组的尺寸
+    fn size_of_array(
+        &self,
+        elem_type: &MonoType,
+        count: usize,
+    ) -> Result<usize, String> {
+        let elem_size = self.size_of(elem_type)?;
+        Ok(elem_size.saturating_mul(count))
     }
 }
 
