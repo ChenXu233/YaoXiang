@@ -222,6 +222,27 @@ fn type_name_hash<H: Hasher>(
                 type_name_hash(t, state);
             }
         }
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => {
+            "literal".hash(state);
+            name.hash(state);
+            type_name_hash(base_type, state);
+            // 哈希常量值
+            match value {
+                crate::frontend::core::type_system::ConstValue::Int(n) => {
+                    format!("int:{}", n).hash(state);
+                }
+                crate::frontend::core::type_system::ConstValue::Bool(b) => {
+                    format!("bool:{}", b).hash(state);
+                }
+                crate::frontend::core::type_system::ConstValue::Float(f) => {
+                    format!("float:{}", f.to_bits()).hash(state);
+                }
+            }
+        }
     }
 }
 

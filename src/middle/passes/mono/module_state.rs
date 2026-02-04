@@ -405,6 +405,10 @@ impl ModuleMonoState {
                 // 递归调用get_type_name来获取宿主类型名称
                 Self::get_type_name(host_type) + "::" + assoc_name
             }
+            Type::Literal { name, base_type } => {
+                // 字面量类型：基础类型::名称
+                Self::get_type_name(base_type) + "::" + name
+            }
         }
     }
 
