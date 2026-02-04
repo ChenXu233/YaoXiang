@@ -4,7 +4,6 @@
 
 pub mod app;
 pub mod components;
-pub mod engine;
 pub mod screens;
 pub mod tui;
 pub mod widgets;
@@ -12,8 +11,8 @@ pub mod widgets;
 // 重新导出 TUI REPL
 pub use tui::TuiREPL;
 
-// 重新导出引擎组件
-pub use engine::{IncrementalCompiler, ModuleBuilder, SymbolCache, Profiler};
+// 复用 repl::engine
+pub use crate::backends::dev::repl::engine::{Evaluator, REPLContext};
 
 // 重新导出组件
 pub use components::{HistoryPanel, DebugPanel, OutputConsole};

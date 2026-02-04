@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 /// 历史面板组件
 ///
 /// 显示和管理 REPL 历史记录
@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::backends::dev::tui_repl::engine::IncrementalCompiler;
+use crate::backends::dev::repl::engine::Evaluator;
 
 /// 历史条目
 #[derive(Debug, Clone)]
@@ -87,7 +87,7 @@ impl HistoryPanel {
         &self,
         f: &mut Frame<'_>,
         area: Rect,
-        _compiler: &Arc<IncrementalCompiler>,
+        _evaluator: &Arc<Mutex<Evaluator>>,
     ) {
         let block = Block::default()
             .borders(Borders::ALL)

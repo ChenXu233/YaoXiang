@@ -3,7 +3,7 @@
 //! 管理 TUI REPL 的整体状态、屏幕切换和事件处理
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
@@ -15,7 +15,8 @@ use ratatui::{
 };
 
 use crate::backends::dev::tui_repl::components::{HistoryPanel, DebugPanel, OutputConsole};
-use crate::backends::dev::tui_repl::engine::IncrementalCompiler;
+use crate::backends::dev::repl::engine::Evaluator;
+use crate::backends::dev::repl::EvalResult;
 use crate::backends::dev::tui_repl::screens::{MainScreen, HistoryScreen, DebugScreen, HelpScreen};
 
 /// 屏幕标识符
@@ -136,7 +137,7 @@ impl App {
     /// 执行输入
     pub fn execute_input(
         &mut self,
-        compiler: &Arc<IncrementalCompiler>,
+        evaluator: &Arc<Mutex<Evaluator>>,
     ) {
         let input = self.input_buffer.trim_end();
         if input.is_empty() && !self.continuation_mode {
@@ -159,28 +160,23 @@ impl App {
         let mut entry_output = None;
 
         // 编译/执行
-        match compiler.compile(input) {
-            Ok(result) => {
-                if result.need_more_input {
-                    self.continuation_mode = true;
-                } else if result.success {
-                    self.continuation_mode = false;
-                    // 获取实际输出
-                    let output = compiler.read_stdout();
-                    if !output.is_empty() {
-                        self.output_console.add_output(output.clone());
-                        entry_output = Some(output);
-                    }
-                } else {
-                    self.continuation_mode = false;
-                    if let Some(err) = result.error {
-                        self.output_console.add_error(err);
-                    }
-                }
-            }
-            Err(e) => {
+        let mut eval = evaluator.lock().unwrap();
+        match eval.eval(input) {
+            EvalResult::Value(v) => {
                 self.continuation_mode = false;
-                self.output_console.add_error(e.to_string());
+                entry_output = Some(v.to_string());
+                self.output_console.add_output(v.to_string());
+            }
+            EvalResult::Ok => {
+                self.continuation_mode = false;
+                // 无返回值，正常执行
+            }
+            EvalResult::Error(e) => {
+                self.continuation_mode = false;
+                self.output_console.add_error(e);
+            }
+            EvalResult::Incomplete => {
+                self.continuation_mode = true;
             }
         }
 
@@ -189,7 +185,7 @@ impl App {
             input: input_clone,
             output: entry_output,
             timestamp: std::time::SystemTime::now(),
-            duration: std::time::Duration::from_millis(0), // TODO: Measure time
+            duration: std::time::Duration::from_millis(0),
         });
 
         // 清空输入
@@ -201,7 +197,7 @@ impl App {
         &mut self,
         f: &mut Frame<'_>,
         area: ratatui::layout::Rect,
-        compiler: &Arc<IncrementalCompiler>,
+        evaluator: &Arc<Mutex<Evaluator>>,
     ) {
         // 创建主布局
         let chunks = Layout::default()
@@ -251,14 +247,14 @@ impl App {
                 .split(chunks[1]);
 
             // 渲染历史面板
-            self.history_panel.render(f, main_chunks[0], compiler);
+            self.history_panel.render(f, main_chunks[0], evaluator);
 
             // 渲染主内容(Integrated Terminal)
             self.output_console
                 .render(f, main_chunks[1], prompt, &self.input_buffer);
 
             // 渲染调试面板
-            self.debug_panel.render(f, main_chunks[2], compiler);
+            self.debug_panel.render(f, main_chunks[2], evaluator);
         } else {
             // 两栏布局：历史 | 内容
             let main_chunks = Layout::default()
@@ -270,7 +266,7 @@ impl App {
                 .split(chunks[1]);
 
             // 渲染历史面板
-            self.history_panel.render(f, main_chunks[0], compiler);
+            self.history_panel.render(f, main_chunks[0], evaluator);
 
             // 渲染主内容
             self.output_console
@@ -312,8 +308,6 @@ impl App {
         );
     }
 
-    // render_main_content removed (replaced by direct output_console.render in render())
-
     /// Switch to a screen
     pub fn switch_screen(
         &mut self,
@@ -324,8 +318,6 @@ impl App {
 
     /// Clear output console
     pub fn clear_output(&mut self) {
-        // We can expose a clear method on OutputConsole if needed,
-        // or just recreate it. For now let's just create a new one to be safe/simple.
         self.output_console = OutputConsole::new();
         self.input_buffer.clear();
     }
