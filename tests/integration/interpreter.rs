@@ -36,7 +36,7 @@ fn test_simple_function() {
 fn test_function_with_parameters() {
     // Test that we can define and compile a function with parameters
     let source = r#"
-        add: (Int, Int) -> Int = (a, b) => { return a }
+        add: (a: Int, b: Int) -> Int = (a, b) => { return a }
         main: () -> () = () => { let result = add(5, 10) }
     "#;
 
