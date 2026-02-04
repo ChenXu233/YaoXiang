@@ -7,6 +7,7 @@
 //! 3. 跨模块实例化：在定义模块中实例化，使用模块引用结果
 
 use crate::frontend::core::parser::ast::Type;
+use crate::frontend::core::type_system::ConstValue;
 use crate::frontend::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR};
 use crate::middle::passes::module::{ModuleGraph, ModuleId};
@@ -500,6 +501,21 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             assoc_name: assoc_name.clone(),
             assoc_args: assoc_args.iter().map(ast_type_to_mono_type).collect(),
         },
+        Type::Literal { name, base_type } => {
+            // 对于字面量类型，转换为基础类型
+            // 字面量的值会在类型检查阶段处理
+            let base = ast_type_to_mono_type(base_type);
+            // 尝试从名称解析 ConstValue
+            let value = ConstValue::from_literal_name(name).unwrap_or({
+                // 如果无法解析，使用默认值
+                ConstValue::Int(0)
+            });
+            MonoType::Literal {
+                name: name.clone(),
+                base_type: Box::new(base),
+                value,
+            }
+        }
     }
 }
 
