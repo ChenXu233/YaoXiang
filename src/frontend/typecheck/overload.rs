@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::frontend::typecheck::{MonoType, TypeVar};
+use crate::frontend::typecheck::MonoType;
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, SpecializationKey};
 
 /// 重载候选函数
