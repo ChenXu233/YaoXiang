@@ -222,6 +222,8 @@ impl SendSyncChecker {
             MonoType::TypeRef(_) => true,
             // 关联类型需要检查宿主类型
             MonoType::AssocType { host_type, .. } => self.is_send(host_type),
+            // 字面量类型：检查基础类型
+            MonoType::Literal { base_type, .. } => self.is_send(base_type),
         }
     }
 
@@ -277,6 +279,8 @@ impl SendSyncChecker {
             MonoType::TypeRef(_) => true,
             // 关联类型需要检查宿主类型
             MonoType::AssocType { host_type, .. } => self.is_sync(host_type),
+            // 字面量类型：检查基础类型
+            MonoType::Literal { base_type, .. } => self.is_sync(base_type),
         }
     }
 

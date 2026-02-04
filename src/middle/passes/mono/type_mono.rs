@@ -217,6 +217,16 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .map(|t| self.type_to_mono_type(t))
                     .collect(),
             },
+            AstType::Literal { name, base_type } => {
+                let base = self.type_to_mono_type(base_type);
+                let value = crate::frontend::core::type_system::ConstValue::from_literal_name(name)
+                    .unwrap_or(crate::frontend::core::type_system::ConstValue::Int(0));
+                MonoType::Literal {
+                    name: name.clone(),
+                    base_type: Box::new(base),
+                    value,
+                }
+            }
         }
     }
 
@@ -264,6 +274,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 // 递归调用get_type_name来获取宿主类型名称
                 Self::get_type_name(host_type) + "::" + assoc_name
             }
+            AstType::Literal { name, base_type } => Self::get_type_name(base_type) + "::" + name,
         }
     }
 
@@ -317,6 +328,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 self.contains_type_var_type(host_type)
                     || assoc_args.iter().any(|t| self.contains_type_var_type(t))
             }
+            AstType::Literal { .. } => false,
         }
     }
 
@@ -398,6 +410,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .iter()
                     .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen));
             }
+            AstType::Literal { .. } => {}
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -730,6 +743,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 assoc_args
                     .iter()
                     .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
+            }
+            MonoType::Literal { base_type, .. } => {
+                self.collect_type_vars_from_mono_type(base_type, type_params, seen);
             }
         }
     }

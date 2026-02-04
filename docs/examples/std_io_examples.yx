@@ -5,7 +5,7 @@ use std.io
 // ============================================================================
 
 // 打印各种类型的值
-basic_printing = () => {
+basic_printing: () -> Void = {
     print("=== 基础打印示例 ===\n")
 
     // 字符串
@@ -32,7 +32,7 @@ basic_printing = () => {
 // 变量操作示例
 // ============================================================================
 
-variable_demo = () => {
+variable_demo: () -> Void = {
     print("\n=== 变量操作示例 ===\n")
 
     // 字符串变量
@@ -52,7 +52,7 @@ variable_demo = () => {
 // 条件语句示例
 // ============================================================================
 
-conditional_demo = () => {
+conditional_demo: () -> Void = {
     print("\n=== 条件语句示例 ===\n")
 
     age = 18
@@ -67,7 +67,7 @@ conditional_demo = () => {
     score = 85
     if score >= 90 {
         print("优秀\n")
-    } else if score >= 60 {
+    } elif score >= 60 {
         print("及格\n")
     } else {
         print("不及格\n")
@@ -78,7 +78,7 @@ conditional_demo = () => {
 // 循环示例
 // ============================================================================
 
-loop_demo = () => {
+loop_demo: () -> Void = {
     print("\n=== 循环示例 ===\n")
 
     // for 循环
@@ -105,12 +105,12 @@ loop_demo = () => {
 // ============================================================================
 
 // 定义一个加法函数
-add: (Int, Int) -> Int = (a, b) => {
+add: (a: Int, b: Int) -> Int = {
     return a + b
 }
 
 // 定义一个比较函数
-max: (Int, Int) -> Int = (a, b) => {
+max: (a: Int, b: Int) -> Int = {
     result = if a > b {
         a
     } else {
@@ -119,7 +119,7 @@ max: (Int, Int) -> Int = (a, b) => {
     return result
 }
 
-function_demo = () => {
+function_demo: () -> Void = {
     print("\n=== 函数定义示例 ===\n")
 
     // 调用加法函数
@@ -139,7 +139,7 @@ function_demo = () => {
 // 主程序入口
 // ============================================================================
 
-main: () -> Void = () => {
+main: () -> Void = {
     basic_printing()
     variable_demo()
     conditional_demo()

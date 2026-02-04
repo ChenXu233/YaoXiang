@@ -1,6 +1,6 @@
 use std.io
 
-main = () => {
+main: () -> Void = {
   print("Testing error handling\n")
 
   // 报错：未定义变量

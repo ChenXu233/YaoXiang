@@ -89,6 +89,16 @@ pub enum MonoType {
         /// 关联类型参数（如果有关联类型也是泛型的）
         assoc_args: Vec<MonoType>,
     },
+    /// 字面量类型（编译期常量值作为类型）
+    /// 用于 Const 泛型，如 "5" 表示值 5 的字面量类型
+    Literal {
+        /// 字面量名称（标识符）
+        name: String,
+        /// 基础类型（如 Int）
+        base_type: Box<MonoType>,
+        /// 对应的 ConstValue
+        value: ConstValue,
+    },
 }
 
 impl MonoType {
@@ -218,6 +228,13 @@ impl MonoType {
                 };
                 format!("{}::{}{}", host_type.type_name(), assoc_name, args_str)
             }
+            MonoType::Literal {
+                name: _,
+                base_type,
+                value,
+            } => {
+                format!("{}::{}", base_type.type_name(), value)
+            }
         }
     }
 
@@ -334,6 +351,11 @@ impl From<ast::Type> for MonoType {
                         .collect::<Vec<_>>()
                         .join(" | ")
                 ))
+            }
+            ast::Type::Literal { name: _, base_type } => {
+                // Literal type - for now, convert to the base type
+                // The actual literal value is handled during const evaluation
+                MonoType::from(*base_type)
             }
         }
     }

@@ -1,17 +1,20 @@
 //! 类型推断器详细测试
 
+use std::collections::HashMap;
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Pattern, UnOp};
 use crate::frontend::typecheck::inference::ExprInferrer;
 use crate::frontend::typecheck::inference::patterns::PatternInferrer;
 use crate::frontend::typecheck::*;
+use crate::frontend::typecheck::overload;
 use crate::util::span::Span;
 
 /// 测试类型推断器创建
 #[test]
 fn test_type_inferrer_new() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
     assert!(inferrer.solver().new_var().type_var().is_some());
 }
 
@@ -19,7 +22,8 @@ fn test_type_inferrer_new() {
 #[test]
 fn test_infer_literal_types() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 整数
     let int_expr = Expr::Lit(Literal::Int(42), Span::default());
@@ -51,7 +55,8 @@ fn test_infer_literal_types() {
 #[test]
 fn test_infer_unknown_variable() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let var_expr = Expr::Var("unknown_var".to_string(), Span::default());
     let result = inferrer.infer_expr(&var_expr);
@@ -62,7 +67,8 @@ fn test_infer_unknown_variable() {
 #[test]
 fn test_inferrer_add_get_var() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 添加变量
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -82,7 +88,8 @@ fn test_inferrer_add_get_var() {
 fn test_scope_management() {
     // 测试进入和退出作用域
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     inferrer.add_var("test".to_string(), PolyType::mono(MonoType::Int(64)));
 
@@ -102,7 +109,8 @@ fn test_scope_management() {
 #[test]
 fn test_infer_arithmetic_ops() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let left = Expr::Lit(Literal::Int(1), Span::default());
     let right = Expr::Lit(Literal::Int(2), Span::default());
@@ -157,7 +165,8 @@ fn test_infer_arithmetic_ops() {
 #[test]
 fn test_infer_comparison_ops() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let left = Expr::Lit(Literal::Int(1), Span::default());
     let right = Expr::Lit(Literal::Int(2), Span::default());
@@ -222,7 +231,8 @@ fn test_infer_comparison_ops() {
 #[test]
 fn test_infer_logical_ops() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let left = Expr::Lit(Literal::Bool(true), Span::default());
     let right = Expr::Lit(Literal::Bool(false), Span::default());
@@ -252,7 +262,8 @@ fn test_infer_logical_ops() {
 #[test]
 fn test_infer_unary_ops() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let expr = Expr::Lit(Literal::Int(5), Span::default());
 
@@ -287,7 +298,8 @@ fn test_infer_unary_ops() {
 #[test]
 fn test_infer_tuple() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let elems = vec![
         Expr::Lit(Literal::Int(1), Span::default()),
@@ -309,7 +321,8 @@ fn test_infer_tuple() {
 #[test]
 fn test_infer_empty_list() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let list = Expr::List(vec![], Span::default());
 
@@ -327,7 +340,8 @@ fn test_infer_empty_list() {
 #[test]
 fn test_infer_dict() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let pairs = vec![
         (
@@ -354,7 +368,8 @@ fn test_infer_dict() {
 #[test]
 fn test_infer_empty_dict() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let dict = Expr::Dict(vec![], Span::default());
 
@@ -373,7 +388,8 @@ fn test_infer_empty_dict() {
 #[test]
 fn test_infer_assignment() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let left = Expr::Lit(Literal::Int(1), Span::default());
     let right = Expr::Lit(Literal::Int(2), Span::default());
@@ -393,7 +409,8 @@ fn test_infer_assignment() {
 #[test]
 fn test_infer_index() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 列表下标
     let list = Expr::List(
@@ -420,7 +437,8 @@ fn test_infer_index() {
 #[test]
 fn test_infer_tuple_static_index() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let tuple = Expr::Tuple(
         vec![
@@ -446,7 +464,8 @@ fn test_infer_tuple_static_index() {
 #[test]
 fn test_infer_tuple_out_of_bounds_index() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let tuple = Expr::Tuple(
         vec![
@@ -564,7 +583,8 @@ fn test_infer_typed_pattern() {
 #[test]
 fn test_infer_return() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 有表达式的 return
     let ret_expr = Expr::Lit(Literal::Int(42), Span::default());
@@ -583,7 +603,8 @@ fn test_infer_return() {
 #[test]
 fn test_infer_break() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 无标签的 break
     let break_expr = Expr::Break(None, Span::default());
@@ -595,7 +616,8 @@ fn test_infer_break() {
 #[test]
 fn test_infer_continue() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 无标签的 continue
     let continue_expr = Expr::Continue(None, Span::default());
@@ -607,7 +629,8 @@ fn test_infer_continue() {
 #[test]
 fn test_infer_break_unknown_label() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let break_expr = Expr::Break(Some("unknown_label".to_string()), Span::default());
     let result = inferrer.infer_expr(&break_expr);
@@ -618,7 +641,8 @@ fn test_infer_break_unknown_label() {
 #[test]
 fn test_infer_continue_unknown_label() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let continue_expr = Expr::Continue(Some("unknown_label".to_string()), Span::default());
     let result = inferrer.infer_expr(&continue_expr);
@@ -629,7 +653,8 @@ fn test_infer_continue_unknown_label() {
 #[test]
 fn test_infer_cast() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let expr = Expr::Lit(Literal::Int(42), Span::default());
     let target_type = crate::frontend::core::parser::ast::Type::Int(64);
@@ -647,7 +672,8 @@ fn test_infer_cast() {
 #[test]
 fn test_infer_type_cast() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let expr = Expr::Lit(Literal::Int(42), Span::default());
     let cast = Expr::Cast {
@@ -664,7 +690,8 @@ fn test_infer_type_cast() {
 #[test]
 fn test_infer_function_call() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 定义一个函数变量
     let fn_type = MonoType::Fn {
@@ -694,7 +721,8 @@ fn test_infer_function_call() {
 #[test]
 fn test_infer_field_access() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 创建结构体类型
     let struct_type = MonoType::Struct(StructType {
@@ -723,7 +751,8 @@ fn test_infer_field_access() {
 #[test]
 fn test_infer_unknown_field() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let struct_type = MonoType::Struct(StructType {
         name: "Point".to_string(),
@@ -747,7 +776,8 @@ fn test_infer_unknown_field() {
 #[test]
 fn test_infer_field_access_on_non_struct() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
 
@@ -766,7 +796,8 @@ fn test_infer_field_access_on_non_struct() {
 #[test]
 fn test_infer_unsupported_op() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 函数定义在表达式上下文中是不支持的
     let fn_def = Expr::FnDef {
@@ -791,7 +822,8 @@ fn test_infer_unsupported_op() {
 #[test]
 fn test_infer_block() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let block = Block {
         stmts: vec![],
@@ -807,7 +839,8 @@ fn test_infer_block() {
 #[test]
 fn test_infer_empty_block() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let block = Block {
         stmts: vec![],
@@ -823,7 +856,8 @@ fn test_infer_empty_block() {
 #[test]
 fn test_infer_var_decl() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 使用 add_var 直接添加变量（模拟变量声明）
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -837,7 +871,8 @@ fn test_infer_var_decl() {
 #[test]
 fn test_infer_var_decl_with_annotation() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 使用 add_var 直接添加变量（模拟带类型的变量声明）
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -851,7 +886,8 @@ fn test_infer_var_decl_with_annotation() {
 #[test]
 fn test_infer_var_decl_no_initializer() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     // 使用 add_var 直接添加变量（模拟无初始化的变量声明）
     inferrer.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -865,7 +901,8 @@ fn test_infer_var_decl_no_initializer() {
 #[test]
 fn test_infer_if_expr() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let condition = Expr::Lit(Literal::Bool(true), Span::default());
     let then_body = Block {
@@ -895,7 +932,8 @@ fn test_infer_if_expr() {
 #[test]
 fn test_infer_while_expr() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let condition = Expr::Lit(Literal::Bool(true), Span::default());
     let body = Block {
@@ -919,7 +957,8 @@ fn test_infer_while_expr() {
 #[test]
 fn test_infer_for_loop() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let iterable = Expr::Lit(Literal::String("test".to_string()), Span::default());
     let body = Block {
@@ -944,7 +983,8 @@ fn test_infer_for_loop() {
 #[test]
 fn test_infer_neg() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let expr = Expr::Lit(Literal::Int(42), Span::default());
     let neg = Expr::UnOp {
@@ -963,7 +1003,8 @@ fn test_infer_neg() {
 #[test]
 fn test_infer_fn_def() {
     let mut solver = TypeConstraintSolver::new();
-    let mut inferrer = ExprInferrer::new(&mut solver);
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let mut inferrer = ExprInferrer::new(&mut solver, &overload_candidates);
 
     let fn_def = Expr::FnDef {
         name: "add".to_string(),

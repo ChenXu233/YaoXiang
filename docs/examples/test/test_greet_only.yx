@@ -1,11 +1,8 @@
 use std.io
 
-greet: (String) -> String = (name) => {
-    return "Hello, ${name}!"
-}
+greet: (name: String) -> String = "Hello, ${name}!"
 
-main: () -> Void = () => {
-    message: String = greet("World");
-    print(message);
-    return
+main = {
+    message: String = greet("World")
+    print(message)
 }

@@ -28,6 +28,9 @@ pub mod traits;
 // 导入 GAT 模块
 pub mod gat;
 
+// 导入重载解析模块（在 TypeEnvironment 之前声明）
+pub mod overload;
+
 // 导入错误处理
 pub mod errors;
 
@@ -48,6 +51,7 @@ pub use checking::*;
 pub use specialization::*;
 pub use specialize::*;
 pub use gat::*;
+pub use overload::*;
 pub use errors::*;
 
 // 类型环境
@@ -67,6 +71,11 @@ pub struct TypeEnvironment {
     pub method_bindings: HashMap<String, crate::frontend::core::type_system::MonoType>,
     /// 模块名称
     pub module_name: String,
+    /// 重载候选存储: 函数名 -> 多个重载版本
+    /// 用于支持函数重载解析
+    pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
+    /// Trait 表：存储所有已解析的 Trait 定义和实现
+    pub trait_table: super::type_level::trait_bounds::TraitTable,
 }
 
 impl TypeEnvironment {
@@ -79,6 +88,7 @@ impl TypeEnvironment {
     pub fn new_with_module(module_name: String) -> Self {
         Self {
             module_name,
+            trait_table: super::type_level::trait_bounds::TraitTable::default(),
             ..Self::default()
         }
     }
@@ -185,6 +195,58 @@ impl TypeEnvironment {
             return true;
         }
         false
+    }
+
+    // ============ Trait 相关方法 ============
+
+    /// 添加 Trait 定义
+    pub fn add_trait(
+        &mut self,
+        definition: super::type_level::trait_bounds::TraitDefinition,
+    ) {
+        self.trait_table.add_trait(definition);
+    }
+
+    /// 获取 Trait 定义
+    pub fn get_trait(
+        &self,
+        name: &str,
+    ) -> Option<&super::type_level::trait_bounds::TraitDefinition> {
+        self.trait_table.get_trait(name)
+    }
+
+    /// 检查 Trait 是否已定义
+    pub fn has_trait(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.trait_table.has_trait(name)
+    }
+
+    /// 添加 Trait 实现
+    pub fn add_trait_impl(
+        &mut self,
+        impl_: super::type_level::trait_bounds::TraitImplementation,
+    ) {
+        self.trait_table.add_impl(impl_);
+    }
+
+    /// 检查类型是否实现了 Trait
+    pub fn has_trait_impl(
+        &self,
+        trait_name: &str,
+        for_type: &str,
+    ) -> bool {
+        self.trait_table.has_impl(trait_name, for_type)
+    }
+
+    /// 获取 Trait 实现
+    pub fn get_trait_impl(
+        &self,
+        trait_name: &str,
+        for_type: &str,
+    ) -> Option<&super::type_level::trait_bounds::TraitImplementation> {
+        self.trait_table.get_impl(trait_name, for_type)
     }
 }
 
@@ -497,7 +559,7 @@ impl TypeChecker {
 
     /// 自动将函数绑定到类型
     /// pub 函数的默认行为：绑定到第一个参数的类型
-    /// 例如: pub distance: (Point, Point) -> Float 自动绑定为 Point.distance
+    /// 例如: pub distance: (p1: Point, p2: Point) -> Float 自动绑定为 Point.distance
     fn auto_bind_to_type(
         &mut self,
         fn_name: &str,
@@ -593,7 +655,11 @@ pub fn infer_expression(
 ) -> Result<MonoType, Vec<TypeError>> {
     // 克隆环境变量，避免借用冲突
     let vars_clone = env.vars.clone();
-    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(env.solver());
+    let overload_candidates_clone = env.overload_candidates.clone();
+    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+        env.solver(),
+        &overload_candidates_clone,
+    );
     // 添加环境中的变量到推断器
     for (name, poly) in vars_clone {
         inferrer.add_var(name, poly);

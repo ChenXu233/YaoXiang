@@ -215,7 +215,41 @@ pub fn parse_if_stmt(
         span,
     })
 }
+/// Parse while loop statement: `while condition { body }`
+pub fn parse_while_stmt(
+    state: &mut crate::frontend::core::parser::ParserState<'_>,
+    span: Span,
+) -> Option<Stmt> {
+    state.bump(); // consume 'while'
 
+    // Parse condition expression
+    let condition = Box::new(state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?);
+
+    // Parse body block
+    let body = if state.at(&TokenKind::LBrace) {
+        parse_block_expression(state)?
+    } else {
+        let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
+        let span = state.span();
+        Block {
+            stmts: Vec::new(),
+            expr: Some(Box::new(expr)),
+            span,
+        }
+    };
+
+    state.skip(&TokenKind::Semicolon);
+
+    Some(Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::While {
+            condition,
+            body: Box::new(body),
+            label: None,
+            span,
+        })),
+        span,
+    })
+}
 /// Parse block statement: `{ ... }`
 pub fn parse_block_stmt(
     state: &mut crate::frontend::core::parser::ParserState<'_>,

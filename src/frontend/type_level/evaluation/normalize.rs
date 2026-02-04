@@ -6,16 +6,21 @@
 //! - 类型表达式的唯一表示
 //! - 冗余结构被消除
 //! - 嵌套类型被扁平化
+//!
+//! 复用 core/type_system/substitute.rs 中的公共替换实现
 
-use crate::frontend::core::type_system::MonoType;
+use crate::frontend::core::type_system::{MonoType, Substitution, Substituter};
 use crate::frontend::type_level::evaluation::{NormalForm, ReductionConfig};
 use std::collections::HashMap;
 
 /// 范式化上下文
 #[derive(Debug, Clone, Default)]
 pub struct NormalizationContext {
-    /// 类型变量映射（使用索引）
-    substitutions: HashMap<usize, MonoType>,
+    /// 类型替换映射
+    substitutions: Substitution,
+
+    /// 替换器实例
+    substituter: Substituter,
 
     /// 范式化缓存
     cache: HashMap<MonoType, NormalForm>,
@@ -25,7 +30,8 @@ impl NormalizationContext {
     /// 创建新的范式化上下文
     pub fn new() -> Self {
         Self {
-            substitutions: HashMap::new(),
+            substitutions: Substitution::new(),
+            substituter: Substituter::new(),
             cache: HashMap::new(),
         }
     }
@@ -44,7 +50,9 @@ impl NormalizationContext {
         &mut self,
         subs: HashMap<usize, MonoType>,
     ) {
-        self.substitutions.extend(subs);
+        for (k, v) in subs {
+            self.substitutions.insert(k, v);
+        }
     }
 
     /// 应用替换到类型
@@ -52,57 +60,7 @@ impl NormalizationContext {
         &self,
         ty: &MonoType,
     ) -> MonoType {
-        self.substitute(ty)
-    }
-
-    fn substitute(
-        &self,
-        ty: &MonoType,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeVar(tv) => self
-                .substitutions
-                .get(&tv.index())
-                .cloned()
-                .unwrap_or(MonoType::TypeVar(*tv)),
-            MonoType::Tuple(types) => {
-                MonoType::Tuple(types.iter().map(|t| self.substitute(t)).collect())
-            }
-            MonoType::List(t) => MonoType::List(Box::new(self.substitute(t))),
-            MonoType::Dict(k, v) => {
-                MonoType::Dict(Box::new(self.substitute(k)), Box::new(self.substitute(v)))
-            }
-            MonoType::Set(t) => MonoType::Set(Box::new(self.substitute(t))),
-            MonoType::Fn {
-                params,
-                return_type,
-                is_async,
-            } => MonoType::Fn {
-                params: params.iter().map(|p| self.substitute(p)).collect(),
-                return_type: Box::new(self.substitute(return_type)),
-                is_async: *is_async,
-            },
-            MonoType::Range { elem_type } => MonoType::Range {
-                elem_type: Box::new(self.substitute(elem_type)),
-            },
-            MonoType::Union(types) => {
-                MonoType::Union(types.iter().map(|t| self.substitute(t)).collect())
-            }
-            MonoType::Intersection(types) => {
-                MonoType::Intersection(types.iter().map(|t| self.substitute(t)).collect())
-            }
-            MonoType::Arc(t) => MonoType::Arc(Box::new(self.substitute(t))),
-            MonoType::AssocType {
-                host_type,
-                assoc_name,
-                assoc_args,
-            } => MonoType::AssocType {
-                host_type: Box::new(self.substitute(host_type)),
-                assoc_name: assoc_name.clone(),
-                assoc_args: assoc_args.iter().map(|t| self.substitute(t)).collect(),
-            },
-            _ => ty.clone(),
-        }
+        self.substituter.substitute(ty, &self.substitutions)
     }
 }
 
