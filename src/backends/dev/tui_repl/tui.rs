@@ -3,7 +3,7 @@
 //! 使用 ratatui 实现的现代化终端用户界面 REPL
 
 use std::io;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crossterm::{
@@ -14,7 +14,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::backends::dev::tui_repl::app::{App, Action};
-use crate::backends::dev::tui_repl::engine::IncrementalCompiler;
+use crate::backends::dev::repl::engine::Evaluator;
 use crate::Result;
 
 /// TUI REPL 主结构
@@ -23,8 +23,8 @@ pub struct TuiREPL {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     /// 应用程序状态
     app: App,
-    /// 增量编译器
-    compiler: Arc<IncrementalCompiler>,
+    /// 评估引擎
+    evaluator: Arc<Mutex<Evaluator>>,
 }
 
 impl TuiREPL {
@@ -37,8 +37,8 @@ impl TuiREPL {
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
 
-        // 创建增量编译器
-        let compiler = Arc::new(IncrementalCompiler::new()?);
+        // 创建评估引擎
+        let evaluator = Arc::new(Mutex::new(Evaluator::new()));
 
         // 创建应用
         let app = App::new();
@@ -46,7 +46,7 @@ impl TuiREPL {
         Ok(Self {
             terminal,
             app,
-            compiler,
+            evaluator,
         })
     }
 
@@ -61,7 +61,7 @@ impl TuiREPL {
 
             // 绘制界面
             self.terminal.draw(|f| {
-                self.app.render(f, f.area(), &self.compiler);
+                self.app.render(f, f.area(), &self.evaluator);
             })?;
 
             // 检查是否超时
@@ -82,7 +82,7 @@ impl TuiREPL {
                         // 处理按键事件
                         match self.app.handle_key_event(key) {
                             Some(Action::Quit) => return self.quit(),
-                            Some(Action::Execute) => self.app.execute_input(&self.compiler),
+                            Some(Action::Execute) => self.app.execute_input(&self.evaluator),
                             Some(Action::SwitchScreen(id)) => self.app.switch_screen(id),
                             Some(Action::Clear) => self.app.clear_output(),
                             Some(Action::ToggleDebug) => self.app.toggle_debug(),
