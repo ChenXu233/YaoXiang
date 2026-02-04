@@ -14,7 +14,9 @@ fn create_trait_table_with_clone() -> TraitTable {
             TraitMethodSignature {
                 name: "clone".to_string(),
                 params: vec![],
-                return_type: crate::frontend::core::type_system::MonoType::TypeRef("Self".to_string()),
+                return_type: crate::frontend::core::type_system::MonoType::TypeRef(
+                    "Self".to_string(),
+                ),
                 is_static: false,
             },
         )]
@@ -32,7 +34,7 @@ fn create_trait_table_with_clone() -> TraitTable {
 #[test]
 fn test_impl_has_required_method() {
     let table = create_trait_table_with_clone();
-    let checker = TraitImplChecker::new(&table);
+    let mut checker = TraitImplChecker::new(&table);
 
     let impl_ = TraitImpl {
         trait_name: "Clone".to_string(),
@@ -57,7 +59,7 @@ fn test_impl_has_required_method() {
 #[test]
 fn test_impl_missing_method() {
     let table = create_trait_table_with_clone();
-    let checker = TraitImplChecker::new(&table);
+    let mut checker = TraitImplChecker::new(&table);
 
     let impl_ = TraitImpl {
         trait_name: "Clone".to_string(),
@@ -83,7 +85,7 @@ fn test_impl_missing_method() {
 #[test]
 fn test_trait_not_found() {
     let table = TraitTable::default();
-    let checker = TraitImplChecker::new(&table);
+    let mut checker = TraitImplChecker::new(&table);
 
     let impl_ = TraitImpl {
         trait_name: "UnknownTrait".to_string(),

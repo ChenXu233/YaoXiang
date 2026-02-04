@@ -1,10 +1,7 @@
 //! type_level 模块测试入口
 
-mod conditional_types_tests;
-mod type_level_operations_tests;
-mod type_evaluation_tests;
+// 已存在的测试模块
 mod const_generics_tests;
-mod integration_tests;
-mod impl_check;
 mod derive;
+mod impl_check;
 mod inheritance;
