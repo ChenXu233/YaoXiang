@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 use crate::frontend::core::type_system::MonoType;
-use crate::frontend::core::parser::ast::{TraitDef, TraitImpl};
 
 /// Trait 方法签名
 #[derive(Debug, Clone)]
@@ -45,7 +44,7 @@ pub struct TraitBound {
 pub type TraitBounds = Vec<TraitBound>;
 
 /// Trait 表 - 存储所有已解析的 Trait 定义
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TraitTable {
     /// Trait 定义存储: name -> TraitDefinition
     traits: HashMap<String, TraitDefinition>,
@@ -56,6 +55,11 @@ pub struct TraitTable {
 }
 
 impl TraitTable {
+    /// 创建新的 Trait 表
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// 添加 Trait 定义
     pub fn add_trait(
         &mut self,
@@ -330,83 +334,6 @@ impl std::fmt::Display for TraitSolverError {
 
 impl std::error::Error for TraitSolverError {}
 
-/// 从 AST Trait 定义创建 TraitDefinition
-impl From<&TraitDef> for TraitDefinition {
-    fn from(def: &TraitDef) -> Self {
-        let mut methods = HashMap::new();
-
-        for method in &def.methods {
-            let sig = TraitMethodSignature {
-                name: method.name.clone(),
-                params: Vec::new(), // 将在类型检查时填充
-                return_type: MonoType::from(method.return_type.clone().unwrap_or(Type::Void)),
-                is_static: false,
-            };
-            methods.insert(method.name.clone(), sig);
-        }
-
-        let parent_traits: Vec<String> = def
-            .parent_traits
-            .iter()
-            .filter_map(|t| {
-                if let Type::Name(n) = t {
-                    Some(n.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Self {
-            name: def.name.clone(),
-            methods,
-            parent_traits,
-            generic_params: def.generic_params.iter().map(|p| p.name.clone()).collect(),
-            span: Some(def.span),
-        }
-    }
-}
-
-/// 从 AST Trait 实现创建 TraitImplementation
-impl From<&TraitImpl> for TraitImplementation {
-    fn from(impl_: &TraitImpl) -> Self {
-        let mut methods = HashMap::new();
-
-        for method in &impl_.methods {
-            // 构建方法类型
-            let param_types: Vec<MonoType> = method
-                .params
-                .iter()
-                .filter(|p| p.name != "self" && p.name != "Self")
-                .map(|p| MonoType::from(p.ty.clone().unwrap_or(Type::Name("unknown".to_string()))))
-                .collect();
-
-            let return_type = MonoType::from(method.return_type.clone().unwrap_or(Type::Void));
-
-            let fn_type = MonoType::Fn {
-                params: param_types,
-                return_type: Box::new(return_type),
-                is_async: false,
-            };
-
-            methods.insert(method.name.clone(), fn_type);
-        }
-
-        let for_type_name = if let Type::Name(n) = &impl_.for_type {
-            n.clone()
-        } else {
-            "unknown".to_string()
-        };
-
-        Self {
-            trait_name: impl_.trait_name.clone(),
-            for_type_name,
-            methods,
-        }
-    }
-}
-
 // 需要的导入
 use std::hash::Hash;
 use std::collections::HashSet;
-use crate::frontend::core::parser::ast::Type;
