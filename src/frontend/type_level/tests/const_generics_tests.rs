@@ -46,8 +46,134 @@ fn test_invalid_literal_name() {
     let value = ConstValue::from_literal_name("hello");
     assert!(value.is_none());
 
+    // 浮点数现在应该是有效的
     let value = ConstValue::from_literal_name("3.14");
-    assert!(value.is_none());
+    assert!(value.is_some());
+}
+
+/// 测试浮点数字面量解析
+#[test]
+fn test_float_literal_parsing() {
+    let value = ConstValue::from_literal_name("3.14");
+    assert!(value.is_some());
+    match value.unwrap() {
+        ConstValue::Float(f) => assert!((f - 3.14).abs() < 0.001),
+        _ => panic!("Expected Float variant"),
+    }
+
+    let value = ConstValue::from_literal_name("-2.5");
+    assert!(value.is_some());
+    match value.unwrap() {
+        ConstValue::Float(f) => assert!((f - (-2.5)).abs() < 0.001),
+        _ => panic!("Expected Float variant"),
+    }
+}
+
+/// 测试 ConstExpr Float 类型
+#[test]
+fn test_const_expr_float() {
+    use crate::frontend::type_level::const_generics::ConstExpr;
+
+    let expr = ConstExpr::Float(3.14);
+    assert!(matches!(expr, ConstExpr::Float(f) if (f - 3.14).abs() < 0.001));
+}
+
+/// 测试 Const 求值器 - 位运算
+#[test]
+fn test_const_eval_bitwise() {
+    let eval = ConstGenericEval::new();
+
+    // 测试位与
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::BitAnd,
+        lhs: Box::new(ConstExpr::Int(0b1111)),
+        rhs: Box::new(ConstExpr::Int(0b1010)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Int(0b1010));
+
+    // 测试位或
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::BitOr,
+        lhs: Box::new(ConstExpr::Int(0b1111)),
+        rhs: Box::new(ConstExpr::Int(0b0000)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Int(0b1111));
+
+    // 测试位异或
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::BitXor,
+        lhs: Box::new(ConstExpr::Int(0b1111)),
+        rhs: Box::new(ConstExpr::Int(0b1010)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Int(0b0101));
+
+    // 测试左移
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::Shl,
+        lhs: Box::new(ConstExpr::Int(1)),
+        rhs: Box::new(ConstExpr::Int(4)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Int(16));
+
+    // 测试右移
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::Shr,
+        lhs: Box::new(ConstExpr::Int(16)),
+        rhs: Box::new(ConstExpr::Int(4)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Int(1));
+}
+
+/// 测试 Const 求值器 - 浮点数运算
+#[test]
+fn test_const_eval_float_operations() {
+    let eval = ConstGenericEval::new();
+
+    // 测试浮点数加法
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::Add,
+        lhs: Box::new(ConstExpr::Float(3.14)),
+        rhs: Box::new(ConstExpr::Float(2.86)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    match result.unwrap() {
+        ConstValue::Float(f) => assert!((f - 6.0).abs() < 0.001),
+        _ => panic!("Expected Float variant"),
+    }
+
+    // 测试浮点数乘法
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::Mul,
+        lhs: Box::new(ConstExpr::Float(2.0)),
+        rhs: Box::new(ConstExpr::Float(3.0)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    match result.unwrap() {
+        ConstValue::Float(f) => assert!((f - 6.0).abs() < 0.001),
+        _ => panic!("Expected Float variant"),
+    }
+
+    // 测试浮点数比较
+    let expr = ConstExpr::BinOp {
+        op: ConstBinOp::Lt,
+        lhs: Box::new(ConstExpr::Float(1.5)),
+        rhs: Box::new(ConstExpr::Float(2.5)),
+    };
+    let result = eval.eval(&expr);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), ConstValue::Bool(true));
 }
 
 /// 测试 Const 参数信息提取
@@ -418,4 +544,36 @@ fn test_generic_param_kind() {
         },
         _ => panic!("Expected Const kind"),
     }
+}
+
+/// 测试泛型尺寸计算 - 数组类型
+#[test]
+fn test_generic_size_array() {
+    use crate::frontend::type_level::const_generics::GenericSize;
+
+    let size_calc = GenericSize::new();
+
+    // 测试 Array<Int, 10> - Int 是 8 字节，所以 8 * 10 = 80
+    let array_type = MonoType::TypeRef("Array<Int, 10>".to_string());
+    let result = size_calc.size_of(&array_type);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 80);
+
+    // 测试 Array<Float, 5> - Float 是 8 字节，所以 8 * 5 = 40
+    let array_type = MonoType::TypeRef("Array<Float, 5>".to_string());
+    let result = size_calc.size_of(&array_type);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 40);
+
+    // 测试 Array<Bool, 100> - Bool 是 1 字节，所以 1 * 100 = 100
+    let array_type = MonoType::TypeRef("Array<Bool, 100>".to_string());
+    let result = size_calc.size_of(&array_type);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 100);
+
+    // 测试嵌套数组 Array<Array<Int, 2>, 3> - 外层 3 * (内层 2 * 8) = 48
+    let nested_type = MonoType::TypeRef("Array<Array<Int, 2>, 3>".to_string());
+    let result = size_calc.size_of(&nested_type);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 48);
 }

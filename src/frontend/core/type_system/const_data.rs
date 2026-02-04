@@ -36,11 +36,15 @@ impl ConstValue {
     }
 
     /// 从字面量名称解析 ConstValue
-    /// 例如: "5" -> ConstValue::Int(5), "true" -> ConstValue::Bool(true)
+    /// 例如: "5" -> ConstValue::Int(5), "3.14" -> ConstValue::Float(3.14), "true" -> ConstValue::Bool(true)
     pub fn from_literal_name(name: &str) -> Option<Self> {
-        // Try to parse as integer
+        // Try to parse as integer first (to prioritize "5" over "5.0")
         if let Ok(n) = name.parse::<i128>() {
             return Some(ConstValue::Int(n));
+        }
+        // Try to parse as float (to handle cases like "3.14")
+        if let Ok(f) = name.parse::<f64>() {
+            return Some(ConstValue::Float(f as f32));
         }
         // Try to parse as boolean
         match name {
@@ -52,7 +56,11 @@ impl ConstValue {
 
     /// 检查名称是否是有效的字面量
     pub fn is_valid_literal_name(name: &str) -> bool {
-        name.parse::<i128>().is_ok() || name == "true" || name == "false"
+        // 整数优先于浮点数（5.0 应该被解析为浮点数，但如果输入是 "5" 则解析为整数）
+        name.parse::<i128>().is_ok()
+            || name.parse::<f64>().is_ok()
+            || name == "true"
+            || name == "false"
     }
 }
 
