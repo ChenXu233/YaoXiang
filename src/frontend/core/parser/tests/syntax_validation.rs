@@ -68,16 +68,16 @@ mod syntax_validation_tests {
             "sub: (a: Int, b: Int) -> Int = (a, b) => a - b"
         ));
 
-        // 单参数函数（签名中类型简写）
-        assert!(check_syntax("inc: Int -> Int = x => x + 1"));
+        // 单参数函数（RFC-010 语法：参数名在签名中）
+        assert!(check_syntax("inc: (x: Int) -> Int = x => x + 1"));
 
         // 空参函数
         assert!(check_syntax("empty1: () -> Void = () => {}"));
         assert!(check_syntax("get_answer: () -> Int = () => 42"));
 
-        // 柯里化函数（右结合）
+        // 柯里化函数（RFC-010 语法，右结合）
         assert!(check_syntax(
-            "add_curried: Int -> Int -> Int = a => b => a + b"
+            "add_curried: (a: Int) -> (b: Int) -> Int = a => b => a + b"
         ));
     }
 
@@ -161,19 +161,17 @@ mod syntax_validation_tests {
         // 旧语法已不再支持：name(Params) -> Ret = ...
         assert!(!check_syntax("add(Int, Int) -> Int = (a, b) => a + b"));
 
-        // 缺少 '=' 符号（类型标注后直接跟 lambda 而没有 =）
-        assert!(!check_syntax("neg: Int -> Int (a) => -a"));
+        // 旧柯里化语法已不支持：Type -> Type 现在需要 (param: Type) -> Type
+        assert!(!check_syntax("neg: Int -> Int = (a) => -a"));
 
-        // 缺少 '=>' 符号 - 这个实际上是有效的变量声明语法
-        // `inc: Int -> Int = a + 1` 声明了一个类型为 Int -> Int 的变量，值为 a + 1
-        // 这是有效的语法，类型检查会报错但解析会通过
-        assert!(check_syntax("inc: Int -> Int = a + 1"));
+        // 新语法下需要使用 (a: Int) -> Int，不能省略参数,并且报错为 a 没有定义。
+        assert!(!check_syntax("inc: Int -> Int = a + 1"));
 
-        // 缺少函数体
-        assert!(!check_syntax("dec: Int -> Int = (a) => "));
+        // 缺少函数体 (RFC-010 语法)
+        assert!(!check_syntax("dec: (a: Int) -> Int = (a) => "));
 
-        // 参数体不完整
-        assert!(!check_syntax("double: Int -> Int =  => x * 2;"));
+        // 参数体不完整 (RFC-010 语法)
+        assert!(!check_syntax("double: (x: Int) -> Int =  => x * 2;"));
 
         // 无效的括号形式
         assert!(!check_syntax(
@@ -212,11 +210,13 @@ mod syntax_validation_tests {
         // | { statements } | 无 return → Void；有 return → return 的类型 |
         // | expression | 直接返回表达式值 |
 
-        // 单参数 Lambda（可省略括号）
-        assert!(check_syntax("inc: Int -> Int = x => x + 1"));
+        // 单参数 Lambda（RFC-010 语法：参数名在签名中）
+        assert!(check_syntax("inc: (x: Int) -> Int = x => x + 1"));
 
-        // 柯里化 Lambda（多箭头，右结合）
-        assert!(check_syntax("add: Int -> Int -> Int = a => b => a + b"));
+        // 柯里化 Lambda（RFC-010 语法，右结合）
+        assert!(check_syntax(
+            "add: (a: Int) -> (b: Int) -> Int = a => b => a + b"
+        ));
 
         // 块形式：无 return → Void
         assert!(check_syntax("test = () => { println(\"hi\") }"));
@@ -240,7 +240,9 @@ mod syntax_validation_tests {
         assert!(check_syntax(
             "square: (x: Int) -> Int = (x) => { return x * x }"
         ));
-        assert!(check_syntax("square: Int -> Int = x => { return x * x }"));
+        assert!(check_syntax(
+            "square: (x: Int) -> Int = x => { return x * x }"
+        ));
         assert!(check_syntax("get_value: () -> Int = () => { return 42 }"));
         assert!(check_syntax(
             "log: (msg: String) -> Void = (msg) => { print(msg); return }"
