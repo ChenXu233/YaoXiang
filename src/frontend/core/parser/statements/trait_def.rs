@@ -7,6 +7,7 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::{
     TraitMethod, TraitDef, TraitImpl, MethodImpl, Stmt, StmtKind, Param, Type, Block, GenericParam,
+    GenericParamKind,
 };
 use crate::frontend::core::parser::{ParserState, ParseError};
 use crate::util::span::Span;
@@ -129,7 +130,11 @@ fn parse_trait_generic_params(state: &mut ParserState<'_>) -> Option<Vec<Generic
             }
         }
 
-        params.push(GenericParam { name, constraints });
+        params.push(GenericParam {
+            name,
+            kind: GenericParamKind::Type,
+            constraints,
+        });
 
         // 跳过逗号
         state.skip(&TokenKind::Comma);

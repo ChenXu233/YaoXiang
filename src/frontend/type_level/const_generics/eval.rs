@@ -274,8 +274,35 @@ impl ConstGenericEval {
                 _ => None,
             },
             "sizeof" => {
-                // 返回类型的大小
-                Some(Ok(ConstValue::Int(8))) // 简化实现
+                // 期望参数是类型名称字符串
+                let type_name = match args.first() {
+                    Some(ConstExpr::Var(name)) => name.as_str(),
+                    _ => {
+                        return Some(Err(ConstGenericError::EvalFailed(
+                            "sizeof expects a type name".to_string(),
+                        )))
+                    }
+                };
+
+                // 基础类型大小表
+                let size = match type_name {
+                    "Void" => 0,
+                    "Bool" => 1,
+                    "Char" => 4,
+                    "Int" | "Uint" | "Float" | "String" => 8,
+                    _ => {
+                        return Some(Err(ConstGenericError::EvalFailed(format!(
+                            "Unknown type: {}",
+                            type_name
+                        ))))
+                    }
+                };
+                Some(Ok(ConstValue::Int(size as i128)))
+            }
+            // RFC-011: compile_time - 检查表达式是否可以在编译期求值
+            "compile_time" => {
+                // compile_time() 总是返回 true（表示可以在编译期求值）
+                Some(Ok(ConstValue::Bool(true)))
             }
             _ => None,
         }
