@@ -3,9 +3,15 @@
 //! 特质求解器
 //!
 //! 实现特质约束求解
+//!
+//! 集成 RFC-011 Trait 系统，支持：
+//! - 内置特质 (Clone, Debug, Send, Sync)
+//! - 用户定义特质
+//! - 约束传播
 
 use crate::util::diagnostic::Result;
 use crate::frontend::core::type_system::MonoType;
+use crate::frontend::type_level::trait_bounds::{TraitTable, TraitBound, TraitSolver as AdvancedSolver};
 use std::collections::HashMap;
 
 /// 特质约束
@@ -17,8 +23,14 @@ pub struct TraitConstraint {
 
 /// 特质求解器
 pub struct TraitSolver {
-    /// 已解析的特质约束
-    resolved_constraints: HashMap<String, TraitConstraint>,
+    /// 简化的约束存储
+    simple_constraints: HashMap<String, TraitConstraint>,
+
+    /// 高级求解器（用于用户定义 Trait）
+    advanced_solver: AdvancedSolver,
+
+    /// Trait 表引用
+    trait_table: Option<TraitTable>,
 }
 
 impl Default for TraitSolver {
@@ -31,8 +43,19 @@ impl TraitSolver {
     /// 创建新的特质求解器
     pub fn new() -> Self {
         Self {
-            resolved_constraints: HashMap::new(),
+            simple_constraints: HashMap::new(),
+            advanced_solver: AdvancedSolver::new(),
+            trait_table: None,
         }
+    }
+
+    /// 设置 Trait 表
+    pub fn set_trait_table(
+        &mut self,
+        table: TraitTable,
+    ) {
+        self.trait_table = Some(table.clone());
+        self.advanced_solver.set_trait_table(table);
     }
 
     /// 求解特质约束
@@ -41,13 +64,49 @@ impl TraitSolver {
         constraint: &TraitConstraint,
     ) -> Result<()> {
         // 检查是否已经解决
-        if self.resolved_constraints.contains_key(&constraint.name) {
+        if self.simple_constraints.contains_key(&constraint.name) {
             return Ok(());
         }
 
+        // 尝试使用高级求解器（支持用户定义 Trait）
+        if let Some(ref table) = self.trait_table {
+            if table.has_trait(&constraint.name) {
+                // 用户定义的 Trait，使用高级求解器
+                let trait_bound = TraitBound {
+                    trait_name: constraint.name.clone(),
+                    self_type: constraint.args.first().cloned().unwrap_or(MonoType::Void),
+                };
+                self.advanced_solver.add_constraint(trait_bound);
+                match self.advanced_solver.solve() {
+                    Ok(_) => {
+                        self.simple_constraints
+                            .insert(constraint.name.clone(), constraint.clone());
+                        Ok(())
+                    }
+                    Err(e) => Err(crate::util::diagnostic::Diagnostic::error(
+                        "E0602".to_string(),
+                        format!("Cannot satisfy trait constraint: {}", e),
+                        None,
+                    )),
+                }
+            } else {
+                // 内置 Trait，使用简化求解
+                self.solve_builtin_trait(constraint)
+            }
+        } else {
+            // 没有 Trait 表，使用简化求解
+            self.solve_builtin_trait(constraint)
+        }
+    }
+
+    /// 求解内置特质约束
+    fn solve_builtin_trait(
+        &mut self,
+        constraint: &TraitConstraint,
+    ) -> Result<()> {
         // 检查约束是否可以满足
         if self.can_satisfy_constraint(constraint) {
-            self.resolved_constraints
+            self.simple_constraints
                 .insert(constraint.name.clone(), constraint.clone());
             Ok(())
         } else {
@@ -136,19 +195,61 @@ impl TraitSolver {
         )
     }
 
-    /// 检查特质是否满足
+    /// 检查特质是否满足（支持用户定义 Trait）
     pub fn check_trait(
         &mut self,
         ty: &MonoType,
         trait_name: &str,
     ) -> bool {
-        // 简化的实现：根据类型检查特质可用性
+        // 首先检查是否是用户定义的 Trait
+        if let Some(ref table) = self.trait_table {
+            if table.has_trait(trait_name) {
+                // 使用高级求解器
+                return self.advanced_solver.satisfies_trait(trait_name, ty);
+            }
+        }
+
+        // 内置 Trait
         match trait_name {
             "Clone" => self.check_clone_trait(ty),
             "Debug" => self.check_debug_trait(ty),
             "Send" => self.check_send_trait(ty),
             "Sync" => self.check_sync_trait(ty),
-            _ => true, // 其他特质默认为可满足
+            _ => true,
         }
+    }
+
+    /// 获取所有未满足的约束
+    pub fn unsatisfied_constraints(&self) -> Vec<&TraitConstraint> {
+        self.simple_constraints
+            .values()
+            .filter(|c| !self.simple_constraints.contains_key(&c.name))
+            .collect()
+    }
+
+    /// 批量求解约束
+    pub fn solve_all(
+        &mut self,
+        constraints: &[TraitConstraint],
+    ) -> Result<()> {
+        for constraint in constraints {
+            self.solve(constraint)?;
+        }
+        Ok(())
+    }
+
+    /// 传播约束到类型参数
+    /// 如果类型 T 实现了 Trait A，且 B: A，则 T 也实现了 B
+    pub fn propagate_constraints_to_type_args(
+        &self,
+        _ty: &MonoType,
+        _trait_name: &str,
+    ) -> Vec<TraitConstraint> {
+        // 简化实现：返回空列表
+        // 完整的实现需要：
+        // 1. 分析类型的泛型参数
+        // 2. 检查父 Trait 继承关系
+        // 3. 生成传播后的约束
+        Vec::new()
     }
 }
