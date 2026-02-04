@@ -3,7 +3,7 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-25
-> **最后更新**: 2025-02-03（平台特化语法：P 为预定义泛型参数，平台即类型）
+> **最后更新**: 2025-02-04（移除 const 关键字，改用字面量类型约束）
 
 ## 摘要
 
@@ -13,7 +13,7 @@
 - **基础泛型**：`[T]` 类型参数，支持泛型函数和泛型类型
 - **类型约束**：`[T: Clone]` 多重约束，函数类型约束
 - **关联类型**：`type Iterator[T] = { Item: T, next: () -> Option[T] }`
-- **Const泛型**：`[T, N: Int]` 编译期常量参数，Const函数
+- **编译期泛型**：`[T, N: Int]` 编译期常量参数，字面量类型约束区分编译期与运行时
 - **条件类型**：`type If[C: Bool, T, E]` 类型级计算，类型族
 - **平台特化**：`[P: X86_64]` 预定义泛型参数 P，平台即类型
 
@@ -325,82 +325,110 @@ process_container: [T, C: Container[T]](container: C) -> List[T] = {
 }
 ```
 
-### 4. Const泛型
+### 4. 编译期泛型
 
-#### 4.1 Const泛型语法
+#### 4.1 编译期常量参数
+
+**核心设计**：用 `[n: Int]` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。无需 `const` 关键字。
 
 ```yaoxiang
-# 编译期常量参数
-type Array[T, N: Int] = {
+# ════════════════════════════════════════════════════════
+# 字面量类型约束：编译期 vs 运行时
+# ════════════════════════════════════════════════════════
+
+# [n: Int] 声明泛型参数，类型为 Int
+# (n: n)   声明值参数，类型为字面量类型 "n"
+#           n 既是类型也是值，编译器在调用时必须已知 n 的值
+
+# 编译期阶乘：参数必须是编译期已知的字面量
+factorial: [n: Int](n: n) -> Int = {
+    match n {
+        0 => 1,
+        _ => n * factorial(n - 1)
+    }
+}
+
+# 编译期加法
+add: [a: Int, b: Int](a: a, b: b) -> Int = a + b
+
+# ════════════════════════════════════════════════════════
+# 编译期常量数组
+# ════════════════════════════════════════════════════════
+type StaticArray[T, N: Int] = {
     data: T[N],  # 编译期已知大小的数组
     length: N,
 }
 
-# 函数级别的Const泛型
-identity_matrix: [N: Int, T: Add + Zero](size: N) -> Array[Array[T, N], N] = {
-    matrix = Array[Array[T, N], N]()
-    for i in 0..N {
-        row = Array[T, N]()
-        for j in 0..N {
+# 使用方式
+arr: StaticArray[Int, factorial(5)]  # StaticArray[Int, 120]，编译器在编译期计算
+```
+
+#### 4.2 编译期计算
+
+```yaoxiang
+# ════════════════════════════════════════════════════════
+# 编译期计算示例
+# ════════════════════════════════════════════════════════
+
+# 编译器在编译期计算字面量类型的函数调用
+SIZE: Int = factorial(5)  # 编译期为 120
+
+# 矩阵类型使用
+type Matrix[T, Rows: Int, Cols: Int] = {
+    data: Array[Array[T, Cols], Rows],
+}
+
+# 编译期维度验证
+identity_matrix: [T: Add + Zero + One, N: Int](size: N) -> Matrix[T, N, N] = {
+    matrix = Matrix[T, N, N]()
+    for i in 0..size {
+        for j in 0..size {
             if i == j {
-                row.push(One::one())
+                matrix.data[i][j] = One::one()
             } else {
-                row.push(Zero::zero())
+                matrix.data[i][j] = Zero::zero()
             }
         }
-        matrix.push(row)
     }
-    return matrix
+    matrix
 }
 
-# 使用
-# identity_matrix[3, Int] 创建 3x3 Int 矩阵
+# 使用：编译期计算，生成 Matrix[Float, 3, 3]
+identity_3x3 = identity_matrix[Float, 3](3)
 ```
 
-#### 4.2 Const函数
+#### 4.3 编译期验证（标准库实现）
 
 ```yaoxiang
-# 编译期函数（const fn）
-const add: (a: Int, b: Int) -> Int = a + b
+# ════════════════════════════════════════════════════════
+# 标准库实现：利用条件类型
+# ════════════════════════════════════════════════════════
 
-const multiply: (a: Int, b: Int) -> Int = a * b
-
-# 递归Const函数
-const factorial: (n: Int) -> Int = {
-    return match n {
-        0 => 1,
-        _ => n * factorial(n - 1),
-    }
+# 标准库定义：Assert[C] 是一个类型
+# - C 为 True 时，推导为 Void
+# - C 为 False 时，推导为 compile_error("Assertion failed")
+type Assert[C: Bool] = match C {
+    True => Void,
+    False => compile_error("Assertion failed"),
 }
 
-# 编译期计算
-const SIZE: Int = factorial(5)  # 120
-
-# 使用Const泛型
-type StaticArray[T, N: Int] = {
+# 使用方式1：在类型定义中作为约束
+type Array[T, N: Int] = {
     data: T[N],
-    length: N,
+    # 编译期检查：N 必须大于 0（Assert 在类型位置）
+    length: Assert[N > 0],
 }
 
-# 编译期验证
-static_assert: [C: Bool](condition: C) -> Void = {
-    # 编译期检查
-    if !condition {
-        compile_error("Assertion failed")
-    }
-}
-
-# 使用
-type IntArray[10] = StaticArray[Int, 10]
-
-# 验证
-static_assert(IntArray.length == 10)  # 编译期验证
+# 使用方式2：在表达式中使用
+type IntArray[N: Int] = StaticArray[Int, N]
+# 验证：IntArray[10] 的大小等于 sizeof(Int) * 10
+Assert[size_of(IntArray[10]) == sizeof(Int) * 10]
 ```
 
-#### 4.3 Const泛型特化
+#### 4.4 编译期泛型特化
 
 ```yaoxiang
-# 小数组优化：使用函数重载实现Const泛型特化
+# 小数组优化：使用函数重载实现编译期泛型特化
 
 # 通用实现
 sum: [T, N: Int](arr: Array[T, N]) -> T = {
@@ -572,11 +600,8 @@ type PlatformSupportsSIMD[P] = match P {
     _ => False,
 }
 
-# 编译期静态断言
-static_assert: [C: Bool](condition: C) -> Void = ...
-
-# 验证当前平台是否支持 SIMD
-static_assert(PlatformSupportsSIMD[P])
+# 验证当前平台是否支持 SIMD（使用 Assert 标准库类型）
+Assert[PlatformSupportsSIMD[P]]
 ```
 
 #### 6.3 条件特化
@@ -760,10 +785,10 @@ map_Int_Int: (list: List[Int], f: Fn(Int) -> Int) -> List[Int] = ...
 map_String_String: (list: List[String], f: Fn(String) -> String) -> List[String] = ...
 ```
 
-#### 7.3 Const泛型DCE
+#### 7.3 编译期泛型DCE
 
 ```yaoxiang
-# 编译期分析：Const泛型使用情况
+# 编译期分析：编译期泛型使用情况
 type Array[T, N: Int] = {
     data: T[N],
 }
@@ -1107,18 +1132,16 @@ strings = Array[String]("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator[String]())
 ```
 
-#### 9.3 Const泛型示例
+#### 9.3 编译期泛型示例
 
 ```yaoxiang
 # ======== 1. 编译期矩阵类型 ========
 type Matrix[T, Rows: Int, Cols: Int] = {
     data: Array[Array[T, Cols], Rows],
 
-    # 编译期维度验证
-    static_assert: () -> Void = {
-        static_assert(Rows > 0)
-        static_assert(Cols > 0)
-    },
+    # 编译期维度验证：利用 Assert 标准库类型
+    _assert: Assert[Rows > 0],  # Rows > 0，否则编译错误
+    _assert: Assert[Cols > 0],  # Cols > 0，否则编译错误
 
     # 矩阵运算
     multiply: [T: Add + Multiply + Zero, M: Int](self: Matrix[T, Rows, Cols], other: Matrix[T, Cols, M]) -> Matrix[T, Rows, M] = {
@@ -1475,20 +1498,20 @@ type Iterator[T] = {
 
 **预计工期**：3个月
 
-#### Phase 4: Const泛型（编译期计算）
+#### Phase 4: 编译期泛型（编译期计算）
 
-**目标**：支持Const泛型和Const函数
+**目标**：支持编译期泛型和字面量类型约束
 
 **实现**：
-- 常量表达式求值
-- Const泛型实例化
-- 编译期证明
+- 字面量类型作为参数类型
+- 编译期表达式求值
+- 编译期泛型实例化
 - 维度验证
 
 **示例**：
 ```yaoxiang
 type Array[T, N: Int] = { data: T[N] }
-const factorial: (Int) -> Int = (n) => ...
+factorial: [n: Int](n: n) -> Int = (n) => ...
 ```
 
 **预计工期**：2个月
@@ -1652,8 +1675,9 @@ impl TypeLevelComputer {
    - IDE友好，错误信息清晰
 
 4. **编译期计算**
-   - Const泛型支持编译期计算
+   - 编译期泛型支持编译期计算
    - 维度验证等特性
+   - 无需 `const` 关键字，纯类型约束
 
 5. **平台特化**
    - 平台即类型：平台是标准库定义的枚举类型
@@ -1716,7 +1740,7 @@ impl TypeLevelComputer {
 | **Phase 1** | 基础泛型 + 单态化 | 1个月 |
 | **Phase 2** | 类型约束 + trait系统 | 2个月 |
 | **Phase 3** | 关联类型 + GAT | 3个月 |
-| **Phase 4** | Const泛型 + 编译期计算 | 2个月 |
+| **Phase 4** | 编译期泛型 + 字面量类型 | 2个月 |
 | **Phase 5** | 条件类型 + 类型级编程 | 4个月 |
 
 ### 依赖关系
@@ -1791,8 +1815,10 @@ method ::= identifier '.' identifier generic_params? '(' parameters? ')' '->' ty
 # 类型定义
 generic_type ::= 'type' identifier generic_params? '=' type_expression
 
-# 编译期函数
-const_fn ::= 'const' identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
+# 字面量类型参数（编译期函数）
+# [n: Int](n: n) 表示 n 是编译期常量，类型为字面量 "n"
+literal_param ::= identifier ':' identifier  # 声明泛型参数
+               | identifier ':' identifier   # 值参数，类型为泛型参数名（字面量类型）
 ```
 
 ### 平台类型系统
@@ -1890,17 +1916,17 @@ benchmark_map: () -> Void = {
 
 # 编译期计算性能测试
 benchmark_const: () -> Void = {
-    # 测试Const泛型性能
+    # 测试编译期泛型性能
     start = compile_time()
 
-    # 大量Const泛型实例
+    # 大量编译期泛型实例
     arrays = List[Array[Int, 100]]()
     for i in 0..1000 {
         arrays.push(Array[Int, 100]())
     }
 
     end = compile_time()
-    println("Const compile time: " + (end - start).to_string())
+    println("Compile time: " + (end - start).to_string())
 }
 ```
 
