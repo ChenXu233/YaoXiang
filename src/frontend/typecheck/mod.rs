@@ -28,6 +28,9 @@ pub mod traits;
 // 导入 GAT 模块
 pub mod gat;
 
+// 导入重载解析模块（在 TypeEnvironment 之前声明）
+pub mod overload;
+
 // 导入错误处理
 pub mod errors;
 
@@ -48,6 +51,7 @@ pub use checking::*;
 pub use specialization::*;
 pub use specialize::*;
 pub use gat::*;
+pub use overload::*;
 pub use errors::*;
 
 // 类型环境
@@ -67,6 +71,9 @@ pub struct TypeEnvironment {
     pub method_bindings: HashMap<String, crate::frontend::core::type_system::MonoType>,
     /// 模块名称
     pub module_name: String,
+    /// 重载候选存储: 函数名 -> 多个重载版本
+    /// 用于支持函数重载解析
+    pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
 }
 
 impl TypeEnvironment {
