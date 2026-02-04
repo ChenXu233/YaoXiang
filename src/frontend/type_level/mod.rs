@@ -5,18 +5,29 @@
 //! - 类型级运算 (算术、比较、逻辑)
 //! - Const泛型支持
 //! - 类型范式化和归约
+//! - Trait 边界和约束求解
 
 pub mod conditional_types;
 pub mod const_generics;
 pub mod dependent_types;
+pub mod derive;
 pub mod evaluation;
+pub mod impl_check;
+pub mod inheritance;
 pub mod operations;
+pub mod trait_bounds;
 
 // 重新导出主要类型
 pub use conditional_types::{If, MatchType, ConditionalType};
 pub use evaluation::{TypeNormalizer, TypeReducer, TypeComputer, NormalForm};
 pub use operations::{TypeArithmetic, TypeComparison, TypeLogic};
 pub use const_generics::{ConstGenericEval, GenericSize};
+pub use trait_bounds::{
+    TraitDefinition, TraitBound, TraitTable, TraitImplementation, TraitSolver, TraitSolverError,
+};
+pub use inheritance::{InheritanceChecker, InheritanceError, TraitInheritanceGraph};
+pub use impl_check::{TraitImplChecker, TraitImplError};
+pub use derive::{DeriveParser, DeriveGenerator};
 
 /// 高级类型错误
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
