@@ -16,6 +16,8 @@ pub mod impl_check;
 pub mod inheritance;
 pub mod operations;
 pub mod trait_bounds;
+pub mod type_families;
+pub mod type_match;
 
 // 重新导出主要类型
 pub use conditional_types::{If, MatchType, ConditionalType};
@@ -28,6 +30,8 @@ pub use trait_bounds::{
 pub use inheritance::{InheritanceChecker, InheritanceError, TraitInheritanceGraph};
 pub use impl_check::{TraitImplChecker, TraitImplError};
 pub use derive::{DeriveParser, DeriveGenerator};
+pub use type_families::{Bool, Nat, IsTrue, IsFalse, IsZero, IsSucc, bool_family, nat_family};
+pub use type_match::{MatchPattern, MatchArm, PatternMatcher, MatchBinding, PatternBuilder};
 
 /// 高级类型错误
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
