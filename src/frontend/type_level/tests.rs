@@ -2,7 +2,6 @@
 //!
 //! 测试条件类型、依赖类型、类型级运算和Const泛型
 
-#[cfg(test)]
 mod conditional_types_tests {
     use crate::frontend::type_level::conditional_types::{
         If, MatchType, TypeCondition, conditions, MatchArm,
@@ -81,7 +80,6 @@ mod conditional_types_tests {
     }
 }
 
-#[cfg(test)]
 mod type_level_operations_tests {
     use crate::frontend::type_level::operations::{
         TypeArithmetic, TypeComparison, TypeLogic, ArithOp, CmpOp, LogicOp,
@@ -168,7 +166,6 @@ mod type_level_operations_tests {
     }
 }
 
-#[cfg(test)]
 mod type_evaluation_tests {
     use crate::frontend::type_level::evaluation::{
         TypeNormalizer, TypeReducer, TypeUnifier, NormalForm,
@@ -214,7 +211,6 @@ mod type_evaluation_tests {
     }
 }
 
-#[cfg(test)]
 mod const_generics_tests {
     use crate::frontend::type_level::const_generics::{
         eval::{ConstGenericEval, ConstExpr, ConstBinOp},
@@ -274,7 +270,6 @@ mod const_generics_tests {
     }
 }
 
-#[cfg(test)]
 mod integration_tests {
     use crate::frontend::type_level::evaluation::compute::TypeComputer;
     use crate::frontend::core::type_system::MonoType;
@@ -288,3 +283,7 @@ mod integration_tests {
         assert!(matches!(result, super::compute::ComputeResult::Done(_)));
     }
 }
+
+// 重新导出 tests 子模块
+#[path = "tests/mod.rs"]
+mod tests_submodules;
