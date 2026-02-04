@@ -440,15 +440,127 @@ impl CrossModuleReachabilityAnalyzer {
     }
 
     /// 分析跨模块可达性
+    ///
+    /// 返回每个模块中可达的实例集合
+    /// 工作流程：
+    /// 1. 识别入口模块（包含 main 函数或导出的入口点）
+    /// 2. 从入口模块开始进行可达性分析
+    /// 3. 收集所有被入口引用的外部模块实例
+    /// 4. 递归分析依赖的模块
     pub fn analyze_cross_module(&self) -> HashMap<String, HashSet<InstanceNode>> {
-        let module_reachable: HashMap<String, HashSet<InstanceNode>> = HashMap::new();
+        let mut module_reachable: HashMap<String, HashSet<InstanceNode>> = HashMap::new();
 
-        // TODO: 实现跨模块分析
-        // 1. 从入口模块开始（包含 main 的模块）
-        // 2. 递归分析依赖的模块
-        // 3. 收集所有可达实例
+        // 1. 识别入口模块
+        // 默认将所有模块标记为不可达，后续只标记可达的
+        let entry_modules = self.identify_entry_modules();
+
+        // 2. 对每个入口模块进行可达性分析
+        for module_name in entry_modules {
+            let reachable = self.analyze_module_reachability(&module_name);
+            module_reachable.insert(module_name, reachable);
+        }
+
+        // 3. 收集所有模块中被引用的实例
+        self.collect_cross_module_references(&mut module_reachable);
 
         module_reachable
+    }
+
+    /// 识别入口模块
+    ///
+    /// 包含 main 函数或导出入口点的模块
+    fn identify_entry_modules(&self) -> Vec<String> {
+        let mut entry_modules = Vec::new();
+
+        // 检查每个模块的导出中是否包含入口点
+        for (module_name, exports) in &self.module_exports {
+            for export in exports {
+                // 检查是否是 main 函数或入口函数
+                if let InstanceNode::Function(func) = export {
+                    if func.generic_id.name() == "main" && !entry_modules.contains(module_name) {
+                        entry_modules.push(module_name.clone());
+                    }
+                }
+            }
+        }
+
+        // 如果没有找到入口模块，返回所有模块（保守处理）
+        if entry_modules.is_empty() {
+            return self.module_graphs.keys().cloned().collect();
+        }
+
+        entry_modules
+    }
+
+    /// 分析单个模块的可达性
+    fn analyze_module_reachability(
+        &self,
+        module_name: &str,
+    ) -> HashSet<InstanceNode> {
+        if let Some(graph) = self.module_graphs.get(module_name) {
+            let analyzer = ReachabilityAnalyzer::new();
+            let analysis = analyzer.analyze(graph);
+            analysis.reachable().clone()
+        } else {
+            HashSet::new()
+        }
+    }
+
+    /// 收集跨模块引用
+    ///
+    /// 分析所有模块的导入，收集被引用的外部实例
+    fn collect_cross_module_references(
+        &self,
+        module_reachable: &mut HashMap<String, HashSet<InstanceNode>>,
+    ) {
+        // 使用工作列表进行迭代直到不动点
+        let mut changed = true;
+        let work_list: Vec<String> = module_reachable.keys().cloned().collect();
+
+        while changed {
+            changed = false;
+
+            for module_name in &work_list {
+                let imports = if let Some(imports) = self.module_imports.get(module_name) {
+                    imports.clone()
+                } else {
+                    continue;
+                };
+
+                // 检查是否有新的可达实例
+                let current_reachable = module_reachable.entry(module_name.clone()).or_default();
+
+                let before_count = current_reachable.len();
+
+                // 添加被导入的实例（如果导出模块有该实例）
+                for import in &imports {
+                    if let Some(export_module) = self.find_export_module(import) {
+                        if let Some(exported) = self.module_exports.get(&export_module) {
+                            if exported.contains(import) {
+                                current_reachable.insert(import.clone());
+                            }
+                        }
+                    }
+                }
+
+                if current_reachable.len() > before_count {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    /// 查找实例的导出模块
+    fn find_export_module(
+        &self,
+        node: &InstanceNode,
+    ) -> Option<String> {
+        for (module_name, exports) in &self.module_exports {
+            if exports.contains(node) {
+                return Some(module_name.clone());
+            }
+        }
+        None
     }
 
     /// 获取模块的可达实例
