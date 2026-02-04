@@ -1,4 +1,18 @@
-//! Function definition parser tests - 函数定义测试
+//! RFC-007 函数定义解析器测试
+//!
+//! 测试 RFC-007 统一语法：name: (params) -> Return = body
+//!
+//! 语法规则：
+//! - 完整形式：name: (a: Type, b: Type) -> Ret = (a, b) => { return ... }
+//! - 省略 Lambda 头：name: (a: Type, b: Type) -> Ret = { return ... }
+//! - 直接表达式：name: (a: Type, b: Type) -> Ret = expression
+//! - 最简形式：name = (a, b) => { return ... }
+//! - 泛型函数：name: [T](x: T) -> T = x
+//! - 方法绑定：Type.method: (Type, ...) -> Ret = (params) => { ... }
+//!
+//! RFC-010 统一语法: name: (params) -> Return = body
+//! - 参数名在签名中声明: `(a: Int, b: Int)`
+//! - Lambda 头可省略（签名已声明参数）
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::ast::{StmtKind};
@@ -8,9 +22,12 @@ use crate::frontend::core::parser::parse;
 mod fn_def_tests {
     use super::*;
 
+    // ======== RFC-010 函数定义测试 ========
+
     #[test]
     fn test_parse_fn_def_no_params() {
-        let source = "main: () -> () = () => {}";
+        // RFC-010: main: () -> Void = {}
+        let source = "main: () -> Void = {}";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -20,18 +37,18 @@ mod fn_def_tests {
                 assert_eq!(name, "main");
                 assert!(params.is_empty());
             }
-            _ => panic!("Expected Fn statement"),
+            _ => panic!("Expected Fn statement, got {:?}", module.items[0].kind),
         }
     }
 
     #[test]
     fn test_parse_fn_def_with_params() {
-        let source = "add: (Int, Int) -> Int = (a, b) => a + b";
+        // RFC-010: 参数名在签名中，表达式体
+        let source = "add: (a: Int, b: Int) -> Int = a + b";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
-        // With standard syntax, function definitions are parsed as StmtKind::Fn
         match &module.items[0].kind {
             StmtKind::Fn { name, params, .. } => {
                 assert_eq!(name, "add");
@@ -44,16 +61,20 @@ mod fn_def_tests {
     }
 
     #[test]
-    fn test_parse_complex_fn_def() {
-        let source = "add: (Int, Int) -> Int = (a, b) => { return a + b }";
+    fn test_parse_fn_def_block_body() {
+        // RFC-010: 代码块体
+        let source = "add: (a: Int, b: Int) -> Int = { return a + b }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
         assert_eq!(module.items.len(), 1);
     }
 
+    // ======== RFC-011 泛型函数测试 ========
+
     #[test]
-    fn test_parse_generic_param_with_constraint_bracket() {
-        let source = "test: [T: Clone](x: T) -> T = x";
+    fn test_parse_generic_param_with_constraint() {
+        // RFC-011: [T: Clone](x: T) -> T
+        let source = "clone: [T: Clone](x: T) -> T = x";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -64,11 +85,10 @@ mod fn_def_tests {
                 generic_params,
                 ..
             } => {
-                assert_eq!(name, "test");
+                assert_eq!(name, "clone");
                 assert_eq!(generic_params.len(), 1);
                 assert_eq!(generic_params[0].name, "T");
                 assert_eq!(generic_params[0].constraints.len(), 1);
-                // Check that constraint is a Type::Name with "Clone"
                 match &generic_params[0].constraints[0] {
                     crate::frontend::core::parser::ast::Type::Name(n) => {
                         assert_eq!(n, "Clone");
@@ -82,7 +102,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_multiple_generic_params_with_constraints() {
-        let source = "pair: [T: Clone, U: Serializable](a: T, b: U) -> (T, U) = (a, b) => (a, b)";
+        // RFC-011: [T: Clone, U: Serializable](a: T, b: U) -> (T, U)
+        let source = "pair: [T: Clone, U: Serializable](a: T, b: U) -> (T, U) = (a, b)";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -106,6 +127,7 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_generic_param_without_constraint() {
+        // RFC-011: [T](value: T) -> T
         let source = "identity: [T](value: T) -> T = value";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
@@ -126,10 +148,12 @@ mod fn_def_tests {
         }
     }
 
+    // ======== RFC-010 方法绑定测试 ========
+
     #[test]
     fn test_parse_method_bind_basic() {
-        // Basic method binding syntax: Point.draw: (Point, Surface) -> Void = (self, surface) => { ... }
-        let source = "Point.draw: (Point, Surface) -> Void = (self, surface) => { }";
+        // RFC-010: Point.draw: (self: Point, surface: Surface) -> Void = { ... }
+        let source = "Point.draw: (self: Point, surface: Surface) -> Void = { }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -144,20 +168,18 @@ mod fn_def_tests {
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "draw");
-                // Check method type is a function type with 2 params
+                // RFC-010: params 从签名解析，method_type 存储完整签名
                 if let crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
                 } = method_type
                 {
-                    assert_eq!(type_params.len(), 2);
+                    assert_eq!(type_params.len(), 2); // self: Point, surface: Surface
                 } else {
                     panic!("Expected Fn type for method_type, got {:?}", method_type);
                 }
-                // Check params
-                assert_eq!(params.len(), 2);
-                assert_eq!(params[0].name, "self");
-                assert_eq!(params[1].name, "surface");
+                // RFC-010: body 是代码块，params 为空
+                assert_eq!(params.len(), 0);
             }
             _ => panic!(
                 "Expected MethodBind statement, got {:?}",
@@ -168,8 +190,9 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_with_expression_body() {
-        let source =
-            "Point.serialize: (Point) -> String = (self) => \"Point(${self.x}, ${self.y})\"";
+        // RFC-010: Point.serialize: (self: Point) -> String = "..."
+        // 参数从签名解析，method_type 存储签名
+        let source = "Point.serialize: (self: Point) -> String = \"Point(${self.x}, ${self.y})\"";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -178,14 +201,20 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
-                params,
+                method_type,
                 body: (stmts, expr),
                 ..
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "serialize");
-                assert_eq!(params.len(), 1);
-                assert_eq!(params[0].name, "self");
+                // RFC-010: params 从签名解析，存储在 method_type 中
+                // method_type 应该是 Fn 类型
+                match method_type {
+                    crate::frontend::core::parser::ast::Type::Fn { params, .. } => {
+                        assert_eq!(params.len(), 1); // self: Point
+                    }
+                    _ => panic!("Expected Fn type for method_type"),
+                }
                 assert!(stmts.is_empty());
                 assert!(expr.is_some());
             }
@@ -195,8 +224,9 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_with_block_body() {
+        // RFC-010: Point.distance: (self: Point, other: Point) -> Float = { ... }
         let source = r#"
-            Point.distance: (Point, Point) -> Float = (self, other) => {
+            Point.distance: (self: Point, other: Point) -> Float = {
                 dx = self.x - other.x
                 dy = self.y - other.y
                 return (dx * dx + dy * dy).sqrt()
@@ -210,16 +240,30 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
-                params,
+                method_type,
                 body: (stmts, _expr),
                 ..
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "distance");
-                assert_eq!(params.len(), 2);
-                assert_eq!(params[0].name, "self");
-                assert_eq!(params[1].name, "other");
-                // Should have statements (dx = ..., dy = ...) and no expression
+                // RFC-010: method_type 存储完整签名
+                if let crate::frontend::core::parser::ast::Type::Fn {
+                    params: type_params,
+                    ..
+                } = method_type
+                {
+                    assert_eq!(type_params.len(), 2);
+                    // type_params 是 Vec<Type>，检查类型名称
+                    match &type_params[0] {
+                        crate::frontend::core::parser::ast::Type::Name(name) => {
+                            assert_eq!(name, "Point")
+                        }
+                        _ => panic!("Expected Point type for first param"),
+                    }
+                } else {
+                    panic!("Expected Fn type");
+                }
+                // Should have statements (dx = ..., dy = ...)
                 assert!(stmts.len() >= 2);
             }
             _ => panic!("Expected MethodBind statement"),
@@ -228,8 +272,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_no_params() {
-        // Method binding with no parameters
-        let source = "Point.reset: () -> Void = () => { x = 0 }";
+        // RFC-010: Point.reset: () -> Void = { ... }
+        let source = "Point.reset: () -> Void = { x = 0 }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -244,7 +288,7 @@ mod fn_def_tests {
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "reset");
-                // Check method type has 0 params
+                // RFC-010: Check method type has 0 params
                 if let crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
@@ -262,8 +306,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_complex_types() {
-        // Method binding with complex generic types
-        let source = "List.map: (List[T], (T) -> U) -> List[U] = (self, mapper) => { }";
+        // RFC-010: List.map: (self: List[T], mapper: (T) -> U) -> List[U] = { ... }
+        let source = "List.map: (self: List[T], mapper: (T) -> U) -> List[U] = { }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -272,14 +316,42 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
+                method_type,
                 params,
                 ..
             } => {
                 assert_eq!(type_name, "List");
                 assert_eq!(method_name, "map");
-                assert_eq!(params.len(), 2);
-                assert_eq!(params[0].name, "self");
-                assert_eq!(params[1].name, "mapper");
+                // RFC-010: method_type 存储完整签名
+                if let crate::frontend::core::parser::ast::Type::Fn {
+                    params: type_params,
+                    ..
+                } = method_type
+                {
+                    assert_eq!(type_params.len(), 2);
+                    // type_params 是 Vec<Type>，检查类型名称
+                    // 第一个参数应该是 List[T]
+                    match &type_params[0] {
+                        crate::frontend::core::parser::ast::Type::Generic { name, .. } => {
+                            assert_eq!(name, "List")
+                        }
+                        _ => panic!(
+                            "Expected Generic List type for first param, got {:?}",
+                            type_params[0]
+                        ),
+                    }
+                    // 第二个参数应该是 (T) -> U 函数类型
+                    match &type_params[1] {
+                        crate::frontend::core::parser::ast::Type::Fn { .. } => {}
+                        _ => panic!(
+                            "Expected Fn type for mapper param, got {:?}",
+                            type_params[1]
+                        ),
+                    }
+                } else {
+                    panic!("Expected Fn type");
+                }
+                assert_eq!(params.len(), 0); // RFC-010: body 是代码块
             }
             _ => panic!("Expected MethodBind statement"),
         }
@@ -287,9 +359,9 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_with_method_call_in_body() {
-        // Method binding with method call in body
+        // RFC-010: Point.add: (self: Point, other: Point) -> Point = { ... }
         let source = r#"
-            Point.add: (Point, Point) -> Point = (self, other) => {
+            Point.add: (self: Point, other: Point) -> Point = {
                 result = Point(self.x + other.x, self.y + other.y)
                 result
             }
@@ -302,13 +374,22 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
-                params,
+                method_type,
                 body: (stmts, expr),
                 ..
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "add");
-                assert_eq!(params.len(), 2);
+                // RFC-010: params 从签名解析
+                match method_type {
+                    crate::frontend::core::parser::ast::Type::Fn {
+                        params: type_params,
+                        ..
+                    } => {
+                        assert_eq!(type_params.len(), 2);
+                    }
+                    _ => panic!("Expected Fn type"),
+                }
                 assert!(stmts.len() >= 1);
                 assert!(expr.is_some());
             }
@@ -318,8 +399,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_tuple_return() {
-        // Method binding with tuple return type
-        let source = "Point.decompose: (Point) -> (Float, Float) = (self) => (self.x, self.y)";
+        // RFC-010: Point.decompose: (self: Point) -> (Float, Float) = (self.x, self.y)
+        let source = "Point.decompose: (self: Point) -> (Float, Float) = (self.x, self.y)";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -329,6 +410,7 @@ mod fn_def_tests {
                 type_name,
                 method_name,
                 method_type,
+                body: (_stmts, expr),
                 ..
             } => {
                 assert_eq!(type_name, "Point");
@@ -344,6 +426,8 @@ mod fn_def_tests {
                 } else {
                     panic!("Expected Fn type for method_type");
                 }
+                // RFC-010: 直接表达式形式
+                assert!(expr.is_some());
             }
             _ => panic!("Expected MethodBind statement"),
         }
@@ -353,9 +437,9 @@ mod fn_def_tests {
     fn test_parse_method_bind_and_function_together() {
         // Parse method binding and function definition together
         let source = r#"
-            Point.x: (Point) -> Float = (self) => self.x
+            Point.x: (self: Point) -> Float = self.x
 
-            get_value: (Int) -> Int = (x) => x + 1
+            get_value: (x: Int) -> Int = x + 1
         "#;
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
@@ -367,10 +451,21 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
+                method_type,
                 ..
             } => {
                 assert_eq!(type_name, "Point");
                 assert_eq!(method_name, "x");
+                // RFC-010: Verify method_type has correct params
+                match method_type {
+                    crate::frontend::core::parser::ast::Type::Fn {
+                        params: type_params,
+                        ..
+                    } => {
+                        assert_eq!(type_params.len(), 1);
+                    }
+                    _ => panic!("Expected Fn type"),
+                }
             }
             _ => panic!("Expected MethodBind statement as first item"),
         }
@@ -385,9 +480,9 @@ mod fn_def_tests {
     }
 
     #[test]
-    fn test_parse_method_bind_with_ternary_in_body() {
-        // Method binding with if expression in body (using block-style if syntax)
-        let source = "Number.sign: (Number) -> String = (self) => if self.value > 0 { \"positive\" } else { \"non-positive\" }";
+    fn test_parse_method_bind_with_if_in_body() {
+        // RFC-010: if 表达式使用花括号语法
+        let source = "Number.sign: (self: Number) -> String = if self.value > 0 { \"positive\" } else { \"non-positive\" }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -410,8 +505,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_option_type() {
-        // Method binding with Option type
-        let source = "Optional.get_or_default: (Optional[T], T) -> T = (self, default) => { return self.value or default }";
+        // RFC-010: Optional.get_or_default: (self: Optional[T], default: T) -> T = { ... }
+        let source = "Optional.get_or_default: (self: Optional[T], default: T) -> T = { return self.value or default }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -420,14 +515,166 @@ mod fn_def_tests {
             StmtKind::MethodBind {
                 type_name,
                 method_name,
+                method_type,
                 params,
                 ..
             } => {
                 assert_eq!(type_name, "Optional");
                 assert_eq!(method_name, "get_or_default");
-                assert_eq!(params.len(), 2);
+                // RFC-010: body 是代码块，params 为空（参数信息在 method_type 中）
+                assert_eq!(params.len(), 0);
+                // 验证方法类型签名有 2 个参数
+                if let crate::frontend::core::parser::ast::Type::Fn {
+                    params: type_params,
+                    ..
+                } = method_type
+                {
+                    assert_eq!(type_params.len(), 2);
+                } else {
+                    panic!("Expected Fn type for method_type");
+                }
             }
             _ => panic!("Expected MethodBind statement"),
+        }
+    }
+
+    // ======== RFC-010 接口约束语法测试 ========
+
+    #[test]
+    fn test_parse_struct_type_with_interface_constraint() {
+        // RFC-010: type Point = { x: Float, y: Float, Drawable, Serializable }
+        let source = "type Point = { x: Float, y: Float, Drawable, Serializable }";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "Point");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert_eq!(fields.len(), 2);
+                        assert_eq!(fields[0].0, "x");
+                        assert_eq!(fields[1].0, "y");
+                    }
+                    _ => panic!("Expected Struct type, got {:?}", definition),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_type_only_interfaces() {
+        // RFC-010: type EmptyType = { Drawable, Serializable }
+        let source = "type EmptyType = { Drawable, Serializable }";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "EmptyType");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert!(fields.is_empty()); // 只有接口约束
+                    }
+                    _ => panic!("Expected Struct type"),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_struct_type() {
+        // RFC-010: type EmptyType = {}
+        let source = "type EmptyType = {}";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "EmptyType");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert!(fields.is_empty());
+                    }
+                    _ => panic!("Expected Struct type"),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_interface_definition() {
+        // RFC-010: type Drawable = { draw: (self: Self, surface: Surface) -> Void }
+        let source = "type Drawable = { draw: (self: Self, surface: Surface) -> Void }";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "Drawable");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert_eq!(fields.len(), 1);
+                        assert_eq!(fields[0].0, "draw");
+                    }
+                    _ => panic!("Expected Struct type"),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_interface_definition_with_self() {
+        // RFC-010: type Serializable = { serialize: (self: Self) -> String }
+        let source = "type Serializable = { serialize: (self: Self) -> String }";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "Serializable");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert_eq!(fields.len(), 1);
+                        assert_eq!(fields[0].0, "serialize");
+                    }
+                    _ => panic!("Expected Struct type"),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_generic_type_definition() {
+        // RFC-010: type List[T] = { data: Array[T], length: Int }
+        let source = "type List[T] = { data: Array[T], length: Int }";
+        let tokens = tokenize(source).unwrap();
+        let module = parse(&tokens).unwrap();
+
+        assert_eq!(module.items.len(), 1);
+        match &module.items[0].kind {
+            StmtKind::TypeDef { name, definition } => {
+                assert_eq!(name, "List");
+                match definition {
+                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                        assert_eq!(fields.len(), 2);
+                        assert_eq!(fields[0].0, "data");
+                        assert_eq!(fields[1].0, "length");
+                    }
+                    _ => panic!("Expected Struct type"),
+                }
+            }
+            _ => panic!("Expected TypeDef statement"),
         }
     }
 }

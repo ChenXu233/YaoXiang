@@ -29,8 +29,9 @@ fn test_pub_auto_bind_to_type() {
 /// Test pub function is exported
 #[test]
 fn test_pub_fn_exported() {
+    // RFC-010: 参数名在签名中声明
     let code = r#"
-        pub foo: (Int) -> Int = (x) => x
+        pub foo: (x: Int) -> Int = (x) => x
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -48,8 +49,9 @@ fn test_pub_fn_exported() {
 /// Test non-pub function is not exported
 #[test]
 fn test_private_function_not_exported() {
+    // RFC-010: 参数名在签名中声明
     let code = r#"
-        foo: (Int) -> Int = (x) => x
+        foo: (x: Int) -> Int = (x) => x
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -70,10 +72,11 @@ fn test_private_function_not_exported() {
 /// Test explicit method bind is exported
 #[test]
 fn test_explicit_method_bind_exported() {
+    // RFC-010: 参数名在签名中声明
     let code = r#"
         type Point = Point(x: Float, y: Float)
 
-        Point.distance: (Point, Point) -> Float = (self, other) => 0.0
+        Point.distance: (self: Point, other: Point) -> Float = (self, other) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -91,11 +94,12 @@ fn test_explicit_method_bind_exported() {
     );
 }
 
-/// Test pub fn with type annotation
+/// Test pub fn with type annotation (RFC-010 syntax)
 #[test]
 fn test_pub_fn_with_type_annotation() {
+    // RFC-010: 参数名在签名中声明
     let code = r#"
-        pub distance: (Float, Float) -> Float = (x, y) => 0.0
+        pub distance: (x: Float, y: Float) -> Float = (x, y) => 0.0
     "#;
 
     let tokens = tokenize(code).unwrap();

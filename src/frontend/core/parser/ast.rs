@@ -204,6 +204,10 @@ pub enum StmtKind {
         else_branch: Option<Box<Block>>,
         span: Span,
     },
+    /// Trait 定义: `type TraitName = { method: (params) -> ret }`
+    TraitDef(TraitDef),
+    /// Trait 实现: `impl TraitName for Type { ... }`
+    TraitImpl(TraitImpl),
 }
 
 /// Variant constructor definition (for variant types)
@@ -214,10 +218,23 @@ pub struct VariantDef {
     pub span: Span,
 }
 
-/// Generic parameter with constraints: `[T: Clone]` or `[T: Clone & Serializable]`
+/// Generic parameter kind: Type parameter or Const parameter
+#[derive(Debug, Clone)]
+pub enum GenericParamKind {
+    /// Type parameter: [T]
+    Type,
+    /// Const parameter: [N: Int]
+    Const {
+        /// The type of the const parameter (e.g., Int)
+        const_type: Box<Type>,
+    },
+}
+
+/// Generic parameter with constraints: `[T: Clone]` or `[N: Int]`
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
+    pub kind: GenericParamKind,
     pub constraints: Vec<Type>,
 }
 
@@ -265,6 +282,15 @@ pub enum Type {
         assoc_args: Vec<Type>,
     },
     Sum(Vec<Type>),
+    /// Literal type: a compile-time constant value used as a type
+    /// e.g., "5" in `[n: Int](n: n)` - n is a literal type "5"
+    /// Used for const generics with literal value parameters
+    Literal {
+        /// The literal name (e.g., "5")
+        name: String,
+        /// The underlying type (e.g., Int)
+        base_type: Box<Type>,
+    },
 }
 
 /// Block
@@ -328,4 +354,50 @@ impl Default for Module {
             span: Span::dummy(),
         }
     }
+}
+
+// ============ Trait 相关结构体 ============
+
+/// Trait 方法定义
+#[derive(Debug, Clone)]
+pub struct TraitMethod {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub return_type: Option<Type>,
+    pub span: Span,
+}
+
+/// Trait 定义
+#[derive(Debug, Clone)]
+pub struct TraitDef {
+    pub name: String,
+    /// 泛型参数列表
+    pub generic_params: Vec<GenericParam>,
+    /// Trait 方法列表
+    pub methods: Vec<TraitMethod>,
+    /// 父 Trait 列表（用于继承）
+    pub parent_traits: Vec<Type>,
+    /// Trait 定义的位置
+    pub span: Span,
+}
+
+/// Trait 实现块
+#[derive(Debug, Clone)]
+pub struct TraitImpl {
+    pub trait_name: String,
+    /// 实现针对的类型
+    pub for_type: Type,
+    /// 实现的方法
+    pub methods: Vec<MethodImpl>,
+    pub span: Span,
+}
+
+/// Trait 方法实现
+#[derive(Debug, Clone)]
+pub struct MethodImpl {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub return_type: Option<Type>,
+    pub body: (Vec<Stmt>, Option<Box<Expr>>),
+    pub span: Span,
 }

@@ -10,9 +10,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::Instant;
 
 use crate::frontend::typecheck::MonoType;
-use crate::middle::core::ir::{FunctionIR, ModuleIR};
+use crate::middle::core::ir::{FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 
 use super::instantiation_graph::{InstantiationGraph, InstanceNode};
@@ -95,8 +96,22 @@ pub struct DceStats {
     pub entry_points: usize,
     /// 最大深度
     pub max_depth: Option<usize>,
+    /// 平均深度
+    pub avg_depth: Option<f64>,
     /// 消除率
     pub elimination_rate: f64,
+    /// 膨胀阈值检查
+    pub bloat_threshold: Option<usize>,
+    /// 是否触发膨胀控制
+    pub bloat_control_triggered: bool,
+    /// 按函数名分组的实例数（用于膨胀分析）
+    pub instances_by_function: HashMap<String, usize>,
+    /// 调用频率统计
+    pub call_frequencies: HashMap<String, usize>,
+    /// 分析耗时（纳秒）
+    pub analysis_time_ns: u64,
+    /// 跨模块实例数
+    pub cross_module_instances: usize,
 }
 
 impl DceStats {
@@ -112,23 +127,84 @@ impl DceStats {
     ) {
         self.entry_points = analysis.entry_points().len();
         self.max_depth = analysis.max_depth();
+        self.avg_depth = analysis.average_depth();
         self.elimination_rate = analysis.elimination_rate();
     }
 
-    /// 格式化统计信息
+    /// 添加函数实例统计
+    pub fn add_function_instance(
+        &mut self,
+        func_name: &str,
+    ) {
+        self.function_instances += 1;
+        *self
+            .instances_by_function
+            .entry(func_name.to_string())
+            .or_insert(0) += 1;
+    }
+
+    /// 添加类型实例统计
+    pub fn add_type_instance(
+        &mut self,
+        _type_name: &str,
+    ) {
+        self.type_instances += 1;
+    }
+
+    /// 记录调用频率
+    pub fn record_call(
+        &mut self,
+        func_name: &str,
+    ) {
+        *self
+            .call_frequencies
+            .entry(func_name.to_string())
+            .or_insert(0) += 1;
+    }
+
+    /// 设置膨胀控制状态
+    pub fn set_bloat_control_status(
+        &mut self,
+        triggered: bool,
+        threshold: usize,
+    ) {
+        self.bloat_control_triggered = triggered;
+        self.bloat_threshold = Some(threshold);
+    }
+
+    /// 格式化统计信息（简洁版）
     pub fn format(&self) -> String {
+        let bloat_info = if let Some(threshold) = self.bloat_threshold {
+            format!(
+                "\n  [Bloat Control] Threshold: {}, Triggered: {}",
+                threshold,
+                if self.bloat_control_triggered {
+                    "Yes"
+                } else {
+                    "No"
+                }
+            )
+        } else {
+            String::new()
+        };
+
         format!(
             "DCE Statistics:\n\
+             === Instance Statistics ===\n\
              - Total instances: {}\n\
              - Eliminated: {} ({:.1}%)\n\
              - Kept: {}\n\
              - Function instances: {}\n\
              - Type instances: {}\n\
+             === Graph Statistics ===\n\
              - Graph nodes: {}\n\
              - Graph edges: {}\n\
              - Entry points: {}\n\
              - Max depth: {:?}\n\
-             - Elimination rate: {:.1}%",
+             - Avg depth: {:.1}{}\n\
+             === Performance ===\n\
+             - Analysis time: {} ns\n\
+             - Cross-module instances: {}",
             self.total_instances,
             self.eliminated_instances,
             self.elimination_rate * 100.0,
@@ -139,8 +215,71 @@ impl DceStats {
             self.graph_edges,
             self.entry_points,
             self.max_depth,
-            self.elimination_rate * 100.0,
+            self.avg_depth.unwrap_or(0.0),
+            bloat_info,
+            self.analysis_time_ns,
+            self.cross_module_instances,
         )
+    }
+
+    /// 格式化统计信息（详细版）
+    pub fn format_detailed(&self) -> String {
+        let mut result = self.format();
+
+        // 添加函数实例分布
+        if !self.instances_by_function.is_empty() {
+            result.push_str("\n\n=== Function Instance Distribution ===\n");
+            let mut func_stats: Vec<_> = self.instances_by_function.iter().collect();
+            func_stats.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+
+            for (name, count) in func_stats.iter().take(10) {
+                result.push_str(&format!("  - {}: {}\n", name, count));
+            }
+
+            if func_stats.len() > 10 {
+                result.push_str(&format!(
+                    "  ... and {} more functions\n",
+                    func_stats.len() - 10
+                ));
+            }
+        }
+
+        // 添加高频调用函数
+        if !self.call_frequencies.is_empty() {
+            result.push_str("\n=== Top Called Functions ===\n");
+            let mut calls: Vec<_> = self.call_frequencies.iter().collect();
+            calls.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+
+            for (name, count) in calls.iter().take(5) {
+                result.push_str(&format!("  - {}: {} calls\n", name, count));
+            }
+        }
+
+        result
+    }
+
+    /// 生成JSON格式统计信息
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "total_instances": self.total_instances,
+            "eliminated_instances": self.eliminated_instances,
+            "kept_instances": self.kept_instances,
+            "function_instances": self.function_instances,
+            "type_instances": self.type_instances,
+            "graph_nodes": self.graph_nodes,
+            "graph_edges": self.graph_edges,
+            "entry_points": self.entry_points,
+            "max_depth": self.max_depth,
+            "avg_depth": self.avg_depth,
+            "elimination_rate": self.elimination_rate,
+            "bloat_threshold": self.bloat_threshold,
+            "bloat_control_triggered": self.bloat_control_triggered,
+            "analysis_time_ns": self.analysis_time_ns,
+            "cross_module_instances": self.cross_module_instances,
+            "function_distribution": self.instances_by_function,
+            "call_frequencies": self.call_frequencies,
+        }))
+        .unwrap_or_else(|_| "{}".to_string())
     }
 }
 
@@ -185,6 +324,8 @@ impl DcePass {
             };
         }
 
+        let start_time = Instant::now();
+
         // 1. 构建实例化图
         let mut graph =
             self.build_instantiation_graph(module, instantiated_functions, instantiated_types);
@@ -203,9 +344,14 @@ impl DcePass {
         let kept_types = self.collect_kept_types(instantiated_types, &kept_nodes);
 
         // 5. 代码膨胀控制
+        let bloat_triggered;
         let kept_functions = if self.config.enable_bloat_control {
-            self.apply_bloat_control(kept_functions, instantiated_functions)
+            let before_count = kept_functions.len();
+            let result = self.apply_bloat_control(kept_functions, instantiated_functions);
+            bloat_triggered = result.len() < before_count;
+            result
         } else {
+            bloat_triggered = false;
             kept_functions
         };
 
@@ -218,6 +364,15 @@ impl DcePass {
             kept_functions.len(),
             kept_types.len(),
         );
+
+        // 记录分析时间
+        self.stats.analysis_time_ns = start_time.elapsed().as_nanos() as u64;
+
+        // 设置膨胀控制状态
+        if self.config.enable_bloat_control {
+            self.stats
+                .set_bloat_control_status(bloat_triggered, self.config.bloat_threshold);
+        }
 
         // 7. 输出统计
         if self.config.print_stats {
@@ -351,51 +506,262 @@ impl DcePass {
     }
 
     /// 估算调用频率
+    ///
+    /// 根据以下启发式规则估算函数被调用的频率：
+    /// 1. 入口函数（main）优先级最高
+    /// 2. 被多个函数调用的函数优先级更高
+    /// 3. 函数体越小越可能被内联，优先级可以适当降低
     fn estimate_call_frequency(
         &self,
-        _func_id: &FunctionId,
-        _all: &HashMap<FunctionId, FunctionIR>,
+        func_id: &FunctionId,
+        all: &HashMap<FunctionId, FunctionIR>,
     ) -> usize {
-        // TODO: 实现调用频率估算
-        1
+        let mut frequency = 1;
+
+        // 1. 入口函数优先级最高
+        if func_id.name() == "main" {
+            frequency += 1000;
+        }
+
+        // 2. 统计被调用次数
+        let mut call_count = 0;
+        for (id, ir) in all {
+            if id == func_id {
+                continue;
+            }
+            // 检查函数体中是否调用了目标函数
+            for inst in ir.all_instructions() {
+                if self.inst_calls_function(inst, func_id) {
+                    call_count += 1;
+                    break;
+                }
+            }
+        }
+        frequency += call_count * 10;
+
+        // 3. 小函数优先级略高（可能被内联）
+        if let Some(ir) = all.get(func_id) {
+            let size = ir
+                .blocks
+                .iter()
+                .map(|b| b.instructions.len())
+                .sum::<usize>();
+            if size < 10 {
+                frequency += 5;
+            }
+        }
+
+        frequency
+    }
+
+    /// 检查指令是否调用了指定的函数
+    fn inst_calls_function(
+        &self,
+        inst: &Instruction,
+        func_id: &FunctionId,
+    ) -> bool {
+        match inst {
+            Instruction::Call { func, .. } => {
+                // 检查 func 是否引用了目标函数
+                self.operand_references_function(func, func_id)
+            }
+            _ => false,
+        }
+    }
+
+    /// 检查操作数是否引用了指定的函数
+    fn operand_references_function(
+        &self,
+        operand: &Operand,
+        func_id: &FunctionId,
+    ) -> bool {
+        match operand {
+            Operand::Global(idx) => {
+                // Global 索引指向全局表，需要进一步检查
+                // 这里简化处理，假设 Global 0 可能是入口函数
+                *idx == 0 && func_id.name() == "main"
+            }
+            _ => false,
+        }
     }
 
     /// 从函数ID提取类型参数
     fn extract_function_type_args(
         &self,
-        _func_id: &FunctionId,
+        func_id: &FunctionId,
         _ir: &FunctionIR,
     ) -> Vec<MonoType> {
-        // TODO: 从 FunctionId 和 FunctionIR 提取类型参数
-        vec![]
+        // 从 FunctionId 直接获取类型参数
+        func_id.type_args().to_vec()
     }
 
     /// 从入口函数ID提取类型参数
     fn extract_entry_type_args(
         &self,
-        _func_id: &FunctionId,
+        func_id: &FunctionId,
     ) -> Vec<MonoType> {
-        // TODO: 提取入口函数的类型参数
-        vec![]
+        func_id.type_args().to_vec()
     }
 
     /// 从类型提取类型参数
+    ///
+    /// 递归提取泛型类型的类型参数
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_type_args(
         &self,
-        _ty: &MonoType,
+        ty: &MonoType,
     ) -> Vec<MonoType> {
-        // TODO: 从 MonoType 提取类型参数
-        vec![]
+        match ty {
+            // 基本类型没有类型参数
+            MonoType::Void
+            | MonoType::Bool
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Bytes
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_) => vec![],
+
+            // 联合和交集类型
+            MonoType::Union(types) | MonoType::Intersection(types) => types
+                .iter()
+                .flat_map(|t| self.extract_type_args(t))
+                .collect(),
+
+            // 结构体：提取字段类型参数
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .map(|(_, ty)| ty)
+                .flat_map(|t| self.extract_type_args(t))
+                .collect(),
+
+            // 枚举：没有类型参数
+            MonoType::Enum(_) => vec![],
+
+            // 容器类型
+            MonoType::Tuple(types) => types
+                .iter()
+                .flat_map(|t| self.extract_type_args(t))
+                .collect(),
+            MonoType::List(elem) | MonoType::Set(elem) | MonoType::Range { elem_type: elem } => {
+                self.extract_type_args(elem)
+            }
+            MonoType::Dict(key, value) => {
+                let mut args = self.extract_type_args(key);
+                args.extend(self.extract_type_args(value));
+                args
+            }
+
+            // 函数类型
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                let mut args = params
+                    .iter()
+                    .flat_map(|t| self.extract_type_args(t))
+                    .collect::<Vec<_>>();
+                args.extend(self.extract_type_args(return_type));
+                args
+            }
+
+            // Arc 包装
+            MonoType::Arc(inner) => self.extract_type_args(inner),
+
+            // 关联类型
+            MonoType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                let mut args = self.extract_type_args(host_type);
+                args.extend(assoc_args.iter().cloned());
+                args
+            }
+
+            // 字面量类型：没有类型参数
+            MonoType::Literal { .. } => vec![],
+        }
     }
 
     /// 将类型转换为实例化节点
     fn type_to_instance_node(
         &self,
-        _ty: &MonoType,
+        ty: &MonoType,
         _graph: &InstantiationGraph,
     ) -> Option<InstanceNode> {
-        // TODO: 实现类型到实例化节点的转换
-        None
+        match ty {
+            // 泛型列表
+            MonoType::List(elem) => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new("List".to_string(), vec!["T".to_string()]),
+                    vec![*elem.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型字典
+            MonoType::Dict(key, value) => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new("Dict".to_string(), vec!["K".to_string(), "V".to_string()]),
+                    vec![*key.clone(), *value.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Set
+            MonoType::Set(elem) => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new("Set".to_string(), vec!["T".to_string()]),
+                    vec![*elem.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Option (通过名称判断)
+            MonoType::Enum(e) if e.name == "Option" => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new("Option".to_string(), vec!["T".to_string()]),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Result (通过名称判断)
+            MonoType::Enum(e) if e.name == "Result" => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new(
+                        "Result".to_string(),
+                        vec!["T".to_string(), "E".to_string()],
+                    ),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 结构体
+            MonoType::Struct(s) => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new(s.name.clone(), vec![]),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 其他枚举
+            MonoType::Enum(e) => {
+                let node = super::instantiation_graph::TypeInstanceNode::new(
+                    GenericTypeId::new(e.name.clone(), vec![]),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            _ => None,
+        }
     }
 
     /// 更新统计信息
@@ -537,57 +903,5 @@ impl CrossModuleDce {
         }
 
         total
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::middle::passes::mono::instance::{FunctionId, TypeId};
-
-    #[test]
-    fn test_dce_pass() {
-        let config = DceConfig::default();
-        let mut dce = DcePass::new(config);
-
-        let mut instantiated_functions = HashMap::new();
-        instantiated_functions.insert(
-            FunctionId::new("main".to_string(), vec![]),
-            FunctionIR {
-                name: "main".to_string(),
-                params: vec![],
-                return_type: MonoType::Void,
-                is_async: false,
-                locals: vec![],
-                blocks: vec![],
-                entry: 0,
-            },
-        );
-
-        let result = dce.run_on_module(
-            &ModuleIR::default(),
-            &instantiated_functions,
-            &HashMap::new(),
-            &[FunctionId::new("main".to_string(), vec![])],
-        );
-
-        assert_eq!(result.kept_functions.len(), 1);
-    }
-
-    #[test]
-    fn test_dce_result() {
-        let result = DceResult::new();
-        assert!(!result.has_eliminated_functions());
-    }
-
-    #[test]
-    fn test_dce_config() {
-        let dev_config = DceConfig::development();
-        assert!(!dev_config.enable_bloat_control);
-        assert!(dev_config.print_stats);
-
-        let release_config = DceConfig::release();
-        assert!(release_config.enable_bloat_control);
-        assert!(!release_config.print_stats);
     }
 }

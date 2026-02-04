@@ -37,7 +37,7 @@ mod boundary_tests {
     /// Test many function parameters
     #[test]
     fn test_many_params() {
-        let expr = "foo: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) -> Int = (a, b, c, d, e, f, g, h, i, j) => { 0 }";
+        let expr = "foo: (a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int, j: Int) -> Int = (a, b, c, d, e, f, g, h, i, j) => { 0 }";
         let tokens = tokenize(expr).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
@@ -164,7 +164,7 @@ mod boundary_tests {
     /// Test optional type parameters
     #[test]
     fn test_optional_type_params() {
-        let expr = "foo: (Int,) -> Int = (x) => { x }";
+        let expr = "foo: (x: Int,) -> Int = (x) => { x }";
         let tokens = tokenize(expr).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());

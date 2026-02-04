@@ -162,6 +162,17 @@ impl<'a> ParserState<'a> {
         self.errors.clear();
     }
 
+    pub fn error_count(&self) -> usize {
+        self.errors.len()
+    }
+
+    pub fn truncate_errors(
+        &mut self,
+        len: usize,
+    ) {
+        self.errors.truncate(len);
+    }
+
     pub fn can_start_stmt(&self) -> bool {
         if self.at_end() {
             return false;

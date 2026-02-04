@@ -1,11 +1,8 @@
 use std.io
 
-f: () -> Int = () => {
-    return 42
-}
+f = 42
 
-main: () -> Void = () => {
-    print("Hello");
-    x: Int = f();
-    return
+main = {
+    print("Hello")
+    x: Int = f()
 }

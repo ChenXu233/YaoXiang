@@ -1,23 +1,18 @@
 use std.io
 
-add: (Int, Int) -> Int = (a, b) => {
-    return a + b
-}
+add: (a: Int, b: Int) -> Int = a + b
 
-greet: (String) -> String = (name) => {
-    return "Hello, ${name}!"
-}
+greet: (name: String) -> String = "Hello, ${name}!"
 
 type Point = {
     x: Float,
     y: Float
 }
 
-main: () -> Void = () => {
-    p: Point = Point(1.0, 2.0);
-    sum: Int = add(10, 20);
-    print(sum);
-    message: String = greet("World");
-    print(message);
-    return
+main = {
+    p: Point = Point(1.0, 2.0)
+    sum: Int = add(10, 20)
+    print(sum)
+    message: String = greet("World")
+    print(message)
 }

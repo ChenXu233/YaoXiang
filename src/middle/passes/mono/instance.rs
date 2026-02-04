@@ -60,32 +60,55 @@ impl InstantiationRequest {
 pub struct SpecializationKey {
     /// 函数/类型名称
     pub name: String,
+    /// 参数类型列表（用于区分重载）
+    pub param_types: Vec<MonoType>,
     /// 类型参数
     pub type_args: Vec<MonoType>,
 }
 
 impl SpecializationKey {
-    /// 创建新的缓存键
+    /// 创建新的缓存键（非重载函数）
     pub fn new(
         name: String,
         type_args: Vec<MonoType>,
     ) -> Self {
-        SpecializationKey { name, type_args }
+        SpecializationKey {
+            name,
+            param_types: Vec::new(),
+            type_args,
+        }
+    }
+
+    /// 创建重载函数的缓存键
+    pub fn new_overload(
+        name: String,
+        param_types: Vec<MonoType>,
+        type_args: Vec<MonoType>,
+    ) -> Self {
+        SpecializationKey {
+            name,
+            param_types,
+            type_args,
+        }
     }
 
     /// 生成字符串键
     pub fn as_string(&self) -> String {
-        if self.type_args.is_empty() {
-            self.name.clone()
+        let param_str = if self.param_types.is_empty() {
+            String::new()
         } else {
-            let args_str = self
-                .type_args
-                .iter()
-                .map(|t| t.type_name())
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("{}<{}>", self.name, args_str)
-        }
+            let params: Vec<String> = self.param_types.iter().map(|t| t.type_name()).collect();
+            format!("({})", params.join(", "))
+        };
+
+        let type_str = if self.type_args.is_empty() {
+            String::new()
+        } else {
+            let args: Vec<String> = self.type_args.iter().map(|t| t.type_name()).collect();
+            format!("<{}>", args.join(","))
+        };
+
+        format!("{}{}{}", self.name, param_str, type_str)
     }
 }
 
@@ -103,7 +126,9 @@ impl PartialEq for SpecializationKey {
         &self,
         other: &Self,
     ) -> bool {
-        self.name == other.name && self.type_args == other.type_args
+        self.name == other.name
+            && self.param_types == other.param_types
+            && self.type_args == other.type_args
     }
 }
 
@@ -115,8 +140,11 @@ impl Hash for SpecializationKey {
         state: &mut H,
     ) {
         self.name.hash(state);
+        for ty in &self.param_types {
+            type_name_hash(ty, state);
+        }
         for ty in &self.type_args {
-            self.type_name_hash(ty, state);
+            type_name_hash(ty, state);
         }
     }
 }
@@ -194,6 +222,27 @@ fn type_name_hash<H: Hasher>(
                 type_name_hash(t, state);
             }
         }
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => {
+            "literal".hash(state);
+            name.hash(state);
+            type_name_hash(base_type, state);
+            // 哈希常量值
+            match value {
+                crate::frontend::core::type_system::ConstValue::Int(n) => {
+                    format!("int:{}", n).hash(state);
+                }
+                crate::frontend::core::type_system::ConstValue::Bool(b) => {
+                    format!("bool:{}", b).hash(state);
+                }
+                crate::frontend::core::type_system::ConstValue::Float(f) => {
+                    format!("float:{}", f.to_bits()).hash(state);
+                }
+            }
+        }
     }
 }
 
@@ -211,27 +260,57 @@ impl SpecializationKey {
 
 /// 泛型函数ID
 ///
-/// 用于唯一标识一个泛型函数
+/// 用于唯一标识一个泛型函数或重载函数
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GenericFunctionId {
     /// 函数名称
     name: String,
-    /// 泛型参数列表（用于区分重载的泛型函数）
+    /// 参数类型列表（用于区分重载的函数）
+    /// 空列表表示非重载函数
+    param_types: Vec<MonoType>,
+    /// 泛型参数列表（用于泛型实例化）
     type_params: Vec<String>,
 }
 
 impl GenericFunctionId {
-    /// 创建新的泛型函数ID
+    /// 创建新的泛型函数ID（无参数类型，用于泛型）
     pub fn new(
         name: String,
         type_params: Vec<String>,
     ) -> Self {
-        GenericFunctionId { name, type_params }
+        GenericFunctionId {
+            name,
+            param_types: Vec::new(),
+            type_params,
+        }
+    }
+
+    /// 创建新的重载函数ID（带参数类型）
+    pub fn new_overload(
+        name: String,
+        param_types: Vec<MonoType>,
+        type_params: Vec<String>,
+    ) -> Self {
+        GenericFunctionId {
+            name,
+            param_types,
+            type_params,
+        }
     }
 
     /// 获取函数名称
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// 获取参数类型列表
+    pub fn param_types(&self) -> &[MonoType] {
+        &self.param_types
+    }
+
+    /// 检查是否是重载函数
+    pub fn is_overload(&self) -> bool {
+        !self.param_types.is_empty()
     }
 
     /// 获取泛型参数列表
@@ -241,11 +320,49 @@ impl GenericFunctionId {
 
     /// 获取完整的签名
     pub fn signature(&self) -> String {
-        if self.type_params.is_empty() {
-            self.name.clone()
+        let param_str = if self.param_types.is_empty() {
+            String::new()
         } else {
-            format!("{}<{}>", self.name, self.type_params.join(", "))
-        }
+            format!(
+                "({})",
+                self.param_types
+                    .iter()
+                    .map(|t| t.type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+
+        let generic_str = if self.type_params.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", self.type_params.join(", "))
+        };
+
+        format!("{}{}{}", self.name, param_str, generic_str)
+    }
+
+    /// 生成特化名称（用于代码生成）
+    pub fn specialization_name(&self) -> String {
+        let type_args_str = if self.type_params.is_empty() {
+            String::new()
+        } else {
+            let args: Vec<String> = self.type_params.iter().map(|p| format!("_{}", p)).collect();
+            args.join("")
+        };
+
+        let param_str = if self.param_types.is_empty() {
+            String::new()
+        } else {
+            let args: Vec<String> = self
+                .param_types
+                .iter()
+                .map(|t| format!("_{}", t.type_name()))
+                .collect();
+            args.join("")
+        };
+
+        format!("{}{}{}", self.name, param_str, type_args_str)
     }
 }
 
@@ -374,6 +491,11 @@ impl FunctionId {
         &self.name
     }
 
+    /// 获取类型参数
+    pub fn type_args(&self) -> &[MonoType] {
+        &self.type_args
+    }
+
     /// 获取完整的特化名称
     pub fn specialized_name(&self) -> String {
         if self.type_args.is_empty() {
@@ -434,6 +556,11 @@ impl TypeId {
     /// 获取类型名称
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// 获取类型参数
+    pub fn type_args(&self) -> &[MonoType] {
+        &self.type_args
     }
 
     /// 获取完整的特化名称

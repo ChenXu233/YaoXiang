@@ -1,19 +1,27 @@
 // RFC-010 统一类型语法测试
 // 使用 name: type = value 模型
 
+use std.io
+
 // 1. 变量定义
 x: Int = 42
 name: String = "Alice"
 flag: Bool = true
 
-// 2. 函数定义
-add: (Int, Int) -> Int = (a, b) => {
-    return a + b
-}
+// 2. 函数定义（完整形式）
+add: (a: Int, b: Int) -> Int = (a, b) => a + b
 
-greet: (String) -> String = (name) => {
-    return "Hello, ${name}!"
-}
+// 简写：省略 Lambda 头
+add2: (a: Int, b: Int) -> Int = a + b
+
+// 简写：省略参数类型
+add3: (a, b) -> Int = (a, b) => a + b
+
+// 最简形式
+add4 = (a, b) => a + b
+
+// 带代码块的函数
+greet: (name: String) -> String = "Hello, ${name}!"
 
 // 3. 类型定义（结构体）
 type Point = {
@@ -36,26 +44,55 @@ type Option[T] = {
 
 // 5. 接口定义
 type Drawable = {
-    draw: () -> Void
+    draw: (self: Self) -> Void
 }
 
 type Serializable = {
-    serialize: () -> String
+    serialize: (self: Self) -> String
 }
 
-// 6. 普通函数
-distance: (Point, Point) -> Float = (p1, p2) => {
-    1.0
+// 6. 类型实现接口（RFC-010 新语法：接口名写在类型体末尾）
+type DrawablePoint = {
+    x: Float,
+    y: Float,
+    Drawable,
+    Serializable
 }
 
-// 7. 主函数
-main: () -> Void = () => {
-    // 基本变量赋值
-    p: Point = Point(1.0, 2.0);
+// 7. 方法绑定
+Point.distance: (Point, Point) -> Float = (p1, p2) => {
+    dx = p2.x - p1.x
+    dy = p2.y - p1.y
+    (dx * dx + dy * dy)**0.5
+}
+
+Point.draw: (self: Point) -> Void = {}
+
+Point.serialize: (self: Point) -> String = "Point(${self.x}, ${self.y})"
+
+// 8. 普通函数
+distance: (p1: Point, p2: Point) -> Float = {
+    dx = p2.x - p1.x
+    dy = p2.y - p1.y
+    (dx * dx + dy * dy)**0.5
+}
+
+// 9. 泛型函数（RFC-011 语法）
+identity: [T](x: T) -> T = x
+
+pair: [T, U](a: T, b: U) -> (T, U) = (a, b)
+
+// 10. 空参函数
+main = {
+    // 变量赋值
+    p: Point = Point(1.0, 2.0)
 
     // 函数调用
-    sum: Int = add(10, 20);
-    message: String = greet("World");
+    sum: Int = add(10, 20)
+    message: String = greet("World")
 
-    return
+    // 方法调用
+    d: Float = p1.distance(p2)
+
+    print("RFC-010 tests passed!")
 }
