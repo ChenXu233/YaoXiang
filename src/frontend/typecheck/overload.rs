@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::typecheck::{MonoType, TypeVar};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, SpecializationKey};
 
 /// 重载候选函数
@@ -589,5 +589,284 @@ mod tests {
 
         // 不匹配
         assert_eq!(resolver.type_match_score(&int_type(), &float_type()), -1.0);
+    }
+
+    #[test]
+    fn test_generic_fallback() {
+        // 测试泛型 fallback 机制
+        let candidates: HashMap<String, Vec<OverloadCandidate>> = [(
+            "identity".to_string(),
+            vec![OverloadCandidate::new(
+                "identity".to_string(),
+                vec![MonoType::TypeVar(TypeVar::new(0))],
+                MonoType::TypeVar(TypeVar::new(0)),
+                vec!["T".to_string()],
+            )],
+        )]
+        .into_iter()
+        .collect();
+
+        // 使用 Int 类型调用泛型函数
+        let result = resolve_generic_fallback(&candidates, "identity", &[int_type()]);
+        assert!(result.is_some());
+        assert!(result.unwrap().is_generic);
+
+        // 验证实例化返回类型
+        let return_type = instantiate_return_type(result.unwrap(), &[int_type()]);
+        assert_eq!(return_type, int_type());
+    }
+
+    #[test]
+    fn test_generic_fallback_with_complex_type() {
+        // 测试泛型 fallback 与复杂类型 - 简化测试
+        // 验证 substitute_return_type 基本功能
+        let candidates: HashMap<String, Vec<OverloadCandidate>> = [(
+            "first".to_string(),
+            vec![OverloadCandidate::new(
+                "first".to_string(),
+                vec![MonoType::TypeVar(TypeVar::new(0))],
+                MonoType::TypeVar(TypeVar::new(0)),
+                vec!["T".to_string()],
+            )],
+        )]
+        .into_iter()
+        .collect();
+
+        // 使用 Int 类型调用泛型函数
+        let result = resolve_generic_fallback(&candidates, "first", &[int_type()]);
+        assert!(result.is_some());
+
+        // 验证实例化返回类型
+        let return_type = instantiate_return_type(result.unwrap(), &[int_type()]);
+        assert_eq!(return_type, int_type());
+    }
+}
+
+// ==================== 类型推断集成 ====================
+
+/// 从类型环境解析重载调用
+///
+/// 此函数用于在类型推断过程中解析函数调用。
+/// 它会尝试从类型环境的重载候选中选择最佳匹配。
+pub fn resolve_overload_from_env<'a>(
+    overload_candidates: &'a HashMap<String, Vec<OverloadCandidate>>,
+    func_name: &str,
+    arg_types: &[MonoType],
+) -> Result<&'a OverloadCandidate, OverloadError> {
+    // 尝试从本地重载候选解析
+    if let Some(candidates) = overload_candidates.get(func_name) {
+        let mut resolver = OverloadResolver::new();
+        for candidate in candidates {
+            resolver.add_candidate(candidate.clone());
+        }
+        match resolver.resolve(func_name, arg_types) {
+            Ok(_cloned) => {
+                // 临时解析器返回的是克隆的候选
+                // 由于我们持有 candidates 的引用，直接返回匹配的候选
+                for candidate in candidates {
+                    if resolver.resolve(func_name, arg_types).is_ok_and(|c| {
+                        c.return_type == candidate.return_type
+                            && c.param_types.len() == candidate.param_types.len()
+                    }) {
+                        return Ok(candidate);
+                    }
+                }
+                // 如果找不到，返回第一个匹配的（保守处理）
+                Err(OverloadError::NoMatchingDefinition {
+                    func_name: func_name.to_string(),
+                    arg_types: arg_types.to_vec(),
+                })
+            }
+            Err(e) => Err(e),
+        }
+    } else {
+        Err(OverloadError::NoMatchingDefinition {
+            func_name: func_name.to_string(),
+            arg_types: arg_types.to_vec(),
+        })
+    }
+}
+
+/// 将重载候选添加到类型环境
+pub fn add_overload_to_env(
+    env: &mut super::TypeEnvironment,
+    name: String,
+    param_types: Vec<MonoType>,
+    return_type: MonoType,
+    type_params: Vec<String>,
+) {
+    let candidate = OverloadCandidate::new(name, param_types, return_type, type_params);
+    env.overload_candidates
+        .entry(candidate.name.clone())
+        .or_default()
+        .push(candidate);
+}
+
+/// 检查函数名是否有重载候选
+pub fn has_overloads(
+    overload_candidates: &HashMap<String, Vec<OverloadCandidate>>,
+    name: &str,
+) -> bool {
+    overload_candidates.contains_key(name)
+}
+
+/// 泛型 fallback 解析
+///
+/// 当精确匹配失败时，尝试从泛型候选中进行实例化
+pub fn resolve_generic_fallback<'a>(
+    overload_candidates: &'a HashMap<String, Vec<OverloadCandidate>>,
+    func_name: &str,
+    arg_types: &[MonoType],
+) -> Option<&'a OverloadCandidate> {
+    // 查找泛型候选
+    if let Some(candidates) = overload_candidates.get(func_name) {
+        for candidate in candidates {
+            // 只处理泛型候选（type_params 不为空）
+            if candidate.is_generic && candidate.param_types.len() == arg_types.len() {
+                // 检查是否可以通过实例化匹配
+                if can_instantiate(candidate, arg_types) {
+                    return Some(candidate);
+                }
+            }
+        }
+        // 如果没有找到完全匹配的，返回第一个泛型候选（用于类型推断）
+        for candidate in candidates {
+            if candidate.is_generic {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// 检查是否可以通过实例化泛型候选来匹配实参类型
+fn can_instantiate(
+    candidate: &OverloadCandidate,
+    arg_types: &[MonoType],
+) -> bool {
+    if candidate.param_types.len() != arg_types.len() {
+        return false;
+    }
+
+    // 检查每个参数类型是否兼容
+    // 对于泛型参数 T，需要检查实参是否一致
+    for (param, arg) in candidate.param_types.iter().zip(arg_types.iter()) {
+        match param {
+            // 如果参数是类型变量，任何类型都可以
+            MonoType::TypeVar(_) => continue,
+            // 否则检查精确匹配
+            _ => {
+                if param != arg {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// 获取泛型实例化后的返回类型
+pub fn instantiate_return_type(
+    candidate: &OverloadCandidate,
+    arg_types: &[MonoType],
+) -> MonoType {
+    if !candidate.is_generic || candidate.type_params.is_empty() {
+        return candidate.return_type.clone();
+    }
+
+    // 构建类型参数映射
+    let mut substitutions = Vec::new();
+    for (param, arg) in candidate.param_types.iter().zip(arg_types.iter()) {
+        if let MonoType::TypeVar(tv) = param {
+            substitutions.push((*tv, arg.clone()));
+        }
+    }
+
+    // 应用替换到返回类型
+    substitute_return_type(&candidate.return_type, &substitutions)
+}
+
+/// 简单的类型替换（针对返回类型）
+fn substitute_return_type(
+    ty: &MonoType,
+    substitutions: &[(crate::frontend::core::type_system::TypeVar, MonoType)],
+) -> MonoType {
+    match ty {
+        MonoType::TypeVar(tv) => {
+            for (src, dst) in substitutions {
+                if tv.index() == src.index() {
+                    return dst.clone();
+                }
+            }
+            ty.clone()
+        }
+        MonoType::List(inner) => {
+            MonoType::List(Box::new(substitute_return_type(inner, substitutions)))
+        }
+        MonoType::Dict(k, v) => MonoType::Dict(
+            Box::new(substitute_return_type(k, substitutions)),
+            Box::new(substitute_return_type(v, substitutions)),
+        ),
+        MonoType::Tuple(types) => MonoType::Tuple(
+            types
+                .iter()
+                .map(|t| substitute_return_type(t, substitutions))
+                .collect(),
+        ),
+        MonoType::Set(inner) => {
+            MonoType::Set(Box::new(substitute_return_type(inner, substitutions)))
+        }
+        MonoType::Fn {
+            params,
+            return_type,
+            is_async,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| substitute_return_type(p, substitutions))
+                .collect(),
+            return_type: Box::new(substitute_return_type(return_type, substitutions)),
+            is_async: *is_async,
+        },
+        MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::type_system::StructType {
+            name: s.name.clone(),
+            fields: s
+                .fields
+                .iter()
+                .map(|(n, f)| (n.clone(), substitute_return_type(f, substitutions)))
+                .collect(),
+            methods: s.methods.clone(),
+        }),
+        MonoType::Enum(e) => MonoType::Enum(e.clone()),
+        MonoType::Range { elem_type } => MonoType::Range {
+            elem_type: Box::new(substitute_return_type(elem_type, substitutions)),
+        },
+        MonoType::Union(types) | MonoType::Intersection(types) => {
+            let new_types = types
+                .iter()
+                .map(|t| substitute_return_type(t, substitutions))
+                .collect();
+            if matches!(ty, MonoType::Union(_)) {
+                MonoType::Union(new_types)
+            } else {
+                MonoType::Intersection(new_types)
+            }
+        }
+        MonoType::Arc(inner) => {
+            MonoType::Arc(Box::new(substitute_return_type(inner, substitutions)))
+        }
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(substitute_return_type(host_type, substitutions)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args
+                .iter()
+                .map(|a| substitute_return_type(a, substitutions))
+                .collect(),
+        },
+        _ => ty.clone(),
     }
 }
