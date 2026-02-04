@@ -4,10 +4,11 @@
 //! - 类型等价性检查
 //! - 类型变量绑定
 //! - 联合类型求解
+//!
+//! 复用 core/type_system/substitute.rs 中的公共替换实现
 
-use crate::frontend::core::type_system::{MonoType, TypeVar};
+use crate::frontend::core::type_system::{MonoType, Substitution, Substituter};
 use crate::frontend::type_level::evaluation::ReductionConfig;
-use std::collections::{HashMap, HashSet};
 
 /// 统一结果
 #[derive(Debug, Clone, PartialEq)]
@@ -22,67 +23,9 @@ pub enum UnificationResult {
     NeedReduction(MonoType, MonoType),
 }
 
-/// 类型替换映射
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Substitution {
-    /// 类型变量替换（使用索引）
-    bindings: HashMap<usize, MonoType>,
-}
-
-impl Substitution {
-    /// 创建新的替换
-    pub fn new() -> Self {
-        Self {
-            bindings: HashMap::new(),
-        }
-    }
-
-    /// 添加绑定
-    pub fn bind(
-        &mut self,
-        tv: TypeVar,
-        ty: MonoType,
-    ) {
-        self.bindings.insert(tv.index(), ty);
-    }
-
-    /// 获取绑定
-    pub fn get(
-        &self,
-        index: &usize,
-    ) -> Option<&MonoType> {
-        self.bindings.get(index)
-    }
-
-    /// 检查是否包含变量
-    pub fn contains_var(
-        &self,
-        index: &usize,
-    ) -> bool {
-        self.bindings.contains_key(index)
-    }
-
-    /// 合并替换
-    pub fn merge(
-        &self,
-        other: &Substitution,
-    ) -> Substitution {
-        let mut result = self.clone();
-        for (k, v) in &other.bindings {
-            result.bindings.insert(*k, v.clone());
-        }
-        result
-    }
-
-    /// 获取所有绑定的变量索引
-    pub fn bound_vars(&self) -> HashSet<usize> {
-        self.bindings.keys().cloned().collect()
-    }
-}
-
 /// 类型级统一器
 ///
-/// 执行类型表达式的统一
+/// 执行类型表达式的统一，复用 Substituter 进行替换操作
 #[derive(Debug, Clone)]
 pub struct TypeUnifier {
     /// 统一配置
@@ -90,6 +33,9 @@ pub struct TypeUnifier {
 
     /// 当前替换
     substitution: Substitution,
+
+    /// 替换器实例
+    substituter: Substituter,
 }
 
 impl Default for TypeUnifier {
@@ -104,6 +50,7 @@ impl TypeUnifier {
         Self {
             config: ReductionConfig::default(),
             substitution: Substitution::new(),
+            substituter: Substituter::new(),
         }
     }
 
@@ -112,6 +59,7 @@ impl TypeUnifier {
         Self {
             config,
             substitution: Substitution::new(),
+            substituter: Substituter::new(),
         }
     }
 
@@ -210,50 +158,10 @@ impl TypeUnifier {
         current: &Substitution,
     ) -> UnificationResult {
         // 应用当前替换
-        let applied1 = self.apply_substitution(ty1, current);
-        let applied2 = self.apply_substitution(ty2, current);
+        let applied1 = self.substituter.substitute(ty1, current);
+        let applied2 = self.substituter.substitute(ty2, current);
 
         self.unify_internal(&applied1, &applied2)
-    }
-
-    /// 应用替换到类型
-    #[allow(clippy::only_used_in_recursion)]
-    fn apply_substitution(
-        &self,
-        ty: &MonoType,
-        sub: &Substitution,
-    ) -> MonoType {
-        match ty {
-            MonoType::TypeVar(tv) => sub
-                .get(&tv.index())
-                .cloned()
-                .unwrap_or(MonoType::TypeVar(*tv)),
-            MonoType::Tuple(types) => MonoType::Tuple(
-                types
-                    .iter()
-                    .map(|t| self.apply_substitution(t, sub))
-                    .collect(),
-            ),
-            MonoType::List(t) => MonoType::List(Box::new(self.apply_substitution(t, sub))),
-            MonoType::Dict(k, v) => MonoType::Dict(
-                Box::new(self.apply_substitution(k, sub)),
-                Box::new(self.apply_substitution(v, sub)),
-            ),
-            MonoType::Set(t) => MonoType::Set(Box::new(self.apply_substitution(t, sub))),
-            MonoType::Fn {
-                params,
-                return_type,
-                is_async,
-            } => MonoType::Fn {
-                params: params
-                    .iter()
-                    .map(|p| self.apply_substitution(p, sub))
-                    .collect(),
-                return_type: Box::new(self.apply_substitution(return_type, sub)),
-                is_async: *is_async,
-            },
-            _ => ty.clone(),
-        }
     }
 
     /// 获取当前替换
