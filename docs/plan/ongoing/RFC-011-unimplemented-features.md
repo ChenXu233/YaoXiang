@@ -1,6 +1,7 @@
 # RFC-011 泛型系统 - 未实现功能清单
 
 > **创建日期**: 2026-02-03
+> **最后更新**: 2026-02-04
 > **状态**: 进行中
 > **基于 RFC**: [RFC-011 泛型系统设计](../accepted/011-generic-type-system.md)
 
@@ -16,11 +17,11 @@
 |-------|---------|------|--------|----------|
 | Phase 1 | 基础泛型 | ✅ 部分实现 | 70% | `src/middle/passes/mono/mod.rs` |
 | Phase 2 | 类型约束系统 | ⚠️ 基础结构 | 30% | `src/frontend/type_level/` |
-| Phase 3 | 关联类型 | ❌ 未实现 | 0% | - |
+| Phase 3 | 关联类型 | ⚠️ 基础结构 | 5% | `src/frontend/typecheck/gat/` |
 | Phase 4 | 编译期泛型 | ⚠️ 基础结构 | 40% | `src/frontend/type_level/const_generics/` |
-| Phase 5 | 条件类型 | ⚠️ 基础结构 | 35% | `src/frontend/type_level/conditional_types.rs` |
+| Phase 5 | 条件类型 | ✅ 基础实现 | 65% | `src/frontend/type_level/type_match.rs` |
 | - | 函数重载特化 | ✅ 已实现 | 75% | `src/frontend/typecheck/overload.rs` |
-| - | 平台特定优化 | ❌ 未实现 | 0% | - |
+| - | 平台特定优化 | ⚠️ 基础实现 | 50% | `src/middle/passes/mono/platform_specializer.rs` |
 | - | 完整DCE | ✅ 部分实现 | 90% | `src/middle/passes/mono/` |
 
 ---
@@ -77,37 +78,53 @@ src/frontend/typecheck/checking/mod.rs          # ✅ BodyChecker扩展（完成
 
 #### 2.1 功能描述
 
-RFC-011 设计支持 `#[cfg]` 属性实现平台特化：
+RFC-011 设计支持通过预定义泛型参数 `P` 实现平台特化（不使用 `#[cfg]`）：
 ```yaoxiang
-sum: [T](arr: Array[T]) -> T = (arr) => { basic_sum_iter(arr) }
+# 通用实现（所有平台可用）
+sum: [T: Add](arr: Array[T]) -> T = { ... }
 
-#[cfg(target_arch = "x86_64")]
-sum: (arr: Array[T]) -> T = (arr) => { avx2_sum(arr.data, arr.length) }
+# 平台特化：P 是预定义泛型参数，代表当前平台
+sum: [P: X86_64](arr: Array[Float]) -> Float = {
+    return avx2_sum(arr.data, arr.length)
+}
 
-#[cfg(target_arch = "aarch64")]
-sum: (arr: Array[T]) -> T = (arr) => { neon_sum(arr.data, arr.length) }
+sum: [P: AArch64](arr: Array[Float]) -> Float = {
+    return neon_sum(arr.data, arr.length)
+}
 ```
 
 #### 2.2 当前状态
 
-- ❌ 无 `#[cfg]` 属性解析
-- ❌ 无平台检测逻辑
-- ❌ 无条件编译选择
+- ✅ `platform_info.rs` 已实现（80%）
+  - TargetPlatform: X86_64, AArch64, RiscV64, Arm, X86, Wasm32
+  - PlatformDetector: 从目标三元组/环境变量检测
+  - 预定义泛型参数 `P` 支持
+
+- ✅ `platform_specializer.rs` 已实现（50%）
+  - PlatformConstraint: `[P: X86_64]` 约束
+  - PlatformSpecializer: 平台特化选择
+  - 支持多平台特化版本注册和选择
+
+- ❌ 无 `#[cfg]` 属性解析（RFC设计不使用此方案）
+- ❌ 平台特化与单态化器集成（待实现）
+- ❌ 平台感知代码生成（待实现）
 
 #### 2.3 需要的实现
 
 ```
-src/frontend/core/parser/attr.rs                    # 新增：属性解析
-src/frontend/config/platform_detect.rs              # 新增：平台检测
-src/middle/passes/mono/platform_specializer.rs     # 新增：平台特化器
+src/frontend/core/parser/attr.rs                    # 可选：属性解析（RFC设计不使用 #[cfg]）
+src/middle/passes/mono/platform_info.rs             # ✅ 已实现
+src/middle/passes/mono/platform_specializer.rs      # ✅ 已实现
+src/middle/passes/mono/mod.rs                       # 修改：集成平台特化
 ```
 
 #### 2.4 验收标准
 
-- [ ] 能解析 `#[cfg(...)]` 属性
-- [ ] 编译时检测目标平台
-- [ ] 只生成匹配当前平台的代码
-- [ ] 支持 `target_arch`、`target_os` 等条件
+- [x] 能检测目标平台（X86_64, AArch64, 等）
+- [x] 预定义泛型参数 `P` 识别
+- [ ] 平台特化与单态化器正确集成
+- [ ] 只生成匹配当前平台的特化代码
+- [ ] 编译时根据目标平台自动选择特化版本
 
 ---
 
@@ -310,27 +327,46 @@ type Add[A: Nat, B: Nat] = match (A, B) {
 
 #### 7.2 当前状态
 
-- ⚠️ `conditional_types.rs` 存在
-- ⚠️ 基础类型级计算框架
-- ❌ 无 `match` 类型匹配
-- ❌ 无 Bool/Nat 类型族
-- ❌ 编译期类型计算不完整
+- ✅ `type_families.rs` 已实现（60%）
+  - Bool 类型族: `True`, `False`
+  - Nat 类型族: `Zero`, `Succ[N]`
+  - 条件类型: `IsTrue`, `IsFalse`, `IsZero`, `IsSucc`
+  - TypeFamily trait 统一处理
+
+- ✅ `type_match.rs` 已实现（70%）
+  - MatchPattern: 字面量/构造器/元组/通配符模式
+  - PatternMatcher: 模式匹配引擎
+  - MatchType: 完整类型匹配
+  - PatternBuilder: 流式 API 构建模式
+
+- ✅ `type_eval.rs` 已实现（65%）
+  - If 条件求值: `If<True, Int, String> => Int`
+  - Nat 运算: `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Eq`, `Lt`
+  - 缓存、循环检测、依赖追踪
+  - 条件组合: `And`, `Or`, `Not`
+
+- ⚠️ `conditional_types.rs` 存在（基础框架）
+
+- ❌ 与类型归一化器完整集成（待实现）
+- ❌ 标准库 `Assert` 实现（待实现）
 
 #### 7.3 需要的实现
 
 ```
-src/frontend/type_level/type_match.rs               # 新增：类型级match
-src/frontend/type_level/type_families.rs            # 新增：类型族(Bool, Nat)
-src/frontend/typecheck/type_eval.rs                 # 新增：类型级求值器
+src/frontend/type_level/type_match.rs               # ✅ 已实现
+src/frontend/type_level/type_families.rs            # ✅ 已实现
+src/frontend/typecheck/type_eval.rs                 # ✅ 已实现
+src/frontend/type_level/evaluation/mod.rs          # 修改：集成求值器
 ```
 
 #### 7.4 验收标准
 
-- [ ] 能解析类型级 `match` 表达式
-- [ ] 支持 `If[C, T, E]` 条件类型
-- [ ] 支持 Bool 类型族 (True/False)
-- [ ] 支持 Nat 类型族 (Zero/Succ)
-- [ ] 编译期类型计算
+- [x] 支持 `If[C, T, E]` 条件类型
+- [x] 支持 Bool 类型族 (True, False)
+- [x] 支持 Nat 类型族 (Zero, Succ)
+- [x] 支持类型级 match 表达式
+- [x] 编译期类型计算（If, Nat 运算）
+- [ ] 与类型归一化器完整集成
 - [ ] 标准库 `Assert` 实现（编译期断言）
   ```yaoxiang
   type Assert[C: Bool] = match C {
@@ -377,18 +413,36 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 
 ---
 
-## 优先级排序
+## 优先级排序（2026-02-04 更新）
 
-| 优先级 | 功能 | 预估工期 | 依赖 |
-|--------|------|----------|------|
-| **P0** | 完整DCE | 2周 | 基础单态化器 |
-| **P1** | 函数重载特化 | 3周 | 泛型解析 |
-| **P2** | 完整Trait系统 | 4周 | Phase 2类型约束 |
-| **P3** | 编译期泛型完整 | 3周 | Phase 4 |
-| **P4** | 条件类型完整 | 3周 | Phase 5 |
-| **P5** | 平台特定优化 | 2周 | 函数重载 |
-| **P6** | 关联类型 | 4周 | Trait系统 |
-| **P7** | 特化感知内联 | 2周 | P1 + 优化器 |
+| 优先级 | 功能 | 预估工期 | 依赖 | 状态 |
+|--------|------|----------|------|------|
+| **P0** | 完整DCE | 1周 | 基础单态化器 | 90% - 收尾 |
+| **P1** | 函数重载特化集成 | 2周 | 重载解析 | 75% - 完善 |
+| **P2** | 条件类型集成 | 2周 | 类型归一化器 | 65% - 中期 |
+| **P3** | 平台特化集成 | 2周 | 单态化器 | 50% - 中期 |
+| **P4** | 编译期泛型完整 | 3周 | Phase 4 | 40% - 中期 |
+| **P5** | 完整Trait系统 | 4周 | Phase 2 | 10% - 长期 |
+| **P6** | 关联类型 | 4周 | Trait系统 | 5% - 长期 |
+| **P7** | 特化感知内联 | 2周 | P1 + 优化器 | 0% - 长期 |
+| **P8** | 宏替代 | 3周 | 泛型+Trait | 0% - 长期 |
+
+### 下一步建议
+
+**短期 (1-2周)**：
+1. 完成 DCE 收尾工作
+2. 集成条件类型到类型归一化器
+3. 集成平台特化到单态化器
+
+**中期 (1个月)**：
+1. 完善函数重载与泛型的集成
+2. 完善编译期泛型（字面量参数）
+3. 开始 Trait 系统基础实现
+
+**长期 (2-3个月)**：
+1. 关联类型 (GAT)
+2. 特化感知内联
+3. 宏替代能力
 
 ---
 
@@ -438,48 +492,59 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 | `src/middle/passes/mono/function.rs` | ⚠️ 70% | 函数单态化 |
 | `src/middle/passes/mono/type_mono.rs` | ⚠️ 50% | 类型单态化 |
 | `src/middle/passes/mono/closure.rs` | ⚠️ 50% | 闭包单态化 |
+| `src/middle/passes/mono/platform_info.rs` | ✅ 80% | 平台信息检测 |
+| `src/middle/passes/mono/platform_specializer.rs` | ✅ 50% | 平台特化器 |
 | `src/frontend/type_level/mod.rs` | ⚠️ 40% | 类型级计算入口 |
 | `src/frontend/type_level/conditional_types.rs` | ⚠️ 35% | 条件类型框架 |
 | `src/frontend/type_level/const_generics/mod.rs` | ⚠️ 40% | 编译期泛型框架 |
 | `src/frontend/type_level/evaluation/compute.rs` | ⚠️ 30% | 类型级计算 |
+| `src/frontend/type_level/type_match.rs` | ✅ 70% | 类型级 match |
+| `src/frontend/type_level/type_families.rs` | ✅ 60% | 类型族 (Bool/Nat) |
+| `src/frontend/typecheck/type_eval.rs` | ✅ 65% | 编译期类型求值器 |
+| `src/frontend/typecheck/gat/mod.rs` | ⚠️ 5% | GAT 基础结构 |
+| `src/frontend/typecheck/traits/mod.rs` | ⚠️ 10% | Trait 基础结构 |
 
-### 需要新增模块
+### 需要新增/完善的模块
 
-| 文件路径 | 功能 |
-|----------|------|
-| `src/frontend/core/parser/overload.rs` | 函数重载解析 |
-| `src/frontend/core/parser/trait_def.rs` | Trait定义解析 |
-| `src/frontend/core/parser/literal_param.rs` | 字面量类型参数解析 |
-| `src/frontend/core/parser/attr.rs` | 属性解析 |
-| `src/frontend/typecheck/overload_resolution.rs` | 重载类型检查 |
-| `src/frontend/typecheck/trait_resolution.rs` | Trait约束求解 |
-| `src/frontend/typecheck/trait_impl.rs` | Trait实现检查 |
-| `src/frontend/typecheck/const_eval.rs` | 编译期表达式求值 |
-| `src/frontend/type_level/associated_types.rs` | 关联类型 |
-| `src/frontend/type_level/type_match.rs` | 类型级match |
-| `src/middle/passes/mono/instantiation_graph.rs` | 实例化图 |
-| `src/middle/passes/mono/reachability.rs` | 可达性分析 |
-| `src/middle/passes/mono/cross_module_dce.rs` | 跨模块DCE |
-| `src/middle/passes/mono/platform_specializer.rs` | 平台特化器 |
+| 文件路径 | 功能 | 状态 |
+|----------|------|------|
+| `src/frontend/core/parser/overload.rs` | 函数重载解析 | 已存在 |
+| `src/frontend/core/parser/trait_def.rs` | Trait定义解析 | ❌ 未实现 |
+| `src/frontend/core/parser/literal_param.rs` | 字面量类型参数解析 | ❌ 未实现 |
+| `src/frontend/core/parser/attr.rs` | 属性解析（可选） | ❌ 未实现 |
+| `src/frontend/typecheck/trait_resolution.rs` | Trait约束求解 | ⚠️ 部分 |
+| `src/frontend/typecheck/trait_impl.rs` | Trait实现检查 | ⚠️ 部分 |
+| `src/frontend/typecheck/const_eval.rs` | 编译期表达式求值 | ⚠️ 部分 |
+| `src/frontend/type_level/associated_types.rs` | 关联类型 | ❌ 未实现 |
+| `src/middle/passes/mono/instantiation_graph.rs` | 实例化图 | 已存在 |
+| `src/middle/passes/mono/reachability.rs` | 可达性分析 | 已存在 |
+| `src/middle/passes/mono/cross_module_dce.rs` | 跨模块DCE | 已存在 |
+| `src/middle/optimizer/specialization_aware_inlining.rs` | 特化感知内联 | ❌ 未实现 |
 
 ---
 
 ## 附录：RFC-011 设计回顾
 
-### 核心特性清单
+### 核心特性清单（2026-02-04 更新）
 
-| 特性 | RFC设计 | 当前实现 | 差距 |
-|------|---------|----------|------|
-| 基础泛型 `[T]` | ✅ | ✅ 70% | 需完善 |
-| 类型推导 | ✅ | ⚠️ 基础 | 需扩展 |
-| 类型约束 | ✅ | ❌ 0% | 需实现 |
-| 关联类型 | ✅ | ❌ 0% | 需实现 |
-| 编译期泛型 | ✅ | ⚠️ 40% | 需完善（无 const 关键字） |
-| 条件类型 | ✅ | ⚠️ 35% | 需完善 |
-| 函数特化 | ✅ | ❌ 0% | 需实现 |
-| 平台特化 | ✅ | ❌ 0% | 需实现 |
-| 完整DCE | ✅ | ⚠️ 50% | 需完善 |
-| 宏替代 | ✅ | ❌ 0% | 需实现 |
+| 特性 | RFC设计 | 当前实现 | 差距 | 优先级 |
+|------|---------|----------|------|--------|
+| 基础泛型 `[T]` | ✅ | ✅ 70% | 需完善 | P1 |
+| 类型推导 | ✅ | ⚠️ 基础 | 需扩展 | P1 |
+| 类型约束 (Trait) | ✅ | ⚠️ 10% | 需实现 | P2 |
+| 关联类型 (GAT) | ✅ | ⚠️ 5% | 需实现 | P4 |
+| 编译期泛型 | ✅ | ⚠️ 40% | 需完善 | P3 |
+| 条件类型 | ✅ | ✅ 65% | 条件类型框架完成 | P2 |
+| 函数特化 | ✅ | ✅ 75% | 重载机制完成 | P1 |
+| 平台特化 | ✅ | ⚠️ 50% | 基础结构完成 | P2 |
+| 完整DCE | ✅ | ⚠️ 90% | 接近完成 | P0 |
+| 宏替代 | ✅ | ❌ 0% | 需实现 | P5 |
+| 特化感知内联 | ✅ | ❌ 0% | 需实现 | P5 |
+
+> **更新说明 (2026-02-04)**：
+> - 条件类型从 35% → **65%**：`type_match.rs`, `type_families.rs`, `type_eval.rs` 已实现
+> - 平台特化从 0% → **50%**：`platform_info.rs`, `platform_specializer.rs` 已实现
+> - 关联类型从 0% → **5%**：`src/frontend/typecheck/gat/` 基础结构已创建
 
 ### 依赖关系图
 
