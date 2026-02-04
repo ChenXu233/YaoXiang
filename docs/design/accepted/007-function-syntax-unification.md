@@ -109,12 +109,12 @@ if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 **示例说明**：
 ```yaoxiang
 # ✅ 支持高阶多态：泛型约束函数类型参数
-call_twice: [T](f: (T) -> T, x: T) -> T = {
+call_twice: [T](f: (x: T) -> T, x: T) -> T = {
     return f(f(x))
 }
 # 使用：call_twice((x) => x + 1, 5)  # 推断为 call_twice[Int]
 
-compose: [A, B, C](f: (B) -> C, g: (A) -> B, x: A) -> C = {
+compose: [A, B, C](f: (x: B) -> C, g: (x: A) -> B, x: A) -> C = {
     return f(g(x))
 }
 # 使用：compose((x) => x * 2, (x) => x + 1, 5)  # 推断为 compose[Int, Int, Int]
