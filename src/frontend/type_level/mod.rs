@@ -80,3 +80,6 @@ impl<T> TypeLevelResult<T> {
         matches!(self, Self::Normalized(_))
     }
 }
+
+#[cfg(test)]
+pub mod tests;

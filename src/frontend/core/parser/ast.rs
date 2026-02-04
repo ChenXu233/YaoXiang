@@ -218,10 +218,23 @@ pub struct VariantDef {
     pub span: Span,
 }
 
-/// Generic parameter with constraints: `[T: Clone]` or `[T: Clone & Serializable]`
+/// Generic parameter kind: Type parameter or Const parameter
+#[derive(Debug, Clone)]
+pub enum GenericParamKind {
+    /// Type parameter: [T]
+    Type,
+    /// Const parameter: [N: Int]
+    Const {
+        /// The type of the const parameter (e.g., Int)
+        const_type: Box<Type>,
+    },
+}
+
+/// Generic parameter with constraints: `[T: Clone]` or `[N: Int]`
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
+    pub kind: GenericParamKind,
     pub constraints: Vec<Type>,
 }
 
@@ -269,6 +282,15 @@ pub enum Type {
         assoc_args: Vec<Type>,
     },
     Sum(Vec<Type>),
+    /// Literal type: a compile-time constant value used as a type
+    /// e.g., "5" in `[n: Int](n: n)` - n is a literal type "5"
+    /// Used for const generics with literal value parameters
+    Literal {
+        /// The literal name (e.g., "5")
+        name: String,
+        /// The underlying type (e.g., Int)
+        base_type: Box<Type>,
+    },
 }
 
 /// Block

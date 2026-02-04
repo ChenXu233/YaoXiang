@@ -16,10 +16,12 @@
 
 pub mod eval;
 pub mod generic_size;
+pub mod validation;
 
 // 重新导出主要类型
 pub use eval::{ConstGenericEval, ConstExpr, ConstBinOp};
 pub use generic_size::GenericSize;
+pub use validation::{LiteralTypeValidator, LiteralTypeInfo};
 use crate::frontend::core::type_system::ConstValue;
 
 /// Const泛型错误

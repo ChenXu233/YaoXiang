@@ -10,6 +10,20 @@ use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
+use std::collections::HashSet;
+
+/// Const parameter primitive types
+const CONST_PARAM_TYPES: &[&str] = &[
+    "Int", "Bool", "Float", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F32", "F64",
+    "Char", "String",
+];
+
+/// Lazy-initialized set of const parameter types for O(1) lookup
+fn const_param_type_set() -> &'static HashSet<&'static str> {
+    use std::sync::OnceLock;
+    static SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    SET.get_or_init(|| CONST_PARAM_TYPES.iter().copied().collect())
+}
 
 /// 检测是否是旧函数定义语法: identifier( 后跟类型参数和 ->
 /// 旧语法示例: add(Int, Int) -> Int = (a, b) => a + b
@@ -775,7 +789,10 @@ fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>>
     Some(params)
 }
 
-/// Parse generic parameters with constraints: `[T: Clone]`
+/// Parse generic parameters with constraints: `[T: Clone]` or `[N: Int]`
+/// Supports:
+/// - Type parameters: `[T]` or `[T: Clone]`
+/// - Const parameters: `[N: Int]` - const generic with type annotation
 pub fn parse_generic_params_with_constraints(
     state: &mut ParserState<'_>
 ) -> Option<Vec<GenericParam>> {
@@ -794,15 +811,51 @@ pub fn parse_generic_params_with_constraints(
         };
         state.bump();
 
-        // Parse constraint: `T: Clone`
+        // Parse constraint: `T: Clone` or type annotation: `N: Int`
         let mut constraints = Vec::new();
+
+        // Check for colon followed by type (could be either constraint or const type)
         if state.skip(&TokenKind::Colon) {
-            if let Some(constraint) = parse_type_annotation(state) {
-                constraints.push(constraint);
+            if let Some(constraint_or_type) = parse_type_annotation(state) {
+                // Determine if this is a Const parameter or a constraint
+                // Const parameter: [N: Int] where Int is the const's type
+                // Type constraint: [T: Clone] where Clone is a trait/type bound
+                // We distinguish by whether the type is a simple type name (const) or a trait-like type
+                if is_const_param_type(&constraint_or_type) {
+                    // This is a Const parameter: [N: Int]
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Const {
+                            const_type: Box::new(constraint_or_type),
+                        },
+                        constraints,
+                    });
+                } else {
+                    // This is a type parameter with constraint: [T: Clone]
+                    constraints.push(constraint_or_type);
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Type,
+                        constraints,
+                    });
+                }
+            } else {
+                // Fallback: type parameter without specific constraint
+                params.push(GenericParam {
+                    name,
+                    kind: GenericParamKind::Type,
+                    constraints,
+                });
             }
+        } else {
+            // No colon: type parameter without constraint: [T]
+            params.push(GenericParam {
+                name,
+                kind: GenericParamKind::Type,
+                constraints,
+            });
         }
 
-        params.push(GenericParam { name, constraints });
         state.skip(&TokenKind::Comma);
     }
 
@@ -811,6 +864,17 @@ pub fn parse_generic_params_with_constraints(
     }
 
     Some(params)
+}
+
+/// Check if a type annotation represents a Const parameter type
+/// Const parameter types are simple named types like Int, Bool, Float
+/// Type constraints are trait-like types
+fn is_const_param_type(ty: &Type) -> bool {
+    match ty {
+        Type::Name(name) => const_param_type_set().contains(name.as_str()),
+        Type::Literal { .. } => true,
+        _ => false,
+    }
 }
 
 /// Parse type definition (handles union types with |)
@@ -1619,6 +1683,7 @@ fn parse_fn_type(state: &mut ParserState<'_>) -> Option<Type> {
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
+/// Also supports const generic literal types: `factorial: [n: Int](n: n) -> Int`
 pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
@@ -1646,7 +1711,14 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
             // RFC-007: 类型标注是可选的（HM 推断）
             // 检查是否有冒号和类型
             let ty = if state.skip(&TokenKind::Colon) {
-                Some(parse_type_annotation(state)?)
+                // Parse type annotation
+                // Check if this is a literal type (const parameter reference)
+                // e.g., (n: n) where n is a const generic parameter
+                let parsed_type = parse_type_annotation(state)?;
+
+                // Wrap in Literal if it's an identifier matching the parameter name
+                // This handles const generic literal types like (n: n)
+                Some(wrap_literal_type_if_needed(name.clone(), parsed_type))
             } else {
                 // 无类型标注，HM 推断
                 None
@@ -1672,6 +1744,29 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
     let return_type = Box::new(parse_type_annotation(state)?);
 
     Some((params, return_type))
+}
+
+/// Wrap a type annotation as a literal type if it's a const parameter reference
+/// e.g., for `factorial: [n: Int](n: n)`, when parsing the second `n`:
+/// - name = "n" (parameter name)
+/// - parsed_type = Type::Name("n")
+///   Result: Type::Literal { name: "n", base_type: Type::Name("Int") }
+fn wrap_literal_type_if_needed(
+    param_name: String,
+    parsed_type: Type,
+) -> Type {
+    // Check if the type is a simple identifier with the same name as the parameter
+    // This indicates a const generic literal type reference
+    match &parsed_type {
+        Type::Name(type_name) if type_name == &param_name => {
+            // This is a literal type reference: the parameter value is used as a type
+            Type::Literal {
+                name: param_name.clone(),
+                base_type: Box::new(Type::Name(param_name)),
+            }
+        }
+        _ => parsed_type,
+    }
 }
 
 /// Parse tuple type like `(T, U, V)`

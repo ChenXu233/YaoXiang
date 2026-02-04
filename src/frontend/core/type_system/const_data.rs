@@ -34,6 +34,26 @@ impl ConstValue {
             ConstValue::Float(_) => ConstKind::Float(None),
         }
     }
+
+    /// 从字面量名称解析 ConstValue
+    /// 例如: "5" -> ConstValue::Int(5), "true" -> ConstValue::Bool(true)
+    pub fn from_literal_name(name: &str) -> Option<Self> {
+        // Try to parse as integer
+        if let Ok(n) = name.parse::<i128>() {
+            return Some(ConstValue::Int(n));
+        }
+        // Try to parse as boolean
+        match name {
+            "true" => Some(ConstValue::Bool(true)),
+            "false" => Some(ConstValue::Bool(false)),
+            _ => None,
+        }
+    }
+
+    /// 检查名称是否是有效的字面量
+    pub fn is_valid_literal_name(name: &str) -> bool {
+        name.parse::<i128>().is_ok() || name == "true" || name == "false"
+    }
 }
 
 impl PartialEq for ConstValue {

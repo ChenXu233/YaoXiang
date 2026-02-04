@@ -373,6 +373,13 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
                 args_str
             )
         }
+        crate::frontend::typecheck::MonoType::Literal {
+            name: _,
+            base_type,
+            value,
+        } => {
+            format!("{}::{}", dump_type_detail(base_type), value)
+        }
     }
 }
 
