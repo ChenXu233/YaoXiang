@@ -11,6 +11,7 @@
 
 use crate::frontend::core::type_system::{MonoType, Substitution, Substituter};
 use crate::frontend::type_level::evaluation::{NormalForm, ReductionConfig};
+use crate::frontend::typecheck::type_eval::TypeEvaluator;
 use std::collections::HashMap;
 
 /// 范式化上下文
@@ -34,6 +35,16 @@ impl NormalizationContext {
             substituter: Substituter::new(),
             cache: HashMap::new(),
         }
+    }
+
+    /// 获取缓存的可变引用（用于同步）
+    pub fn cache_mut(&mut self) -> &mut HashMap<MonoType, NormalForm> {
+        &mut self.cache
+    }
+
+    /// 获取缓存的不可变引用
+    pub fn cache(&self) -> &HashMap<MonoType, NormalForm> {
+        &self.cache
     }
 
     /// 添加类型变量替换
@@ -67,18 +78,32 @@ impl NormalizationContext {
 /// 类型范式化器
 ///
 /// 将类型表达式转换为范式形式
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TypeNormalizer {
     /// 范式化配置
     config: ReductionConfig,
 
     /// 上下文
     context: NormalizationContext,
+
+    /// 类型求值器（用于条件类型求值）
+    evaluator: TypeEvaluator,
 }
 
 impl Default for TypeNormalizer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Clone for TypeNormalizer {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            context: self.context.clone(),
+            // 重新创建 evaluator，因为原始指针不能克隆
+            evaluator: TypeEvaluator::new(),
+        }
     }
 }
 
@@ -88,6 +113,7 @@ impl TypeNormalizer {
         Self {
             config: ReductionConfig::default(),
             context: NormalizationContext::new(),
+            evaluator: TypeEvaluator::new(),
         }
     }
 
@@ -96,6 +122,7 @@ impl TypeNormalizer {
         Self {
             config,
             context: NormalizationContext::new(),
+            evaluator: TypeEvaluator::new(),
         }
     }
 
@@ -131,7 +158,14 @@ impl TypeNormalizer {
             | MonoType::Bytes => NormalForm::Normalized,
             MonoType::Int(_) | MonoType::Float(_) => NormalForm::Normalized,
             MonoType::TypeVar(_) => NormalForm::NeedsReduction,
-            MonoType::TypeRef(_) => NormalForm::Normalized,
+            MonoType::TypeRef(name) => {
+                // 检查是否是条件类型（If, Match 等）
+                if let Some(args) = self.parse_conditional_args(name) {
+                    self.eval_conditional(name, &args)
+                } else {
+                    NormalForm::Normalized
+                }
+            }
             MonoType::Struct(_) | MonoType::Enum(_) => NormalForm::Normalized,
             MonoType::Tuple(types) => {
                 if types
@@ -168,6 +202,138 @@ impl TypeNormalizer {
             }
             _ => NormalForm::Normalized,
         }
+    }
+
+    /// 解析条件类型参数
+    fn parse_conditional_args(
+        &self,
+        type_name: &str,
+    ) -> Option<Vec<String>> {
+        if !type_name.starts_with("If<") && !type_name.starts_with("Match<") {
+            return None;
+        }
+
+        let args_str = &type_name[type_name.find('<')? + 1..type_name.rfind('>')?];
+        Self::parse_type_args(args_str)
+    }
+
+    /// 解析类型参数字符串
+    fn parse_type_args(args_str: &str) -> Option<Vec<String>> {
+        let mut args = Vec::new();
+        let mut current = String::new();
+        let mut depth = 0;
+
+        for c in args_str.chars() {
+            match c {
+                ',' if depth == 0 => {
+                    if !current.trim().is_empty() {
+                        args.push(current.trim().to_string());
+                    }
+                    current = String::new();
+                }
+                '<' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                '>' => {
+                    if depth == 0 {
+                        return None;
+                    }
+                    depth -= 1;
+                    current.push(c);
+                }
+                _ => current.push(c),
+            }
+        }
+
+        if !current.trim().is_empty() {
+            args.push(current.trim().to_string());
+        }
+
+        if args.is_empty() {
+            None
+        } else {
+            Some(args)
+        }
+    }
+
+    /// 求值条件类型
+    fn eval_conditional(
+        &mut self,
+        type_name: &str,
+        args: &[String],
+    ) -> NormalForm {
+        // 解析参数为 MonoType
+        let parsed_args: Vec<MonoType> = args
+            .iter()
+            .filter_map(|arg| {
+                self.evaluator
+                    .parse_type(arg)
+                    .or_else(|| Some(MonoType::TypeRef(arg.clone())))
+            })
+            .collect();
+
+        if parsed_args.len() < 2 {
+            return NormalForm::Normalized;
+        }
+
+        // 根据类型名称调用对应的求值方法
+        match type_name {
+            _ if type_name.starts_with("If<") => {
+                // If<Condition, TrueBranch, FalseBranch>
+                if parsed_args.len() >= 3 {
+                    let result =
+                        self.evaluator
+                            .eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
+                    match result {
+                        crate::frontend::typecheck::type_eval::EvalResult::Value(_) => {
+                            NormalForm::Normalized
+                        }
+                        crate::frontend::typecheck::type_eval::EvalResult::Pending => {
+                            NormalForm::NeedsReduction
+                        }
+                        crate::frontend::typecheck::type_eval::EvalResult::Error(_) => {
+                            NormalForm::Normalized
+                        }
+                    }
+                } else {
+                    NormalForm::Normalized
+                }
+            }
+            _ if type_name.starts_with("Match<") => {
+                // Match<Target, Arm1, Arm2, ...>
+                let target = &parsed_args[0];
+                let arms: Vec<(MonoType, MonoType)> = parsed_args[1..]
+                    .chunks(2)
+                    .filter_map(|chunk| {
+                        if chunk.len() == 2 {
+                            Some((chunk[0].clone(), chunk[1].clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let result = self.evaluator.eval_match(target, arms);
+                match result {
+                    crate::frontend::typecheck::type_eval::EvalResult::Value(_) => {
+                        NormalForm::Normalized
+                    }
+                    crate::frontend::typecheck::type_eval::EvalResult::Pending => {
+                        NormalForm::NeedsReduction
+                    }
+                    crate::frontend::typecheck::type_eval::EvalResult::Error(_) => {
+                        NormalForm::Normalized
+                    }
+                }
+            }
+            _ => NormalForm::Normalized,
+        }
+    }
+
+    /// 获取求值器（用于外部访问）
+    pub fn evaluator(&mut self) -> &mut TypeEvaluator {
+        &mut self.evaluator
     }
 
     /// 获取上下文
