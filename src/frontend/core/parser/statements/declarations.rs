@@ -793,6 +793,7 @@ fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>>
 /// Supports:
 /// - Type parameters: `[T]` or `[T: Clone]`
 /// - Const parameters: `[N: Int]` - const generic with type annotation
+/// - Platform parameter: `[P: X86_64]` - RFC-011 platform specialization
 pub fn parse_generic_params_with_constraints(
     state: &mut ParserState<'_>
 ) -> Option<Vec<GenericParam>> {
@@ -811,17 +812,31 @@ pub fn parse_generic_params_with_constraints(
         };
         state.bump();
 
+        // RFC-011: Check for reserved platform parameter P
+        // P is reserved for platform specialization: [P: X86_64]
+        let is_platform_param = name == "P";
+
         // Parse constraint: `T: Clone` or type annotation: `N: Int`
         let mut constraints = Vec::new();
 
         // Check for colon followed by type (could be either constraint or const type)
         if state.skip(&TokenKind::Colon) {
             if let Some(constraint_or_type) = parse_type_annotation(state) {
+                // RFC-011: Platform parameter handling
+                // [P: X86_64] - P is reserved, constraint is the platform type
+                if is_platform_param {
+                    // P is a special platform parameter, constraint is the platform type
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Platform, // Platform-specific parameter
+                        constraints: vec![constraint_or_type],
+                    });
+                }
                 // Determine if this is a Const parameter or a constraint
                 // Const parameter: [N: Int] where Int is the const's type
                 // Type constraint: [T: Clone] where Clone is a trait/type bound
                 // We distinguish by whether the type is a simple type name (const) or a trait-like type
-                if is_const_param_type(&constraint_or_type) {
+                else if is_const_param_type(&constraint_or_type) {
                     // This is a Const parameter: [N: Int]
                     params.push(GenericParam {
                         name,
@@ -841,17 +856,31 @@ pub fn parse_generic_params_with_constraints(
                 }
             } else {
                 // Fallback: type parameter without specific constraint
-                params.push(GenericParam {
-                    name,
-                    kind: GenericParamKind::Type,
-                    constraints,
-                });
+                if is_platform_param {
+                    // Platform parameter without constraint matches any platform
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Platform,
+                        constraints,
+                    });
+                } else {
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Type,
+                        constraints,
+                    });
+                }
             }
         } else {
             // No colon: type parameter without constraint: [T]
+            // Platform parameter without constraint matches any platform
             params.push(GenericParam {
                 name,
-                kind: GenericParamKind::Type,
+                kind: if is_platform_param {
+                    GenericParamKind::Platform
+                } else {
+                    GenericParamKind::Type
+                },
                 constraints,
             });
         }

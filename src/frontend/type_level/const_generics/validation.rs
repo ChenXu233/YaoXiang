@@ -168,6 +168,7 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
             }
         }
         GenericParamKind::Type => None,
+        GenericParamKind::Platform => None, // 平台参数不是常量参数
     }
 }
 
