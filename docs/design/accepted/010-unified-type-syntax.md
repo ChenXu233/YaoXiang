@@ -339,7 +339,7 @@ draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 type DrawableSerializable = Drawable & Serializable
 
 # 使用交集类型
-func process[T: Drawable & Serializable](item: T) -> String {
+process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
     item.draw(screen)
     return item.serialize()
 }
@@ -498,30 +498,6 @@ process_all[T: Serializable](items: List[T]) {
 process_all([p, r])
 ```
 
-### 运行时表示
-
-```yaoxiang
-# Point 实例在内存中的表示
-p: Point = Point(1.0, 2.0)
-
-# 内部结构：
-# p = {
-#     x: 1.0,
-#     y: 2.0,
-#     __vtable__: {
-#         draw: &Point.draw,
-#         bounding_box: &Point.bounding_box,
-#         serialize: &Point.serialize,
-#         translate: &Point.translate,
-#         scale: &Point.scale
-#     }
-# }
-
-# 方法调用 p.draw(screen) 编译为：
-# 1. 查找 p.__vtable__.draw
-# 2. 调用 p.__vtable__.draw(p, screen)
-```
-
 ## 详细设计
 
 ### 接口检查算法
@@ -569,7 +545,7 @@ type CustomPoint = {
 }
 
 custom: CustomPoint = CustomPoint(
-    (self, surface) => surface.plot(self.x, self.y),
+    (self: CustomPoint, surface: Surface) => surface.plot(self.x, self.y),
     1.0,
     2.0
 )
@@ -592,7 +568,7 @@ custom: CustomPoint = CustomPoint(
 ```yaoxiang
 # 这两者本质完全相同
 add: (a: Int, b: Int) -> Int = a + b           # 具名函数（推荐）
-add: (Int, Int) -> Int = (a, b) => a + b        # Lambda 形式（完全等价）
+add: (a: Int, b: Int) -> Int = (a, b) => a + b        # Lambda 形式（完全等价）
 ```
 
 ### 语法糖模型
@@ -634,10 +610,6 @@ double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
 add: (a: Int, b: Int) -> Int = a + b
 inc: (x: Int) -> Int = x + 1
 main: () -> Void = { print("hi") }
-
-# ✅ 合法：签名只声明类型，Lambda 补全参数名
-add: (Int, Int) -> Int = (a, b) => a + b
-inc: Int -> Int = (x) => x + 1
 
 # ✅ 合法：Lambda 头中标注类型
 double = (x: Int) => x * 2
