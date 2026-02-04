@@ -17,7 +17,7 @@
 | Phase 1 | 基础泛型 | ✅ 部分实现 | 70% | `src/middle/passes/mono/mod.rs` |
 | Phase 2 | 类型约束系统 | ⚠️ 基础结构 | 30% | `src/frontend/type_level/` |
 | Phase 3 | 关联类型 | ❌ 未实现 | 0% | - |
-| Phase 4 | Const泛型 | ⚠️ 基础结构 | 40% | `src/frontend/type_level/const_generics/` |
+| Phase 4 | 编译期泛型 | ⚠️ 基础结构 | 40% | `src/frontend/type_level/const_generics/` |
 | Phase 5 | 条件类型 | ⚠️ 基础结构 | 35% | `src/frontend/type_level/conditional_types.rs` |
 | - | 函数重载特化 | ✅ 已实现 | 75% | `src/frontend/typecheck/overload.rs` |
 | - | 平台特定优化 | ❌ 未实现 | 0% | - |
@@ -242,7 +242,7 @@ src/frontend/typecheck/gat_check.rs                 # 新增：GAT 类型检查
 
 ---
 
-### 6. Const泛型完整实现
+### 6. 编译期泛型完整实现
 
 #### 6.1 功能描述
 
@@ -250,11 +250,16 @@ src/frontend/typecheck/gat_check.rs                 # 新增：GAT 类型检查
 # 编译期常量参数
 type Array[T, N: Int] = { data: T[N] }
 
-# Const函数
-const fn factorial(n: Int) -> Int = ...
+# 编译期函数：使用字面量类型约束
+factorial: [n: Int](n: n) -> Int = {
+    match n {
+        0 => 1,
+        _ => n * factorial(n - 1)
+    }
+}
 
-# 编译期计算
-identity_matrix: [N: Int, T: Add + Zero](size: N) -> Array[Array[T, N], N] = { ... }
+# 编译期计算（编译器在编译期计算）
+SIZE: Int = factorial(5)  # 120
 ```
 
 #### 6.2 当前状态
@@ -262,27 +267,26 @@ identity_matrix: [N: Int, T: Add + Zero](size: N) -> Array[Array[T, N], N] = { .
 - ⚠️ `const_generics/` 模块存在
 - ⚠️ 基础 `GenericSize` 表示
 - ⚠️ 基础常量表达式求值
-- ❌ 无 Const 函数解析
-- ❌ 无 Const 泛型实例化
+- ❌ 无字面量类型参数解析 `[n: Int](n: n)`
+- ❌ 无编译期函数实例化
 - ❌ 无编译期维度验证
-- ❌ 无 `static_assert`
+- ⚠️ `static_assert` 由条件类型标准库实现（见 7. 条件类型）
 
 #### 6.3 需要的实现
 
 ```
-src/frontend/core/parser/const_fn.rs                 # 新增：Const 函数解析
-src/frontend/typecheck/const_eval.rs                 # 新增：Const 表达式求值
-src/middle/passes/mono/const_monomorphization.rs    # 新增：Const 泛型特化
-src/frontend/typecheck/static_assert.rs              # 新增：static_assert 支持
+src/frontend/core/parser/literal_param.rs           # 新增：字面量类型参数解析
+src/frontend/typecheck/const_eval.rs                 # 新增：编译期表达式求值
+src/middle/passes/mono/compile_time_monomorphization.rs  # 新增：编译期泛型特化
 ```
 
 #### 6.4 验收标准
 
-- [ ] 能解析 `const fn` 定义
-- [ ] 能解析 `[N: Int]` Const 参数
-- [ ] 编译期求值 Const 表达式
-- [ ] 支持 Const 泛型实例化
-- [ ] 支持 `static_assert` 编译期检查
+- [ ] 能解析 `[n: Int](n: n)` 字面量类型参数语法
+- [ ] 能解析 `[N: Int]` 编译期泛型参数
+- [ ] 编译期求值字面量类型参数的函数调用
+- [ ] 支持编译期泛型实例化
+- [ ] 注：`Assert` 由标准库利用条件类型实现（见 7.4 验收标准）
 
 ---
 
@@ -327,6 +331,13 @@ src/frontend/typecheck/type_eval.rs                 # 新增：类型级求值�
 - [ ] 支持 Bool 类型族 (True/False)
 - [ ] 支持 Nat 类型族 (Zero/Succ)
 - [ ] 编译期类型计算
+- [ ] 标准库 `Assert` 实现（编译期断言）
+  ```yaoxiang
+  type Assert[C: Bool] = match C {
+      True => Void,
+      False => compile_error("Assertion failed"),
+  }
+  ```
 
 ---
 
@@ -373,7 +384,7 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 | **P0** | 完整DCE | 2周 | 基础单态化器 |
 | **P1** | 函数重载特化 | 3周 | 泛型解析 |
 | **P2** | 完整Trait系统 | 4周 | Phase 2类型约束 |
-| **P3** | Const泛型完整 | 3周 | Phase 4 |
+| **P3** | 编译期泛型完整 | 3周 | Phase 4 |
 | **P4** | 条件类型完整 | 3周 | Phase 5 |
 | **P5** | 平台特定优化 | 2周 | 函数重载 |
 | **P6** | 关联类型 | 4周 | Trait系统 |
@@ -400,9 +411,10 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
    - 支撑泛型约束
    - 为标准库提供基础
 
-2. **Const泛型**
+2. **编译期泛型**
    - 支撑编译期计算
    - 支持静态数组优化
+   - 无需 `const` 关键字
 
 ### 长期目标 (5-6个月)
 
@@ -428,7 +440,7 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 | `src/middle/passes/mono/closure.rs` | ⚠️ 50% | 闭包单态化 |
 | `src/frontend/type_level/mod.rs` | ⚠️ 40% | 类型级计算入口 |
 | `src/frontend/type_level/conditional_types.rs` | ⚠️ 35% | 条件类型框架 |
-| `src/frontend/type_level/const_generics/mod.rs` | ⚠️ 40% | Const泛型框架 |
+| `src/frontend/type_level/const_generics/mod.rs` | ⚠️ 40% | 编译期泛型框架 |
 | `src/frontend/type_level/evaluation/compute.rs` | ⚠️ 30% | 类型级计算 |
 
 ### 需要新增模块
@@ -437,12 +449,12 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 |----------|------|
 | `src/frontend/core/parser/overload.rs` | 函数重载解析 |
 | `src/frontend/core/parser/trait_def.rs` | Trait定义解析 |
-| `src/frontend/core/parser/const_fn.rs` | Const函数解析 |
+| `src/frontend/core/parser/literal_param.rs` | 字面量类型参数解析 |
 | `src/frontend/core/parser/attr.rs` | 属性解析 |
 | `src/frontend/typecheck/overload_resolution.rs` | 重载类型检查 |
 | `src/frontend/typecheck/trait_resolution.rs` | Trait约束求解 |
 | `src/frontend/typecheck/trait_impl.rs` | Trait实现检查 |
-| `src/frontend/typecheck/const_eval.rs` | Const表达式求值 |
+| `src/frontend/typecheck/const_eval.rs` | 编译期表达式求值 |
 | `src/frontend/type_level/associated_types.rs` | 关联类型 |
 | `src/frontend/type_level/type_match.rs` | 类型级match |
 | `src/middle/passes/mono/instantiation_graph.rs` | 实例化图 |
@@ -462,7 +474,7 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
 | 类型推导 | ✅ | ⚠️ 基础 | 需扩展 |
 | 类型约束 | ✅ | ❌ 0% | 需实现 |
 | 关联类型 | ✅ | ❌ 0% | 需实现 |
-| Const泛型 | ✅ | ⚠️ 40% | 需完善 |
+| 编译期泛型 | ✅ | ⚠️ 40% | 需完善（无 const 关键字） |
 | 条件类型 | ✅ | ⚠️ 35% | 需完善 |
 | 函数特化 | ✅ | ❌ 0% | 需实现 |
 | 平台特化 | ✅ | ❌ 0% | 需实现 |
@@ -480,9 +492,9 @@ src/middle/passes/opt/size_analysis.rs                 # 新增：函数大小�
     │        │
     │        └──> Trait继承
     │
-    ├──> Const泛型
+    ├──> 编译期泛型
     │        │
-    │        ├──> Const函数
+    │        ├──> 字面量类型参数
     │        │
     │        └──> 编译期计算
     │
