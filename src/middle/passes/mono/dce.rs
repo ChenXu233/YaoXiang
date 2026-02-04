@@ -314,6 +314,7 @@ impl DcePass {
         instantiated_functions: &HashMap<FunctionId, FunctionIR>,
         instantiated_types: &HashMap<TypeId, MonoType>,
         entry_points: &[FunctionId],
+        generic_functions: &HashMap<GenericFunctionId, FunctionIR>,
     ) -> DceResult {
         if !self.config.enabled {
             return DceResult {
@@ -327,11 +328,15 @@ impl DcePass {
         let start_time = Instant::now();
 
         // 1. 构建实例化图
-        let mut graph =
-            self.build_instantiation_graph(module, instantiated_functions, instantiated_types);
+        let mut graph = self.build_instantiation_graph(
+            module,
+            instantiated_functions,
+            instantiated_types,
+            generic_functions,
+        );
 
         // 2. 标记入口点
-        self.mark_entry_points(&mut graph, entry_points);
+        self.mark_entry_points(&mut graph, entry_points, generic_functions);
 
         // 3. 执行可达性分析
         let eliminator =
@@ -340,7 +345,8 @@ impl DcePass {
         let (kept_nodes, analysis) = eliminator.eliminate_with_analysis(&graph);
 
         // 4. 收集保留的实例
-        let kept_functions = self.collect_kept_functions(instantiated_functions, &kept_nodes);
+        let kept_functions =
+            self.collect_kept_functions(instantiated_functions, &kept_nodes, generic_functions);
         let kept_types = self.collect_kept_types(instantiated_types, &kept_nodes);
 
         // 5. 代码膨胀控制
@@ -393,14 +399,23 @@ impl DcePass {
         _module: &ModuleIR,
         instantiated_functions: &HashMap<FunctionId, FunctionIR>,
         instantiated_types: &HashMap<TypeId, MonoType>,
+        generic_functions: &HashMap<GenericFunctionId, FunctionIR>,
     ) -> InstantiationGraph {
         let mut graph = InstantiationGraph::new();
 
         // 添加函数实例化节点
         for (func_id, ir) in instantiated_functions {
             let type_args = self.extract_function_type_args(func_id, ir);
+
+            // 从特化名称提取基础泛型名称
+            let base_name = self.extract_base_name(func_id.name());
+
+            // 查找原始泛型函数以获取类型参数名
+            let type_param_names =
+                self.extract_type_param_names_from_generic(&base_name, generic_functions);
+
             let node = graph.add_function_node(
-                GenericFunctionId::new(func_id.name().to_string(), vec![]),
+                GenericFunctionId::new(base_name, type_param_names),
                 type_args,
             );
 
@@ -430,12 +445,21 @@ impl DcePass {
         &self,
         graph: &mut InstantiationGraph,
         entry_points: &[FunctionId],
+        generic_functions: &HashMap<GenericFunctionId, FunctionIR>,
     ) {
         for entry in entry_points {
             let type_args = self.extract_entry_type_args(entry);
+
+            // 从特化名称提取基础泛型名称
+            let base_name = self.extract_base_name(entry.name());
+
+            // 查找原始泛型函数以获取类型参数名
+            let type_param_names =
+                self.extract_type_param_names_from_generic(&base_name, generic_functions);
+
             let node =
                 InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
-                    GenericFunctionId::new(entry.name().to_string(), vec![]),
+                    GenericFunctionId::new(base_name, type_param_names),
                     type_args,
                 ));
             graph.add_entry_point(node);
@@ -447,13 +471,20 @@ impl DcePass {
         &self,
         instantiated_functions: &HashMap<FunctionId, FunctionIR>,
         kept_nodes: &HashSet<InstanceNode>,
+        generic_functions: &HashMap<GenericFunctionId, FunctionIR>,
     ) -> HashMap<FunctionId, FunctionIR> {
         let mut kept = HashMap::new();
 
         for (func_id, ir) in instantiated_functions {
+            // 从特化名称提取基础泛型名称
+            let base_name = self.extract_base_name(func_id.name());
+            // 查找原始泛型函数以获取类型参数名
+            let type_param_names =
+                self.extract_type_param_names_from_generic(&base_name, generic_functions);
+
             let node =
                 InstanceNode::Function(super::instantiation_graph::FunctionInstanceNode::new(
-                    GenericFunctionId::new(func_id.name().to_string(), vec![]),
+                    GenericFunctionId::new(base_name, type_param_names),
                     self.extract_function_type_args(func_id, ir),
                 ));
 
@@ -585,6 +616,34 @@ impl DcePass {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
+    /// 从特化名称提取基础泛型名称
+    ///
+    /// 特化名称格式: "{base_name}_{type_args}"
+    /// 例如: "map_Int" -> "map", "sum_Float_String" -> "sum"
+    fn extract_base_name(
+        &self,
+        specialized_name: &str,
+    ) -> String {
+        // 尝试从后往前分割，提取基础名称
+        // 处理格式: "map_Int", "sum_Float_String"
+        if let Some(last_underscore) = specialized_name.rfind('_') {
+            let potential_base = &specialized_name[..last_underscore];
+            // 检查基础部分是否包含下划线，如果包含，说明后面还有类型参数
+            // 需要继续往前找
+            if potential_base.contains('_') {
+                // 递归处理
+                self.extract_base_name(potential_base)
+            } else {
+                // 找到基础名称
+                potential_base.to_string()
+            }
+        } else {
+            // 没有下划线，整个名称就是基础名称（可能是非泛型函数）
+            specialized_name.to_string()
+        }
+    }
+
     /// 从函数ID提取类型参数
     fn extract_function_type_args(
         &self,
@@ -601,6 +660,49 @@ impl DcePass {
         func_id: &FunctionId,
     ) -> Vec<MonoType> {
         func_id.type_args().to_vec()
+    }
+
+    /// 从泛型函数映射中提取指定函数的类型参数名
+    fn extract_type_param_names_from_generic(
+        &self,
+        base_name: &str,
+        generic_functions: &HashMap<GenericFunctionId, FunctionIR>,
+    ) -> Vec<String> {
+        // 查找原始泛型函数
+        for (generic_id, func_ir) in generic_functions {
+            if generic_id.name() == base_name {
+                return self.extract_type_params_from_ir(func_ir);
+            }
+        }
+        // 如果找不到泛型函数，返回空列表
+        vec![]
+    }
+
+    /// 从 FunctionIR 提取类型参数名
+    fn extract_type_params_from_ir(
+        &self,
+        func: &FunctionIR,
+    ) -> Vec<String> {
+        let mut type_params = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for param_ty in &func.params {
+            if let MonoType::TypeVar(tv) = param_ty {
+                let name = format!("T{}", tv.index());
+                if seen.insert(name.clone()) {
+                    type_params.push(name);
+                }
+            }
+        }
+
+        if let MonoType::TypeVar(tv) = &func.return_type {
+            let name = format!("T{}", tv.index());
+            if seen.insert(name.clone()) {
+                type_params.push(name);
+            }
+        }
+
+        type_params
     }
 
     /// 从类型提取类型参数
