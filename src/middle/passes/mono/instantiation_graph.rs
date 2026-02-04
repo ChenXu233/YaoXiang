@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use crate::frontend::typecheck::MonoType;
-use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 
 /// 实例化图中的节点
@@ -294,6 +294,8 @@ impl InstantiationGraph {
     }
 
     /// 从函数IR中提取依赖的类型
+    ///
+    /// 需要传入参数类型和局部变量类型才能正确提取
     pub fn extract_dependencies_from_function(
         &self,
         ir: &FunctionIR,
@@ -302,7 +304,12 @@ impl InstantiationGraph {
 
         for block in &ir.blocks {
             for inst in &block.instructions {
-                self.extract_types_from_instruction(inst, &mut dependencies);
+                self.extract_types_from_instruction(
+                    inst,
+                    &ir.params,
+                    &ir.locals,
+                    &mut dependencies,
+                );
             }
         }
 
@@ -310,72 +317,288 @@ impl InstantiationGraph {
     }
 
     /// 从指令中提取类型
+    ///
+    /// # Arguments
+    /// * `inst` - 指令
+    /// * `params` - 函数参数类型
+    /// * `locals` - 局部变量类型
+    /// * `deps` - 收集依赖类型
     fn extract_types_from_instruction(
         &self,
         inst: &Instruction,
+        params: &[MonoType],
+        locals: &[MonoType],
         deps: &mut Vec<MonoType>,
     ) {
         match inst {
-            // 函数调用
-            Instruction::Call {
-                func: _,
-                args: _,
-                dst: _,
-            } => {
-                // 从 func Operand 提取类型
-                // 这需要解析 Operand 的类型信息
+            // ==================== 调用指令 ====================
+            // 函数调用 (dst 是 Option<Operand>)
+            Instruction::Call { func, args, dst } => {
+                self.extract_type_from_operand(func, params, locals, deps);
+                if let Some(d) = dst {
+                    self.extract_type_from_operand(d, params, locals, deps);
+                }
+                for arg in args {
+                    self.extract_type_from_operand(arg, params, locals, deps);
+                }
             }
-            // 动态调用
-            Instruction::CallDyn {
-                func: _,
-                args: _,
-                dst: _,
-            } => {
-                // 从 func Operand 提取类型
+            // 动态调用 (dst 是 Option<Operand>)
+            Instruction::CallDyn { func, args, dst } => {
+                self.extract_type_from_operand(func, params, locals, deps);
+                if let Some(d) = dst {
+                    self.extract_type_from_operand(d, params, locals, deps);
+                }
+                for arg in args {
+                    self.extract_type_from_operand(arg, params, locals, deps);
+                }
             }
-            // 虚方法调用
-            Instruction::CallVirt {
-                obj: _,
-                method_name: _,
-                args: _,
-                dst: _,
-            } => {
-                // 从 obj 提取类型
+            // 虚方法调用 (dst 是 Option<Operand>)
+            Instruction::CallVirt { obj, args, dst, .. } => {
+                self.extract_type_from_operand(obj, params, locals, deps);
+                if let Some(d) = dst {
+                    self.extract_type_from_operand(d, params, locals, deps);
+                }
+                for arg in args {
+                    self.extract_type_from_operand(arg, params, locals, deps);
+                }
             }
-            // 返回指令可能包含类型
+
+            // ==================== 内存操作指令 ====================
+            // 分配指令
+            Instruction::Alloc { dst, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+            }
+            // 数组分配
+            Instruction::AllocArray { dst, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+            }
+            // 堆分配（包含类型ID）
+            Instruction::HeapAlloc { dst, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+            }
+            // 释放
+            Instruction::Free(op) => {
+                self.extract_type_from_operand(op, params, locals, deps);
+            }
+
+            // ==================== 字段操作指令 ====================
+            // 加载字段
+            Instruction::LoadField { dst, src, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // 存储字段
+            Instruction::StoreField { dst, src, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // 加载索引
+            Instruction::LoadIndex { dst, src, index } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+                self.extract_type_from_operand(index, params, locals, deps);
+            }
+            // 存储索引
+            Instruction::StoreIndex { dst, index, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(index, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+
+            // ==================== 闭包指令 ====================
+            // 创建闭包
+            Instruction::MakeClosure { dst, env, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                for e in env {
+                    self.extract_type_from_operand(e, params, locals, deps);
+                }
+            }
+
+            // ==================== 引用计数指令 ====================
+            // Arc new
+            Instruction::ArcNew { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // Arc clone
+            Instruction::ArcClone { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+
+            // ==================== 类型转换指令 ====================
+            // 类型转换
+            Instruction::Cast { dst, src, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+
+            // ==================== 其他指令 ====================
+            // 移动
+            Instruction::Move { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // 加载
+            Instruction::Load { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // 存储
+            Instruction::Store { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
+            }
+            // Push
+            Instruction::Push(op) => {
+                self.extract_type_from_operand(op, params, locals, deps);
+            }
+            // Dup/Swap - 无操作数
+            Instruction::Dup | Instruction::Swap => {}
+            // Drop
+            Instruction::Drop(op) => {
+                self.extract_type_from_operand(op, params, locals, deps);
+            }
+            // 返回指令
             Instruction::Ret(Some(op)) => {
-                // 从 Operand 提取类型
-                self.extract_type_from_operand(op, deps);
+                self.extract_type_from_operand(op, params, locals, deps);
             }
             Instruction::Ret(None) => {}
-            // 分配指令包含类型信息
-            Instruction::Alloc { size: _, dst } => {
-                self.extract_type_from_operand(dst, deps);
+
+            // 二元运算（提取dst和操作数）
+            Instruction::Add { dst, lhs, rhs }
+            | Instruction::Sub { dst, lhs, rhs }
+            | Instruction::Mul { dst, lhs, rhs }
+            | Instruction::Div { dst, lhs, rhs }
+            | Instruction::Mod { dst, lhs, rhs }
+            | Instruction::And { dst, lhs, rhs }
+            | Instruction::Or { dst, lhs, rhs }
+            | Instruction::Xor { dst, lhs, rhs }
+            | Instruction::Shl { dst, lhs, rhs }
+            | Instruction::Shr { dst, lhs, rhs } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(lhs, params, locals, deps);
+                self.extract_type_from_operand(rhs, params, locals, deps);
             }
-            // 数组分配包含元素类型信息（通过其他方式传递）
-            Instruction::AllocArray {
-                size: _,
-                elem_size: _,
-                dst,
-            } => {
-                self.extract_type_from_operand(dst, deps);
+
+            // 一元运算
+            Instruction::Neg { dst, src } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+                self.extract_type_from_operand(src, params, locals, deps);
             }
-            // 构造指令包含类型
-            _ => {
-                // 其他指令可能包含类型信息
+
+            // Jumps and branches - 无需提取类型
+            Instruction::Jmp(_) => {}
+            Instruction::JmpIf(op, _) => {
+                self.extract_type_from_operand(op, params, locals, deps);
             }
+            Instruction::JmpIfNot(op, _) => {
+                self.extract_type_from_operand(op, params, locals, deps);
+            }
+
+            // 其他指令（保守处理）
+            _ => {}
+        }
+    }
+
+    /// 从指令的 dst 字段提取类型（通用方法）
+    fn extract_type_from_inst_dst(
+        &self,
+        inst: &Instruction,
+        params: &[MonoType],
+        locals: &[MonoType],
+        deps: &mut Vec<MonoType>,
+    ) {
+        // 使用模式匹配尝试提取 dst
+        match inst {
+            Instruction::LoadField { dst, .. }
+            | Instruction::StoreField { dst, .. }
+            | Instruction::LoadIndex { dst, .. }
+            | Instruction::StoreIndex { dst, .. }
+            | Instruction::Call { dst: Some(dst), .. }
+            | Instruction::CallDyn { dst: Some(dst), .. }
+            | Instruction::CallVirt { dst: Some(dst), .. }
+            | Instruction::Alloc { dst, .. }
+            | Instruction::AllocArray { dst, .. }
+            | Instruction::HeapAlloc { dst, .. }
+            | Instruction::MakeClosure { dst, .. }
+            | Instruction::ArcNew { dst, .. }
+            | Instruction::ArcClone { dst, .. }
+            | Instruction::Move { dst, .. }
+            | Instruction::Load { dst, .. }
+            | Instruction::Cast { dst, .. }
+            | Instruction::Neg { dst, .. } => {
+                self.extract_type_from_operand(dst, params, locals, deps);
+            }
+            _ => {}
         }
     }
 
     /// 从操作数提取类型
+    ///
+    /// # Arguments
+    /// * `op` - 操作数
+    /// * `params` - 函数参数类型
+    /// * `locals` - 局部变量类型
+    /// * `deps` - 收集依赖类型
     fn extract_type_from_operand(
         &self,
-        _op: &Operand,
-        _deps: &mut Vec<MonoType>,
+        op: &Operand,
+        params: &[MonoType],
+        locals: &[MonoType],
+        deps: &mut Vec<MonoType>,
     ) {
-        // Operand 本身不直接包含类型信息
-        // 类型信息需要从 FunctionIR.params 和 locals 获取
-        // 这里留空实现，实际使用时需要传入类型上下文
+        match op {
+            // 参数：使用索引从 params 获取类型
+            Operand::Arg(idx) => {
+                if *idx < params.len() {
+                    deps.push(params[*idx].clone());
+                }
+            }
+            // 局部变量：使用索引从 locals 获取类型
+            Operand::Local(idx) => {
+                if *idx < locals.len() {
+                    deps.push(locals[*idx].clone());
+                }
+            }
+            // 临时变量：跳过（临时变量类型由 SSA 形式确定）
+            Operand::Temp(_) => {}
+            // 全局变量：跳过（需要全局表信息）
+            Operand::Global(_) => {}
+            // 常量：基本类型直接添加
+            Operand::Const(c) => {
+                self.extract_type_from_const(c, deps);
+            }
+            // Label：无类型
+            Operand::Label(_) => {}
+            // Register：无类型
+            Operand::Register(_) => {}
+        }
+    }
+
+    /// 从常量值提取类型
+    fn extract_type_from_const(
+        &self,
+        c: &ConstValue,
+        deps: &mut Vec<MonoType>,
+    ) {
+        match c {
+            ConstValue::Void => {}
+            ConstValue::Bool(_) => deps.push(MonoType::Bool),
+            ConstValue::Int(n) => {
+                // 根据值大小推断整型宽度
+                let width = if *n >= i128::from(i32::MIN) && *n <= i128::from(i32::MAX) {
+                    32
+                } else {
+                    64
+                };
+                deps.push(MonoType::Int(width));
+            }
+            ConstValue::Float(_) => deps.push(MonoType::Float(64)),
+            ConstValue::Char(_) => deps.push(MonoType::Char),
+            ConstValue::String(_) => deps.push(MonoType::String),
+            ConstValue::Bytes(_) => deps.push(MonoType::Bytes),
+        }
     }
 
     /// 获取所有节点
@@ -536,21 +759,158 @@ impl<'a> InstantiationGraphBuilder<'a> {
     }
 
     /// 从 FunctionId 提取类型参数
-    fn extract_type_args_from_id(_id: &FunctionId) -> Vec<MonoType> {
-        // TODO: 实现从 FunctionId 提取类型参数
-        vec![]
+    fn extract_type_args_from_id(id: &FunctionId) -> Vec<MonoType> {
+        id.type_args().to_vec()
     }
 
     /// 从 MonoType 提取类型参数
-    fn extract_type_args_from_type(_ty: &MonoType) -> Vec<MonoType> {
-        // TODO: 实现从 MonoType 提取类型参数
-        vec![]
+    ///
+    /// 递归提取泛型类型的类型参数
+    fn extract_type_args_from_type(ty: &MonoType) -> Vec<MonoType> {
+        match ty {
+            // 基本类型没有类型参数
+            MonoType::Void
+            | MonoType::Bool
+            | MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Bytes
+            | MonoType::TypeVar(_)
+            | MonoType::TypeRef(_) => vec![],
+
+            // 联合和交集类型：提取所有成员的参数
+            MonoType::Union(types) | MonoType::Intersection(types) => types
+                .iter()
+                .flat_map(Self::extract_type_args_from_type)
+                .collect(),
+
+            // 结构体：提取字段类型参数
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .map(|(_, ty)| ty)
+                .flat_map(Self::extract_type_args_from_type)
+                .collect(),
+
+            // 枚举：没有类型参数（枚举变体不使用泛型）
+            MonoType::Enum(_) => vec![],
+
+            // 容器类型：递归提取元素类型
+            MonoType::Tuple(types) => types
+                .iter()
+                .flat_map(Self::extract_type_args_from_type)
+                .collect(),
+            MonoType::List(elem) | MonoType::Set(elem) | MonoType::Range { elem_type: elem } => {
+                Self::extract_type_args_from_type(elem)
+            }
+            MonoType::Dict(key, value) => {
+                let mut args = Self::extract_type_args_from_type(key);
+                args.extend(Self::extract_type_args_from_type(value));
+                args
+            }
+
+            // 函数类型：提取参数和返回类型的参数
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                let mut args = params
+                    .iter()
+                    .flat_map(Self::extract_type_args_from_type)
+                    .collect::<Vec<_>>();
+                args.extend(Self::extract_type_args_from_type(return_type));
+                args
+            }
+
+            // Arc 包装：提取内部类型参数
+            MonoType::Arc(inner) => Self::extract_type_args_from_type(inner),
+
+            // 关联类型：提取主机类型和关联类型的参数
+            MonoType::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                let mut args = Self::extract_type_args_from_type(host_type);
+                args.extend(assoc_args.iter().cloned());
+                args
+            }
+        }
     }
 
     /// 将类型转换为实例化节点
-    fn type_to_instance_node(_ty: &MonoType) -> Option<InstanceNode> {
-        // TODO: 实现类型到实例化节点的转换
-        None
+    ///
+    /// 尝试将 MonoType 转换为 InstanceNode，用于构建依赖图
+    /// 注意：当前 StructType 和 EnumType 没有类型参数字段，
+    /// 只处理已知的内置泛型类型
+    fn type_to_instance_node(ty: &MonoType) -> Option<InstanceNode> {
+        match ty {
+            // 泛型列表
+            MonoType::List(elem) => {
+                let node = TypeInstanceNode::new(
+                    GenericTypeId::new("List".to_string(), vec!["T".to_string()]),
+                    vec![*elem.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型字典
+            MonoType::Dict(key, value) => {
+                let node = TypeInstanceNode::new(
+                    GenericTypeId::new("Dict".to_string(), vec!["K".to_string(), "V".to_string()]),
+                    vec![*key.clone(), *value.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Set
+            MonoType::Set(elem) => {
+                let node = TypeInstanceNode::new(
+                    GenericTypeId::new("Set".to_string(), vec!["T".to_string()]),
+                    vec![*elem.clone()],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Option (通过名称判断)
+            MonoType::Enum(e) if e.name == "Option" => {
+                let node = TypeInstanceNode::new(
+                    GenericTypeId::new("Option".to_string(), vec!["T".to_string()]),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 泛型 Result (通过名称判断)
+            MonoType::Enum(e) if e.name == "Result" => {
+                let node = TypeInstanceNode::new(
+                    GenericTypeId::new(
+                        "Result".to_string(),
+                        vec!["T".to_string(), "E".to_string()],
+                    ),
+                    vec![],
+                );
+                Some(InstanceNode::Type(node))
+            }
+
+            // 结构体
+            MonoType::Struct(s) => {
+                let node =
+                    TypeInstanceNode::new(GenericTypeId::new(s.name.clone(), vec![]), vec![]);
+                Some(InstanceNode::Type(node))
+            }
+
+            // 其他枚举
+            MonoType::Enum(e) => {
+                let node =
+                    TypeInstanceNode::new(GenericTypeId::new(e.name.clone(), vec![]), vec![]);
+                Some(InstanceNode::Type(node))
+            }
+
+            _ => None,
+        }
     }
 }
 
