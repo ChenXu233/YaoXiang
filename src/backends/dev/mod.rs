@@ -11,6 +11,6 @@ pub mod shell;
 pub mod tui_repl;
 
 pub use debugger::{Debugger, DebuggerState};
-pub use repl::{REPL, REPLConfig};
+pub use repl::{REPL, REPLConfig, LineREPL, Evaluator, REPLBackend};
 pub use shell::DevShell;
 pub use tui_repl::TuiREPL;

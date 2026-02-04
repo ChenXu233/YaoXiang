@@ -9,6 +9,7 @@ use crate::tlog;
 use crate::util::i18n::MSG;
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::Interpreter;
+use crate::backends::Executor;
 
 /// REPL configuration
 #[derive(Debug, Clone)]
@@ -195,26 +196,44 @@ impl REPL {
             match c {
                 '\\' => escaped = true,
                 '"' => in_string = !in_string,
-                '{' if !in_string => braces += 1,
-                '}' if !in_string => {
-                    if braces == 0 {
-                        return true;
+                '{' => {
+                    if !in_string {
+                        braces += 1;
                     }
-                    braces -= 1;
                 }
-                '[' if !in_string => brackets += 1,
-                ']' if !in_string => {
-                    if brackets == 0 {
-                        return true;
+                '}' => {
+                    if !in_string {
+                        if braces == 0 {
+                            return true;
+                        }
+                        braces -= 1;
                     }
-                    brackets -= 1;
                 }
-                '(' if !in_string => parens += 1,
-                ')' if !in_string => {
-                    if parens == 0 {
-                        return true;
+                '[' => {
+                    if !in_string {
+                        brackets += 1;
                     }
-                    parens -= 1;
+                }
+                ']' => {
+                    if !in_string {
+                        if brackets == 0 {
+                            return true;
+                        }
+                        brackets -= 1;
+                    }
+                }
+                '(' => {
+                    if !in_string {
+                        parens += 1;
+                    }
+                }
+                ')' => {
+                    if !in_string {
+                        if parens == 0 {
+                            return true;
+                        }
+                        parens -= 1;
+                    }
                 }
                 _ => {}
             }
@@ -271,14 +290,28 @@ impl REPL {
 
         // Compile
         let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile_with_source("<repl>", &wrapped) {
-            Ok(_module) => {
-                // In a full implementation, we'd execute with the interpreter
-                Ok(REPLResult::Ok)
+        match compiler.compile("<repl>", &wrapped) {
+            Ok(module_ir) => {
+                // Generate bytecode
+                match crate::middle::passes::codegen::CodegenContext::new(module_ir).generate() {
+                    Ok(bytecode_file) => {
+                        let bytecode_module =
+                            crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+                        // Execute with interpreter
+                        match self.interpreter.execute_module(&bytecode_module) {
+                            Ok(_) => {
+                                // Note: execute_module doesn't return the value yet
+                                Ok(REPLResult::Ok)
+                            }
+                            Err(e) => Ok(REPLResult::Error(format!("Runtime error: {:?}", e))),
+                        }
+                    }
+                    Err(e) => Ok(REPLResult::Error(format!("Codegen error: {:?}", e))),
+                }
             }
             Err(e) => {
                 let error_msg = format!("{}", e);
-                // Strip file context for cleaner output
                 let lines: Vec<&str> = error_msg.lines().collect();
                 if lines.len() > 2 {
                     Ok(REPLResult::Error(lines[lines.len() - 2..].join("\n")))
@@ -298,8 +331,20 @@ impl REPL {
 
         // Compile
         let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile_with_source(&path.display().to_string(), &source) {
-            Ok(_module) => Ok(REPLResult::Ok),
+        match compiler.compile(&path.display().to_string(), &source) {
+            Ok(module_ir) => {
+                match crate::middle::passes::codegen::CodegenContext::new(module_ir).generate() {
+                    Ok(bytecode_file) => {
+                        let bytecode_module =
+                            crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+                        match self.interpreter.execute_module(&bytecode_module) {
+                            Ok(_) => Ok(REPLResult::Ok),
+                            Err(e) => Ok(REPLResult::Error(format!("Runtime error: {:?}", e))),
+                        }
+                    }
+                    Err(e) => Ok(REPLResult::Error(format!("Codegen error: {:?}", e))),
+                }
+            }
             Err(e) => Ok(REPLResult::Error(format!("{}", e))),
         }
     }
