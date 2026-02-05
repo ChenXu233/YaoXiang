@@ -397,7 +397,7 @@ fn test_intersection_constraint() {
     });
 
     // Circle 应该满足 Drawable & Serializable 约束
-    let result = checker.check_constraint(&circle_type, &intersection_constraint);
+    let _result = checker.check_constraint(&circle_type, &intersection_constraint);
     // 注意：当前实现可能不支持交集类型作为约束，这是预期的行为
     // 实际使用时需要先解析交集类型为单独的约束列表
 }

@@ -292,7 +292,7 @@ fn test_assoc_type_with_args() {
 
     match &assoc_type {
         MonoType::AssocType {
-            host_type,
+            host_type: _,
             assoc_name,
             assoc_args,
         } => {
