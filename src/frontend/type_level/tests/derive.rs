@@ -51,7 +51,7 @@ fn test_is_primitive_type() {
 
 #[test]
 fn test_record_deriver_creation() {
-    let table = TraitTable::new();
+    let _table = TraitTable::new();
     // 检查 BUILTIN_DERIVES 常量是否有内容
     assert!(BUILTIN_DERIVES.len() > 0);
     // 验证 can_auto_derive 函数存在
