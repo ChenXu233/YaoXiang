@@ -14,6 +14,7 @@ use std::collections::HashMap;
 /// 检测以下错误：
 /// - ImmutableAssign: 对不可变变量进行赋值
 /// - ImmutableMutation: 调用不可变对象上的变异方法
+/// - ImmutableFieldAssign: 对不可变字段进行赋值
 #[derive(Debug)]
 pub struct MutChecker {
     /// 可变变量集合 (Operand -> is_mut)
@@ -24,6 +25,8 @@ pub struct MutChecker {
     location: (usize, usize),
     /// 符号表：变量名 -> 是否可变（从外部传入）
     symbol_table: Option<HashMap<String, bool>>,
+    /// 类型表：类型名 -> StructType（包含字段可变性信息）
+    type_table: Option<HashMap<String, crate::frontend::core::type_system::StructType>>,
     /// 兼容 OwnershipCheck trait 的状态字段（未使用）
     state: HashMap<Operand, super::error::ValueState>,
 }
@@ -36,6 +39,7 @@ impl MutChecker {
             errors: Vec::new(),
             location: (0, 0),
             symbol_table: None,
+            type_table: None,
             state: HashMap::new(),
         }
     }
@@ -49,6 +53,15 @@ impl MutChecker {
         self
     }
 
+    /// 设置类型表（用于查询字段可变性）
+    pub fn with_type_table(
+        mut self,
+        type_table: HashMap<String, crate::frontend::core::type_system::StructType>,
+    ) -> Self {
+        self.type_table = Some(type_table);
+        self
+    }
+
     fn check_instruction(
         &mut self,
         instr: &Instruction,
@@ -56,8 +69,16 @@ impl MutChecker {
         match instr {
             // Store: 赋值操作，检查目标是否可变
             Instruction::Store { dst, .. } => self.check_store(dst),
+            // StoreIndex: 索引赋值，检查目标是否可变
             Instruction::StoreIndex { dst, .. } => self.check_store(dst),
-            Instruction::StoreField { dst, .. } => self.check_store(dst),
+            // StoreField: 字段赋值，需要检查字段可变性
+            Instruction::StoreField {
+                dst,
+                field,
+                type_name,
+                field_name,
+                ..
+            } => self.check_store_field(dst, *field, type_name, field_name),
             // Call: 方法调用，检查是否是变异方法
             Instruction::Call {
                 func: Operand::Const(crate::middle::core::ir::ConstValue::String(method)),
@@ -70,7 +91,7 @@ impl MutChecker {
         }
     }
 
-    /// 检查赋值操作
+    /// 检查变量赋值操作
     fn check_store(
         &mut self,
         target: &Operand,
@@ -82,6 +103,62 @@ impl MutChecker {
             value: operand_to_string(target),
             location: self.location,
         });
+    }
+
+    /// 检查字段赋值操作
+    ///
+    /// 规则：
+    /// - 绑定可变：可以写任意字段
+    /// - 绑定不可变：只能写可变字段
+    ///
+    /// 通过 StoreField 指令携带的类型信息进行检查
+    fn check_store_field(
+        &mut self,
+        target: &Operand,
+        field_index: usize,
+        type_name: &Option<String>,
+        field_name: &Option<String>,
+    ) {
+        // 1. 首先检查绑定本身是否可变
+        let binding_is_mutable = self.is_mutable(target);
+
+        if binding_is_mutable {
+            // 绑定可变，可以写任意字段
+            return;
+        }
+
+        // 2. 绑定不可变，检查目标字段是否可变
+        if let Some(type_name) = type_name {
+            if let Some(type_table) = &self.type_table {
+                if let Some(struct_type) = type_table.get(type_name) {
+                    // 获取字段可变性
+                    let field_is_mutable = struct_type
+                        .field_mutability
+                        .get(field_index)
+                        .copied()
+                        .unwrap_or(false);
+
+                    if !field_is_mutable {
+                        // 字段不可变，报错
+                        let struct_name = type_name.clone();
+                        let field = field_name
+                            .clone()
+                            .unwrap_or_else(|| format!("field_{}", field_index));
+                        self.errors.push(OwnershipError::ImmutableFieldAssign {
+                            struct_name,
+                            field,
+                            location: self.location,
+                        });
+                        return;
+                    }
+
+                    // 字段可变，允许
+                }
+            }
+        }
+
+        // 无法确定类型信息，先允许（保守策略）
+        // 或者可以选择严格模式，在缺少类型信息时报错
     }
 
     /// 检查变异方法调用
@@ -124,12 +201,20 @@ impl MutChecker {
     /// 从 Operand 获取符号的可变性
     fn get_symbol_mutability(
         &self,
-        _operand: &Operand,
-        _symbol_table: &HashMap<String, bool>,
+        operand: &Operand,
+        symbol_table: &HashMap<String, bool>,
     ) -> Option<bool> {
-        match _operand {
-            Operand::Local(_) => None,
-            Operand::Temp(_) => None,
+        match operand {
+            Operand::Local(idx) => {
+                // 尝试从寄存器索引构建符号名
+                // 注意：这需要 IR 生成阶段将寄存器索引与符号名关联
+                let symbol_name = format!("local_{}", idx);
+                symbol_table.get(&symbol_name).copied()
+            }
+            Operand::Temp(_) => {
+                // 临时变量默认不可变
+                None
+            }
             _ => None,
         }
     }

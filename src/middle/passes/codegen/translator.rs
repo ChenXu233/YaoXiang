@@ -161,7 +161,9 @@ impl Translator {
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
 
             LoadField { dst, src, field } => self.translate_load_field(dst, src, *field),
-            StoreField { dst, field, src } => self.translate_store_field(dst, *field, src),
+            StoreField {
+                dst, field, src, ..
+            } => self.translate_store_field(dst, *field, src),
             LoadIndex { dst, src, index } => self.translate_load_index(dst, src, index),
             StoreIndex { .. } => self.translate_store_index(),
 
