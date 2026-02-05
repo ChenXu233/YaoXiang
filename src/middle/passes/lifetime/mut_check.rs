@@ -149,7 +149,6 @@ impl MutChecker {
                             field,
                             location: self.location,
                         });
-                        return;
                     }
 
                     // 字段可变，允许
