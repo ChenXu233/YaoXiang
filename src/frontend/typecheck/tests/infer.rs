@@ -714,7 +714,7 @@ fn test_infer_function_call() {
     };
 
     let ty = inferrer.infer_expr(&call).unwrap();
-    assert!(ty.type_var().is_some());
+    assert_eq!(ty, MonoType::Int(64));
 }
 
 /// 测试结构体字段访问推断

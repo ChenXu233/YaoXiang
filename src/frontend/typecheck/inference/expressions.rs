@@ -381,7 +381,7 @@ impl<'a> ExprInferrer<'a> {
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call { func, args, .. } => {
                 // 1. 首先推断函数表达式
-                let _func_ty = self.infer_expr(func)?;
+                let func_ty = self.infer_expr(func)?;
 
                 // 2. 推断所有参数类型
                 let arg_types: Vec<MonoType> = args
@@ -391,7 +391,7 @@ impl<'a> ExprInferrer<'a> {
 
                 // 3. 尝试重载解析
                 // 检查 func 是否为标识符
-                if let crate::frontend::core::parser::ast::Expr::Var(name, _) = &**func {
+                if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
                     // 尝试从重载候选解析
                     if overload::has_overloads(self.overload_candidates, name) {
                         match overload::resolve_overload_from_env(
@@ -407,7 +407,7 @@ impl<'a> ExprInferrer<'a> {
                                 // 重载解析失败，尝试泛型 fallback
                                 if let Some(generic_candidate) = overload::resolve_generic_fallback(
                                     self.overload_candidates,
-                                    name,
+                                    &name,
                                     &arg_types,
                                 ) {
                                     // 泛型实例化成功，返回实例化后的返回类型
@@ -418,14 +418,23 @@ impl<'a> ExprInferrer<'a> {
                                     return Ok(return_type);
                                 }
                                 // 无匹配，返回类型变量
+                                // 重载解析失败，返回类型变量（让后续类型检查捕获错误）
+                                // 这里不直接报错，因为后续可能有其他错误信息
                                 return Ok(self.solver.new_var());
                             }
                         }
                     }
                 }
-
                 // 4. 非重载情况或重载失败：
                 // 函数调用返回类型变量（具体类型需要在调用点确定）
+                // 如果函数类型已知，使用其返回类型
+                if let MonoType::Fn {
+                    return_type, ..
+                } = func_ty
+                {
+                    return Ok(*return_type);
+                }
+                // 否则返回类型变量（具体类型在调用点确定）
                 Ok(self.solver.new_var())
             }
 
