@@ -19,7 +19,7 @@
 //! ```
 
 use std::collections::HashMap;
-use crate::frontend::core::parser::ast::Type;
+use crate::frontend::core::parser::ast::{Type, StructField};
 use crate::frontend::core::type_system::MonoType;
 use super::trait_bounds::{TraitTable, TraitImplementation};
 
@@ -51,7 +51,7 @@ pub fn is_primitive_type(type_name: &str) -> bool {
 pub fn can_auto_derive(
     trait_table: &TraitTable,
     trait_name: &str,
-    fields: &[(String, Type)],
+    fields: &[StructField],
 ) -> bool {
     // 检查该 trait 是否为内置可派生 trait
     if !is_builtin_derive(trait_name) {
@@ -59,8 +59,8 @@ pub fn can_auto_derive(
     }
 
     // 检查所有字段是否都实现了该 trait
-    for (_field_name, field_type) in fields {
-        let field_type_name = match field_type {
+    for field in fields {
+        let field_type_name = match &field.ty {
             Type::Name(name) => name.clone(),
             _ => return false, // 复杂类型暂不支持自动派生
         };

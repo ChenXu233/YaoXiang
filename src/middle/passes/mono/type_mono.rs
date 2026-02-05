@@ -144,21 +144,23 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Struct(fields) => MonoType::Struct(StructType {
                 name: fields
                     .first()
-                    .map(|(n, _)| n.clone())
+                    .map(|f| f.name.clone())
                     .unwrap_or_else(|| "Struct".to_string()),
                 fields: fields
                     .iter()
-                    .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
+                    .map(|f| (f.name.clone(), self.type_to_mono_type(&f.ty)))
                     .collect(),
                 methods: HashMap::new(),
+                field_mutability: fields.iter().map(|f| f.is_mut).collect(),
             }),
             AstType::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name: name.clone(),
                 fields: fields
                     .iter()
-                    .map(|(n, ty)| (n.clone(), self.type_to_mono_type(ty)))
+                    .map(|f| (f.name.clone(), self.type_to_mono_type(&f.ty)))
                     .collect(),
                 methods: HashMap::new(),
+                field_mutability: fields.iter().map(|f| f.is_mut).collect(),
             }),
             AstType::Union(variants) => MonoType::Union(
                 variants
@@ -242,7 +244,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Void => "void".to_string(),
             AstType::Struct(fields) => fields
                 .first()
-                .map(|(n, _)| n.clone())
+                .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Struct".to_string()),
             AstType::NamedStruct { name, .. } => name.clone(),
             AstType::Union(variants) => variants
@@ -292,9 +294,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
             | AstType::Bytes
             | AstType::Bool
             | AstType::Void => false,
-            AstType::Struct(fields) | AstType::NamedStruct { fields, .. } => fields
-                .iter()
-                .any(|(_, fty)| self.contains_type_var_type(fty)),
+            AstType::Struct(fields) | AstType::NamedStruct { fields, .. } => {
+                fields.iter().any(|f| self.contains_type_var_type(&f.ty))
+            }
             AstType::Union(variants) => variants
                 .iter()
                 .any(|(_, ty)| ty.as_ref().is_some_and(|t| self.contains_type_var_type(t))),
@@ -360,7 +362,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Struct(fields) | AstType::NamedStruct { fields, .. } => {
                 fields
                     .iter()
-                    .for_each(|(_, fty)| self.collect_type_vars_from_type(fty, type_params, seen));
+                    .for_each(|f| self.collect_type_vars_from_type(&f.ty, type_params, seen));
             }
             AstType::Union(variants) => {
                 variants.iter().for_each(|(_, ty)| {
@@ -473,6 +475,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     name: self.generate_type_name(generic_id, type_args),
                     fields: mono_fields,
                     methods: HashMap::new(),
+                    field_mutability: struct_type.field_mutability.clone(),
                 }))
             }
             MonoType::Enum(enum_type) => Some(MonoType::Enum(EnumType {
@@ -567,6 +570,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     })
                     .collect(),
                 methods: struct_type.methods.clone(),
+                field_mutability: struct_type.field_mutability.clone(),
             }),
             MonoType::List(elem) => MonoType::List(Box::new(self.substitute_type_args(
                 elem,

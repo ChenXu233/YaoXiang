@@ -581,12 +581,12 @@ impl AstToIrGenerator {
     fn generate_struct_constructor_ir(
         &self,
         struct_name: &str,
-        fields: &[(String, ast::Type)],
+        fields: &[ast::StructField],
     ) -> Result<Option<FunctionIR>, IrGenError> {
         // 创建构造函数函数的参数列表
         let mut param_types = Vec::new();
-        for (_, field_type) in fields {
-            param_types.push(field_type.clone().into());
+        for field in fields {
+            param_types.push(field.ty.clone().into());
         }
 
         // 创建构造函数函数的指令序列

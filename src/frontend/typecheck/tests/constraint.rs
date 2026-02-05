@@ -26,6 +26,7 @@ fn test_constraint_recognition() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     assert!(draw_constraint.is_constraint());
@@ -39,6 +40,7 @@ fn test_constraint_recognition() {
             ("y".to_string(), MonoType::Int(32)),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     assert!(!point_type.is_constraint());
@@ -69,6 +71,7 @@ fn test_constraint_fields() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let fields = serializable.constraint_fields();
@@ -94,6 +97,7 @@ fn test_type_satisfies_constraint_success() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 定义满足 Drawable 的类型
@@ -111,6 +115,7 @@ fn test_type_satisfies_constraint_success() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // Circle 应该满足 Drawable 约束
@@ -135,6 +140,7 @@ fn test_type_does_not_satisfy_constraint_missing_method() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 定义不满足 Drawable 的类型（缺少 draw 方法）
@@ -145,6 +151,7 @@ fn test_type_does_not_satisfy_constraint_missing_method() {
             ("height".to_string(), MonoType::Int(32)),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // Rect 不应该满足 Drawable 约束
@@ -172,6 +179,7 @@ fn test_type_does_not_satisfy_constraint_signature_mismatch() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 定义有 draw 但签名不兼容的类型
@@ -186,6 +194,7 @@ fn test_type_does_not_satisfy_constraint_signature_mismatch() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // Shape 不应该满足 Drawable 约束（签名不兼容）
@@ -205,6 +214,7 @@ fn test_empty_constraint_satisfied_by_any_type() {
         name: "Empty".to_string(),
         fields: vec![],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let any_type = MonoType::Int(32);
@@ -239,6 +249,7 @@ fn test_multi_method_constraint() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 定义满足约束的类型
@@ -265,6 +276,7 @@ fn test_multi_method_constraint() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let result = checker.check_constraint(&person_type, &printable);
@@ -288,6 +300,7 @@ fn test_fn_signature_compatibility_with_self() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 类型的签名包含 self 作为第一个参数
@@ -309,6 +322,7 @@ fn test_fn_signature_compatibility_with_self() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // Point 应该满足 Drawable 约束（self 参数被跳过比较）
@@ -336,6 +350,7 @@ fn test_intersection_constraint() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let serializable = MonoType::Struct(crate::frontend::core::type_system::StructType {
@@ -349,6 +364,7 @@ fn test_intersection_constraint() {
             },
         )],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // 交集类型：Drawable & Serializable
@@ -377,6 +393,7 @@ fn test_intersection_constraint() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     // Circle 应该满足 Drawable & Serializable 约束
