@@ -74,11 +74,19 @@ impl Translator {
 
         let mut instructions = Vec::new();
         let mut ir_to_bytecode_map = HashMap::new();
+        let mut pending_jumps: Vec<(usize, usize, Opcode)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
         let mut global_ir_index = 0;
 
         for block in func.blocks.iter() {
             for instr in &block.instructions {
                 ir_to_bytecode_map.insert(global_ir_index, instructions.len());
+                let current_bytecode_idx = instructions.len();
+
+                // 检查是否是跳转指令，记录待回填信息
+                if let Some((target, opcode)) = Self::get_jump_target(instr) {
+                    pending_jumps.push((current_bytecode_idx, target, opcode));
+                }
+
                 global_ir_index += 1;
 
                 let bytecode_instr = self.translate_instruction(instr)?;
@@ -88,7 +96,8 @@ impl Translator {
 
         ir_to_bytecode_map.insert(global_ir_index, instructions.len());
 
-        self.backfill_jumps(&instructions, &ir_to_bytecode_map)?;
+        // 回填跳转偏移
+        Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
 
         Ok(super::FunctionCode {
             name: func.name.clone(),
@@ -99,7 +108,51 @@ impl Translator {
         })
     }
 
-    /// 回填跳转偏移
+    /// 从指令中提取跳转目标（如果是跳转指令）
+    fn get_jump_target(instr: &Instruction) -> Option<(usize, Opcode)> {
+        match instr {
+            Instruction::Jmp(target) => Some((*target, Opcode::Jmp)),
+            Instruction::JmpIf(_, target) => Some((*target, Opcode::JmpIf)),
+            Instruction::JmpIfNot(_, target) => Some((*target, Opcode::JmpIfNot)),
+            _ => None,
+        }
+    }
+
+    /// 回填跳转偏移（实际实现）
+    fn backfill_jumps_impl(
+        instructions: &mut [BytecodeInstruction],
+        ir_to_bytecode_map: &HashMap<usize, usize>,
+        pending_jumps: &[(usize, usize, Opcode)],
+    ) {
+        for (bytecode_idx, target_ir_idx, opcode) in pending_jumps {
+            if let Some(&target_bytecode_idx) = ir_to_bytecode_map.get(target_ir_idx) {
+                // 计算相对偏移: target - current
+                let offset = (target_bytecode_idx as i32) - (*bytecode_idx as i32);
+                let bytes = offset.to_le_bytes();
+
+                let instr = &mut instructions[*bytecode_idx];
+                match opcode {
+                    Opcode::Jmp => {
+                        // Jmp 操作数: [offset: i32]
+                        instr.operands[0] = bytes[0];
+                        instr.operands[1] = bytes[1];
+                        instr.operands[2] = bytes[2];
+                        instr.operands[3] = bytes[3];
+                    }
+                    Opcode::JmpIf | Opcode::JmpIfNot => {
+                        // JmpIf/JmpIfNot 操作数: [cond_reg: u8, offset: i32]
+                        instr.operands[1] = bytes[0];
+                        instr.operands[2] = bytes[1];
+                        instr.operands[3] = bytes[2];
+                        instr.operands[4] = bytes[3];
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// 回填跳转偏移（保留旧签名以兼容）
     fn backfill_jumps(
         &self,
         _instructions: &[BytecodeInstruction],
