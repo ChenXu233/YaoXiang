@@ -8,13 +8,22 @@ use std::time::Duration;
 use crate::backends::common::RuntimeValue;
 use crate::backends::dev::repl::backend_trait::{SymbolInfo, ExecutionStats};
 
+/// Variable info stored in context
+#[derive(Debug, Clone)]
+pub enum VariableInfo {
+    /// Runtime value known
+    Value(RuntimeValue),
+    /// Only type known (from bytecode)
+    TypeOnly(String),
+}
+
 /// REPL Execution Context
 ///
 /// Stores variables, functions, and execution state across evaluations.
 #[derive(Debug, Default)]
 pub struct REPLContext {
-    /// Variable environment: name -> value
-    variables: HashMap<String, RuntimeValue>,
+    /// Variable environment: name -> info
+    variables: HashMap<String, VariableInfo>,
     /// Function environment: name -> bytecode function
     functions: HashMap<String, FunctionInfo>,
     /// Execution statistics
@@ -39,13 +48,22 @@ impl REPLContext {
         Self::default()
     }
 
-    /// Define a variable
+    /// Define a variable with runtime value
     pub fn define_var(
         &mut self,
         name: String,
         value: RuntimeValue,
     ) {
-        self.variables.insert(name, value);
+        self.variables.insert(name, VariableInfo::Value(value));
+    }
+
+    /// Define a variable by type only (for bytecode extraction)
+    pub fn define_variable(
+        &mut self,
+        name: String,
+        type_signature: String,
+    ) {
+        self.variables.insert(name, VariableInfo::TypeOnly(type_signature));
     }
 
     /// Get a variable
@@ -53,7 +71,22 @@ impl REPLContext {
         &self,
         name: &str,
     ) -> Option<&RuntimeValue> {
-        self.variables.get(name)
+        match self.variables.get(name) {
+            Some(VariableInfo::Value(v)) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Get variable type
+    pub fn get_var_type(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        match self.variables.get(name) {
+            Some(VariableInfo::Value(v)) => Some(format!("{:?}", v.value_type_simple())),
+            Some(VariableInfo::TypeOnly(t)) => Some(t.clone()),
+            None => None,
+        }
     }
 
     /// Define a function
@@ -77,10 +110,14 @@ impl REPLContext {
         let mut symbols = Vec::new();
 
         // Add variables
-        for (name, value) in &self.variables {
+        for (name, info) in &self.variables {
+            let type_sig = match info {
+                VariableInfo::Value(v) => format!("{:?}", v.value_type_simple()),
+                VariableInfo::TypeOnly(t) => t.clone(),
+            };
             symbols.push(SymbolInfo {
                 name: name.clone(),
-                type_signature: format!("{:?}", value.value_type_simple()),
+                type_signature: type_sig,
                 doc: None,
             });
         }
@@ -102,8 +139,8 @@ impl REPLContext {
         &self,
         name: &str,
     ) -> Option<String> {
-        if let Some(value) = self.variables.get(name) {
-            Some(format!("{:?}", value.value_type_simple()))
+        if let Some(t) = self.get_var_type(name) {
+            Some(t)
         } else {
             self.functions
                 .get(name)
