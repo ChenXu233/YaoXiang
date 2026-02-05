@@ -85,17 +85,28 @@ pub enum CodegenError {
 }
 
 impl std::fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         match self {
-            CodegenError::UnimplementedExpr { expr_type } => write!(f, "未实现的表达式类型: {}", expr_type),
-            CodegenError::UnimplementedStmt { stmt_type } => write!(f, "未实现的语句类型: {}", stmt_type),
+            CodegenError::UnimplementedExpr { expr_type } => {
+                write!(f, "未实现的表达式类型: {}", expr_type)
+            }
+            CodegenError::UnimplementedStmt { stmt_type } => {
+                write!(f, "未实现的语句类型: {}", stmt_type)
+            }
             CodegenError::UnimplementedCall => write!(f, "未实现的函数调用"),
             CodegenError::InvalidAssignmentTarget => write!(f, "无效的赋值目标"),
             CodegenError::SymbolNotFound { name } => write!(f, "符号未找到: {}", name),
-            CodegenError::TypeMismatch { expected, found } => write!(f, "类型不匹配: 期望 {}, 实际 {}", expected, found),
+            CodegenError::TypeMismatch { expected, found } => {
+                write!(f, "类型不匹配: 期望 {}, 实际 {}", expected, found)
+            }
             CodegenError::OutOfRegisters => write!(f, "寄存器不足"),
             CodegenError::InvalidOperand => write!(f, "无效的操作数"),
-            CodegenError::RegisterOverflow { id, limit } => write!(f, "寄存器编号 {} 超过最大限制 ({})", id, limit),
+            CodegenError::RegisterOverflow { id, limit } => {
+                write!(f, "寄存器编号 {} 超过最大限制 ({})", id, limit)
+            }
             CodegenError::TranslationError(msg) => write!(f, "翻译错误: {}", msg),
         }
     }
@@ -147,12 +158,18 @@ impl CodegenContext {
     }
 
     /// 添加常量（用于测试）
-    pub fn test_add_constant(&mut self, value: ConstValue) -> usize {
+    pub fn test_add_constant(
+        &mut self,
+        value: ConstValue,
+    ) -> usize {
         self.translator.test_add_constant(value)
     }
 
     /// 将操作数转换为寄存器（用于测试）
-    pub fn test_operand_to_reg(&self, operand: &Operand) -> Result<u8, CodegenError> {
+    pub fn test_operand_to_reg(
+        &self,
+        operand: &Operand,
+    ) -> Result<u8, CodegenError> {
         let resolver = OperandResolver::new();
         resolver.to_reg(operand)
     }
@@ -233,7 +250,10 @@ impl CodegenContext {
 
     /// 从 AST 类型转换
     #[allow(clippy::only_used_in_recursion)]
-    fn type_from_ast(&self, ast_type: &Type) -> MonoType {
+    fn type_from_ast(
+        &self,
+        ast_type: &Type,
+    ) -> MonoType {
         match ast_type {
             Type::Name(name) => MonoType::TypeRef(name.clone()),
             Type::Int(n) => MonoType::Int(*n),
@@ -250,7 +270,11 @@ impl CodegenContext {
             Type::Tuple(types) => {
                 MonoType::Tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
             }
-            Type::Fn { params, return_type, .. } => MonoType::Fn {
+            Type::Fn {
+                params,
+                return_type,
+                ..
+            } => MonoType::Fn {
                 params: params.iter().map(|t| self.type_from_ast(t)).collect(),
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
