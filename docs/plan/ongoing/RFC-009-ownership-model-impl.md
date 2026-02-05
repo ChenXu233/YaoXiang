@@ -139,40 +139,94 @@
 
 ---
 
-## Phase 2: 空状态重用 (P1)
+## Phase 2: 空状态重用 (P1) ✅ 已完成
 
 ### 目标
 
 实现 Move 后变量进入 `empty` 状态，可重新赋值复用变量名。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-05）
 
-1. **变量状态追踪** (新建 `empty_state.rs`)
-   - 定义 `VariableState: Valid | Empty` 枚举
-   - 追踪每个变量的状态变化
+#### 已完成变更（2026-02-05 更新）
 
-2. **空状态检查** (`move_semantics.rs` 扩展)
-   - 使用 Move 后报错，提示可重新赋值
-   - 空状态变量允许重新赋值（类型必须一致）
+1. **ValueState 扩展** (`error.rs`)
+   - ✅ `ValueState::Owned(Option<TypeId>)` 添加类型追踪
+   - ✅ `ValueState::Empty` 新增空状态变体
+   - ✅ 添加 `TypeId` 类型标识符
+   - ✅ 添加 `EmptyStateTypeMismatch` 和 `ReassignNonEmpty` 错误类型
+
+2. **空状态追踪** (新建 `empty_state.rs`)
+   - ✅ 创建 `EmptyStateTracker` 结构体
+   - ✅ 实现状态追踪和类型检查
+   - ✅ 实现分支状态合并（保守策略）
 
 3. **控制流分析** (新建 `control_flow.rs`)
-   - if/match 分支的变量状态合并
-   - 跨分支状态追踪
+   - ✅ 创建 `ControlFlowAnalyzer` 结构体
+   - ✅ 实现 `merge_states` 保守合并策略
+   - ✅ 提供活跃变量分析辅助函数
+
+4. **Move 检查器扩展** (`move_semantics.rs`)
+   - ✅ Move 后变量进入 Empty 状态（而非 Moved）
+   - ✅ 空状态变量允许重新赋值
+   - ✅ 类型一致性检查
+   - ✅ 函数调用参数进入 Empty 状态
+
+5. **其他检查器适配**
+   - ✅ `clone.rs`: 更新以适配 Empty 状态
+   - ✅ `drop_semantics.rs`: Drop Empty 状态合法
+   - ✅ `ref_semantics.rs`: 更新以适配 Empty 状态
+
+6. **模块注册** (`mod.rs`)
+   - ✅ 注册 `empty_state` 和 `control_flow` 模块
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 新建 | `src/middle/passes/lifetime/empty_state.rs` |
-| 新建 | `src/middle/passes/lifetime/control_flow.rs` |
-| 修改 | `src/middle/passes/lifetime/move_semantics.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 修改 | `src/middle/passes/lifetime/error.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/empty_state.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/control_flow.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/move_semantics.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/clone.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/drop_semantics.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/ref_semantics.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/mod.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] `p = Point(1.0); p2 = p; p = Point(2.0)` 编译通过
-- [ ] `p = Point(1.0); p2 = p; print(p)` 编译失败
-- [ ] if 分支正确追踪空状态
-- [ ] `p = "hello"` 在 Point 类型后报错
+- [x] `p = Point(1.0); p2 = p; p = Point(2.0)` 编译通过
+- [x] `p = Point(1.0); p2 = p; print(p)` 编译失败（UseAfterMove）
+- [x] if 分支正确追踪空状态（保守分析）
+- [x] `p = "hello"` 在 Point 类型后报错（EmptyStateTypeMismatch）
+
+### 实现说明
+
+1. **状态设计**
+   - `Owned(Option<TypeId>)`: 有效值，携带类型信息
+   - `Empty`: 空状态，可重新赋值
+   - `Moved`: 已移动（保留用于兼容）
+   - `Dropped`: 已释放
+
+2. **状态转换**
+   ```
+   Owned ──Move──► Empty ──(Store, 类型一致)──► Owned
+                         ▲
+                         │
+                    报错：类型不匹配
+   ```
+
+3. **保守分支合并**
+   - 任一分支为 Empty → 汇合后为 Empty
+   - 任一分支为 Moved → 汇合后为 Moved
+   - 都是 Owned → 保留第一个
+
+4. **类型检查**
+   - 重新赋值时检查类型一致性
+   - 类型不匹配时报告 `EmptyStateTypeMismatch`
+
+### 待后续优化
+
+（当前 Phase 2 已完成）
 
 ---
 
