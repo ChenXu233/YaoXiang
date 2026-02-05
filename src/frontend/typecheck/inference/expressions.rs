@@ -407,7 +407,7 @@ impl<'a> ExprInferrer<'a> {
                                 // 重载解析失败，尝试泛型 fallback
                                 if let Some(generic_candidate) = overload::resolve_generic_fallback(
                                     self.overload_candidates,
-                                    &name,
+                                    name,
                                     &arg_types,
                                 ) {
                                     // 泛型实例化成功，返回实例化后的返回类型
@@ -428,10 +428,7 @@ impl<'a> ExprInferrer<'a> {
                 // 4. 非重载情况或重载失败：
                 // 函数调用返回类型变量（具体类型需要在调用点确定）
                 // 如果函数类型已知，使用其返回类型
-                if let MonoType::Fn {
-                    return_type, ..
-                } = func_ty
-                {
+                if let MonoType::Fn { return_type, .. } = func_ty {
                     return Ok(*return_type);
                 }
                 // 否则返回类型变量（具体类型在调用点确定）

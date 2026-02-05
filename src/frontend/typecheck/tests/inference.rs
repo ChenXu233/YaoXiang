@@ -57,7 +57,7 @@ fn check_type(input: &str) -> bool {
         }
     };
 
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     match checker.check_module(&module) {
