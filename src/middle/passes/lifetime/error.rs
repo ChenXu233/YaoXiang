@@ -191,6 +191,15 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 参数被消费但未返回（所有权回流错误）
+    ConsumedNotReturned {
+        /// 参数标识
+        param: String,
+        /// 函数名
+        function: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -319,6 +328,17 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "ReassignNonEmpty: cannot reassign '{}' which is not in empty state at {:?}",
                     value, location
+                )
+            }
+            OwnershipError::ConsumedNotReturned {
+                param,
+                function,
+                location,
+            } => {
+                write!(
+                    f,
+                    "ConsumedNotReturned: parameter '{}' of function '{}' is consumed but not returned at {:?}",
+                    param, function, location
                 )
             }
         }
