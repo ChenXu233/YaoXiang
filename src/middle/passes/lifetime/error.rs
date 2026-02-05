@@ -6,15 +6,51 @@ use crate::middle::core::ir::{FunctionIR, Operand};
 use std::collections::HashMap;
 
 /// 所有权状态（Move/Drop 检查器共用）
+///
+/// # 状态转换图
+///
+/// ```text
+///     ┌──────────────────────────────────────────────────────┐
+///     │                                                      │
+///     │    ┌─────────┐    Move     ┌─────────┐               │
+///     │    │  Owned  │ ──────────► │  Moved  │               │
+///     │    └─────────┘             └─────────┘               │
+///     │         │                       │                    │
+///     │         │ Store                 │                    │
+///     │         ▼                       │                    │
+///     │    ┌─────────┐                  │                    │
+///     │    │  Empty  │ ◄────────────────┘                    │
+///     │    └─────────┘    (仅当 Moved 时)                     │
+///     │         │                                            │
+///     │         │ Store (类型一致)                            │
+///     │         ▼                                            │
+///     │    ┌─────────┐    Drop     ┌─────────┐               │
+///     │    │  Owned  │ ──────────► │ Dropped │               │
+///     │    └─────────┘             └─────────┘               │
+///     └──────────────────────────────────────────────────────┘
+/// ```
+///
+/// # 状态语义
+///
+/// - **Owned**: 值有效，所有者可用。可以被使用或 Move。
+/// - **Moved**: 值已被移动，所有者不可用。必须重新赋值才能使用。
+/// - **Empty**: 值处于空状态（仅在 Moved 后触发）。可以重新赋值复用变量。
+/// - **Dropped**: 值已被释放（仅 DropChecker 使用）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueState {
-    /// 有效，所有者可用
-    Owned,
+    /// 有效，所有者可用，可选携带类型信息用于重赋值检查
+    Owned(Option<TypeId>),
     /// 已被移动，所有者不可用
     Moved,
+    /// 空状态，可重新赋值（Move 后进入）
+    Empty,
     /// 已被释放（仅 DropChecker 使用）
     Dropped,
 }
+
+/// 类型标识符（用于空状态重赋值时的类型检查）
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeId(pub String);
 
 /// 所有权检查器 Trait
 ///
@@ -137,6 +173,24 @@ pub enum OwnershipError {
         /// 发生位置
         span: (usize, usize),
     },
+    /// 空状态重赋值类型不匹配
+    EmptyStateTypeMismatch {
+        /// 变量标识
+        value: String,
+        /// 期望类型
+        expected_type: String,
+        /// 实际类型
+        actual_type: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// 重新赋值时值非空状态（变量尚未被 Move）
+    ReassignNonEmpty {
+        /// 变量标识
+        value: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -247,6 +301,25 @@ impl std::fmt::Display for OwnershipError {
             }
             OwnershipError::CrossSpawnCycle { details, span } => {
                 write!(f, "CrossSpawnCycle: {} at {:?}", details, span)
+            }
+            OwnershipError::EmptyStateTypeMismatch {
+                value,
+                expected_type,
+                actual_type,
+                location,
+            } => {
+                write!(
+                    f,
+                    "EmptyStateTypeMismatch: cannot reassign '{}' in empty state: expected '{}', found '{}' at {:?}",
+                    value, expected_type, actual_type, location
+                )
+            }
+            OwnershipError::ReassignNonEmpty { value, location } => {
+                write!(
+                    f,
+                    "ReassignNonEmpty: cannot reassign '{}' which is not in empty state at {:?}",
+                    value, location
+                )
             }
         }
     }
