@@ -31,12 +31,13 @@ impl CloneChecker {
             match state {
                 ValueState::Moved => self.error_clone_moved(receiver),
                 ValueState::Dropped => self.error_clone_dropped(receiver),
-                ValueState::Owned => {}
+                ValueState::Owned(_) => {}
+                ValueState::Empty => self.error_clone_moved(receiver), // 空状态不能 clone
             }
-            self.state.insert(receiver.clone(), ValueState::Owned);
+            self.state.insert(receiver.clone(), ValueState::Owned(None));
         }
         if let Some(d) = dst {
-            self.state.insert(d.clone(), ValueState::Owned);
+            self.state.insert(d.clone(), ValueState::Owned(None));
         }
     }
 
@@ -64,7 +65,7 @@ impl CloneChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.state.insert(operand.clone(), ValueState::Owned);
+        self.state.insert(operand.clone(), ValueState::Owned(None));
     }
 
     fn set_moved(
@@ -72,6 +73,13 @@ impl CloneChecker {
         operand: &Operand,
     ) {
         self.state.insert(operand.clone(), ValueState::Moved);
+    }
+
+    fn set_empty(
+        &mut self,
+        operand: &Operand,
+    ) {
+        self.state.insert(operand.clone(), ValueState::Empty);
     }
 
     fn set_dropped(
@@ -109,15 +117,22 @@ impl CloneChecker {
                     self.check_clone(receiver, dst.as_ref());
                 }
             }
-            // Move：src 被移动，dst 成为新所有者
+            // Move：src 被移动（进入 Empty），dst 成为新所有者
             Instruction::Move { dst, src } => {
-                self.set_moved(src);
+                self.set_empty(src);
                 self.set_owned(dst);
             }
-            // 函数调用：参数被移动
-            Instruction::Call { args, dst, .. } => self.update_from_call(args, dst.as_ref()),
-            // 返回：返回值被移动
-            Instruction::Ret(Some(value)) => self.set_moved(value),
+            // 函数调用：参数被移动（进入 Empty）
+            Instruction::Call { args, dst, .. } => {
+                for arg in args {
+                    self.set_empty(arg);
+                }
+                if let Some(d) = dst {
+                    self.set_owned(d);
+                }
+            }
+            // 返回：返回值被移动（进入 Empty）
+            Instruction::Ret(Some(value)) => self.set_empty(value),
             // Drop：值被释放
             Instruction::Drop(operand) => self.set_dropped(operand),
             // 堆分配：新值是有效的所有者
