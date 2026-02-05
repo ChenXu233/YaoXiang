@@ -2,7 +2,7 @@
 //!
 //! Provides a feature-rich REPL using rustyline for editing and history.
 
-use std::io::{self, Write};
+use std::io::{self};
 use std::path::PathBuf;
 
 use rustyline::config::Config;
@@ -63,7 +63,10 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
     }
 
     /// Create with custom config
-    pub fn with_config(backend: B, config: LineREPLConfig) -> Result<Self> {
+    pub fn with_config(
+        backend: B,
+        config: LineREPLConfig,
+    ) -> Result<Self> {
         use std::io;
 
         let rl_config = Config::builder()
@@ -77,7 +80,7 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
             .build();
 
         let mut editor = Editor::with_config(rl_config)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Readline error: {:?}", e)))?;
+            .map_err(|e| io::Error::other(format!("Readline error: {:?}", e)))?;
 
         // Load history if file exists
         if let Some(ref history_file) = config.history_file {
@@ -110,7 +113,7 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
             match self.editor.readline(prompt) {
                 Ok(line) => {
                     in_continuation = false;
-                    self.editor.add_history_entry(&line);
+                    let _ = self.editor.add_history_entry(&line);
 
                     // Handle commands
                     if line.starts_with(':') {
@@ -155,7 +158,7 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
                     continue;
                 }
                 Err(e) => {
-                    return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                    return Err(io::Error::other(e.to_string()));
                 }
             }
         }
@@ -169,7 +172,10 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
     }
 
     /// Format a value for display
-    fn format_value(&self, value: &RuntimeValue) -> String {
+    fn format_value(
+        &self,
+        value: &RuntimeValue,
+    ) -> String {
         match value {
             RuntimeValue::Unit => "()".to_string(),
             RuntimeValue::Bool(b) => b.to_string(),

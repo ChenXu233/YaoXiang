@@ -63,7 +63,8 @@ impl REPLContext {
         name: String,
         type_signature: String,
     ) {
-        self.variables.insert(name, VariableInfo::TypeOnly(type_signature));
+        self.variables
+            .insert(name, VariableInfo::TypeOnly(type_signature));
     }
 
     /// Get a variable

@@ -2,8 +2,6 @@
 //!
 //! Provides completion candidates for rustyline based on REPL context.
 
-use std::borrow::Cow;
-
 use rustyline::completion::{Completer, Pair};
 
 use crate::backends::dev::repl::backend_trait::REPLBackend;
@@ -30,9 +28,8 @@ impl<B: REPLBackend> REPLCompleter<B> {
     /// Get YaoXiang keywords
     fn yaoxiang_keywords() -> Vec<&'static str> {
         vec![
-            "let", "fn", "if", "else", "match", "for", "while", "return",
-            "struct", "enum", "trait", "impl", "use", "mod", "pub",
-            "true", "false", "nil", "break", "continue",
+            "let", "fn", "if", "else", "match", "for", "while", "return", "struct", "enum",
+            "trait", "impl", "use", "mod", "pub", "true", "false", "nil", "break", "continue",
         ]
     }
 }
@@ -47,11 +44,12 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         // Get the word being completed
-        let (start, word) = if let Some(i) = line[..pos].rfind(|c: char| !c.is_alphanumeric() && c != '_') {
-            (i + 1, &line[i + 1..pos])
-        } else {
-            (0, &line[..pos])
-        };
+        let (start, word) =
+            if let Some(i) = line[..pos].rfind(|c: char| !c.is_alphanumeric() && c != '_') {
+                (i + 1, &line[i + 1..pos])
+            } else {
+                (0, &line[..pos])
+            };
 
         if word.is_empty() {
             return Ok((start, Vec::new()));

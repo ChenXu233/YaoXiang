@@ -8,7 +8,7 @@ use crate::backends::interpreter::Interpreter;
 use crate::backends::Executor;
 use crate::frontend::Compiler;
 use crate::middle::passes::codegen::CodegenContext;
-use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, GlobalInfo};
+use crate::middle::bytecode::BytecodeModule;
 
 use super::context::REPLContext;
 use crate::backends::dev::repl::backend_trait::{EvalResult, REPLBackend, SymbolInfo, ExecutionStats};
@@ -208,10 +208,7 @@ impl Evaluator {
             }
 
             // Build signature string
-            let params: Vec<String> = func.params
-                .iter()
-                .map(|p| format!("{:?}", p))
-                .collect();
+            let params: Vec<String> = func.params.iter().map(|p| format!("{:?}", p)).collect();
             let signature = format!("fn({}) -> {:?}", params.join(", "), func.return_type);
 
             self.context.define_function(
