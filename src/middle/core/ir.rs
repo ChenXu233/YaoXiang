@@ -179,6 +179,10 @@ pub enum Instruction {
         dst: Operand,
         field: usize,
         src: Operand,
+        /// 结构体类型名（用于字段可变性检查）
+        type_name: Option<String>,
+        /// 字段名（用于错误信息）
+        field_name: Option<String>,
     },
     LoadIndex {
         dst: Operand,

@@ -184,6 +184,7 @@ impl<'a> ExprInferrer<'a> {
             }
             BinOp::Assign => {
                 // 赋值表达式的类型是 Void
+                // 字段可变性检查在 MutChecker 中进行
                 Ok(MonoType::Void)
             }
         }

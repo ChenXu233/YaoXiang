@@ -80,6 +80,15 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 不可变字段赋值：对不可变字段进行赋值
+    ImmutableFieldAssign {
+        /// 结构体类型名
+        struct_name: String,
+        /// 字段名
+        field: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
     /// ref 应用于非所有者（已移动或已释放的值）
     RefNonOwner {
         /// ref 表达式位置
@@ -176,6 +185,17 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "ImmutableMutation: cannot mutate '{}' via method '{}' at {:?}",
                     value, method, location
+                )
+            }
+            OwnershipError::ImmutableFieldAssign {
+                struct_name,
+                field,
+                location,
+            } => {
+                write!(
+                    f,
+                    "ImmutableFieldAssign: cannot assign to immutable field '{}.{}' at {:?}",
+                    struct_name, field, location
                 )
             }
             OwnershipError::RefNonOwner {
