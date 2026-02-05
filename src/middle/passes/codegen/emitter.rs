@@ -94,7 +94,10 @@ impl Emitter {
     }
 
     /// 记录结束位置映射（用于跳到函数末尾）
-    pub fn mark_end(&mut self, ir_index: usize) {
+    pub fn mark_end(
+        &mut self,
+        ir_index: usize,
+    ) {
         let bytecode_idx = self.buffer.bytecode().len();
         self.ir_to_bytecode_map.insert(ir_index, bytecode_idx);
     }
@@ -144,7 +147,10 @@ impl Emitter {
     }
 
     /// 添加常量
-    pub fn add_constant(&mut self, value: crate::middle::core::ir::ConstValue) -> usize {
+    pub fn add_constant(
+        &mut self,
+        value: crate::middle::core::ir::ConstValue,
+    ) -> usize {
         self.buffer.add_constant(value)
     }
 
