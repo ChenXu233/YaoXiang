@@ -19,7 +19,7 @@
 
 #[cfg(test)]
 mod platform_info_tests {
-    use crate::middle::passes::mono::platform_info::{PlatformDetector, PlatformInfo, TargetPlatform};
+    use crate::middle::passes::mono::platform_info::{PlatformDetector, TargetPlatform};
 
     #[test]
     fn test_detect_x86_64() {
@@ -78,7 +78,7 @@ mod platform_info_tests {
 
 #[cfg(test)]
 mod platform_specializer_tests {
-    use crate::middle::passes::mono::platform_info::{PlatformDetector, PlatformInfo, TargetPlatform};
+    use crate::middle::passes::mono::platform_info::{PlatformDetector, TargetPlatform};
     use crate::middle::passes::mono::platform_specializer::{
         FunctionPlatformInfo, PlatformConstraint, PlatformSpecializer, SpecializationDecider,
     };
