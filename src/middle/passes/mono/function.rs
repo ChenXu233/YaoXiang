@@ -644,7 +644,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             AstType::Struct(fields) => AstType::Struct(
                 fields
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.substitute_type_ast(ty, type_map)))
+                    .map(|f| crate::frontend::core::parser::ast::StructField {
+                        name: f.name.clone(),
+                        is_mut: f.is_mut,
+                        ty: self.substitute_type_ast(&f.ty, type_map),
+                    })
                     .collect(),
             ),
 
@@ -653,7 +657,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 name: name.clone(),
                 fields: fields
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.substitute_type_ast(ty, type_map)))
+                    .map(|f| crate::frontend::core::parser::ast::StructField {
+                        name: f.name.clone(),
+                        is_mut: f.is_mut,
+                        ty: self.substitute_type_ast(&f.ty, type_map),
+                    })
                     .collect(),
             },
 

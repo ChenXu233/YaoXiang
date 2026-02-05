@@ -554,8 +554,8 @@ mod fn_def_tests {
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 2);
-                        assert_eq!(fields[0].0, "x");
-                        assert_eq!(fields[1].0, "y");
+                        assert_eq!(fields[0].name, "x");
+                        assert_eq!(fields[1].name, "y");
                     }
                     _ => panic!("Expected Struct type, got {:?}", definition),
                 }
@@ -622,7 +622,7 @@ mod fn_def_tests {
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 1);
-                        assert_eq!(fields[0].0, "draw");
+                        assert_eq!(fields[0].name, "draw");
                     }
                     _ => panic!("Expected Struct type"),
                 }
@@ -645,7 +645,7 @@ mod fn_def_tests {
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 1);
-                        assert_eq!(fields[0].0, "serialize");
+                        assert_eq!(fields[0].name, "serialize");
                     }
                     _ => panic!("Expected Struct type"),
                 }
@@ -668,8 +668,8 @@ mod fn_def_tests {
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 2);
-                        assert_eq!(fields[0].0, "data");
-                        assert_eq!(fields[1].0, "length");
+                        assert_eq!(fields[0].name, "data");
+                        assert_eq!(fields[1].name, "length");
                     }
                     _ => panic!("Expected Struct type"),
                 }

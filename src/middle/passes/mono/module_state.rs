@@ -303,8 +303,8 @@ impl ModuleMonoState {
                 }
             }
             Type::Struct(fields) | Type::NamedStruct { fields, .. } => {
-                for (_, fty) in fields {
-                    Self::collect_type_vars_from_type(fty, type_params, seen);
+                for field in fields {
+                    Self::collect_type_vars_from_type(&field.ty, type_params, seen);
                 }
             }
             Type::Union(variants) => {
@@ -373,7 +373,7 @@ impl ModuleMonoState {
             Type::Void => "void".to_string(),
             Type::Struct(fields) => fields
                 .first()
-                .map(|(n, _)| n.clone())
+                .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Struct".to_string()),
             Type::NamedStruct { name, .. } => name.clone(),
             Type::Union(variants) => variants

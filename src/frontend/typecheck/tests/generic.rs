@@ -67,6 +67,7 @@ fn test_generic_struct() {
                 ("y".to_string(), MonoType::TypeVar(t_var)),
             ],
             methods: std::collections::HashMap::new(),
+            field_mutability: vec![],
         }),
     );
     env.add_type("Point".to_string(), point_type);
@@ -173,6 +174,7 @@ fn test_type_environment_types() {
         name: "Point".to_string(),
         fields: vec![],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     }));
     env.add_type("Point".to_string(), point_type.clone());
 
@@ -287,6 +289,7 @@ fn test_generic_struct_fields() {
             ("second".to_string(), MonoType::TypeVar(t_var)),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let poly = PolyType::new(vec![t_var], struct_type);
@@ -423,6 +426,7 @@ fn test_generic_struct_type_get() {
         name: "Container".to_string(),
         fields: vec![("value".to_string(), MonoType::TypeVar(t_var))],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
     let poly = PolyType::new(vec![t_var], struct_type);
     env.add_type("Container".to_string(), poly);

@@ -435,21 +435,23 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
         Type::Struct(fields) => MonoType::Struct(StructType {
             name: fields
                 .first()
-                .map(|(n, _)| n.clone())
+                .map(|f| f.name.clone())
                 .unwrap_or_else(|| "Struct".to_string()),
             fields: fields
                 .iter()
-                .map(|(n, ty)| (n.clone(), ast_type_to_mono_type(ty)))
+                .map(|f| (f.name.clone(), ast_type_to_mono_type(&f.ty)))
                 .collect(),
             methods: HashMap::new(),
+            field_mutability: fields.iter().map(|f| f.is_mut).collect(),
         }),
         Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
             name: name.clone(),
             fields: fields
                 .iter()
-                .map(|(n, ty)| (n.clone(), ast_type_to_mono_type(ty)))
+                .map(|f| (f.name.clone(), ast_type_to_mono_type(&f.ty)))
                 .collect(),
             methods: HashMap::new(),
+            field_mutability: fields.iter().map(|f| f.is_mut).collect(),
         }),
         Type::Union(variants) => MonoType::Union(
             variants
@@ -672,6 +674,7 @@ fn substitute_type_with_map(
                 })
                 .collect(),
             methods: struct_type.methods.clone(),
+            field_mutability: struct_type.field_mutability.clone(),
         }),
         MonoType::List(elem) => MonoType::List(Box::new(substitute_type_with_map(elem, type_map))),
         MonoType::Dict(key, value) => MonoType::Dict(

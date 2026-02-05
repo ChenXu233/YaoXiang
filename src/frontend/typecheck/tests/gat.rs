@@ -98,6 +98,7 @@ fn test_check_gat_struct_type() {
             ("field2".to_string(), MonoType::String),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let result = checker.check_gat(&struct_type);
@@ -372,6 +373,7 @@ fn test_complex_nested_structure() {
             ),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
 
     let result = checker.check_gat(&complex_type);

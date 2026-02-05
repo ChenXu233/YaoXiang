@@ -5,9 +5,10 @@
 //! - Type definitions: `type Name = Type;`
 //! - Use imports: `use path;` or `use path.{item1, item2};`
 //! - Function definitions: `name: (ParamTypes) -> ReturnType = (params) => body;`
+//! - Mutability fields: `type Point = { x: Float, mut y: Float }`
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::frontend::core::parser::ast::{StructField, *};
 use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
 use std::collections::HashSet;
@@ -940,7 +941,7 @@ fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
                     Type::NamedStruct { name, fields } => {
                         let params = fields
                             .iter()
-                            .map(|(n, t)| (Some(n.clone()), t.clone()))
+                            .map(|f| (Some(f.name.clone()), f.ty.clone()))
                             .collect();
                         variants.push(VariantDef {
                             name: name.clone(),
@@ -1617,7 +1618,7 @@ fn parse_generic_type_bracket(
     Some(Type::Generic { name, args })
 }
 
-/// Parse named struct type: `Name(x: Type, y: Type)`
+/// Parse named struct type: `Name(x: Type, y: Type)` or `Name(mut x: Type, y: Type)`
 fn parse_named_struct_type(
     name: String,
     state: &mut ParserState<'_>,
@@ -1627,6 +1628,9 @@ fn parse_named_struct_type(
     let mut fields = Vec::new();
 
     while !state.at(&TokenKind::RParen) && !state.at_end() {
+        // 检查是否有关键字 mut
+        let is_mut = state.skip(&TokenKind::KwMut);
+
         let field_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => break,
@@ -1638,7 +1642,7 @@ fn parse_named_struct_type(
         }
 
         let field_type = parse_type_annotation(state)?;
-        fields.push((field_name, field_type));
+        fields.push(StructField::new(field_name, is_mut, field_type));
 
         if !state.skip(&TokenKind::Comma) {
             break;
@@ -1821,8 +1825,9 @@ fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
 
 /// Parse struct type like `{ field: Type }` or `{ field: Type, InterfaceName }`
 /// RFC-010 支持两种语法：
-/// - 普通字段: `type Point = { x: Float, y: Float }`
+/// - 普通字段: `type Point = { x: Float, mut y: Float }`
 /// - 接口约束: `type Point = { x: Float, Drawable, Serializable }`
+/// - 可变字段: `type Point = { mut x: Float, y: Float }`
 fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
@@ -1834,12 +1839,22 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
             let name = name.clone();
             state.bump();
 
+            // 检查下一个 token 是否是 mut 或冒号
+            let is_mut = state.skip(&TokenKind::KwMut);
+
             // 检查下一个 token 是否是冒号
             if state.at(&TokenKind::Colon) {
-                // 普通字段: name: Type
+                // 普通字段: [mut] name: Type
                 state.bump(); // consume ':'
                 let field_type = parse_type_annotation(state)?;
-                fields.push((name, field_type));
+                fields.push(StructField::new(name, is_mut, field_type));
+            } else if is_mut {
+                // mut 后面没有冒号是语法错误
+                state.error(ParseError::Message(format!(
+                    "Expected ':' after 'mut' in field '{}'",
+                    name
+                )));
+                return None;
             } else {
                 // 接口约束: InterfaceName
                 interfaces.push(name);

@@ -212,6 +212,27 @@ pub struct VariantDef {
     pub span: Span,
 }
 
+/// 结构体字段定义
+///
+/// 用于表示类型定义中的字段，包含可变性标记
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub is_mut: bool,
+    pub ty: Type,
+}
+
+impl StructField {
+    /// 创建新的结构体字段
+    pub fn new(
+        name: String,
+        is_mut: bool,
+        ty: Type,
+    ) -> Self {
+        Self { name, is_mut, ty }
+    }
+}
+
 /// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
 #[derive(Debug, Clone)]
 pub enum GenericParamKind {
@@ -246,10 +267,10 @@ pub enum Type {
     Bytes,
     Bool,
     Void,
-    Struct(Vec<(String, Type)>),
+    Struct(Vec<StructField>),
     NamedStruct {
         name: String,
-        fields: Vec<(String, Type)>,
+        fields: Vec<StructField>,
     },
     Union(Vec<(String, Option<Type>)>),
     Enum(Vec<String>),
@@ -323,7 +344,8 @@ pub enum Pattern {
     Tuple(Vec<Pattern>),
     Struct {
         name: String,
-        fields: Vec<(String, Pattern)>,
+        /// 字段模式列表：(字段名, 是否可变, 模式)
+        fields: Vec<(String, bool, Box<Pattern>)>,
     },
     Union {
         name: String,
