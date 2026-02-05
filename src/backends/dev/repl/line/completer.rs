@@ -97,12 +97,3 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
         Ok((start, candidates))
     }
 }
-
-/// Helper function to setup completer for LineREPL
-pub fn setup_completer<B: REPLBackend + 'static>(
-    editor: &mut rustyline::Editor<(), rustyline::history::FileHistory>,
-    backend: B,
-) {
-    let completer = REPLCompleter::new(backend);
-    editor.set_completer(Some(Box::new(completer)));
-}
