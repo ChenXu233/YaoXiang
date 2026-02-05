@@ -90,6 +90,11 @@ impl BytecodeInstruction {
         bytes.extend(&self.operands);
         bytes
     }
+
+    /// 获取编码后的大小
+    pub fn encoded_size(&self) -> usize {
+        1 + self.operands.len()
+    }
 }
 
 /// 将 FunctionCode 编码为字节序列
