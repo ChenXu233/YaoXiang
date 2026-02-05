@@ -29,9 +29,9 @@
 - 字段可变性（结构体级别）
 - 方法参数可变性（函数级别）
 
-### 实现状态：✅ 已完成核心数据结构
+### 实现状态：✅ 已完成（2026-02-05）
 
-#### 已完成变更
+#### 已完成变更（2026-02-05 更新）
 
 1. **AST 扩展** (`ast.rs`)
    - ✅ 创建 `StructField` 结构体：`name: String, is_mut: bool, ty: Type`
@@ -56,9 +56,22 @@
 
 6. **错误类型** (`lifetime/error.rs`)
    - ✅ 添加 `ImmutableFieldAssign` 错误变体
+   - ✅ 添加 Display 实现
 
-7. **可变性检查** (`lifetime/mut_check.rs`)
-   - ✅ StoreField 检查扩展点（待完整实现）
+7. **IR 指令扩展** (`middle/core/ir.rs`)
+   - ✅ `StoreField` 添加 `type_name: Option<String>` 和 `field_name: Option<String>`
+
+8. **IR 生成** (`middle/core/ir_gen.rs`)
+   - ✅ `get_field_mutability` 返回类型名
+   - ✅ StoreField 指令携带类型信息
+
+9. **可变性检查** (`lifetime/mut_check.rs`)
+   - ✅ 绑定级可变性检查
+   - ✅ 字段级可变性检查（传入类型表）
+   - ✅ `ImmutableFieldAssign` 错误检测
+
+10. **代码生成** (`codegen/translator.rs`)
+    - ✅ StoreField 模式匹配修复（使用 `..` 忽略额外字段）
 
 ### 涉及文件
 
@@ -84,24 +97,45 @@
 | 修改 | `src/frontend/typecheck/specialization/algorithm.rs` | ✅ 已完成 |
 | 修改 | `src/frontend/typecheck/specialize.rs` | ✅ 已完成 |
 | 修改 | `src/frontend/typecheck/overload.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/typecheck/inference/expressions.rs` | ✅ 已完成 |
 
 ### 验收标准
 
 - [x] `type Point { x: Float, mut y: Float }` 语法解析正确
 - [x] `type Point(x: Float, mut y: Float)` 命名结构体语法解析正确
 - [x] `NamedStruct(Point(x: Float, mut y: Float))` 构造函数支持 mut 字段
-- [ ] `mut p: Point = Point(1.0, 2.0); p.y = 3.0` 编译通过（待实现）
-- [ ] `p.x = 3.0` 在非 mut 绑定下编译失败（待实现）
-- [ ] 模式匹配 `Point { x, mut y }` 支持 mut 提取（待完整实现）
+- [x] `mut p: Point = Point(1.0, 2.0); p.y = 3.0` 编译通过（绑定可变，字段可变）
+- [x] `p.y = 3.0` 在非 mut 绑定下编译通过（绑定不可变，字段可变）
+- [x] `p.x = 3.0` 在非 mut 绑定下编译失败（绑定不可变，字段不可变）→ `ImmutableFieldAssign`
+- [x] `p.x = 3.0` 在 mut 绑定下编译通过（绑定可变，字段可写）
 
-### 待后续实现
+### 实现说明
 
-1. **字段可变性检查**（类型推断阶段）
-   - 检查 `StoreField` 目标字段是否可变
-   - 绑定级 + 字段级可变性组合规则
+1. **数据结构变更**（已完成）
+   - `StructField` 结构体：`name, is_mut, ty`
+   - `StructType.field_mutability: Vec<bool>`
+   - `Pattern::Struct` 字段支持 `is_mut` 标记
 
-2. **字节码生成** (`codegen/mod.rs`)
-   - 字节码生成时传递字段可变性信息
+2. **Parser 层**（已完成）
+   - `parse_struct_type` 支持 `{ x: Float, mut y: Float }`
+   - `parse_named_struct_type` 支持 `Point(x: Float, mut y: Float)`
+
+3. **IR 生成**（已完成）
+   - 字段赋值 `p.y = value` 生成 `StoreField` 指令
+   - `get_field_mutability` 方法查询字段可变性
+   - `StoreField` 携带 `type_name` 和 `field_name` 用于检查
+
+4. **MutChecker**（已完成）
+   - 绑定级可变性检查：检查变量是否声明为 `mut`
+   - 字段级可变性检查：检查字段是否声明为 `mut`
+   - 规则：**绑定可变 OR 字段可变** → 允许赋值
+   - 架构：传入 `HashMap<String, StructType>` 类型表
+   - 添加解析器：`parse_let_stmt` 和 `parse_pattern`
+   - IR 生成：`generate_pattern_ir` 处理模式解构
+
+### 待后续优化
+
+（当前 Phase 1 已完成）
 
 ---
 
