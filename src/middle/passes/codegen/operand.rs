@@ -22,7 +22,10 @@ impl OperandResolver {
     }
 
     /// 将操作数转换为寄存器编号
-    pub fn to_reg(&self, operand: &Operand) -> OperandResult {
+    pub fn to_reg(
+        &self,
+        operand: &Operand,
+    ) -> OperandResult {
         match operand {
             Operand::Local(id) => {
                 if *id > 255 {
@@ -56,18 +59,30 @@ impl OperandResolver {
     }
 
     /// 验证操作数是否有效
-    pub fn validate(&self, operand: &Operand) -> Result<(), super::CodegenError> {
+    pub fn validate(
+        &self,
+        operand: &Operand,
+    ) -> Result<(), super::CodegenError> {
         self.to_reg(operand)?;
         Ok(())
     }
 
     /// 检查操作数是否为寄存器类型
-    pub fn is_register(&self, operand: &Operand) -> bool {
-        matches!(operand, Operand::Local(_) | Operand::Temp(_) | Operand::Arg(_))
+    pub fn is_register(
+        &self,
+        operand: &Operand,
+    ) -> bool {
+        matches!(
+            operand,
+            Operand::Local(_) | Operand::Temp(_) | Operand::Arg(_)
+        )
     }
 
     /// 检查操作数是否为常量
-    pub fn is_constant(&self, operand: &Operand) -> bool {
+    pub fn is_constant(
+        &self,
+        operand: &Operand,
+    ) -> bool {
         matches!(operand, Operand::Const(_))
     }
 }
