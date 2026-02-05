@@ -17,7 +17,7 @@ use crate::frontend::type_level::const_generics::eval::ConstFunction;
 #[test]
 fn test_literal_type_parsing() {
     // 测试从 AST 字面量类型解析
-    let ty = Type::Literal {
+    let _ty = Type::Literal {
         name: "5".to_string(),
         base_type: Box::new(Type::Name("Int".to_string())),
     };
@@ -200,7 +200,7 @@ fn test_const_param_extraction() {
 /// 测试 Const 求值器 - 基础运算
 #[test]
 fn test_const_eval_basic_operations() {
-    let mut eval = ConstGenericEval::new();
+    let eval = ConstGenericEval::new();
 
     // 测试整数加法
     let expr = ConstExpr::BinOp {

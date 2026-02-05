@@ -874,7 +874,10 @@ fn substitute_return_type(
 }
 
 /// 获取函数名的重载候选数量
-pub fn overload_count(env: &super::TypeEnvironment, name: &str) -> usize {
+pub fn overload_count(
+    env: &super::TypeEnvironment,
+    name: &str,
+) -> usize {
     env.overload_candidates
         .get(name)
         .map(|v| v.len())

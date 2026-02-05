@@ -711,8 +711,10 @@ pub fn infer_expression(
     // 克隆环境变量，避免借用冲突
     let vars_clone = env.vars.clone();
     let overload_candidates_clone = env.overload_candidates.clone();
-    let mut inferrer =
-        crate::frontend::typecheck::inference::ExprInferrer::new(env.solver(), &overload_candidates_clone);
+    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+        env.solver(),
+        &overload_candidates_clone,
+    );
     // 添加环境中的变量到推断器
     for (name, poly) in vars_clone {
         inferrer.add_var(name, poly);
