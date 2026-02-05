@@ -70,6 +70,9 @@ ratatui = { version = "0.30.0", features = ["serde"] }
 crossterm = "0.29.0"
 owo-colors = "4.0"
 
+# REPL - 交互式编辑
+rustyline = { version = "14", features = ["with-file-history", "with-dirs"] }
+
 # 异步运行时
 tokio = { version = "1.49.0", features = ["full"] }
 
