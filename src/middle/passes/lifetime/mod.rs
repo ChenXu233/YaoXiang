@@ -20,9 +20,11 @@ use std::fmt;
 // 子模块
 pub mod chain_calls;
 pub mod clone;
+pub mod consume_analysis;
 pub mod cycle_check;
 pub mod drop_semantics;
 pub mod error;
+pub mod lifecycle;
 pub mod move_semantics;
 pub mod mut_check;
 pub mod ownership_flow;
@@ -31,10 +33,12 @@ pub mod send_sync;
 
 pub use chain_calls::*;
 pub use clone::*;
+pub use consume_analysis::*;
 pub use cycle_check::*;
-pub use error::*;
-pub use move_semantics::*;
 pub use drop_semantics::*;
+pub use error::*;
+pub use lifecycle::*;
+pub use move_semantics::*;
 pub use mut_check::*;
 pub use ownership_flow::*;
 pub use ref_semantics::*;

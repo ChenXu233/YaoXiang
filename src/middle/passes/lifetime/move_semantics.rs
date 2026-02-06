@@ -19,7 +19,9 @@
 //!     Owned ──(Store)──► 报错：ReassignNonEmpty
 //! ```
 
+use super::consume_analysis::ConsumeAnalyzer;
 use super::error::{OwnershipCheck, OwnershipError, TypeId, ValueState, operand_to_string};
+use super::ownership_flow::ConsumeMode;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use std::collections::HashMap;
 
@@ -30,6 +32,13 @@ use std::collections::HashMap;
 /// - UseAfterEmpty: 使用空状态的值（已移动后可重新赋值）
 /// - EmptyStateTypeMismatch: 空状态重赋值类型不匹配
 /// - ReassignNonEmpty: 重新赋值时值非空状态
+///
+/// # 消费分析支持（Phase 4）
+///
+/// 通过 ConsumeAnalyzer 查询被调用函数的消费模式：
+/// - Returns 模式：参数不进入 Empty（所有权回流）
+/// - Consumes 模式：参数进入 Empty（所有权消耗）
+/// - Undetermined 模式：保守估计进入 Empty
 #[derive(Debug)]
 pub struct MoveChecker {
     pub state: HashMap<Operand, ValueState>,
@@ -39,6 +48,8 @@ pub struct MoveChecker {
     type_map: HashMap<Operand, TypeId>,
     /// 函数类型表：类型名 -> 类型ID（外部传入）
     type_table: Option<HashMap<String, TypeId>>,
+    /// 消费分析器（Phase 4）
+    consume_analyzer: ConsumeAnalyzer,
 }
 
 impl MoveChecker {
@@ -49,6 +60,7 @@ impl MoveChecker {
             location: (0, 0),
             type_map: HashMap::new(),
             type_table: None,
+            consume_analyzer: ConsumeAnalyzer::new(),
         }
     }
 
@@ -76,7 +88,12 @@ impl MoveChecker {
     ) {
         match instr {
             Instruction::Move { dst, src } => self.check_move(dst, src),
-            Instruction::Call { dst, args, .. } => self.check_call(args, dst.as_ref()),
+            Instruction::Call {
+                dst, args, func, ..
+            } => {
+                let func_name = extract_function_name(func);
+                self.check_call(args, dst.as_ref(), func_name.as_deref());
+            }
             Instruction::Ret(Some(value)) => self.check_ret(value),
             Instruction::Store { dst, src } => self.check_store(dst, src),
             Instruction::LoadIndex { src, .. }
@@ -202,10 +219,17 @@ impl MoveChecker {
         self.check_used(src);
     }
 
+    /// 检查函数调用
+    ///
+    /// 根据被调用函数的消费模式决定参数状态：
+    /// - Returns 模式：参数所有权回流，不进入 Empty
+    /// - Consumes 模式：参数被消费，进入 Empty
+    /// - Undetermined 模式：保守估计进入 Empty
     fn check_call(
         &mut self,
         args: &[Operand],
         dst: Option<&Operand>,
+        func_name: Option<&str>,
     ) {
         // 处理返回值目标
         if let Some(dst_operand) = dst {
@@ -214,27 +238,44 @@ impl MoveChecker {
             self.state.insert(dst_operand.clone(), ValueState::Empty);
         }
 
+        // 获取被调用函数的消费模式（克隆以避免借用冲突）
+        let consume_modes: Option<Vec<ConsumeMode>> = func_name.and_then(|name| {
+            self.consume_analyzer
+                .get_function_consume_mode_by_name(name)
+                .cloned()
+        });
+
         // 处理参数
-        for arg in args {
-            if let Some(state) = self.state.get(arg) {
-                match state {
-                    ValueState::Empty => {
-                        self.report_use_after_move(arg);
-                    }
-                    ValueState::Owned(_) => {
-                        // 函数调用消费参数，进入 Empty 状态
+        for (idx, arg) in args.iter().enumerate() {
+            let mode = consume_modes.as_ref().and_then(|m| m.get(idx)).copied();
+
+            match mode {
+                Some(ConsumeMode::Returns) => {
+                    // Returns 模式：参数所有权回流，保持 Owned 状态
+                    // 不修改参数状态
+                }
+                Some(ConsumeMode::Consumes) | Some(ConsumeMode::Undetermined) | None => {
+                    // Consumes/Undetermined/未知：保守处理，参数进入 Empty
+                    if let Some(state) = self.state.get(arg) {
+                        match state {
+                            ValueState::Empty => {
+                                self.report_use_after_move(arg);
+                            }
+                            ValueState::Owned(_) => {
+                                self.state.insert(arg.clone(), ValueState::Empty);
+                            }
+                            ValueState::Moved => {
+                                self.report_use_after_move(arg);
+                            }
+                            ValueState::Dropped => {
+                                // 已释放的值不能使用
+                            }
+                        }
+                    } else {
+                        // 首次使用，设为 Empty
                         self.state.insert(arg.clone(), ValueState::Empty);
                     }
-                    ValueState::Moved => {
-                        self.report_use_after_move(arg);
-                    }
-                    ValueState::Dropped => {
-                        // 已释放的值不能使用
-                    }
                 }
-            } else {
-                // 首次使用，设为 Empty
-                self.state.insert(arg.clone(), ValueState::Empty);
             }
         }
     }
@@ -325,11 +366,210 @@ impl OwnershipCheck for MoveChecker {
         self.state.clear();
         self.errors.clear();
         self.type_map.clear();
+        self.consume_analyzer.clear_cache();
     }
 }
 
 impl Default for MoveChecker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 从指令中提取函数名
+fn extract_function_name(operand: &Operand) -> Option<String> {
+    match operand {
+        Operand::Global(name) => Some(name.to_string()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::middle::core::ir::{BasicBlock, ConstValue};
+    use crate::frontend::typecheck::MonoType;
+
+    fn make_test_function() -> FunctionIR {
+        FunctionIR {
+            name: "returns_param".to_string(),
+            params: vec![MonoType::Int(0)],
+            return_type: MonoType::Int(0),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Ret(Some(Operand::Arg(0)))],
+                successors: vec![],
+            }],
+            entry: 0,
+        }
+    }
+
+    #[test]
+    fn test_returns_mode_preserves_param() {
+        let mut checker = MoveChecker::new();
+        let func = make_test_function();
+
+        // 分析函数消费模式
+        checker.consume_analyzer.analyze_and_cache(&func);
+
+        // 参数是 Returns 模式，调用后应该保持 Owned
+        let modes = checker.consume_analyzer.get_function_consume_mode(&func);
+        assert_eq!(modes.len(), 1);
+        assert_eq!(modes[0], ConsumeMode::Returns);
+    }
+
+    #[test]
+    fn test_consumes_mode_empties_param() {
+        // 测试 Consumes 模式的函数调用
+        let mut checker = MoveChecker::new();
+
+        let func = FunctionIR {
+            name: "consumes_param".to_string(),
+            params: vec![MonoType::Int(0)],
+            return_type: MonoType::Void,
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Ret(None)],
+                successors: vec![],
+            }],
+            entry: 0,
+        };
+
+        checker.consume_analyzer.analyze_and_cache(&func);
+
+        let modes = checker.consume_analyzer.get_function_consume_mode(&func);
+        assert_eq!(modes.len(), 1);
+        assert_eq!(modes[0], ConsumeMode::Consumes);
+    }
+
+    #[test]
+    fn test_move_checker_state_tracking() {
+        // 测试 MoveChecker 状态追踪
+        let mut checker = MoveChecker::new();
+
+        let func = FunctionIR {
+            name: "test".to_string(),
+            params: vec![MonoType::Int(0)],
+            return_type: MonoType::Int(0),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Move {
+                        dst: Operand::Temp(0),
+                        src: Operand::Arg(0),
+                    },
+                    Instruction::Ret(Some(Operand::Temp(0))),
+                ],
+                successors: vec![],
+            }],
+            entry: 0,
+        };
+
+        let errors = checker.check_function(&func);
+
+        // 不应该有错误
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_use_after_move_detection() {
+        // 测试 UseAfterMove 检测
+        let mut checker = MoveChecker::new();
+
+        let func = FunctionIR {
+            name: "test".to_string(),
+            params: vec![MonoType::Int(0)],
+            return_type: MonoType::Int(0),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Move {
+                        dst: Operand::Temp(0),
+                        src: Operand::Arg(0),
+                    },
+                    // 再次使用 Arg(0) 应该报错
+                    Instruction::Add {
+                        dst: Operand::Temp(1),
+                        lhs: Operand::Arg(0),
+                        rhs: Operand::Const(ConstValue::Int(1)),
+                    },
+                ],
+                successors: vec![],
+            }],
+            entry: 0,
+        };
+
+        let errors = checker.check_function(&func);
+
+        // 应该有 UseAfterMove 错误
+        let has_use_after_move = errors
+            .iter()
+            .any(|e| matches!(e, OwnershipError::UseAfterMove { .. }));
+        assert!(has_use_after_move);
+    }
+
+    #[test]
+    fn test_checker_clear() {
+        // 测试 MoveChecker 清除状态
+        let mut checker = MoveChecker::new();
+
+        let func = FunctionIR {
+            name: "test".to_string(),
+            params: vec![MonoType::Int(0)],
+            return_type: MonoType::Int(0),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Ret(Some(Operand::Arg(0)))],
+                successors: vec![],
+            }],
+            entry: 0,
+        };
+
+        // 第一次检查
+        checker.check_function(&func);
+
+        // 清除状态
+        checker.clear();
+
+        // 再次检查应该正常
+        let errors = checker.check_function(&func);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_params_consume_modes() {
+        // 测试多参数的消费模式
+        let mut checker = MoveChecker::new();
+
+        let func = FunctionIR {
+            name: "multi_param".to_string(),
+            params: vec![MonoType::Int(0), MonoType::Int(0)],
+            return_type: MonoType::Int(0),
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![Instruction::Ret(Some(Operand::Arg(0)))],
+                successors: vec![],
+            }],
+            entry: 0,
+        };
+
+        checker.consume_analyzer.analyze_and_cache(&func);
+
+        let modes = checker.consume_analyzer.get_function_consume_mode(&func);
+        assert_eq!(modes.len(), 2);
+        assert_eq!(modes[0], ConsumeMode::Returns);
+        assert_eq!(modes[1], ConsumeMode::Consumes);
     }
 }
