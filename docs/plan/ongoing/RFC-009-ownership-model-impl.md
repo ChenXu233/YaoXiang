@@ -460,39 +460,96 @@
 
 ---
 
-## Phase 6: 循环引用检测 (P1)
+## Phase 6: 循环引用检测 (P1) ✅ 已完成
 
 ### 目标
 
 跨任务循环引用检测，任务内循环允许。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **任务边界追踪** (`cycle_check.rs` 扩展)
-   - 追踪 spawn 的参数和返回值边界
-   - 构建跨任务引用图
+#### 已完成变更（2026-02-06 更新）
 
-2. **循环检测算法** (`cycle_check.rs`)
-   - 检测参数和返回值之间的 ref 环
-   - 报错时给出位置和建议
+1. **错误类型扩展** (`error.rs`)
+   - ✅ `IntraTaskCycle` 警告变体（任务内循环，不阻断编译）
+   - ✅ `UnsafeBypassCycle` 信息变体（unsafe 绕过记录）
+   - ✅ Display 实现
 
-3. **任务内循环处理** (新建 `intra_task_cycle.rs`)
-   - 任务内循环允许，只记录警告
-   - 泄漏在任务结束后释放
+2. **CycleChecker 增强** (`cycle_check.rs`)
+   - ✅ 深度限制常量 `MAX_DETECTION_DEPTH = 1`（只检测单层边界）
+   - ✅ `unsafe_ranges` 字段追踪 unsafe 块范围
+   - ✅ `unsafe_bypasses` 字段记录绕过信息
+   - ✅ `is_in_unsafe()` 方法检查位置是否在 unsafe 块内
+   - ✅ `find_spawn_result_direct()` 方法实现深度限制
+   - ✅ `collect_unsafe_ranges()` 预留 Phase 7 接口
+   - ✅ 优化错误消息，包含解决建议
+
+3. **任务内循环追踪器** (新建 `intra_task_cycle.rs`)
+   - ✅ `IntraTaskCycleTracker` 结构体
+   - ✅ `RefEdge` 结构体追踪 ref 边
+   - ✅ `track_function()` 追踪函数内循环
+   - ✅ `collect_ref_info()` 收集 ArcNew/Move/StoreField
+   - ✅ `build_ref_graph()` 构建引用图
+   - ✅ `detect_intra_task_cycles()` DFS 检测循环
+   - ✅ 警告模式输出，不阻断编译
+
+4. **OwnershipChecker 集成** (`mod.rs`)
+   - ✅ 添加 `intra_task_tracker` 字段
+   - ✅ `check_function()` 调用任务内循环追踪
+   - ✅ `intra_task_warnings()` 方法返回警告
+   - ✅ `unsafe_bypasses()` 方法返回绕过记录
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 新建 | `src/middle/passes/lifetime/intra_task_cycle.rs` |
-| 修改 | `src/middle/passes/lifetime/cycle_check.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 修改 | `src/middle/passes/lifetime/error.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/cycle_check.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/intra_task_cycle.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/mod.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] spawn 参数和返回值之间的 ref 循环检测
-- [ ] 任务内循环不报错（泄漏可控）
-- [ ] 跨任务循环报错位置准确
-- [ ] unsafe 块可绕过检测
+- [x] spawn 参数和返回值之间的 ref 循环检测
+- [x] 任务内循环不报错（泄漏可控）
+- [x] 跨任务循环报错位置准确
+- [x] unsafe 块可绕过检测（接口预留，Phase 7 完善）
+
+### 实现说明
+
+1. **深度限制设计**
+   - 只检测单层 spawn 边界（深度 = 1）
+   - `find_spawn_result_direct()` 最多追踪一层 Move
+   - 不递归检测嵌套 spawn 的间接引用
+
+2. **循环检测分工**
+   ```
+   CycleChecker        → 跨 spawn 循环（报错）
+   IntraTaskCycleTracker → 任务内循环（警告）
+   ```
+
+3. **unsafe 绕过机制**
+   - `collect_unsafe_ranges()` 收集 unsafe 块范围
+   - `is_in_unsafe()` 检查指令位置
+   - unsafe 块内的 spawn 跳过检测
+   - 当前版本预留接口，Phase 7 实现 unsafe 语法后完善
+
+4. **错误消息优化**
+   ```
+   跨任务循环引用: temp_0 → temp_1 → temp_0 (形成环).
+   建议: 使用 Weak 打破循环，或在 unsafe 块中绕过检测
+   ```
+
+### 测试覆盖
+
+| 模块 | 测试数 | 说明 |
+|------|--------|------|
+| `cycle_check` | 22 | 跨任务循环、深度限制、状态重置 |
+| `intra_task_cycle` | 7 | 任务内循环、自引用、警告位置 |
+
+### 待后续优化
+
+- Phase 7 实现 unsafe 语法后，完善 `collect_unsafe_ranges()` 解析
 
 ---
 
@@ -597,7 +654,7 @@ Phase 1 (字段不可变性)
 | `src/middle/passes/lifetime/consume_analysis.rs` | P4 ✅ | 消费标记系统 |
 | `src/middle/passes/lifetime/lifecycle.rs` | P4 ✅ | 变量生命周期追踪 |
 | `src/middle/passes/lifetime/unsafe_check.rs` | P7 | unsafe 检查 |
-| `src/middle/passes/lifetime/intra_task_cycle.rs` | P6 | 任务内循环处理 |
+| `src/middle/passes/lifetime/intra_task_cycle.rs` | P6 ✅ | 任务内循环处理 |
 | `src/std/rc.rs` | P8 | Rc/Weak 实现 |
 | `src/std/sync.rs` | P8 | Arc 实现 |
 
@@ -631,7 +688,9 @@ Phase 1 (字段不可变性)
 | `src/frontend/core/parser/expr.rs` | P5 | ref 表达式解析 |
 | `src/frontend/typecheck/infer.rs` | P5 | ref 类型推断 |
 | `src/middle/passes/lifetime/ref_semantics.rs` | P5 | ref 所有权处理 |
-| `src/middle/passes/lifetime/cycle_check.rs` | P6 | 跨任务循环检测 |
+| `src/middle/passes/lifetime/cycle_check.rs` | P6 ✅ | 跨任务循环检测、深度限制、unsafe 绕过 |
+| `src/middle/passes/lifetime/error.rs` | P6 ✅ | IntraTaskCycle, UnsafeBypassCycle |
+| `src/middle/passes/lifetime/mod.rs` | P6 ✅ | 集成 IntraTaskCycleTracker |
 | `src/frontend/core/parser/block.rs` | P7 | unsafe 语法解析 |
 
 ---
