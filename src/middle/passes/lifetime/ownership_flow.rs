@@ -19,7 +19,7 @@ use std::collections::HashSet;
 /// - **Returns**: 参数在返回值中返回，所有权回流
 /// - **Consumes**: 参数被消费，不返回
 /// - **Undetermined**: 无法确定（保守分析）
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConsumeMode {
     /// 参数在返回值中返回，所有权回流
     Returns,

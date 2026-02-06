@@ -322,40 +322,77 @@
 
 ---
 
-## Phase 4: 消费分析 (P1)
+## Phase 4: 消费分析 (P1) ✅ 已完成
 
 ### 目标
 
 实现完整的消费标记系统，追踪每个变量的 Consumes/Returns 状态。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **消费标记系统** (新建 `consume_analysis.rs`)
-   - 定义 `ConsumeMode: Consumes | Returns` 枚举
-   - 函数调用时标记参数消费模式
+#### 已完成变更（2026-02-06 更新）
 
-2. **变量生命周期追踪** (新建 `lifecycle.rs`)
-   - 追踪变量从创建到消费的完整生命周期
-   - 作用域进入/退出时清理
+1. **消费分析器** (新建 `consume_analysis.rs`)
+   - ✅ 复用 Phase 3 的 `ConsumeMode` 和 `OwnershipFlowAnalyzer`
+   - ✅ `ConsumeAnalyzer` 提供跨函数消费模式查询
+   - ✅ 内置函数特殊处理（consume, clone 等）
+   - ✅ 消费模式缓存机制
 
-3. **跨函数分析** (`move_semantics.rs` 扩展)
-   - 分析函数调用对变量的影响
-   - 追踪跨函数的所有权流动
+2. **生命周期追踪器** (新建 `lifecycle.rs`)
+   - ✅ 创建 `LifecycleTracker` 结构体
+   - ✅ 变量生命周期事件记录（创建/消费/移动/释放/返回）
+   - ✅ 消费次数和读取次数统计
+   - ✅ 生命周期问题检测（未消费释放/多次消费/消费后使用）
+
+3. **MoveChecker 扩展** (`move_semantics.rs` 扩展)
+   - ✅ 添加 `ConsumeAnalyzer` 字段
+   - ✅ `check_call` 根据函数消费模式决定参数状态
+   - ✅ Returns 模式：参数所有权回流，不进入 Empty
+   - ✅ Consumes 模式：参数进入 Empty
+
+4. **模块注册** (`mod.rs`)
+   - ✅ 注册 `consume_analysis` 和 `lifecycle` 模块
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 新建 | `src/middle/passes/lifetime/consume_analysis.rs` |
-| 新建 | `src/middle/passes/lifetime/lifecycle.rs` |
-| 修改 | `src/middle/passes/lifetime/move_semantics.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 新建 | `src/middle/passes/lifetime/consume_analysis.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/lifecycle.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/move_semantics.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/mod.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/ownership_flow.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] 赋值/传参/返回正确标记为 Move
-- [ ] `consume(x)` 后 x 变空
-- [ ] `x = modify(x)` 推断为 Returns
-- [ ] `clone()` 正确复制，不影响原变量
+- [x] 赋值/传参/返回正确标记为 Move
+- [x] `consume(x)` 后 x 变空（Consumes 模式）
+- [x] `x = modify(x)` 推断为 Returns（复用 OwnershipFlowAnalyzer）
+- [x] `clone()` 正确复制，不影响原变量（内置函数处理）
+
+### 实现说明
+
+1. **复用 Phase 3 成果**
+   - 直接使用 `ownership_flow.rs` 中的 `ConsumeMode` 枚举
+   - `OwnershipFlowAnalyzer` 进行函数级消费模式分析
+
+2. **消费分析器设计**
+   ```
+   ConsumeMode::Returns     → 参数所有权回流，保持 Owned
+   ConsumeMode::Consumes   → 参数被消费，进入 Empty
+   ConsumeMode::Undetermined → 保守估计进入 Empty
+   ```
+
+3. **生命周期追踪**
+   ```
+   事件：Created → Consumed → Moved → Dropped → Returned
+   检测：未消费释放 / 多次消费 / 消费后使用 / 从未使用
+   ```
+
+4. **MoveChecker 集成**
+   - `check_call` 查询被调用函数的消费模式
+   - Returns 模式：参数状态不变
+   - Consumes 模式：参数进入 Empty
 
 ---
 
@@ -530,8 +567,8 @@ Phase 1 (字段不可变性)
 | `src/middle/passes/lifetime/control_flow.rs` | P2 | 控制流分析 |
 | `src/middle/passes/lifetime/ownership_flow.rs` | P3 ✅ | 所有权回流推断 |
 | `src/middle/passes/lifetime/chain_calls.rs` | P3 ✅ | 链式调用分析 |
-| `src/middle/passes/lifetime/consume_analysis.rs` | P4 | 消费标记系统 |
-| `src/middle/passes/lifetime/lifecycle.rs` | P4 | 变量生命周期追踪 |
+| `src/middle/passes/lifetime/consume_analysis.rs` | P4 ✅ | 消费标记系统 |
+| `src/middle/passes/lifetime/lifecycle.rs` | P4 ✅ | 变量生命周期追踪 |
 | `src/middle/passes/lifetime/unsafe_check.rs` | P7 | unsafe 检查 |
 | `src/middle/passes/lifetime/intra_task_cycle.rs` | P6 | 任务内循环处理 |
 | `src/std/rc.rs` | P8 | Rc/Weak 实现 |
@@ -561,8 +598,9 @@ Phase 1 (字段不可变性)
 | `src/middle/passes/mono/function.rs` | P1 | 适配 StructField |
 | `src/middle/passes/mono/module_state.rs` | P1 | 适配 StructField |
 | `src/middle/passes/mono/type_mono.rs` | P1 | 适配 field_mutability |
-| `src/middle/passes/lifetime/move_semantics.rs` | P2, P4 | 空状态检查、消费分析 |
+| `src/middle/passes/lifetime/move_semantics.rs` | P2, P4 ✅ | 空状态检查、消费分析 |
 | `src/middle/passes/lifetime/error.rs` | P3 | 回流错误诊断 |
+| `src/middle/passes/lifetime/ownership_flow.rs` | P4 | ConsumeMode 添加 Copy |
 | `src/frontend/core/parser/expr.rs` | P5 | ref 表达式解析 |
 | `src/frontend/typecheck/infer.rs` | P5 | ref 类型推断 |
 | `src/middle/passes/lifetime/ref_semantics.rs` | P5 | ref 所有权处理 |
