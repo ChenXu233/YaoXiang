@@ -1381,6 +1381,63 @@ impl AstToIrGenerator {
                     src: Operand::Local(src_reg),
                 });
             }
+            Expr::Unsafe { body, span: _ } => {
+                // unsafe 块：生成 UnsafeBlockStart/End 标记
+                // 生成 UnsafeBlockStart 指令
+                instructions.push(Instruction::UnsafeBlockStart);
+
+                // 生成块内语句的 IR
+                self.generate_block_ir(body, instructions, constants)?;
+
+                // 生成 UnsafeBlockEnd 指令
+                instructions.push(Instruction::UnsafeBlockEnd);
+
+                // unsafe 块作为表达式时返回 0
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Const(ConstValue::Int(0)),
+                });
+            }
+            Expr::UnOp { op, expr, span: _ } => {
+                // 一元运算符
+                match op {
+                    ast::UnOp::Deref => {
+                        // 解引用：*ptr
+                        // 生成指针表达式的 IR
+                        let src_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                        // 生成 PtrDeref 指令
+                        instructions.push(Instruction::PtrDeref {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(src_reg),
+                        });
+                    }
+                    ast::UnOp::Neg => {
+                        // 负号：-x
+                        let src_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                        instructions.push(Instruction::Neg {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(src_reg),
+                        });
+                    }
+                    ast::UnOp::Pos => {
+                        // 正号：+x（无操作）
+                        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+                    }
+                    ast::UnOp::Not => {
+                        // 逻辑非：!x
+                        let src_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                        // 生成一个简单的取反操作
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Const(ConstValue::Int(0)),
+                        });
+                    }
+                }
+            }
             _ => {
                 // 默认返回 0
                 instructions.push(Instruction::Load {

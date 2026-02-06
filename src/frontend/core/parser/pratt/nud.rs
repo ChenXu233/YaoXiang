@@ -29,10 +29,11 @@ impl<'a> ParserState<'a> {
     #[allow(clippy::type_complexity)]
     pub(crate) fn prefix_info(&self) -> Option<(u8, fn(&mut Self) -> Option<Expr>)> {
         match self.current().map(|t| &t.kind) {
-            // Unary operators
-            Some(TokenKind::Minus) | Some(TokenKind::Plus) | Some(TokenKind::Not) => {
-                Some((BP_UNARY, Self::parse_unary))
-            }
+            // Unary operators (including deref *)
+            Some(TokenKind::Minus)
+            | Some(TokenKind::Plus)
+            | Some(TokenKind::Not)
+            | Some(TokenKind::Star) => Some((BP_UNARY, Self::parse_unary)),
             // Literals
             Some(TokenKind::IntLiteral(_)) => Some((BP_HIGHEST, Self::parse_int_literal)),
             Some(TokenKind::FloatLiteral(_)) => Some((BP_HIGHEST, Self::parse_float_literal)),
@@ -59,33 +60,14 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
             // ref 关键字：创建 Arc
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
+            // unsafe 块：系统级操作
+            Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
             // Control flow expressions (return, break, continue)
             Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
             Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
             Some(TokenKind::KwContinue) => Some((BP_LOWEST, Self::parse_continue_expr)),
             _ => None,
         }
-    }
-
-    /// Parse unary operator expression
-    fn parse_unary(&mut self) -> Option<Expr> {
-        let span = self.span();
-        let op = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Minus) => UnOp::Neg,
-            Some(TokenKind::Plus) => UnOp::Pos,
-            Some(TokenKind::Not) => UnOp::Not,
-            _ => return None,
-        };
-        self.bump();
-
-        // Parse operand with higher binding power
-        let operand = self.parse_expression(BP_UNARY + 1)?;
-
-        Some(Expr::UnOp {
-            op,
-            expr: Box::new(operand),
-            span,
-        })
     }
 
     /// Parse ref expression: `ref expr` creates an Arc
@@ -98,6 +80,52 @@ impl<'a> ParserState<'a> {
 
         Some(Expr::Ref {
             expr: Box::new(expr),
+            span,
+        })
+    }
+
+    /// Parse unsafe block: `unsafe { ... }`
+    fn parse_unsafe(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'unsafe'
+
+        // Parse the block body
+        let body = if self.at(&TokenKind::LBrace) {
+            self.parse_block_expr()?
+        } else {
+            // Unsafe without braces is a single expression
+            let expr = self.parse_expression(BP_UNARY)?;
+            Block {
+                stmts: Vec::new(),
+                expr: Some(Box::new(expr)),
+                span: self.span(),
+            }
+        };
+
+        Some(Expr::Unsafe {
+            body: Box::new(body),
+            span,
+        })
+    }
+
+    /// Parse unary operator expression
+    fn parse_unary(&mut self) -> Option<Expr> {
+        let span = self.span();
+        let op = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Minus) => UnOp::Neg,
+            Some(TokenKind::Plus) => UnOp::Pos,
+            Some(TokenKind::Not) => UnOp::Not,
+            Some(TokenKind::Star) => UnOp::Deref,
+            _ => return None,
+        };
+        self.bump();
+
+        // Parse operand with higher binding power
+        let operand = self.parse_expression(BP_UNARY + 1)?;
+
+        Some(Expr::UnOp {
+            op,
+            expr: Box::new(operand),
             span,
         })
     }

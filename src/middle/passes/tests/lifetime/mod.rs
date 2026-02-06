@@ -12,6 +12,7 @@ mod move_semantics;
 mod mut_check;
 mod ref_semantics;
 mod send_sync;
+mod unsafe_check;
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};

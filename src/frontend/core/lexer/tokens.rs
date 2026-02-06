@@ -20,7 +20,7 @@ pub enum LexError {
 /// Token kind
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords (17 total)
+    // Keywords (18 total)
     KwType,
     KwPub,
     KwUse,
@@ -38,6 +38,7 @@ pub enum TokenKind {
     KwBreak,
     KwContinue,
     KwAs,
+    KwUnsafe,
 
     // Identifiers
     Identifier(String),

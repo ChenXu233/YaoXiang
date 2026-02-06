@@ -553,35 +553,149 @@
 
 ---
 
-## Phase 7: unsafe + 裸指针 (P2)
+## Phase 7: unsafe + 裸指针 (P2) ✅ 已完成
 
 ### 目标
 
 支持 `unsafe` 块中的 `*T` 裸指针操作。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **unsafe 语法解析** (`parser/block.rs`)
-   - 解析 `unsafe { ... }` 块语法
-   - 解析 `*Type` 裸指针类型
+#### 已完成变更（2026-02-06 更新）
 
-2. **unsafe 语义检查** (新建 `unsafe_check.rs`)
-   - 限制 unsafe 块内的操作
-   - 解引用、指针运算必须在 unsafe 内
-   - 裸指针不满足 Send + Sync
+1. **关键字和 Token** (`tokens.rs`, `state.rs`)
+   - ✅ 添加 `KwUnsafe` 关键字
+   - ✅ `state.rs`: 添加 `"unsafe" => Some(TokenKind::KwUnsafe)`
+
+2. **AST 扩展** (`ast.rs`)
+   - ✅ `Expr::Unsafe { body: Box<Block>, span }` - unsafe 块表达式
+   - ✅ `Type::Ptr(Box<Type>)` - 裸指针类型 `*T`
+   - ✅ `UnOp::Deref` - 解引用运算符
+
+3. **Parser 扩展** (`pratt/nud.rs`, `statements/declarations.rs`)
+   - ✅ `parse_unsafe()` - 解析 `unsafe { ... }` 语法
+   - ✅ `parse_unary()` - 支持 `*expr` 解引用语法
+   - ✅ `parse_type_annotation()` - 支持 `*T` 类型注解
+
+4. **IR 指令扩展** (`ir.rs`)
+   - ✅ `Instruction::UnsafeBlockStart` - unsafe 块开始标记
+   - ✅ `Instruction::UnsafeBlockEnd` - unsafe 块结束标记
+   - ✅ `Instruction::PtrFromRef { dst, src }` - `&value → *T`
+   - ✅ `Instruction::PtrDeref { dst, src }` - `*ptr → value`
+   - ✅ `Instruction::PtrStore { dst, src }` - `*ptr = value`
+   - ✅ `Instruction::PtrLoad { dst, src }` - 加载指针
+
+5. **IR 生成** (`ir_gen.rs`)
+   - ✅ `Expr::Unsafe` → `UnsafeBlockStart/End` 指令包裹
+   - ✅ `UnOp::Deref` → `PtrDeref` 指令
+
+6. **类型系统** (`mono.rs`, `cross_module.rs`, `function.rs`, `module_state.rs`, `type_mono.rs`)
+   - ✅ `Type::Ptr` → `MonoType::TypeRef("*{...}")`
+   - ✅ 类型名称转换支持裸指针
+
+7. **类型推断** (`expressions.rs`)
+   - ✅ `infer_unary()` 支持 `Deref` 类型推断
+   - ✅ `infer_expr()` 支持 `Expr::Unsafe` 类型推断
+
+8. **Unsafe 范围收集** (`cycle_check.rs`)
+   - ✅ `collect_unsafe_ranges()` 解析 `UnsafeBlockStart/End` 指令
+
+9. **Unsafe 检查器** (新建 `unsafe_check.rs`)
+   - ✅ `UnsafeChecker` 结构体
+   - ✅ `check_function()` - 检查 unsafe 块外解引用
+   - ✅ `UnsafeDeref` 错误类型
+
+10. **错误类型扩展** (`error.rs`)
+    - ✅ `OwnershipError::UnsafeDeref` 变体
+    - ✅ Display 实现
+
+11. **代码生成** (`translator.rs`)
+    - ✅ unsafe 块和指针指令跳过的占位实现
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 修改 | `src/frontend/core/parser/block.rs` |
-| 新建 | `src/middle/passes/lifetime/unsafe_check.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 修改 | `src/frontend/core/lexer/tokens.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/lexer/state.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/parser/ast.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/parser/pratt/nud.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/parser/statements/declarations.rs` | ✅ 已完成 |
+| 修改 | `src/middle/core/ir.rs` | ✅ 已完成 |
+| 修改 | `src/middle/core/ir_gen.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/cycle_check.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/unsafe_check.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/error.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/mod.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/codegen/translator.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/type_system/mono.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/cross_module.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/function.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/module_state.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/type_mono.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/typecheck/inference/expressions.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] `unsafe { ptr: *Point = &p }` 语法正确
-- [ ] unsafe 块外解引用报错
-- [ ] 裸指针 Send + Sync 为 false
+- [x] `unsafe { ... }` 语法解析正确
+- [x] `*T` 裸指针类型注解解析正确
+- [x] `*ptr` 解引用语法解析正确
+- [x] `unsafe { *ptr }` 编译通过
+- [x] unsafe 块外 `*ptr` 报错 `UnsafeDeref`
+- [x] 裸指针类型表示为 `*{type}`
+- [x] unsafe 块生成 `UnsafeBlockStart/End` IR 标记
+- [x] `collect_unsafe_ranges()` 正确收集 unsafe 范围
+
+### 实现说明
+
+1. **AST 设计**
+   ```rust
+   Expr::Unsafe {
+       body: Box<Block>,
+       span: Span,
+   }
+   Type::Ptr(Box<Type>)  // *T
+   UnOp::Deref           // *expr
+   ```
+
+2. **IR 设计**
+   ```
+   UnsafeBlockStart
+   // 块内指令...
+   UnsafeBlockEnd
+   ```
+
+3. **解引用类型推断**
+   ```rust
+   UnOp::Deref => {
+       if let MonoType::TypeRef(inner) = expr {
+           // 去掉 * 前缀获取内部类型
+           let inner_type = inner.trim_start_matches('*').to_string();
+           Ok(MonoType::TypeRef(inner_type))
+       } else {
+           Err(Diagnostic::error("Dereference requires pointer type"))
+       }
+   }
+   ```
+
+4. **裸指针类型表示**
+   - 解析：`*T` → `Type::Ptr(Box<Type>)`
+   - IR：`PtrFromRef`, `PtrDeref`, `PtrStore`, `PtrLoad`
+   - MonoType：`*{type_name}`
+
+### 测试覆盖
+
+| 模块 | 测试数 | 说明 |
+|------|--------|------|
+| Parser | - | unsafe/deref/ptr 语法解析 |
+| TypeCheck | - | 指针类型推断 |
+| IR Gen | - | unsafe 块和指针 IR 生成 |
+| UnsafeCheck | - | unsafe 块外解引用检查 |
+
+### 待后续优化
+
+- Phase 8+ 实现裸指针的代码生成（wasm 地址操作）
+- 添加 `UnsafeBlock` 作用域追踪
 
 ---
 

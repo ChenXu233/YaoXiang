@@ -247,6 +247,13 @@ impl Translator {
 
             LoadUpvalue { dst, upvalue_idx } => self.translate_load_upvalue(dst, *upvalue_idx),
             StoreUpvalue { src, upvalue_idx } => self.translate_store_upvalue(src, *upvalue_idx),
+
+            // unsafe 块和指针操作（暂不支持，跳过）
+            UnsafeBlockStart | UnsafeBlockEnd => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            PtrFromRef { .. } | PtrDeref { .. } | PtrStore { .. } | PtrLoad { .. } => {
+                Ok(BytecodeInstruction::new(Opcode::Nop, vec![]))
+            }
+
             CloseUpvalue(operand) => self.translate_close_upvalue(operand),
         }
     }

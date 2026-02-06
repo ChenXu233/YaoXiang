@@ -35,7 +35,7 @@ pub struct CycleChecker {
     /// 值定义追踪（用于追踪 ref 的来源）
     value_defs: HashMap<Operand, (Operand, (usize, usize))>,
     /// unsafe 块范围：(block_idx, start_instr, end_instr)
-    unsafe_ranges: Vec<(usize, usize, usize)>,
+    pub(crate) unsafe_ranges: Vec<(usize, usize, usize)>,
     /// unsafe 绕过记录（信息级别）
     unsafe_bypasses: Vec<OwnershipError>,
 }
@@ -116,25 +116,51 @@ impl CycleChecker {
 
     /// 收集 unsafe 块范围
     ///
-    /// 注意：当前 IR 没有显式的 unsafe 块标记指令。
-    /// Phase 7 实现 unsafe 语法后，这里解析 UnsafeBlockStart/End 指令。
-    fn collect_unsafe_ranges(
+    /// Phase 7 实现 unsafe 语法后，解析 UnsafeBlockStart/End 指令。
+    pub(crate) fn collect_unsafe_ranges(
         &mut self,
-        _func: &FunctionIR,
+        func: &FunctionIR,
     ) {
-        // TODO: Phase 7 实现 unsafe 语法后完善
-        // 预期：遍历指令，识别 UnsafeBlockStart/End 标记
-        // 当前版本：unsafe 范围为空，所有操作都会被检测
+        // 遍历所有基本块和指令
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            let mut in_unsafe = false;
+            let mut unsafe_start = None;
+
+            for (instr_idx, instr) in block.instructions.iter().enumerate() {
+                match instr {
+                    Instruction::UnsafeBlockStart => {
+                        // 开始 unsafe 块
+                        in_unsafe = true;
+                        unsafe_start = Some(instr_idx);
+                    }
+                    Instruction::UnsafeBlockEnd => {
+                        // 结束 unsafe 块
+                        if in_unsafe {
+                            if let Some(start) = unsafe_start {
+                                self.unsafe_ranges.push((block_idx, start, instr_idx));
+                            }
+                            in_unsafe = false;
+                            unsafe_start = None;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 
-    /// 检查是否为裸指针操作（预留，Phase 7 完善）
-    #[allow(dead_code)]
+    /// 检查是否为裸指针操作
     fn is_pointer_operation(
         &self,
-        _instr: &Instruction,
+        instr: &Instruction,
     ) -> bool {
-        // TODO: Phase 7 实现时检查操作数类型是否为 *T
-        false
+        matches!(
+            instr,
+            Instruction::PtrFromRef { .. }
+                | Instruction::PtrDeref { .. }
+                | Instruction::PtrStore { .. }
+                | Instruction::PtrLoad { .. }
+        )
     }
 
     /// 收集 spawn 的参数和返回值信息

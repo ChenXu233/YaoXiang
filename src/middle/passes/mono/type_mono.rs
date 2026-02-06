@@ -229,6 +229,10 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     value,
                 }
             }
+            AstType::Ptr(inner) => {
+                // 裸指针类型：*T
+                MonoType::TypeRef(format!("*{}", self.type_to_mono_type(inner).type_name()))
+            }
         }
     }
 
@@ -277,6 +281,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 Self::get_type_name(host_type) + "::" + assoc_name
             }
             AstType::Literal { name, base_type } => Self::get_type_name(base_type) + "::" + name,
+            AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
         }
     }
 
@@ -331,6 +336,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     || assoc_args.iter().any(|t| self.contains_type_var_type(t))
             }
             AstType::Literal { .. } => false,
+            AstType::Ptr(inner) => self.contains_type_var_type(inner),
         }
     }
 
@@ -413,6 +419,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen));
             }
             AstType::Literal { .. } => {}
+            AstType::Ptr(inner) => self.collect_type_vars_from_type(inner, type_params, seen),
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char

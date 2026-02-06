@@ -775,6 +775,9 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 name: name.clone(),
                 base_type: Box::new(self.substitute_type_ast(base_type, type_map)),
             },
+            AstType::Ptr(inner) => {
+                AstType::Ptr(Box::new(self.substitute_type_ast(inner, type_map)))
+            }
         }
     }
 

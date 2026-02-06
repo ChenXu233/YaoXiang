@@ -98,6 +98,12 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// unsafe 块：允许系统级操作
+    /// `unsafe { *ptr = ... }`
+    Unsafe {
+        body: Box<Block>,
+        span: Span,
+    },
     /// Lambda expression: (params) => body
     /// Used for RFC-007 function syntax: name = (params) => body
     Lambda {
@@ -133,6 +139,8 @@ pub enum UnOp {
     Neg,
     Pos,
     Not,
+    /// Dereference: `*ptr`
+    Deref,
 }
 
 /// Statement
@@ -309,6 +317,9 @@ pub enum Type {
         /// The underlying type (e.g., Int)
         base_type: Box<Type>,
     },
+    /// Raw pointer type: `*T`
+    /// Only usable inside unsafe blocks
+    Ptr(Box<Type>),
 }
 
 /// Block
