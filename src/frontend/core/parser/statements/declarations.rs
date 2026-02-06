@@ -1344,6 +1344,12 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
 /// Parse type annotation
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Star) => {
+            // Raw pointer type: *T
+            state.bump(); // consume '*'
+            let inner_type = Box::new(parse_type_annotation(state)?);
+            Some(Type::Ptr(inner_type))
+        }
         Some(TokenKind::Identifier(name)) => {
             let name = name.clone();
             state.bump();

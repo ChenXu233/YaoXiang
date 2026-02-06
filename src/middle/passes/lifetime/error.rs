@@ -214,6 +214,13 @@ pub enum OwnershipError {
         /// 发生位置
         span: (usize, usize),
     },
+    /// unsafe 块外解引用裸指针
+    UnsafeDeref {
+        /// 指令描述
+        instruction: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -367,6 +374,16 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "UnsafeBypassCycle (info): {} at {:?}. Cycle detection bypassed in unsafe block.",
                     details, span
+                )
+            }
+            OwnershipError::UnsafeDeref {
+                instruction,
+                location,
+            } => {
+                write!(
+                    f,
+                    "UnsafeDeref: cannot dereference raw pointer outside unsafe block: {} at {:?}",
+                    instruction, location
                 )
             }
         }

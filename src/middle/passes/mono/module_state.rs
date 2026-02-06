@@ -409,6 +409,10 @@ impl ModuleMonoState {
                 // 字面量类型：基础类型::名称
                 Self::get_type_name(base_type) + "::" + name
             }
+            Type::Ptr(inner) => {
+                // 裸指针类型：*T
+                format!("*{}", Self::get_type_name(inner))
+            }
         }
     }
 

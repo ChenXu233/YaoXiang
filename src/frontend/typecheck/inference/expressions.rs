@@ -210,6 +210,21 @@ impl<'a> ExprInferrer<'a> {
                     ))
                 }
             }
+            UnOp::Deref => {
+                // 解引用：*ptr 返回内部类型
+                // ptr 应该是 *T 形式
+                if let MonoType::TypeRef(inner) = expr {
+                    // 提取内部类型（去掉 * 前缀）
+                    let inner_type = inner.trim_start_matches('*').to_string();
+                    Ok(MonoType::TypeRef(inner_type))
+                } else {
+                    Err(Diagnostic::error(
+                        "E0502".to_string(),
+                        "Dereference requires pointer type".to_string(),
+                        None,
+                    ))
+                }
+            }
         }
     }
 
@@ -675,6 +690,16 @@ impl<'a> ExprInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Ref { expr, .. } => {
                 let expr_ty = self.infer_expr(expr)?;
                 Ok(MonoType::Arc(Box::new(expr_ty)))
+            }
+
+            // Unsafe 块
+            crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
+                // 推断块内最后一个表达式的类型作为 unsafe 块的类型
+                if let Some(last_expr) = &body.expr {
+                    self.infer_expr(last_expr)
+                } else {
+                    Ok(MonoType::Void)
+                }
             }
 
             // ListComp 表达式

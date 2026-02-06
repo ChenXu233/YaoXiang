@@ -381,6 +381,10 @@ impl From<ast::Type> for MonoType {
                 // The actual literal value is handled during const evaluation
                 MonoType::from(*base_type)
             }
+            ast::Type::Ptr(inner) => {
+                // Raw pointer type: *T
+                MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
+            }
         }
     }
 }

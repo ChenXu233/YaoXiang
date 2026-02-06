@@ -31,6 +31,7 @@ pub mod mut_check;
 pub mod ownership_flow;
 pub mod ref_semantics;
 pub mod send_sync;
+pub mod unsafe_check;
 
 pub use chain_calls::*;
 pub use clone::*;
@@ -45,6 +46,7 @@ pub use mut_check::*;
 pub use ownership_flow::*;
 pub use ref_semantics::*;
 pub use send_sync::*;
+pub use unsafe_check::*;
 
 /// 所有权分析结果
 #[derive(Debug, Clone)]
@@ -377,6 +379,13 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
 
         // Arc操作
         Instruction::ArcNew { dst, src } => vec![dst.clone(), src.clone()],
+
+        // unsafe 和指针操作
+        Instruction::UnsafeBlockStart | Instruction::UnsafeBlockEnd => Vec::new(),
+        Instruction::PtrFromRef { dst, src } => vec![dst.clone(), src.clone()],
+        Instruction::PtrDeref { dst, src } => vec![dst.clone(), src.clone()],
+        Instruction::PtrStore { dst, src } => vec![dst.clone(), src.clone()],
+        Instruction::PtrLoad { dst, src } => vec![dst.clone(), src.clone()],
     }
 }
 
