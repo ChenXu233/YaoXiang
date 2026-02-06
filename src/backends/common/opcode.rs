@@ -192,6 +192,9 @@ pub enum Opcode {
     ArcNew = 0x7B,
     ArcClone = 0x7C,
     ArcDrop = 0x7D,
+    /// Weak reference operations
+    WeakNew = 0x7E,
+    WeakUpgrade = 0x7F,
 
     // =====================
     // Function Call (0x80-0x8F)
@@ -353,6 +356,8 @@ impl Opcode {
             Opcode::ArcNew => "ArcNew",
             Opcode::ArcClone => "ArcClone",
             Opcode::ArcDrop => "ArcDrop",
+            Opcode::WeakNew => "WeakNew",
+            Opcode::WeakUpgrade => "WeakUpgrade",
             Opcode::CallStatic => "CallStatic",
             Opcode::CallVirt => "CallVirt",
             Opcode::CallDyn => "CallDyn",
@@ -506,6 +511,8 @@ impl Opcode {
             | Opcode::HeapAlloc
             | Opcode::ArcNew
             | Opcode::ArcClone
+            | Opcode::WeakNew
+            | Opcode::WeakUpgrade
             | Opcode::StringLength
             | Opcode::StringFromInt
             | Opcode::StringFromFloat
@@ -637,6 +644,8 @@ impl TryFrom<u8> for Opcode {
             0x7B => Ok(Opcode::ArcNew),
             0x7C => Ok(Opcode::ArcClone),
             0x7D => Ok(Opcode::ArcDrop),
+            0x7E => Ok(Opcode::WeakNew),
+            0x7F => Ok(Opcode::WeakUpgrade),
             0x80 => Ok(Opcode::CallStatic),
             0x81 => Ok(Opcode::CallVirt),
             0x82 => Ok(Opcode::CallDyn),

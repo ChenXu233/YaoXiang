@@ -5,9 +5,10 @@
 //! - Type definitions: `type Name = Type;`
 //! - Use imports: `use path;` or `use path.{item1, item2};`
 //! - Function definitions: `name: (ParamTypes) -> ReturnType = (params) => body;`
+//! - Mutability fields: `type Point = { x: Float, mut y: Float }`
 
 use crate::frontend::core::lexer::tokens::*;
-use crate::frontend::core::parser::ast::*;
+use crate::frontend::core::parser::ast::{StructField, *};
 use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
 use std::collections::HashSet;
@@ -793,6 +794,7 @@ fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>>
 /// Supports:
 /// - Type parameters: `[T]` or `[T: Clone]`
 /// - Const parameters: `[N: Int]` - const generic with type annotation
+/// - Platform parameter: `[P: X86_64]` - RFC-011 platform specialization
 pub fn parse_generic_params_with_constraints(
     state: &mut ParserState<'_>
 ) -> Option<Vec<GenericParam>> {
@@ -811,17 +813,31 @@ pub fn parse_generic_params_with_constraints(
         };
         state.bump();
 
+        // RFC-011: Check for reserved platform parameter P
+        // P is reserved for platform specialization: [P: X86_64]
+        let is_platform_param = name == "P";
+
         // Parse constraint: `T: Clone` or type annotation: `N: Int`
         let mut constraints = Vec::new();
 
         // Check for colon followed by type (could be either constraint or const type)
         if state.skip(&TokenKind::Colon) {
             if let Some(constraint_or_type) = parse_type_annotation(state) {
+                // RFC-011: Platform parameter handling
+                // [P: X86_64] - P is reserved, constraint is the platform type
+                if is_platform_param {
+                    // P is a special platform parameter, constraint is the platform type
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Platform, // Platform-specific parameter
+                        constraints: vec![constraint_or_type],
+                    });
+                }
                 // Determine if this is a Const parameter or a constraint
                 // Const parameter: [N: Int] where Int is the const's type
                 // Type constraint: [T: Clone] where Clone is a trait/type bound
                 // We distinguish by whether the type is a simple type name (const) or a trait-like type
-                if is_const_param_type(&constraint_or_type) {
+                else if is_const_param_type(&constraint_or_type) {
                     // This is a Const parameter: [N: Int]
                     params.push(GenericParam {
                         name,
@@ -841,17 +857,31 @@ pub fn parse_generic_params_with_constraints(
                 }
             } else {
                 // Fallback: type parameter without specific constraint
-                params.push(GenericParam {
-                    name,
-                    kind: GenericParamKind::Type,
-                    constraints,
-                });
+                if is_platform_param {
+                    // Platform parameter without constraint matches any platform
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Platform,
+                        constraints,
+                    });
+                } else {
+                    params.push(GenericParam {
+                        name,
+                        kind: GenericParamKind::Type,
+                        constraints,
+                    });
+                }
             }
         } else {
             // No colon: type parameter without constraint: [T]
+            // Platform parameter without constraint matches any platform
             params.push(GenericParam {
                 name,
-                kind: GenericParamKind::Type,
+                kind: if is_platform_param {
+                    GenericParamKind::Platform
+                } else {
+                    GenericParamKind::Type
+                },
                 constraints,
             });
         }
@@ -911,7 +941,7 @@ fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
                     Type::NamedStruct { name, fields } => {
                         let params = fields
                             .iter()
-                            .map(|(n, t)| (Some(n.clone()), t.clone()))
+                            .map(|f| (Some(f.name.clone()), f.ty.clone()))
                             .collect();
                         variants.push(VariantDef {
                             name: name.clone(),
@@ -1314,6 +1344,12 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
 /// Parse type annotation
 pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
     match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Star) => {
+            // Raw pointer type: *T
+            state.bump(); // consume '*'
+            let inner_type = Box::new(parse_type_annotation(state)?);
+            Some(Type::Ptr(inner_type))
+        }
         Some(TokenKind::Identifier(name)) => {
             let name = name.clone();
             state.bump();
@@ -1588,7 +1624,7 @@ fn parse_generic_type_bracket(
     Some(Type::Generic { name, args })
 }
 
-/// Parse named struct type: `Name(x: Type, y: Type)`
+/// Parse named struct type: `Name(x: Type, y: Type)` or `Name(mut x: Type, y: Type)`
 fn parse_named_struct_type(
     name: String,
     state: &mut ParserState<'_>,
@@ -1598,6 +1634,9 @@ fn parse_named_struct_type(
     let mut fields = Vec::new();
 
     while !state.at(&TokenKind::RParen) && !state.at_end() {
+        // 检查是否有关键字 mut
+        let is_mut = state.skip(&TokenKind::KwMut);
+
         let field_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => break,
@@ -1609,7 +1648,7 @@ fn parse_named_struct_type(
         }
 
         let field_type = parse_type_annotation(state)?;
-        fields.push((field_name, field_type));
+        fields.push(StructField::new(field_name, is_mut, field_type));
 
         if !state.skip(&TokenKind::Comma) {
             break;
@@ -1792,8 +1831,9 @@ fn parse_tuple_type(state: &mut ParserState<'_>) -> Option<Type> {
 
 /// Parse struct type like `{ field: Type }` or `{ field: Type, InterfaceName }`
 /// RFC-010 支持两种语法：
-/// - 普通字段: `type Point = { x: Float, y: Float }`
+/// - 普通字段: `type Point = { x: Float, mut y: Float }`
 /// - 接口约束: `type Point = { x: Float, Drawable, Serializable }`
+/// - 可变字段: `type Point = { mut x: Float, y: Float }`
 fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
@@ -1805,12 +1845,22 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
             let name = name.clone();
             state.bump();
 
+            // 检查下一个 token 是否是 mut 或冒号
+            let is_mut = state.skip(&TokenKind::KwMut);
+
             // 检查下一个 token 是否是冒号
             if state.at(&TokenKind::Colon) {
-                // 普通字段: name: Type
+                // 普通字段: [mut] name: Type
                 state.bump(); // consume ':'
                 let field_type = parse_type_annotation(state)?;
-                fields.push((name, field_type));
+                fields.push(StructField::new(name, is_mut, field_type));
+            } else if is_mut {
+                // mut 后面没有冒号是语法错误
+                state.error(ParseError::Message(format!(
+                    "Expected ':' after 'mut' in field '{}'",
+                    name
+                )));
+                return None;
             } else {
                 // 接口约束: InterfaceName
                 interfaces.push(name);

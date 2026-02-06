@@ -837,6 +837,7 @@ fn substitute_return_type(
                 .map(|(n, f)| (n.clone(), substitute_return_type(f, substitutions)))
                 .collect(),
             methods: s.methods.clone(),
+            field_mutability: s.field_mutability.clone(),
         }),
         MonoType::Enum(e) => MonoType::Enum(e.clone()),
         MonoType::Range { elem_type } => MonoType::Range {
@@ -856,6 +857,9 @@ fn substitute_return_type(
         MonoType::Arc(inner) => {
             MonoType::Arc(Box::new(substitute_return_type(inner, substitutions)))
         }
+        MonoType::Weak(inner) => {
+            MonoType::Weak(Box::new(substitute_return_type(inner, substitutions)))
+        }
         MonoType::AssocType {
             host_type,
             assoc_name,
@@ -870,4 +874,15 @@ fn substitute_return_type(
         },
         _ => ty.clone(),
     }
+}
+
+/// 获取函数名的重载候选数量
+pub fn overload_count(
+    env: &super::TypeEnvironment,
+    name: &str,
+) -> usize {
+    env.overload_candidates
+        .get(name)
+        .map(|v| v.len())
+        .unwrap_or(0)
 }

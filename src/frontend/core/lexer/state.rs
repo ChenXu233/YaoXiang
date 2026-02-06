@@ -48,6 +48,9 @@ impl LexerState {
             // Type casting and conversion
             "as" => Some(TokenKind::KwAs),
 
+            // System programming
+            "unsafe" => Some(TokenKind::KwUnsafe),
+
             // Boolean literals
             "true" => Some(TokenKind::BoolLiteral(true)),
             "false" => Some(TokenKind::BoolLiteral(false)),

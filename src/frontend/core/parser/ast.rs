@@ -98,6 +98,12 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// unsafe 块：允许系统级操作
+    /// `unsafe { *ptr = ... }`
+    Unsafe {
+        body: Box<Block>,
+        span: Span,
+    },
     /// Lambda expression: (params) => body
     /// Used for RFC-007 function syntax: name = (params) => body
     Lambda {
@@ -133,6 +139,8 @@ pub enum UnOp {
     Neg,
     Pos,
     Not,
+    /// Dereference: `*ptr`
+    Deref,
 }
 
 /// Statement
@@ -160,14 +168,12 @@ pub enum StmtKind {
         body: Box<Block>,
         label: Option<String>,
     },
+    /// Type definition: `type Name = { ... }`
     TypeDef {
         name: String,
         definition: Type,
     },
-    Module {
-        name: String,
-        items: Vec<Stmt>,
-    },
+    /// Use statement: `use module.path`
     Use {
         path: String,
         items: Option<Vec<String>>,
@@ -204,10 +210,6 @@ pub enum StmtKind {
         else_branch: Option<Box<Block>>,
         span: Span,
     },
-    /// Trait 定义: `type TraitName = { method: (params) -> ret }`
-    TraitDef(TraitDef),
-    /// Trait 实现: `impl TraitName for Type { ... }`
-    TraitImpl(TraitImpl),
 }
 
 /// Variant constructor definition (for variant types)
@@ -218,7 +220,28 @@ pub struct VariantDef {
     pub span: Span,
 }
 
-/// Generic parameter kind: Type parameter or Const parameter
+/// 结构体字段定义
+///
+/// 用于表示类型定义中的字段，包含可变性标记
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub is_mut: bool,
+    pub ty: Type,
+}
+
+impl StructField {
+    /// 创建新的结构体字段
+    pub fn new(
+        name: String,
+        is_mut: bool,
+        ty: Type,
+    ) -> Self {
+        Self { name, is_mut, ty }
+    }
+}
+
+/// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
 #[derive(Debug, Clone)]
 pub enum GenericParamKind {
     /// Type parameter: [T]
@@ -228,6 +251,9 @@ pub enum GenericParamKind {
         /// The type of the const parameter (e.g., Int)
         const_type: Box<Type>,
     },
+    /// Platform parameter: [P] or [P: X86_64]
+    /// RFC-011: P is reserved for platform specialization
+    Platform,
 }
 
 /// Generic parameter with constraints: `[T: Clone]` or `[N: Int]`
@@ -249,10 +275,10 @@ pub enum Type {
     Bytes,
     Bool,
     Void,
-    Struct(Vec<(String, Type)>),
+    Struct(Vec<StructField>),
     NamedStruct {
         name: String,
-        fields: Vec<(String, Type)>,
+        fields: Vec<StructField>,
     },
     Union(Vec<(String, Option<Type>)>),
     Enum(Vec<String>),
@@ -291,6 +317,9 @@ pub enum Type {
         /// The underlying type (e.g., Int)
         base_type: Box<Type>,
     },
+    /// Raw pointer type: `*T`
+    /// Only usable inside unsafe blocks
+    Ptr(Box<Type>),
 }
 
 /// Block
@@ -326,7 +355,8 @@ pub enum Pattern {
     Tuple(Vec<Pattern>),
     Struct {
         name: String,
-        fields: Vec<(String, Pattern)>,
+        /// 字段模式列表：(字段名, 是否可变, 模式)
+        fields: Vec<(String, bool, Box<Pattern>)>,
     },
     Union {
         name: String,
@@ -354,50 +384,4 @@ impl Default for Module {
             span: Span::dummy(),
         }
     }
-}
-
-// ============ Trait 相关结构体 ============
-
-/// Trait 方法定义
-#[derive(Debug, Clone)]
-pub struct TraitMethod {
-    pub name: String,
-    pub params: Vec<Param>,
-    pub return_type: Option<Type>,
-    pub span: Span,
-}
-
-/// Trait 定义
-#[derive(Debug, Clone)]
-pub struct TraitDef {
-    pub name: String,
-    /// 泛型参数列表
-    pub generic_params: Vec<GenericParam>,
-    /// Trait 方法列表
-    pub methods: Vec<TraitMethod>,
-    /// 父 Trait 列表（用于继承）
-    pub parent_traits: Vec<Type>,
-    /// Trait 定义的位置
-    pub span: Span,
-}
-
-/// Trait 实现块
-#[derive(Debug, Clone)]
-pub struct TraitImpl {
-    pub trait_name: String,
-    /// 实现针对的类型
-    pub for_type: Type,
-    /// 实现的方法
-    pub methods: Vec<MethodImpl>,
-    pub span: Span,
-}
-
-/// Trait 方法实现
-#[derive(Debug, Clone)]
-pub struct MethodImpl {
-    pub name: String,
-    pub params: Vec<Param>,
-    pub return_type: Option<Type>,
-    pub body: (Vec<Stmt>, Option<Box<Expr>>),
-    pub span: Span,
 }

@@ -173,6 +173,10 @@ impl SendSyncSolver {
                 // Arc 内部类型需要满足约束（因为 Arc 可以跨线程共享）
                 self.add_constraint(inner, require_send, require_sync);
             }
+            MonoType::Weak(inner) => {
+                // Weak 内部类型需要满足约束（基于 Arc）
+                self.add_constraint(inner, require_send, require_sync);
+            }
             MonoType::List(elem) => {
                 // 列表：约束传播到元素类型
                 self.add_constraint(elem, require_send, require_sync);
@@ -254,6 +258,8 @@ impl SendSyncSolver {
             | MonoType::Bytes => true,
             // Arc 默认 Send
             MonoType::Arc(_) => true,
+            // Weak 默认 Send（基于 Arc）
+            MonoType::Weak(_) => true,
             // 枚举默认 Send（只是标签）
             MonoType::Enum(_) => true,
             // 联合/交集类型需要所有成员 Send
@@ -310,6 +316,8 @@ impl SendSyncSolver {
             | MonoType::Bytes => true,
             // Arc 默认 Sync
             MonoType::Arc(_) => true,
+            // Weak 默认 Sync（基于 Arc）
+            MonoType::Weak(_) => true,
             // 枚举默认 Sync（只是标签）
             MonoType::Enum(_) => true,
             // 联合/交集类型需要所有成员 Sync

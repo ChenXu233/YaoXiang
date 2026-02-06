@@ -83,6 +83,7 @@ impl SpecializationAlgorithm {
                     .map(|(n, t)| (n.clone(), self.substitute_type(t)))
                     .collect(),
                 methods: s.methods.clone(),
+                field_mutability: s.field_mutability.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),

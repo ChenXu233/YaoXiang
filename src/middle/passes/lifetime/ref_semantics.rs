@@ -39,27 +39,27 @@ impl RefChecker {
     ) {
         match instr {
             Instruction::Move { dst, src } => {
-                // src 被移动
-                self.state.insert(src.clone(), ValueState::Moved);
+                // src 被移动（进入 Empty 状态）
+                self.state.insert(src.clone(), ValueState::Empty);
                 // dst 成为新所有者
-                self.state.insert(dst.clone(), ValueState::Owned);
+                self.state.insert(dst.clone(), ValueState::Owned(None));
                 // 记录 dst 的定义位置
                 self.definitions.insert(dst.clone(), self.location);
             }
             Instruction::Call { args, dst, .. } => {
-                // 参数被移动（所有权转移给函数）
+                // 参数被移动（所有权转移给函数，进入 Empty）
                 for arg in args {
-                    self.state.insert(arg.clone(), ValueState::Moved);
+                    self.state.insert(arg.clone(), ValueState::Empty);
                 }
                 // 如果有返回值，dst 成为新所有者
                 if let Some(d) = dst {
-                    self.state.insert(d.clone(), ValueState::Owned);
+                    self.state.insert(d.clone(), ValueState::Owned(None));
                     self.definitions.insert(d.clone(), self.location);
                 }
             }
             Instruction::Ret(Some(value)) => {
-                // 返回值被移动
-                self.state.insert(value.clone(), ValueState::Moved);
+                // 返回值被移动（进入 Empty）
+                self.state.insert(value.clone(), ValueState::Empty);
             }
             Instruction::Drop(operand) => {
                 // 标记为已释放
@@ -67,7 +67,7 @@ impl RefChecker {
             }
             Instruction::HeapAlloc { dst, .. } => {
                 // 新分配的值是有效的所有者
-                self.state.insert(dst.clone(), ValueState::Owned);
+                self.state.insert(dst.clone(), ValueState::Owned(None));
                 self.definitions.insert(dst.clone(), self.location);
             }
             Instruction::MakeClosure { dst, env, .. } => {
@@ -76,17 +76,17 @@ impl RefChecker {
                     self.state.insert(var.clone(), ValueState::Moved);
                 }
                 // dst 是新所有者
-                self.state.insert(dst.clone(), ValueState::Owned);
+                self.state.insert(dst.clone(), ValueState::Owned(None));
                 self.definitions.insert(dst.clone(), self.location);
             }
             // ArcNew: 创建 Arc，不影响原值的状态（原值仍有效）
             Instruction::ArcNew { dst, .. } => {
-                self.state.insert(dst.clone(), ValueState::Owned);
+                self.state.insert(dst.clone(), ValueState::Owned(None));
                 self.definitions.insert(dst.clone(), self.location);
             }
             // ArcClone: 克隆 Arc，不影响原值的状态
             Instruction::ArcClone { dst, .. } => {
-                self.state.insert(dst.clone(), ValueState::Owned);
+                self.state.insert(dst.clone(), ValueState::Owned(None));
                 self.definitions.insert(dst.clone(), self.location);
             }
             // ArcDrop: 释放 Arc，不影响原值的状态

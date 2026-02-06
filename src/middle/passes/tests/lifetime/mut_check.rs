@@ -98,25 +98,108 @@ fn test_immutable_store_index_error() {
 /// 测试：不可变变量上的 StoreField 应该报错
 #[test]
 fn test_immutable_store_field_error() {
-    let mut checker = MutChecker::new();
-    // 不记录 local_0 为可变
+    use crate::frontend::core::type_system::StructType;
 
+    let mut checker = MutChecker::new();
+
+    // 创建类型表：Point { x: Float (不可变), y: Float (可变) }
+    let mut type_table = std::collections::HashMap::new();
+    type_table.insert(
+        "Point".to_string(),
+        StructType {
+            name: "Point".to_string(),
+            fields: vec![
+                (
+                    "x".to_string(),
+                    crate::frontend::typecheck::MonoType::Float(64),
+                ),
+                (
+                    "y".to_string(),
+                    crate::frontend::typecheck::MonoType::Float(64),
+                ),
+            ],
+            methods: std::collections::HashMap::new(),
+            // 字段 0 不可变，字段 1 可变
+            field_mutability: vec![false, true],
+        },
+    );
+
+    // 设置类型表
+    checker = checker.with_type_table(type_table);
+
+    // 尝试给不可变字段 x (field 0) 赋值
     let instructions = vec![Instruction::StoreField {
         dst: Operand::Local(0),
-        field: 0,
+        field: 0, // x 字段
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        type_name: Some("Point".to_string()),
+        field_name: Some("x".to_string()),
     }];
 
     let func = create_test_function(instructions);
     let errors = checker.check_function(&func);
 
+    // 字段 0 不可变，应该报错 ImmutableFieldAssign
     assert_eq!(errors.len(), 1);
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
-            assert_eq!(value, "local_0");
+        OwnershipError::ImmutableFieldAssign {
+            struct_name,
+            field,
+            location: _,
+        } => {
+            assert_eq!(struct_name, "Point");
+            assert_eq!(field, "x");
         }
-        _ => panic!("Expected ImmutableAssign error"),
+        _ => panic!("Expected ImmutableFieldAssign error, got {:?}", errors[0]),
     }
+}
+
+/// 测试：可变字段的 StoreField 应该允许
+#[test]
+fn test_mutable_store_field_allowed() {
+    use crate::frontend::core::type_system::StructType;
+
+    let mut checker = MutChecker::new();
+
+    // 创建类型表：Point { x: Float (不可变), y: Float (可变) }
+    let mut type_table = std::collections::HashMap::new();
+    type_table.insert(
+        "Point".to_string(),
+        StructType {
+            name: "Point".to_string(),
+            fields: vec![
+                (
+                    "x".to_string(),
+                    crate::frontend::typecheck::MonoType::Float(64),
+                ),
+                (
+                    "y".to_string(),
+                    crate::frontend::typecheck::MonoType::Float(64),
+                ),
+            ],
+            methods: std::collections::HashMap::new(),
+            // 字段 0 不可变，字段 1 可变
+            field_mutability: vec![false, true],
+        },
+    );
+
+    // 设置类型表
+    checker = checker.with_type_table(type_table);
+
+    // 尝试给可变字段 y (field 1) 赋值
+    let instructions = vec![Instruction::StoreField {
+        dst: Operand::Local(0),
+        field: 1, // y 字段（可变）
+        src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        type_name: Some("Point".to_string()),
+        field_name: Some("y".to_string()),
+    }];
+
+    let func = create_test_function(instructions);
+    let errors = checker.check_function(&func);
+
+    // 字段 1 可变，应该不报错
+    assert_eq!(errors.len(), 0, "Expected no errors for mutable field");
 }
 
 /// 测试：变异方法调用应该报错（不可变对象）

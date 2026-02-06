@@ -44,7 +44,7 @@ impl Evaluator {
     }
 
     /// Evaluate code
-    pub fn eval(
+    pub fn evaluate(
         &mut self,
         code: &str,
     ) -> EvalResult {
@@ -80,7 +80,7 @@ impl Evaluator {
                                 // Extract definitions to context
                                 self.extract_definitions(&bytecode_module);
 
-                                // Note: execute_module doesn't return value yet
+                                // Return Ok (module executed successfully)
                                 EvalResult::Ok
                             }
                             Err(e) => EvalResult::Error(format!("Runtime error: {:?}", e)),
@@ -122,26 +122,44 @@ impl Evaluator {
             match c {
                 '\\' => escaped = true,
                 '"' => in_string = !in_string,
-                '{' if !in_string => braces += 1,
-                '}' if !in_string => {
-                    if braces == 0 {
-                        return true;
+                '{' => {
+                    if !in_string {
+                        braces += 1;
                     }
-                    braces -= 1;
                 }
-                '[' if !in_string => brackets += 1,
-                ']' if !in_string => {
-                    if brackets == 0 {
-                        return true;
+                '}' => {
+                    if !in_string {
+                        if braces == 0 {
+                            return true;
+                        }
+                        braces -= 1;
                     }
-                    brackets -= 1;
                 }
-                '(' if !in_string => parens += 1,
-                ')' if !in_string => {
-                    if parens == 0 {
-                        return true;
+                '[' => {
+                    if !in_string {
+                        brackets += 1;
                     }
-                    parens -= 1;
+                }
+                ']' => {
+                    if !in_string {
+                        if brackets == 0 {
+                            return true;
+                        }
+                        brackets -= 1;
+                    }
+                }
+                '(' => {
+                    if !in_string {
+                        parens += 1;
+                    }
+                }
+                ')' => {
+                    if !in_string {
+                        if parens == 0 {
+                            return true;
+                        }
+                        parens -= 1;
+                    }
                 }
                 _ => {}
             }
@@ -180,10 +198,52 @@ impl Evaluator {
     /// Extract defined variables and functions to context
     fn extract_definitions(
         &mut self,
-        _module: &BytecodeModule,
+        module: &BytecodeModule,
     ) {
-        // TODO: Extract actual definitions from bytecode
-        // For now, we track that evaluation happened
+        // Extract function definitions (skip main wrapper)
+        for func in &module.functions {
+            // Skip the main wrapper function
+            if func.name == "main" {
+                continue;
+            }
+
+            // Build signature string
+            let params: Vec<String> = func.params.iter().map(|p| format!("{:?}", p)).collect();
+            let signature = format!("fn({}) -> {:?}", params.join(", "), func.return_type);
+
+            self.context.define_function(
+                func.name.clone(),
+                signature,
+                format!("{:?}", func.return_type),
+            );
+        }
+
+        // Extract global variable definitions
+        for global in &module.globals {
+            // Skip internal variables
+            if global.name.starts_with("$") {
+                continue;
+            }
+
+            // Get type from type table
+            let type_str = if (global.type_id as usize) < module.type_table.len() {
+                format!("{:?}", &module.type_table[global.type_id as usize])
+            } else {
+                "unknown".to_string()
+            };
+
+            self.context.define_variable(global.name.clone(), type_str);
+        }
+    }
+
+    /// Get context reference
+    pub fn context(&self) -> &REPLContext {
+        &self.context
+    }
+
+    /// Get mutable context reference
+    pub fn context_mut(&mut self) -> &mut REPLContext {
+        &mut self.context
     }
 }
 
@@ -192,7 +252,7 @@ impl REPLBackend for Evaluator {
         &mut self,
         code: &str,
     ) -> EvalResult {
-        self.eval(code)
+        self.evaluate(code)
     }
 
     fn complete(

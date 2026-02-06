@@ -9,3 +9,4 @@ pub mod list;
 pub mod math;
 pub mod net;
 pub mod string;
+pub mod weak;

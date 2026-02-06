@@ -188,3 +188,47 @@ fn test_ref_bytecode_generation() {
         result.err()
     );
 }
+
+/// 测试嵌套 ref 表达式的字节码生成
+#[test]
+fn test_nested_ref_bytecode() {
+    let func = FunctionIR {
+        name: "test_nested_ref".to_string(),
+        params: vec![],
+        return_type: MonoType::Arc(Box::new(MonoType::Arc(Box::new(MonoType::Int(64))))),
+        is_async: false,
+        locals: vec![],
+        blocks: vec![crate::middle::core::ir::BasicBlock {
+            label: 0,
+            instructions: vec![
+                // inner = ref local_0
+                Instruction::ArcNew {
+                    dst: Operand::Temp(0),
+                    src: Operand::Local(0),
+                },
+                // outer = ref inner (Temp(0))
+                Instruction::ArcNew {
+                    dst: Operand::Temp(1),
+                    src: Operand::Temp(0),
+                },
+                Instruction::Ret(Some(Operand::Temp(1))),
+            ],
+            successors: vec![],
+        }],
+        entry: 0,
+    };
+
+    let module = ModuleIR {
+        types: vec![],
+        globals: vec![],
+        functions: vec![func],
+    };
+
+    let mut codegen = CodegenContext::new(module);
+    let result = codegen.generate();
+    assert!(
+        result.is_ok(),
+        "Failed to generate nested ref bytecode: {:?}",
+        result.err()
+    );
+}

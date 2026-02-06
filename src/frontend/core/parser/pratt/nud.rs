@@ -29,10 +29,11 @@ impl<'a> ParserState<'a> {
     #[allow(clippy::type_complexity)]
     pub(crate) fn prefix_info(&self) -> Option<(u8, fn(&mut Self) -> Option<Expr>)> {
         match self.current().map(|t| &t.kind) {
-            // Unary operators
-            Some(TokenKind::Minus) | Some(TokenKind::Plus) | Some(TokenKind::Not) => {
-                Some((BP_UNARY, Self::parse_unary))
-            }
+            // Unary operators (including deref *)
+            Some(TokenKind::Minus)
+            | Some(TokenKind::Plus)
+            | Some(TokenKind::Not)
+            | Some(TokenKind::Star) => Some((BP_UNARY, Self::parse_unary)),
             // Literals
             Some(TokenKind::IntLiteral(_)) => Some((BP_HIGHEST, Self::parse_int_literal)),
             Some(TokenKind::FloatLiteral(_)) => Some((BP_HIGHEST, Self::parse_float_literal)),
@@ -59,33 +60,14 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwFor) => Some((BP_HIGHEST, Self::parse_for)),
             // ref 关键字：创建 Arc
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
+            // unsafe 块：系统级操作
+            Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
             // Control flow expressions (return, break, continue)
             Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
             Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
             Some(TokenKind::KwContinue) => Some((BP_LOWEST, Self::parse_continue_expr)),
             _ => None,
         }
-    }
-
-    /// Parse unary operator expression
-    fn parse_unary(&mut self) -> Option<Expr> {
-        let span = self.span();
-        let op = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Minus) => UnOp::Neg,
-            Some(TokenKind::Plus) => UnOp::Pos,
-            Some(TokenKind::Not) => UnOp::Not,
-            _ => return None,
-        };
-        self.bump();
-
-        // Parse operand with higher binding power
-        let operand = self.parse_expression(BP_UNARY + 1)?;
-
-        Some(Expr::UnOp {
-            op,
-            expr: Box::new(operand),
-            span,
-        })
     }
 
     /// Parse ref expression: `ref expr` creates an Arc
@@ -98,6 +80,52 @@ impl<'a> ParserState<'a> {
 
         Some(Expr::Ref {
             expr: Box::new(expr),
+            span,
+        })
+    }
+
+    /// Parse unsafe block: `unsafe { ... }`
+    fn parse_unsafe(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'unsafe'
+
+        // Parse the block body
+        let body = if self.at(&TokenKind::LBrace) {
+            self.parse_block_expr()?
+        } else {
+            // Unsafe without braces is a single expression
+            let expr = self.parse_expression(BP_UNARY)?;
+            Block {
+                stmts: Vec::new(),
+                expr: Some(Box::new(expr)),
+                span: self.span(),
+            }
+        };
+
+        Some(Expr::Unsafe {
+            body: Box::new(body),
+            span,
+        })
+    }
+
+    /// Parse unary operator expression
+    fn parse_unary(&mut self) -> Option<Expr> {
+        let span = self.span();
+        let op = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Minus) => UnOp::Neg,
+            Some(TokenKind::Plus) => UnOp::Pos,
+            Some(TokenKind::Not) => UnOp::Not,
+            Some(TokenKind::Star) => UnOp::Deref,
+            _ => return None,
+        };
+        self.bump();
+
+        // Parse operand with higher binding power
+        let operand = self.parse_expression(BP_UNARY + 1)?;
+
+        Some(Expr::UnOp {
+            op,
+            expr: Box::new(operand),
             span,
         })
     }
@@ -654,7 +682,17 @@ impl<'a> ParserState<'a> {
             Expr::Call { func, args, .. } => {
                 // Constructor pattern: Name(patterns)
                 if let Expr::Var(name, _) = func.as_ref() {
+                    // Check if this looks like a struct pattern: Name { field, field, ... }
+                    // This would be parsed as a call with the struct literal
                     if args.len() == 1 {
+                        if let Expr::Block(block) = &args[0] {
+                            // This is a struct pattern: Name { ... }
+                            let fields = self.parse_struct_pattern_fields(block);
+                            return Pattern::Struct {
+                                name: name.clone(),
+                                fields,
+                            };
+                        }
                         Pattern::Union {
                             name: name.clone(),
                             variant: name.clone(),
@@ -674,7 +712,106 @@ impl<'a> ParserState<'a> {
                     Pattern::Wildcard
                 }
             }
+            Expr::Block(block) => {
+                // Check if this is a struct pattern: { x, mut y, ... }
+                // by looking for identifier patterns separated by commas
+                let fields = self.parse_struct_pattern_fields(block);
+                Pattern::Struct {
+                    name: String::new(), // Anonymous struct
+                    fields,
+                }
+            }
+            // 处理字段访问模式: `obj.field` 作为字段名
+            Expr::FieldAccess { expr, field, .. } => {
+                // 将字段访问转换为模式
+                if let Expr::Var(name, _) = expr.as_ref() {
+                    // 可能是一个简单的字段模式
+                    Pattern::Identifier(format!("{}.{}", name, field))
+                } else {
+                    Pattern::Wildcard
+                }
+            }
             _ => Pattern::Wildcard,
+        }
+    }
+
+    /// Parse fields from a block for struct pattern matching
+    /// Supports: { x, mut y, x: pat, mut y: pat }
+    #[allow(clippy::only_used_in_recursion)]
+    fn parse_struct_pattern_fields(
+        &self,
+        block: &Block,
+    ) -> Vec<(String, bool, Box<Pattern>)> {
+        let mut fields = Vec::new();
+
+        // Parse the block's expression (comma-separated identifiers/patterns)
+        if let Some(expr) = &block.expr {
+            match expr.as_ref() {
+                Expr::Tuple(elements, _) => {
+                    for element in elements {
+                        if let Some((name, is_mut, pattern)) = self.parse_pattern_field(element) {
+                            fields.push((name, is_mut, Box::new(pattern)));
+                        }
+                    }
+                }
+                _ => {
+                    if let Some((name, is_mut, pattern)) = self.parse_pattern_field(expr) {
+                        fields.push((name, is_mut, Box::new(pattern)));
+                    }
+                }
+            }
+        }
+
+        fields
+    }
+
+    /// Parse a single field in struct pattern: `x`, `mut y`, `x: pat`, `mut y: pat`
+    fn parse_pattern_field(
+        &self,
+        expr: &Expr,
+    ) -> Option<(String, bool, Pattern)> {
+        match expr {
+            Expr::Var(name, _) => {
+                // Simple identifier: `x` or `mut x`
+                // Check if name starts with "mut " prefix
+                if name.starts_with("mut ") {
+                    let field_name = name.trim_start_matches("mut ").trim().to_string();
+                    if field_name.is_empty() {
+                        return None;
+                    }
+                    // Default pattern for bare identifier
+                    Some((field_name.clone(), true, Pattern::Identifier(field_name)))
+                } else {
+                    Some((name.clone(), false, Pattern::Identifier(name.clone())))
+                }
+            }
+            Expr::Call { func, args, .. } => {
+                // Named field with pattern: `x: pat` or `mut x: pat`
+                if let Expr::Var(func_name, _) = func.as_ref() {
+                    let mut is_mut = false;
+                    let field_name = if func_name.starts_with("mut ") {
+                        is_mut = true;
+                        func_name.trim_start_matches("mut ").trim().to_string()
+                    } else {
+                        func_name.clone()
+                    };
+
+                    if field_name.is_empty() {
+                        return None;
+                    }
+
+                    // Parse the pattern from the argument
+                    let pattern = if !args.is_empty() {
+                        self.expr_to_pattern(&args[0])
+                    } else {
+                        Pattern::Identifier(field_name.clone())
+                    };
+
+                    return Some((field_name, is_mut, pattern));
+                }
+                None
+            }
+            _ => None,
         }
     }
 }

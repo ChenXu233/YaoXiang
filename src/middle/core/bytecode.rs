@@ -306,6 +306,16 @@ pub enum BytecodeInstr {
     ArcDrop {
         src: Reg,
     },
+    /// Create Weak from Arc
+    WeakNew {
+        dst: Reg,
+        src: Reg,
+    },
+    /// Upgrade Weak to Arc (returns Option)
+    WeakUpgrade {
+        dst: Reg,
+        src: Reg,
+    },
 
     // =====================
     // Function Call
@@ -479,6 +489,8 @@ impl BytecodeInstr {
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
+            BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
+            BytecodeInstr::WeakUpgrade { .. } => Opcode::WeakUpgrade,
             BytecodeInstr::CallStatic { .. } => Opcode::CallStatic,
             BytecodeInstr::CallVirt { .. } => Opcode::CallVirt,
             BytecodeInstr::CallDyn { .. } => Opcode::CallDyn,
@@ -531,6 +543,8 @@ impl BytecodeInstr {
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
             BytecodeInstr::ArcDrop { .. } => 2,
+            BytecodeInstr::WeakNew { .. } => 4,
+            BytecodeInstr::WeakUpgrade { .. } => 4,
             BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallVirt { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallDyn { args, .. } => 4 + args.len() * 2,

@@ -18,6 +18,8 @@ pub mod global;
 pub mod instance;
 pub mod instantiation_graph; // 实例化图
 pub mod module_state;
+pub mod platform_info; // 平台信息获取
+pub mod platform_specializer; // 平台特化器
 pub mod reachability; // 可达性分析
 #[cfg(test)]
 pub mod tests;
@@ -36,6 +38,8 @@ use self::function::FunctionMonomorphizer;
 use self::type_mono::TypeMonomorphizer;
 
 use self::dce::{DceConfig, DcePass};
+use self::platform_info::{PlatformDetector, PlatformInfo};
+use self::platform_specializer::{PlatformConstraint, SpecializationDecider};
 
 /// 单态化器
 #[derive(Debug)]
@@ -90,11 +94,28 @@ pub struct Monomorphizer {
 
     /// DCE 统计信息（可访问）
     dce_stats: Option<dce::DceStats>,
+
+    /// ==================== 平台特化相关 ====================
+
+    /// 当前目标平台信息
+    platform_info: PlatformInfo,
+
+    /// 平台特化决策器
+    specialization_decider: SpecializationDecider,
+
+    /// 函数平台约束映射（函数名 -> 平台约束）
+    /// 用于在实例化时检查是否应该实例化特定平台的版本
+    function_platform_constraints: HashMap<String, Option<PlatformConstraint>>,
 }
 
 impl Monomorphizer {
-    /// 创建新的单态化器
+    /// 创建新的单态化器（使用检测到的平台）
     pub fn new() -> Self {
+        Self::with_platform(PlatformDetector::detect_from_env())
+    }
+
+    /// 创建指定平台的单态化器
+    pub fn with_platform(platform_info: PlatformInfo) -> Self {
         Monomorphizer {
             instantiated_functions: HashMap::new(),
             instantiation_queue: Vec::new(),
@@ -114,11 +135,30 @@ impl Monomorphizer {
             // DCE 相关字段
             dce_config: DceConfig::default(),
             dce_stats: None,
+            // 平台特化相关字段
+            platform_info: platform_info.clone(),
+            specialization_decider: SpecializationDecider::new(&platform_info),
+            function_platform_constraints: HashMap::new(),
         }
+    }
+
+    /// 获取当前平台信息
+    pub fn platform_info(&self) -> &PlatformInfo {
+        &self.platform_info
+    }
+
+    /// 设置目标平台
+    pub fn set_target_platform(
+        &mut self,
+        platform_info: PlatformInfo,
+    ) {
+        self.platform_info = platform_info.clone();
+        self.specialization_decider = SpecializationDecider::new(&platform_info);
     }
 
     /// 创建带配置的单态化器
     pub fn with_dce_config(config: DceConfig) -> Self {
+        let platform_info = PlatformDetector::detect_from_env();
         Monomorphizer {
             instantiated_functions: HashMap::new(),
             instantiation_queue: Vec::new(),
@@ -138,6 +178,10 @@ impl Monomorphizer {
             // DCE 相关字段
             dce_config: config,
             dce_stats: None,
+            // 平台特化相关字段
+            platform_info: platform_info.clone(),
+            specialization_decider: SpecializationDecider::new(&platform_info),
+            function_platform_constraints: HashMap::new(),
         }
     }
 
@@ -180,7 +224,13 @@ impl Monomorphizer {
             .filter_map(|(id, inst)| inst.get_mono_type().map(|ty| (id.clone(), ty.clone())))
             .collect();
 
-        let result = dce_pass.run_on_module(module, &kept_functions, &kept_types, &entry_points);
+        let result = dce_pass.run_on_module(
+            module,
+            &kept_functions,
+            &kept_types,
+            &entry_points,
+            &self.generic_functions,
+        );
 
         // 保存统计信息
         self.dce_stats = Some(result.stats);

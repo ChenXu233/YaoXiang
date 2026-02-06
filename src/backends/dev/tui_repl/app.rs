@@ -16,6 +16,7 @@ use ratatui::{
 
 use crate::backends::dev::tui_repl::components::{HistoryPanel, DebugPanel, OutputConsole};
 use crate::backends::dev::repl::engine::Evaluator;
+use crate::backends::dev::repl::backend_trait::REPLBackend;
 use crate::backends::dev::repl::EvalResult;
 use crate::backends::dev::tui_repl::screens::{MainScreen, HistoryScreen, DebugScreen, HelpScreen};
 

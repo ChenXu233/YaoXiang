@@ -204,6 +204,9 @@ impl SendSyncChecker {
             // Arc: 总是 Send（原子引用计数）
             MonoType::Arc(inner) => self.is_send(inner),
 
+            // Weak: 基于 Arc，总是 Send
+            MonoType::Weak(inner) => self.is_send(inner),
+
             // Range: 元素类型必须 Send
             MonoType::Range { elem_type } => self.is_send(elem_type),
 
@@ -260,6 +263,9 @@ impl SendSyncChecker {
 
             // Arc: 总是 Sync（安全共享）
             MonoType::Arc(inner) => self.is_sync(inner),
+
+            // Weak: 基于 Arc，总是 Sync
+            MonoType::Weak(inner) => self.is_sync(inner),
 
             // Range: 元素类型必须 Sync
             MonoType::Range { elem_type } => self.is_sync(elem_type),

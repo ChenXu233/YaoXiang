@@ -6,6 +6,7 @@ use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, InstantiationRequest};
+use crate::middle::passes::mono::platform_specializer::PlatformConstraint;
 use std::collections::{HashMap, HashSet};
 
 /// 函数单态化相关trait
@@ -79,6 +80,12 @@ pub trait FunctionMonomorphizer {
         &self,
         generic_id: &GenericFunctionId,
     ) -> bool;
+
+    /// 获取函数的平台约束
+    fn get_function_platform_constraint(
+        &self,
+        func_name: &str,
+    ) -> Option<&PlatformConstraint>;
 
     /// 实例化单个函数
     fn instantiate_function(
@@ -402,9 +409,32 @@ impl FunctionMonomorphizer for super::Monomorphizer {
 
     fn should_specialize(
         &self,
-        _generic_id: &GenericFunctionId,
+        generic_id: &GenericFunctionId,
     ) -> bool {
-        true
+        // 检查函数是否有平台约束
+        let constraint = self.get_function_platform_constraint(generic_id.name());
+
+        match constraint {
+            Some(platform_constraint) => {
+                // 有平台约束，使用决策器判断
+                let decision = self.specialization_decider.decide(platform_constraint);
+                decision.should_specialize()
+            }
+            None => {
+                // 没有平台约束，始终实例化（通用版本）
+                true
+            }
+        }
+    }
+
+    /// 获取函数的平台约束
+    fn get_function_platform_constraint(
+        &self,
+        func_name: &str,
+    ) -> Option<&PlatformConstraint> {
+        self.function_platform_constraints
+            .get(func_name)
+            .and_then(|c| c.as_ref())
     }
 
     fn instantiate_function(
@@ -596,9 +626,159 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     fn substitute_type_ast(
         &self,
         ty: &AstType,
-        _type_map: &HashMap<usize, MonoType>,
+        type_map: &HashMap<usize, MonoType>,
     ) -> AstType {
-        ty.clone()
+        match ty {
+            // 基本类型直接返回
+            AstType::Name(_)
+            | AstType::Int(_)
+            | AstType::Float(_)
+            | AstType::Char
+            | AstType::String
+            | AstType::Bytes
+            | AstType::Bool
+            | AstType::Void
+            | AstType::Enum(_) => ty.clone(),
+
+            // 结构体：递归替换字段类型
+            AstType::Struct(fields) => AstType::Struct(
+                fields
+                    .iter()
+                    .map(|f| crate::frontend::core::parser::ast::StructField {
+                        name: f.name.clone(),
+                        is_mut: f.is_mut,
+                        ty: self.substitute_type_ast(&f.ty, type_map),
+                    })
+                    .collect(),
+            ),
+
+            // 命名结构体
+            AstType::NamedStruct { name, fields } => AstType::NamedStruct {
+                name: name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|f| crate::frontend::core::parser::ast::StructField {
+                        name: f.name.clone(),
+                        is_mut: f.is_mut,
+                        ty: self.substitute_type_ast(&f.ty, type_map),
+                    })
+                    .collect(),
+            },
+
+            // 联合类型
+            AstType::Union(members) => AstType::Union(
+                members
+                    .iter()
+                    .map(|(name, ty)| {
+                        (
+                            name.clone(),
+                            ty.as_ref().map(|t| self.substitute_type_ast(t, type_map)),
+                        )
+                    })
+                    .collect(),
+            ),
+
+            // 变体类型
+            AstType::Variant(variants) => AstType::Variant(
+                variants
+                    .iter()
+                    .map(|v| crate::frontend::core::parser::ast::VariantDef {
+                        name: v.name.clone(),
+                        params: v
+                            .params
+                            .iter()
+                            .map(|(n, t)| (n.clone(), self.substitute_type_ast(t, type_map)))
+                            .collect(),
+                        span: v.span,
+                    })
+                    .collect(),
+            ),
+
+            // 元组：递归替换元素类型
+            AstType::Tuple(types) => AstType::Tuple(
+                types
+                    .iter()
+                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .collect(),
+            ),
+
+            // 列表：替换元素类型
+            AstType::List(elem) => {
+                AstType::List(Box::new(self.substitute_type_ast(elem, type_map)))
+            }
+
+            // 字典：替换键值类型
+            AstType::Dict(key, value) => AstType::Dict(
+                Box::new(self.substitute_type_ast(key, type_map)),
+                Box::new(self.substitute_type_ast(value, type_map)),
+            ),
+
+            // 集合：替换元素类型
+            AstType::Set(elem) => AstType::Set(Box::new(self.substitute_type_ast(elem, type_map))),
+
+            // 函数类型：替换参数和返回类型
+            AstType::Fn {
+                params,
+                return_type,
+            } => AstType::Fn {
+                params: params
+                    .iter()
+                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .collect(),
+                return_type: Box::new(self.substitute_type_ast(return_type, type_map)),
+            },
+
+            // Option：替换内部类型
+            AstType::Option(inner) => {
+                AstType::Option(Box::new(self.substitute_type_ast(inner, type_map)))
+            }
+
+            // Result：替换 Ok 和 Err 类型
+            AstType::Result(ok, err) => AstType::Result(
+                Box::new(self.substitute_type_ast(ok, type_map)),
+                Box::new(self.substitute_type_ast(err, type_map)),
+            ),
+
+            // 泛型类型：替换类型参数
+            AstType::Generic { name, args } => AstType::Generic {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .collect(),
+            },
+
+            // 关联类型：递归替换
+            AstType::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => AstType::AssocType {
+                host_type: Box::new(self.substitute_type_ast(host_type, type_map)),
+                assoc_name: assoc_name.clone(),
+                assoc_args: assoc_args
+                    .iter()
+                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .collect(),
+            },
+
+            // Sum 类型
+            AstType::Sum(types) => AstType::Sum(
+                types
+                    .iter()
+                    .map(|t| self.substitute_type_ast(t, type_map))
+                    .collect(),
+            ),
+
+            // 字面量类型：替换基础类型
+            AstType::Literal { name, base_type } => AstType::Literal {
+                name: name.clone(),
+                base_type: Box::new(self.substitute_type_ast(base_type, type_map)),
+            },
+            AstType::Ptr(inner) => {
+                AstType::Ptr(Box::new(self.substitute_type_ast(inner, type_map)))
+            }
+        }
     }
 
     fn build_output_module(

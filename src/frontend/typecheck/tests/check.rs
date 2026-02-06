@@ -9,7 +9,7 @@ fn create_dummy_span() -> Span {
 
 #[test]
 fn test_check_var_with_initializer() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // x = 42
@@ -32,7 +32,7 @@ fn test_check_var_with_initializer() {
 
 #[test]
 fn test_check_var_with_type_annotation() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // x: Int = 42
@@ -56,7 +56,7 @@ fn test_check_var_with_type_annotation() {
 #[test]
 #[ignore] // 需要类型检查器完整实现才能检测此错误
 fn test_check_var_type_mismatch() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // x: String = 42
@@ -77,7 +77,7 @@ fn test_check_var_type_mismatch() {
     assert!(checker.check_stmt(&stmt).is_ok());
 
     // Now we need to solve constraints to see the error
-    let result = checker.check_module(&ast::Module {
+    let _result = checker.check_module(&ast::Module {
         items: vec![stmt],
         span: create_dummy_span(),
     });
@@ -85,7 +85,7 @@ fn test_check_var_type_mismatch() {
 
 #[test]
 fn test_check_expr_stmt() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // 42
@@ -102,7 +102,7 @@ fn test_check_expr_stmt() {
 
 #[test]
 fn test_check_type_alias() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // type MyInt = Int
@@ -141,7 +141,7 @@ fn test_check_type_alias() {
 
 #[test]
 fn test_check_for_loop() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // for i in [1, 2, 3] { i }
@@ -183,7 +183,7 @@ fn test_check_for_loop() {
 
 #[test]
 fn test_check_fn_def() {
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     // add(Int, Int) -> Int = (a, b) => a + b

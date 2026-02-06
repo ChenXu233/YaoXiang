@@ -12,7 +12,7 @@ pub mod reduce;
 pub mod unify;
 
 // 重新导出主要类型
-pub use normalize::TypeNormalizer;
+pub use normalize::{TypeNormalizer, NormalizationContext};
 pub use reduce::{TypeReducer, ReductionResult};
 pub use unify::{TypeUnifier, UnificationResult};
 pub use compute::TypeComputer;

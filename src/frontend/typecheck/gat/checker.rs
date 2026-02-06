@@ -95,7 +95,7 @@ impl GATChecker {
 
     /// 检查是否包含泛型参数
     #[allow(clippy::only_used_in_recursion)]
-    fn contains_generic_params(
+    pub fn contains_generic_params(
         &self,
         ty: &MonoType,
     ) -> bool {
@@ -158,7 +158,7 @@ impl GATChecker {
     }
 
     /// 检查关联类型是否定义
-    fn is_associated_type_defined(
+    pub fn is_associated_type_defined(
         &self,
         container: &str,
         assoc_type: &str,
@@ -174,7 +174,7 @@ impl GATChecker {
     }
 
     /// 检查关联类型约束
-    fn check_associated_type_constraints(
+    pub fn check_associated_type_constraints(
         &self,
         _container: &str,
         _assoc_type: &str,
@@ -186,7 +186,7 @@ impl GATChecker {
     }
 
     /// 检查关联类型泛型参数
-    fn check_associated_type_generics(
+    pub fn check_associated_type_generics(
         &self,
         _container: &str,
         _assoc_type: &str,

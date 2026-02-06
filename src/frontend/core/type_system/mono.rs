@@ -80,6 +80,8 @@ pub enum MonoType {
     Intersection(Vec<MonoType>),
     /// Arc 类型（原子引用计数）
     Arc(Box<MonoType>),
+    /// Weak 类型（不增加引用计数）
+    Weak(Box<MonoType>),
     /// 关联类型访问（如 T::Item）
     AssocType {
         /// 宿主类型
@@ -209,6 +211,7 @@ impl MonoType {
                 )
             }
             MonoType::Arc(t) => format!("Arc<{}>", t.type_name()),
+            MonoType::Weak(t) => format!("Weak<{}>", t.type_name()),
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -267,14 +270,26 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bytes => MonoType::Bytes,
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
-            ast::Type::Struct(fields) => MonoType::Struct(StructType {
-                name: String::new(),
-                fields: fields
+            ast::Type::Struct(fields) => {
+                let (field_names, field_types, field_mutability) = fields
                     .into_iter()
-                    .map(|(n, t)| (n, MonoType::from(t)))
-                    .collect(),
-                methods: HashMap::new(),
-            }),
+                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
+                    .fold(
+                        (Vec::new(), Vec::new(), Vec::new()),
+                        |(mut names, mut types, mut mutability), (n, t, m)| {
+                            names.push(n);
+                            types.push(t);
+                            mutability.push(m);
+                            (names, types, mutability)
+                        },
+                    );
+                MonoType::Struct(StructType {
+                    name: String::new(),
+                    fields: field_names.into_iter().zip(field_types).collect(),
+                    methods: HashMap::new(),
+                    field_mutability,
+                })
+            }
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
                 name: String::new(),
                 variants: variants.into_iter().map(|(n, _)| n).collect(),
@@ -333,14 +348,26 @@ impl From<ast::Type> for MonoType {
                 assoc_args: assoc_args.into_iter().map(MonoType::from).collect(),
             },
             // NamedStruct and Sum types (placeholder implementations)
-            ast::Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
-                name,
-                fields: fields
+            ast::Type::NamedStruct { name, fields } => {
+                let (field_names, field_types, field_mutability) = fields
                     .into_iter()
-                    .map(|(n, t)| (n, MonoType::from(t)))
-                    .collect(),
-                methods: HashMap::new(),
-            }),
+                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
+                    .fold(
+                        (Vec::new(), Vec::new(), Vec::new()),
+                        |(mut names, mut types, mut mutability), (n, t, m)| {
+                            names.push(n);
+                            types.push(t);
+                            mutability.push(m);
+                            (names, types, mutability)
+                        },
+                    );
+                MonoType::Struct(StructType {
+                    name,
+                    fields: field_names.into_iter().zip(field_types).collect(),
+                    methods: HashMap::new(),
+                    field_mutability,
+                })
+            }
             ast::Type::Sum(types) => {
                 // Sum type - treat as union for now
                 MonoType::TypeRef(format!(
@@ -357,6 +384,10 @@ impl From<ast::Type> for MonoType {
                 // The actual literal value is handled during const evaluation
                 MonoType::from(*base_type)
             }
+            ast::Type::Ptr(inner) => {
+                // Raw pointer type: *T
+                MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
+            }
         }
     }
 }
@@ -368,6 +399,21 @@ pub struct StructType {
     pub fields: Vec<(String, MonoType)>,
     /// 方法表：方法名 -> 方法类型
     pub methods: HashMap<String, PolyType>,
+    /// 字段可变性标记：与 fields 索引对应
+    pub field_mutability: Vec<bool>,
+}
+
+impl StructType {
+    /// 检查指定字段是否可变
+    pub fn field_is_mut(
+        &self,
+        field_name: &str,
+    ) -> Option<bool> {
+        self.fields
+            .iter()
+            .position(|(name, _)| name == field_name)
+            .map(|idx| self.field_mutability.get(idx).copied().unwrap_or(false))
+    }
 }
 
 // 为 StructType 实现自定义的 Hash 和 Eq
@@ -389,6 +435,7 @@ impl Hash for StructType {
     ) {
         self.name.hash(state);
         self.fields.hash(state);
+        self.field_mutability.hash(state);
     }
 }
 

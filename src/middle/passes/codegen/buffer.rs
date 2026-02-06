@@ -101,6 +101,11 @@ impl BytecodeBuffer {
         &self.bytecode
     }
 
+    /// 获取字节码内容（可变引用）
+    pub fn bytecode_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.bytecode
+    }
+
     /// 获取常量池
     pub fn into_constant_pool(self) -> ConstantPool {
         self.constant_pool

@@ -179,6 +179,10 @@ pub enum Instruction {
         dst: Operand,
         field: usize,
         src: Operand,
+        /// 结构体类型名（用于字段可变性检查）
+        type_name: Option<String>,
+        /// 字段名（用于错误信息）
+        field_name: Option<String>,
     },
     LoadIndex {
         dst: Operand,
@@ -227,6 +231,33 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
+    // =====================
+    // unsafe 块和裸指针指令
+    // =====================
+    /// Mark the start of an unsafe block
+    UnsafeBlockStart,
+    /// Mark the end of an unsafe block
+    UnsafeBlockEnd,
+    /// Create raw pointer from value: ptr = &value
+    PtrFromRef {
+        dst: Operand,
+        src: Operand,
+    },
+    /// Dereference pointer: value = *ptr
+    PtrDeref {
+        dst: Operand,
+        src: Operand,
+    },
+    /// Store through pointer: *ptr = value
+    PtrStore {
+        dst: Operand,
+        src: Operand,
+    },
+    /// Load from pointer: value = *ptr (combined deref and load)
+    PtrLoad {
+        dst: Operand,
+        src: Operand,
+    },
     // =====================
     // 字符串指令
     // =====================

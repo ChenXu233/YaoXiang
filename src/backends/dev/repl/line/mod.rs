@@ -1,12 +1,20 @@
 //! Line-based REPL with rustyline
 //!
-//! Provides a simple but feature-rich REPL using rustyline for editing.
+//! Provides a feature-rich REPL using rustyline for editing and history.
 
-use std::io::{self, Write};
+use std::io::{self};
 use std::path::PathBuf;
 
+use rustyline::config::Config;
+use rustyline::error::ReadlineError;
+use rustyline::{Editor, CompletionType, EditMode};
+
 use crate::backends::common::RuntimeValue;
-use crate::backends::dev::repl::EvalResult;
+use crate::backends::dev::repl::backend_trait::{REPLBackend, EvalResult};
+use crate::backends::dev::repl::commands::{CommandHandler, CommandResult};
+
+mod completer;
+pub use completer::REPLCompleter;
 
 /// Line REPL configuration
 #[derive(Debug, Clone)]
@@ -37,178 +45,130 @@ impl Default for LineREPLConfig {
 
 /// Line REPL
 ///
-/// A simple line-based REPL that supports basic history and editing.
+/// A line-based REPL with rustyline support for editing and history.
 #[derive(Debug)]
-pub struct LineREPL<B: super::backend_trait::REPLBackend> {
+pub struct LineREPL<B: REPLBackend> {
     /// Configuration
     config: LineREPLConfig,
+    /// rustyline editor
+    editor: Editor<(), rustyline::history::FileHistory>,
     /// Backend for evaluation
     backend: B,
-    /// Input buffer for multi-line input
-    buffer: String,
-    /// Whether we're in continuation mode
-    is_continuation: bool,
 }
 
-impl<B: super::backend_trait::REPLBackend> LineREPL<B> {
+impl<B: REPLBackend + 'static> LineREPL<B> {
     /// Create a new line REPL
-    pub fn new(backend: B) -> Self {
-        Self {
-            config: LineREPLConfig::default(),
-            backend,
-            buffer: String::new(),
-            is_continuation: false,
-        }
+    pub fn new(backend: B) -> Result<Self> {
+        Self::with_config(backend, LineREPLConfig::default())
     }
 
     /// Create with custom config
     pub fn with_config(
         backend: B,
         config: LineREPLConfig,
-    ) -> Self {
-        Self {
-            config,
-            backend,
-            buffer: String::new(),
-            is_continuation: false,
+    ) -> Result<Self> {
+        use std::io;
+
+        let rl_config = Config::builder()
+            .history_ignore_space(true)
+            .completion_type(CompletionType::List)
+            .edit_mode(if config.vi_mode {
+                EditMode::Vi
+            } else {
+                EditMode::Emacs
+            })
+            .build();
+
+        let mut editor = Editor::with_config(rl_config)
+            .map_err(|e| io::Error::other(format!("Readline error: {:?}", e)))?;
+
+        // Load history if file exists
+        if let Some(ref history_file) = config.history_file {
+            if history_file.exists() {
+                let _ = editor.load_history(history_file);
+            }
         }
+
+        Ok(Self {
+            config,
+            editor,
+            backend,
+        })
     }
 
     /// Run the REPL
-    pub fn run(&mut self) -> Result<(), io::Error> {
+    pub fn run(&mut self) -> Result<()> {
         println!("YaoXiang REPL - Type :help for assistance");
         println!("Press Ctrl+D or :quit to exit\n");
 
+        let mut in_continuation = false;
+
         loop {
-            let prompt = if self.is_continuation {
+            let prompt = if in_continuation {
                 &self.config.continuation_prompt
             } else {
                 &self.config.prompt
             };
 
-            print!("{}", prompt);
-            io::stdout().flush()?;
+            match self.editor.readline(prompt) {
+                Ok(line) => {
+                    in_continuation = false;
+                    let _ = self.editor.add_history_entry(&line);
 
-            let mut line = String::new();
-            let stdin = io::stdin();
-
-            if stdin.read_line(&mut line)? == 0 {
-                // Ctrl-D pressed
-                break;
-            }
-
-            let line = line.trim_end().to_string();
-
-            if line.is_empty() && !self.is_continuation {
-                continue;
-            }
-
-            // Check for command
-            if line.starts_with(':') {
-                if let Some(result) = self.handle_command(&line) {
-                    match result {
-                        super::commands::CommandResult::Exit => break,
-                        super::commands::CommandResult::Continue => {
-                            self.buffer.clear();
-                            self.is_continuation = false;
-                            continue;
-                        }
-                        super::commands::CommandResult::Output(msg) => {
-                            println!("{}", msg);
-                            self.buffer.clear();
-                            self.is_continuation = false;
-                            continue;
+                    // Handle commands
+                    if line.starts_with(':') {
+                        let mut command_handler = CommandHandler::new(&mut self.backend);
+                        if let Some(result) = command_handler.handle(&line) {
+                            match result {
+                                CommandResult::Exit => break,
+                                CommandResult::Continue => {
+                                    continue;
+                                }
+                                CommandResult::Output(msg) => {
+                                    println!("{}", msg);
+                                    continue;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // Add to buffer
-            if !self.buffer.is_empty() {
-                self.buffer.push('\n');
-            }
-            self.buffer.push_str(&line);
-
-            // Check if complete
-            if self.is_complete(&self.buffer) {
-                match self.backend.eval(&self.buffer) {
-                    EvalResult::Value(v) => {
-                        println!("{}", self.format_value(&v));
-                    }
-                    EvalResult::Error(e) => {
-                        println!("Error: {}", e);
-                    }
-                    EvalResult::Ok => {}
-                    EvalResult::Incomplete => {
-                        self.is_continuation = true;
-                        continue;
+                    // Evaluate
+                    match self.backend.eval(&line) {
+                        EvalResult::Value(v) => {
+                            println!("{}", self.format_value(&v));
+                        }
+                        EvalResult::Error(e) => {
+                            println!("Error: {}", e);
+                        }
+                        EvalResult::Incomplete => {
+                            // Continue multi-line input
+                            continue;
+                        }
+                        EvalResult::Ok => {}
                     }
                 }
-                self.buffer.clear();
-                self.is_continuation = false;
-            } else {
-                self.is_continuation = true;
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D pressed
+                    break;
+                }
+                Err(ReadlineError::Interrupted) => {
+                    // Ctrl-C pressed
+                    println!("(Interrupted)");
+                    let _ = self.editor.clear_screen();
+                    continue;
+                }
+                Err(e) => {
+                    return Err(io::Error::other(e.to_string()));
+                }
             }
+        }
+
+        // Save history
+        if let Some(ref history_file) = self.config.history_file {
+            let _ = self.editor.save_history(history_file);
         }
 
         Ok(())
-    }
-
-    /// Check if input is complete
-    fn is_complete(
-        &self,
-        code: &str,
-    ) -> bool {
-        let mut braces = 0;
-        let mut brackets = 0;
-        let mut parens = 0;
-        let mut in_string = false;
-        let mut escaped = false;
-
-        for c in code.chars() {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-
-            match c {
-                '\\' => escaped = true,
-                '"' => in_string = !in_string,
-                '{' if !in_string => braces += 1,
-                '}' if !in_string => {
-                    if braces == 0 {
-                        return true;
-                    }
-                    braces -= 1;
-                }
-                '[' if !in_string => brackets += 1,
-                ']' if !in_string => {
-                    if brackets == 0 {
-                        return true;
-                    }
-                    brackets -= 1;
-                }
-                '(' if !in_string => parens += 1,
-                ')' if !in_string => {
-                    if parens == 0 {
-                        return true;
-                    }
-                    parens -= 1;
-                }
-                _ => {}
-            }
-        }
-
-        braces == 0 && brackets == 0 && parens == 0 && !in_string && !escaped
-    }
-
-    /// Handle a command
-    fn handle_command(
-        &mut self,
-        line: &str,
-    ) -> Option<super::commands::CommandResult> {
-        let mut handler = super::commands::CommandHandler::new(&mut self.backend);
-        handler.handle(line)
     }
 
     /// Format a value for display
@@ -226,3 +186,17 @@ impl<B: super::backend_trait::REPLBackend> LineREPL<B> {
         }
     }
 }
+
+impl<B: REPLBackend> LineREPL<B> {
+    /// Get the backend reference
+    pub fn backend(&self) -> &B {
+        &self.backend
+    }
+
+    /// Get the backend mut reference
+    pub fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
+    }
+}
+
+type Result<T> = std::result::Result<T, io::Error>;
