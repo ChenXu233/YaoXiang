@@ -1369,6 +1369,18 @@ impl AstToIrGenerator {
                     constants,
                 )?;
             }
+            Expr::Ref { expr, span: _ } => {
+                // ref 表达式：创建 Arc
+                // 生成内部表达式的 IR
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                // 生成 ArcNew 指令
+                instructions.push(Instruction::ArcNew {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                });
+            }
             _ => {
                 // 默认返回 0
                 instructions.push(Instruction::Load {
