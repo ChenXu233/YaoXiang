@@ -699,37 +699,111 @@
 
 ---
 
-## Phase 8: Rc/Arc/Weak 标准库 (P1)
+## Phase 8: Weak 标准库 (P1) ✅ 已完成
 
 ### 目标
 
-实现 `std.rc` 和 `std.sync` 模块。
+实现 `std.weak.Weak` 模块，支持不阻止目标释放的弱引用。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **Rc/Weak 实现** (新建 `std/rc.rs`)
-   - `Rc::new()`, `Rc::clone()`
-   - `Weak::new()`, `Weak::upgrade()`
-   - 非原子计数，单线程安全
+**设计调整**：
+- 不实现 `std.rc` 和 `std.sync`（因为 `ref` 已满足需求）
+- 仅实现 `Weak[T]` 类型
 
-2. **Arc 实现** (新建 `std/sync.rs`)
-   - `Arc::new()`, `Arc::clone()`
-   - 原子计数，线程安全
-   - 自动满足 Send + Sync
+#### 已完成变更（2026-02-06 更新）
+
+1. **类型系统扩展** (`mono.rs`)
+   - ✅ 添加 `MonoType::Weak(Box<MonoType>)` 变体
+   - ✅ 更新 `type_name()` 方法
+
+2. **约束传播** (`constraint.rs`, `substitute.rs`)
+   - ✅ Weak 的 Send + Sync 约束传播
+   - ✅ Weak 的类型替换逻辑
+
+3. **类型检查** (`specialize.rs`, `overload.rs`)
+   - ✅ Weak 特化处理
+   - ✅ Weak 重载匹配
+
+4. **运行时支持** (`value.rs`)
+   - ✅ 添加 `RuntimeValue::Weak(std::sync::Weak<RuntimeValue>)`
+   - ✅ 实现 `upgrade()` 返回 `Option<RuntimeValue>`
+   - ✅ 实现 `from_arc_into_weak()` 创建 Weak
+
+5. **字节码指令** (`bytecode.rs`, `opcode.rs`)
+   - ✅ 添加 `BytecodeInstr::WeakNew` / `WeakUpgrade`
+   - ✅ 添加 `Opcode::WeakNew(0x7E)` / `WeakUpgrade(0x7F)`
+
+6. **解释器** (`executor.rs`)
+   - ✅ `WeakNew`: `Arc → Weak`
+   - ✅ `WeakUpgrade`: `Weak → Option<Arc>`
+
+7. **标准库** (`weak.rs`, `mod.rs`)
+   - ✅ 新建 `src/std/weak.rs`
+   - ✅ 注册 `pub mod weak`
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 新建 | `src/std/rc.rs` |
-| 新建 | `src/std/sync.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 修改 | `src/frontend/core/type_system/mono.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/type_system/constraint.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/core/type_system/substitute.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/typecheck/specialize.rs` | ✅ 已完成 |
+| 修改 | `src/frontend/typecheck/overload.rs` | ✅ 已完成 |
+| 修改 | `src/backends/common/value.rs` | ✅ 已完成 |
+| 修改 | `src/backends/common/opcode.rs` | ✅ 已完成 |
+| 修改 | `src/middle/core/bytecode.rs` | ✅ 已完成 |
+| 修改 | `src/backends/interpreter/executor.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/codegen/bytecode.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/send_sync.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/dce.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/instance.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/instantiation_graph.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/mono/type_mono.rs` | ✅ 已完成 |
+| 修改 | `src/lib.rs` | ✅ 已完成 |
+| 新建 | `src/std/weak.rs` | ✅ 已完成 |
+| 修改 | `src/std/mod.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] `use std.rc.{Rc, Weak}` 导入正确
-- [ ] `rc.clone()` 增加计数
-- [ ] `weak.upgrade()` 返回 Some/None
-- [ ] `Arc` 使用原子操作
+- [x] `use std.weak.Weak` 模块注册
+- [x] `MonoType::Weak` 类型系统支持
+- [x] `WeakNew` / `WeakUpgrade` 字节码指令
+- [x] `RuntimeValue::Weak` 运行时支持
+- [x] Send + Sync 约束传播
+- [x] 编译通过
+
+### 实现说明
+
+1. **Weak 设计**
+   ```
+   Arc[T] ──Weak::new()──► Weak[T] ──upgrade()──► Option[Arc[T]]
+   ```
+
+2. **字节码指令**
+   ```
+   WeakNew { dst, src }    # Arc -> Weak
+   WeakUpgrade { dst, src } # Weak -> Option<Arc>
+   ```
+
+3. **运行时行为**
+   - `WeakNew`: 使用 `Arc::downgrade()` 创建 Weak
+   - `WeakUpgrade`: 使用 `weak.upgrade()` 返回 Option
+   - Arc 释放后，upgrade 返回 None
+
+### 测试覆盖
+
+| 模块 | 测试数 | 说明 |
+|------|--------|------|
+| RuntimeValue::Weak | - | Weak 创建和升级 |
+| Executor WeakNew | - | 字节码执行 |
+| Executor WeakUpgrade | - | Option 返回 |
+
+### 待后续优化
+
+- 添加完整的解释器测试用例
+- 添加类型检查测试
 
 ---
 

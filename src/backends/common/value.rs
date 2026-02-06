@@ -80,6 +80,8 @@ pub enum ValueType {
     Ref(Box<ValueType>),
     /// Arc reference (same as Ref in runtime)
     Arc(Box<ValueType>),
+    /// Weak reference (does not increase ref count)
+    Weak(Box<ValueType>),
     /// Async value for concurrent model
     Async(Box<ValueType>),
     /// Raw pointer (only in unsafe blocks)
@@ -195,6 +197,9 @@ pub enum RuntimeValue {
     /// Thread-safe reference count (ref T keyword runtime representation)
     Arc(Arc<RuntimeValue>),
 
+    /// Weak reference (does not increase ref count)
+    Weak(std::sync::Weak<RuntimeValue>),
+
     /// Async value for concurrent model
     Async(Box<AsyncValue>),
 
@@ -260,6 +265,7 @@ impl RuntimeValue {
             RuntimeValue::Enum { type_id, .. } => ValueType::Enum(*type_id),
             RuntimeValue::Function(f) => ValueType::Function(f.func_id),
             RuntimeValue::Arc(inner) => ValueType::Arc(Box::new(inner.value_type(heap))),
+            RuntimeValue::Weak(_) => ValueType::Weak(Box::new(ValueType::Unit)),
             RuntimeValue::Async(v) => ValueType::Async(Box::new(v.value_type.clone())),
             RuntimeValue::Ptr { kind, .. } => ValueType::Ptr(*kind),
         }
@@ -417,6 +423,7 @@ impl RuntimeValue {
             },
             RuntimeValue::Function(f) => RuntimeValue::Function(f.clone()),
             RuntimeValue::Arc(arc) => RuntimeValue::Arc(arc.clone()),
+            RuntimeValue::Weak(weak) => RuntimeValue::Weak(weak.clone()),
             RuntimeValue::Async(a) => RuntimeValue::Async(a.clone()),
             RuntimeValue::Ptr {
                 kind,
@@ -532,6 +539,7 @@ impl RuntimeValue {
             },
             RuntimeValue::Function(f) => RuntimeValue::Function(f.clone()),
             RuntimeValue::Arc(arc) => RuntimeValue::Arc(arc.clone()),
+            RuntimeValue::Weak(weak) => RuntimeValue::Weak(weak.clone()),
             RuntimeValue::Async(a) => RuntimeValue::Async(a.clone()),
             RuntimeValue::Ptr {
                 kind,
@@ -542,6 +550,23 @@ impl RuntimeValue {
                 address: *address,
                 type_id: *type_id,
             },
+        }
+    }
+
+    /// Upgrade Weak to Arc (returns Option)
+    pub fn upgrade(&self) -> Option<RuntimeValue> {
+        match self {
+            RuntimeValue::Weak(weak) => weak.upgrade().map(RuntimeValue::Arc),
+            _ => None,
+        }
+    }
+
+    /// Create Weak from Arc
+    pub fn from_arc_into_weak(arc: RuntimeValue) -> Self {
+        if let RuntimeValue::Arc(inner) = arc {
+            RuntimeValue::Weak(std::sync::Arc::downgrade(&inner))
+        } else {
+            RuntimeValue::Unit
         }
     }
 
@@ -578,6 +603,7 @@ impl RuntimeValue {
             RuntimeValue::Struct { .. } => alloc::Layout::new::<super::heap::Handle>(),
             RuntimeValue::Enum { .. } => alloc::Layout::new::<(u32, Box<RuntimeValue>)>(),
             RuntimeValue::Arc(_) => alloc::Layout::new::<Arc<RuntimeValue>>(),
+            RuntimeValue::Weak(_) => alloc::Layout::new::<std::sync::Weak<RuntimeValue>>(),
             RuntimeValue::Async(_) => alloc::Layout::new::<AsyncState>(),
             RuntimeValue::Ptr { .. } => alloc::Layout::new::<usize>(),
             RuntimeValue::Function(_) => alloc::Layout::new::<FunctionValue>(),
@@ -636,6 +662,7 @@ impl fmt::Display for RuntimeValue {
             }
             RuntimeValue::Function(_) => write!(f, "function"),
             RuntimeValue::Arc(inner) => write!(f, "arc({})", inner),
+            RuntimeValue::Weak(_) => write!(f, "weak(...)"),
             RuntimeValue::Async(_) => write!(f, "async"),
             RuntimeValue::Ptr { kind, address, .. } => write!(f, "ptr({:?}, {:#x})", kind, address),
         }
@@ -689,6 +716,8 @@ impl PartialEq for RuntimeValue {
             ) => t1 == t2 && v1 == v2 && p1 == p2,
             (RuntimeValue::Function(f1), RuntimeValue::Function(f2)) => f1 == f2,
             (RuntimeValue::Arc(a), RuntimeValue::Arc(b)) => a == b,
+            // Weak equality is based on pointer identity
+            (RuntimeValue::Weak(a), RuntimeValue::Weak(b)) => a.ptr_eq(b),
             (RuntimeValue::Async(a), RuntimeValue::Async(b)) => a == b,
             (
                 RuntimeValue::Ptr {
@@ -750,6 +779,10 @@ impl Hash for RuntimeValue {
             RuntimeValue::Function(func) => func.func_id.hash(state),
             RuntimeValue::Arc(inner) => {
                 core::mem::discriminant(&**inner).hash(state);
+            }
+            RuntimeValue::Weak(_) => {
+                // Weak uses pointer identity for hashing
+                core::mem::discriminant(self).hash(state);
             }
             RuntimeValue::Async(_) => {
                 core::mem::discriminant(self).hash(state);

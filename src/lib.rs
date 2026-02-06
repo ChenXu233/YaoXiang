@@ -349,6 +349,9 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
         crate::frontend::typecheck::MonoType::Arc(inner) => {
             format!("Arc<{}>", dump_type_detail(inner))
         }
+        crate::frontend::typecheck::MonoType::Weak(inner) => {
+            format!("Weak<{}>", dump_type_detail(inner))
+        }
         crate::frontend::typecheck::MonoType::AssocType {
             host_type,
             assoc_name,

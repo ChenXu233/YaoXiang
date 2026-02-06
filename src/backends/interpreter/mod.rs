@@ -7,6 +7,9 @@ pub mod executor;
 pub mod frames;
 pub mod registers;
 
+#[cfg(test)]
+mod tests;
+
 pub use executor::Interpreter;
 pub use registers::RegisterFile;
 pub use frames::Frame;

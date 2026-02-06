@@ -827,6 +827,9 @@ impl<'a> InstantiationGraphBuilder<'a> {
             // Arc 包装：提取内部类型参数
             MonoType::Arc(inner) => Self::extract_type_args_from_type(inner),
 
+            // Weak 包装：提取内部类型参数
+            MonoType::Weak(inner) => Self::extract_type_args_from_type(inner),
+
             // 关联类型：提取主机类型和关联类型的参数
             MonoType::AssocType {
                 host_type,

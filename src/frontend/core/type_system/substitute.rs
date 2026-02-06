@@ -228,6 +228,7 @@ impl Substituter {
                     .collect(),
             ),
             MonoType::Arc(t) => MonoType::Arc(Box::new(self.substitute_internal(t, lookup))),
+            MonoType::Weak(t) => MonoType::Weak(Box::new(self.substitute_internal(t, lookup))),
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -268,6 +269,7 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
             types.iter().any(contains_type_vars)
         }
         MonoType::Arc(t) => contains_type_vars(t),
+        MonoType::Weak(t) => contains_type_vars(t),
         MonoType::AssocType {
             host_type,
             assoc_args,

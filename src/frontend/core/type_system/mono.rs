@@ -80,6 +80,8 @@ pub enum MonoType {
     Intersection(Vec<MonoType>),
     /// Arc 类型（原子引用计数）
     Arc(Box<MonoType>),
+    /// Weak 类型（不增加引用计数）
+    Weak(Box<MonoType>),
     /// 关联类型访问（如 T::Item）
     AssocType {
         /// 宿主类型
@@ -209,6 +211,7 @@ impl MonoType {
                 )
             }
             MonoType::Arc(t) => format!("Arc<{}>", t.type_name()),
+            MonoType::Weak(t) => format!("Weak<{}>", t.type_name()),
             MonoType::AssocType {
                 host_type,
                 assoc_name,

@@ -857,6 +857,9 @@ fn substitute_return_type(
         MonoType::Arc(inner) => {
             MonoType::Arc(Box::new(substitute_return_type(inner, substitutions)))
         }
+        MonoType::Weak(inner) => {
+            MonoType::Weak(Box::new(substitute_return_type(inner, substitutions)))
+        }
         MonoType::AssocType {
             host_type,
             assoc_name,

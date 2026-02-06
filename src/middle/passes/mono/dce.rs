@@ -725,6 +725,9 @@ impl DcePass {
             | MonoType::TypeVar(_)
             | MonoType::TypeRef(_) => vec![],
 
+            // Arc 和 Weak：提取内部类型参数
+            MonoType::Arc(t) | MonoType::Weak(t) => self.extract_type_args(t),
+
             // 联合和交集类型
             MonoType::Union(types) | MonoType::Intersection(types) => types
                 .iter()
@@ -769,9 +772,6 @@ impl DcePass {
                 args.extend(self.extract_type_args(return_type));
                 args
             }
-
-            // Arc 包装
-            MonoType::Arc(inner) => self.extract_type_args(inner),
 
             // 关联类型
             MonoType::AssocType {
