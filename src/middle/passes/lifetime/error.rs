@@ -200,6 +200,20 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 任务内循环引用（警告，不阻断编译）
+    IntraTaskCycle {
+        /// 详细信息
+        details: String,
+        /// 发生位置
+        span: (usize, usize),
+    },
+    /// unsafe 块绕过循环检测（信息记录）
+    UnsafeBypassCycle {
+        /// 详细信息
+        details: String,
+        /// 发生位置
+        span: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -339,6 +353,20 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "ConsumedNotReturned: parameter '{}' of function '{}' is consumed but not returned at {:?}",
                     param, function, location
+                )
+            }
+            OwnershipError::IntraTaskCycle { details, span } => {
+                write!(
+                    f,
+                    "IntraTaskCycle (warning): {} at {:?}. Note: intra-task cycles are allowed but may cause memory leaks until task ends.",
+                    details, span
+                )
+            }
+            OwnershipError::UnsafeBypassCycle { details, span } => {
+                write!(
+                    f,
+                    "UnsafeBypassCycle (info): {} at {:?}. Cycle detection bypassed in unsafe block.",
+                    details, span
                 )
             }
         }

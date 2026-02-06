@@ -24,6 +24,7 @@ pub mod consume_analysis;
 pub mod cycle_check;
 pub mod drop_semantics;
 pub mod error;
+pub mod intra_task_cycle;
 pub mod lifecycle;
 pub mod move_semantics;
 pub mod mut_check;
@@ -37,6 +38,7 @@ pub use consume_analysis::*;
 pub use cycle_check::*;
 pub use drop_semantics::*;
 pub use error::*;
+pub use intra_task_cycle::*;
 pub use lifecycle::*;
 pub use move_semantics::*;
 pub use mut_check::*;
@@ -103,7 +105,8 @@ impl Lifetime {
 
 /// 统一的所有权检查器
 ///
-/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、Send/Sync 检查和跨 spawn 循环检查，返回所有错误。
+/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、Send/Sync 检查、
+/// 跨 spawn 循环检查和任务内循环追踪，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
     move_checker: MoveChecker,
@@ -113,6 +116,7 @@ pub struct OwnershipChecker {
     clone_checker: CloneChecker,
     send_sync_checker: SendSyncChecker,
     cycle_checker: CycleChecker,
+    intra_task_tracker: IntraTaskCycleTracker,
 }
 
 impl OwnershipChecker {
@@ -126,6 +130,7 @@ impl OwnershipChecker {
             clone_checker: CloneChecker::default(),
             send_sync_checker: SendSyncChecker::new(),
             cycle_checker: CycleChecker::new(),
+            intra_task_tracker: IntraTaskCycleTracker::new(),
         }
     }
 
@@ -142,7 +147,10 @@ impl OwnershipChecker {
         let send_sync_errors = self.send_sync_checker.check_function(func);
         let cycle_errors = self.cycle_checker.check_function(func);
 
-        // 合并错误
+        // 任务内循环追踪（警告模式，不计入错误）
+        let _intra_task_warnings = self.intra_task_tracker.track_function(func);
+
+        // 合并错误（不包含任务内循环警告）
         move_errors
             .iter()
             .chain(drop_errors)
@@ -188,6 +196,16 @@ impl OwnershipChecker {
     /// 获取跨 spawn 循环检查的错误
     pub fn cycle_errors(&self) -> &[OwnershipError] {
         self.cycle_checker.errors()
+    }
+
+    /// 获取任务内循环警告（不阻断编译）
+    pub fn intra_task_warnings(&self) -> &[OwnershipError] {
+        self.intra_task_tracker.warnings()
+    }
+
+    /// 获取 unsafe 绕过记录
+    pub fn unsafe_bypasses(&self) -> &[OwnershipError] {
+        self.cycle_checker.unsafe_bypasses()
     }
 }
 
