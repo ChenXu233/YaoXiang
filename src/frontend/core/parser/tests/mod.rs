@@ -1,4 +1,3 @@
-//! Parser tests module
 //!
 //! Organized test modules for better maintainability:
 //! - basic: 基础语法解析测试
@@ -10,6 +9,7 @@
 //! - unified_syntax_debug: RFC 统一语法调试测试
 //! - old_syntax_rejection: 旧语法兼容性检查
 //! - boundary: 边界情况测试
+//! - unsafe_ptr: unsafe 和裸指针测试（RFC-009 Phase 7）
 
 mod basic;
 mod boundary;
@@ -18,3 +18,4 @@ mod old_syntax_rejection;
 mod ref_test;
 mod state;
 mod syntax_validation;
+mod unsafe_ptr;

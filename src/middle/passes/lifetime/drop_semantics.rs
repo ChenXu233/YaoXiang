@@ -66,8 +66,11 @@ impl DropChecker {
                     value: operand_to_string(value),
                 });
             }
-            Some(ValueState::Owned) => {
+            Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
+            }
+            Some(ValueState::Empty) => {
+                // Empty 状态的值也可以被 Drop，保持 Empty
             }
             None => {
                 self.state.insert(value.clone(), ValueState::Dropped);
@@ -80,8 +83,8 @@ impl DropChecker {
         dst: &Operand,
         src: &Operand,
     ) {
-        self.state.insert(dst.clone(), ValueState::Owned);
-        if let Some(ValueState::Owned) = self.state.get(src) {
+        self.state.insert(dst.clone(), ValueState::Owned(None));
+        if let Some(ValueState::Owned(_)) = self.state.get(src) {
             self.state.insert(src.clone(), ValueState::Moved);
         } else if !self.state.contains_key(src) {
             self.state.insert(src.clone(), ValueState::Moved);

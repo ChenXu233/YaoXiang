@@ -34,6 +34,9 @@ pub mod overload;
 // 导入错误处理
 pub mod errors;
 
+// 导入类型求值器模块
+pub mod type_eval;
+
 // 导入测试模块
 #[cfg(test)]
 mod tests;
@@ -53,6 +56,7 @@ pub use specialize::*;
 pub use gat::*;
 pub use overload::*;
 pub use errors::*;
+pub use type_eval::*;
 
 // 类型环境
 #[derive(Debug, Default)]
@@ -271,6 +275,7 @@ impl TypeChecker {
     pub fn new(module_name: &str) -> Self {
         let mut env = TypeEnvironment::new_with_module(module_name.to_string());
         add_builtin_types(&mut env);
+        add_std_traits(&mut env);
 
         Self {
             env,
@@ -555,6 +560,56 @@ impl TypeChecker {
     ) {
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         self.env.add_type(name.to_string(), poly);
+
+        // 自动为 Record 类型派生标准库 traits
+        self.auto_derive_traits(name, definition);
+    }
+
+    /// 为 Record 类型自动派生标准库 traits
+    ///
+    /// 规则：
+    /// 1. Record 的所有字段都实现了某 trait → 自动派生该 trait
+    /// 2. 显式定义的方法会覆盖自动派生
+    fn auto_derive_traits(
+        &mut self,
+        type_name: &str,
+        definition: &crate::frontend::core::parser::ast::Type,
+    ) {
+        // 提取字段列表
+        let fields = match definition {
+            crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
+            crate::frontend::core::parser::ast::Type::Struct(fields) => fields,
+            _ => return, // 非 Record 类型不自动派生
+        };
+
+        // 获取 trait 表的引用（用于检查）
+        let trait_table = &self.env.trait_table;
+
+        // 为每个内置可派生 trait 尝试自动派生
+        let mut impls_to_add = Vec::new();
+
+        for trait_name in super::type_level::auto_derive::BUILTIN_DERIVES {
+            // 检查是否可以自动派生
+            let can_derive =
+                super::type_level::auto_derive::can_auto_derive(trait_table, trait_name, fields);
+
+            if can_derive {
+                // 检查是否已有显式实现
+                if !self.env.has_trait_impl(trait_name, type_name) {
+                    // 生成自动派生实现
+                    if let Some(impl_) =
+                        super::type_level::auto_derive::generate_auto_derive(type_name, trait_name)
+                    {
+                        impls_to_add.push(impl_);
+                    }
+                }
+            }
+        }
+
+        // 批量添加实现（避免借用冲突）
+        for impl_ in impls_to_add {
+            self.env.add_trait_impl(impl_);
+        }
     }
 
     /// 自动将函数绑定到类型
@@ -692,6 +747,15 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
+}
+
+/// 添加标准库 traits 到环境
+pub fn add_std_traits(env: &mut TypeEnvironment) {
+    // 初始化标准库 trait 定义
+    super::type_level::std_traits::init_std_traits(&mut env.trait_table);
+
+    // 初始化 primitive 类型的 trait 实现
+    super::type_level::std_traits::init_primitive_impls(&mut env.trait_table);
 }
 
 /// 类型检查结果

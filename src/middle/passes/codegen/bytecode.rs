@@ -90,6 +90,11 @@ impl BytecodeInstruction {
         bytes.extend(&self.operands);
         bytes
     }
+
+    /// 获取编码后的大小
+    pub fn encoded_size(&self) -> usize {
+        1 + self.operands.len()
+    }
 }
 
 /// 将 FunctionCode 编码为字节序列
@@ -233,8 +238,9 @@ impl MonoTypeExt for MonoType {
             MonoType::Union(_) => 40,
             MonoType::Intersection(_) => 40,
             MonoType::Arc(_) => 45,
-            MonoType::AssocType { .. } => 46, // 使用新的类型ID
-            MonoType::Literal { .. } => 47,   // 字面量类型
+            MonoType::Weak(_) => 46,
+            MonoType::AssocType { .. } => 47, // 使用新的类型ID
+            MonoType::Literal { .. } => 48,   // 字面量类型
         }
     }
 

@@ -220,6 +220,7 @@ fn test_mono_type_struct() {
             ("y".to_string(), MonoType::Int(64)),
         ],
         methods: HashMap::new(),
+        field_mutability: vec![],
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.name == "Point"));
 }
@@ -230,6 +231,7 @@ fn test_mono_type_struct_empty() {
         name: "Empty".to_string(),
         fields: vec![],
         methods: HashMap::new(),
+        field_mutability: vec![],
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.fields.is_empty()));
 }

@@ -3,18 +3,7 @@
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2025-02-04（v8.0：简化消费分析 + 明确逆函数生成规则）
-
-## 参考文档
-
-本文档的设计基于以下文档，并作为 language-spec 的详细设计来源：
-
-| 文档 | 关系 | 说明 |
-|------|------|------|
-| [language-spec](../language-spec.md) | **规范目标** | 本 RFC 的设计将整合到语言规范中 |
-| [manifesto](../manifesto.md) | **设计哲学** | 零成本抽象、默认不可变、无 GC |
-| [RFC-001 并作模型](./001-concurrent-model-error-handling.md) | **并发安全** | DAG 资源分析 + 结构化并发 |
-| [RFC-008 运行时并发模型](./accepted/008-runtime-concurrency-model.md) | **运行时集成** | 运行时内存管理与所有权的集成 |
+> **最后更新**: 2025-02-05（精简版 v1）
 
 ## 摘要
 
@@ -474,27 +463,24 @@ print(copy.name)            # 读副本
 #[reversible]
 increment: (counter: Counter) -> Counter {
     counter.value += 1
-    counter
+    return counter
 }
 
 # 编译器生成逆函数
 undo_increment: (counter: Counter) -> Counter {
     counter.value -= 1
-    counter
+    return counter
 }
 
 # ❌ 错误：没有标注，不会生成逆函数
 double: (x: Int) -> Int {
-    x * 2
+    return x * 2
 }
 
 # 使用
 c = Counter(0)
 c = increment(c)        # c.value = 1
 c = undo_increment(c)   # c.value = 0，回滚！
-```
-
-```yaoxiang
 ```
 
 #### 8.3 撤销栈支持
@@ -505,29 +491,6 @@ c = undo_increment(c)   # c.value = 0，回滚！
 
 ```yaoxiang
 # === 撤销/重做支持（手动实现）===
-
-struct Editor {
-    history: List[State]    # 撤销栈
-    current: State
-}
-
-undo: (editor: Editor) -> Editor {
-    # 从历史栈弹出上一个状态
-    if let Some(previous) = editor.history.pop() {
-        editor.current = previous
-    }
-    editor
-}
-
-# 使用
-editor = Editor::new()
-editor = editor.type_text("Hello")
-editor = editor.type_text(" World")
-editor = editor.undo()      # 回滚到 "Hello"
-```
-
-```yaoxiang
-# === 撤销/重做支持 ===
 
 struct Editor {
     history: List[State]    # 撤销栈
@@ -551,10 +514,8 @@ editor = editor.undo()      # 回滚到 "Hello"
 
 #### 8.4 部分消费
 
-> **⚠️ 未来特性**：部分消费需要更复杂的类型系统支持，暂不实现。
-
 ```yaoxiang
-# === 部分消费结构体字段（未来特性）===
+# === 部分消费结构体字段===
 
 struct Config {
     timeout: Int
@@ -562,10 +523,10 @@ struct Config {
     debug: Bool
 }
 
-# 未来语法：只消费 timeout 部分
+# 只消费 timeout 部分
 set_timeout(config: Config, ms: Int) -> Config {
     config.timeout = ms
-    config
+    return config
 }
 ```
 
@@ -583,6 +544,262 @@ set_timeout(config: Config, ms: Int) -> Config {
 3. 模式推断
    └── Consumes / Returns
 ```
+
+---
+
+### 10. 字段级不可变性设计
+
+#### 10.1 核心理念：统一语法中的字段级控制
+
+在 **`name: type = value`** 统一语法框架下，字段级可变性通过 `mut` 标记实现一致性控制。
+
+```yaoxiang
+# === 字段 mut 标记 ===
+
+type Point = {
+    x: Float,      # 不可变字段
+    mut y: Float,  # 可变字段
+}
+
+# 使用示例
+p: Point = Point(1.0, 2.0)
+
+mut p2: Point = Point(3.0, 4.0)
+p2.y = 5.0        # ✅ 允许：p2 是 mut 绑定，y 是 mut 字段
+# p2.x = 6.0      # ❌ 错误：x 是不可变字段
+
+# 非 mut 绑定不能修改任何字段
+# p.y = 5.0       # ❌ 错误：p 不是 mut 绑定
+```
+
+#### 10.2 三层次可变性模型
+
+##### 10.2.1 层次1：绑定可变性（变量级别）
+
+```yaoxiang
+# 语法：mut 标记绑定
+mut counter: Int = 0         # 可变绑定
+counter = 1                  # ✅ 允许重新赋值
+
+total: Int = 100            # 不可变绑定
+# total = 200               # ❌ 编译错误：不能修改不可变绑定
+```
+
+##### 10.2.2 层次2：字段可变性（结构体级别）
+
+```yaoxiang
+# 类型定义时标记字段可变性
+type Account = {
+    # 不可变字段：一旦设置永不改变
+    account_id: String,
+    created_at: Timestamp,
+
+    # 可变字段：可以修改
+    mut balance: Float,
+    mut last_login: Timestamp,
+
+    # 嵌套结构体：保持原有的可变性
+    mut settings: UserSettings,
+}
+
+# 使用示例
+mut acc: Account = Account(
+    "acc123",
+    now(),
+    1000.0,
+    now(),
+    default_settings()
+)
+
+# 可以修改：
+acc.balance = 1500.0          # ✅ balance 是 mut 字段
+acc.last_login = now()        # ✅ last_login 是 mut 字段
+acc.settings.theme = "dark"   # ✅ settings 是 mut 字段
+
+# 禁止修改：
+# acc.account_id = "acc456"   # ❌ account_id 不可变
+# acc.created_at = tomorrow() # ❌ created_at 不可变
+```
+
+##### 10.2.3 层次3：方法参数可变性（函数级别）
+
+```yaoxiang
+# 方法定义：mut self 表示可修改自身
+Account.deposit: (mut self: Account, amount: Float) -> Account = {
+    self.balance = self.balance + amount
+    self.last_login = now()
+    return self  # 所有权回流
+}
+
+# 调用
+mut acc: Account = Account(...)
+acc = acc.deposit(100.0)  # ✅ acc 是 mut 绑定，可以调用 mut 方法
+
+# 非 mut 绑定只能调用不可变方法
+Account.get_balance: (self: Account) -> Float = self.balance
+balance = acc.get_balance()  # ✅ 不需要 mut 绑定
+```
+
+#### 10.4 语法设计细节
+
+##### 10.4.1 统一语法中的字段 mut 标记
+
+```yaoxiang
+# 在类型定义中标记字段可变性
+type User = {
+    id: String,           # 不可变
+    name: String,         # 不可变
+    mut email: String,    # 可变
+    mut settings: {       # 嵌套结构体
+        theme: String,
+        mut notifications: Bool,
+    }
+}
+
+# 简洁写法：mut 块
+type User = {
+    id: String,
+    name: String,
+    mut {
+        email: String,
+        settings: {
+            theme: String,
+            mut notifications: Bool,
+        }
+    }
+}
+```
+
+##### 10.4.2 模式匹配中的字段可变性
+
+```yaoxiang
+# 模式匹配支持字段可变性
+match shape {
+    Point { x, mut y } => {
+        # 这里 y 是 mut 绑定，可以修改
+        y = y + 1.0
+        Point(x, y)
+    }
+    Circle { radius, mut center } => {
+        center = center.translate(1.0, 1.0)
+        Circle(radius, center)
+    }
+}
+
+# 注意：模式匹配提取的是新值，不影响原值
+# 需要 mut 绑定才能修改原结构体
+```
+
+##### 10.4.3 默认值与构造器
+
+```yaoxiang
+# 字段可以有默认值
+type Config = {
+    version: String = "1.0.0",      # 不可变，编译时常量
+    mut port: Int = 8080,           # 可变，运行时可以修改
+    mut debug: Bool = false,        # 可变
+}
+
+# 构造时可以省略有默认值的字段
+config: Config = Config()  # 使用所有默认值
+mut config2: Config = Config(port = 3000)  # 只指定 port
+```
+
+#### 10.6 与现有特性集成
+
+##### 10.6.1 与所有权回流集成
+
+```yaoxiang
+# 字段可变性 + 所有权回流 = 流畅的链式调用
+type Transformable = {
+    mut x: Float,
+    mut y: Float,
+
+    translate: (mut self: Transformable, dx: Float, dy: Float) -> Transformable = {
+        self.x = self.x + dx
+        self.y = self.y + dy
+        return self
+    }
+
+    scale: (mut self: Transformable, factor: Float) -> Transformable = {
+        self.x = self.x * factor
+        self.y = self.y * factor
+        return self
+    }
+}
+
+# 链式调用
+mut shape: Transformable = Transformable(1.0, 2.0)
+shape = shape.translate(10.0, 10.0).scale(2.0)
+```
+
+##### 10.6.2 与消费分析集成
+
+```yaoxiang
+# 消费分析考虑字段可变性
+# 不可变字段：总是返回原值（Returns）
+# 可变字段：可能被消费（Consumes）或返回（Returns）
+
+process_config: (config: Config) -> Config = {
+    # config.port 是 mut 字段，但这里没有修改
+    # 编译器推断：config 整体 Returns（因为返回了）
+    config
+}
+
+modify_config: (mut config: Config) -> Config = {
+    config.port = 3000  # 修改 mut 字段
+    config  # 返回修改后的 config
+}
+
+# 消费分析结果：
+# process_config: config → Returns
+# modify_config: config → Returns（但修改了 mut 字段）
+```
+
+##### 10.6.3 与接口系统集成
+
+```yaoxiang
+# 接口定义不关心字段可变性
+type Drawable = {
+    draw: (Surface) -> Void,
+}
+
+# 类型实现接口时可以有不同的字段可变性
+type ImmutablePoint = {
+    x: Float,
+    y: Float,
+    Drawable,
+}
+
+type MutablePoint = {
+    mut x: Float,
+    mut y: Float,
+    Drawable,
+}
+
+# 方法实现
+ImmutablePoint.draw: (self: ImmutablePoint, surface: Surface) -> Void = {
+    surface.plot(self.x, self.y)  # 只读访问
+}
+
+MutablePoint.draw: (self: MutablePoint, surface: Surface) -> Void = {
+    # 可以修改 self.x, self.y（因为字段是 mut）
+    # 但通常 draw 方法不应该修改位置
+    surface.plot(self.x, self.y)
+}
+```
+
+#### 10.9 设计原则总结
+
+在 **`name: type = value`** 统一语法框架下，字段级可变性设计遵循以下原则：
+
+| 原则 | 说明 |
+|------|------|
+| **统一性** | `mut` 标记一致地用于变量、参数、字段 |
+| **显式性** | 必须显式标记才能修改 |
+| **安全性** | 编译器严格检查，防止意外修改 |
+| **可组合性** | 与所有权回流、接口系统、消费分析无缝集成 |
+| **零成本** | 编译时检查，无运行时开销 |
 
 ---
 
@@ -622,13 +839,13 @@ shape = shape.scale(2.0)
 # 5. 消费分析
 modify: (shape: Shape) -> Shape {
     shape.color = Color::red()
-    shape
+    return shape
 }
 shape = modify(shape)                # 回流，shape 被更新
 
 scale: (shape: Shape, factor: Float) -> Shape {
     shape.scale(factor)
-    shape
+    return shape
 }
 shape = scale(shape, 2.0)
 
@@ -973,6 +1190,7 @@ unsafe {
 | **v7.1** | **修复问题 + 完善细节** | **2025-01-16** |
 | **v8.0** | **新增：空状态重用、所有权回流** | **2025-02-04** |
 | **v8.1** | **简化：消费分析移除 Borrows、逆函数作为未来特性** | **2025-02-04** |
+| **v8.2** | **新增：第10节字段级不可变性设计** | **2025-02-05** |
 
 ### 待决议题
 
@@ -982,7 +1200,7 @@ unsafe {
 | 逃逸分析 | 编译器优化策略 | 待讨论 |
 | 跨任务循环检测算法 | 具体实现方案 | 待讨论 |
 | 逆函数生成 | 需要宏/代码生成支持 | 未来特性 |
-| 部分消费 | 字段级别的所有权 | 未来特性 |
+| 字段级不可变性 | 见第10节完整设计 | 已设计，待实现 |
 
 ---
 

@@ -1,7 +1,7 @@
 //! Trait 继承测试
 
 use crate::frontend::core::parser::ast::Type;
-use crate::frontend::type_level::inheritance::{InheritanceChecker, InheritanceError};
+use crate::frontend::type_level::inheritance::InheritanceChecker;
 
 #[test]
 fn test_simple_inheritance() {

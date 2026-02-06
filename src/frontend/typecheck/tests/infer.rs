@@ -714,7 +714,7 @@ fn test_infer_function_call() {
     };
 
     let ty = inferrer.infer_expr(&call).unwrap();
-    assert!(ty.type_var().is_some());
+    assert_eq!(ty, MonoType::Int(64));
 }
 
 /// 测试结构体字段访问推断
@@ -732,6 +732,7 @@ fn test_infer_field_access() {
             ("y".to_string(), MonoType::Int(64)),
         ],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 
@@ -758,6 +759,7 @@ fn test_infer_unknown_field() {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Int(64))],
         methods: std::collections::HashMap::new(),
+        field_mutability: vec![],
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 

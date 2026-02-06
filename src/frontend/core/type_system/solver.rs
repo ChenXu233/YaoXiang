@@ -189,6 +189,7 @@ impl TypeConstraintSolver {
                     .map(|(n, t)| (n.clone(), self.expand_type(t)))
                     .collect(),
                 methods: s.methods.clone(),
+                field_mutability: s.field_mutability.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),
@@ -508,6 +509,7 @@ impl TypeConstraintSolver {
                     .map(|(n, t)| (n.clone(), self.substitute_type(t, substitution)))
                     .collect(),
                 methods: s.methods.clone(),
+                field_mutability: s.field_mutability.clone(),
             }),
             MonoType::Enum(e) => MonoType::Enum(EnumType {
                 name: e.name.clone(),

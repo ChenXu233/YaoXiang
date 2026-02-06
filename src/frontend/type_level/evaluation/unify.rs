@@ -12,6 +12,7 @@ use crate::frontend::type_level::evaluation::ReductionConfig;
 
 /// 统一结果
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum UnificationResult {
     /// 统一成功，生成替换映射
     Success(Substitution),

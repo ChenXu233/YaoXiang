@@ -7,15 +7,18 @@
 //! - 类型范式化和归约
 //! - Trait 边界和约束求解
 
+pub mod auto_derive;
 pub mod conditional_types;
 pub mod const_generics;
 pub mod dependent_types;
-pub mod derive;
 pub mod evaluation;
-pub mod impl_check;
 pub mod inheritance;
+pub mod method_bind_check;
 pub mod operations;
+pub mod std_traits;
 pub mod trait_bounds;
+pub mod type_families;
+pub mod type_match;
 
 // 重新导出主要类型
 pub use conditional_types::{If, MatchType, ConditionalType};
@@ -26,8 +29,16 @@ pub use trait_bounds::{
     TraitDefinition, TraitBound, TraitTable, TraitImplementation, TraitSolver, TraitSolverError,
 };
 pub use inheritance::{InheritanceChecker, InheritanceError, TraitInheritanceGraph};
-pub use impl_check::{TraitImplChecker, TraitImplError};
-pub use derive::{DeriveParser, DeriveGenerator};
+pub use method_bind_check::{TraitImplChecker, TraitImplError};
+pub use auto_derive::{
+    BUILTIN_DERIVES, is_primitive_type, is_builtin_derive, can_auto_derive, generate_auto_derive,
+};
+pub use std_traits::{
+    init_std_traits, init_primitive_impls, std_trait_names,
+    is_primitive_type as is_primitive_type_std,
+};
+pub use type_families::{Bool, Nat, IsTrue, IsFalse, IsZero, IsSucc, bool_family, nat_family};
+pub use type_match::{MatchPattern, MatchArm, PatternMatcher, MatchBinding, PatternBuilder};
 
 /// 高级类型错误
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]

@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::middle::bytecode::{
@@ -848,6 +849,38 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::ArcDrop { src: _ } => {
+                    frame.advance();
+                }
+                BytecodeInstr::WeakNew { dst, src } => {
+                    let val = frame
+                        .registers
+                        .get(src.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+                    if let RuntimeValue::Arc(arc) = val {
+                        frame
+                            .set_register(dst.0 as usize, RuntimeValue::Weak(Arc::downgrade(&arc)));
+                    } else {
+                        frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                    }
+                    frame.advance();
+                }
+                BytecodeInstr::WeakUpgrade { dst, src } => {
+                    let val = frame
+                        .registers
+                        .get(src.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+                    if let RuntimeValue::Weak(weak) = val {
+                        if let Some(arc) = weak.upgrade() {
+                            frame.set_register(dst.0 as usize, RuntimeValue::Arc(arc));
+                        } else {
+                            // Upgrade failed - set to None unit
+                            frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                        }
+                    } else {
+                        frame.set_register(dst.0 as usize, RuntimeValue::Unit);
+                    }
                     frame.advance();
                 }
                 BytecodeInstr::MakeClosure {

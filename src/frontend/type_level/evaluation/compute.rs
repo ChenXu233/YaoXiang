@@ -214,12 +214,36 @@ impl TypeComputer {
     }
 
     /// 计算条件类型
+    ///
+    /// 使用 TypeEvaluator 计算 If、Match 等条件类型的值
     fn compute_conditional(
         &mut self,
         ty: &MonoType,
     ) -> ComputeResult {
-        // 条件类型作为独立结构处理
-        ComputeResult::Done(ty.clone())
+        // 使用 normalizer 中的 evaluator 计算条件类型
+        let evaluator = self.normalizer.evaluator();
+
+        // 计算类型
+        let eval_result = evaluator.eval(ty);
+
+        match eval_result {
+            crate::frontend::typecheck::type_eval::EvalResult::Value(result_ty) => {
+                // 进一步归一化结果
+                let normalized = self.normalizer.normalize(&result_ty);
+                if matches!(normalized, super::NormalForm::Normalized) {
+                    ComputeResult::Done(result_ty)
+                } else {
+                    // 如果还需要归约，继续处理
+                    ComputeResult::Pending(vec![result_ty])
+                }
+            }
+            crate::frontend::typecheck::type_eval::EvalResult::Pending => {
+                ComputeResult::Pending(vec![ty.clone()])
+            }
+            crate::frontend::typecheck::type_eval::EvalResult::Error(msg) => {
+                ComputeResult::Error(msg)
+            }
+        }
     }
 
     /// 设置上下文

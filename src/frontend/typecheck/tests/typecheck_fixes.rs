@@ -29,7 +29,7 @@ fn test_fn_param_type_checking() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -59,7 +59,7 @@ fn test_fn_return_type_consistency() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -87,7 +87,7 @@ fn test_statement_block_void_return() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -115,7 +115,7 @@ fn test_expression_fn_return() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -145,7 +145,7 @@ fn test_fn_call_param_type_matching() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -174,7 +174,7 @@ fn test_nested_fn_calls() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -202,7 +202,7 @@ fn test_complex_block_expression() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -230,7 +230,7 @@ fn test_fn_param_annotations() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -261,7 +261,7 @@ fn test_fn_return_annotation_validation() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -289,7 +289,7 @@ fn test_no_param_function() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -322,7 +322,7 @@ fn test_function_type_inference() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -354,7 +354,7 @@ fn test_mixed_expr_stmt_block() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -385,7 +385,7 @@ fn test_fn_variable_scope() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -419,7 +419,7 @@ fn test_complex_nested_blocks() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
@@ -452,7 +452,7 @@ fn test_block_var_type_annotations() {
     assert!(result.is_ok(), "Failed to parse code");
 
     let module = result.unwrap();
-    let mut solver = TypeConstraintSolver::new();
+    let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
     let check_result = checker.check_module(&module);
