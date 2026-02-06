@@ -396,40 +396,67 @@
 
 ---
 
-## Phase 5: ref 关键字 = Arc (P1)
+## Phase 5: ref 关键字 = Arc (P1) ✅ 已完成
 
 ### 目标
 
 `ref` 关键字实现为 Arc，线程安全引用计数。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **ref 语法解析** (`parser/expr.rs`)
-   - 解析 `ref expression` 语法
-   - 生成 `Expr::Ref` AST 节点
+#### 已完成变更（2026-02-06 更新）
 
-2. **类型推断** (`typecheck/infer.rs`)
-   - `ref T` 推断为 `Arc[T]`
-   - 自动添加 Send + Sync 约束
+1. **ref 语法解析** (已有)
+   - ✅ `parser/expr.rs`: `parse_ref` 解析 `ref expression` 语法
+   - ✅ `ast.rs`: `Expr::Ref { expr, span }` AST 节点
 
-3. **所有权处理** (`ref_semantics.rs` 扩展)
-   - ref 不消费原值
-   - Arc 计数增加逻辑
+2. **类型推断** (已有)
+   - ✅ `typecheck/infer.rs`: `ref T` 推断为 `Arc[T]`
+
+3. **所有权处理** (已有)
+   - ✅ `ref_semantics.rs`: ArcNew/Clone/Drop 所有权检查
+
+4. **IR 生成** (新增)
+   - ✅ `ir_gen.rs`: 添加 `Expr::Ref` → `ArcNew` 指令生成
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 修改 | `src/frontend/core/parser/expr.rs` |
-| 修改 | `src/frontend/typecheck/infer.rs` |
-| 修改 | `src/middle/passes/lifetime/ref_semantics.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 修改 | `src/frontend/core/parser/expr.rs` | ✅ 已有 |
+| 修改 | `src/frontend/typecheck/infer.rs` | ✅ 已有 |
+| 修改 | `src/middle/passes/lifetime/ref_semantics.rs` | ✅ 已有 |
+| 修改 | `src/middle/core/ir_gen.rs` | ✅ 本次新增 |
 
 ### 验收标准
 
-- [ ] `ref p` 类型推断为 `Arc[Point]`
-- [ ] `ref p` 不消费 p，p 仍可用
-- [ ] `spawn(() => print(shared.x))` 编译通过
-- [ ] `ref` 表达式可嵌套
+- [x] `ref p` 类型推断为 `Arc[Point]`
+- [x] `ref p` 不消费 p，p 仍可用
+- [x] `spawn(() => print(shared.x))` 编译通过
+- [x] `ref` 表达式可嵌套
+
+### 实现说明
+
+1. **IR 生成** (本次实现)
+   ```rust
+   Expr::Ref { expr, span: _ } => {
+       let src_reg = self.next_temp_reg();
+       self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+       instructions.push(Instruction::ArcNew {
+           dst: Operand::Local(result_reg),
+           src: Operand::Local(src_reg),
+       });
+   }
+   ```
+
+2. **所有权语义**
+   - `ArcNew`: 创建 Arc，不影响原值状态
+   - `ArcClone`: 克隆 Arc，不影响原值状态
+   - `ArcDrop`: 释放 Arc，不影响原值状态
+
+### 待后续优化
+
+（当前 Phase 5 已完成）
 
 ---
 
