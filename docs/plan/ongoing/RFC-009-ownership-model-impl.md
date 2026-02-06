@@ -230,40 +230,95 @@
 
 ---
 
-## Phase 3: 所有权回流 (P1)
+## Phase 3: 所有权回流 (P1) ✅ 已完成
 
 ### 目标
 
 实现函数参数被修改后返回，形成所有权闭环，支持链式调用。
 
-### 实现步骤
+### 实现状态：✅ 已完成（2026-02-06）
 
-1. **回流推断** (新建 `ownership_flow.rs`)
-   - 分析 return 语句中是否包含参数
-   - 推断 Consumes / Returns 模式
+#### 已完成变更（2026-02-06 更新）
 
-2. **链式调用支持** (新建 `chain_calls.rs`)
-   - 分析方法链的所有权流动
-   - 支持 `p.rotate(90).scale(2.0)`
+1. **消费模式枚举** (`ownership_flow.rs`)
+   - ✅ 创建 `ConsumeMode` 枚举：`Returns | Consumes | Undetermined`
+   - ✅ `Returns`: 参数在返回值中返回，所有权回流
+   - ✅ `Consumes`: 参数被消费，不返回
+   - ✅ `Undetermined`: 无法确定（保守分析）
 
-3. **错误诊断** (`lifetime/error.rs`)
-   - 参数被消费但未返回的报错
-   - 提供正确的使用建议
+2. **所有权回流分析器** (`ownership_flow.rs`)
+   - ✅ 创建 `OwnershipFlowAnalyzer` 结构体
+   - ✅ `analyze_function()` 分析函数消费模式
+   - ✅ `operand_references_param()` 检查返回值是否引用参数
+   - ✅ `returns_param_directly()` 快速检测 `return p;` 模式
+   - ✅ 保守估计：临时变量可能引用参数
+
+3. **链式调用分析器** (`chain_calls.rs`)
+   - ✅ 创建 `ChainCallAnalyzer` 结构体
+   - ✅ `analyze_chain()` 分析方法链所有权流动
+   - ✅ `extract_chain_calls()` 提取连续的虚方法调用
+   - ✅ `infer_consume_mode()` 基于使用方式推断消费模式
+   - ✅ `check_ownership_closure()` 验证所有权闭合
+
+4. **错误类型扩展** (`error.rs`)
+   - ✅ 添加 `ConsumedNotReturned` 错误变体
+   - ✅ 用于参数被消费但未返回的诊断
+
+5. **模块注册** (`mod.rs`)
+   - ✅ 注册 `ownership_flow` 和 `chain_calls` 模块
 
 ### 涉及文件
 
-| 类型 | 文件 |
-|------|------|
-| 新建 | `src/middle/passes/lifetime/ownership_flow.rs` |
-| 新建 | `src/middle/passes/lifetime/chain_calls.rs` |
-| 修改 | `src/middle/passes/lifetime/error.rs` |
+| 类型 | 文件 | 状态 |
+|------|------|------|
+| 新建 | `src/middle/passes/lifetime/ownership_flow.rs` | ✅ 已完成 |
+| 新建 | `src/middle/passes/lifetime/chain_calls.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/error.rs` | ✅ 已完成 |
+| 修改 | `src/middle/passes/lifetime/mod.rs` | ✅ 已完成 |
 
 ### 验收标准
 
-- [ ] `p = p.process()` 推断为 Returns 模式
-- [ ] `consume(p)` 推断为 Consumes 模式
-- [ ] `p = p.rotate(90).scale(2.0).translate(1.0)` 链式调用正确
-- [ ] 回流推断错误给出准确提示
+- [x] `p = p.process()` 推断为 Returns 模式
+- [x] `consume(p)` 推断为 Consumes 模式
+- [x] `p = p.rotate(90).scale(2.0).translate(1.0)` 链式调用正确
+- [x] 回流推断错误给出准确提示
+
+### 实现说明
+
+1. **ConsumeMode 设计**
+   ```
+   ConsumeMode::Returns     → 参数在返回值中返回
+   ConsumeMode::Consumes   → 参数被消费，不返回
+   ConsumeMode::Undetermined → 无法确定，保守分析
+   ```
+
+2. **参数引用检测**
+   - 直接引用：`Operand::Arg(idx)` → 检查索引匹配
+   - 临时变量：保守估计可能引用参数
+   - 常量/全局：不引用参数
+
+3. **链式调用分析**
+   ```ignore
+   p.rotate(90)    // Method 1: rotate
+     .scale(2.0)   // Method 2: scale (obj = temp_1)
+     .translate(1.0); // Method 3: translate (obj = temp_2)
+   ```
+
+4. **所有权闭合检查**
+   - Consumes 模式 → 所有权正确闭合
+   - Returns 模式 → 返回值应该被使用
+   - Undetermined → 保守返回 true
+
+### 测试覆盖
+
+| 模块 | 测试数 | 说明 |
+|------|--------|------|
+| `ownership_flow` | 10 | 参数引用检测、模式推断 |
+| `chain_calls` | 13 | 链式调用、所有权闭合 |
+
+### 待后续优化
+
+（当前 Phase 3 已完成）
 
 ---
 
@@ -473,8 +528,8 @@ Phase 1 (字段不可变性)
 |------|-------|------|
 | `src/middle/passes/lifetime/empty_state.rs` | P2 | 空状态追踪 |
 | `src/middle/passes/lifetime/control_flow.rs` | P2 | 控制流分析 |
-| `src/middle/passes/lifetime/ownership_flow.rs` | P3 | 所有权回流推断 |
-| `src/middle/passes/lifetime/chain_calls.rs` | P3 | 链式调用分析 |
+| `src/middle/passes/lifetime/ownership_flow.rs` | P3 ✅ | 所有权回流推断 |
+| `src/middle/passes/lifetime/chain_calls.rs` | P3 ✅ | 链式调用分析 |
 | `src/middle/passes/lifetime/consume_analysis.rs` | P4 | 消费标记系统 |
 | `src/middle/passes/lifetime/lifecycle.rs` | P4 | 变量生命周期追踪 |
 | `src/middle/passes/lifetime/unsafe_check.rs` | P7 | unsafe 检查 |
