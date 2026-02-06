@@ -170,6 +170,9 @@ impl GenericSpecializer {
             MonoType::Arc(t) => {
                 MonoType::Arc(Box::new(self.substitute_type(t, substitution, _solver)))
             }
+            MonoType::Weak(t) => {
+                MonoType::Weak(Box::new(self.substitute_type(t, substitution, _solver)))
+            }
             _ => ty.clone(),
         }
     }

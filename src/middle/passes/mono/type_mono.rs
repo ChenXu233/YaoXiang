@@ -745,6 +745,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .for_each(|t| self.collect_type_vars_from_mono_type(t, type_params, seen));
             }
             MonoType::Arc(inner) => self.collect_type_vars_from_mono_type(inner, type_params, seen),
+            MonoType::Weak(inner) => {
+                self.collect_type_vars_from_mono_type(inner, type_params, seen)
+            }
             MonoType::AssocType {
                 host_type,
                 assoc_args,

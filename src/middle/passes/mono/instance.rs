@@ -210,6 +210,10 @@ fn type_name_hash<H: Hasher>(
             "arc".hash(state);
             type_name_hash(t, state);
         }
+        MonoType::Weak(t) => {
+            "weak".hash(state);
+            type_name_hash(t, state);
+        }
         MonoType::AssocType {
             host_type,
             assoc_name,
