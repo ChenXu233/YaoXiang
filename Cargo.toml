@@ -90,3 +90,6 @@ debug = true
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
+
+[patch.crates-io]
+time = { git = "https://github.com/time-rs/time", tag = "v0.3.47" }
