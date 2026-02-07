@@ -27,6 +27,7 @@ jobs:
         with:
           version: 9
           run_install: false
+          standalone: true
 
       - name: Install Dependencies
         run: cd docs && pnpm install
