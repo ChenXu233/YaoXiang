@@ -1,0 +1,252 @@
+<script setup>
+import { useData, withBase } from 'vitepress'
+import { ref, computed } from 'vue'
+import { useMouse, useWindowSize } from '@vueuse/core'
+
+const { site, frontmatter } = useData()
+
+const copyInstall = () => {
+  navigator.clipboard.writeText('cargo install yaoxiang')
+}
+
+// 3D Code Showcase Logic (Global Mouse Tracking)
+const { x: mouseX, y: mouseY } = useMouse()
+const { width: windowWidth, height: windowHeight } = useWindowSize()
+
+const codeTransform = computed(() => {
+  // 计算鼠标在屏幕中的相对位置 (-0.5 ~ 0.5)
+  const factorX = (mouseX.value / windowWidth.value) - 0.5
+  const factorY = (mouseY.value / windowHeight.value) - 0.5
+  
+  // 旋转强度
+  const intensity = 60
+
+  // 计算旋转角度
+  // Y轴旋转（左右）：鼠标在右(>0) -> 元素面朝右 -> 左边前移，右边后退 -> rotateY (+)
+  // X轴旋转（上下）：鼠标在下(>0) -> 元素面朝下 -> 顶部后退，底部前移 -> rotateX (-)
+  const rotateY = factorX * intensity
+  const rotateX = factorY * -intensity
+  
+  return {
+    transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+    transition: 'transform 0.1s ease-out'
+  }
+})
+</script>
+
+<template>
+  <div class="retro-home min-h-screen bg-base-100 font-mono text-base-content selection:bg-primary selection:text-primary-content">
+    
+    <!-- Hero Section -->
+    <div class="hero min-h-[80vh] border-b-4 border-primary/20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-base-200 via-base-100 to-base-100">
+      <div class="hero-content flex-col lg:flex-row-reverse gap-12 w-full max-w-7xl px-4">
+        
+        <!-- Retro Code Showcase (Right Side) -->
+        <div 
+          :style="codeTransform"
+          class="mockup-code bg-[#1a1a1a] text-[#f0f0f0] border-2 border-primary shadow-[8px_8px_0px_rgba(255,62,0,0.4)] w-full max-w-lg cursor-crosshair [transform-style:preserve-3d]"
+        >
+          <pre data-prefix="$"><code>yaoxiang new universe</code></pre> 
+          <pre data-prefix=">" class="text-success"><code>Creating project...</code></pre>
+          <pre data-prefix=">"><code><span class="text-primary">type</span> <span class="text-warning">Universe</span> = {</code></pre>
+          <pre data-prefix=">"><code>    matter: <span class="text-warning">Amount</span>,</code></pre>
+          <pre data-prefix=">"><code>    energy: <span class="text-warning">Amount</span>,</code></pre>
+          <pre data-prefix=">"><code>    <span class="text-info">expand</span>: (<span class="text-secondary">self</span>) -> <span class="text-primary">Void</span> = ...</code></pre>
+          <pre data-prefix=">"><code>}</code></pre>
+          <pre data-prefix=">" class="text-success"><code>Done in 0.04s ✨</code></pre>
+        </div>
+
+        <!-- Text Content (Left Side) -->
+        <div class="text-center lg:text-left flex flex-col justify-center z-10">
+          
+          <!-- Slogan -->
+          <div class="mb-8 flex justify-center lg:justify-start animate-fade-in-up">
+            <div class="badge badge-primary badge-outline badge-lg gap-3 rounded-none p-4 font-bold tracking-[0.2em] shadow-[4px_4px_0px_currentColor]">
+              <div class="w-2 h-2 bg-primary animate-pulse"></div>
+              TYPE THE UNIVERSE
+            </div>
+          </div>
+
+          <!-- Main Title -->
+          <h1 class="text-7xl md:text-8xl lg:text-9xl font-black mb-6 leading-none glitch-text select-none" :data-text="frontmatter.hero.name">
+            {{ frontmatter.hero.name }}
+          </h1>
+          
+          <!-- Description -->
+          <p class="text-2xl lg:text-3xl font-bold tracking-tight opacity-90 mb-3 leading-tight max-w-2xl mx-auto lg:mx-0">
+            {{ frontmatter.hero.text }}
+          </p>
+          
+          <!-- Tagline -->
+          <p class="text-base font-mono opacity-60 mb-12 italic tracking-wide">
+            <span class="text-primary font-bold">#</span> {{ frontmatter.hero.tagline }}
+          </p>
+          
+          <!-- Actions -->
+          <div class="flex flex-col sm:flex-row gap-6 justify-center lg:justify-start mb-16">
+            <a :href="withBase('/zh/getting-started')" class="btn btn-primary btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all hover:border-primary font-black uppercase">
+              ▶ Play (Start)
+            </a>
+            <a :href="withBase('/zh/tutorial/')" class="btn btn-outline btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all hover:bg-base-content hover:text-base-100 font-bold uppercase">
+              ≡ Index (Docs)
+            </a>
+          </div>
+
+          <!-- Install Command -->
+          <div class="flex items-center justify-center lg:justify-start gap-4 group cursor-pointer" @click="copyInstall">
+            <span class="text-primary font-black text-xl">>_</span>
+            <div class="mockup-code bg-base-300 text-base-content before:hidden rounded-none min-w-0 pr-6 shadow-sm group-hover:bg-base-200 transition-colors">
+              <pre class="py-2 pl-4"><code>$ cargo install yaoxiang</code></pre>
+            </div>
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-mono tracking-widest text-primary hidden sm:inline-block">
+              [CLICK TO COPY]
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Container -->
+    <div class="container mx-auto px-4 py-16 max-w-6xl">
+      
+      <!-- SIDE A: Architecture -->
+      <div class="mb-24 relative">
+        <!-- Cassette Header -->
+        <div class="flex flex-col md:flex-row justify-between items-center bg-primary text-primary-content p-4 mb-8 border-b-4 border-base-content border-r-4 shadow-[8px_8px_0px_rgba(0,0,0,0.2)] dark:shadow-[8px_8px_0px_rgba(255,255,255,0.1)]">
+          <div class="text-2xl font-black tracking-widest flex items-center gap-2">
+            <span class="badge badge-lg bg-base-content text-base-100 rounded-full h-8 w-8 flex items-center justify-center">A</span>
+            THE ARCHITECTURE
+          </div>
+          <div class="font-mono text-sm opacity-80 mt-2 md:mt-0">RFC-009 / RFC-010 / RFC-011</div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          
+          <!-- Track 01 -->
+          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
+            <div class="card-body p-6">
+              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [01]</h2>
+              <h3 class="text-xl font-bold mb-2">Unified Syntax</h3>
+              <div class="badge badge-neutral mb-4">RFC-010</div>
+              <p class="text-sm opacity-80 mb-4">极简统一模型。一切皆 <code>name: type = value</code>。</p>
+              <div class="mockup-code bg-base-100 text-[10px] w-full transform scale-95 origin-top-left border border-base-content/10">
+                <pre><code><span class="text-primary">x</span>: Int = 42</code></pre>
+                <pre><code><span class="text-secondary">add</span>: (Int)->Int = ...</code></pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Track 02 -->
+          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
+            <div class="card-body p-6">
+              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [02]</h2>
+              <h3 class="text-xl font-bold mb-2">Zero-Cost Generics</h3>
+              <div class="badge badge-neutral mb-4">RFC-011</div>
+              <p class="text-sm opacity-80">编译期单态化。死代码消除。类型系统即宏。</p>
+            </div>
+          </div>
+
+          <!-- Track 03 -->
+          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
+            <div class="card-body p-6">
+              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [03]</h2>
+              <h3 class="text-xl font-bold mb-2">Ownership</h3>
+              <div class="badge badge-neutral mb-4">RFC-009</div>
+              <p class="text-sm opacity-80">
+                <span class="text-success font-bold">✓</span> Ref Sharing <br>
+                <span class="text-error font-bold">✕</span> GC <br>
+                <span class="text-error font-bold">✕</span> Lifetimes
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SIDE B: Runtime -->
+      <div class="mb-24 relative">
+        <!-- Cassette Header B-Side -->
+        <div class="flex flex-col md:flex-row justify-between items-center bg-secondary text-secondary-content p-4 mb-8 border-b-4 border-base-content border-r-4 shadow-[8px_8px_0px_rgba(0,0,0,0.2)] dark:shadow-[8px_8px_0px_rgba(255,255,255,0.1)]">
+          <div class="text-2xl font-black tracking-widest flex items-center gap-2">
+            <span class="badge badge-lg bg-base-content text-base-100 rounded-full h-8 w-8 flex items-center justify-center">B</span>
+            THE RUNTIME
+          </div>
+          <div class="font-mono text-sm opacity-80 mt-2 md:mt-0">RFC-008 / STD-LIB</div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+           <!-- Track 04 -->
+           <div class="card bg-base-200 border-l-4 border-secondary rounded-none hover:bg-base-300 transition-colors">
+            <div class="card-body">
+              <h2 class="card-title font-mono text-sm opacity-50 mb-0">TRACK [04]</h2>
+              <h3 class="text-xl font-bold">Decoupled Scheduler</h3>
+              <div class="py-4">
+                 <ul class="steps steps-vertical lg:steps-horizontal w-full text-sm">
+                  <li class="step step-secondary opacity-60">Embedded <br/>(Sync)</li>
+                  <li class="step step-secondary">Standard <br/>(DAG)</li>
+                  <li class="step step-secondary font-bold">Full <br/>(WorkSteal)</li>
+                </ul>
+              </div>
+              <p class="text-sm opacity-80">适应从微控制器到高性能服务器的所有场景。</p>
+            </div>
+          </div>
+
+          <!-- Track 05 -->
+          <div class="card bg-base-200 border-l-4 border-secondary rounded-none hover:bg-base-300 transition-colors">
+            <div class="card-body">
+              <h2 class="card-title font-mono text-sm opacity-50 mb-0">TRACK [05]</h2>
+              <h3 class="text-xl font-bold">Language Spec v1.6</h3>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <span class="badge badge-outline">18 Keywords</span>
+                <span class="badge badge-outline">Type Inference</span>
+                <span class="badge badge-outline">Pattern Match</span>
+              </div>
+              <p class="mt-4 text-sm opacity-80">没有复杂的语法糖，只有纯粹的表达力。</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Retro Footer -->
+    <footer class="footer items-center p-10 bg-neutral text-neutral-content rounded-none">
+      <div class="items-center grid-flow-col">
+        <p class="font-bold text-xl">YX</p> 
+        <p>Copyright © 2026 - All right reserved by YaoXiang Foundation</p>
+      </div> 
+      <div class="grid-flow-col gap-4 md:place-self-center md:justify-self-end">
+        <a class="link link-hover" :href="frontmatter.hero.actions[2].link">GitHub</a>
+        <a class="link link-hover" :href="withBase('/zh/contributing')">Contributing</a>
+      </div>
+    </footer>
+
+  </div>
+</template>
+
+<style scoped>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+.retro-home {
+  font-family: 'Space Mono', monospace;
+}
+
+.glitch-text {
+  position: relative;
+  display: inline-block;
+  color: hsl(var(--bc));
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+</style>
