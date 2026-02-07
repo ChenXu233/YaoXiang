@@ -2,6 +2,8 @@
 //!
 //! 测试整数运算和循环性能
 
+use std.io
+
 fibonacci: (n: Int) -> Int = {
     if n <= 1 {
         return n
@@ -9,7 +11,7 @@ fibonacci: (n: Int) -> Int = {
         mut a = 0;
         mut b = 1;
         mut result = 0;
-        for i in range(2, n + 1) {
+        for i in 2..(n + 1) {
             result = a + b;
             a = b;
             b = result;
@@ -20,5 +22,5 @@ fibonacci: (n: Int) -> Int = {
 
 // 主函数
 main: () -> Int = {
-    fibonacci(1000)
+    print(fibonacci(10))
 }
