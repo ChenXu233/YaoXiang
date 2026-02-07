@@ -3,7 +3,7 @@ name: Deploy Docs
 on:
   push:
     branches: [main, dev]
-    paths: ['docs/**', '!.obsidian/**', '!.git/**']
+    # paths: ['docs/**', '!.obsidian/**', '!.git/**']
   pull_request:
     paths: ['docs/**']
 
