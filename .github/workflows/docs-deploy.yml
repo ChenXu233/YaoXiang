@@ -26,12 +26,13 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
+          cache-dependency-path: 'docs/pnpm-lock.yaml'
 
       - name: Install Dependencies
         run: pnpm install
 
       - name: Build Docs
-        run: npm run docs:build
+        run: pnpm run docs:build
 
       - name: Upload Pages Artifact
         if: github.ref == 'refs/heads/main'
