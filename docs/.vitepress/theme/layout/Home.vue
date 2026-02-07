@@ -224,18 +224,19 @@ const codeTransform = computed(() => {
             
             <div class="card bg-base-100 shadow-xl border-l-4 border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-visible">
                <div class="absolute -top-4 -right-4 bg-primary text-primary-content px-4 py-1 font-mono text-sm font-bold shadow-lg rotate-2 group-hover:rotate-0 transition-transform">
-                 TRACK 01
+                 {{ frontmatter.tracks.track01.trackLabel }}
                </div>
                <div class="card-body md:flex-row gap-8 items-start">
                   <div class="flex-1">
-                      <div class="badge badge-neutral mb-2">RFC-010</div>
-                      <h3 class="text-3xl font-bold mb-4">Unified Syntax</h3>
+                      <div class="badge badge-neutral mb-2">{{ frontmatter.tracks.track01.rfc }}</div>
+                      <h3 class="text-3xl font-bold mb-4">{{ frontmatter.tracks.track01.title }}</h3>
                       <p class="text-lg opacity-80 mb-6 font-light leading-relaxed">
-                        The philosophy of minimalism. Everything follows the <code class="bg-base-200 px-1 rounded">name: type = value</code> pattern.
+                        {{ frontmatter.tracks.track01.description }}
                       </p>
                       <ul class="space-y-2 text-sm opacity-70 font-mono">
-                        <li class="flex items-center gap-2"><span class="text-success">✓</span> Consistent Declaration</li>
-                        <li class="flex items-center gap-2"><span class="text-success">✓</span> First-class Functions</li>
+                        <li v-for="feature in frontmatter.tracks.track01.features" :key="feature" class="flex items-center gap-2">
+                          <span class="text-success">✓</span> {{ feature }}
+                        </li>
                       </ul>
                   </div>
                   <div class="flex-1 w-full relative">
@@ -258,10 +259,10 @@ const codeTransform = computed(() => {
                 <div class="card-body">
                    <div class="flex flex-col md:flex-row gap-8 items-center">
                       <div class="flex-1">
-                         <div class="badge badge-neutral mb-2">RFC-011</div>
-                         <h3 class="text-3xl font-bold mb-4">Zero-Cost Generics</h3>
+                         <div class="badge badge-neutral mb-2">{{ frontmatter.tracks.track02.rfc }}</div>
+                         <h3 class="text-3xl font-bold mb-4">{{ frontmatter.tracks.track02.title }}</h3>
                          <p class="text-lg opacity-80 mb-4">
-                           Compile-time monomorphization means your abstractions cost nothing at runtime. The type system acts as a powerful macro engine.
+                           {{ frontmatter.tracks.track02.description }}
                          </p>
                       </div>
                       <div class="flex-1 flex justify-center items-center py-8 bg-base-200/50 rounded-lg w-full">
@@ -284,28 +285,20 @@ const codeTransform = computed(() => {
              <div class="card bg-base-100 shadow-xl border-l-4 border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
                 <div class="card-body md:flex-row gap-12 items-center">
                     <div class="flex-1">
-                       <div class="badge badge-neutral mb-2">RFC-009</div>
-                       <h3 class="text-3xl font-bold mb-4">Ownership Model</h3>
+                       <div class="badge badge-neutral mb-2">{{ frontmatter.tracks.track03.rfc }}</div>
+                       <h3 class="text-3xl font-bold mb-4">{{ frontmatter.tracks.track03.title }}</h3>
                        <p class="text-lg opacity-80">
-                         Memory safety without the garbage collector pauses. YaoXiang uses a refined ownership model that simplifies lifetime management based on scope.
+                         {{ frontmatter.tracks.track03.description }}
                        </p>
                     </div>
                     <div class="flex-1 grid grid-cols-2 gap-4 w-full">
-                        <div class="p-4 bg-success/10 border border-success/20 rounded-lg text-center">
+                        <div v-for="(feature, index) in frontmatter.tracks.track03.features.slice(0, 2)" :key="feature" class="p-4 bg-success/10 border border-success/20 rounded-lg text-center">
                            <div class="text-2xl mb-1">✓</div>
-                           <div class="font-bold text-success text-xs sm:text-sm">Ref Sharing</div>
+                           <div class="font-bold text-success text-xs sm:text-sm">{{ feature }}</div>
                         </div>
-                        <div class="p-4 bg-success/10 border border-success/20 rounded-lg text-center">
-                           <div class="text-2xl mb-1">✓</div>
-                           <div class="font-bold text-success text-xs sm:text-sm">Predictable</div>
-                        </div>
-                        <div class="p-4 bg-error/10 border border-error/20 rounded-lg text-center opacity-60">
+                        <div v-for="(feature, index) in frontmatter.tracks.track03.features.slice(2)" :key="feature" class="p-4 bg-error/10 border border-error/20 rounded-lg text-center opacity-60">
                            <div class="text-2xl mb-1">✕</div>
-                           <div class="font-bold text-error text-xs sm:text-sm">GC Pauses</div>
-                        </div>
-                         <div class="p-4 bg-error/10 border border-error/20 rounded-lg text-center opacity-60">
-                           <div class="text-2xl mb-1">✕</div>
-                           <div class="font-bold text-error text-xs sm:text-sm">Lifetimes</div>
+                           <div class="font-bold text-error text-xs sm:text-sm">{{ feature }}</div>
                         </div>
                     </div>
                 </div>
@@ -337,19 +330,19 @@ const codeTransform = computed(() => {
 
               <div class="card bg-base-100 shadow-xl border-l-4 border-secondary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
                   <div class="absolute -top-4 -right-4 bg-secondary text-secondary-content px-4 py-1 font-mono text-sm font-bold shadow-lg -rotate-2 group-hover:rotate-0 transition-transform">
-                     TRACK 04
+                     {{ frontmatter.tracks.track04.trackLabel }}
                   </div>
                   <div class="card-body">
                       <div class="flex flex-col gap-6">
                         <div>
-                           <h3 class="text-3xl font-bold mb-2">Decoupled Scheduler</h3>
-                           <p class="opacity-80 max-w-2xl">From microcontrollers to high-performance servers. The runtime adapts to the environment.</p>
+                           <h3 class="text-3xl font-bold mb-2">{{ frontmatter.tracks.track04.title }}</h3>
+                           <p class="opacity-80 max-w-2xl">{{ frontmatter.tracks.track04.description }}</p>
                         </div>
                         <div class="w-full py-8">
                            <ul class="steps steps-vertical md:steps-horizontal w-full">
-                            <li class="step step-secondary font-mono text-sm" data-content="●">Embedded<br/><span class="opacity-60 text-xs">(Sync)</span></li>
-                            <li class="step step-secondary font-mono text-sm" data-content="●">Standard<br/><span class="opacity-60 text-xs">(DAG)</span></li>
-                            <li class="step step-secondary font-mono text-sm font-bold" data-content="★">Full<br/><span class="opacity-60 text-xs">(WorkSteal)</span></li>
+                            <li v-for="step in frontmatter.tracks.track04.steps" :key="step.label" class="step step-secondary font-mono text-sm" :data-content="step.label === 'Full' ? '★' : '●'">
+                              {{ step.label }}<br/><span class="opacity-60 text-xs">({{ step.sub }})</span>
+                            </li>
                           </ul>
                         </div>
                       </div>
@@ -365,11 +358,11 @@ const codeTransform = computed(() => {
                <div class="card bg-base-100 shadow-xl border-l-4 border-secondary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
                   <div class="card-body md:flex-row items-center gap-8">
                       <div class="flex-1">
-                          <h3 class="text-3xl font-bold mb-4">Language Spec v1.6</h3>
+                          <h3 class="text-3xl font-bold mb-4">{{ frontmatter.tracks.track05.title }}</h3>
                           <p class="text-lg opacity-80 mb-6">
-                            Pure expression without syntax sugar overload. A minimal surface area for maximum capability.
+                            {{ frontmatter.tracks.track05.description }}
                           </p>
-                          <a href="/zh/getting-started" class="link link-secondary no-underline font-bold hover:underline">Get Started →</a>
+                          <a :href="frontmatter.hero.actions[0].link" class="link link-secondary no-underline font-bold hover:underline">Get Started →</a>
                       </div>
                       <div class="flex-1 flex flex-wrap gap-2 justify-end content-start">
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">18 Keywords</div>
