@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 
 export default defineConfig({
   base: '/YaoXiang/',
@@ -15,13 +16,30 @@ export default defineConfig({
   // 忽略死链接（现有文档有 146 个死链接）
   ignoreDeadLinks: true,
 
+  // 代码高亮配置
+  markdown: {
+    theme: {
+      light: 'github-light',
+      dark: 'github-dark',
+    },
+    languages: [
+      {
+        id: 'yaoxiang',
+        scopeName: 'source.yaoxiang',
+        grammar: yaoxiangGrammar,
+        name: 'yaoxiang',
+        aliases: ['yx']
+      }
+    ]
+  },
+
   themeConfig: {
     logo: '/logo.svg',
     nav: [
       { text: '开始', link: '/zh/getting-started' },
       { text: '教程', link: '/zh/tutorial/' },
       { text: '参考', link: '/zh/reference/' },
-      { text: 'GitHub', link: 'https://github.com/yaoxiang-lang/yaoxiang' },
+      { text: 'GitHub', link: 'https://github.com/ChenXu233/yaoxiang' },
     ],
 
     sidebar: {
