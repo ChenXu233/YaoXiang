@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: docs
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,13 +26,16 @@ jobs:
           standalone: true
 
       - name: Install Dependencies
-        run: cd docs && pnpm install
+        working-directory: docs
+        run: pnpm install
 
       - name: Build Docs
-        run: cd docs && pnpm run docs:build
+        working-directory: docs
+        run: pnpm run docs:build
       
       - name: Verify Build Output
-        run: ls -la docs/.vitepress/dist || echo "Build output not found!"
+        working-directory: docs
+        run: ls -la .vitepress/dist || echo "Build output not found!"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
