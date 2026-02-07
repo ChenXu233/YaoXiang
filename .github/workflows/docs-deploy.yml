@@ -15,18 +15,18 @@ jobs:
         with:
           path: docs
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-          run_install: false
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: 'docs/pnpm-lock.yaml'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
 
       - name: Install Dependencies
         run: cd docs && pnpm install
@@ -35,12 +35,12 @@ jobs:
         run: cd docs && pnpm run docs:build
       
       - name: Verify Build Output
-        run: cd docs && ls -la .vitepress/dist || echo "Build output not found!"
+        run: ls -la docs/.vitepress/dist || echo "Build output not found!"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .vitepress/dist
+          path: docs/.vitepress/dist
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
