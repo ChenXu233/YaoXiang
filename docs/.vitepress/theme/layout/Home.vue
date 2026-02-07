@@ -1,13 +1,93 @@
-<script setup>
+<script setup lang="ts">
 import { useData, withBase } from 'vitepress'
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useMouse, useWindowSize } from '@vueuse/core'
 
-const { site, frontmatter } = useData()
+const { site, frontmatter } = useData<any>()
 
-const copyInstall = () => {
-  navigator.clipboard.writeText('cargo install yaoxiang')
+// Typewriter Effect for Description
+const displayedText = ref('')
+const cursorVisible = ref(true)
+let typeTimeout: ReturnType<typeof setTimeout> | null = null
+let cursorInterval: ReturnType<typeof setInterval> | null = null
+let isDeleting = false
+let isFirstRun = true
+let hasStarted = false
+
+// Code Showcase Copy
+const copySuccess = ref(false)
+const codeContent = `yaoxiang new universe
+Creating project...
+type Universe = {
+    matter: Amount,
+    energy: Amount,
+    expand: (self) -> Void = ...
 }
+Done in 0.04s ✨`
+
+const copyCode = async () => {
+  await navigator.clipboard.writeText(codeContent)
+  copySuccess.value = true
+  setTimeout(() => copySuccess.value = false, 2000)
+}
+
+const targetText = computed(() => frontmatter.value?.hero?.text || '')
+
+const typeWriter = () => {
+  const text = targetText.value
+  if (!text) {
+    typeTimeout = setTimeout(typeWriter, 100)
+    return
+  }
+
+  if (isFirstRun) {
+    if (displayedText.value.length > 0) {
+      displayedText.value = displayedText.value.slice(0, -1)
+      typeTimeout = setTimeout(typeWriter, 20)
+      return
+    }
+    isFirstRun = false
+  }
+
+  if (!isDeleting) {
+    if (displayedText.value.length < text.length) {
+      displayedText.value = text.slice(0, displayedText.value.length + 1)
+      typeTimeout = setTimeout(typeWriter, 140 + Math.random() * 120)
+    } else {
+      isDeleting = true
+      typeTimeout = setTimeout(typeWriter, 5000)
+    }
+  } else {
+    if (displayedText.value.length > 0) {
+      displayedText.value = displayedText.value.slice(0, -1)
+      typeTimeout = setTimeout(typeWriter, 100)
+    } else {
+      isDeleting = false
+      typeTimeout = setTimeout(typeWriter, 500)
+    }
+  }
+}
+
+const startTypewriter = () => {
+  if (hasStarted) return
+  hasStarted = true
+  cursorInterval = setInterval(() => {
+    cursorVisible.value = !cursorVisible.value
+  }, 500)
+  typeWriter()
+}
+
+// 监听 frontmatter 变化
+watch(() => frontmatter.value?.hero?.text, (newText) => {
+  if (newText && !hasStarted) {
+    startTypewriter()
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (typeTimeout) clearTimeout(typeTimeout)
+  if (cursorInterval) clearInterval(cursorInterval)
+})
 
 // 3D Code Showcase Logic (Global Mouse Tracking)
 const { x: mouseX, y: mouseY } = useMouse()
@@ -15,7 +95,7 @@ const { width: windowWidth, height: windowHeight } = useWindowSize()
 
 const codeTransform = computed(() => {
   // 计算鼠标在屏幕中的相对位置 (-0.5 ~ 0.5)
-  const factorX = (mouseX.value / windowWidth.value) - 0.5
+  const factorX = (mouseX.value / windowWidth.value) - 0.5 - 0.2
   const factorY = (mouseY.value / windowHeight.value) - 0.5
   
   // 旋转强度
@@ -35,29 +115,47 @@ const codeTransform = computed(() => {
 </script>
 
 <template>
-  <div class="retro-home min-h-screen bg-base-100 font-mono text-base-content selection:bg-primary selection:text-primary-content">
+  <div class="retro-home min-h-screen bg-base-100 font-monoselection:bg-primary selection:text-primary-content">
     
     <!-- Hero Section -->
     <div class="hero min-h-[80vh] border-b-4 border-primary/20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-base-200 via-base-100 to-base-100">
       <div class="hero-content flex-col lg:flex-row-reverse gap-12 w-full max-w-7xl px-4">
         
         <!-- Retro Code Showcase (Right Side) -->
-        <div 
+        <div
           :style="codeTransform"
-          class="mockup-code bg-[#1a1a1a] text-[#f0f0f0] border-2 border-primary shadow-[8px_8px_0px_rgba(255,62,0,0.4)] w-full max-w-lg cursor-crosshair [transform-style:preserve-3d]"
+          class="code-showcase border-2 border-primary shadow-[8px_8px_0px_rgba(255,62,0,0.4)] w-full max-w-lg rounded-lg overflow-hidden [transform-style:preserve-3d]"
         >
-          <pre data-prefix="$"><code>yaoxiang new universe</code></pre> 
-          <pre data-prefix=">" class="text-success"><code>Creating project...</code></pre>
-          <pre data-prefix=">"><code><span class="text-primary">type</span> <span class="text-warning">Universe</span> = {</code></pre>
-          <pre data-prefix=">"><code>    matter: <span class="text-warning">Amount</span>,</code></pre>
-          <pre data-prefix=">"><code>    energy: <span class="text-warning">Amount</span>,</code></pre>
-          <pre data-prefix=">"><code>    <span class="text-info">expand</span>: (<span class="text-secondary">self</span>) -> <span class="text-primary">Void</span> = ...</code></pre>
-          <pre data-prefix=">"><code>}</code></pre>
-          <pre data-prefix=">" class="text-success"><code>Done in 0.04s ✨</code></pre>
+          <!-- Window Title Bar -->
+          <div class="window-header flex items-center justify-between px-4 py-2 bg-base-200 dark:bg-[#2a2a2a] border-b border-base-300 dark:border-base-content/20">
+            <div class="flex gap-2">
+              <span class="window-btn w-3 h-3 rounded-full bg-[#ff5f56]"></span>
+              <span class="window-btn w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
+              <span class="window-btn w-3 h-3 rounded-full bg-[#27ca40]"></span>
+            </div>
+            <button
+              @click="copyCode"
+              class="copy-btn text-xs font-mono px-3 py-1 rounded transition-all"
+              :class="copySuccess ? 'bg-success text-success-content' : 'bg-base-300 hover:bg-primary hover:text-primary-content'"
+            >
+              {{ copySuccess ? 'COPIED!' : 'COPY' }}
+            </button>
+          </div>
+          <!-- Code Content -->
+          <div class="mockup-code bg-transparent text-sm p-4 overflow-x-auto">
+            <pre data-prefix="$"><code>yaoxiang new universe</code></pre>
+            <pre data-prefix=">" class="text-success"><code>Creating project...</code></pre>
+            <pre data-prefix=">"><code><span class="text-primary">type</span> <span class="text-warning">Universe</span> = {</code></pre>
+            <pre data-prefix=">"><code>    matter: <span class="text-warning">Amount</span>,</code></pre>
+            <pre data-prefix=">"><code>    energy: <span class="text-warning">Amount</span>,</code></pre>
+            <pre data-prefix=">"><code>    <span class="text-info">expand</span>: (<span class="text-secondary">self</span>) -> <span class="text-primary">Void</span> = ...</code></pre>
+            <pre data-prefix=">"><code>}</code></pre>
+            <pre data-prefix=">" class="text-success"><code>Done in 0.04s ✨</code></pre>
+          </div>
         </div>
 
         <!-- Text Content (Left Side) -->
-        <div class="text-center lg:text-left flex flex-col justify-center z-10">
+        <div class="text-center lg:text-left">
           
           <!-- Slogan -->
           <div class="mb-8 flex justify-center lg:justify-start animate-fade-in-up">
@@ -68,39 +166,33 @@ const codeTransform = computed(() => {
           </div>
 
           <!-- Main Title -->
-          <h1 class="text-7xl md:text-8xl lg:text-9xl font-black mb-6 leading-none glitch-text select-none" :data-text="frontmatter.hero.name">
+          <h1 class="hero-title glitch-text" :data-text="frontmatter.hero.name" style="font-size: 5rem; font-size: max(3rem, 10vw); margin-bottom: 0.5rem; line-height: 1.1;">
             {{ frontmatter.hero.name }}
           </h1>
           
           <!-- Description -->
-          <p class="text-2xl lg:text-3xl font-bold tracking-tight opacity-90 mb-3 leading-tight max-w-2xl mx-auto lg:mx-0">
-            {{ frontmatter.hero.text }}
+          <p class="hero-description text-2xl lg:text-3xl font-bold tracking-tight opacity-90" style=" min-height: 3rem;">
+            <span>{{ displayedText }}</span><span class="typewriter-cursor" :class="{ hidden: !cursorVisible }">_</span>
           </p>
-          
+
           <!-- Tagline -->
-          <p class="text-base font-mono opacity-60 mb-12 italic tracking-wide">
-            <span class="text-primary font-bold">#</span> {{ frontmatter.hero.tagline }}
+          <p class="text-base font-mono opacity-60 tracking-wide text-xl" style="margin-bottom: 1.5rem;">
+            <span class="text-primary font-bold">>>_</span> {{ frontmatter.hero.tagline }}
           </p>
           
           <!-- Actions -->
-          <div class="flex flex-col sm:flex-row gap-6 justify-center lg:justify-start mb-16">
-            <a :href="withBase('/zh/getting-started')" class="btn btn-primary btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all hover:border-primary font-black uppercase">
-              ▶ Play (Start)
+          <div class="flex flex-col sm:flex-row justify-center lg:justify-start" style="margin-bottom: 1rem; gap: 1.5rem;">
+            <a
+              v-for="action in frontmatter.hero.actions"
+              :key="action.text"
+              :href="withBase(action.link)"
+              :class="[
+                'btn btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all font-black uppercase',
+                action.theme === 'brand' ? 'btn-primary border-primary' : 'btn-outline border-base-content hover:bg-base-content hover:text-base-100'
+              ]"
+            >
+              {{ action.text }}
             </a>
-            <a :href="withBase('/zh/tutorial/')" class="btn btn-outline btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all hover:bg-base-content hover:text-base-100 font-bold uppercase">
-              ≡ Index (Docs)
-            </a>
-          </div>
-
-          <!-- Install Command -->
-          <div class="flex items-center justify-center lg:justify-start gap-4 group cursor-pointer" @click="copyInstall">
-            <span class="text-primary font-black text-xl">>_</span>
-            <div class="mockup-code bg-base-300 text-base-content before:hidden rounded-none min-w-0 pr-6 shadow-sm group-hover:bg-base-200 transition-colors">
-              <pre class="py-2 pl-4"><code>$ cargo install yaoxiang</code></pre>
-            </div>
-            <span class="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-mono tracking-widest text-primary hidden sm:inline-block">
-              [CLICK TO COPY]
-            </span>
           </div>
         </div>
       </div>
@@ -231,6 +323,47 @@ const codeTransform = computed(() => {
 
 .retro-home {
   font-family: 'Space Mono', monospace;
+}
+
+.hero-title {
+  font-family: 'Microsoft YaHei', 'SimHei', 'PingFang SC', 'Heiti SC', sans-serif;
+  font-weight: 900;
+  font-size: 4rem !important;
+}
+
+.hero-description {
+  font-family: 'Microsoft YaHei', 'SimHei', 'PingFang SC', 'Heiti SC', sans-serif;
+  font-weight: 700;
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: 4em;
+  height: 1.2em;
+  background: hsl(var(--bc));
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
+.typewriter-cursor.hidden {
+  opacity: 0;
+}
+
+.install-box {
+  border-left: 3px solid hsl(var(--p));
+  transition: all 0.2s ease;
+}
+
+.install-box:hover {
+  border-left-color: hsl(var(--su));
+  transform: translateX(4px);
+  box-shadow: 6px 6px 0px hsl(var(--su) / 0.3) !important;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .glitch-text {
