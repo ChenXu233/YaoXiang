@@ -19,6 +19,7 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 9
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,13 +29,13 @@ jobs:
           cache-dependency-path: 'docs/pnpm-lock.yaml'
 
       - name: Install Dependencies
-        run: pnpm install
+        run: cd docs && pnpm install
 
       - name: Build Docs
-        run: pnpm run docs:build
+        run: cd docs && pnpm run docs:build
       
       - name: Verify Build Output
-        run: ls -la .vitepress/dist || echo "Build output not found!"
+        run: cd docs && ls -la .vitepress/dist || echo "Build output not found!"
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
