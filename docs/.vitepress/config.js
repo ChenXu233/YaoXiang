@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/YaoXiang/',
   title: 'YaoXiang',
   description: '一门面向未来的编程语言',
 
