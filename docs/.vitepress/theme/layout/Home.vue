@@ -181,15 +181,13 @@ const codeTransform = computed(() => {
           </p>
           
           <!-- Actions -->
-          <div class="flex flex-col sm:flex-row justify-center lg:justify-start" style="margin-bottom: 1rem; gap: 1.5rem;">
+          <div class="grid grid-cols-2 gap-4 justify-items-stretch" style="margin-bottom: 1rem; max-width: 400px;">
             <a
-              v-for="action in frontmatter.hero.actions"
+              v-for="(action, index) in frontmatter.hero.actions"
               :key="action.text"
               :href="withBase(action.link)"
-              :class="[
-                'btn btn-lg h-14 px-8 text-lg rounded-none border-2 shadow-[6px_6px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all font-black uppercase',
-                action.theme === 'brand' ? 'btn-primary border-primary' : 'btn-outline border-base-content hover:bg-base-content hover:text-base-100'
-              ]"
+              class="btn btn-lg h-14 text-lg rounded-none border-2 shadow-[4px_4px_0px_currentColor] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_currentColor] transition-all font-black uppercase w-full"
+              :class="action.theme === 'brand' ? 'btn-primary border-primary' : 'btn-outline border-base-content hover:bg-base-content hover:text-base-100'"
             >
               {{ action.text }}
             </a>
@@ -199,117 +197,205 @@ const codeTransform = computed(() => {
     </div>
 
     <!-- Main Content Container -->
-    <div class="container mx-auto px-4 py-16 max-w-6xl">
+    <div class="container mx-auto px-4 py-16 max-w-5xl relative">
       
+      <!-- Timeline Connector Backbone -->
+      <div class="absolute left-8 md:left-[2.25rem] top-16 bottom-16 w-1 bg-base-300 dark:bg-base-content/10 hidden md:block"></div>
+
       <!-- SIDE A: Architecture -->
-      <div class="mb-24 relative">
-        <!-- Cassette Header -->
-        <div class="flex flex-col md:flex-row justify-between items-center bg-primary text-primary-content p-4 mb-8 border-b-4 border-base-content border-r-4 shadow-[8px_8px_0px_rgba(0,0,0,0.2)] dark:shadow-[8px_8px_0px_rgba(255,255,255,0.1)]">
-          <div class="text-2xl font-black tracking-widest flex items-center gap-2">
-            <span class="badge badge-lg bg-base-content text-base-100 rounded-full h-8 w-8 flex items-center justify-center">A</span>
-            THE ARCHITECTURE
+      <div class="mb-32">
+        <!-- Cassette Header A -->
+        <div class="sticky top-4 z-20 flex items-center gap-6 mb-16 backdrop-blur-sm py-4">
+           <div class="w-20 h-20 shrink-0 bg-primary text-primary-content rounded-full flex items-center justify-center font-black text-4xl shadow-[4px_4px_0px_rgba(0,0,0,0.3)] border-4 border-base-100 z-10 transition-transform hover:scale-110 duration-200">
+            A
           </div>
-          <div class="font-mono text-sm opacity-80 mt-2 md:mt-0">RFC-009 / RFC-010 / RFC-011</div>
+          <div class="bg-base-100/90 border-l-8 border-primary p-4 pr-12 shadow-lg backdrop-blur flex-grow max-w-2xl">
+              <h2 class="text-3xl font-black tracking-widest text-base-content">THE ARCHITECTURE</h2>
+              <div class="text-xs font-mono opacity-60 uppercase tracking-widest mt-1">RFC-009 / RFC-010 / RFC-011</div>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div class="space-y-24">
           
           <!-- Track 01 -->
-          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
-            <div class="card-body p-6">
-              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [01]</h2>
-              <h3 class="text-xl font-bold mb-2">Unified Syntax</h3>
-              <div class="badge badge-neutral mb-4">RFC-010</div>
-              <p class="text-sm opacity-80 mb-4">极简统一模型。一切皆 <code>name: type = value</code>。</p>
-              <div class="mockup-code bg-base-100 text-[10px] w-full transform scale-95 origin-top-left border border-base-content/10">
-                <pre><code><span class="text-primary">x</span>: Int = 42</code></pre>
-                <pre><code><span class="text-secondary">add</span>: (Int)->Int = ...</code></pre>
-              </div>
+          <div class="relative pl-0 md:pl-24 group">
+            <!-- Timeline Dot -->
+            <div class="absolute left-9 top-8 w-4 h-4 rounded-full bg-base-100 border-4 border-primary z-10 hidden md:block group-hover:scale-150 transition-transform duration-300"></div>
+            
+            <div class="card bg-base-100 shadow-xl border-l-4 border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-visible">
+               <div class="absolute -top-4 -right-4 bg-primary text-primary-content px-4 py-1 font-mono text-sm font-bold shadow-lg rotate-2 group-hover:rotate-0 transition-transform">
+                 TRACK 01
+               </div>
+               <div class="card-body md:flex-row gap-8 items-start">
+                  <div class="flex-1">
+                      <div class="badge badge-neutral mb-2">RFC-010</div>
+                      <h3 class="text-3xl font-bold mb-4">Unified Syntax</h3>
+                      <p class="text-lg opacity-80 mb-6 font-light leading-relaxed">
+                        The philosophy of minimalism. Everything follows the <code class="bg-base-200 px-1 rounded">name: type = value</code> pattern.
+                      </p>
+                      <ul class="space-y-2 text-sm opacity-70 font-mono">
+                        <li class="flex items-center gap-2"><span class="text-success">✓</span> Consistent Declaration</li>
+                        <li class="flex items-center gap-2"><span class="text-success">✓</span> First-class Functions</li>
+                      </ul>
+                  </div>
+                  <div class="flex-1 w-full relative">
+                      <div class="mockup-code bg-[#282c34] text-gray-300 shadow-2xl transform md:rotate-2 group-hover:rotate-0 transition-all duration-500 border border-white/10 text-xs">
+                        <pre data-prefix="1"><code><span class="text-[#c678dd]">let</span> <span class="text-[#e06c75]">x</span>: Int = <span class="text-[#d19a66]">42</span></code></pre>
+                        <pre data-prefix="2"><code><span class="text-[#c678dd]">let</span> <span class="text-[#61afef]">add</span>: (Int)->Int = ...</code></pre>
+                        <pre data-prefix="3"><code><span class="text-[#c678dd]">type</span> <span class="text-[#e5c07b]">Point</span> = { x: Int, y: Int }</code></pre>
+                      </div>
+                  </div>
+               </div>
             </div>
           </div>
 
           <!-- Track 02 -->
-          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
-            <div class="card-body p-6">
-              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [02]</h2>
-              <h3 class="text-xl font-bold mb-2">Zero-Cost Generics</h3>
-              <div class="badge badge-neutral mb-4">RFC-011</div>
-              <p class="text-sm opacity-80">编译期单态化。死代码消除。类型系统即宏。</p>
-            </div>
+          <div class="relative pl-0 md:pl-24 group">
+             <!-- Timeline Dot -->
+             <div class="absolute left-9 top-8 w-4 h-4 rounded-full bg-base-100 border-4 border-primary z-10 hidden md:block group-hover:bg-primary transition-colors duration-300"></div>
+
+             <div class="card bg-base-100 shadow-xl border-l-4 border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+                <div class="card-body">
+                   <div class="flex flex-col md:flex-row gap-8 items-center">
+                      <div class="flex-1">
+                         <div class="badge badge-neutral mb-2">RFC-011</div>
+                         <h3 class="text-3xl font-bold mb-4">Zero-Cost Generics</h3>
+                         <p class="text-lg opacity-80 mb-4">
+                           Compile-time monomorphization means your abstractions cost nothing at runtime. The type system acts as a powerful macro engine.
+                         </p>
+                      </div>
+                      <div class="flex-1 flex justify-center items-center py-8 bg-base-200/50 rounded-lg w-full">
+                         <div class="flex items-center gap-4 font-mono text-xl sm:text-2xl font-bold opacity-80">
+                            <span class="text-primary">Box&lt;T></span>
+                            <span class="text-base-content/30">→</span>
+                            <span class="text-secondary">Box_Int</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+             </div>
           </div>
 
-          <!-- Track 03 -->
-          <div class="card bg-base-200 border-l-4 border-primary rounded-none hover:bg-base-300 transition-colors group">
-            <div class="card-body p-6">
-              <h2 class="card-title font-mono text-sm opacity-50 mb-0 group-hover:text-primary transition-colors">TRACK [03]</h2>
-              <h3 class="text-xl font-bold mb-2">Ownership</h3>
-              <div class="badge badge-neutral mb-4">RFC-009</div>
-              <p class="text-sm opacity-80">
-                <span class="text-success font-bold">✓</span> Ref Sharing <br>
-                <span class="text-error font-bold">✕</span> GC <br>
-                <span class="text-error font-bold">✕</span> Lifetimes
-              </p>
-            </div>
+           <!-- Track 03 -->
+           <div class="relative pl-0 md:pl-24 group">
+             <!-- Timeline Dot -->
+             <div class="absolute left-9 top-8 w-4 h-4 rounded-full bg-base-100 border-4 border-primary z-10 hidden md:block group-hover:scale-150 transition-transform duration-300"></div>
+
+             <div class="card bg-base-100 shadow-xl border-l-4 border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+                <div class="card-body md:flex-row gap-12 items-center">
+                    <div class="flex-1">
+                       <div class="badge badge-neutral mb-2">RFC-009</div>
+                       <h3 class="text-3xl font-bold mb-4">Ownership Model</h3>
+                       <p class="text-lg opacity-80">
+                         Memory safety without the garbage collector pauses. YaoXiang uses a refined ownership model that simplifies lifetime management based on scope.
+                       </p>
+                    </div>
+                    <div class="flex-1 grid grid-cols-2 gap-4 w-full">
+                        <div class="p-4 bg-success/10 border border-success/20 rounded-lg text-center">
+                           <div class="text-2xl mb-1">✓</div>
+                           <div class="font-bold text-success text-xs sm:text-sm">Ref Sharing</div>
+                        </div>
+                        <div class="p-4 bg-success/10 border border-success/20 rounded-lg text-center">
+                           <div class="text-2xl mb-1">✓</div>
+                           <div class="font-bold text-success text-xs sm:text-sm">Predictable</div>
+                        </div>
+                        <div class="p-4 bg-error/10 border border-error/20 rounded-lg text-center opacity-60">
+                           <div class="text-2xl mb-1">✕</div>
+                           <div class="font-bold text-error text-xs sm:text-sm">GC Pauses</div>
+                        </div>
+                         <div class="p-4 bg-error/10 border border-error/20 rounded-lg text-center opacity-60">
+                           <div class="text-2xl mb-1">✕</div>
+                           <div class="font-bold text-error text-xs sm:text-sm">Lifetimes</div>
+                        </div>
+                    </div>
+                </div>
+             </div>
           </div>
 
         </div>
       </div>
 
       <!-- SIDE B: Runtime -->
-      <div class="mb-24 relative">
-        <!-- Cassette Header B-Side -->
-        <div class="flex flex-col md:flex-row justify-between items-center bg-secondary text-secondary-content p-4 mb-8 border-b-4 border-base-content border-r-4 shadow-[8px_8px_0px_rgba(0,0,0,0.2)] dark:shadow-[8px_8px_0px_rgba(255,255,255,0.1)]">
-          <div class="text-2xl font-black tracking-widest flex items-center gap-2">
-            <span class="badge badge-lg bg-base-content text-base-100 rounded-full h-8 w-8 flex items-center justify-center">B</span>
-            THE RUNTIME
+      <div class="mb-24">
+         <!-- Cassette Header B -->
+         <div class="sticky top-4 z-20 flex items-center gap-6 mb-16 backdrop-blur-sm py-4">
+           <div class="w-20 h-20 shrink-0 bg-secondary text-secondary-content rounded-full flex items-center justify-center font-black text-4xl shadow-[4px_4px_0px_rgba(0,0,0,0.3)] border-4 border-base-100 z-10 transition-transform hover:scale-110 duration-200">
+            B
           </div>
-          <div class="font-mono text-sm opacity-80 mt-2 md:mt-0">RFC-008 / STD-LIB</div>
+          <div class="bg-base-100/90 border-l-8 border-secondary p-4 pr-12 shadow-lg backdrop-blur flex-grow max-w-2xl">
+              <h2 class="text-3xl font-black tracking-widest text-base-content">THE RUNTIME</h2>
+              <div class="text-xs font-mono opacity-60 uppercase tracking-widest mt-1">RFC-008 / STD-LIB</div>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-          
+        <div class="space-y-24">
+
            <!-- Track 04 -->
-           <div class="card bg-base-200 border-l-4 border-secondary rounded-none hover:bg-base-300 transition-colors">
-            <div class="card-body">
-              <h2 class="card-title font-mono text-sm opacity-50 mb-0">TRACK [04]</h2>
-              <h3 class="text-xl font-bold">Decoupled Scheduler</h3>
-              <div class="py-4">
-                 <ul class="steps steps-vertical lg:steps-horizontal w-full text-sm">
-                  <li class="step step-secondary opacity-60">Embedded <br/>(Sync)</li>
-                  <li class="step step-secondary">Standard <br/>(DAG)</li>
-                  <li class="step step-secondary font-bold">Full <br/>(WorkSteal)</li>
-                </ul>
-              </div>
-              <p class="text-sm opacity-80">适应从微控制器到高性能服务器的所有场景。</p>
-            </div>
-          </div>
+           <div class="relative pl-0 md:pl-24 group">
+              <!-- Timeline Dot -->
+              <div class="absolute left-9 top-8 w-4 h-4 rounded-full bg-base-100 border-4 border-secondary z-10 hidden md:block group-hover:scale-150 transition-transform duration-300"></div>
 
-          <!-- Track 05 -->
-          <div class="card bg-base-200 border-l-4 border-secondary rounded-none hover:bg-base-300 transition-colors">
-            <div class="card-body">
-              <h2 class="card-title font-mono text-sm opacity-50 mb-0">TRACK [05]</h2>
-              <h3 class="text-xl font-bold">Language Spec v1.6</h3>
-              <div class="flex flex-wrap gap-2 mt-2">
-                <span class="badge badge-outline">18 Keywords</span>
-                <span class="badge badge-outline">Type Inference</span>
-                <span class="badge badge-outline">Pattern Match</span>
+              <div class="card bg-base-100 shadow-xl border-l-4 border-secondary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+                  <div class="absolute -top-4 -right-4 bg-secondary text-secondary-content px-4 py-1 font-mono text-sm font-bold shadow-lg -rotate-2 group-hover:rotate-0 transition-transform">
+                     TRACK 04
+                  </div>
+                  <div class="card-body">
+                      <div class="flex flex-col gap-6">
+                        <div>
+                           <h3 class="text-3xl font-bold mb-2">Decoupled Scheduler</h3>
+                           <p class="opacity-80 max-w-2xl">From microcontrollers to high-performance servers. The runtime adapts to the environment.</p>
+                        </div>
+                        <div class="w-full py-8">
+                           <ul class="steps steps-vertical md:steps-horizontal w-full">
+                            <li class="step step-secondary font-mono text-sm" data-content="●">Embedded<br/><span class="opacity-60 text-xs">(Sync)</span></li>
+                            <li class="step step-secondary font-mono text-sm" data-content="●">Standard<br/><span class="opacity-60 text-xs">(DAG)</span></li>
+                            <li class="step step-secondary font-mono text-sm font-bold" data-content="★">Full<br/><span class="opacity-60 text-xs">(WorkSteal)</span></li>
+                          </ul>
+                        </div>
+                      </div>
+                  </div>
               </div>
-              <p class="mt-4 text-sm opacity-80">没有复杂的语法糖，只有纯粹的表达力。</p>
-            </div>
-          </div>
+           </div>
+
+           <!-- Track 05 -->
+           <div class="relative pl-0 md:pl-24 group">
+               <!-- Timeline Dot -->
+               <div class="absolute left-9 top-8 w-4 h-4 rounded-full bg-base-100 border-4 border-secondary z-10 hidden md:block group-hover:bg-secondary transition-colors duration-300"></div>
+
+               <div class="card bg-base-100 shadow-xl border-l-4 border-secondary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+                  <div class="card-body md:flex-row items-center gap-8">
+                      <div class="flex-1">
+                          <h3 class="text-3xl font-bold mb-4">Language Spec v1.6</h3>
+                          <p class="text-lg opacity-80 mb-6">
+                            Pure expression without syntax sugar overload. A minimal surface area for maximum capability.
+                          </p>
+                          <a href="/zh/getting-started" class="link link-secondary no-underline font-bold hover:underline">Get Started →</a>
+                      </div>
+                      <div class="flex-1 flex flex-wrap gap-2 justify-end content-start">
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">18 Keywords</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Type Inference</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Pattern Match</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Traits</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Modules</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">FFI</div>
+                      </div>
+                  </div>
+               </div>
+           </div>
 
         </div>
+
       </div>
 
     </div>
 
     <!-- Retro Footer -->
     <footer class="footer items-center p-10 bg-neutral text-neutral-content rounded-none">
-      <div class="items-center grid-flow-col">
+      <div class="items-center grid-flow-col md:place-self-center">
         <p class="font-bold text-xl">YX</p> 
         <p>Copyright © 2026 - All right reserved by YaoXiang Foundation</p>
       </div> 
-      <div class="grid-flow-col gap-4 md:place-self-center md:justify-self-end">
+      <div class="grid-flow-col gap-4 md:place-self-center">
         <a class="link link-hover" :href="frontmatter.hero.actions[2].link">GitHub</a>
         <a class="link link-hover" :href="withBase('/zh/contributing')">Contributing</a>
       </div>
