@@ -1,0 +1,39 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main, dev]
+    paths: ['docs/**', '!.obsidian/**', '!.git/**']
+  pull_request:
+    paths: ['docs/**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Docs
+        run: npm run docs:build
+
+      - name: Upload Pages Artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .vitepress/dist
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/deploy-pages@v4
