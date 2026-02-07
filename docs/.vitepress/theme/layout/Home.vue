@@ -341,7 +341,7 @@ const codeTransform = computed(() => {
                         <div class="w-full py-8">
                            <ul class="steps steps-vertical md:steps-horizontal w-full">
                             <li v-for="step in frontmatter.tracks.track04.steps" :key="step.label" class="step step-secondary font-mono text-sm" :data-content="step.label === 'Full' ? '★' : '●'">
-                              {{ step.label }}<br/><span class="opacity-60 text-xs">({{ step.sub }})</span>
+                              {{ step.label }}<br/><span class="opacity-60 text-xs">{{ step.sub }}</span>
                             </li>
                           </ul>
                         </div>
@@ -371,6 +371,8 @@ const codeTransform = computed(() => {
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Traits</div>
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Modules</div>
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">FFI</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Concurrency</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Curry Function</div>
                       </div>
                   </div>
                </div>
