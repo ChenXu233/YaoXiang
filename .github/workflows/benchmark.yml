@@ -2,9 +2,9 @@ name: Benchmark
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
     inputs:
       iterations:
@@ -88,25 +88,6 @@ jobs:
         with:
           name: comparison-results
           path: compare_results.json
-          retention-days: 30
-
-      - name: Generate HTML Report
-        run: |
-          python3 scripts/generate_report.py --output benchmark_report/index.html
-
-      - name: Prepare Report Directory
-        run: |
-          mkdir -p benchmark_report/history
-          # 保存历史数据
-          if [ -f "compare_results.json" ]; then
-            cp compare_results.json "benchmark_report/history/$(date +%Y%m%d_%H%M%S).json"
-          fi
-
-      - name: Upload Report Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-report
-          path: benchmark_report/
           retention-days: 30
 
       - name: Check for Regressions
