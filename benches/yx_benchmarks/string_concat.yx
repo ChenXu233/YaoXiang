@@ -1,0 +1,16 @@
+//! # string_concat - 字符串拼接
+//!
+//! 测试字符串操作性能
+
+main: () -> Int = {
+    mut result = "";
+    mut i = 0;
+    while i < 500 {
+        result = result + "Hello";
+        result = result + " ";
+        result = result + "World";
+        result = result + "!";
+        i = i + 1;
+    };
+    return 0
+}

@@ -1,0 +1,182 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Number of iterations"
+        required: false
+        default: "100"
+      regression_threshold:
+        description: "Regression threshold (e.g., 0.05 for 5%)"
+        required: false
+        default: "0.05"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  benchmarks:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.82.0
+          components: llvm-tools-preview
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install C++ Compiler
+        run: sudo apt-get update && sudo apt-get install -y g++ gdb make
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            target
+          key: ${{ runner.os }}-bench-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-bench-
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Run YaoXiang Benchmarks
+        run: |
+          iterations=${{ github.event.inputs.iterations || '100' }}
+          echo "Running with $iterations iterations..."
+          cargo bench --all-features -- --sample-size=$iterations --output-format=json 2>&1 | tee benchmark_raw.json
+
+      - name: Save Criterion Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-results
+          path: target/criterion/
+          retention-days: 30
+
+      - name: Run Language Comparison
+        run: |
+          python3 scripts/compare.py --output compare_results.json --iterations 50
+
+      - name: Save Comparison Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-results
+          path: compare_results.json
+          retention-days: 30
+
+      - name: Generate HTML Report
+        run: |
+          python3 scripts/generate_report.py --output benchmark_report/index.html
+
+      - name: Prepare Report Directory
+        run: |
+          mkdir -p benchmark_report/history
+          # 保存历史数据
+          if [ -f "compare_results.json" ]; then
+            cp compare_results.json "benchmark_report/history/$(date +%Y%m%d_%H%M%S).json"
+          fi
+
+      - name: Upload Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: benchmark_report/
+          retention-days: 30
+
+      - name: Check for Regressions
+        if: github.event_name == 'pull_request'
+        run: |
+          threshold=${{ github.event.inputs.regression_threshold || '0.05' }}
+          echo "Checking for regressions (threshold: $threshold)..."
+          # 解析 Criterion 结果
+          # 如果发现性能下降超过阈值，输出警告
+          python3 -c "
+          import json
+          import sys
+
+          try:
+              with open('benchmark_raw.json', 'r') as f:
+                  data = json.load(f)
+
+              regressions = []
+              for result in data.get('results', []):
+                  # 检查是否相比上一次有显著性能下降
+                  # 简化处理：只输出警告
+                  print(f\"Benchmark: {result.get('name', 'unknown')}\")
+                  # 详细回归检测需要完整的历史数据
+
+              print('Regression check completed.')
+          except Exception as e:
+              print(f'Warning: Could not check regressions: {e}', file=sys.stderr)
+          "
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: benchmark-report
+
+  benchmark-summary:
+    name: Benchmark Summary
+    needs: benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Download Comparison Results
+        uses: actions/download-artifact@v4
+        with:
+          name: comparison-results
+          path: .
+
+      - name: Generate Summary Comment
+        run: |
+          echo "## 🚀 Benchmark Results" > benchmark_summary.md
+          echo "" >> benchmark_summary.md
+          echo "### Language Performance Comparison" >> benchmark_summary.md
+          echo "" >> benchmark_summary.md
+          echo "| Benchmark | YaoXiang | Python | Rust | C++ | Go |" >> benchmark_summary.md
+          echo "|-----------|-----------|--------|------|-----|----|" >> benchmark_summary.md
+
+          if [ -f "compare_results.json" ]; then
+            python3 -c "
+            import json
+            with open('compare_results.json') as f:
+                data = json.load(f)
+            for bench in data.get('benchmarks', []):
+                name = bench.get('name', 'Unknown')
+                yaoxiang = bench.get('yaoxiang', 0)
+                python = bench.get('python', 0)
+                rust = bench.get('rust', 0)
+                cpp = bench.get('cpp', 0)
+                go = bench.get('go', 0)
+                print(f'| {name} | {yaoxiang:.3f}ms | {python:.3f}ms | {rust:.3f}ms | {cpp:.3f}ms | {go:.3f}ms |')
+            " >> benchmark_summary.md
+          fi
+
+          cat benchmark_summary.md

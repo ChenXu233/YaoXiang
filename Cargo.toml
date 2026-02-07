@@ -25,6 +25,11 @@ criterion = "0.8.1"
 quickcheck = "1.0"
 proptest = "1.0"
 
+[[bench]]
+name = "lib"
+path = "benches/lib.rs"
+harness = false
+
 [dependencies]
 # 日志 - tracing
 tracing = "0.1"

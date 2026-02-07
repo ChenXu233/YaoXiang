@@ -1,0 +1,39 @@
+//! # matrix_multiply - 矩阵乘法
+//!
+//! 测试嵌套循环和多维数组操作
+
+create_matrix: (size: Int) -> List[List[Int]] = {
+    mut matrix = [];
+    for i in range(0, size) {
+        mut row = [];
+        for j in range(0, size) {
+            row = row + [i * j];
+        }
+        matrix = matrix + [row];
+    }
+    return matrix
+};
+
+multiply: (a: List[List[Int]], b: List[List[Int]], size: Int) -> List[List[Int]] = {
+    mut result = [];
+    for i in range(0, size) {
+        mut row = [];
+        for j in range(0, size) {
+            mut sum = 0;
+            for k in range(0, size) {
+                sum = sum + a[i][k] * b[k][j];
+            }
+            row = row + [sum];
+        }
+        result = result + [row];
+    }
+    return result
+};
+
+main: () -> Int = {
+    mut size = 20;
+    mut a = create_matrix(size);
+    mut b = create_matrix(size);
+    mut c = multiply(a, b, size);
+    return c[0][0]
+}
