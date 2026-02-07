@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.2.0
+> 版本：v1.6.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2025-01-05 - 精简为纯规范，示例移至 tutorial/
+> 更新：2025-02-06 - 整合 RFC-010（统一类型语法）和 RFC-011（泛型系统）
 
 ---
 
@@ -137,12 +137,15 @@ Membership  ::= Expr 'in' Expr
 TypeExpr    ::= PrimitiveType
               | StructType
               | EnumType
+              | InterfaceType
               | TupleType
               | FnType
               | GenericType
               | TypeRef
               | TypeUnion
               | TypeIntersection
+              | ConstrainedType
+              | AssociatedType
 ```
 
 ### 3.2 原类型
@@ -161,28 +164,42 @@ TypeExpr    ::= PrimitiveType
 带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`, `Int128`
 带位宽的浮点：`Float32`, `Float64`
 
-### 3.3 结构体类型
+### 3.3 记录类型
+
+**统一语法**：`type Name = { field1: Type1, field2: Type2, ... }`
 
 ```
-StructType  ::= '{' FieldList? '}'
+RecordType  ::= '{' FieldList? '}'
 FieldList   ::= Field (',' Field)* ','?
 Field       ::= Identifier ':' TypeExpr
+            |  Identifier                 # 接口约束
 ```
-
-**语法**：`type Name = { field1: Type1, field2: Type2, ... }`
 
 ```yaoxiang
-# 简单结构体
+# 简单记录类型
 type Point = { x: Float, y: Float }
 
-# 空结构体
+# 空记录类型
 type Empty = {}
 
-# 带泛型的结构体
+# 带泛型的记录类型
 type Pair[T] = { first: T, second: T }
+
+# 实现接口的记录类型
+type Point = {
+    x: Float,
+    y: Float,
+    Drawable,        # 实现 Drawable 接口
+    Serializable     # 实现 Serializable 接口
+}
 ```
 
-### 3.4 枚举类型
+**规则**：
+- 记录类型使用花括号 `{}` 定义
+- 字段名后直接跟冒号和类型
+- 接口名写在类型体内表示实现该接口
+
+### 3.4 枚举类型（变体类型）
 
 ```
 EnumType    ::= '{' Variant ('|' Variant)* '}'
@@ -249,34 +266,225 @@ TupleType   ::= '(' TypeList? ')'
 TypeList    ::= TypeExpr (',' TypeExpr)* ','?
 ```
 
-### 3.6 函数类型
+### 3.7 函数类型
 
 ```
 FnType      ::= '(' ParamList? ')' '->' TypeExpr
 ParamList   ::= TypeExpr (',' TypeExpr)*
 ```
 
-### 3.7 泛型类型
+### 3.8 泛型类型
+
+#### 3.8.1 泛型参数语法
 
 ```
-GenericType ::= Identifier '[' TypeArgList ']'
-TypeArgList ::= TypeExpr (',' TypeExpr)* ','?
+GenericType     ::= Identifier '[' TypeArgList ']'
+TypeArgList     ::= TypeExpr (',' TypeExpr)* ','?
+GenericParams   ::= '[' Identifier (',' Identifier)* ']'
+                 |  '[' Identifier ':' TypeBound (',' Identifier ':' TypeBound)* ']'
+TypeBound       ::= Identifier
+                 |  Identifier '+' Identifier ('+' Identifier)*
 ```
 
-### 3.8 依赖类型
+#### 3.8.2 泛型类型定义
+
+```yaoxiang
+# 基础泛型类型
+type Option[T] = {
+    some: (T) -> Self,
+    none: () -> Self
+}
+
+type Result[T, E] = {
+    ok: (T) -> Self,
+    err: (E) -> Self
+}
+
+type List[T] = {
+    data: Array[T],
+    length: Int,
+    push: [T](self: List[T], item: T) -> Void,
+    get: [T](self: List[T], index: Int) -> Option[T]
+}
+```
+
+#### 3.8.3 类型推导
+
+```yaoxiang
+# 编译器自动推导泛型参数
+numbers: List[Int] = List(1, 2, 3)  # 编译器推导 List[Int]
+```
+
+### 3.9 类型约束
+
+#### 3.9.1 单一约束
 
 ```
-DependentType ::= Identifier '[' TypeParamList ']' TypeExpr?
-TypeParamList ::= Identifier ':' TypeExpr (',' Identifier ':' TypeExpr)*
+ConstrainedType ::= '[' Identifier ':' TypeBound ']' TypeExpr
 ```
 
-### 3.9 类型联合
+```yaoxiang
+# 接口类型定义（作为约束）
+type Clone = {
+    clone: (Self) -> Self
+}
+
+# 使用约束
+clone: [T: Clone](value: T) -> T = value.clone()
+```
+
+#### 3.9.2 多重约束
+
+```yaoxiang
+# 多重约束语法
+combine: [T: Clone + Add](a: T, b: T) -> T = {
+    a.clone() + b
+}
+
+# 泛型容器的排序
+sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
+    result = list.clone()
+    quicksort(&mut result)
+    return result
+}
+```
+
+#### 3.9.3 函数类型约束
+
+```yaoxiang
+# 高阶函数约束
+call_twice: [T, F: Fn() -> T](f: F) -> (T, T) = (f(), f())
+
+compose: [A, B, C, F: Fn(A) -> B, G: Fn(B) -> C](a: A, f: F, g: G) -> C = g(f(a))
+```
+
+### 3.10 关联类型
+
+#### 3.10.1 关联类型定义
+
+```
+AssociatedType ::= Identifier ':' TypeExpr
+```
+
+```yaoxiang
+# Iterator trait（使用记录类型语法）
+type Iterator[T] = {
+    Item: T,                    # 关联类型
+    next: (Self) -> Option[T],
+    has_next: (Self) -> Bool
+}
+
+# 使用关联类型
+collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
+    result = List[T]()
+    while iter.has_next() {
+        if let Some(item) = iter.next() {
+            result.push(item)
+        }
+    }
+    return result
+}
+```
+
+#### 3.10.2 泛型关联类型（GAT）
+
+```yaoxiang
+# 更复杂的关联类型
+type Container[T] = {
+    Item: T,
+    IteratorType: Iterator[T],  # 关联类型也是泛型的
+    iter: (Self) -> IteratorType
+}
+```
+
+### 3.11 编译期泛型
+
+#### 3.11.1 字面量类型约束
+
+```
+LiteralType   ::= Identifier ':' Int          # 编译期常量
+CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
+```
+
+**核心设计**：用 `[n: Int]` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
+
+```yaoxiang
+# 编译期阶乘：参数必须是编译期已知的字面量
+factorial: [n: Int](n: n) -> Int = {
+    match n {
+        0 => 1,
+        _ => n * factorial(n - 1)
+    }
+}
+
+# 编译期常量数组
+type StaticArray[T, N: Int] = {
+    data: T[N],      # 编译期已知大小的数组
+    length: N
+}
+
+# 使用方式
+arr: StaticArray[Int, factorial(5)]  # 编译器在编译期计算 factorial(5) = 120
+```
+
+#### 3.11.2 编译期常量数组
+
+```yaoxiang
+# 矩阵类型使用
+type Matrix[T, Rows: Int, Cols: Int] = {
+    data: Array[Array[T, Cols], Rows]
+}
+
+# 编译期维度验证
+identity_matrix: [T: Add + Zero + One, N: Int](size: N) -> Matrix[T, N, N] = {
+    # ...
+}
+```
+
+### 3.12 条件类型
+
+#### 3.12.1 If 条件类型
+
+```
+IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
+```
+
+```yaoxiang
+# 类型级 If
+type If[C: Bool, T, E] = match C {
+    True => T,
+    False => E
+}
+
+# 示例：编译期分支
+type NonEmpty[T] = If[T != Void, T, Never]
+
+# 编译期验证
+type Assert[C: Bool] = match C {
+    True => Void,
+    False => compile_error("Assertion failed")
+}
+```
+
+#### 3.12.2 类型族
+
+```yaoxiang
+# 编译期类型转换
+type AsString[T] = match T {
+    Int => String,
+    Float => String,
+    Bool => String,
+    _ => String
+}
+```
+
+### 3.13 类型联合
 
 ```
 TypeUnion     ::= TypeExpr '|' TypeExpr
 ```
 
-### 3.10 类型交集
+### 3.14 类型交集
 
 ```
 TypeIntersection ::= TypeExpr '&' TypeExpr
@@ -285,16 +493,98 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 **语法**：类型交集 `A & B` 表示同时满足 A 和 B 的类型
 
 ```yaoxiang
-# === 依赖类型示例 ===
-process[T: Drawable & Serializable](item: T) -> String = {
+# 接口组合 = 类型交集
+type DrawableSerializable = Drawable & Serializable
+
+# 使用交集类型
+process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
     item.draw(screen)
-    item.serialize()
+    return item.serialize()
+}
+```
+
+### 3.15 函数重载与特化
+
+```yaoxiang
+# 基本特化：使用函数重载（编译器自动选择）
+sum: (arr: Array[Int]) -> Int = {
+    return native_sum_int(arr.data, arr.length)
+}
+
+sum: (arr: Array[Float]) -> Float = {
+    return simd_sum_float(arr.data, arr.length)
+}
+
+# 通用实现
+sum: [T: Add](arr: Array[T]) -> T = {
+    result = Zero::zero()
+    for item in arr {
+        result = result + item
+    }
+    return result
+}
+```
+
+### 3.16 平台特化
+
+```yaoxiang
+# 平台类型枚举（标准库定义）
+type Platform = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
+
+# P 是预定义泛型参数名，代表当前编译平台
+sum: [P: X86_64](arr: Array[Float]) -> Float = {
+    return avx2_sum(arr.data, arr.length)
+}
+
+sum: [P: AArch64](arr: Array[Float]) -> Float = {
+    return neon_sum(arr.data, arr.length)
 }
 ```
 
 ---
 
-## 第四章：表达式
+## 第三章（续）：语法设计说明
+
+### 3.17 具名函数与 Lambda 的关系
+
+**核心理解**：具名函数和 Lambda 表达式是同一个东西！唯一的区别是：具名函数给 Lambda 取了个名字。
+
+```yaoxiang
+# 这两者本质完全相同
+add: (a: Int, b: Int) -> Int = a + b           # 具名函数（推荐）
+add: (a: Int, b: Int) -> Int = (a, b) => a + b  # Lambda 形式（完全等价）
+```
+
+**语法糖模型**：
+
+```
+# 具名函数 = Lambda + 名字
+name: (Params) -> ReturnType = body
+
+# 本质上是
+name: (Params) -> ReturnType = (params) => body
+```
+
+**关键点**：当签名完整声明了参数类型，Lambda 头部的参数名就变成了冗余，可以省略。
+
+### 3.18 参数作用域规则
+
+**参数覆盖外层变量**：签名中的参数作用域覆盖函数体，内部作用域优先级更高。
+
+```yaoxiang
+x = 10  # 外层变量
+double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
+```
+
+### 3.19 类型标注位置
+
+类型标注可以在以下任一位置，**至少标注一处即可**：
+
+| 标注位置 | 形式 | 说明 |
+|----------|------|------|
+| 仅签名 | `double: (x: Int) -> Int = x * 2` | ✅ 推荐 |
+| 仅 Lambda 头 | `double = (x: Int) => x * 2` | ✅ 合法 |
+| 两边都标 | `double: (x: Int) -> Int = (x) => x * 2` | ✅ 冗余但允许 |
 
 ### 4.1 表达式分类
 
@@ -465,41 +755,41 @@ ForStmt     ::= 'for' Identifier 'in' Expr Block
 
 ## 第六章：函数
 
-### 6.1 函数定义语法
+### 6.1 统一函数模型
 
-**统一模型**：`name: type = value`
+**核心语法**：`name: type = value`
 
-```
-Declaration ::= Identifier ':' Type '=' Expression
-```
-
-#### 6.1.1 变量声明
+YaoXiang 采用**统一声明模型**：变量、函数、方法都使用相同的形式 `name: type = value`。
 
 ```
-LetStmt ::= ('mut')? Identifier ':' TypeExpr '=' Expr
+Declaration   ::= Identifier ':' Type '=' Expression
+FunctionDef   ::= Identifier GenericParams? '(' Parameters? ')' '->' Type '=' (Expression | Block)
+GenericParams ::= '[' Identifier (',' Identifier)* ']'
+Parameters    ::= Parameter (',' Parameter)*
+Parameter     ::= Identifier ':' TypeExpr
 ```
+
+### 6.2 变量声明
 
 ```yaoxiang
-# 变量声明
+# 基本语法
 x: Int = 42
 name: String = "YaoXiang"
 mut counter: Int = 0
+
+# 类型推导
+y = 100  # 推断为 Int
 ```
 
-#### 6.1.2 函数声明
+### 6.3 函数定义
 
-```
-FunctionDef ::= Identifier ':' FnType '=' Lambda
-FnType      ::= '(' ParamTypes? ')' '->' TypeExpr
-Lambda      ::= '(' ParamNames? ')' '=>' Expr
-            |  '(' ParamNames? ')' '=>' Block
-ParamNames  ::= Identifier (',' Identifier)*
-ParamTypes  ::= TypeExpr (',' TypeExpr)*
-```
+#### 6.3.1 完整语法
 
 ```yaoxiang
-# 完整语法：参数名在签名中
-add: (a: Int, b: Int) -> Int = a + b
+# 参数名在签名中声明
+add: (a: Int, b: Int) -> Int = {
+    return a + b
+}
 
 # 单参数
 inc: (x: Int) -> Int = x + 1
@@ -508,11 +798,77 @@ inc: (x: Int) -> Int = x + 1
 main: () -> Void = {
     print("Hello")
 }
+
+# 多行函数体
+calc: (x: Float, y: Float, op: String) -> Float = {
+    return match op {
+        "+" => x + y,
+        "-" => x - y,
+        _ => 0.0
+    }
+}
 ```
 
-#### 6.1.4 普通方法定义
+#### 6.3.2 返回规则
 
-**语法**：`name: (Type, ...) -> ReturnType = { ... }`
+```yaoxiang
+# 非 Void 返回类型 - 必须使用 return
+add: (a: Int, b: Int) -> Int = {
+    return a + b
+}
+
+# Void 返回类型 - 可选使用 return
+print: (msg: String) -> Void = {
+    # 不需要 return
+}
+
+# 单行表达式 - 直接返回值，无需 return
+greet: (name: String) -> String = "Hello, ${name}!"
+```
+
+### 6.4 泛型函数
+
+```yaoxiang
+# 泛型函数定义
+map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = {
+    result = List[R]()
+    for item in list {
+        result.push(f(item))
+    }
+    return result
+}
+
+# 使用泛型约束
+clone: [T: Clone](value: T) -> T = value.clone()
+
+# 多类型参数
+combine: [T, U](a: T, b: U) -> (T, U) = (a, b)
+```
+
+### 6.5 方法定义
+
+#### 6.5.1 类型方法
+
+**语法**：`Type.method: (self: Type, ...) -> Return = ...`
+
+```yaoxiang
+# 类型方法：关联到特定类型
+Point.draw: (self: Point, surface: Surface) -> Void = {
+    surface.plot(self.x, self.y)
+}
+
+Point.serialize: (self: Point) -> String = {
+    return "Point(${self.x}, ${self.y})"
+}
+
+# 使用方法语法糖
+p: Point = Point(1.0, 2.0)
+p.draw(screen)           # 语法糖 → Point.draw(p, screen)
+```
+
+#### 6.5.2 普通方法
+
+**语法**：`name: (Type, ...) -> Return = ...`（不关联类型）
 
 ```yaoxiang
 # 普通方法：不关联类型，作为独立函数
@@ -523,7 +879,9 @@ distance: (p1: Point, p2: Point) -> Float = {
 }
 ```
 
-#### 6.1.5 方法绑定
+### 6.6 方法绑定
+
+#### 6.6.1 手动绑定
 
 **语法**：`Type.method = function[positions]`
 
@@ -541,7 +899,7 @@ Point.scale = scale[0, 1]
 Point.calc = func[0, _, 2]
 ```
 
-#### 6.1.6 pub 自动绑定
+#### 6.6.2 pub 自动绑定
 
 使用 `pub` 声明的函数，编译器自动绑定到同文件定义的类型：
 
@@ -563,11 +921,35 @@ d = distance(p1, p2)           # 函数式
 d2 = p1.distance(p2)           # OOP 语法糖
 ```
 
----
+### 6.7 方法绑定规则
 
-### 6.2 并作函数与注解
+| 规则 | 说明 |
+|------|------|
+| 位置从 0 开始 | `func[0]` 绑定第 1 个参数（索引 0） |
+| 最大位置 | 必须 < 函数参数个数 |
+| 负数索引 | `[-1]` 表示最后一个参数 |
+| 占位符 | `_` 跳过该位置，由用户提供 |
 
-#### 6.2.1 spawn 函数（并作函数）
+### 6.8 柯里化支持
+
+绑定天然支持柯里化。当调用时提供的参数少于剩余参数时，返回一个接受剩余参数的函数：
+
+```yaoxiang
+# 原始函数：5 个参数
+calculate: (scale: Float, a: Point, b: Point, x: Float, y: Float) -> Float = ...
+
+# 绑定：Point.calc = calculate[1, 2]
+# 绑定后剩余参数：scale, x, y
+
+# 调用场景
+p1.calc(2.0, 10.0, 20.0)       # 提供 3 个参数 → 直接调用
+p1.calc(2.0)                    # 提供 1 个参数 → 返回 (Float, Float) -> Float
+p1.calc()                       # 提供 0 个参数 → 返回 (Float, Float, Float) -> Float
+```
+
+### 6.9 并作函数与注解
+
+#### 6.9.1 spawn 函数（并作函数）
 
 ```
 SpawnFn     ::= Identifier ':' FnType 'spawn' '=' Lambda
@@ -595,7 +977,7 @@ main: () -> Void @block = { ... }
 compute: (n: Int) -> Int @eager = { ... }
 ```
 
-#### 6.2.2 spawn 块
+#### 6.9.2 spawn 块
 
 显式声明的并发疆域，块内任务将并作执行：
 
@@ -613,7 +995,7 @@ SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' Expr (',' Expr)* 
 }
 ```
 
-#### 6.2.3 spawn 循环
+#### 6.9.3 spawn 循环
 
 数据并行循环，循环体在所有数据元素上并作执行：
 
@@ -630,7 +1012,7 @@ results = spawn for item in items {
 }
 ```
 
-#### 6.2.4 错误传播运算符
+#### 6.9.4 错误传播运算符
 
 ```
 ErrorPropagate ::= Expr '?'
@@ -952,6 +1334,12 @@ name: (param1: Type1, param2: Type2) -> ReturnType = body
 
 # 形式二：简写式（参数名省略）
 name: (Type1, Type2) -> ReturnType = (params) => body
+
+# 泛型函数
+name: [T, R](param: T) -> R = body
+
+# 泛型约束
+name: [T: Clone + Add](a: T, b: T) -> T = body
 ```
 
 ### A.3 方法定义
@@ -977,7 +1365,36 @@ Type.method = func[0, 1]
 pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 ```
 
-### A.5 模块
+### A.5 泛型语法
+
+```
+# 泛型类型
+type List[T] = { data: Array[T], length: Int }
+type Result[T, E] = { ok(T) | err(E) }
+
+# 泛型函数
+map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = { ... }
+
+# 类型约束
+clone: [T: Clone](value: T) -> T = value.clone()
+combine: [T: Clone + Add](a: T, b: T) -> T = body
+
+# 关联类型
+type Iterator[T] = { Item: T, next: () -> Option[T] }
+
+# 编译期泛型
+factorial: [n: Int](n: n) -> Int = { ... }
+type StaticArray[T, N: Int] = { data: T[N], length: N }
+
+# 条件类型
+type If[C: Bool, T, E] = match C { True => T, False => E }
+
+# 函数特化
+sum: (arr: Array[Int]) -> Int = { ... }
+sum: (arr: Array[Float]) -> Float = { ... }
+```
+
+### A.6 模块
 
 ```
 # 模块即文件
@@ -985,7 +1402,7 @@ pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 Import ::= 'use' ModuleRef
 ```
 
-### A.6 控制流
+### A.7 控制流
 
 ```
 if Expr Block (elif Expr Block)* (else Block)?
@@ -994,7 +1411,7 @@ while Identifier in Expr Block Expr Block
 for
 ```
 
-### A.7 match 语法
+### A.8 match 语法
 
 ```
 match value {
@@ -1032,7 +1449,7 @@ match value {
 | 特性 | 优先级 | 说明 |
 |------|--------|------|
 | 花括号类型语法 | P0 | `type Point = { x: Float, y: Float }` |
-| 接口类型 | P1 | `type Serializable = [ serialize() -> String ]` |
+| 接口类型 | P1 | `type Serializable = { serialize() -> String }` |
 | 列表推导式 | P2 | `[x for x in list if condition]` |
 | `?` 错误传播 | P1 | Result 类型自动错误传播 |
 | `ref` 关键字 | P1 | Arc 引用计数共享 |
@@ -1046,6 +1463,14 @@ match value {
 | Send/Sync 约束 | P2 | 并发安全类型检查 |
 | Mutex/Atomic 类型 | P2 | 并发安全数据类型 |
 | 错误图可视化 | P3 | 并发错误传播追踪 |
+| **泛型类型系统** | P1 | RFC-011 |
+| 基础泛型 `[T]` | P1 | 泛型类型参数和单态化 |
+| 类型约束 `[T: Clone]` | P2 | 单一/多重约束系统 |
+| 关联类型 `Item: T` | P3 | GAT 支持 |
+| 编译期泛型 `[N: Int]` | P3 | 字面量类型约束 |
+| 条件类型 `If[C, T, E]` | P3 | 类型级计算 |
+| 函数重载特化 | P2 | 平台特化与类型特化 |
+| 方法语法 `Type.method` | P1 | `Point.draw: (...) -> ... = ...` |
 
 ### B.4 不实现特性
 
@@ -1261,6 +1686,7 @@ result = f(arg2, arg3)
 | v1.3.0 | 2025-01-05 | 沫郁酱 | 添加并作模型规范（三层并发架构、spawn语法、注解）；添加类型系统约束（Send/Sync）；添加并发安全类型（Mutex、Atomic）；更新错误处理（?运算符）；更新待实现特性列表 |
 | v1.4.0 | 2025-01-15 | 晨煦 | 更新所有权模型（默认Move + 显式ref=Arc）；添加unsafe关键字；删除生命周期 `'a` 和借用检查器；更新待实现特性列表 |
 | v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
+| v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
 
 ---
 
