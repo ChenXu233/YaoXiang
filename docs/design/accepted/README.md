@@ -17,7 +17,7 @@
 | RFC-009 | [所有权模型 v7](009-ownership-model.md) | 2025-01-16 | 已接受 |
 | RFC-010 | [统一类型语法](010-unified-type-syntax.md) | 2025-01-25 | 已接受 |
 | RFC-011 | [泛型系统设计 - 零成本抽象与宏替代](011-generic-type-system.md) | 2025-01-25 | 已接受 |
-
+| RFC-013 | [错误代码规范设计](012-error-code-specification.md) | 2025-01-30 | 已接受 |
 
 
 ## 分类索引

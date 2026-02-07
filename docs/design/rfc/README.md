@@ -27,7 +27,8 @@
 |------|------|------|----------|------|
 | RFC-002 | [跨平台I/O与libuv集成](002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案 |
 | RFC-005 | [自动化CVE安全检查系统](005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 草案 |
-| RFC-006 | [文档站点建设与优化方案](006-documentation-site-optimization.md) | 晨煦 | 2025-01-05 | 草案 |
+| RFC-012 | [F-String 模板字符串](012-f-string-template-strings.md) | 晨煦 | 2025-01-27 | 草案 |
+
 ---
 
 ## 审核中RFC
@@ -35,7 +36,7 @@
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-003 | [版本规划与实现建议](003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
-
+| RFC-006 | [文档站点建设与优化方案](006-documentation-site-optimization.md) | 晨煦 | 2025-01-05 | 审核中 |
 
 ---
 
@@ -49,7 +50,7 @@
 | RFC-008 | [Runtime 并发模型与调度器脱耦设计](008-runtime-concurrency-model.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-009 | [所有权模型 v7](009-ownership-model.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-011 | [泛型系统设计 - 零成本抽象与宏替代](011-generic-type-system.md) | 晨煦 | 2025-01-25 | 已接受 |
-
+| RFC-013 | [错误代码规范设计](012-error-code-specification.md) | 晨煦 | 2025-01-30 | 已接受 |
 ---
 
 ## 已拒绝RFC
