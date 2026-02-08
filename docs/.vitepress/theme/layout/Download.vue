@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useData } from 'vitepress'
-import { computed, ref } from 'vue'
-import { useMouse, useWindowSize } from '@vueuse/core'
+import { computed, ref, watchEffect } from 'vue'
+import { useMouse, useWindowSize, onClickOutside } from '@vueuse/core'
 
 const { frontmatter, isDark } = useData<any>()
 
@@ -27,14 +27,54 @@ const shadowColorHover = computed(() => isDark.value ? 'rgba(0,0,0,0.2)' : 'rgba
 
 const copySuccess = ref(false)
 const copyInstall = async () => {
-  const cmd = frontmatter.value.install_command || 'curl -fsSL https://yaoxiang.org/install.sh | sh'
+  const cmd = installCmd.value
   await navigator.clipboard.writeText(cmd)
   copySuccess.value = true
   setTimeout(() => copySuccess.value = false, 2000)
 }
 
-const downloads = computed(() => frontmatter.value.downloads || [])
 const d = computed(() => frontmatter.value.download || {})
+
+// Version Handler
+const allVersions = computed(() => frontmatter.value.versions || [])
+const selectedVersion = ref('')
+
+// Dropdown Logic
+const isDropdownOpen = ref(false)
+const dropdownRef = ref(null)
+
+const toggleDropdown = () => isDropdownOpen.value = !isDropdownOpen.value
+const selectVersion = (ver: string) => {
+  selectedVersion.value = ver
+  isDropdownOpen.value = false
+}
+
+onClickOutside(dropdownRef, () => isDropdownOpen.value = false)
+
+watchEffect(() => {
+  if (!selectedVersion.value && allVersions.value.length > 0) {
+    selectedVersion.value = allVersions.value[0].version
+  }
+})
+
+const activeVersionData = computed(() => {
+  if (allVersions.value.length > 0) {
+    return allVersions.value.find((v: any) => v.version === selectedVersion.value) || allVersions.value[0]
+  }
+  return null
+})
+
+const effectiveDownloads = computed(() => {
+  return activeVersionData.value?.downloads || []
+})
+
+const currentDisplayVersion = computed(() => {
+    return activeVersionData.value?.version || '0.1.0'
+})
+
+const installCmd = computed(() => {
+    return activeVersionData.value?.install_command || 'curl -fsSL https://yaoxiang.org/install.sh | sh'
+})
 </script>
 
 <template>
@@ -48,7 +88,7 @@ const d = computed(() => frontmatter.value.download || {})
         <div class="text-center">
             <div class="inline-flex items-center gap-2 px-3 py-1 border border-primary/50 text-primary text-xs font-bold tracking-widest uppercase mb-6 rounded-full bg-primary/5">
                <span class="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
-               {{ d.latest_stable?.replace('{version}', frontmatter.version || '0.1.0') || 'LATEST STABLE v' + (frontmatter.version || '0.1.0') }}
+               {{ d.latest_stable?.replace('{version}', currentDisplayVersion) || 'LATEST STABLE v' + (currentDisplayVersion) }}
             </div>
             <h1 class="text-5xl md:text-7xl font-black mb-6 glitch-text tracking-tighter" :data-text="frontmatter.title">{{ frontmatter.title }}</h1>
             <p class="text-xl opacity-60 max-w-2xl mx-auto font-mono leading-relaxed">{{ frontmatter.description }}</p>
@@ -71,7 +111,7 @@ const d = computed(() => frontmatter.value.download || {})
              <div class="flex-1 w-full">
                <div class="text-xs text-primary/70 dark:text-primary/70 font-bold mb-2 tracking-widest uppercase">{{ d.quick_install || 'QUICK INSTALL' }}</div>
                <code class="block bg-gray-100 dark:bg-black/50 p-4 rounded text-success font-mono text-sm md:text-base border-l-2 border-success/50 w-full overflow-x-auto">
-                 <span class="text-gray-500 dark:text-gray-500">$</span> {{ frontmatter.install_command || 'curl -fsSL https://yaoxiang.org/install.sh | sh' }}
+                 <span class="text-gray-500 dark:text-gray-500">$</span> {{ installCmd }}
                </code>
              </div>
              <button
@@ -87,9 +127,69 @@ const d = computed(() => frontmatter.value.download || {})
         </div>
       </div>
 
-      <!-- OS Selection Grid -->
+      <!-- Retro Version Selector -->
+      <div v-if="allVersions.length > 0" class="max-w-[400px] mx-auto mb-16 relative z-30">
+         <div class="relative group select-none">
+            <!-- Decorative shadow/offset bg -->
+            <div class="absolute inset-0 bg-primary/20 rounded-lg transform translate-x-2 translate-y-2 group-hover:translate-x-3 group-hover:translate-y-3 transition-transform duration-300"></div>
+            
+            <!-- Main container -->
+            <div class="relative bg-base-100 border-2 border-primary/80 rounded-lg px-6 py-4 transition-all duration-300 group-hover:border-primary shadow-xl">
+               
+               <div class="flex items-center justify-between mb-3 border-b-2 border-primary/10 pb-2">
+                   <div class="flex items-center gap-2">
+                     <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span>
+                     <span class="text-[10px] tracking-[0.25em] font-bold text-primary/70 uppercase">Select_Version_Module</span>
+                   </div>
+                   <!-- Tech deco dots -->
+                   <div class="flex gap-1">
+                       <span class="w-1 h-1 rounded-full bg-primary/20"></span>
+                       <span class="w-1 h-1 rounded-full bg-primary/40"></span>
+                       <span class="w-1 h-1 rounded-full bg-primary/60"></span>
+                   </div>
+               </div>
+               
+               <div class="relative" ref="dropdownRef">
+                   <!-- Trigger/Display Area -->
+                   <div @click="toggleDropdown" class="flex justify-between items-center bg-base-200/50 rounded p-2 border border-base-300 hover:border-primary/50 transition-colors cursor-pointer select-none group/trigger">
+                     <span class="text-3xl font-black font-mono tracking-tighter text-base-content group-hover/trigger:text-primary transition-colors">
+                       v{{ selectedVersion }}
+                     </span>
+                     
+                     <div class="flex flex-col items-end gap-1">
+                       <span v-if="activeVersionData?.latest" class="badge badge-primary badge-sm rounded-sm font-mono font-bold">LATEST</span>
+                       <span class="text-[10px] font-mono opacity-50">{{ activeVersionData?.date || 'RELEASED' }}</span>
+                     </div>
+                   </div>
+
+                   <!-- Custom Arrow -->
+                   <div class="absolute right-[-24px] top-1/2 -translate-y-1/2 text-primary/30 text-xs flex flex-col gap-0.5 pointer-events-none transition-colors" :class="{ '!text-primary': isDropdownOpen }">
+                     <span class="transition-transform duration-300" :class="{ 'translate-y-1': isDropdownOpen }">▲</span>
+                     <span class="transition-transform duration-300" :class="{ '-translate-y-1': isDropdownOpen }">▼</span>
+                   </div>
+
+                   <!-- Custom Dropdown Menu -->
+                   <div v-show="isDropdownOpen" class="absolute top-full left-0 right-0 mt-3 bg-base-100 border-2 border-primary shadow-[8px_8px_0_rgba(0,0,0,0.15)] z-50 rounded-lg overflow-hidden">
+                        <ul>
+                            <li v-for="v in allVersions" :key="v.version" 
+                                @click="selectVersion(v.version)"
+                                class="px-4 py-3 border-b border-primary/10 last:border-0 hover:bg-primary/10 cursor-pointer flex justify-between items-center group transition-colors">
+                                <span class="font-mono text-xl font-bold group-hover:text-primary transition-colors">v{{ v.version }}</span>
+                                <span v-if="v.latest" class="text-[10px] font-bold text-primary border border-primary px-1 rounded bg-primary/5">LATEST</span>
+                            </li>
+                        </ul>
+                   </div>
+               </div>
+
+               <!-- Corner accents -->
+               <div class="absolute -top-[1px] -left-[1px] w-3 h-3 border-t-2 border-l-2 border-primary rounded-tl-lg"></div>
+               <div class="absolute -bottom-[1px] -right-[1px] w-3 h-3 border-b-2 border-r-2 border-primary rounded-br-lg"></div>
+            </div>
+         </div>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-        <div v-for="(os, index) in downloads" :key="index" 
+        <div v-for="(os, index) in effectiveDownloads" :key="index" 
             class="card bg-base-100 border-2 border-base-content/10 hover:border-primary transition-all duration-300 hover:-translate-y-2 hover:shadow-[12px_12px_0px_rgba(0,0,0,0.1)] group rounded-none"
         >
           <div class="card-body">

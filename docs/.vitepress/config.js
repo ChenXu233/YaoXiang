@@ -35,35 +35,6 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.svg',
-    nav: [
-      { text: '开始', link: '/getting-started' },
-      { text: '教程', link: '/tutorial/' },
-      { text: '参考', link: '/reference/' },
-      { text: 'GitHub', link: 'https://github.com/ChenXu233/yaoxiang' },
-    ],
-
-    sidebar: {
-      '/zh/': [
-        {
-          text: '中文文档',
-          items: [
-            { text: '快速开始', link: '/getting-started' },
-            { text: '教程', link: '/tutorial/' },
-            { text: '贡献指南', link: '/contributing' },
-          ],
-        },
-      ],
-      '/en/': [
-        {
-          text: 'English',
-          items: [
-            { text: 'Quick Start', link: '/en/getting-started' },
-            { text: 'Tutorial', link: '/en/tutorial/' },
-            { text: 'Contributing', link: '/en/contributing' },
-          ],
-        },
-      ],
-    },
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/ChenXu233/yaoxiang' },
@@ -82,7 +53,57 @@ export default defineConfig({
   },
 
   locales: {
-    root: { lang: 'zh-CN', label: '中文' },
-    en: { lang: 'en-US', label: 'English' },
+    root: {
+      lang: 'zh-CN',
+      label: '中文',
+      link: '/',
+      themeConfig: {
+        nav: [
+          { text: '下载', link: '/download' },
+          { text: '教程', link: '/tutorial/' },
+          { text: '实验', link: '/playground/' },
+          { text: '工具', link: '/tools/' },
+          { text: '社区', link: '/community/' },
+          { text: '归档', link: '/archived/' },
+          { text: '博客', link: '/blog/' },
+        ],
+        sidebar: [
+          {
+            text: '中文文档',
+            items: [
+              { text: '快速开始', link: '/getting-started' },
+              { text: '教程', link: '/tutorial/' },
+              { text: '贡献指南', link: '/contributing' },
+            ],
+          },
+        ],
+      },
+    },
+    en: {
+      lang: 'en-US',
+      label: 'English',
+      link: '/en/',
+      themeConfig: {
+        nav: [
+          { text: 'Download', link: '/en/download' },
+          { text: 'Tutorial', link: '/en/tutorial/' },
+          { text: 'Playground', link: '/en/playground/' },
+          { text: 'Tools', link: '/en/tools/' },
+          { text: 'Community', link: '/en/community/' },
+          { text: 'Archived', link: '/en/archived/' },
+          { text: 'Blog', link: '/en/blog/' },
+        ],
+        sidebar: [
+          {
+            text: 'English',
+            items: [
+              { text: 'Quick Start', link: '/en/getting-started' },
+              { text: 'Tutorial', link: '/en/tutorial/' },
+              { text: 'Contributing', link: '/en/contributing' },
+            ],
+          },
+        ],
+      },
+    },
   },
 })
