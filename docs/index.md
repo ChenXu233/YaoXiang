@@ -10,13 +10,13 @@ hero:
   actions:
     - theme: brand
       text: 🚀 快速开始
-      link: /zh/getting-started
+      link: /getting-started
     - theme: alt
       text: 教程
-      link: /zh/tutorial/
+      link: /tutorial/
     - theme: brand
       text: 下载本体
-      link: /zh/download/
+      link: /download
     - theme: alt
       text: GitHub ⇗
       link: https://github.com/yaoxiang-lang/yaoxiang

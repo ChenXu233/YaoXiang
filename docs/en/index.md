@@ -9,7 +9,7 @@ hero:
   tagline: 万物并作，吾以观复
   actions:
     - theme: brand
-      text: 🚀 Quick Start
+      text: Quick Start
       link: /en/getting-started
     - theme: alt
       text: Tutorials
