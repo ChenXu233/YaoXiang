@@ -2,6 +2,7 @@ import daisyui from 'daisyui'
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     './.vitepress/**/*.{js,ts,vue}',
     './zh/**/*.{md,vue}',

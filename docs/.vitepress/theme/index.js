@@ -6,6 +6,7 @@ import { h } from 'vue'
 import { useData } from 'vitepress'
 import Mermaid from './component/Mermaid.vue'
 import Home from './layout/Home.vue'
+import Download from './layout/Download.vue'
 
 // medium-zoom 指令
 const zoomDirective = {
@@ -31,14 +32,19 @@ export default {
 
   Layout() {
     const { frontmatter } = useData()
+    
+    if (frontmatter.value.is_download) {
+       return h(DefaultTheme.Layout, null, {
+         'page-top': () => h(Download)
+       })
+    }
+
     if (frontmatter.value.is_home) {
       return h(DefaultTheme.Layout, null, {
         'page-top': () => h(Home)
-      })
+     })
     }
-    return h(DefaultTheme.Layout, null, {
-      'page-top': () => h(Home)
-    })
+    return h(DefaultTheme.Layout)
   },
 
   mounted() {

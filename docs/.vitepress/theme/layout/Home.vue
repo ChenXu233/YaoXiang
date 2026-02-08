@@ -241,8 +241,8 @@ const codeTransform = computed(() => {
                   </div>
                   <div class="flex-1 w-full relative">
                       <div class="mockup-code bg-[#282c34] text-gray-300 shadow-2xl transform md:rotate-2 group-hover:rotate-0 transition-all duration-500 border border-white/10 text-xs">
-                        <pre data-prefix="1"><code><span class="text-[#c678dd]">let</span> <span class="text-[#e06c75]">x</span>: Int = <span class="text-[#d19a66]">42</span></code></pre>
-                        <pre data-prefix="2"><code><span class="text-[#c678dd]">let</span> <span class="text-[#61afef]">add</span>: (Int)->Int = ...</code></pre>
+                        <pre data-prefix="1"><code><span class="text-[#e06c75]">x</span>: Int = <span class="text-[#d19a66]">42</span></code></pre>
+                        <pre data-prefix="2"><code><span class="text-[#61afef]">add</span>: (a:Int, b:Int)->Int = (a, b) => a + b</code></pre>
                         <pre data-prefix="3"><code><span class="text-[#c678dd]">type</span> <span class="text-[#e5c07b]">Point</span> = { x: Int, y: Int }</code></pre>
                       </div>
                   </div>
@@ -392,7 +392,7 @@ const codeTransform = computed(() => {
       </div> 
       <div class="grid-flow-col gap-4 md:place-self-center">
         <a class="link link-hover" :href="frontmatter.hero.actions[2].link">GitHub</a>
-        <a class="link link-hover" :href="withBase('/zh/contributing')">Contributing</a>
+        <a class="link link-hover" :href="withBase(frontmatter.hero.actions[3]?.link || '/contributing')">Contributing</a>
       </div>
     </footer>
 
