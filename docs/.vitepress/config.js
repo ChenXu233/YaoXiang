@@ -35,8 +35,6 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.svg',
-
-    // 全局nav配置，用于作为fallback
     nav: [
       { text: '开始', link: '/getting-started' },
       { text: '教程', link: '/tutorial/' },
@@ -84,25 +82,7 @@ export default defineConfig({
   },
 
   locales: {
-    root: {
-      lang: 'zh-CN',
-      label: '中文',
-      nav: [
-        { text: '开始', link: '/getting-started' },
-        { text: '教程', link: '/tutorial/' },
-        { text: '参考', link: '/reference/' },
-        { text: 'GitHub', link: 'https://github.com/ChenXu233/yaoxiang' },
-      ],
-    },
-    en: {
-      lang: 'en-US',
-      label: 'English',
-      nav: [
-        { text: 'Getting Started', link: '/en/getting-started' },
-        { text: 'Tutorial', link: '/en/tutorial/' },
-        { text: 'Reference', link: '/en/reference/' },
-        { text: 'GitHub', link: 'https://github.com/ChenXu233/yaoxiang' },
-      ],
-    },
+    root: { lang: 'zh-CN', label: '中文' },
+    en: { lang: 'en-US', label: 'English' },
   },
 })
