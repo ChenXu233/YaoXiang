@@ -9,7 +9,7 @@ export default defineConfig({
   // 排除有问题文件的目录
   srcExclude: [
     'archived/**',
-    'plan/old/**',
+    'reference/plan/old/**',
     '**/*.backup.md',
   ],
 
