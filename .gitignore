@@ -31,3 +31,7 @@ tarpaulin-report.html
 
 proptest-regressions/
 .last_version_bump
+
+node_modules/
+cache/
+dist/
