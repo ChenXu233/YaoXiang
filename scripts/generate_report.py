@@ -88,11 +88,18 @@ def generate_trend_indicator(current: float, previous: float) -> tuple:
 def generate_html_report(criterion_results: dict, compare_results: dict) -> str:
     """生成完整的 HTML 报告"""
 
-    # 获取 Git 信息
-    git_commit = os.popen("git rev-parse HEAD 2>/dev/null").read().strip()[:7] or "unknown"
-    git_branch = (
-        os.popen("git rev-parse --abbrev-ref HEAD 2>/dev/null").strip() or "unknown"
-    )
+    # Git 信息 (使用 subprocess 获取)
+    import subprocess
+    try:
+        git_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], text=True
+        ).strip()[:7]
+        git_branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
+        ).strip()
+    except subprocess.CalledProcessError:
+        git_commit = "unknown"
+        git_branch = "unknown"
 
     # 构建语言对比表格
     compare_table = ""
