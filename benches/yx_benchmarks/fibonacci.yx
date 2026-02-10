@@ -22,5 +22,6 @@ fibonacci: (n: Int) -> Int = {
 
 // 主函数
 main: () -> Int = {
-    print(fibonacci(10))
+    fibonacci(20)
+    return 0
 }
