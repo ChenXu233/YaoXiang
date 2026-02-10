@@ -1,0 +1,32 @@
+[benchmarks]
+# Output directory
+output_directory = "target/criterion"
+
+# Statistical analysis settings
+confidence_level = 0.95
+sample_size = 100
+noise_threshold = 0.02
+significance_level = 0.01
+min_change_samples = 10
+
+# Plot settings
+plotting_backend = "plotters"
+term = "fancy"
+
+# Regression detection
+# 如果性能下降超过此阈值，CI 将发出告警
+regression_threshold = 0.05
+
+# Filter configuration
+# 只显示主要 benchmark，避免噪音
+filter = ".*"
+
+# Throughput mode (bytes per second)
+# 禁用吞吐量模式，使用时间模式
+throughput_mode = false
+
+[html]
+# 报告样式定制
+export_as_html = true
+# 在报告中显示置信区间
+show_confidence_interval = true

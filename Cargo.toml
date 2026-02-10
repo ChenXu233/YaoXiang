@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.5.5"
+version = "0.5.6"
 edition = "2021"
 rust-version = "1.82"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -24,6 +24,11 @@ test = false
 criterion = "0.8.1"
 quickcheck = "1.0"
 proptest = "1.0"
+
+[[bench]]
+name = "lib"
+path = "benches/lib.rs"
+harness = false
 
 [dependencies]
 # 日志 - tracing

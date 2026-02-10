@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@plugin "daisyui" {
+  themes: yaoxiang --default, dark, light;
+}
+
+@variant dark (&:where(.dark, .dark *));
+/* 自定义样式 */
+:root {
+  --vp-c-brand: #6366f1;
+  --vp-c-brand-light: #818cf8;
+  --vp-c-brand-dark: #4f46e5;
+}
+
+/* 暗色模式下的自定义颜色适配 */
+.dark {
+  --bg-primary: #1a1a1a;
+  --text-primary: #e5e7eb;
+}
+/* 修复 VPNavBarMenu 导航栏横排 */
+.VPNavBarMenu {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 0 !important;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6366f1;
+  border-radius: 4px;
+}

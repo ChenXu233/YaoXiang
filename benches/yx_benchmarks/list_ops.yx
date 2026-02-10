@@ -1,0 +1,37 @@
+//! # list_operations - 列表操作
+//!
+//! 测试列表的创建、遍历、过滤和映射
+
+is_even: (n: Int) -> Bool = {
+    return n % 2 == 0
+};
+
+double: (n: Int) -> Int = {
+    return n * 2
+};
+
+main: () -> Int = {
+    mut result = 0;
+    mut i = 0;
+    while i < 100 {
+        mut nums = [];
+        mut j = 0;
+        while j < 1000 {
+            nums = nums + [j];
+            j = j + 1;
+        };
+        mut filtered = [];
+        for n in nums {
+            if is_even(n) {
+                filtered = filtered + [n];
+            }
+        };
+        mut doubled = [];
+        for n in filtered {
+            doubled = doubled + [double(n)];
+        };
+        result = result + doubled[0];
+        i = i + 1;
+    }
+    return result
+}

@@ -1091,14 +1091,59 @@ impl AstToIrGenerator {
 
             Ok(())
         } else {
-            // Treat as void/0 if not range (TODO: generic iterator)
-            if let Some(reg) = result_reg {
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(reg),
-                    src: Operand::Const(ConstValue::Int(0)),
-                });
+            // 不支持的迭代器类型，返回错误
+            let iter_type = Self::describe_expr(iterable);
+            let span = Self::get_expr_span(iterable);
+            Err(IrGenError::UnsupportedIterator { iter_type, span })
+        }
+    }
+
+    /// 获取表达式的 span
+    fn get_expr_span(expr: &ast::Expr) -> Span {
+        match expr {
+            ast::Expr::Lit(_, span) => *span,
+            ast::Expr::Var(_, span) => *span,
+            ast::Expr::BinOp { span, .. } => *span,
+            ast::Expr::UnOp { span, .. } => *span,
+            ast::Expr::Call { span, .. } => *span,
+            ast::Expr::FnDef { span, .. } => *span,
+            ast::Expr::If { span, .. } => *span,
+            ast::Expr::Match { span, .. } => *span,
+            ast::Expr::While { span, .. } => *span,
+            ast::Expr::For { span, .. } => *span,
+            ast::Expr::Block(block) => block.span,
+            ast::Expr::Return(_, span) => *span,
+            ast::Expr::Break(_, span) => *span,
+            ast::Expr::Continue(_, span) => *span,
+            ast::Expr::Cast { span, .. } => *span,
+            ast::Expr::Tuple(_, span) => *span,
+            ast::Expr::List(_, span) => *span,
+            ast::Expr::ListComp { span, .. } => *span,
+            ast::Expr::Dict(_, span) => *span,
+            ast::Expr::Index { span, .. } => *span,
+            ast::Expr::FieldAccess { span, .. } => *span,
+            ast::Expr::Try { span, .. } => *span,
+            ast::Expr::Ref { span, .. } => *span,
+            ast::Expr::Unsafe { span, .. } => *span,
+            ast::Expr::Lambda { span, .. } => *span,
+        }
+    }
+
+    /// 描述表达式类型（用于错误消息）
+    fn describe_expr(expr: &ast::Expr) -> String {
+        match expr {
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Var(name, _) = func.as_ref() {
+                    format!("函数调用 `{}(...)`", name)
+                } else {
+                    "函数调用".to_string()
+                }
             }
-            Ok(())
+            ast::Expr::Var(name, _) => format!("变量 `{}`", name),
+            ast::Expr::Lit(lit, _) => format!("字面量 `{:?}`", lit),
+            ast::Expr::List(_, _) => "列表".to_string(),
+            ast::Expr::BinOp { op, .. } => format!("二元运算 `{:?}`", op),
+            _ => "表达式".to_string(),
         }
     }
 
@@ -1464,6 +1509,10 @@ pub enum IrGenError {
 
     /// 内部错误
     InternalError { message: String, span: Span },
+
+    /// 不支持的迭代器类型
+    /// for 循环目前只支持 `start..end` 语法的 range 迭代
+    UnsupportedIterator { iter_type: String, span: Span },
 }
 
 impl std::fmt::Display for IrGenError {
@@ -1480,6 +1529,13 @@ impl std::fmt::Display for IrGenError {
             }
             IrGenError::InvalidOperand { span: _ } => write!(f, "无效的操作数"),
             IrGenError::InternalError { message, span: _ } => write!(f, "内部错误: {}", message),
+            IrGenError::UnsupportedIterator { iter_type, span: _ } => {
+                write!(
+                    f,
+                    "不支持的迭代器类型: {}。for 循环目前只支持 `start..end` 语法，请使用如 `for i in 0..10` 的写法",
+                    iter_type
+                )
+            }
         }
     }
 }

@@ -9,7 +9,7 @@
 > Based on "Concurrent Model: All Things Work Together, and We Observe the Return"
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.2.2--experimental-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.5.6--experimental-blue.svg)]()
 [![Status](https://img.shields.io/badge/Status-Experiment--Validation-yellow.svg)]()
 
 ---
@@ -25,41 +25,10 @@
 
 YaoXiang (爻象) is an **experimental programming language under active development**, designed to explore the fusion of type theory, ownership models, and natural syntax.
 
-> **⚠️ Project Status: Experimental Validation**  
-> This is a research project for learning compiler development. The implementation is incomplete and not production-ready. See [Project Status](#project-status-experimental-validation) for current implementation level.
+> **⚠️ Project Status: Experimental Validation**
+> This is a research project for learning compiler development. The implementation is incomplete and not production-ready.
 
-### Project Status: Phase 5 - Ownership System Completed
-
-## Current Implementation Progress (based on docs/plan phase division):
-
-| Phase | Module | Status | Location |
-|-------|------|------|------|
-| P1 | Lexer | ✅ Complete | `src/frontend/lexer/` |
-| P2 | Parser | ✅ Complete | `src/frontend/parser/` |
-| P3 | Type Checker | ✅ Complete | `src/frontend/typecheck/` |
-| P4 | Bytecode Generator | ✅ In Progress | `src/middle/codegen/` |
-| P5 | Ownership System | ✅ Complete | `src/middle/lifetime/` |
-| P6 | Unsafe / FFI | 🔶 To Be Implemented | `src/middle/` |
-| P7-P10 | Optimization | ⏳ To Be Implemented | `src/middle/optim/` |
-| P11 | Virtual Machine | ⏳ To Be Implemented | `src/middle/` |
-| P12-19 | Runtime/Toolchain | ⏳ To Be Implemented | `src/middle/` |
-
-## Module Details:
-- ✅ **Lexer**: Complete token support, supports all literals
-- ✅ **Parser**: Complete Pratt Parser, supports functions/types/control flow
-- ✅ **Type Checker**: Type inference, monomorphization, specialization completed
-- 🔶 **Bytecode Generator**: Expression/statement generation in progress
-- ✅ **Ownership System**: Move semantics, mut check, ref (Arc), Send/Sync, cycle detection (100 tests passing)
-- ⏳ **Runtime**: DAG, scheduler, VM to be implemented
-
-## Next Goals (v0.2):
-- Complete P4 Bytecode Generator
-- Implement P11 Virtual Machine
-- End-to-end Hello World execution
-
-See [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) for detailed implementation status.
-
-### Getting Started
+### Core Design Goals
 
 **⚠️ Warning: This is for experimental/educational use only**
 
@@ -90,16 +59,6 @@ cargo run -- build docs/examples/hello.yx -o hello.42
 # Dump bytecode for debugging
 cargo run -- dump docs/examples/hello.yx
 ```
-
-### Core Design Goals
-
-| Goal | Description |
-|------|-------------|
-| **Everything is Type** | Values, functions, modules, generics are all types; types are first-class citizens |
-| **Unified Abstraction** | Mathematical abstraction framework based on type theory |
-| **Natural Syntax** | Python-like readability, close to natural language |
-| **Concurrent Model Design** | Synchronous syntax, async nature (design phase, not implemented) |
-| **AI-Friendly Design** | Strictly structured, clear AST (design goal) |
 
 ---
 
@@ -161,34 +120,6 @@ main: () -> Void = {
 ```
 
 For more examples, see [docs/examples/](docs/examples/).
-
----
-
-### Getting Started
-
-#### Installation
-
-```bash
-# Build from source
-git clone https://github.com/yourusername/yaoxiang.git
-cd yaoxiang
-cargo build --release
-```
-
-#### Running
-
-```bash
-yaoxiang your_program.yx
-```
-
-#### Documentation
-
-- [Quick Start](docs/guides/getting-started.md) - Get started in 5 minutes
-- [Language Guide](docs/guides/YaoXiang-book.md) - Learn core concepts systematically
-- [Language Specification](docs/design/language-spec.md) - Complete syntax and semantics
-- [Async Whitepaper](docs/design/async-whitepaper.md) - Seamless async design
-- [Tutorial](docs/tutorial/) - Step-by-step examples and best practices
-- [Architecture](docs/architecture/) - Compiler and runtime design
 
 ---
 
@@ -323,39 +254,18 @@ Before you criticize, check this out:
 
 YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**，旨在探索类型论、所有权模型和自然语法的融合。
 
-> **⚠️ 项目状态：实验验证阶段**  
-> 这是一个用于学习编译器开发的研究项目。实现不完整且不适用于生产环境。当前实现进度见[项目状态](#项目状态实验验证)。
+> **⚠️ 项目状态：实验验证阶段**
+> 这是一个用于学习编译器开发的研究项目。实现不完整且不适用于生产环境。
 
-### 项目状态：Phase 4 - 字节码生成器进行中
+### 核心设计目标
 
-**当前实现进度** (基于 docs/plan 阶段划分):
-
-| Phase | 模块 | 状态 | 位置 |
-|-------|------|------|------|
-| P1 | 词法分析器 | ✅ 完成 | `src/frontend/lexer/` |
-| P2 | 语法分析器 | ✅ 完成 | `src/frontend/parser/` |
-| P3 | 类型检查器 | ✅ 完成 | `src/frontend/typecheck/` |
-| P4 | 字节码生成器 | ✅ 进行中 | `src/middle/codegen/` |
-| P5-10 | 优化阶段 | 🔶 待实现 | `src/middle/` |
-| P11 | 虚拟机 | ⏳ 待实现 | `src/middle/` |
-| P12-19 | Runtime/工具链 | ⏳ 待实现 | `src/middle/` |
-
-**各模块详情**:
-- ✅ **词法分析器**: Token 完整，支持所有字面量
-- ✅ **语法分析器**: Pratt Parser 完整，函数/类型/控制流
-- ✅ **类型检查器**: 类型推断、单态化、特化完成
-- ✅ **字节码生成器**: 表达式/语句生成中
-- 🔶 **优化器**: 所有权系统、生命周期、单态化待完善
-- ⏳ **运行时**: DAG、调度器、VM 待实现
-
-**下一步目标 (v0.1)**:
-- 完成 P4 字节码生成器
-- 实现 P11 虚拟机
-- 端到端运行 Hello World
-
-详见 [docs/plan/IMPLEMENTATION-ROADMAP.md](docs/plan/IMPLEMENTATION-ROADMAP.md) 了解详细实现状态。
-
-### 快速开始
+| 目标 | 描述 |
+|------|-------------|
+| **一切皆类型** | 值、函数、模块、泛型都是类型；类型是一等公民 |
+| **统一抽象** | 基于类型论的数学抽象框架 |
+| **自然语法** | Python 般的可读性，接近自然语言 |
+| **并发模型设计** | 同步语法，异步本质（设计阶段，未实现） |
+| **AI 友好设计** | 严格结构化，清晰的 AST（设计目标） |
 
 **⚠️ 警告：仅用于实验/教育目的**
 
@@ -370,35 +280,9 @@ cargo build
 # 运行测试查看当前状态
 cargo test
 
-# 尝试示例（某些可能无法工作）
+# 尝试示例
 cargo run --example hello
 ```
-
-#### 当前可用功能
-
-```bash
-# 完整编译流程
-cargo run -- build docs/examples/hello.yx -o hello.yxb    # 编译为字节码
-cargo run -- run hello.yxb                                 # 运行字节码
-cargo run -- dump docs/examples/hello.yx                   # 转储 AST/字节码用于调试
-
-# 当前支持的功能：
-# - 词法分析：所有字面量、关键字、标识符
-# - 语法分析：函数定义、类型定义、控制流、模式匹配
-# - 类型检查：类型推断、单态化、泛型特化
-# - 字节码生成：表达式、语句、闭包、控制流
-# - 虚拟机：指令解释执行（进行中）
-```
-
-### 核心设计目标
-
-| 目标 | 描述 |
-|------|-------------|
-| **一切皆类型** | 值、函数、模块、泛型都是类型；类型是一等公民 |
-| **统一抽象** | 基于类型论的数学抽象框架 |
-| **自然语法** | Python 般的可读性，接近自然语言 |
-| **并发模型设计** | 同步语法，异步本质（设计阶段，未实现） |
-| **AI 友好设计** | 严格结构化，清晰的 AST（设计目标） |
 
 ### 代码示例
 
@@ -429,7 +313,7 @@ main: () -> Void = {
 
 # 使用 spawn 标记异步函数
 fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
+    return HTTP.get(url).json()
 }
 
 # 自动并行：多个 spawn 调用自动并行执行
@@ -449,41 +333,13 @@ compute_all: () -> (Int, Int, Int) spawn = {
         heavy_calc(2),
         heavy_calc(3)
     }
-    (a, b, c)
+    return (a, b, c)
 }
 
 # === 泛型 ===
 
 identity: [T](x: T) -> T = x
 ```
-
----
-
-### 快速开始
-
-#### 安装
-
-```bash
-# 从源码编译
-git clone https://github.com/yourusername/yaoxiang.git
-cd yaoxiang
-cargo build --release
-```
-
-#### 运行
-
-```bash
-yaoxiang your_program.yx
-```
-
-#### 文档
-
-- [快速入门](docs/guides/getting-started.md) - 5 分钟上手
-- [语言指南](docs/guides/YaoXiang-book.md) - 系统学习核心概念
-- [语言规范](docs/design/language-spec.md) - 完整语法和语义定义
-- [异步白皮书](docs/design/async-whitepaper.md) - 无感异步设计
-- [教程](docs/tutorial/) - 逐步示例和最佳实践
-- [架构设计](docs/architecture/) - 编译器与运行时设计
 
 ---
 
@@ -560,7 +416,7 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 | 无GC | ✅ | ✅ | ❌ | ❌ | ❌ |
 | 编译时线程安全 | ✅ | ✅ | ❌ | ❌ | ❌ |
 | AI友好语法 | ✅ | ❌ | ✅ | ❌ | ❌ |
-| 关键字数量 | 17 | 51+ | 35 | 64+ | 25 |
+| 关键字数量 | 18 | 51+ | 35 | 64+ | 25 |
 
 > **并作模型** = 同步语法 + 惰性求值 + 自动并行 + 无感异步
 
