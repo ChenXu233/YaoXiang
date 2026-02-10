@@ -19,8 +19,6 @@ on:
 permissions:
   contents: read
   actions: read
-  pages: write
-  id-token: write
 
 jobs:
   benchmarks:
@@ -128,11 +126,6 @@ jobs:
           name: benchmark-report
           path: benchmark-report/
           retention-days: 30
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
-        with:
-          artifact_name: benchmark-report
 
   benchmark-summary:
     name: Benchmark Summary
