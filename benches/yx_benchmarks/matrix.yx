@@ -4,9 +4,9 @@
 
 create_matrix: (size: Int) -> List[List[Int]] = {
     mut matrix = [];
-    for i in range(0, size) {
+    for i in 0..size {
         mut row = [];
-        for j in range(0, size) {
+        for j in 0..size {
             row = row + [i * j];
         }
         matrix = matrix + [row];
@@ -16,11 +16,11 @@ create_matrix: (size: Int) -> List[List[Int]] = {
 
 multiply: (a: List[List[Int]], b: List[List[Int]], size: Int) -> List[List[Int]] = {
     mut result = [];
-    for i in range(0, size) {
+    for i in 0..size {
         mut row = [];
-        for j in range(0, size) {
+        for j in 0..size {
             mut sum = 0;
-            for k in range(0, size) {
+            for k in 0..size {
                 sum = sum + a[i][k] * b[k][j];
             }
             row = row + [sum];
