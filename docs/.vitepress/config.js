@@ -65,6 +65,7 @@ export default defineConfig({
           { text: '码场', link: '/playground/' },
           { text: '工具', link: '/tools/' },
           { text: '设计', link: '/design/' },
+          { text: '参考', link: '/reference/' },
           { text: '社区', link: '/community/' },
           { text: '博客', link: '/blog/' },
         ],
@@ -82,11 +83,25 @@ export default defineConfig({
           // 设计文档的 sidebar
           '/design/': [
             {
-              text: '设计文档',
+              text: '语言设计',
               items: [
-                { text: 'RFC', link: '/design/rfc/' },
-                { text: '语言设计', link: '/design/language-spec' },
-                { text: '错误码', link: '/design/error-code' },
+                // TDDO: 添加语言设计文档链接
+              ]
+            },
+            {
+              text: 'RFC 文档',
+              items: [
+                // TDDO: 添加 RFC 文档链接
+              ],
+            },
+          ],
+          '/reference/': [
+            {
+              text: '参考文档',
+              items: [
+                { text: '语法', link: '/reference/syntax' },
+                { text: '标准库', link: '/reference/stdlib' },
+                { text: '错误码', link: '/reference/error-code' },
               ],
             },
           ],
@@ -115,8 +130,9 @@ export default defineConfig({
           { text: 'Tutorial', link: '/en/tutorial/' },
           { text: 'Playground', link: '/en/playground/' },
           { text: 'Tools', link: '/en/tools/' },
-          { text: 'Community', link: '/en/community/' },
           { text: 'Design', link: '/en/design/' },
+          { text: 'Reference', link: '/en/reference/' },
+          { text: 'Community', link: '/en/community/' },
           { text: 'Blog', link: '/en/blog/' },
         ],
         sidebar: {
@@ -138,6 +154,16 @@ export default defineConfig({
                 { text: 'RFC', link: '/en/design/rfc/' },
                 { text: 'Language Design', link: '/en/design/language-spec' },
                 { text: 'Error Code', link: '/en/design/error-code' },
+              ],
+            },
+          ],
+          '/en/reference/': [
+            {
+              text: 'Reference Documentation',
+              items: [
+                { text: 'Syntax', link: '/en/reference/syntax' },
+                { text: 'Standard Library', link: '/en/reference/stdlib' },
+                { text: 'Error Code', link: '/en/reference/error-code' },
               ],
             },
           ],
