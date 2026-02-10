@@ -7,8 +7,9 @@ import { useData } from 'vitepress'
 import Mermaid from './component/Mermaid.vue'
 import Home from './layout/Home.vue'
 import Download from './layout/Download.vue'
+import Community from './layout/Community.vue'
 
-// medium-zoom 指令
+// medium-zoom directive
 const zoomDirective = {
   mounted(el, binding) {
     mediumZoom(el, {
@@ -44,6 +45,13 @@ export default {
         'page-top': () => h(Home)
      })
     }
+
+    if (frontmatter.value.is_community) {
+      return h(DefaultTheme.Layout, null, {
+        'page-top': () => h(Community)
+      })
+    }
+
     return h(DefaultTheme.Layout)
   },
 
