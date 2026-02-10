@@ -9,7 +9,7 @@ export default defineConfig({
   // 排除有问题文件的目录
   srcExclude: [
     'archived/**',
-    'reference/plan/old/**',
+    'old/**',
     '**/*.backup.md',
   ],
 
@@ -59,24 +59,49 @@ export default defineConfig({
       link: '/',
       themeConfig: {
         nav: [
+          { text: '首页', link: '/' },
           { text: '下载', link: '/download' },
           { text: '教程', link: '/tutorial/' },
-          { text: '实验', link: '/playground/' },
+          { text: '码场', link: '/playground/' },
           { text: '工具', link: '/tools/' },
+          { text: '设计', link: '/design/' },
           { text: '社区', link: '/community/' },
-          { text: '归档', link: '/archived/' },
           { text: '博客', link: '/blog/' },
         ],
-        sidebar: [
-          {
-            text: '中文文档',
-            items: [
-              { text: '快速开始', link: '/getting-started' },
-              { text: '教程', link: '/tutorial/' },
-              { text: '贡献指南', link: '/contributing' },
-            ],
-          },
-        ],
+        sidebar: {
+          // 教程目录的 sidebar
+          '/tutorial/': [
+            {
+              text: '教程文档',
+              items: [
+                { text: '快速开始', link: '/tutorial/getting-started' },
+                { text: '贡献指南', link: '/tutorial/contributing' },
+              ],
+            },
+          ],
+          // 设计文档的 sidebar
+          '/design/': [
+            {
+              text: '设计文档',
+              items: [
+                { text: 'RFC', link: '/design/rfc/' },
+                { text: '语言设计', link: '/design/language-spec' },
+                { text: '错误码', link: '/design/error-code' },
+              ],
+            },
+          ],
+          // 默认 sidebar
+          '/': [
+            {
+              text: '中文文档',
+              items: [
+                { text: '快速开始', link: '/getting-started' },
+                { text: '教程', link: '/tutorial/' },
+                { text: '贡献指南', link: '/contributing' },
+              ],
+            },
+          ],
+        },
       },
     },
     en: {
@@ -85,24 +110,49 @@ export default defineConfig({
       link: '/en/',
       themeConfig: {
         nav: [
+          { text: 'Home', link: '/en/' },
           { text: 'Download', link: '/en/download' },
           { text: 'Tutorial', link: '/en/tutorial/' },
           { text: 'Playground', link: '/en/playground/' },
           { text: 'Tools', link: '/en/tools/' },
           { text: 'Community', link: '/en/community/' },
-          { text: 'Archived', link: '/en/archived/' },
+          { text: 'Design', link: '/en/design/' },
           { text: 'Blog', link: '/en/blog/' },
         ],
-        sidebar: [
-          {
-            text: 'English',
-            items: [
-              { text: 'Quick Start', link: '/en/getting-started' },
-              { text: 'Tutorial', link: '/en/tutorial/' },
-              { text: 'Contributing', link: '/en/contributing' },
-            ],
-          },
-        ],
+        sidebar: {
+          // 教程目录的 sidebar
+          '/en/tutorial/': [
+            {
+              text: 'Tutorial Documentation',
+              items: [
+                { text: 'Quick Start', link: '/en/tutorial/getting-started' },
+                { text: 'Contributing', link: '/en/tutorial/contributing' },
+              ],
+            },
+          ],
+          // 设计文档的 sidebar
+          '/en/design/': [
+            {
+              text: 'Design Documentation',
+              items: [
+                { text: 'RFC', link: '/en/design/rfc/' },
+                { text: 'Language Design', link: '/en/design/language-spec' },
+                { text: 'Error Code', link: '/en/design/error-code' },
+              ],
+            },
+          ],
+          // 默认 sidebar
+          '/en/': [
+            {
+              text: 'English Documentation',
+              items: [
+                { text: 'Quick Start', link: '/en/getting-started' },
+                { text: 'Tutorial', link: '/en/tutorial/' },
+                { text: 'Contributing', link: '/en/contributing' },
+              ],
+            },
+          ],
+        },
       },
     },
   },
