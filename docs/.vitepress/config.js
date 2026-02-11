@@ -99,11 +99,25 @@ export default defineConfig({
             {
               text: '参考文档',
               items: [
+                { text: '参考目录', link: '/reference' },
                 { text: '语法', link: '/reference/syntax' },
                 { text: '标准库', link: '/reference/stdlib' },
-                { text: '错误码', link: '/reference/error-code' },
               ],
             },
+            {
+              text: '错误码',
+              items: [
+                { text: '错误码列表', link: '/reference/error-code' },
+                { text: 'E0xxx：词法与语法分析', link: '/reference/error-code/E0xxx' },
+                { text: 'E1xxx：类型检查', link: '/reference/error-code/E1xxx' },
+                { text: 'E2xxx：语义分析', link: '/reference/error-code/E2xxx' },
+                { text: 'E4xxx：泛型与特质', link: '/reference/error-code/E4xxx' },
+                { text: 'E5xxx：模块与导入', link: '/reference/error-code/E5xxx' },
+                { text: 'E6xxx：运行时错误', link: '/reference/error-code/E6xxx' },
+                { text: 'E7xxx：I/O 与系统错误', link: '/reference/error-code/E7xxx' },
+                { text: 'E8xxx：内部编译器错误', link: '/reference/error-code/E8xxx' },
+              ],
+            }
           ],
           // 默认 sidebar
           '/': [
@@ -163,9 +177,22 @@ export default defineConfig({
               items: [
                 { text: 'Syntax', link: '/en/reference/syntax' },
                 { text: 'Standard Library', link: '/en/reference/stdlib' },
-                { text: 'Error Code', link: '/en/reference/error-code' },
               ],
             },
+            {
+              text: 'Error Codes',
+              items: [
+                { text: 'Error Code List', link: '/en/reference/error-code' },
+                { text: 'E0xxx: Lexical and Syntax Analysis', link: '/en/reference/error-code/E0xxx' },
+                { text: 'E1xxx: Type Checking', link: '/en/reference/error-code/E1xxx' },
+                { text: 'E2xxx: Semantic Analysis', link: '/en/reference/error-code/E2xxx' },
+                { text: 'E4xxx: Generics and Traits', link: '/en/reference/error-code/E4xxx' },
+                { text: 'E5xxx: Modules and Imports', link: '/en/reference/error-code/E5xxx' },
+                { text: 'E6xxx: Runtime Errors', link: '/en/reference/error-code/E6xxx' },
+                { text: 'E7xxx: I/O and System Errors', link: '/en/reference/error-code/E7xxx' },
+                { text: 'E8xxx: Internal Compiler Errors', link: '/en/reference/error-code/E8xxx' },
+              ],
+            }
           ],
           // 默认 sidebar
           '/en/': [
