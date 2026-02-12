@@ -1,6 +1,6 @@
 # YaoXiang Design Documents
 
-> One generates two, two generates three, three generates all things.
+> 「道生一，一生二，二生三，三生万物。」
 
 This directory contains design decisions, proposals, and discussions for the YaoXiang programming language.
 
@@ -8,10 +8,10 @@ This directory contains design decisions, proposals, and discussions for the Yao
 
 | Principle | Description |
 |-----------|-------------|
-| **Everything is Type** | Values, functions, modules are all types; types are first-class citizens |
+| **Everything is a Type** | Values, functions, and modules are all types; types are first-class citizens |
 | **Natural Syntax** | Python-like readability, close to natural language |
 | **Ownership Model** | Zero-cost abstraction, no GC, high performance |
-| **Bingzuo Model** | Synchronous syntax, asynchronous nature, automatic parallelism |
+| **Concurrency Model** | Synchronous syntax, asynchronous essence, automatic parallelism |
 | **AI-Friendly** | Strictly structured, clear AST |
 
 ## Design Document Structure
@@ -32,9 +32,9 @@ design/
 
 | Document | Status | Description |
 |----------|--------|-------------|
-| [008-Concurrency Model](./accepted/008-runtime-concurrency-model.md) | ✅ Accepted | Bingzuo model and task scheduler design |
+| [008-Concurrency Model](./accepted/008-runtime-concurrency-model.md) | ✅ Stable | Concurrency model and task scheduler design |
 
-> See [`accepted/`](./accepted/) directory for the complete list.
+> See the [`accepted/`](./accepted/) directory for the complete list.
 
 ## RFC Proposals
 
@@ -49,7 +49,7 @@ design/
 | RFC-006 | Documentation Site Optimization | Pending Review |
 | RFC-012 | f-string Template Strings | Pending Review |
 
-### RFC Template
+### RFC Templates
 
 Before submitting a new proposal, please refer to:
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
@@ -64,7 +64,7 @@ Before submitting a new proposal, please refer to:
    → Place in rfc/ directory
 
 2. Community discussion
-   → Discuss in corresponding rfc/REPO issue
+   → Discuss in corresponding issue in rfc/REPO
 
 3. Core team review
    → Accept → Move to accepted/
@@ -73,27 +73,27 @@ Before submitting a new proposal, please refer to:
 
 ### Design Principles
 
-- **Clear Boundaries**: Each design decision should have a clear scope
-- **Practical First**: Solve real problems, not imagined threats
+- **Clear Boundaries**: Each design decision should have a clear scope of application
+- **Practicality First**: Solve real problems, not hypothetical threats
 - **Progressive Transparency**: Layered concurrency model design (L1-L3)
-- **Never Break Userspace**: User-visible behavior must not change
+- **User-Visible Behavior Invariant**: Never break userspace
 
 ## Code Examples
 
 ```yaoxiang
-# Type definitions
+# Type Definitions
 type Point = { x: Float, y: Float }
 type Result[T, E] = { ok(T) | err(E) }
 
-# Function definitions
+# Function Definitions
 add: (a: Int, b: Int) -> Int = a + b
 
-# Bingzuo functions (automatic concurrency)
+# Concurrent Functions (Automatic Concurrency)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Main function
+# Main Function
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -103,11 +103,11 @@ main: () -> Void = {
 
 ### 1. Type System
 
-- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`, use `type` instead
-- **Constructors as Types**: Eliminate the gap between "type" and "value"
+- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`, unify with `type`
+- **Constructors as Types**: Bridge the gap between "types" and "values"
 - **Generic Support**: Compile-time monomorphization, zero runtime overhead
 
-### 2. Bingzuo Model
+### 2. Concurrency Model
 
 ```yaoxiang
 # Three-layer concurrency abstraction
@@ -118,7 +118,7 @@ fetch: (String) -> JSON @blocking = (url) => { ... }
 # L2: spawn explicit concurrency
 process: () -> Void spawn = () => {
     users = fetch_users()
-    posts = fetch_posts()  # Automatic parallel
+    posts = fetch_posts()  # Automatic parallelism
 }
 
 # L3: Fully transparent (default)
@@ -136,7 +136,7 @@ compute: (Int) -> Int = (n) => {
 type Result[T, E] = ok(T) | err(E)
 
 process: () -> Result[Data, Error] = {
-    data = fetch_data()?      # ? operator transparent propagation
+    data = fetch_data()?      # ? operator transparently propagates
     transformed = transform(data)?
     save(transformed)?
 }
@@ -144,14 +144,14 @@ process: () -> Result[Data, Error] = {
 
 ## Related Resources
 
-- [Tutorial](../tutorial/) - Learn YaoXiang
-- [Reference](../reference/) - API and standard library
+- [Tutorial](../tutorial/) - Learn to use YaoXiang
+- [Reference Documentation](../reference/) - API and standard library
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
 - [Contributing Guide](../tutorial/contributing.md)
 
 ## Historical Archives
 
-Historical documents from the design process have been moved to [`docs/old/`](../../old/):
+Historical documents from the design process have been moved to the [`docs/old/`](../../old/) directory, including:
 - Early architecture designs
-- Abandoned proposals
+- Discarded proposals
 - Outdated implementation plans

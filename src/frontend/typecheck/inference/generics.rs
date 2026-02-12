@@ -4,10 +4,9 @@
 //!
 //! 实现泛型函数的类型推断
 
-use crate::util::diagnostic::Result;
+use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::typecheck::checking::bounds::BoundsChecker;
-use crate::frontend::typecheck::errors::TypeError;
 use crate::util::span::Span;
 
 /// 泛型推断器
@@ -72,13 +71,9 @@ impl GenericInferrer {
         self.bounds_checker
             .check_constraint(actual_type, constraint_type)
             .map_err(|e| {
-                TypeError::ConstraintCheck {
-                    type_name: e.type_name,
-                    constraint_name: e.constraint_name,
-                    reason: e.reason,
-                    span,
-                }
-                .into()
+                ErrorCodeDefinition::trait_bound_not_satisfied(&e.type_name, &e.constraint_name)
+                    .at(span)
+                    .build(I18nRegistry::en())
             })
     }
 }

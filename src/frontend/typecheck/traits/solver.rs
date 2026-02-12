@@ -9,7 +9,7 @@
 //! - 用户定义特质
 //! - 约束传播
 
-use crate::util::diagnostic::Result;
+use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::type_level::trait_bounds::{TraitTable, TraitBound, TraitSolver as AdvancedSolver};
 use std::collections::HashMap;
@@ -83,11 +83,15 @@ impl TraitSolver {
                             .insert(constraint.name.clone(), constraint.clone());
                         Ok(())
                     }
-                    Err(e) => Err(crate::util::diagnostic::Diagnostic::error(
-                        "E0602".to_string(),
-                        format!("Cannot satisfy trait constraint: {}", e),
-                        None,
-                    )),
+                    Err(_e) => Err(ErrorCodeDefinition::trait_bound_not_satisfied(
+                        &constraint
+                            .args
+                            .first()
+                            .map(|a| format!("{}", a))
+                            .unwrap_or_default(),
+                        &constraint.name,
+                    )
+                    .build(I18nRegistry::en())),
                 }
             } else {
                 // 内置 Trait，使用简化求解
@@ -110,11 +114,15 @@ impl TraitSolver {
                 .insert(constraint.name.clone(), constraint.clone());
             Ok(())
         } else {
-            Err(crate::util::diagnostic::Diagnostic::error(
-                "E0602".to_string(),
-                format!("Cannot satisfy trait constraint: {}", constraint.name),
-                None,
-            ))
+            Err(ErrorCodeDefinition::trait_bound_not_satisfied(
+                &constraint
+                    .args
+                    .first()
+                    .map(|a| format!("{}", a))
+                    .unwrap_or_default(),
+                &constraint.name,
+            )
+            .build(I18nRegistry::en()))
         }
     }
 

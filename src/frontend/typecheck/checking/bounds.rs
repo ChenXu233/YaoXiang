@@ -4,7 +4,7 @@
 //!
 //! 检查泛型类型边界和约束
 
-use crate::util::diagnostic::Result;
+use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::typecheck::traits::solver::TraitSolver;
 use crate::util::span::Span;
@@ -46,11 +46,11 @@ impl BoundsChecker {
         // 检查每个边界
         for bound in bounds {
             if !self.trait_solver.check_trait(ty, bound) {
-                return Err(crate::util::diagnostic::Diagnostic::error(
-                    "E0601".to_string(),
-                    format!("Type does not satisfy trait bound: {}", bound),
-                    None,
-                ));
+                return Err(ErrorCodeDefinition::trait_bound_not_satisfied(
+                    &format!("{}", ty),
+                    bound,
+                )
+                .build(I18nRegistry::en()));
             }
         }
         Ok(())

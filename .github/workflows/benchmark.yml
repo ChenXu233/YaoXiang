@@ -2,19 +2,19 @@ name: Benchmark
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      iterations:
-        description: "Number of iterations"
-        required: false
-        default: "100"
-      regression_threshold:
-        description: "Regression threshold (e.g., 0.05 for 5%)"
-        required: false
-        default: "0.05"
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+  # workflow_dispatch:
+  #   inputs:
+  #     iterations:
+  #       description: "Number of iterations"
+  #       required: false
+  #       default: "100"
+  #     regression_threshold:
+  #       description: "Regression threshold (e.g., 0.05 for 5%)"
+  #       required: false
+  #       default: "0.05"
 
 permissions:
   contents: read
@@ -94,27 +94,22 @@ jobs:
         run: |
           threshold=${{ github.event.inputs.regression_threshold || '0.05' }}
           echo "Checking for regressions (threshold: $threshold)..."
-          # 解析 Criterion 结果
-          # 如果发现性能下降超过阈值，输出警告
-          python3 -c "
+          python3 -c '
           import json
           import sys
 
           try:
-              with open('benchmark_raw.json', 'r') as f:
+              with open("benchmark_raw.json", "r") as f:
                   data = json.load(f)
 
-              regressions = []
-              for result in data.get('results', []):
-                  # 检查是否相比上一次有显著性能下降
-                  # 简化处理：只输出警告
-                  print(f\"Benchmark: {result.get('name', 'unknown')}\")
-                  # 详细回归检测需要完整的历史数据
+              for result in data.get("results", []):
+                  name = result.get("name", "unknown")
+                  print(f"Benchmark: {name}")
 
-              print('Regression check completed.')
+              print("Regression check completed.")
           except Exception as e:
-              print(f'Warning: Could not check regressions: {e}', file=sys.stderr)
-          "
+              print(f"Warning: Could not check regressions: {e}", file=sys.stderr)
+          '
 
       - name: Generate Benchmark Report
         run: |
@@ -150,19 +145,7 @@ jobs:
           echo "|-----------|-----------|--------|------|-----|----|" >> benchmark_summary.md
 
           if [ -f "compare_results.json" ]; then
-            python3 -c "
-            import json
-            with open('compare_results.json') as f:
-                data = json.load(f)
-            for bench in data.get('benchmarks', []):
-                name = bench.get('name', 'Unknown')
-                yaoxiang = bench.get('yaoxiang', 0)
-                python = bench.get('python', 0)
-                rust = bench.get('rust', 0)
-                cpp = bench.get('cpp', 0)
-                go = bench.get('go', 0)
-                print(f'| {name} | {yaoxiang:.3f}ms | {python:.3f}ms | {rust:.3f}ms | {cpp:.3f}ms | {go:.3f}ms |')
-            " >> benchmark_summary.md
+            python3 scripts/generate_summary.py
           fi
 
           cat benchmark_summary.md

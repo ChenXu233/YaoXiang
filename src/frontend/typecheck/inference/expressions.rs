@@ -4,7 +4,7 @@
 //!
 //! 实现各种表达式的类型推断
 
-use crate::util::diagnostic::{Diagnostic, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::typecheck::overload;
@@ -164,11 +164,11 @@ impl<'a> ExprInferrer<'a> {
                 if let (MonoType::Bool, MonoType::Bool) = (left, right) {
                     Ok(MonoType::Bool)
                 } else {
-                    Err(Diagnostic::error(
-                        "E0500".to_string(),
-                        "Logical operation requires boolean operands".to_string(),
-                        None,
-                    ))
+                    Err(ErrorCodeDefinition::logical_operand_type_mismatch(
+                        &format!("{}", left),
+                        &format!("{}", right),
+                    )
+                    .build(I18nRegistry::en()))
                 }
             }
             BinOp::Range => {
@@ -203,11 +203,10 @@ impl<'a> ExprInferrer<'a> {
                 if *expr == MonoType::Bool {
                     Ok(MonoType::Bool)
                 } else {
-                    Err(Diagnostic::error(
-                        "E0501".to_string(),
-                        "Logical NOT requires boolean operand".to_string(),
-                        None,
-                    ))
+                    Err(
+                        ErrorCodeDefinition::logical_not_type_mismatch(&format!("{}", expr))
+                            .build(I18nRegistry::en()),
+                    )
                 }
             }
             UnOp::Deref => {
@@ -218,11 +217,8 @@ impl<'a> ExprInferrer<'a> {
                     let inner_type = inner.trim_start_matches('*').to_string();
                     Ok(MonoType::TypeRef(inner_type))
                 } else {
-                    Err(Diagnostic::error(
-                        "E0502".to_string(),
-                        "Dereference requires pointer type".to_string(),
-                        None,
-                    ))
+                    Err(ErrorCodeDefinition::invalid_deref(&format!("{}", expr))
+                        .build(I18nRegistry::en()))
                 }
             }
         }
@@ -246,11 +242,9 @@ impl<'a> ExprInferrer<'a> {
                     Ok(resolved)
                 } else {
                     // 返回错误
-                    Err(crate::util::diagnostic::Diagnostic::error(
-                        "E0002".to_string(),
-                        format!("Unknown variable: {}", name),
-                        Some(*span),
-                    ))
+                    Err(ErrorCodeDefinition::unknown_variable(name)
+                        .at(*span)
+                        .build(I18nRegistry::en()))
                 }
             }
 
@@ -345,15 +339,11 @@ impl<'a> ExprInferrer<'a> {
                             if *i >= 0 && (*i as usize) < types.len() {
                                 Ok(types[*i as usize].clone())
                             } else {
-                                Err(Diagnostic::error(
-                                    "E0012".to_string(),
-                                    format!(
-                                        "Tuple index {} out of bounds for tuple of length {}",
-                                        i,
-                                        types.len()
-                                    ),
-                                    None,
-                                ))
+                                Err(ErrorCodeDefinition::index_out_of_bounds(
+                                    types.len(),
+                                    *i as usize,
+                                )
+                                .build(I18nRegistry::en()))
                             }
                         } else {
                             // 动态下标：返回类型变量
@@ -379,17 +369,16 @@ impl<'a> ExprInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
-                        Err(Diagnostic::error(
-                            "E0011".to_string(),
-                            format!("Unknown field '{}' in struct '{}'", field, struct_type.name),
-                            None,
-                        ))
+                        Err(
+                            ErrorCodeDefinition::field_not_found(field, &struct_type.name)
+                                .build(I18nRegistry::en()),
+                        )
                     }
-                    _ => Err(Diagnostic::error(
-                        "E0502".to_string(),
-                        "Cannot access field on non-struct type".to_string(),
-                        None,
-                    )),
+                    _ => Err(ErrorCodeDefinition::field_access_on_non_struct(&format!(
+                        "{}",
+                        obj_ty
+                    ))
+                    .build(I18nRegistry::en())),
                 }
             }
 
@@ -461,11 +450,11 @@ impl<'a> ExprInferrer<'a> {
                 // 推断条件类型（必须是 Bool）
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
-                    return Err(Diagnostic::error(
-                        "E0503".to_string(),
-                        "If condition must be boolean".to_string(),
-                        None,
-                    ));
+                    return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                        "{}",
+                        cond_ty
+                    ))
+                    .build(I18nRegistry::en()));
                 }
 
                 // 推断 then 分支
@@ -475,11 +464,11 @@ impl<'a> ExprInferrer<'a> {
                 for (elif_cond, elif_block) in elif_branches {
                     let elif_cond_ty = self.infer_expr(elif_cond)?;
                     if elif_cond_ty != MonoType::Bool {
-                        return Err(Diagnostic::error(
-                            "E0504".to_string(),
-                            "Elif condition must be boolean".to_string(),
-                            None,
-                        ));
+                        return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                            "{}",
+                            elif_cond_ty
+                        ))
+                        .build(I18nRegistry::en()));
                     }
                     let _ = self.infer_block(elif_block, true, None)?;
                 }
@@ -503,11 +492,11 @@ impl<'a> ExprInferrer<'a> {
                 // 推断条件类型
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
-                    return Err(Diagnostic::error(
-                        "E0505".to_string(),
-                        "While condition must be boolean".to_string(),
-                        None,
-                    ));
+                    return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                        "{}",
+                        cond_ty
+                    ))
+                    .build(I18nRegistry::en()));
                 }
 
                 // 注册循环标签
@@ -565,11 +554,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(Diagnostic::error(
-                            "E0010".to_string(),
-                            format!("Unknown label '{}'", l),
-                            None,
-                        ));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
                     }
                 }
                 Ok(MonoType::Void)
@@ -581,11 +566,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(Diagnostic::error(
-                            "E0010".to_string(),
-                            format!("Unknown label '{}'", l),
-                            None,
-                        ));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
                     }
                 }
                 Ok(MonoType::Void)

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { generateSidebar } from 'vitepress-sidebar'
 import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 
 export default defineConfig({
@@ -13,7 +14,7 @@ export default defineConfig({
     '**/*.backup.md',
   ],
 
-  // 忽略死链接（现有文档有 146 个死链接）
+  // 忽略死链接
   ignoreDeadLinks: true,
 
   // 代码高亮配置
@@ -70,7 +71,6 @@ export default defineConfig({
           { text: '博客', link: '/blog/' },
         ],
         sidebar: {
-          // 教程目录的 sidebar
           '/tutorial/': [
             {
               text: '教程文档',
@@ -80,39 +80,92 @@ export default defineConfig({
               ],
             },
           ],
-          // 设计文档的 sidebar
+
           '/design/': [
             {
-              text: '语言设计',
+              text: '设计文档', 
               items: [
-                // TDDO: 添加语言设计文档链接
-              ]
-            },
+                { text: '设计目录', link: '/design' },
+                { text: '语言规范', link: '/design/language-spec' },
+                { text: '爻象宣言', link: '/design/manifesto' },
+                { text: '爻象宣言 WTF 版', link: '/design/manifesto-wtf' },
+                { text: '一个 2006 年出生者的语言设计观', link: '/design/2006-born-language-design' },
+              ],
+             },
             {
               text: 'RFC 文档',
               items: [
-                // TDDO: 添加 RFC 文档链接
-              ],
+                { text: 'RFC 目录', link: '/design/rfc' },
+                { text: 'RFC 模板', link: '/design/rfc/RFC_TEMPLATE' },
+                { text: 'RFC 完整模板（示例）', link: '/design/rfc/EXAMPLE_full_feature_proposal' },
+                {
+                  text: '已接受',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/design/rfc/accepted',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: '进行中',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/design/rfc/review',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: '提案',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/design/rfc/draft',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: '已拒绝',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/design/rfc/rejected',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+              ]
             },
           ],
+
           '/reference/': [
             {
               text: '参考文档',
               items: [
-                { text: '语法', link: '/reference/syntax' },
-                { text: '标准库', link: '/reference/stdlib' },
-                { text: '错误码', link: '/reference/error-code' },
+                { text: '参考目录', link: '/reference' },
               ],
             },
+            {
+              text: '错误码',
+              items: generateSidebar({
+                scanStartPath: '/reference/error-code',
+                useTitleFromFile: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              })
+            }
           ],
-          // 默认 sidebar
+
           '/': [
             {
               text: '中文文档',
               items: [
                 { text: '快速开始', link: '/getting-started' },
                 { text: '教程', link: '/tutorial/' },
-                { text: '贡献指南', link: '/contributing' },
               ],
             },
           ],
@@ -136,7 +189,6 @@ export default defineConfig({
           { text: 'Blog', link: '/en/blog/' },
         ],
         sidebar: {
-          // 教程目录的 sidebar
           '/en/tutorial/': [
             {
               text: 'Tutorial Documentation',
@@ -146,35 +198,89 @@ export default defineConfig({
               ],
             },
           ],
-          // 设计文档的 sidebar
           '/en/design/': [
             {
-              text: 'Design Documentation',
+              text: 'Design Index',
               items: [
-                { text: 'RFC', link: '/en/design/rfc/' },
-                { text: 'Language Design', link: '/en/design/language-spec' },
-                { text: 'Error Code', link: '/en/design/error-code' },
+                { text: 'Design Index', link: '/en/design' },
+                { text: 'Language Spec', link: '/en/design/language-spec' },
+                { text: 'YaoXiang Manifesto', link: '/en/design/manifesto' },
+                { text: 'YaoXiang Manifesto WTF', link: '/en/design/manifesto-wtf' },
+                { text: 'A Language Design Observation from a 2006 Born', link: '/en/design/2006-born-language-design' },
               ],
+             },
+            {
+              text: 'RFC Documentation',
+              items: [
+                { text: 'RFC Index', link: '/en/design/rfc' },
+                { text: 'RFC Template', link: '/en/design/rfc/RFC_TEMPLATE' },
+                { text: 'RFC Full Template (Example)', link: '/en/design/rfc/EXAMPLE_full_feature_proposal' },
+                {
+                  text: 'Accepted',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/en/design/rfc/accepted',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: 'Review',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/en/design/rfc/review',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: 'Draft',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/en/design/rfc/draft',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: 'Rejected',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/en/design/rfc/rejected',
+                    useTitleFromFile: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+              ]
             },
           ],
           '/en/reference/': [
             {
               text: 'Reference Documentation',
               items: [
-                { text: 'Syntax', link: '/en/reference/syntax' },
-                { text: 'Standard Library', link: '/en/reference/stdlib' },
-                { text: 'Error Code', link: '/en/reference/error-code' },
+                { text: 'Reference Index', link: '/en/reference' },
               ],
             },
+            {
+              text: 'Error Codes',
+              items: generateSidebar({
+                scanStartPath: '/en/reference/error-code',
+                useTitleFromFile: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              }),
+            },
           ],
-          // 默认 sidebar
           '/en/': [
             {
               text: 'English Documentation',
               items: [
                 { text: 'Quick Start', link: '/en/getting-started' },
                 { text: 'Tutorial', link: '/en/tutorial/' },
-                { text: 'Contributing', link: '/en/contributing' },
               ],
             },
           ],
