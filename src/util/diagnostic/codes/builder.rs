@@ -99,7 +99,7 @@ impl DiagnosticBuilder {
                                 "Missing parameter '{}' for error code '{}'. Available: {:?}",
                                 key,
                                 self.code,
-                                param_keys.iter().map(|s| *s).collect::<Vec<_>>()
+                                param_keys.iter().copied().collect::<Vec<_>>()
                             );
                         }
                         break;

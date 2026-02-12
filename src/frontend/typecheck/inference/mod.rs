@@ -12,15 +12,15 @@ pub trait TypeInferrer {
     fn infer_expr(
         &mut self,
         expr: &crate::frontend::core::parser::ast::Expr,
-    ) -> Result<MonoType, Diagnostic>;
+    ) -> Result<MonoType, Box<Diagnostic>>;
     fn infer_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<(), Diagnostic>;
+    ) -> Result<(), Box<Diagnostic>>;
     fn infer_pattern(
         &mut self,
         pattern: &crate::frontend::core::parser::ast::Pattern,
-    ) -> Result<MonoType, Diagnostic>;
+    ) -> Result<MonoType, Box<Diagnostic>>;
 }
 
 // 重新导出

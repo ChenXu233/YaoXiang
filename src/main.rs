@@ -216,7 +216,7 @@ fn main() -> Result<()> {
         } => {
             if let Some(definition) = ErrorCodeDefinition::find(&code) {
                 let i18n = I18nRegistry::new("zh"); // 使用中文配置
-                let info = i18n.get_info(&code).unwrap_or_else(|| ErrorInfo {
+                let info = i18n.get_info(&code).unwrap_or(ErrorInfo {
                     title: "",
                     help: "",
                     example: None,

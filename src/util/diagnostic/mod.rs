@@ -68,13 +68,7 @@ pub fn parse_compile_error(error: &str) -> Diagnostic {
     let i18n = I18nRegistry::en();
 
     // 根据消息内容识别错误码，通过注册表构建
-    if error.contains("Unknown variable") {
-        ErrorCodeDefinition::internal_error(error).build(i18n)
-    } else if error.contains("Type mismatch") {
-        ErrorCodeDefinition::internal_error(error).build(i18n)
-    } else {
-        ErrorCodeDefinition::internal_error(error).build(i18n)
-    }
+    ErrorCodeDefinition::internal_error(error).build(i18n)
 }
 
 /// 运行文件并美化错误输出

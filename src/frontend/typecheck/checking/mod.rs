@@ -79,7 +79,7 @@ impl BodyChecker {
         name: &str,
         params: &[Param],
         body: &Block,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         // 检查是否已经检查过
         if self.checked_functions.contains_key(name) {
             return Ok(());
@@ -116,7 +116,7 @@ impl BodyChecker {
     pub fn check_stmt(
         &mut self,
         stmt: &Stmt,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
             crate::frontend::core::parser::ast::StmtKind::Fn {
@@ -183,7 +183,7 @@ impl BodyChecker {
     fn check_expr_stmt(
         &mut self,
         expr: &Expr,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         match expr {
             Expr::FnDef {
                 name, params, body, ..
@@ -219,13 +219,15 @@ impl BodyChecker {
         _stmts: &[Stmt],
         body: Block,
         _span: crate::util::span::Span,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         // 检查是否与结构体重名
         if let Some(existing) = self.vars.get(name) {
             if let MonoType::Struct(_) = &existing.body {
-                return Err(ErrorCodeDefinition::duplicate_definition(name)
-                    .at(_span)
-                    .build(I18nRegistry::en()));
+                return Err(Box::new(
+                    ErrorCodeDefinition::duplicate_definition(name)
+                        .at(_span)
+                        .build(I18nRegistry::en()),
+                ));
             }
         }
 
@@ -264,7 +266,7 @@ impl BodyChecker {
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
         initializer: Option<&Expr>,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), _) => self.check_expr(init_expr)?,
             (None, Some(type_ann)) => MonoType::from(type_ann.clone()),
@@ -280,7 +282,7 @@ impl BodyChecker {
         var: &str,
         iterable: &Expr,
         body: &Block,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
             MonoType::List(elem) => *elem,
@@ -306,14 +308,14 @@ impl BodyChecker {
         elif_branches: &[(&Expr, &Block)],
         else_branch: Option<&Block>,
         _stmt_span: crate::util::span::Span,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         let cond_ty = self.check_expr(condition)?;
         if cond_ty != MonoType::Bool {
-            return Err(
+            return Err(Box::new(
                 ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
                     .at(_stmt_span)
                     .build(I18nRegistry::en()),
-            );
+            ));
         }
 
         self.check_block(then_branch)?;
@@ -321,12 +323,11 @@ impl BodyChecker {
         for (elif_cond, _) in elif_branches {
             let elif_cond_ty = self.check_expr(elif_cond)?;
             if elif_cond_ty != MonoType::Bool {
-                return Err(ErrorCodeDefinition::type_mismatch(
-                    "bool",
-                    &format!("{}", elif_cond_ty),
-                )
-                .at(_stmt_span)
-                .build(I18nRegistry::en()));
+                return Err(Box::new(
+                    ErrorCodeDefinition::type_mismatch("bool", &format!("{}", elif_cond_ty))
+                        .at(_stmt_span)
+                        .build(I18nRegistry::en()),
+                ));
             }
         }
 
@@ -345,7 +346,7 @@ impl BodyChecker {
     fn check_block(
         &mut self,
         block: &Block,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         for stmt in &block.stmts {
             self.check_stmt(stmt)?;
         }
@@ -359,7 +360,7 @@ impl BodyChecker {
     pub fn check_expr(
         &mut self,
         expr: &Expr,
-    ) -> Result<MonoType, Diagnostic> {
+    ) -> Result<MonoType, Box<Diagnostic>> {
         let vars_clone = self.vars.clone();
         let overload_candidates_clone = self.overload_candidates.clone();
         let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
@@ -371,6 +372,6 @@ impl BodyChecker {
             inferrer.add_var(name, poly);
         }
 
-        inferrer.infer_expr(expr)
+        inferrer.infer_expr(expr).map_err(Box::new)
     }
 }

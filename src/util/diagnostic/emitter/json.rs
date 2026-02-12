@@ -122,10 +122,8 @@ impl JsonEmitter {
 
     /// 渲染多个诊断
     pub fn render_all(diagnostics: &[Diagnostic]) -> String {
-        let lsp_diagnostics: Vec<LspDiagnostic> = diagnostics
-            .iter()
-            .map(|d| Self::to_lsp_diagnostic(d))
-            .collect();
+        let lsp_diagnostics: Vec<LspDiagnostic> =
+            diagnostics.iter().map(Self::to_lsp_diagnostic).collect();
         to_string_pretty(&lsp_diagnostics).unwrap_or_else(|_| "[]".to_string())
     }
 
