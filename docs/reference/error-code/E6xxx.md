@@ -1,147 +1,56 @@
-﻿# E6xxx：运行时错误
+# E6xxx：运行时错误
 
-> 执行期间发生的错误。
+> 自动生成自 `src/util/diagnostic/codes/`
+
+## 错误列表
 
 ## E6001：Division by zero
 
-整数除以零。
+**类别**: Runtime
 
-```yaoxiang
-main: () -> Void = {
-    x = 10 / 0;
-}
-```
+**消息**: Attempted to divide by zero
 
-```
-error[E6001]: Division by zero
-  --> example.yx:2:17
-   |
-  2 |     x = 10 / 0;
-   |            ^ division by zero
-```
+**帮助**: Add a check to prevent division by zero
 
-## E6002：Assertion failed
+---
 
-assert! 宏失败。
+## E6002：Null pointer dereference
 
-```yaoxiang
-main: () -> Void = {
-    x = 10;
-    assert!(x > 100, "x must be greater than 100");  # assert! 宏
-}
-```
+**类别**: Runtime
 
-```
-error[E6002]: Assertion failed: x must be greater than 100
-  --> example.yx:3:5
-   |
-  3 |     assert!(x > 100, "x must be greater than 100");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ assertion failed
-```
+**消息**: Attempted to access a null value
 
-## E6003：Arithmetic overflow
+**帮助**: Add a null check before accessing the value
 
-算术运算溢出。
+---
 
-```yaoxiang
-main: () -> Void = {
-    max_int = 9223372036854775807;  # 最大 Int 值
-    overflow = max_int + 1;  # 溢出
-}
-```
+## E6003：Array index out of bounds
 
-```
-error[E6003]: Arithmetic overflow
-  --> example.yx:3:21
-   |
-  3 |     overflow = max_int + 1;
-   |                     ^^^^^^^^^^^ arithmetic overflow
-```
+**类别**: Runtime
+
+**消息**: Array index is out of bounds at runtime
+
+**帮助**: Ensure the index is within the array bounds
+
+---
 
 ## E6004：Stack overflow
 
-栈空间耗尽（递归深度过大）。
+**类别**: Runtime
 
-```yaoxiang
-fibonacci: (n: Int) -> Int = {
-    if n <= 1 {
-        return n;
-    }
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
+**消息**: Recursion depth exceeded stack limit
 
-main: () -> Void = {
-    result = fibonacci(10000);
-}
-```
+**帮助**: Reduce recursion depth or use iteration
 
-```
-error[E6004]: Stack overflow: maximum recursion depth exceeded
-  --> example.yx:7:22
-   |
-  7 |     result = fibonacci(10000);
-   |                      ^^^^^^^^^^^^ recursion depth too large
-```
+---
 
-## E6005：Heap allocation failed
+## E6005：Assert failed
 
-内存分配失败。
+**类别**: Runtime
 
-```yaoxiang
-main: () -> Void = {
-    huge_list = List::new(1_000_000_000_000);
-}
-```
+**消息**: Assertion failed at runtime
 
-```
-error[E6005]: Heap allocation failed
-  --> example.yx:2:19
-   |
-  2 |     huge_list = List::new(1_000_000_000_000);
-   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ memory allocation failed
-```
+**帮助**: Fix the assertion condition or provide valid input
 
-## E6006：Runtime index out of bounds
+---
 
-运行时索引越界。
-
-```yaoxiang
-main: () -> Void = {
-    arr = [1, 2, 3];  # 数组
-    index = get_index();  # 动态索引
-    value = arr[index];
-}
-```
-
-```
-error[E6006]: Runtime index out of bounds
-  --> example.yx:4:18
-   |
-  4 |     value = arr[index];
-   |                  ^^^^^^^^^^ index out of bounds at runtime
-```
-
-## E6007：Type cast failed
-
-尝试将类型断言为不兼容类型。
-
-```yaoxiang
-main: () -> Void = {
-    value: Any = 42;
-    string_value = value as String;
-}
-```
-
-```
-error[E6007]: Type cast failed
-  --> example.yx:3:22
-   |
-  3 |     string_value = value as String;
-   |                      ^^^^^^^^^^^^^^^^ cannot cast `Int` to `String`
-```
-
-## 相关章节
-
-- [E5xxx：模块与导入](./E5xxx.md)
-- [E7xxx：I/O 与系统错误](./E7xxx.md)
-- [错误码总索引](./index.md)

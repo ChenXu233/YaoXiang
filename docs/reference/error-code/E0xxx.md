@@ -1,158 +1,96 @@
-﻿# E0xxx：词法与语法分析
+# E0xxx：词法和语法分析
 
-> 词法和解析阶段发生的错误。
+> 自动生成自 `src/util/diagnostic/codes/`
+
+## 错误列表
 
 ## E0001：Invalid character
 
-源代码包含非法字符。
+**类别**: Lexer
 
-```yaoxiang
-x: Int = ¥100;  # ¥ 不是有效字符
-```
+**消息**: Source contains illegal character
 
-```
-error[E0001]: Invalid character
-  --> example.yx:1:10
-   |
- 1 | x: Int = ¥100;
-   |              ^ illegal character '¥'
-```
+**帮助**: Remove the illegal character
+
+---
 
 ## E0002：Invalid number literal
 
-数字字面量格式不正确。
+**类别**: Lexer
 
-```yaoxiang
-x: Int = 1_000_000_;  # 下划线位置错误
-```
+**消息**: Number literal format is incorrect
 
-```
-error[E0002]: Invalid number literal
-  --> example.yx:1:10
-   |
- 1 | x = 1_000_000_;
-   |          ^ invalid digit '_' in numeric literal
-```
+**帮助**: Check the format of the number literal
+
+---
 
 ## E0003：Unterminated string
 
-多行字符串缺少结束引号。
+**类别**: Lexer
 
-```yaoxiang
-greeting = "Hello, World;
-```
+**消息**: Multi-line string is missing closing quote
 
-```
-error[E0003]: Unterminated string
-  --> example.yx:1:18
-   |
- 1 | greeting = "Hello, World;
-   |                  ^ string never terminates
-```
+**帮助**: Add the closing quote for the string
+
+---
 
 ## E0004：Invalid character literal
 
-字符字面量不正确。
+**类别**: Lexer
 
-```yaoxiang
-c = 'ab';  # 字符只能包含一个字符
-```
+**消息**: Character literal is incorrect
 
-```
-error[E0004]: Invalid character literal
-  --> example.yx:1:10
-   |
- 1 | c = 'ab';
-   |          ^^^ character literal must contain exactly one character
-```
+**帮助**: Character literals must contain exactly one character
+
+---
 
 ## E0010：Expected token
 
-语法分析时期望特定 token。
+**类别**: Parser
 
-```yaoxiang
-add: (a: Int, b: Int)  Int = {  # 缺少 ->
-    a + b
-}
-```
+**消息**: Parser expected a specific token
 
-```
-error[E0010]: Expected token
-  --> example.yx:1:28
-   |
- 1 | add: (a: Int, b: Int)  Int = {
-   |                       ^^ expected '->'
-```
+**帮助**: Check the syntax and add the expected token
+
+---
 
 ## E0011：Unexpected token
 
-遇到意外的 token。
+**类别**: Parser
 
-```yaoxiang
-x = 10;
-x +++;  # 意外的 ++
-```
+**消息**: Encountered an unexpected token
 
-```
-error[E0011]: Unexpected token
-  --> example.yx:2:3
-   |
- 2 | x +++;
-   |   ^^ unexpected token '++'
-```
+**帮助**: Remove or replace the unexpected token
+
+---
 
 ## E0012：Invalid syntax
 
-表达式/语句语法错误。
+**类别**: Parser
 
-```yaoxiang
-if x > 0 {
-    print(x)  # 缺少 {}
-}
-```
+**消息**: Expression/statement has syntax error
 
-```
-error[E0012]: Invalid syntax
-  --> example.yx:2:5
-   |
- 2 |     print(x)
-   |     ^ expected '{' after if condition
-```
+**帮助**: Check the syntax of the expression or statement
+
+---
 
 ## E0013：Mismatched brackets
 
-圆括号、方括号、花括号不匹配。
+**类别**: Parser
 
-```yaoxiang
-result = (1 + 2 * 3;
-```
+**消息**: Parentheses, brackets, or braces are mismatched
 
-```
-error[E0013]: Mismatched brackets
-  --> example.yx:1:20
-   |
- 1 | result = (1 + 2 * 3;
-   |                    ^ unclosed '('
-```
+**帮助**: Ensure all brackets are properly closed
+
+---
 
 ## E0014：Missing semicolon
 
-语句末尾缺少分号（对于需要分号的旧语法）。
+**类别**: Parser
 
-```yaoxiang
-x = 10;
-y = 20;
-```
+**消息**: Statement is missing a semicolon
 
-```
-error[E0014]: Missing semicolon
-  --> example.yx:2:1
-   |
- 2 | y = 20
-   | ^ expected ';' after variable declaration
-```
+**帮助**: Add a semicolon at the end of the statement
 
-## 相关章节
+---
 
-- [E1xxx：类型检查](./E1xxx.md)
-- [错误码总索引](./index.md)

@@ -1,113 +1,66 @@
-﻿# E2xxx：语义分析
+# E2xxx：语义分析
 
-> 作用域、生命周期等语义相关错误。
+> 自动生成自 `src/util/diagnostic/codes/`
+
+## 错误列表
 
 ## E2001：Scope error
 
-变量不在当前作用域。
+**类别**: Semantic
 
-```yaoxiang
-outer: () -> Int = {
-    x = 10;
-    inner: () -> Int = {
-        return x;  # x 不在 inner 的作用域中
-    };
-    return inner();
-}
-```
+**消息**: Variable is not in current scope
 
-```
-error[E2001]: Scope error: x is not in scope
-  --> example.yx:4:16
-   |
- 4 |         return x;
-   |                ^ not defined in this scope
-```
+**帮助**: Check the variable's scope and ensure it's accessible here
+
+---
 
 ## E2002：Duplicate definition
 
-同一作用域内重复定义。
+**类别**: Semantic
 
-```yaoxiang
-x = 10;
-x = 20;  # 重复定义 x
-```
+**消息**: Variable is defined multiple times in the same scope
 
-```
-error[E2002]: Duplicate definition: x is already defined
-  --> example.yx:2:5
-   |
- 2 | x = 20;
-   |     ^ previously defined here
-```
+**帮助**: Rename or remove the duplicate definition
+
+---
 
 ## E2003：Ownership error
 
-所有权约束不满足（YaoXiang 使用 Move 语义而非借用）。
+**类别**: Semantic
 
-```yaoxiang
-dangling: () -> Int = {
-    x = 10;
-    return x;  # x 的所有权在返回时转移
-}
-```
+**消息**: Ownership constraint is not satisfied
+
+**帮助**: Check the ownership semantics of the value
+
+---
 
 ## E2010：Immutable assignment
 
-尝试修改不可变变量。
+**类别**: Semantic
 
-```yaoxiang
-x = 10;
-x = 20;  # x 是不可变的
-```
+**消息**: Attempting to modify an immutable variable
 
-```
-error[E2010]: Immutable assignment: cannot assign to immutable variable
-  --> example.yx:2:3
-   |
- 2 | x = 20;
-   | ^ variable `x` is immutable
-```
+**帮助**: Use 'mut' to declare a mutable variable
 
-**修复**：使用 `mut` 声明可变变量。
+---
 
 ## E2011：Uninitialized use
 
-使用未初始化的变量。
+**类别**: Semantic
 
-```yaoxiang
-x: Int;
-print(x);  # x 未初始化
-```
+**消息**: Using an uninitialized variable
 
-```
-error[E2011]: Uninitialized use: x may be used here
-  --> example.yx:2:8
-   |
- 2 | print(x);
-   |        ^ variable `x` is not initialized
-```
+**帮助**: Initialize the variable before using it
+
+---
 
 ## E2012：Mutability conflict
 
-不可变上下文中使用可变引用。
+**类别**: Semantic
 
-```yaoxiang
-mut x = 10;
-ref y = x;  # ref 创建共享引用
-x = 20;  # y 是共享引用，不能修改
-```
+**消息**: Using mutable reference in immutable context
 
-```
-error[E2012]: Mutability conflict
-  --> example.yx:3:3
-   |
- 3 | x = 20;
-   | ^ cannot mutate through shared reference
-```
+**帮助**: Ensure the reference mutability matches the usage context
 
-## 相关章节
+---
 
-- [E1xxx：类型检查](./E1xxx.md)
-- [E4xxx：泛型与特质](./E4xxx.md)
-- [错误码总索引](./index.md)

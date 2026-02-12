@@ -1,109 +1,46 @@
-﻿# E5xxx：模块与导入
+# E5xxx：模块与导入
 
-> 模块解析和导入导出相关错误。
+> 自动生成自 `src/util/diagnostic/codes/`
+
+## 错误列表
 
 ## E5001：Module not found
 
-导入的模块不存在。
+**类别**: Module
 
-```yaoxiang
-use "./nonexistent";  # 模块不存在
-```
+**消息**: Referenced module does not exist
 
-```
-error[E5001]: Module not found: ./nonexistent
-  --> example.yx:1:5
-   |
- 1 | use "./nonexistent";
-   |     ^^^^^^^^^^^^^^^^^ file not found
-```
+**帮助**: Check the module path and ensure it exists
 
-## E5002：Cyclic import
+---
 
-模块间循环依赖。
+## E5002：Import error
 
-```yaoxiang
-# a.yx
-use "./b";
+**类别**: Module
 
-pub a_func: () -> Void = b.b_func();
-```
+**消息**: Failed to import the module
 
-```yaoxiang
-# b.yx
-use "./a";
+**帮助**: Check the import path and module resolution
 
-pub b_func: () -> Void = a.a_func();
-```
+---
 
-```
-error[E5002]: Cyclic import detected
-  --> a.yx:1:1
-   |
- 1 | use "./b";
-   | ^^^^^^^^^^^ circular dependency: a -> b -> a
-```
+## E5003：Export not found
 
-## E5003：Symbol not exported
+**类别**: Module
 
-尝试访问未导出的符号。
+**消息**: Referenced export does not exist in the module
 
-```yaoxiang
-# my_module.yx
-internal = 10;  # 未导出
+**帮助**: Check the exports of the module
 
-# main.yx
-use "./my_module";
-x = my_module.internal;
-```
+---
 
-```
-error[E5003]: Symbol not exported: internal
-  --> main.yx:3:18
-   |
- 3 | x = my_module.internal;
-   |                  ^^^^^^^^ `internal` is not exported by `./my_module`
-```
+## E5004：Circular dependency
 
-## E5004：Invalid module path
+**类别**: Module
 
-模块路径格式错误。
+**消息**: Modules have circular dependencies
 
-```yaoxiang
-use "invalid/path/../to/module";  # 路径包含 ..
-```
+**帮助**: Refactor to remove the circular dependency
 
-```
-error[E5004]: Invalid module path
-  --> example.yx:1:5
-   |
- 1 | use "invalid/path/../to/module";
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ invalid path format
-```
+---
 
-## E5005：Private access
-
-访问私有符号。
-
-```yaoxiang
-# other.yx
-private_value = 42;
-
-# main.yx
-use "./other";
-x = other.private_value;
-```
-
-```
-error[E5005]: Private access: private_value is private
-  --> main.yx:3:18
-   |
- 3 | x = other.private_value;
-   |                  ^^^^^^^^^^^ cannot access private symbol
-```
-
-## 相关章节
-
-- [E1xxx：类型检查](./E1xxx.md)
-- [E6xxx：运行时错误](./E6xxx.md)
-- [错误码总索引](./index.md)

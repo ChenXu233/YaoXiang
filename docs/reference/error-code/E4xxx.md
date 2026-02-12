@@ -1,131 +1,46 @@
-﻿# E4xxx：泛型与特质
+# E4xxx：泛型与特质
 
-> 泛型参数和特质约束相关错误。
+> 自动生成自 `src/util/diagnostic/codes/`
 
-## E4001：Generic parameter mismatch
+## 错误列表
 
-泛型参数数量或类型不匹配。
+## E4001：Generic constraint violated
 
-```yaoxiang
-identity: [T](x: T) -> T = x;
-result = identity[Int, String](10);  # 太多泛型参数
-```
+**类别**: Generic
 
-```
-error[E4001]: Generic parameter mismatch: expected 1, found 2
-  --> example.yx:2:27
-   |
- 2 | result = identity[Int, String](10);
-   |                            ^^^^^^^^ too many generic parameters
-```
+**消息**: Type does not satisfy the generic constraint
 
-## E4002：Trait bound violated
+**帮助**: Ensure the type satisfies all required trait bounds
 
-不满足 trait 约束。
+---
 
-```yaoxiang
-double: [T: Addable](x: T) -> T = x + x;
-s = double("hello");  # String 不实现 Addable
-```
+## E4002：Trait not found
 
-```
-error[E4002]: Trait bound violated: String does not implement Addable
-  --> example.yx:2:18
-   |
- 2 | s = double("hello");
-   |                  ^^^^^ trait bound `Addable` not satisfied
-```
+**类别**: Generic
 
-## E4003：Associated type error
+**消息**: Referenced trait does not exist
 
-关联类型定义或使用错误。
+**帮助**: Check the trait name or import the correct trait
 
-```yaoxiang
-# 使用 type 定义接口（RFC-010 语法）
-type Container = {
-    type Item;  # 关联类型
-    get: () -> Item,
-}
-```
+---
 
-```
-error[E4003]: Associated type error
-  --> example.yx:3:5
-   |
- 3 |     type Item;
-   |           ^^^ associated type definition error
-```
+## E4003：Trait implementation missing
 
-## E4004：Duplicate trait implementation
+**类别**: Generic
 
-重复实现同一 trait（RFC-010 使用接口组合语法）。
+**消息**: Type does not implement the required trait
 
-```yaoxiang
-# 接口定义
-type Printable = {
-    print: () -> Void,
-}
+**帮助**: Add a trait implementation for this type
 
-# 实现接口（在类型定义末尾列出接口名）
-type IntPrinter = {
-    value: Int,
-    Printable,  # 实现 Printable 接口
-}
+---
 
-type IntPrinter2 = {
-    value: Int,
-    Printable,  # 重复实现
-}
-```
+## E4004：Conflicting trait implementations
 
-```
-error[E4004]: Duplicate trait implementation: Printable is already implemented for Int
-  --> example.yx:10:5
-   |
-10 |     Printable,  # 重复实现
-   |     ^^^^^^^^^^ conflicting implementation
-```
+**类别**: Generic
 
-## E4005：Trait not found
+**消息**: Multiple trait implementations conflict
 
-找不到要求的 trait。
+**帮助**: Resolve the conflicting implementations
 
-```yaoxiang
-print_all: [T: MyPrintable](items: List[T]) -> Void = {
-    for item in items {
-        item.print();
-    }
-}
-```
+---
 
-```
-error[E4005]: Trait not found: MyPrintable
-  --> example.yx:1:16
-   |
- 1 | print_all: [T: MyPrintable](items: List[T]) -> Void = {
-   |                ^^^^^^^^^^^ trait not defined
-```
-
-## E4006：Sized bound violated
-
-Sized 约束不满足。
-
-```yaoxiang
-store: [T](value: T) -> Void = {
-    # T 必须是 Sized
-}
-```
-
-```
-error[E4006]: Sized bound violated: T may not be sized
-  --> example.yx:1:14
-   |
- 1 | store: [T](value: T) -> Void = {
-   |            ^^^^^^^^^ T does not satisfy `Sized` bound
-```
-
-## 相关章节
-
-- [E1xxx：类型检查](./E1xxx.md)
-- [E5xxx：模块与导入](./E5xxx.md)
-- [错误码总索引](./index.md)
