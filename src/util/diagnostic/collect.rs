@@ -3,8 +3,7 @@
 //! 提供通用的错误收集器和格式化工具
 
 use crate::util::span::Span;
-use super::span::SpannedError;
-
+use crate::util::span::SpannedError;
 /// 错误收集器
 ///
 /// 收集多个错误，支持批量报告

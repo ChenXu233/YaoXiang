@@ -34,15 +34,13 @@ impl SpecializationAlgorithm {
         // 构建替换映射
         self.substitution.clear();
         if poly.type_binders.len() != args.len() {
-            return Err(crate::util::diagnostic::Diagnostic::error(
-                "E0701".to_string(),
-                format!(
-                    "Generic parameter arity mismatch: expected {}, found {}",
+            return Err(
+                crate::util::diagnostic::ErrorCodeDefinition::type_argument_count_mismatch(
                     poly.type_binders.len(),
-                    args.len()
-                ),
-                None,
-            ));
+                    args.len(),
+                )
+                .build(crate::util::diagnostic::I18nRegistry::en()),
+            );
         }
 
         for (var, arg) in poly.type_binders.iter().zip(args.iter()) {

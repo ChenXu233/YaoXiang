@@ -3,8 +3,10 @@
 //! 统一 Result 类型
 //!
 //! 为编译器模块提供统一的错误处理
+//! 所有错误转换都通过注册表中的错误码路径
 
 use super::error::Diagnostic;
+use super::codes::{ErrorCodeDefinition, I18nRegistry};
 
 /// 统一结果类型
 pub type Result<T, E = Diagnostic> = std::result::Result<T, E>;
@@ -29,7 +31,8 @@ impl<T, E: std::fmt::Display> ResultExt<T, E> for Result<T, E> {
         F: FnOnce() -> String,
     {
         self.map_err(|err| {
-            Diagnostic::error("E0000".to_string(), format!("{}: {}", f(), err), None)
+            ErrorCodeDefinition::internal_error(&format!("{}: {}", f(), err))
+                .build(I18nRegistry::en())
         })
     }
 }

@@ -12,15 +12,15 @@ pub trait TypeInferrer {
     fn infer_expr(
         &mut self,
         expr: &crate::frontend::core::parser::ast::Expr,
-    ) -> Result<MonoType, TypeError>;
+    ) -> Result<MonoType, Box<Diagnostic>>;
     fn infer_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<(), TypeError>;
+    ) -> Result<(), Box<Diagnostic>>;
     fn infer_pattern(
         &mut self,
         pattern: &crate::frontend::core::parser::ast::Pattern,
-    ) -> Result<MonoType, TypeError>;
+    ) -> Result<MonoType, Box<Diagnostic>>;
 }
 
 // 重新导出
@@ -30,5 +30,4 @@ pub use patterns::PatternInferrer;
 pub use generics::GenericInferrer;
 
 pub use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
-pub use crate::frontend::typecheck::TypeError;
-pub use crate::util::diagnostic::Result;
+pub use crate::util::diagnostic::{Diagnostic, Result};

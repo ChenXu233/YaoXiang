@@ -10,10 +10,11 @@
 use crate::frontend::core::type_system::{
     MonoType, PolyType, StructType, EnumType, TypeConstraintSolver, TypeVar,
 };
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, I18nRegistry};
 use std::collections::HashMap;
 
 // 类型别名
-type TypeResult = Result<MonoType, crate::frontend::typecheck::errors::TypeError>;
+type TypeResult = Result<MonoType, Diagnostic>;
 
 /// 泛型特化器
 ///
@@ -52,11 +53,12 @@ impl GenericSpecializer {
     ) -> TypeResult {
         // 检查参数数量是否匹配
         if poly.type_binders.len() != args.len() {
-            return Err(super::errors::TypeError::ArityMismatch {
-                expected: poly.type_binders.len(),
-                found: args.len(),
-                span: crate::util::span::Span::default(),
-            });
+            return Err(ErrorCodeDefinition::type_argument_count_mismatch(
+                poly.type_binders.len(),
+                args.len(),
+            )
+            .at(crate::util::span::Span::default())
+            .build(I18nRegistry::en()));
         }
 
         // 构建替换映射

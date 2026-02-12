@@ -33,11 +33,10 @@ impl Instantiator {
     ) -> Result<InstanceResult> {
         // 检查是否可以实例化
         if !self.can_instantiate(generic, args) {
-            return Err(crate::util::diagnostic::Diagnostic::error(
-                "E0701".to_string(),
-                "Cannot instantiate generic type with given arguments".to_string(),
-                None,
-            ));
+            return Err(
+                crate::util::diagnostic::ErrorCodeDefinition::cannot_instantiate_generic()
+                    .build(crate::util::diagnostic::I18nRegistry::en()),
+            );
         }
 
         // 执行实例化：用具体类型替换泛型参数

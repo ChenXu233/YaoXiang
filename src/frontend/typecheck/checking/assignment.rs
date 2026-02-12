@@ -4,9 +4,8 @@
 //!
 //! 检查赋值语句的类型正确性
 
-use crate::util::diagnostic::Result;
+use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
 use crate::frontend::core::type_system::MonoType;
-use crate::frontend::typecheck::errors::TypeError;
 use crate::util::span::Span;
 use super::subtyping::SubtypeChecker;
 
@@ -42,20 +41,20 @@ impl AssignmentChecker {
     ) -> Result<()> {
         // 如果目标是约束类型，拒绝
         if lhs.is_constraint() {
-            return Err(TypeError::ConstraintInNonGenericContext {
-                constraint_name: lhs.type_name(),
-                span,
-            }
-            .into());
+            return Err(
+                ErrorCodeDefinition::constraint_not_in_generic(&lhs.type_name())
+                    .at(span)
+                    .build(I18nRegistry::en()),
+            );
         }
 
         // 使用子类型检查
         if !self.can_assign(lhs, rhs) {
-            return Err(TypeError::AssignmentError {
-                message: format!("Cannot assign {} to {}", rhs.type_name(), lhs.type_name()),
-                span,
-            }
-            .into());
+            return Err(
+                ErrorCodeDefinition::type_mismatch(&lhs.type_name(), &rhs.type_name())
+                    .at(span)
+                    .build(I18nRegistry::en()),
+            );
         }
 
         Ok(())
