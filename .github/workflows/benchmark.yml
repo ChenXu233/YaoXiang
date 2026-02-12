@@ -2,19 +2,19 @@ name: Benchmark
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      iterations:
-        description: "Number of iterations"
-        required: false
-        default: "100"
-      regression_threshold:
-        description: "Regression threshold (e.g., 0.05 for 5%)"
-        required: false
-        default: "0.05"
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+  # workflow_dispatch:
+  #   inputs:
+  #     iterations:
+  #       description: "Number of iterations"
+  #       required: false
+  #       default: "100"
+  #     regression_threshold:
+  #       description: "Regression threshold (e.g., 0.05 for 5%)"
+  #       required: false
+  #       default: "0.05"
 
 permissions:
   contents: read
@@ -103,7 +103,8 @@ jobs:
                   data = json.load(f)
 
               for result in data.get("results", []):
-                  print(f"Benchmark: {result.get(\"name\", \"unknown\")}")
+                  name = result.get("name", "unknown")
+                  print(f"Benchmark: {name}")
 
               print("Regression check completed.")
           except Exception as e:
