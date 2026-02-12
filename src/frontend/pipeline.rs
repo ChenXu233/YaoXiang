@@ -467,7 +467,8 @@ impl Pipeline {
                 phase_durations.push((CompilationPhase::TypeChecking, duration));
 
                 // 保留原始 Diagnostic，同时发送字符串消息给事件总线
-                let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
+                let error_messages: Vec<String> =
+                    errors.iter().map(|e| e.message.clone()).collect();
 
                 self.event_bus.emit(TypeCheckingComplete::new(
                     0,

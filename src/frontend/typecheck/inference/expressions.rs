@@ -167,7 +167,8 @@ impl<'a> ExprInferrer<'a> {
                     Err(ErrorCodeDefinition::logical_operand_type_mismatch(
                         &format!("{}", left),
                         &format!("{}", right),
-                    ).build(I18nRegistry::en()))
+                    )
+                    .build(I18nRegistry::en()))
                 }
             }
             BinOp::Range => {
@@ -202,9 +203,10 @@ impl<'a> ExprInferrer<'a> {
                 if *expr == MonoType::Bool {
                     Ok(MonoType::Bool)
                 } else {
-                    Err(ErrorCodeDefinition::logical_not_type_mismatch(
-                        &format!("{}", expr),
-                    ).build(I18nRegistry::en()))
+                    Err(
+                        ErrorCodeDefinition::logical_not_type_mismatch(&format!("{}", expr))
+                            .build(I18nRegistry::en()),
+                    )
                 }
             }
             UnOp::Deref => {
@@ -215,9 +217,8 @@ impl<'a> ExprInferrer<'a> {
                     let inner_type = inner.trim_start_matches('*').to_string();
                     Ok(MonoType::TypeRef(inner_type))
                 } else {
-                    Err(ErrorCodeDefinition::invalid_deref(
-                        &format!("{}", expr),
-                    ).build(I18nRegistry::en()))
+                    Err(ErrorCodeDefinition::invalid_deref(&format!("{}", expr))
+                        .build(I18nRegistry::en()))
                 }
             }
         }
@@ -341,7 +342,8 @@ impl<'a> ExprInferrer<'a> {
                                 Err(ErrorCodeDefinition::index_out_of_bounds(
                                     types.len(),
                                     *i as usize,
-                                ).build(I18nRegistry::en()))
+                                )
+                                .build(I18nRegistry::en()))
                             }
                         } else {
                             // 动态下标：返回类型变量
@@ -367,12 +369,16 @@ impl<'a> ExprInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
-                        Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name)
-                            .build(I18nRegistry::en()))
+                        Err(
+                            ErrorCodeDefinition::field_not_found(field, &struct_type.name)
+                                .build(I18nRegistry::en()),
+                        )
                     }
-                    _ => Err(ErrorCodeDefinition::field_access_on_non_struct(
-                        &format!("{}", obj_ty),
-                    ).build(I18nRegistry::en())),
+                    _ => Err(ErrorCodeDefinition::field_access_on_non_struct(&format!(
+                        "{}",
+                        obj_ty
+                    ))
+                    .build(I18nRegistry::en())),
                 }
             }
 
@@ -444,9 +450,11 @@ impl<'a> ExprInferrer<'a> {
                 // 推断条件类型（必须是 Bool）
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
-                    return Err(ErrorCodeDefinition::condition_type_mismatch(
-                        &format!("{}", cond_ty),
-                    ).build(I18nRegistry::en()));
+                    return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                        "{}",
+                        cond_ty
+                    ))
+                    .build(I18nRegistry::en()));
                 }
 
                 // 推断 then 分支
@@ -456,9 +464,11 @@ impl<'a> ExprInferrer<'a> {
                 for (elif_cond, elif_block) in elif_branches {
                     let elif_cond_ty = self.infer_expr(elif_cond)?;
                     if elif_cond_ty != MonoType::Bool {
-                        return Err(ErrorCodeDefinition::condition_type_mismatch(
-                            &format!("{}", elif_cond_ty),
-                        ).build(I18nRegistry::en()));
+                        return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                            "{}",
+                            elif_cond_ty
+                        ))
+                        .build(I18nRegistry::en()));
                     }
                     let _ = self.infer_block(elif_block, true, None)?;
                 }
@@ -482,9 +492,11 @@ impl<'a> ExprInferrer<'a> {
                 // 推断条件类型
                 let cond_ty = self.infer_expr(condition)?;
                 if cond_ty != MonoType::Bool {
-                    return Err(ErrorCodeDefinition::condition_type_mismatch(
-                        &format!("{}", cond_ty),
-                    ).build(I18nRegistry::en()));
+                    return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                        "{}",
+                        cond_ty
+                    ))
+                    .build(I18nRegistry::en()));
                 }
 
                 // 注册循环标签
@@ -542,8 +554,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l)
-                            .build(I18nRegistry::en()));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
                     }
                 }
                 Ok(MonoType::Void)
@@ -555,8 +566,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l)
-                            .build(I18nRegistry::en()));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
                     }
                 }
                 Ok(MonoType::Void)

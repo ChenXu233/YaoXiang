@@ -38,19 +38,20 @@ impl ErrorCodeDefinition {
     /// E6001 除零错误
     pub fn division_by_zero(expr: &str) -> DiagnosticBuilder {
         let def = Self::find("E6001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("expr", expr)
+        DiagnosticBuilder::new(def.code, def.message_template).param("expr", expr)
     }
 
     /// E6002 空指针解引用
     pub fn null_pointer_deref(location: &str) -> DiagnosticBuilder {
         let def = Self::find("E6002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("location", location)
+        DiagnosticBuilder::new(def.code, def.message_template).param("location", location)
     }
 
     /// E6003 数组索引越界（运行时）
-    pub fn runtime_index_out_of_bounds(max: usize, index: usize) -> DiagnosticBuilder {
+    pub fn runtime_index_out_of_bounds(
+        max: usize,
+        index: usize,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E6003").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("max", max.to_string())
@@ -60,14 +61,12 @@ impl ErrorCodeDefinition {
     /// E6004 栈溢出
     pub fn stack_overflow(limit: usize) -> DiagnosticBuilder {
         let def = Self::find("E6004").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("limit", limit.to_string())
+        DiagnosticBuilder::new(def.code, def.message_template).param("limit", limit.to_string())
     }
 
     /// E6005 断言失败
     pub fn assertion_failed(condition: &str) -> DiagnosticBuilder {
         let def = Self::find("E6005").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("condition", condition)
+        DiagnosticBuilder::new(def.code, def.message_template).param("condition", condition)
     }
 }

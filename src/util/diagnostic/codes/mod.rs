@@ -29,19 +29,22 @@ use crate::util::diagnostic::Diagnostic;
 /// 错误类别
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
-    Lexer,      // E0xxx: 词法和语法分析
-    Parser,     // E0xxx: Parser errors
-    TypeCheck,  // E1xxx: 类型检查
-    Semantic,   // E2xxx: 语义分析
-    Generic,    // E4xxx: 泛型与特质
-    Module,     // E5xxx: 模块与导入
-    Runtime,    // E6xxx: 运行时错误
-    Io,         // E7xxx: I/O与系统错误
-    Internal,   // E8xxx: 内部编译器错误
+    Lexer,     // E0xxx: 词法和语法分析
+    Parser,    // E0xxx: Parser errors
+    TypeCheck, // E1xxx: 类型检查
+    Semantic,  // E2xxx: 语义分析
+    Generic,   // E4xxx: 泛型与特质
+    Module,    // E5xxx: 模块与导入
+    Runtime,   // E6xxx: 运行时错误
+    Io,        // E7xxx: I/O与系统错误
+    Internal,  // E8xxx: 内部编译器错误
 }
 
 impl std::fmt::Display for ErrorCategory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         match self {
             ErrorCategory::Lexer => write!(f, "Lexer"),
             ErrorCategory::Parser => write!(f, "Parser"),
@@ -115,7 +118,10 @@ impl ErrorCodeDefinition {
     }
 
     /// 获取该错误码的 I18nRegistry
-    pub fn i18n(&self, lang: &str) -> &'static I18nRegistry {
+    pub fn i18n(
+        &self,
+        lang: &str,
+    ) -> &'static I18nRegistry {
         I18nRegistry::new(lang)
     }
 
@@ -179,7 +185,11 @@ mod tests {
     #[test]
     fn test_get_all_codes() {
         let all = ErrorCodeDefinition::all();
-        assert!(all.len() > 30, "Expected more than 30 error codes, got {}", all.len());
+        assert!(
+            all.len() > 30,
+            "Expected more than 30 error codes, got {}",
+            all.len()
+        );
     }
 
     #[test]
@@ -210,7 +220,8 @@ mod tests {
         let code = ErrorCodeDefinition::find("E0001").unwrap();
         let i18n = I18nRegistry::en();
 
-        let diagnostic = code.builder()
+        let diagnostic = code
+            .builder()
             .param("char", "@")
             .at(Span::default())
             .build(i18n);

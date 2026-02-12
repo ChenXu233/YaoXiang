@@ -42,7 +42,10 @@ impl Default for EmitterConfig {
 
 /// 诊断渲染器 trait
 pub trait DiagnosticEmitter {
-    fn emit(&self, diagnostic: &Diagnostic) -> String;
+    fn emit(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> String;
 }
 
 /// 文本诊断渲染器
@@ -65,7 +68,10 @@ impl TextEmitter {
     }
 
     /// 渲染单个诊断
-    pub fn render(&self, diagnostic: &Diagnostic) -> String {
+    pub fn render(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> String {
         self.render_internal(diagnostic, None, 0)
     }
 
@@ -120,7 +126,10 @@ impl TextEmitter {
     }
 
     /// 渲染错误头部
-    fn render_header(&self, diagnostic: &Diagnostic) -> String {
+    fn render_header(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> String {
         let severity = match diagnostic.severity {
             Severity::Error => "error",
             Severity::Warning => "warning",
@@ -129,11 +138,7 @@ impl TextEmitter {
         };
 
         if diagnostic.code.is_empty() {
-            format!(
-                "{}{}\n",
-                self.color(severity, severity),
-                diagnostic.message
-            )
+            format!("{}{}\n", self.color(severity, severity), diagnostic.message)
         } else {
             format!(
                 "{} [{}] {}\n",
@@ -155,12 +160,12 @@ impl TextEmitter {
                 return String::new();
             }
 
-            let file_name = source_file.map(|sf| sf.name.as_str()).unwrap_or("<unknown>");
+            let file_name = source_file
+                .map(|sf| sf.name.as_str())
+                .unwrap_or("<unknown>");
             format!(
                 " --> {}:{}:{}\n",
-                file_name,
-                span.start.line,
-                span.start.column
+                file_name, span.start.line, span.start.column
             )
         } else {
             String::new()
@@ -168,7 +173,10 @@ impl TextEmitter {
     }
 
     /// 获取源码行
-    fn get_source_line(source_file: &SourceFile, line_num: usize) -> Option<String> {
+    fn get_source_line(
+        source_file: &SourceFile,
+        line_num: usize,
+    ) -> Option<String> {
         let lines: Vec<&str> = source_file.content.lines().collect();
         lines.get(line_num - 1).map(|s| s.to_string())
     }
@@ -226,7 +234,10 @@ impl TextEmitter {
     }
 
     /// 渲染帮助信息
-    fn render_help(&self, diagnostic: &Diagnostic) -> Option<String> {
+    fn render_help(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> Option<String> {
         // 帮助信息已内联在 Diagnostic 中
         if diagnostic.help.is_empty() {
             return None;
@@ -235,7 +246,11 @@ impl TextEmitter {
     }
 
     /// 简单的颜色渲染
-    fn color(&self, style: &str, text: &str) -> String {
+    fn color(
+        &self,
+        style: &str,
+        text: &str,
+    ) -> String {
         if !self.config.use_colors {
             return text.to_string();
         }
@@ -276,8 +291,7 @@ mod tests {
     #[test]
     fn test_render_basic_error() {
         let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@")
-            .build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
 
         let emitter = TextEmitter::new();
         let output = emitter.render(&diagnostic);
@@ -311,8 +325,7 @@ mod tests {
         };
 
         let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@")
-            .build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
 
         let emitter = TextEmitter::with_config(config);
         let output = emitter.render(&diagnostic);

@@ -12,13 +12,26 @@ const SIMILARITY_THRESHOLD: f64 = 0.5;
 #[derive(Debug, Clone)]
 pub enum Suggestion {
     /// 变量名拼写建议
-    Variable { typo: String, suggestions: Vec<String> },
+    Variable {
+        typo: String,
+        suggestions: Vec<String>,
+    },
     /// 类型建议
-    Type { expected: String, found: String, suggestion: String },
+    Type {
+        expected: String,
+        found: String,
+        suggestion: String,
+    },
     /// 函数调用建议
-    Function { name: String, suggestions: Vec<(String, usize)> },
+    Function {
+        name: String,
+        suggestions: Vec<(String, usize)>,
+    },
     /// 模块导入建议
-    Module { name: String, suggestions: Vec<String> },
+    Module {
+        name: String,
+        suggestions: Vec<String>,
+    },
     /// 通用帮助
     Generic { message: String },
 }
@@ -53,23 +66,34 @@ impl SuggestionEngine {
     }
 
     /// 添加定义的名字
-    pub fn add_defined_name(&mut self, name: &str) {
+    pub fn add_defined_name(
+        &mut self,
+        name: &str,
+    ) {
         self.defined_names.insert(name.to_string());
     }
 
     /// 添加名字到类型的映射
-    pub fn add_name_type(&mut self, name: &str, ty: &str) {
+    pub fn add_name_type(
+        &mut self,
+        name: &str,
+        ty: &str,
+    ) {
         self.name_to_types.insert(name.to_string(), ty.to_string());
     }
 
     /// 查找相似的名字
-    pub fn find_similar(&self, name: &str) -> Vec<(String, f64)> {
+    pub fn find_similar(
+        &self,
+        name: &str,
+    ) -> Vec<(String, f64)> {
         // 检查缓存
         if let Some(cached) = self.similarity_cache.get(name) {
             return cached.clone();
         }
 
-        let mut suggestions: Vec<(String, f64)> = self.defined_names
+        let mut suggestions: Vec<(String, f64)> = self
+            .defined_names
             .iter()
             .map(|def_name| (def_name.clone(), self.similarity(name, def_name)))
             .filter(|(_, score)| *score >= SIMILARITY_THRESHOLD)
@@ -83,7 +107,11 @@ impl SuggestionEngine {
     }
 
     /// 计算两个字符串的相似度
-    fn similarity(&self, s1: &str, s2: &str) -> f64 {
+    fn similarity(
+        &self,
+        s1: &str,
+        s2: &str,
+    ) -> f64 {
         if s1 == s2 {
             return 1.0;
         }
@@ -99,8 +127,10 @@ impl SuggestionEngine {
         let base_similarity = 1.0 - (dist as f64 / max_len as f64);
 
         // 如果有共同前缀，给予额外奖励
-        let prefix_bonus = if !s1.is_empty() && !s2.is_empty()
-            && (s1.starts_with(&s2[..1]) || s2.starts_with(&s1[..1])) {
+        let prefix_bonus = if !s1.is_empty()
+            && !s2.is_empty()
+            && (s1.starts_with(&s2[..1]) || s2.starts_with(&s1[..1]))
+        {
             0.1
         } else {
             0.0
@@ -110,7 +140,11 @@ impl SuggestionEngine {
     }
 
     /// Levenshtein 编辑距离
-    fn levenshtein_distance(&self, a: &str, b: &str) -> usize {
+    fn levenshtein_distance(
+        &self,
+        a: &str,
+        b: &str,
+    ) -> usize {
         if a.is_empty() {
             return b.len();
         }
@@ -133,7 +167,11 @@ impl SuggestionEngine {
             curr_row.push(i);
 
             for j in 1..=b_len {
-                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
                 let value = prev_row[j]
                     .min(curr_row[j - 1] + 1)
                     .min(prev_row[j - 1] + cost);
@@ -147,17 +185,17 @@ impl SuggestionEngine {
     }
 
     /// 为未知变量生成建议
-    pub fn suggest_for_unknown_variable(&self, name: &str) -> Option<Suggestion> {
+    pub fn suggest_for_unknown_variable(
+        &self,
+        name: &str,
+    ) -> Option<Suggestion> {
         let similar = self.find_similar(name);
 
         if similar.is_empty() {
             return None;
         }
 
-        let suggestions: Vec<String> = similar
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect();
+        let suggestions: Vec<String> = similar.into_iter().map(|(name, _)| name).collect();
 
         Some(Suggestion::Variable {
             typo: name.to_string(),

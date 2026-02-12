@@ -41,17 +41,20 @@ impl AssignmentChecker {
     ) -> Result<()> {
         // 如果目标是约束类型，拒绝
         if lhs.is_constraint() {
-            return Err(ErrorCodeDefinition::constraint_not_in_generic(
-                &lhs.type_name(),
-            ).at(span).build(I18nRegistry::en()));
+            return Err(
+                ErrorCodeDefinition::constraint_not_in_generic(&lhs.type_name())
+                    .at(span)
+                    .build(I18nRegistry::en()),
+            );
         }
 
         // 使用子类型检查
         if !self.can_assign(lhs, rhs) {
-            return Err(ErrorCodeDefinition::type_mismatch(
-                &lhs.type_name(),
-                &rhs.type_name(),
-            ).at(span).build(I18nRegistry::en()));
+            return Err(
+                ErrorCodeDefinition::type_mismatch(&lhs.type_name(), &rhs.type_name())
+                    .at(span)
+                    .build(I18nRegistry::en()),
+            );
         }
 
         Ok(())

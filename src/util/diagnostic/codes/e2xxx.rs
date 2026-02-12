@@ -43,36 +43,31 @@ impl ErrorCodeDefinition {
     /// E2001 变量不在作用域中
     pub fn variable_not_in_scope(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("name", name)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E2002 重复定义
     pub fn duplicate_definition(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("name", name)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E2003 所有权约束违反
     pub fn ownership_violation(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E2003").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 
     /// E2010 不可变赋值
     pub fn immutable_assignment(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2010").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("name", name)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E2011 使用未初始化变量
     pub fn uninitialized_variable(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2011").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("name", name)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E2012 可变性冲突

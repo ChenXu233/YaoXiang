@@ -71,10 +71,9 @@ impl GenericInferrer {
         self.bounds_checker
             .check_constraint(actual_type, constraint_type)
             .map_err(|e| {
-                ErrorCodeDefinition::trait_bound_not_satisfied(
-                    &e.type_name,
-                    &e.constraint_name,
-                ).at(span).build(I18nRegistry::en())
+                ErrorCodeDefinition::trait_bound_not_satisfied(&e.type_name, &e.constraint_name)
+                    .at(span)
+                    .build(I18nRegistry::en())
             })
     }
 }

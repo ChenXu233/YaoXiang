@@ -309,9 +309,11 @@ impl BodyChecker {
     ) -> Result<(), Diagnostic> {
         let cond_ty = self.check_expr(condition)?;
         if cond_ty != MonoType::Bool {
-            return Err(ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
-                .at(_stmt_span)
-                .build(I18nRegistry::en()));
+            return Err(
+                ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
+                    .at(_stmt_span)
+                    .build(I18nRegistry::en()),
+            );
         }
 
         self.check_block(then_branch)?;
@@ -319,9 +321,12 @@ impl BodyChecker {
         for (elif_cond, _) in elif_branches {
             let elif_cond_ty = self.check_expr(elif_cond)?;
             if elif_cond_ty != MonoType::Bool {
-                return Err(ErrorCodeDefinition::type_mismatch("bool", &format!("{}", elif_cond_ty))
-                    .at(_stmt_span)
-                    .build(I18nRegistry::en()));
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    "bool",
+                    &format!("{}", elif_cond_ty),
+                )
+                .at(_stmt_span)
+                .build(I18nRegistry::en()));
             }
         }
 

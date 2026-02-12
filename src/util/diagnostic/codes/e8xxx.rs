@@ -28,19 +28,20 @@ impl ErrorCodeDefinition {
     /// E8001 内部编译器错误
     pub fn internal_error(message: &str) -> DiagnosticBuilder {
         let def = Self::find("E8001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("message", message)
+        DiagnosticBuilder::new(def.code, def.message_template).param("message", message)
     }
 
     /// E8002 意外 panic
     pub fn unexpected_panic(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E8002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 
     /// E8003 编译器阶段错误
-    pub fn compiler_phase_error(phase: &str, message: &str) -> DiagnosticBuilder {
+    pub fn compiler_phase_error(
+        phase: &str,
+        message: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E8003").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("phase", phase)
