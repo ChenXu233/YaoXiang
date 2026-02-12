@@ -39,11 +39,17 @@ yaoxiang explain E1001 --json
 ### 在代码中
 
 ```rust
-use yaoxiang::util::diagnostic::ErrorCodeDefinition;
+use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
 
-// 查找错误码
+// 查找错误码，并通过 I18nRegistry 获取标题与帮助信息
+let i18n = I18nRegistry::default();
+
 if let Some(code) = ErrorCodeDefinition::find("E1001") {
-    println!("Title: {}", code.title);
-    println!("Help: {:?}", code.help);
+    let title = i18n.get_title(&code);
+    println!("Title: {}", title);
+
+    if let Some(help) = i18n.get_help(&code) {
+        println!("Help: {}", help);
+    }
 }
 ```
