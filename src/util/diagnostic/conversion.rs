@@ -3,8 +3,10 @@
 //! 错误转换
 //!
 //! 提供不同错误类型之间的转换
+//! 所有转换都通过注册表中的 E8001（内部编译器错误）路径
 
 use super::error::Diagnostic;
+use super::codes::{ErrorCodeDefinition, I18nRegistry};
 
 /// 错误转换trait
 pub trait ErrorConvert<T> {
@@ -13,12 +15,18 @@ pub trait ErrorConvert<T> {
 
 impl<T> ErrorConvert<T> for Result<T, String> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| Diagnostic::error("E0000".to_string(), msg, None))
+        self.map_err(|msg| {
+            ErrorCodeDefinition::internal_error(&msg)
+                .build(I18nRegistry::en())
+        })
     }
 }
 
 impl<T> ErrorConvert<T> for Result<T, &str> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| Diagnostic::error("E0000".to_string(), msg.to_string(), None))
+        self.map_err(|msg| {
+            ErrorCodeDefinition::internal_error(msg)
+                .build(I18nRegistry::en())
+        })
     }
 }

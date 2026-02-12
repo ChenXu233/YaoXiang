@@ -31,9 +31,6 @@ pub mod gat;
 // 导入重载解析模块（在 TypeEnvironment 之前声明）
 pub mod overload;
 
-// 导入错误处理
-pub mod errors;
-
 // 导入类型求值器模块
 pub mod type_eval;
 
@@ -55,8 +52,16 @@ pub use specialization::*;
 pub use specialize::*;
 pub use gat::*;
 pub use overload::*;
-pub use errors::*;
 pub use type_eval::*;
+
+// 导入诊断系统
+pub use crate::util::diagnostic::{Diagnostic, ErrorCollector, ErrorCodeDefinition, I18nRegistry};
+
+/// 类型推断结果
+pub type TypeResult<T> = Result<T, Diagnostic>;
+
+/// 类型错误收集器
+pub type TypeErrorCollector = ErrorCollector<Diagnostic>;
 
 // 类型环境
 #[derive(Debug, Default)]
@@ -299,7 +304,7 @@ impl TypeChecker {
     /// 添加错误
     fn add_error(
         &mut self,
-        error: TypeError,
+        error: Diagnostic,
     ) {
         self.env.errors.add_error(error);
     }
@@ -319,7 +324,7 @@ impl TypeChecker {
     }
 
     /// 获取错误列表
-    pub fn errors(&self) -> &[TypeError] {
+    pub fn errors(&self) -> &[Diagnostic] {
         self.env.errors.errors()
     }
 
@@ -327,7 +332,7 @@ impl TypeChecker {
     pub fn check_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<(), TypeError> {
+    ) -> Result<(), Diagnostic> {
         self.body_checker_mut().check_stmt(stmt)
     }
 
@@ -343,7 +348,7 @@ impl TypeChecker {
     pub fn check_module(
         &mut self,
         module: &Module,
-    ) -> Result<TypeCheckResult, Vec<TypeError>> {
+    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::TypeDef { name, definition } =
@@ -380,10 +385,11 @@ impl TypeChecker {
         // 求解所有约束
         self.env.solver().solve().map_err(|e| {
             e.into_iter()
-                .map(|e| TypeError::TypeMismatch {
-                    expected: Box::new(e.error.left),
-                    found: Box::new(e.error.right),
-                    span: e.span,
+                .map(|e| {
+                    ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", e.error.left),
+                        &format!("{}", e.error.right),
+                    ).at(e.span).build(I18nRegistry::en())
                 })
                 .collect::<Vec<_>>()
         })?;
@@ -677,7 +683,7 @@ impl TypeChecker {
 pub fn check_module(
     ast: &Module,
     env: &mut Option<TypeEnvironment>,
-) -> Result<TypeCheckResult, Vec<TypeError>> {
+) -> Result<TypeCheckResult, Vec<Diagnostic>> {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = TypeChecker::new("main");
 
@@ -707,7 +713,7 @@ pub fn check_module(
 pub fn infer_expression(
     expr: &Expr,
     env: &mut TypeEnvironment,
-) -> Result<MonoType, Vec<TypeError>> {
+) -> Result<MonoType, Vec<Diagnostic>> {
     // 克隆环境变量，避免借用冲突
     let vars_clone = env.vars.clone();
     let overload_candidates_clone = env.overload_candidates.clone();
@@ -719,18 +725,7 @@ pub fn infer_expression(
     for (name, poly) in vars_clone {
         inferrer.add_var(name, poly);
     }
-    match inferrer.infer_expr(expr) {
-        Ok(ty) => Ok(ty),
-        Err(diagnostic) => {
-            // 转换Diagnostic到TypeError，保留原始错误代码
-            let type_err = TypeError::Diagnostic {
-                code: diagnostic.code.clone(),
-                message: diagnostic.message,
-                span: diagnostic.span.unwrap_or_default(),
-            };
-            Err(vec![type_err])
-        }
-    }
+    inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
 /// 添加内置类型到环境
