@@ -1,81 +1,46 @@
-﻿# E7xxx：I/O 与系统错误
+# E7xxx：I/O与系统错误
 
-> 文件、网络等系统操作相关错误。
+> 自动生成自 `src/util/diagnostic/codes/`
+
+## 错误列表
 
 ## E7001：File not found
 
-尝试读取不存在的文件。
+**类别**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("nonexistent.txt");
-}
-```
+**消息**: The specified file does not exist
 
-```
-error[E7001]: File not found: nonexistent.txt
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("nonexistent.txt");
-   |                          ^^^^^^^^^^^^^^^^^^^ file does not exist
-```
+**帮助**: Check the file path and ensure the file exists
+
+---
 
 ## E7002：Permission denied
 
-文件权限不足。
+**类别**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("/root/secret.txt");
-}
-```
+**消息**: Insufficient permissions to access the file
 
-```
-error[E7002]: Permission denied: /root/secret.txt
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("/root/secret.txt");
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^ permission denied
-```
+**帮助**: Check file permissions or run with appropriate privileges
+
+---
 
 ## E7003：I/O error
 
-通用 I/O 错误。
+**类别**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("/dev/full");
-}
-```
+**消息**: An unspecified I/O error occurred
 
-```
-error[E7003]: I/O error: device full
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("/dev/full");
-   |                          ^^^^^^^^^^^^^^^ I/O error: device full
-```
+**帮助**: Check the error details for more information
+
+---
 
 ## E7004：Network error
 
-网络操作失败。
+**类别**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    response = HTTP.get("https://invalid.example.com");
-}
-```
+**消息**: A network error occurred
 
-```
-error[E7004]: Network error: connection refused
-  --> example.yx:2:31
-   |
- 2 |     response = HTTP.get("https://invalid.example.com");
-   |                                   ^^^^^^^^^^^^^^^^^^^^^^^^ network error
-```
+**帮助**: Check network connectivity and try again
 
-## 相关章节
+---
 
-- [E6xxx：运行时错误](./E6xxx.md)
-- [E8xxx：内部编译器错误](./E8xxx.md)
-- [错误码总索引](./index.md)
