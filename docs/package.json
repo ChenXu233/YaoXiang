@@ -7,7 +7,7 @@
     "docs:dev": "vitepress dev",
     "docs:build": "node build.js",
     "docs:preview": "vitepress preview",
-    "info": "vuepress info"  
+    "info": "vuepress info"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
@@ -20,5 +20,8 @@
     "tailwindcss": "^4.1.18",
     "vitepress": "^1.6.4",
     "vue": "^3.5.27"
+  },
+  "devDependencies": {
+    "vitepress-sidebar": "^1.33.1"
   }
 }
