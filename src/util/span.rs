@@ -200,3 +200,8 @@ impl fmt::Display for SourceFile {
         write!(f, "{}", self.name)
     }
 }
+
+pub trait SpannedError {
+    /// 获取错误对应的源代码位置
+    fn span(&self) -> Span;
+}

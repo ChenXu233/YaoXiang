@@ -5,7 +5,6 @@
 use crate::middle;
 use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
-use super::typecheck::TypeError;
 use super::{config::CompileConfig, events::*, typecheck};
 
 /// 管道错误类型
@@ -14,7 +13,7 @@ pub enum PipelineError {
     /// 词法/解析错误
     LexParse(String),
     /// 类型检查错误
-    TypeCheck(TypeError),
+    TypeCheck(Diagnostic),
     /// IR 生成错误
     IRGeneration(String),
 }
@@ -26,7 +25,7 @@ impl fmt::Display for PipelineError {
     ) -> fmt::Result {
         match self {
             PipelineError::LexParse(msg) => write!(f, "{}", msg),
-            PipelineError::TypeCheck(err) => write!(f, "{}", err),
+            PipelineError::TypeCheck(err) => write!(f, "{}", err.message),
             PipelineError::IRGeneration(msg) => write!(f, "{}", msg),
         }
     }
@@ -36,7 +35,7 @@ impl PipelineError {
     /// 获取诊断信息（如果是类型检查错误）
     pub fn diagnostic(&self) -> Option<Diagnostic> {
         match self {
-            PipelineError::TypeCheck(err) => Some(Diagnostic::from(err.clone())),
+            PipelineError::TypeCheck(err) => Some(err.clone()),
             _ => None,
         }
     }
@@ -467,8 +466,8 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::TypeChecking, duration));
 
-                // 保留原始 TypeError，同时发送字符串消息给事件总线
-                let error_messages: Vec<String> = errors.iter().map(|e| format!("{}", e)).collect();
+                // 保留原始 Diagnostic，同时发送字符串消息给事件总线
+                let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
 
                 self.event_bus.emit(TypeCheckingComplete::new(
                     0,
@@ -537,7 +536,6 @@ impl Pipeline {
                         ErrorLevel::Error,
                     ));
                 }
-
                 // IR 生成错误被归类为类型检查错误（因为它们源于类型检查）
                 IRResult::failed(errors)
             }
@@ -631,7 +629,7 @@ impl ParseResult {
 /// 类型检查结果
 struct TypecheckResult {
     type_result: typecheck::TypeCheckResult,
-    errors: Vec<TypeError>,
+    errors: Vec<Diagnostic>,
 }
 
 impl TypecheckResult {
@@ -642,7 +640,7 @@ impl TypecheckResult {
         }
     }
 
-    fn failed(errors: Vec<TypeError>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self {
             type_result: typecheck::TypeCheckResult::default(),
             errors,
@@ -657,7 +655,7 @@ impl TypecheckResult {
 /// IR 生成结果
 struct IRResult {
     ir: Option<middle::ModuleIR>,
-    errors: Vec<TypeError>,
+    errors: Vec<Diagnostic>,
 }
 
 impl IRResult {
@@ -668,7 +666,7 @@ impl IRResult {
         }
     }
 
-    fn failed(errors: Vec<TypeError>) -> Self {
+    fn failed(errors: Vec<Diagnostic>) -> Self {
         Self { ir: None, errors }
     }
 

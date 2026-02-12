@@ -20,6 +20,11 @@ name = "yaoxiang"
 path = "src/main.rs"
 test = false
 
+[[bin]]
+name = "generate-error-docs"
+path = "scripts/generate_error_docs.rs"
+test = false
+
 [dev-dependencies]
 criterion = "0.8.1"
 quickcheck = "1.0"

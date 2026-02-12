@@ -138,14 +138,10 @@ impl GATChecker {
     ) -> Result<()> {
         // 检查关联类型是否在容器中定义
         if !self.is_associated_type_defined(container, assoc_type) {
-            return Err(crate::util::diagnostic::Diagnostic::error(
-                "E0801".to_string(),
-                format!(
-                    "Associated type {} not found in container {}",
-                    assoc_type, container
-                ),
-                None,
-            ));
+            return Err(crate::util::diagnostic::ErrorCodeDefinition::associated_type_not_found(
+                assoc_type,
+                container,
+            ).build(crate::util::diagnostic::I18nRegistry::en()));
         }
 
         // 检查关联类型的约束

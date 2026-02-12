@@ -14,6 +14,7 @@ use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::tlog;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, I18nRegistry};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -1549,17 +1550,43 @@ impl std::error::Error for IrGenError {}
 pub fn generate_ir(
     ast: &crate::frontend::core::parser::ast::Module,
     result: &crate::frontend::typecheck::TypeCheckResult,
-) -> Result<crate::middle::ModuleIR, Vec<crate::frontend::typecheck::TypeError>> {
-    use crate::util::span::Span;
-
+) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
     generator.generate_module_ir(ast).map_err(|errors| {
         errors
             .into_iter()
-            .map(|e| crate::frontend::typecheck::TypeError::InferenceError {
-                message: e.to_string(),
-                span: Span::default(),
-            })
+            .map(convert_ir_gen_error)
             .collect()
     })
+}
+
+/// 将 IrGenError 转换为 Diagnostic
+fn convert_ir_gen_error(e: IrGenError) -> Diagnostic {
+    match e {
+        IrGenError::UnimplementedExpr { expr_type, span } => {
+            ErrorCodeDefinition::internal_error(&format!("Unimplemented expression type: {}", expr_type))
+                .at(span)
+                .build(I18nRegistry::en())
+        }
+        IrGenError::UnimplementedStmt { stmt_type, span } => {
+            ErrorCodeDefinition::internal_error(&format!("Unimplemented statement type: {}", stmt_type))
+                .at(span)
+                .build(I18nRegistry::en())
+        }
+        IrGenError::InvalidOperand { span } => {
+            ErrorCodeDefinition::internal_error("Invalid operand")
+                .at(span)
+                .build(I18nRegistry::en())
+        }
+        IrGenError::InternalError { message, span } => {
+            ErrorCodeDefinition::internal_error(&message)
+                .at(span)
+                .build(I18nRegistry::en())
+        }
+        IrGenError::UnsupportedIterator { iter_type, span } => {
+            ErrorCodeDefinition::unsupported_operation("iterate", &iter_type)
+                .at(span)
+                .build(I18nRegistry::en())
+        }
+    }
 }

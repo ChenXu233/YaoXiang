@@ -3,7 +3,6 @@
 mod basic;
 mod check;
 mod constraint;
-mod error;
 mod gat;
 mod generic;
 mod infer;

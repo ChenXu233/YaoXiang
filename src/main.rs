@@ -4,10 +4,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::{build_bytecode, dump_bytecode, run, TuiREPL, NAME, VERSION};
+use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
-use yaoxiang::util::diagnostic::{run_file_with_diagnostics, check_file_with_diagnostics};
+use yaoxiang::util::diagnostic::{run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry, ErrorInfo};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -122,11 +122,29 @@ enum Commands {
         output: Option<PathBuf>,
     },
 
+    /// Explain an error code
+    Explain {
+        /// Error code to explain (e.g., E1001)
+        #[arg(value_name = "CODE")]
+        code: String,
+
+        /// Output in JSON format
+        #[arg(short, long)]
+        json: bool,
+
+        /// Language for explanation (en, zh)
+        #[arg(short, long, value_enum)]
+        lang: Option<LangArg>,
+    },
+
     /// Print version information
     Version,
 
     /// Start TUI REPL (default when no command is provided) (Experimental Feature)
-    Repl,
+    Repl {
+        #[arg(short, long)]
+        tui: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -160,7 +178,7 @@ fn main() -> Result<()> {
     }
 
     // 如果没有提供子命令，启动 TUI REPL
-    let command = args.command.unwrap_or(Commands::Repl);
+    let command = args.command.unwrap_or(Commands::Repl { tui: false });
 
     match command {
         Commands::Run { file } => {
@@ -188,12 +206,57 @@ fn main() -> Result<()> {
             build_bytecode(&file, &output_path)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
+        Commands::Explain { code, json, lang: _ } => {
+            if let Some(definition) = ErrorCodeDefinition::find(&code) {
+                let i18n = I18nRegistry::new("zh"); // 使用中文配置
+                let info = i18n.get_info(&code).unwrap_or_else(|| ErrorInfo {
+                    title: "",
+                    help: "",
+                    example: None,
+                    error_output: None,
+                });
+
+                if json {
+                    // JSON output
+                    use serde::Serialize;
+                    #[derive(Serialize)]
+                    struct ExplainOutput<'a> {
+                        code: &'static str,
+                        category: String,
+                        title: &'a str,
+                        template: &'static str,
+                        help: &'a str,
+                    }
+                    let output = ExplainOutput {
+                        code: definition.code,
+                        category: definition.category.to_string(),
+                        title: info.title,
+                        template: definition.message_template,
+                        help: info.help,
+                    };
+                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+                } else {
+                    // Human-readable output
+                    println!("Error {}", definition.code);
+                    println!("Category: {}", definition.category);
+                    println!("Title: {}", info.title);
+                    println!("Message Template: {}", definition.message_template);
+                    if !info.help.is_empty() {
+                        println!("Help: {}", info.help);
+                    }
+                }
+            } else {
+                eprintln!("Unknown error code: {}", code);
+                std::process::exit(1);
+            }
+        }
         Commands::Version => {
             info!("{} {}", NAME, VERSION);
         }
-        Commands::Repl => {
-            let mut repl = TuiREPL::new().context("Failed to create TUI REPL")?;
-            repl.run().context("Failed to run TUI REPL")?;
+        Commands::Repl { .. } => {
+            // REPL not yet implemented
+            tracing::info!("REPL mode is not yet implemented.");
+            tracing::info!("Use 'yaoxiang run <file>' to execute a YaoXiang source file.");
         }
     }
 
