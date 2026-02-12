@@ -332,7 +332,7 @@ impl TypeChecker {
     pub fn check_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<(), Box<Diagnostic>> {
         self.body_checker_mut().check_stmt(stmt)
     }
 
@@ -378,7 +378,7 @@ impl TypeChecker {
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
             if let Err(e) = self.body_checker_mut().check_stmt(stmt) {
-                self.add_error(e);
+                self.add_error(*e);
             }
         }
 

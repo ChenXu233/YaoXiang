@@ -221,11 +221,7 @@ impl TextEmitter {
                     };
                     let indicators = self.config.indicator.to_string().repeat(indicator_len);
 
-                    if self.config.show_line_numbers {
-                        output.push_str(&format!("     | {}{}\n", spaces, indicators));
-                    } else {
-                        output.push_str(&format!("     | {}{}\n", spaces, indicators));
-                    }
+                    output.push_str(&format!("     | {}{}\n", spaces, indicators));
                 }
             }
         }

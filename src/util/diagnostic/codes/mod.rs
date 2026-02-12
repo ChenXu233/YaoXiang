@@ -126,7 +126,7 @@ impl ErrorCodeDefinition {
     }
 
     /// 构建完整的 Diagnostic
-    pub fn build<'a>(
+    pub fn build(
         &self,
         i18n: &I18nRegistry,
         params: &[(&'static str, String)],

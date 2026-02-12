@@ -229,10 +229,7 @@ impl Default for SuggestionEngine {
 impl crate::util::diagnostic::Diagnostic {
     /// 获取针对此错误的建议
     pub fn get_suggestions(&self) -> Option<Vec<Suggestion>> {
-        match self {
-            // 这里可以添加更多特定错误的建议
-            _ => None,
-        }
+        None
     }
 }
 
