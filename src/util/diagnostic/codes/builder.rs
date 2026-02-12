@@ -61,14 +61,60 @@ impl DiagnosticBuilder {
         self
     }
 
-    /// 构建 Diagnostic（模板渲染在编译期完成）
+    /// 构建 Diagnostic
     pub fn build(
         &self,
         i18n: &I18nRegistry,
     ) -> Diagnostic {
-        // 验证模板参数
-        self.validate_params();
+        // 在 debug 模式下保持原有行为（会 panic）
+        if cfg!(debug_assertions) {
+            self.validate_params();
+        } else {
+            // release 下回落：检查缺失参数并返回 E8001 (避免进程崩溃)
+            let param_keys: std::collections::HashSet<&'static str> =
+                self.params.iter().map(|(k, _)| *k).collect();
 
+            let mut chars = self.message_template.chars().peekable();
+            let mut missing = Vec::new();
+            while let Some(c) = chars.next() {
+                if c == '{' {
+                    let mut key = String::new();
+                    while let Some(&c) = chars.peek() {
+                        if c == '}' {
+                            chars.next();
+                            if !key.is_empty() && !param_keys.contains(key.as_str()) {
+                                missing.push(key.clone());
+                            }
+                            break;
+                        }
+                        key.push(c);
+                        chars.next();
+                    }
+                }
+            }
+
+            if !missing.is_empty() {
+                let message = format!(
+                    "Internal diagnostic error: missing template parameter(s) for '{}'. template='{}', missing={:?}",
+                    self.code, self.message_template, missing
+                );
+                let help = format!(
+                    "Please report this issue. Available params: {:?}",
+                    param_keys.iter().copied().collect::<Vec<_>>()
+                );
+
+                let mut diagnostic =
+                    Diagnostic::error("E8001".to_string(), message, help, self.span);
+
+                if !self.related.is_empty() {
+                    diagnostic = diagnostic.with_related(self.related.clone());
+                }
+
+                return diagnostic;
+            }
+        }
+
+        // 正常路径：渲染并返回原始 Diagnostic
         let message = i18n.render(self.message_template, &self.params);
         let help = i18n.render_help(self.code, &self.params);
 

@@ -25,7 +25,7 @@ impl fmt::Display for PipelineError {
     ) -> fmt::Result {
         match self {
             PipelineError::LexParse(msg) => write!(f, "{}", msg),
-            PipelineError::TypeCheck(err) => write!(f, "{}", err.message),
+            PipelineError::TypeCheck(err) => write!(f, "{}", err),
             PipelineError::IRGeneration(msg) => write!(f, "{}", msg),
         }
     }

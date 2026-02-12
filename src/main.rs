@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use serde::Serialize;
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
@@ -182,7 +183,6 @@ fn main() -> Result<()> {
 
     // 如果没有提供子命令，启动 TUI REPL
     let command = args.command.unwrap_or(Commands::Repl { tui: false });
-
     match command {
         Commands::Run { file } => {
             run_file_with_diagnostics(&file)?;
@@ -209,13 +209,12 @@ fn main() -> Result<()> {
             build_bytecode(&file, &output_path)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
-        Commands::Explain {
-            code,
-            json,
-            lang: _,
-        } => {
+        Commands::Explain { code, json, lang } => {
             if let Some(definition) = ErrorCodeDefinition::find(&code) {
-                let i18n = I18nRegistry::new("zh"); // 使用中文配置
+                let lang_code = lang
+                    .map(Into::<String>::into)
+                    .unwrap_or_else(|| "zh".to_string());
+                let i18n = I18nRegistry::new(&lang_code);
                 let info = i18n.get_info(&code).unwrap_or(ErrorInfo {
                     title: "",
                     help: "",
@@ -225,7 +224,6 @@ fn main() -> Result<()> {
 
                 if json {
                     // JSON output
-                    use serde::Serialize;
                     #[derive(Serialize)]
                     struct ExplainOutput<'a> {
                         code: &'static str,
