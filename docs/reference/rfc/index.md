@@ -28,6 +28,8 @@
 | RFC-002 | [跨平台I/O与libuv集成](002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案 |
 | RFC-005 | [自动化CVE安全检查系统](005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 草案 |
 | RFC-012 | [F-String 模板字符串](012-f-string-template-strings.md) | 晨煦 | 2025-01-27 | 草案 |
+| RFC-014 | [包管理系统设计](draft/014-package-manager.md) | 晨煦 | 2026-02-12 | 草案 |
+| RFC-015 | [yaoxiang.toml 字段研究](draft/015-yaoxiang-toml-fields.md) | 晨煦 | 2026-02-12 | 草案 |
 
 ---
 
@@ -79,8 +81,8 @@
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│   accepted/ │    │    rfc/     │
-│ (正式设计)  │    │ (保留原位)  │
+│  accepted/  │    │  rejected/  │
+│ (正式设计)  │    │ (被拒绝)    │
 └─────────────┘    └─────────────┘
 ```
 
@@ -88,10 +90,10 @@
 
 | 状态 | 位置 | 说明 |
 |------|------|------|
-| **草案** | `docs/design/rfc/` | 作者草稿，等待提交审核 |
-| **审核中** | `docs/design/rfc/` | 开放社区讨论和反馈 |
-| **已接受** | `docs/design/accepted/` | 成为正式设计文档，进入实现阶段 |
-| **已拒绝** | `docs/design/rfc/` | 保留在RFC目录，更新状态 |
+| **草案** | `docs/reference/rfc/draft/` | 作者草稿，等待提交审核 |
+| **审核中** | `docs/reference/rfc/review/` | 开放社区讨论和反馈 |
+| **已接受** | `docs/reference/rfc/accepted/` | 成为正式设计文档，进入实现阶段 |
+| **已拒绝** | `docs/reference/rfc/rejected/` | 被拒绝的RFC文档 |
 
 ---
 
@@ -100,7 +102,7 @@
 1. 阅读 [RFC_TEMPLATE.md](RFC_TEMPLATE.md) 了解格式要求
 2. 参考 [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) 学习写法
 3. 创建新文件，命名为 `序号-描述性标题.md`
-4. 将文件放入 `docs/design/rfc/` 目录
+4. 将文件放入 `docs/reference/rfc/draft/` 目录
 5. 更新本索引文件，添加新RFC条目
 6. 提交PR进入审核流程
 
