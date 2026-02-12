@@ -84,9 +84,14 @@ impl TraitSolver {
                         Ok(())
                     }
                     Err(_e) => Err(ErrorCodeDefinition::trait_bound_not_satisfied(
-                        &constraint.args.first().map(|a| format!("{}", a)).unwrap_or_default(),
+                        &constraint
+                            .args
+                            .first()
+                            .map(|a| format!("{}", a))
+                            .unwrap_or_default(),
                         &constraint.name,
-                    ).build(I18nRegistry::en())),
+                    )
+                    .build(I18nRegistry::en())),
                 }
             } else {
                 // 内置 Trait，使用简化求解
@@ -110,9 +115,14 @@ impl TraitSolver {
             Ok(())
         } else {
             Err(ErrorCodeDefinition::trait_bound_not_satisfied(
-                &constraint.args.first().map(|a| format!("{}", a)).unwrap_or_default(),
+                &constraint
+                    .args
+                    .first()
+                    .map(|a| format!("{}", a))
+                    .unwrap_or_default(),
                 &constraint.name,
-            ).build(I18nRegistry::en()))
+            )
+            .build(I18nRegistry::en()))
         }
     }
 

@@ -80,7 +80,8 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
     ErrorCodeDefinition {
         code: "E1050",
         category: ErrorCategory::TypeCheck,
-        message_template: "Logical operation requires boolean operands, found '{left}' and '{right}'",
+        message_template:
+            "Logical operation requires boolean operands, found '{left}' and '{right}'",
     },
     ErrorCodeDefinition {
         code: "E1051",
@@ -131,12 +132,14 @@ impl ErrorCodeDefinition {
     /// E1001 未知变量
     pub fn unknown_variable(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E1001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("name", name)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E1002 类型不匹配
-    pub fn type_mismatch(expected: &str, found: &str) -> DiagnosticBuilder {
+    pub fn type_mismatch(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1002").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("expected", expected)
@@ -146,12 +149,15 @@ impl ErrorCodeDefinition {
     /// E1003 未知类型
     pub fn unknown_type(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1003").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1010 参数数量不匹配
-    pub fn argument_count_mismatch(func: &str, expected: usize, found: usize) -> DiagnosticBuilder {
+    pub fn argument_count_mismatch(
+        func: &str,
+        expected: usize,
+        found: usize,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1010").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("func", func)
@@ -160,7 +166,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E1011 参数类型不匹配
-    pub fn parameter_type_mismatch(expected: &str, found: &str) -> DiagnosticBuilder {
+    pub fn parameter_type_mismatch(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1011").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("expected", expected)
@@ -168,7 +177,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E1012 返回类型不匹配
-    pub fn return_type_mismatch(expected: &str, found: &str) -> DiagnosticBuilder {
+    pub fn return_type_mismatch(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1012").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("expected", expected)
@@ -178,40 +190,38 @@ impl ErrorCodeDefinition {
     /// E1013 函数未找到
     pub fn function_not_found(func: &str) -> DiagnosticBuilder {
         let def = Self::find("E1013").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("func", func)
+        DiagnosticBuilder::new(def.code, def.message_template).param("func", func)
     }
 
     /// E1020 无法推断类型
     pub fn cannot_infer_type(expr: &str) -> DiagnosticBuilder {
         let def = Self::find("E1020").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("expr", expr)
+        DiagnosticBuilder::new(def.code, def.message_template).param("expr", expr)
     }
 
     /// E1021 类型推断冲突
     pub fn type_inference_conflict(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E1021").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 
     /// E1030 模式穷举不足
     pub fn pattern_non_exhaustive(patterns: &str) -> DiagnosticBuilder {
         let def = Self::find("E1030").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("patterns", patterns)
+        DiagnosticBuilder::new(def.code, def.message_template).param("patterns", patterns)
     }
 
     /// E1031 不可达模式
     pub fn unreachable_pattern(pattern: &str) -> DiagnosticBuilder {
         let def = Self::find("E1031").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("pattern", pattern)
+        DiagnosticBuilder::new(def.code, def.message_template).param("pattern", pattern)
     }
 
     /// E1040 不支持的操作
-    pub fn unsupported_operation(op: &str, type_: &str) -> DiagnosticBuilder {
+    pub fn unsupported_operation(
+        op: &str,
+        type_: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1040").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("op", op)
@@ -219,7 +229,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E1041 数组越界
-    pub fn index_out_of_bounds(max: usize, index: usize) -> DiagnosticBuilder {
+    pub fn index_out_of_bounds(
+        max: usize,
+        index: usize,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1041").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("max", max.to_string())
@@ -227,7 +240,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E1042 字段未找到
-    pub fn field_not_found(field: &str, struct_: &str) -> DiagnosticBuilder {
+    pub fn field_not_found(
+        field: &str,
+        struct_: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1042").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("field", field)
@@ -235,7 +251,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E1050 逻辑运算需要布尔操作数
-    pub fn logical_operand_type_mismatch(left: &str, right: &str) -> DiagnosticBuilder {
+    pub fn logical_operand_type_mismatch(
+        left: &str,
+        right: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1050").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("left", left)
@@ -245,40 +264,38 @@ impl ErrorCodeDefinition {
     /// E1051 逻辑 NOT 需要布尔操作数
     pub fn logical_not_type_mismatch(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1051").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1052 不能解引用非指针类型
     pub fn invalid_deref(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1052").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1053 不能在非结构体类型上访问字段
     pub fn field_access_on_non_struct(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1053").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1054 条件必须是布尔类型
     pub fn condition_type_mismatch(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1054").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1055 约束类型只能在泛型上下文中使用
     pub fn constraint_not_in_generic(type_: &str) -> DiagnosticBuilder {
         let def = Self::find("E1055").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("type", type_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
     }
 
     /// E1060 类型参数数量不匹配
-    pub fn type_argument_count_mismatch(expected: usize, found: usize) -> DiagnosticBuilder {
+    pub fn type_argument_count_mismatch(
+        expected: usize,
+        found: usize,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E1060").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("expected", expected.to_string())
@@ -294,7 +311,6 @@ impl ErrorCodeDefinition {
     /// E1070 未知标签
     pub fn unknown_label(label: &str) -> DiagnosticBuilder {
         let def = Self::find("E1070").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("label", label)
+        DiagnosticBuilder::new(def.code, def.message_template).param("label", label)
     }
 }

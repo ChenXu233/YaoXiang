@@ -172,8 +172,14 @@ impl JsonEmitter {
     /// 创建虚拟 Range（用于无位置的错误）
     fn dummy_range() -> LspRange {
         LspRange {
-            start: LspPosition { line: 0, character: 0 },
-            end: LspPosition { line: 0, character: 0 },
+            start: LspPosition {
+                line: 0,
+                character: 0,
+            },
+            end: LspPosition {
+                line: 0,
+                character: 0,
+            },
         }
     }
 }
@@ -186,10 +192,7 @@ mod tests {
 
     #[test]
     fn test_render_single_diagnostic() {
-        let span = Span::new(
-            Position::new(1, 5),
-            Position::new(1, 8),
-        );
+        let span = Span::new(Position::new(1, 5), Position::new(1, 8));
 
         let i18n = I18nRegistry::en();
         let diagnostic = ErrorCodeDefinition::invalid_character("@")
@@ -222,8 +225,7 @@ mod tests {
     #[test]
     fn test_severity_mapping() {
         let i18n = I18nRegistry::en();
-        let error = ErrorCodeDefinition::invalid_character("@")
-            .build(i18n);
+        let error = ErrorCodeDefinition::invalid_character("@").build(i18n);
 
         let error_json = JsonEmitter::render(&error);
         let error_parsed: LspDiagnostic = serde_json::from_str(&error_json).unwrap();

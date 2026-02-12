@@ -7,7 +7,10 @@ use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
-use yaoxiang::util::diagnostic::{run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry, ErrorInfo};
+use yaoxiang::util::diagnostic::{
+    run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
+    ErrorInfo,
+};
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -206,7 +209,11 @@ fn main() -> Result<()> {
             build_bytecode(&file, &output_path)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
-        Commands::Explain { code, json, lang: _ } => {
+        Commands::Explain {
+            code,
+            json,
+            lang: _,
+        } => {
             if let Some(definition) = ErrorCodeDefinition::find(&code) {
                 let i18n = I18nRegistry::new("zh"); // 使用中文配置
                 let info = i18n.get_info(&code).unwrap_or_else(|| ErrorInfo {

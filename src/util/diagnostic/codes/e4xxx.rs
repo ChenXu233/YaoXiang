@@ -36,7 +36,10 @@ pub static E4XXX: &[ErrorCodeDefinition] = &[
 // E4xxx 快捷方法
 impl ErrorCodeDefinition {
     /// E4001 类型不满足特质约束
-    pub fn trait_bound_not_satisfied(type_: &str, trait_: &str) -> DiagnosticBuilder {
+    pub fn trait_bound_not_satisfied(
+        type_: &str,
+        trait_: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E4001").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("type", type_)
@@ -46,12 +49,14 @@ impl ErrorCodeDefinition {
     /// E4002 特质未找到
     pub fn trait_not_found(trait_: &str) -> DiagnosticBuilder {
         let def = Self::find("E4002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("trait", trait_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("trait", trait_)
     }
 
     /// E4003 特质实现缺失
-    pub fn missing_trait_impl(trait_: &str, type_: &str) -> DiagnosticBuilder {
+    pub fn missing_trait_impl(
+        trait_: &str,
+        type_: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E4003").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("trait", trait_)
@@ -61,12 +66,14 @@ impl ErrorCodeDefinition {
     /// E4004 特质实现冲突
     pub fn conflicting_trait_impls(trait_: &str) -> DiagnosticBuilder {
         let def = Self::find("E4004").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("trait", trait_)
+        DiagnosticBuilder::new(def.code, def.message_template).param("trait", trait_)
     }
 
     /// E4005 关联类型未找到
-    pub fn associated_type_not_found(assoc_type: &str, container: &str) -> DiagnosticBuilder {
+    pub fn associated_type_not_found(
+        assoc_type: &str,
+        container: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E4005").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("assoc_type", assoc_type)

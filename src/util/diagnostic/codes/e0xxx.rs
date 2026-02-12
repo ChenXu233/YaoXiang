@@ -44,7 +44,8 @@ pub static E0XXX: &[ErrorCodeDefinition] = &[
     ErrorCodeDefinition {
         code: "E0013",
         category: ErrorCategory::Parser,
-        message_template: "Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed",
+        message_template:
+            "Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed",
     },
     ErrorCodeDefinition {
         code: "E0014",
@@ -58,33 +59,32 @@ impl ErrorCodeDefinition {
     /// E0001 无效字符
     pub fn invalid_character(char: &str) -> DiagnosticBuilder {
         let def = Self::find("E0001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("char", char)
+        DiagnosticBuilder::new(def.code, def.message_template).param("char", char)
     }
 
     /// E0002 无效数字字面量
     pub fn invalid_number_literal(literal: &str) -> DiagnosticBuilder {
         let def = Self::find("E0002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("literal", literal)
+        DiagnosticBuilder::new(def.code, def.message_template).param("literal", literal)
     }
 
     /// E0003 未终止的字符串
     pub fn unterminated_string(line: usize) -> DiagnosticBuilder {
         let def = Self::find("E0003").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("line", line.to_string())
+        DiagnosticBuilder::new(def.code, def.message_template).param("line", line.to_string())
     }
 
     /// E0004 无效字符字面量
     pub fn invalid_char_literal(literal: &str) -> DiagnosticBuilder {
         let def = Self::find("E0004").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("literal", literal)
+        DiagnosticBuilder::new(def.code, def.message_template).param("literal", literal)
     }
 
     /// E0010 期望的令牌
-    pub fn expected_token(expected: &str, found: &str) -> DiagnosticBuilder {
+    pub fn expected_token(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E0010").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("expected", expected)
@@ -94,19 +94,21 @@ impl ErrorCodeDefinition {
     /// E0011 意外的令牌
     pub fn unexpected_token(token: &str) -> DiagnosticBuilder {
         let def = Self::find("E0011").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("token", token)
+        DiagnosticBuilder::new(def.code, def.message_template).param("token", token)
     }
 
     /// E0012 无效语法
     pub fn invalid_syntax(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E0012").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 
     /// E0013 不匹配的括号
-    pub fn mismatched_brackets(bracket_type: &str, open_line: usize, open_col: usize) -> DiagnosticBuilder {
+    pub fn mismatched_brackets(
+        bracket_type: &str,
+        open_line: usize,
+        open_col: usize,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E0013").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("bracket_type", bracket_type)
@@ -117,7 +119,6 @@ impl ErrorCodeDefinition {
     /// E0014 缺少分号
     pub fn missing_semicolon(statement: &str) -> DiagnosticBuilder {
         let def = Self::find("E0014").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("statement", statement)
+        DiagnosticBuilder::new(def.code, def.message_template).param("statement", statement)
     }
 }

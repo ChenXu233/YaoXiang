@@ -33,28 +33,24 @@ impl ErrorCodeDefinition {
     /// E7001 文件未找到
     pub fn file_not_found(path: &str) -> DiagnosticBuilder {
         let def = Self::find("E7001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("path", path)
+        DiagnosticBuilder::new(def.code, def.message_template).param("path", path)
     }
 
     /// E7002 权限被拒绝
     pub fn permission_denied(path: &str) -> DiagnosticBuilder {
         let def = Self::find("E7002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("path", path)
+        DiagnosticBuilder::new(def.code, def.message_template).param("path", path)
     }
 
     /// E7003 I/O 错误
     pub fn io_error(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E7003").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 
     /// E7004 网络错误
     pub fn network_error(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E7004").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("reason", reason)
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
     }
 }

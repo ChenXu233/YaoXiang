@@ -389,7 +389,9 @@ impl TypeChecker {
                     ErrorCodeDefinition::type_mismatch(
                         &format!("{}", e.error.left),
                         &format!("{}", e.error.right),
-                    ).at(e.span).build(I18nRegistry::en())
+                    )
+                    .at(e.span)
+                    .build(I18nRegistry::en())
                 })
                 .collect::<Vec<_>>()
         })?;

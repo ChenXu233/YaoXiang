@@ -18,7 +18,10 @@ pub struct DiagnosticBuilder {
 
 impl DiagnosticBuilder {
     /// 创建新的诊断构建器
-    pub fn new(code: &'static str, template: &'static str) -> Self {
+    pub fn new(
+        code: &'static str,
+        template: &'static str,
+    ) -> Self {
         Self {
             code,
             message_template: template,
@@ -29,39 +32,47 @@ impl DiagnosticBuilder {
     }
 
     /// 添加模板参数
-    pub fn param(mut self, key: &'static str, value: impl Into<String>) -> Self {
+    pub fn param(
+        mut self,
+        key: &'static str,
+        value: impl Into<String>,
+    ) -> Self {
         self.params.push((key, value.into()));
         self
     }
 
     /// 设置位置
     #[inline]
-    pub fn at(mut self, span: Span) -> Self {
+    pub fn at(
+        mut self,
+        span: Span,
+    ) -> Self {
         self.span = Some(span);
         self
     }
 
     /// 添加相关诊断
     #[inline]
-    pub fn with_related(mut self, related: Vec<Diagnostic>) -> Self {
+    pub fn with_related(
+        mut self,
+        related: Vec<Diagnostic>,
+    ) -> Self {
         self.related = related;
         self
     }
 
     /// 构建 Diagnostic（模板渲染在编译期完成）
-    pub fn build(&self, i18n: &I18nRegistry) -> Diagnostic {
+    pub fn build(
+        &self,
+        i18n: &I18nRegistry,
+    ) -> Diagnostic {
         // 验证模板参数
         self.validate_params();
 
         let message = i18n.render(self.message_template, &self.params);
         let help = i18n.render_help(self.code, &self.params);
 
-        let mut diagnostic = Diagnostic::error(
-            self.code.to_string(),
-            message,
-            help,
-            self.span,
-        );
+        let mut diagnostic = Diagnostic::error(self.code.to_string(), message, help, self.span);
 
         if !self.related.is_empty() {
             diagnostic = diagnostic.with_related(self.related.clone());
@@ -86,7 +97,8 @@ impl DiagnosticBuilder {
                         if !param_keys.contains(key_str) && !key.is_empty() {
                             panic!(
                                 "Missing parameter '{}' for error code '{}'. Available: {:?}",
-                                key, self.code,
+                                key,
+                                self.code,
                                 param_keys.iter().map(|s| *s).collect::<Vec<_>>()
                             );
                         }
@@ -190,7 +202,10 @@ impl I18nRegistry {
     }
 
     /// 获取错误信息
-    pub fn get_info(&self, code: &str) -> Option<ErrorInfo<'_>> {
+    pub fn get_info(
+        &self,
+        code: &str,
+    ) -> Option<ErrorInfo<'_>> {
         Some(ErrorInfo {
             title: self.titles.get(code)?,
             help: self.helps.get(code).copied().unwrap_or(""),
@@ -200,31 +215,52 @@ impl I18nRegistry {
     }
 
     /// 获取标题
-    pub fn get_title(&self, code: &str) -> String {
-        self.titles.get(code).map(|s| s.to_string()).unwrap_or_else(|| code.to_string())
+    pub fn get_title(
+        &self,
+        code: &str,
+    ) -> String {
+        self.titles
+            .get(code)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| code.to_string())
     }
 
     /// 获取帮助信息
-    pub fn get_help(&self, code: &str) -> String {
-        self.helps.get(code).map(|s| s.to_string()).unwrap_or_default()
+    pub fn get_help(
+        &self,
+        code: &str,
+    ) -> String {
+        self.helps
+            .get(code)
+            .map(|s| s.to_string())
+            .unwrap_or_default()
     }
 
     /// 获取示例代码
-    pub fn get_example(&self, code: &str) -> Option<String> {
+    pub fn get_example(
+        &self,
+        code: &str,
+    ) -> Option<String> {
         self.examples.get(code).map(|s| s.to_string())
     }
 
     /// 获取错误输出示例
-    pub fn get_error_output(&self, code: &str) -> Option<String> {
+    pub fn get_error_output(
+        &self,
+        code: &str,
+    ) -> Option<String> {
         self.error_outputs.get(code).map(|s| s.to_string())
     }
 
     /// 渲染模板（编译期完成，运行时零开销）
-    pub fn render(&self, template: &'static str, params: &[(&'static str, String)]) -> String {
+    pub fn render(
+        &self,
+        template: &'static str,
+        params: &[(&'static str, String)],
+    ) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
-        let param_map: HashMap<&str, &str> =
-            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let param_map: HashMap<&str, &str> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
 
         while let Some(c) = chars.next() {
             if c == '{' {
@@ -253,7 +289,11 @@ impl I18nRegistry {
     }
 
     /// 渲染帮助信息
-    pub fn render_help(&self, code: &str, params: &[(&'static str, String)]) -> String {
+    pub fn render_help(
+        &self,
+        code: &str,
+        params: &[(&'static str, String)],
+    ) -> String {
         if let Some(help) = self.helps.get(code) {
             self.render(help, params)
         } else {

@@ -33,12 +33,14 @@ impl ErrorCodeDefinition {
     /// E5001 模块未找到
     pub fn module_not_found(module: &str) -> DiagnosticBuilder {
         let def = Self::find("E5001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("module", module)
+        DiagnosticBuilder::new(def.code, def.message_template).param("module", module)
     }
 
     /// E5002 导入错误
-    pub fn import_error(module: &str, reason: &str) -> DiagnosticBuilder {
+    pub fn import_error(
+        module: &str,
+        reason: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E5002").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("module", module)
@@ -46,7 +48,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E5003 导出未找到
-    pub fn export_not_found(export: &str, module: &str) -> DiagnosticBuilder {
+    pub fn export_not_found(
+        export: &str,
+        module: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E5003").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
             .param("export", export)
@@ -56,7 +61,6 @@ impl ErrorCodeDefinition {
     /// E5004 循环依赖
     pub fn circular_dependency(path: &str) -> DiagnosticBuilder {
         let def = Self::find("E5004").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
-            .param("path", path)
+        DiagnosticBuilder::new(def.code, def.message_template).param("path", path)
     }
 }

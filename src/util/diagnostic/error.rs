@@ -172,7 +172,10 @@ impl Default for Diagnostic {
 }
 
 impl std::fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
         write!(f, "{}[{}]: {}", self.severity, self.code, self.message)
     }
 }

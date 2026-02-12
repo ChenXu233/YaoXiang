@@ -15,18 +15,12 @@ pub trait ErrorConvert<T> {
 
 impl<T> ErrorConvert<T> for Result<T, String> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| {
-            ErrorCodeDefinition::internal_error(&msg)
-                .build(I18nRegistry::en())
-        })
+        self.map_err(|msg| ErrorCodeDefinition::internal_error(&msg).build(I18nRegistry::en()))
     }
 }
 
 impl<T> ErrorConvert<T> for Result<T, &str> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| {
-            ErrorCodeDefinition::internal_error(msg)
-                .build(I18nRegistry::en())
-        })
+        self.map_err(|msg| ErrorCodeDefinition::internal_error(msg).build(I18nRegistry::en()))
     }
 }

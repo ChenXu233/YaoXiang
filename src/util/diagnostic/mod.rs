@@ -69,14 +69,11 @@ pub fn parse_compile_error(error: &str) -> Diagnostic {
 
     // 根据消息内容识别错误码，通过注册表构建
     if error.contains("Unknown variable") {
-        ErrorCodeDefinition::internal_error(error)
-            .build(i18n)
+        ErrorCodeDefinition::internal_error(error).build(i18n)
     } else if error.contains("Type mismatch") {
-        ErrorCodeDefinition::internal_error(error)
-            .build(i18n)
+        ErrorCodeDefinition::internal_error(error).build(i18n)
     } else {
-        ErrorCodeDefinition::internal_error(error)
-            .build(i18n)
+        ErrorCodeDefinition::internal_error(error).build(i18n)
     }
 }
 
@@ -230,7 +227,8 @@ main = () => {
     #[test]
     fn test_render_no_source_file() {
         let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::find("E0001").unwrap()
+        let diagnostic = ErrorCodeDefinition::find("E0001")
+            .unwrap()
             .builder()
             .param("char", "@")
             .build(i18n);
@@ -240,7 +238,11 @@ main = () => {
         let clean_output = strip_ansi(&output);
 
         assert!(clean_output.contains("error [E0001]"), "{}", clean_output);
-        assert!(clean_output.contains("Invalid character"), "{}", clean_output);
+        assert!(
+            clean_output.contains("Invalid character"),
+            "{}",
+            clean_output
+        );
     }
 
     #[test]
@@ -267,6 +269,10 @@ main = () => {
     #[test]
     fn test_error_code_get_all() {
         let all = ErrorCodeDefinition::all();
-        assert!(all.len() > 30, "Expected more than 30 error codes, got {}", all.len());
+        assert!(
+            all.len() > 30,
+            "Expected more than 30 error codes, got {}",
+            all.len()
+        );
     }
 }

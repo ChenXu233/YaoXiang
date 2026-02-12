@@ -1552,27 +1552,24 @@ pub fn generate_ir(
     result: &crate::frontend::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
-    generator.generate_module_ir(ast).map_err(|errors| {
-        errors
-            .into_iter()
-            .map(convert_ir_gen_error)
-            .collect()
-    })
+    generator
+        .generate_module_ir(ast)
+        .map_err(|errors| errors.into_iter().map(convert_ir_gen_error).collect())
 }
 
 /// 将 IrGenError 转换为 Diagnostic
 fn convert_ir_gen_error(e: IrGenError) -> Diagnostic {
     match e {
-        IrGenError::UnimplementedExpr { expr_type, span } => {
-            ErrorCodeDefinition::internal_error(&format!("Unimplemented expression type: {}", expr_type))
-                .at(span)
-                .build(I18nRegistry::en())
-        }
-        IrGenError::UnimplementedStmt { stmt_type, span } => {
-            ErrorCodeDefinition::internal_error(&format!("Unimplemented statement type: {}", stmt_type))
-                .at(span)
-                .build(I18nRegistry::en())
-        }
+        IrGenError::UnimplementedExpr { expr_type, span } => ErrorCodeDefinition::internal_error(
+            &format!("Unimplemented expression type: {}", expr_type),
+        )
+        .at(span)
+        .build(I18nRegistry::en()),
+        IrGenError::UnimplementedStmt { stmt_type, span } => ErrorCodeDefinition::internal_error(
+            &format!("Unimplemented statement type: {}", stmt_type),
+        )
+        .at(span)
+        .build(I18nRegistry::en()),
         IrGenError::InvalidOperand { span } => {
             ErrorCodeDefinition::internal_error("Invalid operand")
                 .at(span)

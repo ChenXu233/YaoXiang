@@ -49,7 +49,8 @@ impl BoundsChecker {
                 return Err(ErrorCodeDefinition::trait_bound_not_satisfied(
                     &format!("{}", ty),
                     bound,
-                ).build(I18nRegistry::en()));
+                )
+                .build(I18nRegistry::en()));
             }
         }
         Ok(())

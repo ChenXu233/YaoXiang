@@ -89,7 +89,10 @@ impl RichEmitter {
     }
 
     /// 渲染头部
-    fn render_header(&self, diagnostic: &Diagnostic) -> String {
+    fn render_header(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> String {
         let severity_text = match diagnostic.severity {
             Severity::Error => "error",
             Severity::Warning => "warning",
@@ -131,7 +134,9 @@ impl RichEmitter {
                 return String::new();
             }
 
-            let file_name = source_file.map(|sf| sf.name.as_str()).unwrap_or("<unknown>");
+            let file_name = source_file
+                .map(|sf| sf.name.as_str())
+                .unwrap_or("<unknown>");
             format!(
                 "{}{}:{}:{}",
                 self.color("muted", " --> "),
@@ -145,7 +150,10 @@ impl RichEmitter {
     }
 
     /// 获取源码行
-    fn get_source_line(source_file: &SourceFile, line_num: usize) -> Option<String> {
+    fn get_source_line(
+        source_file: &SourceFile,
+        line_num: usize,
+    ) -> Option<String> {
         let lines: Vec<&str> = source_file.content.lines().collect();
         lines.get(line_num - 1).map(|s| s.to_string())
     }
@@ -195,7 +203,10 @@ impl RichEmitter {
     }
 
     /// 渲染帮助
-    fn render_help(&self, diagnostic: &Diagnostic) -> Option<String> {
+    fn render_help(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> Option<String> {
         // 帮助信息已内联在 Diagnostic 中
         if diagnostic.help.is_empty() {
             return None;
@@ -222,7 +233,11 @@ impl RichEmitter {
     }
 
     /// 颜色应用
-    fn color(&self, style: &str, text: &str) -> String {
+    fn color(
+        &self,
+        style: &str,
+        text: &str,
+    ) -> String {
         if !self.config.colors {
             return text.to_string();
         }
@@ -264,8 +279,7 @@ mod tests {
     #[test]
     fn test_rich_render() {
         let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@")
-            .build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
 
         let emitter = RichEmitter::new();
         let output = emitter.render(&diagnostic, None);

@@ -56,7 +56,9 @@ impl GenericSpecializer {
             return Err(ErrorCodeDefinition::type_argument_count_mismatch(
                 poly.type_binders.len(),
                 args.len(),
-            ).at(crate::util::span::Span::default()).build(I18nRegistry::en()));
+            )
+            .at(crate::util::span::Span::default())
+            .build(I18nRegistry::en()));
         }
 
         // 构建替换映射
