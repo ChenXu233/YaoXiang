@@ -260,10 +260,18 @@ fn main() -> Result<()> {
         Commands::Version => {
             info!("{} {}", NAME, VERSION);
         }
-        Commands::Repl { .. } => {
-            // REPL not yet implemented
-            tracing::info!("REPL mode is not yet implemented.");
-            tracing::info!("Use 'yaoxiang run <file>' to execute a YaoXiang source file.");
+        Commands::Repl { tui } => {
+            if tui {
+                // TUI REPL mode explicitly requested but not available
+                tracing::error!("TUI REPL mode (`--tui`) is not implemented in this build.");
+                tracing::info!("You can run non-interactive programs with 'yaoxiang run <file>'.");
+            } else {
+                // Non-TUI REPL mode not available
+                tracing::error!("REPL mode is currently not available in this build.");
+                tracing::info!("Use 'yaoxiang run <file>' to execute a YaoXiang source file.");
+            }
+            // Exit with a non-zero status so callers know the command failed.
+            std::process::exit(1);
         }
     }
 
