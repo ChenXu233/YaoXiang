@@ -778,6 +778,9 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             AstType::Ptr(inner) => {
                 AstType::Ptr(Box::new(self.substitute_type_ast(inner, type_map)))
             }
+
+            // 元类型：直接返回
+            AstType::MetaType { .. } => ty.clone(),
         }
     }
 

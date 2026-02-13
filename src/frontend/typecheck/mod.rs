@@ -42,7 +42,7 @@ mod tests;
 pub use crate::frontend::core::type_system::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
     TypeConstraintSolver, SendSyncConstraint, SendSyncSolver, TypeMismatch, TypeConstraintError,
-    ConstValue, ConstExpr, ConstKind, ConstVarDef,
+    ConstValue, ConstExpr, ConstKind, ConstVarDef, UniverseLevel,
 };
 
 // 重新导出推断、检查、特化等模块
@@ -351,8 +351,9 @@ impl TypeChecker {
     ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDef { name, definition } =
-                &stmt.kind
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDef {
+                name, definition, ..
+            } = &stmt.kind
             {
                 self.add_type_definition(name, definition, stmt.span);
             }
@@ -566,6 +567,36 @@ impl TypeChecker {
         definition: &crate::frontend::core::parser::ast::Type,
         _span: crate::util::span::Span,
     ) {
+        // RFC-010 Easter Egg: Type: Type = Type
+        // 当用户尝试定义 Type 自身时，触发彩蛋
+        if name == "Type" {
+            if let crate::frontend::core::parser::ast::Type::MetaType { .. } = definition {
+                // 输出禅意消息，但不添加类型定义（会导致宇宙悖论）
+                use crate::util::diagnostic::DiagnosticBuilder;
+                let easter_egg_msg = concat!(
+                    "\n",
+                    "╔══════════════════════════════════════════════════════════════╗\n",
+                    "║                                                              ║\n",
+                    "║   一生二，二生三，三生万物。                                   ║\n",
+                    "║   易有太极，是生两仪。                                         ║\n",
+                    "║                                                              ║\n",
+                    "║   Type: Type = Type                                          ║\n",
+                    "║   此乃爻象之源，语言之边界。                                   ║\n",
+                    "║   编译器在此沉默，哲学在此驻足。                               ║\n",
+                    "║                                                              ║\n",
+                    "║   感谢你触达语言的哲学边界。                                   ║\n",
+                    "║                                                              ║\n",
+                    "╚══════════════════════════════════════════════════════════════╝",
+                );
+                self.add_error(
+                    DiagnosticBuilder::new("E9999", easter_egg_msg)
+                        .at(_span)
+                        .build(I18nRegistry::en()),
+                );
+                return;
+            }
+        }
+
         let poly = PolyType::mono(MonoType::from(definition.clone()));
         self.env.add_type(name.to_string(), poly);
 

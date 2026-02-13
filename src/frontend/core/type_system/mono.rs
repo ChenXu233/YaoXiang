@@ -4,6 +4,7 @@
 //! - MonoType: 单态类型（具体类型）
 //! - StructType: 结构体类型
 //! - EnumType: 枚举类型
+//! - UniverseLevel: RFC-010 类型宇宙层级
 
 use crate::frontend::core::parser::ast;
 use super::var::TypeVar;
@@ -11,6 +12,105 @@ use super::const_data::{ConstVarDef, ConstValue};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
+
+/// RFC-010: 类型宇宙层级
+///
+/// 使用字符串存储层级，以表示层级可以无穷无尽。
+/// 编译器内部维护宇宙层级：
+/// - "0" = Type0: 日常类型（Int, Float, Point 等）
+/// - "1" = Type1: 类型构造器（List, Maybe 等）
+/// - "2"+ = Type2+: 高阶构造器
+///
+/// 用户永远不会看到这些数字，只看见 `: Type`。
+/// 编译器自动处理 Type0、Type1、Type2... 的区分，对用户透明。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UniverseLevel {
+    /// 层级值，使用字符串存储以支持理论上无穷的层级
+    pub level: String,
+}
+
+impl UniverseLevel {
+    /// 创建 Type0 层级（日常类型）
+    pub fn type0() -> Self {
+        Self {
+            level: "0".to_string(),
+        }
+    }
+
+    /// 创建 Type1 层级（类型构造器）
+    pub fn type1() -> Self {
+        Self {
+            level: "1".to_string(),
+        }
+    }
+
+    /// 创建指定层级
+    pub fn new(level: impl Into<String>) -> Self {
+        Self {
+            level: level.into(),
+        }
+    }
+
+    /// 获取下一个层级（level + 1）
+    pub fn succ(&self) -> Self {
+        // 将字符串解析为大整数并加一
+        // 使用字符串算术以支持任意大层级
+        let level_str = &self.level;
+        let next = increment_level_string(level_str);
+        Self { level: next }
+    }
+
+    /// 检查是否是 Type0
+    pub fn is_type0(&self) -> bool {
+        self.level == "0"
+    }
+
+    /// 检查是否是 Type1
+    pub fn is_type1(&self) -> bool {
+        self.level == "1"
+    }
+
+    /// 比较两个层级的大小
+    pub fn cmp_level(
+        &self,
+        other: &Self,
+    ) -> std::cmp::Ordering {
+        let a = &self.level;
+        let b = &other.level;
+        // 先比较长度（位数多的更大），再字典序比较
+        match a.len().cmp(&b.len()) {
+            std::cmp::Ordering::Equal => a.cmp(b),
+            ord => ord,
+        }
+    }
+}
+
+impl fmt::Display for UniverseLevel {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        write!(f, "Type{}", self.level)
+    }
+}
+
+/// 字符串形式的大整数加一
+fn increment_level_string(s: &str) -> String {
+    let mut digits: Vec<u8> = s.bytes().map(|b| b - b'0').collect();
+    let mut carry = 1u8;
+    for d in digits.iter_mut().rev() {
+        let sum = *d + carry;
+        *d = sum % 10;
+        carry = sum / 10;
+        if carry == 0 {
+            break;
+        }
+    }
+    if carry > 0 {
+        digits.insert(0, carry);
+    }
+    digits.into_iter().map(|d| (d + b'0') as char).collect()
+}
 
 /// 类型绑定的状态（union-find 结构）
 ///
@@ -90,6 +190,15 @@ pub enum MonoType {
         assoc_name: String,
         /// 关联类型参数（如果有关联类型也是泛型的）
         assoc_args: Vec<MonoType>,
+    },
+    /// RFC-010: 元类型 `Type`
+    /// 表示一个值是类型本身
+    /// universe_level 表示类型宇宙层级（用户不可见，编译器自动管理）
+    MetaType {
+        /// 类型宇宙层级
+        universe_level: UniverseLevel,
+        /// 泛型参数（Type[T] 中的 T）
+        type_params: Vec<String>,
     },
     /// 字面量类型（编译期常量值作为类型）
     /// 用于 Const 泛型，如 "5" 表示值 5 的字面量类型
@@ -237,6 +346,17 @@ impl MonoType {
                 value,
             } => {
                 format!("{}::{}", base_type.type_name(), value)
+            }
+            MonoType::MetaType {
+                universe_level: _,
+                type_params,
+            } => {
+                if type_params.is_empty() {
+                    // 用户只看见 "Type"，不看见层级数字
+                    "Type".to_string()
+                } else {
+                    format!("Type[{}]", type_params.join(", "))
+                }
             }
         }
     }
@@ -387,6 +507,19 @@ impl From<ast::Type> for MonoType {
             ast::Type::Ptr(inner) => {
                 // Raw pointer type: *T
                 MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
+            }
+            ast::Type::MetaType { args } => {
+                // RFC-010: Meta-type `Type` or `Type[T]`
+                // Determine universe level: plain Type = Type0, Type[T] = Type1
+                let level = if args.is_empty() {
+                    UniverseLevel::type0()
+                } else {
+                    UniverseLevel::type1()
+                };
+                MonoType::MetaType {
+                    universe_level: level,
+                    type_params: args,
+                }
             }
         }
     }

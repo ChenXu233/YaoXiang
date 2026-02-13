@@ -332,7 +332,7 @@ mod parser_basic_tests {
     /// Test parsing type definition
     #[test]
     fn test_parse_type_definition() {
-        let tokens = tokenize("type MyInt = int;").unwrap();
+        let tokens = tokenize("MyInt: Type = int;").unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
     }
@@ -340,7 +340,7 @@ mod parser_basic_tests {
     /// Test parsing struct type definition (RFC-010)
     #[test]
     fn test_parse_struct_type_definition() {
-        let tokens = tokenize("type Point = { x: Float, y: Float }").unwrap();
+        let tokens = tokenize("Point: Type = { x: Float, y: Float }").unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
         let module = result.unwrap();
@@ -350,7 +350,7 @@ mod parser_basic_tests {
     /// Test parsing struct type with interface constraint (RFC-010)
     #[test]
     fn test_parse_struct_with_interface_constraint() {
-        let tokens = tokenize("type Point = { x: Float, Drawable, Serializable }").unwrap();
+        let tokens = tokenize("Point: Type = { x: Float, Drawable, Serializable }").unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
         let module = result.unwrap();
@@ -360,7 +360,7 @@ mod parser_basic_tests {
     /// Test parsing empty struct type (RFC-010)
     #[test]
     fn test_parse_empty_struct_type() {
-        let tokens = tokenize("type Empty = {}").unwrap();
+        let tokens = tokenize("Empty: Type = {}").unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok());
     }

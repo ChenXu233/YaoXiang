@@ -28,12 +28,8 @@ impl StatementParser for ParserState<'_> {
         let start_span = self.span();
 
         match self.current().map(|t| &t.kind) {
-            // type definition
-            Some(TokenKind::KwType) => {
-                // RFC-010: 所有类型定义（包括接口）都使用 type 语法
-                // 接口 = 记录类型，字段都是函数类型
-                declarations::parse_type_stmt(self, start_span)
-            }
+            // RFC-010: 'type' keyword removed
+            // Type definitions use `Name: Type = { ... }` syntax (handled by parse_identifier_stmt)
             // use import
             Some(TokenKind::KwUse) => declarations::parse_use_stmt(self, start_span),
             // return statement
