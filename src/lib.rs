@@ -390,7 +390,8 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
             if type_params.is_empty() {
                 format!("Type{}", universe_level)
             } else {
-                format!("Type{}<{}>", universe_level, type_params.join(", "))
+                let params_str: Vec<String> = type_params.iter().map(|p| p.type_name()).collect();
+                format!("Type{}<{}>", universe_level, params_str.join(", "))
             }
         }
     }
