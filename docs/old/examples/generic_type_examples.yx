@@ -13,18 +13,18 @@ identity: [T](x: T) -> T = x
 // 多参数泛型函数
 pair: [T, U](first: T, second: U) -> (T, U) = (first, second)
 
-// 泛型Option类型（新语法：type Name = { ... }）
-type Option = {
+// 泛型Option类型（新语法：Name: Type = { ... }）
+Option: (T: Type) -> Type = {
     some(T) | none
 }
 
 // 泛型Result类型（新语法）
-type Result = {
+Result: (T: Type, E: Type) -> Type = {
     ok(T) | err(E)
 }
 
 // 泛型List类型（新语法）
-type List = {
+List: (T: Type) -> Type = {
     nil | cons(T, List)
 }
 
@@ -41,13 +41,13 @@ map: [T, R](list: List, f: (T) -> R) -> List = {
 // ============================================================================
 
 // Const泛型数组
-type Array[T, N: Int] = {
+Array: (T: Type, N: Type) -> Type = {
     data: T[N],
     length: N
 }
 
 // Const泛型矩阵
-type Matrix[T, R: Int, C: Int] = {
+Matrix: (T: Type, R: Type, C: Type) -> Type = {
     data: T[R * C],
     rows: R,
     cols: C
@@ -84,28 +84,28 @@ static_assert(MAX_PACKET_SIZE == 1480)
 // ============================================================================
 
 // 条件类型
-type If[C: Bool, T, E] = match C {
+If: (C: Type, T: Type, E: Type) -> Type = match C {
     True => T,
     False => E
 }
 
 // 类型级自然数
-type Nat = {
+Nat: Type = {
     zero | succ(Nat)
 }
 
-type Add[A: Nat, B: Nat] = match (A, B) {
+Add: (A: Type, B: Type) -> Type = match (A, B) {
     (zero, B) => B,
     (succ(A'), B) => succ(Add[A', B])
 }
 
-type Mult[A: Nat, B: Nat] = match (A, B) {
+Mult: (A: Type, B: Type) -> Type = match (A, B) {
     (zero, _) => zero,
     (succ(A'), B) => Add[B, Mult[A', B]]
 }
 
 // 类型级比较
-type Lt[A: Nat, B: Nat] = match (A, B) {
+Lt: (A: Type, B: Type) -> Type = match (A, B) {
     (zero, zero) => False,
     (zero, succ(_)) => True,
     (succ(_), zero) => False,
@@ -113,10 +113,10 @@ type Lt[A: Nat, B: Nat] = match (A, B) {
 }
 
 // 非空类型
-type NonEmpty[T] = If[T != Void, T, Never]
+NonEmpty: (T: Type) -> Type = If[T != Void, T, Never]
 
 // 固定大小向量（依赖类型）
-type Vector[T, N: Nat] = match N {
+Vector: (T: Type, N: Type) -> Type = match N {
     zero => nil,
     succ(_) => cons(T, Vector[T, N])
 }
@@ -132,7 +132,7 @@ type_size: Nat = Add[succ(succ(zero)), succ(succ(succ(zero)))]  // 2 + 3 = 5
 // ============================================================================
 
 // 1. 类型安全的缓冲区
-type Buffer[T, N: Int] = {
+Buffer: (T: Type, N: Type) -> Type = {
     data: Array[T, N],
     capacity: N,
     size: N
@@ -148,7 +148,7 @@ create_buffer: [T, N: Int](initial_value: T) -> Buffer[T, N] = {
 }
 
 // 2. 类型安全的网络包
-type NetworkPacket[MaxSize: Int] = {
+NetworkPacket: (MaxSize: Type) -> Type = {
     header: Array[Byte, 20],
     payload: Array[Byte, MaxSize],
     checksum: Array[Byte, 4],
@@ -158,7 +158,7 @@ type NetworkPacket[MaxSize: Int] = {
 static_assert(NetworkPacket[1460].header.length == 20)
 
 // 3. 类型安全的内存池
-type MemoryPool[T, BlockSize: Int, BlockCount: Int] = {
+MemoryPool: (T: Type, BlockSize: Type, BlockCount: Type) -> Type = {
     blocks: Array[T, BlockSize * BlockCount],
     free_blocks: Array[Int, BlockCount],
     next_free: Int
@@ -167,7 +167,7 @@ type MemoryPool[T, BlockSize: Int, BlockCount: Int] = {
 static_assert(MemoryPool[Byte, 64, 1024].blocks.length == 65536)
 
 // 4. 类型安全的固定大小队列
-type FixedQueue[T, N: Int] = {
+FixedQueue: (T: Type, N: Type) -> Type = {
     data: Array[T, N],
     head: Int,
     tail: Int,
@@ -175,14 +175,14 @@ type FixedQueue[T, N: Int] = {
 }
 
 // 5. 类型安全的固定大小栈
-type FixedStack[T, N: Int] = {
+FixedStack: (T: Type, N: Type) -> Type = {
     data: Array[T, N],
     top: Int,
     size: N
 }
 
 // 6. 类型安全的协议缓冲区
-type ProtocolBuffer[MaxFields: Int, FieldSize: Int] = {
+ProtocolBuffer: (MaxFields: Type, FieldSize: Type) -> Type = {
     fields: Array[Field, MaxFields],
     field_size: FieldSize,
     total_size: MaxFields * FieldSize
@@ -195,7 +195,7 @@ static_assert(ProtocolBuffer[100, 256].total_size == 25600)
 // ============================================================================
 
 // 编译期矩阵维度检查
-type MatrixMul[A: Nat, B: Nat, C: Nat] = {
+MatrixMul: (A: Type, B: Type, C: Type) -> Type = {
     left: Matrix[Float, A, B],
     right: Matrix[Float, B, C],
     result: Matrix[Float, A, C]
@@ -212,7 +212,7 @@ static_assert(MatrixMul[3, 4, 5].result.cols == 5)
 // ============================================================================
 
 // 编译期状态数量验证
-type StateMachine[StateCount: Int, TransitionCount: Int] = {
+StateMachine: (StateCount: Type, TransitionCount: Type) -> Type = {
     states: Array[State, StateCount],
     transitions: Array[Transition, TransitionCount],
     current_state: Int
@@ -226,7 +226,7 @@ static_assert(StateMachine[5, 10].transitions.length == 10)
 // ============================================================================
 
 // AVL树节点（平衡二叉搜索树）
-type AVLNode[T, Height: Nat] = match Height {
+AVLNode: (T: Type, Height: Type) -> Type = match Height {
     zero => empty,
     succ(_) => node {
         value: T,
@@ -240,7 +240,7 @@ type AVLNode[T, Height: Nat] = match Height {
 static_assert(AVLNode[Int, succ(zero)].height == succ(zero))
 
 // B+树节点
-type BPlusNode[T, Order: Int, KeyCount: Int] = {
+BPlusNode: (T: Type, Order: Type, KeyCount: Type) -> Type = {
     keys: Array[T, KeyCount],
     children: Array[BPlusNode[T, Order, KeyCount], KeyCount + 1],
     is_leaf: Bool,
@@ -255,7 +255,7 @@ static_assert(BPlusNode[String, 4, 3].children.length == 4)
 // ============================================================================
 
 // HTTP请求结构
-type HTTPRequest[MaxHeaders: Int, MaxBody: Int] = {
+HTTPRequest: (MaxHeaders: Type, MaxBody: Type) -> Type = {
     method: String,
     path: String,
     version: String,
@@ -269,7 +269,7 @@ static_assert(HTTPRequest[50, 1024].headers.length == 50)
 static_assert(HTTPRequest[50, 1024].body.length == 1024)
 
 // 数据库记录结构
-type DBRecord[FieldCount: Int, FieldSize: Int] = {
+DBRecord: (FieldCount: Type, FieldSize: Type) -> Type = {
     fields: Array[Field, FieldCount],
     total_size: FieldCount * FieldSize,
     schema_version: Int
@@ -282,7 +282,7 @@ static_assert(DBRecord[10, 256].total_size == 2560)
 // ============================================================================
 
 // 小数组优化
-type SmallArray[T, N: Int] = if N <= 32 {
+SmallArray: (T: Type, N: Type) -> Type = if N <= 32 {
     InlineArray[T, N]
 } else {
     HeapArray[T, N]
@@ -304,14 +304,14 @@ static_assert(L1_CACHE_SIZE == 8192)
 // ============================================================================
 
 // 编译期除零检查
-type SafeDiv[A: Nat, B: Nat] = if B == zero {
+SafeDiv: (A: Type, B: Type) -> Type = if B == zero {
     Error[DivisionByZero]
 } else {
     Nat
 }
 
 // 编译期数组边界检查
-type SafeArrayAccess[T, N: Int, Index: Nat] = if Index < N {
+SafeArrayAccess: (T: Type, N: Type, Index: Type) -> Type = if Index < N {
     T
 } else {
     Error[IndexOutOfBounds]
