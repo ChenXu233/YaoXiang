@@ -35,10 +35,11 @@ const render = async () => {
   if (!container.value) return
 
   error.value = null
-  container.value.innerHTML = props.code
+  const decodedCode = decodeURIComponent(props.code)
+  container.value.innerHTML = decodedCode
 
   try {
-    const { svg } = await mermaid.render(`${id}-graph`, props.code)
+    const { svg } = await mermaid.render(`${id}-graph`, decodedCode)
     container.value.innerHTML = svg
   } catch (e) {
     error.value = e.message

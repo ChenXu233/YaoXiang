@@ -2,9 +2,7 @@
 
 > 本指南帮助您快速上手 YaoXiang 编程语言。
 >
-> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../YaoXiang-language-specification.md)。
-
-[English version](./getting-started-en.md)
+> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考 [语言规范](../design/language-spec.md)。
 
 ## 安装
 

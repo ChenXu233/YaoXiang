@@ -31,7 +31,7 @@ export default defineConfig({
         name: 'yaoxiang',
         aliases: ['yx']
       }
-    ]
+    ],
   },
 
   themeConfig: {
@@ -75,8 +75,27 @@ export default defineConfig({
             {
               text: '教程文档',
               items: [
+                { text: '教程首页', link: '/tutorial/' },
                 { text: '快速开始', link: '/tutorial/getting-started' },
-                { text: '贡献指南', link: '/tutorial/contributing' },
+                { text: '爻象手册', link: '/tutorial/YaoXiang-book' },
+                {
+                  text: '零基础入门', 
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/tutorial/basics',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                  }),
+                 },
+                {
+                  text: '贡献指南',
+                  collapsed: true,
+                  items: [
+                    { text: '贡献指南', link: '/tutorial/dev/contributing' },
+                    { text: '提交指南', link: '/tutorial/dev/commit-convention' },
+                    { text: '分支指南', link: '/tutorial/dev/branch-maintenance-guide' },
+                  ]
+                },
               ],
             },
           ],
@@ -219,8 +238,27 @@ export default defineConfig({
             {
               text: 'Tutorial Documentation',
               items: [
+                { text: 'Tutorial Index', link: '/en/tutorial/' },
                 { text: 'Quick Start', link: '/en/tutorial/getting-started' },
-                { text: 'Contributing', link: '/en/tutorial/contributing' },
+                { text: 'YaoXiang Handbook', link: '/en/tutorial/YaoXiang-book' },
+                { text: 'Zero-to-Hero', 
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/en/tutorial/basics',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: 'Contribution Guide',
+                  collapsed: true,
+                  items: [
+                    { text: 'Contribution Guide', link: '/en/tutorial/dev/contributing' },
+                    { text: 'Commit Guide', link: '/en/tutorial/dev/commit-convention' },
+                    { text: 'Branch Maintenance Guide', link: '/en/tutorial/dev/branch-maintenance-guide' },
+                  ]
+                },
               ],
             },
           ],
