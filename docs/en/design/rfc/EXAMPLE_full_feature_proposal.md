@@ -11,7 +11,7 @@ title: 'RFC Example: Enhanced Pattern Matching Syntax'
 
 > **Author**: ChenXu (example author)
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2025-01-05
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 
@@ -25,8 +25,8 @@ The current `match` expression has limited functionality and cannot handle the f
 
 ```yaoxiang
 # Cannot destructure nested structures
-type Person = Person(name: String, address: Address)
-type Address = Address(city: String, zip: Int)
+Person: Type = { name: String, address: Address }
+Address: Type = { city: String, zip: Int }
 match person {
     Person(name: "Alice", address: Address(city: "Beijing", _)) => "Alice from Beijing"  # ❌ Not supported
 }
@@ -57,8 +57,8 @@ Extend `match` expression syntax to support:
 
 ```yaoxiang
 # Nested destructuring
-type Person = Person(name: String, address: Address)
-type Address = Address(city: String, zip: Int)
+Person: Type = { name: String, address: Address }
+Address: Type = { city: String, zip: Int }
 
 match person {
     Person(name: "Alice", address: Address(city: "Beijing", _)) => "Alice from Beijing"

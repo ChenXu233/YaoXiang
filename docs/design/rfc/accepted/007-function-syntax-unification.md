@@ -7,7 +7,7 @@ title: RFC-007：函数定义语法统一方案
 > **状态**: 已接受
 > **作者**: 沫郁酱
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-02-03（与 RFC-010 统一语法对齐：参数名在签名中声明）
+> **最后更新**: 2026-02-12（与 RFC-010 统一语法对齐）
 
 ## 摘要
 
@@ -284,19 +284,19 @@ let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
 ### 语法定义
 
 ```bnf
-function_def ::= identifier ':' type '=' expression
+function_def ::= identifier ':' type_expr '=' expression
                | identifier '=' expression
-               | identifier ':' generic_params type '=' expression
+               | identifier ':' generic_params type_expr '=' expression
                | identifier '=' block                    # 最简形式：无参无返回
 
 generic_params ::= '[' identifier (',' identifier)* ']'
 
 identifier ::= [a-zA-Z_][a-zA-Z0-9_]*
 
-type ::= identifier                     # 类型引用
+type_expr ::= identifier                     # 类型引用
        | '()'                          # 空类型
-       | '(' parameters ')' '->' type   # 函数类型（参数名在签名中）
-       | type '->' type                # 简单函数类型
+       | '(' parameters ')' '->' type_expr   # 函数类型（参数名在签名中）
+       | type_expr '->' type_expr            # 简单函数类型
 
 expression ::= '(' parameters ')' '=>' block
              | '(' ')' '=>' block
@@ -304,7 +304,7 @@ expression ::= '(' parameters ')' '=>' block
 
 parameters ::= parameter (',' parameter)*
 parameter ::= identifier                # 类型推断
-            | identifier ':' type      # 部分显式类型
+            | identifier ':' type_expr      # 部分显式类型
             | identifier ':' generic_type  # 泛型类型
 
 generic_type ::= identifier            # 类型引用
