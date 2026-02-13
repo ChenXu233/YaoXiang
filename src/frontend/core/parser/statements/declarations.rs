@@ -2,7 +2,7 @@
 //!
 //! Implements parsing for:
 //! - Variable declarations: `[mut] name[: type] [= expr];`
-//! - Type definitions: `type Name = Type;`
+//! - Type definitions: `Name: Type = Type;`
 //! - Use imports: `use path;` or `use path.{item1, item2};`
 //! - Function definitions: `name: (ParamTypes) -> ReturnType = (params) => body;`
 //! - Mutability fields: `type Point = { x: Float, mut y: Float }`
@@ -660,6 +660,48 @@ fn parse_var_stmt_with_pub(
 
         // Case 2: Variable with initializer (no fn_params - not a function definition)
         // Note: Old function syntax (Type, Type) -> Ret is now rejected at type annotation parsing stage
+
+        // RFC-010: Check if type annotation is MetaType (`Type` or `Type[T]`)
+        // If so, this is a type definition: `Name: Type = { ... }` or `Name: Type[T] = { ... }`
+        if let Some(Type::MetaType { args: meta_args }) = &type_annotation {
+            // RFC-010 Easter Egg: Type: Type = Type
+            // 检测 `Type: Type = Type` 彩蛋（用户尝试定义 Type 自身）
+            if name == "Type" {
+                // 尝试解析表达式
+                let saved_easter = state.save_position();
+                if let Some(TokenKind::Identifier(val)) = state.current().map(|t| &t.kind) {
+                    if val == "Type" {
+                        state.bump();
+                        state.skip(&TokenKind::Semicolon);
+                        // 返回一个特殊的 TypeDef 表示彩蛋
+                        // 编译器后续阶段会检测并输出禅意消息
+                        // 保留 meta_args 以便类型检查器区分 E1090 和 E1091
+                        return Some(Stmt {
+                            kind: StmtKind::TypeDef {
+                                name: "Type".to_string(),
+                                definition: Type::MetaType { args: Vec::new() },
+                                generic_params: meta_args.clone(),
+                            },
+                            span,
+                        });
+                    }
+                }
+                state.restore_position(saved_easter);
+            }
+
+            let generic_params_for_type = meta_args.clone();
+            let definition = parse_type_definition(state)?;
+            state.skip(&TokenKind::Semicolon);
+            return Some(Stmt {
+                kind: StmtKind::TypeDef {
+                    name,
+                    definition,
+                    generic_params: generic_params_for_type,
+                },
+                span,
+            });
+        }
+
         let initializer = match state.parse_expression(BP_LOWEST) {
             Some(expr) => Some(Box::new(expr)),
             None => {
@@ -714,80 +756,6 @@ fn parse_var_stmt_with_pub(
         },
         span,
     })
-}
-
-/// Parse type definition statement: `type Name = Type;`
-/// Supports:
-/// - Simple type: `type Color = red`
-/// - Union type: `type Color = red | green | blue`
-/// - Generic union: `type Result[T, E] = ok(T) | err(E)`
-/// - Struct type: `type Point = Point(x: Float, y: Float)`
-pub fn parse_type_stmt(
-    state: &mut ParserState<'_>,
-    span: Span,
-) -> Option<Stmt> {
-    state.bump(); // consume 'type'
-
-    let name = match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(n)) => n.clone(),
-        _ => {
-            state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
-            return None;
-        }
-    };
-    state.bump();
-
-    // Parse generic parameters: type Result[T, E] = ...
-    let _generic_params = parse_type_generic_params(state)?;
-
-    if !state.expect(&TokenKind::Eq) {
-        return None;
-    }
-
-    let definition = parse_type_definition(state)?;
-
-    state.skip(&TokenKind::Semicolon);
-
-    Some(Stmt {
-        kind: StmtKind::TypeDef { name, definition },
-        span,
-    })
-}
-
-/// Parse generic parameters for type definition: [T, E] or <T, E>
-fn parse_type_generic_params(state: &mut ParserState<'_>) -> Option<Vec<String>> {
-    let open = if state.at(&TokenKind::LBracket) {
-        state.bump();
-        TokenKind::RBracket
-    } else if state.at(&TokenKind::Lt) {
-        state.bump();
-        TokenKind::Gt
-    } else {
-        return Some(Vec::new());
-    };
-
-    let mut params = Vec::new();
-    while !state.at(&open) && !state.at_end() {
-        if let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
-            params.push(n.clone());
-            state.bump();
-            state.skip(&TokenKind::Comma);
-        } else {
-            break;
-        }
-    }
-
-    if !state.expect(&open) {
-        return None;
-    }
-
-    Some(params)
 }
 
 /// Parse generic parameters with constraints: `[T: Clone]` or `[N: Int]`
@@ -1354,6 +1322,47 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             let name = name.clone();
             state.bump();
 
+            // RFC-010: Check if this is the meta-type keyword `Type` or `Type[T]` or `Type<T>`
+            if name == "Type" {
+                // Check for generic parameters: Type[T] or Type[K, V]
+                if state.at(&TokenKind::LBracket) {
+                    state.bump(); // consume '['
+                    let mut args = Vec::new();
+                    while !state.at(&TokenKind::RBracket) && !state.at_end() {
+                        if let Some(TokenKind::Identifier(param_name)) =
+                            state.current().map(|t| &t.kind)
+                        {
+                            args.push(param_name.clone());
+                            state.bump();
+                            state.skip(&TokenKind::Comma);
+                        } else {
+                            break;
+                        }
+                    }
+                    state.skip(&TokenKind::RBracket);
+                    return Some(Type::MetaType { args });
+                }
+                // Also support angle bracket syntax: Type<T> or Type<K, V>
+                if state.at(&TokenKind::Lt) {
+                    state.bump(); // consume '<'
+                    let mut args = Vec::new();
+                    while !state.at(&TokenKind::Gt) && !state.at_end() {
+                        if let Some(TokenKind::Identifier(param_name)) =
+                            state.current().map(|t| &t.kind)
+                        {
+                            args.push(param_name.clone());
+                            state.bump();
+                            state.skip(&TokenKind::Comma);
+                        } else {
+                            break;
+                        }
+                    }
+                    state.skip(&TokenKind::Gt);
+                    return Some(Type::MetaType { args });
+                }
+                return Some(Type::MetaType { args: Vec::new() });
+            }
+
             // Check for generic parameters: Type<T> or Type[T]
             if state.at(&TokenKind::Lt) {
                 return parse_generic_type(name, state);
@@ -1681,42 +1690,6 @@ fn parse_constructor_type(
     state.expect(&TokenKind::RParen);
 
     Some(Type::Generic { name, args })
-}
-
-/// Parse function type: `(Params) -> ReturnType`
-fn parse_fn_type(state: &mut ParserState<'_>) -> Option<Type> {
-    // Note: fn type uses syntax (Params) -> ReturnType without `fn` keyword
-
-    if !state.expect(&TokenKind::LParen) {
-        return None;
-    }
-
-    let mut param_types = Vec::new();
-
-    if !state.at(&TokenKind::RParen) {
-        while let Some(ty) = parse_type_annotation(state) {
-            param_types.push(ty);
-
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    }
-
-    if !state.expect(&TokenKind::RParen) {
-        return None;
-    }
-
-    if !state.expect(&TokenKind::Arrow) {
-        return None;
-    }
-
-    let return_type = Box::new(parse_type_annotation(state)?);
-
-    Some(Type::Fn {
-        params: param_types,
-        return_type,
-    })
 }
 
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`

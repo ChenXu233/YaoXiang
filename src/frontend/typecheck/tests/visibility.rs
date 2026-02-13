@@ -35,8 +35,8 @@ fn test_private_items_not_exported() {
 #[test]
 fn test_type_def_auto_exported() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
-        type Line = Line(start: Point, end: Point)
+        Point: Type = Point(x: Float, y: Float)
+        Line: Type = Line(start: Point, end: Point)
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -59,7 +59,7 @@ fn test_type_def_auto_exported() {
 #[test]
 fn test_method_bind_visibility() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
 
         Point.distance: (self: Point, other: Point) -> Float = (self, other) => 0.0
         Point.add: (self: Point, other: Point) -> Point = (self, other) => self
@@ -88,7 +88,7 @@ fn test_method_bind_visibility() {
 #[test]
 fn test_pub_fn_auto_binds() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
 
         pub distance: (self: Point, other: Point) -> Float = (self, other) => 0.0
     "#;
@@ -145,7 +145,7 @@ fn test_local_visibility() {
 #[test]
 fn test_type_visibility() {
     let code = r#"
-        type MyInt = Int
+        MyInt: Type = Int
 
         pub create: (x: Int) -> MyInt = (x) => x
     "#;
@@ -195,7 +195,7 @@ fn test_pub_fn_no_auto_bind_without_type() {
 #[test]
 fn test_multiple_pub_fn_same_type() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
 
         pub length: (p: Point) -> Float = (p) => 0.0
         pub normalize: (p: Point) -> Point = (p) => p
@@ -240,7 +240,7 @@ fn test_multiple_pub_fn_same_type() {
 #[test]
 fn test_pub_fn_auto_binds_to_counter() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
 
         pub length: (p: Point) -> Float = (p) => 0.0
     "#;
@@ -274,7 +274,7 @@ fn test_pub_fn_auto_binds_to_counter() {
 #[test]
 fn test_method_bind_type_preserved() {
     let code = r#"
-        type Container = Container(items: Vec<Int>)
+        Container: Type = Container(items: Vec<Int>)
 
         Container.size: (c: Container) -> Int = (c) => 0
     "#;
@@ -298,7 +298,7 @@ fn test_method_bind_type_preserved() {
 #[test]
 fn test_type_and_methods_separate_exports() {
     let code = r#"
-        type Vector = Vector(x: Float, y: Float)
+        Vector: Type = Vector(x: Float, y: Float)
 
         pub magnitude: (v:Vector) -> Float = (v) => 0.0
     "#;
@@ -328,8 +328,8 @@ fn test_type_and_methods_separate_exports() {
 #[test]
 fn test_nested_type_exports() {
     let code = r#"
-        type Outer = Outer(inner: Inner)
-        type Inner = Inner(value: Int)
+        Outer: Type = Outer(inner: Inner)
+        Inner: Type = Inner(value: Int)
 
         pub get_value: (o:Outer) -> Int = (o) => 0
     "#;
@@ -392,7 +392,7 @@ fn test_private_function_not_exported() {
 #[test]
 fn test_aliased_type_exported() {
     let code = r#"
-        type MyString = String
+        MyString: Type = String
 
         pub get_my_string: () -> MyString = () => ""
     "#;
@@ -422,7 +422,7 @@ fn test_aliased_type_exported() {
 #[test]
 fn test_enum_type_exported() {
     let code = r#"
-        type Option[T] = Some(T) | None
+        Option: Type[T] = Some(T) | None
 
         pub is_some: (o: Option[Int]) -> Bool = (o) => true
     "#;
@@ -446,8 +446,8 @@ fn test_enum_type_exported() {
 #[test]
 fn test_mixed_visibility() {
     let code = r#"
-        type PublicType = PublicType(value: Int)
-        type PrivateType = PrivateType(value: Int)
+        PublicType: Type = PublicType(value: Int)
+        PrivateType: Type = PrivateType(value: Int)
 
         pub public_fn: (p: PublicType) -> Int = (p) => 0
         private_fn: (p: PrivateType) -> Int = (p) => 0
@@ -500,7 +500,7 @@ fn test_mixed_visibility() {
 #[test]
 fn test_method_complex_params() {
     let code = r#"
-        type Tree = Tree(left: Tree, right: Tree, value: Int)
+        Tree: Type = Tree(left: Tree, right: Tree, value: Int)
 
         pub height: (t: Tree) -> Int = (t) => 0
         pub sum: (t: Tree) -> Int = (t) => 0

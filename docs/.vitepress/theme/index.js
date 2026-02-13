@@ -2,8 +2,9 @@ import DefaultTheme from 'vitepress/theme'
 import './tailwind.css'
 import mediumZoom from 'medium-zoom'
 import { useDark, useToggle } from '@vueuse/core'
-import { h } from 'vue'
+import { h, nextTick, watch } from 'vue'
 import { useData } from 'vitepress'
+import { createMermaidRenderer } from 'vitepress-mermaid-renderer'
 import Mermaid from './component/Mermaid.vue'
 import Home from './layout/Home.vue'
 import Download from './layout/Download.vue'
@@ -32,8 +33,27 @@ export default {
   },
 
   Layout() {
+    const { isDark } = useData()
     const { frontmatter } = useData()
-    
+
+    // 初始化 mermaid 渲染器
+    const initMermaid = () => {
+      createMermaidRenderer({
+        theme: isDark.value ? 'dark' : 'default',
+      })
+    }
+
+    // 初始化
+    nextTick(() => initMermaid())
+
+    // 主题切换时重新渲染
+    watch(
+      () => isDark.value,
+      () => {
+        initMermaid()
+      },
+    )
+
     if (frontmatter.value.is_download) {
        return h(DefaultTheme.Layout, null, {
          'page-top': () => h(Download)

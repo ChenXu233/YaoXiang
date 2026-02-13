@@ -7,7 +7,7 @@ title: RFC-002：跨平台 I/O 与 libuv 集成
 > **状态**: 草案
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-05
+> **最后更新**: 2026-02-12
 
 ## 摘要
 
@@ -550,8 +550,8 @@ read_config: String -> Config = (path) => {
 
 ```yaoxiang
 # RFC-001 定义：资源类型
-type FilePath: Resource
-type HttpUrl: Resource
+FilePath: Resource
+HttpUrl: Resource
 
 # RFC-002 实现：资源操作的 IO 语义
 File.read: (FilePath) -> String = path => {

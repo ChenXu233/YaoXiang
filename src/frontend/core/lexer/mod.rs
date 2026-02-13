@@ -59,8 +59,7 @@ fn log_token(token: &Token) {
 
     let (msg, arg) = match &token.kind {
         TokenKind::Identifier(name) => (MSG::LexTokenIdentifier, name.clone()),
-        TokenKind::KwType
-        | TokenKind::KwPub
+        TokenKind::KwPub
         | TokenKind::KwUse
         | TokenKind::KwSpawn
         | TokenKind::KwRef

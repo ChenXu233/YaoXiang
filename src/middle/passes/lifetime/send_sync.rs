@@ -227,6 +227,8 @@ impl SendSyncChecker {
             MonoType::AssocType { host_type, .. } => self.is_send(host_type),
             // 字面量类型：检查基础类型
             MonoType::Literal { base_type, .. } => self.is_send(base_type),
+            // 元类型：编译期概念，总是 Send
+            MonoType::MetaType { .. } => true,
         }
     }
 
@@ -287,6 +289,8 @@ impl SendSyncChecker {
             MonoType::AssocType { host_type, .. } => self.is_sync(host_type),
             // 字面量类型：检查基础类型
             MonoType::Literal { base_type, .. } => self.is_sync(base_type),
+            // 元类型：编译期概念，总是 Sync
+            MonoType::MetaType { .. } => true,
         }
     }
 

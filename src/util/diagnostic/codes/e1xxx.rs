@@ -125,6 +125,19 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::TypeCheck,
         message_template: "Unknown label: '{label}'",
     },
+    // === RFC-010: Type 元类型 ===
+    // E1090: Type: Type = Type 彩蛋 (Note 级别)
+    ErrorCodeDefinition {
+        code: "E1090",
+        category: ErrorCategory::TypeCheck,
+        message_template: "", // 消息在 i18n 的 zen_message 中
+    },
+    // E1091: Type: Type[T] = ... 泛型元类型自指错误
+    ErrorCodeDefinition {
+        code: "E1091",
+        category: ErrorCategory::TypeCheck,
+        message_template: "Generic meta-type self-reference is not allowed: '{decl}'",
+    },
 ];
 
 // 快捷方法实现
@@ -312,5 +325,17 @@ impl ErrorCodeDefinition {
     pub fn unknown_label(label: &str) -> DiagnosticBuilder {
         let def = Self::find("E1070").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template).param("label", label)
+    }
+
+    /// E1091 泛型元类型自指错误
+    pub fn invalid_generic_self_reference(decl: &str) -> DiagnosticBuilder {
+        let def = Self::find("E1091").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("decl", decl)
+    }
+
+    /// E1090 彩蛋（返回占位符，由 i18n 的 zen_message 提供实际消息）
+    pub fn type_self_reference_easter_egg() -> DiagnosticBuilder {
+        let def = Self::find("E1090").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
     }
 }

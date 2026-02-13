@@ -7,7 +7,7 @@ title: 'RFC-002: Cross-Platform I/O with libuv Integration'
 > **Status**: Draft
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2025-01-05
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 
@@ -554,8 +554,8 @@ read_config: String -> Config = (path) => {
 
 ```yaoxiang
 # RFC-001 defined: Resource types
-type FilePath: Resource
-type HttpUrl: Resource
+FilePath: Resource
+HttpUrl: Resource
 
 # RFC-002 implemented: IO semantics for resource operations
 File.read: (FilePath) -> String = path => {

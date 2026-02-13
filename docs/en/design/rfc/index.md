@@ -2,6 +2,7 @@
 title: RFC Index
 ---
 
+
 # YaoXiang RFC (Request for Comments) Index
 
 > RFC (Request for Comments) is the formal submission format for YaoXiang language feature design proposals.

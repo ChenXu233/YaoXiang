@@ -7,7 +7,7 @@ title: 'RFC-006: Documentation Site Construction'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2025-02-07
+> **Last Updated**: 2026-02-12 (No type syntax changes)
 
 > **Reference**: See [RFC Template](RFC_TEMPLATE.md) for RFC specifications.
 

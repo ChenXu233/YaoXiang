@@ -1,8 +1,0 @@
-use std.io
-
-greet: (name: String) -> String = "Hello, ${name}!"
-
-main = {
-    message: String = greet("World")
-    print(message)
-}

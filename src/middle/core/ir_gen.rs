@@ -299,9 +299,9 @@ impl AstToIrGenerator {
                 expr,
                 constants,
             ),
-            ast::StmtKind::TypeDef { name, definition } => {
-                self.generate_constructor_ir(name, definition)
-            }
+            ast::StmtKind::TypeDef {
+                name, definition, ..
+            } => self.generate_constructor_ir(name, definition),
             _ => Ok(None),
         }
     }

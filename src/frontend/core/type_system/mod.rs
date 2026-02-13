@@ -20,7 +20,7 @@ pub mod var;
 // 重新导出主要类型
 pub use var::{TypeVar, ConstVar};
 pub use const_data::{ConstValue, ConstExpr, ConstKind, ConstVarDef, BinOp, UnOp};
-pub use mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
+pub use mono::{TypeBinding, MonoType, StructType, EnumType, PolyType, UniverseLevel};
 pub use substitute::{Substitution, Substituter};
 pub use constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};
 pub use solver::TypeConstraintSolver;

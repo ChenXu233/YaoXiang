@@ -7,7 +7,7 @@ title: 'RFC-007: Function Definition Syntax Unification Scheme'
 > **Status**: Accepted
 > **Author**: MoYu酱
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2026-02-03 (Aligned with RFC-010 unified syntax: parameter names declared in signature)
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 

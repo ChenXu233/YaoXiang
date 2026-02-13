@@ -843,6 +843,9 @@ impl<'a> InstantiationGraphBuilder<'a> {
 
             // 字面量类型：没有类型参数
             MonoType::Literal { .. } => vec![],
+
+            // 元类型：没有类型参数
+            MonoType::MetaType { .. } => vec![],
         }
     }
 
