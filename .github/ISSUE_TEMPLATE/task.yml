@@ -1,0 +1,95 @@
+---
+name: Task
+description: 创建开发任务或追踪项
+labels: ["task"]
+assignees: ""
+
+body:
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: 任务类型 (Task Type)
+      description: 选择任务类型
+      options:
+        - Implementation（功能实现）
+        - Research（调研）
+        - Documentation（文档）
+        - Testing（测试）
+        - Refactoring（重构）
+        - CI/CD（持续集成）
+        - Other（其他）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 相关组件 (Affected Component)
+      description: 这个任务影响到哪个组件
+      options:
+        - Lexer（词法分析器）
+        - Parser（解析器）
+        - Type Checker（类型检查器）
+        - IR（中间表示）
+        - Codegen（代码生成）
+        - Runtime（运行时）
+        - CLI/Tools（命令行工具）
+        - Docs（文档）
+        - Infrastructure（基础设施）
+        - Other（其他）
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级 (Priority)
+      description: 任务的重要程度
+      options:
+        - P0 - Critical（紧急）
+        - P1 - High（高）
+        - P2 - Medium（中）
+        - P3 - Low（低）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: 初始状态 (Initial Status)
+      description: 任务的当前状态
+      options:
+        - todo - To Do（待处理）
+        - in_progress - In Progress（进行中）
+        - blocked - Blocked（阻塞）
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 任务描述 (Description)
+      description: 详细描述这个任务的内容和目标
+      placeholder: |
+        描述这个任务要做什么...
+
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: 交付物 (Deliverables)
+      description: 任务完成后的预期产出
+      placeholder: |
+        - [ ] 新增功能 X
+        - [ ] 修改文件 Y
+        - [ ] 添加测试 Z
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: 依赖任务 (Dependencies)
+      description: 此任务依赖的其他 Issue 编号（用逗号分隔）
+      placeholder: e.g. #123, #456
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 额外上下文 (Additional Context)
+      description: 任何其他有助于理解这个任务的信息
