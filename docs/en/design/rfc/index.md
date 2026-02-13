@@ -1,8 +1,7 @@
 ---
 title: RFC Index
-
-> **Last Updated**: 2026-02-12
 ---
+
 
 # YaoXiang RFC (Request for Comments) Index
 

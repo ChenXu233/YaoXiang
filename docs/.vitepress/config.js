@@ -157,6 +157,32 @@ export default defineConfig({
                 collapsed: true,
                 hyphenToSpace: true,
               })
+            },
+            {
+              text: '计划',
+              items: [
+                { text: '计划目录', link: '/reference/plan' },
+                {
+                  text: '处理中', 
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/reference/plan/ongoing',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+                {
+                  text: '已完成', 
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/reference/plan/completed',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                 },
+              ],
             }
           ],
 
