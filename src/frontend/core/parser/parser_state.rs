@@ -215,7 +215,8 @@ impl<'a> ParserState<'a> {
         let start_span = self.span();
 
         match self.current().map(|t| &t.kind) {
-            Some(TokenKind::KwType) => parse_type_stmt(self, start_span),
+            // RFC-010: 'type' keyword removed, type definitions use `Name: Type = { ... }` syntax
+            // handled by parse_identifier_stmt
             Some(TokenKind::KwUse) => parse_use_stmt(self, start_span),
             Some(TokenKind::KwReturn) => parse_return_stmt(self, start_span),
             Some(TokenKind::KwBreak) => parse_break_stmt(self, start_span),

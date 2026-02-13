@@ -7,10 +7,11 @@ mod lexer_keywords_tests {
     use super::*;
 
     #[test]
-    fn test_type_keyword() {
+    fn test_type_is_not_keyword() {
+        // RFC-010: 'type' is no longer a keyword, it's just an identifier
         let tokens = tokenize("type").unwrap();
         assert_eq!(tokens.len(), 2);
-        assert!(matches!(&tokens[0].kind, TokenKind::KwType));
+        assert!(matches!(&tokens[0].kind, TokenKind::Identifier(name) if name == "type"));
     }
 
     #[test]

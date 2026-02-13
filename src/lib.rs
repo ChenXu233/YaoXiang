@@ -383,6 +383,16 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
         } => {
             format!("{}::{}", dump_type_detail(base_type), value)
         }
+        crate::frontend::typecheck::MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => {
+            if type_params.is_empty() {
+                format!("Type{}", universe_level)
+            } else {
+                format!("Type{}<{}>", universe_level, type_params.join(", "))
+            }
+        }
     }
 }
 

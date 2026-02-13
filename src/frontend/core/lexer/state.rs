@@ -24,7 +24,7 @@ impl LexerState {
     ) -> Option<TokenKind> {
         match s {
             // Basic type and declaration keywords
-            "type" => Some(TokenKind::KwType),
+            // RFC-010: "type" is no longer a keyword. Use `Name: Type = { ... }` syntax.
             "pub" => Some(TokenKind::KwPub),
             "use" => Some(TokenKind::KwUse),
 

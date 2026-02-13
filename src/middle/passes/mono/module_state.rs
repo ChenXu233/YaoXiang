@@ -413,6 +413,7 @@ impl ModuleMonoState {
                 // 裸指针类型：*T
                 format!("*{}", Self::get_type_name(inner))
             }
+            Type::MetaType { .. } => "MetaType".to_string(),
         }
     }
 

@@ -105,11 +105,12 @@ fn test_check_type_alias() {
     let _solver = TypeConstraintSolver::new();
     let mut checker = TypeChecker::new("test");
 
-    // type MyInt = Int
+    // type MyInt = Int (RFC-010: MyInt: Type = Int)
     let type_def = ast::Stmt {
         kind: ast::StmtKind::TypeDef {
             name: "MyInt".to_string(),
             definition: ast::Type::Name("Int".to_string()),
+            generic_params: Vec::new(),
         },
         span: create_dummy_span(),
     };
