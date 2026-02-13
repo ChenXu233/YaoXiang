@@ -1,0 +1,153 @@
+// RFC-010: 统一类型语法示例
+// 展示 name: type = value 模型的统一语法
+
+use std.io
+
+// ======== 1. 变量定义 ========
+
+// 使用统一语法：name: type = value
+x: Int = 42
+name: String = "Alice"
+flag: Bool = true
+
+// ======== 2. 函数定义 ========
+
+// 使用统一语法：name: (params) -> ReturnType = body
+// 完整形式：签名完整，Lambda 头完整
+add: (a: Int, b: Int) -> Int = (a, b) => a + b
+
+// 简写：省略 Lambda 头（签名已声明参数，推荐）
+add2: (a: Int, b: Int) -> Int = a + b
+
+// 简写：省略参数类型（HM 推断）
+add3: (a, b) -> Int = (a, b) => a + b
+
+// 最简形式（HM 完全推断）
+add4 = (a, b) => a + b
+
+// 带类型推导的函数
+greet: (name: String) -> String = {
+    return "Hello, ${name}!"
+}
+
+// 空参函数
+main: () -> Void = {
+    print("Hello, YaoXiang!\n")
+}
+
+// ======== 3. 类型定义（结构体） ========
+
+// 使用花括号定义结构体
+Point: Type = {
+    x: Float,
+    y: Float
+}
+
+// ======== 4. 类型定义（枚举） ========
+
+// 简单枚举（无载荷变体）
+Color: Type = {
+    red | green | blue
+}
+
+// 复杂枚举（有载荷变体）
+Result: Type = {
+    ok(Int) | err(String)
+}
+
+// Option 枚举
+Option: Type = {
+    some(String) | none
+}
+
+// ======== 5. 接口定义 ========
+
+// 接口是字段全为函数类型的记录类型
+Drawable: Type = {
+    draw: (self: Self, surface: Surface) -> Void
+}
+
+Serializable: Type = {
+    serialize: (self: Self) -> String
+}
+
+// ======== 6. 方法定义 ========
+
+// 类型方法：关联到特定类型
+Point.draw: (self: Point, surface: Surface) -> Void = {
+    return
+}
+
+Point.serialize: (self: Point) -> String = {
+    return "Point"
+}
+
+// 普通方法
+distance: (p1: Point, p2: Point) -> Float = {
+    1.0
+}
+
+// ======== 7. 类型实现接口 ========
+
+// Point 实现 Drawable 和 Serializable 接口
+Point: Type = {
+    x: Float,
+    y: Float,
+    Drawable,
+    Serializable
+}
+
+// ======== 8. 使用示例 ========
+
+main: () -> Void = {
+    // 基本变量赋值
+    p: Point = Point(1.0, 2.0);
+
+    // 函数调用
+    sum: Int = add(10, 20);
+    print("这是输出的和:");
+    print(sum);
+    print("\n");
+    message: String = greet("World");
+
+    return
+}
+
+// ======== 9. 泛型函数（RFC-011 语法）======
+
+// 泛型函数使用 [T] 语法约束类型参数
+identity: [T](x: T) -> T = x
+
+// 泛型函数带约束
+clone: [T: Clone](value: T) -> T = value.clone()
+
+// 泛型高阶函数
+map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = {
+    // 实现 map
+    List[R]()
+}
+
+// ======== 10. 泛型类型 ========
+
+// 泛型列表类型
+List: (T: Type) -> Type = {
+    data: Array[T],
+    length: Int,
+    push: [T](self: List[T], item: T) -> Void,
+    get: [T](self: List[T], index: Int) -> Maybe[T]
+}
+
+// ======== 11. Lambda 表达式 ========
+
+// Lambda 作为一等公民
+add_fn = (a: Int, b: Int) => a + b
+
+// 高阶函数
+apply_twice: [T](f: (T) -> T, x: T) -> T = {
+    return f(f(x))
+}
+
+// 使用 Lambda
+main: () -> Void = {
+    result = apply_twice((x: Int) => x + 1, 5)
+}

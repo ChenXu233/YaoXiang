@@ -1,0 +1,12 @@
+use std.io
+
+main: () -> Void = {
+  print("Testing error handling\n")
+
+  // 报错：未定义变量
+  print(a)
+  // 报错
+  print(b)
+
+  print("All tests passed!\n")
+}
