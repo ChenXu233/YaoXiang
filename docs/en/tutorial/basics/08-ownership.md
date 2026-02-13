@@ -1,5 +1,5 @@
 ---
-title: Chapter 8: Who Owns the Data
+title: 'Chapter 8: Who Owns the Data'
 ---
 
 # Chapter 8: Who Owns the Data

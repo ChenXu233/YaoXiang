@@ -1,5 +1,5 @@
 ---
-title: Chapter 6: Custom Types
+title: 'Chapter 6: Custom Types'
 ---
 
 # Chapter 6: Custom Types

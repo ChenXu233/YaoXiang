@@ -1,5 +1,5 @@
 ---
-title: Chapter 9: Move and Share
+title: 'Chapter 9: Move and Share'
 ---
 
 # Chapter 9: Move and Share

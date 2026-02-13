@@ -1,5 +1,5 @@
 ---
-title: Chapter 2: The Shape of Data
+title: 'Chapter 2: The Shape of Data'
 ---
 
 # Chapter 2: The Shape of Data

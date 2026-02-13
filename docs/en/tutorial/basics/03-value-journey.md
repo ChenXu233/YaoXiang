@@ -1,5 +1,5 @@
 ---
-title: Chapter 3: The Journey of Values
+title: 'Chapter 3: The Journey of Values'
 ---
 
 # Chapter 3: The Journey of Values

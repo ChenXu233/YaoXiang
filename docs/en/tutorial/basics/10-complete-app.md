@@ -1,5 +1,5 @@
 ---
-title: Chapter 10: Complete Application
+title: 'Chapter 10: Complete Application'
 ---
 
 # Chapter 10: Complete Application
