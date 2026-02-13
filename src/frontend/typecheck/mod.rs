@@ -352,10 +352,13 @@ impl TypeChecker {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::TypeDef {
-                name, definition, ..
+                name,
+                definition,
+                generic_params,
+                ..
             } = &stmt.kind
             {
-                self.add_type_definition(name, definition, stmt.span);
+                self.add_type_definition(name, definition, generic_params, stmt.span);
             }
         }
 
@@ -565,32 +568,47 @@ impl TypeChecker {
         &mut self,
         name: &str,
         definition: &crate::frontend::core::parser::ast::Type,
-        _span: crate::util::span::Span,
+        generic_params: &[String],
+        span: crate::util::span::Span,
     ) {
         // RFC-010 Easter Egg: Type: Type = Type
         // 当用户尝试定义 Type 自身时，触发彩蛋
         if name == "Type" {
-            if let crate::frontend::core::parser::ast::Type::MetaType { .. } = definition {
-                // 输出禅意消息，但不添加类型定义（会导致宇宙悖论）
-                use crate::util::diagnostic::DiagnosticBuilder;
-                let easter_egg_msg = concat!(
-                    "\n",
-                    "╔══════════════════════════════════════════════════════════════╗\n",
-                    "║                                                              ║\n",
-                    "║   一生二，二生三，三生万物。                                   ║\n",
-                    "║   易有太极，是生两仪。                                         ║\n",
-                    "║                                                              ║\n",
-                    "║   Type: Type = Type                                          ║\n",
-                    "║   此乃爻象之源，语言之边界。                                   ║\n",
-                    "║   编译器在此沉默，哲学在此驻足。                               ║\n",
-                    "║                                                              ║\n",
-                    "║   感谢你触达语言的哲学边界。                                   ║\n",
-                    "║                                                              ║\n",
-                    "╚══════════════════════════════════════════════════════════════╝",
-                );
+            // 检查 definition 是否引用了 Type
+            let is_type_self_ref = match definition {
+                // 情况1: definition 是 MetaType（Type: Type = ...）
+                crate::frontend::core::parser::ast::Type::MetaType { .. } => true,
+                // 情况2: definition 是 Name("Type")（Type: Type = Type）
+                crate::frontend::core::parser::ast::Type::Name(type_name) => type_name == "Type",
+                // 情况3: definition 是 Generic { name: "Type", ... }（Type: Type = Type[T]）
+                crate::frontend::core::parser::ast::Type::Generic {
+                    name: type_name, ..
+                } => type_name == "Type",
+                // 情况4: definition 是 NamedStruct { name: "Type", ... }
+                crate::frontend::core::parser::ast::Type::NamedStruct {
+                    name: type_name, ..
+                } => type_name == "Type",
+                _ => false,
+            };
+
+            if is_type_self_ref {
+                // 检查 type_annotation 是否有泛型参数（这表示 Type: Type[T] = ...）
+                if !generic_params.is_empty() {
+                    // E1091: 泛型元类型自引用错误
+                    let decl = format!("Type: Type[{}] = ...", generic_params.join(", "));
+                    self.add_error(
+                        ErrorCodeDefinition::invalid_generic_self_reference(&decl)
+                            .at(span)
+                            .build(I18nRegistry::en()),
+                    );
+                    return;
+                }
+
+                // E1090: Type: Type = Type 彩蛋（Note 级别）
                 self.add_error(
-                    DiagnosticBuilder::new("E9999", easter_egg_msg)
-                        .at(_span)
+                    ErrorCodeDefinition::type_self_reference_easter_egg()
+                        .at(span)
+                        .severity(crate::util::diagnostic::Severity::Info)
                         .build(I18nRegistry::en()),
                 );
                 return;

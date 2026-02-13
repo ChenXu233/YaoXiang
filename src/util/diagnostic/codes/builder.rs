@@ -3,7 +3,7 @@
 //! 支持模板参数化的错误消息构建器，替代 trait-per-error 设计
 
 use crate::util::span::Span;
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{Diagnostic, Severity};
 use std::collections::HashMap;
 
 /// 诊断构建器（支持模板参数）
@@ -14,6 +14,7 @@ pub struct DiagnosticBuilder {
     params: Vec<(&'static str, String)>,
     span: Option<Span>,
     related: Vec<Diagnostic>,
+    severity: Option<Severity>,
 }
 
 impl DiagnosticBuilder {
@@ -28,6 +29,7 @@ impl DiagnosticBuilder {
             params: Vec::new(),
             span: None,
             related: Vec::new(),
+            severity: None,
         }
     }
 
@@ -58,6 +60,16 @@ impl DiagnosticBuilder {
         related: Vec<Diagnostic>,
     ) -> Self {
         self.related = related;
+        self
+    }
+
+    /// 设置严重级别（默认 Error）
+    #[inline]
+    pub fn severity(
+        mut self,
+        severity: Severity,
+    ) -> Self {
+        self.severity = Some(severity);
         self
     }
 
@@ -114,11 +126,31 @@ impl DiagnosticBuilder {
             }
         }
 
-        // 正常路径：渲染并返回原始 Diagnostic
-        let message = i18n.render(self.message_template, &self.params);
+        // 正常路径：渲染并返回 Diagnostic
+        let message = if self.message_template.is_empty() {
+            // 对于 E1090 等特殊错误码，从 zen_message 获取消息
+            i18n.get_zen_message(self.code)
+                .unwrap_or_else(|| i18n.render(self.message_template, &self.params))
+        } else {
+            i18n.render(self.message_template, &self.params)
+        };
         let help = i18n.render_help(self.code, &self.params);
 
-        let mut diagnostic = Diagnostic::error(self.code.to_string(), message, help, self.span);
+        // 根据 severity 创建诊断
+        let mut diagnostic = match self.severity {
+            Some(Severity::Warning) => {
+                Diagnostic::warning(self.code.to_string(), message, help, self.span)
+            }
+            Some(Severity::Info) => {
+                Diagnostic::info(self.code.to_string(), message, help, self.span)
+            }
+            Some(Severity::Hint) => {
+                Diagnostic::hint(self.code.to_string(), message, help, self.span)
+            }
+            None | Some(Severity::Error) => {
+                Diagnostic::error(self.code.to_string(), message, help, self.span)
+            }
+        };
 
         if !self.related.is_empty() {
             diagnostic = diagnostic.with_related(self.related.clone());
@@ -178,6 +210,8 @@ pub struct I18nRegistry {
     examples: HashMap<&'static str, &'static str>,
     /// 错误输出示例
     error_outputs: HashMap<&'static str, &'static str>,
+    /// 禅意消息（用于 E1090 彩蛋）
+    zen_messages: HashMap<&'static str, &'static str>,
 }
 
 /// JSON 结构（与 i18n/*.json 对应）
@@ -187,6 +221,8 @@ struct ErrorInfoJson {
     help: String,
     example: Option<String>,
     error_output: Option<String>,
+    #[serde(default)]
+    zen_message: Option<String>,
 }
 
 /// 将 String 转换为 &'static str
@@ -202,6 +238,7 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
     let mut helps = HashMap::new();
     let mut examples = HashMap::new();
     let mut error_outputs = HashMap::new();
+    let mut zen_messages = HashMap::new();
 
     for (code, info) in data {
         let code_static: &'static str = to_static_string(code);
@@ -214,6 +251,9 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
         if let Some(out) = info.error_output {
             error_outputs.insert(code_static, to_static_string(out));
         }
+        if let Some(zen) = info.zen_message {
+            zen_messages.insert(code_static, to_static_string(zen));
+        }
     }
 
     I18nRegistry {
@@ -221,6 +261,7 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
         helps,
         examples,
         error_outputs,
+        zen_messages,
     }
 }
 
@@ -296,6 +337,14 @@ impl I18nRegistry {
         code: &str,
     ) -> Option<String> {
         self.error_outputs.get(code).map(|s| s.to_string())
+    }
+
+    /// 获取禅意消息（用于 E1090 彩蛋）
+    pub fn get_zen_message(
+        &self,
+        code: &str,
+    ) -> Option<String> {
+        self.zen_messages.get(code).map(|s| s.to_string())
     }
 
     /// 渲染模板（编译期完成，运行时零开销）

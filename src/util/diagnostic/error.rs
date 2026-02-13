@@ -142,6 +142,44 @@ impl Diagnostic {
         }
     }
 
+    /// 创建信息诊断（Note 级别）
+    ///
+    /// `pub(crate)`: 仅由 `DiagnosticBuilder::build()` 调用。
+    pub(crate) fn info(
+        code: String,
+        message: String,
+        help: String,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            severity: Severity::Info,
+            code,
+            message,
+            help,
+            span,
+            related: Vec::new(),
+        }
+    }
+
+    /// 创建提示诊断（Hint 级别）
+    ///
+    /// `pub(crate)`: 仅由 `DiagnosticBuilder::build()` 调用。
+    pub(crate) fn hint(
+        code: String,
+        message: String,
+        help: String,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            severity: Severity::Hint,
+            code,
+            message,
+            help,
+            span,
+            related: Vec::new(),
+        }
+    }
+
     /// 添加相关诊断
     pub(crate) fn with_related(
         mut self,

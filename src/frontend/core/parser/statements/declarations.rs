@@ -675,11 +675,12 @@ fn parse_var_stmt_with_pub(
                         state.skip(&TokenKind::Semicolon);
                         // 返回一个特殊的 TypeDef 表示彩蛋
                         // 编译器后续阶段会检测并输出禅意消息
+                        // 保留 meta_args 以便类型检查器区分 E1090 和 E1091
                         return Some(Stmt {
                             kind: StmtKind::TypeDef {
                                 name: "Type".to_string(),
                                 definition: Type::MetaType { args: Vec::new() },
-                                generic_params: Vec::new(),
+                                generic_params: meta_args.clone(),
                             },
                             span,
                         });
@@ -1689,42 +1690,6 @@ fn parse_constructor_type(
     state.expect(&TokenKind::RParen);
 
     Some(Type::Generic { name, args })
-}
-
-/// Parse function type: `(Params) -> ReturnType`
-fn parse_fn_type(state: &mut ParserState<'_>) -> Option<Type> {
-    // Note: fn type uses syntax (Params) -> ReturnType without `fn` keyword
-
-    if !state.expect(&TokenKind::LParen) {
-        return None;
-    }
-
-    let mut param_types = Vec::new();
-
-    if !state.at(&TokenKind::RParen) {
-        while let Some(ty) = parse_type_annotation(state) {
-            param_types.push(ty);
-
-            if !state.skip(&TokenKind::Comma) {
-                break;
-            }
-        }
-    }
-
-    if !state.expect(&TokenKind::RParen) {
-        return None;
-    }
-
-    if !state.expect(&TokenKind::Arrow) {
-        return None;
-    }
-
-    let return_type = Box::new(parse_type_annotation(state)?);
-
-    Some(Type::Fn {
-        params: param_types,
-        return_type,
-    })
 }
 
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`
