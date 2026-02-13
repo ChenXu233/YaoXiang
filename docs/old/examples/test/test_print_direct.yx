@@ -1,7 +1,0 @@
-use std.io
-
-add: (a: Int, b: Int) -> Int = a + b
-
-main = {
-    print(add(10, 20))
-}

@@ -1,6 +1,0 @@
-use std.io
-
-main = {
-    print("Hello")
-    x: Int = 42
-}

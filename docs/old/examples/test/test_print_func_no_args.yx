@@ -1,7 +1,0 @@
-use std.io
-
-f = 42
-
-main = {
-    print(f())
-}
