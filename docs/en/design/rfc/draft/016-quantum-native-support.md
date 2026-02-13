@@ -1,5 +1,5 @@
 ---
-title: RFC 016: Quantum-Native Support and Multi-Backend Integration
+title: 'RFC 016: Quantum-Native Support and Multi-Backend Integration'
 ---
 
 # RFC 016: Quantum-Native Support and Multi-Backend Integration

@@ -16,8 +16,8 @@ Imagine you have many drawers, each drawer can hold things. You put a name on th
 # Create a variable, name is "age", value is 25
 age: Int = 25
 
-# Create a variable, name is "name", value is "小明"
-name: String = "小明"
+# Create a variable, name is "name", value is "Alex"
+name: String = "Alex"
 ```
 
 **Understanding**:
@@ -33,7 +33,7 @@ name: String = "小明"
 │  │  age   │      │   25    │        │
 │  └─────────┘      └─────────┘        │
 │  ┌─────────┐      ┌─────────┐        │
-│  │  name  │ ────▶ │ "小明"  │        │
+│  │  name  │ ────▶ │ "Alex"  │        │
 │  └─────────┘      └─────────┘        │
 └─────────────────────────────────────────┘
 ```
@@ -169,9 +169,9 @@ Person: Type = {
 }
 
 # Usage
-person: Person = Person("小明", 18, 95.5)
+person: Person = Person("Alex", 18, 95.5)
 
-# person.name = "小红"    # ❌ Error! name is immutable field
+# person.name = "Bob"    # ❌ Error! name is immutable field
 person.age = 19           # ✅ Can change
 person.score = 98.0       # ✅ Can change
 ```
@@ -184,7 +184,7 @@ person.score = 98.0       # ✅ Can change
 | **Field-level mut** | **Stronger** | **Sufficient** |
 
 - **Safer**: Only fields that need to change can be changed
-- **Clearer**:一眼看出哪些字段可变
+- **Clearer**: You can immediately see which fields are mutable
 - **Absolutely safe**: Compile-time checking, runtime guarantee
 
 ### 3.6.2 When to Use Mutable vs Immutable?

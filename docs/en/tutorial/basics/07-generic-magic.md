@@ -170,10 +170,10 @@ first: [T](List[T]) -> Option[T] = ...
 Compiler can automatically infer generic parameters:
 
 ```yaoxiang
-# Complete写法
+# Complete form
 numbers: List[Int] = List[Int](1, 2, 3)
 
-# Infer写法 (recommended)
+# Inferred form (recommended)
 numbers = List(1, 2, 3)     # Compiler infers as List[Int]
 ```
 
