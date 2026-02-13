@@ -152,7 +152,7 @@ main: () -> Void = {
     mut c1: Circle = Circle(Point(0.0, 0.0), 10.0)
 
     # Chained calls (ownership backflow)
-    c1 = c1.scale(2.0).move(5.0, 5.0)
+    c1 = c1.scale(2.0)
 
     # Share example
     shared_circle = ref c1

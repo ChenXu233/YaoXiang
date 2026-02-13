@@ -565,4 +565,4 @@ The `.gitmessage.txt` file in project root has the following format:
 
 ---
 
-> 💡 **Tip**: Keep commits atomic and descriptions clear to make code review and追溯 more efficient!
+> 💡 **Tip**: Keep commits atomic and descriptions clear to make code review and tracing more efficient!
