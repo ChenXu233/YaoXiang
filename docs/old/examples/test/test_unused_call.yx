@@ -1,7 +1,0 @@
-use std.io
-
-greet: (name: String) -> String = "Hello"
-
-main = {
-    greet("World")
-}

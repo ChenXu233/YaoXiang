@@ -1,5 +1,0 @@
-use std.io
-
-main = {
-    print("Test")
-}
