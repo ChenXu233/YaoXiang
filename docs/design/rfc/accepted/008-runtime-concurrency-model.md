@@ -7,7 +7,7 @@ title: RFC-008：Runtime 并发模型与调度器脱耦设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-25（更新：集成RFC-011泛型系统，类型约束已定义）
+> **最后更新**: 2026-02-12
 
 > **参考**:
 > - [RFC-001: 并作模型与错误处理系统](../rfc/001-concurrent-model-error-handling.md)
@@ -237,7 +237,7 @@ title: RFC-008：Runtime 并发模型与调度器脱耦设计
 
 ```yaoxiang
 # 调度器接口 - 使用 YaoXiang 函数类型定义
-type Scheduler = {
+Scheduler: Type = {
     spawn: (Task) -> TaskId,
     await: (TaskId) -> Result,
     spawn_with_deps: (Task, List[TaskId]) -> TaskId,

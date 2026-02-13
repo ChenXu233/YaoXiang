@@ -1,6 +1,0 @@
-use std.io
-
-main = {
-    s = """hello"""
-    println(s)
-}

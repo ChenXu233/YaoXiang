@@ -168,10 +168,12 @@ pub enum StmtKind {
         body: Box<Block>,
         label: Option<String>,
     },
-    /// Type definition: `type Name = { ... }`
+    /// Type definition: `RFC-010: `Name: Type = { ... }`
     TypeDef {
         name: String,
         definition: Type,
+        /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
+        generic_params: Vec<String>,
     },
     /// Use statement: `use module.path`
     Use {
@@ -320,6 +322,14 @@ pub enum Type {
     /// Raw pointer type: `*T`
     /// Only usable inside unsafe blocks
     Ptr(Box<Type>),
+    /// Meta-type: `Type` or `Type[T]` or `Type[K, V]`
+    /// RFC-010: Used in unified syntax `Name: Type = { ... }`
+    /// `Type` is the only meta-type keyword in the language
+    MetaType {
+        /// Generic type parameters (empty for plain `Type`)
+        /// e.g., `Type[T]` has args = ["T"], `Type[K, V]` has args = ["K", "V"]
+        args: Vec<String>,
+    },
 }
 
 /// Block

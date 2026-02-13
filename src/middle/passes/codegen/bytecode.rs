@@ -241,6 +241,7 @@ impl MonoTypeExt for MonoType {
             MonoType::Weak(_) => 46,
             MonoType::AssocType { .. } => 47, // 使用新的类型ID
             MonoType::Literal { .. } => 48,   // 字面量类型
+            MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
         }
     }
 

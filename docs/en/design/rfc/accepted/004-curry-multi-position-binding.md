@@ -7,7 +7,7 @@ title: 'RFC-004: Multi-Position Joint Binding Design for Curried Methods'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2026-02-03 (Aligned with RFC-010 unified syntax: parameter names declared in signature)
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax: identifier : type = expression)
 
 ## Summary
 
@@ -49,8 +49,8 @@ Point.distance = distance[0]   # this bound to position 0
 
 ```yaoxiang
 # Problems with existing design:
-type Point = { x: Float, y: Float }
-type Vector = { x: Float, y: Float, z: Float }
+Point: Type = { x: Float, y: Float }
+Vector: Type = { x: Float, y: Float, z: Float }
 
 distance: (a: Point, b: Point) -> Float = { ... }
 transform: (p: Point, v: Vector) -> Point = { ... }

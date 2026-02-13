@@ -247,6 +247,16 @@ fn type_name_hash<H: Hasher>(
                 }
             }
         }
+        MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => {
+            "meta_type".hash(state);
+            universe_level.hash(state);
+            for p in type_params {
+                p.hash(state);
+            }
+        }
     }
 }
 

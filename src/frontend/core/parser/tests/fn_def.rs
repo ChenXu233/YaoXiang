@@ -542,15 +542,20 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_struct_type_with_interface_constraint() {
-        // RFC-010: type Point = { x: Float, y: Float, Drawable, Serializable }
-        let source = "type Point = { x: Float, y: Float, Drawable, Serializable }";
+        // RFC-010: Point: Type = { x: Float, y: Float, Drawable, Serializable }
+        let source = "Point: Type = { x: Float, y: Float, Drawable, Serializable }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name,
+                definition,
+                generic_params,
+            } => {
                 assert_eq!(name, "Point");
+                assert!(generic_params.is_empty());
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 2);
@@ -566,15 +571,20 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_struct_type_only_interfaces() {
-        // RFC-010: type EmptyType = { Drawable, Serializable }
-        let source = "type EmptyType = { Drawable, Serializable }";
+        // RFC-010: EmptyType: Type = { Drawable, Serializable }
+        let source = "EmptyType: Type = { Drawable, Serializable }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name,
+                definition,
+                generic_params,
+            } => {
                 assert_eq!(name, "EmptyType");
+                assert!(generic_params.is_empty());
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert!(fields.is_empty()); // 只有接口约束
@@ -588,15 +598,20 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_empty_struct_type() {
-        // RFC-010: type EmptyType = {}
-        let source = "type EmptyType = {}";
+        // RFC-010: EmptyType: Type = {}
+        let source = "EmptyType: Type = {}";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name,
+                definition,
+                generic_params,
+            } => {
                 assert_eq!(name, "EmptyType");
+                assert!(generic_params.is_empty());
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert!(fields.is_empty());
@@ -610,14 +625,16 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_interface_definition() {
-        // RFC-010: type Drawable = { draw: (self: Self, surface: Surface) -> Void }
-        let source = "type Drawable = { draw: (self: Self, surface: Surface) -> Void }";
+        // RFC-010: Drawable: Type = { draw: (self: Self, surface: Surface) -> Void }
+        let source = "Drawable: Type = { draw: (self: Self, surface: Surface) -> Void }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name, definition, ..
+            } => {
                 assert_eq!(name, "Drawable");
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
@@ -633,14 +650,16 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_interface_definition_with_self() {
-        // RFC-010: type Serializable = { serialize: (self: Self) -> String }
-        let source = "type Serializable = { serialize: (self: Self) -> String }";
+        // RFC-010: Serializable: Type = { serialize: (self: Self) -> String }
+        let source = "Serializable: Type = { serialize: (self: Self) -> String }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name, definition, ..
+            } => {
                 assert_eq!(name, "Serializable");
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
@@ -656,15 +675,20 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_generic_type_definition() {
-        // RFC-010: type List[T] = { data: Array[T], length: Int }
-        let source = "type List[T] = { data: Array[T], length: Int }";
+        // RFC-010: List: Type[T] = { data: Array[T], length: Int }
+        let source = "List: Type[T] = { data: Array[T], length: Int }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef { name, definition } => {
+            StmtKind::TypeDef {
+                name,
+                definition,
+                generic_params,
+            } => {
                 assert_eq!(name, "List");
+                assert_eq!(generic_params, &vec!["T".to_string()]);
                 match definition {
                     crate::frontend::core::parser::ast::Type::Struct(fields) => {
                         assert_eq!(fields.len(), 2);

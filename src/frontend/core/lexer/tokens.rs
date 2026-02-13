@@ -20,8 +20,7 @@ pub enum LexError {
 /// Token kind
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Keywords (18 total)
-    KwType,
+    // Keywords (17 total - RFC-010: 'type' keyword removed, use `Name: Type = ...` syntax)
     KwPub,
     KwUse,
     KwSpawn,

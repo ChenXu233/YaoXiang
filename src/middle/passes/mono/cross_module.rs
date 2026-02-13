@@ -522,6 +522,10 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             // 裸指针类型：*T
             MonoType::TypeRef(format!("*{}", ast_type_to_mono_type(inner).type_name()))
         }
+        Type::MetaType { .. } => {
+            // 元类型：编译期概念，无需特殊处理
+            MonoType::Void
+        }
     }
 }
 

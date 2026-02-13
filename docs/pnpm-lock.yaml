@@ -35,13 +35,22 @@ importers:
       vitepress:
         specifier: ^1.6.4
         version: 1.6.4(@algolia/client-search@5.48.0)(lightningcss@1.30.2)(postcss@8.5.6)(search-insights@2.17.3)
+      vitepress-mermaid-renderer:
+        specifier: ^1.1.8
+        version: 1.1.8(mermaid@11.12.2)(vue@3.5.27)
+      vitepress-sidebar:
+        specifier: ^1.33.1
+        version: 1.33.1
       vue:
         specifier: ^3.5.27
         version: 3.5.27
     devDependencies:
-      vitepress-sidebar:
-        specifier: ^1.33.1
-        version: 1.33.1
+      cd:
+        specifier: ^0.3.3
+        version: 0.3.3
+      docs:
+        specifier: 0.3.2-canary.0
+        version: 0.3.2-canary.0
 
 packages:
 
@@ -872,6 +881,9 @@ packages:
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
+  cd@0.3.3:
+    resolution: {integrity: sha512-X2y0Ssu48ucdkrNgCdg6k3EZWjWVy/dsEywUUTeZEIW31f3bQfq65Svm+TzU1Hz+qqhdmyCdjGhUvRsSKHl/mw==}
+
   character-entities-html4@2.1.0:
     resolution: {integrity: sha512-1v7fgQRj6hnSwFpq1Eu0ynr/CDEw0rXo2B61qXrLNdHZmPKgb7fqS1a2JwF0rISo9q77jDI8VMEHoApn8qDoZA==}
 
@@ -1092,6 +1104,10 @@ packages:
 
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
+
+  docs@0.3.2-canary.0:
+    resolution: {integrity: sha512-jkGIXsVKFcs8SXpqJuIPZJvwAuHqNwlatDSFLhMXLQDqsvQp+IK7JAdbdJvrypJrdXUnWJTntur3s4qfh6JQCQ==}
+    hasBin: true
 
   dompurify@3.3.1:
     resolution: {integrity: sha512-qkdCKzLNtrgPFP1Vo+98FRzJnBRGe4ffyCea9IwHB1fyxPOeNTHpLKYGd4Uk9xvNoH0ZoOjwZxNptyMwqrId1Q==}
@@ -1587,6 +1603,13 @@ packages:
         optional: true
       terser:
         optional: true
+
+  vitepress-mermaid-renderer@1.1.8:
+    resolution: {integrity: sha512-lGduwewm3G+hX7X1bj5mNVO+B1vT2oKgfC+U+hsg8jYeHXtwwtSwVnxn6mm7NEx4U1NnV6qNrHX2MzFx2usQLw==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      mermaid: ^11.0.0
+      vue: ^3.0.0
 
   vitepress-sidebar@1.33.1:
     resolution: {integrity: sha512-wPUbXezGakVldawixeRW5tKQTLKoMj2t4nWoThKfCltBM/9a38IE+wCXmmRNW22ZKC32SD/X/sG6NyCTK8QBRg==}
@@ -2425,6 +2448,8 @@ snapshots:
 
   ccount@2.0.1: {}
 
+  cd@0.3.3: {}
+
   character-entities-html4@2.1.0: {}
 
   character-entities-legacy@3.0.0: {}
@@ -2670,6 +2695,8 @@ snapshots:
   devlop@1.1.0:
     dependencies:
       dequal: 2.0.3
+
+  docs@0.3.2-canary.0: {}
 
   dompurify@3.3.1:
     optionalDependencies:
@@ -3179,6 +3206,11 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
       lightningcss: 1.30.2
+
+  vitepress-mermaid-renderer@1.1.8(mermaid@11.12.2)(vue@3.5.27):
+    dependencies:
+      mermaid: 11.12.2
+      vue: 3.5.27
 
   vitepress-sidebar@1.33.1:
     dependencies:

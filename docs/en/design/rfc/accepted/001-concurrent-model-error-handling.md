@@ -7,7 +7,7 @@ title: 'RFC-001: Concurrency Model and Error Handling System'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2025-01-06
+> **Last Updated**: 2026-02-12
 
 ## Design Source and Reference
 
@@ -157,7 +157,7 @@ heavy_calc: (Int) -> Int = (n) => {
 
 ```yaoxiang
 # Standard Result type definition
-type Result[T, E] = {
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self,
     is_ok: (Self) -> Bool,
@@ -226,8 +226,8 @@ Types that can safely be transferred across threads:
 
 ```yaoxiang
 # Send constraint definition
-trait Send = {
-    # Empty marker trait
+Send: Type = {
+    # Empty marker interface
 }
 
 # Derive Send automatically
@@ -243,8 +243,8 @@ Types that can be safely shared across threads through references:
 
 ```yaoxiang
 # Sync constraint definition
-trait Sync = {
-    # Empty marker trait
+Sync: Type = {
+    # Empty marker interface
 }
 
 # Derive Sync automatically
@@ -283,7 +283,7 @@ spawn(() => process(shared_data))   # ✅ Safe: Arc is Send + Sync
 
 ```yaoxiang
 # Send constraint prevents data races at compile time
-type SafeCounter = { value: Int }
+SafeCounter: Type = { value: Int }
 
 # Arc provides thread-safe shared ownership
 counter: ref SafeCounter = ref SafeCounter(Mutex.new(0))
@@ -390,7 +390,7 @@ Created ──► Ready ──► Running ──► Waiting ──► Ready ─�
 
 ```yaoxiang
 # Async function type representation
-type Async[T] = {
+Async: Type[T] = {
     # Opaque type representing ongoing computation
     # Can be awaited when result needed
 }
@@ -400,7 +400,7 @@ type Async[T] = {
 
 ```yaoxiang
 # Type system tracks async capability
-type Function = {
+Function: Type = {
     params: TypeList,
     return_type: Type,
     is_async: Bool,    # Whether function can spawn
@@ -415,7 +415,7 @@ type Function = {
 
 ```yaoxiang
 # Exception hierarchy
-type Exception = {
+Exception: Type = {
     RuntimeError,
     TypeError,
     ValueError,
@@ -424,7 +424,7 @@ type Exception = {
 }
 
 # Exception as error variant
-type Result[T, E] = {
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self,    # E can be Exception or custom error
 }

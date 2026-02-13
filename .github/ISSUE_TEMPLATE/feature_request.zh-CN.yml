@@ -1,0 +1,72 @@
+---
+name: 功能请求
+description: 为 YaoXiang 提出新功能建议
+labels: ["enhancement"]
+assignees: ""
+
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: 功能类型 (Feature Type)
+      description: 选择你要请求的功能类型
+      options:
+        - Language Feature（语言特性）- 新语法、内置类型等
+        - Runtime Feature（运行时特性）- 内存管理、并发模型等
+        - CLI/Tools（命令行工具）- 新命令、工具改进
+        - Documentation（文档改进）
+        - Performance（性能优化）
+        - Other（其他）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级 (Priority)
+      description: 功能的重要程度
+      options:
+        - P0 - Critical（紧急）- 必须实现
+        - P1 - High（高）- 重要功能
+        - P2 - Medium（中）- 改进性功能
+        - P3 - Low（低）- 锦上添花
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述 (Problem Description)
+      description: 描述你想要解决的问题或遇到的限制
+      placeholder: |
+        目前使用 YaoXiang 时，我遇到了...问题
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望的解决方案 (Proposed Solution)
+      description: 描述你希望如何解决这个问题
+      placeholder: |
+        希望能够支持...语法/功能
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案 (Alternatives Considered)
+      description: 描述你考虑过的其他解决方案
+
+  - type: textarea
+    id: usage
+    attributes:
+      label: 使用示例 (Usage Example)
+      description: 提供你期望的 API/语法使用示例
+      placeholder: |
+        ```yaoxiang
+        // 期望的使用方式
+        ```
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 额外上下文 (Additional Context)
+      description: 任何其他有助于理解这个功能请求的信息

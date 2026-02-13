@@ -233,6 +233,8 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 // 裸指针类型：*T
                 MonoType::TypeRef(format!("*{}", self.type_to_mono_type(inner).type_name()))
             }
+            // 元类型：编译期概念，无运行时表示
+            AstType::MetaType { .. } => MonoType::Void,
         }
     }
 
@@ -282,6 +284,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Literal { name, base_type } => Self::get_type_name(base_type) + "::" + name,
             AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
+            AstType::MetaType { .. } => "MetaType".to_string(),
         }
     }
 
@@ -337,6 +340,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Literal { .. } => false,
             AstType::Ptr(inner) => self.contains_type_var_type(inner),
+            AstType::MetaType { .. } => false,
         }
     }
 
@@ -420,6 +424,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Literal { .. } => {}
             AstType::Ptr(inner) => self.collect_type_vars_from_type(inner, type_params, seen),
+            AstType::MetaType { .. } => {}
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -761,6 +766,8 @@ impl TypeMonomorphizer for super::Monomorphizer {
             MonoType::Literal { base_type, .. } => {
                 self.collect_type_vars_from_mono_type(base_type, type_params, seen);
             }
+            // 元类型：无类型变量
+            MonoType::MetaType { .. } => {}
         }
     }
 

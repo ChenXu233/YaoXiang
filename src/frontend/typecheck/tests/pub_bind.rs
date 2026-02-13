@@ -8,7 +8,7 @@ use crate::frontend::typecheck::TypeChecker;
 #[test]
 fn test_pub_auto_bind_to_type() {
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
     "#;
 
     let tokens = tokenize(code).unwrap();
@@ -74,7 +74,7 @@ fn test_private_function_not_exported() {
 fn test_explicit_method_bind_exported() {
     // RFC-010: 参数名在签名中声明
     let code = r#"
-        type Point = Point(x: Float, y: Float)
+        Point: Type = Point(x: Float, y: Float)
 
         Point.distance: (self: Point, other: Point) -> Float = (self, other) => 0.0
     "#;

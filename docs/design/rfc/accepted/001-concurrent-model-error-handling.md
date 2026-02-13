@@ -7,7 +7,7 @@ title: RFC-001：并作模型与错误处理系统
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-06
+> **最后更新**: 2026-02-12
 
 ## 设计来源与参考
 
@@ -214,11 +214,11 @@ File.write("data.txt", y)   # 无变量依赖
 
 ```yaoxiang
 # 资源类型声明
-type Resource             # 资源标记
-type FilePath: Resource   # 文件路径是资源
-type HttpUrl: Resource    # URL 是资源
-type DBUrl: Resource      # 数据库 URL 是资源
-type Console: Resource    # 控制台是资源
+Resource: Type             # 资源标记
+FilePath: Type            # 文件路径是资源
+HttpUrl: Type             # URL 是资源
+DBUrl: Type              # 数据库 URL 是资源
+Console: Type            # 控制台是资源
 
 # 资源操作自动构建 DAG
 main: () -> Void = () => {
@@ -260,7 +260,7 @@ main: () -> Void = () => {
 
 3. **用户自定义资源**：用户定义的资源类型自动继承资源操作识别
    ```yaoxiang
-   type Database: Resource
+   Database: Type
 
    query: (Database, String) -> Result[Row, Error]
    # 参数 Database 是 Resource，自动识别为资源操作
@@ -295,7 +295,7 @@ path2 = compute_path("file2")       # 运行时计算
 
 ```yaoxiang
 # 标准 Result 类型
-type Result[T, E] = ok(T) | err(E)
+Result: Type[T, E] = { ok: (T) -> Self, err: (E) -> Self }
 
 # ? 运算符透明错误传播
 process: () -> Result[Data, Error] = {

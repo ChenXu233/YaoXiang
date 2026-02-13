@@ -370,8 +370,10 @@ mod parser_state_tests {
     }
 
     #[test]
-    fn test_can_start_stmt_kw_type() {
-        let tokens = vec![create_token(TokenKind::KwType)];
+    fn test_can_start_stmt_identifier_type() {
+        // RFC-010: 'type' is no longer a keyword, it's just a regular identifier
+        // Type definitions use `Name: Type = { ... }` syntax (starts with Identifier)
+        let tokens = vec![create_token(TokenKind::Identifier("Type".to_string()))];
         let state = ParserState::new(&tokens);
 
         assert!(state.can_start_stmt());

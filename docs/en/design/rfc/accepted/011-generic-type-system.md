@@ -7,7 +7,7 @@ title: 'RFC-011: Generic Type System Design'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-25
-> **Last Updated**: 2025-02-04 (Removed const keyword, using literal type constraints instead)
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 
@@ -16,9 +16,9 @@ This document defines the **generic type system design** for YaoXiang language, 
 **Core Design**:
 - **Basic Generics**: `[T]` type parameters, supporting generic functions and types
 - **Type Constraints**: `[T: Clone]` multiple constraints, function type constraints
-- **Associated Types**: `type Iterator[T] = { Item: T, next: () -> Option[T] }`
+- **Associated Types**: `Iterator: Type[Item] = { next: () -> Option[Item], has_next: () -> Bool }`
 - **Compile-Time Generics**: `[T, N: Int]` compile-time constant parameters, literal type constraints distinguishing compile-time from runtime
-- **Conditional Types**: `type If[C: Bool, T, E]` type-level computation, type families
+- **Conditional Types**: `If: Type[C, T, E]` type-level computation, type families
 - **Platform Specialization**: `[P: X86_64]` predefined generic parameter P, platform as type
 
 **Value**:
@@ -88,8 +88,8 @@ identity: [T](value: T) -> T = {
     return value
 }
 
-# Generic type
-type Option[T] = {
+# Generic type (Type[T] = generic type)
+Option: Type[T] = {
     some: (T) -> Self,
     none: () -> Self
 }
@@ -127,14 +127,13 @@ sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
 
 ```yaoxiang
 # Iterator trait with associated type
-type Iterator[T] = {
-    Item: T,                    # Associated type
-    next: (Self) -> Option[T],
+Iterator: Type[Item] = {
+    next: (Self) -> Option[Item],
     has_next: (Self) -> Bool
 }
 
 # Using associated types
-collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
+collect: [T, I: Iterator[Item = T]](iter: I) -> List[T] = {
     result = List[T]()
     while iter.has_next() {
         if let Some(item) = iter.next() {
@@ -157,7 +156,7 @@ factorial: [n: Int](n: n) -> Int = {
 }
 
 # Compile-time constant array
-type StaticArray[T, N: Int] = {
+StaticArray: Type[T, N] = {
     data: T[N],
     length: N
 }
@@ -170,16 +169,16 @@ arr: StaticArray[Int, factorial(5)]  # Compiled to StaticArray[Int, 120]
 
 ```yaoxiang
 # Type-level If
-type If[C: Bool, T, E] = match C {
+If: Type[C, T, E] = match C {
     True => T,
     False => E
 }
 
 # Compile-time branch
-type NonEmpty[T] = If[T != Void, T, Never]
+NonEmpty: Type[T] = If[T != Void, T, Never]
 
 # Type family
-type AsString[T] = match T {
+AsString: Type[T] = match T {
     Int => String,
     Float => String,
     Bool => String,
@@ -191,7 +190,7 @@ type AsString[T] = match T {
 
 ```yaoxiang
 # Platform as type
-type Platform = X86_64 | AArch64 | RISC_V | ARM | X86
+Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86
 
 # Platform-specific implementation
 sum: [P: X86_64](arr: Array[Float]) -> Float = {

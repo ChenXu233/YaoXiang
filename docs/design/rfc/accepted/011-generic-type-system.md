@@ -7,7 +7,7 @@ title: RFC-011：泛型系统设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-25
-> **最后更新**: 2025-02-04（移除 const 关键字，改用字面量类型约束）
+> **最后更新**: 2026-02-12
 
 ## 摘要
 
@@ -16,7 +16,7 @@ title: RFC-011：泛型系统设计
 **核心设计**：
 - **基础泛型**：`[T]` 类型参数，支持泛型函数和泛型类型
 - **类型约束**：`[T: Clone]` 多重约束，函数类型约束
-- **关联类型**：`type Iterator[T] = { Item: T, next: () -> Option[T] }`
+- **关联类型**：`Iterator: Type[Item] = { next: () -> Option[Item], has_next: () -> Bool }`
 - **编译期泛型**：`[T, N: Int]` 编译期常量参数，字面量类型约束区分编译期与运行时
 - **条件类型**：`type If[C: Bool, T, E]` 类型级计算，类型族
 - **平台特化**：`[P: X86_64]` 预定义泛型参数 P，平台即类型
@@ -103,17 +103,17 @@ map: [T, R](container: Container[T], f: Fn(T) -> R) -> Container[R] = {
 
 ```yaoxiang
 # 泛型类型定义（统一使用记录类型语法）
-type Option[T] = {
+Option: Type[T] = {
     some: (T) -> Self,
     none: () -> Self
 }
 
-type Result[T, E] = {
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self
 }
 
-type List[T] = {
+List: Type[T] = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
@@ -192,15 +192,15 @@ map_String_String: (list: List[String], f: Fn(String) -> String) -> List[String]
 
 ```yaoxiang
 # 基本trait定义（接口类型）
-type Clone = {
+Clone: Type = {
     clone: (Self) -> Self,
 }
 
-type Display = {
+Display: Type = {
     fmt: (Self, Formatter) -> Result,
 }
 
-type Debug = {
+Debug: Type = {
     fmt: (Self, Formatter) -> Result,
 }
 
@@ -268,10 +268,9 @@ composed = compose(
 #### 3.1 关联类型定义
 
 ```yaoxiang
-# Iterator trait（使用记录类型语法）
-type Iterator[T] = {
-    Item: T,  # 关联类型
-    next: (Self) -> Option[T],
+# Iterator trait（使用 Type[Item] 语法）
+Iterator: Type[Item] = {
+    next: (Self) -> Option[Item],
     has_next: (Self) -> Bool,
     collect: [T](Self) -> List[T],
 }
@@ -311,15 +310,15 @@ Array.Item: [T](arr: Array[T]) -> T = {
 
 ```yaoxiang
 # 更复杂的关联类型
-type Producer[T] = {
+Producer: Type[Item] = {
     Item: T,
-    produce: (Self) -> Option[T],
+    produce: (Self) -> Option[Item],
 }
 
 # 关联类型可以是泛型的
-type Container[T] = {
+Container: Type[Item] = {
     Item: T,
-    IteratorType: Iterator[T],  # 关联类型也是泛型的
+    IteratorType: Iterator[Item],  # 关联类型也是泛型的
     iter: (Self) -> IteratorType,
 }
 
@@ -358,7 +357,7 @@ add: [a: Int, b: Int](a: a, b: b) -> Int = a + b
 # ════════════════════════════════════════════════════════
 # 编译期常量数组
 # ════════════════════════════════════════════════════════
-type StaticArray[T, N: Int] = {
+StaticArray: Type[T, N] = {
     data: T[N],  # 编译期已知大小的数组
     length: N,
 }
@@ -378,7 +377,7 @@ arr: StaticArray[Int, factorial(5)]  # StaticArray[Int, 120]，编译器在编�
 SIZE: Int = factorial(5)  # 编译期为 120
 
 # 矩阵类型使用
-type Matrix[T, Rows: Int, Cols: Int] = {
+Matrix: Type[T, Rows, Cols] = {
     data: Array[Array[T, Cols], Rows],
 }
 
@@ -411,20 +410,20 @@ identity_3x3 = identity_matrix[Float, 3](3)
 # 标准库定义：Assert[C] 是一个类型
 # - C 为 True 时，推导为 Void
 # - C 为 False 时，推导为 compile_error("Assertion failed")
-type Assert[C: Bool] = match C {
+Assert: Type[C] = match C {
     True => Void,
     False => compile_error("Assertion failed"),
 }
 
 # 使用方式1：在类型定义中作为约束
-type Array[T, N: Int] = {
+Array: Type[T, N] = {
     data: T[N],
     # 编译期检查：N 必须大于 0（Assert 在类型位置）
     length: Assert[N > 0],
 }
 
 # 使用方式2：在表达式中使用
-type IntArray[N: Int] = StaticArray[Int, N]
+IntArray: (N: Type) -> Type = StaticArray[Int, N]
 # 验证：IntArray[10] 的大小等于 sizeof(Int) * 10
 Assert[size_of(IntArray[10]) == sizeof(Int) * 10]
 ```
@@ -462,18 +461,18 @@ sum: [T, N: Int](arr: Array[T, N]) -> T = {
 
 ```yaoxiang
 # 类型级If
-type If[C: Bool, T, E] = match C {
+If: Type[C, T, E] = match C {
     True => T,
     False => E,
 }
 
 # 示例：编译期分支
-type NonEmpty[T] = If[T != Void, T, Never]
+NonEmpty: Type[T] = If[T != Void, T, Never]
 
-type Optional[T] = If[T != Void, T, Void]
+Optional: Type[T] = If[T != Void, T, Void]
 
 # 编译期验证
-type Assert[C: Bool] = match C {
+Assert: Type[C] = match C {
     True => Void,
     False => compile_error("Assertion failed"),
 }
@@ -487,7 +486,7 @@ type Assert[C: Bool] = match C {
 
 ```yaoxiang
 # 编译期类型转换
-type AsString[T] = match T {
+AsString: Type[T] = match T {
     Int => String,
     Float => String,
     Bool => String,
@@ -495,7 +494,7 @@ type AsString[T] = match T {
 }
 
 # 类型级计算
-type Length[T: TupleType] = match T.length {
+Length: Type[T] = match T.length {
     0 => Zero,
     1 => Succ(Zero),
     2 => Succ(Succ(Zero)),
@@ -503,15 +502,15 @@ type Length[T: TupleType] = match T.length {
 }
 
 # 类型级加法
-type Add[A: Nat, B: Nat] = match (A, B) {
+Add: Type[A, B] = match (A, B) {
     (Zero, B) => B,
     (Succ(A'), B) => Succ(Add(A', B)),
 }
 
 # 示例：编译期计算 2 + 3
-type Two = Succ(Succ(Zero))
-type Three = Succ(Succ(Succ(Zero)))
-type Five = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
+Two: Type = Succ(Succ(Zero))
+Three: Type = Succ(Succ(Succ(Zero)))
+Five: Type = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 ```
 
 ### 6. 函数重载特化
@@ -550,7 +549,7 @@ sum: [T](arr: Array[T]) -> T = {
 ```yaoxiang
 # ======== 标准库定义（std） ========
 # 平台类型枚举
-type Platform = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
+Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
 
 # 预定义泛型参数 P：解析器自动识别，代表当前编译平台
 
@@ -597,7 +596,7 @@ sum: [P](arr: Array[Float]) -> Float = match P {
 
 ```yaoxiang
 # 平台类型可用于类型级计算
-type PlatformSupportsSIMD[P] = match P {
+PlatformSupportsSIMD: Type[P] = match P {
     X86_64 => True,
     AArch64 => True,
     RISC_V => True,
@@ -793,7 +792,7 @@ map_String_String: (list: List[String], f: Fn(String) -> String) -> List[String]
 
 ```yaoxiang
 # 编译期分析：编译期泛型使用情况
-type Array[T, N: Int] = {
+Array: Type[T, N] = {
     data: T[N],
 }
 
@@ -905,7 +904,7 @@ html! {
 }
 
 # ✅ 泛型方案：类型安全构建器
-type Element = {
+Element: Type = {
     tag: String,
     attrs: HashMap[String, String],
     children: List[Element],
@@ -948,7 +947,7 @@ macro_rules! add_types {
 }
 
 # ✅ 泛型方案：条件类型
-type Add[A, B] = match (A, B) {
+Add: Type[A, B] = match (A, B) {
     (Int, Int) => Int,
     (Float, Float) => Float,
     (Int, Float) => Float,
@@ -957,7 +956,7 @@ type Add[A, B] = match (A, B) {
 }
 
 # 编译期验证
-type AssertAddable[A, B] = If[Add[A, B] != TypeError, (A, B), compile_error("Cannot add")]
+AssertAddable: Type[A, B] = If[Add[A, B] != TypeError, (A, B), compile_error("Cannot add")]
 
 # 使用
 result_type = Add[Int, Float]  # 推导为 Float
@@ -969,18 +968,18 @@ result_type = Add[Int, Float]  # 推导为 Float
 
 ```yaoxiang
 # ======== 1. 定义泛型容器 ========
-# 使用记录类型语法
-type Result[T, E] = {
+# 使用 Type[T] 语法
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self,
 }
 
-type Option[T] = {
+Option: Type[T] = {
     some: (T) -> Self,
     none: () -> Self,
 }
 
-type List[T] = {
+List: Type[T] = {
     data: Array[T],
     length: Int,
 
@@ -1078,7 +1077,7 @@ sum_of_evens = numbers
 
 ```yaoxiang
 # ======== 1. 泛型排序算法 ========
-type Comparator[T] = {
+Comparator: Type[T] = {
     compare: (T, T) -> Int,  # -1 if a < b, 0 if a == b, 1 if a > b
 }
 
@@ -1140,7 +1139,7 @@ sorted_strings = quicksort(strings, Comparator[String]())
 
 ```yaoxiang
 # ======== 1. 编译期矩阵类型 ========
-type Matrix[T, Rows: Int, Cols: Int] = {
+Matrix: Type[T, Rows, Cols] = {
     data: Array[Array[T, Cols], Rows],
 
     # 编译期维度验证：利用 Assert 标准库类型
@@ -1459,7 +1458,7 @@ impl CodeSizeManager {
 
 **示例**：
 ```yaoxiang
-type Option[T] = Some(T) | None
+Option: Type[T] = Some(T) | None
 map: [T, R](opt: Option[T], f: Fn(T) -> R) -> Option[R] = ...
 ```
 
@@ -1494,9 +1493,9 @@ combine: [T: Clone + Add](a: T, b: T) -> T = a.clone() + b
 
 **示例**：
 ```yaoxiang
-type Iterator[T] = {
+Iterator: Type[Item] = {
     Item: T,
-    next: () -> Option[T],
+    next: () -> Option[Item],
 }
 ```
 
@@ -1514,7 +1513,7 @@ type Iterator[T] = {
 
 **示例**：
 ```yaoxiang
-type Array[T, N: Int] = { data: T[N] }
+Array: Type[T, N] = { data: T[N] }
 factorial: [n: Int](n: n) -> Int = (n) => ...
 ```
 
@@ -1531,7 +1530,7 @@ factorial: [n: Int](n: n) -> Int = (n) => ...
 
 **示例**：
 ```yaoxiang
-type If[C: Bool, T, E] = match C {
+If: Type[C, T, E] = match C {
     True => T,
     False => E,
 }
@@ -1830,7 +1829,7 @@ literal_param ::= identifier ':' identifier  # 声明泛型参数
 ```yaoxiang
 # ======== 标准库定义 ========
 # 平台类型枚举（可扩展）
-type Platform = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
+Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
 
 # 平台感知泛型函数
 sum: [P: Platform](arr: Array[Float]) -> Float = match P {
@@ -1840,7 +1839,7 @@ sum: [P: Platform](arr: Array[Float]) -> Float = match P {
 }
 
 # 平台类型级计算
-type PlatformSupportsSIMD[P] = match P {
+PlatformSupportsSIMD: Type[P] = match P {
     X86_64 => True,
     AArch64 => True,
     RISC_V => True,
@@ -1854,9 +1853,9 @@ type PlatformSupportsSIMD[P] = match P {
 # 标准库泛型实现
 # 标准库应该提供完整的泛型容器和算法
 
-type Vec[T] = List[T]  # 别名
+Vec: Type[T] = List[T]  # 别名
 
-type HashMap[K, V] = {
+HashMap: Type[K, V] = {
     buckets: Array[List[(K, V)]],
     size: Int,
 
@@ -1865,7 +1864,7 @@ type HashMap[K, V] = {
     remove: [K: Eq + Hash](self: HashMap[K, V], key: K) -> Option[V],
 }
 
-type HashSet[T] = {
+HashSet: Type[T] = {
     map: HashMap[T, Void],
 
     insert: [T: Eq + Hash](self: HashSet[T], value: T) -> Void,
