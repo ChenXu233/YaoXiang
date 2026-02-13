@@ -1,10 +1,10 @@
 # YaoXiang Programming Language Specification
 
-> Version: v1.6.0
+> Version: v1.7.0
 > Status: Specification
 > Author: ChenXu
 > Date: 2024-12-31
-> Update: 2025-02-06 - Integrated RFC-010 (Unified Type Syntax) and RFC-011 (Generic System)
+> Update: 2026-02-13 - RFC-010 Unified Type Syntax: `Name: Type = value` replaces `type Name = ...`
 
 ---
 
@@ -40,14 +40,16 @@ YaoXiang source files must use UTF-8 encoding. Source files typically use `.yx` 
 
 ### 2.3 Keywords
 
-YaoXiang defines 18 keywords in total:
+YaoXiang defines a minimal set of keywords:
 
 ```
-type   pub    use    spawn
+Type   pub    use    spawn
 ref    mut    if     elif
 else   match  while  for    return
 break  continue as     in     unsafe
 ```
+
+**Note**: `Type` is the only meta-type keyword in the language (uppercase). All type definitions use the unified syntax `Name: Type = ...`.
 
 ### 2.4 Reserved Words
 
@@ -166,7 +168,7 @@ Width-specific floats: `Float32`, `Float64`
 
 ### 3.3 Record Types
 
-**Unified syntax**: `type Name = { field1: Type1, field2: Type2, ... }`
+**Unified syntax**: `Name: Type = { field1: Type1, field2: Type2, ... }`
 
 ```
 RecordType  ::= '{' FieldList? '}'
@@ -177,16 +179,16 @@ Field       ::= Identifier ':' TypeExpr
 
 ```yaoxiang
 # Simple record type
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # Empty record type
-type Empty = {}
+Empty: Type = {}
 
 # Generic record type
-type Pair[T] = { first: T, second: T }
+Pair: Type[T] = { first: T, second: T }
 
 # Record type implementing interfaces
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,        # Implements Drawable interface
@@ -206,20 +208,20 @@ EnumType    ::= '{' Variant ('|' Variant)* '}'
 Variant     ::= Identifier (':' TypeExpr)?
 ```
 
-**Syntax**: `type Name = { Variant1 | Variant2(params) | ... }`
+**Syntax**: `Name: Type = { Variant1 | Variant2(params) | ... }`
 
 ```yaoxiang
 # No-parameter variants
-type Color = { red | green | blue }
+Color: Type = { red | green | blue }
 
 # Parameterized variants
-type Option[T] = { some(T) | none }
+Option: Type[T] = { some(T) | none }
 
 # Mixed
-type Result[T, E] = { ok(T) | err(E) }
+Result: Type[T, E] = { ok(T) | err(E) }
 
 # No-parameter variants are equivalent to no-parameter constructors
-type Bool = { true | false }
+Bool: Type = { true | false }
 ```
 
 ### 3.5 Interface Types
@@ -234,24 +236,24 @@ FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
 
 ```yaoxiang
 # Interface definition
-type Drawable = {
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
 # Empty interface
-type EmptyInterface = {}
+EmptyInterface: Type = {}
 ```
 
 **Interface Implementation**: Types implement interfaces by listing interface names at the end of the definition
 
 ```yaoxiang
 # Type implementing interfaces
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,        # Implements Drawable interface
@@ -290,17 +292,17 @@ TypeBound       ::= Identifier
 
 ```yaoxiang
 # Basic generic types
-type Option[T] = {
+Option: Type[T] = {
     some: (T) -> Self,
     none: () -> Self
 }
 
-type Result[T, E] = {
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self
 }
 
-type List[T] = {
+List: Type[T] = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
@@ -325,7 +327,7 @@ ConstrainedType ::= '[' Identifier ':' TypeBound ']' TypeExpr
 
 ```yaoxiang
 # Interface type definition (as constraint)
-type Clone = {
+Clone: Type = {
     clone: (Self) -> Self
 }
 
@@ -368,7 +370,7 @@ AssociatedType ::= Identifier ':' TypeExpr
 
 ```yaoxiang
 # Iterator trait (using record type syntax)
-type Iterator[T] = {
+Iterator: Type[T] = {
     Item: T,                    # Associated type
     next: (Self) -> Option[T],
     has_next: (Self) -> Bool
@@ -390,7 +392,7 @@ collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
 
 ```yaoxiang
 # More complex associated types
-type Container[T] = {
+Container: Type[T] = {
     Item: T,
     IteratorType: Iterator[T],  # Associated type is also generic
     iter: (Self) -> IteratorType
@@ -418,7 +420,7 @@ factorial: [n: Int](n: n) -> Int = {
 }
 
 # Compile-time constant array
-type StaticArray[T, N: Int] = {
+StaticArray: Type[T, N: Int] = {
     data: T[N],      # Array with compile-time known size
     length: N
 }
@@ -431,7 +433,7 @@ arr: StaticArray[Int, factorial(5)]  # Compiler computes factorial(5) = 120 at c
 
 ```yaoxiang
 # Matrix type usage
-type Matrix[T, Rows: Int, Cols: Int] = {
+Matrix: Type[T, Rows: Int, Cols: Int] = {
     data: Array[Array[T, Cols], Rows]
 }
 
@@ -451,16 +453,16 @@ IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
 
 ```yaoxiang
 # Type-level If
-type If[C: Bool, T, E] = match C {
+If: Type[C: Bool, T, E] = match C {
     True => T,
     False => E
 }
 
 # Example: Compile-time branch
-type NonEmpty[T] = If[T != Void, T, Never]
+NonEmpty: Type[T] = If[T != Void, T, Never]
 
 # Compile-time verification
-type Assert[C: Bool] = match C {
+Assert: Type[C: Bool] = match C {
     True => Void,
     False => compile_error("Assertion failed")
 }
@@ -470,7 +472,7 @@ type Assert[C: Bool] = match C {
 
 ```yaoxiang
 # Compile-time type conversion
-type AsString[T] = match T {
+AsString: Type[T] = match T {
     Int => String,
     Float => String,
     Bool => String,
@@ -494,7 +496,7 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 
 ```yaoxiang
 # Interface composition = Type intersection
-type DrawableSerializable = Drawable & Serializable
+DrawableSerializable: Type = Drawable & Serializable
 
 # Using intersection types
 process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
@@ -529,7 +531,7 @@ sum: [T: Add](arr: Array[T]) -> T = {
 
 ```yaoxiang
 # Platform type enum (defined in standard library)
-type Platform = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
+Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
 
 # P is a predefined generic parameter name representing the current compilation platform
 sum: [P: X86_64](arr: Array[Float]) -> Float = {
@@ -1251,7 +1253,7 @@ with mutex.lock() {
 ### 9.1 Result Type
 
 ```
-type Result[T, E] = ok(T) | err(E)
+Result: Type[T, E] = ok(T) | err(E)
 ```
 
 **Variant Construction**:
@@ -1264,7 +1266,7 @@ type Result[T, E] = ok(T) | err(E)
 ### 9.2 Option Type
 
 ```
-type Option[T] = some(T) | none
+Option: Type[T] = some(T) | none
 ```
 
 **Variant Construction**:
@@ -1303,19 +1305,19 @@ data = match fetch_data() {
 # === Record Types (Curly Braces) ===
 
 # Struct
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # Enum (Variant Types)
-type Result[T, E] = { ok(T) | err(E) }
-type Status = { pending | processing | completed }
+Result: Type[T, E] = { ok(T) | err(E) }
+Status: Type = { pending | processing | completed }
 
 # === Interface Types (Curly Braces, all fields are functions) ===
 
 # Interface definition
-type Serializable = { serialize: () -> String }
+Serializable: Type = { serialize: () -> String }
 
 # Type implementing interfaces
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Serializable    # Implements Serializable interface
@@ -1323,7 +1325,7 @@ type Point = {
 
 # === Function Types ===
 
-type Adder = (Int, Int) -> Int
+Adder: Type = (Int, Int) -> Int
 ```
 
 ### A.2 Function Definition
@@ -1369,8 +1371,8 @@ pub name: (Type, ...) -> ReturnType = { ... }  # Automatically binds to Type
 
 ```
 # Generic types
-type List[T] = { data: Array[T], length: Int }
-type Result[T, E] = { ok(T) | err(E) }
+List: Type[T] = { data: Array[T], length: Int }
+Result: Type[T, E] = { ok(T) | err(E) }
 
 # Generic functions
 map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = { ... }
@@ -1380,14 +1382,14 @@ clone: [T: Clone](value: T) -> T = value.clone()
 combine: [T: Clone + Add](a: T, b: T) -> T = body
 
 # Associated types
-type Iterator[T] = { Item: T, next: () -> Option[T] }
+Iterator: Type[T] = { Item: T, next: () -> Option[T] }
 
 # Compile-time generics
 factorial: [n: Int](n: n) -> Int = { ... }
-type StaticArray[T, N: Int] = { data: T[N], length: N }
+StaticArray: Type[T, N: Int] = { data: T[N], length: N }
 
 # Conditional types
-type If[C: Bool, T, E] = match C { True => T, False => E }
+If: Type[C: Bool, T, E] = match C { True => T, False => E }
 
 # Function specialization
 sum: (arr: Array[Int]) -> Int = { ... }
@@ -1431,8 +1433,9 @@ match value {
 
 | Keyword | Specification Status | Code Implementation | Description |
 |---------|---------------------|---------------------|-------------|
-| `struct` | Exists | ❌ None | Type definition uses constructor syntax, no need for this keyword |
-| `enum` | Exists | ❌ None | Use variant syntax `type X = A \| B \| C` |
+| `struct` | Removed | ❌ None | Use unified syntax `Name: Type = {...}` |
+| `enum` | Removed | ❌ None | Use variant syntax `Name: Type = { A \| B \| C }` |
+| `type` | Removed | ❌ None | Use `Type` (uppercase) as meta-type keyword |
 
 ### B.2 Syntax Differences
 
@@ -1448,8 +1451,9 @@ Features described in the specification but not yet implemented in code:
 
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| Curly brace type syntax | P0 | `type Point = { x: Float, y: Float }` |
-| Interface type | P1 | `type Serializable = { serialize() -> String }` |
+| Unified Type Syntax `Name: Type = {...}` | P0 | RFC-010: Unified syntax replaces `type Name = ...` |
+| Curly brace type syntax | P0 | `Point: Type = { x: Float, y: Float }` |
+| Interface type | P1 | `Drawable: Type = { draw() -> Void }` |
 | List comprehension | P2 | `[x for x in list if condition]` |
 | `?` error propagation | P1 | Result type automatic error propagation |
 | `ref` keyword | P1 | Arc reference counting sharing |
@@ -1590,7 +1594,7 @@ For functions defined in modules with the first parameter being the module type,
 
 ```yaoxiang
 # === Point.yx ===
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # First parameter is Point, automatically support method call
 distance: (a: Point, b: Point) -> Float = { ... }
@@ -1687,6 +1691,7 @@ result = f(arg2, arg3)
 | v1.4.0 | 2025-01-15 | ChenXu | Updated ownership model (default Move + explicit ref=Arc); Added unsafe keyword; Deleted lifetime `'a` and borrow checker; Updated pending implementation features list |
 | v1.5.0 | 2025-01-20 | ChenXu | Added method binding specification (RFC-004): position index starts from 0; Default bind to position 0; Support negative index and multi-position binding |
 | v1.6.0 | 2025-02-06 | ChenXu | Integrated RFC-010 (Unified Type Syntax): updated `type Name = {...}` syntax, function definitions with parameter names in signature, Type.method method syntax; Integrated RFC-011 (Generic System): added generic types `[T]`, type constraints `[T: Clone]`, associated types `Item: T`, compile-time generics `[N: Int]`, conditional types `If[C, T, E]`, function overload specialization, platform specialization |
+| v1.7.0 | 2026-02-13 | ChenXu | RFC-010 Update: `Name: Type = {...}` replaces `type Name = {...}`; Only `Type` (uppercase) is the meta-type keyword; Unified syntax for all declarations |
 
 ---
 

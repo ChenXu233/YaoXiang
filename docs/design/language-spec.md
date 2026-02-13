@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.6.0
+> 版本：v1.7.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2025-02-06 - 整合 RFC-010（统一类型语法）和 RFC-011（泛型系统）
+> 更新：2026-02-13 - RFC-010 统一类型语法：`Name: Type = value` 替换 `type Name = ...`
 
 ---
 
@@ -33,21 +33,23 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 | 类别 | 说明 | 示例 |
 |------|------|------|
 | 标识符 | 以字母或下划线开头 | `x`, `_private`, `my_var` |
-| 关键字 | 语言预定义保留词 | `type`, `pub`, `use` |
+| 关键字 | 语言预定义保留词 | `Type`, `pub`, `use` |
 | 字面量 | 固定值 | `42`, `"hello"`, `true` |
 | 运算符 | 运算符号 | `+`, `-`, `*`, `/` |
 | 分隔符 | 语法分隔符 | `(`, `)`, `{`, `}`, `,` |
 
 ### 2.3 关键字
 
-YaoXiang 共定义 18 个关键字：
+YaoXiang 定义了极少量的关键字：
 
 ```
-type   pub    use    spawn
+Type   pub    use    spawn
 ref    mut    if     elif
 else   match  while  for    return
 break  continue as     in     unsafe
 ```
+
+**注意**：`Type` 是语言中唯一的元类型关键字（大写）。所有类型定义都使用统一语法 `Name: Type = ...`。
 
 ### 2.4 保留字
 
@@ -166,7 +168,7 @@ TypeExpr    ::= PrimitiveType
 
 ### 3.3 记录类型
 
-**统一语法**：`type Name = { field1: Type1, field2: Type2, ... }`
+**统一语法**：`Name: Type = { field1: Type1, field2: Type2, ... }`
 
 ```
 RecordType  ::= '{' FieldList? '}'
@@ -177,20 +179,20 @@ Field       ::= Identifier ':' TypeExpr
 
 ```yaoxiang
 # 简单记录类型
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # 空记录类型
-type Empty = {}
+Empty: Type = {}
 
 # 带泛型的记录类型
-type Pair[T] = { first: T, second: T }
+Pair: Type[T] = { first: T, second: T }
 
 # 实现接口的记录类型
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
-    Drawable,        # 实现 Drawable 接口
-    Serializable     # 实现 Serializable 接口
+    Drawable,
+    Serializable
 }
 ```
 
@@ -206,20 +208,20 @@ EnumType    ::= '{' Variant ('|' Variant)* '}'
 Variant     ::= Identifier (':' TypeExpr)?
 ```
 
-**语法**：`type Name = { Variant1 | Variant2(params) | ... }`
+**语法**：`Name: Type = { Variant1 | Variant2(params) | ... }`
 
 ```yaoxiang
 # 无参变体
-type Color = { red | green | blue }
+Color: Type = { red | green | blue }
 
 # 有参变体
-type Option[T] = { some(T) | none }
+Option: Type[T] = { some(T) | none }
 
 # 混合
-type Result[T, E] = { ok(T) | err(E) }
+Result: Type[T, E] = { ok(T) | err(E) }
 
 # 无参变体等价于无参构造器
-type Bool = { true | false }
+Bool: Type = { true | false }
 ```
 
 ### 3.5 接口类型
@@ -234,24 +236,24 @@ FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
 
 ```yaoxiang
 # 接口定义
-type Drawable = {
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
 # 空接口
-type EmptyInterface = {}
+EmptyInterface: Type = {}
 ```
 
 **接口实现**：类型通过在定义末尾列出接口名来实现接口
 
 ```yaoxiang
 # 实现接口的类型
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,        # 实现 Drawable 接口
@@ -290,17 +292,17 @@ TypeBound       ::= Identifier
 
 ```yaoxiang
 # 基础泛型类型
-type Option[T] = {
+Option: Type[T] = {
     some: (T) -> Self,
     none: () -> Self
 }
 
-type Result[T, E] = {
+Result: Type[T, E] = {
     ok: (T) -> Self,
     err: (E) -> Self
 }
 
-type List[T] = {
+List: Type[T] = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
@@ -325,7 +327,7 @@ ConstrainedType ::= '[' Identifier ':' TypeBound ']' TypeExpr
 
 ```yaoxiang
 # 接口类型定义（作为约束）
-type Clone = {
+Clone: Type = {
     clone: (Self) -> Self
 }
 
@@ -368,7 +370,7 @@ AssociatedType ::= Identifier ':' TypeExpr
 
 ```yaoxiang
 # Iterator trait（使用记录类型语法）
-type Iterator[T] = {
+Iterator: Type[T] = {
     Item: T,                    # 关联类型
     next: (Self) -> Option[T],
     has_next: (Self) -> Bool
@@ -390,7 +392,7 @@ collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
 
 ```yaoxiang
 # 更复杂的关联类型
-type Container[T] = {
+Container: Type[T] = {
     Item: T,
     IteratorType: Iterator[T],  # 关联类型也是泛型的
     iter: (Self) -> IteratorType
@@ -418,7 +420,7 @@ factorial: [n: Int](n: n) -> Int = {
 }
 
 # 编译期常量数组
-type StaticArray[T, N: Int] = {
+StaticArray: Type[T, N: Int] = {
     data: T[N],      # 编译期已知大小的数组
     length: N
 }
@@ -431,7 +433,7 @@ arr: StaticArray[Int, factorial(5)]  # 编译器在编译期计算 factorial(5) 
 
 ```yaoxiang
 # 矩阵类型使用
-type Matrix[T, Rows: Int, Cols: Int] = {
+Matrix: Type[T, Rows: Int, Cols: Int] = {
     data: Array[Array[T, Cols], Rows]
 }
 
@@ -451,16 +453,16 @@ IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
 
 ```yaoxiang
 # 类型级 If
-type If[C: Bool, T, E] = match C {
+If: Type[C: Bool, T, E] = match C {
     True => T,
     False => E
 }
 
 # 示例：编译期分支
-type NonEmpty[T] = If[T != Void, T, Never]
+NonEmpty: Type[T] = If[T != Void, T, Never]
 
 # 编译期验证
-type Assert[C: Bool] = match C {
+Assert: Type[C: Bool] = match C {
     True => Void,
     False => compile_error("Assertion failed")
 }
@@ -470,7 +472,7 @@ type Assert[C: Bool] = match C {
 
 ```yaoxiang
 # 编译期类型转换
-type AsString[T] = match T {
+AsString: Type[T] = match T {
     Int => String,
     Float => String,
     Bool => String,
@@ -494,7 +496,7 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 
 ```yaoxiang
 # 接口组合 = 类型交集
-type DrawableSerializable = Drawable & Serializable
+DrawableSerializable: Type = Drawable & Serializable
 
 # 使用交集类型
 process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
@@ -529,7 +531,7 @@ sum: [T: Add](arr: Array[T]) -> T = {
 
 ```yaoxiang
 # 平台类型枚举（标准库定义）
-type Platform = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
+Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86
 
 # P 是预定义泛型参数名，代表当前编译平台
 sum: [P: X86_64](arr: Array[Float]) -> Float = {
@@ -1251,7 +1253,7 @@ with mutex.lock() {
 ### 9.1 Result 类型
 
 ```
-type Result[T, E] = ok(T) | err(E)
+Result: Type[T, E] = ok(T) | err(E)
 ```
 
 **变体构造**：
@@ -1264,7 +1266,7 @@ type Result[T, E] = ok(T) | err(E)
 ### 9.2 Option 类型
 
 ```
-type Option[T] = some(T) | none
+Option: Type[T] = some(T) | none
 ```
 
 **变体构造**：
@@ -1303,19 +1305,19 @@ data = match fetch_data() {
 # === 记录类型（花括号） ===
 
 # 结构体
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # 枚举（变体类型）
-type Result[T, E] = { ok(T) | err(E) }
-type Status = { pending | processing | completed }
+Result: Type[T, E] = { ok(T) | err(E) }
+Status: Type = { pending | processing | completed }
 
 # === 接口类型（花括号，字段全为函数） ===
 
 # 接口定义
-type Serializable = { serialize: () -> String }
+Serializable: Type = { serialize: () -> String }
 
 # 实现接口的类型
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Serializable    # 实现 Serializable 接口
@@ -1323,7 +1325,7 @@ type Point = {
 
 # === 函数类型 ===
 
-type Adder = (Int, Int) -> Int
+Adder: Type = (Int, Int) -> Int
 ```
 
 ### A.2 函数定义
@@ -1369,8 +1371,8 @@ pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 
 ```
 # 泛型类型
-type List[T] = { data: Array[T], length: Int }
-type Result[T, E] = { ok(T) | err(E) }
+List: Type[T] = { data: Array[T], length: Int }
+Result: Type[T, E] = { ok(T) | err(E) }
 
 # 泛型函数
 map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = { ... }
@@ -1380,14 +1382,14 @@ clone: [T: Clone](value: T) -> T = value.clone()
 combine: [T: Clone + Add](a: T, b: T) -> T = body
 
 # 关联类型
-type Iterator[T] = { Item: T, next: () -> Option[T] }
+Iterator: Type[T] = { Item: T, next: () -> Option[T] }
 
 # 编译期泛型
 factorial: [n: Int](n: n) -> Int = { ... }
-type StaticArray[T, N: Int] = { data: T[N], length: N }
+StaticArray: Type[T, N: Int] = { data: T[N], length: N }
 
 # 条件类型
-type If[C: Bool, T, E] = match C { True => T, False => E }
+If: Type[C: Bool, T, E] = match C { True => T, False => E }
 
 # 函数特化
 sum: (arr: Array[Int]) -> Int = { ... }
@@ -1431,8 +1433,9 @@ match value {
 
 | 关键字 | 规范状态 | 代码实现 | 说明 |
 |--------|---------|---------|------|
-| `struct` | 有 | ❌ 无 | 类型定义使用构造器语法，无需此关键字 |
-| `enum` | 有 | ❌ 无 | 使用变体语法 `type X = A | B | C` |
+| `struct` | 已移除 | ❌ 无 | 使用统一语法 `Name: Type = {...}` |
+| `enum` | 已移除 | ❌ 无 | 使用变体语法 `Name: Type = { A \| B \| C }` |
+| `type` | 已移除 | ❌ 无 | 使用 `Type`（大写）作为元类型关键字 |
 
 ### B.2 语法差异
 
@@ -1448,8 +1451,9 @@ match value {
 
 | 特性 | 优先级 | 说明 |
 |------|--------|------|
-| 花括号类型语法 | P0 | `type Point = { x: Float, y: Float }` |
-| 接口类型 | P1 | `type Serializable = { serialize() -> String }` |
+| 统一类型语法 `Name: Type = {...}` | P0 | RFC-010：统一语法替换 `type Name = ...` |
+| 花括号类型语法 | P0 | `Point: Type = { x: Float, y: Float }` |
+| 接口类型 | P1 | `Drawable: Type = { draw() -> Void }` |
 | 列表推导式 | P2 | `[x for x in list if condition]` |
 | `?` 错误传播 | P1 | Result 类型自动错误传播 |
 | `ref` 关键字 | P1 | Arc 引用计数共享 |
@@ -1590,7 +1594,7 @@ Point.wrong = distance[-2]            # -2 超出范围
 
 ```yaoxiang
 # === Point.yx ===
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # 首参数是 Point，自动支持方法调用
 distance: (a: Point, b: Point) -> Float = { ... }
@@ -1687,6 +1691,7 @@ result = f(arg2, arg3)
 | v1.4.0 | 2025-01-15 | 晨煦 | 更新所有权模型（默认Move + 显式ref=Arc）；添加unsafe关键字；删除生命周期 `'a` 和借用检查器；更新待实现特性列表 |
 | v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
 | v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
+| v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
 
 ---
 
