@@ -1,0 +1,85 @@
+---
+name: Bug Report
+description: 报告 YaoXiang 语言的 Bug
+labels: ["bug"]
+assignees: ""
+
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: 哪个组件出现问题？(Which component is affected?)
+      description: 选择出问题的编译器/工具组件
+      options:
+        - Lexer（词法分析器）
+        - Parser（解析器）
+        - Type Checker（类型检查器）
+        - IR（中间表示）
+        - Codegen（代码生成）
+        - Runtime（运行时）
+        - CLI/Tools（命令行工具）
+        - Docs（文档）
+        - Other（其他）
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: YaoXiang 版本 (YaoXiang Version)
+      description: 运行 `yaoxiang --version` 获取版本号
+      placeholder: e.g. v0.5.6
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤 (Reproduction Steps)
+      description: 详细描述如何复现这个 Bug
+      placeholder: |
+        1. 运行命令 '...'
+        2. 输入 '...'
+        3. 出现错误 '...'
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 (Expected Behavior)
+      description: 描述你期望发生什么
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为 (Actual Behavior)
+      description: 描述实际发生了什么
+
+  - type: textarea
+    id: code
+    attributes:
+      label: 复现代码 (Reproducible Code)
+      description: 提供导致 Bug 的最小代码示例
+      placeholder: |
+        ```yaoxiang
+        // 在此粘贴导致问题的代码
+        ```
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 错误日志 (Error Logs)
+      description: 粘贴完整的错误信息或 panic 输出
+
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: 环境信息 (Environment)
+      options:
+        - label: Linux
+        - label: macOS
+        - label: Windows
+        - label: WSL
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 额外上下文 (Additional Context)
+      description: 任何其他有助于解决这个问题的信息
