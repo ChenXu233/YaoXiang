@@ -1,474 +1,490 @@
 {
-  "E0001": {
-    "title": "无效字符",
-    "message": "源代码包含非法字符",
-    "template": "无效字符：'{char}'",
-    "help": "删除非法字符或使用有效的编码",
-    "example": "x = ¥100;",
-    "error_output": "error[E0001]: 无效字符\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 非法字符 '¥'"
-  },
-  "E0002": {
-    "title": "无效数字字面量",
-    "message": "数字字面量格式不正确",
-    "template": "无效数字字面量：'{literal}'",
-    "help": "检查数字字面量的格式",
-    "example": "x = 1_2_3_;",
-    "error_output": "error[E0002]: 无效数字字面量\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 无效数字"
-  },
-  "E0003": {
-    "title": "未终止的字符串",
-    "message": "字符串字面量缺少闭合引号",
-    "template": "字符串从第 {line} 行开始未终止",
-    "help": "为字符串添加闭合引号",
-    "example": "x = \"hello world;",
-    "error_output": "error[E0003]: 未终止的字符串\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 未终止的字符串"
-  },
-  "E0004": {
-    "title": "无效字符字面量",
-    "message": "字符字面量不正确",
-    "template": "无效字符字面量：'{literal}'",
-    "help": "字符字面量只能包含一个字符",
-    "example": "x = 'ab';",
-    "error_output": "error[E0004]: 无效字符字面量\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量包含多个字符"
-  },
-  "E0010": {
-    "title": "期望的令牌",
-    "message": "解析器期望特定的令牌",
-    "template": "期望 {expected}，找到 {found}",
-    "help": "检查语法并添加期望的令牌",
-    "example": "x = 1, 2;",
-    "error_output": "error[E0010]: 期望的令牌\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ 期望 ',' 或 ';'"
-  },
-  "E0011": {
-    "title": "意外的令牌",
-    "message": "遇到了意外的令牌",
-    "template": "意外的令牌：'{token}'",
-    "help": "删除或替换意外的令牌",
-    "example": "x = 1 @ 2;",
-    "error_output": "error[E0011]: 意外的令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外的令牌 '@'"
-  },
-  "E0012": {
-    "title": "无效语法",
-    "message": "表达式或语句存在语法错误",
-    "template": "无效语法：{reason}",
-    "help": "检查表达式或语句的语法",
-    "example": "if x { }",
-    "error_output": "error[E0012]: 无效语法\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 缺少条件"
-  },
-  "E0013": {
-    "title": "不匹配的括号",
-    "message": "圆括号、方括号或花括号不匹配",
-    "template": "不匹配的 {bracket_type}：在第 {open_line} 行、第 {open_col} 列打开，未闭合",
-    "help": "确保所有括号都正确闭合",
-    "example": "x = (1 + 2;",
-    "error_output": "error[E0013]: 不匹配的括号\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 未闭合的圆括号"
-  },
-  "E0014": {
-    "title": "缺少分号",
-    "message": "语句缺少分号",
-    "template": "{statement} 后缺少分号",
-    "help": "在语句末尾添加分号",
-    "example": "x = 1\ny = 2",
-    "error_output": "error[E0014]: 缺少分号\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 缺少分号"
-  },
-  "E1001": {
-    "title": "未知变量",
-    "message": "引用的变量未定义",
-    "template": "未知变量：'{name}'",
-    "help": "检查变量名是否拼写正确，或先定义它",
-    "example": "x = y + 1;",
-    "error_output": "error[E1001]: 未知变量\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未定义的变量 'y'"
-  },
-  "E1002": {
-    "title": "类型不匹配",
-    "message": "期望类型与实际类型不匹配",
-    "template": "期望类型 '{expected}'，实际类型 '{found}'",
-    "help": "使用正确的类型或添加类型转换",
-    "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: 类型不匹配\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，找到 'String'"
-  },
-  "E1003": {
-    "title": "未知类型",
-    "message": "引用的类型不存在",
-    "template": "未知类型：'{type}'",
-    "help": "检查类型名是否拼写正确",
-    "example": "x: MyType = 1;",
-    "error_output": "error[E1003]: 未知类型\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 未定义的类型 'MyType'"
-  },
-  "E1010": {
-    "title": "参数数量不匹配",
-    "message": "函数调用参数与定义不匹配",
-    "template": "函数 '{func}' 期望 {expected} 个参数，找到 {found} 个",
-    "help": "检查函数调用参数数量",
-    "example": "add(1, 2, 3);",
-    "error_output": "error[E1010]: 参数数量不匹配\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数期望 2 个参数，找到 3 个"
-  },
-  "E1011": {
-    "title": "参数类型不匹配",
-    "message": "参数类型检查失败",
-    "template": "参数类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保参数类型与函数签名匹配",
-    "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: 参数类型不匹配\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期望 'Int'，找到 'String'"
-  },
-  "E1012": {
-    "title": "返回类型不匹配",
-    "message": "函数返回类型不正确",
-    "template": "返回类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保返回值与声明的返回类型匹配",
-    "example": "fn foo() -> Int { \"hello\" }",
-    "error_output": "error[E1012]: 返回类型不匹配\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
-  },
-  "E1013": {
-    "title": "函数未找到",
-    "message": "调用了未定义的函数",
-    "template": "函数未找到：'{func}'",
-    "help": "检查函数名是否拼写正确",
-    "example": "unknown_fn();",
-    "error_output": "error[E1013]: 函数未找到\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'"
-  },
-  "E1020": {
-    "title": "无法推断类型",
-    "message": "上下文无法推断类型",
-    "template": "无法推断 '{expr}' 的类型",
-    "help": "添加类型注解或显式类型参数",
-    "example": "let x = nil;",
-    "error_output": "error[E1020]: 无法推断类型\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 无法从 'nil' 推断类型"
-  },
-  "E1021": {
-    "title": "类型推断冲突",
-    "message": "多个约束导致类型矛盾",
-    "template": "类型推断冲突：{reason}",
-    "help": "检查类型注解的一致性",
-    "example": "let x: Int = \"hello\";",
-    "error_output": "error[E1021]: 类型推断冲突\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与推断类型冲突"
-  },
-  "E1030": {
-    "title": "模式不完整",
-    "message": "match 表达式没有覆盖所有情况",
-    "template": "模式不完整：缺少 {patterns}",
-    "help": "为 match 表达式添加缺失的模式",
-    "example": "match x { Some(_) => 1 }",
-    "error_output": "error[E1030]: 模式不完整\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 模式 'None' 未覆盖"
-  },
-  "E1031": {
-    "title": "不可达模式",
-    "message": "永远无法匹配的模式",
-    "template": "不可达模式：'{pattern}'",
-    "help": "删除或修改不可达的模式",
-    "example": "match x { 1 => \"one\", 1 => \"another\" }",
-    "error_output": "error[E1031]: 不可达模式\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 模式 '1' 已被覆盖"
-  },
-  "E1040": {
-    "title": "操作不支持",
-    "message": "类型不支持该操作",
-    "template": "类型 '{type}' 不支持操作 '{op}'",
-    "help": "检查该类型支持的操作",
-    "example": "\"hello\" + 1;",
-    "error_output": "error[E1040]: 操作不支持\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型不支持 '+' 操作"
-  },
-  "E1041": {
-    "title": "索引越界",
-    "message": "数组/列表索引超出范围",
-    "template": "索引越界：有效范围是 0..{max}，找到 {index}",
-    "help": "确保索引在集合范围内",
-    "example": "arr[10];",
-    "error_output": "error[E1041]: 索引越界\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 超出数组长度 5"
-  },
-  "E1042": {
-    "title": "字段未找到",
-    "message": "访问了不存在的结构体字段",
-    "template": "在结构体 '{struct}' 中找不到字段 '{field}'",
-    "help": "检查结构体的可用字段",
-    "example": "point.z;",
-    "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
-  },
-  "E1050": {
-    "title": "需要布尔操作数",
-    "message": "逻辑运算需要布尔操作数",
-    "template": "逻辑运算需要布尔操作数，实际为 '{left}' 和 '{right}'",
-    "help": "将操作数转换为布尔类型或使用其他运算符",
-    "example": "let x = 1 && 2;",
-    "error_output": "error[E1050]: 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 逻辑运算需要布尔操作数"
-  },
-  "E1051": {
-    "title": "逻辑 NOT 需要布尔操作数",
-    "message": "逻辑 NOT 运算需要布尔操作数",
-    "template": "逻辑 NOT 需要布尔操作数，实际为 '{type}'",
-    "help": "在应用 NOT 前将操作数转换为布尔类型",
-    "example": "let x = !42;",
-    "error_output": "error[E1051]: 逻辑 NOT 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT 需要布尔操作数，实际为 'Int'"
-  },
-  "E1052": {
-    "title": "无效解引用",
-    "message": "无法解引用非指针类型",
-    "template": "无法解引用类型 '{type}'，期望指针类型",
-    "help": "只有指针类型可以解引用",
-    "example": "let x = *42;",
-    "error_output": "error[E1052]: 无效解引用\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 无法解引用 'Int'"
-  },
-  "E1053": {
-    "title": "非结构体字段访问",
-    "message": "无法在非结构体类型上访问字段",
-    "template": "无法在非结构体类型 '{type}' 上访问字段",
-    "help": "字段访问仅适用于结构体类型",
-    "example": "let x = 42.field;",
-    "error_output": "error[E1053]: 非结构体字段访问\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 无法在 'Int' 上访问字段"
-  },
-  "E1054": {
-    "title": "条件类型不匹配",
-    "message": "条件表达式必须是布尔类型",
-    "template": "条件必须是布尔类型，实际为 '{type}'",
-    "help": "使用布尔表达式或转换为布尔类型",
-    "example": "if 42 { }",
-    "error_output": "error[E1054]: 条件类型不匹配\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件必须是布尔类型，实际为 'Int'"
-  },
-  "E1055": {
-    "title": "约束在非泛型上下文中",
-    "message": "约束类型在非泛型上下文中使用",
-    "template": "约束类型 '{type}' 只能在泛型上下文中使用",
-    "help": "使用具体类型代替约束类型",
-    "example": "let x: Eq = 42;",
-    "error_output": "error[E1055]: 约束在非泛型上下文中\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型不能在此使用"
-  },
-  "E1060": {
-    "title": "类型参数数量不匹配",
-    "message": "提供的类型参数数量错误",
-    "template": "期望 {expected} 个类型参数，实际 {found} 个",
-    "help": "提供正确数量的类型参数",
-    "example": "let x: Vec<Int, String> = vec![];",
-    "error_output": "error[E1060]: 类型参数数量不匹配\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期望 1 个类型参数，找到 2 个"
-  },
-  "E1061": {
-    "title": "无法实例化泛型",
-    "message": "泛型类型无法用给定参数实例化",
-    "template": "无法用给定参数实例化泛型类型",
-    "help": "确保类型参数满足所有约束",
-    "example": "let x = Foo::<Int>();",
-    "error_output": "error[E1061]: 无法实例化泛型\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化"
-  },
-  "E1070": {
-    "title": "未知标签",
-    "message": "引用的标签不存在",
-    "template": "未知标签：'{label}'",
-    "help": "检查标签名或在循环上定义它",
-    "example": "break 'unknown;",
-    "error_output": "error[E1070]: 未知标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'"
-  },
-  "E2001": {
-    "title": "作用域错误",
-    "message": "变量不在当前作用域",
-    "template": "变量 '{name}' 不在作用域中",
-    "help": "检查变量的作用域，确保它在这里可访问",
-    "example": "fn foo() { x }",
-    "error_output": "error[E2001]: 作用域错误\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不在作用域中"
-  },
-  "E2002": {
-    "title": "重复定义",
-    "message": "变量在同一作用域中定义了多次",
-    "template": "重复定义：'{name}' 已在当前作用域中定义",
-    "help": "重命名或删除重复的定义",
-    "example": "let x = 1; let x = 2;",
-    "error_output": "error[E2002]: 重复定义\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已被定义"
-  },
-  "E2003": {
-    "title": "所有权错误",
-    "message": "所有权约束未满足",
-    "template": "所有权约束违反：{reason}",
-    "help": "检查值的所有权语义",
-    "example": "let a = vec![1, 2, 3]; let b = a;",
-    "error_output": "error[E2003]: 所有权错误\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 值已移动"
-  },
-  "E2010": {
-    "title": "不可变赋值",
-    "message": "试图修改不可变变量",
-    "template": "无法给不可变变量 '{name}' 赋值",
-    "help": "使用 'mut' 声明可变变量",
-    "example": "let x = 1; x = 2;",
-    "error_output": "error[E2010]: 不可变赋值\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 无法给不可变变量赋值"
-  },
-  "E2011": {
-    "title": "使用未初始化变量",
-    "message": "使用了未初始化的变量",
-    "template": "使用未初始化的变量 '{name}'",
-    "help": "使用前初始化变量",
-    "example": "let x; println!(x);",
-    "error_output": "error[E2011]: 使用未初始化变量\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 使用未初始化的变量"
-  },
-  "E2012": {
-    "title": "可变性冲突",
-    "message": "在不可变上下文中使用可变引用",
-    "template": "可变性冲突：无法在不可变上下文中使用可变引用",
-    "help": "确保引用的可变性匹配使用上下文",
-    "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
-    "error_output": "error[E2012]: 可变性冲突\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 无法通过不可变引用修改"
-  },
-  "E4001": {
-    "title": "泛型约束违反",
-    "message": "类型不满足泛型约束",
-    "template": "类型 '{type}' 不满足特质约束 '{trait}'",
-    "help": "确保类型满足所有必需的特质边界",
-    "example": "let x: &Display = &5;",
-    "error_output": "error[E4001]: 泛型约束违反\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 未实现 'Display'"
-  },
-  "E4002": {
-    "title": "特质未找到",
-    "message": "引用的特质不存在",
-    "template": "特质 '{trait}' 未找到",
-    "help": "检查特质名或导入正确的特质",
-    "example": "impl MyTrait for Int {}",
-    "error_output": "error[E4002]: 特质未找到\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定义的特质 'MyTrait'"
-  },
-  "E4003": {
-    "title": "特质实现缺失",
-    "message": "类型未实现必需的特质",
-    "template": "类型 '{type}' 缺少特质 '{trait}' 的实现",
-    "help": "为该类型添加特质实现",
-    "example": "println!(\"{}\", vec![1, 2, 3]);",
-    "error_output": "error[E4003]: 特质实现缺失\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 未实现 'Display'"
-  },
-  "E4004": {
-    "title": "特质实现冲突",
-    "message": "多个特质实现冲突",
-    "template": "特质 '{trait}' 的实现冲突",
-    "help": "解决冲突的实现",
-    "example": "impl<T> Display for T {}",
-    "error_output": "error[E4004]: 特质实现冲突\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现冲突"
-  },
-  "E4005": {
-    "title": "关联类型未找到",
-    "message": "容器中不存在引用的关联类型",
-    "template": "在 '{container}' 中找不到关联类型 '{assoc_type}'",
-    "help": "检查关联类型名和容器定义",
-    "example": "type Output = Foo::Bar;",
-    "error_output": "error[E4005]: 关联类型未找到\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 在 'Foo' 中找不到 'Bar'"
-  },
-  "E5001": {
-    "title": "模块未找到",
-    "message": "引用的模块不存在",
-    "template": "模块 '{module}' 未找到",
-    "help": "检查模块路径，确保它存在",
-    "example": "use foo::bar;",
-    "error_output": "error[E5001]: 模块未找到\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块 'foo' 未找到"
-  },
-  "E5002": {
-    "title": "导入错误",
-    "message": "导入模块失败",
-    "template": "导入模块 '{module}' 失败：{reason}",
-    "help": "检查导入路径和模块解析",
-    "example": "use std::unknown;",
-    "error_output": "error[E5002]: 导入错误\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 找不到模块 'unknown'"
-  },
-  "E5003": {
-    "title": "导出未找到",
-    "message": "模块中不存在的导出",
-    "template": "在模块 '{module}' 中找不到导出 '{export}'",
-    "help": "检查模块的导出",
-    "example": "use std::foo;",
-    "error_output": "error[E5003]: 导出未找到\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo' 不是 'std' 的导出"
-  },
-  "E5004": {
-    "title": "循环依赖",
-    "message": "模块存在循环依赖",
-    "template": "检测到循环依赖：{path}",
-    "help": "重构以移除循环依赖",
-    "example": "mod a { use b; } mod b { use a; }",
-    "error_output": "error[E5004]: 循环依赖\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循环依赖：a -> b -> a"
-  },
-  "E6001": {
-    "title": "除零错误",
-    "message": "试图除以零",
-    "template": "表达式 {expr} 除以零",
-    "help": "添加检查以防止除以零",
-    "example": "let x = 10 / 0;",
-    "error_output": "error[E6001]: 除零错误\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零"
-  },
-  "E6002": {
-    "title": "空指针解引用",
-    "message": "试图访问空值",
-    "template": "在 {location} 空指针解引用",
-    "help": "在访问值之前添加空值检查",
-    "example": "let x = nil; println!(x.field);",
-    "error_output": "error[E6002]: 空指针解引用\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 无法访问空值的字段"
-  },
-  "E6003": {
-    "title": "数组索引越界",
-    "message": "数组索引在运行时越界",
-    "template": "数组索引越界：有效范围是 0..{max}，找到 {index}",
-    "help": "确保索引在数组范围内",
-    "example": "let arr = [1, 2, 3]; println!(arr[10]);",
-    "error_output": "error[E6003]: 数组索引越界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 超出长度 3"
-  },
-  "E6004": {
-    "title": "栈溢出",
-    "message": "递归深度超出栈限制",
-    "template": "栈溢出：递归深度超出限制 {limit}",
-    "help": "减少递归深度或使用迭代",
-    "example": "fn foo() { foo(); } foo();",
-    "error_output": "error[E6004]: 栈溢出\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ 栈溢出"
-  },
-  "E6005": {
-    "title": "断言失败",
-    "message": "运行时断言失败",
-    "template": "断言失败：{condition}",
-    "help": "修复断言条件或提供有效输入",
-    "example": "assert!(x > 0);",
-    "error_output": "error[E6005]: 断言失败\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ 断言失败：x > 0"
-  },
-  "E7001": {
-    "title": "文件未找到",
-    "message": "指定文件不存在",
-    "template": "文件未找到：'{path}'",
-    "help": "检查文件路径，确保文件存在",
-    "example": "let content = read(\"missing.txt\");",
-    "error_output": "error[E7001]: 文件未找到\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文件 'missing.txt' 未找到"
-  },
-  "E7002": {
-    "title": "权限被拒绝",
-    "message": "访问文件的权限不足",
-    "template": "权限被拒绝：'{path}'",
-    "help": "检查文件权限或使用适当权限运行",
-    "example": "let content = read(\"/root/secret.txt\");",
-    "error_output": "error[E7002]: 权限被拒绝\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' 权限被拒绝"
-  },
-  "E7003": {
-    "title": "I/O 错误",
-    "message": "发生未指定的 I/O 错误",
-    "template": "I/O 错误：{reason}",
-    "help": "检查错误详情获取更多信息",
-    "example": "let content = read(\"/dev/full\");",
-    "error_output": "error[E7003]: I/O 错误\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 错误：设备已满"
-  },
-  "E7004": {
-    "title": "网络错误",
-    "message": "发生网络错误",
-    "template": "网络错误：{reason}",
-    "help": "检查网络连接并重试",
-    "example": "let response = http_get(\"https://example.com\");",
-    "error_output": "error[E7004]: 网络错误\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接被拒绝"
-  },
-  "E8001": {
-    "title": "内部编译器错误",
-    "message": "编译器发生内部错误",
-    "template": "内部编译器错误：{message}",
-    "help": "请在 https://github.com/yaoxiang/yaoxiang/issues 报告此错误",
-    "example": "",
-    "error_output": ""
-  },
-  "E8002": {
-    "title": "意外 Panic",
-    "message": "编译器遇到意外 panic",
-    "template": "意外编译器 panic：{reason}",
-    "help": "请使用 panic 详情报告此错误",
-    "example": "",
-    "error_output": ""
-  },
-  "E8003": {
-    "title": "编译器阶段错误",
-    "message": "编译器阶段发生错误",
-    "template": "编译器阶段错误：{phase} - {message}",
-    "help": "这可能是编译器错误，请报告",
-    "example": "",
-    "error_output": ""
-  }
+    "E0001": {
+        "title": "无效字符",
+        "message": "源代码包含非法字符",
+        "template": "无效字符：'{char}'",
+        "help": "删除非法字符或使用有效的编码",
+        "example": "x = ¥100;",
+        "error_output": "error[E0001]: 无效字符\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 非法字符 '¥'"
+    },
+    "E0002": {
+        "title": "无效数字字面量",
+        "message": "数字字面量格式不正确",
+        "template": "无效数字字面量：'{literal}'",
+        "help": "检查数字字面量的格式",
+        "example": "x = 1_2_3_;",
+        "error_output": "error[E0002]: 无效数字字面量\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 无效数字"
+    },
+    "E0003": {
+        "title": "未终止的字符串",
+        "message": "字符串字面量缺少闭合引号",
+        "template": "字符串从第 {line} 行开始未终止",
+        "help": "为字符串添加闭合引号",
+        "example": "x = \"hello world;",
+        "error_output": "error[E0003]: 未终止的字符串\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 未终止的字符串"
+    },
+    "E0004": {
+        "title": "无效字符字面量",
+        "message": "字符字面量不正确",
+        "template": "无效字符字面量：'{literal}'",
+        "help": "字符字面量只能包含一个字符",
+        "example": "x = 'ab';",
+        "error_output": "error[E0004]: 无效字符字面量\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量包含多个字符"
+    },
+    "E0010": {
+        "title": "期望的令牌",
+        "message": "解析器期望特定的令牌",
+        "template": "期望 {expected}，找到 {found}",
+        "help": "检查语法并添加期望的令牌",
+        "example": "x = 1, 2;",
+        "error_output": "error[E0010]: 期望的令牌\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ 期望 ',' 或 ';'"
+    },
+    "E0011": {
+        "title": "意外的令牌",
+        "message": "遇到了意外的令牌",
+        "template": "意外的令牌：'{token}'",
+        "help": "删除或替换意外的令牌",
+        "example": "x = 1 @ 2;",
+        "error_output": "error[E0011]: 意外的令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外的令牌 '@'"
+    },
+    "E0012": {
+        "title": "无效语法",
+        "message": "表达式或语句存在语法错误",
+        "template": "无效语法：{reason}",
+        "help": "检查表达式或语句的语法",
+        "example": "if x { }",
+        "error_output": "error[E0012]: 无效语法\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 缺少条件"
+    },
+    "E0013": {
+        "title": "不匹配的括号",
+        "message": "圆括号、方括号或花括号不匹配",
+        "template": "不匹配的 {bracket_type}：在第 {open_line} 行、第 {open_col} 列打开，未闭合",
+        "help": "确保所有括号都正确闭合",
+        "example": "x = (1 + 2;",
+        "error_output": "error[E0013]: 不匹配的括号\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 未闭合的圆括号"
+    },
+    "E0014": {
+        "title": "缺少分号",
+        "message": "语句缺少分号",
+        "template": "{statement} 后缺少分号",
+        "help": "在语句末尾添加分号",
+        "example": "x = 1\ny = 2",
+        "error_output": "error[E0014]: 缺少分号\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 缺少分号"
+    },
+    "E1001": {
+        "title": "未知变量",
+        "message": "引用的变量未定义",
+        "template": "未知变量：'{name}'",
+        "help": "检查变量名是否拼写正确，或先定义它",
+        "example": "x = y + 1;",
+        "error_output": "error[E1001]: 未知变量\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未定义的变量 'y'"
+    },
+    "E1002": {
+        "title": "类型不匹配",
+        "message": "期望类型与实际类型不匹配",
+        "template": "期望类型 '{expected}'，实际类型 '{found}'",
+        "help": "使用正确的类型或添加类型转换",
+        "example": "x: Int = \"hello\";",
+        "error_output": "error[E1002]: 类型不匹配\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，找到 'String'"
+    },
+    "E1003": {
+        "title": "未知类型",
+        "message": "引用的类型不存在",
+        "template": "未知类型：'{type}'",
+        "help": "检查类型名是否拼写正确",
+        "example": "x: MyType = 1;",
+        "error_output": "error[E1003]: 未知类型\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 未定义的类型 'MyType'"
+    },
+    "E1010": {
+        "title": "参数数量不匹配",
+        "message": "函数调用参数与定义不匹配",
+        "template": "函数 '{func}' 期望 {expected} 个参数，找到 {found} 个",
+        "help": "检查函数调用参数数量",
+        "example": "add(1, 2, 3);",
+        "error_output": "error[E1010]: 参数数量不匹配\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数期望 2 个参数，找到 3 个"
+    },
+    "E1011": {
+        "title": "参数类型不匹配",
+        "message": "参数类型检查失败",
+        "template": "参数类型不匹配：期望 '{expected}'，实际 '{found}'",
+        "help": "确保参数类型与函数签名匹配",
+        "example": "add(\"hello\", 2);",
+        "error_output": "error[E1011]: 参数类型不匹配\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期望 'Int'，找到 'String'"
+    },
+    "E1012": {
+        "title": "返回类型不匹配",
+        "message": "函数返回类型不正确",
+        "template": "返回类型不匹配：期望 '{expected}'，实际 '{found}'",
+        "help": "确保返回值与声明的返回类型匹配",
+        "example": "fn foo() -> Int { \"hello\" }",
+        "error_output": "error[E1012]: 返回类型不匹配\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
+    },
+    "E1013": {
+        "title": "函数未找到",
+        "message": "调用了未定义的函数",
+        "template": "函数未找到：'{func}'",
+        "help": "检查函数名是否拼写正确",
+        "example": "unknown_fn();",
+        "error_output": "error[E1013]: 函数未找到\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'"
+    },
+    "E1020": {
+        "title": "无法推断类型",
+        "message": "上下文无法推断类型",
+        "template": "无法推断 '{expr}' 的类型",
+        "help": "添加类型注解或显式类型参数",
+        "example": "let x = nil;",
+        "error_output": "error[E1020]: 无法推断类型\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 无法从 'nil' 推断类型"
+    },
+    "E1021": {
+        "title": "类型推断冲突",
+        "message": "多个约束导致类型矛盾",
+        "template": "类型推断冲突：{reason}",
+        "help": "检查类型注解的一致性",
+        "example": "let x: Int = \"hello\";",
+        "error_output": "error[E1021]: 类型推断冲突\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与推断类型冲突"
+    },
+    "E1030": {
+        "title": "模式不完整",
+        "message": "match 表达式没有覆盖所有情况",
+        "template": "模式不完整：缺少 {patterns}",
+        "help": "为 match 表达式添加缺失的模式",
+        "example": "match x { Some(_) => 1 }",
+        "error_output": "error[E1030]: 模式不完整\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 模式 'None' 未覆盖"
+    },
+    "E1031": {
+        "title": "不可达模式",
+        "message": "永远无法匹配的模式",
+        "template": "不可达模式：'{pattern}'",
+        "help": "删除或修改不可达的模式",
+        "example": "match x { 1 => \"one\", 1 => \"another\" }",
+        "error_output": "error[E1031]: 不可达模式\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 模式 '1' 已被覆盖"
+    },
+    "E1040": {
+        "title": "操作不支持",
+        "message": "类型不支持该操作",
+        "template": "类型 '{type}' 不支持操作 '{op}'",
+        "help": "检查该类型支持的操作",
+        "example": "\"hello\" + 1;",
+        "error_output": "error[E1040]: 操作不支持\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型不支持 '+' 操作"
+    },
+    "E1041": {
+        "title": "索引越界",
+        "message": "数组/列表索引超出范围",
+        "template": "索引越界：有效范围是 0..{max}，找到 {index}",
+        "help": "确保索引在集合范围内",
+        "example": "arr[10];",
+        "error_output": "error[E1041]: 索引越界\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 超出数组长度 5"
+    },
+    "E1042": {
+        "title": "字段未找到",
+        "message": "访问了不存在的结构体字段",
+        "template": "在结构体 '{struct}' 中找不到字段 '{field}'",
+        "help": "检查结构体的可用字段",
+        "example": "point.z;",
+        "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
+    },
+    "E1050": {
+        "title": "需要布尔操作数",
+        "message": "逻辑运算需要布尔操作数",
+        "template": "逻辑运算需要布尔操作数，实际为 '{left}' 和 '{right}'",
+        "help": "将操作数转换为布尔类型或使用其他运算符",
+        "example": "let x = 1 && 2;",
+        "error_output": "error[E1050]: 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 逻辑运算需要布尔操作数"
+    },
+    "E1051": {
+        "title": "逻辑 NOT 需要布尔操作数",
+        "message": "逻辑 NOT 运算需要布尔操作数",
+        "template": "逻辑 NOT 需要布尔操作数，实际为 '{type}'",
+        "help": "在应用 NOT 前将操作数转换为布尔类型",
+        "example": "let x = !42;",
+        "error_output": "error[E1051]: 逻辑 NOT 需要布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ NOT 需要布尔操作数，实际为 'Int'"
+    },
+    "E1052": {
+        "title": "无效解引用",
+        "message": "无法解引用非指针类型",
+        "template": "无法解引用类型 '{type}'，期望指针类型",
+        "help": "只有指针类型可以解引用",
+        "example": "let x = *42;",
+        "error_output": "error[E1052]: 无效解引用\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 无法解引用 'Int'"
+    },
+    "E1053": {
+        "title": "非结构体字段访问",
+        "message": "无法在非结构体类型上访问字段",
+        "template": "无法在非结构体类型 '{type}' 上访问字段",
+        "help": "字段访问仅适用于结构体类型",
+        "example": "let x = 42.field;",
+        "error_output": "error[E1053]: 非结构体字段访问\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 无法在 'Int' 上访问字段"
+    },
+    "E1054": {
+        "title": "条件类型不匹配",
+        "message": "条件表达式必须是布尔类型",
+        "template": "条件必须是布尔类型，实际为 '{type}'",
+        "help": "使用布尔表达式或转换为布尔类型",
+        "example": "if 42 { }",
+        "error_output": "error[E1054]: 条件类型不匹配\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件必须是布尔类型，实际为 'Int'"
+    },
+    "E1055": {
+        "title": "约束在非泛型上下文中",
+        "message": "约束类型在非泛型上下文中使用",
+        "template": "约束类型 '{type}' 只能在泛型上下文中使用",
+        "help": "使用具体类型代替约束类型",
+        "example": "let x: Eq = 42;",
+        "error_output": "error[E1055]: 约束在非泛型上下文中\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型不能在此使用"
+    },
+    "E1060": {
+        "title": "类型参数数量不匹配",
+        "message": "提供的类型参数数量错误",
+        "template": "期望 {expected} 个类型参数，实际 {found} 个",
+        "help": "提供正确数量的类型参数",
+        "example": "let x: Vec<Int, String> = vec![];",
+        "error_output": "error[E1060]: 类型参数数量不匹配\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期望 1 个类型参数，找到 2 个"
+    },
+    "E1061": {
+        "title": "无法实例化泛型",
+        "message": "泛型类型无法用给定参数实例化",
+        "template": "无法用给定参数实例化泛型类型",
+        "help": "确保类型参数满足所有约束",
+        "example": "let x = Foo::<Int>();",
+        "error_output": "error[E1061]: 无法实例化泛型\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 无法用给定参数实例化"
+    },
+    "E1070": {
+        "title": "未知标签",
+        "message": "引用的标签不存在",
+        "template": "未知标签：'{label}'",
+        "help": "检查标签名或在循环上定义它",
+        "example": "break 'unknown;",
+        "error_output": "error[E1070]: 未知标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'"
+    },
+    "E2001": {
+        "title": "作用域错误",
+        "message": "变量不在当前作用域",
+        "template": "变量 '{name}' 不在作用域中",
+        "help": "检查变量的作用域，确保它在这里可访问",
+        "example": "fn foo() { x }",
+        "error_output": "error[E2001]: 作用域错误\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不在作用域中"
+    },
+    "E2002": {
+        "title": "重复定义",
+        "message": "变量在同一作用域中定义了多次",
+        "template": "重复定义：'{name}' 已在当前作用域中定义",
+        "help": "重命名或删除重复的定义",
+        "example": "let x = 1; let x = 2;",
+        "error_output": "error[E2002]: 重复定义\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已被定义"
+    },
+    "E2003": {
+        "title": "所有权错误",
+        "message": "所有权约束未满足",
+        "template": "所有权约束违反：{reason}",
+        "help": "检查值的所有权语义",
+        "example": "let a = vec![1, 2, 3]; let b = a;",
+        "error_output": "error[E2003]: 所有权错误\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 值已移动"
+    },
+    "E2010": {
+        "title": "不可变赋值",
+        "message": "试图修改不可变变量",
+        "template": "无法给不可变变量 '{name}' 赋值",
+        "help": "使用 'mut' 声明可变变量",
+        "example": "let x = 1; x = 2;",
+        "error_output": "error[E2010]: 不可变赋值\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 无法给不可变变量赋值"
+    },
+    "E2011": {
+        "title": "使用未初始化变量",
+        "message": "使用了未初始化的变量",
+        "template": "使用未初始化的变量 '{name}'",
+        "help": "使用前初始化变量",
+        "example": "let x; println!(x);",
+        "error_output": "error[E2011]: 使用未初始化变量\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 使用未初始化的变量"
+    },
+    "E2012": {
+        "title": "可变性冲突",
+        "message": "在不可变上下文中使用可变引用",
+        "template": "可变性冲突：无法在不可变上下文中使用可变引用",
+        "help": "确保引用的可变性匹配使用上下文",
+        "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
+        "error_output": "error[E2012]: 可变性冲突\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 无法通过不可变引用修改"
+    },
+    "E4001": {
+        "title": "泛型约束违反",
+        "message": "类型不满足泛型约束",
+        "template": "类型 '{type}' 不满足特质约束 '{trait}'",
+        "help": "确保类型满足所有必需的特质边界",
+        "example": "let x: &Display = &5;",
+        "error_output": "error[E4001]: 泛型约束违反\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 未实现 'Display'"
+    },
+    "E4002": {
+        "title": "特质未找到",
+        "message": "引用的特质不存在",
+        "template": "特质 '{trait}' 未找到",
+        "help": "检查特质名或导入正确的特质",
+        "example": "impl MyTrait for Int {}",
+        "error_output": "error[E4002]: 特质未找到\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定义的特质 'MyTrait'"
+    },
+    "E4003": {
+        "title": "特质实现缺失",
+        "message": "类型未实现必需的特质",
+        "template": "类型 '{type}' 缺少特质 '{trait}' 的实现",
+        "help": "为该类型添加特质实现",
+        "example": "println!(\"{}\", vec![1, 2, 3]);",
+        "error_output": "error[E4003]: 特质实现缺失\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 未实现 'Display'"
+    },
+    "E4004": {
+        "title": "特质实现冲突",
+        "message": "多个特质实现冲突",
+        "template": "特质 '{trait}' 的实现冲突",
+        "help": "解决冲突的实现",
+        "example": "impl<T> Display for T {}",
+        "error_output": "error[E4004]: 特质实现冲突\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现冲突"
+    },
+    "E4005": {
+        "title": "关联类型未找到",
+        "message": "容器中不存在引用的关联类型",
+        "template": "在 '{container}' 中找不到关联类型 '{assoc_type}'",
+        "help": "检查关联类型名和容器定义",
+        "example": "type Output = Foo::Bar;",
+        "error_output": "error[E4005]: 关联类型未找到\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 在 'Foo' 中找不到 'Bar'"
+    },
+    "E5001": {
+        "title": "模块未找到",
+        "message": "引用的模块不存在",
+        "template": "模块 '{module}' 未找到",
+        "help": "检查模块路径，确保它存在",
+        "example": "use foo::bar;",
+        "error_output": "error[E5001]: 模块未找到\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块 'foo' 未找到"
+    },
+    "E5002": {
+        "title": "导入错误",
+        "message": "导入模块失败",
+        "template": "导入模块 '{module}' 失败：{reason}",
+        "help": "检查导入路径和模块解析",
+        "example": "use std::unknown;",
+        "error_output": "error[E5002]: 导入错误\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 找不到模块 'unknown'"
+    },
+    "E5003": {
+        "title": "导出未找到",
+        "message": "模块中不存在的导出",
+        "template": "在模块 '{module}' 中找不到导出 '{export}'",
+        "help": "检查模块的导出",
+        "example": "use std::foo;",
+        "error_output": "error[E5003]: 导出未找到\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo' 不是 'std' 的导出"
+    },
+    "E5004": {
+        "title": "循环依赖",
+        "message": "模块存在循环依赖",
+        "template": "检测到循环依赖：{path}",
+        "help": "重构以移除循环依赖",
+        "example": "mod a { use b; } mod b { use a; }",
+        "error_output": "error[E5004]: 循环依赖\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循环依赖：a -> b -> a"
+    },
+    "E6001": {
+        "title": "除零错误",
+        "message": "试图除以零",
+        "template": "表达式 {expr} 除以零",
+        "help": "添加检查以防止除以零",
+        "example": "let x = 10 / 0;",
+        "error_output": "error[E6001]: 除零错误\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零"
+    },
+    "E6002": {
+        "title": "空指针解引用",
+        "message": "试图访问空值",
+        "template": "在 {location} 空指针解引用",
+        "help": "在访问值之前添加空值检查",
+        "example": "let x = nil; println!(x.field);",
+        "error_output": "error[E6002]: 空指针解引用\n --> runtime\n  |\n  | println!(x.field);\n  |     ^ 无法访问空值的字段"
+    },
+    "E6003": {
+        "title": "数组索引越界",
+        "message": "数组索引在运行时越界",
+        "template": "数组索引越界：有效范围是 0..{max}，找到 {index}",
+        "help": "确保索引在数组范围内",
+        "example": "let arr = [1, 2, 3]; println!(arr[10]);",
+        "error_output": "error[E6003]: 数组索引越界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 超出长度 3"
+    },
+    "E6004": {
+        "title": "栈溢出",
+        "message": "递归深度超出栈限制",
+        "template": "栈溢出：递归深度超出限制 {limit}",
+        "help": "减少递归深度或使用迭代",
+        "example": "fn foo() { foo(); } foo();",
+        "error_output": "error[E6004]: 栈溢出\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ 栈溢出"
+    },
+    "E6005": {
+        "title": "断言失败",
+        "message": "运行时断言失败",
+        "template": "断言失败：{condition}",
+        "help": "修复断言条件或提供有效输入",
+        "example": "assert!(x > 0);",
+        "error_output": "error[E6005]: 断言失败\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ 断言失败：x > 0"
+    },
+    "E7001": {
+        "title": "文件未找到",
+        "message": "指定文件不存在",
+        "template": "文件未找到：'{path}'",
+        "help": "检查文件路径，确保文件存在",
+        "example": "let content = read(\"missing.txt\");",
+        "error_output": "error[E7001]: 文件未找到\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文件 'missing.txt' 未找到"
+    },
+    "E7002": {
+        "title": "权限被拒绝",
+        "message": "访问文件的权限不足",
+        "template": "权限被拒绝：'{path}'",
+        "help": "检查文件权限或使用适当权限运行",
+        "example": "let content = read(\"/root/secret.txt\");",
+        "error_output": "error[E7002]: 权限被拒绝\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' 权限被拒绝"
+    },
+    "E7003": {
+        "title": "I/O 错误",
+        "message": "发生未指定的 I/O 错误",
+        "template": "I/O 错误：{reason}",
+        "help": "检查错误详情获取更多信息",
+        "example": "let content = read(\"/dev/full\");",
+        "error_output": "error[E7003]: I/O 错误\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 错误：设备已满"
+    },
+    "E7004": {
+        "title": "网络错误",
+        "message": "发生网络错误",
+        "template": "网络错误：{reason}",
+        "help": "检查网络连接并重试",
+        "example": "let response = http_get(\"https://example.com\");",
+        "error_output": "error[E7004]: 网络错误\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接被拒绝"
+    },
+    "E8001": {
+        "title": "内部编译器错误",
+        "message": "编译器发生内部错误",
+        "template": "内部编译器错误：{message}",
+        "help": "请在 https://github.com/yaoxiang/yaoxiang/issues 报告此错误",
+        "example": "",
+        "error_output": ""
+    },
+    "E8002": {
+        "title": "意外 Panic",
+        "message": "编译器遇到意外 panic",
+        "template": "意外编译器 panic：{reason}",
+        "help": "请使用 panic 详情报告此错误",
+        "example": "",
+        "error_output": ""
+    },
+    "E8003": {
+        "title": "编译器阶段错误",
+        "message": "编译器阶段发生错误",
+        "template": "编译器阶段错误：{phase} - {message}",
+        "help": "这可能是编译器错误，请报告",
+        "example": "",
+        "error_output": ""
+    },
+    "E1090": {
+        "title": "✨ 不可言说 ✨",
+        "message": "你已触达 YaoXiang 的哲学边界",
+        "template": "Type: Type = Type",
+        "help": "此乃语言之源，编译器在此沉默",
+        "example": "Type: Type = Type",
+        "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一生二，二生三，三生万物。                                      ║\n║   易有太极，是生两仪。                                           ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此乃爻象之源，语言之边界。                                     ║\n║   编译器在此沉默，哲学在此驻足。                                 ║\n║                                                               ║\n║   感谢你触达语言的哲学边界。                                     ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
+    },
+    "E1091": {
+        "title": "无效的泛型元类型",
+        "message": "泛型元类型自引用是不允许的",
+        "template": "泛型元类型自引用不允许：'{decl}'",
+        "help": "类型构造器如 'Type[T]' 不能引用 Type 自身",
+        "example": "Type: Type[T] = { data: T }",
+        "error_output": "error[E1091]: 泛型元类型自引用不允许：'Type: Type[T] = ...'"
+    }
 }
