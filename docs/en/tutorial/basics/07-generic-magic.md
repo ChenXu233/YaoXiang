@@ -1,5 +1,5 @@
 ---
-title: Chapter 7: The Magic of Generics
+title: 'Chapter 7: The Magic of Generics'
 ---
 
 # Chapter 7: The Magic of Generics

@@ -1,5 +1,5 @@
 ---
-title: Chapter 5: The Art of Unity
+title: 'Chapter 5: The Art of Unity'
 ---
 
 # Chapter 5: The Art of Unity

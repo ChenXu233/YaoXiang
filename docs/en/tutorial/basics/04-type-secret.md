@@ -1,5 +1,5 @@
 ---
-title: Chapter 4: The Secret of Type
+title: 'Chapter 4: The Secret of Type'
 ---
 
 # Chapter 4: The Secret of Type

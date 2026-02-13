@@ -1,5 +1,5 @@
 ---
-title: Chapter 1: Hello, Program
+title: 'Chapter 1: Hello, Program'
 ---
 
 # Chapter 1: Hello, Program
