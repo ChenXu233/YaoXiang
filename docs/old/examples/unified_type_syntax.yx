@@ -38,7 +38,7 @@ main: () -> Void = {
 // ======== 3. 类型定义（结构体） ========
 
 // 使用花括号定义结构体
-type Point = {
+Point: Type = {
     x: Float,
     y: Float
 }
@@ -46,28 +46,28 @@ type Point = {
 // ======== 4. 类型定义（枚举） ========
 
 // 简单枚举（无载荷变体）
-type Color = {
+Color: Type = {
     red | green | blue
 }
 
 // 复杂枚举（有载荷变体）
-type Result = {
+Result: Type = {
     ok(Int) | err(String)
 }
 
 // Option 枚举
-type Option = {
+Option: Type = {
     some(String) | none
 }
 
 // ======== 5. 接口定义 ========
 
 // 接口是字段全为函数类型的记录类型
-type Drawable = {
+Drawable: Type = {
     draw: (self: Self, surface: Surface) -> Void
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: (self: Self) -> String
 }
 
@@ -90,7 +90,7 @@ distance: (p1: Point, p2: Point) -> Float = {
 // ======== 7. 类型实现接口 ========
 
 // Point 实现 Drawable 和 Serializable 接口
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,
@@ -130,7 +130,7 @@ map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = {
 // ======== 10. 泛型类型 ========
 
 // 泛型列表类型
-type List[T] = {
+List: (T: Type) -> Type = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
