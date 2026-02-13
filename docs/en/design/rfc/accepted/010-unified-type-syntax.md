@@ -267,7 +267,7 @@ block           ::= expression | '{' expression* '}'
 | Feature | Description |
 |---------|-------------|
 | Unified declaration | Parse `name: type = value` |
-| Type definition | Parse `type Name = ...` |
+| Type definition | Parse `Name: Type = {...}` |
 | Type method | Parse `Type.method: ...` |
 
 ### Type System Changes
@@ -286,7 +286,38 @@ block           ::= expression | '{' expression* '}'
 |-----------|------------|
 | `var x: Int = 42` | `x: Int = 42` |
 | `fn add(a: Int, b: Int) -> Int { a + b }` | `add: (a: Int, b: Int) -> Int = a + b` |
-| `struct Point { x: Float, y: Float }` | `type Point = { x: Float, y: Float }` |
+| `struct Point { x: Float, y: Float }` | `Point: Type = { x: Float, y: Float }` |
+
+---
+
+## 🎮 Easter Egg: The Origin of the Language
+
+> ✨ **Type: Type = Type** ✨
+
+```yaoxiang
+# Attempting to define the type of types...
+Type: Type = Type
+```
+
+**Warning**: This is the **Ineffable**!
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   One generates Two, Two generates Three,                   ║
+║   Three generates all things.                                 ║
+║   In the Beginning, there was Taiji, which begat Liangyi.    ║
+║                                                              ║
+║   Type: Type = Type                                         ║
+║   This is the source of YaoXiang, the edge of language.     ║
+║   The compiler falls silent here; philosophy stands still.   ║
+║                                                              ║
+║   Thank you for reaching the philosophical boundary.         ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+> **Note**: The compiler cannot properly handle `Type: Type = Type` (it leads to a Type0/Type1 universe paradox), but we've deliberately kept this "easter egg" — when you try to compile it, you'll receive a Zen message from the language creator. This is not just a technical boundary, but YaoXiang's tribute to the philosophy of types.
 
 ---
 
