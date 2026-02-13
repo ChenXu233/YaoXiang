@@ -340,3 +340,155 @@ mod tests {
         assert!(!contains_type_vars(&MonoType::String));
     }
 }
+
+// ========== RFC-010: Universe Level Tests ==========
+
+#[cfg(test)]
+mod universe_level_tests {
+    use super::*;
+    use crate::frontend::core::type_system::{
+        UniverseLevel, calculate_meta_type_level, get_ast_type_universe_level,
+    };
+
+    /// Test UniverseLevel basic operations
+    #[test]
+    fn test_universe_level_basics() {
+        let level0 = UniverseLevel::type0();
+        let level1 = UniverseLevel::type1();
+
+        assert_eq!(level0.level, "0");
+        assert_eq!(level1.level, "1");
+    }
+
+    #[test]
+    fn test_universe_level_successor() {
+        let level0 = UniverseLevel::type0();
+        let level1 = level0.succ();
+        let level2 = level1.succ();
+        let level10 = UniverseLevel::new("9".to_string()).succ();
+
+        assert_eq!(level1.level, "1");
+        assert_eq!(level2.level, "2");
+        assert_eq!(level10.level, "10");
+    }
+
+    #[test]
+    fn test_universe_level_carry() {
+        // Test "9" -> "10" carry
+        let level9 = UniverseLevel::new("9".to_string());
+        let level10 = level9.succ();
+        assert_eq!(level10.level, "10");
+
+        // Test "99" -> "100" carry
+        let level99 = UniverseLevel::new("99".to_string());
+        let level100 = level99.succ();
+        assert_eq!(level100.level, "100");
+    }
+
+    #[test]
+    fn test_universe_level_display() {
+        let level0 = UniverseLevel::type0();
+        let level1 = UniverseLevel::type1();
+        let level2 = UniverseLevel::new("2".to_string());
+
+        assert_eq!(format!("{}", level0), "Type0");
+        assert_eq!(format!("{}", level1), "Type1");
+        assert_eq!(format!("{}", level2), "Type2");
+    }
+
+    /// Test get_ast_type_universe_level function
+    #[test]
+    fn test_get_ast_type_universe_level() {
+        use crate::frontend::core::parser::ast::Type;
+
+        // Plain Type should be Type0
+        let plain_type = Type::Name("Int".to_string());
+        assert_eq!(get_ast_type_universe_level(&plain_type), 0);
+
+        // MetaType without args should be Type0
+        let meta_empty = Type::MetaType { args: Vec::new() };
+        assert_eq!(get_ast_type_universe_level(&meta_empty), 0);
+
+        // MetaType with simple arg (Type0) should be Type1
+        let meta_with_t = Type::MetaType {
+            args: vec![Type::Name("T".to_string())],
+        };
+        assert_eq!(get_ast_type_universe_level(&meta_with_t), 1);
+
+        // MetaType with MetaType arg (Type1) should be Type2
+        let meta_nested = Type::MetaType {
+            args: vec![Type::MetaType {
+                args: vec![Type::Name("T".to_string())],
+            }],
+        };
+        assert_eq!(get_ast_type_universe_level(&meta_nested), 2);
+
+        // MetaType with deeply nested (Type2) should be Type3
+        let meta_deep = Type::MetaType {
+            args: vec![Type::MetaType {
+                args: vec![Type::MetaType {
+                    args: vec![Type::Name("T".to_string())],
+                }],
+            }],
+        };
+        assert_eq!(get_ast_type_universe_level(&meta_deep), 3);
+    }
+
+    /// Test calculate_meta_type_level function
+    #[test]
+    fn test_calculate_meta_type_level() {
+        use crate::frontend::core::parser::ast::Type;
+
+        // Empty args -> Type0
+        let empty_args: Vec<Type> = Vec::new();
+        let level = calculate_meta_type_level(&empty_args);
+        assert!(level.is_type0());
+
+        // Single Type0 arg -> Type1
+        let single_arg = vec![Type::Name("T".to_string())];
+        let level = calculate_meta_type_level(&single_arg);
+        assert!(level.is_type1());
+
+        // Multiple Type0 args -> Type1 (max is 0, +1 = 1)
+        let multi_args = vec![Type::Name("T".to_string()), Type::Name("U".to_string())];
+        let level = calculate_meta_type_level(&multi_args);
+        assert!(level.is_type1());
+
+        // Nested MetaType -> Type2
+        let nested = vec![Type::MetaType {
+            args: vec![Type::Name("T".to_string())],
+        }];
+        let level = calculate_meta_type_level(&nested);
+        assert_eq!(level.level, "2");
+    }
+
+    /// Test MonoType MetaType display
+    #[test]
+    fn test_mono_type_meta_type_display() {
+        // Plain Type
+        let plain = MonoType::MetaType {
+            universe_level: UniverseLevel::type0(),
+            type_params: Vec::new(),
+        };
+        assert_eq!(plain.type_name(), "Type");
+
+        // Type[T] - RFC-010: users only see "Type", not "Type1"
+        let with_t = MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: vec![MonoType::TypeVar(TypeVar::new(0))],
+        };
+        let name = with_t.type_name();
+        assert_eq!(name, "Type[t0]");
+
+        // Type[Type[T]]
+        let nested = MonoType::MetaType {
+            universe_level: UniverseLevel::new("2".to_string()),
+            type_params: vec![MonoType::MetaType {
+                universe_level: UniverseLevel::type1(),
+                type_params: vec![MonoType::TypeVar(TypeVar::new(0))],
+            }],
+        };
+        let name = nested.type_name();
+        assert_eq!(name, "Type[Type[t0]]");
+    }
+}
