@@ -7,7 +7,7 @@ title: RFC-009：所有权模型设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2025-02-05（精简版 v1）
+> **最后更新**: 2026-02-12
 
 ## 摘要
 
@@ -560,7 +560,7 @@ set_timeout(config: Config, ms: Int) -> Config {
 ```yaoxiang
 # === 字段 mut 标记 ===
 
-type Point = {
+Point: Type = {
     x: Float,      # 不可变字段
     mut y: Float,  # 可变字段
 }
@@ -593,7 +593,7 @@ total: Int = 100            # 不可变绑定
 
 ```yaoxiang
 # 类型定义时标记字段可变性
-type Account = {
+Account: Type = {
     # 不可变字段：一旦设置永不改变
     account_id: String,
     created_at: Timestamp,
@@ -650,7 +650,7 @@ balance = acc.get_balance()  # ✅ 不需要 mut 绑定
 
 ```yaoxiang
 # 在类型定义中标记字段可变性
-type User = {
+User: Type = {
     id: String,           # 不可变
     name: String,         # 不可变
     mut email: String,    # 可变
@@ -661,7 +661,7 @@ type User = {
 }
 
 # 简洁写法：mut 块
-type User = {
+User: Type = {
     id: String,
     name: String,
     mut {
@@ -698,7 +698,7 @@ match shape {
 
 ```yaoxiang
 # 字段可以有默认值
-type Config = {
+Config: Type = {
     version: String = "1.0.0",      # 不可变，编译时常量
     mut port: Int = 8080,           # 可变，运行时可以修改
     mut debug: Bool = false,        # 可变
@@ -715,7 +715,7 @@ mut config2: Config = Config(port = 3000)  # 只指定 port
 
 ```yaoxiang
 # 字段可变性 + 所有权回流 = 流畅的链式调用
-type Transformable = {
+Transformable: Type = {
     mut x: Float,
     mut y: Float,
 
@@ -764,18 +764,18 @@ modify_config: (mut config: Config) -> Config = {
 
 ```yaoxiang
 # 接口定义不关心字段可变性
-type Drawable = {
+Drawable: Type = {
     draw: (Surface) -> Void,
 }
 
 # 类型实现接口时可以有不同的字段可变性
-type ImmutablePoint = {
+ImmutablePoint: Type = {
     x: Float,
     y: Float,
     Drawable,
 }
 
-type MutablePoint = {
+MutablePoint: Type = {
     mut x: Float,
     mut y: Float,
     Drawable,

@@ -7,7 +7,7 @@ title: 'RFC-009: Ownership Model Design'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-08
-> **Last Updated**: 2025-02-05 (Simplified v1)
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 
@@ -148,21 +148,21 @@ unsafe {
 
 ```yaoxiang
 # Rc - Non-thread-safe reference counting
-type Rc[T] = {
-    new: (T) -> Rc[T],
-    clone: (Self) -> Rc[T],
+Rc: Type[T] = {
+    new: (T) -> Self,
+    clone: (Self) -> Self,
     drop: (Self) -> Void,
 }
 
 # Arc - Thread-safe reference counting
-type Arc[T] = {
-    new: (T) -> Arc[T],
-    clone: (Self) -> Arc[T],
+Arc: Type[T] = {
+    new: (T) -> Self,
+    clone: (Self) -> Self,
     drop: (Self) -> Void,
 }
 
 # Weak - Non-owning reference
-type Weak[T] = {
+Weak: Type[T] = {
     upgrade: () -> Option[Arc[T]],
 }
 ```
@@ -226,24 +226,25 @@ consume: [T](value: T) -> T = (value) => {
 
 ```yaoxiang
 # Types that can be safely transferred across threads
-trait Send = {
-    # Marker trait
+Send: Type = {
+    # Marker interface
 }
 
 # Auto-derived rules
-struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
+# Point: Type = { x: Float, y: Float }
+# If Point is Send, then all its fields must be Send
 ```
 
 ### Sync Constraint
 
 ```yaoxiang
 # Types that can be safely shared across threads
-trait Sync = {
-    # Marker trait
+Sync: Type = {
+    # Marker interface
 }
 
 # Auto-derived rules
-struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
+# If Point is Sync, then all its fields must be Sync
 ```
 
 ### Constraint Hierarchy

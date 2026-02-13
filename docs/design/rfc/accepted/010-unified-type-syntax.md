@@ -5,21 +5,41 @@ title: RFC-010：统一类型语法
 # RFC-010: 统一类型语法 - name: type = value 模型
 
 > **状态**: 已接受
+>
 > **作者**: 晨煦
+>
 > **创建日期**: 2025-01-20
-> **最后更新**: 2025-02-03（统一语法风格：参数名在签名中声明，函数体用 = { ... }）
+>
+> **最后更新**: 2026-02-12（统一语法规则：identifier : type = expression，无 `type`/`fn`/`struct`/`trait`/`impl` 关键字）
 
 ## 摘要
 
 本 RFC 提出一种极简统一的类型语法模型：**一切皆 `name: type = value`**。
 
-核心思想：
-- 变量/函数：`name: type = value`
-- 类型定义：`type Name = { ... }`
-- 接口定义：`type InterfaceName = { method: (param: Type) -> Ret }`
-- 类型方法：`Type.method: (self: Type, param: Type) -> Ret = { ... }`
-- 普通方法：`name: (param: Type) -> Ret = { ... }`
-- 自动绑定：`pub name: (param: Type) -> Ret = ...` → 自动绑定到类型
+YaoXiang 只有一种声明形式：
+
+```
+identifier : type = expression
+```
+
+其中 `type` 可以是任意类型表达式，`expression` 可以是任意值表达式。
+**没有 `fn`，没有 `struct`，没有 `trait`，没有 `impl`，没有小写 `type` 关键字（但有 `Type` 作为元类型关键字）**。
+
+> **核心设计**：`Type` 本身就是一个泛型类型。`Type[T]` 表示"接受类型参数 T 的类型"。
+
+| 概念       | 代码写法                                      |
+|------------|-----------------------------------------------|
+| 变量       | `x: Int = 42`                                |
+| 函数       | `add: (a: Int, b: Int) -> Int = a + b`       |
+| 记录类型   | `Point: Type = { x: Float, y: Float }`       |
+| 接口       | `Drawable: Type = { draw: (Surface) -> Void }` |
+| 泛型类型   | `List: Type[T] = { data: Array[T], length: Int }` |
+| 泛型类型   | `Map: Type[K, V] = { keys: Array[K], values: Array[V] }` |
+| 方法       | `Point.draw: (self: Point, s: Surface) -> Void = ...` |
+| 泛型函数   | `map: [A,B](list: List[A], f: (A)->B) -> List[B] = ...` |
+
+**`Type` 是语言中唯一的元类型关键字**。
+它用于标注类型层级，编译器自动处理 Type0、Type1、Type2... 的区分，对用户透明。
 
 ```yaoxiang
 # 核心语法：统一 + 区分
@@ -30,24 +50,25 @@ x: Int = 42
 # 函数（参数名在签名中）
 add: (a: Int, b: Int) -> Int = a + b
 
-# 类型定义（type 关键字前置，更直观）
-type Point = {
+# 记录类型
+Point: Type = {
     x: Float,
     y: Float,
-    Drawable,
-    Serializable
+    draw: (Surface) -> Void,
+    serialize: () -> String
 }
 
-# 接口定义
-type Drawable = {
-    draw: (self: Self, surface: Surface) -> Void
+# 接口（本质是字段全为函数的记录类型）
+Drawable: Type = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
 }
 
-type Serializable = {
-    serialize: (self: Self) -> String
+Serializable: Type = {
+    serialize: () -> String
 }
 
-# 方法定义（使用 Type.method 语法糖）
+# 方法定义（使用 Type.method 语法）
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -56,10 +77,21 @@ Point.serialize: (self: Point) -> String = {
     return "Point(${self.x}, ${self.y})"
 }
 
+# 泛型类型（Type[T] = 接受类型参数的泛型类型）
+List: Type[T] = {
+    data: Array[T],
+    length: Int
+}
+
+Map: Type[K, V] = {
+    keys: Array[K],
+    values: Array[V]
+}
+
 # 使用
 p: Point = Point(1.0, 2.0)
 p.draw(screen)           # 语法糖 → Point.draw(p, screen)
-s: Drawable = p      # 接口赋值
+s: Drawable = p           # 结构子类型：Point 实现 Drawable
 ```
 
 ## 动机
@@ -89,7 +121,7 @@ RFC-010的统一语法模型与RFC-011的泛型系统设计**天然契合**，�
 
 ```yaoxiang
 # 基础泛型（RFC-011 Phase 1）
-type List[T] = { data: Array[T], length: Int }
+List: Type[T] = { data: Array[T], length: Int }
 
 # 泛型函数
 map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = ...
@@ -98,7 +130,7 @@ map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = ...
 clone: [T: Clone](value: T) -> T = value.clone()
 
 # Const泛型（RFC-011 Phase 4）
-type Array[T, N: Int] = { data: T[N], length: N }
+Array: Type[T, N: Int] = { data: T[N], length: N }
 ```
 
 **依赖关系**：
@@ -111,25 +143,44 @@ type Array[T, N: Int] = { data: T[N], length: N }
 ### 核心原则
 
 ```
-统一模型 + 类型定义区分
+统一模型：identifier : type = expression
 
-├── 变量/函数：name: type = value
-│   ├── x: Int = 42
-│   └── add: (Int, Int) -> Int = (a, b) => a + b
+├── 变量
+│   └── x: Int = 42
 │
-├── 类型定义：type Name = ...
-│   ├── type Point = { x: Float, y: Float }
-│   └── type Drawable = { draw: (Surface) -> Void }
+├── 函数
+│   └── add: (a: Int, b: Int) -> Int = a + b
 │
-├── 类型方法：Type.method: (self: Type, ...) -> Return = ...
+├── 记录类型
+│   └── Point: Type = { x: Float, y: Float }
+│
+├── 接口
+│   └── Drawable: Type = { draw: (Surface) -> Void }
+│
+├── 泛型类型
+│   └── List: Type[T] = { data: Array[T], length: Int }
+│
+├── 泛型类型（多参数）
+│   └── Map: Type[K, V] = { keys: Array[K], values: Array[V] }
+│
+├── 方法
 │   └── Point.draw: (self: Point, surface: Surface) -> Void = ...
 │
-├── 普通方法：name: (param: Type, ...) -> Return = ...
-│   └── distance: (p1: Point, p2: Point) -> Float = ...
-│
-└── 自动绑定：pub name: (param: Type, ...) -> Return = ...
-    └── pub draw: (self: Point, surface: Surface) -> Void = ...  → 自动绑定到 Point.draw
+└── 泛型函数
+    └── map: [A,B](list: List[A], f: (A) -> B) -> List[B] = ...
 ```
+
+### 元类型层级（编译器内部）
+
+**编译器内部**维护一个宇宙层级 `level: selfpointnum`（用字符串存储，理论上可无限延伸）。
+
+| Level | 说明 |
+|-------|------|
+| `Type0` | 日常类型（`Int`、`Float`、`Point`） |
+| `Type1` | 类型构造器（`List`、`Maybe`） |
+| `Type2+` | 高阶构造器 |
+
+**用户从不看见这些数字**，只看见 `: Type`。
 
 ### 语法定义
 
@@ -207,39 +258,39 @@ max: (a: Int, b: Int) -> Int = {
 #### 3. 类型定义
 
 ```yaoxiang
-# 简单类型
-type Point = {
+# 记录类型
+Point: Type = {
     x: Float,
     y: Float
 }
 
 # 实现接口的类型（接口名写在类型体末尾）
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,     # 实现 Drawable 接口
     Serializable  # 实现 Serializable 接口
 }
 
-# 空类型（仅实现接口）
-type EmptyType = {}
+# 空类型
+EmptyType: Type = {}
 ```
 
 #### 4. 接口定义
 
 ```yaoxiang
-# 接口 = 记录类型，字段都是函数类型
-type Drawable = {
+# 接口 = 字段全为函数的记录类型
+Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: () -> String
 }
 
 # 空接口
-type Empty = {}
+Empty: Type = {}
 ```
 
 #### 5. 方法定义
@@ -340,7 +391,7 @@ draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 
 ```yaoxiang
 # 接口组合 = 类型交集
-type DrawableSerializable = Drawable & Serializable
+DrawableSerializable: Type = Drawable & Serializable
 
 # 使用交集类型
 process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
@@ -353,7 +404,7 @@ process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
 
 ```yaoxiang
 # 基础泛型（RFC-011 Phase 1）
-type List[T] = {
+List: Type[T] = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
@@ -361,7 +412,7 @@ type List[T] = {
 }
 
 # 具体实例化（RFC-011语法）
-type IntList = List[Int]
+IntList: Type = List[Int]
 
 # 泛型方法（RFC-011语法）
 List.push: [T](self: List[T], item: T) -> Void = {
@@ -385,23 +436,23 @@ List.get: [T](self: List[T], index: Int) -> Maybe[T] = {
 ```yaoxiang
 # ======== 1. 接口定义 ========
 
-type Drawable = {
+Drawable: Type = {
     draw: (self: Self, surface: Surface) -> Void,
     bounding_box: (self: Self) -> Rect
 }
 
-type Serializable = {
+Serializable: Type = {
     serialize: (self: Self) -> String
 }
 
-type Transformable = {
+Transformable: Type = {
     translate: (self: Self, dx: Float, dy: Float) -> Self,
     scale: (self: Self, factor: Float) -> Self
 }
 
 # ======== 2. 类型定义 ========
 
-type Point = {
+Point: Type = {
     x: Float,
     y: Float,
     Drawable,
@@ -409,7 +460,7 @@ type Point = {
     Transformable
 }
 
-type Rect = {
+Rect: Type = {
     x: Float,
     y: Float,
     width: Float,
@@ -542,7 +593,7 @@ fn check_type_implements_interface(
 
 ```yaoxiang
 # 只要有相同方法，就可以赋值给接口类型
-type CustomPoint = {
+CustomPoint: Type = {
     draw: (self: CustomPoint, surface: Surface) -> Void,
     x: Float,
     y: Float
@@ -669,39 +720,6 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 # IDE 自动提示缺失的方法
 ```
 
-## 实现策略
-
-### 阶段划分
-
-1. **Phase 1: 基础语法**
-   - [ ] 解析 `name: type = value` 声明
-   - [ ] 实现基础类型检查
-   - [ ] 支持变量和简单函数
-
-2. **Phase 2: 记录类型**
-   - [ ] 解析 `{ ... }` 记录类型
-   - [ ] 实现记录类型检查
-   - [ ] 支持字段访问
-
-3. **Phase 3: 接口系统**
-   - [ ] 解析接口定义 `Interface: Type = { method: (...) -> ... }`
-   - [ ] 实现接口检查算法
-   - [ ] 支持鸭子类型
-
-4. **Phase 4: 方法系统**
-   - [ ] 解析 `Type.method: (...) -> ... = ...` 方法定义
-   - [ ] 实现方法关联
-   - [ ] 方法调用语法糖
-
-5. **Phase 5: 泛型和高级特性**
-   - [ ] 支持泛型类型构造器
-   - [ ] 支持接口组合 `&`
-   - [ ] 优化和测试
-
-### 依赖关系
-
-- 无外部依赖
-- 可独立实现
 
 ### 风险
 
@@ -710,11 +728,6 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 | 解析复杂度 | 统一语法可能增加解析复杂度 | 使用递归下降解析器 |
 | 性能开销 | vtable 查找可能有额外开销 | 编译期单态化优化 |
 
-## 开放问题
-
-- [ ] 泛型语法是否需要简化？
-- [ ] 默认方法实现的优先级规则？
-
 ## 附录
 
 ### 语法 BNF
@@ -722,45 +735,43 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 ```bnf
 program ::= statement*
 
-statement ::= type_declaration | function | expression
+statement ::= declaration | expression
 
-# 类型定义：type Name = { ... }
-type_declaration ::= 'type' identifier type_params? '=' type_expression
+# 统一声明：name: Type = expression
+declaration ::= identifier ':' type_expr '=' expression
 
-type_params ::= '[' identifier (',' identifier)* ']'
+# 类型表达式
+type_expr ::= identifier
+       | identifier '[' type_expr (',' type_expr)* ']'      # 类型构造器应用
+       | '(' type_expr (',' type_expr)* ')' '->' type_expr       # 函数类型
+       | '{' type_field* '}'                       # 记录/接口类型
+       | 'Type'                                    # 元类型
 
-type_expression ::= identifier
-                  | '(' type_expression (',' type_expression)* ')' '->' type_expression
-                  | '{' type_field* '}'
+type_field ::= identifier ':' type_expr
+             | identifier                           # 接口约束
 
-type_field ::= identifier ':' type_expression
-             | identifier   # 接口约束
+# 泛型参数
+generic_params ::= '[' identifier (':' type_expr)? (',' identifier (':' type_expr)?)* ']'
 
-# 函数声明：name: (param: Type, ...) -> Ret = { ... }
-# 参数名在签名中声明，函数体直接使用参数名
-function ::= identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
+# 函数签名
+function_signature ::= identifier generic_params? '(' parameter_list? ')' '->' type_expr
 
-generic_params ::= '[' identifier (',' identifier)* ']'
+parameter_list ::= parameter (',' parameter)*
 
-parameters ::= parameter (',' parameter)*
+parameter ::= identifier ':' type_expr
 
-parameter ::= identifier ':' type
-
-type ::= identifier
-       | '(' type (',' type)* ')' '->' type
-       | '{' field* '}'
-
-field ::= identifier ':' type
-        | identifier
-
+# 表达式
 expression ::= literal
               | identifier
-              | '(' expression (',' expression)* ')'
-              | expression '.' identifier '(' arguments? ')'
+              | identifier '[' expression (',' expression)* ']'  # 构造器调用
+              | '(' expression (',' expression)* ')'              # 元组
+              | expression '.' identifier '(' arguments? ')'    # 方法调用
               | lambda
               | '{' field ':' expression (',' field ':' expression)* '}'
 
-lambda ::= '(' parameters? ')' '=>' block
+arguments ::= expression (',' expression)*
+
+lambda ::= '(' parameter_list? ')' '=>' block
 
 block ::= expression | '{' expression* '}'
 ```
@@ -770,13 +781,12 @@ block ::= expression | '{' expression* '}'
 | 术语 | 定义 |
 |------|------|
 | 声明 | `name: type = value` 形式的赋值语句 |
-| 记录类型 | 包含命名字段 `{ ... }` 的类型 |
+| 记录类型 | 包含命名字段的 `{ ... }` 类型 |
 | 接口 | 字段全为函数类型的记录类型 |
+| 泛型类型 | 定义为 `Name: Type[T] = { ... }` 的类型，接受类型参数 |
 | 类型方法 | `Type.method` 形式的方法，关联到特定类型 |
-| 普通方法 | 不关联类型的独立函数，可直接调用 |
-| 自动绑定 | `pub` 声明的函数自动绑定到同文件定义的类型 |
-| 方法关联 | 将 `Type.method` 函数自动关联为类型的函数字段 |
-| vtable | 虚表，存储方法指针的数据结构 |
+| 泛型函数 | 带 `[...]` 类型参数的函数 |
+| 元类型 | `Type`，语言中唯一的类型层级标记 |
 
 ---
 

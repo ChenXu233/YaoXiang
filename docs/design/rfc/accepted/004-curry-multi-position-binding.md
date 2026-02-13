@@ -7,7 +7,7 @@ title: RFC-004：柯里化方法的多位置联合绑定设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-02-03（与 RFC-010 统一语法对齐：参数名在签名中声明）
+> **最后更新**: 2026-02-12（与 RFC-010 统一语法对齐）
 
 ## 摘要
 
@@ -49,8 +49,8 @@ Point.distance = distance[0]   # this 绑定到第 0 位
 
 ```yaoxiang
 # 现有设计的问题：
-type Point = { x: Float, y: Float }
-type Vector = { x: Float, y: Float, z: Float }
+Point: Type = { x: Float, y: Float }
+Vector: Type = { x: Float, y: Float, z: Float }
 
 distance: (a: Point, b: Point) -> Float = { ... }
 transform: (p: Point, v: Vector) -> Point = { ... }
@@ -113,7 +113,7 @@ Point.create = create_point        # 作为工厂函数，调用：Point.create(
 当函数参数数量 > 绑定位置数量时，自动生成柯里化函数：
 
 ```yaoxiang
-type Point = { x: Float, y: Float }
+Point: Type = { x: Float, y: Float }
 
 # 基础函数：3 个参数
 scale: (p: Point, factor: Float) -> Point = {
@@ -171,8 +171,8 @@ Point.transform = transform[1, 2]      # 绑定到第1,2参数
 ```yaoxiang
 # === 完整示例 ===
 
-type Point = { x: Float, y: Float }
-type Vector = { x: Float, y: Float, z: Float }
+Point: Type = { x: Float, y: Float }
+Vector: Type = { x: Float, y: Float, z: Float }
 
 # 1. 基础距离计算
 distance: (a: Point, b: Point) -> Float = {
@@ -206,7 +206,7 @@ Point.scale = multiply[0, _]
 # 调用：p.scale(2.0) → multiply(p, 2.0)
 
 # 4. 跨类型绑定
-type Circle = { center: Point, radius: Float }
+Circle: Type = { center: Point, radius: Float }
 
 distance: (a: Circle, b: Circle) -> Float = {
     return a.center.distance(b.center) - a.radius - b.radius
@@ -232,7 +232,7 @@ process_coordinates: (coord: (Float, Float)) -> String = {
     }
 }
 
-type Coord = { x: Float, y: Float }
+Coord: Type = { x: Float, y: Float }
 
 # 自动解构绑定：Coord -> (Float, Float)
 Coord.describe = process_coordinates[1]

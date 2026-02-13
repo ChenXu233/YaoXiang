@@ -7,7 +7,7 @@ title: 'RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2025-01-25 (Update: Integrated RFC-011 generic system, type constraints defined)
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 > **Reference**:
 > - [RFC-001: Concurrency Model and Error Handling System](../rfc/001-concurrent-model-error-handling.md)
@@ -115,7 +115,7 @@ When designing YaoXiang runtime architecture, the following key issues need reso
 
 ```yaoxiang
 # Scheduler trait (using YaoXiang generics)
-type Scheduler[T: Task] = {
+Scheduler: Type[T] = {
     schedule: (T) -> Void,
     spawn: (T) -> Void,
     wait: (T) -> Void,
@@ -127,7 +127,7 @@ type Scheduler[T: Task] = {
 
 ```yaoxiang
 # Single-threaded scheduler
-type SingleThreadedScheduler = {
+SingleThreadedScheduler: Type = {
     schedule: (Task) -> Void,
     spawn: (Task) -> Void,
     wait: (Task) -> Void,
@@ -135,7 +135,7 @@ type SingleThreadedScheduler = {
 }
 
 # Work-stealing scheduler
-type WorkStealingScheduler = {
+WorkStealingScheduler: Type = {
     schedule: (Task) -> Void,
     spawn: (Task) -> Void,
     wait: (Task) -> Void,
@@ -150,7 +150,7 @@ type WorkStealingScheduler = {
 
 ```yaoxiang
 # DAG builder (Standard Runtime)
-type DAG = {
+DAG: Type = {
     add_node: (Task) -> NodeId,
     add_edge: (NodeId, NodeId) -> Void,
     topological_sort: () -> List[NodeId],

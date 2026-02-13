@@ -7,7 +7,7 @@ title: 'RFC-012: F-String Template Strings'
 > **Status**: Draft
 > **Author**: Chen Xu
 > **Created Date**: 2025-01-27
-> **Last Updated**: 2025-01-27
+> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
 
 ## Summary
 

@@ -11,7 +11,7 @@ title: RFC 示例：增强模式匹配语法
 
 > **作者**: 晨煦（示例作者）
 > **创建日期**: 2025-01-05
-> **最后更新**: 2025-01-05
+> **最后更新**: 2026-02-12
 
 ## 摘要
 
@@ -25,8 +25,8 @@ title: RFC 示例：增强模式匹配语法
 
 ```yaoxiang
 # 无法解构嵌套结构
-type Person = Person(name: String, address: Address)
-type Address = Address(city: String, zip: Int)
+Person: Type = { name: String, address: Address }
+Address: Type = { city: String, zip: Int }
 match person {
     Person(name: "Alice", address: Address(city: "Beijing", _)) => "Alice from Beijing"  # ❌ 不支持
 }
@@ -57,8 +57,8 @@ match result {
 
 ```yaoxiang
 # 嵌套解构
-type Person = Person(name: String, address: Address)
-type Address = Address(city: String, zip: Int)
+Person: Type = { name: String, address: Address }
+Address: Type = { city: String, zip: Int }
 
 match person {
     Person(name: "Alice", address: Address(city: "Beijing", _)) => "Alice from Beijing"
