@@ -1,0 +1,111 @@
+// 测试 if 语句的完整功能
+// 这个文件测试了新的 if 语句功能
+
+use std.io
+
+// 测试 1：基本 if 语句
+test_basic_if: () -> Void = {
+    x = 10
+    if x > 5 {
+        println("x is greater than 5")
+    } else {
+        println("x is not greater than 5")
+    }
+}
+
+// 测试 2：if-elif-else 语句
+test_if_elif_else: () -> Void = {
+    score = 85
+
+    if score >= 90 {
+        println("Grade: A")
+    } elif score >= 80 {
+        println("Grade: B")
+    } elif score >= 70 {
+        println("Grade: C")
+    } else {
+        println("Grade: F")
+    }
+}
+
+// 测试 3：嵌套 if 语句
+test_nested_if: () -> Void = {
+    age = 25
+    has_license = true
+
+    if age >= 18 {
+        if has_license {
+            println("You can drive")
+        } else {
+            println("You need a license to drive")
+        }
+    } else {
+        println("You are too young to drive")
+    }
+}
+
+// 测试 4：if 语句与 if 表达式混合使用
+test_mixed_if: () -> Void = {
+    temperature = 20
+
+    // if 表达式用于赋值
+    weather = if temperature > 25 {
+        "hot"
+    } elif temperature > 15 {
+        "warm"
+    } else {
+        "cold"
+    }
+
+    println("The weather is: " + weather)
+
+    // if 语句用于控制流程
+    if weather == "hot" {
+        println("Drink plenty of water")
+    } elif weather == "warm" {
+        println("Perfect weather for a walk")
+    } else {
+        println("Stay warm!")
+    }
+}
+
+// 测试 5：没有 else 分支的 if 语句
+test_if_without_else: () -> Void = {
+    count = 0
+
+    // 这个 if 语句可以没有 else 分支
+    if count == 0 {
+        println("Count is zero")
+    }
+
+    // 但如果需要返回值，应该使用 if 表达式
+    result = if count > 0 {
+        count * 2
+    } else {
+        0
+    }
+
+    println("Result: ")
+}
+
+// 主函数测试所有功能
+main: () -> Void = {
+    println("=== Testing if statements ===")
+
+    println("\n--- Test 1: Basic if ---")
+    test_basic_if()
+
+    println("\n--- Test 2: if-elif-else ---")
+    test_if_elif_else()
+
+    println("\n--- Test 3: Nested if ---")
+    test_nested_if()
+
+    println("\n--- Test 4: Mixed if ---")
+    test_mixed_if()
+
+    println("\n--- Test 5: if without else ---")
+    test_if_without_else()
+
+    println("\n=== All tests completed ===")
+}
