@@ -103,7 +103,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/design/rfc/accepted',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -113,17 +113,17 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/design/rfc/review',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
                 },
                 {
-                  text: '提案',
+                  text: '草案',
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/design/rfc/draft',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -133,7 +133,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/design/rfc/rejected',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -153,7 +153,7 @@ export default defineConfig({
               text: '错误码',
               items: generateSidebar({
                 scanStartPath: '/reference/error-code',
-                useTitleFromFile: true,
+                useTitleFromFrontmatter: true,
                 collapsed: true,
                 hyphenToSpace: true,
               })
@@ -220,7 +220,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/en/design/rfc/accepted',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -230,7 +230,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/en/design/rfc/review',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -240,7 +240,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/en/design/rfc/draft',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -250,7 +250,7 @@ export default defineConfig({
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/en/design/rfc/rejected',
-                    useTitleFromFile: true,
+                    useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
@@ -269,7 +269,7 @@ export default defineConfig({
               text: 'Error Codes',
               items: generateSidebar({
                 scanStartPath: '/en/reference/error-code',
-                useTitleFromFile: true,
+                useTitleFromFrontmatter: true,
                 collapsed: true,
                 hyphenToSpace: true,
               }),
