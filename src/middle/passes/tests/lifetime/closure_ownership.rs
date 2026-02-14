@@ -5,6 +5,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::OwnershipAnalyzer;
+use crate::util::span::Span;
 
 /// 创建闭包测试函数
 fn create_closure_function(
@@ -60,6 +61,7 @@ fn test_closure_capture_ownership() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 闭包捕获局部变量
             Instruction::Ret(Some(Operand::Local(0))),
@@ -82,6 +84,7 @@ fn test_closure_capture_move() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 移动捕获的变量
             Instruction::Move {
@@ -108,6 +111,7 @@ fn test_closure_capture_borrow_immutable() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 不可变借用捕获
             Instruction::Ret(Some(Operand::Local(0))),
@@ -133,6 +137,7 @@ fn test_closure_capture_borrow_mutable() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 可变借用捕获
             Instruction::Ret(Some(Operand::Local(0))),
@@ -155,6 +160,7 @@ fn test_closure_capture_multiple_vars() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 捕获多个变量
             Instruction::Ret(Some(Operand::Local(0))),
@@ -177,6 +183,7 @@ fn test_closure_capture_nested() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 嵌套闭包捕获
             Instruction::Ret(Some(Operand::Local(0))),
@@ -201,6 +208,7 @@ fn test_closure_capture_env_ownership() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 闭包环境所有权
             Instruction::Ret(Some(Operand::Local(0))),
@@ -290,6 +298,7 @@ fn test_fn_mut_trait_ownership() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Arg(0),
+                span: Span::dummy(),
             },
             // FnMut 闭包修改环境
             Instruction::Ret(Some(Operand::Local(0))),
@@ -358,6 +367,7 @@ fn test_fn_mut_to_fn_once_conversion() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             Instruction::Ret(Some(Operand::Local(0))),
         ],
@@ -381,6 +391,7 @@ fn test_closure_move_semantics() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 闭包移动语义
             Instruction::Move {
@@ -413,6 +424,7 @@ fn test_closure_move_captured_var() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 移动捕获的变量
                 Instruction::Move {
@@ -442,6 +454,7 @@ fn test_closure_partial_move() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 部分移动
             Instruction::Move {
@@ -468,6 +481,7 @@ fn test_closure_move_after_use() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 使用后移动（应该检测错误）
             Instruction::Ret(Some(Operand::Local(0))),
@@ -512,6 +526,7 @@ fn test_closure_lifetime_extension_captured() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 延长捕获变量的生命周期
             Instruction::Ret(Some(Operand::Local(0))),
@@ -669,6 +684,7 @@ fn test_closure_recursive() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 递归闭包
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -728,6 +744,7 @@ fn test_closure_composition() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 闭包组合
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -753,6 +770,7 @@ fn test_closure_with_drop() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                span: Span::dummy(),
             },
             // 闭包销毁时清理
             Instruction::Ret(Some(Operand::Const(

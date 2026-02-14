@@ -53,6 +53,10 @@ pub struct AstToIrGenerator {
     type_result: Option<Box<TypeCheckResult>>,
     /// 下一个临时寄存器编号
     next_temp: usize,
+    /// 当前函数中可变局部变量的索引集合
+    current_mut_locals: std::collections::HashSet<usize>,
+    /// 模块级别的可变局部变量映射 (function_name -> set of mutable local indices)
+    module_mut_locals: HashMap<String, std::collections::HashSet<usize>>,
 }
 
 impl Default for AstToIrGenerator {
@@ -69,6 +73,8 @@ impl AstToIrGenerator {
             symbols: vec![HashMap::new()], // 全局作用域
             type_result: None,
             next_temp: 0,
+            current_mut_locals: std::collections::HashSet::new(),
+            module_mut_locals: HashMap::new(),
         }
     }
 
@@ -79,6 +85,8 @@ impl AstToIrGenerator {
             symbols: vec![HashMap::new()], // 全局作用域
             type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
+            current_mut_locals: std::collections::HashSet::new(),
+            module_mut_locals: HashMap::new(),
         }
     }
 
@@ -249,6 +257,7 @@ impl AstToIrGenerator {
             types: Vec::new(),
             globals: Vec::new(),
             functions,
+            mut_locals: std::mem::take(&mut self.module_mut_locals),
         })
     }
 
@@ -318,6 +327,9 @@ impl AstToIrGenerator {
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
+        // 重置当前函数的可变局部变量追踪
+        self.current_mut_locals.clear();
+
         // 命名空间机制：方法函数名就是方法名，无复杂前缀
         // 例如：Point.get_x 生成函数名 "get_x"
         // 调用时：p.get_x() -> get_x(p)
@@ -377,7 +389,7 @@ impl AstToIrGenerator {
 
         // 构建函数 IR
         let func_ir = FunctionIR {
-            name: func_name,
+            name: func_name.clone(),
             params: param_types.clone(),
             return_type,
             is_async: false,
@@ -389,6 +401,12 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
+
+        // 保存当前函数的可变局部变量信息到模块级别映射
+        if !self.current_mut_locals.is_empty() {
+            self.module_mut_locals
+                .insert(func_name.clone(), self.current_mut_locals.clone());
+        }
 
         Ok(Some(func_ir))
     }
@@ -404,6 +422,8 @@ impl AstToIrGenerator {
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
+        // 重置当前函数的可变局部变量追踪
+        self.current_mut_locals.clear();
         // 阶段3修复：改进返回类型解析，更好地与类型检查集成
         let return_type = match type_annotation {
             Some(ast::Type::Fn { return_type, .. }) => (**return_type).clone().into(),
@@ -427,6 +447,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Store {
                 dst: Operand::Local(i),
                 src: Operand::Local(i),
+                span: Span::dummy(),
             });
             self.register_local(&param.name, i);
         }
@@ -512,6 +533,12 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
+
+        // 保存当前函数的可变局部变量信息到模块级别映射
+        if !self.current_mut_locals.is_empty() {
+            self.module_mut_locals
+                .insert(name.to_string(), self.current_mut_locals.clone());
+        }
 
         Ok(Some(func_ir))
     }
@@ -642,7 +669,7 @@ impl AstToIrGenerator {
                 name,
                 type_annotation: _,
                 initializer,
-                is_mut: _,
+                is_mut,
             } => {
                 // 检查变量是否已经存在于当前或外层作用域
                 // 如果存在，这是赋值操作而不是新声明
@@ -653,6 +680,10 @@ impl AstToIrGenerator {
                     // 新变量声明，分配新索引
                     let idx = self.next_temp_reg();
                     self.register_local(name, idx);
+                    // 记录可变性信息
+                    if *is_mut {
+                        self.current_mut_locals.insert(idx);
+                    }
                     idx
                 };
 
@@ -669,6 +700,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Store {
                     dst: Operand::Local(var_idx),
                     src: Operand::Local(var_idx),
+                    span: stmt.span,
                 });
             }
             ast::StmtKind::Fn {
@@ -709,6 +741,7 @@ impl AstToIrGenerator {
                     iterable,
                     body,
                     None, // No result needed for statement
+                    stmt.span,
                     instructions,
                     constants,
                 )?;
@@ -1006,6 +1039,7 @@ impl AstToIrGenerator {
         iterable: &ast::Expr,
         body: &ast::Block,
         result_reg: Option<usize>,
+        for_span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), IrGenError> {
@@ -1033,6 +1067,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Store {
                 dst: Operand::Local(var_reg),
                 src: Operand::Local(var_reg),
+                span: for_span,
             });
 
             // Loop start label
@@ -1069,6 +1104,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Store {
                 dst: Operand::Local(var_reg),
                 src: Operand::Local(var_reg),
+                span: for_span,
             });
 
             // 7. Jump back
@@ -1190,7 +1226,7 @@ impl AstToIrGenerator {
                 op,
                 left,
                 right,
-                span: _,
+                span,
             } => {
                 tlog!(debug, MSG::DebugGeneratingIRBinOp, &format!("{:?}", op));
                 // 二元运算
@@ -1209,6 +1245,7 @@ impl AstToIrGenerator {
                             instructions.push(Instruction::Store {
                                 dst: Operand::Local(local_idx),
                                 src: Operand::Local(val_reg),
+                                span: *span,
                             });
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
@@ -1404,13 +1441,14 @@ impl AstToIrGenerator {
                 iterable,
                 body,
                 label: _,
-                span: _,
+                span: for_span,
             } => {
                 self.generate_for_loop_ir(
                     var,
                     iterable,
                     body,
                     Some(result_reg),
+                    *for_span,
                     instructions,
                     constants,
                 )?;

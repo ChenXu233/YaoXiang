@@ -5,6 +5,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::OwnershipAnalyzer;
+use crate::util::span::Span;
 
 /// 创建泛型类型测试工具
 fn create_generic_function(
@@ -62,6 +63,7 @@ fn test_generic_struct_ownership() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Local(0))),
             ],
@@ -91,6 +93,7 @@ fn test_generic_struct_multiple_params() {
             Instruction::Store {
                 dst: Operand::Local(0),
                 src: Operand::Arg(0),
+                span: Span::dummy(),
             },
             Instruction::Ret(Some(Operand::Local(0))),
         ],
@@ -139,6 +142,7 @@ fn test_generic_struct_move() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 移动泛型结构体
                 Instruction::Move {
@@ -174,6 +178,7 @@ fn test_generic_struct_borrow() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 借用泛型结构体
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -205,6 +210,7 @@ fn test_generic_struct_arc() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // Arc 引用计数
                 Instruction::Ret(Some(Operand::Local(0))),

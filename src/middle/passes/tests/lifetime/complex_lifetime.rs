@@ -5,6 +5,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::OwnershipAnalyzer;
+use crate::util::span::Span;
 
 /// 创建嵌套作用域的测试函数
 fn create_nested_scope_function(instructions: Vec<Instruction>) -> FunctionIR {
@@ -88,16 +89,19 @@ fn test_nested_scope_lifetime() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+            span: Span::dummy(),
         },
         // 内层作用域开始
         Instruction::Store {
             dst: Operand::Local(1),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+            span: Span::dummy(),
         },
         // 内层作用域结束，Local(1) 应该被释放
         Instruction::Store {
             dst: Operand::Local(2),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(3)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(0))),
     ]);
@@ -117,6 +121,7 @@ fn test_nested_scope_with_move() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+            span: Span::dummy(),
         },
         // 移动 Local(0) 到 Local(1)
         Instruction::Move {
@@ -141,14 +146,17 @@ fn test_deeply_nested_lifetime() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Local(1),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Local(2),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(3)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(2))),
     ]);
@@ -169,6 +177,7 @@ fn test_conditional_lifetime_both_branches() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(0))),
     ];
@@ -177,6 +186,7 @@ fn test_conditional_lifetime_both_branches() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(24)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(0))),
     ];
@@ -204,6 +214,7 @@ fn test_conditional_lifetime_one_branch_move() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(0)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(0))),
     ];
@@ -225,6 +236,7 @@ fn test_conditional_lifetime_early_return() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(0)),
+            span: Span::dummy(),
         },
         Instruction::Ret(Some(Operand::Local(0))),
     ];
@@ -242,11 +254,13 @@ fn test_conditional_lifetime_merge_point() {
     let then_instructions = vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+        span: Span::dummy(),
     }];
 
     let else_instructions = vec![Instruction::Store {
         dst: Operand::Local(1),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+        span: Span::dummy(),
     }];
 
     let func = create_conditional_function(then_instructions, else_instructions);
@@ -266,6 +280,7 @@ fn test_loop_lifetime_iteration() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(0)),
+            span: Span::dummy(),
         },
         // 循环体
         Instruction::Add {
@@ -290,6 +305,7 @@ fn test_loop_lifetime_invariant() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Arg(0),
+            span: Span::dummy(),
         },
         // 循环不变量：Local(0) 在整个循环中保持有效
         Instruction::Ret(Some(Operand::Local(0))),
@@ -309,6 +325,7 @@ fn test_loop_lifetime_borrow_invariant() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Arg(0),
+            span: Span::dummy(),
         },
         // 借用检查：在循环中保持借用有效
         Instruction::Ret(Some(Operand::Local(0))),
@@ -338,6 +355,7 @@ fn test_lifetime_escape_to_global() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Local(0))),
             ],
@@ -368,6 +386,7 @@ fn test_lifetime_escape_to_heap() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Local(0))),
             ],
@@ -398,6 +417,7 @@ fn test_lifetime_no_escape() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 局部变量，不返回
                 Instruction::Ret(None),
@@ -431,6 +451,7 @@ fn test_borrow_lifetime_simple() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 借用 Local(0)
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -462,10 +483,12 @@ fn test_borrow_lifetime_nested() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 Instruction::Store {
                     dst: Operand::Local(1),
                     src: Operand::Local(0),
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Local(1))),
             ],
@@ -496,6 +519,7 @@ fn test_borrow_lifetime_conflict() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 可变借用与不可变借用冲突的测试
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -529,6 +553,7 @@ fn test_lifetime_with_arc() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // Arc 引用计数
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -560,6 +585,7 @@ fn test_lifetime_with_rc() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // Rc 引用计数
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -591,6 +617,7 @@ fn test_lifetime_early_drop() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 早期释放
                 Instruction::Ret(Some(Operand::Const(

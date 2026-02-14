@@ -85,7 +85,7 @@ impl IntraTaskCycleTracker {
                         self.value_defs.insert(dst.clone(), src.clone());
                     }
                     // Store：追踪赋值
-                    Instruction::Store { dst, src } => {
+                    Instruction::Store { dst, src, .. } => {
                         self.value_defs.insert(dst.clone(), src.clone());
                     }
                     // StoreField：追踪字段赋值（可能形成循环）
@@ -240,6 +240,7 @@ mod tests {
     use super::*;
     use crate::middle::core::ir::BasicBlock;
     use crate::frontend::typecheck::MonoType;
+    use crate::util::span::Span;
 
     /// 创建测试用的 FunctionIR
     fn create_test_function(instructions: Vec<Instruction>) -> FunctionIR {
@@ -292,6 +293,7 @@ mod tests {
                 field: 0,
                 type_name: None,
                 field_name: None,
+                span: Span::dummy(),
             },
         ]);
 
@@ -354,6 +356,7 @@ mod tests {
                 field: 0,
                 type_name: None,
                 field_name: None,
+                span: Span::dummy(),
             },
             // 循环 2: temp_1 -> local_1 -> temp_1
             Instruction::ArcNew {
@@ -366,6 +369,7 @@ mod tests {
                 field: 0,
                 type_name: None,
                 field_name: None,
+                span: Span::dummy(),
             },
         ]);
 

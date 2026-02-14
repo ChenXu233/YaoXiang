@@ -95,7 +95,7 @@ impl MoveChecker {
                 self.check_call(args, dst.as_ref(), func_name.as_deref());
             }
             Instruction::Ret(Some(value)) => self.check_ret(value),
-            Instruction::Store { dst, src } => self.check_store(dst, src),
+            Instruction::Store { dst, src, .. } => self.check_store(dst, src),
             Instruction::LoadIndex { src, .. }
             | Instruction::LoadField { src, .. }
             | Instruction::Neg { src, .. }
