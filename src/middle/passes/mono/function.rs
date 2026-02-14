@@ -801,6 +801,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             types: original_module.types.clone(),
             globals: original_module.globals.clone(),
             functions: output_funcs,
+            mut_locals: original_module.mut_locals.clone(),
         }
     }
 }

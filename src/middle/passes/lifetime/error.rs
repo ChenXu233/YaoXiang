@@ -3,6 +3,7 @@
 //! 定义所有权的语义错误，包括 UseAfterMove、UseAfterDrop 等。
 
 use crate::middle::core::ir::{FunctionIR, Operand};
+use crate::util::span::Span;
 use std::collections::HashMap;
 
 /// 所有权状态（Move/Drop 检查器共用）
@@ -104,8 +105,8 @@ pub enum OwnershipError {
     ImmutableAssign {
         /// 值标识
         value: String,
-        /// 发生位置
-        location: (usize, usize),
+        /// 源文件位置
+        span: Option<Span>,
     },
     /// 不可变变异：调用不可变对象上的变异方法
     ImmutableMutation {
@@ -253,11 +254,11 @@ impl std::fmt::Display for OwnershipError {
             OwnershipError::DoubleDrop { value } => {
                 write!(f, "DoubleDrop: value '{}' dropped twice", value)
             }
-            OwnershipError::ImmutableAssign { value, location } => {
+            OwnershipError::ImmutableAssign { value, span } => {
                 write!(
                     f,
                     "ImmutableAssign: cannot assign to immutable value '{}' at {:?}",
-                    value, location
+                    value, span
                 )
             }
             OwnershipError::ImmutableMutation {

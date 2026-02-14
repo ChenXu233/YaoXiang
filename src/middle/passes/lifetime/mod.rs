@@ -271,15 +271,19 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::HeapAlloc { dst, .. } => vec![dst.clone()],
 
         // 存储指令：dst = src
-        Instruction::Store { dst, src } => vec![dst.clone(), src.clone()],
+        Instruction::Store { dst, src, .. } => vec![dst.clone(), src.clone()],
         Instruction::StoreField { dst, src, .. } => vec![dst.clone(), src.clone()],
         Instruction::Drop(src) | Instruction::ArcDrop(src) | Instruction::CloseUpvalue(src) => {
             vec![src.clone()]
         }
 
         // 索引访问：dst[index] = src 或 dst = src[index]
-        Instruction::LoadIndex { dst, src, index }
-        | Instruction::StoreIndex { dst, index, src } => {
+        Instruction::LoadIndex {
+            dst, src, index, ..
+        }
+        | Instruction::StoreIndex {
+            dst, index, src, ..
+        } => {
             vec![dst.clone(), src.clone(), index.clone()]
         }
 
@@ -558,11 +562,13 @@ impl OwnershipAnalyzer {
             }
 
             // 存储：src 和 dst 都活跃
-            Instruction::Store { src, dst } => {
+            Instruction::Store { src, dst, .. } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
             }
-            Instruction::StoreIndex { src, dst, index } => {
+            Instruction::StoreIndex {
+                src, dst, index, ..
+            } => {
                 block_live.insert(src.clone());
                 block_live.insert(dst.clone());
                 block_live.insert(index.clone());

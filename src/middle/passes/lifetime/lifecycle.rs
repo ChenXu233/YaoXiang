@@ -250,7 +250,7 @@ impl LifecycleTracker {
             }
 
             // Store: dst 被创建，src 被消费
-            Instruction::Store { dst, src } => {
+            Instruction::Store { dst, src, .. } => {
                 self.record_creation(dst, location);
                 self.record_consume(src, ConsumeType::Assign, location);
             }
@@ -729,6 +729,7 @@ mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
     use crate::frontend::typecheck::MonoType;
+    use crate::util::span::Span;
 
     fn make_simple_function() -> FunctionIR {
         FunctionIR {
@@ -848,6 +849,7 @@ mod tests {
                     Instruction::Store {
                         dst: Operand::Local(0),
                         src: Operand::Arg(0),
+                        span: Span::dummy(),
                     },
                 ],
                 successors: vec![],
