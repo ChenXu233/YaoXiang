@@ -4,7 +4,7 @@ title: RFC-014: Package Manager Design
 
 # RFC-014: Package Manager Design
 
-> **Status**: Draft
+> **Status**: Accepted
 > **Author**: Chen Xu
 > **Created Date**: 2026-02-12
 > **Last Updated**: 2026-02-14
