@@ -30,11 +30,11 @@ title: RFC Index
 
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
-| RFC-002 | [Cross-platform I/O with libuv Integration](002-cross-platform-io-libuv.md) | ChenXu | 2025-01-05 | Draft |
-| RFC-005 | [Automated CVE Security Scanning System](005-automated-cve-scanning.md) | ChenXu | 2025-01-05 | Draft |
-| RFC-012 | [F-String Template Strings](012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Draft |
-| RFC-014 | [Package Manager System Design](draft/014-package-manager.md) | ChenXu | 2026-02-12 | Draft |
-| RFC-015 | [yaoxiang.toml Fields Research](draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-002 | [Cross-platform I/O with libuv Integration](./draft/002-cross-platform-io-libuv.md) | ChenXu | 2025-01-05 | Draft |
+| RFC-005 | [Automated CVE Security Scanning System](./draft/005-automated-cve-scanning.md) | ChenXu | 2025-01-05 | Draft |
+| RFC-012 | [F-String Template Strings](./draft/012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Draft |
+| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | ChenXu | 2026-02-12 | Draft |
 
 ---
 
@@ -42,7 +42,7 @@ title: RFC Index
 
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
-| RFC-003 | [Version Planning and Implementation Suggestions](003-version-planning.md) | ChenXu | 2025-01-05 | Under Review |
+| RFC-003 | [Version Planning and Implementation Suggestions](./review/003-version-planning.md) | ChenXu | 2025-01-05 | Under Review |
 
 ---
 
@@ -50,15 +50,15 @@ title: RFC Index
 
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
-| RFC-001 | [Concurrency Model and Error Handling System](001-concurrent-model-error-handling.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-004 | [Multi-Position Joint Binding Design for Curried Methods](004-curry-multi-position-binding.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-006 | [Documentation Site Construction and Optimization Plan](006-documentation-site-optimization.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-007 | [Function Definition Syntax Unification Scheme](007-function-syntax-unification.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-008 | [Runtime Concurrency Model and Scheduler Decoupling Design](008-runtime-concurrency-model.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-009 | [Ownership Model v7](009-ownership-model.md) | ChenXu | 2025-01-05 | Accepted |
-| RFC-011 | [Generic Type System Design - Zero-Cost Abstraction and Macro Replacement](011-generic-type-system.md) | ChenXu | 2025-01-25 | Accepted |
-| RFC-013 | [Error Code Specification Design](012-error-code-specification.md) | ChenXu | 2025-01-30 | Accepted |
-
+| RFC-001 | [Concurrency Model and Error Handling System](./accepted/001-concurrent-model-error-handling.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-004 | [Multi-Position Joint Binding Design for Curried Methods](./accepted/004-curry-multi-position-binding.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-006 | [Documentation Site Construction and Optimization Plan](./accepted/006-documentation-site-optimization.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-007 | [Function Definition Syntax Unification Scheme](./accepted/007-function-syntax-unification.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-008 | [Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-009 | [Ownership Model v7](./accepted/009-ownership-model.md) | ChenXu | 2025-01-05 | Accepted |
+| RFC-011 | [Generic Type System Design - Zero-Cost Abstraction and Macro Replacement](./accepted/011-generic-type-system.md) | ChenXu | 2025-01-25 | Accepted |
+| RFC-013 | [Error Code Specification Design](./accepted/012-error-code-specification.md) | ChenXu | 2025-01-30 | Accepted |
+| RFC-014 | [Package Manager System Design](./accepted/014-package-manager.md) | ChenXu | 2026-02-12 | Accepted |
 ---
 
 ## Rejected RFCs
