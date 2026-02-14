@@ -5,7 +5,7 @@ import { useDark, useToggle } from '@vueuse/core'
 import { h, nextTick, watch } from 'vue'
 import { useData } from 'vitepress'
 import { createMermaidRenderer } from 'vitepress-mermaid-renderer'
-import Mermaid from './component/Mermaid.vue'
+import VersionSwitcher from './components/VersionSwitcher.vue'
 import Home from './layout/Home.vue'
 import Download from './layout/Download.vue'
 import Community from './layout/Community.vue'
@@ -28,8 +28,8 @@ export default {
     // 注册 medium-zoom 指令
     app.directive('zoom', zoomDirective)
 
-    // 注册 Mermaid 组件
-    app.component('Mermaid', Mermaid)
+    // 注册 VersionSwitcher 组件
+    app.component('VersionSwitcher', VersionSwitcher)
   },
 
   Layout() {

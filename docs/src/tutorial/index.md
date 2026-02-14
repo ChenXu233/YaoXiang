@@ -46,13 +46,13 @@ description: 系统学习 YaoXiang 核心概念
 
 如果你是有编程基础的用户，我们建议你从「有基础入门」开始。
 
-[🚀 有基础入门 →](/tutorial/getting-started)
+[🚀 有基础入门 →](./getting-started)
 
 ### 没有编程基础的用户
 
 如果你是没有编程基础的用户，我们建议你从「零基础入门」开始。
 
-[💡 零基础入门 →](/tutorial/basics/01-hello-program.md)
+[💡 零基础入门 →](./basics/01-hello-program.md)
 
 > **💡 提示**：没有编程基础反而是优势——没有其他语言的包袱，能最直接地理解爻象的设计哲学。
 
@@ -68,13 +68,13 @@ description: 系统学习 YaoXiang 核心概念
 
 ## 下一步
 
-[🚀 快速开始 →](/tutorial/getting-started)
+[🚀 快速开始 →](./getting-started)
 
 或者，从核心概念开始：
 
-- [什么是「一切皆类型」？](/tutorial/YaoXiang-book#一语言概述)
-- [为什么不需要写 await？](/tutorial/YaoXiang-book#五异步编程与并发)
-- [所有权是什么？](/tutorial/YaoXiang-book#四内存管理)
+- [什么是「一切皆类型」？](./YaoXiang-book#一语言概述)
+- [为什么不需要写 await？](./YaoXiang-book#五异步编程与并发)
+- [所有权是什么？](./YaoXiang-book#四内存管理)
 
 ---
 
