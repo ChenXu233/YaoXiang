@@ -1,92 +1,61 @@
 ---
-title: 'RFC-014: Package Manager Design'
+title: RFC-014: Package Manager Design
 ---
 
 # RFC-014: Package Manager Design
 
 > **Status**: Draft
-> **Author**: ChenXu
+> **Author**: Chen Xu
 > **Created Date**: 2026-02-12
-> **Last Updated**: 2026-02-12
+> **Last Updated**: 2026-02-14
 
 ## Summary
 
-Design a package management system for YaoXiang language, supporting semantic versioning (SemVer), local modules and GitHub dependencies (downloaded to vendor/ directory), unified `use <name>` import syntax, `yaoxiang.toml` configuration file and `yaoxiang.lock` lockfile.
+Design the package management system for YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration files, and `yaoxiang.lock` lock files.
 
 ## Motivation
 
 ### Why this feature/change is needed?
 
-In modern programming language ecosystems, package management is a core part of infrastructure. YaoXiang language currently has the following problems:
+Package management is fundamental infrastructure for modern programming language ecosystems. YaoXiang language currently lacks:
+- Dependency declaration mechanism
+- Version management capability
+- Standard distribution channel
 
-1. **Missing dependency management**: Users cannot declare project dependencies, can only manually copy code
-2. **Version chaos**: Cannot manage dependency versions, prone to compatibility issues
-3. **Difficult ecosystem building**: Third-party libraries have no standard release and distribution mechanism
-
-### Current Problems
+### Current problems
 
 ```
 my-project/
 ├── src/
-│   └── main.yx          # Code needs functions from other modules
-├── lib/                 # Modules copied manually
+│   └── main.yx          # Code depends on other modules
+├── lib/                  # Manually copied modules
 │   ├── foo.yx
 │   └── bar.yx
-└── ???                 # No standard dependency declaration method
-```
-
-Expected user workflow:
-```bash
-# Declare dependencies
-[dependencies]
-foo = "1.2.3"
-
-# One-click install
-yaoxiang add foo
-
-# Use directly
-use foo;    # No need to care about source
+└── ???                   # No standard dependency management
 ```
 
 ## Proposal
 
 ### Core Design
 
-Use layered architecture, abstract "dependency source" as `Source` trait:
-
+**Layered Architecture**:
 ```
-┌─────────────────────────────────────────┐
-│           Resolution Engine              │
-│    (Dependency Resolution, Version      │
-│     Constraint Matching, Conflict Detection)
-└─────────────┬───────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│              Source Trait                │
-├─────────────┬─────────────┬───────────────┤
-│   Local     │    Git      │   Registry   │
-│   Source    │   Source   │    (Future)  │
-│  (Local)   │  (GitHub)   │ (crates.io)  │
-└─────────────┴─────────────┴───────────────┘
+┌─────────────────────────────────────────────┐
+│           Resolution Engine                  │ ← Dependency resolution
+└─────────────────┬───────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────┐
+│              Source Trait                   │ ← Extensible sources
+├─────────────┬─────────────┬─────────────────┤
+│   Local     │    Git      │   Registry      │
+│             │  (GitHub)   │   (Reserved)   │
+└─────────────┴─────────────┴─────────────────┘
 ```
 
-### Project Structure
+**Extension mechanism**: Adding a new Source type only requires implementing the trait, without modifying the resolution engine.
 
-```
-my-project/
-├── yaoxiang.toml        # Package configuration
-├── yaoxiang.lock        # Lockfile (auto-generated)
-├── src/                 # Source code
-│   └── main.yx
-└── vendor/              # Downloaded dependencies
-    ├── foo-1.2.3/
-    │   ├── yaoxiang.toml
-    │   └── src/
-    └── bar-0.5.0/
-```
-
-### User Workflow
+### Example
 
 ```bash
 # 1. Create project
@@ -94,59 +63,55 @@ yaoxiang init my-project
 
 # 2. Edit yaoxiang.toml to add dependencies
 [dependencies]
-foo = { git = "https://github.com/user/foo", version = "1.2.3" }
+foo = "^1.0.0"
+bar = { git = "https://github.com/user/bar", version = "0.5.0" }
 
-# 3. Download dependencies
-yaoxiang add foo   # or yaoxiang install
+# 3. Install dependencies
+yaoxiang add foo
 
-# 4. Use in code (unified as local path)
+# 4. Use in code
 use foo;
-use foo.bar;
+use bar.baz;
 ```
 
-### yaoxiang.toml Configuration Specification
+### Project Structure
 
+```
+my-project/
+├── yaoxiang.toml        # Package configuration
+├── yaoxiang.lock        # Lock file (auto-generated)
+├── src/
+│   └── main.yx
+└── .yaoxiang/
+    └── vendor/              # Local dependencies
+        ├── foo-1.2.3/
+        └── bar-0.5.0/
+```
+
+## Detailed Design
+
+### Configuration file format
+
+**yaoxiang.toml**:
 ```toml
 [package]
 name = "my-package"
 version = "0.1.0"
 description = "A short description"
-authors = ["Author Name <email@example.com>"]
 
 [dependencies]
-# Semantic version constraints
 foo = "1.2.3"           # Exact version
-bar = "^1.0.0"          # Compatible version (>=1.0.0, <2.0.0)
-baz = "~1.2.0"          # Patch version (>=1.2.0, <1.3.0)
-
-# GitHub dependency
-qux = { git = "https://github.com/user/qux", version = "0.5.0" }
-
-# Local path dependency
+bar = "^1.0.0"          # Compatible version
+baz = "~1.2.0"          # Patch version
+qux = { git = "...", version = "0.5.0" }
 local_pkg = { path = "./local-module" }
 
 [dev-dependencies]
 test-utils = "0.1.0"
-
-[build]
-script = "build.yx"
 ```
 
-### Version Constraint Syntax
-
-| Constraint | Meaning | Example |
-|------------|---------|---------|
-| `1.2.3` | Exact version | `1.2.3` |
-| `^1.2.3` | Compatible version | `>=1.2.3, <2.0.0` |
-| `~1.2.3` | Patch version | `>=1.2.3, <1.3.0` |
-| `>=1.0` | Minimum version | `>=1.0.0` |
-| `1.x` | Major wildcard | `>=1.0.0, <2.0.0` |
-| `*` | Any version | Any |
-
-### yaoxiang.lock Format
-
+**yaoxiang.lock**:
 ```toml
-# This file is auto-generated, please do not manually modify
 version = 1
 
 [[package]]
@@ -155,149 +120,53 @@ version = "1.2.3"
 source = "git"
 resolved = "https://github.com/user/foo?tag=v1.2.3"
 integrity = "sha256-xxxx"
-
-[[package]]
-name = "bar"
-version = "0.5.0"
-source = "local"
-resolved = "./vendor/bar-0.5.0"
-
-[[package]]
-name = "my-package"
-version = "0.1.0"
-dependencies = [
-    "foo 1.2.3",
-    "bar 0.5.0",
-]
 ```
 
-### Module Resolution Order
+### Module resolution order
 
 ```
 use foo.bar.baz;
 
-Search order:
-1. ./vendor/*/src/foo/bar/baz.yx  (matching version in vendor/)
-2. ./src/foo/bar/baz.yx           (local module)
-3. $YXPATH/foo/bar/baz.yx         (global path, future)
-4. $YXLIB/std/foo/bar/baz.yx      (standard library)
+Lookup order:
+1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
+2. ./src/foo/bar/baz.yx           (Local modules)
+3. $YXPATH/foo/bar/baz.yx         (Global path, reserved)
+4. $YXLIB/std/foo/bar/baz.yx      (Standard library)
 ```
 
-## Detailed Design
-
-### Core Data Structures
+### Core data structures
 
 ```rust
-// src/package/manifest.rs
-
-/// Package manifest (parsed from yaoxiang.toml)
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Manifest {
-    pub package: PackageConfig,
-    pub dependencies: HashMap<String, DependencySpec>,
-    pub dev_dependencies: HashMap<String, DependencySpec>,
-    pub build: Option<BuildConfig>,
+// Dependency source (extensible)
+enum Source {
+    Local { path: PathBuf },
+    Git { url: Url, version: Option<VersionConstraint> },
+    Registry { registry: String, namespace: Option<String> }, // Reserved
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PackageConfig {
-    pub name: String,
-    pub version: Version,
-    pub description: Option<String>,
-    pub authors: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum DependencySpec {
-    /// Simple version constraint: "1.2.3"
+// Dependency declaration
+enum DependencySpec {
     Version(VersionConstraint),
-    /// Git dependency
-    Git {
-        url: Url,
-        version: Option<VersionConstraint>,
-        tag: Option<String>,
-        branch: Option<String>,
-        rev: Option<String>,
-    },
-    /// Local path
+    Git { url: Url, version: Option<VersionConstraint> },
     Local { path: PathBuf },
 }
-```
 
-```rust
-// src/package/version.rs
-
-/// Semantic version
-#[derive(Debug, Clone, PartialOrd, Ord)]
-pub struct Version {
-    pub major: u64,
-    pub minor: u64,
-    pub patch: u64,
-    pub pre: Option<String>,
-    pub build: Option<String>,
-}
-
-/// Version constraint expression
-#[derive(Debug, Clone)]
-pub enum VersionConstraint {
-    Exact(Version),
-    Compatible(Version),  // ^1.2.3
-    Patch(Version),       // ~1.2.3
-    Range { min: Option<Version>, max: Option<Version> },
-    Wildcard(MatchLevel),
-}
-
-enum MatchLevel { Major, Minor }
-```
-
-```rust
-// src/package/resolution.rs
-
-/// Resolved dependency
-#[derive(Debug, Clone)]
-pub struct ResolvedDependency {
-    pub name: String,
-    pub version: Version,
-    pub source: SourceInfo,
-    pub integrity: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum SourceInfo {
-    Local { path: PathBuf },
-    Git { url: Url, tag: Option<String>, commit: Option<String> },
-    Registry { registry: String, namespace: Option<String> },
-}
-
-/// Package identifier: name + version (ensures same package with different versions can coexist)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PackageId {
-    pub name: String,
-    pub version: Version,
+// Resolved dependency
+struct ResolvedDependency {
+    name: String,
+    version: Version,
+    source: Source,
+    integrity: Option<String>,
 }
 ```
 
-### Component Architecture
+### CLI command design
 
-```
-src/package/
-├── mod.rs              # Entry, exports public API
-├── manifest.rs         # yaoxiang.toml parsing
-├── version.rs          # SemVer parsing and constraint
-├── resolution.rs       # Dependency resolution algorithm
-├── lock.rs             # yaoxiang.lock read/write
-├── fetch.rs            # Download dependencies to vendor/
-├── storage.rs          # Local cache management
-└── id.rs               # PackageId definition
-```
+Adopt a unified approach, integrating compiler, package manager, and REPL into a single CLI tool:
 
-### CLI Command Design
+#### Single-file mode vs Project mode
 
-Use unified approach, integrate compiler, package manager, and REPL into a single CLI tool:
-
-#### Single File Mode vs Project Mode
-
-| Command | Single File | Project Mode | Description |
+| Command | Single-file | Project Mode | Description |
 |---------|-------------|--------------|-------------|
 | `yaoxiang run <file>` | ✅ | ✅ | Run file/project entry |
 | `yaoxiang build` | ❌ | ✅ | Build project |
@@ -309,7 +178,7 @@ Use unified approach, integrate compiler, package manager, and REPL into a singl
 | `yaoxiang check` | ✅ | ✅ | Type check |
 | `yaoxiang` (no args) | ✅ | ✅ | Enter REPL directly |
 
-#### Command Details
+#### Command details
 
 | Command | Function | Example |
 |---------|----------|---------|
@@ -331,118 +200,81 @@ Use unified approach, integrate compiler, package manager, and REPL into a singl
 | `yaoxiang clean` | Clean build artifacts | `yaoxiang clean` |
 | `yaoxiang task <name>` | Run custom task | `yaoxiang task lint` |
 
-#### Command Constraint Notes
+#### Command constraint notes
 
 ```bash
-# Single file mode: yaoxiang.toml not needed
+# Single-file mode: yaoxiang.toml not required
 yaoxiang run hello.yx   # ✅ Works normally
 yaoxiang add foo        # ❌ Error: not a project directory
 
-# Project mode: yaoxiang.toml needed
+# Project mode: yaoxiang.toml required
 cd my-project
 yaoxiang run main.yx    # ✅ Run entry file
 yaoxiang build          # ✅ Build project
 yaoxiang add foo        # ✅ Add dependency
 ```
 
-### Backward Compatibility
+### Backward compatibility
 
-- **Existing `use` syntax fully preserved**: `use std.io` continues to work
-- **Existing module resolution unchanged**: Logic for finding modules in `src/` directory unchanged
-- **New vendor/ directory doesn't affect existing projects**
+- ✅ Existing `use` syntax fully preserved
+- ✅ Existing module resolution logic unchanged
+- ✅ New .yaoxiang/vendor directory doesn't affect existing projects
 
 ## Trade-offs
 
 ### Advantages
 
-- **Unified import syntax**: Users don't need to care about dependency source, unified `use <name>`
-- **Deterministic builds**: `yaoxiang.lock` ensures same build result on different machines
-- **Offline support**: Can develop offline after downloading
-- **Progressive extension**: Source abstracted as trait, easy to add registry support later
-- **Unified CLI experience**: Compiler, package manager, REPL combined into one
-- **Configurable REPL**: Configure REPL behavior in yaoxiang.toml, works out of the box
+- Unified import syntax, users don't need to care about dependency sources
+- Deterministic builds, lock file ensures build consistency
+- Offline support, can develop offline after downloading to local
+- Source trait enables easy future extensions
 
 ### Disadvantages
 
-- **Need to download dependencies**: Compared to real-time GitHub, requires extra storage space
-- **Version conflict handling**: Users need to manually resolve incompatible version dependencies
+- Additional storage space required (.yaoxiang/vendor directory)
+- Version conflicts require manual resolution by users
 
-## Alternative Solutions
+## Alternative approaches
 
-| Solution | Description | Why Not Chosen |
-|----------|-------------|----------------|
-| Real-time GitHub access | `use github.com/user/repo` direct pull | Hard to guarantee security and cache reuse |
-| Global cache | Dependencies stored in global directory ($HOME/.yaoxiang) | Poor isolation, more complex version conflicts |
-| Only semantic versioning | Don't support Git source, only registry | GitHub is current mainstream code hosting platform |
+| Approach | Why not chosen |
+|----------|----------------|
+| Real-time GitHub access | Security and cache reuse are hard to guarantee |
+| Global cache ($HOME/.yaoxiang) | Poor isolation, complex version conflicts |
+| Registry only | GitHub is the current mainstream code hosting platform |
 
-## Implementation Strategy
+## Implementation strategy
 
-### Phase Division
+### Phase breakdown
 
-**Phase 1: Basic Dependency Management**
-- yaoxiang.toml parsing
-- Version constraint parsing and matching
-- Dependency graph construction and conflict detection
-- yaoxiang.lock generation
-- Local path dependency support
-
-**Phase 2: GitHub Support**
-- Git source implementation
-- Download tool
-- vendor/ directory management
-- Git tag/branch parsing
-
-**Phase 3: Registry Support (Future)**
-- Registry Source implementation
-- Search function
-- Private registry support
-
-**Phase 4: Advanced Features**
-- Workspace
-- Dependency overrides
-- Dependency integrity verification
+| Phase | Content |
+|-------|---------|
+| **Phase 1** | toml parsing, local dependencies, lock generation, basic algorithms |
+| **Phase 2** | GitHub support, .yaoxiang/vendor management, download tools |
+| **Future Extensions** | Registry sources, workspaces, integrity checks, dependency overrides |
 
 ### Dependencies
 
-- This RFC has no prerequisites
-- Needs integration with `ModuleGraph` (`middle/passes/module/`) during implementation
+- No prerequisites
+- Must integrate with `ModuleGraph` (`middle/passes/module/`)
 
 ### Risks
 
 | Risk | Mitigation |
 |------|------------|
 | Complex dependency resolution algorithm | Implement simple version first, add conflict detection later |
-| Unstable Git download | Implement retry and caching mechanism |
-| Performance issues | Lazy loading, incremental resolution |
+| Unstable Git downloads | Retry and caching mechanisms |
+| Performance issues | Lazy loading, incremental parsing |
 
-## Open Questions
+## Open questions
 
-- [ ] Whether to support `dev-dependencies` conditional compilation?
-- [ ] What algorithm for dependency `Integrity` verification? (SHA-256 / BLAKE3)
-- [ ] Whether to support `excludes` to exclude specific files from download?
-
-## Appendix
-
-### Appendix A: Glossary
-
-| Term | Definition |
-|------|------------|
-| Manifest | Package manifest file (yaoxiang.toml) |
-| Lockfile | Lock file (yaoxiang.lock), records exact versions |
-| Vendor | Local dependency storage directory |
-| Source | Dependency source (local/Git/registry) |
-| Resolution | Dependency resolution process |
-
-### Appendix B: Reference Implementations
-
-- [Cargo Dependency Resolution](https://doc.rust-lang.org/cargo/)
-- [npm Package Manifest](https://docs.npmjs.com/cli/v9/configuring-npm/package-json)
-- [Go Modules](https://go.dev/ref/mod)
+- [ ] `dev-dependencies` conditional compilation syntax?
+- [ ] Integrity verification algorithm (SHA-256 / BLAKE3)?
+- [ ] `excludes` to exclude specific files from download?
 
 ---
 
 ## References
 
-- [RFC-011: Generic Type System Design](011-generic-type-system.md) - Type system foundation
-- [Yarn Berry: Plug'n'Play](https://yarnpkg.com/features/pnp) - Alternative dependency management solution
-- [Python PEP 440: Version Identification](https://peps.python.org/pep-0440/) - Version identification standard
+- [Cargo Dependency Resolution](https://doc.rust-lang.org/cargo/)
+- [Go Modules](https://go.dev/ref/mod)
+- [PEP 440: Version Identification](https://peps.python.org/pep-0440/)
