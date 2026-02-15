@@ -4,10 +4,10 @@ title: RFC-015: YaoXiang Configuration System Design
 
 # RFC-015: YaoXiang Configuration System Design
 
-> **Status**: Draft
+> **Status**: Review
 > **Author**: Chen Xu
 > **Created Date**: 2026-02-12
-> **Last Updated**: 2026-02-14
+> **Last Updated**: 2026-02-15
 
 > **Prerequisite RFC**: [RFC-014: Package Manager Design](014-package-manager.md)
 
@@ -210,10 +210,67 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 **Priority**: `CLI > Environment Variables > Configuration File`
 
+### yaoxiang config command
+
+Provides CLI commands to manage configuration:
+
+```bash
+# Initialize user-level configuration (generate with defaults)
+yaoxiang config init
+
+# Edit user-level configuration (opens editor)
+yaoxiang config edit
+
+# Show current configuration (merged effective configuration)
+yaoxiang config show
+
+# Show configuration sources
+yaoxiang config show --source
+
+# Reset to default configuration
+yaoxiang config reset
+```
+
+**First run**: When users first run any `yaoxiang` command, it automatically checks if user-level configuration exists. If not, it auto-generates with default options.
+
+**Configuration file locations**:
+- Project-level: `./yaoxiang.toml` (project root)
+- User-level: `~/.config/yaoxiang/config.toml`
+
+### Configuration merge semantics
+
+Configuration from different tiers merges according to the following rules:
+
+| Type | Strategy | Description |
+|------|----------|-------------|
+| Scalar (String/Number/Boolean) | Replace | Project-level overrides user-level |
+| Array (Array) | Replace | Project-level completely replaces user-level |
+| Object (Object) | Deep merge | Field-by-field merge, undefined fields inherit from lower tier |
+
+**Example - Object deep merge**:
+```toml
+# User-level
+[lint]
+rules = ["recommended"]
+severity = "warn"
+
+# Project-level
+[lint]
+strict = true
+
+# Merged result
+[lint]
+rules = ["recommended"]    # from user-level
+severity = "warn"          # from user-level
+strict = true             # from project-level
+```
+
 ### Backward compatibility
 
-- ✅ Existing no-config mode continues to be supported
+- ✅ Existing no-config mode continues to be supported (all components use built-in defaults)
 - ✅ New configuration options all have reasonable defaults
+- ✅ Auto-generate configuration with default options on first run
+- ✅ Show friendly error messages on config parse failure, with specific line numbers and error details
 
 ## Trade-offs
 
@@ -243,9 +300,9 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 | Phase | Content |
 |-------|---------|
-| **Phase 1** | Basic configuration parser, toml support, project-level configuration |
-| **Phase 2** | User-level configuration, configuration merging logic |
-| **Phase 3** | CLI/environment variable overrides |
+| **Phase 1** | Basic configuration parser, toml support, project-level configuration, `yaoxiang config init` |
+| **Phase 2** | User-level configuration, configuration merging logic, `yaoxiang config edit/show` |
+| **Phase 3** | CLI/environment variable overrides, `platform` platform constraints, `[tool.*]` extension |
 
 ### Dependencies
 
@@ -260,10 +317,62 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 ## Open questions
 
-- [ ] `features` conditional compilation syntax?
-- [ ] `platform` platform constraints needed?
-- [ ] `workspace` workspace design?
-- [ ] `[tool.*]` third-party tool configuration extension?
+- [x] `features` conditional compilation syntax? → **Moved to separate RFC**, depends on RFC-011 Generic Type System
+- [x] `workspace` workspace design? → **Moved to separate RFC**, high complexity, requires independent design
+
+### Accepted features (Phase 3)
+
+#### `platform` Platform Constraints
+
+> **Note**: The following syntax is used in the `yaoxiang.toml` **configuration file**, **not** in YaoXiang source code (`.yx` files). Users should **not** write `cfg(...)` in their source code.
+
+Support platform-specific configuration based on target OS/architecture:
+
+```toml
+# yaoxiang.toml (configuration file)
+
+[target.'cfg(windows)'.build]
+output = "dist/win32"
+
+[target.'cfg(unix)'.build]
+output = "dist/unix"
+
+[target.'cfg(target_arch = "x86_64")'.build]
+rustflags = ["-C target-cpu=native"]
+```
+
+**Syntax**: `[target.'<condition>'.<section>]`
+
+**Explanation**:
+- This syntax only appears in `yaoxiang.toml` configuration file
+- During build, configurations are selected based on the `--target` parameter
+- Users should **not** write `cfg(...)` syntax in `.yx` source code
+
+**Supported conditions**:
+- `cfg(os = "windows")` - Windows
+- `cfg(os = "linux")` - Linux
+- `cfg(os = "macos")` - macOS
+- `cfg(target_arch = "x86_64")` - 64-bit x86
+- `cfg(target_arch = "aarch64")` - ARM 64-bit
+
+#### `[tool.*]` Third-party Tool Configuration Extension
+
+Allow third-party tools to store their configuration under `[tool.<name>]`:
+
+```toml
+[tool.eslint]
+extension = ["yx", "yxp"]
+ignore = ["node_modules/", "dist/"]
+
+[tool.prettier]
+semi = false
+singleQuote = true
+```
+
+**Behavior**:
+- YaoXiang ignores unknown `[tool.*]` sections but preserves them in the config file
+- Third-party tools can be integrated via `yaoxiang tool run <name>` or direct access
+- No validation performed on tool-specific configuration
 
 ---
 

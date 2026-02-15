@@ -4,10 +4,10 @@ title: RFC-015：YaoXiang 配置系统设计
 
 # RFC-015: YaoXiang 配置系统设计
 
-> **状态**: 草案
+> **状态**: 审核中
 > **作者**: 晨煦
 > **创建日期**: 2026-02-12
-> **最后更新**: 2026-02-14
+> **最后更新**: 2026-02-15
 
 > **前置 RFC**: [RFC-014: 包管理系统设计](014-package-manager.md)
 
@@ -210,10 +210,67 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 **优先级**：`命令行 > 环境变量 > 配置文件`
 
+### yaoxiang config 命令
+
+提供 CLI 命令管理配置：
+
+```bash
+# 初始化用户级配置（按默认选项生成）
+yaoxiang config init
+
+# 编辑用户级配置（打开编辑器）
+yaoxiang config edit
+
+# 查看当前配置（合并后的有效配置）
+yaoxiang config show
+
+# 查看配置来源
+yaoxiang config show --source
+
+# 重置为默认配置
+yaoxiang config reset
+```
+
+**首次运行**：用户首次运行任何 `yaoxiang` 命令时，自动检测用户级配置是否存在。若不存在，按默认选项自动生成。
+
+**配置文件位置**：
+- 项目级：`./yaoxiang.toml`（项目根目录）
+- 用户级：`~/.config/yaoxiang/config.toml`
+
+### 配置合并语义
+
+不同层级的配置按以下规则合并：
+
+| 类型 | 策略 | 说明 |
+|------|------|------|
+| 标量 (String/Number/Boolean) | 替换 | 项目级覆盖用户级 |
+| 数组 (Array) | 替换 | 项目级完全替换用户级 |
+| 对象 (Object) | 深度合并 | 逐字段合并，未定义字段继承下层 |
+
+**示例 - 对象深度合并**：
+```toml
+# 用户级
+[lint]
+rules = ["recommended"]
+severity = "warn"
+
+# 项目级
+[lint]
+strict = true
+
+# 合并结果
+[lint]
+rules = ["recommended"]    # 来自用户级
+severity = "warn"          # 来自用户级
+strict = true             # 来自项目级
+```
+
 ### 向后兼容性
 
-- ✅ 现有无配置文件模式继续支持
+- ✅ 现有无配置文件模式继续支持（所有组件使用内置默认值）
 - ✅ 新增配置项均有合理默认值
+- ✅ 用户首次运行命令时自动按默认选项生成配置
+- ✅ 配置解析失败时显示友好错误，提示具体行号和错误原因
 
 ## 权衡
 
@@ -243,9 +300,9 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 | 阶段 | 内容 |
 |------|------|
-| **Phase 1** | 基础配置解析器、toml 支持、项目级配置 |
-| **Phase 2** | 用户级配置、配置合并逻辑 |
-| **Phase 3** | 命令行/环境变量覆盖 |
+| **Phase 1** | 基础配置解析器、toml 支持、项目级配置、`yaoxiang config init` |
+| **Phase 2** | 用户级配置、配置合并逻辑、`yaoxiang config edit/show` |
+| **Phase 3** | 命令行/环境变量覆盖、`platform` 平台约束、`[tool.*]` 扩展 |
 
 ### 依赖关系
 
@@ -260,10 +317,62 @@ export YAOXIANG_FMT_INDENT_WIDTH=2
 
 ## 开放问题
 
-- [ ] `features` 条件编译语法？
-- [ ] `platform` 平台约束是否需要？
-- [ ] `workspace` 工作空间设计？
-- [ ] `[tool.*]` 第三方工具配置扩展？
+- [x] `features` 条件编译语法？ → **移至单独 RFC**，依赖 RFC-011 泛型系统
+- [x] `workspace` 工作空间设计？ → **移至单独 RFC**，复杂度高，需独立设计
+
+### 已接受功能（第三阶段）
+
+#### `platform` 平台约束
+
+> **注意**：以下语法用于 `yaoxiang.toml` **配置文件**，**不是** YaoXiang 源代码 (`.yx` 文件) 中的语法。用户无需在代码中写 `cfg(...)`。
+
+支持基于目标操作系统/架构的平台特定配置：
+
+```toml
+# yaoxiang.toml（配置文件）
+
+[target.'cfg(windows)'.build]
+output = "dist/win32"
+
+[target.'cfg(unix)'.build]
+output = "dist/unix"
+
+[target.'cfg(target_arch = "x86_64")'.build]
+rustflags = ["-C target-cpu=native"]
+```
+
+**语法**：`[target.'<条件>'.<配置节>]`
+
+**说明**：
+- 此语法仅出现在 `yaoxiang.toml` 配置文件中
+- 构建时根据 `--target` 参数选择对应的配置
+- 用户在 `.yx` 源代码中**无需**、**也不应该**写 `cfg(...)` 语法
+
+**支持的条件**：
+- `cfg(os = "windows")` - Windows 系统
+- `cfg(os = "linux")` - Linux 系统
+- `cfg(os = "macos")` - macOS 系统
+- `cfg(target_arch = "x86_64")` - 64 位 x86 架构
+- `cfg(target_arch = "aarch64")` - ARM 64 位架构
+
+#### `[tool.*]` 第三方工具配置扩展
+
+允许第三方工具在 `[tool.<名称>]` 下存储配置：
+
+```toml
+[tool.eslint]
+extension = ["yx", "yxp"]
+ignore = ["node_modules/", "dist/"]
+
+[tool.prettier]
+semi = false
+singleQuote = true
+```
+
+**行为**：
+- YaoXiang 忽略未知的 `[tool.*]` 节，但会保留在配置文件中
+- 第三方工具可通过 `yaoxiang tool run <名称>` 集成或直接访问
+- 工具特定配置不进行验证
 
 ---
 
