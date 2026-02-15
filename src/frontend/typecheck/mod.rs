@@ -406,9 +406,19 @@ impl TypeChecker {
         }
 
         // 构建类型检查结果
+        // 合并 BodyChecker 中的局部变量类型到 bindings
+        let mut bindings = self.env.vars.clone();
+        if let Some(ref bc) = self.body_checker {
+            for (name, poly) in bc.vars() {
+                // 只添加 env.vars 中不存在的局部变量类型
+                if !bindings.contains_key(name) {
+                    bindings.insert(name.clone(), poly.clone());
+                }
+            }
+        }
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),
-            bindings: self.env.vars.clone(),
+            bindings,
         };
 
         Ok(result)

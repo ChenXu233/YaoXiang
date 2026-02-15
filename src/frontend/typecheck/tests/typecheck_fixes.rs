@@ -401,7 +401,7 @@ fn test_fn_variable_scope() {
 fn test_complex_nested_blocks() {
     // RFC-007: 空参数函数
     let code = r#"
-        outer_func: () -> Int = () => {
+        outer_func: () -> (()-> Int) = () => {
             inner_block: () -> Int = () => {
                 value: Int = 42
                 return value

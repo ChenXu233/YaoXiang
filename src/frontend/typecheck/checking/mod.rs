@@ -242,6 +242,25 @@ impl BodyChecker {
                 .insert(param.name.clone(), PolyType::mono(param_ty));
         }
 
+        // 将函数自身注册到变量环境中（支持嵌套函数的前向引用和递归调用）
+        if let Some(crate::frontend::core::parser::ast::Type::Fn {
+            params: param_types,
+            return_type,
+        }) = type_annotation
+        {
+            let fn_param_types: Vec<MonoType> = param_types
+                .iter()
+                .map(|t| MonoType::from(t.clone()))
+                .collect();
+            let fn_return_type = MonoType::from(*return_type.clone());
+            let fn_type = MonoType::Fn {
+                params: fn_param_types,
+                return_type: Box::new(fn_return_type),
+                is_async: false,
+            };
+            self.vars.insert(name.to_string(), PolyType::mono(fn_type));
+        }
+
         // 处理类型注解
         if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
             type_annotation
@@ -250,13 +269,15 @@ impl BodyChecker {
                 name: name.to_string(),
                 params: params.to_vec(),
                 return_type: Some(*return_type.clone()),
-                body: Box::new(body),
+                body: Box::new(body.clone()),
                 is_async: false,
                 span: _span,
             };
-            return self.check_expr(&fn_def_expr).map(|_| ());
+            // 通过 check_expr 验证类型约束，但不提前返回
+            let _ = self.check_expr(&fn_def_expr);
         }
 
+        // 始终通过 check_fn_def 处理函数体，以收集局部变量类型
         self.check_fn_def(name, params, &body)
     }
 
