@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::package::error::{PackageError, PackageResult};
 use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
+use crate::util::i18n::{t, current_lang, MSG};
 
 /// Add a dependency to a project at the given directory
 ///
@@ -28,12 +29,27 @@ pub fn exec_in(
         return Err(PackageError::DependencyAlreadyExists(name.to_string()));
     }
 
+    let lang = current_lang();
     if dev {
         manifest.add_dev_dependency(name, version);
-        println!("✓ 已添加开发依赖 '{}' ({})", name, version);
+        println!(
+            "{}",
+            t(
+                MSG::PackageDevDepAdded,
+                lang,
+                Some(&[&name.to_string(), &version.to_string()])
+            )
+        );
     } else {
         manifest.add_dependency(name, version);
-        println!("✓ 已添加依赖 '{}' ({})", name, version);
+        println!(
+            "{}",
+            t(
+                MSG::PackageDepAdded,
+                lang,
+                Some(&[&name.to_string(), &version.to_string()])
+            )
+        );
     }
 
     manifest.save(project_dir)?;

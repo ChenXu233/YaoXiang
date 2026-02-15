@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::package::error::PackageResult;
+use crate::util::i18n::{t_simple, current_lang, MSG};
 
 /// The lock file name
 pub const LOCK_FILE: &str = "yaoxiang.lock";
@@ -75,7 +76,10 @@ impl LockFile {
     ) -> PackageResult<()> {
         let path = dir.join(LOCK_FILE);
         let content = toml::to_string_pretty(self)?;
-        let header = "# 此文件由 yaoxiang 自动生成，请勿手动编辑。\n\n";
+        let header = format!(
+            "{}\n\n",
+            t_simple(MSG::PackageLockGenerated, current_lang())
+        );
         std::fs::write(&path, format!("{}{}", header, content))?;
         Ok(())
     }
@@ -270,6 +274,7 @@ mod tests {
         lock.save(dir.path()).unwrap();
 
         let content = std::fs::read_to_string(dir.path().join(LOCK_FILE)).unwrap();
-        assert!(content.contains("自动生成"));
+        // Header should contain translated text (e.g., "generated" or "自动生成")
+        assert!(content.contains("generated") || content.contains("自动生成"));
     }
 }

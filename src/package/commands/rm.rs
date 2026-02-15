@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::package::error::{PackageError, PackageResult};
 use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
+use crate::util::i18n::{t, current_lang, MSG};
 
 /// Remove a dependency from a project at the given directory
 ///
@@ -38,10 +39,17 @@ pub fn exec_in(
     lock.update_from_dependencies(&all_deps);
     lock.save(project_dir)?;
 
+    let lang = current_lang();
     if dev {
-        println!("✓ 已移除开发依赖 '{}'", name);
+        println!(
+            "{}",
+            t(MSG::PackageDevDepRemoved, lang, Some(&[&name.to_string()]))
+        );
     } else {
-        println!("✓ 已移除依赖 '{}'", name);
+        println!(
+            "{}",
+            t(MSG::PackageDepRemoved, lang, Some(&[&name.to_string()]))
+        );
     }
 
     Ok(())
