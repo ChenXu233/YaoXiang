@@ -8,7 +8,9 @@ pub mod dependency;
 pub mod error;
 pub mod lock;
 pub mod manifest;
+pub mod source;
 pub mod template;
+pub mod vendor;
 
 pub use error::{PackageError, PackageResult};
 pub use manifest::PackageManifest;

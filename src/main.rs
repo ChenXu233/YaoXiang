@@ -184,8 +184,12 @@ enum Commands {
         dev: bool,
     },
 
-    /// Update all dependencies
-    Update,
+    /// Update all dependencies (or a specific one)
+    Update {
+        /// Optional: specific package to update
+        #[arg(value_name = "PKG")]
+        pkg: Option<String>,
+    },
 
     /// Install all dependencies
     Install,
@@ -324,8 +328,16 @@ fn main() -> Result<()> {
         Commands::Rm { dep, dev } => {
             package::commands::rm::exec(&dep, dev).context("Failed to remove dependency")?;
         }
-        Commands::Update => {
-            package::commands::update::exec().context("Failed to update dependencies")?;
+        Commands::Update { pkg } => {
+            if let Some(name) = pkg {
+                package::commands::update::exec_single_in(
+                    &std::env::current_dir().context("Failed to get current directory")?,
+                    &name,
+                )
+                .context("Failed to update dependency")?;
+            } else {
+                package::commands::update::exec().context("Failed to update dependencies")?;
+            }
         }
         Commands::Install => {
             package::commands::install::exec().context("Failed to install dependencies")?;

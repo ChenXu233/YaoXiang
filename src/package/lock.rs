@@ -96,6 +96,24 @@ impl LockFile {
         );
     }
 
+    /// Add or update a locked dependency with full information
+    pub fn lock_dependency_full(
+        &mut self,
+        name: &str,
+        version: &str,
+        source: &str,
+        checksum: Option<&str>,
+    ) {
+        self.package.insert(
+            name.to_string(),
+            LockedDependency {
+                version: version.to_string(),
+                source: source.to_string(),
+                checksum: checksum.map(|s| s.to_string()),
+            },
+        );
+    }
+
     /// Remove a locked dependency
     pub fn remove_dependency(
         &mut self,
