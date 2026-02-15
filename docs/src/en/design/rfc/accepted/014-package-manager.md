@@ -1,5 +1,5 @@
 ---
-title: RFC-014: Package Manager Design
+title: 'RFC-014: Package Manager Design'
 ---
 
 # RFC-014: Package Manager Design
