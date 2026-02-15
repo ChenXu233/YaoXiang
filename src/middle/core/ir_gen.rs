@@ -57,6 +57,8 @@ pub struct AstToIrGenerator {
     current_mut_locals: std::collections::HashSet<usize>,
     /// 模块级别的可变局部变量映射 (function_name -> set of mutable local indices)
     module_mut_locals: HashMap<String, std::collections::HashSet<usize>>,
+    /// 局部变量类型追踪（用于错误消息中显示实际类型）
+    local_var_types: HashMap<String, String>,
 }
 
 impl Default for AstToIrGenerator {
@@ -75,6 +77,7 @@ impl AstToIrGenerator {
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
+            local_var_types: HashMap::new(),
         }
     }
 
@@ -87,6 +90,7 @@ impl AstToIrGenerator {
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
+            local_var_types: HashMap::new(),
         }
     }
 
@@ -198,6 +202,49 @@ impl AstToIrGenerator {
         }
         tracing::debug!("Type not found for variable: {}", name);
         None
+    }
+
+    /// 从 AST 表达式推断类型名称（轻量级，用于错误消息）
+    fn infer_type_name_from_expr(
+        &self,
+        expr: &ast::Expr,
+    ) -> String {
+        match expr {
+            ast::Expr::Lit(lit, _) => match lit {
+                Literal::Int(_) => "int64".to_string(),
+                Literal::Float(_) => "float64".to_string(),
+                Literal::String(_) => "string".to_string(),
+                Literal::Char(_) => "char".to_string(),
+                Literal::Bool(_) => "bool".to_string(),
+            },
+            ast::Expr::List(_, _) => "List".to_string(),
+            ast::Expr::Dict(_, _) => "Dict".to_string(),
+            ast::Expr::Tuple(_, _) => "Tuple".to_string(),
+            ast::Expr::Var(name, _) => {
+                // 查找已知变量类型
+                if let Some(type_name) = self.local_var_types.get(name) {
+                    return type_name.clone();
+                }
+                "<unknown>".to_string()
+            }
+            ast::Expr::BinOp {
+                op: ast::BinOp::Add,
+                left,
+                ..
+            } => {
+                // 加法运算继承左操作数的类型
+                self.infer_type_name_from_expr(left)
+            }
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Var(name, _) = func.as_ref() {
+                    if let Some(ret_type) = self.get_function_return_type(name) {
+                        return ret_type.type_name();
+                    }
+                }
+                "<unknown>".to_string()
+            }
+            _ => "<unknown>".to_string(),
+        }
     }
 
     // 删除的函数：extract_type_name_from_poly
@@ -667,10 +714,21 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::Var {
                 name,
-                type_annotation: _,
+                type_annotation,
                 initializer,
                 is_mut,
             } => {
+                // 记录变量的类型信息（用于错误消息）
+                if let Some(type_ann) = type_annotation {
+                    let mono: MonoType = type_ann.clone().into();
+                    self.local_var_types.insert(name.clone(), mono.type_name());
+                } else if let Some(init_expr) = initializer {
+                    let inferred = self.infer_type_name_from_expr(init_expr);
+                    if inferred != "<unknown>" {
+                        self.local_var_types.insert(name.clone(), inferred);
+                    }
+                }
+
                 // 检查变量是否已经存在于当前或外层作用域
                 // 如果存在，这是赋值操作而不是新声明
                 let var_idx = if let Some(existing_idx) = self.lookup_local(name) {
@@ -1129,8 +1187,8 @@ impl AstToIrGenerator {
 
             Ok(())
         } else {
-            // 不支持的迭代器类型，返回错误
-            let iter_type = Self::describe_expr(iterable);
+            // 不支持的迭代器类型，返回错误（使用实际类型名称）
+            let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
             Err(IrGenError::UnsupportedIterator { iter_type, span })
         }
@@ -1167,22 +1225,29 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 描述表达式类型（用于错误消息）
-    fn describe_expr(expr: &ast::Expr) -> String {
-        match expr {
-            ast::Expr::Call { func, .. } => {
-                if let ast::Expr::Var(name, _) = func.as_ref() {
-                    format!("函数调用 `{}(...)`", name)
-                } else {
-                    "函数调用".to_string()
-                }
+    /// 获取表达式的实际类型名称（用于错误消息）
+    ///
+    /// 通过查询类型检查结果获取表达式的真正类型，而不是仅描述 AST 节点结构。
+    /// 例如对于变量 `nums`，返回 `List<int64>` 而非 `变量 \`nums\``。
+    fn get_expr_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> String {
+        // 如果表达式是变量，尝试从多个来源查找其类型
+        if let ast::Expr::Var(name, _) = expr {
+            // 1. 先从类型检查结果中查找
+            if let Some(poly_type) = self.lookup_var_type(name) {
+                let mono_type = self.instantiate_poly_type(poly_type);
+                return mono_type.type_name();
             }
-            ast::Expr::Var(name, _) => format!("变量 `{}`", name),
-            ast::Expr::Lit(lit, _) => format!("字面量 `{:?}`", lit),
-            ast::Expr::List(_, _) => "列表".to_string(),
-            ast::Expr::BinOp { op, .. } => format!("二元运算 `{:?}`", op),
-            _ => "表达式".to_string(),
+            // 2. 再从 IR 生成器本地追踪的类型中查找
+            if let Some(type_name) = self.local_var_types.get(name) {
+                return type_name.clone();
+            }
         }
+
+        // 3. 根据 AST 结构推断类型
+        self.infer_type_name_from_expr(expr)
     }
 
     /// 生成表达式 IR
