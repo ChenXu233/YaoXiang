@@ -35,6 +35,7 @@ title: RFC Index
 | RFC-012 | [F-String Template Strings](./draft/012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Draft |
 | RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Draft |
 | RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-017 | [Yaoxiang LSP Support](./draft/017-yaoxiang-lsp-support.md) | ChenXu | 2026-02-12 | Draft |
 
 ---
 

@@ -34,6 +34,7 @@ title: RFC 索引
 | RFC-012 | [F-String 模板字符串](./draft/012-f-string-template-strings.md) | 晨煦 | 2025-01-27 | 草案 |
 | RFC-015 | [yaoxiang.toml 字段研究](./draft/015-yaoxiang-toml-fields.md) | 晨煦 | 2026-02-12 | 草案 |
 | RFC-016 | [量子原生支持与多重后端集成](./draft/016-quantum-native-support.md) | 晨煦 | 2026-02-12 | 草案 |
+| RFC-017 | [语言服务器协议（LSP）支持设计](./draft/017-lsp-support.md) | Claude | 2026-02-15 | 草案 |
 
 ---
 
