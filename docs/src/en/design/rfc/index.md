@@ -33,8 +33,8 @@ title: RFC Index
 | RFC-002 | [Cross-platform I/O with libuv Integration](./draft/002-cross-platform-io-libuv.md) | ChenXu | 2025-01-05 | Draft |
 | RFC-005 | [Automated CVE Security Scanning System](./draft/005-automated-cve-scanning.md) | ChenXu | 2025-01-05 | Draft |
 | RFC-012 | [F-String Template Strings](./draft/012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Draft |
-| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Draft |
 | RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-017 | [Yaoxiang LSP Support](./draft/017-yaoxiang-lsp-support.md) | ChenXu | 2026-02-12 | Draft |
 
 ---
 
@@ -43,6 +43,7 @@ title: RFC Index
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
 | RFC-003 | [Version Planning and Implementation Suggestions](./review/003-version-planning.md) | ChenXu | 2025-01-05 | Under Review |
+| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Under Review |
 
 ---
 
