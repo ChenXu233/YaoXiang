@@ -12,6 +12,7 @@ use yaoxiang::util::diagnostic::{
     run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
     ErrorInfo,
 };
+use yaoxiang::package;
 
 /// Log level enum for CLI
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -149,6 +150,48 @@ enum Commands {
         #[arg(short, long)]
         tui: bool,
     },
+
+    /// Initialize a new YaoXiang project
+    Init {
+        /// Project name
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
+
+    /// Add a dependency to the current project
+    Add {
+        /// Dependency name
+        #[arg(value_name = "DEP")]
+        dep: String,
+
+        /// Version string (e.g. "1.0.0")
+        #[arg(short, long)]
+        version: Option<String>,
+
+        /// Add as dev-dependency
+        #[arg(short = 'D', long)]
+        dev: bool,
+    },
+
+    /// Remove a dependency from the current project
+    Rm {
+        /// Dependency name to remove
+        #[arg(value_name = "DEP")]
+        dep: String,
+
+        /// Remove from dev-dependencies
+        #[arg(short = 'D', long)]
+        dev: bool,
+    },
+
+    /// Update all dependencies
+    Update,
+
+    /// Install all dependencies
+    Install,
+
+    /// List all dependencies
+    List,
 }
 
 fn main() -> Result<()> {
@@ -270,6 +313,25 @@ fn main() -> Result<()> {
             }
             // Exit with a non-zero status so callers know the command failed.
             std::process::exit(1);
+        }
+        Commands::Init { name } => {
+            package::commands::init::exec(&name).context("Failed to initialize project")?;
+        }
+        Commands::Add { dep, version, dev } => {
+            package::commands::add::exec(&dep, version.as_deref(), dev)
+                .context("Failed to add dependency")?;
+        }
+        Commands::Rm { dep, dev } => {
+            package::commands::rm::exec(&dep, dev).context("Failed to remove dependency")?;
+        }
+        Commands::Update => {
+            package::commands::update::exec().context("Failed to update dependencies")?;
+        }
+        Commands::Install => {
+            package::commands::install::exec().context("Failed to install dependencies")?;
+        }
+        Commands::List => {
+            package::commands::list::exec().context("Failed to list dependencies")?;
         }
     }
 
