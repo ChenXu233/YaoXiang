@@ -7,31 +7,31 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum PackageError {
     /// Project directory already exists
-    #[error("项目 '{0}' 已存在")]
+    #[error("Project already exists: {0}")]
     ProjectExists(PathBuf),
 
     /// Not inside a YaoXiang project (no yaoxiang.toml found)
-    #[error("不在 YaoXiang 项目中：未找到 yaoxiang.toml")]
+    #[error("Not a YaoXiang project: yaoxiang.toml not found")]
     NotProject,
 
     /// Dependency not found in manifest
-    #[error("依赖 '{0}' 未找到")]
+    #[error("Dependency not found: {0}")]
     DependencyNotFound(String),
 
     /// Dependency already exists in manifest
-    #[error("依赖 '{0}' 已存在")]
+    #[error("Dependency already exists: {0}")]
     DependencyAlreadyExists(String),
 
     /// Invalid manifest format
-    #[error("无效的 yaoxiang.toml 格式: {0}")]
+    #[error("Invalid yaoxiang.toml format: {0}")]
     InvalidManifest(String),
 
     /// IO error
-    #[error("IO 错误: {0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
     /// TOML serialization/deserialization error
-    #[error("TOML 解析错误: {0}")]
+    #[error("TOML parse error: {0}")]
     Toml(String),
 }
 

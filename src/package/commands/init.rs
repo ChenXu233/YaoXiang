@@ -7,6 +7,7 @@ use crate::package::error::{PackageError, PackageResult};
 use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::package::template::{generate_gitignore, generate_main_yx};
+use crate::util::i18n::{t, current_lang, MSG};
 
 /// Initialize a new YaoXiang project at the given base directory
 ///
@@ -49,7 +50,11 @@ pub fn exec_in(
     let gitignore_content = generate_gitignore();
     fs::write(project_dir.join(".gitignore"), gitignore_content)?;
 
-    println!("✓ 已创建项目 '{}'", name);
+    let lang = current_lang();
+    println!(
+        "{}",
+        t(MSG::PackageProjectCreated, lang, Some(&[&name.to_string()]))
+    );
     println!("  {}/yaoxiang.toml", name);
     println!("  {}/yaoxiang.lock", name);
     println!("  {}/src/main.yx", name);

@@ -5,6 +5,8 @@ use std::path::Path;
 use crate::package::dependency::DependencySpec;
 use crate::package::error::PackageResult;
 use crate::package::manifest::PackageManifest;
+use crate::util::i18n::t_simple;
+use crate::util::i18n::MSG;
 
 /// List all dependencies in the project at the given directory
 pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
@@ -16,7 +18,10 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     println!("{} v{}\n", manifest.package.name, manifest.package.version);
 
     if dep_specs.is_empty() && dev_dep_specs.is_empty() {
-        println!("没有依赖。");
+        println!(
+            "{}",
+            t_simple(MSG::PackageNoDeps, crate::util::i18n::current_lang())
+        );
         return Ok(());
     }
 

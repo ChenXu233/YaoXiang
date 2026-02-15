@@ -8,6 +8,7 @@ use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::package::source::conflict;
 use crate::package::vendor::fetcher;
+use crate::util::i18n::{t, t_simple, current_lang, MSG};
 
 /// Install all dependencies at the given project directory
 ///
@@ -23,7 +24,7 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     all_deps.extend(manifest.dev_dependencies.clone());
 
     if all_deps.is_empty() {
-        println!("没有依赖需要安装。");
+        println!("{}", t_simple(MSG::PackageNoDepsToInstall, current_lang()));
         return Ok(());
     }
 
@@ -39,34 +40,45 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     lock.save(project_dir)?;
 
     // 显示结果
+    let lang = current_lang();
     let total = dep_specs.len() + dev_dep_specs.len();
 
-    println!("✓ 已解析 {} 个依赖:", total);
+    println!(
+        "{}",
+        t(MSG::PackageDepsResolved, lang, Some(&[&total.to_string()]))
+    );
     for spec in &dep_specs {
         let status = if result.installed.iter().any(|r| r.name == spec.name) {
-            "已安装"
+            t_simple(MSG::PackageDepInstalled, lang)
         } else {
-            "已缓存"
+            t_simple(MSG::PackageDepCached, lang)
         };
         println!("  {} ({}) [{}]", spec.name, spec.version, status);
     }
     for spec in &dev_dep_specs {
         let status = if result.installed.iter().any(|r| r.name == spec.name) {
-            "已安装"
+            t_simple(MSG::PackageDepInstalled, lang)
         } else {
-            "已缓存"
+            t_simple(MSG::PackageDepCached, lang)
         };
         println!("  {} ({}) [dev, {}]", spec.name, spec.version, status);
     }
 
     if !result.failed.is_empty() {
-        println!("\n⚠ {} 个依赖安装失败:", result.failed.len());
+        println!(
+            "\n{}",
+            t(
+                MSG::PackageDepsInstallFailed,
+                lang,
+                Some(&[&result.failed.len().to_string()])
+            )
+        );
         for (name, err) in &result.failed {
             println!("  {} - {}", name, err);
         }
     }
 
-    println!("\n已更新 yaoxiang.lock");
+    println!("\n{}", t_simple(MSG::PackageLockUpdated, lang));
 
     Ok(())
 }

@@ -195,5 +195,36 @@
 
   "repl_value": "{0}",
   "repl_prompt": "{0}",
-  "repl_history_entry": "[{0}] {1}"
+  "repl_history_entry": "[{0}] {1}",
+
+  "package_error_already_exists": "项目 '{0}' 已存在",
+  "package_error_not_project": "不在 YaoXiang 项目中：未找到 yaoxiang.toml",
+  "package_error_dep_not_found": "依赖 '{0}' 未找到",
+  "package_error_dep_already_exists": "依赖 '{0}' 已存在",
+  "package_error_invalid_manifest": "无效的 yaoxiang.toml 格式: {0}",
+  "package_error_io_error": "IO 错误: {0}",
+  "package_error_toml_parse_error": "TOML 解析错误: {0}",
+
+  "package_no_deps_to_update": "没有依赖需要更新。",
+  "package_no_deps_to_install": "没有依赖需要安装。",
+  "package_deps_updated": "✓ 已更新 {0} 个依赖:",
+  "package_deps_resolved": "✓ 已解析 {0} 个依赖:",
+  "package_dep_installed": "已安装",
+  "package_dep_cached": "已缓存",
+  "package_deps_install_failed": "⚠ {0} 个依赖安装失败:",
+  "package_lock_updated": "已更新 yaoxiang.lock",
+  "package_no_deps": "没有依赖。",
+  "package_dev_dep_added": "✓ 已添加开发依赖 '{0}' ({1})",
+  "package_dep_added": "✓ 已添加依赖 '{0}' ({1})",
+  "package_dev_dep_removed": "✓ 已移除开发依赖 '{0}'",
+  "package_dep_removed": "✓ 已移除依赖 '{0}'",
+  "package_project_created": "✓ 已创建项目 '{0}'",
+
+  "package_lock_generated": "# 此文件由 yaoxiang 自动生成，请勿手动编辑。",
+
+  "package_invalid_version": "无效的版本号",
+  "package_invalid_major_version": "无效的主版本号",
+
+  "package_update_failed": "⚠ {0} 更新失败: {1}",
+  "package_already_up_to_date": "✓ {0} ({1}) 已是最新"
 }

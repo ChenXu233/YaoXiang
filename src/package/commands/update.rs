@@ -7,6 +7,7 @@ use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
 use crate::package::vendor::fetcher;
 use crate::package::vendor::VendorManager;
+use crate::util::i18n::{t, t_simple, current_lang, MSG};
 
 /// Update all dependencies in the lock file at the given directory
 ///
@@ -22,7 +23,7 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     all_deps.extend(manifest.dev_dependencies.clone());
 
     if all_deps.is_empty() {
-        println!("没有依赖需要更新。");
+        println!("{}", t_simple(MSG::PackageNoDepsToUpdate, current_lang()));
         return Ok(());
     }
 
@@ -40,21 +41,37 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     // 保存更新后的锁文件
     lock.save(project_dir)?;
 
+    let lang = current_lang();
     if result.installed.is_empty() && result.skipped.is_empty() {
-        println!("没有依赖需要更新。");
+        println!("{}", t_simple(MSG::PackageNoDepsToUpdate, lang));
     } else {
         let total = result.installed.len() + result.skipped.len();
-        println!("✓ 已更新 {} 个依赖:", total);
+        println!(
+            "{}",
+            t(MSG::PackageDepsUpdated, lang, Some(&[&total.to_string()]))
+        );
         for resolved in &result.installed {
             println!("  {} ({})", resolved.name, resolved.version);
         }
         for (name, version) in &result.skipped {
-            println!("  {} ({}) [本地]", name, version);
+            println!(
+                "  {} ({}) [{}]",
+                name,
+                version,
+                t_simple(MSG::PackageDepCached, lang)
+            );
         }
     }
 
     if !result.failed.is_empty() {
-        println!("\n⚠ {} 个依赖更新失败:", result.failed.len());
+        println!(
+            "\n{}",
+            t(
+                MSG::PackageDepsInstallFailed,
+                lang,
+                Some(&[&result.failed.len().to_string()])
+            )
+        );
         for (name, err) in &result.failed {
             println!("  {} - {}", name, err);
         }
@@ -95,6 +112,7 @@ pub fn exec_single_in(
         .unwrap_or_else(|_| spec.version.clone());
 
     // 根据来源类型处理
+    let lang = current_lang();
     if spec.git.is_some() {
         let manager = VendorManager::new(project_dir);
         match manager.install_dependency(&spec) {
@@ -105,18 +123,46 @@ pub fn exec_single_in(
                     &resolved.source_kind.to_string(),
                     resolved.checksum.as_deref(),
                 );
-                println!("✓ 已更新 {} → {}", name, resolved.version);
+                println!(
+                    "{}",
+                    t(
+                        MSG::PackageDepsUpdated,
+                        lang,
+                        Some(&[&name.to_string(), &resolved.version.to_string()])
+                    )
+                );
             }
             Err(e) => {
-                println!("⚠ {} 更新失败: {}", name, e);
+                println!(
+                    "{}",
+                    t(
+                        MSG::PackageUpdateFailed,
+                        lang,
+                        Some(&[&name.to_string(), &e.to_string()])
+                    )
+                );
             }
         }
     } else if spec.path.is_some() {
         lock.lock_dependency_full(name, &resolved_version, "path", None);
-        println!("✓ {} ({}) 已是最新", name, resolved_version);
+        println!(
+            "{}",
+            t(
+                MSG::PackageAlreadyUpToDate,
+                lang,
+                Some(&[&name.to_string(), &resolved_version.to_string()])
+            )
+        );
     } else {
         lock.lock_dependency_full(name, &resolved_version, "registry", None);
-        println!("✓ 已更新 {} → {}", name, resolved_version);
+        println!(
+            "{}",
+            t(
+                MSG::PackageDepsUpdated,
+                lang,
+                Some(&[&name.to_string(), &resolved_version.to_string()])
+            )
+        );
     }
 
     lock.save(project_dir)?;
