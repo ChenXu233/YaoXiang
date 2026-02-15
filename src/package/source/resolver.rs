@@ -245,9 +245,9 @@ impl VersionReq {
     fn parse_single(s: &str) -> PackageResult<Self> {
         let s = s.trim();
 
-        if s.starts_with('^') {
+        if let Some(stripped) = s.strip_prefix('^') {
             // 兼容版本: ^1.2.3 → >=1.2.3, <2.0.0
-            let version = SemVer::parse(&s[1..])?;
+            let version = SemVer::parse(stripped)?;
             let upper = if version.major > 0 {
                 SemVer::new(version.major + 1, 0, 0)
             } else if version.minor > 0 {
@@ -269,9 +269,9 @@ impl VersionReq {
                 ],
                 any: false,
             })
-        } else if s.starts_with('~') {
+        } else if let Some(stripped) = s.strip_prefix('~') {
             // 补丁版本: ~1.2.3 → >=1.2.3, <1.3.0
-            let version = SemVer::parse(&s[1..])?;
+            let version = SemVer::parse(stripped)?;
             let upper = SemVer::new(version.major, version.minor + 1, 0);
 
             Ok(VersionReq {
@@ -287,8 +287,8 @@ impl VersionReq {
                 ],
                 any: false,
             })
-        } else if s.starts_with(">=") {
-            let version = SemVer::parse(&s[2..])?;
+        } else if let Some(stripped) = s.strip_prefix(">=") {
+            let version = SemVer::parse(stripped)?;
             Ok(VersionReq {
                 constraints: vec![VersionConstraint {
                     op: VersionOp::Gte,
@@ -296,8 +296,8 @@ impl VersionReq {
                 }],
                 any: false,
             })
-        } else if s.starts_with('>') {
-            let version = SemVer::parse(&s[1..])?;
+        } else if let Some(stripped) = s.strip_prefix('>') {
+            let version = SemVer::parse(stripped)?;
             Ok(VersionReq {
                 constraints: vec![VersionConstraint {
                     op: VersionOp::Gt,
@@ -305,8 +305,8 @@ impl VersionReq {
                 }],
                 any: false,
             })
-        } else if s.starts_with("<=") {
-            let version = SemVer::parse(&s[2..])?;
+        } else if let Some(stripped) = s.strip_prefix("<=") {
+            let version = SemVer::parse(stripped)?;
             Ok(VersionReq {
                 constraints: vec![VersionConstraint {
                     op: VersionOp::Lte,
@@ -314,8 +314,8 @@ impl VersionReq {
                 }],
                 any: false,
             })
-        } else if s.starts_with('<') {
-            let version = SemVer::parse(&s[1..])?;
+        } else if let Some(stripped) = s.strip_prefix('<') {
+            let version = SemVer::parse(stripped)?;
             Ok(VersionReq {
                 constraints: vec![VersionConstraint {
                     op: VersionOp::Lt,
