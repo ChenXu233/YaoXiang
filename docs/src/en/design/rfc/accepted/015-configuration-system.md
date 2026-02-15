@@ -4,9 +4,10 @@ title: RFC-015: YaoXiang Configuration System Design
 
 # RFC-015: YaoXiang Configuration System Design
 
-> **Status**: Review
+> **Status**: Accepted
 > **Author**: Chen Xu
 > **Created Date**: 2026-02-12
+> **Accepted Date**: 2026-02-15
 > **Last Updated**: 2026-02-15
 
 > **Prerequisite RFC**: [RFC-014: Package Manager Design](014-package-manager.md)

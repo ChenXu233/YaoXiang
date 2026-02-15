@@ -9,11 +9,17 @@ title: RFC Index
 
 ## Table of Contents
 
-- [Templates](#templates)
-- [Draft RFCs](#draft-rfcs)
-- [RFCs Under Review](#rfcs-under-review)
-- [Accepted RFCs](#accepted-rfcs)
-- [Rejected RFCs](#rejected-rfcs)
+- [YaoXiang RFC (Request for Comments) Index](#yaoxiang-rfc-request-for-comments-index)
+  - [Table of Contents](#table-of-contents)
+  - [Templates](#templates)
+  - [Draft RFCs](#draft-rfcs)
+  - [RFCs Under Review](#rfcs-under-review)
+  - [Accepted RFCs](#accepted-rfcs)
+  - [Rejected RFCs](#rejected-rfcs)
+  - [RFC Lifecycle](#rfc-lifecycle)
+    - [Status Description](#status-description)
+  - [Submitting an RFC](#submitting-an-rfc)
+  - [Contribution Guide](#contribution-guide)
 
 ---
 
@@ -43,7 +49,6 @@ title: RFC Index
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
 | RFC-003 | [Version Planning and Implementation Suggestions](./review/003-version-planning.md) | ChenXu | 2025-01-05 | Under Review |
-| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Under Review |
 
 ---
 
@@ -60,6 +65,8 @@ title: RFC Index
 | RFC-011 | [Generic Type System Design - Zero-Cost Abstraction and Macro Replacement](./accepted/011-generic-type-system.md) | ChenXu | 2025-01-25 | Accepted |
 | RFC-013 | [Error Code Specification Design](./accepted/012-error-code-specification.md) | ChenXu | 2025-01-30 | Accepted |
 | RFC-014 | [Package Manager System Design](./accepted/014-package-manager.md) | ChenXu | 2026-02-12 | Accepted |
+| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Accepted |
+
 ---
 
 ## Rejected RFCs
