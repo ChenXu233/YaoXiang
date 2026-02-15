@@ -185,17 +185,14 @@ impl JsonEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::diagnostic::codes::{ErrorCodeDefinition, I18nRegistry};
+    use crate::util::diagnostic::codes::ErrorCodeDefinition;
     use crate::util::span::Position;
 
     #[test]
     fn test_render_single_diagnostic() {
         let span = Span::new(Position::new(1, 5), Position::new(1, 8));
 
-        let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@")
-            .at(span)
-            .build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").at(span).build();
 
         let json = JsonEmitter::render(&diagnostic);
 
@@ -207,10 +204,9 @@ mod tests {
 
     #[test]
     fn test_render_multiple_diagnostics() {
-        let i18n = I18nRegistry::en();
         let diagnostics: Vec<Diagnostic> = vec![
-            ErrorCodeDefinition::invalid_character("@").build(i18n),
-            ErrorCodeDefinition::invalid_number_literal("1_2_").build(i18n),
+            ErrorCodeDefinition::invalid_character("@").build(),
+            ErrorCodeDefinition::invalid_number_literal("1_2_").build(),
         ];
 
         let json = JsonEmitter::render_all(&diagnostics);
@@ -222,8 +218,7 @@ mod tests {
 
     #[test]
     fn test_severity_mapping() {
-        let i18n = I18nRegistry::en();
-        let error = ErrorCodeDefinition::invalid_character("@").build(i18n);
+        let error = ErrorCodeDefinition::invalid_character("@").build();
 
         let error_json = JsonEmitter::render(&error);
         let error_parsed: LspDiagnostic = serde_json::from_str(&error_json).unwrap();

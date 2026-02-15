@@ -22,6 +22,7 @@
 pub mod backends;
 pub mod frontend;
 pub mod middle;
+pub mod package;
 pub mod std;
 
 pub mod util;

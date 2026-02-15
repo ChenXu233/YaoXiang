@@ -97,6 +97,7 @@ export default defineConfig({
                     { text: '分支指南', link: '/src/tutorial/dev/branch-maintenance-guide' },
                   ]
                 },
+                { text: '包管理系统', link: '/src/tutorial/package' },
               ],
             },
           ],
@@ -177,6 +178,18 @@ export default defineConfig({
                 collapsed: true,
                 hyphenToSpace: true,
               })
+            },
+            {
+              text: '包管理系统',
+              collapsed: true,
+              items: [
+                generateSidebar({
+                scanStartPath: '/src/reference/package',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
+                })
+              ]
             },
             {
               text: '计划',
@@ -261,6 +274,7 @@ export default defineConfig({
                     { text: 'Branch Maintenance Guide', link: '/src/en/tutorial/dev/branch-maintenance-guide' },
                   ]
                 },
+                { text: 'Package Management System', link: '/src/en/tutorial/package' },
               ],
             },
           ],
@@ -340,6 +354,16 @@ export default defineConfig({
                 hyphenToSpace: true,
               }),
             },
+            {
+              text: 'Package Management System',
+              collapsed: true,
+              items: generateSidebar({
+                scanStartPath: '/src/en/reference/package',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              }),
+            }
           ],
           '/en/': [
             {

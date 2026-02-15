@@ -10,7 +10,7 @@
 use crate::frontend::core::type_system::{
     MonoType, PolyType, StructType, EnumType, TypeConstraintSolver, TypeVar,
 };
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, I18nRegistry};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use std::collections::HashMap;
 
 // 类型别名
@@ -58,7 +58,7 @@ impl GenericSpecializer {
                 args.len(),
             )
             .at(crate::util::span::Span::default())
-            .build(I18nRegistry::en()));
+            .build());
         }
 
         // 构建替换映射

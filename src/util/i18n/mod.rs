@@ -3,6 +3,15 @@
 //! Loads translations from JSON files in the `locales/` directory.
 //! Supports both hardcoded languages (en, zh, zh-miao) and dynamic loading.
 //!
+//! # Configuration
+//!
+//! Configuration priority (high → low):
+//! 1. CLI arguments (--lang)
+//! 2. Environment variable (YAOXIANG_LANG)
+//! 3. Project-level config (yaoxiang.toml [i18n])
+//! 4. User-level config (~/.config/yaoxiang/config.toml [i18n])
+//! 5. Default values
+//!
 //! # Usage
 //!
 //! ```rust
@@ -12,9 +21,54 @@
 //! println!("{}", t_simple(MSG::CmdReceived, "zh-x-miao"));
 //! ```
 
+use std::sync::OnceLock;
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::path::Path;
+
+pub use crate::util::config::{I18nConfig as ConfigI18n};
+
+/// Cache for merged i18n config to avoid repeated file reads
+static MERGED_CONFIG: OnceLock<ConfigI18n> = OnceLock::new();
+
+/// Load and merge i18n config from all sources
+/// Priority: CLI > env > project > user > default
+fn load_merged_config() -> ConfigI18n {
+    // 1. Start with user-level config (default)
+    let user_config = crate::util::config::load_user_config()
+        .unwrap_or_else(|_| crate::util::config::UserConfig::default())
+        .i18n;
+
+    // 2. Try to merge project-level config if in a project
+    if let Ok(project_dir) = std::env::current_dir() {
+        if let Ok(manifest) = crate::package::manifest::PackageManifest::load(&project_dir) {
+            if let Some(project_i18n) = manifest.i18n {
+                // Project-level overrides user-level
+                return ConfigI18n {
+                    lang: project_i18n.lang,
+                    fallback: project_i18n.fallback,
+                    error_lang: project_i18n.error_lang,
+                    local_lang: project_i18n.local_lang,
+                };
+            }
+        }
+    }
+
+    // Return user-level config (or default if failed)
+    user_config
+}
+
+/// Reload merged config (useful for testing)
+#[cfg(test)]
+pub fn reload_config() {
+    // Reset the OnceLock to force reload on next access
+    let _ = MERGED_CONFIG.set(load_merged_config());
+}
+
+/// Get the merged i18n config
+pub fn get_i18n_config() -> &'static ConfigI18n {
+    MERGED_CONFIG.get_or_init(load_merged_config)
+}
 
 /// Translation table loaded from JSON
 type TranslationMap = HashMap<String, String>;
@@ -50,7 +104,7 @@ static TRANSLATIONS: Lazy<HashMap<String, TranslationMap>> = Lazy::new(|| {
     }
 
     // Dynamically scan for additional language files
-    let locales_dir = Path::new("locales");
+    let locales_dir = std::path::Path::new("locales");
     if let Ok(entries) = std::fs::read_dir(locales_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -201,27 +255,83 @@ macro_rules! tlog {
     };
 }
 
-/// Convenience function to get current language from env or default
+/// Convenience function to get current language
+/// Priority: YAOXIANG_LANG env > config file > fallback > default
+/// Get current language for src/util/i18n messages
+/// Priority: YAOXIANG_LANG env > local-lang > lang > fallback
 pub fn current_lang() -> &'static str {
-    let env_lang = std::env::var("YAOXIANG_LANG").ok();
-
-    // Check if this language is available
-    if let Some(lang) = &env_lang {
-        if TRANSLATIONS.contains_key(lang) {
+    // 1. Check YAOXIANG_LANG environment variable (highest priority)
+    if let Ok(env_lang) = std::env::var("YAOXIANG_LANG") {
+        if TRANSLATIONS.contains_key(&env_lang) {
             return TRANSLATIONS
                 .keys()
-                .find(|k| k.as_str() == lang)
+                .find(|k| k.as_str() == env_lang)
                 .map(|s| s.as_str())
                 .unwrap_or("en");
         }
     }
 
-    // Default to "zh" or "en" based on available translations
-    if TRANSLATIONS.contains_key("zh") {
-        "zh"
-    } else {
-        "en"
+    let config = get_i18n_config();
+
+    // 2. Use explicit local-lang if set
+    if let Some(ref local_lang) = config.local_lang {
+        if TRANSLATIONS.contains_key(local_lang) {
+            return local_lang;
+        }
     }
+
+    // 3. Fall back to lang
+    if TRANSLATIONS.contains_key(&config.lang) {
+        return &config.lang;
+    }
+
+    // 4. Use fallback language (英文兜底)
+    fallback_lang()
+}
+
+/// Get the fallback language (英文兜底)
+pub fn fallback_lang() -> &'static str {
+    let config = get_i18n_config();
+
+    // Use config fallback if available
+    if TRANSLATIONS.contains_key(&config.fallback) {
+        return &config.fallback;
+    }
+
+    // Default to English
+    "en"
+}
+
+/// Get the language for diagnostic error messages
+/// Priority: error-lang > lang > fallback
+pub fn error_lang() -> &'static str {
+    // 1. Check YAOXIANG_LANG environment variable first
+    if let Ok(env_lang) = std::env::var("YAOXIANG_LANG") {
+        if TRANSLATIONS.contains_key(&env_lang) {
+            return TRANSLATIONS
+                .keys()
+                .find(|k| k.as_str() == env_lang)
+                .map(|s| s.as_str())
+                .unwrap_or("en");
+        }
+    }
+
+    let config = get_i18n_config();
+
+    // 2. Use explicit error-lang if set
+    if let Some(ref error_lang) = config.error_lang {
+        if TRANSLATIONS.contains_key(error_lang) {
+            return error_lang;
+        }
+    }
+
+    // 3. Fall back to lang
+    if TRANSLATIONS.contains_key(&config.lang) {
+        return &config.lang;
+    }
+
+    // 4. Fall back to fallback
+    fallback_lang()
 }
 
 /// Set current language via environment variable
@@ -461,6 +571,42 @@ pub enum MSG {
 
     // Other messages
     FormatterNotImplemented,
+
+    // Package manager - errors
+    PackageErrorAlreadyExists,
+    PackageErrorNotProject,
+    PackageErrorDepNotFound,
+    PackageErrorDepAlreadyExists,
+    PackageErrorInvalidManifest,
+    PackageErrorIoError,
+    PackageErrorTomlParseError,
+
+    // Package manager - commands
+    PackageNoDepsToUpdate,
+    PackageNoDepsToInstall,
+    PackageDepsUpdated,
+    PackageDepsResolved,
+    PackageDepInstalled,
+    PackageDepCached,
+    PackageDepsInstallFailed,
+    PackageLockUpdated,
+    PackageNoDeps,
+    PackageDevDepAdded,
+    PackageDepAdded,
+    PackageDevDepRemoved,
+    PackageDepRemoved,
+    PackageProjectCreated,
+
+    // Package manager - lock file
+    PackageLockGenerated,
+
+    // Package manager - source resolver
+    PackageInvalidVersion,
+    PackageInvalidMajorVersion,
+
+    // Package manager - update messages
+    PackageUpdateFailed,
+    PackageAlreadyUpToDate,
 }
 
 impl MSG {
@@ -654,6 +800,42 @@ impl MSG {
 
             // Other messages
             MSG::FormatterNotImplemented => "formatter_not_implemented",
+
+            // Package manager - errors
+            MSG::PackageErrorAlreadyExists => "package_error_already_exists",
+            MSG::PackageErrorNotProject => "package_error_not_project",
+            MSG::PackageErrorDepNotFound => "package_error_dep_not_found",
+            MSG::PackageErrorDepAlreadyExists => "package_error_dep_already_exists",
+            MSG::PackageErrorInvalidManifest => "package_error_invalid_manifest",
+            MSG::PackageErrorIoError => "package_error_io_error",
+            MSG::PackageErrorTomlParseError => "package_error_toml_parse_error",
+
+            // Package manager - commands
+            MSG::PackageNoDepsToUpdate => "package_no_deps_to_update",
+            MSG::PackageNoDepsToInstall => "package_no_deps_to_install",
+            MSG::PackageDepsUpdated => "package_deps_updated",
+            MSG::PackageDepsResolved => "package_deps_resolved",
+            MSG::PackageDepInstalled => "package_dep_installed",
+            MSG::PackageDepCached => "package_dep_cached",
+            MSG::PackageDepsInstallFailed => "package_deps_install_failed",
+            MSG::PackageLockUpdated => "package_lock_updated",
+            MSG::PackageNoDeps => "package_no_deps",
+            MSG::PackageDevDepAdded => "package_dev_dep_added",
+            MSG::PackageDepAdded => "package_dep_added",
+            MSG::PackageDevDepRemoved => "package_dev_dep_removed",
+            MSG::PackageDepRemoved => "package_dep_removed",
+            MSG::PackageProjectCreated => "package_project_created",
+
+            // Package manager - lock file
+            MSG::PackageLockGenerated => "package_lock_generated",
+
+            // Package manager - source resolver
+            MSG::PackageInvalidVersion => "package_invalid_version",
+            MSG::PackageInvalidMajorVersion => "package_invalid_major_version",
+
+            // Package manager - update messages
+            MSG::PackageUpdateFailed => "package_update_failed",
+            MSG::PackageAlreadyUpToDate => "package_already_up_to_date",
 
             _ => "unknown_message",
         }
