@@ -6,7 +6,7 @@
 //! 所有错误转换都通过注册表中的错误码路径
 
 use super::error::Diagnostic;
-use super::codes::{ErrorCodeDefinition, I18nRegistry};
+use super::codes::ErrorCodeDefinition;
 
 /// 统一结果类型
 pub type Result<T, E = Diagnostic> = std::result::Result<T, E>;
@@ -31,8 +31,7 @@ impl<T, E: std::fmt::Display> ResultExt<T, E> for Result<T, E> {
         F: FnOnce() -> String,
     {
         self.map_err(|err| {
-            ErrorCodeDefinition::internal_error(&format!("{}: {}", f(), err))
-                .build(I18nRegistry::en())
+            ErrorCodeDefinition::internal_error(&format!("{}: {}", f(), err)).build()
         })
     }
 }

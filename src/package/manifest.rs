@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::package::error::{PackageError, PackageResult};
+use crate::util::config::I18nConfig;
 
 /// The main manifest file name
 pub const MANIFEST_FILE: &str = "yaoxiang.toml";
@@ -42,6 +43,9 @@ pub struct PackageManifest {
         rename = "dev-dependencies"
     )]
     pub dev_dependencies: BTreeMap<String, toml::Value>,
+    /// I18n configuration (project-level overrides user-level)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub i18n: Option<I18nConfig>,
 }
 
 impl PackageManifest {
@@ -57,6 +61,7 @@ impl PackageManifest {
             },
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
+            i18n: None,
         }
     }
 

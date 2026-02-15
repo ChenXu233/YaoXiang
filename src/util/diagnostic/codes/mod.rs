@@ -23,7 +23,6 @@ pub use e8xxx::*;
 pub mod builder;
 pub use builder::{DiagnosticBuilder, I18nRegistry, ErrorInfo};
 
-use crate::util::span::Span;
 use crate::util::diagnostic::Diagnostic;
 
 /// 错误类别
@@ -117,29 +116,9 @@ impl ErrorCodeDefinition {
         DiagnosticBuilder::new(self.code, self.message_template)
     }
 
-    /// 获取该错误码的 I18nRegistry
-    pub fn i18n(
-        &self,
-        lang: &str,
-    ) -> &'static I18nRegistry {
-        I18nRegistry::new(lang)
-    }
-
-    /// 构建完整的 Diagnostic
-    pub fn build(
-        &self,
-        i18n: &I18nRegistry,
-        params: &[(&'static str, String)],
-        span: Option<Span>,
-    ) -> Diagnostic {
-        let mut builder = self.builder();
-        for (key, value) in params {
-            builder = builder.param(key, value);
-        }
-        if let Some(s) = span {
-            builder = builder.at(s);
-        }
-        builder.build(i18n)
+    /// 使用 error_lang() 自动获取语言构建 Diagnostic
+    pub fn build(&self) -> Diagnostic {
+        self.builder().build()
     }
 }
 
@@ -168,6 +147,7 @@ macro_rules! impl_error_code_methods {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::span::Span;
 
     #[test]
     fn test_find_error_code() {
@@ -218,13 +198,12 @@ mod tests {
     #[test]
     fn test_diagnostic_builder() {
         let code = ErrorCodeDefinition::find("E0001").unwrap();
-        let i18n = I18nRegistry::en();
 
         let diagnostic = code
             .builder()
             .param("char", "@")
             .at(Span::default())
-            .build(i18n);
+            .build();
 
         assert_eq!(diagnostic.code, "E0001");
         assert!(diagnostic.message.contains("@"));
