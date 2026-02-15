@@ -67,6 +67,7 @@ fn test_collect_generic_functions() {
         types: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func, non_generic],
+        mut_locals: Default::default(),
     };
 
     mono.collect_generics(id, &ir);
@@ -92,6 +93,7 @@ fn test_global_function_instantiation() {
         types: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
+        mut_locals: Default::default(),
     };
 
     mono.collect_generics(id, &ir);
@@ -127,6 +129,7 @@ fn test_instance_sharing() {
         types: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
+        mut_locals: Default::default(),
     };
 
     mono.collect_generics(id, &ir);
@@ -158,6 +161,7 @@ fn test_different_types_different_instances() {
         types: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
+        mut_locals: Default::default(),
     };
 
     mono.collect_generics(id, &ir);
@@ -204,6 +208,7 @@ fn test_multiple_type_parameters() {
         types: Vec::new(),
         globals: Vec::new(),
         functions: vec![generic_func],
+        mut_locals: Default::default(),
     };
 
     mono.collect_generics(id, &ir);

@@ -365,7 +365,7 @@ const codeTransform = computed(() => {
                           <a :href="frontmatter.hero.actions[0].link" class="link link-secondary no-underline font-bold hover:underline">Get Started →</a>
                       </div>
                       <div class="flex-1 flex flex-wrap gap-2 justify-end content-start">
-                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">18 Keywords</div>
+                         <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">17 Keywords</div>
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Type Inference</div>
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Pattern Match</div>
                          <div class="badge badge-lg badge-outline p-4 hover:bg-secondary hover:text-secondary-content hover:scale-105 transition-all cursor-default">Traits</div>

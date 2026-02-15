@@ -12,13 +12,10 @@
 [![Version](https://img.shields.io/badge/Version-v0.5.6--experimental-blue.svg)]()
 [![Status](https://img.shields.io/badge/Status-Experiment--Validation-yellow.svg)]()
 
----
-
 <!-- language-nav-start -->
 🌐 **Language / 语言** | [English](#english) | [中文](#中文)
 <!-- language-nav-end -->
 
----
 
 <!-- bilingual-section-start -->
 ## <a name="english"></a>📖 Introduction
@@ -60,8 +57,6 @@ cargo run -- build docs/examples/hello.yx -o hello.42
 cargo run -- dump docs/examples/hello.yx
 ```
 
----
-
 **Development hooks (pre-commit)**
 
 We use `pre-commit` to run project checks before commits (cross-platform). The repository includes a `.pre-commit-config.yaml` that runs `cargo fmt` and `cargo clippy`.
@@ -99,12 +94,12 @@ Notes:
 # === Type Definitions ===
 
 # Record types (curly braces)
-type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
-type Color = { red | green | blue }
+Point: Type = { x: Float, y: Float }
+Result: Type[T, E] = { ok(T) | err(E) }
+Color: Type = { red | green | blue }
 
 # Interface types (all fields are function types)
-type Serializable = { serialize: () -> String }
+Serializable: Type = { serialize: () -> String }
 
 # Value construction
 p = Point(3.0, 4.0)
@@ -120,8 +115,6 @@ main: () -> Void = {
 ```
 
 For more examples, see [docs/examples/](docs/examples/).
-
----
 
 ### Project Structure
 
@@ -167,8 +160,6 @@ yaoxiang/
 └── tests/                  # Tests
 ```
 
----
-
 ### Design Philosophy
 
 YaoXiang's design philosophy can be summarized in five principles:
@@ -180,8 +171,6 @@ Python Syntax → Natural Language → Readability → Beginner-Friendly
 Concurrent Model → Lazy Evaluation → Auto Parallel → Seamless Concurrency
 Send/Sync → Compile-Time Check → Data Race → Thread Safety
 ```
-
----
 
 ### Comparison with Existing Languages
 
@@ -196,17 +185,13 @@ Send/Sync → Compile-Time Check → Data Race → Thread Safety
 | No GC | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Compile-Time Thread Safety | ✅ | ✅ | ❌ | ❌ | ❌ |
 | AI-Friendly Syntax | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Keyword Count | 18 | 51+ | 35 | 64+ | 25 |
+| Keyword Count | ~17 | 51+ | 35 | 64+ | 25 |
 
 > **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Auto Parallel + Seamless Async
-
----
 
 ### Roadmap
 
 For detailed implementation status and future plans, see [Implementation Roadmap](docs/plan/IMPLEMENTATION-ROADMAP.md).
-
----
 
 ### Contributing
 
@@ -231,7 +216,6 @@ YaoXiang's design is inspired by the following projects and languages:
 - **TypeScript** - Type annotations, runtime types
 - **MoonBit** - AI-friendly design
 
----
 
 ### Yes, It's Still an Experimental Project
 
@@ -239,7 +223,6 @@ Before you criticize, check this out:
 
 - [YaoXiang Design Manifesto (Satirical Version)](docs/design/manifesto-wtf.md) - DeepSeek's Review
 
----
 
 > "道生一，一生二，二生三，三生万物。"
 > —— 《道德经》
@@ -290,12 +273,12 @@ cargo run --example hello
 # === 类型定义 ===
 
 # 记录类型（花括号）
-type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
-type Color = { red | green | blue }
+Point: Type = { x: Float, y: Float }
+Result: Type[T, E] = { ok(T) | err(E) }
+Color: Type = { red | green | blue }
 
 # 接口类型（字段全为函数类型）
-type Serializable = { serialize: () -> String }
+Serializable: Type = { serialize: () -> String }
 
 # 值构造
 p = Point(3.0, 4.0)
@@ -341,8 +324,6 @@ compute_all: () -> (Int, Int, Int) spawn = {
 identity: [T](x: T) -> T = x
 ```
 
----
-
 ### 项目结构
 
 ```
@@ -387,8 +368,6 @@ yaoxiang/
 └── tests/                  # 测试
 ```
 
----
-
 ### 设计理念
 
 YaoXiang 的设计哲学可以用五句话概括：
@@ -400,8 +379,6 @@ Python语法 → 自然语言感 → 可读性 → 新手友好
 并作模型 → 惰性求值 → 自动并行 → 无感并发
 Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 ```
-
----
 
 ### 与现有语言的对比
 
@@ -416,17 +393,13 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 | 无GC | ✅ | ✅ | ❌ | ❌ | ❌ |
 | 编译时线程安全 | ✅ | ✅ | ❌ | ❌ | ❌ |
 | AI友好语法 | ✅ | ❌ | ✅ | ❌ | ❌ |
-| 关键字数量 | 18 | 51+ | 35 | 64+ | 25 |
+| 关键字数量 | 17 | 51+ | 35 | 64+ | 25 |
 
 > **并作模型** = 同步语法 + 惰性求值 + 自动并行 + 无感异步
-
----
 
 ### 路线图
 
 详细实现状态和未来计划，请查看 [实现路线图](docs/plan/IMPLEMENTATION-ROADMAP.md)。
-
----
 
 ### 贡献
 
@@ -451,13 +424,9 @@ YaoXiang 的设计灵感来自以下项目和语言：
 - **TypeScript** - 类型注解、运行时类型
 - **MoonBit** - AI 友好设计
 
----
-
 ### 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
 
 - [爻象设计宣言WTF版](docs/design/manifesto-wtf.md) - DeepSeek锐评
-
----
 
 > 「道生一，一生二，二生三，三生万物。」
 > —— 《道德经》

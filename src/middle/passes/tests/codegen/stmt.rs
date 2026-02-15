@@ -22,6 +22,7 @@ fn test_function_definition() {
             blocks: Vec::new(),
             entry: 0,
         }],
+        mut_locals: Default::default(),
     };
 
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);

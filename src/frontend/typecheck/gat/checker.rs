@@ -142,7 +142,7 @@ impl GATChecker {
                 crate::util::diagnostic::ErrorCodeDefinition::associated_type_not_found(
                     assoc_type, container,
                 )
-                .build(crate::util::diagnostic::I18nRegistry::en()),
+                .build(),
             );
         }
 

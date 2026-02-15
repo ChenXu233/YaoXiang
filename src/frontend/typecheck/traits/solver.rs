@@ -9,7 +9,7 @@
 //! - 用户定义特质
 //! - 约束传播
 
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::type_level::trait_bounds::{TraitTable, TraitBound, TraitSolver as AdvancedSolver};
 use std::collections::HashMap;
@@ -91,7 +91,7 @@ impl TraitSolver {
                             .unwrap_or_default(),
                         &constraint.name,
                     )
-                    .build(I18nRegistry::en())),
+                    .build()),
                 }
             } else {
                 // 内置 Trait，使用简化求解
@@ -122,7 +122,7 @@ impl TraitSolver {
                     .unwrap_or_default(),
                 &constraint.name,
             )
-            .build(I18nRegistry::en()))
+            .build())
         }
     }
 

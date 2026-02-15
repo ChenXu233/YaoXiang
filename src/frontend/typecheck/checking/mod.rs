@@ -14,7 +14,7 @@ pub use compatibility::CompatibilityChecker;
 pub use bounds::BoundsChecker;
 
 pub use crate::util::diagnostic::Diagnostic;
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 use std::collections::HashMap;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
@@ -226,7 +226,7 @@ impl BodyChecker {
                 return Err(Box::new(
                     ErrorCodeDefinition::duplicate_definition(name)
                         .at(_span)
-                        .build(I18nRegistry::en()),
+                        .build(),
                 ));
             }
         }
@@ -314,7 +314,7 @@ impl BodyChecker {
             return Err(Box::new(
                 ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
                     .at(_stmt_span)
-                    .build(I18nRegistry::en()),
+                    .build(),
             ));
         }
 
@@ -326,7 +326,7 @@ impl BodyChecker {
                 return Err(Box::new(
                     ErrorCodeDefinition::type_mismatch("bool", &format!("{}", elif_cond_ty))
                         .at(_stmt_span)
-                        .build(I18nRegistry::en()),
+                        .build(),
                 ));
             }
         }

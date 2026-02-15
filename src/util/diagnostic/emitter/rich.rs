@@ -264,7 +264,7 @@ impl Default for RichEmitter {
 mod tests {
     use super::*;
 
-    use crate::util::diagnostic::codes::{ErrorCodeDefinition, I18nRegistry};
+    use crate::util::diagnostic::codes::ErrorCodeDefinition;
 
     /// 移除 ANSI 转义序列
     fn strip_ansi(s: &str) -> String {
@@ -278,8 +278,7 @@ mod tests {
 
     #[test]
     fn test_rich_render() {
-        let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
 
         let emitter = RichEmitter::new();
         let output = emitter.render(&diagnostic, None);

@@ -4,6 +4,7 @@
 
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
+use crate::util::i18n::error_lang;
 use std::collections::HashMap;
 
 /// 诊断构建器（支持模板参数）
@@ -73,11 +74,10 @@ impl DiagnosticBuilder {
         self
     }
 
-    /// 构建 Diagnostic
-    pub fn build(
-        &self,
-        i18n: &I18nRegistry,
-    ) -> Diagnostic {
+    /// 使用 error_lang() 自动获取语言构建 Diagnostic
+    pub fn build(&self) -> Diagnostic {
+        let i18n = I18nRegistry::new(error_lang());
+
         // 在 debug 模式下保持原有行为（会 panic）
         if cfg!(debug_assertions) {
             self.validate_params();
