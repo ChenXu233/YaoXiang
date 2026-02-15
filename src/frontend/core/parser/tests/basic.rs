@@ -385,6 +385,104 @@ mod parser_basic_tests {
         );
     }
 
+    // ========== RFC-010: Meta-type Universe Level Tests ==========
+
+    /// Test parsing plain Type (Type0)
+    #[test]
+    fn test_parse_meta_type_plain() {
+        let tokens = tokenize("MyType: Type = Int;").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse plain Type: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing Type[T] (Type1)
+    #[test]
+    fn test_parse_meta_type_single_param() {
+        let tokens = tokenize("List: Type[T] = { data: Array[T] };").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type[T]: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing Type[K, V] (Type1 with multiple params)
+    #[test]
+    fn test_parse_meta_type_multiple_params() {
+        let tokens = tokenize("Map: Type[K, V] = { keys: Array[K], values: Array[V] };").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type[K, V]: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing Type[Type[T]] (Type2)
+    #[test]
+    fn test_parse_meta_type_nested() {
+        let tokens = tokenize("HigherKinded: Type[Type[T]] = { apply: (T) -> Type[T] };").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type[Type[T]]: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing Type[Type[Type[T]]] (Type3)
+    #[test]
+    fn test_parse_meta_type_deeply_nested() {
+        let tokens = tokenize("DeepType: Type[Type[Type[T]]] = {};").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type[Type[Type[T]]]: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing with angle bracket syntax: Type<T>
+    #[test]
+    fn test_parse_meta_type_angle_bracket() {
+        let tokens = tokenize("List: Type<T> = { data: Array[T] };").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type<T>: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing with angle bracket nested: Type<Type<T>>
+    #[test]
+    fn test_parse_meta_type_angle_bracket_nested() {
+        let tokens = tokenize("Nested: Type<Type<T>> = {};").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type<Type<T>>: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test parsing mixed syntax: Type[T<U>]
+    #[test]
+    fn test_parse_meta_type_mixed_syntax() {
+        let tokens = tokenize("Complex: Type[T<U>] = {};").unwrap();
+        let result = parse(&tokens);
+        assert!(
+            result.is_ok(),
+            "Failed to parse Type[T<U>]: {:?}",
+            result.err()
+        );
+    }
+
     /// Test parsing function type (RFC-010 syntax)
     #[test]
     fn test_parse_fn_type() {

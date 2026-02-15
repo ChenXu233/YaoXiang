@@ -4,7 +4,7 @@
 //!
 //! 实现各种表达式的类型推断
 
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::typecheck::overload;
@@ -168,7 +168,7 @@ impl<'a> ExprInferrer<'a> {
                         &format!("{}", left),
                         &format!("{}", right),
                     )
-                    .build(I18nRegistry::en()))
+                    .build())
                 }
             }
             BinOp::Range => {
@@ -205,7 +205,7 @@ impl<'a> ExprInferrer<'a> {
                 } else {
                     Err(
                         ErrorCodeDefinition::logical_not_type_mismatch(&format!("{}", expr))
-                            .build(I18nRegistry::en()),
+                            .build(),
                     )
                 }
             }
@@ -217,8 +217,7 @@ impl<'a> ExprInferrer<'a> {
                     let inner_type = inner.trim_start_matches('*').to_string();
                     Ok(MonoType::TypeRef(inner_type))
                 } else {
-                    Err(ErrorCodeDefinition::invalid_deref(&format!("{}", expr))
-                        .build(I18nRegistry::en()))
+                    Err(ErrorCodeDefinition::invalid_deref(&format!("{}", expr)).build())
                 }
             }
         }
@@ -244,7 +243,7 @@ impl<'a> ExprInferrer<'a> {
                     // 返回错误
                     Err(ErrorCodeDefinition::unknown_variable(name)
                         .at(*span)
-                        .build(I18nRegistry::en()))
+                        .build())
                 }
             }
 
@@ -343,7 +342,7 @@ impl<'a> ExprInferrer<'a> {
                                     types.len(),
                                     *i as usize,
                                 )
-                                .build(I18nRegistry::en()))
+                                .build())
                             }
                         } else {
                             // 动态下标：返回类型变量
@@ -369,16 +368,13 @@ impl<'a> ExprInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
-                        Err(
-                            ErrorCodeDefinition::field_not_found(field, &struct_type.name)
-                                .build(I18nRegistry::en()),
-                        )
+                        Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
                     }
                     _ => Err(ErrorCodeDefinition::field_access_on_non_struct(&format!(
                         "{}",
                         obj_ty
                     ))
-                    .build(I18nRegistry::en())),
+                    .build()),
                 }
             }
 
@@ -454,7 +450,7 @@ impl<'a> ExprInferrer<'a> {
                         "{}",
                         cond_ty
                     ))
-                    .build(I18nRegistry::en()));
+                    .build());
                 }
 
                 // 推断 then 分支
@@ -468,7 +464,7 @@ impl<'a> ExprInferrer<'a> {
                             "{}",
                             elif_cond_ty
                         ))
-                        .build(I18nRegistry::en()));
+                        .build());
                     }
                     let _ = self.infer_block(elif_block, true, None)?;
                 }
@@ -496,7 +492,7 @@ impl<'a> ExprInferrer<'a> {
                         "{}",
                         cond_ty
                     ))
-                    .build(I18nRegistry::en()));
+                    .build());
                 }
 
                 // 注册循环标签
@@ -554,7 +550,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build());
                     }
                 }
                 Ok(MonoType::Void)
@@ -566,7 +562,7 @@ impl<'a> ExprInferrer<'a> {
                 // 如果有标签，需要验证标签是否有效
                 if let Some(l) = label {
                     if !self.has_label(l) {
-                        return Err(ErrorCodeDefinition::unknown_label(l).build(I18nRegistry::en()));
+                        return Err(ErrorCodeDefinition::unknown_label(l).build());
                     }
                 }
                 Ok(MonoType::Void)

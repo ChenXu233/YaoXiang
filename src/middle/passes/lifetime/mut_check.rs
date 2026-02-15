@@ -7,7 +7,8 @@
 
 use super::error::{OwnershipCheck, OwnershipError, operand_to_string};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use std::collections::HashMap;
+use crate::util::span::Span;
+use std::collections::{HashMap, HashSet};
 
 /// 可变性检查器
 ///
@@ -19,6 +20,8 @@ use std::collections::HashMap;
 pub struct MutChecker {
     /// 可变变量集合 (Operand -> is_mut)
     mutable_vars: HashMap<Operand, bool>,
+    /// 已初始化的变量集合（首次 Store 视为初始化，允许通过）
+    initialized_vars: HashSet<Operand>,
     /// 可变变量修改错误
     errors: Vec<OwnershipError>,
     /// 当前检查位置
@@ -29,6 +32,8 @@ pub struct MutChecker {
     type_table: Option<HashMap<String, crate::frontend::core::type_system::StructType>>,
     /// 兼容 OwnershipCheck trait 的状态字段（未使用）
     state: HashMap<Operand, super::error::ValueState>,
+    /// 是否启用初始化追踪（允许首次赋值）
+    track_initialization: bool,
 }
 
 impl MutChecker {
@@ -36,11 +41,13 @@ impl MutChecker {
     pub fn new() -> Self {
         Self {
             mutable_vars: HashMap::new(),
+            initialized_vars: HashSet::new(),
             errors: Vec::new(),
             location: (0, 0),
             symbol_table: None,
             type_table: None,
             state: HashMap::new(),
+            track_initialization: false,
         }
     }
 
@@ -68,17 +75,18 @@ impl MutChecker {
     ) {
         match instr {
             // Store: 赋值操作，检查目标是否可变
-            Instruction::Store { dst, .. } => self.check_store(dst),
+            Instruction::Store { dst, span, .. } => self.check_store(dst, *span),
             // StoreIndex: 索引赋值，检查目标是否可变
-            Instruction::StoreIndex { dst, .. } => self.check_store(dst),
+            Instruction::StoreIndex { dst, span, .. } => self.check_store(dst, *span),
             // StoreField: 字段赋值，需要检查字段可变性
             Instruction::StoreField {
                 dst,
                 field,
                 type_name,
                 field_name,
+                span,
                 ..
-            } => self.check_store_field(dst, *field, type_name, field_name),
+            } => self.check_store_field(dst, *field, type_name, field_name, *span),
             // Call: 方法调用，检查是否是变异方法
             Instruction::Call {
                 func: Operand::Const(crate::middle::core::ir::ConstValue::String(method)),
@@ -95,13 +103,19 @@ impl MutChecker {
     fn check_store(
         &mut self,
         target: &Operand,
+        span: Span,
     ) {
+        // 如果启用初始化追踪，首次 Store 视为变量初始化（声明），允许通过
+        if self.track_initialization && !self.initialized_vars.contains(target) {
+            self.initialized_vars.insert(target.clone());
+            return;
+        }
         if self.is_mutable(target) {
             return;
         }
         self.errors.push(OwnershipError::ImmutableAssign {
             value: operand_to_string(target),
-            location: self.location,
+            span: Some(span),
         });
     }
 
@@ -118,6 +132,7 @@ impl MutChecker {
         field_index: usize,
         type_name: &Option<String>,
         field_name: &Option<String>,
+        _span: Span,
     ) {
         // 1. 首先检查绑定本身是否可变
         let binding_is_mutable = self.is_mutable(target);
@@ -225,6 +240,45 @@ impl MutChecker {
     ) {
         self.mutable_vars.insert(value_id, true);
     }
+
+    /// 使用可变局部变量信息检查函数
+    ///
+    /// 与 `check_function` 不同，此方法：
+    /// 1. 接受可变局部变量索引集合，自动注册为可变变量
+    /// 2. 启用初始化追踪：首次 Store 视为变量声明（初始化），允许通过
+    /// 3. 只对重复赋值进行可变性检查
+    pub fn check_function_with_mut_locals(
+        &mut self,
+        func: &FunctionIR,
+        mut_locals: &HashSet<usize>,
+    ) -> Vec<OwnershipError> {
+        // 清除状态
+        self.mutable_vars.clear();
+        self.initialized_vars.clear();
+        self.errors.clear();
+        self.state.clear();
+
+        // 启用初始化追踪
+        self.track_initialization = true;
+
+        // 注册可变局部变量
+        for &idx in mut_locals {
+            self.mutable_vars.insert(Operand::Local(idx), true);
+        }
+
+        // 执行检查
+        for (block_idx, block) in func.blocks.iter().enumerate() {
+            for (instr_idx, instr) in block.instructions.iter().enumerate() {
+                self.location = (block_idx, instr_idx);
+                self.check_instruction(instr);
+            }
+        }
+
+        // 恢复默认设置
+        self.track_initialization = false;
+
+        self.errors.clone()
+    }
 }
 
 impl OwnershipCheck for MutChecker {
@@ -254,6 +308,7 @@ impl OwnershipCheck for MutChecker {
 
     fn clear(&mut self) {
         self.mutable_vars.clear();
+        self.initialized_vars.clear();
         self.errors.clear();
         self.state.clear();
     }

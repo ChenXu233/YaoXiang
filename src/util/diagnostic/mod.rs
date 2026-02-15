@@ -65,10 +65,7 @@ pub fn render_compile_error(
 
 /// 解析编译错误为诊断信息（通过注册表路径）
 pub fn parse_compile_error(error: &str) -> Diagnostic {
-    let i18n = I18nRegistry::en();
-
-    // 根据消息内容识别错误码，通过注册表构建
-    ErrorCodeDefinition::internal_error(error).build(i18n)
+    ErrorCodeDefinition::internal_error(error).build()
 }
 
 /// 运行文件并美化错误输出
@@ -101,6 +98,55 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
     let mut compiler = Compiler::new();
     match compiler.compile(&source_name, &source) {
         Ok(module) => {
+            // 可变性检查：在代码生成之前检查不可变变量的重复赋值
+            {
+                use crate::middle::passes::lifetime::{MutChecker, OwnershipError};
+                let mut mut_checker = MutChecker::new();
+                let empty_set = std::collections::HashSet::new();
+                for func in &module.functions {
+                    let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
+                    let errors = mut_checker.check_function_with_mut_locals(func, mut_locals);
+                    if !errors.is_empty() {
+                        eprintln!();
+                        for err in &errors {
+                            match err {
+                                OwnershipError::ImmutableAssign { value, span } => {
+                                    // 提取变量名（去掉 local_ 前缀）
+                                    let name = value.strip_prefix("local_").unwrap_or(value);
+                                    let mut diag = ErrorCodeDefinition::immutable_assignment(name);
+
+                                    // 如果有 span，使用它
+                                    if let Some(span) = span {
+                                        diag = diag.at(*span);
+                                    }
+
+                                    let diagnostic = diag.build();
+                                    let output = render_compile_error(
+                                        &diagnostic.message,
+                                        &source_file,
+                                        Some(&diagnostic),
+                                    );
+                                    eprintln!("{}", output);
+                                }
+                                _ => {
+                                    // 其他错误类型，使用原来的方式
+                                    let diag =
+                                        ErrorCodeDefinition::immutable_assignment(&err.to_string())
+                                            .build();
+                                    let output = render_compile_error(
+                                        &diag.message,
+                                        &source_file,
+                                        Some(&diag),
+                                    );
+                                    eprintln!("{}", output);
+                                }
+                            }
+                        }
+                        return Err(anyhow::anyhow!("Mutability check failed"));
+                    }
+                }
+            }
+
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             let bytecode_file = ctx
@@ -194,14 +240,13 @@ main = () => {
 }"#;
 
         let source_file = SourceFile::new("error.yx".to_string(), source.to_string());
-        let i18n = I18nRegistry::en();
 
         let diagnostic = ErrorCodeDefinition::unknown_variable("a")
             .at(Span::new(
                 Position::with_offset(5, 7, 65),
                 Position::with_offset(5, 8, 66),
             ))
-            .build(i18n);
+            .build();
 
         let emitter = TextEmitter::new();
         let output = emitter.render_with_source(&diagnostic, Some(&source_file));
@@ -220,12 +265,11 @@ main = () => {
 
     #[test]
     fn test_render_no_source_file() {
-        let i18n = I18nRegistry::en();
         let diagnostic = ErrorCodeDefinition::find("E0001")
             .unwrap()
             .builder()
             .param("char", "@")
-            .build(i18n);
+            .build();
 
         let emitter = TextEmitter::new();
         let output = emitter.render(&diagnostic);

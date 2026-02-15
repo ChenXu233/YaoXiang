@@ -6,8 +6,7 @@
 //! 所有转换都通过注册表中的 E8001（内部编译器错误）路径
 
 use super::error::Diagnostic;
-use super::codes::{ErrorCodeDefinition, I18nRegistry};
-use crate::util::i18n::current_lang;
+use super::codes::ErrorCodeDefinition;
 
 /// 错误转换trait
 pub trait ErrorConvert<T> {
@@ -16,18 +15,12 @@ pub trait ErrorConvert<T> {
 
 impl<T> ErrorConvert<T> for Result<T, String> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| {
-            let i18n = I18nRegistry::new(current_lang());
-            ErrorCodeDefinition::internal_error(&msg).build(i18n)
-        })
+        self.map_err(|msg| ErrorCodeDefinition::internal_error(&msg).build())
     }
 }
 
 impl<T> ErrorConvert<T> for Result<T, &str> {
     fn convert(self) -> Result<T, Diagnostic> {
-        self.map_err(|msg| {
-            let i18n = I18nRegistry::new(current_lang());
-            ErrorCodeDefinition::internal_error(msg).build(i18n)
-        })
+        self.map_err(|msg| ErrorCodeDefinition::internal_error(msg).build())
     }
 }

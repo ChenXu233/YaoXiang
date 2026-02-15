@@ -399,7 +399,9 @@ impl InstantiationGraph {
                 self.extract_type_from_operand(index, params, locals, deps);
             }
             // 存储索引
-            Instruction::StoreIndex { dst, index, src } => {
+            Instruction::StoreIndex {
+                dst, index, src, ..
+            } => {
                 self.extract_type_from_operand(dst, params, locals, deps);
                 self.extract_type_from_operand(index, params, locals, deps);
                 self.extract_type_from_operand(src, params, locals, deps);
@@ -445,7 +447,7 @@ impl InstantiationGraph {
                 self.extract_type_from_operand(src, params, locals, deps);
             }
             // 存储
-            Instruction::Store { dst, src } => {
+            Instruction::Store { dst, src, .. } => {
                 self.extract_type_from_operand(dst, params, locals, deps);
                 self.extract_type_from_operand(src, params, locals, deps);
             }

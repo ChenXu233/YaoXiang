@@ -33,6 +33,7 @@ fn test_codegen_arc_new() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);
@@ -66,6 +67,7 @@ fn test_codegen_arc_clone() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);
@@ -96,6 +98,7 @@ fn test_codegen_arc_drop() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);
@@ -140,6 +143,7 @@ fn test_arc_operation_sequence() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);
@@ -178,6 +182,7 @@ fn test_ref_bytecode_generation() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);
@@ -222,6 +227,7 @@ fn test_nested_ref_bytecode() {
         types: vec![],
         globals: vec![],
         functions: vec![func],
+        mut_locals: Default::default(),
     };
 
     let mut codegen = CodegenContext::new(module);

@@ -2,6 +2,7 @@
 
 pub use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::MonoType;
+use crate::util::span::Span;
 
 /// Instruction operand
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -29,6 +30,8 @@ pub enum Instruction {
     Store {
         dst: Operand,
         src: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     Push(Operand),
     Pop(Operand),
@@ -183,6 +186,8 @@ pub enum Instruction {
         type_name: Option<String>,
         /// 字段名（用于错误信息）
         field_name: Option<String>,
+        /// Source span for error reporting
+        span: Span,
     },
     LoadIndex {
         dst: Operand,
@@ -193,6 +198,8 @@ pub enum Instruction {
         dst: Operand,
         index: Operand,
         src: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     Cast {
         dst: Operand,
@@ -382,4 +389,6 @@ pub struct ModuleIR {
     pub types: Vec<Type>,
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
     pub functions: Vec<FunctionIR>,
+    /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)
+    pub mut_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
 }

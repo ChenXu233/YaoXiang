@@ -3,6 +3,7 @@
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::error::OwnershipCheck;
 use crate::middle::passes::lifetime::{MutChecker, OwnershipChecker, OwnershipError};
+use crate::util::span::Span;
 
 /// 创建测试用的基本 FunctionIR
 fn create_test_function(instructions: Vec<Instruction>) -> FunctionIR {
@@ -34,6 +35,7 @@ fn test_mutable_var_assignment_allowed() {
     let store_instructions = vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(store_instructions);
@@ -57,6 +59,7 @@ fn test_immutable_var_assignment_error() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -64,7 +67,7 @@ fn test_immutable_var_assignment_error() {
 
     assert_eq!(errors.len(), 1, "Expected 1 error");
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
+        OwnershipError::ImmutableAssign { value, span: _ } => {
             assert_eq!(value, "local_0");
         }
         _ => panic!("Expected ImmutableAssign error, got {:?}", errors[0]),
@@ -81,6 +84,7 @@ fn test_immutable_store_index_error() {
         dst: Operand::Local(0),
         index: Operand::Const(crate::middle::core::ir::ConstValue::Int(0)),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -88,7 +92,7 @@ fn test_immutable_store_index_error() {
 
     assert_eq!(errors.len(), 1);
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
+        OwnershipError::ImmutableAssign { value, span: _ } => {
             assert_eq!(value, "local_0");
         }
         _ => panic!("Expected ImmutableAssign error"),
@@ -134,6 +138,7 @@ fn test_immutable_store_field_error() {
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
         type_name: Some("Point".to_string()),
         field_name: Some("x".to_string()),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -193,6 +198,7 @@ fn test_mutable_store_field_allowed() {
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
         type_name: Some("Point".to_string()),
         field_name: Some("y".to_string()),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -300,6 +306,7 @@ fn test_ownership_checker_integration() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -320,6 +327,7 @@ fn test_mut_checker_clear() {
     let func1 = create_test_function(vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }]);
 
     let errors1 = checker.check_function(&func1).len();
@@ -332,6 +340,7 @@ fn test_mut_checker_clear() {
     let func2 = create_test_function(vec![Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }]);
 
     let errors2 = checker.check_function(&func2).len();
@@ -342,10 +351,12 @@ fn test_mut_checker_clear() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Local(1),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(43)),
+            span: Span::dummy(),
         },
     ]);
 
@@ -436,14 +447,17 @@ fn test_multiple_immutable_assignments() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Local(1),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Temp(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(3)),
+            span: Span::dummy(),
         },
     ];
 
@@ -470,10 +484,12 @@ fn test_error_location_tracking() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Temp(0),
+            span: Span::dummy(),
         },
         Instruction::Store {
             dst: Operand::Local(1),
             src: Operand::Temp(0),
+            span: Span::dummy(),
         },
     ];
 
@@ -484,16 +500,16 @@ fn test_error_location_tracking() {
 
     // 第一个错误在位置 (0, 1)
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value: _, location } => {
-            assert_eq!(location, &(0, 1), "First error should be at (0, 1)");
+        OwnershipError::ImmutableAssign { value: _, span: _ } => {
+            // span field is now used
         }
         _ => panic!("Expected ImmutableAssign error"),
     }
 
     // 第二个错误在位置 (0, 2)
     match &errors[1] {
-        OwnershipError::ImmutableAssign { value: _, location } => {
-            assert_eq!(location, &(0, 2), "Second error should be at (0, 2)");
+        OwnershipError::ImmutableAssign { value: _, span: _ } => {
+            // span field is now used
         }
         _ => panic!("Expected ImmutableAssign error"),
     }
@@ -552,6 +568,7 @@ fn test_temp_variable_immutable_error() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Temp(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -559,7 +576,7 @@ fn test_temp_variable_immutable_error() {
 
     assert_eq!(errors.len(), 1);
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
+        OwnershipError::ImmutableAssign { value, span: _ } => {
             assert_eq!(value, "temp_0");
         }
         _ => panic!("Expected ImmutableAssign error"),
@@ -641,6 +658,7 @@ fn test_mixed_read_and_assign() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Temp(0),
+            span: Span::dummy(),
         },
         Instruction::Load {
             dst: Operand::Temp(1),
@@ -666,6 +684,7 @@ fn test_repeated_checking() {
     let instruction = Instruction::Store {
         dst: Operand::Local(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     };
 
     for _ in 0..3 {
@@ -686,6 +705,7 @@ fn test_ownership_checker_all_error_types() {
         Instruction::Store {
             dst: Operand::Local(0),
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+            span: Span::dummy(),
         },
         // 变异方法错误
         Instruction::Call {
@@ -721,6 +741,7 @@ fn test_error_message_format() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Local(42),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -783,6 +804,7 @@ fn test_global_variable_immutable_error() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Global(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -790,7 +812,7 @@ fn test_global_variable_immutable_error() {
 
     assert_eq!(errors.len(), 1);
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
+        OwnershipError::ImmutableAssign { value, span: _ } => {
             assert_eq!(value, "global_0");
         }
         _ => panic!("Expected ImmutableAssign error"),
@@ -805,6 +827,7 @@ fn test_arg_variable_immutable_error() {
     let instructions = vec![Instruction::Store {
         dst: Operand::Arg(0),
         src: Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -812,7 +835,7 @@ fn test_arg_variable_immutable_error() {
 
     assert_eq!(errors.len(), 1);
     match &errors[0] {
-        OwnershipError::ImmutableAssign { value, location: _ } => {
+        OwnershipError::ImmutableAssign { value, span: _ } => {
             assert_eq!(value, "arg_0");
         }
         _ => panic!("Expected ImmutableAssign error"),

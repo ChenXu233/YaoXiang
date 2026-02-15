@@ -171,7 +171,7 @@ impl Translator {
         match instr {
             Move { dst, src } => self.translate_move(dst, src),
             Load { dst, src } => self.translate_load(dst, src),
-            Store { dst, src } => self.translate_store(dst, src),
+            Store { dst, src, .. } => self.translate_store(dst, src),
 
             Add { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Add, dst, lhs, rhs),
             Sub { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sub, dst, lhs, rhs),

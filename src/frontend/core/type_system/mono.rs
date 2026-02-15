@@ -194,11 +194,13 @@ pub enum MonoType {
     /// RFC-010: 元类型 `Type`
     /// 表示一个值是类型本身
     /// universe_level 表示类型宇宙层级（用户不可见，编译器自动管理）
+    /// 支持无限层级：Type[Type[T]] → Type2, Type[Type[Type[T]]] → Type3, etc.
     MetaType {
         /// 类型宇宙层级
         universe_level: UniverseLevel,
-        /// 泛型参数（Type[T] 中的 T）
-        type_params: Vec<String>,
+        /// 泛型参数（Type[T] 中的 T，可以是嵌套的 MetaType）
+        /// e.g., Type[Type[T]] 的 type_params = [MetaType { type_params: [T] }]
+        type_params: Vec<MonoType>,
     },
     /// 字面量类型（编译期常量值作为类型）
     /// 用于 Const 泛型，如 "5" 表示值 5 的字面量类型
@@ -355,7 +357,13 @@ impl MonoType {
                     // 用户只看见 "Type"，不看见层级数字
                     "Type".to_string()
                 } else {
-                    format!("Type[{}]", type_params.join(", "))
+                    // 递归显示类型参数
+                    let params_str = type_params
+                        .iter()
+                        .map(|p| p.type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("Type[{}]", params_str)
                 }
             }
         }
@@ -509,19 +517,54 @@ impl From<ast::Type> for MonoType {
                 MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
             }
             ast::Type::MetaType { args } => {
-                // RFC-010: Meta-type `Type` or `Type[T]`
-                // Determine universe level: plain Type = Type0, Type[T] = Type1
-                let level = if args.is_empty() {
-                    UniverseLevel::type0()
-                } else {
-                    UniverseLevel::type1()
-                };
+                // RFC-010: Meta-type `Type` or `Type[T]` or `Type[Type[T]]`
+                // Determine universe level recursively:
+                // - plain Type = Type0
+                // - Type[T] = Type1 (if T is Type0)
+                // - Type[Type[T]] = Type2 (if T is Type1)
+                // - etc.
+                let universe_level = calculate_meta_type_level(&args);
                 MonoType::MetaType {
-                    universe_level: level,
-                    type_params: args,
+                    universe_level,
+                    type_params: args.into_iter().map(MonoType::from).collect(),
                 }
             }
         }
+    }
+}
+
+/// Calculate the universe level for a meta-type
+/// Returns max(arg_level) + 1, or Type0 if args is empty
+pub fn calculate_meta_type_level(args: &[ast::Type]) -> UniverseLevel {
+    if args.is_empty() {
+        return UniverseLevel::type0();
+    }
+
+    // Find the maximum universe level among all arguments
+    let max_arg_level = args.iter().fold(0, |max, arg| {
+        let arg_level = get_ast_type_universe_level(arg);
+        max.max(arg_level)
+    });
+
+    // Result level is max_arg_level + 1
+    UniverseLevel::new((max_arg_level + 1).to_string())
+}
+
+/// Get the universe level of an AST type (before conversion to MonoType)
+pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
+    match ast_type {
+        ast::Type::MetaType { args } => {
+            // Recursively calculate level
+            if args.is_empty() {
+                0 // Type itself is Type0
+            } else {
+                let max_arg_level = args
+                    .iter()
+                    .fold(0, |max, arg| max.max(get_ast_type_universe_level(arg)));
+                max_arg_level + 1
+            }
+        }
+        _ => 0, // Non-meta types are at Type0
     }
 }
 

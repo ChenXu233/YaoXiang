@@ -4,7 +4,7 @@
 //!
 //! 检查泛型类型边界和约束
 
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::typecheck::traits::solver::TraitSolver;
 use crate::util::span::Span;
@@ -50,7 +50,7 @@ impl BoundsChecker {
                     &format!("{}", ty),
                     bound,
                 )
-                .build(I18nRegistry::en()));
+                .build());
             }
         }
         Ok(())

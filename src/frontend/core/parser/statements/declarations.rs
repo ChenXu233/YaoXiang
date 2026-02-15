@@ -26,6 +26,23 @@ fn const_param_type_set() -> &'static HashSet<&'static str> {
     SET.get_or_init(|| CONST_PARAM_TYPES.iter().copied().collect())
 }
 
+/// Extract parameter name from a Type for generic_params
+/// Returns None if the type is complex (e.g., MetaType) and doesn't have a simple name
+fn extract_type_name(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Name(name) => Some(name.clone()),
+        // For MetaType like Type[T], extract T's name
+        Type::MetaType { args } => {
+            if args.len() == 1 {
+                extract_type_name(&args[0])
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 /// 检测是否是旧函数定义语法: identifier( 后跟类型参数和 ->
 /// 旧语法示例: add(Int, Int) -> Int = (a, b) => a + b
 /// 已被弃用，移除支持
@@ -680,7 +697,10 @@ fn parse_var_stmt_with_pub(
                             kind: StmtKind::TypeDef {
                                 name: "Type".to_string(),
                                 definition: Type::MetaType { args: Vec::new() },
-                                generic_params: meta_args.clone(),
+                                generic_params: meta_args
+                                    .iter()
+                                    .filter_map(extract_type_name)
+                                    .collect(),
                             },
                             span,
                         });
@@ -689,7 +709,10 @@ fn parse_var_stmt_with_pub(
                 state.restore_position(saved_easter);
             }
 
-            let generic_params_for_type = meta_args.clone();
+            // Extract generic parameter names from meta_args (Vec<Type>) for StmtKind::TypeDef
+            let generic_params_for_type: Vec<String> =
+                meta_args.iter().filter_map(extract_type_name).collect();
+
             let definition = parse_type_definition(state)?;
             state.skip(&TokenKind::Semicolon);
             return Some(Stmt {
@@ -1323,17 +1346,16 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             state.bump();
 
             // RFC-010: Check if this is the meta-type keyword `Type` or `Type[T]` or `Type<T>`
+            // Supports infinite universe levels: Type[Type[T]] → Type2, etc.
             if name == "Type" {
-                // Check for generic parameters: Type[T] or Type[K, V]
+                // Check for generic parameters: Type[T] or Type[K, V] or Type[Type[T]]
                 if state.at(&TokenKind::LBracket) {
                     state.bump(); // consume '['
                     let mut args = Vec::new();
                     while !state.at(&TokenKind::RBracket) && !state.at_end() {
-                        if let Some(TokenKind::Identifier(param_name)) =
-                            state.current().map(|t| &t.kind)
-                        {
-                            args.push(param_name.clone());
-                            state.bump();
+                        // Recursively parse each parameter as a Type
+                        if let Some(param_type) = parse_type_annotation(state) {
+                            args.push(param_type);
                             state.skip(&TokenKind::Comma);
                         } else {
                             break;
@@ -1347,11 +1369,9 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                     state.bump(); // consume '<'
                     let mut args = Vec::new();
                     while !state.at(&TokenKind::Gt) && !state.at_end() {
-                        if let Some(TokenKind::Identifier(param_name)) =
-                            state.current().map(|t| &t.kind)
-                        {
-                            args.push(param_name.clone());
-                            state.bump();
+                        // Recursively parse each parameter as a Type
+                        if let Some(param_type) = parse_type_annotation(state) {
+                            args.push(param_type);
                             state.skip(&TokenKind::Comma);
                         } else {
                             break;

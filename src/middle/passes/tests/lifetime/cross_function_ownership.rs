@@ -5,6 +5,7 @@
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::OwnershipAnalyzer;
+use crate::util::span::Span;
 
 /// 创建带多个参数的函数
 fn create_multi_param_function(
@@ -203,6 +204,7 @@ fn test_parameter_escapes_scope() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 参数逃逸到局部变量
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -319,6 +321,7 @@ fn test_return_value_from_local() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 从局部变量返回（所有权转移）
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -440,6 +443,7 @@ fn test_closure_capture_ownership_cross_function() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
+                    span: Span::dummy(),
                 },
                 // 闭包捕获局部变量
                 Instruction::Ret(Some(Operand::Local(0))),
@@ -585,6 +589,7 @@ fn test_spawn_function_ownership() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // Spawn 并发函数
                 create_spawn_instruction(
@@ -621,6 +626,7 @@ fn test_async_function_ownership() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Local(0))),
             ],
@@ -651,6 +657,7 @@ fn test_shared_ownership_across_threads() {
                 Instruction::Store {
                     dst: Operand::Local(0),
                     src: Operand::Arg(0),
+                    span: Span::dummy(),
                 },
                 // 多线程共享所有权
                 create_spawn_instruction(

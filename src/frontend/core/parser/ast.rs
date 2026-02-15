@@ -325,10 +325,12 @@ pub enum Type {
     /// Meta-type: `Type` or `Type[T]` or `Type[K, V]`
     /// RFC-010: Used in unified syntax `Name: Type = { ... }`
     /// `Type` is the only meta-type keyword in the language
+    /// Supports infinite universe levels: `Type[Type[T]]` → Type2, etc.
     MetaType {
         /// Generic type parameters (empty for plain `Type`)
-        /// e.g., `Type[T]` has args = ["T"], `Type[K, V]` has args = ["K", "V"]
-        args: Vec<String>,
+        /// e.g., `Type[T]` has args = [T], `Type[K, V]` has args = [K, V]
+        /// e.g., `Type[Type[T]]` has args = [MetaType { args: [T] }]
+        args: Vec<Type>,
     },
 }
 

@@ -4,7 +4,7 @@
 //!
 //! 检查赋值语句的类型正确性
 
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::util::span::Span;
 use super::subtyping::SubtypeChecker;
@@ -44,7 +44,7 @@ impl AssignmentChecker {
             return Err(
                 ErrorCodeDefinition::constraint_not_in_generic(&lhs.type_name())
                     .at(span)
-                    .build(I18nRegistry::en()),
+                    .build(),
             );
         }
 
@@ -53,7 +53,7 @@ impl AssignmentChecker {
             return Err(
                 ErrorCodeDefinition::type_mismatch(&lhs.type_name(), &rhs.type_name())
                     .at(span)
-                    .build(I18nRegistry::en()),
+                    .build(),
             );
         }
 
