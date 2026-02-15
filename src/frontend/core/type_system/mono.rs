@@ -434,11 +434,6 @@ impl From<ast::Type> for MonoType {
             ast::Type::Tuple(types) => {
                 MonoType::Tuple(types.into_iter().map(MonoType::from).collect())
             }
-            ast::Type::List(t) => MonoType::List(Box::new(MonoType::from(*t))),
-            ast::Type::Dict(k, v) => {
-                MonoType::Dict(Box::new(MonoType::from(*k)), Box::new(MonoType::from(*v)))
-            }
-            ast::Type::Set(t) => MonoType::Set(Box::new(MonoType::from(*t))),
             ast::Type::Fn {
                 params,
                 return_type,

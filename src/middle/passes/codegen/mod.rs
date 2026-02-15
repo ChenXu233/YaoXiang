@@ -262,11 +262,6 @@ impl CodegenContext {
             Type::String => MonoType::String,
             Type::Bool => MonoType::Bool,
             Type::Void => MonoType::Void,
-            Type::List(elem) => MonoType::List(Box::new(self.type_from_ast(elem))),
-            Type::Dict(key, value) => MonoType::Dict(
-                Box::new(self.type_from_ast(key)),
-                Box::new(self.type_from_ast(value)),
-            ),
             Type::Tuple(types) => {
                 MonoType::Tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
             }
@@ -279,6 +274,14 @@ impl CodegenContext {
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
             },
+            Type::Generic { name, args } => MonoType::TypeRef(format!(
+                "{}<{}>",
+                name,
+                args.iter()
+                    .map(|t| self.type_from_ast(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
             _ => MonoType::Void,
         }
     }

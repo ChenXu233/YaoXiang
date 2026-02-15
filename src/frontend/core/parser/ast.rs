@@ -287,9 +287,6 @@ pub enum Type {
     /// Variant type: `type Color = red | green | blue` or `type Result = ok(T) | err(E)`
     Variant(Vec<VariantDef>),
     Tuple(Vec<Type>),
-    List(Box<Type>),
-    Dict(Box<Type>, Box<Type>),
-    Set(Box<Type>),
     Fn {
         params: Vec<Type>,
         return_type: Box<Type>,
