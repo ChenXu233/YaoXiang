@@ -1033,6 +1033,7 @@ impl AstToIrGenerator {
     }
 
     /// Generate For loop IR (simplified range loop)
+    #[allow(clippy::too_many_arguments)]
     fn generate_for_loop_ir(
         &mut self,
         var_name: &str,
