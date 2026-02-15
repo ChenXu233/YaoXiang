@@ -14,7 +14,7 @@ use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::tlog;
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, I18nRegistry};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
@@ -1602,26 +1602,26 @@ fn convert_ir_gen_error(e: IrGenError) -> Diagnostic {
             &format!("Unimplemented expression type: {}", expr_type),
         )
         .at(span)
-        .build(I18nRegistry::en()),
+        .build(),
         IrGenError::UnimplementedStmt { stmt_type, span } => ErrorCodeDefinition::internal_error(
             &format!("Unimplemented statement type: {}", stmt_type),
         )
         .at(span)
-        .build(I18nRegistry::en()),
+        .build(),
         IrGenError::InvalidOperand { span } => {
             ErrorCodeDefinition::internal_error("Invalid operand")
                 .at(span)
-                .build(I18nRegistry::en())
+                .build()
         }
         IrGenError::InternalError { message, span } => {
             ErrorCodeDefinition::internal_error(&message)
                 .at(span)
-                .build(I18nRegistry::en())
+                .build()
         }
         IrGenError::UnsupportedIterator { iter_type, span } => {
             ErrorCodeDefinition::unsupported_operation("iterate", &iter_type)
                 .at(span)
-                .build(I18nRegistry::en())
+                .build()
         }
     }
 }

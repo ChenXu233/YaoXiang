@@ -39,7 +39,7 @@ impl SpecializationAlgorithm {
                     poly.type_binders.len(),
                     args.len(),
                 )
-                .build(crate::util::diagnostic::I18nRegistry::en()),
+                .build(),
             );
         }
 

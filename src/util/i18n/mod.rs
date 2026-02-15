@@ -3,6 +3,15 @@
 //! Loads translations from JSON files in the `locales/` directory.
 //! Supports both hardcoded languages (en, zh, zh-miao) and dynamic loading.
 //!
+//! # Configuration
+//!
+//! Configuration priority (high → low):
+//! 1. CLI arguments (--lang)
+//! 2. Environment variable (YAOXIANG_LANG)
+//! 3. Project-level config (yaoxiang.toml [i18n])
+//! 4. User-level config (~/.config/yaoxiang/config.toml [i18n])
+//! 5. Default values
+//!
 //! # Usage
 //!
 //! ```rust
@@ -12,93 +21,53 @@
 //! println!("{}", t_simple(MSG::CmdReceived, "zh-x-miao"));
 //! ```
 
+use std::sync::OnceLock;
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::path::PathBuf;
-use toml;
 
-/// User configuration for i18n
-#[derive(Debug, Clone)]
-pub struct I18nConfig {
-    pub lang: String,
-    pub fallback: String,
-}
+pub use crate::util::config::{I18nConfig as ConfigI18n};
 
-impl Default for I18nConfig {
-    fn default() -> Self {
-        Self {
-            lang: "zh".to_string(),
-            fallback: "en".to_string(),
-        }
-    }
-}
+/// Cache for merged i18n config to avoid repeated file reads
+static MERGED_CONFIG: OnceLock<ConfigI18n> = OnceLock::new();
 
-/// Cache for user config to avoid repeated file reads
-static USER_CONFIG: Lazy<I18nConfig> = Lazy::new(load_user_config);
+/// Load and merge i18n config from all sources
+/// Priority: CLI > env > project > user > default
+fn load_merged_config() -> ConfigI18n {
+    // 1. Start with user-level config (default)
+    let user_config = crate::util::config::load_user_config()
+        .unwrap_or_else(|_| crate::util::config::UserConfig::default())
+        .i18n;
 
-/// Load user config from ~/.config/yaoxiang/config.toml
-fn load_user_config() -> I18nConfig {
-    let config_path = get_config_path();
-
-    if let Some(path) = config_path {
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(config) = content.parse::<toml::Value>() {
-                    if let Some(i18n_table) = config.get("i18n").and_then(|v| v.as_table()) {
-                        let lang = i18n_table
-                            .get("lang")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| "zh".to_string());
-
-                        let fallback = i18n_table
-                            .get("fallback")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| "en".to_string());
-
-                        return I18nConfig { lang, fallback };
-                    }
-                }
+    // 2. Try to merge project-level config if in a project
+    if let Ok(project_dir) = std::env::current_dir() {
+        if let Ok(manifest) = crate::package::manifest::PackageManifest::load(&project_dir) {
+            if let Some(project_i18n) = manifest.i18n {
+                // Project-level overrides user-level
+                return ConfigI18n {
+                    lang: project_i18n.lang,
+                    fallback: project_i18n.fallback,
+                    error_lang: project_i18n.error_lang,
+                    local_lang: project_i18n.local_lang,
+                };
             }
         }
     }
 
-    I18nConfig::default()
+    // Return user-level config (or default if failed)
+    user_config
 }
 
-/// Get the user config file path (~/.config/yaoxiang/config.toml)
-fn get_config_path() -> Option<PathBuf> {
-    // Try XDG config directory on Unix
-    if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-        return Some(
-            PathBuf::from(xdg_config)
-                .join("yaoxiang")
-                .join("config.toml"),
-        );
-    }
-
-    // Fallback to ~/.config/yaoxiang/config.toml
-    if let Ok(home) = std::env::var("HOME") {
-        return Some(
-            PathBuf::from(home)
-                .join(".config")
-                .join("yaoxiang")
-                .join("config.toml"),
-        );
-    }
-
-    // On Windows, try %APPDATA%
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return Some(PathBuf::from(appdata).join("yaoxiang").join("config.toml"));
-    }
-
-    None
+/// Reload merged config (useful for testing)
+#[cfg(test)]
+pub fn reload_config() {
+    // Reset the OnceLock to force reload on next access
+    let _ = MERGED_CONFIG.set(load_merged_config());
 }
 
-/// Get the user i18n config
-pub fn get_i18n_config() -> &'static I18nConfig {
-    &USER_CONFIG
+/// Get the merged i18n config
+pub fn get_i18n_config() -> &'static ConfigI18n {
+    MERGED_CONFIG.get_or_init(load_merged_config)
 }
 
 /// Translation table loaded from JSON
@@ -288,6 +257,8 @@ macro_rules! tlog {
 
 /// Convenience function to get current language
 /// Priority: YAOXIANG_LANG env > config file > fallback > default
+/// Get current language for src/util/i18n messages
+/// Priority: YAOXIANG_LANG env > local-lang > lang > fallback
 pub fn current_lang() -> &'static str {
     // 1. Check YAOXIANG_LANG environment variable (highest priority)
     if let Ok(env_lang) = std::env::var("YAOXIANG_LANG") {
@@ -300,13 +271,21 @@ pub fn current_lang() -> &'static str {
         }
     }
 
-    // 2. Check config file
     let config = get_i18n_config();
+
+    // 2. Use explicit local-lang if set
+    if let Some(ref local_lang) = config.local_lang {
+        if TRANSLATIONS.contains_key(local_lang) {
+            return local_lang;
+        }
+    }
+
+    // 3. Fall back to lang
     if TRANSLATIONS.contains_key(&config.lang) {
         return &config.lang;
     }
 
-    // 3. Use fallback language (英文兜底)
+    // 4. Use fallback language (英文兜底)
     fallback_lang()
 }
 
@@ -321,6 +300,38 @@ pub fn fallback_lang() -> &'static str {
 
     // Default to English
     "en"
+}
+
+/// Get the language for diagnostic error messages
+/// Priority: error-lang > lang > fallback
+pub fn error_lang() -> &'static str {
+    // 1. Check YAOXIANG_LANG environment variable first
+    if let Ok(env_lang) = std::env::var("YAOXIANG_LANG") {
+        if TRANSLATIONS.contains_key(&env_lang) {
+            return TRANSLATIONS
+                .keys()
+                .find(|k| k.as_str() == env_lang)
+                .map(|s| s.as_str())
+                .unwrap_or("en");
+        }
+    }
+
+    let config = get_i18n_config();
+
+    // 2. Use explicit error-lang if set
+    if let Some(ref error_lang) = config.error_lang {
+        if TRANSLATIONS.contains_key(error_lang) {
+            return error_lang;
+        }
+    }
+
+    // 3. Fall back to lang
+    if TRANSLATIONS.contains_key(&config.lang) {
+        return &config.lang;
+    }
+
+    // 4. Fall back to fallback
+    fallback_lang()
 }
 
 /// Set current language via environment variable

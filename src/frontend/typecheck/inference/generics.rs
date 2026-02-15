@@ -4,7 +4,7 @@
 //!
 //! 实现泛型函数的类型推断
 
-use crate::util::diagnostic::{ErrorCodeDefinition, I18nRegistry, Result};
+use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::type_system::MonoType;
 use crate::frontend::typecheck::checking::bounds::BoundsChecker;
 use crate::util::span::Span;
@@ -73,7 +73,7 @@ impl GenericInferrer {
             .map_err(|e| {
                 ErrorCodeDefinition::trait_bound_not_satisfied(&e.type_name, &e.constraint_name)
                     .at(span)
-                    .build(I18nRegistry::en())
+                    .build()
             })
     }
 }

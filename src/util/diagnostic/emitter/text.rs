@@ -271,7 +271,7 @@ impl Default for TextEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::diagnostic::codes::{ErrorCodeDefinition, I18nRegistry};
+    use crate::util::diagnostic::codes::ErrorCodeDefinition;
     use crate::util::span::Span;
 
     /// 移除 ANSI 转义序列
@@ -286,8 +286,7 @@ mod tests {
 
     #[test]
     fn test_render_basic_error() {
-        let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
 
         let emitter = TextEmitter::new();
         let output = emitter.render(&diagnostic);
@@ -300,10 +299,9 @@ mod tests {
 
     #[test]
     fn test_render_error_with_span() {
-        let i18n = I18nRegistry::en();
         let diagnostic = ErrorCodeDefinition::type_mismatch("Int", "String")
             .at(Span::dummy())
-            .build(i18n);
+            .build();
 
         let emitter = TextEmitter::new();
         let output = emitter.render(&diagnostic);
@@ -320,8 +318,7 @@ mod tests {
             ..Default::default()
         };
 
-        let i18n = I18nRegistry::en();
-        let diagnostic = ErrorCodeDefinition::invalid_character("@").build(i18n);
+        let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
 
         let emitter = TextEmitter::with_config(config);
         let output = emitter.render(&diagnostic);
