@@ -395,7 +395,7 @@ impl TypeChecker {
                         &format!("{}", e.error.right),
                     )
                     .at(e.span)
-                    .build(I18nRegistry::en())
+                    .build()
                 })
                 .collect::<Vec<_>>()
         })?;
@@ -599,7 +599,7 @@ impl TypeChecker {
                     self.add_error(
                         ErrorCodeDefinition::invalid_generic_self_reference(&decl)
                             .at(span)
-                            .build(I18nRegistry::en()),
+                            .build(),
                     );
                     return;
                 }
@@ -609,7 +609,7 @@ impl TypeChecker {
                     ErrorCodeDefinition::type_self_reference_easter_egg()
                         .at(span)
                         .severity(crate::util::diagnostic::Severity::Info)
-                        .build(I18nRegistry::en()),
+                        .build(),
                 );
                 return;
             }

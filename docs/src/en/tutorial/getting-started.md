@@ -4,8 +4,6 @@
 >
 > **Note**: The code examples in this document are written according to the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../YaoXiang-language-specification.md).
 
-[中文版本](./getting-started.md)
-
 ## Installation
 
 ### Building from Source (Recommended)

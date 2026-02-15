@@ -34,8 +34,7 @@ impl Instantiator {
         // 检查是否可以实例化
         if !self.can_instantiate(generic, args) {
             return Err(
-                crate::util::diagnostic::ErrorCodeDefinition::cannot_instantiate_generic()
-                    .build(crate::util::diagnostic::I18nRegistry::en()),
+                crate::util::diagnostic::ErrorCodeDefinition::cannot_instantiate_generic().build(),
             );
         }
 
