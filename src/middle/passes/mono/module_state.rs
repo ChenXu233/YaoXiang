@@ -319,16 +319,6 @@ impl ModuleMonoState {
                     Self::collect_type_vars_from_type(t, type_params, seen);
                 }
             }
-            Type::List(elem) => {
-                Self::collect_type_vars_from_type(elem, type_params, seen);
-            }
-            Type::Dict(key, value) => {
-                Self::collect_type_vars_from_type(key, type_params, seen);
-                Self::collect_type_vars_from_type(value, type_params, seen);
-            }
-            Type::Set(elem) => {
-                Self::collect_type_vars_from_type(elem, type_params, seen);
-            }
             Type::Fn {
                 params,
                 return_type,
@@ -389,9 +379,6 @@ impl ModuleMonoState {
                 .map(|v| v.name.clone())
                 .unwrap_or_else(|| "Variant".to_string()),
             Type::Tuple(types) => format!("tuple{}", types.len()),
-            Type::List(_) => "List".to_string(),
-            Type::Dict(_, _) => "Dict".to_string(),
-            Type::Set(_) => "Set".to_string(),
             Type::Fn { .. } => "Fn".to_string(),
             Type::Option(_) => "Option".to_string(),
             Type::Result(_, _) => "Result".to_string(),

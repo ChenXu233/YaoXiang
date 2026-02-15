@@ -702,20 +702,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
             ),
 
-            // 列表：替换元素类型
-            AstType::List(elem) => {
-                AstType::List(Box::new(self.substitute_type_ast(elem, type_map)))
-            }
-
-            // 字典：替换键值类型
-            AstType::Dict(key, value) => AstType::Dict(
-                Box::new(self.substitute_type_ast(key, type_map)),
-                Box::new(self.substitute_type_ast(value, type_map)),
-            ),
-
-            // 集合：替换元素类型
-            AstType::Set(elem) => AstType::Set(Box::new(self.substitute_type_ast(elem, type_map))),
-
             // 函数类型：替换参数和返回类型
             AstType::Fn {
                 params,

@@ -468,12 +468,6 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
         }),
         Type::Variant(_) => MonoType::TypeRef("Variant".to_string()),
         Type::Tuple(types) => MonoType::Tuple(types.iter().map(ast_type_to_mono_type).collect()),
-        Type::List(elem) => MonoType::List(Box::new(ast_type_to_mono_type(elem))),
-        Type::Dict(key, value) => MonoType::Dict(
-            Box::new(ast_type_to_mono_type(key)),
-            Box::new(ast_type_to_mono_type(value)),
-        ),
-        Type::Set(elem) => MonoType::Set(Box::new(ast_type_to_mono_type(elem))),
         Type::Fn {
             params,
             return_type,

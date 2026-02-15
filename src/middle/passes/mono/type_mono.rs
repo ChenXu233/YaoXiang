@@ -179,12 +179,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Tuple(types) => {
                 MonoType::Tuple(types.iter().map(|t| self.type_to_mono_type(t)).collect())
             }
-            AstType::List(elem) => MonoType::List(Box::new(self.type_to_mono_type(elem))),
-            AstType::Dict(key, value) => MonoType::Dict(
-                Box::new(self.type_to_mono_type(key)),
-                Box::new(self.type_to_mono_type(value)),
-            ),
-            AstType::Set(elem) => MonoType::Set(Box::new(self.type_to_mono_type(elem))),
             AstType::Fn {
                 params,
                 return_type,
@@ -266,9 +260,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 .map(|v| v.name.clone())
                 .unwrap_or_else(|| "Variant".to_string()),
             AstType::Tuple(types) => format!("tuple{}", types.len()),
-            AstType::List(_) => "List".to_string(),
-            AstType::Dict(_, _) => "Dict".to_string(),
-            AstType::Set(_) => "Set".to_string(),
             AstType::Fn { .. } => "Fn".to_string(),
             AstType::Option(_) => "Option".to_string(),
             AstType::Result(_, _) => "Result".to_string(),
@@ -311,11 +302,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Enum(_) => false,
             AstType::Variant(_) => false,
             AstType::Tuple(types) => types.iter().any(|t| self.contains_type_var_type(t)),
-            AstType::List(elem) => self.contains_type_var_type(elem),
-            AstType::Dict(key, value) => {
-                self.contains_type_var_type(key) || self.contains_type_var_type(value)
-            }
-            AstType::Set(elem) => self.contains_type_var_type(elem),
             AstType::Fn {
                 params,
                 return_type,
@@ -385,12 +371,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             AstType::Tuple(types) => types
                 .iter()
                 .for_each(|t| self.collect_type_vars_from_type(t, type_params, seen)),
-            AstType::List(elem) => self.collect_type_vars_from_type(elem, type_params, seen),
-            AstType::Dict(key, value) => {
-                self.collect_type_vars_from_type(key, type_params, seen);
-                self.collect_type_vars_from_type(value, type_params, seen);
-            }
-            AstType::Set(elem) => self.collect_type_vars_from_type(elem, type_params, seen),
             AstType::Fn {
                 params,
                 return_type,
