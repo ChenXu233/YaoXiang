@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_extract_chain_calls() {
-        let mut analyzer = ChainCallAnalyzer::new();
+        let analyzer = ChainCallAnalyzer::new();
 
         let calls = vec![
             Instruction::CallVirt {
@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_infer_consume_mode() {
-        let mut analyzer = ChainCallAnalyzer::new();
+        let analyzer = ChainCallAnalyzer::new();
 
         let call = Instruction::CallVirt {
             dst: Some(Operand::Temp(1)),
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_check_ownership_closure() {
-        let mut analyzer = ChainCallAnalyzer::new();
+        let analyzer = ChainCallAnalyzer::new();
 
         // Consumes 模式，所有权闭合
         let chain_consumes = ChainAnalysisResult {
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn test_extract_stops_at_non_call() {
         // 测试提取链时遇到非 Call 指令停止
-        let mut analyzer = ChainCallAnalyzer::new();
+        let analyzer = ChainCallAnalyzer::new();
 
         let calls = vec![
             Instruction::CallVirt {
@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn test_ownership_closure_with_undetermined() {
         // 测试 Undetermined 模式的保守闭合检查
-        let mut analyzer = ChainCallAnalyzer::new();
+        let analyzer = ChainCallAnalyzer::new();
 
         let chain = ChainAnalysisResult {
             methods: vec![MethodInfo {
