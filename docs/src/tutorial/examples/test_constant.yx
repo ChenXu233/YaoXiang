@@ -1,0 +1,6 @@
+use std.math
+use std.io
+
+main = {
+    std.io.println(std.math.PI)
+}
