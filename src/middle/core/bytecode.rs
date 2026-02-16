@@ -774,6 +774,123 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     });
                                 }
                             }
+                            Opcode::I64Mul => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Mul,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Div => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Div,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Rem => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Rem,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64And => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::And,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Or => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Or,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Xor => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Xor,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Shl => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Shl,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Sar => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Sar,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Shr => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Shr,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
                             Opcode::I64Lt => {
                                 if instr.operands.len() >= 3 {
                                     let dst = instr.operands[0] as u16;
@@ -978,6 +1095,50 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         .push(BytecodeInstr::ReturnValue { value: Reg(value) });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Return);
+                                }
+                            }
+                            Opcode::NewListWithCap => {
+                                // NewListWithCap: dst(1) + capacity(2)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let capacity =
+                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
+                                    decoded_instructions.push(BytecodeInstr::NewListWithCap {
+                                        dst: Reg(dst),
+                                        capacity,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::LoadElement => {
+                                // LoadElement: dst(1) + array(1) + index(1)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let array = instr.operands[1] as u16;
+                                    let index = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::LoadElement {
+                                        dst: Reg(dst),
+                                        array: Reg(array),
+                                        index: Reg(index),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::StoreElement => {
+                                // StoreElement: array(1) + index(1) + value(1)
+                                if instr.operands.len() >= 3 {
+                                    let array = instr.operands[0] as u16;
+                                    let index = instr.operands[1] as u16;
+                                    let value = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::StoreElement {
+                                        array: Reg(array),
+                                        index: Reg(index),
+                                        value: Reg(value),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
                             _ => {
