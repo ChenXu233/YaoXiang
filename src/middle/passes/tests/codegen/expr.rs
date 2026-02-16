@@ -21,6 +21,7 @@ fn test_literal_generation() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        native_bindings: Vec::new(),
     };
 
     let mut ctx = CodegenContext::new(module);
@@ -46,6 +47,7 @@ fn test_variable_loading() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        native_bindings: Vec::new(),
     };
 
     let mut ctx = CodegenContext::new(module);
@@ -127,6 +129,7 @@ fn test_bytecode_file_generation() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        native_bindings: Vec::new(),
     };
 
     let mut ctx = CodegenContext::new(module);

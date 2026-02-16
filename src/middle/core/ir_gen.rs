@@ -59,6 +59,8 @@ pub struct AstToIrGenerator {
     module_mut_locals: HashMap<String, std::collections::HashSet<usize>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
+    /// 用户声明的 native 函数绑定
+    native_bindings: Vec<crate::std::ffi::NativeBinding>,
 }
 
 impl Default for AstToIrGenerator {
@@ -78,6 +80,7 @@ impl AstToIrGenerator {
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
             local_var_types: HashMap::new(),
+            native_bindings: Vec::new(),
         }
     }
 
@@ -91,6 +94,7 @@ impl AstToIrGenerator {
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
             local_var_types: HashMap::new(),
+            native_bindings: Vec::new(),
         }
     }
 
@@ -262,6 +266,7 @@ impl AstToIrGenerator {
             globals: Vec::new(),
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
+            native_bindings: std::mem::take(&mut self.native_bindings),
         })
     }
 
@@ -426,6 +431,27 @@ impl AstToIrGenerator {
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
+        // 检测 Native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
+        if stmts.is_empty() {
+            if let Some(expr_box) = expr {
+                if let ast::Expr::Call {
+                    func,
+                    args,
+                    span: _,
+                } = expr_box.as_ref()
+                {
+                    if let Some(native_symbol) = crate::std::ffi::detect_native_binding(func, args)
+                    {
+                        // 记录 native 绑定，跳过函数体生成
+                        self.native_bindings
+                            .push(crate::std::ffi::NativeBinding::new(name, &native_symbol));
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+
         // 重置当前函数的可变局部变量追踪
         self.current_mut_locals.clear();
         // 阶段3修复：改进返回类型解析，更好地与类型检查集成

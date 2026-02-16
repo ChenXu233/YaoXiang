@@ -327,6 +327,13 @@ pub enum BytecodeInstr {
         args: Vec<Reg>,
     },
 
+    /// Native function call (FFI)
+    CallNative {
+        dst: Option<Reg>,
+        func_name: String,
+        args: Vec<Reg>,
+    },
+
     /// Virtual dispatch call
     CallVirt {
         dst: Option<Reg>,
@@ -492,6 +499,7 @@ impl BytecodeInstr {
             BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
             BytecodeInstr::WeakUpgrade { .. } => Opcode::WeakUpgrade,
             BytecodeInstr::CallStatic { .. } => Opcode::CallStatic,
+            BytecodeInstr::CallNative { .. } => Opcode::CallNative,
             BytecodeInstr::CallVirt { .. } => Opcode::CallVirt,
             BytecodeInstr::CallDyn { .. } => Opcode::CallDyn,
             BytecodeInstr::MakeClosure { .. } => Opcode::MakeClosure,
@@ -546,6 +554,9 @@ impl BytecodeInstr {
             BytecodeInstr::WeakNew { .. } => 4,
             BytecodeInstr::WeakUpgrade { .. } => 4,
             BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
+            BytecodeInstr::CallNative {
+                args, func_name, ..
+            } => 4 + func_name.len() + args.len() * 2,
             BytecodeInstr::CallVirt { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallDyn { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::MakeClosure { env, .. } => 4 + env.len() * 2,
@@ -1010,6 +1021,50 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(call_instr);
                                 } else {
                                     // Fallback: push Nop
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::CallNative => {
+                                // CallNative: dst(1) + func_name_idx(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
+                                if instr.operands.len() >= 7 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_name_idx = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let _base_arg_reg = instr.operands[5];
+                                    let arg_count = instr.operands[6] as usize;
+
+                                    // Resolve function name from constant pool
+                                    let func_name = if let Some(ConstValue::String(s)) =
+                                        file.const_pool.get(func_name_idx as usize)
+                                    {
+                                        s.clone()
+                                    } else {
+                                        format!("native_{}", func_name_idx)
+                                    };
+
+                                    // Parse arguments
+                                    let mut args = Vec::new();
+                                    for i in 0..arg_count {
+                                        if 7 + i * 2 + 1 < instr.operands.len() {
+                                            let arg_reg = u16::from_le_bytes([
+                                                instr.operands[7 + i * 2],
+                                                instr.operands[7 + i * 2 + 1],
+                                            ]);
+                                            args.push(Reg(arg_reg));
+                                        }
+                                    }
+
+                                    let dst_reg = Some(Reg(dst));
+                                    decoded_instructions.push(BytecodeInstr::CallNative {
+                                        dst: dst_reg,
+                                        func_name,
+                                        args,
+                                    });
+                                } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }

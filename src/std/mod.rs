@@ -4,6 +4,7 @@
 
 pub mod concurrent;
 pub mod dict;
+pub mod ffi;
 pub mod io;
 pub mod list;
 pub mod math;
