@@ -191,15 +191,39 @@ impl GenericValidator {
 
     /// Validate generic parameter list
     /// Supports RFC-010 syntax: [T], [T: Clone], [T, U], [T, N: Int]
+    ///
+    /// Note: This method validates type parameters only. For const parameters,
+    /// use `validate_const_params` method separately.
     pub fn validate_generic_params(
         &self,
         params: &[String],
     ) -> Result<(), String> {
-        if params.len() > self.max_type_params {
+        // Count type params (excluding potential const params)
+        // Heuristic: const params are typically ALL_CAPS with numbers like N32, MAX_SIZE
+        let type_params: Vec<&String> = params
+            .iter()
+            .filter(|p| !Self::is_const_param_style(p))
+            .collect();
+
+        if type_params.len() > self.max_type_params {
             return Err(format!(
                 "Too many type parameters: {}, maximum is {}",
-                params.len(),
+                type_params.len(),
                 self.max_type_params
+            ));
+        }
+
+        // Validate const params count using heuristic
+        let const_params: Vec<&String> = params
+            .iter()
+            .filter(|p| Self::is_const_param_style(p))
+            .collect();
+
+        if const_params.len() > self.max_const_params {
+            return Err(format!(
+                "Too many const parameters: {}, maximum is {}",
+                const_params.len(),
+                self.max_const_params
             ));
         }
 
@@ -210,6 +234,37 @@ impl GenericValidator {
         }
 
         Ok(())
+    }
+
+    /// Validate const parameter count directly
+    /// Use this when you know the exact number of const parameters
+    pub fn validate_const_params(
+        &self,
+        count: usize,
+    ) -> Result<(), String> {
+        if count > self.max_const_params {
+            return Err(format!(
+                "Too many const parameters: {}, maximum is {}",
+                count, self.max_const_params
+            ));
+        }
+        Ok(())
+    }
+
+    /// Check if a parameter name looks like a const parameter
+    /// Heuristic: const params are typically ALL_CAPS with optional trailing digits
+    fn is_const_param_style(param: &str) -> bool {
+        let trimmed = param.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+
+        // Must be all uppercase or followed by digits
+        let has_upper = trimmed.chars().any(|c| c.is_uppercase());
+        let has_digits = trimmed.chars().any(|c| c.is_ascii_digit());
+
+        // Const style: ALL_CAPS or UPPER_CASE_123 or just NUMBERS like 32
+        has_upper && has_digits || trimmed.chars().all(|c| c.is_ascii_digit())
     }
 
     /// Validate generic constraint
