@@ -605,8 +605,7 @@ impl TypeChecker {
                     for export in exports {
                         // 检查是否需要导入这个函数
                         let should_import = import_all
-                            || items_ref
-                                .map_or(false, |i| i.iter().any(|s| s == export.short_name));
+                            || items_ref.is_some_and(|i| i.iter().any(|s| s == export.short_name));
 
                         if should_import {
                             // 为导出的函数创建类型

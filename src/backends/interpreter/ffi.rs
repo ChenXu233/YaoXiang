@@ -199,70 +199,70 @@ fn register_std_io(registry: &mut FfiRegistry) {
 
 fn register_std_math(registry: &mut FfiRegistry) {
     registry.register("std.math.abs", |args| {
-        let n = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let n = args.first().and_then(|v| v.to_int()).unwrap_or(0);
         Ok(RuntimeValue::Int(n.abs()))
     });
     registry.register("std.math.max", |args| {
-        let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
         let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
         Ok(RuntimeValue::Int(a.max(b)))
     });
     registry.register("std.math.min", |args| {
-        let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
         let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
         Ok(RuntimeValue::Int(a.min(b)))
     });
     registry.register("std.math.clamp", |args| {
-        let value = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let value = args.first().and_then(|v| v.to_int()).unwrap_or(0);
         let min = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
         let max = args.get(2).and_then(|v| v.to_int()).unwrap_or(0);
         Ok(RuntimeValue::Int(value.clamp(min, max)))
     });
     registry.register("std.math.fabs", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.abs()))
     });
     registry.register("std.math.fmax", |args| {
-        let a = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let a = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(a.max(b)))
     });
     registry.register("std.math.fmin", |args| {
-        let a = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let a = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(a.min(b)))
     });
     registry.register("std.math.pow", |args| {
-        let base = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let base = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         let exp = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(base.powf(exp)))
     });
     registry.register("std.math.sqrt", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.sqrt()))
     });
     registry.register("std.math.floor", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.floor()))
     });
     registry.register("std.math.ceil", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.ceil()))
     });
     registry.register("std.math.round", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.round()))
     });
     registry.register("std.math.sin", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.sin()))
     });
     registry.register("std.math.cos", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.cos()))
     });
     registry.register("std.math.tan", |args| {
-        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
         Ok(RuntimeValue::Float(n.tan()))
     });
     registry.register("std.math.PI", |_args| {
@@ -282,7 +282,7 @@ fn register_std_math(registry: &mut FfiRegistry) {
 
 fn register_std_net(registry: &mut FfiRegistry) {
     registry.register("std.net.http_get", |args| {
-        let url = match args.get(0) {
+        let url = match args.first() {
             Some(RuntimeValue::String(s)) => s.to_string(),
             _ => {
                 return Err(ExecutorError::Type(
@@ -295,7 +295,7 @@ fn register_std_net(registry: &mut FfiRegistry) {
         ))
     });
     registry.register("std.net.http_post", |args| {
-        let url = match args.get(0) {
+        let url = match args.first() {
             Some(RuntimeValue::String(s)) => s.to_string(),
             _ => {
                 return Err(ExecutorError::Type(
@@ -313,7 +313,7 @@ fn register_std_net(registry: &mut FfiRegistry) {
     });
     registry.register("std.net.url_encode", |args| {
         use std::fmt::Write;
-        let s = match args.get(0) {
+        let s = match args.first() {
             Some(RuntimeValue::String(s)) => s.to_string(),
             _ => {
                 return Err(ExecutorError::Type(
@@ -331,7 +331,7 @@ fn register_std_net(registry: &mut FfiRegistry) {
         Ok(RuntimeValue::String(encoded.into()))
     });
     registry.register("std.net.url_decode", |args| {
-        let s = match args.get(0) {
+        let s = match args.first() {
             Some(RuntimeValue::String(s)) => s.to_string(),
             _ => {
                 return Err(ExecutorError::Type(
@@ -368,7 +368,7 @@ fn register_std_net(registry: &mut FfiRegistry) {
 
 fn register_std_concurrent(registry: &mut FfiRegistry) {
     registry.register("std.concurrent.sleep", |args| {
-        let millis = args.get(0).and_then(|v| v.to_int()).unwrap_or(0) as u64;
+        let millis = args.first().and_then(|v| v.to_int()).unwrap_or(0) as u64;
         std::thread::sleep(std::time::Duration::from_millis(millis));
         Ok(RuntimeValue::Unit)
     });
