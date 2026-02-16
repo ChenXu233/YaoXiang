@@ -204,49 +204,6 @@ impl AstToIrGenerator {
         None
     }
 
-    /// 从 AST 表达式推断类型名称（轻量级，用于错误消息）
-    fn infer_type_name_from_expr(
-        &self,
-        expr: &ast::Expr,
-    ) -> String {
-        match expr {
-            ast::Expr::Lit(lit, _) => match lit {
-                Literal::Int(_) => "int64".to_string(),
-                Literal::Float(_) => "float64".to_string(),
-                Literal::String(_) => "string".to_string(),
-                Literal::Char(_) => "char".to_string(),
-                Literal::Bool(_) => "bool".to_string(),
-            },
-            ast::Expr::List(_, _) => "List".to_string(),
-            ast::Expr::Dict(_, _) => "Dict".to_string(),
-            ast::Expr::Tuple(_, _) => "Tuple".to_string(),
-            ast::Expr::Var(name, _) => {
-                // 查找已知变量类型
-                if let Some(type_name) = self.local_var_types.get(name) {
-                    return type_name.clone();
-                }
-                "<unknown>".to_string()
-            }
-            ast::Expr::BinOp {
-                op: ast::BinOp::Add,
-                left,
-                ..
-            } => {
-                // 加法运算继承左操作数的类型
-                self.infer_type_name_from_expr(left)
-            }
-            ast::Expr::Call { func, .. } => {
-                if let ast::Expr::Var(name, _) = func.as_ref() {
-                    if let Some(ret_type) = self.get_function_return_type(name) {
-                        return ret_type.type_name();
-                    }
-                }
-                "<unknown>".to_string()
-            }
-            _ => "<unknown>".to_string(),
-        }
-    }
-
     // 删除的函数：extract_type_name_from_poly
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
@@ -721,9 +678,11 @@ impl AstToIrGenerator {
                 // 记录变量的类型信息（用于错误消息）
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
-                    self.local_var_types.insert(name.clone(), mono.type_name());
+                    let type_name = mono.type_name();
+                    self.local_var_types.insert(name.clone(), type_name);
                 } else if let Some(init_expr) = initializer {
-                    let inferred = self.infer_type_name_from_expr(init_expr);
+                    // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
+                    let inferred = self.get_expr_type_name(init_expr);
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(name.clone(), inferred);
                     }
@@ -1186,12 +1145,150 @@ impl AstToIrGenerator {
             }
 
             Ok(())
+        } else if let Some(iter_ty) = self.get_expr_mono_type(iterable) {
+            match iter_ty {
+                MonoType::List(_) | MonoType::Tuple(_) => self.generate_indexed_for_loop_ir(
+                    var_name,
+                    iterable,
+                    body,
+                    result_reg,
+                    for_span,
+                    false,
+                    instructions,
+                    constants,
+                ),
+                MonoType::Dict(_, _) => self.generate_indexed_for_loop_ir(
+                    var_name,
+                    iterable,
+                    body,
+                    result_reg,
+                    for_span,
+                    true,
+                    instructions,
+                    constants,
+                ),
+                _ => {
+                    // 不支持的迭代器类型，返回错误（使用实际类型名称）
+                    let iter_type = self.get_expr_type_name(iterable);
+                    let span = Self::get_expr_span(iterable);
+                    Err(IrGenError::UnsupportedIterator { iter_type, span })
+                }
+            }
         } else {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
             Err(IrGenError::UnsupportedIterator { iter_type, span })
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_indexed_for_loop_ir(
+        &mut self,
+        var_name: &str,
+        iterable: &ast::Expr,
+        body: &ast::Block,
+        result_reg: Option<usize>,
+        for_span: Span,
+        use_dict_keys: bool,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), IrGenError> {
+        self.enter_scope();
+
+        // 1. 计算待迭代序列
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        let sequence_reg = if use_dict_keys {
+            let keys_reg = self.next_temp_reg();
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(keys_reg)),
+                func: Operand::Const(ConstValue::String("dict_keys".to_string())),
+                args: vec![Operand::Local(iterable_reg)],
+            });
+            keys_reg
+        } else {
+            iterable_reg
+        };
+
+        // 2. idx = 0
+        let idx_reg = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(idx_reg),
+            src: Operand::Const(ConstValue::Int(0)),
+        });
+
+        // 3. len = len(sequence)
+        let len_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(len_reg)),
+            func: Operand::Const(ConstValue::String("len".to_string())),
+            args: vec![Operand::Local(sequence_reg)],
+        });
+
+        // 4. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var_name, var_reg);
+
+        // 5. 循环开始
+        let loop_start_idx = instructions.len();
+
+        let cond_reg = self.next_temp_reg();
+        instructions.push(Instruction::Lt {
+            dst: Operand::Local(cond_reg),
+            lhs: Operand::Local(idx_reg),
+            rhs: Operand::Local(len_reg),
+        });
+
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
+
+        // 6. var = sequence[idx]
+        let item_reg = self.next_temp_reg();
+        instructions.push(Instruction::LoadIndex {
+            dst: Operand::Local(item_reg),
+            src: Operand::Local(sequence_reg),
+            index: Operand::Local(idx_reg),
+        });
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(item_reg),
+            span: for_span,
+        });
+
+        // 7. 循环体
+        self.generate_block_ir(body, instructions, constants)?;
+
+        // 8. idx += 1
+        let one_reg = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(one_reg),
+            src: Operand::Const(ConstValue::Int(1)),
+        });
+        instructions.push(Instruction::Add {
+            dst: Operand::Local(idx_reg),
+            lhs: Operand::Local(idx_reg),
+            rhs: Operand::Local(one_reg),
+        });
+
+        instructions.push(Instruction::Jmp(loop_start_idx));
+
+        let end_idx = instructions.len();
+        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+            *target = end_idx;
+        }
+
+        self.exit_scope();
+
+        if let Some(reg) = result_reg {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(reg),
+                src: Operand::Const(ConstValue::Int(0)),
+            });
+        }
+
+        Ok(())
     }
 
     /// 获取表达式的 span
@@ -1235,19 +1332,54 @@ impl AstToIrGenerator {
     ) -> String {
         // 如果表达式是变量，尝试从多个来源查找其类型
         if let ast::Expr::Var(name, _) = expr {
-            // 1. 先从类型检查结果中查找
+            // 1. 从类型检查结果中的 local_var_types 查找（最准确，包含具体类型）
+            if let Some(ref type_result) = self.type_result {
+                if let Some(mono_type) = type_result.local_var_types.get(name) {
+                    return mono_type.type_name();
+                }
+            }
+            // 2. 从 bindings 中查找全局绑定
             if let Some(poly_type) = self.lookup_var_type(name) {
                 let mono_type = self.instantiate_poly_type(poly_type);
                 return mono_type.type_name();
             }
-            // 2. 再从 IR 生成器本地追踪的类型中查找
+            // 3. 从 IR 生成器本地追踪的类型中查找
             if let Some(type_name) = self.local_var_types.get(name) {
                 return type_name.clone();
             }
         }
 
-        // 3. 根据 AST 结构推断类型
-        self.infer_type_name_from_expr(expr)
+        // 对于非变量表达式，不做 AST 猜测，避免掩盖类型系统问题
+        "<unknown>".to_string()
+    }
+
+    /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
+    fn get_expr_mono_type(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<MonoType> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                if let Some(ref type_result) = self.type_result {
+                    if let Some(mono_type) = type_result.local_var_types.get(name) {
+                        return Some(mono_type.clone());
+                    }
+                }
+
+                self.lookup_var_type(name)
+                    .map(|poly_type| self.instantiate_poly_type(poly_type))
+            }
+            ast::Expr::List(_, _) => Some(MonoType::List(Box::new(MonoType::Void))),
+            ast::Expr::Tuple(items, _) => {
+                let elems = vec![MonoType::Void; items.len()];
+                Some(MonoType::Tuple(elems))
+            }
+            ast::Expr::Dict(_, _) => Some(MonoType::Dict(
+                Box::new(MonoType::Void),
+                Box::new(MonoType::Void),
+            )),
+            _ => None,
+        }
     }
 
     /// 生成表达式 IR
@@ -1308,6 +1440,14 @@ impl AstToIrGenerator {
                             };
                             let val_reg = self.next_temp_reg();
                             self.generate_expr_ir(right, val_reg, instructions, constants)?;
+
+                            // 更新变量的类型信息
+                            // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
+                            let inferred = self.get_expr_type_name(right);
+                            if inferred != "<unknown>" {
+                                self.local_var_types.insert(var_name.clone(), inferred);
+                            }
+
                             instructions.push(Instruction::Store {
                                 dst: Operand::Local(local_idx),
                                 src: Operand::Local(val_reg),
@@ -1465,6 +1605,45 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     src: Operand::Local(obj_reg),
                     field: field_index,
+                });
+            }
+            Expr::List(elements, span) => {
+                // 列表字面量：先创建空列表，再按索引写入元素
+                instructions.push(Instruction::AllocArray {
+                    dst: Operand::Local(result_reg),
+                    size: Operand::Const(ConstValue::Int(elements.len() as i128)),
+                    elem_size: Operand::Const(ConstValue::Int(1)),
+                });
+
+                for (idx, element) in elements.iter().enumerate() {
+                    let element_reg = self.next_temp_reg();
+                    self.generate_expr_ir(element, element_reg, instructions, constants)?;
+
+                    let index_reg = self.next_temp_reg();
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(index_reg),
+                        src: Operand::Const(ConstValue::Int(idx as i128)),
+                    });
+
+                    instructions.push(Instruction::StoreIndex {
+                        dst: Operand::Local(result_reg),
+                        index: Operand::Local(index_reg),
+                        src: Operand::Local(element_reg),
+                        span: *span,
+                    });
+                }
+            }
+            Expr::Index { expr, index, .. } => {
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                let index_reg = self.next_temp_reg();
+                self.generate_expr_ir(index, index_reg, instructions, constants)?;
+
+                instructions.push(Instruction::LoadIndex {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    index: Operand::Local(index_reg),
                 });
             }
             Expr::Return(expr, _) => {

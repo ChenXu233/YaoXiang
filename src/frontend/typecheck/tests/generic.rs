@@ -620,3 +620,84 @@ fn test_solver_unify_error() {
     let result = solver.unify(&var1, &var2);
     assert!(result.is_err());
 }
+
+#[test]
+fn test_solver_occurs_check_nested_type() {
+    let mut solver = TypeConstraintSolver::new();
+
+    let var = solver.new_var();
+    let tv = var.type_var().unwrap();
+    let recursive = MonoType::List(Box::new(MonoType::TypeVar(tv)));
+
+    let result = solver.bind(tv, &recursive);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_solver_union_backtracking_no_state_pollution() {
+    let mut solver = TypeConstraintSolver::new();
+
+    let leak_var = solver.new_var();
+    let leak_tv = leak_var.type_var().unwrap();
+
+    let union = MonoType::Union(vec![
+        MonoType::Tuple(vec![MonoType::TypeVar(leak_tv), MonoType::Int(32)]),
+        MonoType::Tuple(vec![MonoType::Bool, MonoType::String]),
+    ]);
+    let target = MonoType::Tuple(vec![MonoType::Bool, MonoType::String]);
+
+    let result = solver.unify(&union, &target);
+    assert!(result.is_ok());
+
+    let binding = solver.get_binding(leak_tv);
+    assert!(matches!(binding, Some(TypeBinding::Unbound)));
+}
+
+#[test]
+fn test_solver_union_unordered_unify() {
+    let mut solver = TypeConstraintSolver::new();
+
+    let left = MonoType::Union(vec![MonoType::Int(32), MonoType::String]);
+    let right = MonoType::Union(vec![MonoType::String, MonoType::Int(32)]);
+
+    let result = solver.unify(&left, &right);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_solver_struct_field_name_mismatch_error() {
+    let mut solver = TypeConstraintSolver::new();
+
+    let left = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(32)),
+            ("y".to_string(), MonoType::Int(32)),
+        ],
+        methods: std::collections::HashMap::new(),
+        field_mutability: vec![false, false],
+    });
+    let right = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(32)),
+            ("z".to_string(), MonoType::Int(32)),
+        ],
+        methods: std::collections::HashMap::new(),
+        field_mutability: vec![false, false],
+    });
+
+    let result = solver.unify(&left, &right);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_solver_generalize_collects_free_vars() {
+    let mut solver = TypeConstraintSolver::new();
+
+    let var = solver.new_var();
+    let ty = MonoType::List(Box::new(var));
+
+    let poly = solver.generalize(&ty);
+    assert_eq!(poly.type_binders.len(), 1);
+}

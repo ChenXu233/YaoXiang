@@ -5,6 +5,7 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Pattern, UnOp};
 use crate::frontend::typecheck::inference::ExprInferrer;
 use crate::frontend::typecheck::inference::patterns::PatternInferrer;
+use crate::frontend::typecheck::inference::statements::StmtInferrer;
 use crate::frontend::typecheck::*;
 use crate::frontend::typecheck::overload;
 use crate::util::span::Span;
@@ -505,6 +506,34 @@ fn test_infer_identifier_pattern() {
     let pattern = Pattern::Identifier("x".to_string());
     let ty = inferrer.infer_pattern(&pattern).unwrap();
     assert!(ty.type_var().is_some());
+}
+
+#[test]
+fn test_pattern_inferrer_fresh_type_vars() {
+    let mut inferrer = PatternInferrer::new();
+
+    let t1 = inferrer.infer_pattern(&Pattern::Wildcard).unwrap();
+    let t2 = inferrer
+        .infer_pattern(&Pattern::Identifier("x".to_string()))
+        .unwrap();
+
+    match (t1, t2) {
+        (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => assert_ne!(v1, v2),
+        _ => panic!("Expected type variables"),
+    }
+}
+
+#[test]
+fn test_stmt_inferrer_fresh_declaration_type_vars() {
+    let mut inferrer = StmtInferrer::new();
+
+    let t1 = inferrer.infer_declaration("a", None).unwrap();
+    let t2 = inferrer.infer_declaration("b", None).unwrap();
+
+    match (t1, t2) {
+        (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => assert_ne!(v1, v2),
+        _ => panic!("Expected type variables"),
+    }
 }
 
 /// 测试字面量模式

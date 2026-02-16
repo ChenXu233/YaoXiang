@@ -194,13 +194,25 @@ impl BodyChecker {
             Expr::BinOp {
                 op: crate::frontend::core::parser::ast::BinOp::Assign,
                 left,
+                right,
                 ..
             } => {
+                // 首先推断右侧表达式的类型
+                let right_ty = self.check_expr(right)?;
+
+                // 如果左侧是变量，将其类型与右侧类型统一
                 if let Expr::Var(name, _) = left.as_ref() {
-                    let ty = self.solver.new_var();
-                    self.vars.insert(name.clone(), PolyType::mono(ty));
+                    // 检查变量是否已存在
+                    if let Some(poly) = self.vars.get(name) {
+                        // 变量已存在，统一类型
+                        let _ = self.solver.unify(&poly.body, &right_ty);
+                    } else {
+                        // 变量不存在，创建新变量并与右侧类型统一
+                        let ty = self.solver.new_var();
+                        let _ = self.solver.unify(&ty, &right_ty);
+                        self.vars.insert(name.clone(), PolyType::mono(ty));
+                    }
                 }
-                self.check_expr(expr)?;
                 Ok(())
             }
             _ => {
@@ -293,6 +305,12 @@ impl BodyChecker {
             (None, Some(type_ann)) => MonoType::from(type_ann.clone()),
             (None, None) => self.solver.new_var(),
         };
+
+        // 如果变量已存在，统一类型
+        if let Some(existing_poly) = self.vars.get(name) {
+            let _ = self.solver.unify(&existing_poly.body, &ty);
+        }
+
         self.vars.insert(name.to_string(), PolyType::mono(ty));
         Ok(())
     }
@@ -393,6 +411,13 @@ impl BodyChecker {
             inferrer.add_var(name, poly);
         }
 
-        inferrer.infer_expr(expr).map_err(Box::new)
+        let result = inferrer.infer_expr(expr).map_err(Box::new)?;
+
+        // 同步所有变量的类型（包括修改过的，如赋值统一后的类型）
+        for (name, poly) in inferrer.get_all_vars() {
+            self.vars.insert(name, poly);
+        }
+
+        Ok(result)
     }
 }

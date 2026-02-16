@@ -13,6 +13,7 @@ use std::collections::HashMap;
 pub struct StmtInferrer {
     /// 变量作用域栈
     scopes: Vec<HashMap<String, MonoType>>,
+    next_type_var: usize,
 }
 
 impl Default for StmtInferrer {
@@ -26,7 +27,14 @@ impl StmtInferrer {
     pub fn new() -> Self {
         Self {
             scopes: vec![HashMap::new()], // 全局作用域
+            next_type_var: 0,
         }
+    }
+
+    fn fresh_type_var(&mut self) -> MonoType {
+        let var = crate::frontend::core::type_system::var::TypeVar::new(self.next_type_var);
+        self.next_type_var += 1;
+        MonoType::TypeVar(var)
     }
 
     /// 进入新的作用域
@@ -75,7 +83,7 @@ impl StmtInferrer {
             Some(t) => t,
             None => {
                 // 如果没有类型注解，创建类型变量
-                MonoType::TypeVar(crate::frontend::core::type_system::var::TypeVar::new(0))
+                self.fresh_type_var()
             }
         };
 

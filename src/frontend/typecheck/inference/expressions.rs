@@ -62,6 +62,19 @@ impl<'a> ExprInferrer<'a> {
         None
     }
 
+    /// 获取所有变量（从所有作用域）
+    pub fn get_all_vars(&self) -> HashMap<String, PolyType> {
+        let mut result = HashMap::new();
+        for scope in &self.scopes {
+            for (name, poly) in scope {
+                if !result.contains_key(name) {
+                    result.insert(name.clone(), poly.clone());
+                }
+            }
+        }
+        result
+    }
+
     /// 进入新的作用域
     pub fn enter_scope(&mut self) {
         self.scopes.push(HashMap::new());
@@ -137,6 +150,15 @@ impl<'a> ExprInferrer<'a> {
                     Ok(left.clone())
                 } else if let (MonoType::Float(_), MonoType::Float(_)) = (left, right) {
                     Ok(left.clone())
+                } else if let (MonoType::String, MonoType::String) = (left, right) {
+                    Ok(MonoType::String)
+                } else if let (MonoType::List(left_elem), MonoType::List(right_elem)) =
+                    (left, right)
+                {
+                    // 列表拼接：统一元素类型，返回统一后的列表类型
+                    let _ = self.solver.unify(left_elem, right_elem);
+                    let elem_ty = self.solver.resolve_type(left_elem);
+                    Ok(MonoType::List(Box::new(elem_ty)))
                 } else {
                     // 对于字符串连接和其他类型，使用类型变量
                     let var = self.solver.new_var();
@@ -251,8 +273,26 @@ impl<'a> ExprInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::BinOp {
                 op, left, right, ..
             } => {
-                let left_ty = self.infer_expr(left)?;
+                // 先推断右操作数类型
                 let right_ty = self.infer_expr(right)?;
+
+                // 处理赋值操作：将左操作数（变量）的类型与右操作数类型统一
+                if matches!(op, BinOp::Assign) {
+                    if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) =
+                        left.as_ref()
+                    {
+                        // 获取变量的当前类型
+                        if let Some(poly) = self.get_var(var_name).cloned() {
+                            // 将变量类型与右操作数类型统一（忽略错误，因为类型不匹配会在其他地方报错）
+                            let _ = self.solver.unify(&poly.body, &right_ty);
+                        }
+                    }
+                    // 赋值表达式的类型是 Void
+                    return Ok(MonoType::Void);
+                }
+
+                // 非赋值操作：正常推断
+                let left_ty = self.infer_expr(left)?;
                 self.infer_binary(op, &left_ty, &right_ty)
             }
 
@@ -275,17 +315,15 @@ impl<'a> ExprInferrer<'a> {
                     let elem_ty = self.solver.new_var();
                     Ok(MonoType::List(Box::new(elem_ty)))
                 } else {
-                    // 非空列表：推断所有元素类型并取统一
-                    let mut elem_types: Vec<MonoType> = Vec::new();
-                    for e in elems {
+                    // 非空列表：推断所有元素类型并统一
+                    let mut iter = elems.iter();
+                    let first = iter.next().expect("non-empty list must have first element");
+                    let mut elem_ty = self.infer_expr(first)?;
+                    for e in iter {
                         let ty = self.infer_expr(e)?;
-                        elem_types.push(ty);
+                        let _ = self.solver.unify(&elem_ty, &ty);
+                        elem_ty = self.solver.resolve_type(&elem_ty);
                     }
-                    // 取第一个元素的类型作为列表类型
-                    let elem_ty = elem_types
-                        .into_iter()
-                        .next()
-                        .unwrap_or(self.solver.new_var());
                     Ok(MonoType::List(Box::new(elem_ty)))
                 }
             }
