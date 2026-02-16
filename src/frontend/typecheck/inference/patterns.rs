@@ -9,7 +9,9 @@ use crate::frontend::core::parser::ast;
 use crate::frontend::core::type_system::MonoType;
 
 /// 模式匹配推断器
-pub struct PatternInferrer;
+pub struct PatternInferrer {
+    next_type_var: usize,
+}
 
 impl Default for PatternInferrer {
     fn default() -> Self {
@@ -20,7 +22,13 @@ impl Default for PatternInferrer {
 impl PatternInferrer {
     /// 创建新的模式推断器
     pub fn new() -> Self {
-        Self
+        Self { next_type_var: 0 }
+    }
+
+    fn fresh_type_var(&mut self) -> MonoType {
+        let var = crate::frontend::core::type_system::var::TypeVar::new(self.next_type_var);
+        self.next_type_var += 1;
+        MonoType::TypeVar(var)
     }
 
     /// 推断模式类型
@@ -32,9 +40,7 @@ impl PatternInferrer {
         match pattern {
             ast::Pattern::Wildcard => {
                 // 通配符模式可以匹配任何类型，返回类型变量
-                Ok(MonoType::TypeVar(
-                    crate::frontend::core::type_system::var::TypeVar::new(0),
-                ))
+                Ok(self.fresh_type_var())
             }
             ast::Pattern::Literal(lit) => {
                 // 字面量模式根据字面量类型推断
@@ -53,9 +59,7 @@ impl PatternInferrer {
             ast::Pattern::Identifier(name) => {
                 // 标识符模式返回类型变量
                 let _ = name;
-                Ok(MonoType::TypeVar(
-                    crate::frontend::core::type_system::var::TypeVar::new(0),
-                ))
+                Ok(self.fresh_type_var())
             }
             ast::Pattern::Tuple(patterns) => {
                 // 元组模式：推断每个元素的类型
@@ -94,9 +98,7 @@ impl PatternInferrer {
             }
             _ => {
                 // 其他模式返回类型变量
-                Ok(MonoType::TypeVar(
-                    crate::frontend::core::type_system::var::TypeVar::new(0),
-                ))
+                Ok(self.fresh_type_var())
             }
         }
     }
@@ -114,15 +116,11 @@ impl PatternInferrer {
         &mut self,
         _name: &str,
     ) -> Result<MonoType> {
-        Ok(MonoType::TypeVar(
-            crate::frontend::core::type_system::var::TypeVar::new(0),
-        )) // 返回类型变量
+        Ok(self.fresh_type_var()) // 返回类型变量
     }
 
     /// 推断通配符模式类型
     pub fn infer_wildcard_pattern(&mut self) -> Result<MonoType> {
-        Ok(MonoType::TypeVar(
-            crate::frontend::core::type_system::var::TypeVar::new(0),
-        )) // 返回类型变量
+        Ok(self.fresh_type_var()) // 返回类型变量
     }
 }

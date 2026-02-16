@@ -408,17 +408,45 @@ impl TypeChecker {
         // 构建类型检查结果
         // 合并 BodyChecker 中的局部变量类型到 bindings
         let mut bindings = self.env.vars.clone();
+        let mut local_var_types = HashMap::new();
+
+        // 从 body_checker.vars 获取局部变量类型
         if let Some(ref bc) = self.body_checker {
             for (name, poly) in bc.vars() {
                 // 只添加 env.vars 中不存在的局部变量类型
                 if !bindings.contains_key(name) {
                     bindings.insert(name.clone(), poly.clone());
                 }
+                // 收集局部变量的 MonoType（用于 IR 生成器错误消息）
+                local_var_types.insert(name.clone(), poly.body.clone());
             }
         }
+
+        // 同时从 env.vars 收集非全局绑定（函数）的局部变量
+        for (name, poly) in &self.env.vars {
+            // 排除函数（函数名首字母小写或者是已知的函数）
+            let is_function = matches!(
+                poly.body,
+                crate::frontend::core::type_system::MonoType::Fn { .. }
+            );
+            if !is_function && !local_var_types.contains_key(name) {
+                local_var_types.insert(name.clone(), poly.body.clone());
+            }
+        }
+
+        // 对局部变量类型进行求解，将类型变量替换为具体类型
+        // 注意：必须使用 body_checker 的 solver，因为约束是在那里收集的
+        if let Some(ref mut bc) = self.body_checker {
+            let solver = bc.solver();
+            for (_, ty) in local_var_types.iter_mut() {
+                *ty = solver.resolve(ty);
+            }
+        }
+
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),
             bindings,
+            local_var_types,
         };
 
         Ok(result)
@@ -819,6 +847,9 @@ pub fn add_std_traits(env: &mut TypeEnvironment) {
 pub struct TypeCheckResult {
     pub module_name: String,
     pub bindings: HashMap<String, PolyType>,
+    /// 局部变量的类型信息（用于 IR 生成器显示错误消息）
+    /// Key 是变量名，Value 是推断出的具体类型
+    pub local_var_types: HashMap<String, MonoType>,
 }
 
 /// 导入信息
