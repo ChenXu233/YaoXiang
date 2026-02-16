@@ -167,7 +167,7 @@ impl Interpreter {
 
     /// Execute a binary operation
     fn exec_binary_op(
-        &self,
+        &mut self,
         dst: Reg,
         lhs: Reg,
         rhs: Reg,
@@ -246,6 +246,19 @@ impl Interpreter {
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l % r)
+            }
+            (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
+                let mut merged = Vec::new();
+
+                if let Some(HeapValue::List(items)) = self.heap.get(lhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+                if let Some(HeapValue::List(items)) = self.heap.get(rhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+
+                let handle = self.heap.allocate(HeapValue::List(merged));
+                RuntimeValue::List(handle)
             }
             _ => RuntimeValue::Unit,
         };
@@ -596,6 +609,66 @@ impl Executor for Interpreter {
                         continue;
                     }
 
+                    if func_name == "len" {
+                        if call_args.len() != 1 {
+                            return Err(ExecutorError::Type(
+                                "len expects exactly 1 argument".to_string(),
+                            ));
+                        }
+
+                        let len = match &call_args[0] {
+                            RuntimeValue::List(handle)
+                            | RuntimeValue::Tuple(handle)
+                            | RuntimeValue::Array(handle)
+                            | RuntimeValue::Dict(handle) => self
+                                .heap
+                                .get(*handle)
+                                .map(|value| value.len() as i64)
+                                .unwrap_or(0),
+                            RuntimeValue::String(s) => s.chars().count() as i64,
+                            RuntimeValue::Bytes(b) => b.len() as i64,
+                            _ => 0,
+                        };
+
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Int(len));
+                        }
+                        frame.advance();
+                        continue;
+                    }
+
+                    if func_name == "dict_keys" {
+                        if call_args.len() != 1 {
+                            return Err(ExecutorError::Type(
+                                "dict_keys expects exactly 1 argument".to_string(),
+                            ));
+                        }
+
+                        let keys = match &call_args[0] {
+                            RuntimeValue::Dict(handle) => match self.heap.get(*handle) {
+                                Some(HeapValue::Dict(map)) => {
+                                    map.keys().cloned().collect::<Vec<_>>()
+                                }
+                                _ => Vec::new(),
+                            },
+                            _ => {
+                                return Err(ExecutorError::Type(
+                                    "dict_keys only supports dict".to_string(),
+                                ));
+                            }
+                        };
+
+                        let list_handle = self.heap.allocate(HeapValue::List(keys));
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(
+                                dst_reg.index() as usize,
+                                RuntimeValue::List(list_handle),
+                            );
+                        }
+                        frame.advance();
+                        continue;
+                    }
+
                     // Resolve function and execute immediately to avoid re-executing call site
                     let mut lookup_name = func_name.clone();
 
@@ -683,18 +756,45 @@ impl Executor for Interpreter {
                         .get(array.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    let idx = frame
+                    let idx_value = frame
                         .registers
                         .get(index.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0) as usize;
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
 
-                    if let RuntimeValue::List(handle) = arr {
-                        if let Some(HeapValue::List(items)) = self.heap.get(handle) {
-                            if idx < items.len() {
-                                frame.set_register(dst.0 as usize, items[idx].clone());
+                    match arr {
+                        RuntimeValue::List(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::List(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
                             }
                         }
+                        RuntimeValue::Tuple(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Tuple(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
+                            }
+                        }
+                        RuntimeValue::Array(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Array(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
+                            }
+                        }
+                        RuntimeValue::Dict(handle) => {
+                            if let Some(HeapValue::Dict(map)) = self.heap.get(handle) {
+                                if let Some(value) = map.get(&idx_value) {
+                                    frame.set_register(dst.0 as usize, value.clone());
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                     frame.advance();
                 }
@@ -708,23 +808,42 @@ impl Executor for Interpreter {
                         .get(array.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    let idx = frame
+                    let idx_value = frame
                         .registers
                         .get(index.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0) as usize;
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
                     let val = frame
                         .registers
                         .get(value.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
 
-                    if let RuntimeValue::List(handle) = arr {
-                        if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
-                            if idx < items.len() {
-                                items[idx] = val;
+                    match arr {
+                        RuntimeValue::List(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
+                                if idx < items.len() {
+                                    items[idx] = val;
+                                } else if idx == items.len() {
+                                    items.push(val);
+                                }
                             }
                         }
+                        RuntimeValue::Array(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Array(items)) = self.heap.get_mut(handle) {
+                                if idx < items.len() {
+                                    items[idx] = val;
+                                }
+                            }
+                        }
+                        RuntimeValue::Dict(handle) => {
+                            if let Some(HeapValue::Dict(map)) = self.heap.get_mut(handle) {
+                                map.insert(idx_value, val);
+                            }
+                        }
+                        _ => {}
                     }
                     frame.advance();
                 }

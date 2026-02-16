@@ -218,7 +218,9 @@ impl Translator {
                 dst, field, src, ..
             } => self.translate_store_field(dst, *field, src),
             LoadIndex { dst, src, index } => self.translate_load_index(dst, src, index),
-            StoreIndex { .. } => self.translate_store_index(),
+            StoreIndex {
+                dst, index, src, ..
+            } => self.translate_store_index(dst, index, src),
 
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
@@ -583,10 +585,18 @@ impl Translator {
         ))
     }
 
-    fn translate_store_index(&mut self) -> Result<BytecodeInstruction, CodegenError> {
+    fn translate_store_index(
+        &mut self,
+        dst: &Operand,
+        index: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let index_reg = self.operand_resolver.to_reg(index)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
             Opcode::StoreElement,
-            vec![0, 0, 0],
+            vec![dst_reg, index_reg, src_reg],
         ))
     }
 
