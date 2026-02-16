@@ -2,7 +2,6 @@
 //!
 //! 管理单个模块的泛型定义和实例化状态
 
-use crate::frontend::core::parser::ast::Type;
 use crate::frontend::typecheck::{MonoType, StructType};
 use crate::middle::core::ir::FunctionIR;
 use crate::middle::passes::module::ModuleId;
@@ -280,131 +279,6 @@ impl ModuleMonoState {
         type_params
     }
 
-    /// 从类型提取类型参数
-    fn extract_type_params_from_type(ty: &Type) -> Vec<String> {
-        let mut type_params = Vec::new();
-        let mut seen = HashSet::new();
-        Self::collect_type_vars_from_type(ty, &mut type_params, &mut seen);
-        type_params
-    }
-
-    #[allow(clippy::only_used_in_recursion)]
-    fn collect_type_vars_from_type(
-        ty: &Type,
-        type_params: &mut Vec<String>,
-        seen: &mut HashSet<String>,
-    ) {
-        match ty {
-            Type::Name(name) => {
-                if name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                    && seen.insert(name.clone())
-                {
-                    type_params.push(name.clone());
-                }
-            }
-            Type::Struct(fields) | Type::NamedStruct { fields, .. } => {
-                for field in fields {
-                    Self::collect_type_vars_from_type(&field.ty, type_params, seen);
-                }
-            }
-            Type::Union(variants) => {
-                for (_, ty) in variants {
-                    if let Some(t) = ty {
-                        Self::collect_type_vars_from_type(t, type_params, seen);
-                    }
-                }
-            }
-            Type::Tuple(types) => {
-                for t in types {
-                    Self::collect_type_vars_from_type(t, type_params, seen);
-                }
-            }
-            Type::Fn {
-                params,
-                return_type,
-                ..
-            } => {
-                for p in params {
-                    Self::collect_type_vars_from_type(p, type_params, seen);
-                }
-                Self::collect_type_vars_from_type(return_type, type_params, seen);
-            }
-            Type::Option(inner) => {
-                Self::collect_type_vars_from_type(inner, type_params, seen);
-            }
-            Type::Result(ok, err) => {
-                Self::collect_type_vars_from_type(ok, type_params, seen);
-                Self::collect_type_vars_from_type(err, type_params, seen);
-            }
-            Type::Generic { args, .. } => {
-                for t in args {
-                    Self::collect_type_vars_from_type(t, type_params, seen);
-                }
-            }
-            Type::Sum(types) => {
-                for t in types {
-                    Self::collect_type_vars_from_type(t, type_params, seen);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// 获取类型名称
-    fn get_type_name(ty: &Type) -> String {
-        match ty {
-            Type::Name(name) => name.clone(),
-            Type::Int(n) => format!("int{}", n),
-            Type::Float(n) => format!("float{}", n),
-            Type::Char => "char".to_string(),
-            Type::String => "string".to_string(),
-            Type::Bytes => "bytes".to_string(),
-            Type::Bool => "bool".to_string(),
-            Type::Void => "void".to_string(),
-            Type::Struct(fields) => fields
-                .first()
-                .map(|f| f.name.clone())
-                .unwrap_or_else(|| "Struct".to_string()),
-            Type::NamedStruct { name, .. } => name.clone(),
-            Type::Union(variants) => variants
-                .first()
-                .map(|(n, _)| n.clone())
-                .unwrap_or_else(|| "Union".to_string()),
-            Type::Enum(variants) => variants
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "Enum".to_string()),
-            Type::Variant(variants) => variants
-                .first()
-                .map(|v| v.name.clone())
-                .unwrap_or_else(|| "Variant".to_string()),
-            Type::Tuple(types) => format!("tuple{}", types.len()),
-            Type::Fn { .. } => "Fn".to_string(),
-            Type::Option(_) => "Option".to_string(),
-            Type::Result(_, _) => "Result".to_string(),
-            Type::Generic { name, .. } => name.clone(),
-            Type::Sum(_) => "Sum".to_string(),
-            Type::AssocType {
-                host_type,
-                assoc_name,
-                ..
-            } => {
-                // 递归调用get_type_name来获取宿主类型名称
-                Self::get_type_name(host_type) + "::" + assoc_name
-            }
-            Type::Literal { name, base_type } => {
-                // 字面量类型：基础类型::名称
-                Self::get_type_name(base_type) + "::" + name
-            }
-            Type::Ptr(inner) => {
-                // 裸指针类型：*T
-                format!("*{}", Self::get_type_name(inner))
-            }
-            Type::MetaType { .. } => "MetaType".to_string(),
-        }
-    }
-
-    /// 记录导入
     pub fn record_import(
         &mut self,
         source_module: ModuleId,

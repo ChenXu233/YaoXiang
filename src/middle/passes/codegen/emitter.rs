@@ -16,8 +16,6 @@ struct PendingJump {
     target_ir_idx: usize,
     /// 操作码类型（用于确定回填位置）
     opcode: Opcode,
-    /// 跳转偏移量在操作数中的位置
-    operand_positions: Vec<usize>,
 }
 
 /// 字节码发射器
@@ -76,18 +74,10 @@ impl Emitter {
         let bytecode_instr_idx = bytecode_idx / instr.encoded_size();
         self.ir_to_bytecode_map.insert(ir_index, bytecode_instr_idx);
 
-        // 根据操作码确定操作数位置
-        let operand_positions = match opcode {
-            Opcode::Jmp => vec![0, 1, 2, 3],
-            Opcode::JmpIf | Opcode::JmpIfNot => vec![1, 2, 3, 4],
-            _ => vec![],
-        };
-
         self.pending_jumps.push(PendingJump {
             instr_idx: bytecode_idx,
             target_ir_idx,
             opcode,
-            operand_positions,
         });
 
         self.buffer.emit(&instr.encode());

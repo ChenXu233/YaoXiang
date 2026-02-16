@@ -298,17 +298,13 @@ impl CompileProgress {
 /// 用于从编译器事件生成进度信息。
 #[derive(Debug)]
 pub struct ProgressReporter {
-    last_phase: CompilationPhase,
     total_lines: usize,
 }
 
 impl ProgressReporter {
     /// 创建新的进度报告器
     pub fn new(total_lines: usize) -> Self {
-        Self {
-            last_phase: CompilationPhase::Full,
-            total_lines,
-        }
+        Self { total_lines }
     }
 
     /// 从事件生成进度信息

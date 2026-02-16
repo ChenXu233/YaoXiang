@@ -52,21 +52,9 @@ pub struct CodegenContext {
     config: CodegenConfig,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CodegenConfig {
-    enable_optimizations: bool,
     generate_debug_info: bool,
-    enable_inline_cache: bool,
-}
-
-impl Default for CodegenConfig {
-    fn default() -> Self {
-        CodegenConfig {
-            enable_optimizations: true,
-            generate_debug_info: false,
-            enable_inline_cache: true,
-        }
-    }
 }
 
 /// 代码生成错误

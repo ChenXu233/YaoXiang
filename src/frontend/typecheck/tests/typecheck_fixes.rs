@@ -6,11 +6,6 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::typecheck::TypeChecker;
 use crate::frontend::core::type_system::TypeConstraintSolver;
-use crate::util::span::{Position, Span};
-
-fn create_dummy_span() -> Span {
-    Span::new(Position::dummy(), Position::dummy())
-}
 
 /// 测试函数参数类型检查
 #[test]

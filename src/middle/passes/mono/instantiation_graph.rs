@@ -503,39 +503,6 @@ impl InstantiationGraph {
         }
     }
 
-    /// 从指令的 dst 字段提取类型（通用方法）
-    fn extract_type_from_inst_dst(
-        &self,
-        inst: &Instruction,
-        params: &[MonoType],
-        locals: &[MonoType],
-        deps: &mut Vec<MonoType>,
-    ) {
-        // 使用模式匹配尝试提取 dst
-        match inst {
-            Instruction::LoadField { dst, .. }
-            | Instruction::StoreField { dst, .. }
-            | Instruction::LoadIndex { dst, .. }
-            | Instruction::StoreIndex { dst, .. }
-            | Instruction::Call { dst: Some(dst), .. }
-            | Instruction::CallDyn { dst: Some(dst), .. }
-            | Instruction::CallVirt { dst: Some(dst), .. }
-            | Instruction::Alloc { dst, .. }
-            | Instruction::AllocArray { dst, .. }
-            | Instruction::HeapAlloc { dst, .. }
-            | Instruction::MakeClosure { dst, .. }
-            | Instruction::ArcNew { dst, .. }
-            | Instruction::ArcClone { dst, .. }
-            | Instruction::Move { dst, .. }
-            | Instruction::Load { dst, .. }
-            | Instruction::Cast { dst, .. }
-            | Instruction::Neg { dst, .. } => {
-                self.extract_type_from_operand(dst, params, locals, deps);
-            }
-            _ => {}
-        }
-    }
-
     /// 从操作数提取类型
     ///
     /// # Arguments

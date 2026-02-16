@@ -89,19 +89,6 @@ impl CloneChecker {
         self.state.insert(operand.clone(), ValueState::Dropped);
     }
 
-    fn update_from_call(
-        &mut self,
-        args: &[Operand],
-        dst: Option<&Operand>,
-    ) {
-        for arg in args {
-            self.set_moved(arg);
-        }
-        if let Some(d) = dst {
-            self.set_owned(d);
-        }
-    }
-
     fn check_instruction(
         &mut self,
         instr: &Instruction,

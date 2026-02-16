@@ -181,37 +181,8 @@ impl BytecodeFile {
     }
 }
 
-fn calculate_checksum(
-    magic: u32,
-    version: u32,
-    file_size: usize,
-) -> u32 {
-    let mut sum = magic.wrapping_add(version);
-    sum = sum.wrapping_add(file_size as u32);
-    sum
-}
-
-trait ConstValueExt {
-    fn encoded_size(&self) -> usize;
-}
-
-impl ConstValueExt for ConstValue {
-    fn encoded_size(&self) -> usize {
-        match self {
-            ConstValue::Void => 1,
-            ConstValue::Bool(_) => 2,
-            ConstValue::Int(_) => 9,
-            ConstValue::Float(_) => 9,
-            ConstValue::Char(_) => 5,
-            ConstValue::String(s) => 5 + s.len(),
-            ConstValue::Bytes(b) => 5 + b.len(),
-        }
-    }
-}
-
 trait MonoTypeExt {
     fn to_type_id(&self) -> u32;
-    fn from_ast(ast_type: &crate::frontend::core::parser::ast::Type) -> Self;
 }
 
 impl MonoTypeExt for MonoType {
@@ -243,9 +214,5 @@ impl MonoTypeExt for MonoType {
             MonoType::Literal { .. } => 48,   // 字面量类型
             MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
         }
-    }
-
-    fn from_ast(ast_type: &crate::frontend::core::parser::ast::Type) -> Self {
-        MonoType::from(ast_type.clone())
     }
 }

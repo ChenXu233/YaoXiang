@@ -937,8 +937,6 @@ impl Default for DceResult {
 /// 分析模块间的依赖，消除跨模块的死代码
 #[derive(Debug)]
 pub struct CrossModuleDce {
-    /// DCE 配置
-    config: DceConfig,
     /// 模块 DCE 结果
     module_results: HashMap<PathBuf, DceResult>,
 }
@@ -951,9 +949,8 @@ impl Default for CrossModuleDce {
 
 impl CrossModuleDce {
     /// 创建新的跨模块 DCE
-    pub fn new(config: DceConfig) -> Self {
+    pub fn new(_config: DceConfig) -> Self {
         Self {
-            config,
             module_results: HashMap::new(),
         }
     }
