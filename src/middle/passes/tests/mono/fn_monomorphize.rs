@@ -27,11 +27,6 @@ fn string_type() -> MonoType {
     MonoType::String
 }
 
-/// 创建布尔类型的 MonoType
-fn bool_type() -> MonoType {
-    MonoType::Bool
-}
-
 /// 创建简单 FunctionIR 的辅助函数
 fn create_simple_function_ir(
     name: &str,

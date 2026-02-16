@@ -174,18 +174,6 @@ mod tests {
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
     use crate::frontend::typecheck::MonoType;
 
-    fn make_dummy_func() -> FunctionIR {
-        FunctionIR {
-            name: String::new(),
-            params: vec![],
-            return_type: MonoType::Void,
-            is_async: false,
-            locals: vec![],
-            blocks: vec![],
-            entry: 0,
-        }
-    }
-
     fn create_test_function(returns_param: bool) -> FunctionIR {
         let return_instr = if returns_param {
             Instruction::Ret(Some(Operand::Arg(0)))

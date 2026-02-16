@@ -16,7 +16,6 @@
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
 #![warn(rust_2018_idioms)]
-#![allow(dead_code)]
 
 // Public modules
 pub mod backends;
