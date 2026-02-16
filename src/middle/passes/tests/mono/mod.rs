@@ -8,4 +8,3 @@ mod fn_monomorphize;
 mod global;
 mod instance;
 mod real_world;
-mod type_monomorphize;
