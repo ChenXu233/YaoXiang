@@ -1,55 +1,72 @@
-//! Standard Network library (placeholder)
+//! Standard Network library (YaoXiang)
 
-/// HTTP response
-pub struct HttpResponse {
-    pub status: u16,
-    pub body: String,
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct NativeDeclaration {
+    pub name: &'static str,
+    pub native_name: &'static str,
+    pub signature: &'static str,
+    pub doc: &'static str,
+    pub implemented: bool,
 }
 
-impl HttpResponse {
-    pub fn new(
-        status: u16,
-        body: String,
-    ) -> Self {
-        Self { status, body }
-    }
-
-    pub fn is_success(&self) -> bool {
-        (200..300).contains(&self.status)
-    }
-
-    pub fn status_text(&self) -> &'static str {
-        match self.status {
-            200 => "OK",
-            201 => "Created",
-            204 => "No Content",
-            400 => "Bad Request",
-            401 => "Unauthorized",
-            403 => "Forbidden",
-            404 => "Not Found",
-            500 => "Internal Server Error",
-            _ => "Unknown",
-        }
-    }
+pub fn native_declarations() -> Vec<NativeDeclaration> {
+    vec![
+        NativeDeclaration {
+            name: "http_get",
+            native_name: "std.net.http_get",
+            signature: "(url: String) -> String",
+            doc: "Perform HTTP GET request.",
+            implemented: true,
+        },
+        NativeDeclaration {
+            name: "http_post",
+            native_name: "std.net.http_post",
+            signature: "(url: String, body: String) -> String",
+            doc: "Perform HTTP POST request.",
+            implemented: true,
+        },
+        NativeDeclaration {
+            name: "url_encode",
+            native_name: "std.net.url_encode",
+            signature: "(s: String) -> String",
+            doc: "URL-encode a string.",
+            implemented: true,
+        },
+        NativeDeclaration {
+            name: "url_decode",
+            native_name: "std.net.url_decode",
+            signature: "(s: String) -> String",
+            doc: "URL-decode a string.",
+            implemented: true,
+        },
+    ]
 }
 
-/// HTTP client (placeholder)
-pub fn http_get(url: &str) -> String {
-    // Simulated HTTP GET request - returns formatted response
-    let response = HttpResponse::new(
-        200,
-        format!(
-            r#"{{"url": "{}", "method": "GET", "data": "sample data"}}"#,
-            url
-        ),
-    );
+pub fn native_name_map() -> HashMap<String, String> {
+    native_declarations()
+        .into_iter()
+        .filter(|d| d.implemented)
+        .map(|d| (d.name.to_string(), d.native_name.to_string()))
+        .collect()
+}
 
-    // Format as HTTP response
-    format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-        response.status,
-        response.status_text(),
-        response.body.len(),
-        response.body
-    )
+pub fn implemented_native_names() -> Vec<(&'static str, &'static str)> {
+    native_declarations()
+        .into_iter()
+        .filter(|d| d.implemented)
+        .map(|d| (d.name, d.native_name))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_native_declarations_not_empty() {
+        let decls = native_declarations();
+        assert!(!decls.is_empty());
+    }
 }

@@ -1,0 +1,40 @@
+use std.io.*
+use std.math.*
+
+main = {
+    println("=== 基础算术示例 ===")
+
+    // 绝对值
+    abs_result = abs(-42)
+    print("abs(-42) = ")
+    println(abs_result)
+
+    // 最大最小值
+    max_result = max(10, 20)
+    min_result = min(10, 20)
+    print("max(10, 20) = ")
+    println(max_result)
+    print("min(10, 20) = ")
+    println(min_result)
+
+    // 幂运算
+    pow_result = pow(2.0, 3.0)
+    print("pow(2.0, 3.0) = ")
+    println(pow_result)
+
+    // 平方根
+    sqrt_result = sqrt(16.0)
+    print("sqrt(16.0) = ")
+    println(sqrt_result)
+
+    // 三角函数
+    sin_result = sin(0.0)
+    print("sin(0.0) = ")
+    println(sin_result)
+
+    // 常量
+    print("PI = ")
+    println(PI)
+
+    println("\n=== 测试完成 ===")
+}

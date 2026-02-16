@@ -592,20 +592,34 @@ impl TypeChecker {
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
-                items: _,
+                items,
                 alias: _,
             } => {
-                // 处理 use std.io - 添加 print/println 函数
-                if path == "std.io" {
-                    let print_ty = MonoType::Fn {
-                        params: vec![self.env.solver().new_var()],
-                        return_type: Box::new(MonoType::Void),
-                        is_async: false,
-                    };
-                    self.env
-                        .add_var("print".to_string(), PolyType::mono(print_ty.clone()));
-                    self.env
-                        .add_var("println".to_string(), PolyType::mono(print_ty));
+                // 通用处理 std 模块的 use 语句
+                // 根据 path 自动发现并加载模块导出的函数
+                if let Some(exports) = crate::std::get_module_exports(path) {
+                    // items 为 None 时导入全部，否则只导入指定的
+                    let import_all = items.is_none();
+                    let items_ref = items.as_ref();
+
+                    for export in exports {
+                        // 检查是否需要导入这个函数
+                        let should_import = import_all
+                            || items_ref
+                                .map_or(false, |i| i.iter().any(|s| s == export.short_name));
+
+                        if should_import {
+                            // 为导出的函数创建类型
+                            // 简化处理：使用泛型参数
+                            let fn_ty = MonoType::Fn {
+                                params: vec![self.env.solver().new_var()],
+                                return_type: Box::new(MonoType::Void),
+                                is_async: false,
+                            };
+                            self.env
+                                .add_var(export.short_name.to_string(), PolyType::mono(fn_ty));
+                        }
+                    }
                 }
             }
             _ => {}
@@ -847,64 +861,32 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
 /// 注册标准库 native 函数类型签名到类型环境
 ///
 /// 这些签名用于类型检查 `Native("...")` 表达式，确保调用签名匹配。
+/// 通过通用机制自动发现所有 std 模块的 native 函数。
 pub fn add_native_function_types(env: &mut TypeEnvironment) {
-    // std.io.print: (Any...) -> Void
-    // 由于 print/println 支持任意类型参数，使用 String 作为基本签名
-    let print_type = MonoType::Fn {
-        params: vec![MonoType::String],
-        return_type: Box::new(MonoType::Void),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.print".to_string(), print_type.clone());
-    env.native_signatures
-        .insert("print".to_string(), print_type.clone());
+    // 遍历所有已知的 std 模块，自动注册其导出的函数
+    let std_modules = ["std.io", "std.math", "std.net", "std.concurrent"];
 
-    let println_type = MonoType::Fn {
-        params: vec![MonoType::String],
-        return_type: Box::new(MonoType::Void),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.println".to_string(), println_type.clone());
-    env.native_signatures
-        .insert("println".to_string(), println_type);
+    for module_path in std_modules {
+        if let Some(exports) = crate::std::get_module_exports(module_path) {
+            for export in exports {
+                // 为每个导出的函数创建类型
+                // 简化处理：使用泛型参数让其更灵活
+                let fn_ty = MonoType::Fn {
+                    params: vec![env.solver().new_var()],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                };
 
-    // std.io.read_line: () -> String
-    let read_line_type = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::String),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.read_line".to_string(), read_line_type);
+                // 注册完全限定名
+                env.native_signatures
+                    .insert(export.qualified_name.to_string(), fn_ty.clone());
 
-    // std.io.read_file: (String) -> String
-    let read_file_type = MonoType::Fn {
-        params: vec![MonoType::String],
-        return_type: Box::new(MonoType::String),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.read_file".to_string(), read_file_type);
-
-    // std.io.write_file: (String, String) -> Bool
-    let write_file_type = MonoType::Fn {
-        params: vec![MonoType::String, MonoType::String],
-        return_type: Box::new(MonoType::Bool),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.write_file".to_string(), write_file_type);
-
-    // std.io.append_file: (String, String) -> Bool
-    let append_file_type = MonoType::Fn {
-        params: vec![MonoType::String, MonoType::String],
-        return_type: Box::new(MonoType::Bool),
-        is_async: false,
-    };
-    env.native_signatures
-        .insert("std.io.append_file".to_string(), append_file_type);
+                // 注册短名称（这样可以直接用 print 而不是 std.io.print）
+                env.native_signatures
+                    .insert(export.short_name.to_string(), fn_ty);
+            }
+        }
+    }
 
     // 同时将这些 native 函数注册为变量，使其可在类型推断时查找
     for (name, sig) in &env.native_signatures.clone() {

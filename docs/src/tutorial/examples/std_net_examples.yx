@@ -1,0 +1,20 @@
+use std.io.*
+use std.net.*
+
+main = {
+    println("=== 网络库测试 ===")
+
+    // HTTP GET
+    response = http_get("https://example.com")
+    println(response)
+
+    // URL 编码
+    encoded = url_encode("hello world")
+    println(encoded)
+
+    // URL 解码
+    decoded = url_decode(encoded)
+    println(decoded)
+
+    println("\n=== 测试完成 ===")
+}

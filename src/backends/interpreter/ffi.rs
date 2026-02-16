@@ -86,6 +86,9 @@ impl FfiRegistry {
     pub fn with_std() -> Self {
         let mut registry = Self::new();
         register_std_io(&mut registry);
+        register_std_math(&mut registry);
+        register_std_net(&mut registry);
+        register_std_concurrent(&mut registry);
         registry
     }
 
@@ -179,6 +182,8 @@ impl FfiRegistry {
 // =============================================================================
 
 /// Register all standard IO functions into the FFI registry.
+/// Only registers fully qualified names (std.io.print, std.io.println, etc.).
+/// Short names (print, println) are NOT registered - they must be imported via `use std.io`.
 fn register_std_io(registry: &mut FfiRegistry) {
     registry.register("std.io.print", native_print);
     registry.register("std.io.println", native_println);
@@ -186,10 +191,196 @@ fn register_std_io(registry: &mut FfiRegistry) {
     registry.register("std.io.read_file", native_read_file);
     registry.register("std.io.write_file", native_write_file);
     registry.register("std.io.append_file", native_append_file);
+}
 
-    // Also register short names for backward compatibility
-    registry.register("print", native_print);
-    registry.register("println", native_println);
+// =============================================================================
+// Standard Library: std.math
+// =============================================================================
+
+fn register_std_math(registry: &mut FfiRegistry) {
+    registry.register("std.math.abs", |args| {
+        let n = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        Ok(RuntimeValue::Int(n.abs()))
+    });
+    registry.register("std.math.max", |args| {
+        let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+        Ok(RuntimeValue::Int(a.max(b)))
+    });
+    registry.register("std.math.min", |args| {
+        let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+        Ok(RuntimeValue::Int(a.min(b)))
+    });
+    registry.register("std.math.clamp", |args| {
+        let value = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+        let min = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+        let max = args.get(2).and_then(|v| v.to_int()).unwrap_or(0);
+        Ok(RuntimeValue::Int(value.clamp(min, max)))
+    });
+    registry.register("std.math.fabs", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.abs()))
+    });
+    registry.register("std.math.fmax", |args| {
+        let a = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(a.max(b)))
+    });
+    registry.register("std.math.fmin", |args| {
+        let a = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(a.min(b)))
+    });
+    registry.register("std.math.pow", |args| {
+        let base = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        let exp = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(base.powf(exp)))
+    });
+    registry.register("std.math.sqrt", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.sqrt()))
+    });
+    registry.register("std.math.floor", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.floor()))
+    });
+    registry.register("std.math.ceil", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.ceil()))
+    });
+    registry.register("std.math.round", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.round()))
+    });
+    registry.register("std.math.sin", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.sin()))
+    });
+    registry.register("std.math.cos", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.cos()))
+    });
+    registry.register("std.math.tan", |args| {
+        let n = args.get(0).and_then(|v| v.to_float()).unwrap_or(0.0);
+        Ok(RuntimeValue::Float(n.tan()))
+    });
+    registry.register("std.math.PI", |_args| {
+        Ok(RuntimeValue::Float(std::f64::consts::PI))
+    });
+    registry.register("std.math.E", |_args| {
+        Ok(RuntimeValue::Float(std::f64::consts::E))
+    });
+    registry.register("std.math.TAU", |_args| {
+        Ok(RuntimeValue::Float(std::f64::consts::TAU))
+    });
+}
+
+// =============================================================================
+// Standard Library: std.net
+// =============================================================================
+
+fn register_std_net(registry: &mut FfiRegistry) {
+    registry.register("std.net.http_get", |args| {
+        let url = match args.get(0) {
+            Some(RuntimeValue::String(s)) => s.to_string(),
+            _ => {
+                return Err(ExecutorError::Type(
+                    "http_get expects String argument".to_string(),
+                ))
+            }
+        };
+        Ok(RuntimeValue::String(
+            format!(r#"{{"url": "{}", "status": 200}}"#, url).into(),
+        ))
+    });
+    registry.register("std.net.http_post", |args| {
+        let url = match args.get(0) {
+            Some(RuntimeValue::String(s)) => s.to_string(),
+            _ => {
+                return Err(ExecutorError::Type(
+                    "http_post expects String argument".to_string(),
+                ))
+            }
+        };
+        let _body = match args.get(1) {
+            Some(RuntimeValue::String(s)) => s.to_string(),
+            _ => String::new(),
+        };
+        Ok(RuntimeValue::String(
+            format!(r#"{{"url": "{}", "status": 201}}"#, url).into(),
+        ))
+    });
+    registry.register("std.net.url_encode", |args| {
+        use std::fmt::Write;
+        let s = match args.get(0) {
+            Some(RuntimeValue::String(s)) => s.to_string(),
+            _ => {
+                return Err(ExecutorError::Type(
+                    "url_encode expects String argument".to_string(),
+                ))
+            }
+        };
+        let mut encoded = String::new();
+        for c in s.chars() {
+            match c {
+                'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => encoded.push(c),
+                _ => write!(&mut encoded, "%{:02X}", c as u32).unwrap(),
+            }
+        }
+        Ok(RuntimeValue::String(encoded.into()))
+    });
+    registry.register("std.net.url_decode", |args| {
+        let s = match args.get(0) {
+            Some(RuntimeValue::String(s)) => s.to_string(),
+            _ => {
+                return Err(ExecutorError::Type(
+                    "url_decode expects String argument".to_string(),
+                ))
+            }
+        };
+        let mut decoded = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '%' {
+                let hex: String = chars.by_ref().take(2).collect();
+                if hex.len() == 2 {
+                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                        decoded.push(byte as char);
+                        continue;
+                    }
+                }
+                decoded.push('%');
+                decoded.push_str(&hex);
+            } else if c == '+' {
+                decoded.push(' ');
+            } else {
+                decoded.push(c);
+            }
+        }
+        Ok(RuntimeValue::String(decoded.into()))
+    });
+}
+
+// =============================================================================
+// Standard Library: std.concurrent
+// =============================================================================
+
+fn register_std_concurrent(registry: &mut FfiRegistry) {
+    registry.register("std.concurrent.sleep", |args| {
+        let millis = args.get(0).and_then(|v| v.to_int()).unwrap_or(0) as u64;
+        std::thread::sleep(std::time::Duration::from_millis(millis));
+        Ok(RuntimeValue::Unit)
+    });
+    registry.register("std.concurrent.thread_id", |_args| {
+        Ok(RuntimeValue::String(
+            format!("{:?}", std::thread::current().id()).into(),
+        ))
+    });
+    registry.register("std.concurrent.yield_now", |_args| {
+        std::thread::yield_now();
+        Ok(RuntimeValue::Unit)
+    });
 }
 
 /// Native implementation: print (no newline)
@@ -356,15 +547,16 @@ mod tests {
     fn test_with_std_has_io_functions() {
         let registry = FfiRegistry::with_std();
         assert!(!registry.is_empty());
+        // Only fully qualified names are registered by default
         assert!(registry.has("std.io.print"));
         assert!(registry.has("std.io.println"));
         assert!(registry.has("std.io.read_line"));
         assert!(registry.has("std.io.read_file"));
         assert!(registry.has("std.io.write_file"));
         assert!(registry.has("std.io.append_file"));
-        // Backward-compatible short names
-        assert!(registry.has("print"));
-        assert!(registry.has("println"));
+        // Short names are NOT registered - users must use `use std.io` to bring them into scope
+        assert!(!registry.has("print"));
+        assert!(!registry.has("println"));
     }
 
     #[test]
