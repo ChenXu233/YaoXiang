@@ -28,6 +28,29 @@ pub struct ModuleExport {
 /// Returns None if the module doesn't exist or has no exports.
 pub fn get_module_exports(module_path: &str) -> Option<Vec<ModuleExport>> {
     match module_path {
+        // "std" 模块：返回所有子模块
+        "std" => Some(vec![
+            ModuleExport {
+                short_name: "io",
+                qualified_name: "std.io",
+                signature: "Module",
+            },
+            ModuleExport {
+                short_name: "math",
+                qualified_name: "std.math",
+                signature: "Module",
+            },
+            ModuleExport {
+                short_name: "net",
+                qualified_name: "std.net",
+                signature: "Module",
+            },
+            ModuleExport {
+                short_name: "concurrent",
+                qualified_name: "std.concurrent",
+                signature: "Module",
+            },
+        ]),
         "std.io" => Some(
             io::native_declarations()
                 .into_iter()

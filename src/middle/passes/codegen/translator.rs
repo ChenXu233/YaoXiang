@@ -468,6 +468,8 @@ impl Translator {
             _ => None,
         };
 
+        // 命名空间解析：如果函数名不是已知的 native 函数，
+        // 尝试通过短名称映射获取完整名称
         let is_native = func_name
             .as_ref()
             .map(|n| self.is_native(n))

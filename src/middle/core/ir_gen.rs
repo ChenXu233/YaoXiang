@@ -36,25 +36,60 @@ static NATIVE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
         .collect()
 });
 
-/// 检查是否是命名空间调用（如 std.io.println）
-fn is_namespace_call(expr: &ast::Expr) -> bool {
-    match expr {
-        ast::Expr::Var(name, _) => name == "std",
+/// 缓存短名称到完整名称的映射（用于命名空间解析）
+/// 例如：print -> std.io.print, abs -> std.math.abs
+static SHORT_TO_QUALIFIED: LazyLock<std::collections::HashMap<String, String>> =
+    LazyLock::new(|| {
+        let mut map = std::collections::HashMap::new();
+
+        // 从 io 模块添加映射
+        for (short, qualified) in io::native_name_map() {
+            map.insert(short, qualified);
+        }
+        // 从 math 模块添加映射
+        for (short, qualified) in math::native_name_map() {
+            map.insert(short, qualified);
+        }
+        // 从 net 模块添加映射
+        for (short, qualified) in net::native_name_map() {
+            map.insert(short, qualified);
+        }
+        // 从 concurrent 模块添加映射
+        for (short, qualified) in concurrent::native_name_map() {
+            map.insert(short, qualified);
+        }
+
+        map
+    });
+
+/// 检查是否是命名空间调用（如 std.io.println 或 io.println）
+/// io 是通过 use std.{io} 导入的模块变量
+fn is_namespace_call(expr: &Box<ast::Expr>) -> bool {
+    match expr.as_ref() {
+        ast::Expr::Var(name, _) => name == "std" || is_std_module(name),
         ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
         _ => false,
     }
 }
 
-/// 提取完整的命名空间路径（如 std.io.println）
+/// 提取完整的命名空间路径（如 std.io.println 或 io.println -> std.io.println）
+/// 处理 &Box<ast::Expr> 类型
 fn extract_namespace_path(
-    expr: &ast::Expr,
+    expr: &Box<ast::Expr>,
     field: &str,
 ) -> String {
-    match expr {
+    // 解引用 Box<ast::Expr> 得到 &ast::Expr
+    match expr.as_ref() {
         ast::Expr::Var(name, _) => {
             if name == "std" {
+                // std.xxx -> std.xxx
                 format!("std.{}", field)
+            } else if is_std_module(name) {
+                // io.println -> std.io.println
+                // 当遇到模块变量时，需要将模块名和字段组合
+                format!("std.{}.{}", name, field)
             } else {
+                // 普通变量
                 format!("{}.{}", name, field)
             }
         }
@@ -63,6 +98,7 @@ fn extract_namespace_path(
             field: sub_field,
             ..
         } => {
+            // 递归处理：expr 是 Box<ast::Expr>
             let prefix = extract_namespace_path(expr, sub_field);
             format!("{}.{}", prefix, field)
         }
@@ -73,6 +109,25 @@ fn extract_namespace_path(
 /// 检查完整的命名空间路径是否是 native 函数/常量
 fn is_native_name(full_path: &str) -> bool {
     NATIVE_NAMES.iter().any(|n| n == full_path)
+}
+
+/// 检查变量名是否是 std 模块的子模块（io, math, net, concurrent）
+fn is_std_module(name: &str) -> bool {
+    matches!(name, "io" | "math" | "net" | "concurrent")
+}
+
+/// 将模块变量和字段组合成完整路径（如 io.println -> std.io.println）
+fn resolve_module_access(
+    module_name: &str,
+    field: &str,
+) -> Option<String> {
+    if is_std_module(module_name) {
+        let full_path = format!("std.{}", field);
+        if is_native_name(&full_path) {
+            return Some(full_path);
+        }
+    }
+    None
 }
 
 /// 符号表条目
@@ -1611,7 +1666,7 @@ impl AstToIrGenerator {
                     }
 
                     // 命名空间机制：提取完整的命名空间路径
-                    // 例如：std.io.println -> "std.io.println"
+                    // 例如：std.io.println -> "std.io.println" 或 io.println -> "std.io.println"
                     let method_function_name = extract_namespace_path(expr, field);
 
                     instructions.push(Instruction::Call {
@@ -1628,9 +1683,21 @@ impl AstToIrGenerator {
                         arg_regs.push(Operand::Local(arg_reg));
                     }
 
-                    // 直接将函数名作为 String 存储在 Operand 中
+                    // 命名空间解析：将短名称解析为完整名称
+                    // 例如：print -> std.io.print (当 print 是通过 use std.io.{print} 导入时)
                     let func_operand = if let Expr::Var(name, _) = func.as_ref() {
-                        Operand::Const(ConstValue::String(name.clone()))
+                        // 尝试将短名称解析为完整名称
+                        let resolved_name = if is_native_name(name) {
+                            // 已经是完整的 native 函数名
+                            name.clone()
+                        } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                            // 通过短名称映射获取完整名称
+                            qualified.clone()
+                        } else {
+                            // 未知函数，保持原名
+                            name.clone()
+                        };
+                        Operand::Const(ConstValue::String(resolved_name))
                     } else {
                         Operand::Const(ConstValue::Int(0))
                     };
@@ -1643,37 +1710,55 @@ impl AstToIrGenerator {
                 }
             }
             Expr::FieldAccess { expr, field, .. } => {
-                // 提取完整的命名空间路径
-                let full_path = extract_namespace_path(expr, field);
-
-                // 检查是否是命名空间常量访问（如 std.math.PI）
-                let is_native_constant = is_native_name(&full_path);
-
-                if is_native_constant {
-                    // 命名空间常量访问：生成零参数函数调用
-                    // 例如：std.math.PI -> Call("std.math.PI", [])
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(full_path)),
-                        args: vec![],
-                    });
+                // 首先检查是否是模块变量的字段访问（如 io.println）
+                // io 是通过 use std.{io} 导入的模块变量
+                if let Expr::Var(module_name, _) = expr.as_ref() {
+                    if let Some(full_path) = resolve_module_access(module_name, field) {
+                        // 模块变量方法调用：生成函数调用
+                        // 例如：io.println -> Call("std.io.println", [args])
+                        // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
+                        // 生成零参数调用
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(full_path)),
+                            args: vec![],
+                        });
+                    } else {
+                        // 普通字段访问
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        instructions.push(Instruction::LoadField {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(obj_reg),
+                            field: field_index,
+                        });
+                    }
                 } else {
-                    // 普通字段访问：加载对象的字段
-                    // 生成对象表达式 IR
-                    let obj_reg = self.next_temp_reg();
-                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                    // 提取完整的命名空间路径（如 std.math.PI）
+                    let full_path = extract_namespace_path(expr, field);
 
-                    // 尝试从类型信息中获取字段索引
-                    // 简化处理：使用字段名的哈希值作为索引（临时方案）
-                    // 在真正的实现中，需要完整的类型信息来查找字段位置
-                    let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                    // 检查是否是命名空间常量访问
+                    let is_native_constant = is_native_name(&full_path);
 
-                    // 使用 LoadField 指令加载字段
-                    instructions.push(Instruction::LoadField {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(obj_reg),
-                        field: field_index,
-                    });
+                    if is_native_constant {
+                        // 命名空间常量访问：生成零参数函数调用
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(full_path)),
+                            args: vec![],
+                        });
+                    } else {
+                        // 普通字段访问
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                        instructions.push(Instruction::LoadField {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(obj_reg),
+                            field: field_index,
+                        });
+                    }
                 }
             }
             Expr::List(elements, span) => {

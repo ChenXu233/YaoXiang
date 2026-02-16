@@ -443,8 +443,19 @@ impl<'a> ExprInferrer<'a> {
                     }
                 }
 
-                if is_std_namespace(obj) {
-                    // 命名空间访问：std.module 或 std.module.submodule
+                // 检查是否是 std 子模块变量（如 io, math, net, concurrent）
+                // 这些是通过 use std.{io} 导入的模块变量
+                fn is_std_module_var(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+                    match expr {
+                        crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+                            matches!(name.as_str(), "io" | "math" | "net" | "concurrent")
+                        }
+                        _ => false,
+                    }
+                }
+
+                if is_std_namespace(obj) || is_std_module_var(obj) {
+                    // 命名空间访问：std.module 或 io（模块变量）
                     // 返回一个虚拟函数类型，让后续调用可以继续
                     let fn_ty = MonoType::Fn {
                         params: vec![self.solver.new_var()],
@@ -506,9 +517,14 @@ impl<'a> ExprInferrer<'a> {
                 ) -> Option<String> {
                     match expr {
                         crate::frontend::core::parser::ast::Expr::Var(name, _) => {
-                            // 基础情况：如果是 std，则返回 Some("std".to_string())
+                            // 基础情况：
+                            // - 如果是 std，返回 Some("std")
+                            // - 如果是 io/math/net/concurrent（模块变量），返回 Some("io") 等
                             if name == "std" {
                                 Some("std".to_string())
+                            } else if matches!(name.as_str(), "io" | "math" | "net" | "concurrent")
+                            {
+                                Some(name.clone())
                             } else {
                                 None
                             }
@@ -520,8 +536,13 @@ impl<'a> ExprInferrer<'a> {
                         } => {
                             // 递归获取前面的路径
                             if let Some(prefix) = extract_namespace_path(expr) {
+                                // 如果前缀是 std 或模块变量，构建完整路径
                                 if prefix == "std" {
-                                    // 命名空间访问：std.module
+                                    return Some(format!("std.{}", field));
+                                } else if matches!(
+                                    prefix.as_str(),
+                                    "io" | "math" | "net" | "concurrent"
+                                ) {
                                     return Some(format!("std.{}", field));
                                 }
                             }
@@ -552,12 +573,23 @@ impl<'a> ExprInferrer<'a> {
                         }
                     }
 
-                    // 重新组织：namespace_path 是 std.io，需要加上函数名
+                    // 重新组织：namespace_path 是 std.io 或 io（模块变量），需要加上函数名
                     // 例如：如果 func 是 std.io.println，field 是 "println"，namespace_path 是 "std.io"
+                    // 或者：func 是 io.println，namespace_path 是 "io"
                     // 我们需要构建 "std.io.println"
                     if let Some(field_name) = extract_function_name(func) {
                         // field_name 可能是 "io.println"，需要组合成完整路径
-                        let full_name = format!("{}.{}", namespace_path, field_name);
+                        let full_name = if namespace_path == "std"
+                            || namespace_path == "io"
+                            || namespace_path == "math"
+                            || namespace_path == "net"
+                            || namespace_path == "concurrent"
+                        {
+                            // 模块变量路径，需要添加 std. 前缀
+                            format!("std.{}", field_name)
+                        } else {
+                            format!("{}.{}", namespace_path, field_name)
+                        };
                         // 查找 native 函数
                         if let Some(sig) = self.native_signatures.get(&full_name).cloned() {
                             return Ok(sig);

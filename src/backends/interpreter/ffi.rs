@@ -183,7 +183,7 @@ impl FfiRegistry {
 
 /// Register all standard IO functions into the FFI registry.
 /// Only registers fully qualified names (std.io.print, std.io.println, etc.).
-/// Short names (print, println) are NOT registered - they must be imported via `use std.io`.
+/// Namespace resolution is handled at code generation time.
 fn register_std_io(registry: &mut FfiRegistry) {
     registry.register("std.io.print", native_print);
     registry.register("std.io.println", native_println);
