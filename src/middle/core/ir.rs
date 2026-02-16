@@ -238,6 +238,12 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
+    /// Share reference across threads (requires Sync)
+    /// Used for thread-local sharing, requires the type to be Sync
+    ShareRef {
+        dst: Operand,
+        src: Operand,
+    },
     // =====================
     // unsafe 块和裸指针指令
     // =====================
