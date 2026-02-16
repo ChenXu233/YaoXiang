@@ -190,15 +190,6 @@ impl Translator {
         }
     }
 
-    /// 回填跳转偏移（保留旧签名以兼容）
-    fn backfill_jumps(
-        &self,
-        _instructions: &[BytecodeInstruction],
-        _ir_to_bytecode_map: &HashMap<usize, usize>,
-    ) -> Result<(), CodegenError> {
-        Ok(())
-    }
-
     /// 翻译单条 IR 指令
     fn translate_instruction(
         &mut self,

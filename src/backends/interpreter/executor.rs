@@ -1311,4 +1311,194 @@ mod tests {
         // Function executes successfully (actual return value depends on implementation)
         let _ = result.unwrap();
     }
+
+    // =============================================================================
+    // FFI End-to-End Tests
+    // =============================================================================
+
+    /// Create a CallNative bytecode instruction for testing
+    fn make_call_native_bytecode(
+        func_name: &str,
+        args: Vec<ConstValue>,
+    ) -> (BytecodeModule, usize) {
+        let mut module = BytecodeModule::new("test_ffi".to_string());
+
+        // Build instructions:
+        // 1. Load constants for args
+        // 2. CallNative
+        // 3. Return
+        let mut instructions = Vec::new();
+
+        for (i, arg) in args.iter().enumerate() {
+            let const_idx = module.constants.len() as u16;
+            module.constants.push(arg.clone());
+
+            instructions.push(BytecodeInstr::LoadConst {
+                dst: Reg(i as u16),
+                const_idx,
+            });
+        }
+
+        // CallNative instruction - func_name is String directly
+        let arg_regs: Vec<Reg> = (0..args.len()).map(|i| Reg(i as u16)).collect();
+
+        instructions.push(BytecodeInstr::CallNative {
+            dst: Some(Reg(100)), // Use a high register for return
+            func_name: func_name.to_string(),
+            args: arg_regs,
+        });
+
+        // Return the result
+        instructions.push(BytecodeInstr::ReturnValue { value: Reg(100) });
+
+        let func_idx = module.add_function(BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Void,
+            local_count: 101,
+            upvalue_count: 0,
+            instructions,
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        });
+
+        module.entry_point = Some(func_idx);
+        (module, func_idx)
+    }
+
+    #[test]
+    fn test_ffi_println_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Create: println("Hello, FFI!")
+        let (module, func_idx) = make_call_native_bytecode(
+            "std.io.println",
+            vec![ConstValue::String("Hello, FFI!".to_string())],
+        );
+
+        let result = interp.execute_function(&module.functions[func_idx], &[]);
+        assert!(result.is_ok(), "FFI call should succeed");
+    }
+
+    #[test]
+    fn test_ffi_write_and_read_file_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Test using std.io directly via FFI registry
+        let path_str = "test_e2e_file.txt".to_string();
+
+        // Test write_file via registry directly
+        let result = interp.ffi.call(
+            "std.io.write_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String("E2E test content".into()),
+            ],
+        );
+        assert!(result.is_ok(), "write_file should succeed: {:?}", result);
+
+        // Test read_file via registry
+        let result = interp.ffi.call(
+            "std.io.read_file",
+            &[RuntimeValue::String(path_str.clone().into())],
+        );
+        assert!(result.is_ok(), "read_file should succeed");
+
+        // Verify content
+        let return_value = result.unwrap();
+        if let RuntimeValue::String(content) = return_value {
+            assert_eq!(content.to_string(), "E2E test content");
+        } else {
+            panic!("Expected String return value");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_ffi_custom_function_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Register a custom native function
+        interp.ffi_registry_mut().register("test.multiply", |args| {
+            eprintln!("DEBUG: multiply args = {:?}", args);
+            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+            eprintln!("DEBUG: multiply {} * {}", a, b);
+            Ok(RuntimeValue::Int(a * b))
+        });
+
+        // Test via registry directly
+        let result = interp.ffi.call(
+            "test.multiply",
+            &[RuntimeValue::Int(6), RuntimeValue::Int(7)],
+        );
+
+        assert!(
+            result.is_ok(),
+            "Custom FFI call should succeed: {:?}",
+            result
+        );
+
+        let return_value = result.unwrap();
+        if let RuntimeValue::Int(val) = return_value {
+            assert_eq!(val, 42, "6 * 7 should equal 42");
+        } else {
+            panic!("Expected Int return value");
+        }
+    }
+
+    #[test]
+    fn test_ffi_nonexistent_function_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Try to call a non-existent function
+        let result = interp.ffi.call("nonexistent.function", &[]);
+        assert!(result.is_err(), "Call to non-existent function should fail");
+    }
+
+    #[test]
+    fn test_ffi_append_file_e2e() {
+        let mut interp = Interpreter::new();
+
+        let path_str = "test_append_file.txt".to_string();
+
+        // Write initial content
+        let result1 = interp.ffi.call(
+            "std.io.write_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String("First".into()),
+            ],
+        );
+        assert!(result1.is_ok());
+
+        // Append content
+        let result2 = interp.ffi.call(
+            "std.io.append_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String(" Second".into()),
+            ],
+        );
+        assert!(result2.is_ok());
+
+        // Read and verify
+        let result3 = interp.ffi.call(
+            "std.io.read_file",
+            &[RuntimeValue::String(path_str.clone().into())],
+        );
+        assert!(result3.is_ok());
+
+        let return_value = result3.unwrap();
+        if let RuntimeValue::String(content) = return_value {
+            assert_eq!(content.to_string(), "First Second");
+        } else {
+            panic!("Expected String");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&path_str);
+    }
 }

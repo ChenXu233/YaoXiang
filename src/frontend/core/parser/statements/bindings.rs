@@ -68,14 +68,17 @@ pub fn parse_method_bind(
 }
 
 /// RFC-004 Binding parser
-pub struct BindingParser {
-    /// Maximum binding positions allowed
-    max_positions: usize,
+pub struct BindingParser {}
+
+impl Default for BindingParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BindingParser {
-    pub fn new(max_positions: usize) -> Self {
-        Self { max_positions }
+    pub fn new() -> Self {
+        Self {}
     }
 
     /// Parse binding declaration: `Type.method = value`

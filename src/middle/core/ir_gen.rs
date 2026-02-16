@@ -22,7 +22,6 @@ use std::collections::HashMap;
 /// 符号表条目
 #[derive(Debug, Clone)]
 struct SymbolEntry {
-    name: String,
     local_idx: usize,
 }
 
@@ -45,8 +44,6 @@ impl IrGeneratorConfig {
 /// 将 AST 节点转换为 IR 指令序列。
 #[derive(Debug)]
 pub struct AstToIrGenerator {
-    /// 配置
-    config: IrGeneratorConfig,
     /// 符号表（用于变量解析）
     symbols: Vec<HashMap<String, SymbolEntry>>,
     /// 类型检查结果（包含变量绑定信息）
@@ -73,7 +70,6 @@ impl AstToIrGenerator {
     /// 创建新的 IR 生成器
     pub fn new() -> Self {
         Self {
-            config: IrGeneratorConfig::default(),
             symbols: vec![HashMap::new()], // 全局作用域
             type_result: None,
             next_temp: 0,
@@ -87,7 +83,6 @@ impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
         Self {
-            config: IrGeneratorConfig::default(),
             symbols: vec![HashMap::new()], // 全局作用域
             type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
@@ -110,27 +105,6 @@ impl AstToIrGenerator {
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
         self.symbols.pop();
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
-    }
-
-    /// 阶段3修复：从类型检查结果中获取函数的返回类型
-    fn get_function_return_type(
-        &self,
-        func_name: &str,
-    ) -> Option<MonoType> {
-        if let Some(ref type_result) = self.type_result {
-            if let Some(poly_type) = type_result.bindings.get(func_name) {
-                // 如果是多态类型，实例化获取具体类型
-                let mono_type = self.instantiate_poly_type(poly_type);
-                match mono_type {
-                    MonoType::Fn { return_type, .. } => Some(*return_type),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
     }
 
     /// 阶段3修复：实例化多态类型
@@ -156,13 +130,7 @@ impl AstToIrGenerator {
             &local_idx.to_string()
         );
         if let Some(scope) = self.symbols.last_mut() {
-            scope.insert(
-                name.to_string(),
-                SymbolEntry {
-                    name: name.to_string(),
-                    local_idx,
-                },
-            );
+            scope.insert(name.to_string(), SymbolEntry { local_idx });
         }
     }
 

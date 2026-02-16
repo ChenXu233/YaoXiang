@@ -29,9 +29,6 @@ pub enum UnificationResult {
 /// 执行类型表达式的统一，复用 Substituter 进行替换操作
 #[derive(Debug, Clone)]
 pub struct TypeUnifier {
-    /// 统一配置
-    config: ReductionConfig,
-
     /// 当前替换
     substitution: Substitution,
 
@@ -49,16 +46,14 @@ impl TypeUnifier {
     /// 创建新的统一器
     pub fn new() -> Self {
         Self {
-            config: ReductionConfig::default(),
             substitution: Substitution::new(),
             substituter: Substituter::new(),
         }
     }
 
     /// 创建带配置的统一器
-    pub fn with_config(config: ReductionConfig) -> Self {
+    pub fn with_config(_config: ReductionConfig) -> Self {
         Self {
-            config,
             substitution: Substitution::new(),
             substituter: Substituter::new(),
         }

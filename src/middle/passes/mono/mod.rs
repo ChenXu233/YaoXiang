@@ -56,9 +56,6 @@ pub struct Monomorphizer {
     /// 泛型函数集合
     generic_functions: HashMap<GenericFunctionId, FunctionIR>,
 
-    /// 当前特化计数器
-    next_function_id: usize,
-
     /// ==================== 类型单态化相关 ====================
 
     /// 已实例化的类型
@@ -69,9 +66,6 @@ pub struct Monomorphizer {
 
     /// 泛型类型集合（存储原始类型定义）
     generic_types: HashMap<GenericTypeId, MonoType>,
-
-    /// 下一个类型ID计数器
-    next_type_id: usize,
 
     /// ==================== 闭包单态化相关 ====================
 
@@ -121,12 +115,10 @@ impl Monomorphizer {
             instantiation_queue: Vec::new(),
             specialization_cache: HashMap::new(),
             generic_functions: HashMap::new(),
-            next_function_id: 0,
             // 类型单态化相关字段
             type_instances: HashMap::new(),
             type_specialization_cache: HashMap::new(),
             generic_types: HashMap::new(),
-            next_type_id: 0,
             // 闭包单态化相关字段
             instantiated_closures: HashMap::new(),
             closure_specialization_cache: HashMap::new(),
@@ -164,12 +156,10 @@ impl Monomorphizer {
             instantiation_queue: Vec::new(),
             specialization_cache: HashMap::new(),
             generic_functions: HashMap::new(),
-            next_function_id: 0,
             // 类型单态化相关字段
             type_instances: HashMap::new(),
             type_specialization_cache: HashMap::new(),
             generic_types: HashMap::new(),
-            next_type_id: 0,
             // 闭包单态化相关字段
             instantiated_closures: HashMap::new(),
             closure_specialization_cache: HashMap::new(),

@@ -331,4 +331,38 @@ interpreter.ffi_registry_mut().register("my_add", |args| {
 | 5 | 类型检查正确处理 Native | ✅ |
 | 6 | std.io 函数可用 | ✅ |
 | 7 | 用户自定义 native 函数支持 | ✅ |
-| 7 | 用户可自定义 native 函数 |
+
+## 端到端测试结果
+
+```
+running 19 tests
+- backends::interpreter::ffi::tests::test_new_registry_is_empty ... ok
+- backends::interpreter::ffi::tests::test_with_std_has_io_functions ... ok
+- backends::interpreter::ffi::tests::test_register_custom_function ... ok
+- backends::interpreter::ffi::tests::test_call_custom_function ... ok
+- backends::interpreter::ffi::tests::test_call_nonexistent_function_returns_error ... ok
+- backends::interpreter::ffi::tests::test_call_println_via_registry ... ok
+- backends::interpreter::ffi::tests::test_cache_accelerates_repeated_calls ... ok
+- backends::interpreter::ffi::tests::test_register_overwrites_existing ... ok
+- backends::interpreter::ffi::tests::test_registered_functions_list ... ok
+- backends::interpreter::ffi::tests::test_write_and_read_file ... ok
+- backends::interpreter::ffi::tests::test_read_file_missing_args ... ok
+- backends::interpreter::ffi::tests::test_write_file_missing_args ... ok
+- backends::interpreter::executor::tests::test_ffi_println_e2e ... ok
+- backends::interpreter::executor::tests::test_ffi_write_and_read_file_e2e ... ok
+- backends::interpreter::executor::tests::test_ffi_custom_function_e2e ... ok
+- backends::interpreter::executor::tests::test_ffi_nonexistent_function_e2e ... ok
+- backends::interpreter::executor::tests::test_ffi_append_file_e2e ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored
+```
+
+### 测试覆盖
+
+- ✅ FFI 注册表创建和注册
+- ✅ 标准库函数 (std.io.print, println, read_file, write_file, append_file)
+- ✅ 自定义 native 函数注册和调用
+- ✅ 错误处理（不存在的函数）
+- ✅ 缓存加速
+- ✅ 文件读写
+- ✅ 文件追加

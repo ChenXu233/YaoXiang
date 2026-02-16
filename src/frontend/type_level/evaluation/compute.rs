@@ -8,9 +8,7 @@
 //! - 类型级函数应用
 
 use crate::frontend::core::type_system::{MonoType, TypeVar};
-use crate::frontend::type_level::evaluation::{
-    TypeNormalizer, TypeReducer, TypeUnifier, ReductionConfig,
-};
+use crate::frontend::type_level::evaluation::{TypeNormalizer, TypeReducer, ReductionConfig};
 use std::collections::HashMap;
 
 /// 类型计算结果
@@ -36,9 +34,6 @@ pub struct TypeComputer {
 
     /// 归约器
     reducer: TypeReducer,
-
-    /// 统一器
-    unifier: TypeUnifier,
 
     /// 计算配置
     config: ComputeConfig,
@@ -152,7 +147,6 @@ impl TypeComputer {
         Self {
             normalizer: TypeNormalizer::new(),
             reducer: TypeReducer::new(),
-            unifier: TypeUnifier::new(),
             config: ComputeConfig::default(),
             context: ComputeContext::new(),
         }
@@ -164,7 +158,6 @@ impl TypeComputer {
         Self {
             normalizer: TypeNormalizer::with_config(reduction.clone()),
             reducer: TypeReducer::with_config(reduction.clone()),
-            unifier: TypeUnifier::with_config(reduction),
             config,
             context: ComputeContext::new(),
         }

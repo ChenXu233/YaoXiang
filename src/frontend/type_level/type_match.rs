@@ -233,17 +233,12 @@ impl MatchType {
 /// - 支持元组解构
 /// - 支持通配符绑定
 #[derive(Debug, Default)]
-pub struct PatternMatcher {
-    /// 匹配优先级：通配符在最后
-    wildcard_priority: usize,
-}
+pub struct PatternMatcher {}
 
 impl PatternMatcher {
     /// 创建新的模式匹配器
     pub fn new() -> Self {
-        Self {
-            wildcard_priority: 0,
-        }
+        Self {}
     }
 
     /// 检查目标类型是否匹配给定模式

@@ -292,12 +292,6 @@ impl TypeEnvironment {
 pub struct TypeChecker {
     /// 当前环境
     env: TypeEnvironment,
-    /// 已检查的函数签名（用于递归检测）
-    checked_functions: HashMap<String, bool>,
-    /// 当前函数的返回类型
-    current_return_type: Option<MonoType>,
-    /// 泛型函数缓存
-    generic_cache: HashMap<String, HashMap<String, PolyType>>,
     /// 函数体检查器
     body_checker: Option<checking::BodyChecker>,
 }
@@ -312,9 +306,6 @@ impl TypeChecker {
 
         Self {
             env,
-            checked_functions: HashMap::new(),
-            current_return_type: None,
-            generic_cache: HashMap::new(),
             body_checker: None,
         }
     }
@@ -362,14 +353,6 @@ impl TypeChecker {
         stmt: &crate::frontend::core::parser::ast::Stmt,
     ) -> Result<(), Box<Diagnostic>> {
         self.body_checker_mut().check_stmt(stmt)
-    }
-
-    /// 获取函数体检查器
-    fn body_checker(&mut self) -> &mut checking::BodyChecker {
-        if self.body_checker.is_none() {
-            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
-        }
-        self.body_checker.as_mut().unwrap()
     }
 
     /// 检查整个模块

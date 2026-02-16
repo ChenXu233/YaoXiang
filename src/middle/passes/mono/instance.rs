@@ -260,18 +260,6 @@ fn type_name_hash<H: Hasher>(
     }
 }
 
-impl SpecializationKey {
-    /// 辅助函数：计算类型名称的哈希值
-    #[allow(clippy::only_used_in_recursion)]
-    fn type_name_hash<H: Hasher>(
-        &self,
-        ty: &MonoType,
-        state: &mut H,
-    ) {
-        type_name_hash(ty, state);
-    }
-}
-
 /// 泛型函数ID
 ///
 /// 用于唯一标识一个泛型函数或重载函数

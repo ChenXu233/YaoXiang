@@ -547,16 +547,6 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    /// Parse elif branch helper
-    fn parse_elif_branch(&mut self) -> Option<(Expr, Block)> {
-        self.expect(&TokenKind::KwElif);
-
-        let condition = self.parse_expression(BP_LOWEST)?;
-        let body = self.parse_block_expr()?;
-
-        Some((condition, body))
-    }
-
     /// Parse match expression: `match expr { pattern => expr, ... }`
     fn parse_match(&mut self) -> Option<Expr> {
         let span = self.span();

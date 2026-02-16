@@ -341,13 +341,11 @@ impl EventSubscriber for ConsoleLogger {
 
 /// LSP 通知订阅者（用于集成）
 #[derive(Debug)]
-pub struct LspNotifier {
-    sender: std::sync::mpsc::Sender<(String, serde_json::Value)>,
-}
+pub struct LspNotifier {}
 
 impl LspNotifier {
-    pub fn new(sender: std::sync::mpsc::Sender<(String, serde_json::Value)>) -> Self {
-        Self { sender }
+    pub fn new(_sender: std::sync::mpsc::Sender<(String, serde_json::Value)>) -> Self {
+        Self {}
     }
 }
 
