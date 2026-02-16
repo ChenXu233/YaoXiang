@@ -13,11 +13,67 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::std::{concurrent, io, math, net};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+/// 缓存所有 native 函数/常量名（用于快速查找）
+static NATIVE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
+    let math_names: Vec<String> = math::native_name_map().into_values().collect();
+    let io_names: Vec<String> = io::native_name_map().into_values().collect();
+    let net_names: Vec<String> = net::native_name_map().into_values().collect();
+    let concurrent_names: Vec<String> = concurrent::native_name_map().into_values().collect();
+
+    math_names
+        .into_iter()
+        .chain(io_names)
+        .chain(net_names)
+        .chain(concurrent_names)
+        .collect()
+});
+
+/// 检查是否是命名空间调用（如 std.io.println）
+fn is_namespace_call(expr: &ast::Expr) -> bool {
+    match expr {
+        ast::Expr::Var(name, _) => name == "std",
+        ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
+        _ => false,
+    }
+}
+
+/// 提取完整的命名空间路径（如 std.io.println）
+fn extract_namespace_path(
+    expr: &ast::Expr,
+    field: &str,
+) -> String {
+    match expr {
+        ast::Expr::Var(name, _) => {
+            if name == "std" {
+                format!("std.{}", field)
+            } else {
+                format!("{}.{}", name, field)
+            }
+        }
+        ast::Expr::FieldAccess {
+            expr,
+            field: sub_field,
+            ..
+        } => {
+            let prefix = extract_namespace_path(expr, sub_field);
+            format!("{}.{}", prefix, field)
+        }
+        _ => field.to_string(),
+    }
+}
+
+/// 检查完整的命名空间路径是否是 native 函数/常量
+fn is_native_name(full_path: &str) -> bool {
+    NATIVE_NAMES.iter().any(|n| n == full_path)
+}
 
 /// 符号表条目
 #[derive(Debug, Clone)]
@@ -1538,10 +1594,14 @@ impl AstToIrGenerator {
                     // 命名空间机制：p.method() -> method(p)
                     let mut arg_regs = Vec::new();
 
-                    // 首先生成对象表达式 IR（用于 self）
-                    let obj_reg = self.next_temp_reg();
-                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                    arg_regs.push(Operand::Local(obj_reg));
+                    // 只有非命名空间调用才需要添加 self 参数
+                    // 命名空间调用（如 std.io.println）不需要隐式参数
+                    if !is_namespace_call(expr) {
+                        // 首先生成对象表达式 IR（用于 self）
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        arg_regs.push(Operand::Local(obj_reg));
+                    }
 
                     // 生成参数 IR
                     for arg in args.iter() {
@@ -1550,10 +1610,9 @@ impl AstToIrGenerator {
                         arg_regs.push(Operand::Local(arg_reg));
                     }
 
-                    // 命名空间机制：将方法调用转换为简单函数调用
-                    // 例如：p.get_x() -> get_x(p)
-                    // 函数名就是方法名，无复杂前缀
-                    let method_function_name = field;
+                    // 命名空间机制：提取完整的命名空间路径
+                    // 例如：std.io.println -> "std.io.println"
+                    let method_function_name = extract_namespace_path(expr, field);
 
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
@@ -1584,22 +1643,38 @@ impl AstToIrGenerator {
                 }
             }
             Expr::FieldAccess { expr, field, .. } => {
-                // 字段访问：加载对象的字段
-                // 生成对象表达式 IR
-                let obj_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                // 提取完整的命名空间路径
+                let full_path = extract_namespace_path(expr, field);
 
-                // 尝试从类型信息中获取字段索引
-                // 简化处理：使用字段名的哈希值作为索引（临时方案）
-                // 在真正的实现中，需要完整的类型信息来查找字段位置
-                let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+                // 检查是否是命名空间常量访问（如 std.math.PI）
+                let is_native_constant = is_native_name(&full_path);
 
-                // 使用 LoadField 指令加载字段
-                instructions.push(Instruction::LoadField {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(obj_reg),
-                    field: field_index,
-                });
+                if is_native_constant {
+                    // 命名空间常量访问：生成零参数函数调用
+                    // 例如：std.math.PI -> Call("std.math.PI", [])
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(full_path)),
+                        args: vec![],
+                    });
+                } else {
+                    // 普通字段访问：加载对象的字段
+                    // 生成对象表达式 IR
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+
+                    // 尝试从类型信息中获取字段索引
+                    // 简化处理：使用字段名的哈希值作为索引（临时方案）
+                    // 在真正的实现中，需要完整的类型信息来查找字段位置
+                    let field_index = self.resolve_field_index(expr, field).unwrap_or(0);
+
+                    // 使用 LoadField 指令加载字段
+                    instructions.push(Instruction::LoadField {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(obj_reg),
+                        field: field_index,
+                    });
+                }
             }
             Expr::List(elements, span) => {
                 // 列表字面量：先创建空列表，再按索引写入元素
