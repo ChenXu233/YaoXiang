@@ -286,6 +286,7 @@ impl Monomorphizer {
             globals: original_module.globals.clone(),
             functions: output_funcs,
             mut_locals: original_module.mut_locals.clone(),
+            native_bindings: original_module.native_bindings.clone(),
         }
     }
 

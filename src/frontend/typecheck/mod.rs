@@ -85,6 +85,9 @@ pub struct TypeEnvironment {
     pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Trait 表：存储所有已解析的 Trait 定义和实现
     pub trait_table: super::type_level::trait_bounds::TraitTable,
+    /// Native 函数签名表：存储已注册的 native 函数类型签名
+    /// Key: 函数名（如 "std.io.println"），Value: 函数类型
+    pub native_signatures: HashMap<String, MonoType>,
 }
 
 impl TypeEnvironment {
@@ -257,6 +260,30 @@ impl TypeEnvironment {
     ) -> Option<&super::type_level::trait_bounds::TraitImplementation> {
         self.trait_table.get_impl(trait_name, for_type)
     }
+    /// 注册 native 函数签名
+    pub fn add_native_signature(
+        &mut self,
+        name: &str,
+        sig: MonoType,
+    ) {
+        self.native_signatures.insert(name.to_string(), sig);
+    }
+
+    /// 获取 native 函数签名
+    pub fn get_native_signature(
+        &self,
+        name: &str,
+    ) -> Option<&MonoType> {
+        self.native_signatures.get(name)
+    }
+
+    /// 检查是否是已注册的 native 函数
+    pub fn is_native_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.native_signatures.contains_key(name)
+    }
 }
 
 /// 类型检查器
@@ -281,6 +308,7 @@ impl TypeChecker {
         let mut env = TypeEnvironment::new_with_module(module_name.to_string());
         add_builtin_types(&mut env);
         add_std_traits(&mut env);
+        add_native_function_types(&mut env);
 
         Self {
             env,
@@ -831,6 +859,74 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
+}
+
+/// 注册标准库 native 函数类型签名到类型环境
+///
+/// 这些签名用于类型检查 `Native("...")` 表达式，确保调用签名匹配。
+pub fn add_native_function_types(env: &mut TypeEnvironment) {
+    // std.io.print: (Any...) -> Void
+    // 由于 print/println 支持任意类型参数，使用 String 作为基本签名
+    let print_type = MonoType::Fn {
+        params: vec![MonoType::String],
+        return_type: Box::new(MonoType::Void),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.print".to_string(), print_type.clone());
+    env.native_signatures
+        .insert("print".to_string(), print_type.clone());
+
+    let println_type = MonoType::Fn {
+        params: vec![MonoType::String],
+        return_type: Box::new(MonoType::Void),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.println".to_string(), println_type.clone());
+    env.native_signatures
+        .insert("println".to_string(), println_type);
+
+    // std.io.read_line: () -> String
+    let read_line_type = MonoType::Fn {
+        params: vec![],
+        return_type: Box::new(MonoType::String),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.read_line".to_string(), read_line_type);
+
+    // std.io.read_file: (String) -> String
+    let read_file_type = MonoType::Fn {
+        params: vec![MonoType::String],
+        return_type: Box::new(MonoType::String),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.read_file".to_string(), read_file_type);
+
+    // std.io.write_file: (String, String) -> Bool
+    let write_file_type = MonoType::Fn {
+        params: vec![MonoType::String, MonoType::String],
+        return_type: Box::new(MonoType::Bool),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.write_file".to_string(), write_file_type);
+
+    // std.io.append_file: (String, String) -> Bool
+    let append_file_type = MonoType::Fn {
+        params: vec![MonoType::String, MonoType::String],
+        return_type: Box::new(MonoType::Bool),
+        is_async: false,
+    };
+    env.native_signatures
+        .insert("std.io.append_file".to_string(), append_file_type);
+
+    // 同时将这些 native 函数注册为变量，使其可在类型推断时查找
+    for (name, sig) in &env.native_signatures.clone() {
+        env.add_var(name.clone(), PolyType::mono(sig.clone()));
+    }
 }
 
 /// 添加标准库 traits 到环境

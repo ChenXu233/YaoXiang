@@ -14,6 +14,7 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
+use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::util::i18n::MSG;
 use crate::tlog;
 
@@ -44,6 +45,8 @@ pub struct Interpreter {
     config: ExecutorConfig,
     /// Breakpoints
     breakpoints: HashMap<usize, ()>,
+    /// FFI Registry for native function calls
+    ffi: FfiRegistry,
     /// Standard output
     #[allow(dead_code)] // Might be unused if only accessed via write!
     stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
@@ -63,6 +66,7 @@ impl fmt::Debug for Interpreter {
             .field("state", &self.state)
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
+            .field("ffi", &self.ffi)
             .field(
                 "stdout",
                 &if self.stdout.is_some() {
@@ -98,6 +102,7 @@ impl Interpreter {
             state: ExecutionState::default(),
             config,
             breakpoints: HashMap::new(),
+            ffi: FfiRegistry::with_std(),
             stdout: None, // Default to stdout (handled by None check)
         }
     }
@@ -108,6 +113,16 @@ impl Interpreter {
         stdout: std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>,
     ) {
         self.stdout = Some(stdout);
+    }
+
+    /// Get mutable reference to the FFI registry for registering native functions
+    pub fn ffi_registry_mut(&mut self) -> &mut FfiRegistry {
+        &mut self.ffi
+    }
+
+    /// Get reference to the FFI registry
+    pub fn ffi_registry(&self) -> &FfiRegistry {
+        &self.ffi
     }
 
     /// Push a frame onto the call stack
@@ -579,7 +594,21 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
+                    // Try FFI registry first for native functions
+                    if self.ffi.has(&func_name) {
+                        let result = self.ffi.call(&func_name, &call_args)?;
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                        frame.advance();
+                        continue;
+                    }
+
                     // Handle built-in functions (like print)
+                    // NOTE: This block is a legacy fallback — print/println are now handled
+                    // by the FFI registry above. This remains as a safety net for the
+                    // stdout capture mechanism (set_stdout), which the FFI handlers
+                    // don't currently support.
                     if func_name == "print" || func_name == "println" {
                         // For print/println, we join all arguments with space
                         let output = call_args
@@ -742,6 +771,31 @@ impl Executor for Interpreter {
                     } else {
                         return Err(ExecutorError::FunctionNotFound(func_name));
                     }
+                }
+                BytecodeInstr::CallNative {
+                    dst,
+                    func_name,
+                    args: arg_regs,
+                } => {
+                    // Collect arguments from registers
+                    let call_args: Vec<RuntimeValue> = arg_regs
+                        .iter()
+                        .map(|r| {
+                            frame
+                                .registers
+                                .get(r.0 as usize)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        })
+                        .collect();
+
+                    // Delegate to FFI registry
+                    let result = self.ffi.call(func_name, &call_args)?;
+
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, result);
+                    }
+                    frame.advance();
                 }
                 BytecodeInstr::NewListWithCap { dst, capacity } => {
                     let handle = self

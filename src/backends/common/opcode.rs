@@ -220,6 +220,9 @@ pub enum Opcode {
     /// Close upvalue
     CloseUpvalue = 0x86,
 
+    /// Native function call (FFI)
+    CallNative = 0x87,
+
     // =====================
     // String Operations (0x90-0x9F)
     // =====================
@@ -365,6 +368,7 @@ impl Opcode {
             Opcode::LoadUpvalue => "LoadUpvalue",
             Opcode::StoreUpvalue => "StoreUpvalue",
             Opcode::CloseUpvalue => "CloseUpvalue",
+            Opcode::CallNative => "CallNative",
             Opcode::StringLength => "StringLength",
             Opcode::StringConcat => "StringConcat",
             Opcode::StringEqual => "StringEqual",
@@ -434,7 +438,7 @@ impl Opcode {
     pub fn is_call_op(&self) -> bool {
         matches!(
             self,
-            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn
+            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn | Opcode::CallNative
         )
     }
 
@@ -588,7 +592,7 @@ impl Opcode {
             | Opcode::StringGetChar => 4,
 
             // 5 operands (function calls)
-            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn => 5,
+            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn | Opcode::CallNative => 5,
 
             // Default
             _ => 0,
@@ -653,6 +657,7 @@ impl TryFrom<u8> for Opcode {
             0x84 => Ok(Opcode::LoadUpvalue),
             0x85 => Ok(Opcode::StoreUpvalue),
             0x86 => Ok(Opcode::CloseUpvalue),
+            0x87 => Ok(Opcode::CallNative),
             0x90 => Ok(Opcode::StringLength),
             0x91 => Ok(Opcode::StringConcat),
             0x92 => Ok(Opcode::StringEqual),

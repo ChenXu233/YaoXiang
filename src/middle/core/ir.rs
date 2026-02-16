@@ -391,4 +391,10 @@ pub struct ModuleIR {
     pub functions: Vec<FunctionIR>,
     /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)
     pub mut_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
+    /// 用户声明的 native 函数绑定 (func_name -> native_symbol)
+    ///
+    /// 当源码中出现 `my_func: (a: Int) -> Int = Native("symbol")` 时，
+    /// IR 生成器会在此记录映射 `"my_func" -> "symbol"`，
+    /// 代码生成器会将这些函数名注册为 native，使调用点生成 `CallNative` 指令。
+    pub native_bindings: Vec<crate::std::ffi::NativeBinding>,
 }

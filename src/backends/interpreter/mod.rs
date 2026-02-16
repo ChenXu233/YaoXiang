@@ -4,6 +4,7 @@
 //! It reads bytecode instructions and executes them directly.
 
 pub mod executor;
+pub mod ffi;
 pub mod frames;
 pub mod registers;
 

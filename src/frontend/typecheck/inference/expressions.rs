@@ -19,6 +19,8 @@ pub struct ExprInferrer<'a> {
     loop_labels: Vec<String>,
     /// 重载候选存储引用
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
+    /// Native 函数签名引用
+    native_signatures: &'a HashMap<String, MonoType>,
 }
 
 impl<'a> ExprInferrer<'a> {
@@ -27,11 +29,30 @@ impl<'a> ExprInferrer<'a> {
         solver: &'a mut TypeConstraintSolver,
         overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     ) -> Self {
+        // 默认空 native_signatures，使用 with_native_signatures 来传入实际签名
+        static EMPTY_NATIVE: std::sync::LazyLock<HashMap<String, MonoType>> =
+            std::sync::LazyLock::new(HashMap::new);
         Self {
             solver,
             scopes: vec![HashMap::new()], // Global scope
             loop_labels: Vec::new(),
             overload_candidates,
+            native_signatures: &EMPTY_NATIVE,
+        }
+    }
+
+    /// 创建带 native 函数签名的表达式推断器
+    pub fn with_native_signatures(
+        solver: &'a mut TypeConstraintSolver,
+        overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
+        native_signatures: &'a HashMap<String, MonoType>,
+    ) -> Self {
+        Self {
+            solver,
+            scopes: vec![HashMap::new()],
+            loop_labels: Vec::new(),
+            overload_candidates,
+            native_signatures,
         }
     }
 
@@ -418,6 +439,31 @@ impl<'a> ExprInferrer<'a> {
 
             // 函数调用
             crate::frontend::core::parser::ast::Expr::Call { func, args, .. } => {
+                // 0. 检查是否是 Native("...") 表达式
+                if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
+                    if name == "Native" {
+                        // Native("symbol_name") 表达式
+                        // 从参数中提取 native 函数名
+                        if args.len() == 1 {
+                            if let crate::frontend::core::parser::ast::Expr::Lit(
+                                crate::frontend::core::lexer::tokens::Literal::String(native_name),
+                                _,
+                            ) = &args[0]
+                            {
+                                // 查找 native 函数签名
+                                if let Some(sig) = self.native_signatures.get(native_name).cloned()
+                                {
+                                    return Ok(sig);
+                                }
+                                // 未注册的 native 函数：返回类型变量（允许用户定义的 native）
+                                return Ok(self.solver.new_var());
+                            }
+                        }
+                        // Native 调用参数不合法：返回类型变量
+                        return Ok(self.solver.new_var());
+                    }
+                }
+
                 // 1. 首先推断函数表达式
                 let func_ty = self.infer_expr(func)?;
 

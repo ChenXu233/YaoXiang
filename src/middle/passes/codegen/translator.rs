@@ -7,7 +7,7 @@ use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Ope
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// IR 到字节码翻译器
 ///
@@ -23,16 +23,43 @@ pub struct Translator {
     operand_resolver: OperandResolver,
     /// 当前函数
     current_function: Option<FunctionIR>,
+    /// 已注册的 native 函数名集合
+    native_functions: HashSet<String>,
 }
 
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
+        let mut native_functions = HashSet::new();
+
+        // 从 std.io 声明注册表自动发现 native 函数
+        for (short_name, native_name) in crate::std::io::implemented_native_names() {
+            native_functions.insert(native_name.to_string());
+            native_functions.insert(short_name.to_string());
+        }
+
         Translator {
             emitter: Emitter::new(),
             operand_resolver: OperandResolver::new(),
             current_function: None,
+            native_functions,
         }
+    }
+
+    /// 注册一个 native 函数名
+    pub fn register_native(
+        &mut self,
+        name: &str,
+    ) {
+        self.native_functions.insert(name.to_string());
+    }
+
+    /// 检查函数是否是 native 函数
+    pub fn is_native(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.native_functions.contains(name)
     }
 
     /// 添加常量（用于测试）
@@ -48,6 +75,17 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, CodegenError> {
+        // 注册用户声明的 native 函数绑定
+        // 这些来自 `my_func: Type = Native("symbol")` 声明
+        for binding in &module.native_bindings {
+            // 注册函数名（使调用点生成 CallNative）
+            self.register_native(binding.func_name());
+            // 也注册 native symbol（若与函数名不同）
+            if binding.func_name() != binding.native_symbol() {
+                self.register_native(binding.native_symbol());
+            }
+        }
+
         let mut code_section = super::CodeSection {
             functions: Vec::new(),
         };
@@ -413,6 +451,18 @@ impl Translator {
         } else {
             0
         };
+
+        // 检查是否是 native 函数调用
+        let func_name = match func {
+            Operand::Const(ConstValue::String(name)) => Some(name.clone()),
+            _ => None,
+        };
+
+        let is_native = func_name
+            .as_ref()
+            .map(|n| self.is_native(n))
+            .unwrap_or(false);
+
         let func_id = match func {
             Operand::Const(ConstValue::Int(i)) => *i as u32,
             Operand::Const(ConstValue::String(name)) => {
@@ -434,7 +484,15 @@ impl Translator {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
             operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::CallStatic, operands))
+
+        // 根据是否是 native 函数选择操作码
+        let opcode = if is_native {
+            Opcode::CallNative
+        } else {
+            Opcode::CallStatic
+        };
+
+        Ok(BytecodeInstruction::new(opcode, operands))
     }
 
     fn translate_call_virt(
