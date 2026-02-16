@@ -1,0 +1,17 @@
+use std.io.*
+use std.concurrent.*
+
+main = {
+    println("=== 并发库测试 ===")
+
+    // 线程 ID
+    id = thread_id()
+    println(id)
+
+    // 休眠
+    println("休眠 10ms...")
+    sleep(10)
+    println("完成")
+
+    println("\n=== 测试完成 ===")
+}

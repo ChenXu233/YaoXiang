@@ -606,40 +606,6 @@ impl Executor for Interpreter {
                         continue;
                     }
 
-                    // Handle built-in functions (like print)
-                    // NOTE: This block is a legacy fallback — print/println are now handled
-                    // by the FFI registry above. This remains as a safety net for the
-                    // stdout capture mechanism (set_stdout), which the FFI handlers
-                    // don't currently support.
-                    if func_name == "print" || func_name == "println" {
-                        // For print/println, we join all arguments with space
-                        let output = call_args
-                            .iter()
-                            .map(|arg| format!("{}", arg))
-                            .collect::<Vec<String>>()
-                            .join(" ");
-
-                        if let Some(stdout_arc) = &self.stdout {
-                            if let Ok(mut lock) = stdout_arc.lock() {
-                                if func_name == "println" {
-                                    let _ = writeln!(lock, "{}", output);
-                                } else {
-                                    let _ = write!(lock, "{}", output);
-                                }
-                            }
-                        } else if func_name == "println" {
-                            println!("{}", output);
-                        } else {
-                            print!("{}", output);
-                        }
-
-                        if let Some(dst_reg) = dst {
-                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
-                        }
-                        frame.advance();
-                        continue;
-                    }
-
                     if func_name == "len" {
                         if call_args.len() != 1 {
                             return Err(ExecutorError::Type(

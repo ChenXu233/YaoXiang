@@ -472,9 +472,9 @@ mod ffi_tests {
         assert!(registry.has("std.io.write_file"));
         assert!(registry.has("std.io.append_file"));
 
-        // Test 2: Verify short names also work
-        assert!(registry.has("println"));
-        assert!(registry.has("print"));
+        // Test 2: Short names are NOT registered - users must use `use std.io`
+        assert!(!registry.has("println"));
+        assert!(!registry.has("print"));
 
         // Test 3: Verify FFI call works
         let result = registry.call(
