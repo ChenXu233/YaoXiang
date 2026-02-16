@@ -2,6 +2,8 @@
 //!
 //! 测试列表的创建、遍历、过滤和映射
 
+use std.io;
+
 is_even: (n: Int) -> Bool = {
     return n % 2 == 0
 };
@@ -33,5 +35,5 @@ main: () -> Int = {
         result = result + doubled[0];
         i = i + 1;
     }
-    return result
+    print(result);
 }
