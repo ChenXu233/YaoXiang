@@ -277,6 +277,18 @@ impl<'a> ExprInferrer<'a> {
 
             // 变量
             crate::frontend::core::parser::ast::Expr::Var(name, span) => {
+                // 特殊处理：std 是内置命名空间
+                if name == "std" {
+                    // 返回一个虚拟的函数类型，让后续的 FieldAccess 可以继续处理
+                    // 实际函数查找在 Call 处理中完成
+                    let fn_ty = MonoType::Fn {
+                        params: vec![self.solver.new_var()],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    };
+                    return Ok(fn_ty);
+                }
+
                 let poly = self.get_var(name).cloned();
                 if let Some(poly) = poly {
                     let ty = self.solver.instantiate(&poly);
@@ -419,6 +431,29 @@ impl<'a> ExprInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::FieldAccess {
                 expr: obj, field, ..
             } => {
+                // 特殊处理：支持命名空间访问如 std.io
+                // 检查 obj 是否是 Var("std") 开头
+                fn is_std_namespace(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+                    match expr {
+                        crate::frontend::core::parser::ast::Expr::Var(name, _) => name == "std",
+                        crate::frontend::core::parser::ast::Expr::FieldAccess { expr, .. } => {
+                            is_std_namespace(expr)
+                        }
+                        _ => false,
+                    }
+                }
+
+                if is_std_namespace(obj) {
+                    // 命名空间访问：std.module 或 std.module.submodule
+                    // 返回一个虚拟函数类型，让后续调用可以继续
+                    let fn_ty = MonoType::Fn {
+                        params: vec![self.solver.new_var()],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    };
+                    return Ok(fn_ty);
+                }
+
                 let obj_ty = self.infer_expr(obj)?;
                 match obj_ty {
                     MonoType::Struct(struct_type) => {
@@ -461,6 +496,72 @@ impl<'a> ExprInferrer<'a> {
                         }
                         // Native 调用参数不合法：返回类型变量
                         return Ok(self.solver.new_var());
+                    }
+                }
+
+                // 特殊处理：支持命名空间调用如 std.io.print, std.math.abs 等
+                // 从嵌套的 FieldAccess 中提取完整的命名空间路径
+                fn extract_namespace_path(
+                    expr: &crate::frontend::core::parser::ast::Expr
+                ) -> Option<String> {
+                    match expr {
+                        crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+                            // 基础情况：如果是 std，则返回 Some("std".to_string())
+                            if name == "std" {
+                                Some("std".to_string())
+                            } else {
+                                None
+                            }
+                        }
+                        crate::frontend::core::parser::ast::Expr::FieldAccess {
+                            expr,
+                            field,
+                            ..
+                        } => {
+                            // 递归获取前面的路径
+                            if let Some(prefix) = extract_namespace_path(expr) {
+                                if prefix == "std" {
+                                    // 命名空间访问：std.module
+                                    return Some(format!("std.{}", field));
+                                }
+                            }
+                            None
+                        }
+                        _ => None,
+                    }
+                }
+
+                // 检查是否是命名空间调用
+                if let Some(namespace_path) = extract_namespace_path(func) {
+                    // 这是一个命名空间调用，如 std.io.print
+                    // namespace_path 是 "std.io"，需要从 func 中提取函数名
+                    // func 是嵌套的 FieldAccess，最内层是函数名
+                    fn extract_function_name(
+                        expr: &crate::frontend::core::parser::ast::Expr
+                    ) -> Option<String> {
+                        match expr {
+                            crate::frontend::core::parser::ast::Expr::Var(name, _) => {
+                                Some(name.clone())
+                            }
+                            crate::frontend::core::parser::ast::Expr::FieldAccess {
+                                expr,
+                                field,
+                                ..
+                            } => extract_function_name(expr).map(|f| format!("{}.{}", field, f)),
+                            _ => None,
+                        }
+                    }
+
+                    // 重新组织：namespace_path 是 std.io，需要加上函数名
+                    // 例如：如果 func 是 std.io.println，field 是 "println"，namespace_path 是 "std.io"
+                    // 我们需要构建 "std.io.println"
+                    if let Some(field_name) = extract_function_name(func) {
+                        // field_name 可能是 "io.println"，需要组合成完整路径
+                        let full_name = format!("{}.{}", namespace_path, field_name);
+                        // 查找 native 函数
+                        if let Some(sig) = self.native_signatures.get(&full_name).cloned() {
+                            return Ok(sig);
+                        }
                     }
                 }
 
