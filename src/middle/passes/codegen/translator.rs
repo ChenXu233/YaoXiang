@@ -269,6 +269,7 @@ impl Translator {
             ArcNew { dst, src } => self.translate_arc_new(dst, src),
             ArcClone { dst, src } => self.translate_arc_clone(dst, src),
             ArcDrop(operand) => self.translate_arc_drop(operand),
+            ShareRef { dst, src } => self.translate_share_ref(dst, src),
 
             StringLength { dst, src } => self.translate_string_length(dst, src),
             StringConcat { dst, lhs, rhs } => self.translate_string_concat(dst, lhs, rhs),
@@ -742,6 +743,20 @@ impl Translator {
     ) -> Result<BytecodeInstruction, CodegenError> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
+    }
+
+    fn translate_share_ref(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        // ShareRef: 用于线程本地共享，需要类型是 Sync
+        // TODO: 实现完整的 ShareRef 操作码支持
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
+        // 临时实现：使用 Nop，后续需要添加专门的 Opcode
+        let _ = src_reg;
+        Ok(BytecodeInstruction::new(Opcode::Nop, vec![dst_reg]))
     }
 
     fn translate_string_length(

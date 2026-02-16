@@ -111,6 +111,14 @@ impl SendSyncChecker {
             Instruction::ArcClone { .. } => {
                 // Arc 总是 Send+Sync
             }
+            // ShareRef: 检查被共享的类型是否是 Sync
+            Instruction::ShareRef { src, .. } => {
+                if let Some(ty) = self.get_operand_type(src, func) {
+                    if !self.is_sync(&ty) {
+                        self.report_not_sync(src, &ty, "cannot share non-Sync type across threads");
+                    }
+                }
+            }
             // 跨线程函数调用检查（如果将来实现）
             _ => {}
         }

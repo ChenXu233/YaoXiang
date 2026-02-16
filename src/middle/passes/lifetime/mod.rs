@@ -265,7 +265,8 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         | Instruction::StringLength { dst, src }
         | Instruction::StringFromInt { dst, src }
         | Instruction::StringFromFloat { dst, src }
-        | Instruction::ArcClone { dst, src } => vec![dst.clone(), src.clone()],
+        | Instruction::ArcClone { dst, src }
+        | Instruction::ShareRef { dst, src } => vec![dst.clone(), src.clone()],
 
         // 堆分配：dst = HeapAlloc(type_id)
         Instruction::HeapAlloc { dst, .. } => vec![dst.clone()],
