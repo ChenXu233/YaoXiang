@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
+use crate::backends::{
+    Executor, DebuggableExecutor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig,
+};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::middle::bytecode::{
     BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, Label, BinaryOp, CompareOp, FunctionRef,
@@ -143,17 +145,17 @@ impl Interpreter {
     }
 
     /// Get the current frame
-    fn current_frame(&mut self) -> Option<&mut Frame> {
+    pub fn current_frame(&mut self) -> Option<&mut Frame> {
         self.call_stack.last_mut()
     }
 
     /// Get the current function
-    fn current_function(&self) -> Option<&BytecodeFunction> {
+    pub fn current_function(&self) -> Option<&BytecodeFunction> {
         self.call_stack.last().map(|f| &f.function)
     }
 
     /// Resolve a label to an instruction offset
-    fn resolve_label(
+    pub fn resolve_label(
         &mut self,
         label: Label,
     ) -> Option<usize> {
@@ -1271,6 +1273,58 @@ impl Executor for Interpreter {
     }
 }
 
+impl DebuggableExecutor for Interpreter {
+    fn set_breakpoint(
+        &mut self,
+        offset: usize,
+    ) {
+        self.breakpoints.insert(offset, ());
+    }
+
+    fn remove_breakpoint(
+        &mut self,
+        offset: usize,
+    ) {
+        self.breakpoints.remove(&offset);
+    }
+
+    fn has_breakpoint(&self) -> bool {
+        if let Some(frame) = self.call_stack.last() {
+            self.breakpoints.contains_key(&frame.ip)
+        } else {
+            false
+        }
+    }
+
+    fn step(&mut self) -> ExecutorResult<()> {
+        todo!("step debugging not implemented")
+    }
+
+    fn step_over(&mut self) -> ExecutorResult<()> {
+        todo!("step_over debugging not implemented")
+    }
+
+    fn step_out(&mut self) -> ExecutorResult<()> {
+        todo!("step_out debugging not implemented")
+    }
+
+    fn run(&mut self) -> ExecutorResult<()> {
+        todo!("run debugging not implemented")
+    }
+
+    fn current_ip(&self) -> usize {
+        self.call_stack.last().map(|f| f.ip).unwrap_or(0)
+    }
+
+    fn current_function(&self) -> Option<&str> {
+        self.call_stack.last().map(|f| f.function.name.as_str())
+    }
+
+    fn breakpoints(&self) -> Vec<usize> {
+        self.breakpoints.keys().copied().collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1382,7 +1436,7 @@ mod tests {
 
     #[test]
     fn test_ffi_write_and_read_file_e2e() {
-        let mut interp = Interpreter::new();
+        let interp = Interpreter::new();
 
         // Test using std.io directly via FFI registry
         let path_str = "test_e2e_file.txt".to_string();
@@ -1451,7 +1505,7 @@ mod tests {
 
     #[test]
     fn test_ffi_nonexistent_function_e2e() {
-        let mut interp = Interpreter::new();
+        let interp = Interpreter::new();
 
         // Try to call a non-existent function
         let result = interp.ffi.call("nonexistent.function", &[]);
@@ -1460,7 +1514,7 @@ mod tests {
 
     #[test]
     fn test_ffi_append_file_e2e() {
-        let mut interp = Interpreter::new();
+        let interp = Interpreter::new();
 
         let path_str = "test_append_file.txt".to_string();
 
