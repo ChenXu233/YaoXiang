@@ -2,7 +2,7 @@
 name: 任务
 description: 创建开发任务或追踪项
 labels: ["task"]
-assignees: ""
+assignees: []
 
 body:
   - type: dropdown
