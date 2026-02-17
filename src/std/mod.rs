@@ -26,75 +26,53 @@ pub struct ModuleExport {
 /// Get all exports from a std module.
 ///
 /// Returns None if the module doesn't exist or has no exports.
+///
+/// This function delegates to `ModuleRegistry` for a unified module lookup.
+/// It converts the generic `Export` format back to `ModuleExport` for backward
+/// compatibility with existing callers.
 pub fn get_module_exports(module_path: &str) -> Option<Vec<ModuleExport>> {
-    match module_path {
-        // "std" 模块：返回所有子模块
-        "std" => Some(vec![
+    use crate::frontend::module::registry::ModuleRegistry;
+
+    let registry = ModuleRegistry::with_std();
+
+    let module = registry.get(module_path)?;
+
+    let exports: Vec<ModuleExport> = module
+        .exports
+        .values()
+        .map(|export| {
+            // SAFETY: We leak static strings here as ModuleExport requires &'static str.
+            // This is acceptable because std module metadata is effectively static program data.
+            let short_name: &'static str = Box::leak(export.name.clone().into_boxed_str());
+            let qualified_name: &'static str = Box::leak(export.full_path.clone().into_boxed_str());
+            let signature: &'static str = Box::leak(export.signature.clone().into_boxed_str());
+
             ModuleExport {
-                short_name: "io",
-                qualified_name: "std.io",
-                signature: "Module",
-            },
-            ModuleExport {
-                short_name: "math",
-                qualified_name: "std.math",
-                signature: "Module",
-            },
-            ModuleExport {
-                short_name: "net",
-                qualified_name: "std.net",
-                signature: "Module",
-            },
-            ModuleExport {
-                short_name: "concurrent",
-                qualified_name: "std.concurrent",
-                signature: "Module",
-            },
-        ]),
-        "std.io" => Some(
-            io::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| ModuleExport {
-                    short_name: d.name,
-                    qualified_name: d.native_name,
-                    signature: d.signature,
-                })
-                .collect(),
-        ),
-        "std.math" => Some(
-            math::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| ModuleExport {
-                    short_name: d.name,
-                    qualified_name: d.native_name,
-                    signature: d.signature,
-                })
-                .collect(),
-        ),
-        "std.net" => Some(
-            net::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| ModuleExport {
-                    short_name: d.name,
-                    qualified_name: d.native_name,
-                    signature: d.signature,
-                })
-                .collect(),
-        ),
-        "std.concurrent" => Some(
-            concurrent::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| ModuleExport {
-                    short_name: d.name,
-                    qualified_name: d.native_name,
-                    signature: d.signature,
-                })
-                .collect(),
-        ),
-        _ => None,
+                short_name,
+                qualified_name,
+                signature,
+            }
+        })
+        .collect();
+
+    if exports.is_empty() && module.is_namespace() {
+        // For namespace modules like "std", return submodule list
+        let submodule_exports: Vec<ModuleExport> = module
+            .submodules
+            .iter()
+            .map(|name| {
+                let short_name: &'static str = Box::leak(name.clone().into_boxed_str());
+                let qualified_name: &'static str =
+                    Box::leak(format!("{}.{}", module_path, name).into_boxed_str());
+                ModuleExport {
+                    short_name,
+                    qualified_name,
+                    signature: "Module",
+                }
+            })
+            .collect();
+        Some(submodule_exports)
+    } else {
+        Some(exports)
     }
 }

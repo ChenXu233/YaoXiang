@@ -11,9 +11,9 @@
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
+use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
-use crate::std::{concurrent, io, math, net};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
@@ -21,49 +21,20 @@ use crate::util::span::Span;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-/// 缓存所有 native 函数/常量名（用于快速查找）
-static NATIVE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
-    let math_names: Vec<String> = math::native_name_map().into_values().collect();
-    let io_names: Vec<String> = io::native_name_map().into_values().collect();
-    let net_names: Vec<String> = net::native_name_map().into_values().collect();
-    let concurrent_names: Vec<String> = concurrent::native_name_map().into_values().collect();
+/// 缓存所有 native 函数/常量名（通过 ModuleRegistry 自动发现）
+static NATIVE_NAMES: LazyLock<Vec<String>> =
+    LazyLock::new(|| ModuleRegistry::with_std().native_names());
 
-    math_names
-        .into_iter()
-        .chain(io_names)
-        .chain(net_names)
-        .chain(concurrent_names)
-        .collect()
-});
-
-/// 缓存短名称到完整名称的映射（用于命名空间解析）
+/// 缓存短名称到完整名称的映射（通过 ModuleRegistry 自动发现）
 /// 例如：print -> std.io.print, abs -> std.math.abs
-static SHORT_TO_QUALIFIED: LazyLock<std::collections::HashMap<String, String>> =
-    LazyLock::new(|| {
-        let mut map = std::collections::HashMap::new();
+static SHORT_TO_QUALIFIED: LazyLock<HashMap<String, String>> =
+    LazyLock::new(|| ModuleRegistry::with_std().short_to_qualified_map());
 
-        // 从 io 模块添加映射
-        for (short, qualified) in io::native_name_map() {
-            map.insert(short, qualified);
-        }
-        // 从 math 模块添加映射
-        for (short, qualified) in math::native_name_map() {
-            map.insert(short, qualified);
-        }
-        // 从 net 模块添加映射
-        for (short, qualified) in net::native_name_map() {
-            map.insert(short, qualified);
-        }
-        // 从 concurrent 模块添加映射
-        for (short, qualified) in concurrent::native_name_map() {
-            map.insert(short, qualified);
-        }
-
-        map
-    });
+/// 缓存 std 子模块名称列表（通过 ModuleRegistry 自动发现）
+static STD_SUBMODULES: LazyLock<Vec<String>> =
+    LazyLock::new(|| ModuleRegistry::with_std().std_submodule_names());
 
 /// 检查是否是命名空间调用（如 std.io.println 或 io.println）
-/// io 是通过 use std.{io} 导入的模块变量
 fn is_namespace_call(expr: &Box<ast::Expr>) -> bool {
     match expr.as_ref() {
         ast::Expr::Var(name, _) => name == "std" || is_std_module(name),
@@ -73,23 +44,17 @@ fn is_namespace_call(expr: &Box<ast::Expr>) -> bool {
 }
 
 /// 提取完整的命名空间路径（如 std.io.println 或 io.println -> std.io.println）
-/// 处理 &Box<ast::Expr> 类型
 fn extract_namespace_path(
     expr: &Box<ast::Expr>,
     field: &str,
 ) -> String {
-    // 解引用 Box<ast::Expr> 得到 &ast::Expr
     match expr.as_ref() {
         ast::Expr::Var(name, _) => {
             if name == "std" {
-                // std.xxx -> std.xxx
                 format!("std.{}", field)
             } else if is_std_module(name) {
-                // io.println -> std.io.println
-                // 当遇到模块变量时，需要将模块名和字段组合
                 format!("std.{}.{}", name, field)
             } else {
-                // 普通变量
                 format!("{}.{}", name, field)
             }
         }
@@ -98,7 +63,6 @@ fn extract_namespace_path(
             field: sub_field,
             ..
         } => {
-            // 递归处理：expr 是 Box<ast::Expr>
             let prefix = extract_namespace_path(expr, sub_field);
             format!("{}.{}", prefix, field)
         }
@@ -111,9 +75,10 @@ fn is_native_name(full_path: &str) -> bool {
     NATIVE_NAMES.iter().any(|n| n == full_path)
 }
 
-/// 检查变量名是否是 std 模块的子模块（io, math, net, concurrent）
+/// 检查变量名是否是 std 模块的子模块
+/// 通过 ModuleRegistry 动态查询，不再硬编码模块名称
 fn is_std_module(name: &str) -> bool {
-    matches!(name, "io" | "math" | "net" | "concurrent")
+    STD_SUBMODULES.iter().any(|m| m == name)
 }
 
 /// 将模块变量和字段组合成完整路径（如 io.println -> std.io.println）

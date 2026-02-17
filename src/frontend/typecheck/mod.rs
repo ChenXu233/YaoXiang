@@ -88,6 +88,8 @@ pub struct TypeEnvironment {
     /// Native 函数签名表：存储已注册的 native 函数类型签名
     /// Key: 函数名（如 "std.io.println"），Value: 函数类型
     pub native_signatures: HashMap<String, MonoType>,
+    /// 模块注册表 - 提供统一的模块查询接口
+    pub module_registry: crate::frontend::module::registry::ModuleRegistry,
 }
 
 impl TypeEnvironment {
@@ -101,6 +103,7 @@ impl TypeEnvironment {
         Self {
             module_name,
             trait_table: super::type_level::trait_bounds::TraitTable::default(),
+            module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
         }
     }
@@ -595,28 +598,39 @@ impl TypeChecker {
                 items,
                 alias: _,
             } => {
-                // 通用处理 std 模块的 use 语句
-                // 根据 path 自动发现并加载模块导出的函数
-                if let Some(exports) = crate::std::get_module_exports(path) {
-                    // items 为 None 时导入全部，否则只导入指定的
+                // 通过 ModuleRegistry 查找模块导出，不再硬编码特定模块
+                if let Some(module) = self.env.module_registry.get(path).cloned() {
                     let import_all = items.is_none();
                     let items_ref = items.as_ref();
 
-                    for export in exports {
-                        // 检查是否需要导入这个函数
+                    for export in module.exports.values() {
+                        // 子模块作为命名空间导入，不需要创建函数类型
+                        if export.kind == crate::frontend::module::ExportKind::SubModule {
+                            // 将子模块名作为变量注册，后续 FieldAccess 可以解析
+                            let module_ty = MonoType::Fn {
+                                params: vec![self.env.solver().new_var()],
+                                return_type: Box::new(MonoType::Void),
+                                is_async: false,
+                            };
+                            let should_import = import_all
+                                || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
+                            if should_import {
+                                self.env
+                                    .add_var(export.name.clone(), PolyType::mono(module_ty));
+                            }
+                            continue;
+                        }
+
                         let should_import = import_all
-                            || items_ref.is_some_and(|i| i.iter().any(|s| s == export.short_name));
+                            || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
 
                         if should_import {
-                            // 为导出的函数创建类型
-                            // 简化处理：使用泛型参数
                             let fn_ty = MonoType::Fn {
                                 params: vec![self.env.solver().new_var()],
                                 return_type: Box::new(MonoType::Void),
                                 is_async: false,
                             };
-                            self.env
-                                .add_var(export.short_name.to_string(), PolyType::mono(fn_ty));
+                            self.env.add_var(export.name.clone(), PolyType::mono(fn_ty));
                         }
                     }
                 }
@@ -860,29 +874,39 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
 /// 注册标准库 native 函数类型签名到类型环境
 ///
 /// 这些签名用于类型检查 `Native("...")` 表达式，确保调用签名匹配。
-/// 通过通用机制自动发现所有 std 模块的 native 函数。
+/// 通过 ModuleRegistry 自动发现所有 std 模块的 native 函数。
 pub fn add_native_function_types(env: &mut TypeEnvironment) {
-    // 遍历所有已知的 std 模块，自动注册其导出的函数
-    let std_modules = ["std.io", "std.math", "std.net", "std.concurrent"];
+    use crate::frontend::module::registry::ModuleRegistry;
+    use crate::frontend::module::ExportKind;
 
-    for module_path in std_modules {
-        if let Some(exports) = crate::std::get_module_exports(module_path) {
-            for export in exports {
-                // 为每个导出的函数创建类型
-                // 简化处理：使用泛型参数让其更灵活
-                let fn_ty = MonoType::Fn {
-                    params: vec![env.solver().new_var()],
-                    return_type: Box::new(MonoType::Void),
-                    is_async: false,
+    let registry = ModuleRegistry::with_std();
+
+    // 遍历所有 std 子模块，自动注册导出的函数
+    for submodule_name in registry.std_submodule_names() {
+        let module_path = format!("std.{}", submodule_name);
+        if let Some(module) = registry.get(&module_path) {
+            for export in module.exports.values() {
+                // 为每个导出的函数/常量创建类型
+                let fn_ty = match export.kind {
+                    ExportKind::Function => MonoType::Fn {
+                        params: vec![env.solver().new_var()],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    },
+                    ExportKind::Constant => MonoType::Fn {
+                        params: vec![env.solver().new_var()],
+                        return_type: Box::new(MonoType::Void),
+                        is_async: false,
+                    },
+                    _ => continue,
                 };
 
                 // 注册完全限定名
                 env.native_signatures
-                    .insert(export.qualified_name.to_string(), fn_ty.clone());
+                    .insert(export.full_path.clone(), fn_ty.clone());
 
-                // 注册短名称（这样可以直接用 print 而不是 std.io.print）
-                env.native_signatures
-                    .insert(export.short_name.to_string(), fn_ty);
+                // 注册短名称
+                env.native_signatures.insert(export.name.clone(), fn_ty);
             }
         }
     }
