@@ -53,6 +53,7 @@ smallvec = "1.15.1"
 # 字符串处理
 regex = "1"
 unicode-ident = "1.0.23"
+urlencoding = "2"
 
 # 文件系统
 walkdir = "2"

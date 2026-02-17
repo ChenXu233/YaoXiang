@@ -1,65 +1,76 @@
 //! Standard Concurrent library (YaoXiang)
+//!
+//! This module provides concurrency-related functionality for YaoXiang programs.
 
-use std::collections::HashMap;
+use crate::backends::common::RuntimeValue;
+use crate::backends::ExecutorError;
+use crate::std::{NativeExport, StdModule};
 
-#[derive(Debug, Clone)]
-pub struct NativeDeclaration {
-    pub name: &'static str,
-    pub native_name: &'static str,
-    pub signature: &'static str,
-    pub doc: &'static str,
-    pub implemented: bool,
-}
+// ============================================================================
+// ConcurrentModule - StdModule Implementation
+// ============================================================================
 
-pub fn native_declarations() -> Vec<NativeDeclaration> {
-    vec![
-        NativeDeclaration {
-            name: "sleep",
-            native_name: "std.concurrent.sleep",
-            signature: "(millis: Int) -> Void",
-            doc: "Sleep for specified milliseconds.",
-            implemented: true,
-        },
-        NativeDeclaration {
-            name: "thread_id",
-            native_name: "std.concurrent.thread_id",
-            signature: "() -> String",
-            doc: "Get current thread ID.",
-            implemented: true,
-        },
-        NativeDeclaration {
-            name: "yield_now",
-            native_name: "std.concurrent.yield_now",
-            signature: "() -> Void",
-            doc: "Yield execution to scheduler.",
-            implemented: true,
-        },
-    ]
-}
+/// Concurrent module implementation.
+pub struct ConcurrentModule;
 
-pub fn native_name_map() -> HashMap<String, String> {
-    native_declarations()
-        .into_iter()
-        .filter(|d| d.implemented)
-        .map(|d| (d.name.to_string(), d.native_name.to_string()))
-        .collect()
-}
-
-pub fn implemented_native_names() -> Vec<(&'static str, &'static str)> {
-    native_declarations()
-        .into_iter()
-        .filter(|d| d.implemented)
-        .map(|d| (d.name, d.native_name))
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_native_declarations_not_empty() {
-        let decls = native_declarations();
-        assert!(!decls.is_empty());
+impl Default for ConcurrentModule {
+    fn default() -> Self {
+        Self
     }
+}
+
+impl StdModule for ConcurrentModule {
+    fn module_path(&self) -> &str {
+        "std.concurrent"
+    }
+
+    fn exports(&self) -> Vec<NativeExport> {
+        vec![
+            NativeExport::new(
+                "sleep",
+                "std.concurrent.sleep",
+                "(millis: Int) -> Void",
+                native_sleep,
+            ),
+            NativeExport::new(
+                "thread_id",
+                "std.concurrent.thread_id",
+                "() -> String",
+                native_thread_id,
+            ),
+            NativeExport::new(
+                "yield_now",
+                "std.concurrent.yield_now",
+                "() -> Void",
+                native_yield_now,
+            ),
+        ]
+    }
+}
+
+/// Singleton instance for std.concurrent module.
+pub const CONCURRENT_MODULE: ConcurrentModule = ConcurrentModule;
+
+// ============================================================================
+// Native Function Implementations
+// ============================================================================
+
+/// Native implementation: sleep
+fn native_sleep(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+    let millis = args.first().and_then(|v| v.to_int()).unwrap_or(0) as u64;
+    std::thread::sleep(std::time::Duration::from_millis(millis));
+    Ok(RuntimeValue::Unit)
+}
+
+/// Native implementation: thread_id
+fn native_thread_id(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+    Ok(RuntimeValue::String(
+        format!("{:?}", std::thread::current().id()).into(),
+    ))
+}
+
+/// Native implementation: yield_now
+fn native_yield_now(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+    std::thread::yield_now();
+    Ok(RuntimeValue::Unit)
 }
