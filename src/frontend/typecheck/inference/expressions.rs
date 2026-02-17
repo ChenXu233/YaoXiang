@@ -21,6 +21,9 @@ pub struct ExprInferrer<'a> {
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
     native_signatures: &'a HashMap<String, MonoType>,
+    /// 已注册的 std 子模块名（如 "io", "math" 等）
+    /// 用于动态识别模块命名空间访问
+    std_submodules: Vec<String>,
 }
 
 impl<'a> ExprInferrer<'a> {
@@ -38,6 +41,8 @@ impl<'a> ExprInferrer<'a> {
             loop_labels: Vec::new(),
             overload_candidates,
             native_signatures: &EMPTY_NATIVE,
+            std_submodules: crate::frontend::module::registry::ModuleRegistry::with_std()
+                .std_submodule_names(),
         }
     }
 
@@ -53,6 +58,8 @@ impl<'a> ExprInferrer<'a> {
             loop_labels: Vec::new(),
             overload_candidates,
             native_signatures,
+            std_submodules: crate::frontend::module::registry::ModuleRegistry::with_std()
+                .std_submodule_names(),
         }
     }
 
@@ -445,16 +452,18 @@ impl<'a> ExprInferrer<'a> {
 
                 // 检查是否是 std 子模块变量（如 io, math, net, concurrent）
                 // 这些是通过 use std.{io} 导入的模块变量
-                fn is_std_module_var(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+                // 动态检查：通过 std_submodules 列表判断，不再硬编码特定名称
+                let std_submodules = &self.std_submodules;
+                let is_module_var = |expr: &crate::frontend::core::parser::ast::Expr| -> bool {
                     match expr {
                         crate::frontend::core::parser::ast::Expr::Var(name, _) => {
-                            matches!(name.as_str(), "io" | "math" | "net" | "concurrent")
+                            std_submodules.iter().any(|m| m == name)
                         }
                         _ => false,
                     }
-                }
+                };
 
-                if is_std_namespace(obj) || is_std_module_var(obj) {
+                if is_std_namespace(obj) || is_module_var(obj) {
                     // 命名空间访问：std.module 或 io（模块变量）
                     // 返回一个虚拟函数类型，让后续调用可以继续
                     let fn_ty = MonoType::Fn {
@@ -512,18 +521,18 @@ impl<'a> ExprInferrer<'a> {
 
                 // 特殊处理：支持命名空间调用如 std.io.print, std.math.abs 等
                 // 从嵌套的 FieldAccess 中提取完整的命名空间路径
-                fn extract_namespace_path(
-                    expr: &crate::frontend::core::parser::ast::Expr
+                // 使用 std_submodules 列表动态判断模块名
+                let std_submodules_ref = &self.std_submodules;
+
+                fn extract_namespace_path_dynamic(
+                    expr: &crate::frontend::core::parser::ast::Expr,
+                    std_submodules: &[String],
                 ) -> Option<String> {
                     match expr {
                         crate::frontend::core::parser::ast::Expr::Var(name, _) => {
-                            // 基础情况：
-                            // - 如果是 std，返回 Some("std")
-                            // - 如果是 io/math/net/concurrent（模块变量），返回 Some("io") 等
                             if name == "std" {
                                 Some("std".to_string())
-                            } else if matches!(name.as_str(), "io" | "math" | "net" | "concurrent")
-                            {
+                            } else if std_submodules.iter().any(|m| m == name) {
                                 Some(name.clone())
                             } else {
                                 None
@@ -534,15 +543,12 @@ impl<'a> ExprInferrer<'a> {
                             field,
                             ..
                         } => {
-                            // 递归获取前面的路径
-                            if let Some(prefix) = extract_namespace_path(expr) {
-                                // 如果前缀是 std 或模块变量，构建完整路径
+                            if let Some(prefix) =
+                                extract_namespace_path_dynamic(expr, std_submodules)
+                            {
                                 if prefix == "std" {
                                     return Some(format!("std.{}", field));
-                                } else if matches!(
-                                    prefix.as_str(),
-                                    "io" | "math" | "net" | "concurrent"
-                                ) {
+                                } else if std_submodules.iter().any(|m| m == &prefix) {
                                     return Some(format!("std.{}", field));
                                 }
                             }
@@ -553,10 +559,9 @@ impl<'a> ExprInferrer<'a> {
                 }
 
                 // 检查是否是命名空间调用
-                if let Some(namespace_path) = extract_namespace_path(func) {
-                    // 这是一个命名空间调用，如 std.io.print
-                    // namespace_path 是 "std.io"，需要从 func 中提取函数名
-                    // func 是嵌套的 FieldAccess，最内层是函数名
+                if let Some(namespace_path) =
+                    extract_namespace_path_dynamic(func, std_submodules_ref)
+                {
                     fn extract_function_name(
                         expr: &crate::frontend::core::parser::ast::Expr
                     ) -> Option<String> {
@@ -573,24 +578,15 @@ impl<'a> ExprInferrer<'a> {
                         }
                     }
 
-                    // 重新组织：namespace_path 是 std.io 或 io（模块变量），需要加上函数名
-                    // 例如：如果 func 是 std.io.println，field 是 "println"，namespace_path 是 "std.io"
-                    // 或者：func 是 io.println，namespace_path 是 "io"
-                    // 我们需要构建 "std.io.println"
                     if let Some(field_name) = extract_function_name(func) {
-                        // field_name 可能是 "io.println"，需要组合成完整路径
+                        // 使用 std_submodules 动态判断是否需要加 std. 前缀
                         let full_name = if namespace_path == "std"
-                            || namespace_path == "io"
-                            || namespace_path == "math"
-                            || namespace_path == "net"
-                            || namespace_path == "concurrent"
+                            || std_submodules_ref.iter().any(|m| m == &namespace_path)
                         {
-                            // 模块变量路径，需要添加 std. 前缀
                             format!("std.{}", field_name)
                         } else {
                             format!("{}.{}", namespace_path, field_name)
                         };
-                        // 查找 native 函数
                         if let Some(sig) = self.native_signatures.get(&full_name).cloned() {
                             return Ok(sig);
                         }
