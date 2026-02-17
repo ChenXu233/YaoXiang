@@ -546,9 +546,7 @@ impl<'a> ExprInferrer<'a> {
                             if let Some(prefix) =
                                 extract_namespace_path_dynamic(expr, std_submodules)
                             {
-                                if prefix == "std" {
-                                    return Some(format!("std.{}", field));
-                                } else if std_submodules.iter().any(|m| m == &prefix) {
+                                if prefix == "std" || std_submodules.iter().any(|m| m == &prefix) {
                                     return Some(format!("std.{}", field));
                                 }
                             }

@@ -185,7 +185,7 @@ impl ModuleCache {
         let mut entries = self.entries.write();
         let to_remove: Vec<String> = entries
             .iter()
-            .filter(|(_, entry)| entry.file_path.as_ref().map_or(false, |p| p == file_path))
+            .filter(|(_, entry)| entry.file_path.as_ref().is_some_and(|p| p == file_path))
             .map(|(path, _)| path.clone())
             .collect();
 

@@ -191,7 +191,7 @@ impl ModuleResolver {
         module_path: &str,
     ) -> Vec<String> {
         let parts: Vec<&str> = module_path.split('.').collect();
-        let last = parts.last().map(|s| *s).unwrap_or(module_path);
+        let last = parts.last().copied().unwrap_or(module_path);
 
         let current_dir = self.current_file.parent().unwrap_or(Path::new("."));
         let src_dir = self.project_root.join("src");
