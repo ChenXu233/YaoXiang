@@ -35,8 +35,8 @@ static STD_SUBMODULES: LazyLock<Vec<String>> =
     LazyLock::new(|| ModuleRegistry::with_std().std_submodule_names());
 
 /// 检查是否是命名空间调用（如 std.io.println 或 io.println）
-fn is_namespace_call(expr: &Box<ast::Expr>) -> bool {
-    match expr.as_ref() {
+fn is_namespace_call(expr: &ast::Expr) -> bool {
+    match expr {
         ast::Expr::Var(name, _) => name == "std" || is_std_module(name),
         ast::Expr::FieldAccess { expr, .. } => is_namespace_call(expr),
         _ => false,
@@ -45,10 +45,10 @@ fn is_namespace_call(expr: &Box<ast::Expr>) -> bool {
 
 /// 提取完整的命名空间路径（如 std.io.println 或 io.println -> std.io.println）
 fn extract_namespace_path(
-    expr: &Box<ast::Expr>,
+    expr: &ast::Expr,
     field: &str,
 ) -> String {
-    match expr.as_ref() {
+    match expr {
         ast::Expr::Var(name, _) => {
             if name == "std" {
                 format!("std.{}", field)

@@ -165,7 +165,7 @@ impl ModuleRegistry {
         name: &str,
     ) -> bool {
         let path = format!("std.{}", name);
-        self.modules.get(&path).is_some()
+        self.modules.contains_key(&path)
     }
 
     /// 获取所有 std 子模块的名称

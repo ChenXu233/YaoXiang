@@ -161,7 +161,7 @@ impl ModuleLoader {
                     if *is_pub {
                         let signature = type_annotation
                             .as_ref()
-                            .map(|t| format_type(t))
+                            .map(format_type)
                             .unwrap_or_else(|| "(...) -> Any".to_string());
                         module.add_export(Export {
                             name: name.clone(),
@@ -192,7 +192,7 @@ impl ModuleLoader {
                     if !is_mut {
                         let signature = type_annotation
                             .as_ref()
-                            .map(|t| format_type(t))
+                            .map(format_type)
                             .unwrap_or_else(|| "Any".to_string());
                         module.add_export(Export {
                             name: name.clone(),
@@ -328,7 +328,7 @@ fn format_type(ty: &AstType) -> String {
             params,
             return_type,
         } => {
-            let param_str: Vec<String> = params.iter().map(|p| format_type(p)).collect();
+            let param_str: Vec<String> = params.iter().map(format_type).collect();
             format!("({}) -> {}", param_str.join(", "), format_type(return_type))
         }
         AstType::Option(inner) => format!("{}?", format_type(inner)),
@@ -336,11 +336,11 @@ fn format_type(ty: &AstType) -> String {
             format!("Result[{}, {}]", format_type(ok), format_type(err))
         }
         AstType::Generic { name, args } => {
-            let args_str: Vec<String> = args.iter().map(|a| format_type(a)).collect();
+            let args_str: Vec<String> = args.iter().map(format_type).collect();
             format!("{}[{}]", name, args_str.join(", "))
         }
         AstType::Tuple(types) => {
-            let parts: Vec<String> = types.iter().map(|t| format_type(t)).collect();
+            let parts: Vec<String> = types.iter().map(format_type).collect();
             format!("({})", parts.join(", "))
         }
         AstType::Ptr(inner) => format!("*{}", format_type(inner)),
