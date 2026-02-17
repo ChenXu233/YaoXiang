@@ -1,12 +1,17 @@
 //! 模块加载器
 //!
 //! 负责从文件系统加载用户模块，管理模块缓存，并检测循环依赖。
+//! 支持解析 `.yx` 源文件，自动提取导出项（`pub` 函数、类型定义等）。
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::ast::{Module as AstModule, StmtKind, Type as AstType};
+use crate::frontend::core::parser::parse;
+
 use super::resolver::{ModuleLocation, ModuleResolver};
-use super::{ModuleError, ModuleInfo, ModuleSource};
+use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 
 /// 加载状态（用于循环依赖检测）
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,21 +102,126 @@ impl ModuleLoader {
     }
 
     /// 从文件加载模块
+    ///
+    /// 读取 `.yx` 文件，使用词法分析器和解析器提取导出项。
+    ///
+    /// 导出规则：
+    /// - `pub` 修饰的函数定义 → `ExportKind::Function`
+    /// - 类型定义（`Name: Type = ...`） → `ExportKind::Type`
+    /// - 顶层不可变变量绑定 → `ExportKind::Constant`
     fn load_from_file(
         &mut self,
         module_path: &str,
         file_path: &PathBuf,
     ) -> Result<ModuleInfo, ModuleError> {
         // 读取文件内容
-        let _source = std::fs::read_to_string(file_path).map_err(|_| ModuleError::NotFound {
+        let source = std::fs::read_to_string(file_path).map_err(|_| ModuleError::NotFound {
             path: module_path.to_string(),
             searched_paths: vec![file_path.display().to_string()],
         })?;
 
-        // TODO: 解析源文件，提取导出项
-        // 当前返回空模块，后续实现完整的解析
-        let module = ModuleInfo::new(module_path.to_string(), ModuleSource::User);
+        // 词法分析
+        let tokens = tokenize(&source).map_err(|e| ModuleError::InvalidPath {
+            path: format!("{}: {}", file_path.display(), e),
+        })?;
 
+        // 语法分析
+        let ast = parse(&tokens).map_err(|e| ModuleError::InvalidPath {
+            path: format!("{}: {}", file_path.display(), e),
+        })?;
+
+        // 提取导出项
+        let module = Self::extract_exports(module_path, &ast, &ModuleSource::User);
+
+        Ok(module)
+    }
+
+    /// 从 AST 中提取模块导出项
+    ///
+    /// 遍历模块顶层语句，根据以下规则提取导出项：
+    /// - `pub fn_name: (...) -> ... = ...` → 公开函数
+    /// - `Name: Type = ...` → 类型定义（始终导出）
+    /// - `name = expr`（不可变绑定） → 常量
+    fn extract_exports(
+        module_path: &str,
+        ast: &AstModule,
+        source: &ModuleSource,
+    ) -> ModuleInfo {
+        let mut module = ModuleInfo::new(module_path.to_string(), source.clone());
+
+        for stmt in &ast.items {
+            match &stmt.kind {
+                // pub 函数 → 导出
+                StmtKind::Fn {
+                    name,
+                    type_annotation,
+                    is_pub,
+                    ..
+                } => {
+                    if *is_pub {
+                        let signature = type_annotation
+                            .as_ref()
+                            .map(|t| format_type(t))
+                            .unwrap_or_else(|| "(...) -> Any".to_string());
+                        module.add_export(Export {
+                            name: name.clone(),
+                            full_path: format!("{}.{}", module_path, name),
+                            kind: ExportKind::Function,
+                            signature,
+                        });
+                    }
+                }
+
+                // 类型定义始终导出
+                StmtKind::TypeDef { name, .. } => {
+                    module.add_export(Export {
+                        name: name.clone(),
+                        full_path: format!("{}.{}", module_path, name),
+                        kind: ExportKind::Type,
+                        signature: "Type".to_string(),
+                    });
+                }
+
+                // 顶层不可变绑定 → 常量导出
+                StmtKind::Var {
+                    name,
+                    is_mut,
+                    type_annotation,
+                    ..
+                } => {
+                    if !is_mut {
+                        let signature = type_annotation
+                            .as_ref()
+                            .map(|t| format_type(t))
+                            .unwrap_or_else(|| "Any".to_string());
+                        module.add_export(Export {
+                            name: name.clone(),
+                            full_path: format!("{}.{}", module_path, name),
+                            kind: ExportKind::Constant,
+                            signature,
+                        });
+                    }
+                }
+
+                // use/方法绑定/其他语句不产生导出
+                _ => {}
+            }
+        }
+
+        module
+    }
+
+    /// 加载 vendor 模块
+    ///
+    /// 直接从指定文件路径加载模块，标记为 Vendor 来源。
+    /// 用于 VendorBridge 发现的依赖模块。
+    pub fn load_vendor_module(
+        &mut self,
+        module_name: &str,
+        file_path: &PathBuf,
+    ) -> Result<ModuleInfo, ModuleError> {
+        let mut module = self.load_from_file(module_name, file_path)?;
+        module.source = ModuleSource::Vendor;
         Ok(module)
     }
 
@@ -201,6 +311,43 @@ impl ModuleLoader {
     }
 }
 
+/// 将 AST 类型格式化为可读签名字符串
+///
+/// 用于生成模块导出项的签名描述。
+fn format_type(ty: &AstType) -> String {
+    match ty {
+        AstType::Name(name) => name.clone(),
+        AstType::Int(bits) => format!("Int{}", bits),
+        AstType::Float(bits) => format!("Float{}", bits),
+        AstType::Char => "Char".to_string(),
+        AstType::String => "String".to_string(),
+        AstType::Bytes => "Bytes".to_string(),
+        AstType::Bool => "Bool".to_string(),
+        AstType::Void => "Void".to_string(),
+        AstType::Fn {
+            params,
+            return_type,
+        } => {
+            let param_str: Vec<String> = params.iter().map(|p| format_type(p)).collect();
+            format!("({}) -> {}", param_str.join(", "), format_type(return_type))
+        }
+        AstType::Option(inner) => format!("{}?", format_type(inner)),
+        AstType::Result(ok, err) => {
+            format!("Result[{}, {}]", format_type(ok), format_type(err))
+        }
+        AstType::Generic { name, args } => {
+            let args_str: Vec<String> = args.iter().map(|a| format_type(a)).collect();
+            format!("{}[{}]", name, args_str.join(", "))
+        }
+        AstType::Tuple(types) => {
+            let parts: Vec<String> = types.iter().map(|t| format_type(t)).collect();
+            format!("({})", parts.join(", "))
+        }
+        AstType::Ptr(inner) => format!("*{}", format_type(inner)),
+        _ => "Any".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +391,88 @@ mod tests {
 
         let result = ModuleLoader::detect_cycles(&deps);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_exports_pub_fn() {
+        let source = r#"
+pub add: (a: Int, b: Int) -> Int = (a, b) => {
+    a + b
+}
+
+helper: (x: Int) -> Int = (x) => {
+    x * 2
+}
+"#;
+        let tokens = tokenize(source).unwrap();
+        let ast = parse(&tokens).unwrap();
+        let module = ModuleLoader::extract_exports("my_module", &ast, &ModuleSource::User);
+
+        // pub 函数应该被导出
+        assert!(module.has_export("add"));
+        assert_eq!(module.get_export("add").unwrap().kind, ExportKind::Function);
+        assert_eq!(module.get_export("add").unwrap().full_path, "my_module.add");
+
+        // 非 pub 函数不导出
+        assert!(!module.has_export("helper"));
+    }
+
+    #[test]
+    fn test_extract_exports_typedef() {
+        let source = r#"
+Point: Type = {
+    x: Int
+    y: Int
+}
+"#;
+        let tokens = tokenize(source).unwrap();
+        let ast = parse(&tokens).unwrap();
+        let module = ModuleLoader::extract_exports("shapes", &ast, &ModuleSource::User);
+
+        // 类型定义始终导出
+        assert!(module.has_export("Point"));
+        assert_eq!(module.get_export("Point").unwrap().kind, ExportKind::Type);
+    }
+
+    #[test]
+    fn test_extract_exports_constant() {
+        let source = r#"
+MAX_SIZE = 100
+mut counter = 0
+"#;
+        let tokens = tokenize(source).unwrap();
+        let ast = parse(&tokens).unwrap();
+        let module = ModuleLoader::extract_exports("config", &ast, &ModuleSource::User);
+
+        // 不可变绑定导出为常量
+        assert!(module.has_export("MAX_SIZE"));
+        assert_eq!(
+            module.get_export("MAX_SIZE").unwrap().kind,
+            ExportKind::Constant
+        );
+
+        // 可变绑定不导出
+        assert!(!module.has_export("counter"));
+    }
+
+    #[test]
+    fn test_format_type_fn() {
+        let ty = AstType::Fn {
+            params: vec![
+                AstType::Name("Int".to_string()),
+                AstType::Name("Int".to_string()),
+            ],
+            return_type: Box::new(AstType::Name("Bool".to_string())),
+        };
+        assert_eq!(format_type(&ty), "(Int, Int) -> Bool");
+    }
+
+    #[test]
+    fn test_format_type_generic() {
+        let ty = AstType::Generic {
+            name: "List".to_string(),
+            args: vec![AstType::Name("Int".to_string())],
+        };
+        assert_eq!(format_type(&ty), "List[Int]");
     }
 }

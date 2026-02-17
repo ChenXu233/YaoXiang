@@ -15,9 +15,12 @@
 //! 2. 支持模块搜索路径和缓存
 //! 3. 支持循环依赖检测
 
+pub mod cache;
+pub mod hot_reload;
 pub mod loader;
 pub mod registry;
 pub mod resolver;
+pub mod vendor;
 
 use std::collections::HashMap;
 
