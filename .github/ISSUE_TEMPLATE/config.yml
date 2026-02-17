@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 问题咨询 / Q&A
+    url: https://github.com/ChenXu233/YaoXiang/discussions
+    about: 一般问题、用法讨论请优先使用 Discussions

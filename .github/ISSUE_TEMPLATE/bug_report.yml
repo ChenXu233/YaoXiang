@@ -2,7 +2,7 @@
 name: Bug Report
 description: 报告 YaoXiang 语言的 Bug
 labels: ["bug"]
-assignees: ""
+assignees: []
 
 body:
   - type: dropdown
