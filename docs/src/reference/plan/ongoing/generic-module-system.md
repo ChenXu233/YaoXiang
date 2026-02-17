@@ -578,8 +578,8 @@ impl ModuleRegistry for CompositeRegistry {
 
 ## 13. 实施检查清单
 
-- [ ] 模块缓存策略
-- [ ] 热重载机制
+- [x] 模块缓存策略（`src/frontend/module/cache.rs`）
+- [x] 热重载机制（`src/frontend/module/hot_reload.rs`）
 - [x] 编译错误信息（E5001-E5007 已定义）
 - [x] 模块路径解析（`src/frontend/module/resolver.rs`）
 - [x] 统一模块接口（`src/frontend/module/mod.rs`）
@@ -588,8 +588,8 @@ impl ModuleRegistry for CompositeRegistry {
 - [x] 类型检查重构 - 移除硬编码（`src/frontend/typecheck/mod.rs`）
 - [x] IR 生成重构 - 移除硬编码（`src/middle/core/ir_gen.rs`）
 - [x] 表达式推断重构 - 移除硬编码（`src/frontend/typecheck/inference/expressions.rs`）
-- [ ] 用户模块文件加载（解析 .yx 文件提取导出项）
-- [ ] RFC-014 集成（vendor/、yaoxiang.toml）
+- [x] 用户模块文件加载（`src/frontend/module/loader.rs`，解析 .yx 文件提取导出项）
+- [x] RFC-014 集成（`src/frontend/module/vendor.rs`，vendor/、yaoxiang.toml）
 
 ---
 
@@ -627,12 +627,69 @@ impl ModuleRegistry for CompositeRegistry {
 - `E5006` - 重复导入
 - `E5007` - 模块导出提示
 
-### 14.4 验证结果
+### 14.4 阶段 4：用户模块文件加载（已完成 ✅）
 
-- ✅ 全部 1464 测试通过（1428 单元 + 30 文档 + 6 集成，0 失败）
-- ✅ 运行示例文件正常输出
+**修改文件**：
+- `src/frontend/module/loader.rs` - 实现 `load_from_file()`，通过 tokenize → parse → `extract_exports()` 提取导出项
+
+**导出提取规则**：
+| 语句类型 | 导出条件 | ExportKind |
+|---------|---------|-----------|
+| `pub fn_name: ...` | `is_pub = true` | Function |
+| `Name: Type = ...` | 始终导出 | Type |
+| `name = expr`（不可变） | `is_mut = false` | Constant |
+| `mut name = expr` | 不导出 | — |
+
+**新增辅助函数**：
+- `format_type()` - 将 AST 类型节点格式化为签名字符串
+
+### 14.5 阶段 5：RFC-014 集成（已完成 ✅）
+
+**新增文件**：
+- `src/frontend/module/vendor.rs` - VendorBridge，桥接 `PackageManifest` + `VendorManager` 与模块系统
+
+**工作流程**：
+1. 读取 `yaoxiang.toml` 获取声明的依赖
+2. 扫描 `.yaoxiang/vendor/` 目录查找已安装的依赖
+3. 为每个依赖解析入口文件并提取导出项
+4. 注册到 `ModuleRegistry`
+
+### 14.6 阶段 6：模块缓存策略（已完成 ✅）
+
+**新增文件**：
+- `src/frontend/module/cache.rs` - 线程安全的模块缓存（`parking_lot::RwLock`）
+
+**缓存模式**：
+| 模式 | 变更检测 | 适用场景 |
+|------|---------|---------|
+| `Compile` | 不检测 | 编译期间内存缓存 |
+| `Development` | FNV-1a 文件哈希 | 开发时自动失效 |
+| `Release` | 不检测 | 生产构建 |
+
+### 14.7 阶段 7：热重载机制（已完成 ✅）
+
+**新增文件**：
+- `src/frontend/module/hot_reload.rs` - 文件监听 + 防抖 + 缓存失效
+
+**新增依赖**：
+- `notify = "7.0.0"`（文件系统监听）
+
+**架构**：
+```text
+FileWatcher (notify) → 防抖 (300ms) → classify_events → invalidate_cache → ReloadEvent channel
+```
+
+**事件分类**：
+| 文件变化 | FileChange | 缓存处理 |
+|---------|-----------|---------|
+| `.yx` 修改 | SourceModified | invalidate_by_file |
+| `.yx` 创建 | SourceCreated | 无需处理 |
+| `.yx` 删除 | SourceDeleted | invalidate_by_file |
+| `yaoxiang.toml` | ManifestChanged | clear() |
+| `yaoxiang.lock` | LockfileChanged | clear() |
+
+### 14.8 验证结果
+
+- ✅ 全部 1494 测试通过（1458 单元 + 6 文档 + 30 集成，0 失败）
 - ✅ `cargo check` 无编译错误
-
----
-
-**注意**: 用户模块的 .yx 文件解析和 vendor 集成尚待实现，需要编译器支持多文件编译。
+- ✅ 所有检查清单项已完成
