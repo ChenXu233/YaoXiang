@@ -32,26 +32,8 @@ impl Translator {
     pub fn new() -> Self {
         let mut native_functions = HashSet::new();
 
-        // 从 std.io 声明注册表自动发现 native 函数
-        for (short_name, native_name) in crate::std::io::implemented_native_names() {
-            native_functions.insert(native_name.to_string());
-            native_functions.insert(short_name.to_string());
-        }
-
-        // 从 std.math 声明注册表自动发现 native 函数
-        for (short_name, native_name) in crate::std::math::implemented_native_names() {
-            native_functions.insert(native_name.to_string());
-            native_functions.insert(short_name.to_string());
-        }
-
-        // 从 std.net 声明注册表自动发现 native 函数
-        for (short_name, native_name) in crate::std::net::implemented_native_names() {
-            native_functions.insert(native_name.to_string());
-            native_functions.insert(short_name.to_string());
-        }
-
-        // 从 std.concurrent 声明注册表自动发现 native 函数
-        for (short_name, native_name) in crate::std::concurrent::implemented_native_names() {
+        // 从 std 模块自动发现 native 函数
+        for (short_name, native_name) in crate::std::all_native_names() {
             native_functions.insert(native_name.to_string());
             native_functions.insert(short_name.to_string());
         }

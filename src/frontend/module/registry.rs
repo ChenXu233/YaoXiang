@@ -179,111 +179,35 @@ impl ModuleRegistry {
 
     /// 注册所有 std 模块
     ///
-    /// 从 `crate::std` 中的 `native_declarations()` 自动发现和注册所有标准库模块。
+    /// 使用 `StdModule` trait 自动发现和注册所有标准库模块。
     fn register_std_modules(&mut self) {
         // 注册根 std 模块
         let mut std_root = ModuleInfo::new("std".to_string(), ModuleSource::Std);
 
-        // 注册 std.io
-        let io_module = Self::build_std_submodule(
-            "std.io",
-            crate::std::io::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| (d.name, d.native_name, d.signature))
-                .collect(),
-        );
-        std_root.add_submodule("io".to_string());
-        std_root.add_export(Export {
-            name: "io".to_string(),
-            full_path: "std.io".to_string(),
-            kind: ExportKind::SubModule,
-            signature: "Module".to_string(),
-        });
-        self.register(io_module);
+        // 从 std 模块自动获取所有子模块信息
+        for module_info in crate::std::all_module_infos() {
+            // 提取子模块名称（从 "std.io" -> "io"）
+            let submodule_name = module_info
+                .path
+                .strip_prefix("std.")
+                .unwrap_or(&module_info.path)
+                .to_string();
 
-        // 注册 std.math
-        let math_module = Self::build_std_submodule(
-            "std.math",
-            crate::std::math::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| (d.name, d.native_name, d.signature))
-                .collect(),
-        );
-        std_root.add_submodule("math".to_string());
-        std_root.add_export(Export {
-            name: "math".to_string(),
-            full_path: "std.math".to_string(),
-            kind: ExportKind::SubModule,
-            signature: "Module".to_string(),
-        });
-        self.register(math_module);
+            // 注册子模块
+            std_root.add_submodule(submodule_name.clone());
+            std_root.add_export(Export {
+                name: submodule_name,
+                full_path: module_info.path.clone(),
+                kind: ExportKind::SubModule,
+                signature: "Module".to_string(),
+            });
 
-        // 注册 std.net
-        let net_module = Self::build_std_submodule(
-            "std.net",
-            crate::std::net::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| (d.name, d.native_name, d.signature))
-                .collect(),
-        );
-        std_root.add_submodule("net".to_string());
-        std_root.add_export(Export {
-            name: "net".to_string(),
-            full_path: "std.net".to_string(),
-            kind: ExportKind::SubModule,
-            signature: "Module".to_string(),
-        });
-        self.register(net_module);
-
-        // 注册 std.concurrent
-        let concurrent_module = Self::build_std_submodule(
-            "std.concurrent",
-            crate::std::concurrent::native_declarations()
-                .into_iter()
-                .filter(|d| d.implemented)
-                .map(|d| (d.name, d.native_name, d.signature))
-                .collect(),
-        );
-        std_root.add_submodule("concurrent".to_string());
-        std_root.add_export(Export {
-            name: "concurrent".to_string(),
-            full_path: "std.concurrent".to_string(),
-            kind: ExportKind::SubModule,
-            signature: "Module".to_string(),
-        });
-        self.register(concurrent_module);
+            // 注册模块信息
+            self.register(module_info);
+        }
 
         // 注册根 std 模块
         self.register(std_root);
-    }
-
-    /// 从 NativeDeclaration 列表构建 std 子模块
-    fn build_std_submodule(
-        module_path: &str,
-        declarations: Vec<(&'static str, &'static str, &'static str)>,
-    ) -> ModuleInfo {
-        let mut module = ModuleInfo::new(module_path.to_string(), ModuleSource::Std);
-
-        for (name, native_name, signature) in declarations {
-            // 判断是函数还是常量
-            let kind = if signature.starts_with('(') {
-                ExportKind::Function
-            } else {
-                ExportKind::Constant
-            };
-
-            module.add_export(Export {
-                name: name.to_string(),
-                full_path: native_name.to_string(),
-                kind,
-                signature: signature.to_string(),
-            });
-        }
-
-        module
     }
 }
 

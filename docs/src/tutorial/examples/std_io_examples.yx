@@ -1,4 +1,4 @@
-use std.io
+use std.io.{print};
 
 // ============================================================================
 // YaoXiang标准IO库使用示例
@@ -91,7 +91,7 @@ loop_demo: () -> Void = {
 
     // while 循环
     print("while 循环倒计时:\n")
-    count = 3
+    mut count = 3
     while count > 0 {
         print(count)
         print("\n")
