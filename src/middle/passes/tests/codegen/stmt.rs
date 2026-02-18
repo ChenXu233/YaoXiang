@@ -24,6 +24,7 @@ fn test_function_definition() {
         }],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 

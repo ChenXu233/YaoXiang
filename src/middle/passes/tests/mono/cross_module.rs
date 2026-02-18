@@ -69,6 +69,7 @@ fn test_collect_generic_functions() {
         functions: vec![generic_func, non_generic],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -97,6 +98,7 @@ fn test_global_function_instantiation() {
         functions: vec![generic_func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -135,6 +137,7 @@ fn test_instance_sharing() {
         functions: vec![generic_func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -169,6 +172,7 @@ fn test_different_types_different_instances() {
         functions: vec![generic_func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -218,6 +222,7 @@ fn test_multiple_type_parameters() {
         functions: vec![generic_func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 

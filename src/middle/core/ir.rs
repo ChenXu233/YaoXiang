@@ -400,6 +400,8 @@ pub struct ModuleIR {
     /// 每个函数的循环绑定变量索引映射 (function_name -> set of loop binding local indices)
     /// 这些变量的 Store 是"绑定"操作，不是"修改"
     pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
+    /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
+    pub local_names: std::collections::HashMap<String, Vec<String>>,
     /// 用户声明的 native 函数绑定 (func_name -> native_symbol)
     ///
     /// 当源码中出现 `my_func: (a: Int) -> Int = Native("symbol")` 时，
@@ -416,6 +418,7 @@ impl Default for ModuleIR {
             functions: Vec::new(),
             mut_locals: std::collections::HashMap::new(),
             loop_binding_locals: std::collections::HashMap::new(),
+            local_names: std::collections::HashMap::new(),
             native_bindings: Vec::new(),
         }
     }
