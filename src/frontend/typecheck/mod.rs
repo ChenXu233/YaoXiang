@@ -428,11 +428,11 @@ impl TypeChecker {
         if let Some(ref bc) = self.body_checker {
             for (name, poly) in bc.vars() {
                 // 只添加 env.vars 中不存在的局部变量类型
-                if !bindings.contains_key(name) {
+                if !bindings.contains_key(&name) {
                     bindings.insert(name.clone(), poly.clone());
                 }
                 // 收集局部变量的 MonoType（用于 IR 生成器错误消息）
-                local_var_types.insert(name.clone(), poly.body.clone());
+                local_var_types.insert(name, poly.body);
             }
         }
 

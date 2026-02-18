@@ -26,8 +26,8 @@ use crate::frontend::core::parser::ast::{Stmt, Expr, Param, Block};
 pub struct BodyChecker {
     /// 约束求解器
     solver: TypeConstraintSolver,
-    /// 变量环境
-    vars: HashMap<String, PolyType>,
+    /// 变量环境（作用域栈）
+    scopes: Vec<HashMap<String, PolyType>>,
     /// 已检查的函数
     checked_functions: HashMap<String, bool>,
     /// 重载候选存储
@@ -40,7 +40,7 @@ impl BodyChecker {
     pub fn new(solver: &mut TypeConstraintSolver) -> Self {
         Self {
             solver: solver.clone(),
-            vars: HashMap::new(),
+            scopes: vec![HashMap::new()],
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
         }
@@ -51,26 +51,84 @@ impl BodyChecker {
         &mut self.solver
     }
 
-    /// 添加变量
+    /// 添加变量到当前作用域
     pub fn add_var(
         &mut self,
         name: String,
         poly: PolyType,
     ) {
-        self.vars.insert(name, poly);
+        self.scopes.last_mut().unwrap().insert(name, poly);
     }
 
-    /// 获取变量
+    /// 获取变量（从最内层作用域开始查找）
     pub fn get_var(
         &self,
         name: &str,
     ) -> Option<&PolyType> {
-        self.vars.get(name)
+        for scope in self.scopes.iter().rev() {
+            if let Some(poly) = scope.get(name) {
+                return Some(poly);
+            }
+        }
+        None
     }
 
-    /// 克隆变量环境
-    pub fn vars(&self) -> &HashMap<String, PolyType> {
-        &self.vars
+    /// 获取所有变量（从所有作用域，内层覆盖外层）
+    pub fn vars(&self) -> HashMap<String, PolyType> {
+        let mut result = HashMap::new();
+        for scope in &self.scopes {
+            for (name, poly) in scope {
+                result.insert(name.clone(), poly.clone());
+            }
+        }
+        result
+    }
+
+    /// 检查变量是否存在于任何作用域中
+    pub fn var_exists_in_any_scope(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.scopes.iter().any(|scope| scope.contains_key(name))
+    }
+
+    /// 检查变量是否存在于当前作用域
+    pub fn var_exists_in_current_scope(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.scopes.last().map_or(false, |s| s.contains_key(name))
+    }
+
+    /// 在现有作用域中更新变量（从内层到外层搜索）
+    fn update_var(
+        &mut self,
+        name: &str,
+        poly: PolyType,
+    ) {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.to_string(), poly);
+                return;
+            }
+        }
+        // 未找到则添加到当前作用域
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), poly);
+    }
+
+    /// 进入新的作用域
+    pub fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    /// 退出当前作用域
+    pub fn exit_scope(&mut self) {
+        if self.scopes.len() > 1 {
+            self.scopes.pop();
+        }
     }
 
     /// 检查函数定义
@@ -88,28 +146,44 @@ impl BodyChecker {
         // 标记为已检查
         self.checked_functions.insert(name.to_string(), true);
 
-        // 添加参数到环境
+        // 创建函数作用域
+        self.enter_scope();
+
+        // 添加参数到函数作用域
         for param in params {
             let param_ty = param
                 .ty
                 .as_ref()
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
-            self.vars
-                .insert(param.name.clone(), PolyType::mono(param_ty));
+            self.add_var(param.name.clone(), PolyType::mono(param_ty));
         }
 
         // 检查函数体语句
+        let mut err = None;
         for stmt in &body.stmts {
-            self.check_stmt(stmt)?;
+            if let Err(e) = self.check_stmt(stmt) {
+                err = Some(e);
+                break;
+            }
         }
 
         // 检查返回表达式
-        if let Some(expr) = &body.expr {
-            self.check_expr(expr)?;
+        if err.is_none() {
+            if let Some(expr) = &body.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    err = Some(e);
+                }
+            }
         }
 
-        Ok(())
+        // 退出函数作用域
+        self.exit_scope();
+
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     /// 检查语句
@@ -203,15 +277,20 @@ impl BodyChecker {
 
                 // 如果左侧是变量，将其类型与右侧类型统一
                 if let Expr::Var(name, _) = left.as_ref() {
-                    // 检查变量是否已存在
-                    if let Some(poly) = self.vars.get(name) {
-                        // 变量已存在，统一类型
+                    if self.var_exists_in_current_scope(name) {
+                        // 当前作用域存在，是赋值操作
+                        let poly = self.get_var(name).unwrap().clone();
                         let _ = self.solver.unify(&poly.body, &right_ty);
+                    } else if self.var_exists_in_any_scope(name) {
+                        // 外层作用域存在，遮蔽错误
+                        return Err(Box::new(
+                            ErrorCodeDefinition::variable_shadowing(name).build(),
+                        ));
                     } else {
                         // 变量不存在，创建新变量并与右侧类型统一
                         let ty = self.solver.new_var();
                         let _ = self.solver.unify(&ty, &right_ty);
-                        self.vars.insert(name.clone(), PolyType::mono(ty));
+                        self.add_var(name.clone(), PolyType::mono(ty));
                     }
                 }
                 Ok(())
@@ -234,7 +313,7 @@ impl BodyChecker {
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         // 检查是否与结构体重名
-        if let Some(existing) = self.vars.get(name) {
+        if let Some(existing) = self.get_var(name) {
             if let MonoType::Struct(_) = &existing.body {
                 return Err(Box::new(
                     ErrorCodeDefinition::duplicate_definition(name)
@@ -244,18 +323,8 @@ impl BodyChecker {
             }
         }
 
-        // 首先添加函数参数到变量环境
-        for param in params {
-            let param_ty = param
-                .ty
-                .as_ref()
-                .map(|t| MonoType::from(t.clone()))
-                .unwrap_or_else(|| self.solver.new_var());
-            self.vars
-                .insert(param.name.clone(), PolyType::mono(param_ty));
-        }
-
         // 将函数自身注册到变量环境中（支持嵌套函数的前向引用和递归调用）
+        // 注意：函数参数由 check_fn_def 在函数作用域内添加
         if let Some(crate::frontend::core::parser::ast::Type::Fn {
             params: param_types,
             return_type,
@@ -271,7 +340,7 @@ impl BodyChecker {
                 return_type: Box::new(fn_return_type),
                 is_async: false,
             };
-            self.vars.insert(name.to_string(), PolyType::mono(fn_type));
+            self.add_var(name.to_string(), PolyType::mono(fn_type));
         }
 
         // 处理类型注解
@@ -294,7 +363,7 @@ impl BodyChecker {
         self.check_fn_def(name, params, &body)
     }
 
-    /// 检查变量语句
+    /// 检查变量语句（mut 声明）
     fn check_var_stmt(
         &mut self,
         name: &str,
@@ -307,12 +376,14 @@ impl BodyChecker {
             (None, None) => self.solver.new_var(),
         };
 
-        // 如果变量已存在，统一类型
-        if let Some(existing_poly) = self.vars.get(name) {
-            let _ = self.solver.unify(&existing_poly.body, &ty);
+        // 遮蔽检查：如果变量已存在于任何作用域中，报错
+        if self.var_exists_in_any_scope(name) {
+            return Err(Box::new(
+                ErrorCodeDefinition::variable_shadowing(name).build(),
+            ));
         }
 
-        self.vars.insert(name.to_string(), PolyType::mono(ty));
+        self.add_var(name.to_string(), PolyType::mono(ty));
         Ok(())
     }
 
@@ -331,27 +402,46 @@ impl BodyChecker {
             _ => self.solver.new_var(),
         };
 
-        // 遮蔽检查：如果变量已存在，报错
-        if self.vars.contains_key(var) {
+        // 创建 for 循环作用域
+        self.enter_scope();
+
+        // 遮蔽检查：如果变量已存在于外层作用域，报错
+        if self.var_exists_in_any_scope(var) {
+            self.exit_scope();
             return Err(Box::new(
                 ErrorCodeDefinition::variable_shadowing(var).build(),
             ));
         }
 
-        self.vars.insert(var.to_string(), PolyType::mono(elem_ty));
+        self.add_var(var.to_string(), PolyType::mono(elem_ty));
 
         // var_mut 在 IR 生成阶段使用，用于决定循环变量是否可变
         // for i in 1..5 - i 不可变
         // for mut i in 1..5 - i 可变
         let _ = var_mut;
 
+        let mut err = None;
         for stmt in &body.stmts {
-            self.check_stmt(stmt)?;
+            if let Err(e) = self.check_stmt(stmt) {
+                err = Some(e);
+                break;
+            }
         }
-        if let Some(expr) = &body.expr {
-            self.check_expr(expr)?;
+        if err.is_none() {
+            if let Some(expr) = &body.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    err = Some(e);
+                }
+            }
         }
-        Ok(())
+
+        // 退出 for 循环作用域（循环变量被销毁）
+        self.exit_scope();
+
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     /// 检查 if 语句
@@ -396,18 +486,34 @@ impl BodyChecker {
         Ok(())
     }
 
-    /// 检查代码块
+    /// 检查代码块（创建独立作用域）
     fn check_block(
         &mut self,
         block: &Block,
     ) -> Result<(), Box<Diagnostic>> {
+        self.enter_scope();
+
+        let mut err = None;
         for stmt in &block.stmts {
-            self.check_stmt(stmt)?;
+            if let Err(e) = self.check_stmt(stmt) {
+                err = Some(e);
+                break;
+            }
         }
-        if let Some(expr) = &block.expr {
-            self.check_expr(expr)?;
+        if err.is_none() {
+            if let Some(expr) = &block.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    err = Some(e);
+                }
+            }
         }
-        Ok(())
+
+        self.exit_scope();
+
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     /// 检查表达式
@@ -415,14 +521,14 @@ impl BodyChecker {
         &mut self,
         expr: &Expr,
     ) -> Result<MonoType, Box<Diagnostic>> {
-        let vars_clone = self.vars.clone();
+        let all_vars = self.vars();
         let overload_candidates_clone = self.overload_candidates.clone();
         let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
             &mut self.solver,
             &overload_candidates_clone,
         );
 
-        for (name, poly) in vars_clone {
+        for (name, poly) in all_vars {
             inferrer.add_var(name, poly);
         }
 
@@ -430,7 +536,7 @@ impl BodyChecker {
 
         // 同步所有变量的类型（包括修改过的，如赋值统一后的类型）
         for (name, poly) in inferrer.get_all_vars() {
-            self.vars.insert(name, poly);
+            self.update_var(&name, poly);
         }
 
         Ok(result)

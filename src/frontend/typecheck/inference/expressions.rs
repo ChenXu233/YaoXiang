@@ -707,8 +707,11 @@ impl<'a> ExprInferrer<'a> {
                     .build());
                 }
 
-                // 推断 then 分支
-                let _then_ty = self.infer_block(then_branch, true, None)?;
+                // 推断 then 分支（独立作用域）
+                self.enter_scope();
+                let then_result = self.infer_block(then_branch, true, None);
+                self.exit_scope();
+                let _then_ty = then_result?;
 
                 // 推断 elif 分支
                 for (elif_cond, elif_block) in elif_branches {
@@ -720,12 +723,20 @@ impl<'a> ExprInferrer<'a> {
                         ))
                         .build());
                     }
-                    let _ = self.infer_block(elif_block, true, None)?;
+                    // elif 分支使用独立作用域
+                    self.enter_scope();
+                    let elif_result = self.infer_block(elif_block, true, None);
+                    self.exit_scope();
+                    let _ = elif_result?;
                 }
 
                 // 推断 else 分支（如果有）
                 if let Some(else_block) = else_branch {
-                    self.infer_block(else_block, true, None)
+                    // else 分支使用独立作用域
+                    self.enter_scope();
+                    let else_result = self.infer_block(else_block, true, None);
+                    self.exit_scope();
+                    else_result
                 } else {
                     // 没有 else 分支时返回 Void
                     Ok(MonoType::Void)
@@ -752,8 +763,10 @@ impl<'a> ExprInferrer<'a> {
                 // 注册循环标签
                 self.enter_loop(label.as_deref());
 
-                // 推断循环体
+                // While 循环体使用独立作用域
+                self.enter_scope();
                 let result = self.infer_block(body, true, None);
+                self.exit_scope();
 
                 // 移除循环标签
                 self.exit_loop(label.as_deref());
@@ -780,10 +793,9 @@ impl<'a> ExprInferrer<'a> {
 
                 // 进入循环体作用域，添加迭代变量（带遮蔽检查）
                 self.enter_scope();
-                self.try_add_var(var.clone(), PolyType::mono(MonoType::Char), *span)?;
-
-                // 推断循环体
-                let result = self.infer_block(body, true, None);
+                let result = self
+                    .try_add_var(var.clone(), PolyType::mono(MonoType::Char), *span)
+                    .and_then(|_| self.infer_block(body, true, None));
 
                 self.exit_scope();
                 // 移除循环标签
