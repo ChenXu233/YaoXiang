@@ -33,6 +33,8 @@ pub struct BodyChecker {
     /// 重载候选存储
     overload_candidates:
         HashMap<String, Vec<crate::frontend::typecheck::overload::OverloadCandidate>>,
+    /// Native 函数签名表
+    native_signatures: HashMap<String, MonoType>,
 }
 
 impl BodyChecker {
@@ -43,7 +45,16 @@ impl BodyChecker {
             scopes: vec![HashMap::new()],
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
+            native_signatures: HashMap::new(),
         }
+    }
+
+    /// 设置 native 函数签名表
+    pub fn set_native_signatures(
+        &mut self,
+        signatures: HashMap<String, MonoType>,
+    ) {
+        self.native_signatures = signatures;
     }
 
     /// 获取求解器
@@ -741,10 +752,13 @@ impl BodyChecker {
     ) -> Result<MonoType, Box<Diagnostic>> {
         let all_vars = self.vars();
         let overload_candidates_clone = self.overload_candidates.clone();
-        let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
-            &mut self.solver,
-            &overload_candidates_clone,
-        );
+        let native_signatures_clone = self.native_signatures.clone();
+        let mut inferrer =
+            crate::frontend::typecheck::inference::ExprInferrer::with_native_signatures(
+                &mut self.solver,
+                &overload_candidates_clone,
+                &native_signatures_clone,
+            );
 
         for (name, poly) in all_vars {
             inferrer.add_var(name, poly);

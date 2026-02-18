@@ -40,6 +40,8 @@ pub struct Interpreter {
     constants: Vec<ConstValue>,
     /// Function table (name -> function)
     functions: HashMap<String, BytecodeFunction>,
+    /// Function table by index (for closure calls via func_id)
+    functions_by_id: Vec<BytecodeFunction>,
     /// Type table
     type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
@@ -65,6 +67,7 @@ impl fmt::Debug for Interpreter {
             .field("call_stack", &self.call_stack)
             .field("constants", &self.constants)
             .field("functions", &self.functions)
+            .field("functions_by_id", &self.functions_by_id)
             .field("type_table", &self.type_table)
             .field("state", &self.state)
             .field("config", &self.config)
@@ -101,6 +104,7 @@ impl Interpreter {
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants: Vec::new(),
             functions: HashMap::new(),
+            functions_by_id: Vec::new(),
             type_table: Vec::new(),
             state: ExecutionState::default(),
             config,
@@ -126,6 +130,26 @@ impl Interpreter {
     /// Get reference to the FFI registry
     pub fn ffi_registry(&self) -> &FfiRegistry {
         &self.ffi
+    }
+
+    /// Call a YaoXiang function by its FunctionId.
+    /// This is used by native functions (like map/filter/reduce) to invoke closures.
+    pub fn call_function_by_id(
+        &mut self,
+        func_id: crate::backends::common::value::FunctionId,
+        args: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let idx = func_id.0 as usize;
+        if idx >= self.functions_by_id.len() {
+            return Err(ExecutorError::FunctionNotFound(format!(
+                "Function with id {} not found (total functions: {})",
+                idx,
+                self.functions_by_id.len()
+            )));
+        }
+        // Clone the function to avoid borrow issues
+        let func = self.functions_by_id[idx].clone();
+        self.execute_function(&func, args)
     }
 
     /// Push a frame onto the call stack
@@ -344,6 +368,7 @@ impl Executor for Interpreter {
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
             self.functions.insert(func.name.clone(), func.clone());
+            self.functions_by_id.push(func.clone());
         }
         tlog!(debug, MSG::DebugTotalFunctions, &self.functions.len());
         tlog!(
@@ -599,7 +624,20 @@ impl Executor for Interpreter {
 
                     // Try FFI registry first for native functions
                     if self.ffi.has(&func_name) {
-                        let mut ctx = NativeContext::new(&mut self.heap);
+                        // Create callback for calling YaoXiang functions (for map/filter/reduce)
+                        let interp_ptr = std::ptr::addr_of_mut!(*self);
+                        let mut call_fn = move |func: &RuntimeValue, args: &[RuntimeValue]| -> Result<RuntimeValue, ExecutorError> {
+                            if let RuntimeValue::Function(fv) = func {
+                                // SAFETY: The interpreter lives as long as the callback.
+                                // The callback is only used during the execution of the native function,
+                                // which is synchronous and completes before the interpreter continues.
+                                let interpreter = unsafe { &mut *interp_ptr };
+                                interpreter.call_function_by_id(fv.func_id, args)
+                            } else {
+                                Err(ExecutorError::Type("Expected function value".to_string()))
+                            }
+                        };
+                        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
                         let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
@@ -700,7 +738,21 @@ impl Executor for Interpreter {
                         .collect();
 
                     // Delegate to FFI registry with NativeContext
-                    let mut ctx = NativeContext::new(&mut self.heap);
+                    // Create callback for calling YaoXiang functions (for map/filter/reduce)
+                    let interp_ptr = std::ptr::addr_of_mut!(*self);
+                    let mut call_fn =
+                        move |func: &RuntimeValue,
+                              args: &[RuntimeValue]|
+                              -> Result<RuntimeValue, ExecutorError> {
+                            if let RuntimeValue::Function(fv) = func {
+                                // SAFETY: The interpreter lives as long as the callback.
+                                let interpreter = unsafe { &mut *interp_ptr };
+                                interpreter.call_function_by_id(fv.func_id, args)
+                            } else {
+                                Err(ExecutorError::Type("Expected function value".to_string()))
+                            }
+                        };
+                    let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
                     let result = self.ffi.call(func_name, &call_args, &mut ctx)?;
 
                     if let Some(dst_reg) = dst {
@@ -1004,12 +1056,25 @@ impl Executor for Interpreter {
                         FunctionRef::Static { name, .. } => name.clone(),
                         FunctionRef::Index(idx) => format!("fn_{}", idx),
                     };
-                    let func_id = crate::backends::common::value::FunctionId(
-                        self.functions
-                            .get(&func_name)
-                            .map(|_| self.functions.len() as u32)
-                            .unwrap_or(0),
-                    );
+                    // Find the function's index in functions_by_id
+                    let func_id = if let Some((idx, _)) = self
+                        .functions_by_id
+                        .iter()
+                        .enumerate()
+                        .find(|(_, f)| f.name == func_name)
+                    {
+                        crate::backends::common::value::FunctionId(idx as u32)
+                    } else {
+                        // Fallback: try to find in functions HashMap
+                        if let Some(func) = self.functions.get(&func_name) {
+                            // Add to functions_by_id if not already there
+                            let idx = self.functions_by_id.len();
+                            self.functions_by_id.push(func.clone());
+                            crate::backends::common::value::FunctionId(idx as u32)
+                        } else {
+                            crate::backends::common::value::FunctionId(0)
+                        }
+                    };
                     let closure =
                         RuntimeValue::Function(crate::backends::common::value::FunctionValue {
                             func_id,

@@ -385,7 +385,9 @@ impl TypeChecker {
         self.collect_exports(module);
 
         // 初始化函数体检查器
-        let body_checker = checking::BodyChecker::new(self.env.solver());
+        let mut body_checker = checking::BodyChecker::new(self.env.solver());
+        // 设置 native 函数签名表
+        body_checker.set_native_signatures(self.env.native_signatures.clone());
         *self.body_checker_mut() = body_checker;
 
         // 将环境中的变量同步到 body_checker
@@ -469,7 +471,10 @@ impl TypeChecker {
     /// 获取 body_checker 的可变引用
     fn body_checker_mut(&mut self) -> &mut checking::BodyChecker {
         if self.body_checker.is_none() {
-            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
+            let mut body_checker = checking::BodyChecker::new(self.env.solver());
+            // 设置 native 函数签名表
+            body_checker.set_native_signatures(self.env.native_signatures.clone());
+            self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
     }
@@ -598,6 +603,40 @@ impl TypeChecker {
                 items,
                 alias: _,
             } => {
+                // 处理嵌套路径：use std.io 需要先注册父模块 "std"
+                if path.contains('.') {
+                    let parts: Vec<&str> = path.split('.').collect();
+                    if parts.len() >= 2 {
+                        let parent_path = parts[0];
+                        // 注册父模块作为命名空间变量（使用 StructType 模拟命名空间）
+                        if !self.env.get_var(parent_path).is_some() {
+                            // 创建命名空间结构体，包含所有子模块
+                            let mut fields = Vec::new();
+                            // 对于 std 命名空间，使用 std_submodule_names 获取子模块列表
+                            if parent_path == "std" {
+                                for submodule_name in self.env.module_registry.std_submodule_names()
+                                {
+                                    let sub_module_ty = MonoType::Fn {
+                                        params: vec![self.env.solver().new_var()],
+                                        return_type: Box::new(MonoType::Void),
+                                        is_async: false,
+                                    };
+                                    fields.push((submodule_name, sub_module_ty));
+                                }
+                            }
+                            let namespace_ty = MonoType::Struct(StructType {
+                                name: parent_path.to_string(),
+                                fields,
+                                methods: HashMap::new(),
+                                field_mutability: Vec::new(),
+                                field_has_default: Vec::new(),
+                            });
+                            self.env
+                                .add_var(parent_path.to_string(), PolyType::mono(namespace_ty));
+                        }
+                    }
+                }
+
                 // 通过 ModuleRegistry 查找模块导出，不再硬编码特定模块
                 if let Some(module) = self.env.module_registry.get(path).cloned() {
                     let import_all = items.is_none();
@@ -844,9 +883,11 @@ pub fn infer_expression(
     // 克隆环境变量，避免借用冲突
     let vars_clone = env.vars.clone();
     let overload_candidates_clone = env.overload_candidates.clone();
-    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+    let native_signatures_clone = env.native_signatures.clone();
+    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::with_native_signatures(
         env.solver(),
         &overload_candidates_clone,
+        &native_signatures_clone,
     );
     // 添加环境中的变量到推断器
     for (name, poly) in vars_clone {
