@@ -43,7 +43,7 @@ variable_demo: () -> Void = {
     x = 42
     y = 100
     sum = x + y
-    print("计算结果: ")
+    print("42+100 计算结果: ")
     print(sum)
     print("\n")
 }
