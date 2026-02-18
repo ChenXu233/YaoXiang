@@ -1,4 +1,4 @@
-//! Send/Sync 检查器单元测试
+﻿//! Send/Sync 检查器单元测试
 
 use std::collections::HashMap;
 
@@ -76,6 +76,7 @@ fn test_arc_is_send_sync() {
             ],
             methods: HashMap::new(),
             field_mutability: vec![false, false],
+            field_has_default: Vec::new(),
         },
     )));
     assert!(checker.is_send(&arc_struct));
@@ -95,6 +96,7 @@ fn test_struct_types() {
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
+        field_has_default: Vec::new(),
     });
     assert!(checker.is_send(&point));
     assert!(checker.is_sync(&point));

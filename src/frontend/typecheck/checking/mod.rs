@@ -249,8 +249,124 @@ impl BodyChecker {
                 )
             }
             crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(()),
-            crate::frontend::core::parser::ast::StmtKind::TypeDef { .. } => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::TypeDef {
+                name, definition, ..
+            } => self.check_type_def(name, definition, stmt.span),
             _ => Ok(()),
+        }
+    }
+
+    /// 检查类型定义
+    ///
+    /// 验证：
+    /// - 默认值字段的类型与字段类型一致
+    /// - 绑定引用的函数和位置有效
+    fn check_type_def(
+        &mut self,
+        _name: &str,
+        definition: &crate::frontend::core::parser::ast::Type,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        use crate::frontend::core::parser::ast::Type;
+
+        match definition {
+            Type::Struct { fields, bindings } => {
+                // 检查默认值字段
+                for field in fields {
+                    if let Some(default_expr) = &field.default {
+                        self.check_field_default(field, default_expr, span)?;
+                    }
+                }
+
+                // 检查绑定字段
+                for binding in bindings {
+                    self.check_field_binding(binding, span)?;
+                }
+
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// 检查字段默认值类型是否与字段类型匹配
+    fn check_field_default(
+        &mut self,
+        field: &crate::frontend::core::parser::ast::StructField,
+        default_expr: &Expr,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        let expected_type = MonoType::from(field.ty.clone());
+        let actual_type = self.check_expr(default_expr)?;
+
+        // 尝试统一默认值类型与字段声明类型
+        if self.solver.unify(&expected_type, &actual_type).is_err() {
+            return Err(Box::new(
+                ErrorCodeDefinition::type_mismatch(
+                    &format!("{}", expected_type),
+                    &format!("{}", actual_type),
+                )
+                .at(span)
+                .build(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// 检查绑定字段的有效性
+    fn check_field_binding(
+        &mut self,
+        binding: &crate::frontend::core::parser::ast::TypeBodyBinding,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        use crate::frontend::core::parser::ast::BindingKind;
+
+        match &binding.kind {
+            BindingKind::External {
+                function,
+                positions,
+            } => {
+                // 验证引用的函数名存在
+                if self.get_var(function).is_none() {
+                    // 函数可能在外层定义或在后续定义，暂时跳过深度检查
+                    // 运行时才验证完整性
+                }
+
+                // 验证位置索引非空
+                if positions.is_empty() {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::type_mismatch(
+                            "at least one binding position",
+                            "empty positions",
+                        )
+                        .at(span)
+                        .build(),
+                    ));
+                }
+
+                Ok(())
+            }
+            BindingKind::Anonymous {
+                params: _,
+                return_type: _,
+                positions,
+                body: _,
+            } => {
+                // 验证位置索引非空
+                if positions.is_empty() {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::type_mismatch(
+                            "at least one binding position",
+                            "empty positions",
+                        )
+                        .at(span)
+                        .build(),
+                    ));
+                }
+
+                Ok(())
+            }
         }
     }
 

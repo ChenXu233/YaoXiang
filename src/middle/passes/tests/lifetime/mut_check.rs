@@ -125,6 +125,7 @@ fn test_immutable_store_field_error() {
             methods: std::collections::HashMap::new(),
             // 字段 0 不可变，字段 1 可变
             field_mutability: vec![false, true],
+            field_has_default: Vec::new(),
         },
     );
 
@@ -185,6 +186,7 @@ fn test_mutable_store_field_allowed() {
             methods: std::collections::HashMap::new(),
             // 字段 0 不可变，字段 1 可变
             field_mutability: vec![false, true],
+            field_has_default: Vec::new(),
         },
     );
 

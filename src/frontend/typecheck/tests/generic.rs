@@ -1,4 +1,4 @@
-//! 泛型类型推断测试
+﻿//! 泛型类型推断测试
 
 use crate::frontend::typecheck::*;
 use crate::util::span::Span;
@@ -68,6 +68,7 @@ fn test_generic_struct() {
             ],
             methods: std::collections::HashMap::new(),
             field_mutability: vec![],
+            field_has_default: Vec::new(),
         }),
     );
     env.add_type("Point".to_string(), point_type);
@@ -175,6 +176,7 @@ fn test_type_environment_types() {
         fields: vec![],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     }));
     env.add_type("Point".to_string(), point_type.clone());
 
@@ -290,6 +292,7 @@ fn test_generic_struct_fields() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
 
     let poly = PolyType::new(vec![t_var], struct_type);
@@ -427,6 +430,7 @@ fn test_generic_struct_type_get() {
         fields: vec![("value".to_string(), MonoType::TypeVar(t_var))],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     let poly = PolyType::new(vec![t_var], struct_type);
     env.add_type("Container".to_string(), poly);
@@ -676,6 +680,7 @@ fn test_solver_struct_field_name_mismatch_error() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![false, false],
+        field_has_default: Vec::new(),
     });
     let right = MonoType::Struct(StructType {
         name: "Point".to_string(),
@@ -685,6 +690,7 @@ fn test_solver_struct_field_name_mismatch_error() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![false, false],
+        field_has_default: Vec::new(),
     });
 
     let result = solver.unify(&left, &right);

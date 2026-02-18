@@ -142,6 +142,9 @@ pub struct AstToIrGenerator {
     local_var_types: HashMap<String, String>,
     /// 用户声明的 native 函数绑定
     native_bindings: Vec<crate::std::ffi::NativeBinding>,
+    /// 结构体定义映射（类型名 -> 字段列表）
+    /// 用于构造器调用时填充默认值
+    struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
 }
 
 impl Default for AstToIrGenerator {
@@ -165,6 +168,7 @@ impl AstToIrGenerator {
             module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
+            struct_definitions: HashMap::new(),
         }
     }
 
@@ -182,6 +186,7 @@ impl AstToIrGenerator {
             module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
+            struct_definitions: HashMap::new(),
         }
     }
 
@@ -716,7 +721,7 @@ impl AstToIrGenerator {
 
     /// 生成构造函数 IR
     fn generate_constructor_ir(
-        &self,
+        &mut self,
         _name: &str,
         definition: &ast::Type,
     ) -> Result<Option<FunctionIR>, IrGenError> {
@@ -725,8 +730,17 @@ impl AstToIrGenerator {
             ast::Type::NamedStruct {
                 name: struct_name,
                 fields,
-            } => self.generate_struct_constructor_ir(struct_name, fields),
-            ast::Type::Struct(fields) => self.generate_struct_constructor_ir(_name, fields),
+            } => {
+                // 记录结构体定义（用于调用时填充默认值）
+                self.struct_definitions
+                    .insert(struct_name.clone(), fields.clone());
+                self.generate_struct_constructor_ir(struct_name, fields)
+            }
+            ast::Type::Struct { fields, .. } => {
+                self.struct_definitions
+                    .insert(_name.to_string(), fields.clone());
+                self.generate_struct_constructor_ir(_name, fields)
+            }
             _ => {
                 // 非结构体类型，不生成构造函数
                 Ok(None)
@@ -740,30 +754,40 @@ impl AstToIrGenerator {
         struct_name: &str,
         fields: &[ast::StructField],
     ) -> Result<Option<FunctionIR>, IrGenError> {
-        // 创建构造函数函数的参数列表
+        // 构造函数接受所有字段作为参数
         let mut param_types = Vec::new();
         for field in fields {
             param_types.push(field.ty.clone().into());
         }
 
-        // 创建构造函数函数的指令序列
         let mut instructions = Vec::new();
 
-        // 为每个字段参数生成返回指令
-        // 这里简化处理：返回第一个参数作为结构体的表示
-        // 在真正的实现中，应该创建结构体并设置字段
-        let result_reg = 0;
-        instructions.push(Instruction::Load {
+        // 将所有参数加载到局部变量中（用于 CreateStruct）
+        let mut field_operands = Vec::new();
+        for (i, _field) in fields.iter().enumerate() {
+            let local_reg = i;
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(local_reg),
+                src: Operand::Arg(i),
+            });
+            field_operands.push(Operand::Local(local_reg));
+        }
+
+        // 使用 CreateStruct 指令创建结构体
+        let result_reg = fields.len(); // 结果寄存器放在所有字段之后
+        instructions.push(Instruction::CreateStruct {
             dst: Operand::Local(result_reg),
-            src: Operand::Arg(0),
+            type_name: struct_name.to_string(),
+            fields: field_operands,
         });
+
+        // 返回创建的结构体
         instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
 
-        // 分配局部变量类型
-        let locals_types = vec![MonoType::Int(64)];
+        // 局部变量类型：每个字段 + 结果寄存器
+        let mut locals_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
+        locals_types.push(MonoType::TypeRef(struct_name.to_string()));
 
-        // 构建构造函数函数 IR
-        // 直接使用结构体名称，完全透明化，避免与用户代码冲突
         let func_ir = FunctionIR {
             name: struct_name.to_string(),
             params: param_types,
@@ -1726,6 +1750,35 @@ impl AstToIrGenerator {
                         let arg_reg = self.next_temp_reg();
                         self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
                         arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // 检查是否是结构体构造器调用，需要填充默认值
+                    if let Expr::Var(name, _) = func.as_ref() {
+                        if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                            // 这是一个结构体构造器调用
+                            // 如果提供的参数数少于字段数，用默认值填充
+                            if arg_regs.len() < fields.len() {
+                                for field in fields.iter().skip(arg_regs.len()) {
+                                    let default_reg = self.next_temp_reg();
+                                    if let Some(default_expr) = &field.default {
+                                        // 有默认值：生成默认值表达式 IR
+                                        self.generate_expr_ir(
+                                            default_expr,
+                                            default_reg,
+                                            instructions,
+                                            constants,
+                                        )?;
+                                    } else {
+                                        // 无默认值：用零值填充（语义检查阶段应已报错）
+                                        instructions.push(Instruction::Load {
+                                            dst: Operand::Local(default_reg),
+                                            src: Operand::Const(ConstValue::Int(0)),
+                                        });
+                                    }
+                                    arg_regs.push(Operand::Local(default_reg));
+                                }
+                            }
+                        }
                     }
 
                     // 命名空间解析：将短名称解析为完整名称

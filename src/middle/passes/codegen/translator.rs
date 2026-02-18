@@ -258,6 +258,11 @@ impl Translator {
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
+            CreateStruct {
+                dst,
+                type_name,
+                fields,
+            } => self.translate_create_struct(dst, type_name, fields),
             MakeClosure { dst, func, .. } => self.translate_make_closure(dst, *func),
             Drop(operand) => self.translate_drop(operand),
 
@@ -674,6 +679,28 @@ impl Translator {
             Opcode::HeapAlloc,
             vec![dst_reg, 0, 0],
         ))
+    }
+
+    /// 翻译 CreateStruct 指令
+    /// 格式: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
+    fn translate_create_struct(
+        &mut self,
+        dst: &Operand,
+        type_name: &str,
+        fields: &[Operand],
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let name_idx = self
+            .emitter
+            .add_constant(ConstValue::String(type_name.to_string())) as u32;
+        let mut operands = vec![dst_reg];
+        operands.extend_from_slice(&name_idx.to_le_bytes());
+        operands.push(fields.len() as u8);
+        for field in fields {
+            let field_reg = self.operand_resolver.to_reg(field)?;
+            operands.extend_from_slice(&(field_reg as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(Opcode::CreateStruct, operands))
     }
 
     fn translate_make_closure(

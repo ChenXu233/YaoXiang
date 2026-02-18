@@ -188,6 +188,9 @@ pub enum Opcode {
     /// List with capacity
     NewListWithCap = 0x7A,
 
+    /// Create struct instance
+    CreateStruct = 0x79,
+
     /// Arc operations
     ArcNew = 0x7B,
     ArcClone = 0x7C,
@@ -356,6 +359,7 @@ impl Opcode {
             Opcode::LoadElement => "LoadElement",
             Opcode::StoreElement => "StoreElement",
             Opcode::NewListWithCap => "NewListWithCap",
+            Opcode::CreateStruct => "CreateStruct",
             Opcode::ArcNew => "ArcNew",
             Opcode::ArcClone => "ArcClone",
             Opcode::ArcDrop => "ArcDrop",
@@ -581,6 +585,9 @@ impl Opcode {
             | Opcode::SetField
             | Opcode::NewListWithCap => 3,
 
+            // Variable operands (like calls)
+            Opcode::CreateStruct => 5,
+
             // 4 operands
             Opcode::LoopStart
             | Opcode::TailCall
@@ -645,6 +652,7 @@ impl TryFrom<u8> for Opcode {
             0x77 => Ok(Opcode::LoadElement),
             0x78 => Ok(Opcode::StoreElement),
             0x7A => Ok(Opcode::NewListWithCap),
+            0x79 => Ok(Opcode::CreateStruct),
             0x7B => Ok(Opcode::ArcNew),
             0x7C => Ok(Opcode::ArcClone),
             0x7D => Ok(Opcode::ArcDrop),

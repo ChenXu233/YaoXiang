@@ -219,6 +219,14 @@ pub enum Instruction {
         dst: Operand,
         type_id: usize,
     },
+    /// 创建结构体实例
+    /// type_name: 结构体类型名
+    /// fields: 各字段值的操作数（按字段顺序）
+    CreateStruct {
+        dst: Operand,
+        type_name: String,
+        fields: Vec<Operand>,
+    },
     MakeClosure {
         dst: Operand,
         func: usize,
