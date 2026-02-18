@@ -257,69 +257,70 @@ max: (a: Int, b: Int) -> Int = {
 
 #### 3. 类型定义
 
+类型定义是 YaoXiang 统一语法的核心，包含字段、默认值、绑定方法、接口实现：
+
+
+##### 基础类型
+
+**记录类型**：字段列表，字段类型可以是任意类型表达式。
+
 ```yaoxiang
-# 记录类型
 Point: Type = {
     x: Float,
     y: Float
 }
-
-# 实现接口的类型（接口名写在类型体末尾）
-Point: Type = {
-    x: Float,
-    y: Float,
-    Drawable,     # 实现 Drawable 接口
-    Serializable  # 实现 Serializable 接口
-}
-
-# 空类型
-EmptyType: Type = {}
 ```
 
-#### 4. 默认值初始化
-
-类型字段可以指定默认值，支持可选初始化：
+**有默认值的字段**：字段可以有默认值，构造时可选。
 
 ```yaoxiang
-# 有默认值的字段 - 构造时可选
 Point: Type = {
     x: Float = 0,
     y: Float = 0
 }
+```
 
-# 使用
-p1 = Point()              # → Point(x=0, y=0)
-p2 = Point(x=1)          # → Point(x=1, y=0)
-p3 = Point(x=1, y=2)     # → Point(x=1, y=2)
+使用：
 
-# 无默认值的字段 - 构造时必填
+```yaoxiang
+Point() → Point(x=0, y=0)
+Point(x=1) → Point(x=1, y=0)
+Point(x=1, y=2) → Point(x=1, y=2)
+```
+
+**无默认值的字段**：必须在构造时提供。
+
+```yaoxiang
 Point2: Type = {
     x: Float,
     y: Float
 }
-
-# 使用
-p4 = Point2(x=1, y=2)    # 正确
-p5 = Point2()            # 错误：x, y 必填
 ```
 
-**规则**：
-- `field: Type = expression` → 有默认值，构造时可选
-- `field: Type` → 无默认值，构造时必填
+使用：
+```yaoxiang
+Point2(x=1, y=2) #✓
+Point2() #✗
+Point2(x=1) #✗
+``` 
 
-#### 5. 内置绑定
+##### 绑定方法
 
-类型定义体内可以直接绑定方法（详细语法见 RFC-004）：
+**方式1：在类型定义体内直接绑定外部函数**
 
 ```yaoxiang
-# 在类型定义体内直接绑定
+distance: (a: Point, b: Point) -> Float = { ... }
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance = distance[0]           # 引用外部函数绑定
+    distance = distance[0]           # 绑定到位置0，柯里化后 method: (b: Point) -> Float
 }
+# 调用：p1.distance(p2) → distance(p1, p2)
+```
 
-# 或使用内联匿名函数绑定
+**方式2：内联匿名函数绑定**
+
+```yaoxiang
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
@@ -329,12 +330,14 @@ Point: Type = {
         return (dx * dx + dy * dy).sqrt()
     }
 }
+# 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
-#### 6. 接口定义
+##### 接口实现
+
+**接口名写在类型体内，编译器自动检查其实现**
 
 ```yaoxiang
-# 接口 = 字段全为函数的记录类型
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -344,14 +347,38 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-# 空接口
+Point: Type = {
+    x: Float,
+    y: Float,
+    Drawable,          # 实现 Drawable 接口
+    Serializable      # 实现 Serializable 接口
+}
+```
+
+##### 接口定义
+
+**接口 = 字段全为函数的记录类型**
+
+```yaoxiang
+Drawable: Type = {
+    draw: (Surface) -> Void,
+    bounding_box: () -> Rect
+}
+
+Serializable: Type = {
+    serialize: () -> String
+}
+
+# 空类型/空接口
+EmptyType: Type = {}
 Empty: Type = {}
 ```
 
-#### 7. 方法定义
+##### 方法定义（外部）
+
+**类型方法**：关联到特定类型（使用 Type.method 语法）
 
 ```yaoxiang
-# 类型方法：关联到特定类型（使用 Type.method 语法）
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -359,20 +386,50 @@ Point.draw: (self: Point, surface: Surface) -> Void = {
 Point.serialize: (self: Point) -> String = {
     return "Point(${self.x}, ${self.y})"
 }
+```
 
-# 普通方法：不关联类型，作为独立函数
-distance: (p1: Point, p2: Point) -> Float = {
+##### 方法绑定（外部）
+
+普通方法可以通过 `[position]` 语法绑定到类型（详细语法见 RFC-004）。
+
+**自动绑定**：`pub` 声明的函数自动绑定到同文件定义的类型
+
+```yaoxiang
+# 使用 pub 声明，编译器自动绑定
+pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-# 类型推导（可省略）
-Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
-Point.serialize = (self: Point) => "Point(${self.x}, ${self.y})"
+# 编译器自动推断：Point.distance = distance[0]
+# 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
-#### 8. 方法绑定：普通方法 ↔ 类型方法
+**手动绑定**：
+
+```yaoxiang
+# 显式绑定
+Point.distance = distance[0]
+
+# 指定绑定位置
+Point.transform = transform[1]  # this 绑定到第 1 位
+```
+
+**多位置绑定**：
+
+```yaoxiang
+# 绑定多个位置（自动柯里化）
+Point.transform = transform_points[0, 1]
+# 调用：p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
+```
+
+**反向绑定**（类型方法转普通函数）：
+
+```yaoxiang
+# 类型方法转普通函数
+draw_point: (p: Point, surface: Surface) -> Void = Point.draw
+```
 
 普通方法可以通过 `[position]` 语法绑定到类型，反之亦然（参考 RFC-004）。
 
@@ -442,7 +499,7 @@ draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 # Point.transform = transform[1]
 ```
 
-#### 9. 接口组合
+#### 4. 接口组合
 
 ```yaoxiang
 # 接口组合 = 类型交集
@@ -455,7 +512,7 @@ process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
 }
 ```
 
-#### 10. 泛型类型
+#### 5. 泛型类型
 
 ```yaoxiang
 # 基础泛型（RFC-011 Phase 1）
