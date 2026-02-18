@@ -10,7 +10,7 @@ title: RFC-010：统一类型语法
 >
 > **创建日期**: 2025-01-20
 >
-> **最后更新**: 2026-02-18（新增默认值初始化语法、内置绑定、后置绑定）
+> **最后更新**: 2026-02-18（新增默认值初始化语法、内置绑定）
 
 ## 摘要
 
@@ -42,15 +42,15 @@ identifier : type = expression
 它用于标注类型层级，编译器自动处理 Type0、Type1、Type2... 的区分，对用户透明。
 
 ```yaoxiang
-# 核心语法：统一 + 区分
+// 核心语法：统一 + 区分
 
-# 变量  
+// 变量
 x: Int = 42
 
-# 函数（参数名在签名中）
+// 函数（参数名在签名中）
 add: (a: Int, b: Int) -> Int = a + b
 
-# 记录类型
+// 记录类型
 Point: Type = {
     x: Float,
     y: Float,
@@ -58,7 +58,7 @@ Point: Type = {
     serialize: () -> String
 }
 
-# 接口（本质是字段全为函数的记录类型）
+// 接口（本质是字段全为函数的记录类型）
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -68,7 +68,7 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-# 方法定义（使用 Type.method 语法）
+// 方法定义（使用 Type.method 语法）
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -77,7 +77,7 @@ Point.serialize: (self: Point) -> String = {
     return "Point(${self.x}, ${self.y})"
 }
 
-# 泛型类型（Type[T] = 接受类型参数的泛型类型）
+// 泛型类型（Type[T] = 接受类型参数的泛型类型）
 List: Type[T] = {
     data: Array[T],
     length: Int
@@ -88,10 +88,10 @@ Map: Type[K, V] = {
     values: Array[V]
 }
 
-# 使用
+// 使用
 p: Point = Point(1.0, 2.0)
-p.draw(screen)           # 语法糖 → Point.draw(p, screen)
-s: Drawable = p           # 结构子类型：Point 实现 Drawable
+p.draw(screen)           // 语法糖 → Point.draw(p, screen)
+s: Drawable = p           // 结构子类型：Point 实现 Drawable
 ```
 
 ## 动机
@@ -120,16 +120,16 @@ s: Drawable = p           # 结构子类型：Point 实现 Drawable
 RFC-010的统一语法模型与RFC-011的泛型系统设计**天然契合**，泛型参数可以无缝融入统一模型：
 
 ```yaoxiang
-# 基础泛型（RFC-011 Phase 1）
+// 基础泛型（RFC-011 Phase 1）
 List: Type[T] = { data: Array[T], length: Int }
 
-# 泛型函数
+// 泛型函数
 map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = ...
 
-# 类型约束（RFC-011 Phase 2）
+// 类型约束（RFC-011 Phase 2）
 clone: [T: Clone](value: T) -> T = value.clone()
 
-# Const泛型（RFC-011 Phase 4）
+// Const泛型（RFC-011 Phase 4）
 Array: Type[T, N: Int] = { data: T[N], length: N }
 ```
 
@@ -187,29 +187,29 @@ Array: Type[T, N: Int] = { data: T[N], length: N }
 #### 1. 变量声明
 
 ```yaoxiang
-# 基本语法
+// 基本语法
 x: Int = 42
 name: String = "Alice"
 flag: Bool = true
 
-# 类型推导（可省略）
-y = 100  # 推断为 Int
+// 类型推导（可省略）
+y = 100  // 推断为 Int
 ```
 
 #### 2. 函数定义
 
 ```yaoxiang
-# 完整语法（参数名在签名中声明）
+// 完整语法（参数名在签名中声明）
 add: (a: Int, b: Int) -> Int = {
     return a + b
 }
 
-# 带参数名
+// 带参数名
 greet: (name: String) -> String = {
     return "Hello, ${name}!"
 }
 
-# 多参数
+// 多参数
 calc: (x: Float, y: Float, op: String) -> Float = {
     return match op {
         "+" -> x + y,
@@ -218,7 +218,7 @@ calc: (x: Float, y: Float, op: String) -> Float = {
     }
 }
 
-# 多行函数体
+// 多行函数体
 calc2: (x: Float, y: Float) -> Float = {
     if x > y {
         return x
@@ -232,20 +232,20 @@ calc2: (x: Float, y: Float) -> Float = {
 所有函数必须显式使用 `return` 关键字返回值（除返回 `()` 的函数外）：
 
 ```yaoxiang
-# 非 Void 返回类型 - 必须使用 return
+// 非 Void 返回类型 - 必须使用 return
 add: (a: Int, b: Int) -> Int = {
     return a + b
 }
 
-# Void 返回类型 - 可选使用 return（通常省略）
+// Void 返回类型 - 可选使用 return（通常省略）
 print: (msg: String) -> Void = {
-    # 不需要 return
+    // 不需要 return
 }
 
-# 单行表达式（直接返回值，无需 return）
+// 单行表达式（直接返回值，无需 return）
 greet: (name: String) -> String = "Hello, ${name}!"
 
-# 多行函数体 - 必须使用 return
+// 多行函数体 - 必须使用 return
 max: (a: Int, b: Int) -> Int = {
     if a > b {
         return a
@@ -299,10 +299,10 @@ Point2: Type = {
 
 使用：
 ```yaoxiang
-Point2(x=1, y=2) #✓
-Point2() #✗
-Point2(x=1) #✗
-``` 
+Point2(x=1, y=2) //✓
+Point2() //✗
+Point2(x=1) //✗
+```
 
 ##### 绑定方法
 
@@ -313,9 +313,9 @@ distance: (a: Point, b: Point) -> Float = { ... }
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance = distance[0]           # 绑定到位置0，柯里化后 method: (b: Point) -> Float
+    distance = distance[0]           // 绑定到位置0，柯里化后 method: (b: Point) -> Float
 }
-# 调用：p1.distance(p2) → distance(p1, p2)
+// 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
 **方式2：内联匿名函数绑定**
@@ -330,7 +330,7 @@ Point: Type = {
         return (dx * dx + dy * dy).sqrt()
     }
 }
-# 调用：p1.distance(p2) → distance(p1, p2)
+// 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
 ##### 接口实现
@@ -350,8 +350,8 @@ Serializable: Type = {
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,          # 实现 Drawable 接口
-    Serializable      # 实现 Serializable 接口
+    Drawable,          // 实现 Drawable 接口
+    Serializable      // 实现 Serializable 接口
 }
 ```
 
@@ -369,7 +369,7 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-# 空类型/空接口
+// 空类型/空接口
 EmptyType: Type = {}
 Empty: Type = {}
 ```
@@ -395,117 +395,49 @@ Point.serialize: (self: Point) -> String = {
 **自动绑定**：`pub` 声明的函数自动绑定到同文件定义的类型
 
 ```yaoxiang
-# 使用 pub 声明，编译器自动绑定
+// 使用 pub 声明，编译器自动绑定
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-# 编译器自动推断：Point.distance = distance[0]
-# 调用：p1.distance(p2) → distance(p1, p2)
+// 编译器自动推断：Point.distance = distance[0]
+// 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
 **手动绑定**：
 
 ```yaoxiang
-# 显式绑定
+// 显式绑定
 Point.distance = distance[0]
 
-# 指定绑定位置
-Point.transform = transform[1]  # this 绑定到第 1 位
+// 指定绑定位置
+Point.transform = transform[1]  // this 绑定到第 1 位
 ```
 
 **多位置绑定**：
 
 ```yaoxiang
-# 绑定多个位置（自动柯里化）
+// 绑定多个位置（自动柯里化）
 Point.transform = transform_points[0, 1]
-# 调用：p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
+// 调用：p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
 ```
 
 **反向绑定**（类型方法转普通函数）：
 
 ```yaoxiang
-# 类型方法转普通函数
+// 类型方法转普通函数
 draw_point: (p: Point, surface: Surface) -> Void = Point.draw
-```
-
-普通方法可以通过 `[position]` 语法绑定到类型，反之亦然（参考 RFC-004）。
-
-**自动绑定**：`pub` 声明的函数自动绑定到同文件定义的类型
-
-```yaoxiang
-# 使用 pub 声明，编译器自动绑定
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
-}
-
-# 编译器自动推断：
-# 1. Point 在当前文件定义
-# 2. 函数参数包含 Point
-# 3. 执行 Point.distance = distance[0]
-
-# 现在可以这样调用：
-# 函数式
-d1 = distance(p1, p2)
-
-# OOP 语法糖
-d2 = p1.distance(p2)  # → distance(p1, p2)
-```
-
-**手动绑定**（需要精确控制位置时）：
-
-```yaoxiang
-# 显式绑定（用于非 pub 或需要指定位置）
-distance: (p1: Point, p2: Point) -> Float = ...
-Point.distance = distance[0]
-
-# 或指定绑定位置
-# Point.transform = transform[1]  # this 绑定到第 1 位
-```
-
-**多位置绑定**：
-
-```yaoxiang
-# 函数接收多个 Point 参数
-transform_points: (p1: Point, p2: Point, factor: Float) -> Point = {
-    # ...
-}
-
-# 绑定多个位置（自动柯里化）
-Point.transform = transform_points[0, 1]
-
-# 调用
-p1.transform(p2)(2.0)  # → transform_points(p1, p2, 2.0)
-```
-
-**反向绑定**（类型方法转普通函数）：
-
-```yaoxiang
-# 类型方法
-Point.draw: (self: Point, surface: Surface) -> Void = {
-    surface.plot(self.x, self.y)
-}
-
-# 提取为普通函数（不绑定 this）
-draw_point: (p: Point, surface: Surface) -> Void = Point.draw
-
-# 或绑定到特定位置
-# 如果 transform(Vector, Point) 的签名是 transform(v, p)
-# 可以绑定 Point 到第 1 位
-# Point.transform = transform[1]
 ```
 
 #### 4. 接口组合
 
 ```yaoxiang
-# 接口组合 = 类型交集
+// 接口组合 = 类型交集
 DrawableSerializable: Type = Drawable & Serializable
 
-# 使用交集类型
+// 使用交集类型
 process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
     item.draw(screen)
     return item.serialize()
@@ -515,7 +447,7 @@ process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
 #### 5. 泛型类型
 
 ```yaoxiang
-# 基础泛型（RFC-011 Phase 1）
+// 基础泛型（RFC-011 Phase 1）
 List: Type[T] = {
     data: Array[T],
     length: Int,
@@ -523,10 +455,10 @@ List: Type[T] = {
     get: [T](self: List[T], index: Int) -> Maybe[T]
 }
 
-# 具体实例化（RFC-011语法）
+// 具体实例化（RFC-011语法）
 IntList: Type = List[Int]
 
-# 泛型方法（RFC-011语法）
+// 泛型方法（RFC-011语法）
 List.push: [T](self: List[T], item: T) -> Void = {
     self.data.append(item)
     self.length = self.length + 1
@@ -546,7 +478,7 @@ List.get: [T](self: List[T], index: Int) -> Maybe[T] = {
 #### 完整示例
 
 ```yaoxiang
-# ======== 1. 接口定义 ========
+// ======== 1. 接口定义 ========
 
 Drawable: Type = {
     draw: (self: Self, surface: Surface) -> Void,
@@ -562,7 +494,7 @@ Transformable: Type = {
     scale: (self: Self, factor: Float) -> Self
 }
 
-# ======== 2. 类型定义 ========
+// ======== 2. 类型定义 ========
 
 Point: Type = {
     x: Float,
@@ -582,10 +514,10 @@ Rect: Type = {
     Transformable
 }
 
-# ======== 3. 方法定义 ========
+// ======== 3. 方法定义 ========
 
-# 使用 pub 声明，编译器自动绑定到类型
-# 绑定规则：第一个 Point 参数 → 方法名取函数名
+// 使用 pub 声明，编译器自动绑定到类型
+// 绑定规则：第一个 Point 参数 → 方法名取函数名
 
 pub draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
@@ -607,14 +539,14 @@ pub scale: (self: Point, factor: Float) -> Point = {
     return Point(self.x * factor, self.y * factor)
 }
 
-# 普通方法（pub，自动绑定到 Point.distance）
+// 普通方法（pub，自动绑定到 Point.distance）
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-# Rect 的方法
+// Rect 的方法
 pub draw: (self: Rect, surface: Surface) -> Void = {
     surface.draw_rect(self.x, self.y, self.width, self.height)
 }
@@ -633,29 +565,29 @@ pub scale: (self: Rect, factor: Float) -> Rect = {
     return Rect(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
 }
 
-# ======== 4. 使用 ========
+// ======== 4. 使用 ========
 
-# 创建实例
+// 创建实例
 p: Point = Point(1.0, 2.0)
 r: Rect = Rect(0.0, 0.0, 10.0, 20.0)
 
-# 方法调用（语法糖）
+// 方法调用（语法糖）
 p.draw(screen)
 r.draw(screen)
 
-# 普通方法调用（直接调用）
+// 普通方法调用（直接调用）
 d: Float = distance(p, Point(0.0, 0.0))
 
-# 链式调用
+// 链式调用
 p2: Point = p.translate(1.0, 1.0).scale(2.0)
 
-# 接口赋值
+// 接口赋值
 drawables: List[Drawable] = [p, r]
 for d in drawables {
     d.draw(screen)
 }
 
-# 泛型函数
+// 泛型函数
 process_all[T: Serializable](items: List[T]) {
     for item in items {
         print(item.serialize())
@@ -704,7 +636,7 @@ fn check_type_implements_interface(
 ### 鸭子类型支持
 
 ```yaoxiang
-# 只要有相同方法，就可以赋值给接口类型
+// 只要有相同方法，就可以赋值给接口类型
 CustomPoint: Type = {
     draw: (self: CustomPoint, surface: Surface) -> Void,
     x: Float,
@@ -733,18 +665,18 @@ custom: CustomPoint = CustomPoint(
 **具名函数和 Lambda 表达式是同一个东西！** 唯一的区别是：具名函数给 Lambda 取了个名字。
 
 ```yaoxiang
-# 这两者本质完全相同
-add: (a: Int, b: Int) -> Int = a + b           # 具名函数（推荐）
-add: (a: Int, b: Int) -> Int = (a, b) => a + b        # Lambda 形式（完全等价）
+// 这两者本质完全相同
+add: (a: Int, b: Int) -> Int = a + b           // 具名函数（推荐）
+add: (a: Int, b: Int) -> Int = (a, b) => a + b        // Lambda 形式（完全等价）
 ```
 
 ### 语法糖模型
 
 ```
-# 具名函数 = Lambda + 名字
+// 具名函数 = Lambda + 名字
 name: (Params) -> ReturnType = body
 
-# 本质上是
+// 本质上是
 name: (Params) -> ReturnType = (params) => body
 ```
 
@@ -755,9 +687,9 @@ name: (Params) -> ReturnType = (params) => body
 **参数覆盖外层变量**：签名中的参数作用域覆盖函数体，内部作用域优先级更高。
 
 ```yaoxiang
-x = 10  # 外层变量
+x = 10  // 外层变量
 
-double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
+double: (x: Int) -> Int = x * 2  // ✅ 参数 x 覆盖外层 x，结果为 20
 ```
 
 ### 标注位置灵活
@@ -773,15 +705,15 @@ double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
 ### 完整示例
 
 ```yaoxiang
-# ✅ 推荐：签名完整，Lambda 头部省略
+// ✅ 推荐：签名完整，Lambda 头部省略
 add: (a: Int, b: Int) -> Int = a + b
 inc: (x: Int) -> Int = x + 1
 main: () -> Void = { print("hi") }
 
-# ✅ 合法：Lambda 头中标注类型
+// ✅ 合法：Lambda 头中标注类型
 double = (x: Int) => x * 2
 
-# ✅ 合法：两边都标注
+// ✅ 合法：两边都标注
 double: (x: Int) -> Int = (x) => x * 2
 ```
 
@@ -818,18 +750,18 @@ double: (x: Int) -> Int = (x) => x * 2
 ### 缓解措施
 
 ```yaoxiang
-# 1. 清晰的错误信息
-# 编译错误示例：
-# Error: Point does not implement Serializable
-#   Required method 'serialize: (self: Point) -> String' not found
-#   Note: Define Point.serialize to implement Serializable
+// 1. 清晰的错误信息
+// 编译错误示例：
+// Error: Point does not implement Serializable
+//   Required method 'serialize: (self: Point) -> String' not found
+//   Note: Define Point.serialize to implement Serializable
 
-# 2. 类型推导
-# 可以省略类型，由编译器推导
+// 2. 类型推导
+// 可以省略类型，由编译器推导
 Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 
-# 3. IDE 提示
-# IDE 自动提示缺失的方法
+// 3. IDE 提示
+// IDE 自动提示缺失的方法
 ```
 
 
@@ -847,7 +779,7 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 > ✨ **Type: Type = Type** ✨
 
 ```yaoxiang
-# 尝试定义类型的类型...
+// 尝试定义类型的类型...
 Type: Type = Type
 ```
 
