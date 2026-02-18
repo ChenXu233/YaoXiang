@@ -112,12 +112,12 @@ fn test_body_checker_vars_returns_all() {
 }
 
 // ============================================================
-// mut 声明遮蔽检查测试
+// mut 声明与重新赋值测试
 // ============================================================
 
 #[test]
-fn test_mut_shadowing_error() {
-    // mut x = 1; mut x = 2 应该报错
+fn test_var_reassignment_same_scope_ok() {
+    // 同一作用域内 mut x = 1; x = 2 应该正常（重新赋值，不是遮蔽）
     let mut checker = TypeChecker::new("test");
 
     let stmt1 = ast::Stmt {
@@ -141,16 +141,49 @@ fn test_mut_shadowing_error() {
                 crate::frontend::core::lexer::tokens::Literal::Int(2),
                 create_dummy_span(),
             ))),
-            is_mut: true,
+            is_mut: false, // a = 2 被解析为 is_mut: false 的 Var
         },
         span: create_dummy_span(),
     };
 
-    // 第一次声明正常
+    // 第一次 mut 声明正常
     assert!(checker.check_stmt(&stmt1).is_ok());
-    // 第二次声明应该报遮蔽错误
-    let result = checker.check_stmt(&stmt2);
-    assert!(result.is_err(), "第二次 mut 声明同名变量应该报遮蔽错误");
+    // 同一作用域内重新赋值应该正常（不是遮蔽）
+    assert!(
+        checker.check_stmt(&stmt2).is_ok(),
+        "同一作用域内对已有变量赋值不是遮蔽"
+    );
+}
+
+#[test]
+fn test_var_shadowing_in_inner_scope() {
+    // 外层 x = 1; 内层 x = 2 应该报遮蔽错误
+    let mut solver = TypeConstraintSolver::new();
+    let mut checker = BodyChecker::new(&mut solver);
+
+    // 外层声明 x
+    checker.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
+
+    // 进入新作用域（模拟 if 块）
+    checker.enter_scope();
+
+    // 在新作用域中用 Var 语句声明同名变量 → 应该报遮蔽错误
+    let inner_stmt = ast::Stmt {
+        kind: ast::StmtKind::Var {
+            name: "x".to_string(),
+            type_annotation: None,
+            initializer: Some(Box::new(ast::Expr::Lit(
+                crate::frontend::core::lexer::tokens::Literal::Int(2),
+                create_dummy_span(),
+            ))),
+            is_mut: true,
+        },
+        span: create_dummy_span(),
+    };
+    let result = checker.check_stmt(&inner_stmt);
+    assert!(result.is_err(), "内层作用域声明同名变量应该报遮蔽错误");
+
+    checker.exit_scope();
 }
 
 // ============================================================
