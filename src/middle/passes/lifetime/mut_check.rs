@@ -34,6 +34,9 @@ pub struct MutChecker {
     state: HashMap<Operand, super::error::ValueState>,
     /// 是否启用初始化追踪（允许首次赋值）
     track_initialization: bool,
+    /// 循环绑定变量集合：这些变量的 Store 操作是"绑定"而不是"修改"
+    /// 例如：for 循环变量每次迭代都是绑定新值，不是修改
+    loop_binding_vars: HashSet<Operand>,
 }
 
 impl MutChecker {
@@ -48,6 +51,7 @@ impl MutChecker {
             type_table: None,
             state: HashMap::new(),
             track_initialization: false,
+            loop_binding_vars: HashSet::new(),
         }
     }
 
@@ -105,6 +109,11 @@ impl MutChecker {
         target: &Operand,
         span: Span,
     ) {
+        // 如果目标在循环绑定变量集合中，跳过检查
+        // 这些变量的 Store 是"绑定"操作，不是"修改"
+        if self.loop_binding_vars.contains(target) {
+            return;
+        }
         // 如果启用初始化追踪，首次 Store 视为变量初始化（声明），允许通过
         if self.track_initialization && !self.initialized_vars.contains(target) {
             self.initialized_vars.insert(target.clone());
@@ -247,16 +256,19 @@ impl MutChecker {
     /// 1. 接受可变局部变量索引集合，自动注册为可变变量
     /// 2. 启用初始化追踪：首次 Store 视为变量声明（初始化），允许通过
     /// 3. 只对重复赋值进行可变性检查
+    /// 4. 接受循环绑定变量集合：这些变量的 Store 是"绑定"操作，不是"修改"
     pub fn check_function_with_mut_locals(
         &mut self,
         func: &FunctionIR,
         mut_locals: &HashSet<usize>,
+        loop_binding_locals: Option<&HashSet<usize>>,
     ) -> Vec<OwnershipError> {
         // 清除状态
         self.mutable_vars.clear();
         self.initialized_vars.clear();
         self.errors.clear();
         self.state.clear();
+        self.loop_binding_vars.clear();
 
         // 启用初始化追踪
         self.track_initialization = true;
@@ -264,6 +276,13 @@ impl MutChecker {
         // 注册可变局部变量
         for &idx in mut_locals {
             self.mutable_vars.insert(Operand::Local(idx), true);
+        }
+
+        // 注册循环绑定变量（这些变量的 Store 是绑定操作，不是修改）
+        if let Some(binding_locals) = loop_binding_locals {
+            for &idx in binding_locals {
+                self.loop_binding_vars.insert(Operand::Local(idx));
+            }
         }
 
         // 执行检查
@@ -324,8 +343,21 @@ impl Default for MutChecker {
 ///
 /// 变异方法会修改调用者本身，而不是返回新值。
 /// 函数式风格的方法通常返回新值（如 `concat`），而不修改原值。
+///
+/// 注意：只有当方法调用是 `obj.method()` 形式时（即方法名包含 `.`）才检查变异方法。
+/// 普通函数调用（如 `add(10, 20)`）不会被误认为是变异方法。
 pub fn is_mutation_method(method: &str) -> bool {
-    MUTATION_METHODS.contains(&method)
+    // 只有包含 `.` 的方法名才是真正的变异方法调用（如 Vec.add）
+    // 不包含 `.` 的可能是普通函数（如 add），不应该检查
+    if !method.contains('.') {
+        return false;
+    }
+    // 提取方法名（去掉命名空间前缀）
+    if let Some(pos) = method.rfind('.') {
+        let simple_method = &method[pos + 1..];
+        return MUTATION_METHODS.contains(&simple_method);
+    }
+    false
 }
 
 /// 变异方法集合（使用 HashSet 实现 O(1) 查询）

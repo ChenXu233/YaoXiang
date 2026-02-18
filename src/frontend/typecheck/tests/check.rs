@@ -149,6 +149,7 @@ fn test_check_for_loop() {
     let stmt = ast::Stmt {
         kind: ast::StmtKind::For {
             var: "i".to_string(),
+            var_mut: false,
             iterable: Box::new(ast::Expr::List(
                 vec![
                     ast::Expr::Lit(

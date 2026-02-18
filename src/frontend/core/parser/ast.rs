@@ -52,6 +52,7 @@ pub enum Expr {
     },
     For {
         var: String,
+        var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,
@@ -161,9 +162,10 @@ pub enum StmtKind {
         initializer: Option<Box<Expr>>,
         is_mut: bool,
     },
-    /// For loop: `for item in iterable { body }`
+    /// For loop: `for [mut] item in iterable { body }`
     For {
         var: String,
+        var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,

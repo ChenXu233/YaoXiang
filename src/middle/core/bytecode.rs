@@ -980,6 +980,19 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     });
                                 }
                             }
+                            Opcode::I64Neg => {
+                                // Unary negation: -x
+                                // Operands: dst(1) + src(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let src = instr.operands[1] as u16;
+                                    decoded_instructions.push(BytecodeInstr::UnaryOp {
+                                        dst: Reg(dst),
+                                        src: Reg(src),
+                                        op: UnaryOp::Neg,
+                                    });
+                                }
+                            }
                             Opcode::CallStatic => {
                                 // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
                                 if instr.operands.len() >= 7 {

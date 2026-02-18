@@ -1000,6 +1000,7 @@ fn test_infer_for_loop() {
 
     let for_expr = Expr::For {
         var: "c".to_string(),
+        var_mut: false,
         iterable: Box::new(iterable),
         body: Box::new(body),
         label: None,

@@ -21,6 +21,7 @@ fn test_literal_generation() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        loop_binding_locals: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -47,6 +48,7 @@ fn test_variable_loading() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        loop_binding_locals: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -129,6 +131,7 @@ fn test_bytecode_file_generation() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        loop_binding_locals: Default::default(),
         native_bindings: Vec::new(),
     };
 

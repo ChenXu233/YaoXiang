@@ -105,7 +105,12 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
                 let empty_set = std::collections::HashSet::new();
                 for func in &module.functions {
                     let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
-                    let errors = mut_checker.check_function_with_mut_locals(func, mut_locals);
+                    let loop_binding_locals = module.loop_binding_locals.get(&func.name);
+                    let errors = mut_checker.check_function_with_mut_locals(
+                        func,
+                        mut_locals,
+                        loop_binding_locals,
+                    );
                     if !errors.is_empty() {
                         eprintln!();
                         for err in &errors {

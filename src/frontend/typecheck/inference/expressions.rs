@@ -68,13 +68,56 @@ impl<'a> ExprInferrer<'a> {
         self.solver
     }
 
-    /// 添加变量到当前作用域
+    /// 添加变量到当前作用域（无遮蔽检查）
     pub fn add_var(
         &mut self,
         name: String,
         poly: PolyType,
     ) {
         self.scopes.last_mut().unwrap().insert(name, poly);
+    }
+
+    /// 检查变量是否存在于任何作用域中
+    pub fn var_exists_in_any_scope(
+        &self,
+        name: &str,
+    ) -> bool {
+        for scope in &self.scopes {
+            if scope.contains_key(name) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 尝试添加变量到当前作用域（带遮蔽检查）
+    /// 如果变量已存在于任何作用域中，返回错误（遮蔽）
+    pub fn try_add_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        span: crate::util::span::Span,
+    ) -> Result<()> {
+        // 检查是否在所有作用域中存在同名变量（遮蔽检查）
+        if self.var_exists_in_any_scope(&name) {
+            return Err(ErrorCodeDefinition::variable_shadowing(&name)
+                .at(span)
+                .build());
+        }
+        self.scopes.last_mut().unwrap().insert(name, poly);
+        Ok(())
+    }
+
+    /// 检查变量是否存在于当前作用域
+    pub fn var_exists_in_current_scope(
+        &self,
+        name: &str,
+    ) -> bool {
+        if let Some(current_scope) = self.scopes.last() {
+            current_scope.contains_key(name)
+        } else {
+            false
+        }
     }
 
     /// 获取变量（从最内层作用域开始查找）
@@ -723,10 +766,11 @@ impl<'a> ExprInferrer<'a> {
             // For 循环
             crate::frontend::core::parser::ast::Expr::For {
                 var,
+                var_mut: _, // TODO: 使用 var_mut 进行类型推断
                 iterable,
                 body,
                 label,
-                ..
+                span,
             } => {
                 // 推断可迭代对象
                 let _iter_ty = self.infer_expr(iterable)?;
@@ -734,9 +778,9 @@ impl<'a> ExprInferrer<'a> {
                 // 注册循环标签
                 self.enter_loop(label.as_deref());
 
-                // 进入循环体作用域，添加迭代变量
+                // 进入循环体作用域，添加迭代变量（带遮蔽检查）
                 self.enter_scope();
-                self.add_var(var.clone(), PolyType::mono(MonoType::Char));
+                self.try_add_var(var.clone(), PolyType::mono(MonoType::Char), *span)?;
 
                 // 推断循环体
                 let result = self.infer_block(body, true, None);
@@ -965,8 +1009,11 @@ impl<'a> ExprInferrer<'a> {
                         .map_or_else(|| self.solver.new_var(), |t| t.clone().into())
                 };
 
-                // 添加变量到作用域
-                self.add_var(name.clone(), PolyType::mono(init_ty));
+                // 如果变量已存在于任何作用域中，则是赋值操作，不进行遮蔽检查
+                // 否则，添加变量并进行遮蔽检查
+                if !self.var_exists_in_any_scope(name) {
+                    self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span)?;
+                }
                 Ok(())
             }
             crate::frontend::core::parser::ast::StmtKind::Fn {

@@ -629,6 +629,7 @@ impl<'a> ParserState<'a> {
                 // Fallback: use a default variable name if pattern is not a simple identifier
                 "_".to_string()
             },
+            var_mut: false, // for 表达式不支持 mut 语法
             iterable: Box::new(iterable),
             body: Box::new(body),
             label: None, // No label for simple for expressions

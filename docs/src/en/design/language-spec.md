@@ -750,8 +750,89 @@ WhileStmt   ::= 'while' Expr Block
 ### 5.10 for Statement
 
 ```
-ForStmt     ::= 'for' Identifier 'in' Expr Block
+ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
+
+#### 5.10.1 Semantics: Binding New Value Each Iteration
+
+YaoXiang's for loop semantics differ from traditional languages: **each iteration binds a new value, rather than modifying the same variable**.
+
+```yaoxiang
+# Example: for i in 1..5
+for i in 1..5 {
+    print(i)
+}
+```
+
+**Execution Process**:
+
+| Iteration | Loop Variable Behavior |
+|-----------|------------------------|
+| 1st | Create new binding `i = 1`, execute body, print 1 |
+| 2nd | Create new binding `i = 2` (previous binding destroyed), execute body, print 2 |
+| 3rd | Create new binding `i = 3`, execute body, print 3 |
+| 4th | Create new binding `i = 4`, execute body, print 4 |
+| End | Loop ends, binding destroyed |
+
+**Key Point**: After each iteration ends, the binding created in that iteration is destroyed. The next iteration is a completely new binding with no relation to the previous iteration's binding.
+
+#### 5.10.2 Difference Between `for` and `for mut`
+
+| Syntax | Loop Variable Mutability | Description |
+|--------|--------------------------|-------------|
+| `for i in 1..5` | Immutable | Cannot modify binding in loop body |
+| `for mut i in 1..5` | Mutable | Can modify binding in loop body |
+
+```yaoxiang
+# ✅ Valid: Each iteration binds a new value, no modification needed
+for i in 1..5 {
+    print(i)  # Read i's value
+}
+
+# ❌ Error: Immutable binding, cannot modify
+for i in 1..5 {
+    i = i + 1  # Error: Cannot modify immutable binding
+}
+
+# ✅ Valid: Using for mut allows modification
+for mut i in 1..5 {
+    i = i + 1  # Allowed to modify
+}
+```
+
+#### 5.10.3 Shadowing Check
+
+For loop variables cannot shadow variables that already exist in outer scopes:
+
+```yaoxiang
+# ❌ Error: i is already declared outside
+i = 10
+for i in 1..5 {
+    print(i)
+}
+
+# ✅ Correct: Use different variable name
+i = 10
+for j in 1..5 {
+    print(j)
+}
+```
+
+Error code: `E2013 - Cannot shadow existing variable`
+
+#### 5.10.4 Comparison with Other Languages
+
+| Language | for Loop Variable Semantics |
+|----------|----------------------------|
+| YaoXiang | Bind new value each iteration |
+| Rust | Modify same variable (requires mut) |
+| Python | Modify same variable (no mut needed) |
+| C/C++ | Modify same variable (requires pointer or reference) |
+
+**Design Rationale**: YaoXiang uses binding semantics because:
+1. Variables in the loop body are destroyed after each iteration
+2. Each iteration is a brand new binding
+3. This is safer - no need to consider state between iterations
 
 ---
 
