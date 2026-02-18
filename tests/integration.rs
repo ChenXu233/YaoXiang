@@ -8,3 +8,5 @@ mod codegen_extended;
 mod execution;
 #[path = "integration/interpreter.rs"]
 mod interpreter;
+#[path = "integration/check.rs"]
+mod check;
