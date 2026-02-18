@@ -318,18 +318,19 @@ Point: Type = {
 // 调用：p1.distance(p2) → distance(p1, p2)
 ```
 
-**方式2：内联匿名函数绑定**
+**方式2：匿名函数 + 位置绑定**
 
 ```yaoxiang
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance: (other: Point) -> Float = {
-        dx = this.x - other.x
-        dy = this.y - other.y
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
         return (dx * dx + dy * dy).sqrt()
-    }
+    })
 }
+// 语法：((params) => body)[position]
 // 调用：p1.distance(p2) → distance(p1, p2)
 ```
 

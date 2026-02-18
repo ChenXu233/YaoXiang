@@ -1,10 +1,10 @@
 # YaoXiang Programming Language Specification
 
-> Version: v1.7.0
+> Version: v1.8.0
 > Status: Specification
 > Author: ChenXu
 > Date: 2024-12-31
-> Update: 2026-02-13 - RFC-010 Unified Type Syntax: `Name: Type = value` replaces `type Name = ...`
+> Update: 2026-02-18 - RFC-010 Added default value initialization, builtin binding; RFC-004 Added builtin binding, anonymous function binding
 
 ---
 
@@ -200,6 +200,65 @@ Point: Type = {
 - Record types are defined using curly braces `{}`
 - Field names are followed directly by colon and type
 - Interface names written inside the type body indicate implementation of that interface
+
+#### 3.3.1 Field Default Values
+
+Type fields can specify default values, construction is optional:
+
+```yaoxiang
+# Fields with default values - optional during construction
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# Usage:
+Point()           # → Point(x=0, y=0)
+Point(x=1)       # → Point(x=1, y=0)
+Point(x=1, y=2) # → Point(x=1, y=2)
+
+# Fields without default values - required during construction
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# Usage:
+Point2(x=1, y=2) # ✓
+Point2()           # ✗ Error
+```
+
+**Rules**:
+- `field: Type = expression` → Has default value, optional during construction
+- `field: Type` → No default value, required during construction
+
+#### 3.3.2 Builtin Binding
+
+Methods can be directly bound inside type definition body:
+
+```yaoxiang
+# Way 1: Reference external function binding
+distance: (a: Point, b: Point) -> Float = { ... }
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]    # Bind to position 0
+}
+# Call: p1.distance(p2) → distance(p1, p2)
+
+# Way 2: Anonymous function + position binding
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# Syntax: ((params) => body)[position]
+# Call: p1.distance(p2) → distance(p1, p2)
+```
 
 ### 3.4 Enum Types (Variant Types)
 
@@ -1773,6 +1832,7 @@ result = f(arg2, arg3)
 | v1.5.0 | 2025-01-20 | ChenXu | Added method binding specification (RFC-004): position index starts from 0; Default bind to position 0; Support negative index and multi-position binding |
 | v1.6.0 | 2025-02-06 | ChenXu | Integrated RFC-010 (Unified Type Syntax): updated `type Name = {...}` syntax, function definitions with parameter names in signature, Type.method method syntax; Integrated RFC-011 (Generic System): added generic types `[T]`, type constraints `[T: Clone]`, associated types `Item: T`, compile-time generics `[N: Int]`, conditional types `If[C, T, E]`, function overload specialization, platform specialization |
 | v1.7.0 | 2026-02-13 | ChenXu | RFC-010 Update: `Name: Type = {...}` replaces `type Name = {...}`; Only `Type` (uppercase) is the meta-type keyword; Unified syntax for all declarations |
+| v1.8.0 | 2026-02-18 | ChenXu | RFC-010 Added default value initialization, builtin binding; RFC-004 Added builtin binding, anonymous function binding |
 
 ---
 

@@ -178,21 +178,22 @@ Point: Type = {
     distance = distance[0]           # 绑定到位置0
 }
 
-# 方式2：内联匿名函数绑定
+# 方式2：匿名函数 + 位置绑定
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance: (other: Point) -> Float = {
-        dx = this.x - other.x
-        dy = this.y - other.y
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
         return (dx * dx + dy * dy).sqrt()
-    }
+    })
 }
+# 语法：((params) => body)[position]
 ```
 
 **柯里化语义**：
 - 绑定 `distance = distance[0]` 时，原函数签名 `(a: Point, b: Point) -> Float`
-- 生成的 method 签名：`b: Point -> Float`（第0位由 this 填充）
+- 生成的 method 签名：`b: Point -> Float`（第0位由调用者填充）
 
 ### 使用示例
 

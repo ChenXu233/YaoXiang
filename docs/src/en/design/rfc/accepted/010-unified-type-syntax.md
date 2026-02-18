@@ -10,7 +10,7 @@ title: 'RFC-010: Unified Type Syntax'
 >
 > **Created Date**: 2025-01-20
 >
-> **Last Updated**: 2026-02-12 (Unified syntax rule: identifier : type = expression, no `type`/`fn`/`struct`/`trait`/`impl` keywords)
+> **Last Updated**: 2026-02-18 (Added default value initialization, builtin binding, anonymous function binding)
 
 ## Summary
 
@@ -212,6 +212,64 @@ Point: Type = {
 # Usage as interface
 p: Point = Point(1.0, 2.0)
 drawable: Drawable = p  # ✓ Structural subtyping
+```
+
+### Default Value Initialization
+
+Type fields can specify default values, construction is optional:
+
+```yaoxiang
+# Fields with default values - optional during construction
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# Usage:
+Point()           # → Point(x=0, y=0)
+Point(x=1)       # → Point(x=1, y=0)
+Point(x=1, y=2) # → Point(x=1, y=2)
+
+# Fields without default values - required during construction
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# Usage:
+Point2(x=1, y=2) # ✓
+Point2()           # ✗ Error
+```
+
+**Rules**:
+- `field: Type = expression` → Has default value, optional during construction
+- `field: Type` → No default value, required during construction
+
+### Builtin Binding
+
+Methods can be directly bound inside type definition body (detailed syntax in RFC-004):
+
+```yaoxiang
+# Way 1: Direct binding of external function inside type definition
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]    # Bind to position 0
+}
+# Call: p1.distance(p2) → distance(p1, p2)
+
+# Way 2: Anonymous function + position binding
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# Syntax: ((params) => body)[position]
+# Call: p1.distance(p2) → distance(p1, p2)
 ```
 
 ## Grammar
