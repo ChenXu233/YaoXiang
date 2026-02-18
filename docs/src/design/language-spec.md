@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.7.0
+> 版本：v1.8.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2026-02-13 - RFC-010 统一类型语法：`Name: Type = value` 替换 `type Name = ...`
+> 更新：2026-02-18 - RFC-010 新增默认值初始化、内置绑定；RFC-004 新增内置绑定语法
 
 ---
 
@@ -200,6 +200,65 @@ Point: Type = {
 - 记录类型使用花括号 `{}` 定义
 - 字段名后直接跟冒号和类型
 - 接口名写在类型体内表示实现该接口
+
+#### 3.3.1 字段默认值
+
+类型字段可以指定默认值，构造时可选提供：
+
+```yaoxiang
+# 有默认值的字段 - 构造时可选
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# 使用
+Point()           # → Point(x=0, y=0)
+Point(x=1)       # → Point(x=1, y=0)
+Point(x=1, y=2) # → Point(x=1, y=2)
+
+# 无默认值的字段 - 构造时必填
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# 使用
+Point2(x=1, y=2) # ✓
+Point2()          # ✗ 错误
+```
+
+**规则**：
+- `field: Type = expression` → 有默认值，构造时可选
+- `field: Type` → 无默认值，构造时必填
+
+#### 3.3.2 内置绑定
+
+在类型定义体内可以直接绑定方法：
+
+```yaoxiang
+# 方式1：引用外部函数绑定
+distance: (a: Point, b: Point) -> Float = { ... }
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]    # 绑定到位置0
+}
+# 调用：p1.distance(p2) → distance(p1, p2)
+
+# 方式2：匿名函数 + 位置绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# 语法：((params) => body)[position]
+# 调用：p1.distance(p2) → distance(p1, p2)
+```
 
 ### 3.4 枚举类型（变体类型）
 
@@ -1773,6 +1832,7 @@ result = f(arg2, arg3)
 | v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
 | v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
 | v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
+| v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 新增默认值初始化、内置绑定语法；RFC-004 新增内置绑定、匿名函数绑定 |
 
 ---
 

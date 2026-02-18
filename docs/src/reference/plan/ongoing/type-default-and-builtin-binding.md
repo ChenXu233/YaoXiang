@@ -4,7 +4,7 @@
 
 本计划实现 YaoXiang 语言的两个新特性：
 1. **类型默认值初始化**：类型字段支持默认值，构造时可选提供
-2. **内置绑定**：在类型定义体内直接绑定方法（引用外部函数或内联匿名函数）
+2. **内置绑定**：在类型定义体内直接绑定方法（引用外部函数或匿名函数）
 
 ### 核心数据结构变更
 
@@ -13,7 +13,7 @@
 ├── 字段声明：field: Type
 ├── 字段默认值：field: Type = expression
 ├── 外部函数绑定：field = function[position]
-└── 内联函数绑定：field: (params) -> Return = { body }
+└── 匿名函数绑定：field: ((params) -> Return)[position] = ((params) => body)
 ```
 
 ### 涉及模块
@@ -33,20 +33,20 @@
 **目标**：新增字段类型以区分普通字段、默认值字段、绑定字段
 
 **原子操作**：
-1. 在 `ast.rs` 新增 `TypeField` 变体：
+1. 在 `ast.rs` 新增/调整 `TypeField` 变体：
    - `Field { name, ty, default }` - 普通/默认值字段
    - `Binding { name, function, positions }` - 外部函数绑定
-   - `InlineMethod { name, params, return_ty, body }` - 内联函数绑定
+   - `AnonBinding { name, lambda, positions }` - 匿名函数 + 位置绑定
 
 2. 扩展解析器 `parse_type_body_field()` 函数，区分：
    - `field: Type = expression` → 默认值字段
    - `field = function[positions]` → 外部绑定
-   - `field: (params) -> Return = { body }` → 内联绑定
+   - `field: ((params) -> Return)[position] = ((params) => body)` → 匿名函数绑定
 
 **验收方案**：
 - [ ] 解析 `Point: Type = { x: Float = 0 }` 生成正确的 AST
 - [ ] 解析 `Point: Type = { distance = distance[0] }` 生成 Binding 节点
-- [ ] 解析 `Point: Type = { distance: (p: Point) -> Float = {...} }` 生成 InlineMethod 节点
+- [ ] 解析 `Point: Type = { distance: ((a, b) => Float)[0] = ((a, b) => a + b) }` 生成 AnonBinding 节点
 
 **测试方案**：
 - 单元测试：测试各类字段语法解析
@@ -92,23 +92,22 @@
 **测试方案**：
 - 错误用例测试：无效函数引用、无效位置索引、类型不匹配
 
-#### 2.3 内联方法语义检查
+#### 2.3 匿名函数绑定语义检查
 
-**目标**：验证内联方法的参数类型和返回值类型
+**目标**：验证匿名函数绑定的参数类型和返回值类型
 
 **原子操作**：
-1. 新增 `Analyzer::check_inline_method()` 方法
-2. 验证方法体类型与声明的返回类型一致
-3. 在方法体内支持 `this` 引用（指向类型实例）
-4. 将内联方法添加到类型的 method 表
+1. 新增 `Analyzer::check_anon_binding()` 方法
+2. 验证匿名函数签名与声明的返回类型一致
+3. 验证位置绑定的参数类型与当前类型匹配
+4. 将匿名函数添加到类型的 method 表
 
 **验收方案**：
-- [ ] 内联方法体类型推导结果与声明返回类型一致
-- [ ] 方法体内 `this.x` 可正确解析为字段访问
-- [ ] `this` 类型为当前类型
+- [ ] `distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => ...)` 类型推导正确
+- [ ] 绑定位置参数类型与当前类型匹配
 
 **测试方案**：
-- 单元测试：内联方法类型推导
+- 单元测试：匿名函数绑定类型推导
 
 ---
 
@@ -134,16 +133,17 @@
 
 #### 3.2 绑定方法代码生成
 
-**目标**：为外部函数绑定和内联方法生成调用转发
+**目标**：为外部函数绑定和匿名函数绑定生成调用转发
 
 **原子操作**：
 1. 新增 `Codegen::generate_binding_call()` 方法
-2. 生成方法调用转发到原始函数的代码
-3. 处理柯里化：方法参数 + this 参数 = 完整函数参数
+2. 生成方法调用转发到原始函数/匿名函数的代码
+3. 处理柯里化：方法参数 + 调用者位置参数 = 完整函数参数
 
 **验收方案**：
 - [ ] `p1.distance(p2)` 生成调用 `distance(p1, p2)` 的代码
 - [ ] 多位置绑定 `Point.transform = transform[0, 1]` 正确转发
+- [ ] 匿名函数绑定调用正确转发
 
 **测试方案**：
 - 集成测试：编译并运行绑定方法调用
@@ -179,6 +179,7 @@
 | 解析测试 | 各类字段语法解析 |
 | 类型检查 | 默认值类型匹配 |
 | 类型检查 | 绑定位置有效性 |
+| 类型检查 | 匿名函数绑定类型推导 |
 | 代码生成 | 默认值生成 |
 
 ### 集成测试
@@ -187,9 +188,9 @@
 |----------|----------|
 | `Point: Type = { x: Float = 0, y: Float = 0 }` + `Point()` | 构造成功 |
 | `Point: Type = { x: Float, y: Float }` + `Point()` | 编译错误 |
-| `Point: Type = { x: Float = 0 } + Point(x=10)` | x=10, y=0 |
-| 外部绑定 + 调用 | 方法调用转发正确 |
-| 内联绑定 + 调用 | 内联函数执行正确 |
+| `Point: Type = { x: Float = 0 } + Point(x=10)` | x=10, y=0绑定 + 调用 | |
+| 外部 方法调用转发正确 |
+| 匿名函数绑定 + 调用 | 匿名函数执行正确 |
 
 ### 回归测试
 
@@ -203,15 +204,14 @@
 
 ### 依赖
 
-- RFC-004（柯里化多位置绑定）：内置绑定依赖其位置语法
+- RFC-004（柯里化多位置绑定）：内置绑定依赖其位置语法 `[position]`
 - RFC-010（统一类型语法）：基于统一语法模型
 
 ### 风险
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| 解析歧义 | `field = value` 可能是赋值或绑定 | 根据 `=` 右侧语法区分 |
-| this 引用 | 内联方法中 this 需要特殊处理 | 在 Analyzer 中注入 this 符号 |
+| 解析歧义 | `field = value` 可能是赋值或绑定 | 根据 `=` 右侧语法区分（函数引用 vs Lambda） |
 
 ---
 

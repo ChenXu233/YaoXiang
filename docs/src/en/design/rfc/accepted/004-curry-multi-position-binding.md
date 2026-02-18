@@ -7,7 +7,7 @@ title: 'RFC-004: Multi-Position Joint Binding Design for Curried Methods'
 > **Status**: Accepted
 > **Author**: ChenXu
 > **Created Date**: 2025-01-05
-> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax: identifier : type = expression)
+> **Last Updated**: 2026-02-18 (Added builtin binding and anonymous function binding syntax)
 
 ## Summary
 
@@ -158,6 +158,36 @@ pub transform: (p: Point, v: Vector) -> Point = { ... }
 # 3. Execute Point.distance = distance[0]
 # 4. Execute Point.transform = transform[0]
 ```
+
+### Builtin Binding
+
+Bindings can be directly written inside type definition body, without separate binding statements:
+
+```yaoxiang
+# Way 1: Direct binding of external function inside type definition
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]           # Bind to position 0
+}
+
+# Way 2: Anonymous function + position binding
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# Syntax: ((params) => body)[position]
+# Call: p1.distance(p2) → distance(p1, p2)
+```
+
+**Currying semantics**:
+- When binding `distance = distance[0]`, original function signature `(a: Point, b: Point) -> Float`
+- Generated method signature: `b: Point -> Float` (position 0 filled by caller)
 
 ## Detailed Design
 
