@@ -9,7 +9,7 @@ use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
 use yaoxiang::util::diagnostic::{
-    run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
+    run_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
     ErrorInfo,
 };
 use yaoxiang::package;
@@ -91,11 +91,23 @@ enum Commands {
         code: String,
     },
 
-    /// Check source file for errors (type checking) (unsupported yet)
+    /// Check source files or directories for errors (type checking, ownership checking)
     Check {
-        /// Source file to check
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+        /// Source files or directories to check
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+
+        /// Output diagnostics in JSON format
+        #[arg(short, long)]
+        json: bool,
+
+        /// Control color output (auto, always, never)
+        #[arg(long, value_name = "WHEN", default_value = "auto")]
+        color: String,
+
+        /// Watch files for changes and re-check automatically
+        #[arg(short, long)]
+        watch: bool,
     },
 
     /// Format source file (unsupported yet)
@@ -237,8 +249,16 @@ fn main() -> Result<()> {
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
         }
-        Commands::Check { file } => {
-            check_file_with_diagnostics(&file)?;
+        Commands::Check { paths, json, color, watch } => {
+            use yaoxiang::util::diagnostic::check::{check_paths_with_options, CheckOptions};
+            
+            let options = CheckOptions {
+                json,
+                color: color.as_str(),
+                watch,
+            };
+            
+            check_paths_with_options(&paths, options)?;
         }
         Commands::Format { file: _, check: _ } => {
             // TODO: Implement formatter
