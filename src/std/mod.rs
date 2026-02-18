@@ -3,11 +3,14 @@
 //! This module contains built-in functions and types.
 
 pub mod concurrent;
+pub mod dict;
 pub mod ffi;
 pub mod io;
+pub mod list;
 pub mod math;
 pub mod net;
 pub mod os;
+pub mod string;
 pub mod time;
 pub mod weak;
 
@@ -117,10 +120,13 @@ pub trait StdModule {
 /// This is the single entry point that ffi.rs should call.
 /// New std modules only need to be added to this function.
 pub fn register_all(registry: &mut FfiRegistry) {
+    dict::DictModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
+    list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     net::NetModule.register_ffi(registry);
     concurrent::ConcurrentModule.register_ffi(registry);
+    string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
     os::OsModule.register_ffi(registry);
 }
@@ -130,10 +136,13 @@ pub fn register_all(registry: &mut FfiRegistry) {
 /// This is used by the frontend module system.
 pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
+        dict::DictModule.to_module_info(),
         io::IoModule.to_module_info(),
+        list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
         net::NetModule.to_module_info(),
         concurrent::ConcurrentModule.to_module_info(),
+        string::StringModule.to_module_info(),
         time::TimeModule.to_module_info(),
         os::OsModule.to_module_info(),
     ]

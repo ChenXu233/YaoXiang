@@ -7,7 +7,7 @@ title: RFC-004：柯里化方法的多位置联合绑定设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-02-12（与 RFC-010 统一语法对齐）
+> **最后更新**: 2026-02-18（新增内置绑定、后置绑定语法）
 
 ## 摘要
 
@@ -165,6 +165,34 @@ Point.transform = transform[1, 2]      # 绑定到第1,2参数
 函数名   ::= 标识符
 类型     ::= 标识符 (泛型参数)?
 ```
+
+### 内置绑定
+
+绑定可以直接写在类型定义体内，无需单独的绑定语句：
+
+```yaoxiang
+# 方式1：在类型定义体内直接绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]           # 绑定到位置0
+}
+
+# 方式2：内联匿名函数绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: (other: Point) -> Float = {
+        dx = this.x - other.x
+        dy = this.y - other.y
+        return (dx * dx + dy * dy).sqrt()
+    }
+}
+```
+
+**柯里化语义**：
+- 绑定 `distance = distance[0]` 时，原函数签名 `(a: Point, b: Point) -> Float`
+- 生成的 method 签名：`b: Point -> Float`（第0位由 this 填充）
 
 ### 使用示例
 
