@@ -20,12 +20,14 @@ use std::sync::Mutex;
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
+use crate::std::NativeContext;
 
 /// Type alias for native function handlers.
 ///
-/// A `NativeHandler` takes a slice of `RuntimeValue` arguments and returns
-/// a `Result<RuntimeValue, ExecutorError>`.
-pub type NativeHandler = fn(&[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>;
+/// A `NativeHandler` takes a slice of `RuntimeValue` arguments and a
+/// `NativeContext` that provides heap access and function call capability.
+pub type NativeHandler =
+    fn(args: &[RuntimeValue], ctx: &mut NativeContext<'_>) -> Result<RuntimeValue, ExecutorError>;
 
 /// FFI Registry that manages native function bindings.
 ///
@@ -122,15 +124,31 @@ impl FfiRegistry {
     ///
     /// Returns `ExecutorError::FunctionNotFound` if no handler is registered
     /// for the given name.
+    /// Call a registered native function by name.
+    ///
+    /// This method first checks the cache, then falls back to the handler table.
+    /// Successfully resolved handlers are cached for subsequent calls.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The fully qualified function name
+    /// * `args` - The arguments to pass to the function
+    /// * `ctx` - The native context providing heap access and function call capability
+    ///
+    /// # Errors
+    ///
+    /// Returns `ExecutorError::FunctionNotFound` if no handler is registered
+    /// for the given name.
     pub fn call(
         &self,
         name: &str,
         args: &[RuntimeValue],
+        ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
         // Fast path: check cache first
         if let Ok(cache) = self.cache.lock() {
             if let Some(handler) = cache.get(name) {
-                return handler(args);
+                return handler(args, ctx);
             }
         }
 
@@ -140,7 +158,7 @@ impl FfiRegistry {
             if let Ok(mut cache) = self.cache.lock() {
                 cache.insert(name.to_string(), *handler);
             }
-            return handler(args);
+            return handler(args, ctx);
         }
 
         Err(ExecutorError::FunctionNotFound(format!(
@@ -180,6 +198,12 @@ impl FfiRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backends::common::Heap;
+
+    /// Helper to create a test NativeContext
+    fn test_ctx(heap: &mut Heap) -> NativeContext {
+        NativeContext::new(heap)
+    }
 
     #[test]
     fn test_new_registry_is_empty() {
@@ -207,7 +231,10 @@ mod tests {
     #[test]
     fn test_register_custom_function() {
         let mut registry = FfiRegistry::new();
-        fn my_add(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn my_add(
+            args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
@@ -220,15 +247,24 @@ mod tests {
     #[test]
     fn test_call_custom_function() {
         let mut registry = FfiRegistry::new();
-        fn my_add(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn my_add(
+            args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         }
         registry.register("my_add", my_add);
 
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
         let result = registry
-            .call("my_add", &[RuntimeValue::Int(3), RuntimeValue::Int(7)])
+            .call(
+                "my_add",
+                &[RuntimeValue::Int(3), RuntimeValue::Int(7)],
+                &mut ctx,
+            )
             .unwrap();
         assert_eq!(result, RuntimeValue::Int(10));
     }
@@ -236,7 +272,9 @@ mod tests {
     #[test]
     fn test_call_nonexistent_function_returns_error() {
         let registry = FfiRegistry::new();
-        let result = registry.call("nonexistent", &[]);
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
+        let result = registry.call("nonexistent", &[], &mut ctx);
         assert!(result.is_err());
         match result {
             Err(ExecutorError::FunctionNotFound(msg)) => {
@@ -249,11 +287,14 @@ mod tests {
     #[test]
     fn test_call_println_via_registry() {
         let registry = FfiRegistry::with_std();
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
         // println should accept any number of args and return Unit
         let result = registry
             .call(
                 "std.io.println",
                 &[RuntimeValue::String("hello from FFI".into())],
+                &mut ctx,
             )
             .unwrap();
         assert_eq!(result, RuntimeValue::Unit);
@@ -262,42 +303,62 @@ mod tests {
     #[test]
     fn test_cache_accelerates_repeated_calls() {
         let mut registry = FfiRegistry::new();
-        fn identity(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn identity(
+            args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             Ok(args.get(0).cloned().unwrap_or(RuntimeValue::Unit))
         }
         registry.register("identity", identity);
 
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
         // First call populates cache
-        let r1 = registry.call("identity", &[RuntimeValue::Int(42)]).unwrap();
+        let r1 = registry
+            .call("identity", &[RuntimeValue::Int(42)], &mut ctx)
+            .unwrap();
         assert_eq!(r1, RuntimeValue::Int(42));
 
         // Second call should hit cache
-        let r2 = registry.call("identity", &[RuntimeValue::Int(99)]).unwrap();
+        let r2 = registry
+            .call("identity", &[RuntimeValue::Int(99)], &mut ctx)
+            .unwrap();
         assert_eq!(r2, RuntimeValue::Int(99));
     }
 
     #[test]
     fn test_register_overwrites_existing() {
         let mut registry = FfiRegistry::new();
-        fn handler_v1(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn handler_v1(
+            _args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             Ok(RuntimeValue::Int(1))
         }
-        fn handler_v2(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn handler_v2(
+            _args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             Ok(RuntimeValue::Int(2))
         }
         registry.register("func", handler_v1);
-        let r1 = registry.call("func", &[]).unwrap();
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
+        let r1 = registry.call("func", &[], &mut ctx).unwrap();
         assert_eq!(r1, RuntimeValue::Int(1));
 
         registry.register("func", handler_v2);
-        let r2 = registry.call("func", &[]).unwrap();
+        let r2 = registry.call("func", &[], &mut ctx).unwrap();
         assert_eq!(r2, RuntimeValue::Int(2));
     }
 
     #[test]
     fn test_registered_functions_list() {
         let mut registry = FfiRegistry::new();
-        fn noop(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+        fn noop(
+            _args: &[RuntimeValue],
+            _ctx: &mut NativeContext<'_>,
+        ) -> Result<RuntimeValue, ExecutorError> {
             Ok(RuntimeValue::Unit)
         }
         registry.register("alpha", noop);
@@ -312,6 +373,8 @@ mod tests {
     #[test]
     fn test_write_and_read_file() {
         let registry = FfiRegistry::with_std();
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
         let test_path = std::env::temp_dir().join("yx_ffi_test.txt");
         let path_str = test_path.to_string_lossy().to_string();
 
@@ -323,6 +386,7 @@ mod tests {
                     RuntimeValue::String(path_str.clone().into()),
                     RuntimeValue::String("FFI test content".into()),
                 ],
+                &mut ctx,
             )
             .unwrap();
         assert_eq!(write_result, RuntimeValue::Bool(true));
@@ -332,6 +396,7 @@ mod tests {
             .call(
                 "std.io.read_file",
                 &[RuntimeValue::String(path_str.clone().into())],
+                &mut ctx,
             )
             .unwrap();
         assert_eq!(read_result, RuntimeValue::String("FFI test content".into()));
@@ -344,6 +409,7 @@ mod tests {
                     RuntimeValue::String(path_str.clone().into()),
                     RuntimeValue::String(" appended".into()),
                 ],
+                &mut ctx,
             )
             .unwrap();
         assert_eq!(append_result, RuntimeValue::Bool(true));
@@ -353,6 +419,7 @@ mod tests {
             .call(
                 "std.io.read_file",
                 &[RuntimeValue::String(path_str.clone().into())],
+                &mut ctx,
             )
             .unwrap();
         assert_eq!(
@@ -367,14 +434,22 @@ mod tests {
     #[test]
     fn test_read_file_missing_args() {
         let registry = FfiRegistry::with_std();
-        let result = registry.call("std.io.read_file", &[]);
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
+        let result = registry.call("std.io.read_file", &[], &mut ctx);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_write_file_missing_args() {
         let registry = FfiRegistry::with_std();
-        let result = registry.call("std.io.write_file", &[RuntimeValue::String("path".into())]);
+        let mut heap = Heap::new();
+        let mut ctx = test_ctx(&mut heap);
+        let result = registry.call(
+            "std.io.write_file",
+            &[RuntimeValue::String("path".into())],
+            &mut ctx,
+        );
         assert!(result.is_err());
     }
 }

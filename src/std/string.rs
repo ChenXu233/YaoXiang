@@ -4,7 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule, NativeHandler};
+use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
 
 // ============================================================================
 // StringModule - StdModule Implementation
@@ -151,36 +151,66 @@ fn extract_int(arg: &RuntimeValue) -> i64 {
 // ============================================================================
 
 /// Native implementation: split - split string by separator
-/// Note: Returns a placeholder string for now - requires FFI heap access
-fn native_split(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
-    // TODO: Requires heap access to return List
-    // For now, return a placeholder indicating this needs implementation
-    Ok(RuntimeValue::String("[List]".into()))
+/// Now uses ctx.heap to allocate a proper List
+fn native_split(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let sep = args.get(1).map(extract_string).unwrap_or_default();
+
+    let parts: Vec<RuntimeValue> = if sep.is_empty() {
+        // Split by each character when separator is empty
+        s.chars()
+            .map(|c| RuntimeValue::String(c.to_string().into()))
+            .collect()
+    } else {
+        s.split(&sep)
+            .map(|p| RuntimeValue::String(p.to_string().into()))
+            .collect()
+    };
+
+    let handle = ctx
+        .heap
+        .allocate(crate::backends::common::HeapValue::List(parts));
+    Ok(RuntimeValue::List(handle))
 }
 
 /// Native implementation: trim - remove leading and trailing whitespace
-fn native_trim(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_trim(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let trimmed = s.trim();
     Ok(RuntimeValue::String(trimmed.to_string().into()))
 }
 
 /// Native implementation: upper - convert to uppercase
-fn native_upper(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_upper(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let upper = s.to_uppercase();
     Ok(RuntimeValue::String(upper.into()))
 }
 
 /// Native implementation: lower - convert to lowercase
-fn native_lower(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_lower(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let lower = s.to_lowercase();
     Ok(RuntimeValue::String(lower.into()))
 }
 
 /// Native implementation: replace - replace all occurrences
-fn native_replace(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_replace(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let old = args.get(1).map(extract_string).unwrap_or_default();
     let new = args.get(2).map(extract_string).unwrap_or_default();
@@ -195,7 +225,10 @@ fn native_replace(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 }
 
 /// Native implementation: contains - check if substring exists
-fn native_contains(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_contains(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let sub = args.get(1).map(extract_string).unwrap_or_default();
 
@@ -203,7 +236,10 @@ fn native_contains(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>
 }
 
 /// Native implementation: starts_with - check prefix
-fn native_starts_with(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_starts_with(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let prefix = args.get(1).map(extract_string).unwrap_or_default();
 
@@ -211,7 +247,10 @@ fn native_starts_with(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorErr
 }
 
 /// Native implementation: ends_with - check suffix
-fn native_ends_with(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_ends_with(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let suffix = args.get(1).map(extract_string).unwrap_or_default();
 
@@ -219,7 +258,10 @@ fn native_ends_with(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError
 }
 
 /// Native implementation: index_of - find substring position
-fn native_index_of(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_index_of(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let sub = args.get(1).map(extract_string).unwrap_or_default();
 
@@ -230,7 +272,10 @@ fn native_index_of(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>
 }
 
 /// Native implementation: substring - extract substring by indices
-fn native_substring(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_substring(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let start = args.get(1).map(extract_int).unwrap_or(0) as usize;
     let end = args.get(2).map(extract_int).unwrap_or(s.len() as i64) as usize;
@@ -244,26 +289,45 @@ fn native_substring(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError
 }
 
 /// Native implementation: is_empty - check if string is empty
-fn native_is_empty(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_is_empty(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     Ok(RuntimeValue::Bool(s.is_empty()))
 }
 
 /// Native implementation: len - get string length
-fn native_len(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_len(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     Ok(RuntimeValue::Int(s.len() as i64))
 }
 
 /// Native implementation: chars - get character list
-/// Note: Returns a placeholder string for now - requires FFI heap access
-fn native_chars(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
-    // TODO: Requires heap access to return List
-    Ok(RuntimeValue::String("[List]".into()))
+/// Uses ctx.heap to allocate a proper List
+fn native_chars(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let chars: Vec<RuntimeValue> = s
+        .chars()
+        .map(|c| RuntimeValue::String(c.to_string().into()))
+        .collect();
+    let handle = ctx
+        .heap
+        .allocate(crate::backends::common::HeapValue::List(chars));
+    Ok(RuntimeValue::List(handle))
 }
 
 /// Native implementation: concat - concatenate two strings
-fn native_concat(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_concat(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s1 = args.get(0).map(extract_string).unwrap_or_default();
     let s2 = args.get(1).map(extract_string).unwrap_or_default();
 
@@ -272,7 +336,10 @@ fn native_concat(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: repeat - repeat string n times
-fn native_repeat(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_repeat(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let n = args.get(1).map(extract_int).unwrap_or(0) as usize;
 
@@ -281,7 +348,10 @@ fn native_repeat(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: reverse - reverse string
-fn native_reverse(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_reverse(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let reversed: String = s.chars().rev().collect();
     Ok(RuntimeValue::String(reversed.into()))

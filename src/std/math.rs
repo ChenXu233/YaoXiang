@@ -4,7 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule, NativeHandler};
+use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
 
 // ============================================================================
 // MathModule - StdModule Implementation
@@ -135,27 +135,39 @@ pub const MATH_MODULE: MathModule = MathModule;
 // ============================================================================
 
 /// Native implementation: abs (integer)
-fn native_abs(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_abs(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_int()).unwrap_or(0);
     Ok(RuntimeValue::Int(n.abs()))
 }
 
 /// Native implementation: max (integer)
-fn native_max(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_max(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
     let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
     Ok(RuntimeValue::Int(a.max(b)))
 }
 
 /// Native implementation: min (integer)
-fn native_min(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_min(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
     let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
     Ok(RuntimeValue::Int(a.min(b)))
 }
 
 /// Native implementation: clamp (integer)
-fn native_clamp(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_clamp(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let value = args.first().and_then(|v| v.to_int()).unwrap_or(0);
     let min = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
     let max = args.get(2).and_then(|v| v.to_int()).unwrap_or(0);
@@ -163,85 +175,127 @@ fn native_clamp(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: fabs (float absolute value)
-fn native_fabs(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_fabs(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.abs()))
 }
 
 /// Native implementation: fmax (float maximum)
-fn native_fmax(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_fmax(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let a = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(a.max(b)))
 }
 
 /// Native implementation: fmin (float minimum)
-fn native_fmin(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_fmin(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let a = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     let b = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(a.min(b)))
 }
 
 /// Native implementation: pow (power)
-fn native_pow(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_pow(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let base = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     let exp = args.get(1).and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(base.powf(exp)))
 }
 
 /// Native implementation: sqrt (square root)
-fn native_sqrt(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_sqrt(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.sqrt()))
 }
 
 /// Native implementation: floor
-fn native_floor(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_floor(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.floor()))
 }
 
 /// Native implementation: ceil
-fn native_ceil(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_ceil(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.ceil()))
 }
 
 /// Native implementation: round
-fn native_round(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_round(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.round()))
 }
 
 /// Native implementation: sin
-fn native_sin(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_sin(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.sin()))
 }
 
 /// Native implementation: cos
-fn native_cos(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_cos(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.cos()))
 }
 
 /// Native implementation: tan
-fn native_tan(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_tan(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let n = args.first().and_then(|v| v.to_float()).unwrap_or(0.0);
     Ok(RuntimeValue::Float(n.tan()))
 }
 
 /// Native implementation: PI constant
-fn native_pi(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_pi(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     Ok(RuntimeValue::Float(std::f64::consts::PI))
 }
 
 /// Native implementation: E constant
-fn native_e(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_e(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     Ok(RuntimeValue::Float(std::f64::consts::E))
 }
 
 /// Native implementation: TAU constant
-fn native_tau(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_tau(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     Ok(RuntimeValue::Float(std::f64::consts::TAU))
 }

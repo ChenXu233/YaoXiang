@@ -8,7 +8,7 @@ use std::io::BufRead;
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // IoModule - StdModule Implementation
@@ -73,7 +73,10 @@ pub const IO_MODULE: IoModule = IoModule;
 // ============================================================================
 
 /// Native implementation: print (without newline)
-fn native_print(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_print(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let output = args
         .iter()
         .map(|arg| format!("{}", arg))
@@ -84,7 +87,10 @@ fn native_print(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: println (with newline)
-fn native_println(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_println(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let output = args
         .iter()
         .map(|arg| format!("{}", arg))
@@ -95,7 +101,10 @@ fn native_println(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 }
 
 /// Native implementation: read_line
-fn native_read_line(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_read_line(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let stdin = std::io::stdin();
     let mut line = String::new();
     stdin
@@ -113,7 +122,10 @@ fn native_read_line(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorErro
 }
 
 /// Native implementation: read_file
-fn native_read_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_read_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "read_file expects 1 argument (path: String)".to_string(),
@@ -138,7 +150,10 @@ fn native_read_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError
 }
 
 /// Native implementation: write_file
-fn native_write_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_write_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "write_file expects 2 arguments (path: String, content: String)".to_string(),
@@ -172,7 +187,10 @@ fn native_write_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorErro
 }
 
 /// Native implementation: append_file
-fn native_append_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_append_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     use std::io::Write;
 
     if args.len() < 2 {

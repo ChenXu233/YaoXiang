@@ -453,8 +453,9 @@ fn dump_instructions(
 #[cfg(test)]
 mod ffi_tests {
     use super::*;
-    use crate::backends::common::RuntimeValue;
+    use crate::backends::common::{RuntimeValue, Heap};
     use crate::backends::interpreter::ffi::FfiRegistry;
+    use crate::std::NativeContext;
 
     /// Test compiling and running YaoXiang source with std.io functions
     #[test]
@@ -477,27 +478,36 @@ mod ffi_tests {
         assert!(!registry.has("print"));
 
         // Test 3: Verify FFI call works
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
         let result = registry.call(
             "std.io.println",
             &[RuntimeValue::String("FFI test message".into())],
+            &mut ctx,
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), RuntimeValue::Unit);
 
         // Test 4: Verify file operations
         let test_path = "test_std_io_e2e.txt";
+        let mut heap2 = Heap::new();
+        let mut ctx2 = NativeContext::new(&mut heap2);
         let write_result = registry.call(
             "std.io.write_file",
             &[
                 RuntimeValue::String(test_path.into()),
                 RuntimeValue::String("Hello, YaoXiang!".into()),
             ],
+            &mut ctx2,
         );
         assert!(write_result.is_ok());
 
+        let mut heap3 = Heap::new();
+        let mut ctx3 = NativeContext::new(&mut heap3);
         let read_result = registry.call(
             "std.io.read_file",
             &[RuntimeValue::String(test_path.into())],
+            &mut ctx3,
         );
         assert!(read_result.is_ok());
         if let RuntimeValue::String(content) = read_result.unwrap() {
@@ -517,7 +527,7 @@ mod ffi_tests {
         let mut registry = FfiRegistry::new();
 
         // Register a custom function
-        registry.register("my_add", |args| {
+        registry.register("my_add", |args, _ctx| {
             let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
@@ -527,7 +537,13 @@ mod ffi_tests {
         assert!(registry.has("my_add"));
 
         // Call the function
-        let result = registry.call("my_add", &[RuntimeValue::Int(10), RuntimeValue::Int(32)]);
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+        let result = registry.call(
+            "my_add",
+            &[RuntimeValue::Int(10), RuntimeValue::Int(32)],
+            &mut ctx,
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), RuntimeValue::Int(42));
     }
@@ -536,7 +552,9 @@ mod ffi_tests {
     #[test]
     fn test_e2e_nonexistent_native_function() {
         let registry = FfiRegistry::new();
-        let result = registry.call("nonexistent.function", &[]);
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+        let result = registry.call("nonexistent.function", &[], &mut ctx);
         assert!(result.is_err());
     }
 }

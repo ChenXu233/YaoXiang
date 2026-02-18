@@ -4,7 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // ConcurrentModule - StdModule Implementation
@@ -56,21 +56,30 @@ pub const CONCURRENT_MODULE: ConcurrentModule = ConcurrentModule;
 // ============================================================================
 
 /// Native implementation: sleep
-fn native_sleep(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_sleep(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let millis = args.first().and_then(|v| v.to_int()).unwrap_or(0) as u64;
     std::thread::sleep(std::time::Duration::from_millis(millis));
     Ok(RuntimeValue::Unit)
 }
 
 /// Native implementation: thread_id
-fn native_thread_id(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_thread_id(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     Ok(RuntimeValue::String(
         format!("{:?}", std::thread::current().id()).into(),
     ))
 }
 
 /// Native implementation: yield_now
-fn native_yield_now(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_yield_now(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     std::thread::yield_now();
     Ok(RuntimeValue::Unit)
 }

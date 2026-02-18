@@ -15,12 +15,73 @@ pub mod time;
 pub mod weak;
 
 use crate::backends::interpreter::ffi::FfiRegistry;
-use crate::backends::common::RuntimeValue;
+use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
+/// Execution context passed to native functions.
+///
+/// This gives native functions access to the heap (for allocating/reading
+/// List/Dict values) and provides a callback for invoking YaoXiang functions
+/// (enabling higher-order functions like map/filter/reduce).
+pub struct NativeContext<'a> {
+    /// Heap memory manager
+    pub heap: &'a mut Heap,
+    /// Callback to invoke a YaoXiang function value with given arguments.
+    /// The closure takes (function_value, args) and returns a RuntimeValue.
+    pub call_fn: Option<
+        &'a mut dyn FnMut(&RuntimeValue, &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>,
+    >,
+}
+
+impl<'a> NativeContext<'a> {
+    /// Create a new NativeContext with heap access only (no function callback).
+    pub fn new(heap: &'a mut Heap) -> Self {
+        Self {
+            heap,
+            call_fn: None,
+        }
+    }
+
+    /// Create a NativeContext with both heap access and function call capability.
+    pub fn with_call_fn(
+        heap: &'a mut Heap,
+        call_fn: &'a mut dyn FnMut(
+            &RuntimeValue,
+            &[RuntimeValue],
+        ) -> Result<RuntimeValue, ExecutorError>,
+    ) -> Self {
+        Self {
+            heap,
+            call_fn: Some(call_fn),
+        }
+    }
+
+    /// Invoke a YaoXiang function value with the given arguments.
+    ///
+    /// Returns an error if no call_fn callback is available.
+    pub fn call_function(
+        &mut self,
+        func: &RuntimeValue,
+        args: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        if let Some(ref mut callback) = self.call_fn {
+            callback(func, args)
+        } else {
+            Err(ExecutorError::Runtime(
+                "Cannot call YaoXiang functions from this native context".to_string(),
+            ))
+        }
+    }
+}
+
 /// Type alias for native function handlers.
-pub type NativeHandler = fn(&[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>;
+///
+/// Native handlers now receive a `NativeContext` which provides:
+/// - `ctx.heap` for heap allocation (List/Dict creation)
+/// - `ctx.call_function()` for invoking YaoXiang functions (higher-order functions)
+pub type NativeHandler =
+    fn(args: &[RuntimeValue], ctx: &mut NativeContext<'_>) -> Result<RuntimeValue, ExecutorError>;
 
 /// Native function export declaration (type-safe alternative to tuple).
 ///
@@ -115,6 +176,61 @@ pub trait StdModule {
     }
 }
 
+// ============================================================================
+// Built-in generic functions (replacing hardcoded interpreter special cases)
+// ============================================================================
+
+/// Built-in generic `len` function that works on List, Tuple, Array, Dict, String, Bytes.
+fn builtin_len(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.len() != 1 {
+        return Err(ExecutorError::Type(
+            "len expects exactly 1 argument".to_string(),
+        ));
+    }
+    let len = match &args[0] {
+        RuntimeValue::List(handle)
+        | RuntimeValue::Tuple(handle)
+        | RuntimeValue::Array(handle)
+        | RuntimeValue::Dict(handle) => ctx
+            .heap
+            .get(*handle)
+            .map(|value| value.len() as i64)
+            .unwrap_or(0),
+        RuntimeValue::String(s) => s.chars().count() as i64,
+        RuntimeValue::Bytes(b) => b.len() as i64,
+        _ => 0,
+    };
+    Ok(RuntimeValue::Int(len))
+}
+
+/// Built-in `dict_keys` function that returns a list of keys from a dictionary.
+fn builtin_dict_keys(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.len() != 1 {
+        return Err(ExecutorError::Type(
+            "dict_keys expects exactly 1 argument".to_string(),
+        ));
+    }
+    let keys = match &args[0] {
+        RuntimeValue::Dict(handle) => match ctx.heap.get(*handle) {
+            Some(HeapValue::Dict(map)) => map.keys().cloned().collect::<Vec<_>>(),
+            _ => Vec::new(),
+        },
+        _ => {
+            return Err(ExecutorError::Type(
+                "dict_keys only supports dict".to_string(),
+            ));
+        }
+    };
+    let list_handle = ctx.heap.allocate(HeapValue::List(keys));
+    Ok(RuntimeValue::List(list_handle))
+}
+
 /// Register all std modules into the FFI registry.
 ///
 /// This is the single entry point that ffi.rs should call.
@@ -129,6 +245,10 @@ pub fn register_all(registry: &mut FfiRegistry) {
     string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
     os::OsModule.register_ffi(registry);
+
+    // Register built-in generic functions (replacing hardcoded interpreter special cases)
+    registry.register("len", builtin_len as NativeHandler);
+    registry.register("dict_keys", builtin_dict_keys as NativeHandler);
 }
 
 /// Get ModuleInfo for all std modules.

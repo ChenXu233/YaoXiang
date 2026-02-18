@@ -4,7 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // NetModule - StdModule Implementation
@@ -62,7 +62,10 @@ pub const NET_MODULE: NetModule = NetModule;
 // ============================================================================
 
 /// Native implementation: http_get
-fn native_http_get(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_http_get(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "http_get expects 1 argument (url: String)".to_string(),
@@ -83,7 +86,10 @@ fn native_http_get(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>
 }
 
 /// Native implementation: http_post
-fn native_http_post(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_http_post(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "http_post expects 2 arguments (url: String, body: String)".to_string(),
@@ -116,7 +122,10 @@ fn native_http_post(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError
 }
 
 /// Native implementation: url_encode
-fn native_url_encode(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_url_encode(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "url_encode expects 1 argument (s: String)".to_string(),
@@ -138,7 +147,10 @@ fn native_url_encode(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorErro
 }
 
 /// Native implementation: url_decode
-fn native_url_decode(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_url_decode(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "url_decode expects 1 argument (s: String)".to_string(),
