@@ -19,6 +19,7 @@ use crate::backends::interpreter::frames::MAX_LOCALS;
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::util::i18n::MSG;
 use crate::tlog;
+use crate::std::NativeContext;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
@@ -598,69 +599,10 @@ impl Executor for Interpreter {
 
                     // Try FFI registry first for native functions
                     if self.ffi.has(&func_name) {
-                        let result = self.ffi.call(&func_name, &call_args)?;
+                        let mut ctx = NativeContext::new(&mut self.heap);
+                        let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
-                        }
-                        frame.advance();
-                        continue;
-                    }
-
-                    if func_name == "len" {
-                        if call_args.len() != 1 {
-                            return Err(ExecutorError::Type(
-                                "len expects exactly 1 argument".to_string(),
-                            ));
-                        }
-
-                        let len = match &call_args[0] {
-                            RuntimeValue::List(handle)
-                            | RuntimeValue::Tuple(handle)
-                            | RuntimeValue::Array(handle)
-                            | RuntimeValue::Dict(handle) => self
-                                .heap
-                                .get(*handle)
-                                .map(|value| value.len() as i64)
-                                .unwrap_or(0),
-                            RuntimeValue::String(s) => s.chars().count() as i64,
-                            RuntimeValue::Bytes(b) => b.len() as i64,
-                            _ => 0,
-                        };
-
-                        if let Some(dst_reg) = dst {
-                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Int(len));
-                        }
-                        frame.advance();
-                        continue;
-                    }
-
-                    if func_name == "dict_keys" {
-                        if call_args.len() != 1 {
-                            return Err(ExecutorError::Type(
-                                "dict_keys expects exactly 1 argument".to_string(),
-                            ));
-                        }
-
-                        let keys = match &call_args[0] {
-                            RuntimeValue::Dict(handle) => match self.heap.get(*handle) {
-                                Some(HeapValue::Dict(map)) => {
-                                    map.keys().cloned().collect::<Vec<_>>()
-                                }
-                                _ => Vec::new(),
-                            },
-                            _ => {
-                                return Err(ExecutorError::Type(
-                                    "dict_keys only supports dict".to_string(),
-                                ));
-                            }
-                        };
-
-                        let list_handle = self.heap.allocate(HeapValue::List(keys));
-                        if let Some(dst_reg) = dst {
-                            frame.set_register(
-                                dst_reg.index() as usize,
-                                RuntimeValue::List(list_handle),
-                            );
                         }
                         frame.advance();
                         continue;
@@ -757,8 +699,9 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    // Delegate to FFI registry
-                    let result = self.ffi.call(func_name, &call_args)?;
+                    // Delegate to FFI registry with NativeContext
+                    let mut ctx = NativeContext::new(&mut self.heap);
+                    let result = self.ffi.call(func_name, &call_args, &mut ctx)?;
 
                     if let Some(dst_reg) = dst {
                         frame.set_register(dst_reg.index() as usize, result);
@@ -1402,18 +1345,20 @@ mod tests {
 
     #[test]
     fn test_ffi_write_and_read_file_e2e() {
-        let interp = Interpreter::new();
+        let mut interp = Interpreter::new();
 
         // Test using std.io directly via FFI registry
         let path_str = "test_e2e_file.txt".to_string();
 
         // Test write_file via registry directly
+        let mut ctx = NativeContext::new(&mut interp.heap);
         let result = interp.ffi.call(
             "std.io.write_file",
             &[
                 RuntimeValue::String(path_str.clone().into()),
                 RuntimeValue::String("E2E test content".into()),
             ],
+            &mut ctx,
         );
         assert!(result.is_ok(), "write_file should succeed: {:?}", result);
 
@@ -1421,6 +1366,7 @@ mod tests {
         let result = interp.ffi.call(
             "std.io.read_file",
             &[RuntimeValue::String(path_str.clone().into())],
+            &mut ctx,
         );
         assert!(result.is_ok(), "read_file should succeed");
 
@@ -1441,18 +1387,22 @@ mod tests {
         let mut interp = Interpreter::new();
 
         // Register a custom native function
-        interp.ffi_registry_mut().register("test.multiply", |args| {
-            eprintln!("DEBUG: multiply args = {:?}", args);
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
-            let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
-            eprintln!("DEBUG: multiply {} * {}", a, b);
-            Ok(RuntimeValue::Int(a * b))
-        });
+        interp
+            .ffi_registry_mut()
+            .register("test.multiply", |args, _ctx| {
+                eprintln!("DEBUG: multiply args = {:?}", args);
+                let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+                let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+                eprintln!("DEBUG: multiply {} * {}", a, b);
+                Ok(RuntimeValue::Int(a * b))
+            });
 
         // Test via registry directly
+        let mut ctx = NativeContext::new(&mut interp.heap);
         let result = interp.ffi.call(
             "test.multiply",
             &[RuntimeValue::Int(6), RuntimeValue::Int(7)],
+            &mut ctx,
         );
 
         assert!(
@@ -1471,19 +1421,21 @@ mod tests {
 
     #[test]
     fn test_ffi_nonexistent_function_e2e() {
-        let interp = Interpreter::new();
+        let mut interp = Interpreter::new();
 
         // Try to call a non-existent function
-        let result = interp.ffi.call("nonexistent.function", &[]);
+        let mut ctx = NativeContext::new(&mut interp.heap);
+        let result = interp.ffi.call("nonexistent.function", &[], &mut ctx);
         assert!(result.is_err(), "Call to non-existent function should fail");
     }
 
     #[test]
     fn test_ffi_append_file_e2e() {
-        let interp = Interpreter::new();
+        let mut interp = Interpreter::new();
 
         let path_str = "test_append_file.txt".to_string();
 
+        let mut ctx = NativeContext::new(&mut interp.heap);
         // Write initial content
         let result1 = interp.ffi.call(
             "std.io.write_file",
@@ -1491,6 +1443,7 @@ mod tests {
                 RuntimeValue::String(path_str.clone().into()),
                 RuntimeValue::String("First".into()),
             ],
+            &mut ctx,
         );
         assert!(result1.is_ok());
 
@@ -1501,6 +1454,7 @@ mod tests {
                 RuntimeValue::String(path_str.clone().into()),
                 RuntimeValue::String(" Second".into()),
             ],
+            &mut ctx,
         );
         assert!(result2.is_ok());
 
@@ -1508,6 +1462,7 @@ mod tests {
         let result3 = interp.ffi.call(
             "std.io.read_file",
             &[RuntimeValue::String(path_str.clone().into())],
+            &mut ctx,
         );
         assert!(result3.is_ok());
 

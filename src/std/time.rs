@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // TimeModule - StdModule Implementation
@@ -245,19 +245,28 @@ fn calculate_timestamp(
 // ============================================================================
 
 /// Native implementation: now
-fn native_now(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_now(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let timestamp = get_current_timestamp();
     Ok(RuntimeValue::Int(timestamp as i64))
 }
 
 /// Native implementation: timestamp
-fn native_timestamp(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_timestamp(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let timestamp = get_current_timestamp();
     Ok(RuntimeValue::Int(timestamp as i64))
 }
 
 /// Native implementation: timestamp_ms
-fn native_timestamp_ms(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_timestamp_ms(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or(Duration::ZERO)
@@ -270,7 +279,10 @@ fn native_timestamp_ms(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorE
 // ============================================================================
 
 /// Native implementation: sleep
-fn native_sleep(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_sleep(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "sleep expects 1 argument (seconds: Float)".to_string(),
@@ -297,7 +309,10 @@ fn native_sleep(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 // ============================================================================
 
 /// Native implementation: format_time
-fn native_format_time(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_format_time(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "format_time expects 2 arguments (timestamp: Int, fmt: String)".to_string(),
@@ -342,7 +357,10 @@ fn native_format_time(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorErr
 }
 
 /// Native implementation: parse_time
-fn native_parse_time(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_parse_time(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "parse_time expects 2 arguments (fmt: String, s: String)".to_string(),
@@ -418,42 +436,66 @@ fn get_datetime_field(
 }
 
 /// Native implementation: DateTime::year
-fn native_datetime_year(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_year(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 0)
 }
 
 /// Native implementation: DateTime::month
-fn native_datetime_month(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_month(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 1)
 }
 
 /// Native implementation: DateTime::day
-fn native_datetime_day(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_day(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 2)
 }
 
 /// Native implementation: DateTime::hour
-fn native_datetime_hour(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_hour(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 3)
 }
 
 /// Native implementation: DateTime::minute
-fn native_datetime_minute(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_minute(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 4)
 }
 
 /// Native implementation: DateTime::second
-fn native_datetime_second(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_second(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 5)
 }
 
 /// Native implementation: DateTime::weekday
-fn native_datetime_weekday(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_weekday(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     get_datetime_field(args, 6)
 }
 
 /// Native implementation: DateTime::to_string
-fn native_datetime_to_string(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_datetime_to_string(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let timestamp = get_timestamp_arg(args, false)?;
     let (year, month, day, hour, minute, second, _, _) = timestamp_to_datetime(timestamp);
 

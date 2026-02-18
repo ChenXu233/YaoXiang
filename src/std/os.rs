@@ -10,7 +10,7 @@ use std::sync::{LazyLock, Mutex};
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::{NativeExport, StdModule};
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
 // OsModule - StdModule Implementation
@@ -187,7 +187,10 @@ fn allocate_fd() -> i64 {
 // ============================================================================
 
 /// Native implementation: open
-fn native_open(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_open(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "open expects 2 arguments (path: String, mode: String)".to_string(),
@@ -266,7 +269,10 @@ fn native_open(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: close
-fn native_close(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_close(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "close expects 1 argument (file: File)".to_string(),
@@ -300,7 +306,10 @@ fn native_close(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: read
-fn native_read(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_read(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "read expects 2 arguments (file: File, n: Int)".to_string(),
@@ -359,7 +368,10 @@ fn native_read(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: write
-fn native_write(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_write(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "write expects 2 arguments (file: File, content: String)".to_string(),
@@ -409,7 +421,10 @@ fn native_write(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: seek
-fn native_seek(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_seek(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "seek expects 2 arguments (file: File, offset: Int)".to_string(),
@@ -459,7 +474,10 @@ fn native_seek(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: tell
-fn native_tell(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_tell(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "tell expects 1 argument (file: File)".to_string(),
@@ -499,7 +517,10 @@ fn native_tell(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: flush
-fn native_flush(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_flush(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "flush expects 1 argument (file: File)".to_string(),
@@ -543,7 +564,10 @@ fn native_flush(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 // ============================================================================
 
 /// Native implementation: mkdir
-fn native_mkdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_mkdir(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "mkdir expects 1 argument (path: String)".to_string(),
@@ -570,7 +594,10 @@ fn native_mkdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: rmdir
-fn native_rmdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_rmdir(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "rmdir expects 1 argument (path: String)".to_string(),
@@ -597,7 +624,10 @@ fn native_rmdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: read_dir
-fn native_read_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_read_dir(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "read_dir expects 1 argument (path: String)".to_string(),
@@ -637,7 +667,10 @@ fn native_read_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>
 // ============================================================================
 
 /// Native implementation: remove
-fn native_remove(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_remove(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "remove expects 1 argument (path: String)".to_string(),
@@ -664,7 +697,10 @@ fn native_remove(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: exists
-fn native_exists(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_exists(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "exists expects 1 argument (path: String)".to_string(),
@@ -685,7 +721,10 @@ fn native_exists(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: is_file
-fn native_is_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_is_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "is_file expects 1 argument (path: String)".to_string(),
@@ -706,7 +745,10 @@ fn native_is_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 }
 
 /// Native implementation: is_dir
-fn native_is_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_is_dir(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "is_dir expects 1 argument (path: String)".to_string(),
@@ -727,7 +769,10 @@ fn native_is_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: copy
-fn native_copy(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_copy(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "copy expects 2 arguments (src: String, dst: String)".to_string(),
@@ -764,7 +809,10 @@ fn native_copy(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: rename
-fn native_rename(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_rename(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "rename expects 2 arguments (old: String, new: String)".to_string(),
@@ -805,7 +853,10 @@ fn native_rename(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 // ============================================================================
 
 /// Native implementation: get_env
-fn native_get_env(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_get_env(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "get_env expects 1 argument (name: String)".to_string(),
@@ -829,7 +880,10 @@ fn native_get_env(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 }
 
 /// Native implementation: set_env
-fn native_set_env(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_set_env(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "set_env expects 2 arguments (name: String, value: String)".to_string(),
@@ -865,13 +919,19 @@ fn native_set_env(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 // ============================================================================
 
 /// Native implementation: args
-fn native_args(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_args(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     let args: Vec<String> = std::env::args().collect();
     Ok(RuntimeValue::String(args.join("\n").into()))
 }
 
 /// Native implementation: chdir
-fn native_chdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_chdir(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::Runtime(
             "chdir expects 1 argument (path: String)".to_string(),
@@ -907,7 +967,10 @@ fn native_chdir(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
 }
 
 /// Native implementation: getcwd
-fn native_getcwd(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_getcwd(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     match std::env::current_dir() {
         Ok(path) => Ok(RuntimeValue::String(path.to_string_lossy().into())),
         Err(e) => Err(ExecutorError::Runtime(format!(
@@ -918,7 +981,10 @@ fn native_getcwd(_args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> 
 }
 
 /// Native implementation: append_file
-fn native_append_file(args: &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError> {
+fn native_append_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::Runtime(
             "append_file expects 2 arguments (path: String, content: String)".to_string(),
