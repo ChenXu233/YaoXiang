@@ -263,7 +263,7 @@ impl BodyChecker {
     /// - 绑定引用的函数和位置有效
     fn check_type_def(
         &mut self,
-        _name: &str,
+        name: &str,
         definition: &crate::frontend::core::parser::ast::Type,
         span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
@@ -278,9 +278,9 @@ impl BodyChecker {
                     }
                 }
 
-                // 检查绑定字段
+                // 检查绑定字段（传入类型名用于位置类型匹配验证）
                 for binding in bindings {
-                    self.check_field_binding(binding, span)?;
+                    self.check_field_binding(name, binding, span)?;
                 }
 
                 Ok(())
@@ -290,6 +290,8 @@ impl BodyChecker {
     }
 
     /// 检查字段默认值类型是否与字段类型匹配
+    ///
+    /// 支持隐式数值提升（Int → Float），符合 RFC-010 中 `x: Float = 0` 的用法
     fn check_field_default(
         &mut self,
         field: &crate::frontend::core::parser::ast::StructField,
@@ -301,22 +303,37 @@ impl BodyChecker {
 
         // 尝试统一默认值类型与字段声明类型
         if self.solver.unify(&expected_type, &actual_type).is_err() {
-            return Err(Box::new(
-                ErrorCodeDefinition::type_mismatch(
-                    &format!("{}", expected_type),
-                    &format!("{}", actual_type),
-                )
-                .at(span)
-                .build(),
-            ));
+            // 检查是否可以隐式数值提升（Int → Float）
+            let is_numeric_promotion = matches!(
+                (&expected_type, &actual_type),
+                (MonoType::Float(_), MonoType::Int(_))
+            );
+
+            if !is_numeric_promotion {
+                return Err(Box::new(
+                    ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", expected_type),
+                        &format!("{}", actual_type),
+                    )
+                    .at(span)
+                    .build(),
+                ));
+            }
+            // 隐式提升：Int → Float 在默认值上下文中允许
         }
 
         Ok(())
     }
 
     /// 检查绑定字段的有效性
+    ///
+    /// 按 RFC-004 规定验证：
+    /// 1. 位置索引列表非空
+    /// 2. 引用的函数存在时：位置索引在参数范围内
+    /// 3. 绑定位置的参数类型与当前类型兼容
     fn check_field_binding(
         &mut self,
+        type_name: &str,
         binding: &crate::frontend::core::parser::ast::TypeBodyBinding,
         span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
@@ -327,12 +344,6 @@ impl BodyChecker {
                 function,
                 positions,
             } => {
-                // 验证引用的函数名存在
-                if self.get_var(function).is_none() {
-                    // 函数可能在外层定义或在后续定义，暂时跳过深度检查
-                    // 运行时才验证完整性
-                }
-
                 // 验证位置索引非空
                 if positions.is_empty() {
                     return Err(Box::new(
@@ -345,10 +356,58 @@ impl BodyChecker {
                     ));
                 }
 
+                // 验证引用的函数名存在，并检查位置索引和类型匹配
+                if let Some(func_poly) = self.get_var(function).cloned() {
+                    let func_mono = self.solver.instantiate(&func_poly);
+
+                    if let MonoType::Fn {
+                        params: param_types,
+                        return_type: _,
+                        is_async: _,
+                    } = &func_mono
+                    {
+                        let param_count = param_types.len();
+
+                        for &pos in positions {
+                            // 验证位置索引在参数范围内（RFC-004：支持从0开始的正数索引）
+                            if pos >= param_count {
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!(
+                                            "binding position < {} (function '{}' has {} params)",
+                                            param_count, function, param_count
+                                        ),
+                                        &format!("position {}", pos),
+                                    )
+                                    .at(span)
+                                    .build(),
+                                ));
+                            }
+
+                            // 验证绑定位置的参数类型与当前类型匹配（RFC-004 类型安全）
+                            let param_type = &param_types[pos];
+                            let binding_type = MonoType::TypeRef(type_name.to_string());
+                            if self.solver.unify(&binding_type, param_type).is_err() {
+                                // 类型不匹配：绑定位置的参数类型与当前类型不兼容
+                                return Err(Box::new(
+                                    ErrorCodeDefinition::type_mismatch(
+                                        &format!("{}", param_type),
+                                        type_name,
+                                    )
+                                    .at(span)
+                                    .build(),
+                                ));
+                            }
+                        }
+                    }
+                }
+                // 函数未在当前作用域中找到时，跳过深度检查
+                // 函数可能在外层作用域或后续定义中
+
                 Ok(())
             }
             BindingKind::Anonymous {
-                params: _,
+                params,
                 return_type: _,
                 positions,
                 body: _,
@@ -363,6 +422,40 @@ impl BodyChecker {
                         .at(span)
                         .build(),
                     ));
+                }
+
+                // 验证位置索引在匿名函数参数范围内
+                let param_count = params.len();
+                for &pos in positions {
+                    if pos >= param_count {
+                        return Err(Box::new(
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!(
+                                    "binding position < {} (anonymous function has {} params)",
+                                    param_count, param_count
+                                ),
+                                &format!("position {}", pos),
+                            )
+                            .at(span)
+                            .build(),
+                        ));
+                    }
+
+                    // 验证绑定位置的参数类型与当前类型匹配
+                    if let Some(param_ty) = &params[pos].ty {
+                        let param_mono = MonoType::from(param_ty.clone());
+                        let binding_type = MonoType::TypeRef(type_name.to_string());
+                        if self.solver.unify(&binding_type, &param_mono).is_err() {
+                            return Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", param_mono),
+                                    type_name,
+                                )
+                                .at(span)
+                                .build(),
+                            ));
+                        }
+                    }
                 }
 
                 Ok(())
