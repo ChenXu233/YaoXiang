@@ -217,7 +217,7 @@ fn test_immutable_mutation_method_error() {
     let instructions = vec![Instruction::Call {
         dst: None,
         func: Operand::Const(crate::middle::core::ir::ConstValue::String(
-            "push".to_string(),
+            "Vec.push".to_string(),
         )),
         args: vec![
             Operand::Local(0),
@@ -236,7 +236,7 @@ fn test_immutable_mutation_method_error() {
             location: _,
         } => {
             assert_eq!(value, "local_0");
-            assert_eq!(method, "push");
+            assert_eq!(method, "Vec.push");
         }
         _ => panic!("Expected ImmutableMutation error"),
     }
@@ -372,23 +372,26 @@ fn test_mut_checker_clear() {
 fn test_is_mutation_method() {
     use crate::middle::passes::lifetime::mut_check::is_mutation_method;
 
-    // 应该是变异方法
-    assert!(is_mutation_method("push"));
-    assert!(is_mutation_method("pop"));
-    assert!(is_mutation_method("insert"));
-    assert!(is_mutation_method("remove"));
-    assert!(is_mutation_method("clear"));
-    assert!(is_mutation_method("set"));
-    assert!(is_mutation_method("update"));
-    assert!(is_mutation_method("append"));
-    assert!(is_mutation_method("extend"));
-    assert!(is_mutation_method("add"));
-    assert!(is_mutation_method("delete"));
-    assert!(is_mutation_method("discard"));
-    assert!(is_mutation_method("swap"));
-    assert!(is_mutation_method("fill"));
+    // 应该是变异方法（使用带命名空间前缀的完整方法名）
+    assert!(is_mutation_method("Vec.push"));
+    assert!(is_mutation_method("Vec.pop"));
+    assert!(is_mutation_method("Vec.insert"));
+    assert!(is_mutation_method("Vec.remove"));
+    assert!(is_mutation_method("Vec.clear"));
+    assert!(is_mutation_method("Vec.set"));
+    assert!(is_mutation_method("Vec.update"));
+    assert!(is_mutation_method("Vec.append"));
+    assert!(is_mutation_method("Vec.extend"));
+    assert!(is_mutation_method("Vec.add"));
+    assert!(is_mutation_method("Vec.delete"));
+    assert!(is_mutation_method("Set.discard"));
+    assert!(is_mutation_method("Vec.swap"));
+    assert!(is_mutation_method("Vec.fill"));
 
-    // 应该不是变异方法
+    // 应该不是变异方法（不包含命名空间前缀）
+    assert!(!is_mutation_method("push"));
+    assert!(!is_mutation_method("pop"));
+    assert!(!is_mutation_method("add"));
     assert!(!is_mutation_method("concat"));
     assert!(!is_mutation_method("map"));
     assert!(!is_mutation_method("filter"));
@@ -407,8 +410,20 @@ fn test_is_mutation_method() {
 #[test]
 fn test_all_mutation_methods_error() {
     let mutation_methods = [
-        "push", "pop", "insert", "remove", "clear", "set", "update", "append", "extend", "add",
-        "delete", "discard", "swap", "fill",
+        "Vec.push",
+        "Vec.pop",
+        "Vec.insert",
+        "Vec.remove",
+        "Vec.clear",
+        "Vec.set",
+        "Vec.update",
+        "Vec.append",
+        "Vec.extend",
+        "Vec.add",
+        "Vec.delete",
+        "Set.discard",
+        "Vec.swap",
+        "Vec.fill",
     ];
 
     for method in mutation_methods {
@@ -586,7 +601,7 @@ fn test_temp_variable_immutable_error() {
 /// 测试：不同的变异方法错误消息
 #[test]
 fn test_different_mutation_method_errors() {
-    let methods = ["push", "pop", "insert", "remove"];
+    let methods = ["Vec.push", "Vec.pop", "Vec.insert", "Vec.remove"];
 
     for method in methods {
         let mut checker = MutChecker::new();
@@ -707,11 +722,11 @@ fn test_ownership_checker_all_error_types() {
             src: Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
             span: Span::dummy(),
         },
-        // 变异方法错误
+        // 变异方法错误（使用带命名空间前缀的方法名）
         Instruction::Call {
             dst: None,
             func: Operand::Const(crate::middle::core::ir::ConstValue::String(
-                "push".to_string(),
+                "Vec.push".to_string(),
             )),
             args: vec![Operand::Local(1)],
         },

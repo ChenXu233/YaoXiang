@@ -303,6 +303,14 @@
         "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
         "error_output": "error[E2012]: 可变性冲突\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 无法通过不可变引用修改"
     },
+    "E2013": {
+        "title": "变量遮蔽",
+        "message": "不能遮蔽已有变量",
+        "template": "Cannot shadow existing variable '{name}'",
+        "help": "使用不同的变量名，或在不同的作用域中声明变量",
+        "example": "i = 10; for i in 1..5 { print(i) }",
+        "error_output": "error[E2013]: 变量遮蔽\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
+    },
     "E4001": {
         "title": "泛型约束违反",
         "message": "类型不满足泛型约束",

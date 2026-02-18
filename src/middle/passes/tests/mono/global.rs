@@ -42,6 +42,7 @@ fn test_instance_sharing() {
         globals: Vec::new(),
         functions: vec![generic_func],
         mut_locals: Default::default(),
+        loop_binding_locals: Default::default(),
         native_bindings: Vec::new(),
     };
     mono.collect_generics(id, &ir);

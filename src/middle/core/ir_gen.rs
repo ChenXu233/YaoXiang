@@ -130,6 +130,10 @@ pub struct AstToIrGenerator {
     current_mut_locals: std::collections::HashSet<usize>,
     /// 模块级别的可变局部变量映射 (function_name -> set of mutable local indices)
     module_mut_locals: HashMap<String, std::collections::HashSet<usize>>,
+    /// 当前函数中循环绑定变量的索引集合（这些变量的 Store 是绑定操作，不是修改）
+    current_loop_binding_locals: std::collections::HashSet<usize>,
+    /// 模块级别的循环绑定变量映射 (function_name -> set of loop binding local indices)
+    module_loop_binding_locals: HashMap<String, std::collections::HashSet<usize>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
     /// 用户声明的 native 函数绑定
@@ -151,6 +155,8 @@ impl AstToIrGenerator {
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
+            current_loop_binding_locals: std::collections::HashSet::new(),
+            module_loop_binding_locals: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
         }
@@ -164,6 +170,8 @@ impl AstToIrGenerator {
             next_temp: 0,
             current_mut_locals: std::collections::HashSet::new(),
             module_mut_locals: HashMap::new(),
+            current_loop_binding_locals: std::collections::HashSet::new(),
+            module_loop_binding_locals: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
         }
@@ -310,6 +318,7 @@ impl AstToIrGenerator {
             globals: Vec::new(),
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
+            loop_binding_locals: std::mem::take(&mut self.module_loop_binding_locals),
             native_bindings: std::mem::take(&mut self.native_bindings),
         })
     }
@@ -461,6 +470,12 @@ impl AstToIrGenerator {
                 .insert(func_name.clone(), self.current_mut_locals.clone());
         }
 
+        // 保存当前函数的循环绑定变量信息到模块级别映射
+        if !self.current_loop_binding_locals.is_empty() {
+            self.module_loop_binding_locals
+                .insert(func_name.clone(), self.current_loop_binding_locals.clone());
+        }
+
         Ok(Some(func_ir))
     }
 
@@ -524,6 +539,8 @@ impl AstToIrGenerator {
                 span: Span::dummy(),
             });
             self.register_local(&param.name, i);
+            // 函数参数默认是可变的（可以修改）
+            self.current_mut_locals.insert(i);
         }
 
         // 记录局部变量起始位置（在参数之后）
@@ -612,6 +629,12 @@ impl AstToIrGenerator {
         if !self.current_mut_locals.is_empty() {
             self.module_mut_locals
                 .insert(name.to_string(), self.current_mut_locals.clone());
+        }
+
+        // 保存当前函数的循环绑定变量信息到模块级别映射
+        if !self.current_loop_binding_locals.is_empty() {
+            self.module_loop_binding_locals
+                .insert(name.to_string(), self.current_loop_binding_locals.clone());
         }
 
         Ok(Some(func_ir))
@@ -819,12 +842,14 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::For {
                 var,
+                var_mut,
                 iterable,
                 body,
                 label: _,
             } => {
                 self.generate_for_loop_ir(
                     var,
+                    *var_mut,
                     iterable,
                     body,
                     None, // No result needed for statement
@@ -1124,6 +1149,7 @@ impl AstToIrGenerator {
     fn generate_for_loop_ir(
         &mut self,
         var_name: &str,
+        #[allow(unused_variables)] var_mut: bool,
         iterable: &ast::Expr,
         body: &ast::Block,
         result_reg: Option<usize>,
@@ -1139,63 +1165,85 @@ impl AstToIrGenerator {
             ..
         } = iterable
         {
-            // Desugar to while loop logic
+            // Desugar to iterator-based loop (每次迭代从迭代器获取新值，不是递增)
+            // for i in 1..5 等价于：
+            // current = 1
+            // end = 5
+            // while current < end {
+            //     // 将 current 值存储到循环变量的 slot
+            //     body 中访问 i 时，从这个 slot 读取
+            //     current = current + 1
+            // }
             self.enter_scope();
 
-            // 1. Initialize loop var = start
-            let var_reg = self.next_temp_reg();
+            // 0. 创建迭代器状态结构
+            let current_reg = self.next_temp_reg(); // 当前迭代值
+            let end_reg = self.next_temp_reg(); // 结束值
+            let var_reg = self.next_temp_reg(); // 循环变量的存储位置
+
+            // 注册循环变量 - 让变量访问指向 var_reg
             self.register_local(var_name, var_reg);
-            self.generate_expr_ir(left, var_reg, instructions, constants)?;
 
-            // 2. Initialize limit = end
-            let limit_reg = self.next_temp_reg();
-            self.generate_expr_ir(right, limit_reg, instructions, constants)?;
+            // for 循环变量的 Store 是"绑定"操作，不是"修改"
+            // 将 var_reg 添加到循环绑定变量集合
+            self.current_loop_binding_locals.insert(var_reg);
 
-            // Store initial value to local so body can access it
+            // 如果使用 for mut，用户可以在循环体内修改变量
+            if var_mut {
+                self.current_mut_locals.insert(var_reg);
+            }
+
+            // 1. 初始化：current = start, end = end
+            self.generate_expr_ir(left, current_reg, instructions, constants)?;
+            self.generate_expr_ir(right, end_reg, instructions, constants)?;
+
+            // 将初始值存储到循环变量的 slot
             instructions.push(Instruction::Store {
                 dst: Operand::Local(var_reg),
-                src: Operand::Local(var_reg),
+                src: Operand::Local(current_reg),
                 span: for_span,
             });
 
             // Loop start label
             let loop_start_idx = instructions.len();
 
-            // 3. Condition check: var < limit
+            // 2. Condition check: current < end
             let cond_reg = self.next_temp_reg();
             instructions.push(Instruction::Lt {
                 dst: Operand::Local(cond_reg),
-                lhs: Operand::Local(var_reg),
-                rhs: Operand::Local(limit_reg),
+                lhs: Operand::Local(current_reg),
+                rhs: Operand::Local(end_reg),
             });
 
-            // 4. Jump to end if false
+            // 3. Jump to end if current >= end
             let jump_end_idx = instructions.len();
             instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
 
-            // 5. Body
+            // 4. 执行循环体
+            // 循环体访问 i 时，会从 var_reg 读取
+            // var_reg 在每次循环迭代前都会被更新为 current 的值
             self.generate_block_ir(body, instructions, constants)?;
 
-            // 6. Increment var
+            // 5. 递增：current = current + 1
             let one_reg = self.next_temp_reg();
             instructions.push(Instruction::Load {
                 dst: Operand::Local(one_reg),
                 src: Operand::Const(ConstValue::Int(1)),
             });
             instructions.push(Instruction::Add {
-                dst: Operand::Local(var_reg),
-                lhs: Operand::Local(var_reg),
+                dst: Operand::Local(current_reg),
+                lhs: Operand::Local(current_reg),
                 rhs: Operand::Local(one_reg),
             });
 
-            // Store updated value to local for next iteration body access
+            // 6. 将新的 current 值存储到循环变量的 slot
             instructions.push(Instruction::Store {
                 dst: Operand::Local(var_reg),
-                src: Operand::Local(var_reg),
+                src: Operand::Local(current_reg),
                 span: for_span,
             });
 
-            // 7. Jump back
+            // 7. 跳转回循环开始
             instructions.push(Instruction::Jmp(loop_start_idx));
 
             // 8. Fix jump
@@ -1802,6 +1850,7 @@ impl AstToIrGenerator {
             }
             Expr::For {
                 var,
+                var_mut,
                 iterable,
                 body,
                 label: _,
@@ -1809,6 +1858,7 @@ impl AstToIrGenerator {
             } => {
                 self.generate_for_loop_ir(
                     var,
+                    *var_mut,
                     iterable,
                     body,
                     Some(result_reg),

@@ -303,6 +303,14 @@
         "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
         "error_output": "error[E2012]: Mutability conflict\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ cannot mutate through immutable reference"
     },
+    "E2013": {
+        "title": "Variable shadowing",
+        "message": "Cannot shadow existing variable",
+        "template": "Cannot shadow existing variable '{name}'",
+        "help": "Use a different variable name, or declare the variable in a different scope",
+        "example": "i = 10; for i in 1..5 { print(i) }",
+        "error_output": "error[E2013]: Variable shadowing\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
+    },
     "E4001": {
         "title": "Generic constraint violated",
         "message": "Type does not satisfy the generic constraint",

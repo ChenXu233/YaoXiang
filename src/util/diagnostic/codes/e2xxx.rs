@@ -36,6 +36,11 @@ pub static E2XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Semantic,
         message_template: "Mutability conflict: cannot use mutable reference in immutable context",
     },
+    ErrorCodeDefinition {
+        code: "E2013",
+        category: ErrorCategory::Semantic,
+        message_template: "Cannot shadow existing variable '{name}'",
+    },
 ];
 
 // E2xxx 快捷方法
@@ -74,5 +79,11 @@ impl ErrorCodeDefinition {
     pub fn mutability_conflict() -> DiagnosticBuilder {
         let def = Self::find("E2012").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
+    }
+
+    /// E2013 变量遮蔽
+    pub fn variable_shadowing(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2013").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 }

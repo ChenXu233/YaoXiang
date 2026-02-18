@@ -23,6 +23,7 @@ fn test_function_definition() {
             entry: 0,
         }],
         mut_locals: Default::default(),
+        loop_binding_locals: Default::default(),
         native_bindings: Vec::new(),
     };
 

@@ -149,10 +149,11 @@ impl BodyChecker {
             } => self.check_var_stmt(name, type_annotation.as_ref(), initializer.as_deref()),
             crate::frontend::core::parser::ast::StmtKind::For {
                 var,
+                var_mut,
                 iterable,
                 body,
                 ..
-            } => self.check_for_stmt(var, iterable, body),
+            } => self.check_for_stmt(var, *var_mut, iterable, body),
             crate::frontend::core::parser::ast::StmtKind::If {
                 condition,
                 then_branch,
@@ -319,6 +320,7 @@ impl BodyChecker {
     fn check_for_stmt(
         &mut self,
         var: &str,
+        var_mut: bool,
         iterable: &Expr,
         body: &Block,
     ) -> Result<(), Box<Diagnostic>> {
@@ -328,7 +330,20 @@ impl BodyChecker {
             MonoType::String => MonoType::Char,
             _ => self.solver.new_var(),
         };
+
+        // 遮蔽检查：如果变量已存在，报错
+        if self.vars.contains_key(var) {
+            return Err(Box::new(
+                ErrorCodeDefinition::variable_shadowing(var).build(),
+            ));
+        }
+
         self.vars.insert(var.to_string(), PolyType::mono(elem_ty));
+
+        // var_mut 在 IR 生成阶段使用，用于决定循环变量是否可变
+        // for i in 1..5 - i 不可变
+        // for mut i in 1..5 - i 可变
+        let _ = var_mut;
 
         for stmt in &body.stmts {
             self.check_stmt(stmt)?;
