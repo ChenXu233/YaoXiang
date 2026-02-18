@@ -145,6 +145,20 @@ pub struct AstToIrGenerator {
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
     struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
+    /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
+    /// 用于方法调用时的参数重排和函数转发（RFC-004）
+    type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
+}
+
+/// 绑定信息（用于 IR 生成阶段的方法调用转发）
+///
+/// 按 RFC-004 设计：记录方法绑定到哪个原始函数的哪些参数位置
+#[derive(Debug, Clone)]
+struct BindingInfo {
+    /// 原始函数名
+    function: String,
+    /// 绑定位置列表（调用者 obj 填充到这些位置）
+    positions: Vec<usize>,
 }
 
 impl Default for AstToIrGenerator {
@@ -169,6 +183,7 @@ impl AstToIrGenerator {
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
             struct_definitions: HashMap::new(),
+            type_bindings: HashMap::new(),
         }
     }
 
@@ -187,6 +202,7 @@ impl AstToIrGenerator {
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
             struct_definitions: HashMap::new(),
+            type_bindings: HashMap::new(),
         }
     }
 
@@ -284,24 +300,88 @@ impl AstToIrGenerator {
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
 
-    /// 解析字段索引（简化版本）
-    /// 在真正的实现中，需要从类型信息中查找字段在结构体中的位置
+    /// 解析字段索引
+    ///
+    /// 从类型信息和结构体定义中动态查找字段在结构体中的位置。
+    /// 查找顺序：
+    /// 1. 从表达式的类型推导出结构体名，再从 struct_definitions 查找字段索引
+    /// 2. 遍历所有结构体定义查找匹配的字段名（兜底）
     fn resolve_field_index(
         &self,
-        _expr: &ast::Expr,
+        expr: &ast::Expr,
         field_name: &str,
     ) -> Option<usize> {
-        // 简化处理：假设常见字段名
-        // x -> 0, y -> 1, value -> 2 等
-        match field_name {
-            "x" | "first" | "key" => Some(0),
-            "y" | "second" | "value" => Some(1),
-            "z" | "third" => Some(2),
-            _ => {
-                // 对于未知字段名，返回 None
-                // 在真正的实现中，这里应该查询类型定义中的字段列表
+        // 1. 尝试从表达式类型推导结构体名，精确查找
+        if let Some(type_name) = self.get_expr_struct_type_name(expr) {
+            if let Some(fields) = self.struct_definitions.get(&type_name) {
+                for (i, field) in fields.iter().enumerate() {
+                    if field.name == field_name {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+
+        // 2. 兜底：遍历所有结构体定义查找字段名（当类型推导不可用时）
+        for (_struct_name, fields) in &self.struct_definitions {
+            for (i, field) in fields.iter().enumerate() {
+                if field.name == field_name {
+                    return Some(i);
+                }
+            }
+        }
+
+        // 3. 未找到，返回 None
+        None
+    }
+
+    /// 从表达式推导其结构体类型名称
+    ///
+    /// 用于 resolve_field_index 等需要知道表达式类型的场景
+    fn get_expr_struct_type_name(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<String> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                // 从类型检查结果查找变量类型
+                if let Some(ref type_result) = self.type_result {
+                    if let Some(mono_type) = type_result.local_var_types.get(name) {
+                        return Self::mono_type_to_struct_name(mono_type);
+                    }
+                }
+                // 从 bindings 查找
+                if let Some(poly_type) = self.lookup_var_type(name) {
+                    let mono_type = self.instantiate_poly_type(poly_type);
+                    return Self::mono_type_to_struct_name(&mono_type);
+                }
+                // 从 IR 生成器追踪的类型查找
+                if let Some(type_name) = self.local_var_types.get(name) {
+                    if self.struct_definitions.contains_key(type_name) {
+                        return Some(type_name.clone());
+                    }
+                }
                 None
             }
+            ast::Expr::Call { func, .. } => {
+                // 构造器调用：Point(...) -> 类型名为 "Point"
+                if let ast::Expr::Var(name, _) = func.as_ref() {
+                    if self.struct_definitions.contains_key(name) {
+                        return Some(name.clone());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// 从 MonoType 提取结构体类型名
+    fn mono_type_to_struct_name(mono_type: &MonoType) -> Option<String> {
+        match mono_type {
+            MonoType::TypeRef(name) => Some(name.clone()),
+            MonoType::Struct(st) => Some(st.name.clone()),
+            _ => None,
         }
     }
 
@@ -736,15 +816,70 @@ impl AstToIrGenerator {
                     .insert(struct_name.clone(), fields.clone());
                 self.generate_struct_constructor_ir(struct_name, fields)
             }
-            ast::Type::Struct { fields, .. } => {
+            ast::Type::Struct { fields, bindings } => {
                 self.struct_definitions
                     .insert(_name.to_string(), fields.clone());
+                // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
+                self.register_type_bindings(_name, bindings);
                 self.generate_struct_constructor_ir(_name, fields)
             }
             _ => {
                 // 非结构体类型，不生成构造函数
                 Ok(None)
             }
+        }
+    }
+
+    /// 注册类型绑定信息（RFC-004）
+    ///
+    /// 将类型定义体内的绑定（外部函数绑定和匿名函数绑定）记录到 type_bindings 映射中，
+    /// 用于后续方法调用 IR 生成时的参数重排。
+    fn register_type_bindings(
+        &mut self,
+        type_name: &str,
+        bindings: &[ast::TypeBodyBinding],
+    ) {
+        use ast::BindingKind;
+
+        let mut binding_map = HashMap::new();
+
+        for binding in bindings {
+            match &binding.kind {
+                BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::Anonymous {
+                    params: _,
+                    return_type: _,
+                    positions,
+                    body: _,
+                } => {
+                    // 匿名函数绑定：函数名使用 "类型名.__anon_方法名" 格式
+                    // 后续生成匿名函数的 IR 时使用此名称
+                    let anon_func_name = format!("{}.__anon_{}", type_name, binding.name);
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: anon_func_name,
+                            positions: positions.clone(),
+                        },
+                    );
+                }
+            }
+        }
+
+        if !binding_map.is_empty() {
+            self.type_bindings
+                .insert(type_name.to_string(), binding_map);
         }
     }
 
@@ -1716,33 +1851,121 @@ impl AstToIrGenerator {
                 if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
                     // 方法调用 - 转换为普通函数调用
                     // 命名空间机制：p.method() -> method(p)
-                    let mut arg_regs = Vec::new();
 
                     // 只有非命名空间调用才需要添加 self 参数
                     // 命名空间调用（如 std.io.println）不需要隐式参数
-                    if !is_namespace_call(expr) {
-                        // 首先生成对象表达式 IR（用于 self）
-                        let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        arg_regs.push(Operand::Local(obj_reg));
+                    if is_namespace_call(expr) {
+                        // 命名空间调用：不需要隐式参数
+                        let mut arg_regs = Vec::new();
+                        for arg in args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                            arg_regs.push(Operand::Local(arg_reg));
+                        }
+                        let method_function_name = extract_namespace_path(expr, field);
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(
+                                method_function_name.to_string(),
+                            )),
+                            args: arg_regs,
+                        });
+                    } else {
+                        // 非命名空间调用：检查是否有绑定信息（RFC-004）
+                        let binding_info =
+                            self.get_expr_struct_type_name(expr).and_then(|type_name| {
+                                self.type_bindings
+                                    .get(&type_name)
+                                    .and_then(|bindings| bindings.get(field).cloned())
+                            });
+
+                        if let Some(binding) = binding_info {
+                            // 绑定方法调用：按 RFC-004 进行参数重排
+                            // obj.method(arg1, arg2) + binding positions [0]
+                            // → original_function(obj, arg1, arg2)
+                            //
+                            // obj.method(arg1) + binding positions [1]
+                            // → original_function(arg1, obj)
+
+                            // 首先生成对象表达式 IR
+                            let obj_reg = self.next_temp_reg();
+                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+
+                            // 生成所有方法参数 IR
+                            let mut method_arg_regs = Vec::new();
+                            for arg in args.iter() {
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                                method_arg_regs.push(Operand::Local(arg_reg));
+                            }
+
+                            // 按绑定位置重排参数
+                            // 总参数数 = 绑定位置数(obj填充) + 方法参数数
+                            let total_params = binding.positions.len() + method_arg_regs.len();
+                            let mut final_args: Vec<Option<Operand>> = vec![None; total_params];
+
+                            // 将 obj 放入绑定位置
+                            for &pos in &binding.positions {
+                                if pos < total_params {
+                                    final_args[pos] = Some(Operand::Local(obj_reg));
+                                }
+                            }
+
+                            // 将方法参数填充到剩余位置
+                            let mut method_arg_iter = method_arg_regs.into_iter();
+                            for slot in final_args.iter_mut() {
+                                if slot.is_none() {
+                                    if let Some(arg) = method_arg_iter.next() {
+                                        *slot = Some(arg);
+                                    }
+                                }
+                            }
+
+                            // 收集最终参数列表
+                            let final_arg_regs: Vec<Operand> =
+                                final_args.into_iter().flatten().collect();
+
+                            // 解析函数名
+                            let func_name = if let Some(qualified) =
+                                SHORT_TO_QUALIFIED.get(&binding.function)
+                            {
+                                qualified.clone()
+                            } else {
+                                binding.function.clone()
+                            };
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(func_name)),
+                                args: final_arg_regs,
+                            });
+                        } else {
+                            // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
+                            let mut arg_regs = Vec::new();
+
+                            // 生成对象表达式 IR（作为第一个参数）
+                            let obj_reg = self.next_temp_reg();
+                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                            arg_regs.push(Operand::Local(obj_reg));
+
+                            // 生成方法参数 IR
+                            for arg in args.iter() {
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                                arg_regs.push(Operand::Local(arg_reg));
+                            }
+
+                            let method_function_name = extract_namespace_path(expr, field);
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(
+                                    method_function_name.to_string(),
+                                )),
+                                args: arg_regs,
+                            });
+                        }
                     }
-
-                    // 生成参数 IR
-                    for arg in args.iter() {
-                        let arg_reg = self.next_temp_reg();
-                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                        arg_regs.push(Operand::Local(arg_reg));
-                    }
-
-                    // 命名空间机制：提取完整的命名空间路径
-                    // 例如：std.io.println -> "std.io.println" 或 io.println -> "std.io.println"
-                    let method_function_name = extract_namespace_path(expr, field);
-
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(method_function_name.to_string())),
-                        args: arg_regs,
-                    });
                 } else {
                     // 普通函数调用
                     let mut arg_regs = Vec::new();
