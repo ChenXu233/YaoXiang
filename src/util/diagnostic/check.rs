@@ -254,16 +254,21 @@ fn check_with_watch(paths: &[PathBuf], options: CheckOptions<'_>) -> Result<()> 
 
     // Wait for file changes
     loop {
-        if let Ok(_) = rx.recv_timeout(Duration::from_millis(100)) {
-            // Debounce: wait a bit for multiple rapid changes
-            std::thread::sleep(Duration::from_millis(100));
-            
-            // Clear previous output
-            print!("\x1B[2J\x1B[1;1H"); // Clear screen and move cursor to top
-            println!("Files changed, re-checking...\n");
-            
-            // Re-check
-            let _ = check_once(paths, check_options.clone());
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(_) => {
+                // Debounce: wait a bit for multiple rapid changes
+                std::thread::sleep(Duration::from_millis(100));
+                
+                // Clear previous output
+                print!("\x1B[2J\x1B[1;1H"); // Clear screen and move cursor to top
+                println!("Files changed, re-checking...\n");
+                
+                // Re-check
+                let _ = check_once(paths, check_options.clone());
+            }
+            Err(_) => {
+                // Timeout - continue waiting
+            }
         }
     }
 }
@@ -332,6 +337,6 @@ mod tests {
         fs::write(&file_path, "use std.io\n\nmain = () => {\n  print(unknown_var)\n}").unwrap();
 
         let diagnostics = check_single_file(&file_path).unwrap();
-        assert!(diagnostics.len() > 0);
+        assert!(!diagnostics.is_empty());
     }
 }
