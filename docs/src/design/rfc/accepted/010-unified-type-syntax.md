@@ -10,7 +10,7 @@ title: RFC-010：统一类型语法
 >
 > **创建日期**: 2025-01-20
 >
-> **最后更新**: 2026-02-12（统一语法规则：identifier : type = expression，无 `type`/`fn`/`struct`/`trait`/`impl` 关键字）
+> **最后更新**: 2026-02-18（新增默认值初始化语法、内置绑定、后置绑定）
 
 ## 摘要
 
@@ -276,7 +276,62 @@ Point: Type = {
 EmptyType: Type = {}
 ```
 
-#### 4. 接口定义
+#### 4. 默认值初始化
+
+类型字段可以指定默认值，支持可选初始化：
+
+```yaoxiang
+# 有默认值的字段 - 构造时可选
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# 使用
+p1 = Point()              # → Point(x=0, y=0)
+p2 = Point(x=1)          # → Point(x=1, y=0)
+p3 = Point(x=1, y=2)     # → Point(x=1, y=2)
+
+# 无默认值的字段 - 构造时必填
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# 使用
+p4 = Point2(x=1, y=2)    # 正确
+p5 = Point2()            # 错误：x, y 必填
+```
+
+**规则**：
+- `field: Type = expression` → 有默认值，构造时可选
+- `field: Type` → 无默认值，构造时必填
+
+#### 5. 内置绑定
+
+类型定义体内可以直接绑定方法（详细语法见 RFC-004）：
+
+```yaoxiang
+# 在类型定义体内直接绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]           # 引用外部函数绑定
+}
+
+# 或使用内联匿名函数绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: (other: Point) -> Float = {
+        dx = this.x - other.x
+        dy = this.y - other.y
+        return (dx * dx + dy * dy).sqrt()
+    }
+}
+```
+
+#### 6. 接口定义
 
 ```yaoxiang
 # 接口 = 字段全为函数的记录类型
@@ -293,7 +348,7 @@ Serializable: Type = {
 Empty: Type = {}
 ```
 
-#### 5. 方法定义
+#### 7. 方法定义
 
 ```yaoxiang
 # 类型方法：关联到特定类型（使用 Type.method 语法）
@@ -317,7 +372,7 @@ Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 Point.serialize = (self: Point) => "Point(${self.x}, ${self.y})"
 ```
 
-#### 6. 方法绑定：普通方法 ↔ 类型方法
+#### 8. 方法绑定：普通方法 ↔ 类型方法
 
 普通方法可以通过 `[position]` 语法绑定到类型，反之亦然（参考 RFC-004）。
 
@@ -387,7 +442,7 @@ draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 # Point.transform = transform[1]
 ```
 
-#### 7. 接口组合
+#### 9. 接口组合
 
 ```yaoxiang
 # 接口组合 = 类型交集
@@ -400,7 +455,7 @@ process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
 }
 ```
 
-#### 8. 泛型类型
+#### 10. 泛型类型
 
 ```yaoxiang
 # 基础泛型（RFC-011 Phase 1）

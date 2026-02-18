@@ -1,0 +1,120 @@
+use std.io
+use std.os
+
+add_prefix: (name: String, prefix: String) -> String = {
+    return prefix + name
+}
+
+add_suffix: (name: String, suffix: String) -> String = {
+    return name + suffix
+}
+
+replace_text: (name: String, old: String, new: String) -> String = {
+    return name
+}
+
+apply_operation: (name: String, op: String, param: String) -> String = {
+    result = match op {
+        "prefix" => add_prefix(name, param),
+        "suffix" => add_suffix(name, param),
+        "replace" => replace_text(name, param, param),
+        _ => name
+    }
+    return result
+}
+
+rename_file: (dir: String, old_name: String, new_name: String, preview: Bool) -> Void = {
+    if old_name == new_name {
+        return
+    }
+
+    if preview {
+        print("  PREVIEW: ")
+        print(old_name)
+        print(" -> ")
+        print(new_name)
+        print("\n")
+        return
+    }
+
+    old_path = dir + "/" + old_name
+    new_path = dir + "/" + new_name
+
+    os.rename(old_path, new_path)
+
+    print("  RENAMED: ")
+    print(old_name)
+    print(" -> ")
+    print(new_name)
+    print("\n")
+
+    return
+}
+
+print_header: (dir: String, op: String, param: String, preview: Bool) -> Void = {
+    print("=== File Batch Rename Tool ===\n")
+    print("Directory: ")
+    print(dir)
+    print("\n")
+    print("Operation: ")
+    print(op)
+    print("\n")
+    print("Parameter: ")
+    print(param)
+    print("\n")
+    print("Mode: ")
+    if preview {
+        print("PREVIEW (no changes will be made)\n")
+    } else {
+        print("LIVE (files will be renamed!)\n")
+    }
+    print("\n")
+    return
+}
+
+main: () -> Void = {
+    dir = "."
+    op = "prefix"
+    param = "NEW_"
+    preview = true
+
+    print_header(dir, op, param, preview)
+
+    if op == "preview" {
+        print("No operation specified. Set op to prefix/suffix/replace.\n")
+        return
+    }
+
+    dir_exists = os.is_dir(dir)
+
+    if dir_exists == false {
+        print("Directory does not exist: ")
+        print(dir)
+        print("\n")
+        return
+    }
+
+    files = os.read_dir(dir)
+
+    if files == "" {
+        print("Directory is empty.\n")
+        return
+    }
+
+    print("Files in directory:\n")
+    print(files)
+    print("\n")
+
+    print("Note: Full file iteration requires string parsing.\n")
+
+    print("\nSummary:\n")
+    print("  Operation: ")
+    print(op)
+    print("\n")
+
+    if preview {
+        print("  Run with preview = false to apply changes.\n")
+    }
+
+    return
+}
