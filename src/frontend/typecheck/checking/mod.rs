@@ -363,7 +363,7 @@ impl BodyChecker {
         self.check_fn_def(name, params, &body)
     }
 
-    /// 检查变量语句（mut 声明）
+    /// 检查变量语句（mut 声明或隐式赋值）
     fn check_var_stmt(
         &mut self,
         name: &str,
@@ -376,13 +376,22 @@ impl BodyChecker {
             (None, None) => self.solver.new_var(),
         };
 
-        // 遮蔽检查：如果变量已存在于任何作用域中，报错
+        if self.var_exists_in_current_scope(name) {
+            // 当前作用域已存在 → 重新赋值（统一类型）
+            // 可变性检查由 MutChecker 在 IR 阶段处理
+            let existing_poly = self.get_var(name).unwrap().clone();
+            let _ = self.solver.unify(&existing_poly.body, &ty);
+            return Ok(());
+        }
+
+        // 仅外层作用域存在 → 遮蔽错误
         if self.var_exists_in_any_scope(name) {
             return Err(Box::new(
                 ErrorCodeDefinition::variable_shadowing(name).build(),
             ));
         }
 
+        // 不存在 → 新变量
         self.add_var(name.to_string(), PolyType::mono(ty));
         Ok(())
     }
