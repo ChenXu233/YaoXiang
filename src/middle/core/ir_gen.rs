@@ -134,6 +134,10 @@ pub struct AstToIrGenerator {
     current_loop_binding_locals: std::collections::HashSet<usize>,
     /// 模块级别的循环绑定变量映射 (function_name -> set of loop binding local indices)
     module_loop_binding_locals: HashMap<String, std::collections::HashSet<usize>>,
+    /// 当前函数的局部变量名列表（按索引顺序）
+    current_local_names: Vec<String>,
+    /// 模块级别的局部变量名映射 (function_name -> 变量名列表)
+    module_local_names: HashMap<String, Vec<String>>,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
     /// 用户声明的 native 函数绑定
@@ -157,6 +161,8 @@ impl AstToIrGenerator {
             module_mut_locals: HashMap::new(),
             current_loop_binding_locals: std::collections::HashSet::new(),
             module_loop_binding_locals: HashMap::new(),
+            current_local_names: Vec::new(),
+            module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
         }
@@ -172,6 +178,8 @@ impl AstToIrGenerator {
             module_mut_locals: HashMap::new(),
             current_loop_binding_locals: std::collections::HashSet::new(),
             module_loop_binding_locals: HashMap::new(),
+            current_local_names: Vec::new(),
+            module_local_names: HashMap::new(),
             local_var_types: HashMap::new(),
             native_bindings: Vec::new(),
         }
@@ -216,6 +224,13 @@ impl AstToIrGenerator {
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(name.to_string(), SymbolEntry { local_idx });
         }
+        // 保存变量名到当前函数的局部变量名列表
+        // 确保向量长度足够（可能有空洞）
+        if local_idx >= self.current_local_names.len() {
+            self.current_local_names
+                .resize(local_idx + 1, String::new());
+        }
+        self.current_local_names[local_idx] = name.to_string();
     }
 
     /// 查找局部变量
@@ -319,6 +334,7 @@ impl AstToIrGenerator {
             functions,
             mut_locals: std::mem::take(&mut self.module_mut_locals),
             loop_binding_locals: std::mem::take(&mut self.module_loop_binding_locals),
+            local_names: std::mem::take(&mut self.module_local_names),
             native_bindings: std::mem::take(&mut self.native_bindings),
         })
     }
@@ -391,6 +407,8 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, IrGenError> {
         // 重置当前函数的可变局部变量追踪
         self.current_mut_locals.clear();
+        // 重置当前函数的局部变量名列表
+        self.current_local_names.clear();
 
         // 命名空间机制：方法函数名就是方法名，无复杂前缀
         // 例如：Point.get_x 生成函数名 "get_x"
@@ -476,6 +494,12 @@ impl AstToIrGenerator {
                 .insert(func_name.clone(), self.current_loop_binding_locals.clone());
         }
 
+        // 保存当前函数的局部变量名列表
+        self.module_local_names.insert(
+            func_name.clone(),
+            std::mem::take(&mut self.current_local_names),
+        );
+
         Ok(Some(func_ir))
     }
 
@@ -513,6 +537,8 @@ impl AstToIrGenerator {
 
         // 重置当前函数的可变局部变量追踪
         self.current_mut_locals.clear();
+        // 重置当前函数的局部变量名列表
+        self.current_local_names.clear();
         // 阶段3修复：改进返回类型解析，更好地与类型检查集成
         let return_type = match type_annotation {
             Some(ast::Type::Fn { return_type, .. }) => (**return_type).clone().into(),
@@ -636,6 +662,12 @@ impl AstToIrGenerator {
             self.module_loop_binding_locals
                 .insert(name.to_string(), self.current_loop_binding_locals.clone());
         }
+
+        // 保存当前函数的局部变量名列表
+        self.module_local_names.insert(
+            name.to_string(),
+            std::mem::take(&mut self.current_local_names),
+        );
 
         Ok(Some(func_ir))
     }

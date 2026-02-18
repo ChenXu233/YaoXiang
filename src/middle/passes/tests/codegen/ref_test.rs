@@ -35,6 +35,7 @@ fn test_codegen_arc_new() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -71,6 +72,7 @@ fn test_codegen_arc_clone() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -104,6 +106,7 @@ fn test_codegen_arc_drop() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -151,6 +154,7 @@ fn test_arc_operation_sequence() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -192,6 +196,7 @@ fn test_ref_bytecode_generation() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 
@@ -239,6 +244,7 @@ fn test_nested_ref_bytecode() {
         functions: vec![func],
         mut_locals: Default::default(),
         loop_binding_locals: Default::default(),
+        local_names: Default::default(),
         native_bindings: Vec::new(),
     };
 

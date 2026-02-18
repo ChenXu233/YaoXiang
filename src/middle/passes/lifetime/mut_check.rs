@@ -37,6 +37,8 @@ pub struct MutChecker {
     /// 循环绑定变量集合：这些变量的 Store 操作是"绑定"而不是"修改"
     /// 例如：for 循环变量每次迭代都是绑定新值，不是修改
     loop_binding_vars: HashSet<Operand>,
+    /// 局部变量名列表（用于错误报告）
+    local_names: Option<Vec<String>>,
 }
 
 impl MutChecker {
@@ -52,6 +54,7 @@ impl MutChecker {
             state: HashMap::new(),
             track_initialization: false,
             loop_binding_vars: HashSet::new(),
+            local_names: None,
         }
     }
 
@@ -122,8 +125,22 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
+        // 尝试获取变量名，如果失败则使用 operand_to_string 的结果
+        let value = if let Some(local_names) = &self.local_names {
+            if let Operand::Local(idx) = target {
+                if *idx < local_names.len() && !local_names[*idx].is_empty() {
+                    local_names[*idx].clone()
+                } else {
+                    operand_to_string(target)
+                }
+            } else {
+                operand_to_string(target)
+            }
+        } else {
+            operand_to_string(target)
+        };
         self.errors.push(OwnershipError::ImmutableAssign {
-            value: operand_to_string(target),
+            value,
             span: Some(span),
         });
     }
@@ -257,11 +274,13 @@ impl MutChecker {
     /// 2. 启用初始化追踪：首次 Store 视为变量声明（初始化），允许通过
     /// 3. 只对重复赋值进行可变性检查
     /// 4. 接受循环绑定变量集合：这些变量的 Store 是"绑定"操作，不是"修改"
+    /// 5. 接受局部变量名列表，用于生成友好的错误信息
     pub fn check_function_with_mut_locals(
         &mut self,
         func: &FunctionIR,
         mut_locals: &HashSet<usize>,
         loop_binding_locals: Option<&HashSet<usize>>,
+        local_names: Option<&Vec<String>>,
     ) -> Vec<OwnershipError> {
         // 清除状态
         self.mutable_vars.clear();
@@ -284,6 +303,9 @@ impl MutChecker {
                 self.loop_binding_vars.insert(Operand::Local(idx));
             }
         }
+
+        // 存储局部变量名列表用于错误报告
+        self.local_names = local_names.map(|v| v.clone());
 
         // 执行检查
         for (block_idx, block) in func.blocks.iter().enumerate() {
