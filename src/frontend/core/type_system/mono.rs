@@ -398,17 +398,18 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bytes => MonoType::Bytes,
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
-            ast::Type::Struct(fields) => {
-                let (field_names, field_types, field_mutability) = fields
+            ast::Type::Struct { fields, .. } => {
+                let (field_names, field_types, field_mutability, field_has_default) = fields
                     .into_iter()
-                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
+                    .map(|f| (f.name, MonoType::from(f.ty), f.is_mut, f.default.is_some()))
                     .fold(
-                        (Vec::new(), Vec::new(), Vec::new()),
-                        |(mut names, mut types, mut mutability), (n, t, m)| {
+                        (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+                        |(mut names, mut types, mut mutability, mut defaults), (n, t, m, d)| {
                             names.push(n);
                             types.push(t);
                             mutability.push(m);
-                            (names, types, mutability)
+                            defaults.push(d);
+                            (names, types, mutability, defaults)
                         },
                     );
                 MonoType::Struct(StructType {
@@ -416,6 +417,7 @@ impl From<ast::Type> for MonoType {
                     fields: field_names.into_iter().zip(field_types).collect(),
                     methods: HashMap::new(),
                     field_mutability,
+                    field_has_default,
                 })
             }
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
@@ -489,6 +491,7 @@ impl From<ast::Type> for MonoType {
                     fields: field_names.into_iter().zip(field_types).collect(),
                     methods: HashMap::new(),
                     field_mutability,
+                    field_has_default: Vec::new(),
                 })
             }
             ast::Type::Sum(types) => {
@@ -572,6 +575,8 @@ pub struct StructType {
     pub methods: HashMap<String, PolyType>,
     /// 字段可变性标记：与 fields 索引对应
     pub field_mutability: Vec<bool>,
+    /// 字段默认值标记：与 fields 索引对应，标记哪些字段有默认值
+    pub field_has_default: Vec<bool>,
 }
 
 impl StructType {

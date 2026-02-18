@@ -838,6 +838,7 @@ fn substitute_return_type(
                 .collect(),
             methods: s.methods.clone(),
             field_mutability: s.field_mutability.clone(),
+            field_has_default: s.field_has_default.clone(),
         }),
         MonoType::Enum(e) => MonoType::Enum(e.clone()),
         MonoType::Range { elem_type } => MonoType::Range {

@@ -912,6 +912,34 @@ impl Executor for Interpreter {
                     frame.set_register(dst.0 as usize, RuntimeValue::Tuple(handle));
                     frame.advance();
                 }
+                BytecodeInstr::CreateStruct {
+                    dst,
+                    type_name: _,
+                    fields,
+                } => {
+                    // 收集各字段值
+                    let field_values: Vec<RuntimeValue> = fields
+                        .iter()
+                        .map(|reg| {
+                            frame
+                                .registers
+                                .get(reg.0 as usize)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        })
+                        .collect();
+                    let dst_idx = dst.0 as usize;
+                    // 在堆上分配字段存储
+                    let handle = self.heap.allocate(HeapValue::Tuple(field_values));
+                    // 创建结构体值
+                    let struct_val = RuntimeValue::Struct {
+                        type_id: crate::backends::common::value::TypeId(0),
+                        fields: handle,
+                        vtable: Vec::new(),
+                    };
+                    frame.set_register(dst_idx, struct_val);
+                    frame.advance();
+                }
                 BytecodeInstr::ArcNew { dst, src } => {
                     let val = frame
                         .registers

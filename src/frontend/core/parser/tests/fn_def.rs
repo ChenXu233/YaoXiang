@@ -557,7 +557,7 @@ mod fn_def_tests {
                 assert_eq!(name, "Point");
                 assert!(generic_params.is_empty());
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert_eq!(fields.len(), 2);
                         assert_eq!(fields[0].name, "x");
                         assert_eq!(fields[1].name, "y");
@@ -586,7 +586,7 @@ mod fn_def_tests {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert!(fields.is_empty()); // 只有接口约束
                     }
                     _ => panic!("Expected Struct type"),
@@ -613,7 +613,7 @@ mod fn_def_tests {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert!(fields.is_empty());
                     }
                     _ => panic!("Expected Struct type"),
@@ -637,7 +637,7 @@ mod fn_def_tests {
             } => {
                 assert_eq!(name, "Drawable");
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert_eq!(fields.len(), 1);
                         assert_eq!(fields[0].name, "draw");
                     }
@@ -662,7 +662,7 @@ mod fn_def_tests {
             } => {
                 assert_eq!(name, "Serializable");
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert_eq!(fields.len(), 1);
                         assert_eq!(fields[0].name, "serialize");
                     }
@@ -690,7 +690,7 @@ mod fn_def_tests {
                 assert_eq!(name, "List");
                 assert_eq!(generic_params, &vec!["T".to_string()]);
                 match definition {
-                    crate::frontend::core::parser::ast::Type::Struct(fields) => {
+                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
                         assert_eq!(fields.len(), 2);
                         assert_eq!(fields[0].name, "data");
                         assert_eq!(fields[1].name, "length");

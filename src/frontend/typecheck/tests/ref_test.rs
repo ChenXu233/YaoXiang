@@ -1,4 +1,4 @@
-//! ref 表达式类型推断测试
+﻿//! ref 表达式类型推断测试
 
 use crate::frontend::typecheck::MonoType;
 
@@ -105,6 +105,7 @@ fn test_nested_weak_type() {
         fields: vec![],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     let weak_type = MonoType::Weak(Box::new(struct_type));
 

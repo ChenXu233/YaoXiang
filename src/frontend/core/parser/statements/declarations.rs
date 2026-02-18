@@ -1831,6 +1831,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::LBrace);
 
     let mut fields = Vec::new();
+    let mut bindings = Vec::new();
     let mut interfaces = Vec::new();
 
     if !state.at(&TokenKind::RBrace) {
@@ -1843,10 +1844,64 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
 
             // 检查下一个 token 是否是冒号
             if state.at(&TokenKind::Colon) {
-                // 普通字段: [mut] name: Type
+                // 有冒号: 字段声明或匿名函数绑定
                 state.bump(); // consume ':'
                 let field_type = parse_type_annotation(state)?;
-                fields.push(StructField::new(name, is_mut, field_type));
+
+                // 检查是否有位置绑定: [positions]
+                let positions = parse_optional_binding_positions(state);
+
+                if state.skip(&TokenKind::Eq) {
+                    if let Some(pos) = positions {
+                        // 匿名函数绑定: name: FnType[pos] = lambda
+                        let body_expr = state.parse_expression(BP_LOWEST)?;
+                        let (params, return_type) = extract_fn_type_info(&field_type);
+                        bindings.push(TypeBodyBinding {
+                            name,
+                            kind: BindingKind::Anonymous {
+                                params,
+                                return_type: Box::new(return_type),
+                                positions: pos,
+                                body: Box::new(body_expr),
+                            },
+                        });
+                    } else {
+                        // 默认值字段: name: Type = expression
+                        let default_expr = state.parse_expression(BP_LOWEST)?;
+                        fields.push(StructField::with_default(
+                            name,
+                            is_mut,
+                            field_type,
+                            default_expr,
+                        ));
+                    }
+                } else {
+                    // 普通字段: name: Type
+                    fields.push(StructField::new(name, is_mut, field_type));
+                }
+            } else if state.skip(&TokenKind::Eq) {
+                // 无冒号但有等号: 外部函数绑定 name = function[positions]
+                let func_name = match state.current().map(|t| &t.kind) {
+                    Some(TokenKind::Identifier(n)) => n.clone(),
+                    _ => {
+                        state.error(ParseError::Message(format!(
+                            "Expected function name after '=' in binding '{}'",
+                            name
+                        )));
+                        return None;
+                    }
+                };
+                state.bump(); // consume function name
+
+                // 解析位置绑定 [positions]
+                let positions = parse_binding_positions(state).ok()?;
+                bindings.push(TypeBodyBinding {
+                    name,
+                    kind: BindingKind::External {
+                        function: func_name,
+                        positions,
+                    },
+                });
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
                 state.error(ParseError::Message(format!(
@@ -1868,13 +1923,91 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
 
     state.skip(&TokenKind::RBrace);
 
-    // 如果有接口约束，构建带接口的结构体类型
-    if !interfaces.is_empty() {
-        // 目前先作为普通结构体处理，接口约束通过字段存储
-        // 未来可以扩展 AST 来区分接口约束
-        Some(Type::Struct(fields))
-    } else {
-        Some(Type::Struct(fields))
+    Some(Type::Struct { fields, bindings })
+}
+
+/// 解析可选的位置绑定: `[0]` 或 `[0, 1]`
+/// 只在下一个 token 是 `[` 且内容是整数时才消费
+fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<usize>> {
+    if !state.at(&TokenKind::LBracket) {
+        return None;
+    }
+
+    // 前瞻检查: 确认 `[` 后面是整数字面量
+    let saved = state.save_position();
+    state.bump(); // consume '['
+
+    match state.current().map(|t| &t.kind) {
+        Some(TokenKind::IntLiteral(_)) => {
+            state.restore_position(saved);
+            // 是位置绑定，解析之
+            parse_binding_positions(state).ok()
+        }
+        _ => {
+            // 不是位置绑定（可能是泛型参数）
+            state.restore_position(saved);
+            None
+        }
+    }
+}
+
+/// 解析位置绑定: `[0]` 或 `[0, 1]`（必须存在）
+fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<usize>, ()> {
+    if !state.at(&TokenKind::LBracket) {
+        state.error(ParseError::Message(
+            "Expected '[' for binding position".to_string(),
+        ));
+        return Err(());
+    }
+    state.bump(); // consume '['
+
+    let mut positions = Vec::new();
+    while !state.at(&TokenKind::RBracket) && !state.at_end() {
+        match state.current().map(|t| &t.kind) {
+            Some(TokenKind::IntLiteral(n)) => {
+                positions.push(*n as usize);
+                state.bump();
+                state.skip(&TokenKind::Comma);
+            }
+            _ => {
+                state.error(ParseError::Message(
+                    "Expected integer position in binding".to_string(),
+                ));
+                return Err(());
+            }
+        }
+    }
+
+    if !state.at(&TokenKind::RBracket) {
+        state.error(ParseError::Message(
+            "Expected ']' after binding positions".to_string(),
+        ));
+        return Err(());
+    }
+    state.bump(); // consume ']'
+
+    Ok(positions)
+}
+
+/// 从函数类型中提取参数和返回类型
+fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
+    match ty {
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            let param_list = params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| Param {
+                    name: format!("arg{}", i),
+                    ty: Some(p.clone()),
+                    span: Span::dummy(),
+                })
+                .collect();
+            (param_list, *return_type.clone())
+        }
+        _ => (Vec::new(), Type::Void),
     }
 }
 

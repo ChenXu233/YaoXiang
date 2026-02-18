@@ -292,6 +292,13 @@ pub enum BytecodeInstr {
         capacity: u16,
     },
 
+    /// 创建结构体实例
+    CreateStruct {
+        dst: Reg,
+        type_name: String,
+        fields: Vec<Reg>,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -493,6 +500,7 @@ impl BytecodeInstr {
             BytecodeInstr::LoadElement { .. } => Opcode::LoadElement,
             BytecodeInstr::StoreElement { .. } => Opcode::StoreElement,
             BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
+            BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
@@ -548,6 +556,9 @@ impl BytecodeInstr {
             BytecodeInstr::LoadElement { .. } => 4,
             BytecodeInstr::StoreElement { .. } => 4,
             BytecodeInstr::NewListWithCap { .. } => 4,
+            BytecodeInstr::CreateStruct {
+                fields, type_name, ..
+            } => 6 + type_name.len() + fields.len() * 2,
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
             BytecodeInstr::ArcDrop { .. } => 2,
@@ -1189,6 +1200,48 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         dst: Reg(dst),
                                         array: Reg(array),
                                         index: Reg(index),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::CreateStruct => {
+                                // CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst = instr.operands[0] as u16;
+                                    let type_name_idx = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let field_count = instr.operands[5] as usize;
+
+                                    // Resolve type name from constant pool
+                                    let type_name = if let Some(ConstValue::String(s)) =
+                                        file.const_pool.get(type_name_idx as usize)
+                                    {
+                                        s.clone()
+                                    } else {
+                                        format!("struct_{}", type_name_idx)
+                                    };
+
+                                    // Parse field registers
+                                    let mut fields = Vec::new();
+                                    for i in 0..field_count {
+                                        if 6 + i * 2 + 1 < instr.operands.len() {
+                                            let field_reg = u16::from_le_bytes([
+                                                instr.operands[6 + i * 2],
+                                                instr.operands[6 + i * 2 + 1],
+                                            ]);
+                                            fields.push(Reg(field_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::CreateStruct {
+                                        dst: Reg(dst),
+                                        type_name,
+                                        fields,
                                     });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);

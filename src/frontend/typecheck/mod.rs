@@ -711,7 +711,7 @@ impl TypeChecker {
         // 提取字段列表
         let fields = match definition {
             crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
-            crate::frontend::core::parser::ast::Type::Struct(fields) => fields,
+            crate::frontend::core::parser::ast::Type::Struct { fields, .. } => fields,
             _ => return, // 非 Record 类型不自动派生
         };
 

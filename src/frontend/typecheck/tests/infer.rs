@@ -1,4 +1,4 @@
-//! 类型推断器详细测试
+﻿//! 类型推断器详细测试
 
 use std::collections::HashMap;
 use crate::frontend::core::lexer::tokens::Literal;
@@ -762,6 +762,7 @@ fn test_infer_field_access() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 
@@ -789,6 +790,7 @@ fn test_infer_unknown_field() {
         fields: vec![("x".to_string(), MonoType::Int(64))],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     inferrer.add_var("p".to_string(), PolyType::mono(struct_type));
 

@@ -1,4 +1,4 @@
-//! FFI (Foreign Function Interface) Registry for YaoXiang
+﻿//! FFI (Foreign Function Interface) Registry for YaoXiang
 //!
 //! This module provides the `FfiRegistry` which manages native function bindings,
 //! allowing YaoXiang code to call Rust functions. It supports:
@@ -201,7 +201,7 @@ mod tests {
     use crate::backends::common::Heap;
 
     /// Helper to create a test NativeContext
-    fn test_ctx(heap: &mut Heap) -> NativeContext {
+    fn test_ctx(heap: &mut Heap) -> NativeContext<'_> {
         NativeContext::new(heap)
     }
 

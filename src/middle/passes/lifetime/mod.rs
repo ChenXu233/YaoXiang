@@ -391,6 +391,13 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::PtrDeref { dst, src } => vec![dst.clone(), src.clone()],
         Instruction::PtrStore { dst, src } => vec![dst.clone(), src.clone()],
         Instruction::PtrLoad { dst, src } => vec![dst.clone(), src.clone()],
+
+        // 结构体创建
+        Instruction::CreateStruct { dst, fields, .. } => {
+            let mut ops = vec![dst.clone()];
+            ops.extend(fields.iter().cloned());
+            ops
+        }
     }
 }
 
