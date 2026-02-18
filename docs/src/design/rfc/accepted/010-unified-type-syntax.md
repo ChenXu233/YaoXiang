@@ -393,20 +393,6 @@ Point.serialize: (self: Point) -> String = {
 
 普通方法可以通过 `[position]` 语法绑定到类型（详细语法见 RFC-004）。
 
-**自动绑定**：`pub` 声明的函数自动绑定到同文件定义的类型
-
-```yaoxiang
-// 使用 pub 声明，编译器自动绑定
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
-}
-
-// 编译器自动推断：Point.distance = distance[0]
-// 调用：p1.distance(p2) → distance(p1, p2)
-```
-
 **手动绑定**：
 
 ```yaoxiang
@@ -517,56 +503,62 @@ Rect: Type = {
 
 // ======== 3. 方法定义 ========
 
-// 使用 pub 声明，编译器自动绑定到类型
-// 绑定规则：第一个 Point 参数 → 方法名取函数名
-
-pub draw: (self: Point, surface: Surface) -> Void = {
+// Point 的方法
+draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
 
-pub bounding_box: (self: Point) -> Rect = {
+bounding_box: (self: Point) -> Rect = {
     return Rect(self.x - 1, self.y - 1, 2, 2)
 }
 
-pub serialize: (self: Point) -> String = {
+serialize: (self: Point) -> String = {
     return "Point(${self.x}, ${self.y})"
 }
 
-pub translate: (self: Point, dx: Float, dy: Float) -> Point = {
+translate: (self: Point, dx: Float, dy: Float) -> Point = {
     return Point(self.x + dx, self.y + dy)
 }
 
-pub scale: (self: Point, factor: Float) -> Point = {
+scale: (self: Point, factor: Float) -> Point = {
     return Point(self.x * factor, self.y * factor)
 }
 
 // 普通方法（pub，自动绑定到 Point.distance）
-pub distance: (p1: Point, p2: Point) -> Float = {
+distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     return (dx * dx + dy * dy).sqrt()
 }
 
 // Rect 的方法
-pub draw: (self: Rect, surface: Surface) -> Void = {
+draw: (self: Rect, surface: Surface) -> Void = {
     surface.draw_rect(self.x, self.y, self.width, self.height)
 }
 
-pub bounding_box: (self: Rect) -> Rect = self
+bounding_box: (self: Rect) -> Rect = self
 
-pub serialize: (self: Rect) -> String = {
+serialize: (self: Rect) -> String = {
     return "Rect(${self.x}, ${self.y}, ${self.width}, ${self.height})"
 }
 
-pub translate: (self: Rect, dx: Float, dy: Float) -> Rect = {
+translate: (self: Rect, dx: Float, dy: Float) -> Rect = {
     return Rect(self.x + dx, self.y + dy, self.width, self.height)
 }
 
-pub scale: (self: Rect, factor: Float) -> Rect = {
+scale: (self: Rect, factor: Float) -> Rect = {
     return Rect(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
 }
 
-// ======== 4. 使用 ========
+// ======== 4. 方法绑定 ========
+
+Point.distance = distance[0]  // 绑定到位置0，柯里化后 method: (p2: Point) -> Float
+Point.transform = transform[1]  // 绑定到位置1，柯里化后 method: (dx: Float, dy: Float) -> Point
+Rect.transform = transform[1]  // 绑定到位置1，柯里化后 method: (dx: Float, dy: Float) -> Rect
+
+// ...以此类推，绑定其他方法...
+
+// ======== 5. 使用 ========
 
 // 创建实例
 p: Point = Point(1.0, 2.0)
