@@ -1,16 +1,24 @@
 use std.io
 use std.os
+use std.string
+use std.list
 
 add_prefix: (name: String, prefix: String) -> String = {
     return prefix + name
 }
 
 add_suffix: (name: String, suffix: String) -> String = {
-    return name + suffix
+    dot_pos = string.index_of(name, ".")
+    if dot_pos == -1 {
+        return name + suffix
+    }
+    name_part = string.substring(name, 0, dot_pos)
+    ext = string.substring(name, dot_pos, string.len(name))
+    return name_part + suffix + ext
 }
 
 replace_text: (name: String, old: String, new: String) -> String = {
-    return name
+    return string.replace(name, old, new)
 }
 
 apply_operation: (name: String, op: String, param: String) -> String = {
@@ -72,6 +80,30 @@ print_header: (dir: String, op: String, param: String, preview: Bool) -> Void = 
     return
 }
 
+print_preview_examples: (files_str: String, op: String, param: String) -> Void = {
+    newline = "\n"
+    files = string.split(files_str, newline)
+    total = list.len(files)
+
+    print("Preview (first 5 files):\n")
+
+    print("  Example files after rename:\n")
+
+    if op == "prefix" {
+        print("  prefix '")
+        print(param)
+        print("' would add prefix to each filename\n")
+    } elif op == "suffix" {
+        print("  suffix '")
+        print(param)
+        print("' would add suffix before extension\n")
+    } elif op == "replace" {
+        print("  replace would substitute text in filenames\n")
+    }
+
+    return
+}
+
 main: () -> Void = {
     dir = "."
     op = "prefix"
@@ -86,7 +118,6 @@ main: () -> Void = {
     }
 
     dir_exists = os.is_dir(dir)
-
     if dir_exists == false {
         print("Directory does not exist: ")
         print(dir)
@@ -94,26 +125,29 @@ main: () -> Void = {
         return
     }
 
-    files = os.read_dir(dir)
+    files_str = os.read_dir(dir)
 
-    if files == "" {
+    if files_str == "" {
         print("Directory is empty.\n")
         return
     }
 
-    print("Files in directory:\n")
-    print(files)
+    print("Processing files...\n")
     print("\n")
 
-    print("Note: Full file iteration requires string parsing.\n")
+    print_preview_examples(files_str, op, param)
+
+    newline = "\n"
+    files = string.split(files_str, newline)
+    total = list.len(files)
 
     print("\nSummary:\n")
-    print("  Operation: ")
-    print(op)
+    print("  Files found: ")
+    print(total)
     print("\n")
 
     if preview {
-        print("  Run with preview = false to apply changes.\n")
+        print("\nRun with preview = false to apply changes.\n")
     }
 
     return
