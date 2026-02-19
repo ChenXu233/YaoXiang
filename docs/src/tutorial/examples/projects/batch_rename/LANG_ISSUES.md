@@ -81,7 +81,7 @@ main: () -> Void = {
 
 ---
 
-## 问题 4：List 遍历和索引操作复杂
+## 问题 4：List 遍历和索引操作复杂 ✅ 已修复
 
 ### 描述
 `std.list` 模块虽然存在，但无法方便地遍历列表元素或通过索引获取元素。
@@ -93,16 +93,27 @@ use std.list
 main: () -> Void = {
     items = [1, 2, 3]
     for item in items {
-        print(item)    // 可能无法正常工作
+        print(item)    // 现在可以正常工作
     }
+
+    // 索引访问
+    first = items[0]
+    print(first)
 }
 ```
 
-### 临时解决方案
-使用字符串索引方式手动解析数据（如手动分割换行符）
+### 修复说明
+1. **修复类型推断**：For 循环现在可以正确推导循环变量类型
+   - `List<T>` → 循环变量类型为 `T`
+   - `Dict<K, V>` → 循环变量类型为 `(K, V)` 元组
+
+2. **迭代器协议支持**：添加了 Iterable/Iterator trait 定义
+   - `std.list.iter(list)` → 创建迭代器
+   - `std.list.next(iterator)` → 获取下一个元素
+   - `std.list.has_next(iterator)` → 检查是否有更多元素
 
 ### 影响
-列表数据结构难以使用
+✅ 现在可以正常使用 List 遍历和索引访问
 
 ---
 

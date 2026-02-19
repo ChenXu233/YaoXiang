@@ -76,42 +76,76 @@ Error: Runtime error: Type error: Expected function value
 
 ### 目标 1：修复签名定义
 
-根据 RFC-010 统一类型语法，函数类型格式为：
+根据 RFC-010 统一类型语法，泛型函数的正确格式为：
 
 ```
-参数名: (参数类型) -> 返回类型
+函数名: [泛型参数列表](参数列表) -> 返回类型
 ```
 
-泛型函数格式为：
-
-```
-参数名: [泛型参数](参数类型) -> 返回类型
-```
+其中泛型参数 `[T]` 声明在函数级别，作用于整个函数签名。
 
 将 `map`/`filter`/`reduce` 的签名修改为：
 
 ```rust
-// map: fn 参数名是 fn，泛型 [T]，接受 T 返回 T
-"(list: List<T>, fn: [T](item: T) -> T) -> List<T>"
+// map: 泛型 [T] 作用域为整个函数
+"(list: List<T>, fn: (item: T) -> T) -> List<T>"
 
-// filter: fn 接受 T 返回 Bool
-"(list: List<T>, fn: [T](item: T) -> Bool) -> List<T>"
+// filter: 泛型 [T] 作用域为整个函数
+"(list: List<T>, fn: (item: T) -> Bool) -> List<T>"
 
-// reduce: fn 接受 (Any, T) 返回 Any
-"(list: List<T>, fn: [T](acc: Any, item: T) -> Any, init: Any) -> Any"
+// reduce: 泛型 [T] 作用域为整个函数
+"(list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
 ```
+
+**注意**：泛型参数 `[T]` 需要在调用点根据传入的 List 元素类型进行实例化。
 
 **签名结构说明**：
 
 ```
-(list: List<T>, fn: [T](item: T) -> T) -> List<T>
- │         │  │    │    │        │
- │         │  │    │    │        └── 返回类型
- │         │  │    │    └── 泛型参数名
- │         │  │    └── 泛型标记
- │         │  └── 参数名（函数参数）
- │         └── 参数名（外部参数）
- └── 参数类型
+(list: List<T>, fn: (item: T) -> T) -> List<T>
+ │         │      │    │        │
+ │         │      │    │        └── 返回类型（使用 T）
+ │         │      │    └── 参数类型（使用 T）
+ │         │      └── 参数名
+ │         └── 参数类型（函数类型）
+ └── 参数类型（List 泛型，使用 T）
+```
+
+### 目标 2：泛型参数作用域规则
+
+**泛型参数声明禁止遮蔽**（No Shadowing）：
+
+1. **同级禁止遮蔽**：同一作用域内的泛型参数不能同名
+2. **跨级禁止遮蔽**：函数参数名不能与泛型参数同名
+3. **继承禁止遮蔽**：子作用域不能声明与父作用域同名的泛型参数
+
+**有效示例**：
+
+```yaoxiang
+// ✅ 有效：泛型参数 T 作用域为整个函数
+map: [T](list: List[T], fn: (item: T) -> T) -> List[T]
+
+// ✅ 有效：多泛型参数
+zip: [T, U](a: List[T], b: List[U]) -> List<(T, U)>
+
+// ✅ 有效：函数参数名与泛型参数不同
+foo: [T](x: Int, y: T) -> T
+```
+
+**无效示例**：
+
+```yaoxiang
+// ❌ 无效：泛型参数同名（同级禁止遮蔽）
+bad1: [T, T](x: T, y: T) -> T
+# 错误：Duplicate generic parameter 'T'
+
+// ❌ 无效：函数参数名与泛型参数同名（跨级禁止遮蔽）
+bad2: [T](T: Int) -> T
+# 错误：Parameter 'T' shadows generic parameter 'T'
+
+// ❌ 无效：外部参数遮蔽泛型
+bad3: [T](T: Int, list: List<T>) -> Int
+# 错误：Parameter 'T' shadows generic parameter 'T'
 ```
 
 ### 目标 3：签名参数名检查
@@ -126,18 +160,22 @@ Error: Runtime error: Type error: Expected function value
 示例：
 ```
 // 有效签名（符合 RFC-010）
-"(list: List, fn: [T](item: T) -> T) -> List"
+"(list: List<T>, fn: (item: T) -> T) -> List<T>"
 
-// 无效签名 - fn 是关键字
-"(list: List, if: (Int) -> Int) -> List"
-# 应报错: Invalid signature: 'if' is a reserved keyword
+// 无效签名 - 函数参数名与泛型参数同名（禁止遮蔽）
+"(list: List<T>, fn: (T: T) -> T) -> List<T>"
+# 应报错: Parameter 'T' shadows generic parameter 'T'
 
 // 无效签名 - 重复参数名
 "(x: Int, x: Int) -> Int"
 # 应报错: Invalid signature: duplicate parameter name 'x'
+
+// 无效签名 - fn 是关键字（当 fn 作为普通参数名时）
+"(list: List, if: (Int) -> Int) -> List"
+# 应报错: Invalid signature: 'if' is a reserved keyword
 ```
 
-### 目标 2：修复错误信息
+### 目标 4：修复错误信息
 
 当签名解析遇到未知类型时，应报错 "Unknown type: xxx"，而非当前误导性的 "Float: missing '->'"。
 
@@ -177,7 +215,27 @@ $ cargo run -- run tests/closure_test2.yx
 [Error] Invalid signature '(list: List, fn: Fn) -> List': unknown type 'Fn'
 ```
 
-### 验收条件 3：参数名检查
+### 验收条件 3：Lambda 参数名匹配
+
+传入的 lambda 参数名必须与签名中定义的函数参数名一致：
+
+```yaoxiang
+// 签名定义：fn: (item: T) -> T
+// 传入 lambda：x => x * 2
+
+// ❌ 错误 - 参数名不匹配
+list.map([1, 2, 3], x => x * 2)
+# 预期错误：Parameter name mismatch: expected 'item', got 'x'
+
+// ✅ 正确 - 参数名匹配
+list.map([1, 2, 3], item => item * 2)
+
+// 对于 reduce，签名是 fn: (acc: Any, item: T) -> Any
+list.reduce([1, 2, 3], (accumulator, item) => accumulator + item, 0)
+# ✅ 正确 - 参数名匹配
+```
+
+### 验收条件 4：参数名检查（签名解析）
 
 签名解析时应检测无效的参数名：
 - 关键字作为参数名应报错
@@ -189,7 +247,7 @@ $ cargo run -- run tests/closure_test2.yx
 [Error] Invalid signature: duplicate parameter name 'x'
 ```
 
-### 验收条件 4：高阶函数功能正常
+### 验收条件 5：高阶函数功能正常
 
 - `list.map` 对列表每个元素应用函数，返回新列表
 - `list.filter` 保留满足条件的元素，返回新列表
@@ -203,7 +261,8 @@ $ cargo run -- run tests/closure_test2.yx
 
 ```yaoxiang
 main = {
-    doubled = list.map([1, 2, 3], x => x * 2);
+    // 签名定义: fn: (item: T) -> T，参数名为 item
+    doubled = list.map([1, 2, 3], item => item * 2);
     io.println(doubled);  // 预期: [2, 4, 6]
 }
 ```
@@ -212,7 +271,8 @@ main = {
 
 ```yaoxiang
 main = {
-    filtered = list.filter([1, 2, 3, 4, 5], x => x > 2);
+    // 签名定义: fn: (item: T) -> Bool，参数名为 item
+    filtered = list.filter([1, 2, 3, 4, 5], item => item > 2);
     io.println(filtered);  // 预期: [3, 4, 5]
 }
 ```
@@ -221,12 +281,24 @@ main = {
 
 ```yaoxiang
 main = {
-    sum = list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0);
+    // 签名定义: fn: (acc: Any, item: T) -> Any，参数名为 acc, item
+    sum = list.reduce([1, 2, 3, 4], (acc, item) => acc + item, 0);
     io.println(sum);  // 预期: 10
 }
 ```
 
-### 测试用例 4：复杂 lambda
+### 测试用例 4：Lambda 参数名不匹配
+
+```yaoxiang
+main = {
+    // ❌ 错误 - 参数名不匹配
+    // 签名: fn: (item: T) -> T，但传入的参数名是 x
+    doubled = list.map([1, 2, 3], x => x * 2);
+}
+# 预期编译错误：Parameter name mismatch: expected 'item', got 'x'
+```
+
+### 测试用例 5：复杂 lambda
 
 ```yaoxiang
 main = {
@@ -243,11 +315,11 @@ main = {
 }
 ```
 
-### 测试用例 5：无效签名错误提示
+### 测试用例 6：无效签名错误提示
 
 验证错误信息是否正确显示（需要添加测试或手动验证）。
 
-### 测试用例 6：参数名是关键字
+### 测试用例 7：参数名是关键字
 
 ```rust
 // 假设有这样一个无效签名
@@ -256,7 +328,7 @@ main = {
 // [Error] Invalid signature: parameter 'if' is a reserved keyword
 ```
 
-### 测试用例 7：重复参数名
+### 测试用例 8：重复参数名
 
 ```rust
 // 假设有这样一个无效签名
@@ -289,10 +361,12 @@ main = {
 
 1. **`src/std/list.rs:72-87`**：修改三个函数的签名字符串（RFC-010 泛型函数语法）
    ```rust
-   "(list: List<T>, fn: [T](item: T) -> T) -> List<T>"
-   "(list: List<T>, fn: [T](item: T) -> Bool) -> List<T>"
-   "(list: List<T>, fn: [T](acc: Any, item: T) -> Any, init: Any) -> Any"
+   "(list: List<T>, fn: (item: T) -> T) -> List<T>"
+   "(list: List<T>, fn: (item: T) -> Bool) -> List<T>"
+   "(list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
    ```
+
+   **注意**：这里的 `<T>` 是 List 的类型参数，函数参数 `fn` 的类型 `(item: T) -> T` 使用了相同的 `T`。编译器需要根据传入的 List 元素类型自动实例化泛型。
 
 2. **`src/frontend/typecheck/mod.rs`**：
    - 改进错误信息：显示实际解析失败的原因

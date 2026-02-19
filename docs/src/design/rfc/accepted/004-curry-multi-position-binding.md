@@ -334,7 +334,6 @@ fn check_binding_type_compatibility(
 | 自动匹配 | `Point.transform = transform` | `p.transform(v)` | `transform(p, v)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
 | 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
-| 多位置 | `Point.transform = transform[0, _]` | `p.transform(v)` | `transform(p, v)` |
 | 自动柯里化 | `Point.scale = scale[0, _]` | `p.scale(2.0)` | `scale(p, 2.0)` |
 | 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
 
@@ -380,12 +379,7 @@ fn check_binding_type_compatibility(
    - 基本的类型检查和代码生成
    - 单元测试覆盖
 
-2. **Phase 2: 多位置绑定**（v0.4）
-   - 实现多位置 `[n, m, ...]` 联合绑定
-   - 占位符 `_` 支持
-   - 支持元组解构和部分应用
-
-3. **Phase 3: 高级特性**（v0.5）
+2. **Phase 2: 高级特性**（v0.5）
    - 支持范围语法 `[n..m]`
    - 编译时位置计算优化
 
