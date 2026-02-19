@@ -1540,26 +1540,17 @@ impl AstToIrGenerator {
             Ok(())
         } else if let Some(iter_ty) = self.get_expr_mono_type(iterable) {
             match iter_ty {
-                MonoType::List(_) | MonoType::Tuple(_) => self.generate_indexed_for_loop_ir(
-                    var_name,
-                    iterable,
-                    body,
-                    result_reg,
-                    for_span,
-                    false,
-                    instructions,
-                    constants,
-                ),
-                MonoType::Dict(_, _) => self.generate_indexed_for_loop_ir(
-                    var_name,
-                    iterable,
-                    body,
-                    result_reg,
-                    for_span,
-                    true,
-                    instructions,
-                    constants,
-                ),
+                // 使用迭代器协议的 For 循环
+                MonoType::List(_) | MonoType::Tuple(_) | MonoType::Dict(_, _) => self
+                    .generate_iterator_for_loop_ir(
+                        var_name,
+                        iterable,
+                        body,
+                        result_reg,
+                        for_span,
+                        instructions,
+                        constants,
+                    ),
                 _ => {
                     // 不支持的迭代器类型，返回错误（使用实际类型名称）
                     let iter_type = self.get_expr_type_name(iterable);
@@ -1575,98 +1566,75 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 生成基于迭代器协议的 For 循环 IR
+    /// 这是新的迭代器协议实现，调用 iter()/next()/has_next() 方法
     #[allow(clippy::too_many_arguments)]
-    fn generate_indexed_for_loop_ir(
+    fn generate_iterator_for_loop_ir(
         &mut self,
         var_name: &str,
         iterable: &ast::Expr,
         body: &ast::Block,
         result_reg: Option<usize>,
         for_span: Span,
-        use_dict_keys: bool,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), IrGenError> {
         self.enter_scope();
 
-        // 1. 计算待迭代序列
+        // 1. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
 
-        let sequence_reg = if use_dict_keys {
-            let keys_reg = self.next_temp_reg();
-            instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(keys_reg)),
-                func: Operand::Const(ConstValue::String("dict_keys".to_string())),
-                args: vec![Operand::Local(iterable_reg)],
-            });
-            keys_reg
-        } else {
-            iterable_reg
-        };
-
-        // 2. idx = 0
-        let idx_reg = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(idx_reg),
-            src: Operand::Const(ConstValue::Int(0)),
-        });
-
-        // 3. len = len(sequence)
-        let len_reg = self.next_temp_reg();
+        // 2. 创建迭代器: iterator = iter(iterable)
+        // 使用 Call 指令调用 std.list.iter 函数
+        let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
-            dst: Some(Operand::Local(len_reg)),
-            func: Operand::Const(ConstValue::String("len".to_string())),
-            args: vec![Operand::Local(sequence_reg)],
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            args: vec![Operand::Local(iterable_reg)],
         });
 
-        // 4. 注册循环变量
+        // 3. 注册循环变量
         let var_reg = self.next_temp_reg();
         self.register_local(var_name, var_reg);
 
-        // 5. 循环开始
+        // 4. 循环开始
         let loop_start_idx = instructions.len();
 
-        let cond_reg = self.next_temp_reg();
-        instructions.push(Instruction::Lt {
-            dst: Operand::Local(cond_reg),
-            lhs: Operand::Local(idx_reg),
-            rhs: Operand::Local(len_reg),
+        // 5. 检查是否有更多元素: has_more = has_next(iterator)
+        // 使用 Call 指令调用 std.list.has_next 函数
+        let has_more_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_more_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
         });
 
+        // 6. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0));
+        instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
 
-        // 6. var = sequence[idx]
-        let item_reg = self.next_temp_reg();
-        instructions.push(Instruction::LoadIndex {
-            dst: Operand::Local(item_reg),
-            src: Operand::Local(sequence_reg),
-            index: Operand::Local(idx_reg),
+        // 7. 获取下一个元素: var = next(iterator)
+        // 使用 Call 指令调用 std.list.next 函数
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
-            src: Operand::Local(item_reg),
+            src: Operand::Local(element_reg),
             span: for_span,
         });
 
-        // 7. 循环体
+        // 8. 执行循环体
         self.generate_block_ir(body, instructions, constants)?;
 
-        // 8. idx += 1
-        let one_reg = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(one_reg),
-            src: Operand::Const(ConstValue::Int(1)),
-        });
-        instructions.push(Instruction::Add {
-            dst: Operand::Local(idx_reg),
-            lhs: Operand::Local(idx_reg),
-            rhs: Operand::Local(one_reg),
-        });
-
+        // 9. 跳转回循环开始
         instructions.push(Instruction::Jmp(loop_start_idx));
 
+        // 10. 修复跳转
         let end_idx = instructions.len();
         if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
             *target = end_idx;
@@ -1683,6 +1651,9 @@ impl AstToIrGenerator {
 
         Ok(())
     }
+
+    // 迭代器协议已通过 Call 指令实现，不再需要独立的 IR 指令
+    // 保留指令定义以供将来使用
 
     /// 获取表达式的 span
     fn get_expr_span(expr: &ast::Expr) -> Span {

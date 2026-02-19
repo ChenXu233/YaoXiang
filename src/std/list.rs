@@ -140,6 +140,25 @@ impl StdModule for ListModule {
                 "(list: List, item: Any) -> Int",
                 native_find_index as NativeHandler,
             ),
+            // 迭代器协议函数
+            NativeExport::new(
+                "iter",
+                "std.list.iter",
+                "(list: List) -> Tuple",
+                native_iter as NativeHandler,
+            ),
+            NativeExport::new(
+                "next",
+                "std.list.next",
+                "(iterator: Tuple) -> Any",
+                native_next as NativeHandler,
+            ),
+            NativeExport::new(
+                "has_next",
+                "std.list.has_next",
+                "(iterator: Tuple) -> Bool",
+                native_has_next as NativeHandler,
+            ),
         ]
     }
 }
@@ -610,4 +629,108 @@ fn native_find_index(
         },
         _ => Ok(RuntimeValue::Int(-1)),
     }
+}
+
+// ============================================================================
+// 迭代器协议实现
+// ============================================================================
+
+/// Native implementation: iter - 创建迭代器
+/// 返回一个 Tuple (原始列表, 当前索引)
+/// 使用 Tuple 存储迭代器状态: (List, Int)
+fn native_iter(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let list_handle = match args.get(0) {
+        Some(RuntimeValue::List(h)) => *h,
+        _ => {
+            return Err(ExecutorError::Type(
+                "iter expects a List as first argument".to_string(),
+            ))
+        }
+    };
+
+    // 创建一个 Tuple 存储迭代器状态 (原始列表, 索引 0)
+    let iterator_items = vec![RuntimeValue::List(list_handle), RuntimeValue::Int(0)];
+    let iterator_handle = ctx.heap.allocate(HeapValue::Tuple(iterator_items));
+    Ok(RuntimeValue::Tuple(iterator_handle))
+}
+
+/// Native implementation: next - 获取下一个元素
+/// 迭代器格式: Tuple (原始列表, 当前索引)
+/// 返回下一个元素，并递增索引
+fn native_next(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let iter_handle = match args.get(0) {
+        Some(RuntimeValue::Tuple(h)) => *h,
+        _ => return Ok(RuntimeValue::Unit),
+    };
+
+    let iterator_items = match ctx.heap.get(iter_handle) {
+        Some(HeapValue::Tuple(items)) => items.clone(),
+        _ => return Ok(RuntimeValue::Unit),
+    };
+
+    // 获取原始列表和当前索引
+    let list_handle = match iterator_items.get(0) {
+        Some(RuntimeValue::List(h)) => *h,
+        _ => return Ok(RuntimeValue::Unit),
+    };
+    let current_idx = match iterator_items.get(1) {
+        Some(RuntimeValue::Int(idx)) => *idx as usize,
+        _ => return Ok(RuntimeValue::Unit),
+    };
+
+    // 获取元素
+    let element = match ctx.heap.get(list_handle) {
+        Some(HeapValue::List(items)) if current_idx < items.len() => items[current_idx].clone(),
+        _ => RuntimeValue::Unit,
+    };
+
+    // 更新索引
+    let new_idx = current_idx + 1;
+    let mut new_iterator_items = iterator_items;
+    new_iterator_items[1] = RuntimeValue::Int(new_idx as i64);
+    let _ = ctx
+        .heap
+        .write(iter_handle, HeapValue::Tuple(new_iterator_items));
+
+    Ok(element)
+}
+
+/// Native implementation: has_next - 检查是否还有更多元素
+fn native_has_next(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let iter_handle = match args.get(0) {
+        Some(RuntimeValue::Tuple(h)) => *h,
+        _ => return Ok(RuntimeValue::Bool(false)),
+    };
+
+    let iterator_items = match ctx.heap.get(iter_handle) {
+        Some(HeapValue::Tuple(items)) => items.clone(),
+        _ => return Ok(RuntimeValue::Bool(false)),
+    };
+
+    // 获取原始列表和当前索引
+    let list_handle = match iterator_items.get(0) {
+        Some(RuntimeValue::List(h)) => *h,
+        _ => return Ok(RuntimeValue::Bool(false)),
+    };
+    let current_idx = match iterator_items.get(1) {
+        Some(RuntimeValue::Int(idx)) => *idx as usize,
+        _ => return Ok(RuntimeValue::Bool(false)),
+    };
+
+    // 检查是否有更多元素
+    let has_more = match ctx.heap.get(list_handle) {
+        Some(HeapValue::List(items)) => current_idx < items.len(),
+        _ => false,
+    };
+
+    Ok(RuntimeValue::Bool(has_more))
 }
