@@ -1,0 +1,3 @@
+main = {
+  std.io.println("Hello, YaoXiang!");
+}
