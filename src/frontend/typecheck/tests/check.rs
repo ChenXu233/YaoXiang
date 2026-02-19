@@ -196,11 +196,13 @@ fn test_check_fn_def() {
                 ast::Param {
                     name: "a".to_string(),
                     ty: Some(ast::Type::Name("Int".to_string())),
+                    is_mut: false,
                     span: create_dummy_span(),
                 },
                 ast::Param {
                     name: "b".to_string(),
                     ty: Some(ast::Type::Name("Int".to_string())),
+                    is_mut: false,
                     span: create_dummy_span(),
                 },
             ],

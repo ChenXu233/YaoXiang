@@ -217,6 +217,8 @@ fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
             break;
         }
         let param_span = state.span();
+        // Check for mut keyword
+        let is_mut = state.skip(&TokenKind::KwMut);
         let name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => break,
@@ -230,6 +232,7 @@ fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
         params.push(Param {
             name,
             ty,
+            is_mut,
             span: param_span,
         });
     }

@@ -329,7 +329,8 @@ impl Interpreter {
             .cloned()
             .unwrap_or(RuntimeValue::Unit);
 
-        let result = match (cmp, a, b) {
+        let result = match (cmp, &a, &b) {
+            // Integer comparison
             (CompareOp::Eq, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 RuntimeValue::Bool(l == r)
             }
@@ -346,6 +347,25 @@ impl Interpreter {
                 RuntimeValue::Bool(l > r)
             }
             (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // String comparison
+            (CompareOp::Eq, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
             _ => RuntimeValue::Bool(false),

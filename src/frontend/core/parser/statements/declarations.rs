@@ -352,6 +352,9 @@ fn parse_var_stmt_with_pub(
                 let looks_like_named_params = if state.at(&TokenKind::RParen) {
                     // Empty params () is always RFC-010 compatible
                     true
+                } else if state.at(&TokenKind::KwMut) {
+                    // mut keyword signals a named parameter
+                    true
                 } else if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
                     let first_char = name.chars().next().unwrap_or('A');
                     let next = state.peek().map(|t| &t.kind);
@@ -456,6 +459,9 @@ fn parse_var_stmt_with_pub(
                 //   - type name (Uppercase) -> old syntax
                 let looks_like_named_params = if state.at(&TokenKind::RParen) {
                     // Empty params () is always RFC-010 compatible
+                    true
+                } else if state.at(&TokenKind::KwMut) {
+                    // mut keyword signals a named parameter
                     true
                 } else if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
                     let first_char = name.chars().next().unwrap_or('A');
@@ -626,6 +632,7 @@ fn parse_var_stmt_with_pub(
                             merged.push(Param {
                                 name: lambda_p.name.clone(),
                                 ty: extracted.ty.clone(),
+                                is_mut: lambda_p.is_mut,
                                 span: lambda_p.span,
                             });
                         } else {
@@ -1245,6 +1252,7 @@ pub fn parse_fn_stmt_with_name_simple(
             params: vec![Param {
                 name: param_name,
                 ty: None,
+                is_mut: false,
                 span: param_span,
             }],
             body: (stmts, expr),
@@ -1310,6 +1318,9 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
         // Handle '...' for variadic parameters
         let _is_variadic = state.skip(&TokenKind::DotDotDot);
 
+        // Check for mut keyword
+        let is_mut = state.skip(&TokenKind::KwMut);
+
         let name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => break,
@@ -1325,6 +1336,7 @@ pub fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
         params.push(Param {
             name,
             ty,
+            is_mut,
             span: param_span,
         });
     }
@@ -1733,6 +1745,9 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
 
             let param_span = state.span();
 
+            // Check for mut keyword
+            let is_mut = state.skip(&TokenKind::KwMut);
+
             // Parse parameter name
             let name = match state.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => n.clone(),
@@ -1759,6 +1774,7 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
             params.push(Param {
                 name,
                 ty,
+                is_mut,
                 span: param_span,
             });
         }
@@ -2002,6 +2018,7 @@ fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
                 .map(|(i, p)| Param {
                     name: format!("arg{}", i),
                     ty: Some(p.clone()),
+                    is_mut: false,
                     span: Span::dummy(),
                 })
                 .collect();

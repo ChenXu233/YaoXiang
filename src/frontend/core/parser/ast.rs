@@ -397,6 +397,7 @@ pub struct Block {
 pub struct Param {
     pub name: String,
     pub ty: Option<Type>,
+    pub is_mut: bool,
     pub span: Span,
 }
 

@@ -686,8 +686,10 @@ impl AstToIrGenerator {
                 span: Span::dummy(),
             });
             self.register_local(&param.name, i);
-            // 函数参数默认是可变的（可以修改）
-            self.current_mut_locals.insert(i);
+            // Only mut parameters are registered as mutable
+            if param.is_mut {
+                self.current_mut_locals.insert(i);
+            }
         }
 
         // 记录局部变量起始位置（在参数之后）
@@ -1782,9 +1784,10 @@ impl AstToIrGenerator {
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
     ) -> Result<LambdaBodyIR, IrGenError> {
-        // 重置当前函数的可变局部变量追踪
-        self.current_mut_locals.clear();
-        self.current_local_names.clear();
+        // 保存父函数的可变局部变量和局部变量名信息
+        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
+        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        let saved_next_temp = self.next_temp;
 
         let mut instructions = Vec::new();
 
@@ -1804,8 +1807,10 @@ impl AstToIrGenerator {
                 span: Span::dummy(),
             });
             self.register_local(&param.name, i);
-            // 函数参数默认是可变的
-            self.current_mut_locals.insert(i);
+            // Only mut parameters are registered as mutable
+            if param.is_mut {
+                self.current_mut_locals.insert(i);
+            }
         }
 
         // 记录局部变量起始位置
@@ -1818,9 +1823,9 @@ impl AstToIrGenerator {
         }
 
         // 处理返回值表达式
-        // 使用寄存器 0 作为返回值寄存器（与 generate_function_ir 一致）
+        // 使用 next_temp_reg 分配独立的返回值寄存器，避免与参数寄存器冲突
         if let Some(expr) = &body.expr {
-            let result_reg = 0;
+            let result_reg = self.next_temp_reg();
             self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
             // 添加返回指令
             instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
@@ -1838,6 +1843,11 @@ impl AstToIrGenerator {
 
         // 保存当前闭包函数的可变局部变量信息
         let mut_locals = std::mem::take(&mut self.current_mut_locals);
+
+        // 恢复父函数的可变局部变量和局部变量名信息
+        self.current_mut_locals = saved_mut_locals;
+        self.current_local_names = saved_local_names;
+        self.next_temp = saved_next_temp;
 
         Ok(LambdaBodyIR {
             instructions,
@@ -2278,6 +2288,9 @@ impl AstToIrGenerator {
                     size: Operand::Const(ConstValue::Int(elements.len() as i128)),
                     elem_size: Operand::Const(ConstValue::Int(1)),
                 });
+
+                // 列表构建需要多次 StoreIndex，因此需要标记为可变
+                self.current_mut_locals.insert(result_reg);
 
                 for (idx, element) in elements.iter().enumerate() {
                     let element_reg = self.next_temp_reg();
