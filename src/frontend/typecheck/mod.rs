@@ -643,14 +643,36 @@ impl TypeChecker {
                     let items_ref = items.as_ref();
 
                     for export in module.exports.values() {
-                        // 子模块作为命名空间导入，不需要创建函数类型
+                        // 子模块作为命名空间导入，需要创建包含导出函数的 StructType
                         if export.kind == crate::frontend::module::ExportKind::SubModule {
-                            // 将子模块名作为变量注册，后续 FieldAccess 可以解析
-                            let module_ty = MonoType::Fn {
-                                params: vec![self.env.solver().new_var()],
-                                return_type: Box::new(MonoType::Void),
-                                is_async: false,
-                            };
+                            // 从模块注册表获取子模块的导出信息
+                            let sub_module_path = format!("{}.{}", path, export.name);
+                            let mut fields = Vec::new();
+
+                            if let Some(sub_module) =
+                                self.env.module_registry.get(&sub_module_path).cloned()
+                            {
+                                // 为子模块的每个导出创建字段
+                                for (field_name, _field_export) in &sub_module.exports {
+                                    let field_ty = MonoType::Fn {
+                                        params: vec![self.env.solver().new_var()],
+                                        return_type: Box::new(MonoType::Void),
+                                        is_async: false,
+                                    };
+                                    fields.push((field_name.clone(), field_ty));
+                                }
+                            }
+
+                            let module_ty = MonoType::Struct(
+                                crate::frontend::core::type_system::mono::StructType {
+                                    name: export.name.clone(),
+                                    fields,
+                                    methods: HashMap::new(),
+                                    field_mutability: Vec::new(),
+                                    field_has_default: Vec::new(),
+                                },
+                            );
+
                             let should_import = import_all
                                 || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
                             if should_import {

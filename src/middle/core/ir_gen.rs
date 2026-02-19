@@ -148,6 +148,8 @@ pub struct AstToIrGenerator {
     /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
     /// 用于方法调用时的参数重排和函数转发（RFC-004）
     type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
+    /// 嵌套函数列表（在函数体内定义的函数）
+    nested_functions: Vec<FunctionIR>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -184,6 +186,7 @@ impl AstToIrGenerator {
             native_bindings: Vec::new(),
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
+            nested_functions: Vec::new(),
         }
     }
 
@@ -203,6 +206,7 @@ impl AstToIrGenerator {
             native_bindings: Vec::new(),
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
+            nested_functions: Vec::new(),
         }
     }
 
@@ -412,6 +416,9 @@ impl AstToIrGenerator {
         if !errors.is_empty() {
             return Err(errors);
         }
+
+        // 添加嵌套函数到模块函数列表
+        functions.extend(std::mem::take(&mut self.nested_functions));
 
         Ok(ModuleIR {
             types: Vec::new(),
@@ -1005,14 +1012,29 @@ impl AstToIrGenerator {
                 });
             }
             ast::StmtKind::Fn {
-                name: _,
+                name,
                 generic_params: _,
-                type_annotation: _,
-                params: _,
-                body: _,
+                type_annotation,
+                params,
+                body: (stmts, expr),
                 is_pub: _,
             } => {
-                // 嵌套函数（简化处理）
+                // 生成嵌套函数的 IR
+                match self.generate_function_ir(
+                    name,
+                    type_annotation.as_ref(),
+                    params,
+                    stmts,
+                    expr,
+                    constants,
+                ) {
+                    Ok(Some(func_ir)) => {
+                        // 将嵌套函数添加到列表（会被提升到模块级别）
+                        self.nested_functions.push(func_ir);
+                    }
+                    Ok(None) => {} // Native 函数或其他情况
+                    Err(e) => return Err(e),
+                }
             }
             ast::StmtKind::If {
                 condition,

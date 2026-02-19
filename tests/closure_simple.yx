@@ -1,7 +1,0 @@
-// Simple closure test
-add = (a, b) => a + b;
-main = {
-  add = (a, b) => a + b;
-  result = add(1, 2);
-  std.io.println(result);
-}

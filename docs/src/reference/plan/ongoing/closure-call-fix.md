@@ -1,177 +1,102 @@
-# 闭包调用修复方案
+# 块内函数定义与闭包相关问题
 
 > **状态**: ✅ 已完成
 >
-> **实现日期**: 2025-02-18
+> **创建日期**: 2026-02-19
+> **完成日期**: 2026-02-19
 
-## 一、问题背景
+## 一、问题总结
 
-### 1.1 当前问题
+### 1.1 问题 1：块内函数定义找不到变量
 
-当用户使用高阶函数时：
-
+**症状**：
 ```yao
-std.list.map([1, 2], x => x * 2)
-```
-
-会报错：`"Cannot call YaoXiang functions from this native context"`
-
-### 1.2 根因分析
-
-问题有两层：
-
-#### 问题 1：MakeClosure 生成的 func_id 错误
-
-**文件**：`src/backends/interpreter/executor.rs` 第 999-1020 行
-
-```rust
-BytecodeInstr::MakeClosure {
-    dst,
-    func: func_ref,
-    env: _,
-} => {
-    let func_name = ...;
-    let func_id = crate::backends::common::value::FunctionId(
-        self.functions
-            .get(&func_name)
-            .map(|_| self.functions.len() as u32)  // ❌ 错误！
-            .unwrap_or(0),
-    );
-    let closure = RuntimeValue::Function(FunctionValue {
-        func_id,
-        env: Vec::new(),  // env 被忽略
-    });
-    ...
+main = {
+  add = (a, b) => a + b;      // 无类型注解的函数定义
+  result = add(1, 2);         // ❌ Unknown variable: 'add'
 }
 ```
 
-问题：`self.functions.len()` 是 HashMap 的当前大小，不是函数的实际索引。
-
-#### 问题 2：没有通过 func_id 调用函数的机制
-
-- `Interpreter` 使用 `HashMap<String, BytecodeFunction>` 存储函数
-- 没有 `Vec<ByteCodeFunction>` 按索引存储
-- 无法通过 `func_id` 查找并调用函数
-
-#### 问题 3：NativeContext 没有传入 call_fn 回调
-
-在 `CallStatic` 和 `CallNative` 处理中：
+**根因**：`src/frontend/typecheck/checking/mod.rs` 第 548-563 行
 
 ```rust
-let mut ctx = NativeContext::new(&mut self.heap);  // ❌ 没有 call_fn
-let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
+// 只有当有类型注解时才添加函数到作用域！
+if let Some(crate::frontend::core::parser::ast::Type::Fn { ... }) = type_annotation {
+    // ... 构建函数类型
+    self.add_var(name.to_string(), PolyType::mono(fn_type));  // ❌ 没有执行
+}
 ```
 
-这导致 `ctx.call_function()` 返回错误。
+当使用最简形式 `add = (a, b) => ...` 时，`type_annotation = None`，函数名根本不会被添加到作用域。
+
+### 1.2 问题 2：模块级函数能正常工作
+
+模块级函数（如 `main = { ... }`）能正常工作是因为它们走的是不同的代码路径：
+
+```
+check_module
+  → collect_function_signature (第379-382行)
+    → 为没有类型注解的函数也添加类型变量
+```
+
+这表明类型推断的基础设施是存在的，只是 `check_fn_stmt` 没有正确使用它。
+
+### 1.3 问题 3：use std.{io} 字段访问错误
+
+**症状**：
+```yao
+use std.{io}
+add: (a: Int, b: Int) -> Int = (a, b) => a + b;
+main = {
+  result = add(1, 2);
+  io.println(result);  // ❌ Cannot access field on non-struct type 'fn(t113) -> void'
+}
+```
+
+**相关但不同的问题**：`io` 被识别为函数类型而不是模块。
+
+### 1.4 函数定义的四种形式测试结果
+
+| 形式 | 代码 | 模块级 | 块内部 |
+|------|------|--------|--------|
+| 完整形式 | `add: (a: Int, b: Int) -> Int = (a, b) => a + b` | ✅ | ✅ |
+| 简写（省略Lambda头） | `add: (a: Int, b: Int) -> Int = { return a + b }` | ✅ | ✅ |
+| 简写（省略参数类型） | `add: (a, b) -> Int = (a, b) => { return a + b }` | ✅ | ❌ |
+| 最简形式 | `add = (a, b) => { return a + b }` | ✅ | ❌ |
 
 ---
 
 ## 二、修复方案
 
-### 2.1 方案设计
+### 2.1 问题 1 修复：块内函数定义
 
-需要三个改动：
+**状态**：✅ 已修复
 
-| 改动 | 文件 | 描述 |
-|------|------|------|
-| A | executor.rs | 添加 `Vec<BytecodeFunction>` 函数表 |
-| B | executor.rs | 修复 MakeClosure，使用正确的函数索引 |
-| C | executor.rs | 添加 `call_function_by_id` 方法 + 在调用 native 时传入回调 |
+修复分两部分：
 
-### 2.2 详细设计
+#### 2.1.1 类型检查修复
 
-#### 改动 A：添加函数表
+修改了 `src/frontend/typecheck/checking/mod.rs` 的 `check_fn_stmt` 函数（第 546-583 行）：
+- 无论是否有类型注解，都添加函数到作用域
+- 如果有类型注解，使用注解的类型
+- 否则从参数创建类型变量
 
-```rust
-// src/backends/interpreter/executor.rs
+#### 2.1.2 IR 生成修复
 
-pub struct Interpreter {
-    // ... 现有字段 ...
-    /// Function table by index (for closure calls)
-    functions_by_id: Vec<BytecodeFunction>,
-}
-```
+修改了 `src/middle/core/ir_gen.rs`：
+1. 添加了 `nested_functions` 字段来存储嵌套函数（第 152 行）
+2. 修改 `generate_local_stmt_ir` 来生成嵌套函数的 IR（第 1013-1032 行）
+3. 修改 `generate_module_ir` 来将嵌套函数添加到模块函数列表（第 416-417 行）
 
-加载模块时，同时填充两个结构：
+**验证结果**：
+- ✅ 编译阶段通过（不再报 `Unknown variable` 错误）
+- ✅ 运行时正常执行
 
-```rust
-// 加载模块时
-for func in &module.functions {
-    self.functions.insert(func.name.clone(), func.clone());
-    self.functions_by_id.push(func.clone());  // 按顺序添加
-}
-```
+### 2.3 问题 3 修复：use std.{io}
 
-#### 改动 B：修复 MakeClosure
-
-```rust
-BytecodeInstr::MakeClosure { ... } => {
-    let func_name = ...;
-
-    // 找到函数在 Vec 中的索引
-    let func_id = if let Some((idx, _)) = self.functions_by_id
-        .iter()
-        .enumerate()
-        .find(|(_, f)| f.name == func_name)
-    {
-        FunctionId(idx as u32)
-    } else {
-        FunctionId(0)  // fallback
-    };
-
-    let closure = RuntimeValue::Function(FunctionValue {
-        func_id,
-        env: Vec::new(),  // TODO: 后续实现 env 捕获
-    });
-    ...
-}
-```
-
-#### 改动 C：实现 call_fn 回调
-
-```rust
-// 在 Interpreter 中添加方法
-impl Interpreter {
-    /// 通过 func_id 调用 YaoXiang 函数
-    fn call_function_by_id(
-        &mut self,
-        func_id: FunctionId,
-        args: &[RuntimeValue],
-    ) -> Result<RuntimeValue, ExecutorError> {
-        let idx = func_id.0 as usize;
-        if idx >= self.functions_by_id.len() {
-            return Err(ExecutorError::FunctionNotFound(format!(
-                "Function with id {} not found",
-                idx
-            )));
-        }
-        let func = &self.functions_by_id[idx];
-        self.execute_function(func, args)
-    }
-}
-```
-
-然后在调用 native 函数时传入回调：
-
-```rust
-// CallStatic / CallNative 处理中
-let mut ctx = NativeContext::new(&mut self.heap);
-
-// 创建回调闭包
-let interp_ptr = std::ptr::addr_of_mut!(*self);
-let call_fn = move |func: &RuntimeValue, args: &[RuntimeValue]| -> Result<RuntimeValue, ExecutorError> {
-    // 从 func 提取 func_id 并调用
-    if let RuntimeValue::Function(fv) = func {
-        let mut interpreter = unsafe { &mut *interp_ptr };
-        interpreter.call_function_by_id(fv.func_id, args)
-    } else {
-        Err(ExecutorError::Type("Expected function value".to_string()))
-    }
-};
-
-let mut ctx = NativeContext::with_call_fn(&mut self.heap, call_fn);
-let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
-```
+这需要单独调查，可能是：
+1. `use` 语句解析后没有正确设置模块类型
+2. 字段访问检查时没有正确处理模块
 
 ---
 
@@ -179,100 +104,71 @@ let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
 
 ### 3.1 编译验收
 
-- [ ] `cargo check` 通过
-- [ ] `cargo build` 通过
+- [x] `cargo check` 通过
+- [x] 块内完整形式函数调用正常（编译阶段）
+- [x] 块内最简形式函数调用正常（编译阶段）
 
 ### 3.2 功能验收
 
-- [ ] `std.list.map([1, 2], x => x * 2)` 返回 `[2, 4]`
-- [ ] `std.list.filter([1, 2, 3], x => x > 1)` 返回 `[2, 3]`
-- [ ] `std.list.reduce([1, 2, 3], (acc, x) => acc + x, 0)` 返回 `6`
+- [x] `main = { add = (a,b) => a + b; add(1,2) }` 正常执行
+- [x] `main = { add: (a:Int,b:Int)->Int = (a,b)=>a+b; add(1,2) }` 正常执行
 
-### 3.3 边界验收
+### 3.3 当前状态
 
-- [ ] 空列表的高阶函数调用正常工作
-- [ ] 闭包捕获外部变量正常工作（后续实现）
-- [ ] 嵌套函数调用正常工作
+| 阶段 | 模块级函数 | 块内函数 |
+|------|-----------|----------|
+| 词法/语法分析 | ✅ | ✅ |
+| 类型检查 | ✅ | ✅ 已修复 |
+| 代码生成 | ✅ | ✅ 已修复 |
+
+## 四、待处理问题
+
+### 4.1 use std.{io} 字段访问错误
+
+**状态**：✅ 已修复
+
+**修复内容**：
+修改了 `src/frontend/typecheck/mod.rs` 的 `collect_use_statement` 函数（第 645-678 行）：
+- 为子模块创建包含导出函数的 StructType，而不是错误的 Fn 类型
+- 从模块注册表中获取子模块的导出信息
+
+**验证结果**：
+```yao
+use std.{io}
+main = {
+  add = (a, b) => a + b;
+  result = add(100, 200);
+  io.println(result)  // ✅ 正常工作
+}
+```
 
 ---
 
-## 四、测试方案
+## 四、测试用例
 
-### 4.1 单元测试
-
-创建测试文件 `tests/closure.yx`：
+### 4.1 块内函数定义测试
 
 ```yao
-// 测试 map
-let doubled = std.list.map([1, 2, 3], x => x * 2);
-assert(std.list.get(doubled, 0) == 2);
-assert(std.list.get(doubled, 1) == 4);
-assert(std.list.get(doubled, 2) == 6);
+// test_block_fn.yx
+main = {
+  // 完整形式
+  add1: (a: Int, b: Int) -> Int = (a, b) => a + b;
 
-// 测试 filter
-let filtered = std.list.filter([1, 2, 3, 4, 5], x => x > 2);
-assert(std.list.len(filtered) == 3);
+  // 最简形式（无类型注解）
+  add2 = (a, b) => a + b;
 
-// 测试 reduce
-let sum = std.list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0);
-assert(sum == 10);
-
-// 测试链式调用
-let result = std.list.map(
-    std.list.filter([1, 2, 3, 4], x => x % 2 == 0),
-    x => x * 10
-);
-assert(std.list.get(result, 0) == 20);
-assert(std.list.get(result, 1) == 40);
-```
-
-### 4.2 运行测试
-
-```bash
-# 编译项目
-cargo build
-
-# 运行测试
-cargo run -- tests/closure.yx
-
-# 或者使用 yaoxiang cli
-yaoxiang run tests/closure.yx
+  result1 = add1(1, 2);
+  result2 = add2(3, 4);
+  result1 + result2  // 返回 10
+}
 ```
 
 ---
 
-## 五、风险与回滚
+## 五、相关文件
 
-### 5.1 风险
-
-| 风险 | 影响 | 缓解措施 |
-|------|------|----------|
-| 改动影响现有函数调用 | 可能破坏 CallStatic | 逐步测试，每步编译 |
-| 回调闭包生命周期 | 借用检查复杂 | 使用原始指针方案 |
-
-### 5.2 回滚方案
-
-```bash
-git checkout -- src/backends/interpreter/executor.rs
-```
-
----
-
-## 六、时间估算
-
-| 改动 | 预计时间 |
-|------|----------|
-| 改动 A：添加函数表 | 30 分钟 |
-| 改动 B：修复 MakeClosure | 20 分钟 |
-| 改动 C：实现回调 + 测试 | 1 小时 |
-| **总计** | **1.5-2 小时** |
-
----
-
-## 七、后续工作
-
-完成本次修复后，可进一步优化：
-
-1. **闭包 env 捕获**：实现 `MakeClosure` 中的 `env` 字段
-2. **TailCall 优化**：添加尾调用优化
-3. **性能优化**：缓存函数查找结果
+| 文件 | 行号 | 描述 |
+|------|------|------|
+| `src/frontend/typecheck/checking/mod.rs` | 548-584 | `check_fn_stmt` 函数 |
+| `src/frontend/typecheck/mod.rs` | 379-382 | `collect_function_signature` |
+| `src/frontend/typecheck/mod.rs` | 546-590 | 模块级函数签名收集逻辑 |
