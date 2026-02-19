@@ -235,8 +235,12 @@ impl Translator {
             Sar { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sar, dst, lhs, rhs),
             Neg { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
 
-            Eq { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Eq, dst, lhs, rhs),
-            Ne { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Ne, dst, lhs, rhs),
+            Eq { dst, lhs, rhs } => {
+                self.translate_compare(Opcode::I64Eq, Opcode::I64Ne, dst, lhs, rhs)
+            }
+            Ne { dst, lhs, rhs } => {
+                self.translate_compare(Opcode::I64Ne, Opcode::I64Eq, dst, lhs, rhs)
+            }
             Lt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Lt, dst, lhs, rhs),
             Le { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Le, dst, lhs, rhs),
             Gt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Gt, dst, lhs, rhs),
@@ -399,6 +403,20 @@ impl Translator {
                 vec![dst_reg, lhs_reg, rhs_reg],
             ))
         }
+    }
+
+    /// 翻译比较操作，统一使用整数比较指令
+    /// 注意：实际类型检查在运行时通过 executor.rs 的 exec_compare 完成
+    fn translate_compare(
+        &mut self,
+        eq_opcode: Opcode,
+        _ne_opcode: Opcode,
+        dst: &Operand,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        // 统一使用整数比较指令，运行时通过 exec_compare 根据实际类型执行正确比较
+        self.translate_binary_op(eq_opcode, dst, lhs, rhs)
     }
 
     fn translate_unary_op(

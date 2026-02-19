@@ -1046,11 +1046,13 @@ fn test_infer_fn_def() {
             crate::frontend::core::parser::ast::Param {
                 name: "a".to_string(),
                 ty: None,
+                is_mut: false,
                 span: Span::default(),
             },
             crate::frontend::core::parser::ast::Param {
                 name: "b".to_string(),
                 ty: None,
+                is_mut: false,
                 span: Span::default(),
             },
         ],

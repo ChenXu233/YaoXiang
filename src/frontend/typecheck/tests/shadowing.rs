@@ -518,6 +518,7 @@ fn test_fn_def_creates_scope() {
             params: vec![ast::Param {
                 name: "param".to_string(),
                 ty: Some(ast::Type::Name("Int".to_string())),
+                is_mut: false,
                 span: create_dummy_span(),
             }],
             return_type: Some(ast::Type::Name("Int".to_string())),

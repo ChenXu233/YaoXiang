@@ -1,0 +1,14 @@
+use std.list
+
+main: () -> Void = {
+    items = [1, 2, 3]
+
+    // 测试索引访问
+    first = items[0]
+    print(first)
+
+    // 测试 for 循环遍历
+    for item in items {
+        print(item)
+    }
+}

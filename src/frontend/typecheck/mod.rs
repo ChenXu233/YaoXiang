@@ -949,18 +949,11 @@ pub fn add_native_function_types(env: &mut TypeEnvironment) {
         let module_path = format!("std.{}", submodule_name);
         if let Some(module) = registry.get(&module_path) {
             for export in module.exports.values() {
-                // 为每个导出的函数/常量创建类型
+                // 使用签名字符串解析出正确的函数类型
                 let fn_ty = match export.kind {
-                    ExportKind::Function => MonoType::Fn {
-                        params: vec![env.solver().new_var()],
-                        return_type: Box::new(MonoType::Void),
-                        is_async: false,
-                    },
-                    ExportKind::Constant => MonoType::Fn {
-                        params: vec![env.solver().new_var()],
-                        return_type: Box::new(MonoType::Void),
-                        is_async: false,
-                    },
+                    ExportKind::Function | ExportKind::Constant => {
+                        parse_signature(&export.signature, env)
+                    }
                     _ => continue,
                 };
 
@@ -978,6 +971,201 @@ pub fn add_native_function_types(env: &mut TypeEnvironment) {
     for (name, sig) in &env.native_signatures.clone() {
         env.add_var(name.clone(), PolyType::mono(sig.clone()));
     }
+}
+
+/// 解析函数签名字符串为 MonoType
+///
+/// 格式: "(param1: Type1, param2: Type2) -> ReturnType"
+/// 例如: "(s: String, prefix: String) -> Bool"
+fn parse_signature(
+    signature: &str,
+    env: &mut TypeEnvironment,
+) -> MonoType {
+    // 提取参数列表和返回类型
+    let signature = signature.trim();
+
+    // 验证签名格式：必须有 ->
+    let Some(arrow_pos) = signature.find("->") else {
+        // 无效签名：记录警告并返回默认类型
+        eprintln!(
+            "[Warning] Invalid signature '{}': missing '->', defaulting to () -> Void",
+            signature
+        );
+        return MonoType::Fn {
+            params: vec![env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+    };
+
+    // 验证括号：必须以 ( 开头
+    if !signature.starts_with('(') {
+        eprintln!(
+            "[Warning] Invalid signature '{}': must start with '('",
+            signature
+        );
+        return MonoType::Fn {
+            params: vec![env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+    }
+
+    let params_str = &signature[1..arrow_pos]; // 去掉括号
+    let return_str = signature[arrow_pos + 2..].trim();
+
+    // 解析参数（使用深度计数处理嵌套括号和泛型）
+    let params = parse_params(params_str);
+
+    // 解析返回类型
+    let return_type = Box::new(parse_type_str(return_str));
+
+    MonoType::Fn {
+        params,
+        return_type,
+        is_async: false,
+    }
+}
+
+/// 解析参数字符串，支持嵌套泛型
+fn parse_params(params_str: &str) -> Vec<MonoType> {
+    if params_str.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let mut params = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+
+    for (i, c) in params_str.char_indices() {
+        match c {
+            '<' | '(' => depth += 1,
+            '>' | ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let param = params_str[start..i].trim();
+                if !param.is_empty() {
+                    params.push(parse_param(param));
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    // 最后一个参数
+    let param = params_str[start..].trim();
+    if !param.is_empty() {
+        params.push(parse_param(param));
+    }
+
+    params
+}
+
+/// 解析单个参数（支持 "name: Type" 或只有 "Type" 格式）
+fn parse_param(param: &str) -> MonoType {
+    let param = param.trim();
+    if let Some(colon_pos) = param.find(':') {
+        let type_str = param[colon_pos + 1..].trim();
+        parse_type_str(type_str)
+    } else {
+        parse_type_str(param)
+    }
+}
+
+/// 解析类型字符串为 MonoType，支持嵌套泛型和元组
+fn parse_type_str(type_str: &str) -> MonoType {
+    let type_str = type_str.trim();
+
+    // 处理元组类型: (String, Int)
+    if type_str.starts_with('(') && type_str.ends_with(')') {
+        let inner = &type_str[1..type_str.len() - 1];
+        let elements = split_by_top_level_comma(inner);
+        let tuple_types: Vec<MonoType> = elements.iter().map(|s| parse_type_str(s)).collect();
+        return MonoType::Tuple(tuple_types);
+    }
+
+    // 处理泛型类型: List<String>, Dict<String, Int>, List<Dict<String, Int>>
+    if let Some(angle_bracket) = type_str.find('<') {
+        let base = &type_str[..angle_bracket];
+        let inner_start = angle_bracket + 1;
+        let inner_end = type_str.len() - 1;
+
+        // 验证有闭合的 >
+        if inner_end > inner_start && type_str.ends_with('>') {
+            let inner = &type_str[inner_start..inner_end];
+
+            match base {
+                "List" => {
+                    // List<T> - 可能嵌套
+                    let inner_types = split_by_top_level_comma(inner);
+                    if inner_types.len() == 1 {
+                        let inner_type = Box::new(parse_type_str(inner_types[0]));
+                        return MonoType::List(inner_type);
+                    }
+                }
+                "Dict" => {
+                    // Dict<K, V> - 可能嵌套
+                    let parts: Vec<&str> = split_by_top_level_comma(inner);
+                    if parts.len() == 2 {
+                        let k = Box::new(parse_type_str(parts[0]));
+                        let v = Box::new(parse_type_str(parts[1]));
+                        return MonoType::Dict(k, v);
+                    }
+                }
+                "Set" => {
+                    // Set<T>
+                    let inner_types = split_by_top_level_comma(inner);
+                    if inner_types.len() == 1 {
+                        let inner_type = Box::new(parse_type_str(inner_types[0]));
+                        return MonoType::Set(inner_type);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 基本类型
+    match type_str {
+        "Void" | "void" => MonoType::Void,
+        "Bool" | "bool" => MonoType::Bool,
+        "Int" | "int" => MonoType::Int(32),
+        "Float" | "float" => MonoType::Float(64),
+        "Char" | "char" => MonoType::Char,
+        "String" | "string" => MonoType::String,
+        "Bytes" | "bytes" => MonoType::Bytes,
+        _ => MonoType::TypeRef(type_str.to_string()),
+    }
+}
+
+/// 按顶层逗号分割字符串，正确处理嵌套的 < > ( )
+fn split_by_top_level_comma(s: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '<' | '(' => depth += 1,
+            '>' | ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let part = s[start..i].trim();
+                if !part.is_empty() {
+                    result.push(part);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    // 最后一个元素
+    let part = s[start..].trim();
+    if !part.is_empty() {
+        result.push(part);
+    }
+
+    result
 }
 
 /// 添加标准库 traits 到环境

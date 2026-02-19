@@ -29,7 +29,7 @@ main: () -> Void = {
 
 ---
 
-## 问题 2：string.starts_with 返回类型错误
+## 问题 2：string.starts_with 返回类型错误 ✅ 已修复
 
 ### 描述
 `std.string.starts_with` 函数应该返回 `Bool`，但实际返回 `void`，导致在 `if` 语句中报错。
@@ -55,11 +55,11 @@ error: Expected type 'bool', found type 'void'
 该函数暂不可用，需要等待修复
 
 ### 影响
-无法使用 `starts_with` 和 `ends_with` 函数
+✅ 已修复 - 现在 `string.starts_with` 和 `string.ends_with` 正确返回 `Bool` 类型
 
 ---
 
-## 问题 3：字符串字面量比较异常
+## 问题 3：字符串字面量比较异常 ✅ 已修复
 
 ### 描述
 字符串字面量直接比较可能返回不正确的结果。
@@ -68,15 +68,16 @@ error: Expected type 'bool', found type 'void'
 ```yaoxiang
 main: () -> Void = {
     result = "test" == "test"
-    print(result)    // 输出: false 或不正确的结果
+    print(result)    // 输出: true
 }
 ```
 
-### 临时解决方案
-使用变量而非字面量进行比较，或使用 `string.equals` 函数（如果可用）
+### 修复说明
+1. 在解释器中添加了字符串类型的运行时比较支持
+2. 现在 `==` 和 `!=` 等比较操作可以正确处理字符串类型
 
 ### 影响
-字符串比较功能不稳定
+✅ 已修复 - 字符串比较现在可以正常工作
 
 ---
 
@@ -152,8 +153,9 @@ Runtime error: Type error: is_dir expects String argument, got Unit
 - 字符串比较 `==`
 
 ### 暂不可用或存在问题的功能
-- 全局变量定义
-- `string.starts_with` / `string.ends_with`
+- 全局变量定义（问题 1 已修复）
+- `string.starts_with` / `string.ends_with`（问题 2 已修复）
+- 字符串比较 `==`（问题 3 已修复）
 - 列表遍历
 - 列表索引访问
 

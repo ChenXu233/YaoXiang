@@ -1,0 +1,10 @@
+// Error test: immutable parameter cannot be modified
+// This should trigger E2010
+increment: (x: Int) -> Int = {
+    x = x + 1
+    return x
+};
+
+main = {
+    result = increment(5);
+}
