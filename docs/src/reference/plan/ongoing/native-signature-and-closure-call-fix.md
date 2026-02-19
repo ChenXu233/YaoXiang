@@ -171,11 +171,10 @@ foo: [T](x: Int, y: T) -> T
 ### 目标 3：签名参数名检查
 
 解析签名时，应验证参数名的合法性：
-1. 参数名不能是关键字（如 `fn`, `let`, `if` 等）
-2. 参数名必须是有效的标识符（字母开头，可包含数字和下划线）
-3. 参数名不能重复
+1. **参数名不能重复**（E2093）
+2. **泛型参数禁止遮蔽**（E2095, E2096）
 
-如果参数名无效，应报错而非忽略。
+> **注意**：参数名是关键字的情况会在解析器解析签名时自动报语法错误，无需单独验证。
 
 示例：
 ```
@@ -190,9 +189,7 @@ foo: [T](x: Int, y: T) -> T
 "[T](x: Int, x: Int) -> Int"
 # 应报错: Invalid signature: duplicate parameter name 'x'
 
-// 无效签名 - fn 是关键字（当 fn 作为普通参数名时）
-"[T](list: List[T], if: (Int) -> Int) -> List"
-# 应报错: Invalid signature: 'if' is a reserved keyword
+// 注意：参数名是关键字的情况会在解析器解析签名时自动报语法错误
 ```
 
 ### 目标 4：修复错误信息
@@ -207,9 +204,10 @@ foo: [T](x: Int, y: T) -> T
 | E2091 | Invalid signature: unknown type '{type_name}' | 未知类型 |
 | E2092 | Invalid signature: missing '->' | 缺少箭头 |
 | E2093 | Invalid signature: duplicate parameter '{name}' | 重复参数名 |
-| E2094 | Invalid signature: parameter '{name}' is reserved keyword | 参数名是关键字 |
-| E2095 | Invalid signature: generic '{name}' shadows outer generic | 泛型参数遮蔽 |
-| E2096 | Invalid signature: parameter '{name}' shadows generic | 参数名遮蔽泛型 |
+| E2094 | Invalid signature: generic '{name}' shadows outer generic | 泛型参数遮蔽 |
+| E2095 | Invalid signature: parameter '{name}' shadows generic | 参数名遮蔽泛型 |
+
+> **注意**：参数名是关键字的情况不需要单独验证，因为解析器在解析签名时遇到关键字会自动报语法错误。
 
 **错误信息格式**（符合 RFC-013）：
 
@@ -277,13 +275,15 @@ list.reduce([1, 2, 3], (accumulator, item) => accumulator + item, 0)
 ### 验收条件 4：参数名检查（签名解析）
 
 签名解析时应检测无效的参数名：
-- 关键字作为参数名应报错
-- 重复参数名应报错
+- 重复参数名应报错（E2093）
+- 泛型参数遮蔽应报错（E2095, E2096）
+
+> **注意**：参数名是关键字的情况会在解析器解析签名时自动报语法错误，无需单独验证。
 
 ```bash
 # 预期错误：
-[Error] Invalid signature: parameter 'fn' is a reserved keyword
-[Error] Invalid signature: duplicate parameter name 'x'
+[Error] E2093: Invalid signature: duplicate parameter 'x'
+[Error] E2095: Invalid signature: generic 'T' shadows outer generic
 ```
 
 ### 验收条件 5：高阶函数功能正常
@@ -365,16 +365,7 @@ main = {
 # [Warning] Invalid signature 'Float': missing '->'
 ```
 
-### 测试用例 7：参数名是关键字
-
-```rust
-// 假设有这样一个无效签名
-// "(list: List, if: (Int) -> Int) -> List"
-// 预期编译错误：
-// [Error] Invalid signature: parameter 'if' is a reserved keyword
-```
-
-### 测试用例 8：重复参数名
+### 测试用例 7：重复参数名
 
 ```rust
 // 假设有这样一个无效签名
@@ -415,8 +406,13 @@ main = {
 2. **`src/frontend/typecheck/mod.rs`**：
    - 解析 `[T]` 泛型参数前缀
    - 改进错误信息：显示实际解析失败的原因
-   - 添加参数名检查：检测关键字冲突和重复参数名
+   - 添加参数名检查：检测重复参数名
    - 添加泛型参数作用域规则检查：禁止遮蔽
+
+3. **错误码定义**：
+   - **`src/util/diagnostic/codes/e2xxx.rs`**：添加 E2090-E2096 错误码定义
+   - **`src/util/diagnostic/codes/e2xxx.rs`**：添加对应的快捷方法
+   - **`src/i18n/zh-CN.json`**（或对应语言文件）：添加错误消息模板
 
 ---
 
