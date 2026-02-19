@@ -4,6 +4,7 @@
 
 use crate::backends::common::Opcode;
 use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
@@ -25,6 +26,10 @@ pub struct Translator {
     current_function: Option<FunctionIR>,
     /// 已注册的 native 函数名集合
     native_functions: HashSet<String>,
+    /// 闭包函数的索引偏移量（用于计算闭包函数在模块中的正确索引）
+    closure_function_offset: Option<usize>,
+    /// 函数名到索引的映射
+    function_name_to_idx: Option<HashMap<String, usize>>,
 }
 
 impl Translator {
@@ -43,6 +48,8 @@ impl Translator {
             operand_resolver: OperandResolver::new(),
             current_function: None,
             native_functions,
+            closure_function_offset: None,
+            function_name_to_idx: None,
         }
     }
 
@@ -85,6 +92,18 @@ impl Translator {
                 self.register_native(binding.native_symbol());
             }
         }
+
+        // 建立函数名到索引的映射
+        let mut function_name_to_idx: HashMap<String, usize> = HashMap::new();
+        for (idx, func) in module.functions.iter().enumerate() {
+            function_name_to_idx.insert(func.name.clone(), idx);
+        }
+
+        // 注册闭包函数的索引偏移量（闭包函数从 module.functions.len() 开始）
+        // 这样 translate_make_closure 就可以正确计算闭包函数的索引
+        let closure_offset = module.functions.len();
+        self.closure_function_offset = Some(closure_offset);
+        self.function_name_to_idx = Some(function_name_to_idx);
 
         let mut code_section = super::CodeSection {
             functions: Vec::new(),
@@ -263,7 +282,7 @@ impl Translator {
                 type_name,
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
-            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, *func),
+            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -525,7 +544,7 @@ impl Translator {
     fn translate_call_dyn(
         &mut self,
         dst: &Option<Operand>,
-        _func: &Operand,
+        func: &Operand,
         args: &[Operand],
     ) -> Result<BytecodeInstruction, CodegenError> {
         let dst_reg = if let Some(d) = dst {
@@ -533,17 +552,24 @@ impl Translator {
         } else {
             0
         };
-        let func_idx = self.emitter.add_constant(ConstValue::Int(0));
-        let func_handle = func_idx as u16;
-        let base_arg_reg = if let Some(first_arg) = args.first() {
-            self.operand_resolver.to_reg(first_arg)?
-        } else {
-            0
-        };
-        let mut operands = vec![dst_reg];
-        operands.extend_from_slice(&func_handle.to_le_bytes());
-        operands.push(base_arg_reg);
-        operands.push(args.len() as u8);
+        // func 是闭包寄存器
+        let obj_reg = self.operand_resolver.to_reg(func)?;
+
+        // 将所有参数寄存器添加到操作数列表
+        let mut arg_regs: Vec<Reg> = Vec::new();
+        for arg in args {
+            let reg = self.operand_resolver.to_reg(arg)? as u16;
+            arg_regs.push(Reg(reg));
+        }
+
+        // name_idx 设为 0，表示闭包调用
+        let mut operands = vec![dst_reg, obj_reg];
+        operands.extend_from_slice(&0u16.to_le_bytes());
+        for reg in &arg_regs {
+            operands.push(reg.0 as u8);
+        }
+        operands.push(arg_regs.len() as u8);
+
         Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
     }
 
@@ -706,10 +732,18 @@ impl Translator {
     fn translate_make_closure(
         &mut self,
         dst: &Operand,
-        func: usize,
+        func_name: &str,
     ) -> Result<BytecodeInstruction, CodegenError> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let func_id = func as u32;
+
+        // 通过函数名查找索引
+        let func_id = if let Some(ref name_to_idx) = self.function_name_to_idx {
+            name_to_idx.get(func_name).copied().unwrap_or(0) as u32
+        } else {
+            // 如果没有映射，使用 0（回退）
+            0
+        };
+
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(0);

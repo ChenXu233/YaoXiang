@@ -229,7 +229,7 @@ pub enum Instruction {
     },
     MakeClosure {
         dst: Operand,
-        func: usize,
+        func: String,
         env: Vec<Operand>,
     },
     /// Drop a value (ownership-based cleanup)

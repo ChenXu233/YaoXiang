@@ -26,8 +26,8 @@ pub struct SendSyncChecker {
     errors: Vec<OwnershipError>,
     /// 当前位置 (block_idx, instr_idx)
     location: (usize, usize),
-    /// 闭包定义映射: closure_operand -> (func, env)
-    closures: HashMap<Operand, (usize, Vec<Operand>)>,
+    /// 闭包定义映射: closure_operand -> (func_name, env)
+    closures: HashMap<Operand, (String, Vec<Operand>)>,
 }
 
 impl SendSyncChecker {
@@ -79,11 +79,12 @@ impl SendSyncChecker {
             for instr in block.instructions.iter() {
                 if let Instruction::MakeClosure {
                     dst,
-                    func: func_idx,
+                    func: func_name,
                     env,
                 } = instr
                 {
-                    self.closures.insert(dst.clone(), (*func_idx, env.clone()));
+                    self.closures
+                        .insert(dst.clone(), (func_name.clone(), env.clone()));
                 }
             }
         }
