@@ -61,13 +61,20 @@ main = {
 }
 ```
 
-输出：
+输出（当前行为 - 错误）：
 
 ```
 [Warning] Invalid signature 'Float': missing '->'
 [Warning] Invalid signature 'Float': missing '->'
 [Warning] Invalid signature 'Float': missing '->'
 Error: Runtime error: Type error: Expected function value
+```
+
+修复后输出（预期行为）：
+
+```
+[Error] Invalid signature: unknown type 'Fn'
+Error: (compilation failed)
 ```
 
 ---
@@ -84,45 +91,58 @@ Error: Runtime error: Type error: Expected function value
 
 其中泛型参数 `[T]` 声明在函数级别，作用于整个函数签名。
 
-将 `map`/`filter`/`reduce` 的签名修改为：
+将 `map`/`filter`/`reduce` 的签名修改为（泛型参数 `[T]` 在函数名前）：
 
 ```rust
 // map: 泛型 [T] 作用域为整个函数
-"(list: List<T>, fn: (item: T) -> T) -> List<T>"
+"[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
 
 // filter: 泛型 [T] 作用域为整个函数
-"(list: List<T>, fn: (item: T) -> Bool) -> List<T>"
+"[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>"
 
 // reduce: 泛型 [T] 作用域为整个函数
-"(list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
+"[T](list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
 ```
-
-**注意**：泛型参数 `[T]` 需要在调用点根据传入的 List 元素类型进行实例化。
 
 **签名结构说明**：
 
 ```
-(list: List<T>, fn: (item: T) -> T) -> List<T>
- │         │      │    │        │
- │         │      │    │        └── 返回类型（使用 T）
- │         │      │    └── 参数类型（使用 T）
- │         │      └── 参数名
- │         └── 参数类型（函数类型）
- └── 参数类型（List 泛型，使用 T）
+[T](list: List<T>, fn: (item: T) -> T) -> List<T>
+│  │         │      │    │        │
+│  │         │      │    │        └── 返回类型（使用 T）
+│  │         │      │    └── 参数类型（使用 T）
+│  │         │      └── 参数名
+│  │         └── 参数类型（函数类型）
+│  └── 参数类型（List 泛型，使用 T）
+└── 泛型参数声明（作用域为整个函数）
 ```
 
 ### 目标 2：泛型参数作用域规则
 
 **泛型参数声明禁止遮蔽**（No Shadowing）：
 
+签名中存在多个作用域层级：
+
+```
+[T](list: List[T], fn: [T](item: T) -> T) -> List[T]
+│                      │
+│                      └── 内层函数类型作用域（fn 的类型参数）
+└── 外层函数作用域（函数的泛型参数）
+```
+
+**规则**：
+
 1. **同级禁止遮蔽**：同一作用域内的泛型参数不能同名
-2. **跨级禁止遮蔽**：函数参数名不能与泛型参数同名
-3. **继承禁止遮蔽**：子作用域不能声明与父作用域同名的泛型参数
+2. **内层禁止遮蔽外层**：内层作用域的泛型参数不能与外层同名
+3. **函数参数禁止遮蔽**：函数参数名不能与任何泛型参数同名
 
 **有效示例**：
 
 ```yaoxiang
 // ✅ 有效：泛型参数 T 作用域为整个函数
+map: [T](list: List[T], fn: (item: T) -> T) -> List[T]
+
+// ✅ 有效：内层函数类型无泛型参数
 map: [T](list: List[T], fn: (item: T) -> T) -> List[T]
 
 // ✅ 有效：多泛型参数
@@ -135,16 +155,16 @@ foo: [T](x: Int, y: T) -> T
 **无效示例**：
 
 ```yaoxiang
+// ❌ 无效：内层函数泛型遮蔽外层泛型（禁止遮蔽）
+"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]"
+# 错误：Generic parameter 'T' in function type shadows outer generic parameter 'T'
+
 // ❌ 无效：泛型参数同名（同级禁止遮蔽）
-bad1: [T, T](x: T, y: T) -> T
+"[T, T](x: T, y: T) -> T"
 # 错误：Duplicate generic parameter 'T'
 
-// ❌ 无效：函数参数名与泛型参数同名（跨级禁止遮蔽）
-bad2: [T](T: Int) -> T
-# 错误：Parameter 'T' shadows generic parameter 'T'
-
-// ❌ 无效：外部参数遮蔽泛型
-bad3: [T](T: Int, list: List<T>) -> Int
+// ❌ 无效：函数参数名与泛型参数同名（禁止遮蔽）
+"[T](T: Int) -> T"
 # 错误：Parameter 'T' shadows generic parameter 'T'
 ```
 
@@ -160,29 +180,46 @@ bad3: [T](T: Int, list: List<T>) -> Int
 示例：
 ```
 // 有效签名（符合 RFC-010）
-"(list: List<T>, fn: (item: T) -> T) -> List<T>"
+"[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
 
 // 无效签名 - 函数参数名与泛型参数同名（禁止遮蔽）
-"(list: List<T>, fn: (T: T) -> T) -> List<T>"
+"[T](list: List<T>, fn: (T: T) -> T) -> List<T>"
 # 应报错: Parameter 'T' shadows generic parameter 'T'
 
 // 无效签名 - 重复参数名
-"(x: Int, x: Int) -> Int"
+"[T](x: Int, x: Int) -> Int"
 # 应报错: Invalid signature: duplicate parameter name 'x'
 
 // 无效签名 - fn 是关键字（当 fn 作为普通参数名时）
-"(list: List, if: (Int) -> Int) -> List"
+"[T](list: List[T], if: (Int) -> Int) -> List"
 # 应报错: Invalid signature: 'if' is a reserved keyword
 ```
 
 ### 目标 4：修复错误信息
 
-当签名解析遇到未知类型时，应报错 "Unknown type: xxx"，而非当前误导性的 "Float: missing '->'"。
+当签名解析遇到错误时，应使用错误码系统报错（E2xxx - 语义分析阶段）：
 
-预期错误信息：
+**需要新增的错误码**：
+
+| 错误码 | 消息模板 | 说明 |
+|--------|----------|------|
+| E2090 | Invalid signature: {reason} | 签名解析失败（通用） |
+| E2091 | Invalid signature: unknown type '{type_name}' | 未知类型 |
+| E2092 | Invalid signature: missing '->' | 缺少箭头 |
+| E2093 | Invalid signature: duplicate parameter '{name}' | 重复参数名 |
+| E2094 | Invalid signature: parameter '{name}' is reserved keyword | 参数名是关键字 |
+| E2095 | Invalid signature: generic '{name}' shadows outer generic | 泛型参数遮蔽 |
+| E2096 | Invalid signature: parameter '{name}' shadows generic | 参数名遮蔽泛型 |
+
+**错误信息格式**（符合 RFC-013）：
 
 ```
-[Error] Invalid signature '(list: List, fn: Fn) -> List': unknown type 'Fn'
+[Error] E2091: Invalid signature: unknown type 'Fn'
+ --> std/list.yx:1:1
+  |
+1 | "(list: List, fn: Fn) -> List"
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: Use a valid type like '(T) -> T' for function parameters
 ```
 
 ---
@@ -207,12 +244,14 @@ $ cargo run -- run tests/closure_test2.yx
 
 ### 验收条件 2：错误信息正确
 
-当使用无效签名时，应显示正确的错误信息：
+当使用无效签名时，应显示 **Error**（而非 Warning），使用错误码系统（E2xxx）：
 
 ```bash
 # 测试无效签名
 # 预期输出：
-[Error] Invalid signature '(list: List, fn: Fn) -> List': unknown type 'Fn'
+[Error] E2091: Invalid signature: unknown type 'Fn'
+[Error] E2092: Invalid signature: missing '->'
+[Error] E2093: Invalid signature: duplicate parameter 'x'
 ```
 
 ### 验收条件 3：Lambda 参数名匹配
@@ -317,7 +356,14 @@ main = {
 
 ### 测试用例 6：无效签名错误提示
 
-验证错误信息是否正确显示（需要添加测试或手动验证）。
+验证错误信息是否正确显示（应为 Error 且使用错误码）：
+
+```bash
+# 预期输出：
+[Error] E2091: Invalid signature: unknown type 'Fn'
+# 而非：
+# [Warning] Invalid signature 'Float': missing '->'
+```
 
 ### 测试用例 7：参数名是关键字
 
@@ -361,16 +407,16 @@ main = {
 
 1. **`src/std/list.rs:72-87`**：修改三个函数的签名字符串（RFC-010 泛型函数语法）
    ```rust
-   "(list: List<T>, fn: (item: T) -> T) -> List<T>"
-   "(list: List<T>, fn: (item: T) -> Bool) -> List<T>"
-   "(list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
+   "[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
+   "[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>"
+   "[T](list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
    ```
 
-   **注意**：这里的 `<T>` 是 List 的类型参数，函数参数 `fn` 的类型 `(item: T) -> T` 使用了相同的 `T`。编译器需要根据传入的 List 元素类型自动实例化泛型。
-
 2. **`src/frontend/typecheck/mod.rs`**：
+   - 解析 `[T]` 泛型参数前缀
    - 改进错误信息：显示实际解析失败的原因
    - 添加参数名检查：检测关键字冲突和重复参数名
+   - 添加泛型参数作用域规则检查：禁止遮蔽
 
 ---
 
