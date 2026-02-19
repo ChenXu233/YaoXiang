@@ -150,6 +150,10 @@ pub struct AstToIrGenerator {
     type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
     /// 嵌套函数列表（在函数体内定义的函数）
     nested_functions: Vec<FunctionIR>,
+    /// 闭包计数器（用于生成唯一的闭包名称）
+    closure_counter: usize,
+    /// 全局变量表 (name, type, initial_value)
+    global_vars: Vec<(String, MonoType, Option<ConstValue>)>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -161,6 +165,14 @@ struct BindingInfo {
     function: String,
     /// 绑定位置列表（调用者 obj 填充到这些位置）
     positions: Vec<usize>,
+}
+
+/// Lambda 函数体 IR 结果
+struct LambdaBodyIR {
+    instructions: Vec<Instruction>,
+    locals: Vec<MonoType>,
+    /// 闭包函数的可变局部变量索引集合
+    mut_locals: std::collections::HashSet<usize>,
 }
 
 impl Default for AstToIrGenerator {
@@ -187,6 +199,8 @@ impl AstToIrGenerator {
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
+            closure_counter: 0,
+            global_vars: Vec::new(),
         }
     }
 
@@ -207,6 +221,8 @@ impl AstToIrGenerator {
             struct_definitions: HashMap::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
+            closure_counter: 0,
+            global_vars: Vec::new(),
         }
     }
 
@@ -275,6 +291,19 @@ impl AstToIrGenerator {
             }
         }
         tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
+        None
+    }
+
+    /// 查找全局变量
+    fn lookup_global(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        for (idx, (var_name, _, _)) in self.global_vars.iter().enumerate() {
+            if var_name == name {
+                return Some(idx);
+            }
+        }
         None
     }
 
@@ -764,26 +793,57 @@ impl AstToIrGenerator {
         Ok(Some(func_ir))
     }
 
+    /// 尝试将表达式求值为编译时常量
+    fn eval_const_expr(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<ConstValue> {
+        match expr {
+            ast::Expr::Lit(literal, _) => match literal {
+                ast::Literal::Int(n) => Some(ConstValue::Int(*n)),
+                ast::Literal::Float(f) => Some(ConstValue::Float(*f)),
+                ast::Literal::Bool(b) => Some(ConstValue::Bool(*b)),
+                ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
+                ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
+            },
+            // TODO: 支持更复杂的常量表达式
+            _ => None,
+        }
+    }
+
     /// 生成全局变量 IR
     fn generate_global_var_ir(
-        &self,
+        &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
-        _initializer: Option<&ast::Expr>,
+        initializer: Option<&ast::Expr>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
         let var_type = type_annotation
             .map(|t| (*t).clone().into())
             .unwrap_or(MonoType::Int(64));
 
-        // 简化处理：将全局变量转换为返回常量的函数
-        // x: Int = 42 => fn x() -> Int { return 0; }
-        // 这样做是为了避免 CodegenError::InvalidOperand (不支持 Global 操作数)
+        // 尝试从 initializer 提取常量值
+        let init_value = if let Some(expr) = initializer {
+            self.eval_const_expr(expr)
+        } else {
+            None
+        };
 
+        // 注册到全局变量表
+        self.global_vars
+            .push((name.to_string(), var_type.clone(), init_value.clone()));
+
+        // 生成返回常量值的函数
+        // x: Int = 42 => fn x() -> Int { return 42; }
         let result_reg = 0;
+        let src_operand = match &init_value {
+            Some(val) => Operand::Const(val.clone()),
+            None => Operand::Const(ConstValue::Int(0)),
+        };
         let instructions = vec![
             Instruction::Load {
                 dst: Operand::Local(result_reg),
-                src: Operand::Const(ConstValue::Int(0)),
+                src: src_operand,
             },
             Instruction::Ret(Some(Operand::Local(result_reg))),
         ];
@@ -1713,6 +1773,79 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 生成 Lambda 函数体 IR
+    ///
+    /// 返回闭包函数体的指令列表和局部变量信息
+    fn generate_lambda_body_ir(
+        &mut self,
+        params: &[ast::Param],
+        body: &ast::Block,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<LambdaBodyIR, IrGenError> {
+        // 重置当前函数的可变局部变量追踪
+        self.current_mut_locals.clear();
+        self.current_local_names.clear();
+
+        let mut instructions = Vec::new();
+
+        // 进入闭包函数体作用域
+        self.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册
+        for (i, param) in params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(i),
+            });
+            // 存储到局部变量并注册
+            instructions.push(Instruction::Store {
+                dst: Operand::Local(i),
+                src: Operand::Local(i),
+                span: Span::dummy(),
+            });
+            self.register_local(&param.name, i);
+            // 函数参数默认是可变的
+            self.current_mut_locals.insert(i);
+        }
+
+        // 记录局部变量起始位置
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
+
+        // 处理函数体语句
+        for stmt in &body.stmts {
+            self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+        }
+
+        // 处理返回值表达式
+        // 使用寄存器 0 作为返回值寄存器（与 generate_function_ir 一致）
+        if let Some(expr) = &body.expr {
+            let result_reg = 0;
+            self.generate_expr_ir(expr, result_reg, &mut instructions, constants)?;
+            // 添加返回指令
+            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        } else {
+            // 隐式返回 Void
+            instructions.push(Instruction::Ret(None));
+        }
+
+        // 退出作用域
+        self.exit_scope();
+
+        // 计算局部变量总数
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+
+        // 保存当前闭包函数的可变局部变量信息
+        let mut_locals = std::mem::take(&mut self.current_mut_locals);
+
+        Ok(LambdaBodyIR {
+            instructions,
+            locals: locals_types,
+            mut_locals,
+        })
+    }
+
     /// 生成表达式 IR
     #[allow(clippy::only_used_in_recursion)]
     fn generate_expr_ir(
@@ -1740,16 +1873,34 @@ impl AstToIrGenerator {
                 });
             }
             Expr::Var(_, _) => {
-                // 变量加载 - 查找符号表获取正确的局部变量索引
-                let local_idx = if let Expr::Var(name, _) = expr {
-                    self.lookup_local(name).unwrap_or(result_reg)
+                // 变量加载 - 首先查找局部变量，然后查找全局变量
+                let var_name = if let Expr::Var(name, _) = expr {
+                    name.clone()
                 } else {
-                    result_reg
+                    String::new()
                 };
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(local_idx),
-                });
+
+                if let Some(local_idx) = self.lookup_local(&var_name) {
+                    // 局部变量：直接加载
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(local_idx),
+                    });
+                } else if self.lookup_global(&var_name).is_some() {
+                    // 全局变量：生成函数调用获取值
+                    let func_name = var_name.clone();
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(func_name)),
+                        args: vec![],
+                    });
+                } else {
+                    // 未找到变量，默认加载 0
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Const(ConstValue::Int(0)),
+                    });
+                }
             }
             Expr::BinOp {
                 op,
@@ -2028,28 +2179,44 @@ impl AstToIrGenerator {
 
                     // 命名空间解析：将短名称解析为完整名称
                     // 例如：print -> std.io.print (当 print 是通过 use std.io.{print} 导入时)
-                    let func_operand = if let Expr::Var(name, _) = func.as_ref() {
-                        // 尝试将短名称解析为完整名称
-                        let resolved_name = if is_native_name(name) {
-                            // 已经是完整的 native 函数名
-                            name.clone()
-                        } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
-                            // 通过短名称映射获取完整名称
-                            qualified.clone()
-                        } else {
-                            // 未知函数，保持原名
-                            name.clone()
-                        };
-                        Operand::Const(ConstValue::String(resolved_name))
-                    } else {
-                        Operand::Const(ConstValue::Int(0))
-                    };
+                    // 检查是否是闭包调用（函数表达式不是简单的变量名）
+                    let is_closure_call = !matches!(func.as_ref(), Expr::Var(_, _));
 
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: func_operand,
-                        args: arg_regs,
-                    });
+                    if is_closure_call {
+                        // 闭包调用：先加载函数值，然后使用 CallDyn
+                        let func_reg = self.next_temp_reg();
+                        self.generate_expr_ir(func, func_reg, instructions, constants)?;
+
+                        instructions.push(Instruction::CallDyn {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Local(func_reg),
+                            args: arg_regs,
+                        });
+                    } else {
+                        // 普通函数调用
+                        let func_operand = if let Expr::Var(name, _) = func.as_ref() {
+                            // 尝试将短名称解析为完整名称
+                            let resolved_name = if is_native_name(name) {
+                                // 已经是完整的 native 函数名
+                                name.clone()
+                            } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                // 通过短名称映射获取完整名称
+                                qualified.clone()
+                            } else {
+                                // 未知函数，保持原名
+                                name.clone()
+                            };
+                            Operand::Const(ConstValue::String(resolved_name))
+                        } else {
+                            Operand::Const(ConstValue::Int(0))
+                        };
+
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: func_operand,
+                            args: arg_regs,
+                        });
+                    }
                 }
             }
             Expr::FieldAccess { expr, field, .. } => {
@@ -2265,6 +2432,69 @@ impl AstToIrGenerator {
                         });
                     }
                 }
+            }
+            Expr::Lambda {
+                params,
+                body,
+                span: _,
+            } => {
+                // Lambda 表达式 IR 生成
+                // 例如: (x, y) => x + y
+
+                // 1. 生成唯一的闭包函数名
+                let closure_name = format!("closure_{}", self.closure_counter);
+                self.closure_counter += 1;
+
+                // 2. 获取闭包的返回类型（简化处理：使用 Void）
+                // TODO: 可以通过类型检查结果获取更精确的返回类型
+                let return_type = MonoType::Void;
+
+                // 3. 为闭包参数分配寄存器索引
+                let _param_regs: Vec<usize> = (0..params.len()).collect();
+
+                // 4. 生成闭包函数体 IR
+                // 类似于 generate_function_ir 的逻辑，但针对 Lambda
+                let closure_body =
+                    self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
+
+                // 5. 创建闭包函数 IR
+                let param_types: Vec<MonoType> = params
+                    .iter()
+                    .filter_map(|p| p.ty.clone())
+                    .map(|t| t.into())
+                    .collect();
+
+                let closure_func = FunctionIR {
+                    name: closure_name.clone(),
+                    params: param_types,
+                    return_type,
+                    is_async: false,
+                    locals: closure_body.locals.clone(),
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        instructions: closure_body.instructions,
+                        successors: Vec::new(),
+                    }],
+                    entry: 0,
+                };
+
+                // 6. 将闭包函数添加到嵌套函数列表
+                self.nested_functions.push(closure_func);
+
+                // 7. 保存闭包函数的可变局部变量信息
+                if !closure_body.mut_locals.is_empty() {
+                    self.module_mut_locals
+                        .insert(closure_name.clone(), closure_body.mut_locals);
+                }
+
+                // 8. 创建 MakeClosure 指令
+                // env 为空，因为当前不处理捕获变量（后续可扩展）
+                // 使用闭包函数名而不是索引
+                instructions.push(Instruction::MakeClosure {
+                    dst: Operand::Local(result_reg),
+                    func: closure_name,
+                    env: Vec::new(),
+                });
             }
             _ => {
                 // 默认返回 0

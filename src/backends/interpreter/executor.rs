@@ -1252,13 +1252,52 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::CallDyn {
-                    dst: _,
-                    obj: _,
+                    dst,
+                    obj,
                     name_idx: _,
-                    args: _,
+                    args,
                 } => {
-                    // Dynamic call - not fully implemented
-                    frame.advance();
+                    // Dynamic call - 闭包调用
+                    // obj 寄存器包含闭包值（FunctionValue）
+                    let closure_val = frame
+                        .registers
+                        .get(obj.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+
+                    if let RuntimeValue::Function(func_value) = closure_val {
+                        // 收集参数（包括捕获的环境变量）
+                        let env_args: Vec<RuntimeValue> = func_value.env.clone();
+                        let call_args: Vec<RuntimeValue> = args
+                            .iter()
+                            .map(|r| {
+                                frame
+                                    .registers
+                                    .get(r.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(RuntimeValue::Unit)
+                            })
+                            .collect();
+
+                        // 合并环境变量和参数
+                        let mut final_args = env_args;
+                        final_args.extend(call_args);
+
+                        // 调用闭包函数
+                        let result = self.call_function_by_id(func_value.func_id, &final_args)?;
+
+                        // 保存返回值
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                        frame.advance();
+                    } else {
+                        // 不是有效的函数值，返回 Unit
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        }
+                        frame.advance();
+                    }
                 }
             }
         }
