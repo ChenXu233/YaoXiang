@@ -1,0 +1,5 @@
+use std.io;
+
+main = {
+  io.println("Hello, YaoXiang with use!");
+}

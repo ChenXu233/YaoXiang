@@ -1,0 +1,20 @@
+// Test closure call - map, filter, reduce
+main = {
+
+// Test map
+doubled = std.list.map([1, 2, 3], x => x * 2);
+std.io.println("Test map:");
+std.io.println(doubled);
+
+// Test filter
+filtered = std.list.filter([1, 2, 3, 4, 5], x => x > 2);
+std.io.println("Test filter:");
+std.io.println(filtered);
+
+// Test reduce
+sum = std.list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0);
+std.io.println("Test reduce:");
+std.io.println(sum);
+
+std.io.println("All tests passed!");
+}
