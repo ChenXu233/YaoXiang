@@ -545,19 +545,39 @@ impl BodyChecker {
 
         // 将函数自身注册到变量环境中（支持嵌套函数的前向引用和递归调用）
         // 注意：函数参数由 check_fn_def 在函数作用域内添加
-        if let Some(crate::frontend::core::parser::ast::Type::Fn {
-            params: param_types,
-            return_type,
-        }) = type_annotation
-        {
-            let fn_param_types: Vec<MonoType> = param_types
+        if let Some(type_ann) = type_annotation {
+            if let crate::frontend::core::parser::ast::Type::Fn {
+                params: param_types,
+                return_type,
+            } = type_ann
+            {
+                let fn_param_types: Vec<MonoType> = param_types
+                    .iter()
+                    .map(|t| MonoType::from(t.clone()))
+                    .collect();
+                let fn_return_type = MonoType::from(*return_type.clone());
+                let fn_type = MonoType::Fn {
+                    params: fn_param_types,
+                    return_type: Box::new(fn_return_type),
+                    is_async: false,
+                };
+                self.add_var(name.to_string(), PolyType::mono(fn_type));
+            }
+        } else {
+            // 没有类型注解时，也需要添加函数到作用域
+            // 从参数创建类型变量
+            let param_types: Vec<MonoType> = params
                 .iter()
-                .map(|t| MonoType::from(t.clone()))
+                .map(|p| {
+                    p.ty.as_ref()
+                        .map(|t| MonoType::from(t.clone()))
+                        .unwrap_or_else(|| self.solver.new_var())
+                })
                 .collect();
-            let fn_return_type = MonoType::from(*return_type.clone());
+
             let fn_type = MonoType::Fn {
-                params: fn_param_types,
-                return_type: Box::new(fn_return_type),
+                params: param_types,
+                return_type: Box::new(self.solver.new_var()),
                 is_async: false,
             };
             self.add_var(name.to_string(), PolyType::mono(fn_type));

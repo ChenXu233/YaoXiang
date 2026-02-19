@@ -1050,7 +1050,7 @@ impl Executor for Interpreter {
                 BytecodeInstr::MakeClosure {
                     dst,
                     func: func_ref,
-                    env: _,
+                    env,
                 } => {
                     let func_name = match func_ref {
                         FunctionRef::Static { name, .. } => name.clone(),
@@ -1072,13 +1072,23 @@ impl Executor for Interpreter {
                             self.functions_by_id.push(func.clone());
                             crate::backends::common::value::FunctionId(idx as u32)
                         } else {
+                            // Warning: function not found, fallback to id 0
+                            eprintln!(
+                                "[warn] Closure: function '{}' not found, fallback to id 0",
+                                func_name
+                            );
                             crate::backends::common::value::FunctionId(0)
                         }
                     };
+                    // Capture environment variables from registers
+                    let captured_env: Vec<RuntimeValue> = env
+                        .iter()
+                        .map(|r| frame.registers[r.0 as usize].clone())
+                        .collect();
                     let closure =
                         RuntimeValue::Function(crate::backends::common::value::FunctionValue {
                             func_id,
-                            env: Vec::new(),
+                            env: captured_env,
                         });
                     frame.set_register(dst.0 as usize, closure);
                     frame.advance();
@@ -1147,25 +1157,24 @@ impl Executor for Interpreter {
                     // In debug mode, this would check types
                     frame.advance();
                 }
-                BytecodeInstr::LoadUpvalue {
-                    dst,
-                    upvalue_idx: _,
-                } => {
-                    // Simplified: upvalues are stored in the current frame for closures
-                    let val = frame.get_upvalue(0).cloned().unwrap_or(RuntimeValue::Unit);
+                BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
+                    // Load from captured environment using the actual upvalue_idx
+                    let idx = *upvalue_idx as usize;
+                    let val = frame
+                        .get_upvalue(idx)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
                     frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
-                BytecodeInstr::StoreUpvalue {
-                    src,
-                    upvalue_idx: _,
-                } => {
+                BytecodeInstr::StoreUpvalue { src, upvalue_idx } => {
                     let val = frame
                         .registers
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    frame.set_upvalue(0, val);
+                    let idx = *upvalue_idx as usize;
+                    frame.set_upvalue(idx, val);
                     frame.advance();
                 }
                 BytecodeInstr::CloseUpvalue { src: _ } => {
