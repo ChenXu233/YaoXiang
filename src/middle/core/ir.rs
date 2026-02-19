@@ -201,6 +201,7 @@ pub enum Instruction {
         /// Source span for error reporting
         span: Span,
     },
+    // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令
     Cast {
         dst: Operand,
         src: Operand,

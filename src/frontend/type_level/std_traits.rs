@@ -32,6 +32,8 @@ pub const STD_TRAITS: &[&str] = &[
     "Debug",     // 可调试打印
     "PartialEq", // 可相等比较
     "Eq",        // 完全相等（标记 trait）
+    "Iterable",  // 可迭代（用于 for 循环）
+    "Iterator",  // 迭代器
 ];
 
 /// 初始化标准库 traits 到 TraitTable
@@ -50,6 +52,12 @@ pub fn init_std_traits(trait_table: &mut TraitTable) {
 
     // 添加 Eq trait 定义（标记 trait）
     add_eq_trait(trait_table);
+
+    // 添加 Iterable trait 定义（用于 for 循环）
+    add_iterable_trait(trait_table);
+
+    // 添加 Iterator trait 定义
+    add_iterator_trait(trait_table);
 }
 
 /// 添加 Clone trait 定义
@@ -257,4 +265,59 @@ pub fn is_primitive_type(type_name: &str) -> bool {
 /// 获取所有标准库 trait 名称
 pub fn std_trait_names() -> &'static [&'static str] {
     STD_TRAITS
+}
+
+// ============================================================================
+// 迭代器协议 Traits
+// ============================================================================
+
+/// 添加 Iterable trait 定义（用于 for 循环）
+fn add_iterable_trait(trait_table: &mut TraitTable) {
+    let mut methods = HashMap::new();
+
+    // Iterable::iter 方法: iter: (self: &Self) -> Iterator<T>
+    // 返回迭代器类型，这里使用 TypeRef 表示，由具体类型参数决定
+    let iter_sig = crate::frontend::type_level::trait_bounds::TraitMethodSignature {
+        name: "iter".to_string(),
+        params: vec![MonoType::TypeRef("Self".to_string())],
+        // 返回类型使用泛型占位符，在实现时具体化
+        return_type: MonoType::TypeRef("Iterator".to_string()),
+        is_static: false,
+    };
+    methods.insert("iter".to_string(), iter_sig);
+
+    let iterable_def = TraitDefinition {
+        name: "Iterable".to_string(),
+        methods,
+        parent_traits: Vec::new(),
+        generic_params: vec!["T".to_string()], // 元素类型参数
+        span: None,
+    };
+
+    trait_table.add_trait(iterable_def);
+}
+
+/// 添加 Iterator trait 定义
+fn add_iterator_trait(trait_table: &mut TraitTable) {
+    let mut methods = HashMap::new();
+
+    // Iterator::next 方法: next: (&mut self) -> Option<T>
+    let next_sig = crate::frontend::type_level::trait_bounds::TraitMethodSignature {
+        name: "next".to_string(),
+        params: vec![MonoType::TypeRef("Self".to_string())],
+        // 返回 Option<T>，Option 是内置类型
+        return_type: MonoType::TypeRef("Option".to_string()),
+        is_static: false,
+    };
+    methods.insert("next".to_string(), next_sig);
+
+    let iterator_def = TraitDefinition {
+        name: "Iterator".to_string(),
+        methods,
+        parent_traits: Vec::new(),
+        generic_params: vec!["T".to_string()], // 元素类型参数
+        span: None,
+    };
+
+    trait_table.add_trait(iterator_def);
 }

@@ -700,8 +700,26 @@ impl<'a> ExprInferrer<'a> {
                 label,
                 span,
             } => {
-                // 推断可迭代对象
-                let _iter_ty = self.infer_expr(iterable)?;
+                // 推断可迭代对象类型
+                let iter_ty = self.infer_expr(iterable)?;
+
+                // 根据可迭代对象类型推导循环变量类型
+                let element_type = match &iter_ty {
+                    // List<T> -> T
+                    MonoType::List(elem_ty) => *elem_ty.clone(),
+                    // Tuple 类型：根据位置推导（这里简化处理，使用类型变量）
+                    MonoType::Tuple(_elems) => {
+                        // TODO: 支持 Tuple 的元素类型推导
+                        self.solver.new_var()
+                    }
+                    // Dict 类型：键值对类型（这里简化处理，使用类型变量）
+                    MonoType::Dict(key_ty, value_ty) => {
+                        // Dict 遍历时，元素是 (Key, Value) 元组
+                        MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
+                    }
+                    // 其他类型：使用类型变量
+                    _ => self.solver.new_var(),
+                };
 
                 // 注册循环标签
                 self.enter_loop(label.as_deref());
@@ -709,7 +727,7 @@ impl<'a> ExprInferrer<'a> {
                 // 进入循环体作用域，添加迭代变量（带遮蔽检查）
                 self.enter_scope();
                 let result = self
-                    .try_add_var(var.clone(), PolyType::mono(MonoType::Char), *span)
+                    .try_add_var(var.clone(), PolyType::mono(element_type), *span)
                     .and_then(|_| self.infer_block(body, true, None));
 
                 self.exit_scope();
