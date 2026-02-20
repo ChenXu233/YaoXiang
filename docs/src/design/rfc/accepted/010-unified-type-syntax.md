@@ -626,6 +626,39 @@ fn check_type_implements_interface(
 }
 ```
 
+### 接口直接赋值与编译期优化
+
+接口类型支持直接赋值，编译器会根据赋值的右值类型自动选择最优的调用策略：
+
+```yaoxiang
+// 直接赋值具体类型 → 编译期可确定具体类型，零开销调用
+d: Drawable = Circle(1)
+d.draw(screen)  // 编译后：直接调用 circle_draw(screen)，无 vtable
+
+// 函数返回值 → 编译期无法确定具体类型，使用 vtable
+d: Drawable = get_shape()
+d.draw(screen)  // 通过 vtable 查找方法
+
+// 异构集合 → 使用 vtable
+shapes: List[Drawable] = [Circle(1), Rect(2, 3)]
+for s in shapes {
+    s.draw(screen)  // 通过 vtable 查找方法
+}
+```
+
+**编译期优化策略**：
+
+| 场景 | 推断结果 | 调用方式 |
+|------|----------|----------|
+| `d: Drawable = Circle(1)` | 具体类型 Circle | 直接调用（零开销） |
+| `d: Drawable = get_shape()` | 未知 | vtable |
+| `shapes: List[Drawable] = [...]` | 异构 | vtable |
+
+**规则**：
+1. 当右值是具体类型构造器且编译期可确定时，生成直接调用 IR
+2. 当右值类型无法在编译期确定时，回退到 vtable 机制
+3. vtable 兜底保证运行时多态的正确性
+
 ### 鸭子类型支持
 
 ```yaoxiang

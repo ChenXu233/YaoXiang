@@ -320,6 +320,29 @@ Point: Type = {
 }
 ```
 
+**接口直接赋值**：具体类型可以直接赋值给接口类型变量（结构化子类型）
+
+```yaoxiang
+# 直接赋值（编译期可确定具体类型 → 零开销调用）
+d: Drawable = Circle(1)
+d.draw(screen)        # 编译后：直接调用 circle_draw，无 vtable
+
+# 函数返回值（编译期无法确定 → vtable 调用）
+d: Drawable = get_shape()
+d.draw(screen)        # 通过 vtable 查找方法
+
+# 接口作为函数参数
+process: (d: Drawable) -> Void = d.draw(screen)
+```
+
+**编译期优化策略**：
+
+| 场景 | 推断结果 | 调用方式 |
+|------|----------|----------|
+| 直接赋值具体类型 | 具体类型可确定 | 直接调用（零开销） |
+| 函数返回值 | 未知 | vtable |
+| 异构集合 | 多个类型 | vtable |
+
 ### 3.6 元组类型
 
 ```
