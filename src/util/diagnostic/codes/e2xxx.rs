@@ -41,6 +41,12 @@ pub static E2XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Semantic,
         message_template: "Cannot shadow existing variable '{name}'",
     },
+    // E2014: 顶层变量错误
+    ErrorCodeDefinition {
+        code: "E2014",
+        category: ErrorCategory::Semantic,
+        message_template: "Function calls are not allowed in top-level variable initializers",
+    },
     // E209x: 函数签名解析错误
     ErrorCodeDefinition {
         code: "E2090",
@@ -116,6 +122,12 @@ impl ErrorCodeDefinition {
     pub fn variable_shadowing(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2013").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
+    }
+
+    /// E2014 顶层变量不支持函数调用
+    pub fn top_level_function_call() -> DiagnosticBuilder {
+        let def = Self::find("E2014").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
     }
 
     /// E2090 签名解析失败（通用）
