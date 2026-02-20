@@ -71,19 +71,19 @@ impl StdModule for ListModule {
             NativeExport::new(
                 "map",
                 "std.list.map",
-                "(list: List, fn: Fn) -> List",
+                "[T](list: List<T>, fn: (item: T) -> T) -> List<T>",
                 native_map as NativeHandler,
             ),
             NativeExport::new(
                 "filter",
                 "std.list.filter",
-                "(list: List, fn: Fn) -> List",
+                "[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>",
                 native_filter as NativeHandler,
             ),
             NativeExport::new(
                 "reduce",
                 "std.list.reduce",
-                "(list: List, fn: Fn, init: Any) -> Any",
+                "[T](list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any",
                 native_reduce as NativeHandler,
             ),
             NativeExport::new(
