@@ -194,6 +194,10 @@ pub struct AstToIrGenerator {
     closure_counter: usize,
     /// 全局变量表 (name, type, initial_value)
     global_vars: Vec<(String, MonoType, Option<ConstValue>)>,
+    /// 约束变量的具体类型映射（接口直接赋值优化）
+    /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
+    /// 用于方法调用时选择直接调用而非 vtable 查找
+    constraint_var_concrete_types: HashMap<String, String>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -241,6 +245,7 @@ impl AstToIrGenerator {
             nested_functions: Vec::new(),
             closure_counter: 0,
             global_vars: Vec::new(),
+            constraint_var_concrete_types: HashMap::new(),
         }
     }
 
@@ -263,6 +268,7 @@ impl AstToIrGenerator {
             nested_functions: Vec::new(),
             closure_counter: 0,
             global_vars: Vec::new(),
+            constraint_var_concrete_types: HashMap::new(),
         }
     }
 
@@ -278,6 +284,37 @@ impl AstToIrGenerator {
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
         self.symbols.pop();
         tlog!(debug, MSG::IrGenExitScope, &self.symbols.len().to_string());
+    }
+
+    /// 从表达式中提取构造器类型名
+    ///
+    /// 用于接口直接赋值优化：判断初始化表达式是否为具体类型构造器调用
+    /// 例如：`Circle(1)` → Some("Circle"), `get_shape()` → None
+    fn extract_constructor_type_name(expr: &ast::Expr) -> Option<String> {
+        match expr {
+            // 构造器调用：TypeName(args...)
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Var(name, _) = func.as_ref() {
+                    // 首字母大写的标识符通常是类型构造器
+                    if name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                        return Some(name.clone());
+                    }
+                }
+                None
+            }
+            // 直接变量引用（可能是已知具体类型的值）
+            _ => None,
+        }
+    }
+
+    /// 获取约束变量的具体类型名（如果编译期可确定）
+    ///
+    /// 用于方法调用时选择直接调用（零开销）而非 vtable 查找
+    fn get_constraint_var_concrete_type(
+        &self,
+        var_name: &str,
+    ) -> Option<&String> {
+        self.constraint_var_concrete_types.get(var_name)
     }
 
     /// 阶段3修复：实例化多态类型
@@ -1072,7 +1109,21 @@ impl AstToIrGenerator {
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
-                    self.local_var_types.insert(name.clone(), type_name);
+                    self.local_var_types.insert(name.clone(), type_name.clone());
+
+                    // 接口直接赋值优化：
+                    // 当 type_annotation 是约束类型且 initializer 是具体类型构造器时，
+                    // 记录变量的具体类型信息，用于后续方法调用优化
+                    if mono.is_constraint() {
+                        if let Some(init_expr) = initializer {
+                            if let Some(concrete_type_name) =
+                                Self::extract_constructor_type_name(init_expr)
+                            {
+                                self.constraint_var_concrete_types
+                                    .insert(name.clone(), concrete_type_name);
+                            }
+                        }
+                    }
                 } else if let Some(init_expr) = initializer {
                     // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
                     let inferred = self.get_expr_type_name(init_expr);
@@ -2154,6 +2205,7 @@ impl AstToIrGenerator {
                             });
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
+                            // 接口直接赋值优化：检查对象是否是约束变量
                             let mut arg_regs = Vec::new();
 
                             // 生成对象表达式 IR（作为第一个参数）
@@ -2168,15 +2220,64 @@ impl AstToIrGenerator {
                                 arg_regs.push(Operand::Local(arg_reg));
                             }
 
-                            let method_function_name = extract_namespace_path(expr, field);
+                            // 检查对象是否是约束变量（接口直接赋值优化）
+                            let var_name = if let Expr::Var(name, _) = expr.as_ref() {
+                                Some(name.clone())
+                            } else {
+                                None
+                            };
 
-                            instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
-                                func: Operand::Const(ConstValue::String(
-                                    method_function_name.to_string(),
-                                )),
-                                args: arg_regs,
+                            let concrete_type = var_name.as_ref().and_then(|name| {
+                                self.get_constraint_var_concrete_type(name).cloned()
                             });
+
+                            if let Some(concrete_type_name) = concrete_type {
+                                // 编译期可确定具体类型 → 直接调用（零开销）
+                                // d.draw(screen) → ConcreteType.draw(d, screen)
+                                let qualified_name = format!("{}.{}", concrete_type_name, field);
+                                instructions.push(Instruction::Call {
+                                    dst: Some(Operand::Local(result_reg)),
+                                    func: Operand::Const(ConstValue::String(qualified_name)),
+                                    args: arg_regs,
+                                });
+                            } else if var_name.as_ref().is_some_and(|name| {
+                                // 检查变量的类型标注是否是约束类型（但具体类型未知）
+                                self.local_var_types
+                                    .get(name)
+                                    .and_then(|type_name| {
+                                        // 如果变量类型是约束类型且不在 constraint_var_concrete_types 中
+                                        // 说明具体类型无法在编译期确定，需要 vtable 调用
+                                        if self.struct_definitions.get(type_name).is_none()
+                                            && !self
+                                                .constraint_var_concrete_types
+                                                .contains_key(name)
+                                        {
+                                            // 简单启发式：如果变量类型不是已知结构体，可能是约束类型
+                                            Some(true)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or(false)
+                            }) {
+                                // 编译期无法确定具体类型 → CallVirt（vtable 调用）
+                                instructions.push(Instruction::CallVirt {
+                                    dst: Some(Operand::Local(result_reg)),
+                                    obj: Operand::Local(obj_reg),
+                                    method_name: field.to_string(),
+                                    args: arg_regs,
+                                });
+                            } else {
+                                // 普通方法调用
+                                let method_function_name = extract_namespace_path(expr, field);
+                                instructions.push(Instruction::Call {
+                                    dst: Some(Operand::Local(result_reg)),
+                                    func: Operand::Const(ConstValue::String(
+                                        method_function_name.to_string(),
+                                    )),
+                                    args: arg_regs,
+                                });
+                            }
                         }
                     }
                 } else {
