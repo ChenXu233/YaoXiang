@@ -19,7 +19,6 @@ title: RFC-011：泛型系统设计
 - **关联类型**：`Iterator: Type[Item] = { next: () -> Option[Item], has_next: () -> Bool }`
 - **编译期泛型**：`[T, N: Int]` 编译期常量参数，字面量类型约束区分编译期与运行时
 - **条件类型**：`type If[C: Bool, T, E]` 类型级计算，类型族
-- **平台特化**：`[P: X86_64]` 预定义泛型参数 P，平台即类型
 
 **价值**：
 - 零成本抽象：编译期单态化，无运行时开销
@@ -539,75 +538,7 @@ sum: [T](arr: Array[T]) -> T = {
 }
 ```
 
-#### 6.2 平台特化
-
-**核心设计**：
-- 平台类型由标准库定义
-- `P` 是预定义的泛型参数名，被解析器占用，代表当前平台
-- 使用纯类型约束语法，无 `#[cfg]` 等宏
-
-```yaoxiang
-# ======== 标准库定义（std） ========
-# 平台类型枚举
-Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
-
-# 预定义泛型参数 P：解析器自动识别，代表当前编译平台
-
-# ======== 用户代码 ========
-# 通用实现（所有平台可用）
-sum: [T: Add](arr: Array[T]) -> T = {
-    result = Zero::zero()
-    for item in arr {
-        result = result + item
-    }
-    return result
-}
-
-# 平台特化：P 是预定义泛型参数，代表当前平台
-# 编译器根据当前平台自动选择匹配的特化
-sum: [P: X86_64](arr: Array[Float]) -> Float = {
-    return avx2_sum(arr.data, arr.length)
-}
-
-sum: [P: AArch64](arr: Array[Float]) -> Float = {
-    return neon_sum(arr.data, arr.length)
-}
-
-sum: [P: RISC_V](arr: Array[Float]) -> Float = {
-    return riscv_vec_sum(arr.data, arr.length)
-}
-
-# 匹配语法（更灵活的方式）
-sum: [P](arr: Array[Float]) -> Float = match P {
-    X86_64 => avx2_sum(arr.data, arr.length),
-    AArch64 => neon_sum(arr.data, arr.length),
-    RISC_V => riscv_vec_sum(arr.data, arr.length),
-    _ => basic_sum_iter(arr),
-}
-```
-
-**设计原则**：
-- **平台即类型**：一切皆是类型，平台不应该是预编译条件
-- **标准库定义**：平台类型可扩展，用户可定义自己的平台类型
-- **解析器占用 P**：语法简洁，无需导入，`P` 自动绑定到当前平台
-- **100% 类型安全**：所有平台代码都参与类型检查，拼写错误在任何平台都能发现
-
-**平台类型能力**：
-
-```yaoxiang
-# 平台类型可用于类型级计算
-PlatformSupportsSIMD: Type[P] = match P {
-    X86_64 => True,
-    AArch64 => True,
-    RISC_V => True,
-    _ => False,
-}
-
-# 验证当前平台是否支持 SIMD（使用 Assert 标准库类型）
-Assert[PlatformSupportsSIMD[P]]
-```
-
-#### 6.3 条件特化
+#### 6.2 条件特化
 
 ```yaoxiang
 # 完全符合RFC-010语法的特化方式：函数重载
@@ -639,7 +570,7 @@ sum(int_arr)     # 选择 sum: (Array[Int]) -> Int
 sum(float_arr)    # 选择 sum: (Array[Float]) -> Float
 ```
 
-#### 6.4 函数重载与内联的完美结合
+#### 6.3 函数重载与内联的完美结合
 
 **关键特性**：函数重载与内联优化天然结合，实现零成本抽象。
 
@@ -1682,13 +1613,6 @@ impl TypeLevelComputer {
    - 维度验证等特性
    - 无需 `const` 关键字，纯类型约束
 
-5. **平台特化**
-   - 平台即类型：平台是标准库定义的枚举类型
-   - 预定义泛型参数 `P`：解析器自动识别，代表当前编译平台
-   - 100% 类型安全：所有平台代码都参与类型检查
-   - SIMD指令自动选择
-   - 无 `#[cfg]` 等宏，纯类型约束
-
 ### 缺点
 
 1. **编译时间**
@@ -1771,7 +1695,6 @@ impl TypeLevelComputer {
 |------|------|------|
 | 实例化策略 | Eager vs Lazy vs Threshold | 待讨论 |
 | 缓存大小 | LRU缓存容量设置 | 待讨论 |
-| 特化优先级 | 平台特化 vs 类型特化 | 待讨论 |
 | 错误诊断 | 泛型错误信息详细程度 | 待讨论 |
 
 ### 后续优化
@@ -1779,7 +1702,6 @@ impl TypeLevelComputer {
 | 优化项 | 价值 | 实现难度 |
 |--------|------|----------|
 | 实例化图分析 | 高 | 中 |
-| 平台自动特化 | 高 | 高 |
 | 类型级编程DSL | 中 | 高 |
 | 泛型性能基准 | 中 | 低 |
 
@@ -1791,13 +1713,9 @@ impl TypeLevelComputer {
 # 泛型参数（支持约束）
 generic_params ::= '[' identifier (',' identifier)* ']'
                  | '[' identifier ':' type_bound (',' identifier ':' type_bound)* ']'
-                 | '[' 'P' (':' platform_type)? ']'  # 平台特化：P 是预定义泛型参数
-
-platform_type ::= identifier  # Platform 的变体类型，如 X86_64, AArch64 等
 
 type_bound ::= identifier
              | identifier '+' identifier ('+' identifier)*
-             | platform_type
 
 # 参数声明（类型 + 可选名字）
 parameter ::= identifier ':' type
@@ -1806,11 +1724,6 @@ parameters ::= parameter (',' parameter)*
 
 # 函数声明：name [泛型] (参数列表) -> 返回类型 = 函数体
 function ::= identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
-
-# 平台特化函数（使用预定义泛型参数 P）
-# P 自动绑定到当前编译平台类型
-sum: [P: X86_64](arr: Array[Float]) -> Float = { ... }
-sum: [P: AArch64](arr: Array[Float]) -> Float = { ... }
 
 # 方法声明：Type.method [泛型] (参数列表) -> 返回类型 = 函数体
 method ::= identifier '.' identifier generic_params? '(' parameters? ')' '->' type '=' (expression | block)
@@ -1822,29 +1735,6 @@ generic_type ::= 'type' identifier generic_params? '=' type_expression
 # [n: Int](n: n) 表示 n 是编译期常量，类型为字面量 "n"
 literal_param ::= identifier ':' identifier  # 声明泛型参数
                | identifier ':' identifier   # 值参数，类型为泛型参数名（字面量类型）
-```
-
-### 平台类型系统
-
-```yaoxiang
-# ======== 标准库定义 ========
-# 平台类型枚举（可扩展）
-Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86 | ...
-
-# 平台感知泛型函数
-sum: [P: Platform](arr: Array[Float]) -> Float = match P {
-    X86_64 => avx2_sum(arr.data, arr.length),
-    AArch64 => neon_sum(arr.data, arr.length),
-    _ => basic_sum_iter(arr),
-}
-
-# 平台类型级计算
-PlatformSupportsSIMD: Type[P] = match P {
-    X86_64 => True,
-    AArch64 => True,
-    RISC_V => True,
-    _ => False,
-}
 ```
 
 ### 示例代码库
