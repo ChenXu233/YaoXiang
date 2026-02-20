@@ -1,0 +1,8 @@
+use std.io
+use std.list
+
+main = {
+    l = [1, 2, 3]
+    n = list.len(l)
+    print(n)
+}

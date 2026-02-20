@@ -1,154 +1,21 @@
 use std.io
-use std.os
-use std.string
-use std.list
 
-add_prefix: (name: String, prefix: String) -> String = {
-    return prefix + name
-}
-
-add_suffix: (name: String, suffix: String) -> String = {
-    dot_pos = string.index_of(name, ".")
-    if dot_pos == -1 {
-        return name + suffix
-    }
-    name_part = string.substring(name, 0, dot_pos)
-    ext = string.substring(name, dot_pos, string.len(name))
-    return name_part + suffix + ext
-}
-
-replace_text: (name: String, old: String, new: String) -> String = {
-    return string.replace(name, old, new)
-}
-
-apply_operation: (name: String, op: String, param: String) -> String = {
-    result = match op {
-        "prefix" => add_prefix(name, param),
-        "suffix" => add_suffix(name, param),
-        "replace" => replace_text(name, param, param),
-        _ => name
-    }
-    return result
-}
-
-rename_file: (dir: String, old_name: String, new_name: String, preview: Bool) -> Void = {
-    if old_name == new_name {
-        return
-    }
-
-    if preview {
-        print("  PREVIEW: ")
-        print(old_name)
-        print(" -> ")
-        print(new_name)
-        print("\n")
-        return
-    }
-
-    old_path = dir + "/" + old_name
-    new_path = dir + "/" + new_name
-
-    os.rename(old_path, new_path)
-
-    print("  RENAMED: ")
-    print(old_name)
-    print(" -> ")
-    print(new_name)
+main = {
+    print("===========================================\n")
+    print("        File Batch Rename Tool\n")
+    print("===========================================\n")
     print("\n")
 
-    return
-}
+    print("Enter target directory: ")
+    x = std.io.read_line()
 
-print_header: (dir: String, op: String, param: String, preview: Bool) -> Void = {
-    print("=== File Batch Rename Tool ===\n")
-    print("Directory: ")
-    print(dir)
+    print("Select: 1=prefix, 2=suffix, 0=exit: ")
+    y = std.io.read_line()
+
+    print("\nFiles in directory:\n")
+    z = std.os.read_dir(x)
+    print(z)
     print("\n")
-    print("Operation: ")
-    print(op)
-    print("\n")
-    print("Parameter: ")
-    print(param)
-    print("\n")
-    print("Mode: ")
-    if preview {
-        print("PREVIEW (no changes will be made)\n")
-    } else {
-        print("LIVE (files will be renamed!)\n")
-    }
-    print("\n")
-    return
-}
-
-print_preview_examples: (files_str: String, op: String, param: String) -> Void = {
-    newline = "\n"
-    files = string.split(files_str, newline)
-    total = list.len(files)
-
-    print("Preview (first 5 files):\n")
-
-    print("  Example files after rename:\n")
-
-    if op == "prefix" {
-        print("  prefix '")
-        print(param)
-        print("' would add prefix to each filename\n")
-    } elif op == "suffix" {
-        print("  suffix '")
-        print(param)
-        print("' would add suffix before extension\n")
-    } elif op == "replace" {
-        print("  replace would substitute text in filenames\n")
-    }
-
-    return
-}
-
-main: () -> Void = {
-    dir = "."
-    op = "prefix"
-    param = "NEW_"
-    preview = true
-
-    print_header(dir, op, param, preview)
-
-    if op == "preview" {
-        print("No operation specified. Set op to prefix/suffix/replace.\n")
-        return
-    }
-
-    dir_exists = os.is_dir(dir)
-    if dir_exists == false {
-        print("Directory does not exist: ")
-        print(dir)
-        print("\n")
-        return
-    }
-
-    files_str = os.read_dir(dir)
-
-    if files_str == "" {
-        print("Directory is empty.\n")
-        return
-    }
-
-    print("Processing files...\n")
-    print("\n")
-
-    print_preview_examples(files_str, op, param)
-
-    newline = "\n"
-    files = string.split(files_str, newline)
-    total = list.len(files)
-
-    print("\nSummary:\n")
-    print("  Files found: ")
-    print(total)
-    print("\n")
-
-    if preview {
-        print("\nRun with preview = false to apply changes.\n")
-    }
 
     return
 }
