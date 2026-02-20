@@ -35,6 +35,8 @@ pub struct BodyChecker {
         HashMap<String, Vec<crate::frontend::typecheck::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
+    /// 是否在顶层作用域（模块级，非函数内部）
+    is_top_level: bool,
 }
 
 impl BodyChecker {
@@ -46,6 +48,7 @@ impl BodyChecker {
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
+            is_top_level: true, // 默认在顶层
         }
     }
 
@@ -157,6 +160,10 @@ impl BodyChecker {
         // 标记为已检查
         self.checked_functions.insert(name.to_string(), true);
 
+        // 保存当前顶层状态，进入函数后不再是顶层
+        let was_top_level = self.is_top_level;
+        self.is_top_level = false;
+
         // 创建函数作用域
         self.enter_scope();
 
@@ -190,6 +197,9 @@ impl BodyChecker {
 
         // 退出函数作用域
         self.exit_scope();
+
+        // 恢复顶层状态
+        self.is_top_level = was_top_level;
 
         match err {
             Some(e) => Err(e),
@@ -610,6 +620,17 @@ impl BodyChecker {
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
         initializer: Option<&Expr>,
     ) -> Result<(), Box<Diagnostic>> {
+        // 顶层变量不支持函数调用检测
+        if self.is_top_level {
+            if let Some(init_expr) = initializer {
+                if self.contains_function_call(init_expr) {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::top_level_function_call().build(),
+                    ));
+                }
+            }
+        }
+
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), _) => self.check_expr(init_expr)?,
             (None, Some(type_ann)) => MonoType::from(type_ann.clone()),
@@ -634,6 +655,114 @@ impl BodyChecker {
         // 不存在 → 新变量
         self.add_var(name.to_string(), PolyType::mono(ty));
         Ok(())
+    }
+
+    /// 检测表达式是否包含函数调用（递归）
+    fn contains_function_call(
+        &self,
+        expr: &Expr,
+    ) -> bool {
+        match expr {
+            Expr::Call { .. } => true,
+            Expr::BinOp { left, right, .. } => {
+                self.contains_function_call(left) || self.contains_function_call(right)
+            }
+            Expr::UnOp { expr: inner, .. } => self.contains_function_call(inner),
+            Expr::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                self.contains_function_call(condition)
+                    || self.contains_function_call_block(then_branch)
+                    || elif_branches.iter().any(|(cond, block)| {
+                        self.contains_function_call(cond)
+                            || self.contains_function_call_block(block)
+                    })
+                    || else_branch
+                        .as_ref()
+                        .map(|b| self.contains_function_call_block(b))
+                        .unwrap_or(false)
+            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+                ..
+            } => {
+                self.contains_function_call(match_expr)
+                    || arms
+                        .iter()
+                        .any(|arm| self.contains_function_call_block(&arm.body))
+            }
+            Expr::For { iterable, body, .. } => {
+                self.contains_function_call(iterable) || self.contains_function_call_block(body)
+            }
+            Expr::While {
+                condition, body, ..
+            } => self.contains_function_call(condition) || self.contains_function_call_block(body),
+            Expr::Block(block) => self.contains_function_call_block(block),
+            // 以下类型不包含函数调用
+            Expr::Lit(..) => false,
+            Expr::Var(..) => false,
+            Expr::FnDef { .. } => false,
+            Expr::Index {
+                expr: obj, index, ..
+            } => self.contains_function_call(obj) || self.contains_function_call(index),
+            Expr::FieldAccess { expr: obj, .. } => self.contains_function_call(obj),
+            _ => false,
+        }
+    }
+
+    /// 检测代码块是否包含函数调用
+    fn contains_function_call_block(
+        &self,
+        block: &Block,
+    ) -> bool {
+        block
+            .stmts
+            .iter()
+            .any(|stmt| self.contains_function_call_stmt(stmt))
+            || block
+                .expr
+                .as_ref()
+                .map(|e| self.contains_function_call(e))
+                .unwrap_or(false)
+    }
+
+    /// 检测语句是否包含函数调用
+    fn contains_function_call_stmt(
+        &self,
+        stmt: &Stmt,
+    ) -> bool {
+        match &stmt.kind {
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
+                self.contains_function_call(expr)
+            }
+            crate::frontend::core::parser::ast::StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                self.contains_function_call(condition)
+                    || self.contains_function_call_block(then_branch)
+                    || elif_branches.iter().any(|(cond, block)| {
+                        self.contains_function_call(cond)
+                            || self.contains_function_call_block(block)
+                    })
+                    || else_branch
+                        .as_ref()
+                        .map(|b| self.contains_function_call_block(b))
+                        .unwrap_or(false)
+            }
+            crate::frontend::core::parser::ast::StmtKind::For { iterable, body, .. } => {
+                self.contains_function_call(iterable) || self.contains_function_call_block(body)
+            }
+            _ => false,
+        }
     }
 
     /// 检查 for 语句
