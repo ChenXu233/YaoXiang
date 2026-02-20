@@ -3,6 +3,7 @@
 //! This module contains built-in functions and types.
 
 pub mod concurrent;
+pub mod convert;
 pub mod dict;
 pub mod ffi;
 pub mod io;
@@ -236,6 +237,7 @@ fn builtin_dict_keys(
 /// This is the single entry point that ffi.rs should call.
 /// New std modules only need to be added to this function.
 pub fn register_all(registry: &mut FfiRegistry) {
+    convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
@@ -256,6 +258,7 @@ pub fn register_all(registry: &mut FfiRegistry) {
 /// This is used by the frontend module system.
 pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
+        convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
