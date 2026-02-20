@@ -40,6 +40,7 @@ title: RFC Index
 | RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | ChenXu | 2026-02-12 | Draft |
 | RFC-017 | [Yaoxiang LSP Support](./draft/017-yaoxiang-lsp-support.md) | ChenXu | 2026-02-12 | Draft |
 | RFC-018 | [LLVM AOT Compiler and Runtime Scheduler Integration](./draft/018-llvm-aot-compiler.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-019 | [Typed Homoiconicity](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | Draft ⚠️ |
 
 ---
 
