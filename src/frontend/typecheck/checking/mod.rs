@@ -10,6 +10,7 @@ pub mod subtyping;
 // 重新导出
 pub use subtyping::SubtypeChecker;
 pub use assignment::AssignmentChecker;
+pub use assignment::ConstraintAssignmentInfo;
 pub use compatibility::CompatibilityChecker;
 pub use bounds::BoundsChecker;
 

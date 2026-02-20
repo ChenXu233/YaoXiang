@@ -1271,12 +1271,58 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::CallVirt {
-                    dst: _,
-                    obj: _,
-                    method_idx: _,
-                    args: _,
+                    dst,
+                    obj,
+                    method_idx,
+                    args,
                 } => {
-                    // Virtual call - not fully implemented
+                    // Virtual call - 通过 vtable 查找方法并调用
+                    let obj_val = frame
+                        .registers
+                        .get(obj.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+
+                    // 从常量池获取方法名
+                    let method_name = self
+                        .constants
+                        .get(*method_idx as usize)
+                        .and_then(|c| {
+                            if let ConstValue::String(s) = c {
+                                Some(s.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default();
+
+                    // 从对象的 vtable 中查找方法
+                    if let Some(func_value) = obj_val.get_method(&method_name).cloned() {
+                        // 收集参数
+                        let call_args: Vec<RuntimeValue> = args
+                            .iter()
+                            .map(|r| {
+                                frame
+                                    .registers
+                                    .get(r.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(RuntimeValue::Unit)
+                            })
+                            .collect();
+
+                        // 调用方法
+                        let result = self.call_function_by_id(func_value.func_id, &call_args)?;
+
+                        // 保存返回值
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                    } else {
+                        // 方法未在 vtable 中找到，返回 Unit
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        }
+                    }
                     frame.advance();
                 }
                 BytecodeInstr::CallDyn {
