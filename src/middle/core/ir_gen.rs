@@ -95,6 +95,46 @@ fn resolve_module_access(
     None
 }
 
+/// 检查类型是否实现了 Stringable 接口（即有 to_string 方法）
+/// 用于 print/println 的零开销分发
+fn type_implements_stringable(mono_type: &MonoType) -> bool {
+    match mono_type {
+        // 具体类型：检查方法表中是否有 to_string
+        MonoType::Struct(struct_type) => struct_type.methods.contains_key("to_string"),
+        // 基础类型默认都有字符串表示
+        MonoType::String
+        | MonoType::Int(_)
+        | MonoType::Float(_)
+        | MonoType::Bool
+        | MonoType::Char => true,
+        // 其他类型使用兜底实现
+        _ => false,
+    }
+}
+
+/// 获取类型的字符串表示（用于兜底实现）
+fn get_type_fallback_string(mono_type: &MonoType) -> String {
+    match mono_type {
+        MonoType::Void => "void".to_string(),
+        MonoType::Bool => "bool".to_string(),
+        MonoType::Int(_) => "int".to_string(),
+        MonoType::Float(_) => "float".to_string(),
+        MonoType::Char => "char".to_string(),
+        MonoType::String => "string".to_string(),
+        MonoType::Bytes => "bytes".to_string(),
+        MonoType::Struct(s) => s.name.clone(),
+        MonoType::Enum(e) => e.name.clone(),
+        MonoType::Tuple(_) => "tuple".to_string(),
+        MonoType::List(_) => "list".to_string(),
+        MonoType::Dict(_, _) => "dict".to_string(),
+        MonoType::Set(_) => "set".to_string(),
+        MonoType::Fn { .. } => "function".to_string(),
+        MonoType::TypeRef(name) => name.clone(),
+        // 其他类型使用默认名称
+        _ => "unknown".to_string(),
+    }
+}
+
 /// 符号表条目
 #[derive(Debug, Clone)]
 struct SymbolEntry {
@@ -1717,6 +1757,25 @@ impl AstToIrGenerator {
         "<unknown>".to_string()
     }
 
+    /// 解析函数表达式为函数名 Operand（用于普通函数调用）
+    fn resolve_function_name(
+        &self,
+        func: &ast::Expr,
+    ) -> Operand {
+        if let Expr::Var(name, _) = func {
+            let resolved_name = if is_native_name(name) {
+                name.clone()
+            } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                qualified.clone()
+            } else {
+                name.clone()
+            };
+            Operand::Const(ConstValue::String(resolved_name))
+        } else {
+            Operand::Const(ConstValue::Int(0))
+        }
+    }
+
     /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
     fn get_expr_mono_type(
         &self,
@@ -2174,29 +2233,142 @@ impl AstToIrGenerator {
                             args: arg_regs,
                         });
                     } else {
-                        // 普通函数调用
-                        let func_operand = if let Expr::Var(name, _) = func.as_ref() {
-                            // 尝试将短名称解析为完整名称
-                            let resolved_name = if is_native_name(name) {
-                                // 已经是完整的 native 函数名
-                                name.clone()
-                            } else if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
-                                // 通过短名称映射获取完整名称
-                                qualified.clone()
-                            } else {
-                                // 未知函数，保持原名
-                                name.clone()
-                            };
-                            Operand::Const(ConstValue::String(resolved_name))
+                        // ========== print/println 零开销分发处理 ==========
+                        // 检查是否是 print 或 println 调用
+                        let is_print_call = if let Expr::Var(name, _) = func.as_ref() {
+                            matches!(
+                                name.as_str(),
+                                "print" | "println" | "std.io.print" | "std.io.println"
+                            )
                         } else {
-                            Operand::Const(ConstValue::Int(0))
+                            false
                         };
 
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: func_operand,
-                            args: arg_regs,
-                        });
+                        // 如果是 print/println 且有参数，尝试零开销分发
+                        if is_print_call && !args.is_empty() {
+                            let arg_expr = &args[0];
+                            // 获取参数的类型信息
+                            let arg_type = self.get_expr_mono_type(arg_expr);
+
+                            if let Some(mono_type) = arg_type {
+                                // 检查类型是否实现了 Stringable（to_string 方法）
+                                if type_implements_stringable(&mono_type) {
+                                    // 零开销路径：直接调用 to_string 方法
+                                    // 生成: arg.to_string()
+                                    let func_name = format!(
+                                        "{}.to_string",
+                                        get_type_fallback_string(&mono_type)
+                                    );
+                                    let mut arg_regs_for_method = Vec::new();
+
+                                    // 先计算参数值
+                                    let arg_reg = self.next_temp_reg();
+                                    self.generate_expr_ir(
+                                        arg_expr,
+                                        arg_reg,
+                                        instructions,
+                                        constants,
+                                    )?;
+                                    arg_regs_for_method.push(Operand::Local(arg_reg));
+
+                                    // 调用 to_string 方法
+                                    let to_string_reg = self.next_temp_reg();
+                                    instructions.push(Instruction::Call {
+                                        dst: Some(Operand::Local(to_string_reg)),
+                                        func: Operand::Const(ConstValue::String(func_name)),
+                                        args: arg_regs_for_method,
+                                    });
+
+                                    // 然后调用 std.io.print 输出字符串
+                                    // 使用 resolved name
+                                    let print_func_name = if let Expr::Var(name, _) = func.as_ref()
+                                    {
+                                        if name == "print" || name == "println" {
+                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                                qualified.clone()
+                                            } else {
+                                                format!("std.io.{}", name)
+                                            }
+                                        } else {
+                                            name.clone()
+                                        }
+                                    } else {
+                                        "std.io.print".to_string()
+                                    };
+
+                                    instructions.push(Instruction::Call {
+                                        dst: Some(Operand::Local(result_reg)),
+                                        func: Operand::Const(ConstValue::String(print_func_name)),
+                                        args: vec![Operand::Local(to_string_reg)],
+                                    });
+                                } else {
+                                    // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
+                                    // 生成: std.io.format_fallback(arg, type_name)
+                                    let type_name = get_type_fallback_string(&mono_type);
+
+                                    // 先计算参数值
+                                    let arg_reg = self.next_temp_reg();
+                                    self.generate_expr_ir(
+                                        arg_expr,
+                                        arg_reg,
+                                        instructions,
+                                        constants,
+                                    )?;
+
+                                    // 调用 format_fallback 获取类型信息字符串
+                                    let fallback_reg = self.next_temp_reg();
+                                    instructions.push(Instruction::Call {
+                                        dst: Some(Operand::Local(fallback_reg)),
+                                        func: Operand::Const(ConstValue::String(
+                                            "std.io.format_fallback".to_string(),
+                                        )),
+                                        args: vec![
+                                            Operand::Local(arg_reg),
+                                            Operand::Const(ConstValue::String(type_name)),
+                                        ],
+                                    });
+
+                                    // 然后调用 std.io.print 输出
+                                    let print_func_name = if let Expr::Var(name, _) = func.as_ref()
+                                    {
+                                        if name == "print" || name == "println" {
+                                            if let Some(qualified) = SHORT_TO_QUALIFIED.get(name) {
+                                                qualified.clone()
+                                            } else {
+                                                format!("std.io.{}", name)
+                                            }
+                                        } else {
+                                            name.clone()
+                                        }
+                                    } else {
+                                        "std.io.print".to_string()
+                                    };
+
+                                    instructions.push(Instruction::Call {
+                                        dst: Some(Operand::Local(result_reg)),
+                                        func: Operand::Const(ConstValue::String(print_func_name)),
+                                        args: vec![Operand::Local(fallback_reg)],
+                                    });
+                                }
+                            } else {
+                                // 无法获取类型，使用默认处理
+                                let func_operand = self.resolve_function_name(func);
+                                instructions.push(Instruction::Call {
+                                    dst: Some(Operand::Local(result_reg)),
+                                    func: func_operand,
+                                    args: arg_regs,
+                                });
+                            }
+                        } else {
+                            // 非 print 调用或无参数，使用默认处理
+                            // ========== 默认函数调用处理 ==========
+                            let func_operand = self.resolve_function_name(func);
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: func_operand,
+                                args: arg_regs,
+                            });
+                        }
                     }
                 }
             }
