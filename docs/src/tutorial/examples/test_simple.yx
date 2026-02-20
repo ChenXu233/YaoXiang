@@ -1,0 +1,6 @@
+use std.io
+
+main = {
+    a = std.io.read_line()
+    print(a)
+}

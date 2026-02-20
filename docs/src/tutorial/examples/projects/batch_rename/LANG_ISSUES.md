@@ -183,9 +183,59 @@ error[E2014]: Function calls are not allowed in top-level variable initializers
 
 ---
 
+## 问题 9：变量遮蔽检查误报
+
+### 描述
+在函数内部首次赋值变量时，编译器错误地报告"Cannot shadow existing variable"。
+
+### 示例代码
+```yaoxiang
+main = {
+    dir_input = std.io.read_line()
+    if dir_input == "" {
+        dir_input = "."    # 错误: Cannot shadow existing variable 'dir_input'
+    }
+}
+```
+
+### 错误信息
+```
+error: Cannot shadow existing variable 'dir_input'
+help: Use a different variable name
+```
+
+### 影响
+无法在条件分支中修改变量的值
+
+---
+
+## 问题 10：std.string / std.list 模块无法导入
+
+### 描述
+使用 `use std.string` 或 `use std.list` 后，模块中的函数无法调用。
+
+### 示例代码
+```yaoxiang
+use std.string
+
+main = {
+    s = string.index_of("hello", "l")  # 错误: Unknown variable 'string'
+}
+```
+
+### 错误信息
+```
+error: Unknown variable: 'string'
+```
+
+### 影响
+字符串和列表高级功能无法使用
+
+---
+
 ## 建议改进
 
-2. **修复全局变量**：支持顶层变量定义
-3. **修复 string.starts_with/ends_with**：确保返回 Bool 类型
-4. **增强 List 支持**：添加 `get` 方法和迭代支持
-5. **文档完善**：补充标准库函数的使用示例
+1. **修复变量遮蔽检查**：首次赋值不应触发遮蔽错误
+2. **修复 std.string/std.list 模块注册**
+3. **添加注释支持**：正确处理 `#` 字符
+4. **修复 os.rename 返回值**：应返回 Bool 表示成功/失败

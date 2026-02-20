@@ -1,0 +1,7 @@
+use std.io
+
+main = {
+    use std.string
+    s = string.index_of("hello", "l")
+    print(s)
+}

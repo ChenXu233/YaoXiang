@@ -33,6 +33,7 @@ title: RFC 索引
 | RFC-016 | [量子原生支持与多重后端集成](./draft/016-quantum-native-support.md) | 晨煦 | 2026-02-12 | 草案 |
 | RFC-017 | [语言服务器协议（LSP）支持设计](./draft/017-lsp-support.md) | Claude | 2026-02-15 | 草案 |
 | RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./draft/018-llvm-aot-compiler.md) | Claude | 2026-02-15 | 草案 |
+| RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | [待定] | 2026-02-20 | 草案 ⚠️ |
 
 ---
 

@@ -2,80 +2,54 @@
 
 A file batch renaming utility written in YaoXiang.
 
-## Usage
+## Current Status
 
-```bash
-yx main.yx
-```
-
-## Configuration
-
-Edit the `main` function in `main.yx` to configure:
-
-```yaoxiang
-main: () -> Void = {
-    dir = "."        # Target directory
-    op = "prefix"    # Operation: "prefix", "suffix", "replace"
-    param = "NEW_"   # Parameter for the operation
-    preview = true   # Set to false to actually rename files
-}
-```
-
-## Operations
-
-| Operation | Description | Example |
-|-----------|-------------|---------|
-| `prefix` | Add text at beginning | `photo.jpg` → `NEW_photo.jpg` |
-| `suffix` | Add text before extension | `photo.jpg` → `photo_NEW.jpg` |
-| `replace` | Replace text in filename | (requires implementation) |
+**Note**: Due to some language limitations, this tool is currently in demo mode. It shows the interactive UI and reads directory contents, but cannot perform actual batch renaming.
 
 ## Running
 
 ```bash
-# Preview mode (default, safe)
-yx main.yx
-
-# To actually rename files, set preview = false in main.yx
+cd docs/src/tutorial/examples/projects/batch_rename
+cargo run -- run main.yx
 ```
 
-## Example Output
+## Features Demonstrated
 
-```
-=== File Batch Rename Tool ===
-Directory: .
-Operation: prefix
-Parameter: NEW_
-Mode: PREVIEW (no changes will be made)
+- Interactive CLI interface
+- Directory selection
+- Operation menu (prefix/suffix)
+- User confirmation
+- Directory content display
 
-Processing files...
+## Language Features Used
 
-Preview (first 5 files):
-  Example files after rename:
-  prefix 'NEW_' would add prefix to each filename
-
-Summary:
-  Files found: 29
-
-Run with preview = false to apply changes.
-```
-
-## Language Features Demonstrated
-
-- Function definition and calls
-- String concatenation (`+`)
+- Module import (`use std.io`)
+- Namespace access (`std.io.read_line()`, `std.os.read_dir()`)
+- String comparison (`==`, `!=`)
 - Conditional statements (`if/elif`)
-- Pattern matching (`match`)
-- Module import (`use std.io`, `use std.os`, `use std.string`, `use std.list`)
-- File system operations (`os.read_dir`, `os.rename`, `os.is_dir`)
-- String operations (`string.split`, `string.substring`, `string.index_of`, `string.replace`, `string.len`, `string.is_empty`)
-- List operations (`list.len`, `list.get`)
+- Function definitions
 
 ## Known Issues
 
-See [LANG_ISSUES.md](LANG_ISSUES.md) for a list of known language issues encountered during development.
+See [LANG_ISSUES.md](LANG_ISSUES.md) for a list of known language issues.
 
-## Notes
+## Output Example
 
-- The tool runs in preview mode by default for safety
-- Set `preview = false` to actually rename files
-- Full file iteration requires list handling improvements in the language
+```
+===========================================
+        File Batch Rename Tool
+===========================================
+
+Welcome to File Batch Rename Tool!
+
+Enter target directory: .
+Select: 1=prefix, 2=suffix, 0=exit:
+
+Files:
+.cargo
+.claude
+.git
+...
+
+Done
+```
