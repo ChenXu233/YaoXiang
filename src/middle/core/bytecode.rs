@@ -1262,6 +1262,38 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            Opcode::MakeClosure => {
+                                // MakeClosure: dst(1) + func_id(4) + env_count(1) + env_regs(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_id = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let env_count = instr.operands[5] as usize;
+
+                                    let mut env = Vec::new();
+                                    for i in 0..env_count {
+                                        if 6 + i * 2 + 1 < instr.operands.len() {
+                                            let env_reg = u16::from_le_bytes([
+                                                instr.operands[6 + i * 2],
+                                                instr.operands[6 + i * 2 + 1],
+                                            ]);
+                                            env.push(Reg(env_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::MakeClosure {
+                                        dst: Reg(dst),
+                                        func: FunctionRef::Index(func_id),
+                                        env,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             _ => {
                                 // For other opcodes, we need to implement decoding
                                 // For now, just use Nop as placeholder

@@ -1072,32 +1072,40 @@ impl Executor for Interpreter {
                     func: func_ref,
                     env,
                 } => {
-                    let func_name = match func_ref {
-                        FunctionRef::Static { name, .. } => name.clone(),
-                        FunctionRef::Index(idx) => format!("fn_{}", idx),
-                    };
-                    // Find the function's index in functions_by_id
-                    let func_id = if let Some((idx, _)) = self
-                        .functions_by_id
-                        .iter()
-                        .enumerate()
-                        .find(|(_, f)| f.name == func_name)
-                    {
-                        crate::backends::common::value::FunctionId(idx as u32)
-                    } else {
-                        // Fallback: try to find in functions HashMap
-                        if let Some(func) = self.functions.get(&func_name) {
-                            // Add to functions_by_id if not already there
-                            let idx = self.functions_by_id.len();
-                            self.functions_by_id.push(func.clone());
-                            crate::backends::common::value::FunctionId(idx as u32)
-                        } else {
-                            // Warning: function not found, fallback to id 0
-                            eprintln!(
-                                "[warn] Closure: function '{}' not found, fallback to id 0",
-                                func_name
-                            );
-                            crate::backends::common::value::FunctionId(0)
+                    let func_id = match func_ref {
+                        FunctionRef::Static { name, .. } => {
+                            // Find by name in functions_by_id
+                            if let Some((idx, _)) = self
+                                .functions_by_id
+                                .iter()
+                                .enumerate()
+                                .find(|(_, f)| f.name == *name)
+                            {
+                                crate::backends::common::value::FunctionId(idx as u32)
+                            } else if let Some(func) = self.functions.get(name.as_str()) {
+                                let idx = self.functions_by_id.len();
+                                self.functions_by_id.push(func.clone());
+                                crate::backends::common::value::FunctionId(idx as u32)
+                            } else {
+                                eprintln!(
+                                    "[warn] Closure: function '{}' not found, fallback to id 0",
+                                    name
+                                );
+                                crate::backends::common::value::FunctionId(0)
+                            }
+                        }
+                        FunctionRef::Index(idx) => {
+                            // Direct index into functions_by_id
+                            if (*idx as usize) < self.functions_by_id.len() {
+                                crate::backends::common::value::FunctionId(*idx)
+                            } else {
+                                eprintln!(
+                                    "[warn] Closure: function index {} out of range ({}), fallback to id 0",
+                                    idx,
+                                    self.functions_by_id.len()
+                                );
+                                crate::backends::common::value::FunctionId(0)
+                            }
                         }
                     };
                     // Capture environment variables from registers

@@ -311,6 +311,54 @@
         "example": "i = 10; for i in 1..5 { print(i) }",
         "error_output": "error[E2013]: Variable shadowing\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
     },
+    "E2090": {
+        "title": "Invalid signature",
+        "message": "Function signature parsing failed",
+        "template": "Invalid signature: {reason}",
+        "help": "Check the function signature format",
+        "example": "\"(x: Unknown) -> Int\"",
+        "error_output": "error[E2090]: Invalid signature\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2091": {
+        "title": "Unknown type in signature",
+        "message": "Signature contains unknown type",
+        "template": "Invalid signature: unknown type '{type_name}'",
+        "help": "Use a valid type like '(T) -> T' for function parameters",
+        "example": "\"(list: List, fn: Fn) -> List\"",
+        "error_output": "error[E2091]: Unknown type in signature\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2092": {
+        "title": "Missing arrow in signature",
+        "message": "Signature is missing '->'",
+        "template": "Invalid signature: missing '->'",
+        "help": "Ensure the signature format is '(params) -> ReturnType'",
+        "example": "\"(x: Int) Int\"",
+        "error_output": "error[E2092]: Missing arrow in signature\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
+    },
+    "E2093": {
+        "title": "Duplicate parameter name",
+        "message": "Signature has duplicate parameter names",
+        "template": "Invalid signature: duplicate parameter '{name}'",
+        "help": "Ensure each parameter name is unique",
+        "example": "\"(x: Int, x: Int) -> Int\"",
+        "error_output": "error[E2093]: Duplicate parameter name\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2094": {
+        "title": "Generic parameter shadowing",
+        "message": "Generic parameter shadows outer generic parameter",
+        "template": "Invalid signature: generic '{name}' shadows outer generic",
+        "help": "Use a different generic parameter name for the inner function type",
+        "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
+        "error_output": "error[E2094]: Generic parameter shadowing\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2095": {
+        "title": "Parameter shadows generic",
+        "message": "Parameter name is same as a generic parameter",
+        "template": "Invalid signature: parameter '{name}' shadows generic",
+        "help": "Parameter names cannot be the same as generic parameters",
+        "example": "\"[T](T: Int) -> T\"",
+        "error_output": "error[E2095]: Parameter shadows generic\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+    },
     "E4001": {
         "title": "Generic constraint violated",
         "message": "Type does not satisfy the generic constraint",

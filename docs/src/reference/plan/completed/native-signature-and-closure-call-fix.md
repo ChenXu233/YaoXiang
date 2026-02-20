@@ -1,7 +1,8 @@
 # Native 函数签名解析与闭包调用问题修复计划
 
-> **状态**：待处理
+> **状态**：✅ 已完成
 > **日期**：2026-02-19
+> **完成日期**：2026-02-19
 
 ---
 
@@ -382,9 +383,14 @@ main = {
 
 | 文件 | 作用 |
 |------|------|
-| `src/std/list.rs` | Native 函数导出定义（需修改签名） |
-| `src/frontend/typecheck/mod.rs` | 签名解析逻辑（parse_signature 函数） |
-| `src/backends/interpreter/executor.rs` | 运行时闭包调用 |
+| `src/std/list.rs` | Native 函数导出定义（✅ 已修改签名） |
+| `src/frontend/typecheck/mod.rs` | 签名解析逻辑（✅ 已重写 parse_signature） |
+| `src/backends/interpreter/executor.rs` | 运行时闭包调用（✅ 已修复 MakeClosure 查找） |
+| `src/middle/core/bytecode.rs` | 字节码解码（✅ 已添加 MakeClosure 解码器） |
+| `src/std/io.rs` | IO 模块（✅ 已修复列表显示格式） |
+| `src/util/diagnostic/codes/e2xxx.rs` | 错误码定义（✅ 已添加 E2090-E2095） |
+| `src/util/diagnostic/codes/i18n/zh.json` | 中文 i18n（✅ 已添加） |
+| `src/util/diagnostic/codes/i18n/en.json` | 英文 i18n（✅ 已添加） |
 
 ### 签名解析流程
 
@@ -392,37 +398,53 @@ main = {
 2. `register_std_native_signatures()` 遍历 std 模块的导出
 3. 对每个 `Export`，调用 `parse_signature(&export.signature, env)`
 4. `parse_signature` 解析签名字符串为 `MonoType::Fn`
-5. 解析失败时打印警告并返回默认类型
+5. 解析失败时使用错误码系统报错（E2090-E2095）
 
-### 需要修改的代码
+### 实际修改的代码
 
-1. **`src/std/list.rs:72-87`**：修改三个函数的签名字符串（RFC-010 泛型函数语法）
+1. **`src/std/list.rs:71-88`**：修改三个函数的签名字符串（RFC-010 泛型函数语法）
    ```rust
    "[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
    "[T](list: List<T>, fn: (item: T) -> Bool) -> List<T>"
    "[T](list: List<T>, fn: (acc: Any, item: T) -> Any, init: Any) -> Any"
    ```
 
-2. **`src/frontend/typecheck/mod.rs`**：
-   - 解析 `[T]` 泛型参数前缀
-   - 改进错误信息：显示实际解析失败的原因
-   - 添加参数名检查：检测重复参数名
-   - 添加泛型参数作用域规则检查：禁止遮蔽
+2. **`src/frontend/typecheck/mod.rs`**（parse_signature 重写）：
+   - 支持 `[T]` 泛型参数前缀解析
+   - 支持函数类型参数 `(item: T) -> T`
+   - 正确处理括号匹配（find_matching_close）
+   - 参数名重复检查（E2093）
+   - 泛型参数遮蔽检查（E2094、E2095）
+   - 常量类型签名处理（如 `"Float"`）
+   - 错误信息从 Warning 升级为 Error + 错误码
 
-3. **错误码定义**：
-   - **`src/util/diagnostic/codes/e2xxx.rs`**：添加 E2090-E2096 错误码定义
-   - **`src/util/diagnostic/codes/e2xxx.rs`**：添加对应的快捷方法
-   - **`src/i18n/zh-CN.json`**（或对应语言文件）：添加错误消息模板
+3. **`src/middle/core/bytecode.rs`**（字节码解码器）：
+   - 添加 `Opcode::MakeClosure` 解码器（之前被 catch-all 分支吞掉变成 Nop）
+
+4. **`src/backends/interpreter/executor.rs`**（闭包执行）：
+   - 修复 `MakeClosure` 处理器：`FunctionRef::Index` 直接使用索引而非构造名字
+
+5. **`src/std/io.rs`**（IO 模块）：
+   - print/println 支持列表/字典的可读格式化输出（通过 heap 解析）
+
+6. **错误码定义**：
+   - `src/util/diagnostic/codes/e2xxx.rs`：添加 E2090-E2095 定义和快捷方法
+   - `src/util/diagnostic/codes/i18n/zh.json`：添加中文错误信息
+   - `src/util/diagnostic/codes/i18n/en.json`：添加英文错误信息
 
 ---
 
 ## 依赖关系
 
-本任务不依赖其他任务，可独立完成。
+本任务不依赖其他任务，已独立完成。
 
 ---
 
 ## 风险与注意事项
 
-1. **泛型支持**：需要确认类型系统是否支持泛型 `List<T>` 的解析
-2. **闭包环境捕获**：当前实现不处理闭包捕获外部变量，需确认 map/filter/reduce 用例不需要此功能
+1. **泛型支持**：✅ 类型系统支持泛型 `List<T>` 的解析，泛型参数解析为 TypeRef
+2. **闭包环境捕获**：当前实现不处理闭包捕获外部变量，map/filter/reduce 用例不需要此功能
+3. **额外发现并修复的问题**：
+   - MakeClosure 字节码解码器缺失（导致闭包变成 Nop）
+   - MakeClosure 执行器对 FunctionRef::Index 的处理错误（构造 "fn_N" 名字而非直接使用索引）
+   - io.println 无法格式化显示列表内容（只显示 handle 地址）

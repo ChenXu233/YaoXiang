@@ -6,7 +6,7 @@
 
 use std::io::BufRead;
 
-use crate::backends::common::RuntimeValue;
+use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
@@ -75,11 +75,11 @@ pub const IO_MODULE: IoModule = IoModule;
 /// Native implementation: print (without newline)
 fn native_print(
     args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
+    ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let output = args
         .iter()
-        .map(|arg| format!("{}", arg))
+        .map(|arg| format_runtime_value(arg, ctx.heap))
         .collect::<Vec<String>>()
         .join(" ");
     print!("{}", output);
@@ -89,15 +89,53 @@ fn native_print(
 /// Native implementation: println (with newline)
 fn native_println(
     args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
+    ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let output = args
         .iter()
-        .map(|arg| format!("{}", arg))
+        .map(|arg| format_runtime_value(arg, ctx.heap))
         .collect::<Vec<String>>()
         .join(" ");
     println!("{}", output);
     Ok(RuntimeValue::Unit)
+}
+
+/// Format a runtime value, resolving heap references for List/Dict/Tuple
+fn format_runtime_value(
+    val: &RuntimeValue,
+    heap: &crate::backends::common::Heap,
+) -> String {
+    match val {
+        RuntimeValue::List(handle) => {
+            if let Some(HeapValue::List(items)) = heap.get(*handle) {
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|item| format_runtime_value(item, heap))
+                    .collect();
+                format!("[{}]", items_str.join(", "))
+            } else {
+                format!("list@{}", handle.raw())
+            }
+        }
+        RuntimeValue::Dict(handle) => {
+            if let Some(HeapValue::Dict(entries)) = heap.get(*handle) {
+                let entries_str: Vec<String> = entries
+                    .iter()
+                    .map(|(k, v)| {
+                        format!(
+                            "{}: {}",
+                            format_runtime_value(k, heap),
+                            format_runtime_value(v, heap)
+                        )
+                    })
+                    .collect();
+                format!("{{{}}}", entries_str.join(", "))
+            } else {
+                format!("dict@{}", handle.raw())
+            }
+        }
+        _ => format!("{}", val),
+    }
 }
 
 /// Native implementation: read_line

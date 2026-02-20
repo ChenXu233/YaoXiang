@@ -311,6 +311,54 @@
         "example": "i = 10; for i in 1..5 { print(i) }",
         "error_output": "error[E2013]: 变量遮蔽\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ Cannot shadow existing variable 'i'"
     },
+    "E2090": {
+        "title": "无效签名",
+        "message": "函数签名解析失败",
+        "template": "无效签名：{reason}",
+        "help": "检查函数签名格式是否正确",
+        "example": "\"(x: Unknown) -> Int\"",
+        "error_output": "error[E2090]: 无效签名\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2091": {
+        "title": "签名未知类型",
+        "message": "签名中包含未知类型",
+        "template": "无效签名：未知类型 '{type_name}'",
+        "help": "使用有效类型，如 '(T) -> T' 表示函数参数",
+        "example": "\"(list: List, fn: Fn) -> List\"",
+        "error_output": "error[E2091]: 签名未知类型\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2092": {
+        "title": "签名缺少箭头",
+        "message": "签名中缺少 '->'",
+        "template": "无效签名：缺少 '->'",
+        "help": "确保签名格式为 '(参数列表) -> 返回类型'",
+        "example": "\"(x: Int) Int\"",
+        "error_output": "error[E2092]: 签名缺少箭头\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
+    },
+    "E2093": {
+        "title": "重复参数名",
+        "message": "签名中存在重复的参数名",
+        "template": "无效签名：重复参数名 '{name}'",
+        "help": "确保每个参数名是唯一的",
+        "example": "\"(x: Int, x: Int) -> Int\"",
+        "error_output": "error[E2093]: 重复参数名\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2094": {
+        "title": "泛型参数遮蔽",
+        "message": "泛型参数遮蔽了外层泛型参数",
+        "template": "无效签名：泛型参数 '{name}' 遮蔽了外层泛型参数",
+        "help": "为内层函数类型使用不同的泛型参数名",
+        "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
+        "error_output": "error[E2094]: 泛型参数遮蔽\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    },
+    "E2095": {
+        "title": "参数名遮蔽泛型",
+        "message": "参数名与泛型参数同名",
+        "template": "无效签名：参数名 '{name}' 遮蔽了泛型参数",
+        "help": "参数名不能与泛型参数同名",
+        "example": "\"[T](T: Int) -> T\"",
+        "error_output": "error[E2095]: 参数名遮蔽泛型\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+    },
     "E4001": {
         "title": "泛型约束违反",
         "message": "类型不满足泛型约束",
