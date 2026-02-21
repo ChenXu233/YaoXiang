@@ -73,6 +73,9 @@ thiserror = "2.0.18"
 # 命令行解析
 clap = { version = "4.5.58", features = ["derive"] }
 
+# 终端检测
+atty = "0.2"
+
 # TUI - 终端用户界面
 ratatui = { version = "0.30.0", features = ["serde"] }
 crossterm = "0.29.0"

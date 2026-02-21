@@ -31,6 +31,7 @@ pub mod error;
 pub mod error_macro;
 pub mod result;
 pub mod suggest;
+pub mod check;
 
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
