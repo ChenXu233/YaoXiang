@@ -157,7 +157,7 @@ fn test_var_reassignment_same_scope_ok() {
 
 #[test]
 fn test_var_shadowing_in_inner_scope() {
-    // 外层 x = 1; 内层 x = 2 应该报遮蔽错误
+    // 外层 x = 1; 内层 x = 2 应该成功（更新外层变量）
     let mut solver = TypeConstraintSolver::new();
     let mut checker = BodyChecker::new(&mut solver);
 
@@ -167,7 +167,7 @@ fn test_var_shadowing_in_inner_scope() {
     // 进入新作用域（模拟 if 块）
     checker.enter_scope();
 
-    // 在新作用域中用 Var 语句声明同名变量 → 应该报遮蔽错误
+    // 在新作用域中对同名变量赋值 → 应该成功（更新外层变量）
     let inner_stmt = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
@@ -181,7 +181,15 @@ fn test_var_shadowing_in_inner_scope() {
         span: create_dummy_span(),
     };
     let result = checker.check_stmt(&inner_stmt);
-    assert!(result.is_err(), "内层作用域声明同名变量应该报遮蔽错误");
+    assert!(
+        result.is_ok(),
+        "内层作用域对同名变量赋值应该成功（更新外层变量）"
+    );
+
+    // 验证变量已更新
+    let poly = checker.get_var("x").unwrap();
+    let ty = solver.instantiate(&poly);
+    assert!(matches!(ty, MonoType::Int(64)));
 
     checker.exit_scope();
 }
@@ -366,8 +374,8 @@ fn test_if_block_creates_scope() {
 
 #[test]
 fn test_assignment_shadowing_in_block() {
-    // x = 1; if ... { x = 2 } 应该报遮蔽错误
-    // 因为 x = 2 在 if 块内，x 只存在于外层作用域
+    // x = 1; if ... { x = 2 } 应该成功（更新外层变量）
+    // 因为 x = 2 在 if 块内是对外层变量的赋值，而不是新声明
     let mut solver = TypeConstraintSolver::new();
     let mut checker = BodyChecker::new(&mut solver);
 
@@ -386,7 +394,7 @@ fn test_assignment_shadowing_in_block() {
     };
     assert!(checker.check_stmt(&assign_stmt).is_ok());
 
-    // if 块内：x = 2 应该报遮蔽错误
+    // if 块内：x = 2 应该成功（更新外层变量）
     let if_stmt = ast::Stmt {
         kind: ast::StmtKind::If {
             condition: Box::new(ast::Expr::Lit(
@@ -416,7 +424,7 @@ fn test_assignment_shadowing_in_block() {
         span: create_dummy_span(),
     };
     let result = checker.check_stmt(&if_stmt);
-    assert!(result.is_err(), "在 if 块中对外层变量赋值应该报遮蔽错误");
+    assert!(result.is_ok(), "在 if 块中对外层变量赋值应该成功");
 }
 
 #[test]

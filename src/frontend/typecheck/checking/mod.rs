@@ -134,6 +134,20 @@ impl BodyChecker {
             .insert(name.to_string(), poly);
     }
 
+    /// 统一变量类型并更新（用于赋值操作）
+    /// 1. 获取变量的当前类型
+    /// 2. 将新类型与现有类型统一
+    /// 3. 更新变量
+    fn unify_and_update_var(
+        &mut self,
+        name: &str,
+        new_ty: MonoType,
+    ) {
+        let existing_poly = self.get_var(name).unwrap().clone();
+        let _ = self.solver.unify(&existing_poly.body, &new_ty);
+        self.update_var(name, existing_poly);
+    }
+
     /// 进入新的作用域
     pub fn enter_scope(&mut self) {
         self.scopes.push(HashMap::new());
@@ -509,14 +523,12 @@ impl BodyChecker {
                 // 如果左侧是变量，将其类型与右侧类型统一
                 if let Expr::Var(name, _) = left.as_ref() {
                     if self.var_exists_in_current_scope(name) {
-                        // 当前作用域存在，是赋值操作
+                        // 当前作用域存在，赋值操作
                         let poly = self.get_var(name).unwrap().clone();
                         let _ = self.solver.unify(&poly.body, &right_ty);
                     } else if self.var_exists_in_any_scope(name) {
-                        // 外层作用域存在，遮蔽错误
-                        return Err(Box::new(
-                            ErrorCodeDefinition::variable_shadowing(name).build(),
-                        ));
+                        // 外层作用域存在，更新外层变量（合法赋值，不是遮蔽）
+                        self.unify_and_update_var(name, right_ty);
                     } else {
                         // 变量不存在，创建新变量并与右侧类型统一
                         let ty = self.solver.new_var();
@@ -646,11 +658,10 @@ impl BodyChecker {
             return Ok(());
         }
 
-        // 仅外层作用域存在 → 遮蔽错误
+        // 外层作用域存在 → 更新外层变量（合法赋值，不是遮蔽）
         if self.var_exists_in_any_scope(name) {
-            return Err(Box::new(
-                ErrorCodeDefinition::variable_shadowing(name).build(),
-            ));
+            self.unify_and_update_var(name, ty);
+            return Ok(());
         }
 
         // 不存在 → 新变量
