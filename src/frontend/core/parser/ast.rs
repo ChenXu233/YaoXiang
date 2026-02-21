@@ -177,11 +177,11 @@ pub enum StmtKind {
         /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
         generic_params: Vec<String>,
     },
-    /// Use statement: `use module.path`
+    /// Use statement: `use module.path` or `use module.{a, b} as c, d`
     Use {
         path: String,
         items: Option<Vec<String>>,
-        alias: Option<String>,
+        alias: Option<Vec<String>>,
     },
     /// Function definition: `name: Type = (params) => body`
     /// With pub modifier: `pub name: Type = (params) => body` - auto-binds to first param type
