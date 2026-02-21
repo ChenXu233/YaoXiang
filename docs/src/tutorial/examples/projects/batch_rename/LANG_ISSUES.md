@@ -4,238 +4,130 @@
 
 ---
 
-## 问题 1：顶层全局变量赋值被忽略 ✅ 已修复
+## 问题 1：List 遍历时类型标注导致的编译错误
 
-### 描述
-在函数外部进行变量赋值时，变量值会变成 `unit` 而不是预期值。
+**状态**：🔴 未解决
 
-### 示例代码
-```yaoxiang
-dir = "."           // 全局赋值
-op = "prefix"       // 全局赋值
-param = "NEW_"      // 全局赋值
-preview = true      // 全局赋值
-
-main: () -> Void = {
-    print(dir)      // 输出: test_dir
-}
+**错误信息**：
+```
+error [E1053] Cannot access field on non-struct type 't35'
+help: Field access is only available on struct types
 ```
 
-### 修复说明
-已修复 IR 生成器，正确处理顶层变量的 initializer。变量在函数内部可以正确访问。
-
-### 影响
-✅ 已修复 - 现在可以正常使用全局配置常量
-
----
-
-## 问题 2：string.starts_with 返回类型错误 ✅ 已修复
-
-### 描述
-`std.string.starts_with` 函数应该返回 `Bool`，但实际返回 `void`，导致在 `if` 语句中报错。
-
-### 示例代码
+**代码示例（有问题）**：
 ```yaoxiang
-use std.string
+// 类型定义
+FileEntry: Type = {
+    original: String,
+    new_name: String,
+    is_file: Bool
+}
 
-main: () -> Void = {
-    name = "test.txt"
-    if string.starts_with(name, ".") {  // 错误!
-        print("hidden")
+// 遍历时使用类型标注
+for item in files {
+    entry: FileEntry = item  // ← 这里报错
+    if entry.is_file {
+        print(entry.original)
     }
 }
 ```
 
-### 错误信息
-```
-error: Expected type 'bool', found type 'void'
-```
-
-### 临时解决方案
-该函数暂不可用，需要等待修复
-
-### 影响
-✅ 已修复 - 现在 `string.starts_with` 和 `string.ends_with` 正确返回 `Bool` 类型
+**问题分析**：
+- 使用 `entry: FileEntry = item` 进行类型标注时，编译器将 item 推断为某种内部类型 t35
+- 访问字段时提示 "Cannot access field on non-struct type"
 
 ---
 
-## 问题 3：字符串字面量比较异常 ✅ 已修复
+## 问题 2：std.list 模块无法在代码中使用
 
-### 描述
-字符串字面量直接比较可能返回不正确的结果。
+**状态**：🔴 未解决
 
-### 示例代码
-```yaoxiang
-main: () -> Void = {
-    result = "test" == "test"
-    print(result)    // 输出: true
-}
+**错误信息**：
+```
+error [E1001] Unknown variable: 'list'
 ```
 
-### 修复说明
-1. 在解释器中添加了字符串类型的运行时比较支持
-2. 现在 `==` 和 `!=` 等比较操作可以正确处理字符串类型
-
-### 影响
-✅ 已修复 - 字符串比较现在可以正常工作
-
----
-
-## 问题 4：List 遍历和索引操作复杂 ✅ 已修复
-
-### 描述
-`std.list` 模块虽然存在，但无法方便地遍历列表元素或通过索引获取元素。
-
-### 示例代码
+**代码示例**：
 ```yaoxiang
 use std.list
 
-main: () -> Void = {
-    items = [1, 2, 3]
-    for item in items {
-        print(item)    // 现在可以正常工作
-    }
-
-    // 索引访问
-    first = items[0]
-    print(first)
+main = {
+    l = [1, 2, 3]
+    n = list.len(l)  // ← 报错
 }
 ```
 
-### 修复说明
-1. **修复类型推断**：For 循环现在可以正确推导循环变量类型
-   - `List<T>` → 循环变量类型为 `T`
-   - `Dict<K, V>` → 循环变量类型为 `(K, V)` 元组
-
-2. **迭代器协议支持**：添加了 Iterable/Iterator trait 定义
-   - `std.list.iter(list)` → 创建迭代器
-   - `std.list.next(iterator)` → 获取下一个元素
-   - `std.list.has_next(iterator)` → 检查是否有更多元素
-
-### 影响
-✅ 现在可以正常使用 List 遍历和索引访问
+**问题分析**：
+- 虽然 std/list.rs 存在，但 use 导入后仍无法在代码中使用
+- 这可能是模块导出问题或实现不完整
 
 ---
 
-## 问题 5：顶层变量不支持函数调用 ✅ 已修复为编译错误
+## 问题 3：变量作用域实现错误 - 块级作用域无效（严重 BUG） 已修复
 
-### 描述
-在顶层（模块级）变量初始化时调用函数会导致运行时类型错误。
+**状态**：🔴 未解决 - **严重 BUG**
 
-### 示例代码
-```yaoxiang
-dir = "."
-is_dir = os.is_dir(dir)   // 编译错误 E2014
+**错误信息**：
+```
+error [E2013] Cannot shadow existing variable 'fp1'
+help: Use a different variable name, or declare the variable in a different scope
 ```
 
-### 错误信息（编译时）
-```
-error[E2014]: Function calls are not allowed in top-level variable initializers
-```
+**问题分析**：
+- 在 for 循环内部无法使用与外部同名的变量（即使只是赋值而非声明）
+- 整个函数是一个作用域，块级作用域（如 for 循环、if 语句）不独立
+- 这违反了大多数编程语言的作用域规则，导致代码难以编写
 
-### 设计说明
-这是**语言设计决策**，不是 bug。原因：
-- `main` 函数是唯一入口点，顶层函数调用时机不明确
-- 避免副作用顺序不确定导致的不可预测行为
-- 顶层变量仅支持常量表达式（字面量）
-
-### 修复说明
-1. 添加了编译时错误检测（E2014）
-2. 在类型检查阶段检测顶层变量初始化中的函数调用
-3. 提供清晰的编译错误信息
-
-### 影响
-✅ 现在会在编译时报错，而不是静默失败
-
----
-
-## 问题 6：函数调用时参数求值顺序
-
-### 描述
-在某些情况下，函数调用时参数的值可能不正确。
-
-### 临时解决方案
-将复杂表达式的结果先赋值给变量，再传递
-
----
-
-### 已验证可用的功能
-- `std.io.print` / `std.io.println`
-- `std.os.read_dir`
-- `std.os.rename`
-- `std.os.is_dir` (在函数内调用)
-- `std.string.split`
-- `std.string.substring`
-- `std.string.index_of`
-- `std.string.replace`
-- `std.string.len`
-- `std.string.is_empty`
-- `std.list.len`
-- 字符串拼接 `+`
-- 字符串比较 `==`
-
-### 暂不可用或存在问题的功能
-- 全局变量定义（问题 1 已修复）
-- `string.starts_with` / `string.ends_with`（问题 2 已修复）
-- 字符串比较 `==`（问题 3 已修复）
-- 列表遍历
-- 列表索引访问
-
----
-
-## 问题 9：变量遮蔽检查误报
-
-### 描述
-在函数内部首次赋值变量时，编译器错误地报告"Cannot shadow existing variable"。
-
-### 示例代码
+**示例**：
 ```yaoxiang
 main = {
-    dir_input = std.io.read_line()
-    if dir_input == "" {
-        dir_input = "."    # 错误: Cannot shadow existing variable 'dir_input'
+    fp1 = "hello"  // 外部变量
+
+    for item in list {
+        fp1 = item  // ← 报错：Cannot shadow existing variable 'fp1'
     }
 }
 ```
 
-### 错误信息
-```
-error: Cannot shadow existing variable 'dir_input'
-help: Use a different variable name
-```
-
-### 影响
-无法在条件分支中修改变量的值
+**影响**：
+- 无法在循环中复用外部变量名
+- 代码需要为每个块使用唯一变量名，导致代码冗长
+- 严重影响开发体验
 
 ---
 
-## 问题 10：std.string / std.list 模块无法导入
+## 问题 4：std.os.is_dir 函数缺失
 
-### 描述
-使用 `use std.string` 或 `use std.list` 后，模块中的函数无法调用。
+**状态**：🔴 未解决
 
-### 示例代码
+**代码**：
 ```yaoxiang
-use std.string
-
-main = {
-    s = string.index_of("hello", "l")  # 错误: Unknown variable 'string'
+if std.os.is_dir(dir_path) == false {
+    print("Error: Path is not a directory!\n")
+    return
 }
 ```
 
-### 错误信息
-```
-error: Unknown variable: 'string'
-```
+**错误**：尝试运行时报错 `std.os.is_dir` 函数不存在
 
-### 影响
-字符串和列表高级功能无法使用
+**标准库现状**（src/std/os.rs）：
+- `std.os.exists(path)` ✓
+- `std.os.is_file(path)` ✓
+- `std.os.is_dir(path)` ✗ 不存在
 
 ---
 
-## 建议改进
+## 问题 5：Int 转 String 的序号格式化
 
-1. **修复变量遮蔽检查**：首次赋值不应触发遮蔽错误
-2. **修复 std.string/std.list 模块注册**
-3. **添加注释支持**：正确处理 `#` 字符
-4. **修复 os.rename 返回值**：应返回 Bool 表示成功/失败
+**状态**：🔴 未解决
+
+**需求**：将数字转换为 3 位字符串（如 1 → "001"）
+
+**尝试的代码**：
+```yaoxiang
+// 尝试使用 substring 截取数字的字符串表示
+counter = 1
+num_str = std.string.substring(counter, 0, 1)  // ← 可能不支持 Int 参数
+```
+
+**问题**：std.string.substring 的参数类型和 YaoXiang 的类型推断可能不支持 Int 直接转 String
