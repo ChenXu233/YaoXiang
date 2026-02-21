@@ -1,21 +1,401 @@
 use std.io
+use std.string
 
-main = {
+// ============================================================================
+// 主程序
+// ============================================================================
+
+main: () -> Void = {
+    // 显示欢迎界面
     print("===========================================\n")
     print("        File Batch Rename Tool\n")
     print("===========================================\n")
     print("\n")
 
-    print("Enter target directory: ")
-    x = std.io.read_line()
+    // 获取目录
+    print("Enter target directory path: ")
+    dir_path = std.io.read_line()
 
-    print("Select: 1=prefix, 2=suffix, 0=exit: ")
-    y = std.io.read_line()
+    // 验证目录
+    if std.os.exists(dir_path) == false {
+        print("Error: Directory does not exist!\n")
+        return
+    }
 
-    print("\nFiles in directory:\n")
-    z = std.os.read_dir(x)
-    print(z)
-    print("\n")
+    // 读取文件列表
+    content = std.os.read_dir(dir_path)
+
+    // 过滤只保留文件
+    file_list = ""
+    names = std.string.split(content, "\n")
+    for name in names {
+        if name != "" {
+            fp1 = dir_path
+            if std.string.ends_with(dir_path, "/") == false && std.string.ends_with(dir_path, "\\") == false {
+                fp1 = fp1 + "\\"
+            }
+            fp1 = fp1 + name
+
+            if std.os.is_file(fp1) {
+                file_list = file_list + name + "\n"
+            }
+        }
+    }
+
+    print("Files loaded.\n\n")
+
+    // 主循环
+    running = true
+    while running {
+        // 显示文件列表
+        print("\nFiles in directory:\n")
+        print("-----------------------------------------\n")
+        print(file_list)
+        print("-----------------------------------------\n\n")
+
+        // 显示菜单
+        print("Please select operation:\n")
+        print("  [1] Add Prefix\n")
+        print("  [2] Add Suffix\n")
+        print("  [3] Change Case\n")
+        print("  [4] Numbering\n")
+        print("  [0] Exit\n")
+        print("\nEnter your choice: ")
+
+        // 获取选择
+        choice = std.io.read_line()
+
+        // 处理选择
+        if choice == "1" {
+            // 添加前缀
+            print("\n=== Add Prefix Mode ===\n")
+            print("Enter prefix to add: ")
+            prefix = std.io.read_line()
+
+            // 应用转换
+            new_list = ""
+            lines = std.string.split(file_list, "\n")
+            for line in lines {
+                if line != "" {
+                    new_name = prefix + line
+                    new_list = new_list + new_name + "\n"
+                }
+            }
+
+            print("\nExecute rename? (y/n): ")
+            confirm = std.io.read_line()
+
+            if confirm == "y" || confirm == "Y" {
+                // 执行重命名
+                old_lines = std.string.split(file_list, "\n")
+                new_lines = std.string.split(new_list, "\n")
+                ctr1 = 0
+                success = 0
+                failed = 0
+                for old_name in old_lines {
+                    ctr2 = 0
+                    new_name = ""
+                    for check_name in new_lines {
+                        if ctr2 == ctr1 {
+                            new_name = check_name
+                        }
+                        ctr2 = ctr2 + 1
+                    }
+                    if old_name != new_name && new_name != "" {
+                        path_sep = "\\"
+                        if std.string.ends_with(dir_path, "/") || std.string.ends_with(dir_path, "\\") {
+                            path_sep = ""
+                        }
+                        old_path = dir_path + path_sep + old_name
+                        new_path = dir_path + path_sep + new_name
+                        ok = std.os.rename(old_path, new_path)
+                        if ok {
+                            success = success + 1
+                        } else {
+                            failed = failed + 1
+                        }
+                    }
+                    ctr1 = ctr1 + 1
+                }
+                print("=== Result ===\n")
+                print("Success: ")
+                print(success)
+                print("\nFailed: ")
+                print(failed)
+                print("\n\n")
+            }
+
+            // 重新读取
+            content = std.os.read_dir(dir_path)
+            file_list = ""
+            names = std.string.split(content, "\n")
+            for name in names {
+                if name != "" {
+                    fp2 = dir_path
+                    if std.string.ends_with(dir_path, "/") == false && std.string.ends_with(dir_path, "\\") == false {
+                        fp2 = fp2 + "\\"
+                    }
+                    fp2 = fp2 + name
+                    if std.os.is_file(fp2) {
+                        file_list = file_list + name + "\n"
+                    }
+                }
+            }
+
+        } elif choice == "2" {
+            // 添加后缀
+            print("\n=== Add Suffix Mode ===\n")
+            print("Enter suffix to add: ")
+            suffix = std.io.read_line()
+
+            // 应用转换
+            new_list = ""
+            lines = std.string.split(file_list, "\n")
+            for line in lines {
+                if line != "" {
+                    dot_pos = std.string.index_of(line, ".")
+                    if dot_pos >= 0 {
+                        name_part = std.string.substring(line, 0, dot_pos)
+                        ext_part = std.string.substring(line, dot_pos, std.string.len(line))
+                        new_name = name_part + suffix + ext_part
+                    } else {
+                        new_name = line + suffix
+                    }
+                    new_list = new_list + new_name + "\n"
+                }
+            }
+
+            print("\nExecute rename? (y/n): ")
+            confirm = std.io.read_line()
+
+            if confirm == "y" || confirm == "Y" {
+                old_lines = std.string.split(file_list, "\n")
+                new_lines = std.string.split(new_list, "\n")
+                ctr3 = 0
+                success = 0
+                failed = 0
+                for old_name in old_lines {
+                    ctr4 = 0
+                    new_name = ""
+                    for check_name in new_lines {
+                        if ctr4 == ctr3 {
+                            new_name = check_name
+                        }
+                        ctr4 = ctr4 + 1
+                    }
+                    if old_name != new_name && new_name != "" {
+                        path_sep = "\\"
+                        if std.string.ends_with(dir_path, "/") || std.string.ends_with(dir_path, "\\") {
+                            path_sep = ""
+                        }
+                        old_path = dir_path + path_sep + old_name
+                        new_path = dir_path + path_sep + new_name
+                        ok = std.os.rename(old_path, new_path)
+                        if ok {
+                            success = success + 1
+                        } else {
+                            failed = failed + 1
+                        }
+                    }
+                    ctr3 = ctr3 + 1
+                }
+                print("=== Result ===\n")
+                print("Success: ")
+                print(success)
+                print("\nFailed: ")
+                print(failed)
+                print("\n\n")
+            }
+
+            content = std.os.read_dir(dir_path)
+            file_list = ""
+            names = std.string.split(content, "\n")
+            for name in names {
+                if name != "" {
+                    fp3 = dir_path
+                    if std.string.ends_with(dir_path, "/") == false && std.string.ends_with(dir_path, "\\") == false {
+                        fp3 = fp3 + "\\"
+                    }
+                    fp3 = fp3 + name
+                    if std.os.is_file(fp3) {
+                        file_list = file_list + name + "\n"
+                    }
+                }
+            }
+
+        } elif choice == "3" {
+            // 大小写转换
+            print("\n=== Change Case Mode ===\n")
+            print("  [1] UPPERCASE\n")
+            print("  [2] lowercase\n")
+            print("\nEnter your choice: ")
+            case_choice = std.io.read_line()
+
+            new_list = ""
+            lines = std.string.split(file_list, "\n")
+            for line in lines {
+                if line != "" {
+                    if case_choice == "1" {
+                        new_name = std.string.upper(line)
+                    } else {
+                        new_name = std.string.lower(line)
+                    }
+                    new_list = new_list + new_name + "\n"
+                }
+            }
+
+            print("\nExecute rename? (y/n): ")
+            confirm = std.io.read_line()
+
+            if confirm == "y" || confirm == "Y" {
+                old_lines = std.string.split(file_list, "\n")
+                new_lines = std.string.split(new_list, "\n")
+                ctr5 = 0
+                success = 0
+                failed = 0
+                for old_name in old_lines {
+                    ctr6 = 0
+                    new_name = ""
+                    for check_name in new_lines {
+                        if ctr6 == ctr5 {
+                            new_name = check_name
+                        }
+                        ctr6 = ctr6 + 1
+                    }
+                    if old_name != new_name && new_name != "" {
+                        path_sep = "\\"
+                        if std.string.ends_with(dir_path, "/") || std.string.ends_with(dir_path, "\\") {
+                            path_sep = ""
+                        }
+                        old_path = dir_path + path_sep + old_name
+                        new_path = dir_path + path_sep + new_name
+                        ok = std.os.rename(old_path, new_path)
+                        if ok {
+                            success = success + 1
+                        } else {
+                            failed = failed + 1
+                        }
+                    }
+                    ctr5 = ctr5 + 1
+                }
+                print("=== Result ===\n")
+                print("Success: ")
+                print(success)
+                print("\nFailed: ")
+                print(failed)
+                print("\n\n")
+            }
+
+            content = std.os.read_dir(dir_path)
+            file_list = ""
+            names = std.string.split(content, "\n")
+            for name in names {
+                if name != "" {
+                    fp4 = dir_path
+                    if std.string.ends_with(dir_path, "/") == false && std.string.ends_with(dir_path, "\\") == false {
+                        fp4 = fp4 + "\\"
+                    }
+                    fp4 = fp4 + name
+                    if std.os.is_file(fp4) {
+                        file_list = file_list + name + "\n"
+                    }
+                }
+            }
+
+        } elif choice == "4" {
+            // 序号重编号
+            print("\n=== Numbering Mode ===\n")
+
+            new_list = ""
+            counter = 1
+            lines = std.string.split(file_list, "\n")
+            for line in lines {
+                if line != "" {
+                    // 格式化数字
+                    num = "001"
+                    if counter == 1 { num = "001" }
+                    if counter == 2 { num = "002" }
+                    if counter == 3 { num = "003" }
+                    if counter == 4 { num = "004" }
+                    if counter == 5 { num = "005" }
+                    if counter == 6 { num = "006" }
+                    if counter == 7 { num = "007" }
+                    if counter == 8 { num = "008" }
+                    if counter == 9 { num = "009" }
+                    if counter == 10 { num = "010" }
+
+                    new_name = num + "_" + line
+                    new_list = new_list + new_name + "\n"
+                    counter = counter + 1
+                }
+            }
+
+            print("\nExecute rename? (y/n): ")
+            confirm = std.io.read_line()
+
+            if confirm == "y" || confirm == "Y" {
+                old_lines = std.string.split(file_list, "\n")
+                new_lines = std.string.split(new_list, "\n")
+                ctr7 = 0
+                success = 0
+                failed = 0
+                for old_name in old_lines {
+                    ctr8 = 0
+                    new_name = ""
+                    for check_name in new_lines {
+                        if ctr8 == ctr7 {
+                            new_name = check_name
+                        }
+                        ctr8 = ctr8 + 1
+                    }
+                    if old_name != new_name && new_name != "" {
+                        path_sep = "\\"
+                        if std.string.ends_with(dir_path, "/") || std.string.ends_with(dir_path, "\\") {
+                            path_sep = ""
+                        }
+                        old_path = dir_path + path_sep + old_name
+                        new_path = dir_path + path_sep + new_name
+                        ok = std.os.rename(old_path, new_path)
+                        if ok {
+                            success = success + 1
+                        } else {
+                            failed = failed + 1
+                        }
+                    }
+                    ctr7 = ctr7 + 1
+                }
+                print("=== Result ===\n")
+                print("Success: ")
+                print(success)
+                print("\nFailed: ")
+                print(failed)
+                print("\n\n")
+            }
+
+            content = std.os.read_dir(dir_path)
+            file_list = ""
+            names = std.string.split(content, "\n")
+            for name in names {
+                if name != "" {
+                    fp5 = dir_path
+                    if std.string.ends_with(dir_path, "/") == false && std.string.ends_with(dir_path, "\\") == false {
+                        fp5 = fp5 + "\\"
+                    }
+                    fp5 = fp5 + name
+                    if std.os.is_file(fp5) {
+                        file_list = file_list + name + "\n"
+                    }
+                }
+            }
+
+        } elif choice == "0" {
+            print("\nThank you for using Batch Rename Tool!\n")
+            running = false
+
+        } else {
+            print("\nInvalid choice.\n")
+        }
+    }
 
     return
 }
