@@ -142,7 +142,7 @@ fn timestamp_to_datetime(timestamp: u64) -> (i64, i64, i64, i64, i64, i64, i64, 
     let second = secs_of_day % 60;
 
     // Calculate year, month, day from days since epoch
-    let days_since_epoch = days as i64;
+    let days_since_epoch = days;
 
     // Approximate year
     let mut year = 1970 + days_since_epoch / 365;
@@ -179,7 +179,7 @@ fn timestamp_to_datetime(timestamp: u64) -> (i64, i64, i64, i64, i64, i64, i64, 
 
     // Calculate weekday (0 = Sunday, 6 = Saturday)
     // 1970-01-01 is Thursday (4)
-    let weekday = ((days_since_epoch + 4) % 7) as i64;
+    let weekday = (days_since_epoch + 4) % 7;
 
     (year, month, day, hour, minute, second, weekday, secs)
 }
@@ -222,8 +222,7 @@ fn days_since_epoch(
     let y = if month <= 2 { year - 1 } else { year };
     let m = if month <= 2 { month + 12 } else { month };
 
-    let days = 365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + day - 719469;
-    days
+    365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + day - 719469
 }
 
 /// Calculate Unix timestamp from components.
@@ -236,8 +235,8 @@ fn calculate_timestamp(
     second: i64,
 ) -> i64 {
     let days = days_since_epoch(year, month, day);
-    let secs = days * 86400 + hour * 3600 + minute * 60 + second;
-    secs
+
+    days * 86400 + hour * 3600 + minute * 60 + second
 }
 
 // ============================================================================
@@ -388,7 +387,7 @@ fn native_parse_time(
     };
 
     // Simple ISO 8601 format parsing: "2024-01-15T10:30:00"
-    let parts: Vec<&str> = s.split(|c| c == 'T' || c == ' ').collect();
+    let parts: Vec<&str> = s.split(['T', ' ']).collect();
 
     if parts.len() < 2 {
         return Err(ExecutorError::Runtime(format!(

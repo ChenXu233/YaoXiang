@@ -1001,17 +1001,12 @@ pub fn parse_use_stmt(
     // Parse alias: use path as alias; or use path.{a, b} as alias1, alias2;
     let alias = if state.skip(&TokenKind::KwAs) {
         let mut aliases = Vec::new();
-        loop {
-            match state.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => {
-                    aliases.push(n.clone());
-                    state.bump();
-                    // 继续读取逗号分隔的下一个别名
-                    if !state.skip(&TokenKind::Comma) {
-                        break;
-                    }
-                }
-                _ => break,
+        while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
+            aliases.push(n.clone());
+            state.bump();
+            // 继续读取逗号分隔的下一个别名
+            if !state.skip(&TokenKind::Comma) {
+                break;
             }
         }
         if aliases.is_empty() {

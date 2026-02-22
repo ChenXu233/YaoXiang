@@ -619,7 +619,7 @@ impl TypeChecker {
                     match (items.as_ref(), aliases) {
                         // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
                         (None, None) => {
-                            let module_alias = path.split('.').last().unwrap_or(path);
+                            let module_alias = path.split('.').next_back().unwrap_or(path);
                             // 首先将模块本身注册为 Struct 类型（包含所有导出作为字段）
                             self.register_module_as_struct(path, module_alias, &module);
                             // 然后注册每个导出
@@ -670,7 +670,7 @@ impl TypeChecker {
         module: &crate::frontend::module::ModuleInfo,
     ) {
         let mut fields = Vec::new();
-        for (field_name, _export) in &module.exports {
+        for field_name in module.exports.keys() {
             let field_ty = MonoType::Fn {
                 params: vec![self.env.solver().new_var()],
                 return_type: Box::new(MonoType::Void),
@@ -709,7 +709,7 @@ impl TypeChecker {
                 let sub_module_path = export.full_path.clone();
                 let mut fields = Vec::new();
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
-                    for (field_name, _) in &sub_module.exports {
+                    for field_name in sub_module.exports.keys() {
                         let field_ty = MonoType::Fn {
                             params: vec![self.env.solver().new_var()],
                             return_type: Box::new(MonoType::Void),
@@ -1160,8 +1160,8 @@ fn find_matching_close(
         return None;
     }
     let mut depth: i32 = 0;
-    for i in pos..bytes.len() {
-        match bytes[i] {
+    for (i, &byte) in bytes.iter().enumerate().skip(pos) {
+        match byte {
             b'(' => depth += 1,
             b')' => {
                 depth -= 1;
@@ -1263,10 +1263,10 @@ fn parse_type_str_with_generics(
         // 找到匹配的 )
         if let Some(close) = find_matching_close(type_str, 0) {
             let after = type_str[close + 1..].trim();
-            if after.starts_with("->") {
+            if let Some(after_arrow) = after.strip_prefix("->") {
                 // 这是函数类型: (params) -> ReturnType
                 let params_part = &type_str[1..close];
-                let return_part = after[2..].trim();
+                let return_part = after_arrow.trim();
 
                 let (fn_params, _fn_param_names) =
                     parse_params_with_names(params_part, generic_params);

@@ -305,7 +305,7 @@ impl MutChecker {
         }
 
         // 存储局部变量名列表用于错误报告
-        self.local_names = local_names.map(|v| v.clone());
+        self.local_names = local_names.cloned();
 
         // 执行检查
         for (block_idx, block) in func.blocks.iter().enumerate() {

@@ -224,11 +224,7 @@ fn native_open(
             .create(true)
             .truncate(true)
             .open(&path),
-        "a" => OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(&path),
+        "a" => OpenOptions::new().append(true).create(true).open(&path),
         "r+" => OpenOptions::new().read(true).write(true).open(&path),
         "w+" => OpenOptions::new()
             .read(true)

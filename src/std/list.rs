@@ -176,7 +176,7 @@ fn native_push(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -200,7 +200,7 @@ fn native_pop(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -237,7 +237,7 @@ fn native_prepend(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -261,7 +261,7 @@ fn native_remove_at(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -294,7 +294,7 @@ fn native_reverse(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -317,7 +317,7 @@ fn native_concat(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let handle_a = match args.get(0) {
+    let handle_a = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -354,7 +354,7 @@ fn native_map(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -386,7 +386,7 @@ fn native_filter(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -405,7 +405,7 @@ fn native_filter(
 
     let mut result_items = Vec::new();
     for item in items {
-        let result = ctx.call_function(&func_value, &[item.clone()])?;
+        let result = ctx.call_function(&func_value, std::slice::from_ref(&item))?;
         if result.to_bool().unwrap_or(false) {
             result_items.push(item);
         }
@@ -420,7 +420,7 @@ fn native_reduce(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -450,7 +450,7 @@ fn native_len(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Int(0)),
     };
@@ -466,7 +466,7 @@ fn native_is_empty(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(true)),
     };
@@ -482,7 +482,7 @@ fn native_get(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -503,7 +503,7 @@ fn native_set(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -531,7 +531,7 @@ fn native_first(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -551,7 +551,7 @@ fn native_last(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -571,7 +571,7 @@ fn native_slice(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -599,7 +599,7 @@ fn native_contains(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
@@ -616,7 +616,7 @@ fn native_find_index(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Int(-1)),
     };
@@ -642,7 +642,7 @@ fn native_iter(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let list_handle = match args.get(0) {
+    let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -664,7 +664,7 @@ fn native_next(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let iter_handle = match args.get(0) {
+    let iter_handle = match args.first() {
         Some(RuntimeValue::Tuple(h)) => *h,
         _ => return Ok(RuntimeValue::Unit),
     };
@@ -675,7 +675,7 @@ fn native_next(
     };
 
     // 获取原始列表和当前索引
-    let list_handle = match iterator_items.get(0) {
+    let list_handle = match iterator_items.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Unit),
     };
@@ -706,7 +706,7 @@ fn native_has_next(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let iter_handle = match args.get(0) {
+    let iter_handle = match args.first() {
         Some(RuntimeValue::Tuple(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
@@ -717,7 +717,7 @@ fn native_has_next(
     };
 
     // 获取原始列表和当前索引
-    let list_handle = match iterator_items.get(0) {
+    let list_handle = match iterator_items.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
