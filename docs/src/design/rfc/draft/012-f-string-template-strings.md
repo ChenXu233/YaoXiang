@@ -13,6 +13,8 @@ title: RFC-012：F-String 模板字符串
 
 为 YaoXiang 语言添加 f-string 模板字符串特性，支持变量插值、表达式求值和格式化输出。f-string 使用 Python 风格语法（`f"..."` 前缀），在字符串中通过 `{expression}` 语法嵌入表达式，编译时转换为高效的字符串操作。
 
+> **注意**: f-string 语法和行为与 Python 保持一致，具体规范参考 [Python 官方文档](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals)。
+
 ## 动机
 
 ### 为什么需要这个特性？
@@ -86,7 +88,10 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 FStringLiteral ::= 'f' '"' FStringContent* '"'
 FStringContent ::= FStringChar | EscapeSequence | FStringInterpolation
 FStringInterpolation ::= '{' Expression (':' FormatSpec)? '}'
-FormatSpec      ::= [precision][type]
+FormatSpec      ::= [width] ['.' precision] type
+width           ::= digit+
+precision       ::= digit+
+type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 'o' | 's' | 'x' | 'X' | '%'
 ```
 
 ## 详细设计
@@ -217,11 +222,11 @@ f"Hello {name}, you are {age} years old"
 
 ## 开放问题
 
-- [ ] 是否支持转义的大括号？`f"{{ literal }}" → "{"`
-- [ ] 是否支持自定义格式化函数？
-- [ ] 格式化说明符的完整规范？
-- [ ] 性能优化的具体策略？
-- [ ] 错误诊断的最佳实践？
+- [x] 是否支持转义的大括号？与 Python 一致：`{{` → `{`，`}}` → `}`
+- [x] 是否支持自定义格式化函数？与 Python 一致：支持通过 `__format__` 方法自定义类型的格式化行为
+- [x] 格式化说明符的完整规范？与 Python 一致，详见上文 BNF
+- [x] 性能优化的具体策略？与 Python 一致：运行时拼接，无需特殊优化
+- [x] 错误诊断的最佳实践？与 Python 一致：报错时显示原 f-string 内容和位置
 
 ## 附录
 
