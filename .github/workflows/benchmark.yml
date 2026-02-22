@@ -1,20 +1,20 @@
 name: Benchmark
 
 on:
-  push:
+  # push:
   #   branches: [main]
   # pull_request:
   #   branches: [main]
-  # workflow_dispatch:
-  #   inputs:
-  #     iterations:
-  #       description: "Number of iterations"
-  #       required: false
-  #       default: "100"
-  #     regression_threshold:
-  #       description: "Regression threshold (e.g., 0.05 for 5%)"
-  #       required: false
-  #       default: "0.05"
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Number of iterations"
+        required: false
+        default: "100"
+      regression_threshold:
+        description: "Regression threshold (e.g., 0.05 for 5%)"
+        required: false
+        default: "0.05"
 
 permissions:
   contents: read
