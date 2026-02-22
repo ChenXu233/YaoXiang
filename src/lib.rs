@@ -557,4 +557,55 @@ mod ffi_tests {
         let result = registry.call("nonexistent.function", &[], &mut ctx);
         assert!(result.is_err());
     }
+
+    /// Test std.string.format function
+    #[test]
+    fn test_e2e_string_format() {
+        let registry = FfiRegistry::with_std();
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+
+        // Test basic formatting
+        let result = registry.call(
+            "std.string.format",
+            &[
+                RuntimeValue::String("Item {0}".into()),
+                RuntimeValue::String("hello".into()),
+            ],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("Item hello".into()));
+
+        // Test zero-padding: {0:03}
+        let result = registry.call(
+            "std.string.format",
+            &[RuntimeValue::String("{0:03}".into()), RuntimeValue::Int(1)],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("001".into()));
+
+        // Test zero-padding: {0:03} with 12
+        let result = registry.call(
+            "std.string.format",
+            &[RuntimeValue::String("{0:03}".into()), RuntimeValue::Int(12)],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("012".into()));
+
+        // Test multiple args
+        let result = registry.call(
+            "std.string.format",
+            &[
+                RuntimeValue::String("{0} - {1}".into()),
+                RuntimeValue::String("name".into()),
+                RuntimeValue::Int(42),
+            ],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("name - 42".into()));
+    }
 }
