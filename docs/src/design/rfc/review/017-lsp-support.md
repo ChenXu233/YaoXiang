@@ -726,6 +726,210 @@ yaoxiang-lsp --tcp --host 0.0.0.0 --port 8765
 
 ---
 
+## 并发模型
+
+### 设计决策：单线程 + 异步事件循环
+
+```rust
+/// LSP 服务器运行时
+struct LspRuntime {
+    /// 异步运行时（单线程）
+    runtime: TokioRuntime,
+    /// 编译器实例（非线程安全）
+    compiler: Compiler,
+    /// 文档缓存
+    documents: DocumentCache,
+}
+
+impl LspRuntime {
+    /// 启动服务器
+    fn run(mode: TransportMode) {
+        // 使用单线程运行时
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            // 事件循环 - 串行处理请求
+            loop {
+                match read_json_rpc().await {
+                    Ok(msg) => {
+                        // 单线程处理，无需锁
+                        self.handle_message(msg).await;
+                    }
+                    Err(e) => {
+                        log::error!("读取失败: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    /// 处理消息（同步执行，不并发）
+    async fn handle_message(&mut self, msg: JsonRpcMessage) {
+        // 编译器调用是同步的，直接在当前线程执行
+        let response = match msg.method.as_str() {
+            "initialize" => self.on_initialize(msg.params).await,
+            "textDocument/completion" => self.on_completion(msg.params).await,
+            "textDocument/definition" => self.on_definition(msg.params).await,
+            // ... 其他方法
+            _ => Err(JsonRpcError::method_not_found()),
+        };
+        send_json_rpc(response).await;
+    }
+}
+```
+
+### 设计理由
+
+| 考量 | 分析 |
+|------|------|
+| 编译器非线程安全 | YaoXiang 的 lexer/parser/typecheck 没有实现 `Sync`，改造成本巨大 |
+| LSP 请求天然串行 | IDE 发请求是一个接一个的，不会并发 |
+| 简单可 Debug | 单线程模型调试直接看日志，不用考虑竞态条件 |
+| 性能足够 | 现代 async I/O 在单线程上吞吐量很高 |
+
+### 后台任务
+
+如需利用多核，后台任务使用 `spawn_blocking`：
+
+```rust
+/// 后台缓存预热（可并行）
+fn warmup_cache(&self) {
+    // 预解析标准库 - 在后台线程池执行
+    tokio::task::spawn_blocking(|| {
+        self.preparse_stdlib();
+    });
+}
+```
+
+---
+
+## LSP 内置测试工具
+
+### 测试命令格式
+
+```json
+// test_cases/completion.test
+{
+    "tests": [
+        {
+            "name": "关键字补全",
+            "setup": [
+                {"cmd": "open", "uri": "main.yx", "content": "fn main() { if true { } }"}
+            ],
+            "action": {"cmd": "complete", "uri": "main.yx", "position": {"line": 0, "character": 1}},
+            "expect": {
+                "items": ["if", "fn", "let", "true", "false"],
+                "item_detail": {
+                    "if": "if condition { } else { }",
+                    "fn": "fn name(params) -> ReturnType { }"
+                }
+            }
+        },
+        {
+            "name": "变量补全",
+            "setup": [
+                {"cmd": "open", "uri": "main.yx", "content": "let message = \"hello\"\nlet msg = |message|"}
+            ],
+            "action": {"cmd": "complete", "uri": "main.yx", "position": {"line": 1, "character": 8}},
+            "expect": {
+                "items": ["message"],
+                "item["message"].detail": "string"
+            }
+        },
+        {
+            "name": "跳转定义",
+            "setup": [
+                {"cmd": "open", "uri": "main.yx", "content": "fn add(a: int) -> int { a }\nlet x = add(1)"}
+            ],
+            "action": {"cmd": "goto", "uri": "main.yx", "position": {"line": 1, "character": 9}},
+            "expect": {
+                "uri": "main.yx",
+                "range": {"start": {"line": 0, "character": 3}, "end": {"line": 0, "character": 6}}
+            }
+        }
+    ]
+}
+```
+
+### 运行测试
+
+```bash
+# 运行所有测试
+yaoxiang-lsp --test
+
+# 运行指定测试文件
+yaoxiang-lsp --test test_cases/completion.test
+
+# 运行指定测试用例
+yaoxiang-lsp --test test_cases/completion.test --name "关键字补全"
+
+# 详细输出
+yaoxiang-lsp --test -v
+```
+
+### 测试输出
+
+```
+$ yaoxiang-lsp --test
+
+Running LSP tests...
+✓ 关键字补全
+✓ 变量补全
+✓ 函数补全
+✓ 跳转定义
+✓ 悬停提示
+✗ 诊断错误 [FAILED]
+  Expected: 1 error at line 3
+  Actual: 0 errors
+
+FAILED: 1/6 tests failed
+```
+
+### 实现方式
+
+```rust
+/// LSP 测试运行器
+struct LspTestRunner {
+    /// 测试用例目录
+    test_dir: PathBuf,
+    /// 服务器实例
+    server: LspServer,
+}
+
+impl LspTestRunner {
+    /// 运行所有测试
+    fn run_all(&mut self) -> TestResult {
+        let test_files = self.test_dir.glob("*.test");
+        for file in test_files {
+            self.run_test_file(&file)?;
+        }
+        self.print_summary()
+    }
+
+    /// 运行单个测试用例
+    fn run_test_case(&mut self, case: &TestCase) -> Result<(), TestError> {
+        // 1. 执行 setup
+        for cmd in &case.setup {
+            self.execute_setup(cmd)?;
+        }
+
+        // 2. 执行 action
+        let result = self.execute_action(&case.action)?;
+
+        // 3. 验证结果
+        self.verify_expectation(&result, &case.expect)?;
+
+        Ok(())
+    }
+}
+```
+
+---
+
 ## 权衡
 
 ### 优点
@@ -806,8 +1010,8 @@ yaoxiang-lsp --tcp --host 0.0.0.0 --port 8765
 - [x] LSP 协议版本：使用 3.18（支持 Inlay Hints、Inline Values 等新特性）
 - [x] 远程通信支持（通过 TCP，兼顾 LSP + 调试）
 - [x] 远程调试支持（基于 DAP 协议）
-- [ ] 并发模型设计（单线程 vs 多线程）
-- [ ] 是否提供 LSP 内置测试工具
+- [x] 并发模型：单线程 + async 事件循环
+- [x] LSP 内置测试工具：使用 JSON 测试用例
 
 ---
 
@@ -827,6 +1031,8 @@ yaoxiang-lsp --tcp --host 0.0.0.0 --port 8765
 | 缓存策略 | Document 版本 + 内容哈希 + 增量重解析 | 2026-02-22 | 晨煦 |
 | 通信模式 | 支持 stdio + TCP + UnixSocket | 2026-02-22 | 晨煦 |
 | 远程调试 | 基于 DAP 协议，与 LSP 共享传输层 | 2026-02-22 | 晨煦 |
+| 并发模型 | 单线程 + async 事件循环 | 2026-02-22 | 晨煦 |
+| 测试工具 | JSON 测试用例 + 内置测试运行器 | 2026-02-22 | 晨煦 |
 
 ### 附录C：术语表
 
