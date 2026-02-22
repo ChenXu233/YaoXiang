@@ -1,4 +1,4 @@
-//! GAT 测试模块 (RFC-011)
+﻿//! GAT 测试模块 (RFC-011)
 //!
 //! 测试 Generic Associated Types 功能：
 //! - 关联类型检查
@@ -99,6 +99,7 @@ fn test_check_gat_struct_type() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
 
     let result = checker.check_gat(&struct_type);
@@ -374,6 +375,7 @@ fn test_complex_nested_structure() {
         ],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
 
     let result = checker.check_gat(&complex_type);

@@ -1,101 +1,85 @@
-//! Standard Concurrent library
+//! Standard Concurrent library (YaoXiang)
+//!
+//! This module provides concurrency-related functionality for YaoXiang programs.
 
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use crate::backends::common::RuntimeValue;
+use crate::backends::ExecutorError;
+use crate::std::{NativeContext, NativeExport, StdModule};
 
-/// Spawn a new thread
-pub fn spawn<F, T>(f: F) -> std::thread::JoinHandle<T>
-where
-    F: FnOnce() -> T,
-    F: Send + 'static,
-    T: Send + 'static,
-{
-    thread::spawn(f)
-}
+// ============================================================================
+// ConcurrentModule - StdModule Implementation
+// ============================================================================
 
-/// Sleep for duration
-pub fn sleep(duration: Duration) {
-    thread::sleep(duration);
-}
+/// Concurrent module implementation.
+pub struct ConcurrentModule;
 
-/// Get current thread ID (format as string for portability)
-pub fn thread_id() -> String {
-    format!("{:?}", thread::current().id())
-}
-
-/// Create a mutex
-pub fn mutex_new<T>(value: T) -> Arc<Mutex<T>> {
-    Arc::new(Mutex::new(value))
-}
-
-/// Lock mutex
-pub fn mutex_lock<T>(mutex: &Arc<Mutex<T>>) -> std::sync::LockResult<std::sync::MutexGuard<'_, T>> {
-    mutex.lock()
-}
-
-/// Atomic bool (placeholder)
-pub struct AtomicBool {
-    value: std::sync::atomic::AtomicUsize,
-}
-
-impl AtomicBool {
-    /// Create new atomic bool
-    pub fn new(value: bool) -> Self {
-        Self {
-            value: std::sync::atomic::AtomicUsize::new(if value { 1 } else { 0 }),
-        }
-    }
-
-    /// Load value
-    pub fn load(&self) -> bool {
-        self.value.load(std::sync::atomic::Ordering::SeqCst) != 0
-    }
-
-    /// Store value
-    pub fn store(
-        &self,
-        value: bool,
-    ) {
-        self.value.store(
-            if value { 1 } else { 0 },
-            std::sync::atomic::Ordering::SeqCst,
-        );
+impl Default for ConcurrentModule {
+    fn default() -> Self {
+        Self
     }
 }
 
-/// Atomic usize (placeholder)
-pub struct AtomicUsize {
-    value: std::sync::atomic::AtomicUsize,
+impl StdModule for ConcurrentModule {
+    fn module_path(&self) -> &str {
+        "std.concurrent"
+    }
+
+    fn exports(&self) -> Vec<NativeExport> {
+        vec![
+            NativeExport::new(
+                "sleep",
+                "std.concurrent.sleep",
+                "(millis: Int) -> Void",
+                native_sleep,
+            ),
+            NativeExport::new(
+                "thread_id",
+                "std.concurrent.thread_id",
+                "() -> String",
+                native_thread_id,
+            ),
+            NativeExport::new(
+                "yield_now",
+                "std.concurrent.yield_now",
+                "() -> Void",
+                native_yield_now,
+            ),
+        ]
+    }
 }
 
-impl AtomicUsize {
-    /// Create new atomic usize
-    pub fn new(value: usize) -> Self {
-        Self {
-            value: std::sync::atomic::AtomicUsize::new(value),
-        }
-    }
+/// Singleton instance for std.concurrent module.
+pub const CONCURRENT_MODULE: ConcurrentModule = ConcurrentModule;
 
-    /// Load value
-    pub fn load(&self) -> usize {
-        self.value.load(std::sync::atomic::Ordering::SeqCst)
-    }
+// ============================================================================
+// Native Function Implementations
+// ============================================================================
 
-    /// Store value
-    pub fn store(
-        &self,
-        value: usize,
-    ) {
-        self.value.store(value, std::sync::atomic::Ordering::SeqCst);
-    }
+/// Native implementation: sleep
+fn native_sleep(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let millis = args.first().and_then(|v| v.to_int()).unwrap_or(0) as u64;
+    std::thread::sleep(std::time::Duration::from_millis(millis));
+    Ok(RuntimeValue::Unit)
+}
 
-    /// Add and return old value
-    pub fn fetch_add(
-        &self,
-        delta: usize,
-    ) -> usize {
-        self.value
-            .fetch_add(delta, std::sync::atomic::Ordering::SeqCst)
-    }
+/// Native implementation: thread_id
+fn native_thread_id(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    Ok(RuntimeValue::String(
+        format!("{:?}", std::thread::current().id()).into(),
+    ))
+}
+
+/// Native implementation: yield_now
+fn native_yield_now(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    std::thread::yield_now();
+    Ok(RuntimeValue::Unit)
 }

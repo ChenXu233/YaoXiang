@@ -1,4 +1,4 @@
-//! 类型系统核心数据结构测试
+﻿//! 类型系统核心数据结构测试
 
 use std::collections::HashMap;
 
@@ -221,6 +221,7 @@ fn test_mono_type_struct() {
         ],
         methods: HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.name == "Point"));
 }
@@ -232,6 +233,7 @@ fn test_mono_type_struct_empty() {
         fields: vec![],
         methods: HashMap::new(),
         field_mutability: vec![],
+        field_has_default: Vec::new(),
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.fields.is_empty()));
 }
@@ -568,16 +570,22 @@ fn test_from_ast_type_tuple() {
 
 #[test]
 fn test_from_ast_type_list() {
-    let ast_type = ast::Type::List(Box::new(ast::Type::Int(64)));
+    let ast_type = ast::Type::Generic {
+        name: "List".to_string(),
+        args: vec![ast::Type::Int(64)],
+    };
     let mono: MonoType = ast_type.into();
-    assert!(matches!(mono, MonoType::List(_)));
+    assert!(matches!(mono, MonoType::TypeRef(s) if s == "List<int64>"));
 }
 
 #[test]
 fn test_from_ast_type_dict() {
-    let ast_type = ast::Type::Dict(Box::new(ast::Type::String), Box::new(ast::Type::Int(64)));
+    let ast_type = ast::Type::Generic {
+        name: "Dict".to_string(),
+        args: vec![ast::Type::String, ast::Type::Int(64)],
+    };
     let mono: MonoType = ast_type.into();
-    assert!(matches!(mono, MonoType::Dict(_, _)));
+    assert!(matches!(mono, MonoType::TypeRef(s) if s == "Dict<string, int64>"));
 }
 
 #[test]

@@ -52,6 +52,7 @@ pub enum Expr {
     },
     For {
         var: String,
+        var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,
@@ -161,9 +162,10 @@ pub enum StmtKind {
         initializer: Option<Box<Expr>>,
         is_mut: bool,
     },
-    /// For loop: `for item in iterable { body }`
+    /// For loop: `for [mut] item in iterable { body }`
     For {
         var: String,
+        var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,
@@ -175,11 +177,11 @@ pub enum StmtKind {
         /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
         generic_params: Vec<String>,
     },
-    /// Use statement: `use module.path`
+    /// Use statement: `use module.path` or `use module.{a, b} as c, d`
     Use {
         path: String,
         items: Option<Vec<String>>,
-        alias: Option<String>,
+        alias: Option<Vec<String>>,
     },
     /// Function definition: `name: Type = (params) => body`
     /// With pub modifier: `pub name: Type = (params) => body` - auto-binds to first param type
@@ -224,23 +226,71 @@ pub struct VariantDef {
 
 /// 结构体字段定义
 ///
-/// 用于表示类型定义中的字段，包含可变性标记
+/// 用于表示类型定义中的字段，包含可变性标记和可选默认值
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,
     pub is_mut: bool,
     pub ty: Type,
+    /// 可选的默认值表达式
+    pub default: Option<Box<Expr>>,
 }
 
 impl StructField {
-    /// 创建新的结构体字段
+    /// 创建新的结构体字段（无默认值）
     pub fn new(
         name: String,
         is_mut: bool,
         ty: Type,
     ) -> Self {
-        Self { name, is_mut, ty }
+        Self {
+            name,
+            is_mut,
+            ty,
+            default: None,
+        }
     }
+
+    /// 创建带默认值的结构体字段
+    pub fn with_default(
+        name: String,
+        is_mut: bool,
+        ty: Type,
+        default: Expr,
+    ) -> Self {
+        Self {
+            name,
+            is_mut,
+            ty,
+            default: Some(Box::new(default)),
+        }
+    }
+}
+
+/// 类型体内置绑定
+///
+/// 在类型定义体内绑定方法到字段
+#[derive(Debug, Clone)]
+pub struct TypeBodyBinding {
+    pub name: String,
+    pub kind: BindingKind,
+}
+
+/// 绑定方式
+#[derive(Debug, Clone)]
+pub enum BindingKind {
+    /// 外部函数绑定: `name = function[positions]`
+    External {
+        function: String,
+        positions: Vec<usize>,
+    },
+    /// 匿名函数绑定: `name: ((params) -> Return)[position] = ((params) => body)`
+    Anonymous {
+        params: Vec<Param>,
+        return_type: Box<Type>,
+        positions: Vec<usize>,
+        body: Box<Expr>,
+    },
 }
 
 /// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
@@ -277,7 +327,10 @@ pub enum Type {
     Bytes,
     Bool,
     Void,
-    Struct(Vec<StructField>),
+    Struct {
+        fields: Vec<StructField>,
+        bindings: Vec<TypeBodyBinding>,
+    },
     NamedStruct {
         name: String,
         fields: Vec<StructField>,
@@ -287,9 +340,6 @@ pub enum Type {
     /// Variant type: `type Color = red | green | blue` or `type Result = ok(T) | err(E)`
     Variant(Vec<VariantDef>),
     Tuple(Vec<Type>),
-    List(Box<Type>),
-    Dict(Box<Type>, Box<Type>),
-    Set(Box<Type>),
     Fn {
         params: Vec<Type>,
         return_type: Box<Type>,
@@ -347,6 +397,7 @@ pub struct Block {
 pub struct Param {
     pub name: String,
     pub ty: Option<Type>,
+    pub is_mut: bool,
     pub span: Span,
 }
 

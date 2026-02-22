@@ -15,10 +15,6 @@ fn create_token(kind: TokenKind) -> Token {
     }
 }
 
-fn create_dummy_span() -> Span {
-    Span::dummy()
-}
-
 #[cfg(test)]
 mod parser_state_tests {
     use super::*;

@@ -149,6 +149,7 @@ fn test_check_for_loop() {
     let stmt = ast::Stmt {
         kind: ast::StmtKind::For {
             var: "i".to_string(),
+            var_mut: false,
             iterable: Box::new(ast::Expr::List(
                 vec![
                     ast::Expr::Lit(
@@ -195,11 +196,13 @@ fn test_check_fn_def() {
                 ast::Param {
                     name: "a".to_string(),
                     ty: Some(ast::Type::Name("Int".to_string())),
+                    is_mut: false,
                     span: create_dummy_span(),
                 },
                 ast::Param {
                     name: "b".to_string(),
                     ty: Some(ast::Type::Name("Int".to_string())),
+                    is_mut: false,
                     span: create_dummy_span(),
                 },
             ],

@@ -36,6 +36,48 @@ pub static E2XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Semantic,
         message_template: "Mutability conflict: cannot use mutable reference in immutable context",
     },
+    ErrorCodeDefinition {
+        code: "E2013",
+        category: ErrorCategory::Semantic,
+        message_template: "Cannot shadow existing variable '{name}'",
+    },
+    // E2014: 顶层变量错误
+    ErrorCodeDefinition {
+        code: "E2014",
+        category: ErrorCategory::Semantic,
+        message_template: "Function calls are not allowed in top-level variable initializers",
+    },
+    // E209x: 函数签名解析错误
+    ErrorCodeDefinition {
+        code: "E2090",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: {reason}",
+    },
+    ErrorCodeDefinition {
+        code: "E2091",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: unknown type '{type_name}'",
+    },
+    ErrorCodeDefinition {
+        code: "E2092",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: missing '->'",
+    },
+    ErrorCodeDefinition {
+        code: "E2093",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: duplicate parameter '{name}'",
+    },
+    ErrorCodeDefinition {
+        code: "E2094",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: generic '{name}' shadows outer generic",
+    },
+    ErrorCodeDefinition {
+        code: "E2095",
+        category: ErrorCategory::Semantic,
+        message_template: "Invalid signature: parameter '{name}' shadows generic",
+    },
 ];
 
 // E2xxx 快捷方法
@@ -74,5 +116,53 @@ impl ErrorCodeDefinition {
     pub fn mutability_conflict() -> DiagnosticBuilder {
         let def = Self::find("E2012").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template)
+    }
+
+    /// E2013 变量遮蔽
+    pub fn variable_shadowing(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2013").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
+    }
+
+    /// E2014 顶层变量不支持函数调用
+    pub fn top_level_function_call() -> DiagnosticBuilder {
+        let def = Self::find("E2014").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
+    }
+
+    /// E2090 签名解析失败（通用）
+    pub fn invalid_signature(reason: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2090").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
+    }
+
+    /// E2091 未知类型
+    pub fn invalid_signature_unknown_type(type_name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2091").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("type_name", type_name)
+    }
+
+    /// E2092 缺少箭头
+    pub fn invalid_signature_missing_arrow() -> DiagnosticBuilder {
+        let def = Self::find("E2092").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
+    }
+
+    /// E2093 重复参数名
+    pub fn invalid_signature_duplicate_param(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2093").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
+    }
+
+    /// E2094 泛型参数遮蔽
+    pub fn invalid_signature_generic_shadows(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2094").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
+    }
+
+    /// E2095 参数名遮蔽泛型
+    pub fn invalid_signature_param_shadows_generic(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2095").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 }

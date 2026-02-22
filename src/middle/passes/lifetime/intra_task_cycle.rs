@@ -33,8 +33,6 @@ struct RefEdge {
     from: Operand,
     /// 目标操作数（被 ref 的值）
     to: Operand,
-    /// 位置
-    span: (usize, usize),
 }
 
 impl IntraTaskCycleTracker {
@@ -77,7 +75,6 @@ impl IntraTaskCycleTracker {
                         self.ref_edges.push(RefEdge {
                             from: dst.clone(),
                             to: src.clone(),
-                            span: (block_idx, instr_idx),
                         });
                     }
                     // Move：追踪值流动
@@ -95,7 +92,6 @@ impl IntraTaskCycleTracker {
                             self.ref_edges.push(RefEdge {
                                 from: dst.clone(),
                                 to: src.clone(),
-                                span: (block_idx, instr_idx),
                             });
                         }
                     }

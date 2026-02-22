@@ -1,4 +1,4 @@
-use std.io
+use std.io.{print};
 
 // ============================================================================
 // YaoXiang标准IO库使用示例
@@ -43,7 +43,7 @@ variable_demo: () -> Void = {
     x = 42
     y = 100
     sum = x + y
-    print("计算结果: ")
+    print("42+100 计算结果: ")
     print(sum)
     print("\n")
 }
@@ -91,7 +91,7 @@ loop_demo: () -> Void = {
 
     // while 循环
     print("while 循环倒计时:\n")
-    count = 3
+    mut count = 3
     while count > 0 {
         print(count)
         print("\n")

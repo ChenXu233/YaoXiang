@@ -1,10 +1,10 @@
 # YaoXiang Programming Language Specification
 
-> Version: v1.7.0
+> Version: v1.8.0
 > Status: Specification
 > Author: ChenXu
 > Date: 2024-12-31
-> Update: 2026-02-13 - RFC-010 Unified Type Syntax: `Name: Type = value` replaces `type Name = ...`
+> Update: 2026-02-18 - RFC-010 Added default value initialization, builtin binding; RFC-004 Added builtin binding, anonymous function binding
 
 ---
 
@@ -200,6 +200,65 @@ Point: Type = {
 - Record types are defined using curly braces `{}`
 - Field names are followed directly by colon and type
 - Interface names written inside the type body indicate implementation of that interface
+
+#### 3.3.1 Field Default Values
+
+Type fields can specify default values, construction is optional:
+
+```yaoxiang
+# Fields with default values - optional during construction
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# Usage:
+Point()           # → Point(x=0, y=0)
+Point(x=1)       # → Point(x=1, y=0)
+Point(x=1, y=2) # → Point(x=1, y=2)
+
+# Fields without default values - required during construction
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# Usage:
+Point2(x=1, y=2) # ✓
+Point2()           # ✗ Error
+```
+
+**Rules**:
+- `field: Type = expression` → Has default value, optional during construction
+- `field: Type` → No default value, required during construction
+
+#### 3.3.2 Builtin Binding
+
+Methods can be directly bound inside type definition body:
+
+```yaoxiang
+# Way 1: Reference external function binding
+distance: (a: Point, b: Point) -> Float = { ... }
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]    # Bind to position 0
+}
+# Call: p1.distance(p2) → distance(p1, p2)
+
+# Way 2: Anonymous function + position binding
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# Syntax: ((params) => body)[position]
+# Call: p1.distance(p2) → distance(p1, p2)
+```
 
 ### 3.4 Enum Types (Variant Types)
 
@@ -750,8 +809,89 @@ WhileStmt   ::= 'while' Expr Block
 ### 5.10 for Statement
 
 ```
-ForStmt     ::= 'for' Identifier 'in' Expr Block
+ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
+
+#### 5.10.1 Semantics: Binding New Value Each Iteration
+
+YaoXiang's for loop semantics differ from traditional languages: **each iteration binds a new value, rather than modifying the same variable**.
+
+```yaoxiang
+# Example: for i in 1..5
+for i in 1..5 {
+    print(i)
+}
+```
+
+**Execution Process**:
+
+| Iteration | Loop Variable Behavior |
+|-----------|------------------------|
+| 1st | Create new binding `i = 1`, execute body, print 1 |
+| 2nd | Create new binding `i = 2` (previous binding destroyed), execute body, print 2 |
+| 3rd | Create new binding `i = 3`, execute body, print 3 |
+| 4th | Create new binding `i = 4`, execute body, print 4 |
+| End | Loop ends, binding destroyed |
+
+**Key Point**: After each iteration ends, the binding created in that iteration is destroyed. The next iteration is a completely new binding with no relation to the previous iteration's binding.
+
+#### 5.10.2 Difference Between `for` and `for mut`
+
+| Syntax | Loop Variable Mutability | Description |
+|--------|--------------------------|-------------|
+| `for i in 1..5` | Immutable | Cannot modify binding in loop body |
+| `for mut i in 1..5` | Mutable | Can modify binding in loop body |
+
+```yaoxiang
+# ✅ Valid: Each iteration binds a new value, no modification needed
+for i in 1..5 {
+    print(i)  # Read i's value
+}
+
+# ❌ Error: Immutable binding, cannot modify
+for i in 1..5 {
+    i = i + 1  # Error: Cannot modify immutable binding
+}
+
+# ✅ Valid: Using for mut allows modification
+for mut i in 1..5 {
+    i = i + 1  # Allowed to modify
+}
+```
+
+#### 5.10.3 Shadowing Check
+
+For loop variables cannot shadow variables that already exist in outer scopes:
+
+```yaoxiang
+# ❌ Error: i is already declared outside
+i = 10
+for i in 1..5 {
+    print(i)
+}
+
+# ✅ Correct: Use different variable name
+i = 10
+for j in 1..5 {
+    print(j)
+}
+```
+
+Error code: `E2013 - Cannot shadow existing variable`
+
+#### 5.10.4 Comparison with Other Languages
+
+| Language | for Loop Variable Semantics |
+|----------|----------------------------|
+| YaoXiang | Bind new value each iteration |
+| Rust | Modify same variable (requires mut) |
+| Python | Modify same variable (no mut needed) |
+| C/C++ | Modify same variable (requires pointer or reference) |
+
+**Design Rationale**: YaoXiang uses binding semantics because:
+1. Variables in the loop body are destroyed after each iteration
+2. Each iteration is a brand new binding
+3. This is safer - no need to consider state between iterations
 
 ---
 
@@ -1692,6 +1832,7 @@ result = f(arg2, arg3)
 | v1.5.0 | 2025-01-20 | ChenXu | Added method binding specification (RFC-004): position index starts from 0; Default bind to position 0; Support negative index and multi-position binding |
 | v1.6.0 | 2025-02-06 | ChenXu | Integrated RFC-010 (Unified Type Syntax): updated `type Name = {...}` syntax, function definitions with parameter names in signature, Type.method method syntax; Integrated RFC-011 (Generic System): added generic types `[T]`, type constraints `[T: Clone]`, associated types `Item: T`, compile-time generics `[N: Int]`, conditional types `If[C, T, E]`, function overload specialization, platform specialization |
 | v1.7.0 | 2026-02-13 | ChenXu | RFC-010 Update: `Name: Type = {...}` replaces `type Name = {...}`; Only `Type` (uppercase) is the meta-type keyword; Unified syntax for all declarations |
+| v1.8.0 | 2026-02-18 | ChenXu | RFC-010 Added default value initialization, builtin binding; RFC-004 Added builtin binding, anonymous function binding |
 
 ---
 

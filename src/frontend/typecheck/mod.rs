@@ -10,17 +10,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{Module, Expr};
 
-// 导入推断模块
+// 导入推断模块（合并了原 checking/ 模块）
 pub mod inference;
-
-// 导入检查模块
-pub mod checking;
 
 // 导入特化模块
 pub mod specialization;
-
-// 导入旧特化模块（包含 GenericSpecializer）
-mod specialize;
 
 // 导入特质模块
 pub mod traits;
@@ -45,11 +39,9 @@ pub use crate::frontend::core::type_system::{
     ConstValue, ConstExpr, ConstKind, ConstVarDef, UniverseLevel,
 };
 
-// 重新导出推断、检查、特化等模块
+// 重新导出推断、特化等模块
 pub use inference::*;
-pub use checking::*;
 pub use specialization::*;
-pub use specialize::*;
 pub use gat::*;
 pub use overload::*;
 pub use type_eval::*;
@@ -85,6 +77,11 @@ pub struct TypeEnvironment {
     pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Trait 表：存储所有已解析的 Trait 定义和实现
     pub trait_table: super::type_level::trait_bounds::TraitTable,
+    /// Native 函数签名表：存储已注册的 native 函数类型签名
+    /// Key: 函数名（如 "std.io.println"），Value: 函数类型
+    pub native_signatures: HashMap<String, MonoType>,
+    /// 模块注册表 - 提供统一的模块查询接口
+    pub module_registry: crate::frontend::module::registry::ModuleRegistry,
 }
 
 impl TypeEnvironment {
@@ -98,6 +95,7 @@ impl TypeEnvironment {
         Self {
             module_name,
             trait_table: super::type_level::trait_bounds::TraitTable::default(),
+            module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
         }
     }
@@ -257,6 +255,30 @@ impl TypeEnvironment {
     ) -> Option<&super::type_level::trait_bounds::TraitImplementation> {
         self.trait_table.get_impl(trait_name, for_type)
     }
+    /// 注册 native 函数签名
+    pub fn add_native_signature(
+        &mut self,
+        name: &str,
+        sig: MonoType,
+    ) {
+        self.native_signatures.insert(name.to_string(), sig);
+    }
+
+    /// 获取 native 函数签名
+    pub fn get_native_signature(
+        &self,
+        name: &str,
+    ) -> Option<&MonoType> {
+        self.native_signatures.get(name)
+    }
+
+    /// 检查是否是已注册的 native 函数
+    pub fn is_native_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.native_signatures.contains_key(name)
+    }
 }
 
 /// 类型检查器
@@ -265,14 +287,8 @@ impl TypeEnvironment {
 pub struct TypeChecker {
     /// 当前环境
     env: TypeEnvironment,
-    /// 已检查的函数签名（用于递归检测）
-    checked_functions: HashMap<String, bool>,
-    /// 当前函数的返回类型
-    current_return_type: Option<MonoType>,
-    /// 泛型函数缓存
-    generic_cache: HashMap<String, HashMap<String, PolyType>>,
-    /// 函数体检查器
-    body_checker: Option<checking::BodyChecker>,
+    /// 语句检查器
+    body_checker: Option<inference::StatementChecker>,
 }
 
 impl TypeChecker {
@@ -281,12 +297,10 @@ impl TypeChecker {
         let mut env = TypeEnvironment::new_with_module(module_name.to_string());
         add_builtin_types(&mut env);
         add_std_traits(&mut env);
+        add_native_function_types(&mut env);
 
         Self {
             env,
-            checked_functions: HashMap::new(),
-            current_return_type: None,
-            generic_cache: HashMap::new(),
             body_checker: None,
         }
     }
@@ -328,20 +342,12 @@ impl TypeChecker {
         self.env.errors.errors()
     }
 
-    /// 检查单个语句（委托给 BodyChecker）
+    /// 检查单个语句（委托给 StatementChecker）
     pub fn check_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
     ) -> Result<(), Box<Diagnostic>> {
         self.body_checker_mut().check_stmt(stmt)
-    }
-
-    /// 获取函数体检查器
-    fn body_checker(&mut self) -> &mut checking::BodyChecker {
-        if self.body_checker.is_none() {
-            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
-        }
-        self.body_checker.as_mut().unwrap()
     }
 
     /// 检查整个模块
@@ -371,7 +377,9 @@ impl TypeChecker {
         self.collect_exports(module);
 
         // 初始化函数体检查器
-        let body_checker = checking::BodyChecker::new(self.env.solver());
+        let mut body_checker = inference::StatementChecker::new(self.env.solver());
+        // 设置 native 函数签名表
+        body_checker.set_native_signatures(self.env.native_signatures.clone());
         *self.body_checker_mut() = body_checker;
 
         // 将环境中的变量同步到 body_checker
@@ -406,18 +414,59 @@ impl TypeChecker {
         }
 
         // 构建类型检查结果
+        // 合并 StatementChecker 中的局部变量类型到 bindings
+        let mut bindings = self.env.vars.clone();
+        let mut local_var_types = HashMap::new();
+
+        // 从 body_checker.vars 获取局部变量类型
+        if let Some(ref bc) = self.body_checker {
+            for (name, poly) in bc.vars() {
+                // 只添加 env.vars 中不存在的局部变量类型
+                if !bindings.contains_key(&name) {
+                    bindings.insert(name.clone(), poly.clone());
+                }
+                // 收集局部变量的 MonoType（用于 IR 生成器错误消息）
+                local_var_types.insert(name, poly.body);
+            }
+        }
+
+        // 同时从 env.vars 收集非全局绑定（函数）的局部变量
+        for (name, poly) in &self.env.vars {
+            // 排除函数（函数名首字母小写或者是已知的函数）
+            let is_function = matches!(
+                poly.body,
+                crate::frontend::core::type_system::MonoType::Fn { .. }
+            );
+            if !is_function && !local_var_types.contains_key(name) {
+                local_var_types.insert(name.clone(), poly.body.clone());
+            }
+        }
+
+        // 对局部变量类型进行求解，将类型变量替换为具体类型
+        // 注意：必须使用 body_checker 的 solver，因为约束是在那里收集的
+        if let Some(ref mut bc) = self.body_checker {
+            let solver = bc.solver();
+            for (_, ty) in local_var_types.iter_mut() {
+                *ty = solver.resolve(ty);
+            }
+        }
+
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),
-            bindings: self.env.vars.clone(),
+            bindings,
+            local_var_types,
         };
 
         Ok(result)
     }
 
     /// 获取 body_checker 的可变引用
-    fn body_checker_mut(&mut self) -> &mut checking::BodyChecker {
+    fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            self.body_checker = Some(checking::BodyChecker::new(self.env.solver()));
+            let mut body_checker = inference::StatementChecker::new(self.env.solver());
+            // 设置 native 函数签名表
+            body_checker.set_native_signatures(self.env.native_signatures.clone());
+            self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
     }
@@ -541,25 +590,156 @@ impl TypeChecker {
                     self.auto_bind_to_type(name, &param_types, fn_ty);
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Use {
-                path,
-                items: _,
-                alias: _,
-            } => {
-                // 处理 use std.io - 添加 print/println 函数
-                if path == "std.io" {
-                    let print_ty = MonoType::Fn {
-                        params: vec![self.env.solver().new_var()],
-                        return_type: Box::new(MonoType::Void),
-                        is_async: false,
-                    };
-                    self.env
-                        .add_var("print".to_string(), PolyType::mono(print_ty.clone()));
-                    self.env
-                        .add_var("println".to_string(), PolyType::mono(print_ty));
+            crate::frontend::core::parser::ast::StmtKind::Use { path, items, alias } => {
+                // 计算导入模式
+                // use std.io → register as "io.print"
+                // use std.io as str → register as "str.print"
+                // use std.{print} → register as "print"
+                // use std.{print} as p → register as "p"
+                // use std.{print, read} → register as "print", "read"
+                // use std.{print, read} as p, r → register as "p", "r"
+                let import_all = items.is_none();
+                let aliases = alias.as_ref();
+
+                // 通过 ModuleRegistry 查找模块导出，不再硬编码特定模块
+                if let Some(module) = self.env.module_registry.get(path).cloned() {
+                    let items_ref = items.as_ref();
+
+                    // 收集需要导入的导出
+                    let mut exports_to_import: Vec<&crate::frontend::module::Export> = Vec::new();
+                    for export in module.exports.values() {
+                        let should_import = import_all
+                            || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
+                        if should_import {
+                            exports_to_import.push(export);
+                        }
+                    }
+
+                    // 根据别名情况注册
+                    match (items.as_ref(), aliases) {
+                        // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
+                        (None, None) => {
+                            let module_alias = path.split('.').next_back().unwrap_or(path);
+                            // 首先将模块本身注册为 Struct 类型（包含所有导出作为字段）
+                            self.register_module_as_struct(path, module_alias, &module);
+                            // 然后注册每个导出
+                            for export in exports_to_import {
+                                self.register_use_export(module_alias, export, true);
+                            }
+                        }
+                        // use path as alias → 整个模块用别名注册
+                        (None, Some(aliases)) if aliases.len() == 1 => {
+                            let alias_name = &aliases[0];
+                            for export in exports_to_import {
+                                self.register_use_export(alias_name, export, true);
+                            }
+                        }
+                        // use path.{a, b} 无 alias → 展平注册
+                        (Some(item_names), None) => {
+                            for (item_name, export) in
+                                item_names.iter().zip(exports_to_import.iter())
+                            {
+                                self.register_use_export(item_name, export, false);
+                            }
+                        }
+                        // use path.{a, b} as alias1, alias2 → 嵌套注册
+                        (Some(item_names), Some(aliases)) if item_names.len() == aliases.len() => {
+                            for (alias_name, export) in aliases.iter().zip(exports_to_import.iter())
+                            {
+                                self.register_use_export(alias_name, export, true);
+                            }
+                        }
+                        // 其他情况：报错或回退
+                        _ => {
+                            for export in exports_to_import {
+                                self.register_use_export(path, export, false);
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
+        }
+    }
+
+    /// 将模块注册为 Struct 类型（包含所有导出作为字段）
+    fn register_module_as_struct(
+        &mut self,
+        _module_path: &str,
+        module_alias: &str,
+        module: &crate::frontend::module::ModuleInfo,
+    ) {
+        let mut fields = Vec::new();
+        for field_name in module.exports.keys() {
+            let field_ty = MonoType::Fn {
+                params: vec![self.env.solver().new_var()],
+                return_type: Box::new(MonoType::Void),
+                is_async: false,
+            };
+            fields.push((field_name.clone(), field_ty));
+        }
+        let module_ty = MonoType::Struct(crate::frontend::core::type_system::mono::StructType {
+            name: module_alias.to_string(),
+            fields,
+            methods: HashMap::new(),
+            field_mutability: Vec::new(),
+            field_has_default: Vec::new(),
+        });
+        self.env
+            .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+    }
+
+    /// 注册单个导出
+    /// - `use_alias`: 是否使用别名模式，为 true 时注册名为 prefix，否则为 export.name
+    fn register_use_export(
+        &mut self,
+        prefix: &str,
+        export: &crate::frontend::module::Export,
+        use_alias: bool,
+    ) {
+        let register_name = if use_alias {
+            prefix.to_string()
+        } else {
+            export.name.clone()
+        };
+
+        match export.kind {
+            crate::frontend::module::ExportKind::SubModule => {
+                // 子模块作为命名空间
+                let sub_module_path = export.full_path.clone();
+                let mut fields = Vec::new();
+                if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
+                    for field_name in sub_module.exports.keys() {
+                        let field_ty = MonoType::Fn {
+                            params: vec![self.env.solver().new_var()],
+                            return_type: Box::new(MonoType::Void),
+                            is_async: false,
+                        };
+                        fields.push((field_name.clone(), field_ty));
+                    }
+                }
+                let module_ty =
+                    MonoType::Struct(crate::frontend::core::type_system::mono::StructType {
+                        name: export.name.clone(),
+                        fields,
+                        methods: HashMap::new(),
+                        field_mutability: Vec::new(),
+                        field_has_default: Vec::new(),
+                    });
+                self.env.add_var(register_name, PolyType::mono(module_ty));
+            }
+            _ => {
+                // 如果变量已存在（比如已经是 Struct 类型），则跳过
+                if self.env.get_var(&register_name).is_some() {
+                    return;
+                }
+                let fn_ty = MonoType::Fn {
+                    params: vec![self.env.solver().new_var()],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                };
+                self.env.add_var(register_name, PolyType::mono(fn_ty));
+            }
         }
     }
 
@@ -635,7 +815,7 @@ impl TypeChecker {
         // 提取字段列表
         let fields = match definition {
             crate::frontend::core::parser::ast::Type::NamedStruct { fields, .. } => fields,
-            crate::frontend::core::parser::ast::Type::Struct(fields) => fields,
+            crate::frontend::core::parser::ast::Type::Struct { fields, .. } => fields,
             _ => return, // 非 Record 类型不自动派生
         };
 
@@ -765,17 +945,19 @@ pub fn infer_expression(
     expr: &Expr,
     env: &mut TypeEnvironment,
 ) -> Result<MonoType, Vec<Diagnostic>> {
-    // 克隆环境变量，避免借用冲突
-    let vars_clone = env.vars.clone();
+    // 创建共享 ScopeManager 并添加环境变量
+    let mut scope = inference::ScopeManager::new();
+    for (name, poly) in env.vars.clone() {
+        scope.add_var(name, poly);
+    }
     let overload_candidates_clone = env.overload_candidates.clone();
-    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::new(
+    let native_signatures_clone = env.native_signatures.clone();
+    let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
+        &mut scope,
         env.solver(),
         &overload_candidates_clone,
+        &native_signatures_clone,
     );
-    // 添加环境中的变量到推断器
-    for (name, poly) in vars_clone {
-        inferrer.add_var(name, poly);
-    }
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
@@ -795,6 +977,411 @@ pub fn add_builtin_types(env: &mut TypeEnvironment) {
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
 }
 
+/// 注册标准库 native 函数类型签名到类型环境
+///
+/// 这些签名用于类型检查 `Native("...")` 表达式，确保调用签名匹配。
+/// 通过 ModuleRegistry 自动发现所有 std 模块的 native 函数。
+pub fn add_native_function_types(env: &mut TypeEnvironment) {
+    use crate::frontend::module::registry::ModuleRegistry;
+    use crate::frontend::module::ExportKind;
+
+    let registry = ModuleRegistry::with_std();
+
+    // 遍历所有 std 子模块，自动注册导出的函数
+    for submodule_name in registry.std_submodule_names() {
+        let module_path = format!("std.{}", submodule_name);
+        if let Some(module) = registry.get(&module_path) {
+            for export in module.exports.values() {
+                // 使用签名字符串解析出正确的函数类型
+                let fn_ty = match export.kind {
+                    ExportKind::Function | ExportKind::Constant => {
+                        parse_signature(&export.signature, env)
+                    }
+                    _ => continue,
+                };
+
+                // 注册完全限定名
+                env.native_signatures
+                    .insert(export.full_path.clone(), fn_ty.clone());
+
+                // 注册短名称
+                env.native_signatures.insert(export.name.clone(), fn_ty);
+            }
+        }
+    }
+
+    // 同时将这些 native 函数注册为变量，使其可在类型推断时查找
+    for (name, sig) in &env.native_signatures.clone() {
+        env.add_var(name.clone(), PolyType::mono(sig.clone()));
+    }
+}
+
+/// 解析函数签名字符串为 MonoType
+///
+/// 格式: "[T](param1: Type1, param2: Type2) -> ReturnType"
+/// 支持泛型前缀 [T]、函数类型参数 (item: T) -> T
+/// 例如: "[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
+fn parse_signature(
+    signature: &str,
+    env: &mut TypeEnvironment,
+) -> MonoType {
+    let signature = signature.trim();
+
+    // 解析可选的泛型参数前缀 [T] 或 [T, U]
+    let (generic_params, rest) = parse_generic_prefix(signature);
+
+    // 如果不以 ( 开头且没有泛型前缀，视为常量类型签名（如 "Float"）
+    if !rest.starts_with('(') && generic_params.is_empty() {
+        return parse_type_str_with_generics(rest, &generic_params);
+    }
+
+    // 检查泛型参数是否有重复
+    {
+        let mut seen = HashSet::new();
+        for gp in &generic_params {
+            if !seen.insert(gp.as_str()) {
+                let diag = ErrorCodeDefinition::invalid_signature_duplicate_param(gp).build();
+                eprintln!("[Error] {}: {}", diag.code, diag.message);
+                return MonoType::Fn {
+                    params: vec![env.solver().new_var()],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                };
+            }
+        }
+    }
+
+    // 验证括号：必须以 ( 开头
+    if !rest.starts_with('(') {
+        let diag = ErrorCodeDefinition::invalid_signature("must start with '('").build();
+        eprintln!("[Error] {}: {}", diag.code, diag.message);
+        return MonoType::Fn {
+            params: vec![env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+    }
+
+    // 找到与首个 ( 匹配的 )
+    let closing_paren = find_matching_close(rest, 0);
+    let Some(closing_paren) = closing_paren else {
+        let diag = ErrorCodeDefinition::invalid_signature("unmatched '('").build();
+        eprintln!("[Error] {}: {}", diag.code, diag.message);
+        return MonoType::Fn {
+            params: vec![env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+    };
+
+    let params_str = &rest[1..closing_paren];
+    let after_params = rest[closing_paren + 1..].trim();
+
+    // 验证签名格式：匹配的 ) 之后必须有 ->
+    if !after_params.starts_with("->") {
+        let diag = ErrorCodeDefinition::invalid_signature_missing_arrow().build();
+        eprintln!("[Error] {}: {}", diag.code, diag.message);
+        return MonoType::Fn {
+            params: vec![env.solver().new_var()],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+    }
+
+    let return_str = after_params[2..].trim();
+
+    // 解析参数（并验证参数名）
+    let (params, param_names) = parse_params_with_names(params_str, &generic_params);
+
+    // 检查参数名是否重复
+    {
+        let mut seen = HashSet::new();
+        for name in &param_names {
+            if !name.is_empty() && !seen.insert(name.as_str()) {
+                let diag = ErrorCodeDefinition::invalid_signature_duplicate_param(name).build();
+                eprintln!("[Error] {}: {}", diag.code, diag.message);
+                return MonoType::Fn {
+                    params: vec![env.solver().new_var()],
+                    return_type: Box::new(MonoType::Void),
+                    is_async: false,
+                };
+            }
+        }
+    }
+
+    // 检查参数名是否与泛型参数同名
+    for name in &param_names {
+        if !name.is_empty() && generic_params.contains(name) {
+            let diag = ErrorCodeDefinition::invalid_signature_param_shadows_generic(name).build();
+            eprintln!("[Error] {}: {}", diag.code, diag.message);
+            return MonoType::Fn {
+                params: vec![env.solver().new_var()],
+                return_type: Box::new(MonoType::Void),
+                is_async: false,
+            };
+        }
+    }
+
+    // 解析返回类型
+    let return_type = Box::new(parse_type_str_with_generics(return_str, &generic_params));
+
+    MonoType::Fn {
+        params,
+        return_type,
+        is_async: false,
+    }
+}
+
+/// 解析泛型参数前缀 [T] 或 [T, U]
+/// 返回 (泛型参数列表, 剩余字符串)
+fn parse_generic_prefix(s: &str) -> (Vec<String>, &str) {
+    let s = s.trim();
+    if s.starts_with('[') {
+        if let Some(close) = s.find(']') {
+            let inner = &s[1..close];
+            let params: Vec<String> = inner
+                .split(',')
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect();
+            return (params, s[close + 1..].trim());
+        }
+    }
+    (Vec::new(), s)
+}
+
+/// 找到从 pos 开始的 ( 对应的匹配 )，正确处理嵌套
+fn find_matching_close(
+    s: &str,
+    pos: usize,
+) -> Option<usize> {
+    let bytes = s.as_bytes();
+    if bytes.get(pos) != Some(&b'(') {
+        return None;
+    }
+    let mut depth: i32 = 0;
+    for (i, &byte) in bytes.iter().enumerate().skip(pos) {
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// 解析参数字符串，返回类型列表和参数名列表
+fn parse_params_with_names(
+    params_str: &str,
+    generic_params: &[String],
+) -> (Vec<MonoType>, Vec<String>) {
+    if params_str.trim().is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
+    let mut params = Vec::new();
+    let mut names = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+
+    for (i, c) in params_str.char_indices() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let param = params_str[start..i].trim();
+                if !param.is_empty() {
+                    let (ty, name) = parse_param_with_name(param, generic_params);
+                    params.push(ty);
+                    names.push(name);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    // 最后一个参数
+    let param = params_str[start..].trim();
+    if !param.is_empty() {
+        let (ty, name) = parse_param_with_name(param, generic_params);
+        params.push(ty);
+        names.push(name);
+    }
+
+    (params, names)
+}
+
+/// 解析单个参数，返回 (类型, 参数名)
+/// 支持 "name: Type" 格式和函数类型 "name: (item: T) -> T"
+fn parse_param_with_name(
+    param: &str,
+    generic_params: &[String],
+) -> (MonoType, String) {
+    let param = param.trim();
+
+    // 找到顶层的冒号（在括号/尖括号外面的第一个冒号）
+    let mut depth: i32 = 0;
+    let mut colon_pos = None;
+    for (i, c) in param.char_indices() {
+        match c {
+            '(' | '<' | '[' => depth += 1,
+            ')' | '>' | ']' => depth = depth.saturating_sub(1),
+            ':' if depth == 0 => {
+                colon_pos = Some(i);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(pos) = colon_pos {
+        let name = param[..pos].trim().to_string();
+        let type_str = param[pos + 1..].trim();
+        let ty = parse_type_str_with_generics(type_str, generic_params);
+        (ty, name)
+    } else {
+        let ty = parse_type_str_with_generics(param, generic_params);
+        (ty, String::new())
+    }
+}
+
+/// 解析类型字符串为 MonoType，支持泛型参数引用和函数类型
+fn parse_type_str_with_generics(
+    type_str: &str,
+    generic_params: &[String],
+) -> MonoType {
+    let type_str = type_str.trim();
+
+    // 处理函数类型: (item: T) -> T 或元组类型: (String, Int)
+    if type_str.starts_with('(') {
+        // 找到匹配的 )
+        if let Some(close) = find_matching_close(type_str, 0) {
+            let after = type_str[close + 1..].trim();
+            if let Some(after_arrow) = after.strip_prefix("->") {
+                // 这是函数类型: (params) -> ReturnType
+                let params_part = &type_str[1..close];
+                let return_part = after_arrow.trim();
+
+                let (fn_params, _fn_param_names) =
+                    parse_params_with_names(params_part, generic_params);
+                let fn_return = parse_type_str_with_generics(return_part, generic_params);
+
+                return MonoType::Fn {
+                    params: fn_params,
+                    return_type: Box::new(fn_return),
+                    is_async: false,
+                };
+            } else if after.is_empty() {
+                // 没有 ->，是元组类型: (String, Int)
+                let inner = &type_str[1..close];
+                let elements = split_by_top_level_comma(inner);
+                let tuple_types: Vec<MonoType> = elements
+                    .iter()
+                    .map(|s| parse_type_str_with_generics(s, generic_params))
+                    .collect();
+                return MonoType::Tuple(tuple_types);
+            }
+        }
+    }
+
+    // 处理泛型类型: List<T>, Dict<String, Int>
+    if let Some(angle_bracket) = type_str.find('<') {
+        let base = &type_str[..angle_bracket];
+        let inner_start = angle_bracket + 1;
+        let inner_end = type_str.len() - 1;
+
+        if inner_end > inner_start && type_str.ends_with('>') {
+            let inner = &type_str[inner_start..inner_end];
+
+            match base {
+                "List" => {
+                    let inner_types = split_by_top_level_comma(inner);
+                    if inner_types.len() == 1 {
+                        let inner_type =
+                            Box::new(parse_type_str_with_generics(inner_types[0], generic_params));
+                        return MonoType::List(inner_type);
+                    }
+                }
+                "Dict" => {
+                    let parts: Vec<&str> = split_by_top_level_comma(inner);
+                    if parts.len() == 2 {
+                        let k = Box::new(parse_type_str_with_generics(parts[0], generic_params));
+                        let v = Box::new(parse_type_str_with_generics(parts[1], generic_params));
+                        return MonoType::Dict(k, v);
+                    }
+                }
+                "Set" => {
+                    let inner_types = split_by_top_level_comma(inner);
+                    if inner_types.len() == 1 {
+                        let inner_type =
+                            Box::new(parse_type_str_with_generics(inner_types[0], generic_params));
+                        return MonoType::Set(inner_type);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 检查是否是泛型参数引用
+    if generic_params.iter().any(|gp| gp == type_str) {
+        // 泛型参数 → 使用 TypeRef 表示（类型检查时将其视为 Any）
+        return MonoType::TypeRef(type_str.to_string());
+    }
+
+    // 基本类型
+    match type_str {
+        "Void" | "void" => MonoType::Void,
+        "Bool" | "bool" => MonoType::Bool,
+        "Int" | "int" => MonoType::Int(32),
+        "Float" | "float" => MonoType::Float(64),
+        "Char" | "char" => MonoType::Char,
+        "String" | "string" => MonoType::String,
+        "Bytes" | "bytes" => MonoType::Bytes,
+        "Any" => MonoType::TypeRef("Any".to_string()),
+        _ => {
+            // 未知类型 → 创建 TypeRef（可能是自定义类型）
+            MonoType::TypeRef(type_str.to_string())
+        }
+    }
+}
+
+/// 按顶层逗号分割字符串，正确处理嵌套的 < > ( )
+fn split_by_top_level_comma(s: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '<' | '(' => depth += 1,
+            '>' | ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let part = s[start..i].trim();
+                if !part.is_empty() {
+                    result.push(part);
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    // 最后一个元素
+    let part = s[start..].trim();
+    if !part.is_empty() {
+        result.push(part);
+    }
+
+    result
+}
+
 /// 添加标准库 traits 到环境
 pub fn add_std_traits(env: &mut TypeEnvironment) {
     // 初始化标准库 trait 定义
@@ -809,6 +1396,9 @@ pub fn add_std_traits(env: &mut TypeEnvironment) {
 pub struct TypeCheckResult {
     pub module_name: String,
     pub bindings: HashMap<String, PolyType>,
+    /// 局部变量的类型信息（用于 IR 生成器显示错误消息）
+    /// Key 是变量名，Value 是推断出的具体类型
+    pub local_var_types: HashMap<String, MonoType>,
 }
 
 /// 导入信息

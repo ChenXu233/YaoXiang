@@ -105,15 +105,21 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
                 let empty_set = std::collections::HashSet::new();
                 for func in &module.functions {
                     let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
-                    let errors = mut_checker.check_function_with_mut_locals(func, mut_locals);
+                    let loop_binding_locals = module.loop_binding_locals.get(&func.name);
+                    let local_names = module.local_names.get(&func.name);
+                    let errors = mut_checker.check_function_with_mut_locals(
+                        func,
+                        mut_locals,
+                        loop_binding_locals,
+                        local_names,
+                    );
                     if !errors.is_empty() {
                         eprintln!();
                         for err in &errors {
                             match err {
                                 OwnershipError::ImmutableAssign { value, span } => {
-                                    // 提取变量名（去掉 local_ 前缀）
-                                    let name = value.strip_prefix("local_").unwrap_or(value);
-                                    let mut diag = ErrorCodeDefinition::immutable_assignment(name);
+                                    // 变量名已经是正确的（从 local_names 获取）
+                                    let mut diag = ErrorCodeDefinition::immutable_assignment(value);
 
                                     // 如果有 span，使用它
                                     if let Some(span) = span {

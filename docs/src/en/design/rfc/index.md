@@ -36,11 +36,9 @@ title: RFC Index
 
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
-| RFC-002 | [Cross-platform I/O with libuv Integration](./draft/002-cross-platform-io-libuv.md) | ChenXu | 2025-01-05 | Draft |
-| RFC-005 | [Automated CVE Security Scanning System](./draft/005-automated-cve-scanning.md) | ChenXu | 2025-01-05 | Draft |
-| RFC-012 | [F-String Template Strings](./draft/012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Draft |
 | RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | ChenXu | 2026-02-12 | Draft |
-| RFC-017 | [Yaoxiang LSP Support](./draft/017-yaoxiang-lsp-support.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-018 | [LLVM AOT Compiler and Runtime Scheduler Integration](./draft/018-llvm-aot-compiler.md) | ChenXu | 2026-02-12 | Draft |
+| RFC-019 | [Typed Homoiconicity](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | Draft ⚠️ |
 
 ---
 
@@ -49,6 +47,7 @@ title: RFC Index
 | ID | Title | Author | Created Date | Status |
 |----|-------|--------|--------------|--------|
 | RFC-003 | [Version Planning and Implementation Suggestions](./review/003-version-planning.md) | ChenXu | 2025-01-05 | Under Review |
+| RFC-017 | [Yaoxiang LSP Support](./review/017-yaoxiang-lsp-support.md) | 晨煦 | 2026-02-15 | Under Review |
 
 ---
 
@@ -63,15 +62,19 @@ title: RFC Index
 | RFC-008 | [Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md) | ChenXu | 2025-01-05 | Accepted |
 | RFC-009 | [Ownership Model v7](./accepted/009-ownership-model.md) | ChenXu | 2025-01-05 | Accepted |
 | RFC-011 | [Generic Type System Design - Zero-Cost Abstraction and Macro Replacement](./accepted/011-generic-type-system.md) | ChenXu | 2025-01-25 | Accepted |
-| RFC-013 | [Error Code Specification Design](./accepted/012-error-code-specification.md) | ChenXu | 2025-01-30 | Accepted |
+| RFC-012 | [F-String Template Strings](./accepted/012-f-string-template-strings.md) | ChenXu | 2025-01-27 | Accepted |
+| RFC-013 | [Error Code Specification Design](./accepted/013-error-code-specification.md) | ChenXu | 2025-01-30 | Accepted |
 | RFC-014 | [Package Manager System Design](./accepted/014-package-manager.md) | ChenXu | 2026-02-12 | Accepted |
-| RFC-015 | [yaoxiang.toml Fields Research](./draft/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Accepted |
+| RFC-015 | [yaoxiang.toml Fields Research](./accepted/015-yaoxiang-toml-fields.md) | ChenXu | 2026-02-12 | Accepted |
 
 ---
 
 ## Rejected RFCs
 
-None yet
+| ID | Title | Author | Created Date | Status |
+|----|-------|--------|--------------|--------|
+| RFC-002 | [Cross-platform I/O with libuv Integration](./rejected/002-cross-platform-io-libuv.md) | ChenXu | 2025-01-05 | Rejected |
+| RFC-005 | [Automated CVE Security Scanning System](./rejected/005-automated-cve-scanning.md) | ChenXu | 2025-01-05 | Rejected |
 
 ---
 

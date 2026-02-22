@@ -641,16 +641,18 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             | AstType::Enum(_) => ty.clone(),
 
             // 结构体：递归替换字段类型
-            AstType::Struct(fields) => AstType::Struct(
-                fields
+            AstType::Struct { fields, bindings } => AstType::Struct {
+                fields: fields
                     .iter()
                     .map(|f| crate::frontend::core::parser::ast::StructField {
                         name: f.name.clone(),
                         is_mut: f.is_mut,
                         ty: self.substitute_type_ast(&f.ty, type_map),
+                        default: f.default.clone(),
                     })
                     .collect(),
-            ),
+                bindings: bindings.clone(),
+            },
 
             // 命名结构体
             AstType::NamedStruct { name, fields } => AstType::NamedStruct {
@@ -661,6 +663,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                         name: f.name.clone(),
                         is_mut: f.is_mut,
                         ty: self.substitute_type_ast(&f.ty, type_map),
+                        default: f.default.clone(),
                     })
                     .collect(),
             },
@@ -701,20 +704,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .map(|t| self.substitute_type_ast(t, type_map))
                     .collect(),
             ),
-
-            // 列表：替换元素类型
-            AstType::List(elem) => {
-                AstType::List(Box::new(self.substitute_type_ast(elem, type_map)))
-            }
-
-            // 字典：替换键值类型
-            AstType::Dict(key, value) => AstType::Dict(
-                Box::new(self.substitute_type_ast(key, type_map)),
-                Box::new(self.substitute_type_ast(value, type_map)),
-            ),
-
-            // 集合：替换元素类型
-            AstType::Set(elem) => AstType::Set(Box::new(self.substitute_type_ast(elem, type_map))),
 
             // 函数类型：替换参数和返回类型
             AstType::Fn {
@@ -802,6 +791,9 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             globals: original_module.globals.clone(),
             functions: output_funcs,
             mut_locals: original_module.mut_locals.clone(),
+            loop_binding_locals: original_module.loop_binding_locals.clone(),
+            local_names: original_module.local_names.clone(),
+            native_bindings: original_module.native_bindings.clone(),
         }
     }
 }

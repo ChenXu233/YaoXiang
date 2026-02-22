@@ -1,0 +1,24 @@
+use std.{io, list}
+
+// Test 1: Normal function with mut parameter
+increment: (mut x: Int) -> Int = {
+    x = x + 1
+    return x
+};
+
+main = {
+    // Test 1: call function with mut param
+    result1 = increment(5);
+    io.println(result1);
+
+    // Test 2: lambda with mut parameter (single expression)
+    f = (mut x: Int) => x + 1;
+    result2 = f(10);
+    io.println(result2);
+
+    // Test 3: higher-order function with mut closure param
+    result3 = list.map([1, 2, 3], (mut x) => x * 2);
+    io.println(result3);
+
+    io.println("All mut param tests passed!")
+}

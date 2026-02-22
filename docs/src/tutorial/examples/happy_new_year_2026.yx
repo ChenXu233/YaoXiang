@@ -1,0 +1,5 @@
+use std.io.{print}
+
+main = {
+  print("Happy New Year 2026! 马年快乐！")
+}

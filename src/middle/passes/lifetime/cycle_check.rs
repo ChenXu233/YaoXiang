@@ -70,8 +70,6 @@ struct SpawnRefEdge {
     spawn_result: Operand,
     /// 返回值持有的 ref 目标
     ref_target: Operand,
-    /// 位置
-    span: (usize, usize),
 }
 
 /// spawn 参数来自另一个 spawn 返回值
@@ -81,8 +79,6 @@ struct SpawnParamEdge {
     consumer_spawn: Operand,
     /// 提供参数的 spawn 返回值
     producer_spawn: Operand,
-    /// 位置
-    span: (usize, usize),
 }
 
 impl CycleChecker {
@@ -149,20 +145,6 @@ impl CycleChecker {
         }
     }
 
-    /// 检查是否为裸指针操作
-    fn is_pointer_operation(
-        &self,
-        instr: &Instruction,
-    ) -> bool {
-        matches!(
-            instr,
-            Instruction::PtrFromRef { .. }
-                | Instruction::PtrDeref { .. }
-                | Instruction::PtrStore { .. }
-                | Instruction::PtrLoad { .. }
-        )
-    }
-
     /// 收集 spawn 的参数和返回值信息
     ///
     /// 只收集单层 spawn 边界的直接引用，不递归进入嵌套 spawn。
@@ -222,7 +204,6 @@ impl CycleChecker {
                             self.spawn_param_edges.push(SpawnParamEdge {
                                 consumer_spawn: result.clone(),
                                 producer_spawn: producer,
-                                span: (block_idx, instr_idx),
                             });
                         }
                     }
@@ -246,7 +227,6 @@ impl CycleChecker {
                     self.spawn_ref_edges.push(SpawnRefEdge {
                         spawn_result: dst.clone(),
                         ref_target: producer,
-                        span: *move_span, // 使用 Move 指令的真实位置
                     });
                 }
             }

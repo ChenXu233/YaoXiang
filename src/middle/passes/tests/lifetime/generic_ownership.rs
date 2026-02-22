@@ -29,19 +29,6 @@ fn create_generic_function(
     }
 }
 
-/// 创建泛型结构体实例
-fn create_generic_struct_instance(
-    _struct_type: MonoType,
-    _fields: Vec<Operand>,
-) -> Vec<Instruction> {
-    vec![
-        // 创建泛型结构体实例
-        Instruction::Ret(Some(Operand::Const(
-            crate::middle::core::ir::ConstValue::Int(0),
-        ))),
-    ]
-}
-
 // ============ 泛型结构体所有权测试 ============
 
 #[test]

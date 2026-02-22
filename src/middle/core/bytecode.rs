@@ -292,6 +292,13 @@ pub enum BytecodeInstr {
         capacity: u16,
     },
 
+    /// 创建结构体实例
+    CreateStruct {
+        dst: Reg,
+        type_name: String,
+        fields: Vec<Reg>,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -324,6 +331,13 @@ pub enum BytecodeInstr {
     CallStatic {
         dst: Option<Reg>,
         func: FunctionRef,
+        args: Vec<Reg>,
+    },
+
+    /// Native function call (FFI)
+    CallNative {
+        dst: Option<Reg>,
+        func_name: String,
         args: Vec<Reg>,
     },
 
@@ -486,12 +500,14 @@ impl BytecodeInstr {
             BytecodeInstr::LoadElement { .. } => Opcode::LoadElement,
             BytecodeInstr::StoreElement { .. } => Opcode::StoreElement,
             BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
+            BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
             BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
             BytecodeInstr::WeakUpgrade { .. } => Opcode::WeakUpgrade,
             BytecodeInstr::CallStatic { .. } => Opcode::CallStatic,
+            BytecodeInstr::CallNative { .. } => Opcode::CallNative,
             BytecodeInstr::CallVirt { .. } => Opcode::CallVirt,
             BytecodeInstr::CallDyn { .. } => Opcode::CallDyn,
             BytecodeInstr::MakeClosure { .. } => Opcode::MakeClosure,
@@ -540,12 +556,18 @@ impl BytecodeInstr {
             BytecodeInstr::LoadElement { .. } => 4,
             BytecodeInstr::StoreElement { .. } => 4,
             BytecodeInstr::NewListWithCap { .. } => 4,
+            BytecodeInstr::CreateStruct {
+                fields, type_name, ..
+            } => 6 + type_name.len() + fields.len() * 2,
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
             BytecodeInstr::ArcDrop { .. } => 2,
             BytecodeInstr::WeakNew { .. } => 4,
             BytecodeInstr::WeakUpgrade { .. } => 4,
             BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
+            BytecodeInstr::CallNative {
+                args, func_name, ..
+            } => 4 + func_name.len() + args.len() * 2,
             BytecodeInstr::CallVirt { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallDyn { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::MakeClosure { env, .. } => 4 + env.len() * 2,
@@ -774,6 +796,123 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     });
                                 }
                             }
+                            Opcode::I64Mul => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Mul,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Div => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Div,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Rem => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Rem,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64And => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::And,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Or => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Or,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Xor => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Xor,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Shl => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Shl,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Sar => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Sar,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
+                            Opcode::I64Shr => {
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let lhs = instr.operands[1] as u16;
+                                    let rhs = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::BinaryOp {
+                                        op: BinaryOp::Shr,
+                                        dst: Reg(dst),
+                                        lhs: Reg(lhs),
+                                        rhs: Reg(rhs),
+                                    });
+                                }
+                            }
                             Opcode::I64Lt => {
                                 if instr.operands.len() >= 3 {
                                     let dst = instr.operands[0] as u16;
@@ -852,6 +991,19 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     });
                                 }
                             }
+                            Opcode::I64Neg => {
+                                // Unary negation: -x
+                                // Operands: dst(1) + src(1)
+                                if instr.operands.len() >= 2 {
+                                    let dst = instr.operands[0] as u16;
+                                    let src = instr.operands[1] as u16;
+                                    decoded_instructions.push(BytecodeInstr::UnaryOp {
+                                        dst: Reg(dst),
+                                        src: Reg(src),
+                                        op: UnaryOp::Neg,
+                                    });
+                                }
+                            }
                             Opcode::CallStatic => {
                                 // CallStatic: dst(1) + func_id(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
                                 if instr.operands.len() >= 7 {
@@ -893,6 +1045,50 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(call_instr);
                                 } else {
                                     // Fallback: push Nop
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::CallNative => {
+                                // CallNative: dst(1) + func_name_idx(4) + base_arg_reg(1) + arg_count(1) + args(2*count)
+                                if instr.operands.len() >= 7 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_name_idx = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let _base_arg_reg = instr.operands[5];
+                                    let arg_count = instr.operands[6] as usize;
+
+                                    // Resolve function name from constant pool
+                                    let func_name = if let Some(ConstValue::String(s)) =
+                                        file.const_pool.get(func_name_idx as usize)
+                                    {
+                                        s.clone()
+                                    } else {
+                                        format!("native_{}", func_name_idx)
+                                    };
+
+                                    // Parse arguments
+                                    let mut args = Vec::new();
+                                    for i in 0..arg_count {
+                                        if 7 + i * 2 + 1 < instr.operands.len() {
+                                            let arg_reg = u16::from_le_bytes([
+                                                instr.operands[7 + i * 2],
+                                                instr.operands[7 + i * 2 + 1],
+                                            ]);
+                                            args.push(Reg(arg_reg));
+                                        }
+                                    }
+
+                                    let dst_reg = Some(Reg(dst));
+                                    decoded_instructions.push(BytecodeInstr::CallNative {
+                                        dst: dst_reg,
+                                        func_name,
+                                        args,
+                                    });
+                                } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
@@ -978,6 +1174,124 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         .push(BytecodeInstr::ReturnValue { value: Reg(value) });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Return);
+                                }
+                            }
+                            Opcode::NewListWithCap => {
+                                // NewListWithCap: dst(1) + capacity(2)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let capacity =
+                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
+                                    decoded_instructions.push(BytecodeInstr::NewListWithCap {
+                                        dst: Reg(dst),
+                                        capacity,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::LoadElement => {
+                                // LoadElement: dst(1) + array(1) + index(1)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let array = instr.operands[1] as u16;
+                                    let index = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::LoadElement {
+                                        dst: Reg(dst),
+                                        array: Reg(array),
+                                        index: Reg(index),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::CreateStruct => {
+                                // CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst = instr.operands[0] as u16;
+                                    let type_name_idx = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let field_count = instr.operands[5] as usize;
+
+                                    // Resolve type name from constant pool
+                                    let type_name = if let Some(ConstValue::String(s)) =
+                                        file.const_pool.get(type_name_idx as usize)
+                                    {
+                                        s.clone()
+                                    } else {
+                                        format!("struct_{}", type_name_idx)
+                                    };
+
+                                    // Parse field registers
+                                    let mut fields = Vec::new();
+                                    for i in 0..field_count {
+                                        if 6 + i * 2 + 1 < instr.operands.len() {
+                                            let field_reg = u16::from_le_bytes([
+                                                instr.operands[6 + i * 2],
+                                                instr.operands[6 + i * 2 + 1],
+                                            ]);
+                                            fields.push(Reg(field_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::CreateStruct {
+                                        dst: Reg(dst),
+                                        type_name,
+                                        fields,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::StoreElement => {
+                                // StoreElement: array(1) + index(1) + value(1)
+                                if instr.operands.len() >= 3 {
+                                    let array = instr.operands[0] as u16;
+                                    let index = instr.operands[1] as u16;
+                                    let value = instr.operands[2] as u16;
+                                    decoded_instructions.push(BytecodeInstr::StoreElement {
+                                        array: Reg(array),
+                                        index: Reg(index),
+                                        value: Reg(value),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::MakeClosure => {
+                                // MakeClosure: dst(1) + func_id(4) + env_count(1) + env_regs(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_id = u32::from_le_bytes([
+                                        instr.operands[1],
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                    ]);
+                                    let env_count = instr.operands[5] as usize;
+
+                                    let mut env = Vec::new();
+                                    for i in 0..env_count {
+                                        if 6 + i * 2 + 1 < instr.operands.len() {
+                                            let env_reg = u16::from_le_bytes([
+                                                instr.operands[6 + i * 2],
+                                                instr.operands[6 + i * 2 + 1],
+                                            ]);
+                                            env.push(Reg(env_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::MakeClosure {
+                                        dst: Reg(dst),
+                                        func: FunctionRef::Index(func_id),
+                                        env,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
                             _ => {

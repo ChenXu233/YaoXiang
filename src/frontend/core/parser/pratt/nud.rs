@@ -323,14 +323,22 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// Try to parse a typed parameter list like (a: Int, b: String)
+    /// Try to parse a typed parameter list like (a: Int, b: String) or (mut a, b: Int)
     /// Returns None if this is not a typed param list, and restores position
     fn try_parse_typed_param_list(&mut self) -> Option<Vec<Param>> {
         use crate::frontend::core::parser::statements::declarations::parse_type_annotation;
 
         let saved = self.save_position();
 
-        // Check if first token is identifier followed by ':'
+        // Check for optional 'mut' keyword on first parameter
+        let first_is_mut = if self.at(&TokenKind::KwMut) {
+            self.bump();
+            true
+        } else {
+            false
+        };
+
+        // Check if first token is identifier
         let first_name =
             if let Some(TokenKind::Identifier(name)) = self.current().map(|t| t.kind.clone()) {
                 name
@@ -342,26 +350,40 @@ impl<'a> ParserState<'a> {
         let first_span = self.span();
         self.bump(); // consume identifier
 
-        if !self.at(&TokenKind::Colon) {
+        // Parse optional type annotation
+        let first_type = if self.at(&TokenKind::Colon) {
+            self.bump(); // consume ':'
+            parse_type_annotation(self)
+        } else {
+            None
+        };
+
+        // If no mut and no type annotation, this is not a param list
+        if !first_is_mut && first_type.is_none() {
             self.restore_position(saved);
             return None;
         }
 
-        self.bump(); // consume ':'
-
-        let first_type = parse_type_annotation(self)?;
-
         let mut params = vec![Param {
             name: first_name,
-            ty: Some(first_type),
+            ty: first_type,
+            is_mut: first_is_mut,
             span: first_span,
         }];
 
-        // Parse remaining typed parameters
+        // Parse remaining parameters
         while self.skip(&TokenKind::Comma) {
             if self.at(&TokenKind::RParen) {
                 break;
             }
+
+            // Check for optional 'mut' keyword
+            let param_is_mut = if self.at(&TokenKind::KwMut) {
+                self.bump();
+                true
+            } else {
+                false
+            };
 
             let param_name =
                 if let Some(TokenKind::Identifier(name)) = self.current().map(|t| t.kind.clone()) {
@@ -374,16 +396,17 @@ impl<'a> ParserState<'a> {
             let param_span = self.span();
             self.bump();
 
-            if !self.skip(&TokenKind::Colon) {
-                self.restore_position(saved);
-                return None;
-            }
-
-            let param_type = parse_type_annotation(self)?;
+            // Parse optional type annotation
+            let param_type = if self.skip(&TokenKind::Colon) {
+                parse_type_annotation(self)
+            } else {
+                None
+            };
 
             params.push(Param {
                 name: param_name,
-                ty: Some(param_type),
+                ty: param_type,
+                is_mut: param_is_mut,
                 span: param_span,
             });
         }
@@ -547,16 +570,6 @@ impl<'a> ParserState<'a> {
         })
     }
 
-    /// Parse elif branch helper
-    fn parse_elif_branch(&mut self) -> Option<(Expr, Block)> {
-        self.expect(&TokenKind::KwElif);
-
-        let condition = self.parse_expression(BP_LOWEST)?;
-        let body = self.parse_block_expr()?;
-
-        Some((condition, body))
-    }
-
     /// Parse match expression: `match expr { pattern => expr, ... }`
     fn parse_match(&mut self) -> Option<Expr> {
         let span = self.span();
@@ -639,6 +652,7 @@ impl<'a> ParserState<'a> {
                 // Fallback: use a default variable name if pattern is not a simple identifier
                 "_".to_string()
             },
+            var_mut: false, // for 表达式不支持 mut 语法
             iterable: Box::new(iterable),
             body: Box::new(body),
             label: None, // No label for simple for expressions
