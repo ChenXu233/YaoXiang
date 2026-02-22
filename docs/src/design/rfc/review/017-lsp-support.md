@@ -567,6 +567,165 @@ struct OwnershipTraceResponse {
 
 ---
 
+## 通信与远程支持
+
+### 1. 双协议支持
+
+LSP 服务器同时支持两种通信模式：
+
+```rust
+/// 通信模式
+enum TransportMode {
+    /// 标准输入/输出（默认，本地开发用）
+    Stdio,
+    /// TCP Socket（远程开发/调试用）
+    Tcp { host: String, port: u16 },
+    /// Unix Domain Socket（本地高性能用）
+    UnixSocket { path: String },
+}
+
+impl LspServer {
+    /// 启动服务器
+    fn start(mode: TransportMode) {
+        match mode {
+            TransportMode::Stdio => {
+                // 读取 stdin，写入 stdout
+            }
+            TransportMode::Tcp { host, port } => {
+                // 监听 TCP 端口
+                let listener = TcpListener::bind(format!("{}:{}", host, port)).unwrap();
+                // 支持多客户端连接
+                for stream in listener.incoming() {
+                    self.handle_client(stream);
+                }
+            }
+            TransportMode::UnixSocket { path } => {
+                // Unix 套接字
+            }
+        }
+    }
+}
+```
+
+### 2. 远程调试支持
+
+基于 DAP（Debug Adapter Protocol）实现远程调试，与 LSP 使用同一端口或独立端口：
+
+```rust
+/// YaoXiang 调试服务器
+struct DebugServer {
+    /// 调试会话管理
+    sessions: HashMap<String, DebugSession>,
+    /// 断点信息
+    breakpoints: HashMap<DocumentUri, Vec<Breakpoint>>,
+}
+
+impl DebugServer {
+    /// 支持的调试功能
+    fn capabilities() -> DebugCapabilities {
+        DebugCapabilities {
+            supports_configuration_done_request: true,
+            supports_function_breakpoints: true,
+            supports_conditional_breakpoints: true,
+            supports_hit_conditions: true,
+            supports_evaluate_for_hovers: true,
+            supports_step_back: false, // 暂不支持
+            supports_restart_frame: true,
+            supports_goto_targets_request: true,
+            supports_pause_request: true,
+            supports_terminate_threads_request: true,
+            supports_modules_request: true,
+            // YaoXiang 特有
+            supports_ownership_trace: true, // 所有权追踪
+            supports_const_eval: true,       // 常量求值
+        }
+    }
+
+    /// 断点类型
+    enum BreakpointKind {
+        /// 代码断点
+        Line,
+        /// 函数断点
+        Function { name: String },
+        /// 条件断点
+        Conditional { condition: String },
+        /// 所有权断点（YaoXiang 特有）- 变量被 move 时触发
+        OwnershipMoved { var_name: String },
+    }
+
+    /// 调试请求处理
+    fn on_launch(&mut self, args: LaunchArgs) -> Result<(), DebugError> {
+        // 编译目标程序
+        let artifact = self.compile(&args.program)?;
+        // 启动调试器
+        self.start_debuggee(artifact, args.debuggee_kind)
+    }
+
+    /// 变量求值（包括编译期常量）
+    fn evaluate(&self, expr: &str, context: EvaluationContext) -> Result<EvaluationResult> {
+        match context {
+            EvaluationContext::Hover => {
+                // 编译期求值
+                self.const_eval(expr)
+            }
+            EvaluationContext::Watch => {
+                // 运行时求值
+                self.runtime_eval(expr)
+            }
+            EvaluationContext::DebugConsole => {
+                // 两者皆可
+                self.try_const_eval(expr).or_else(|| self.runtime_eval(expr))
+            }
+        }
+    }
+}
+```
+
+### 3. 统一通信架构
+
+LSP + 调试共享同一底层传输层：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     IDE (VS Code)                        │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │ LSP Client  │  │ DAP Client  │  │  Terminal   │    │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
+└─────────┼────────────────┼────────────────┼────────────┘
+          │                │                │
+          ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────┐
+│                  YaoXiang Server                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │              Transport Layer (TCP/stdio)         │   │
+│  └─────────────────────┬───────────────────────────┘   │
+│                        │                                 │
+│        ┌──────────────┼──────────────┐                  │
+│        ▼              ▼              ▼                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
+│  │ LSP Server│  │Debug Server│ │ REPL    │             │
+│  └──────────┘  └──────────┘  └──────────┘             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 4. 启动参数
+
+```bash
+# 本地模式（默认）
+yaoxiang-lsp
+
+# TCP 服务器模式
+yaoxiang-lsp --tcp --port 8765
+
+# 远程开发模式（同时启动 LSP + 调试）
+yaoxiang-lsp --tcp --port 8765 --enable-debug
+
+# 指定绑定地址
+yaoxiang-lsp --tcp --host 0.0.0.0 --port 8765
+```
+
+---
+
 ## 权衡
 
 ### 优点
@@ -645,7 +804,8 @@ struct OwnershipTraceResponse {
 - [x] 错误收集机制（见「实现前置条件」章节）
 - [x] 增量缓存系统（见「实现前置条件」章节）
 - [x] LSP 协议版本：使用 3.18（支持 Inlay Hints、Inline Values 等新特性）
-- [ ] 是否支持远程 LSP（通过 TCP）
+- [x] 远程通信支持（通过 TCP，兼顾 LSP + 调试）
+- [x] 远程调试支持（基于 DAP 协议）
 - [ ] 并发模型设计（单线程 vs 多线程）
 - [ ] 是否提供 LSP 内置测试工具
 
@@ -665,6 +825,8 @@ struct OwnershipTraceResponse {
 | 协议版本 | 支持 LSP 3.18（需要 Inlay Hints 等新特性） | 2026-02-22 | 晨煦 |
 | 错误收集模式 | 使用 ErrorCollector 收集所有错误，不阻断 | 2026-02-22 | 晨煦 |
 | 缓存策略 | Document 版本 + 内容哈希 + 增量重解析 | 2026-02-22 | 晨煦 |
+| 通信模式 | 支持 stdio + TCP + UnixSocket | 2026-02-22 | 晨煦 |
+| 远程调试 | 基于 DAP 协议，与 LSP 共享传输层 | 2026-02-22 | 晨煦 |
 
 ### 附录C：术语表
 
@@ -672,8 +834,11 @@ struct OwnershipTraceResponse {
 |------|------|
 | LSP | Language Server Protocol，语言服务器协议 |
 | JSON-RCP | JSON-Remote Procedure Call，JSON 远程过程调用 |
+| DAP | Debug Adapter Protocol，调试适配协议 |
 | 符号索引 | 编译时构建的符号位置映射表 |
 | 编译世界 | 包含所有编译信息的上下文 |
+| 幽灵提示 | Inlay Hints，行内显示的提示信息 |
+| 所有权追踪 | Ownership Trace，变量所有权流动的可视化 |
 
 ---
 
@@ -681,6 +846,7 @@ struct OwnershipTraceResponse {
 
 - [Language Server Protocol 规范](https://microsoft.github.io/language-server-protocol/)
 - [LSP 规范 3.18](https://github.com/microsoft/language-server-protocol/blob/main/specifications/specification-3-18.md)
+- [Debug Adapter Protocol 规范](https://microsoft.github.io/debug-adapter-protocol/)
 - [Rust Analyzer](https://rust-analyzer.github.io/) - 参考实现
 - [lsp-types crate](https://crates.io/crates/lsp-types) - LSP 类型定义
 - [JSON-RPC 2.0 规范](https://www.jsonrpc.org/specification)
