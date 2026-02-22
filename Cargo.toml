@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.6.2"
+version = "0.6.4"
 edition = "2021"
 rust-version = "1.82"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -53,10 +53,12 @@ smallvec = "1.15.1"
 # 字符串处理
 regex = "1"
 unicode-ident = "1.0.23"
+urlencoding = "2"
 
 # 文件系统
 walkdir = "2"
 tempfile = "3.25.0"
+notify = "7.0.0"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }

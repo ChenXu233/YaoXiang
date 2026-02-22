@@ -76,6 +76,7 @@ fn test_arc_is_send_sync() {
             ],
             methods: HashMap::new(),
             field_mutability: vec![false, false],
+            field_has_default: Vec::new(),
         },
     )));
     assert!(checker.is_send(&arc_struct));
@@ -95,6 +96,7 @@ fn test_struct_types() {
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
+        field_has_default: Vec::new(),
     });
     assert!(checker.is_send(&point));
     assert!(checker.is_sync(&point));
@@ -189,8 +191,8 @@ fn test_spawn_closure_no_captured() {
                 // 创建一个无捕获的闭包
                 Instruction::MakeClosure {
                     dst: Operand::Local(0),
-                    func: 0,     // 假设闭包函数索引为 0
-                    env: vec![], // 无捕获变量
+                    func: "closure_0".to_string(), // 闭包函数名
+                    env: vec![],                   // 无捕获变量
                 },
                 // spawn 这个闭包
                 Instruction::Spawn {
@@ -226,7 +228,7 @@ fn test_spawn_closure_captures_send() {
                 // 捕获 local_0 (Int 类型，Send)
                 Instruction::MakeClosure {
                     dst: Operand::Local(1),
-                    func: 0,
+                    func: "closure_0".to_string(),
                     env: vec![Operand::Local(0)],
                 },
                 Instruction::Spawn {

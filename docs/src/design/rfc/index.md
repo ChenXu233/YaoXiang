@@ -29,11 +29,9 @@ title: RFC 索引
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-002 | [跨平台I/O与libuv集成](./draft/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 草案 |
-| RFC-005 | [自动化CVE安全检查系统](./draft/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 草案 |
-| RFC-012 | [F-String 模板字符串](./draft/012-f-string-template-strings.md) | 晨煦 | 2025-01-27 | 草案 |
 | RFC-016 | [量子原生支持与多重后端集成](./draft/016-quantum-native-support.md) | 晨煦 | 2026-02-12 | 草案 |
-| RFC-017 | [语言服务器协议（LSP）支持设计](./draft/017-lsp-support.md) | Claude | 2026-02-15 | 草案 |
+| RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./draft/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 草案 |
+| RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 ⚠️ |
 
 ---
 
@@ -42,6 +40,7 @@ title: RFC 索引
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-003 | [版本规划与实现建议](./review/003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
+| RFC-017 | [语言服务器协议（LSP）支持设计](./review/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
 
 ---
 
@@ -56,7 +55,8 @@ title: RFC 索引
 | RFC-008 | [Runtime 并发模型与调度器脱耦设计](./accepted/008-runtime-concurrency-model.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-009 | [所有权模型 v7](./accepted/009-ownership-model.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-011 | [泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md) | 晨煦 | 2025-01-25 | 已接受 |
-| RFC-013 | [错误代码规范设计](./accepted/012-error-code-specification.md) | 晨煦 | 2025-01-30 | 已接受 |
+| RFC-012 | [F-String 模板字符串](./accepted/012-f-string-template-strings.md) | 晨煦 | 2025-01-27 | 已接受 |
+| RFC-013 | [错误代码规范设计](./accepted/013-error-code-specification.md) | 晨煦 | 2025-01-30 | 已接受 |
 | RFC-014 | [包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-015 | [YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 
@@ -64,7 +64,10 @@ title: RFC 索引
 
 ## 已拒绝RFC
 
-暂无
+| 编号 | 标题 | 作者 | 创建日期 | 状态 |
+|------|------|------|----------|------|
+| RFC-002 | [跨平台I/O与libuv集成](./rejected/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 已拒绝 |
+| RFC-005 | [自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 
 ---
 

@@ -409,24 +409,12 @@ pub enum RuntimeError {
 pub struct TaskSpawner<S: Scheduler> {
     /// Scheduler implementation
     scheduler: Arc<S>,
-    /// Next task ID
-    next_id: usize,
 }
 
 impl<S: Scheduler> TaskSpawner<S> {
     /// Create a new task spawner with scheduler
     pub fn new(scheduler: Arc<S>) -> Self {
-        Self {
-            scheduler,
-            next_id: 0,
-        }
-    }
-
-    /// Generate a new task ID
-    fn next_task_id(&mut self) -> TaskId {
-        let id = self.next_id;
-        self.next_id += 1;
-        TaskId::new(id)
+        Self { scheduler }
     }
 
     /// Spawn a new task with default config

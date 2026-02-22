@@ -1,10 +1,10 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.7.0
+> 版本：v1.8.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2026-02-13 - RFC-010 统一类型语法：`Name: Type = value` 替换 `type Name = ...`
+> 更新：2026-02-18 - RFC-010 新增默认值初始化、内置绑定；RFC-004 新增内置绑定语法
 
 ---
 
@@ -119,10 +119,10 @@ Membership  ::= Expr 'in' Expr
 ### 2.7 注释
 
 ```
-# 单行注释
+// 单行注释
 
-#! 多行注释
-   可以跨越多行 !#
+/* 多行注释
+   可以跨越多行 */
 ```
 
 ### 2.8 缩进规则
@@ -201,6 +201,65 @@ Point: Type = {
 - 字段名后直接跟冒号和类型
 - 接口名写在类型体内表示实现该接口
 
+#### 3.3.1 字段默认值
+
+类型字段可以指定默认值，构造时可选提供：
+
+```yaoxiang
+# 有默认值的字段 - 构造时可选
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0
+}
+
+# 使用
+Point()           # → Point(x=0, y=0)
+Point(x=1)       # → Point(x=1, y=0)
+Point(x=1, y=2) # → Point(x=1, y=2)
+
+# 无默认值的字段 - 构造时必填
+Point2: Type = {
+    x: Float,
+    y: Float
+}
+
+# 使用
+Point2(x=1, y=2) # ✓
+Point2()          # ✗ 错误
+```
+
+**规则**：
+- `field: Type = expression` → 有默认值，构造时可选
+- `field: Type` → 无默认值，构造时必填
+
+#### 3.3.2 内置绑定
+
+在类型定义体内可以直接绑定方法：
+
+```yaoxiang
+# 方式1：引用外部函数绑定
+distance: (a: Point, b: Point) -> Float = { ... }
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]    # 绑定到位置0
+}
+# 调用：p1.distance(p2) → distance(p1, p2)
+
+# 方式2：匿名函数 + 位置绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# 语法：((params) => body)[position]
+# 调用：p1.distance(p2) → distance(p1, p2)
+```
+
 ### 3.4 枚举类型（变体类型）
 
 ```
@@ -260,6 +319,29 @@ Point: Type = {
     Serializable     # 实现 Serializable 接口
 }
 ```
+
+**接口直接赋值**：具体类型可以直接赋值给接口类型变量（结构化子类型）
+
+```yaoxiang
+# 直接赋值（编译期可确定具体类型 → 零开销调用）
+d: Drawable = Circle(1)
+d.draw(screen)        # 编译后：直接调用 circle_draw，无 vtable
+
+# 函数返回值（编译期无法确定 → vtable 调用）
+d: Drawable = get_shape()
+d.draw(screen)        # 通过 vtable 查找方法
+
+# 接口作为函数参数
+process: (d: Drawable) -> Void = d.draw(screen)
+```
+
+**编译期优化策略**：
+
+| 场景 | 推断结果 | 调用方式 |
+|------|----------|----------|
+| 直接赋值具体类型 | 具体类型可确定 | 直接调用（零开销） |
+| 函数返回值 | 未知 | vtable |
+| 异构集合 | 多个类型 | vtable |
 
 ### 3.6 元组类型
 
@@ -750,8 +832,89 @@ WhileStmt   ::= 'while' Expr Block
 ### 5.10 for 语句
 
 ```
-ForStmt     ::= 'for' Identifier 'in' Expr Block
+ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
+
+#### 5.10.1 语义：每次迭代是绑定新值
+
+YaoXiang 的 for 循环语义与传统语言不同：**每次迭代是绑定新值，而不是修改同一个变量**。
+
+```yaoxiang
+# 示例：for i in 1..5
+for i in 1..5 {
+    print(i)
+}
+```
+
+**执行过程**：
+
+| 迭代 | 循环变量的行为 |
+|------|----------------|
+| 第1次 | 创建新绑定 `i = 1`，循环体执行，打印 1 |
+| 第2次 | 创建新绑定 `i = 2`（之前的绑定已销毁），循环体执行，打印 2 |
+| 第3次 | 创建新绑定 `i = 3`，循环体执行，打印 3 |
+| 第4次 | 创建新绑定 `i = 4`，循环体执行，打印 4 |
+| 结束 | 循环体结束，绑定销毁 |
+
+**关键点**：每次迭代结束后，当次迭代创建的绑定会被销毁。下一次迭代是一个全新的绑定，与上一次迭代的绑定没有任何关系。
+
+#### 5.10.2 for 与 for mut 的区别
+
+| 语法 | 循环变量可变性 | 说明 |
+|------|----------------|------|
+| `for i in 1..5` | 不可变 | 循环体内不能修改绑定 |
+| `for mut i in 1..5` | 可变 | 循环体内可以修改绑定 |
+
+```yaoxiang
+# ✅ 合法：每次迭代绑定新值，不需要修改
+for i in 1..5 {
+    print(i)  # 读取 i 的值
+}
+
+# ❌ 错误：不可变绑定，不能修改
+for i in 1..5 {
+    i = i + 1  # 错误：不能修改不可变绑定
+}
+
+# ✅ 合法：使用 for mut 允许修改绑定
+for mut i in 1..5 {
+    i = i + 1  # 允许修改
+}
+```
+
+#### 5.10.3 遮蔽检查
+
+for 循环变量不能遮蔽外层作用域中已存在的变量：
+
+```yaoxiang
+# ❌ 错误：i 已经在外部声明
+i = 10
+for i in 1..5 {
+    print(i)
+}
+
+# ✅ 正确：使用不同的变量名
+i = 10
+for j in 1..5 {
+    print(j)
+}
+```
+
+错误代码：`E2013 - Cannot shadow existing variable`
+
+#### 5.10.4 与其他语言的对比
+
+| 语言 | for 循环变量语义 |
+|------|------------------|
+| YaoXiang | 每次迭代绑定新值 |
+| Rust | 修改同一个变量（需要 mut） |
+| Python | 修改同一个变量（无需 mut） |
+| C/C++ | 修改同一个变量（需要指针或引用） |
+
+**设计理由**：YaoXiang 采用绑定语义是因为：
+1. 每次迭代结束后循环体内的变量会销毁
+2. 下一次迭代是一个全新的绑定
+3. 这样更安全，不需要考虑迭代之间的状态
 
 ---
 
@@ -1047,11 +1210,19 @@ pub sqrt(Float) -> Float = (x) => { ... }
 ### 7.2 模块导入
 
 ```
-Import      ::= 'use' ModuleRef ('as' Identifier)?
-              | 'use' ModuleRef '{' ImportItems '}'
-ImportItems ::= ImportItem (',' ImportItem)* ','?
-ImportItem  ::= Identifier ('as' Identifier)?
+Import       ::= 'use' ModuleRef ImportSpec?
+ImportSpec   ::= ('{' ImportItems '}') ('as' AliasList)?
+              |  'as' AliasList
+ImportItems  ::= Identifier (',' Identifier)* ','?
+AliasList    ::= Identifier (',' Identifier)*
 ```
+
+| 语法 | 说明 | 示例 |
+|------|------|------|
+| `use path;` | 导入模块，使用最后部分访问 | `use std.io;` → `io.print` |
+| `use path.{a, b};` | 导入指定项 | `use std.io.{print};` → `print` |
+| `use path as alias;` | 导入并重命名 | `use std.io as io;` → `io.print` |
+| `use path.{i1, i2} as a, b;` | 导入指定项并重命名 | `use std.io.{print, read} as p, r;` → `p`, `r` |
 
 ---
 
@@ -1692,6 +1863,7 @@ result = f(arg2, arg3)
 | v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
 | v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
 | v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
+| v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 新增默认值初始化、内置绑定语法；RFC-004 新增内置绑定、匿名函数绑定 |
 
 ---
 

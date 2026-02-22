@@ -55,6 +55,9 @@
 // 核心模块（词法分析器、解析器、类型系统）
 pub mod core;
 
+// 通用模块系统
+pub mod module;
+
 // 类型检查层
 pub mod typecheck;
 

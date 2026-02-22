@@ -6,11 +6,6 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::typecheck::TypeChecker;
 use crate::frontend::core::type_system::TypeConstraintSolver;
-use crate::util::span::{Position, Span};
-
-fn create_dummy_span() -> Span {
-    Span::new(Position::dummy(), Position::dummy())
-}
 
 /// 测试函数参数类型检查
 #[test]
@@ -401,7 +396,7 @@ fn test_fn_variable_scope() {
 fn test_complex_nested_blocks() {
     // RFC-007: 空参数函数
     let code = r#"
-        outer_func: () -> Int = () => {
+        outer_func: () -> (()-> Int) = () => {
             inner_block: () -> Int = () => {
                 value: Int = 42
                 return value

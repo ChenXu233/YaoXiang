@@ -1,197 +1,379 @@
 //! Standard IO library (YaoXiang)
 //!
 //! This module provides input/output functionality for YaoXiang programs.
-//! All IO functions are generic and support multiple data types.
-//!
-//! Usage:
-//! ```yaoxiang
-//! from std.io import print, println, read_line, read_file, write_file
-//!
-//! // Print values
-//! println("Hello, World!")
-//! println(42)
-//! println(3.14)
-//! println(true)
-//!
-//! // Read input
-//! name = read_line()
-//! println("Hello, " + name)
-//! ```
-//!
-//! Advanced usage:
-//! ```yaoxiang
-//! from std.io import printf, sprintf, fprintf
-//!
-//! // Formatted printing
-//! printf("Value: %d, String: %s\n", 42, "hello")
-//!
-//! // Buffer operations
-//! buffer = sprintf("Formatted: %x", 255)
-//! println(buffer)
-//! ```
+//! All IO functions are declared as `Native("std.io.xxx")` bindings, meaning
+//! their actual implementations live in the FFI registry.
+
+use std::io::BufRead;
+
+use crate::backends::common::{RuntimeValue, HeapValue};
+use crate::backends::ExecutorError;
+use crate::std::{NativeContext, NativeExport, StdModule};
 
 // ============================================================================
-// Basic Printing Functions
+// IoModule - StdModule Implementation
 // ============================================================================
 
-/// Generic print function - prints a value without newline
-/// Supports all types that implement Display
-/// Usage: print<T>(value: T) -> Void
-pub fn _print() {}
+/// IO module implementation.
+pub struct IoModule;
 
-/// Generic println function - prints a value with newline
-/// Supports all types that implement Display
-/// Usage: println<T>(value: T) -> Void
-pub fn _println() {}
+impl Default for IoModule {
+    fn default() -> Self {
+        Self
+    }
+}
 
-/// Print multiple values with custom separator
-/// Usage: print_sep<T>(values: List[T], separator: String) -> Void
-pub fn _print_sep() {}
+impl StdModule for IoModule {
+    fn module_path(&self) -> &str {
+        "std.io"
+    }
 
-/// Print multiple values with default separator (comma-space)
-/// Usage: print_comma<T>(values: List[T]) -> Void
-pub fn _print_comma() {}
+    fn exports(&self) -> Vec<NativeExport> {
+        vec![
+            NativeExport::new("print", "std.io.print", "(...args) -> ()", native_print),
+            NativeExport::new(
+                "println",
+                "std.io.println",
+                "(...args) -> ()",
+                native_println,
+            ),
+            NativeExport::new(
+                "read_line",
+                "std.io.read_line",
+                "() -> String",
+                native_read_line,
+            ),
+            NativeExport::new(
+                "read_file",
+                "std.io.read_file",
+                "(path: String) -> String",
+                native_read_file,
+            ),
+            NativeExport::new(
+                "write_file",
+                "std.io.write_file",
+                "(path: String, content: String) -> Bool",
+                native_write_file,
+            ),
+            NativeExport::new(
+                "append_file",
+                "std.io.append_file",
+                "(path: String, content: String) -> Bool",
+                native_append_file,
+            ),
+            NativeExport::new(
+                "format_fallback",
+                "std.io.format_fallback",
+                "(value, type_name: String) -> String",
+                native_format_fallback,
+            ),
+        ]
+    }
+}
 
-/// Print with indentation level
-/// Usage: print_indented<T>(value: T, indent: Int) -> Void
-pub fn _print_indented() {}
-
-/// Print with timestamp
-/// Usage: print_time<T>(value: T) -> Void
-pub fn _print_time() {}
-
-/// Pretty print complex types (List, Dict, etc.)
-/// Usage: pprint<T>(value: T, depth: Int) -> Void
-pub fn _pprint() {}
-
-/// Tabular printing for lists of records
-/// Usage: print_table(headers: List[String], rows: List[List[String]]) -> Void
-pub fn _print_table() {}
-
-/// Progress bar for loops
-/// Usage: progress_bar(current: Int, total: Int, width: Int) -> Void
-pub fn _progress_bar() {}
-
-/// Color print support
-/// Usage: print_color(color: String, value: Any) -> Void
-pub fn _print_color() {}
-
-/// Print with log levels
-/// Usage: log(level: String, message: String) -> Void
-pub fn _log() {}
-
-// ============================================================================
-// Formatted Printing
-// ============================================================================
-
-/// Formatted print using printf-style format string
-/// Supports %d, %s, %f, %x, %b format specifiers
-/// Usage: printf(format: String, args: List[Any]) -> Void
-pub fn _printf() {}
-
-/// Formatted print to stderr
-/// Usage: eprintf(format: String, args: List[Any]) -> Void
-pub fn _eprintf() {}
-
-/// Formatted print to file
-/// Usage: fprintf(file: String, format: String, args: List[Any]) -> Void
-pub fn _fprintf() {}
-
-/// Format string using sprintf-style formatting
-/// Returns formatted string
-/// Usage: sprintf(format: String, args: List[Any]) -> String
-pub fn _sprintf() {}
-
-/// Print binary data in hex format
-/// Usage: print_hex(data: Bytes) -> Void
-pub fn _print_hex() {}
+/// Singleton instance for std::io module.
+pub const IO_MODULE: IoModule = IoModule;
 
 // ============================================================================
-// Input Functions
+// Native Function Implementations
 // ============================================================================
 
-/// Read a line from standard input
-/// Returns the input as a String
-/// Usage: read_line() -> String
-pub fn _read_line() {}
+/// Native implementation: print (without newline)
+fn native_print(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let output = args
+        .iter()
+        .map(|arg| format_runtime_value(arg, ctx.heap))
+        .collect::<Vec<String>>()
+        .join(" ");
+    print!("{}", output);
+    Ok(RuntimeValue::Unit)
+}
 
-/// Read multiple lines from stdin
-/// Returns a List of lines
-/// Usage: read_lines(count: Int) -> List[String]
-pub fn _read_lines() {}
+/// Native implementation: println (with newline)
+fn native_println(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let output = args
+        .iter()
+        .map(|arg| format_runtime_value(arg, ctx.heap))
+        .collect::<Vec<String>>()
+        .join(" ");
+    println!("{}", output);
+    Ok(RuntimeValue::Unit)
+}
 
-/// Interactive prompt with default value
-/// Usage: prompt(message: String, default: String) -> String
-pub fn _prompt() {}
+/// Format a runtime value, resolving heap references for List/Dict/Tuple
+fn format_runtime_value(
+    val: &RuntimeValue,
+    heap: &crate::backends::common::Heap,
+) -> String {
+    // 使用公共格式化函数，prefix 为空
+    format_value_with_prefix(val, heap, "")
+}
 
-/// Secure input (hidden password)
-/// Usage: read_password() -> String
-pub fn _read_password() {}
+/// 公共格式化函数（模块内共享）：格式化值，可选添加类型前缀
+/// 如果 prefix 为空，返回基础表示（如 "123"）
+/// 如果 prefix 不为空，返回带前缀的表示（如 "int(123)"）
+pub(crate) fn format_value_with_prefix(
+    val: &RuntimeValue,
+    heap: &crate::backends::common::Heap,
+    prefix: &str,
+) -> String {
+    let prefix_fn = |s: &str| {
+        if prefix.is_empty() {
+            s.to_string()
+        } else {
+            format!("{}({})", prefix, s)
+        }
+    };
 
-// ============================================================================
-// File Operations
-// ============================================================================
+    match val {
+        RuntimeValue::Unit => prefix_fn("unit"),
+        RuntimeValue::Bool(b) => prefix_fn(&b.to_string()),
+        RuntimeValue::Int(i) => prefix_fn(&i.to_string()),
+        RuntimeValue::Float(f) => {
+            let s = if f.fract() == 0.0 {
+                format!("{:.1}", f)
+            } else {
+                f.to_string()
+            };
+            prefix_fn(&s)
+        }
+        RuntimeValue::Char(c) => {
+            let s = char::from_u32(*c)
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| format!("U+{:04X}", c));
+            prefix_fn(&s)
+        }
+        RuntimeValue::String(s) => {
+            // String 类型不添加前缀，直接返回内容
+            s.to_string()
+        }
+        RuntimeValue::Bytes(b) => prefix_fn(&format!("bytes[{}]", b.len())),
+        RuntimeValue::Tuple(handle) => {
+            if let Some(HeapValue::Tuple(items)) = heap.get(*handle) {
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .collect();
+                let s = format!("({})", items_str.join(", "));
+                prefix_fn(&s)
+            } else {
+                prefix_fn(&format!("tuple@{}", handle.raw()))
+            }
+        }
+        RuntimeValue::Array(handle) => {
+            if let Some(HeapValue::Array(arr)) = heap.get(*handle) {
+                let items_str: Vec<String> = arr
+                    .iter()
+                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .collect();
+                let s = format!("[{}]", items_str.join(", "));
+                prefix_fn(&s)
+            } else {
+                prefix_fn(&format!("array@{}", handle.raw()))
+            }
+        }
+        RuntimeValue::List(handle) => {
+            if let Some(HeapValue::List(items)) = heap.get(*handle) {
+                let items_str: Vec<String> = items
+                    .iter()
+                    .map(|item| format_value_with_prefix(item, heap, ""))
+                    .collect();
+                let s = format!("[{}]", items_str.join(", "));
+                prefix_fn(&s)
+            } else {
+                prefix_fn(&format!("list@{}", handle.raw()))
+            }
+        }
+        RuntimeValue::Dict(handle) => {
+            if let Some(HeapValue::Dict(entries)) = heap.get(*handle) {
+                let entries_str: Vec<String> = entries
+                    .iter()
+                    .map(|(k, v)| {
+                        format!(
+                            "{}: {}",
+                            format_value_with_prefix(k, heap, ""),
+                            format_value_with_prefix(v, heap, "")
+                        )
+                    })
+                    .collect();
+                let s = format!("{{{}}}", entries_str.join(", "));
+                prefix_fn(&s)
+            } else {
+                prefix_fn(&format!("dict@{}", handle.raw()))
+            }
+        }
+        RuntimeValue::Struct { fields, .. } => prefix_fn(&format!("struct@{}", fields.raw())),
+        RuntimeValue::Enum { variant_id, .. } => prefix_fn(&format!("enum::v{}", variant_id)),
+        RuntimeValue::Function(_) => prefix_fn("function"),
+        RuntimeValue::Arc(inner) => prefix_fn(&format!("arc({})", inner)),
+        RuntimeValue::Weak(_) => prefix_fn("weak(...)"),
+        RuntimeValue::Async(_) => prefix_fn("async"),
+        RuntimeValue::Ptr { kind, address, .. } => {
+            prefix_fn(&format!("ptr({:?}, {:#x})", kind, address))
+        }
+    }
+}
 
-/// Read entire file as String
-/// Returns empty string if file doesn't exist or can't be read
-/// Usage: read_file(path: String) -> String
-pub fn _read_file() {}
+/// Native implementation: format_fallback
+/// Formats a value using the fallback type info (used when type doesn't implement Stringable)
+fn native_format_fallback(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.is_empty() {
+        return Ok(RuntimeValue::String("()".into()));
+    }
 
-/// Read file as list of lines
-/// Returns empty list if file doesn't exist
-/// Usage: read_file_lines(path: String) -> List[String]
-pub fn _read_file_lines() {}
+    let type_name = args
+        .get(1)
+        .and_then(|v| match v {
+            RuntimeValue::String(s) => Some(s.as_ref()),
+            _ => None,
+        })
+        .unwrap_or("unknown");
 
-/// Write content to file
-/// Returns true if successful, false otherwise
-/// Usage: write_file(path: String, content: String) -> Bool
-pub fn _write_file() {}
+    let formatted = format_value_with_prefix(&args[0], ctx.heap, type_name);
 
-/// Append content to file
-/// Returns true if successful, false otherwise
-/// Usage: append_file(path: String, content: String) -> Bool
-pub fn _append_file() {}
+    Ok(RuntimeValue::String(formatted.into()))
+}
 
-// ============================================================================
-// Terminal Control
-// ============================================================================
+/// Native implementation: read_line
+fn native_read_line(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    stdin
+        .lock()
+        .read_line(&mut line)
+        .map_err(|e| ExecutorError::Runtime(format!("Failed to read line: {}", e)))?;
+    // Remove trailing newline
+    if line.ends_with('\n') {
+        line.pop();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+    }
+    Ok(RuntimeValue::String(line.into()))
+}
 
-/// Get terminal size
-/// Usage: terminal_size() -> (Int, Int)
-pub fn _terminal_size() {}
+/// Native implementation: read_file
+fn native_read_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.is_empty() {
+        return Err(ExecutorError::Runtime(
+            "read_file expects 1 argument (path: String)".to_string(),
+        ));
+    }
+    let path = match &args[0] {
+        RuntimeValue::String(s) => s.to_string(),
+        other => {
+            return Err(ExecutorError::Type(format!(
+                "read_file expects String argument, got {:?}",
+                other.value_type(None)
+            )));
+        }
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(content) => Ok(RuntimeValue::String(content.into())),
+        Err(e) => Err(ExecutorError::Runtime(format!(
+            "Failed to read file '{}': {}",
+            path, e
+        ))),
+    }
+}
 
-/// Clear screen
-/// Usage: clear_screen() -> Void
-pub fn _clear_screen() {}
+/// Native implementation: write_file
+fn native_write_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    if args.len() < 2 {
+        return Err(ExecutorError::Runtime(
+            "write_file expects 2 arguments (path: String, content: String)".to_string(),
+        ));
+    }
+    let path = match &args[0] {
+        RuntimeValue::String(s) => s.to_string(),
+        other => {
+            return Err(ExecutorError::Type(format!(
+                "write_file expects String path, got {:?}",
+                other.value_type(None)
+            )));
+        }
+    };
+    let content = match &args[1] {
+        RuntimeValue::String(s) => s.to_string(),
+        other => {
+            return Err(ExecutorError::Type(format!(
+                "write_file expects String content, got {:?}",
+                other.value_type(None)
+            )));
+        }
+    };
+    match std::fs::write(&path, &content) {
+        Ok(()) => Ok(RuntimeValue::Bool(true)),
+        Err(e) => Err(ExecutorError::Runtime(format!(
+            "Failed to write file '{}': {}",
+            path, e
+        ))),
+    }
+}
 
-/// Move cursor to position
-/// Usage: cursor_move(x: Int, y: Int) -> Void
-pub fn _cursor_move() {}
+/// Native implementation: append_file
+fn native_append_file(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    use std::io::Write;
 
-/// Save cursor position
-/// Usage: cursor_save() -> Void
-pub fn _cursor_save() {}
-
-/// Restore cursor position
-/// Usage: cursor_restore() -> Void
-pub fn _cursor_restore() {}
-
-// ============================================================================
-// Advanced Features
-// ============================================================================
-
-/// Benchmark timing
-/// Usage: time_function<T>(name: String, func: Fn() -> T) -> T
-pub fn _time_function() {}
-
-/// Capture print output
-/// Usage: capture_print<T>(func: Fn() -> T) -> (T, String)
-pub fn _capture_print() {}
-
-/// Print to multiple outputs simultaneously
-/// Usage: print_multi(outputs: List[String], value: Any) -> Void
-pub fn _print_multi() {}
-
-/// Flush output streams
-/// Usage: flush_all() -> Void
-pub fn _flush_all() {}
+    if args.len() < 2 {
+        return Err(ExecutorError::Runtime(
+            "append_file expects 2 arguments (path: String, content: String)".to_string(),
+        ));
+    }
+    let path = match &args[0] {
+        RuntimeValue::String(s) => s.to_string(),
+        other => {
+            return Err(ExecutorError::Type(format!(
+                "append_file expects String path, got {:?}",
+                other.value_type(None)
+            )));
+        }
+    };
+    let content = match &args[1] {
+        RuntimeValue::String(s) => s.to_string(),
+        other => {
+            return Err(ExecutorError::Type(format!(
+                "append_file expects String content, got {:?}",
+                other.value_type(None)
+            )));
+        }
+    };
+    match std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&path)
+    {
+        Ok(mut file) => match file.write_all(content.as_bytes()) {
+            Ok(()) => Ok(RuntimeValue::Bool(true)),
+            Err(e) => Err(ExecutorError::Runtime(format!(
+                "Failed to append to file '{}': {}",
+                path, e
+            ))),
+        },
+        Err(e) => Err(ExecutorError::Runtime(format!(
+            "Failed to open file '{}' for appending: {}",
+            path, e
+        ))),
+    }
+}

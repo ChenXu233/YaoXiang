@@ -52,21 +52,9 @@ pub struct CodegenContext {
     config: CodegenConfig,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CodegenConfig {
-    enable_optimizations: bool,
     generate_debug_info: bool,
-    enable_inline_cache: bool,
-}
-
-impl Default for CodegenConfig {
-    fn default() -> Self {
-        CodegenConfig {
-            enable_optimizations: true,
-            generate_debug_info: false,
-            enable_inline_cache: true,
-        }
-    }
 }
 
 /// 代码生成错误
@@ -262,11 +250,6 @@ impl CodegenContext {
             Type::String => MonoType::String,
             Type::Bool => MonoType::Bool,
             Type::Void => MonoType::Void,
-            Type::List(elem) => MonoType::List(Box::new(self.type_from_ast(elem))),
-            Type::Dict(key, value) => MonoType::Dict(
-                Box::new(self.type_from_ast(key)),
-                Box::new(self.type_from_ast(value)),
-            ),
             Type::Tuple(types) => {
                 MonoType::Tuple(types.iter().map(|t| self.type_from_ast(t)).collect())
             }
@@ -279,6 +262,14 @@ impl CodegenContext {
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
             },
+            Type::Generic { name, args } => MonoType::TypeRef(format!(
+                "{}<{}>",
+                name,
+                args.iter()
+                    .map(|t| self.type_from_ast(t).type_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
             _ => MonoType::Void,
         }
     }

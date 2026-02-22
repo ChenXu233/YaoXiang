@@ -85,12 +85,15 @@ fn parse_loop_label(state: &mut crate::frontend::core::parser::ParserState<'_>) 
     }
 }
 
-/// Parse for loop statement: `for item in iterable { body }`
+/// Parse for loop statement: `for [mut] item in iterable { body }`
 pub fn parse_for_stmt(
     state: &mut crate::frontend::core::parser::ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
     state.bump(); // consume 'for'
+
+    // Check for 'mut' keyword after 'for'
+    let var_mut = state.skip(&TokenKind::KwMut);
 
     // Parse loop variable
     let var = match state.current().map(|t| &t.kind) {
@@ -134,6 +137,7 @@ pub fn parse_for_stmt(
     Some(Stmt {
         kind: StmtKind::For {
             var,
+            var_mut,
             iterable,
             body: Box::new(body),
             label: None,

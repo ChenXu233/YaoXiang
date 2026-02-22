@@ -4,10 +4,11 @@
 
 use crate::backends::common::Opcode;
 use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
+use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// IR 到字节码翻译器
 ///
@@ -23,16 +24,49 @@ pub struct Translator {
     operand_resolver: OperandResolver,
     /// 当前函数
     current_function: Option<FunctionIR>,
+    /// 已注册的 native 函数名集合
+    native_functions: HashSet<String>,
+    /// 闭包函数的索引偏移量（用于计算闭包函数在模块中的正确索引）
+    closure_function_offset: Option<usize>,
+    /// 函数名到索引的映射
+    function_name_to_idx: Option<HashMap<String, usize>>,
 }
 
 impl Translator {
     /// 创建新的翻译器
     pub fn new() -> Self {
+        let mut native_functions = HashSet::new();
+
+        // 从 std 模块自动发现 native 函数
+        for (short_name, native_name) in crate::std::all_native_names() {
+            native_functions.insert(native_name.to_string());
+            native_functions.insert(short_name.to_string());
+        }
+
         Translator {
             emitter: Emitter::new(),
             operand_resolver: OperandResolver::new(),
             current_function: None,
+            native_functions,
+            closure_function_offset: None,
+            function_name_to_idx: None,
         }
+    }
+
+    /// 注册一个 native 函数名
+    pub fn register_native(
+        &mut self,
+        name: &str,
+    ) {
+        self.native_functions.insert(name.to_string());
+    }
+
+    /// 检查函数是否是 native 函数
+    pub fn is_native(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.native_functions.contains(name)
     }
 
     /// 添加常量（用于测试）
@@ -48,6 +82,29 @@ impl Translator {
         &mut self,
         module: &ModuleIR,
     ) -> Result<TranslatorOutput, CodegenError> {
+        // 注册用户声明的 native 函数绑定
+        // 这些来自 `my_func: Type = Native("symbol")` 声明
+        for binding in &module.native_bindings {
+            // 注册函数名（使调用点生成 CallNative）
+            self.register_native(binding.func_name());
+            // 也注册 native symbol（若与函数名不同）
+            if binding.func_name() != binding.native_symbol() {
+                self.register_native(binding.native_symbol());
+            }
+        }
+
+        // 建立函数名到索引的映射
+        let mut function_name_to_idx: HashMap<String, usize> = HashMap::new();
+        for (idx, func) in module.functions.iter().enumerate() {
+            function_name_to_idx.insert(func.name.clone(), idx);
+        }
+
+        // 注册闭包函数的索引偏移量（闭包函数从 module.functions.len() 开始）
+        // 这样 translate_make_closure 就可以正确计算闭包函数的索引
+        let closure_offset = module.functions.len();
+        self.closure_function_offset = Some(closure_offset);
+        self.function_name_to_idx = Some(function_name_to_idx);
+
         let mut code_section = super::CodeSection {
             functions: Vec::new(),
         };
@@ -152,15 +209,6 @@ impl Translator {
         }
     }
 
-    /// 回填跳转偏移（保留旧签名以兼容）
-    fn backfill_jumps(
-        &self,
-        _instructions: &[BytecodeInstruction],
-        _ir_to_bytecode_map: &HashMap<usize, usize>,
-    ) -> Result<(), CodegenError> {
-        Ok(())
-    }
-
     /// 翻译单条 IR 指令
     fn translate_instruction(
         &mut self,
@@ -187,8 +235,12 @@ impl Translator {
             Sar { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sar, dst, lhs, rhs),
             Neg { dst, src } => self.translate_unary_op(Opcode::I64Neg, dst, src),
 
-            Eq { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Eq, dst, lhs, rhs),
-            Ne { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Ne, dst, lhs, rhs),
+            Eq { dst, lhs, rhs } => {
+                self.translate_compare(Opcode::I64Eq, Opcode::I64Ne, dst, lhs, rhs)
+            }
+            Ne { dst, lhs, rhs } => {
+                self.translate_compare(Opcode::I64Ne, Opcode::I64Eq, dst, lhs, rhs)
+            }
             Lt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Lt, dst, lhs, rhs),
             Le { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Le, dst, lhs, rhs),
             Gt { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Gt, dst, lhs, rhs),
@@ -218,7 +270,9 @@ impl Translator {
                 dst, field, src, ..
             } => self.translate_store_field(dst, *field, src),
             LoadIndex { dst, src, index } => self.translate_load_index(dst, src, index),
-            StoreIndex { .. } => self.translate_store_index(),
+            StoreIndex {
+                dst, index, src, ..
+            } => self.translate_store_index(dst, index, src),
 
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
@@ -227,7 +281,12 @@ impl Translator {
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
-            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, *func),
+            CreateStruct {
+                dst,
+                type_name,
+                fields,
+            } => self.translate_create_struct(dst, type_name, fields),
+            MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
             Drop(operand) => self.translate_drop(operand),
 
             Push(operand) => self.translate_push(operand),
@@ -238,6 +297,7 @@ impl Translator {
             ArcNew { dst, src } => self.translate_arc_new(dst, src),
             ArcClone { dst, src } => self.translate_arc_clone(dst, src),
             ArcDrop(operand) => self.translate_arc_drop(operand),
+            ShareRef { dst, src } => self.translate_share_ref(dst, src),
 
             StringLength { dst, src } => self.translate_string_length(dst, src),
             StringConcat { dst, lhs, rhs } => self.translate_string_concat(dst, lhs, rhs),
@@ -345,6 +405,20 @@ impl Translator {
         }
     }
 
+    /// 翻译比较操作，统一使用整数比较指令
+    /// 注意：实际类型检查在运行时通过 executor.rs 的 exec_compare 完成
+    fn translate_compare(
+        &mut self,
+        eq_opcode: Opcode,
+        _ne_opcode: Opcode,
+        dst: &Operand,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        // 统一使用整数比较指令，运行时通过 exec_compare 根据实际类型执行正确比较
+        self.translate_binary_op(eq_opcode, dst, lhs, rhs)
+    }
+
     fn translate_unary_op(
         &mut self,
         opcode: Opcode,
@@ -411,6 +485,20 @@ impl Translator {
         } else {
             0
         };
+
+        // 检查是否是 native 函数调用
+        let func_name = match func {
+            Operand::Const(ConstValue::String(name)) => Some(name.clone()),
+            _ => None,
+        };
+
+        // 命名空间解析：如果函数名不是已知的 native 函数，
+        // 尝试通过短名称映射获取完整名称
+        let is_native = func_name
+            .as_ref()
+            .map(|n| self.is_native(n))
+            .unwrap_or(false);
+
         let func_id = match func {
             Operand::Const(ConstValue::Int(i)) => *i as u32,
             Operand::Const(ConstValue::String(name)) => {
@@ -432,7 +520,15 @@ impl Translator {
             let arg_reg = self.operand_resolver.to_reg(arg)?;
             operands.extend_from_slice(&(arg_reg as u16).to_le_bytes());
         }
-        Ok(BytecodeInstruction::new(Opcode::CallStatic, operands))
+
+        // 根据是否是 native 函数选择操作码
+        let opcode = if is_native {
+            Opcode::CallNative
+        } else {
+            Opcode::CallStatic
+        };
+
+        Ok(BytecodeInstruction::new(opcode, operands))
     }
 
     fn translate_call_virt(
@@ -466,7 +562,7 @@ impl Translator {
     fn translate_call_dyn(
         &mut self,
         dst: &Option<Operand>,
-        _func: &Operand,
+        func: &Operand,
         args: &[Operand],
     ) -> Result<BytecodeInstruction, CodegenError> {
         let dst_reg = if let Some(d) = dst {
@@ -474,17 +570,24 @@ impl Translator {
         } else {
             0
         };
-        let func_idx = self.emitter.add_constant(ConstValue::Int(0));
-        let func_handle = func_idx as u16;
-        let base_arg_reg = if let Some(first_arg) = args.first() {
-            self.operand_resolver.to_reg(first_arg)?
-        } else {
-            0
-        };
-        let mut operands = vec![dst_reg];
-        operands.extend_from_slice(&func_handle.to_le_bytes());
-        operands.push(base_arg_reg);
-        operands.push(args.len() as u8);
+        // func 是闭包寄存器
+        let obj_reg = self.operand_resolver.to_reg(func)?;
+
+        // 将所有参数寄存器添加到操作数列表
+        let mut arg_regs: Vec<Reg> = Vec::new();
+        for arg in args {
+            let reg = self.operand_resolver.to_reg(arg)? as u16;
+            arg_regs.push(Reg(reg));
+        }
+
+        // name_idx 设为 0，表示闭包调用
+        let mut operands = vec![dst_reg, obj_reg];
+        operands.extend_from_slice(&0u16.to_le_bytes());
+        for reg in &arg_regs {
+            operands.push(reg.0 as u8);
+        }
+        operands.push(arg_regs.len() as u8);
+
         Ok(BytecodeInstruction::new(Opcode::CallDyn, operands))
     }
 
@@ -583,10 +686,18 @@ impl Translator {
         ))
     }
 
-    fn translate_store_index(&mut self) -> Result<BytecodeInstruction, CodegenError> {
+    fn translate_store_index(
+        &mut self,
+        dst: &Operand,
+        index: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let index_reg = self.operand_resolver.to_reg(index)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
             Opcode::StoreElement,
-            vec![0, 0, 0],
+            vec![dst_reg, index_reg, src_reg],
         ))
     }
 
@@ -614,13 +725,43 @@ impl Translator {
         ))
     }
 
+    /// 翻译 CreateStruct 指令
+    /// 格式: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count)
+    fn translate_create_struct(
+        &mut self,
+        dst: &Operand,
+        type_name: &str,
+        fields: &[Operand],
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let name_idx = self
+            .emitter
+            .add_constant(ConstValue::String(type_name.to_string())) as u32;
+        let mut operands = vec![dst_reg];
+        operands.extend_from_slice(&name_idx.to_le_bytes());
+        operands.push(fields.len() as u8);
+        for field in fields {
+            let field_reg = self.operand_resolver.to_reg(field)?;
+            operands.extend_from_slice(&(field_reg as u16).to_le_bytes());
+        }
+        Ok(BytecodeInstruction::new(Opcode::CreateStruct, operands))
+    }
+
     fn translate_make_closure(
         &mut self,
         dst: &Operand,
-        func: usize,
+        func_name: &str,
     ) -> Result<BytecodeInstruction, CodegenError> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
-        let func_id = func as u32;
+
+        // 通过函数名查找索引
+        let func_id = if let Some(ref name_to_idx) = self.function_name_to_idx {
+            name_to_idx.get(func_name).copied().unwrap_or(0) as u32
+        } else {
+            // 如果没有映射，使用 0（回退）
+            0
+        };
+
         let mut operands = vec![dst_reg];
         operands.extend_from_slice(&func_id.to_le_bytes());
         operands.push(0);
@@ -683,6 +824,20 @@ impl Translator {
     ) -> Result<BytecodeInstruction, CodegenError> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
+    }
+
+    fn translate_share_ref(
+        &mut self,
+        dst: &Operand,
+        src: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        // ShareRef: 用于线程本地共享，需要类型是 Sync
+        // TODO: 实现完整的 ShareRef 操作码支持
+        let dst_reg = self.operand_resolver.to_reg(dst)?;
+        let src_reg = self.operand_resolver.to_reg(src)?;
+        // 临时实现：使用 Nop，后续需要添加专门的 Opcode
+        let _ = src_reg;
+        Ok(BytecodeInstruction::new(Opcode::Nop, vec![dst_reg]))
     }
 
     fn translate_string_length(

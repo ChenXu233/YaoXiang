@@ -16,7 +16,6 @@
 
 #![doc(html_root_url = "https://docs.rs/yaoxiang")]
 #![warn(rust_2018_idioms)]
-#![allow(dead_code)]
 
 // Public modules
 pub mod backends;
@@ -444,5 +443,169 @@ fn dump_instructions(
                 );
             }
         }
+    }
+}
+
+// =============================================================================
+// FFI End-to-End Tests
+// =============================================================================
+
+#[cfg(test)]
+mod ffi_tests {
+    use super::*;
+    use crate::backends::common::{RuntimeValue, Heap};
+    use crate::backends::interpreter::ffi::FfiRegistry;
+    use crate::std::NativeContext;
+
+    /// Test compiling and running YaoXiang source with std.io functions
+    #[test]
+    fn test_e2e_std_io_compile_and_run() {
+        // This test verifies the complete flow:
+        // 1. Parse YaoXiang source with std.io calls
+        // 2. Compile to bytecode (including CallNative generation)
+        // 3. Execute with FFI registry
+
+        // Test 1: Verify std.io functions are registered in FFI registry
+        let registry = FfiRegistry::with_std();
+        assert!(registry.has("std.io.println"));
+        assert!(registry.has("std.io.print"));
+        assert!(registry.has("std.io.read_file"));
+        assert!(registry.has("std.io.write_file"));
+        assert!(registry.has("std.io.append_file"));
+
+        // Test 2: Short names are NOT registered - users must use `use std.io`
+        assert!(!registry.has("println"));
+        assert!(!registry.has("print"));
+
+        // Test 3: Verify FFI call works
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+        let result = registry.call(
+            "std.io.println",
+            &[RuntimeValue::String("FFI test message".into())],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::Unit);
+
+        // Test 4: Verify file operations
+        let test_path = "test_std_io_e2e.txt";
+        let mut heap2 = Heap::new();
+        let mut ctx2 = NativeContext::new(&mut heap2);
+        let write_result = registry.call(
+            "std.io.write_file",
+            &[
+                RuntimeValue::String(test_path.into()),
+                RuntimeValue::String("Hello, YaoXiang!".into()),
+            ],
+            &mut ctx2,
+        );
+        assert!(write_result.is_ok());
+
+        let mut heap3 = Heap::new();
+        let mut ctx3 = NativeContext::new(&mut heap3);
+        let read_result = registry.call(
+            "std.io.read_file",
+            &[RuntimeValue::String(test_path.into())],
+            &mut ctx3,
+        );
+        assert!(read_result.is_ok());
+        if let RuntimeValue::String(content) = read_result.unwrap() {
+            assert_eq!(content.to_string(), "Hello, YaoXiang!");
+        } else {
+            panic!("Expected String");
+        }
+
+        // Cleanup
+        let _ = fs::remove_file(test_path);
+    }
+
+    /// Test user-defined native function binding flow
+    #[test]
+    fn test_e2e_user_native_function() {
+        // Test user can register custom native functions
+        let mut registry = FfiRegistry::new();
+
+        // Register a custom function
+        registry.register("my_add", |args, _ctx| {
+            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+            Ok(RuntimeValue::Int(a + b))
+        });
+
+        // Verify registration
+        assert!(registry.has("my_add"));
+
+        // Call the function
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+        let result = registry.call(
+            "my_add",
+            &[RuntimeValue::Int(10), RuntimeValue::Int(32)],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::Int(42));
+    }
+
+    /// Test native function not found error
+    #[test]
+    fn test_e2e_nonexistent_native_function() {
+        let registry = FfiRegistry::new();
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+        let result = registry.call("nonexistent.function", &[], &mut ctx);
+        assert!(result.is_err());
+    }
+
+    /// Test std.string.format function
+    #[test]
+    fn test_e2e_string_format() {
+        let registry = FfiRegistry::with_std();
+        let mut heap = Heap::new();
+        let mut ctx = NativeContext::new(&mut heap);
+
+        // Test basic formatting
+        let result = registry.call(
+            "std.string.format",
+            &[
+                RuntimeValue::String("Item {0}".into()),
+                RuntimeValue::String("hello".into()),
+            ],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("Item hello".into()));
+
+        // Test zero-padding: {0:03}
+        let result = registry.call(
+            "std.string.format",
+            &[RuntimeValue::String("{0:03}".into()), RuntimeValue::Int(1)],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("001".into()));
+
+        // Test zero-padding: {0:03} with 12
+        let result = registry.call(
+            "std.string.format",
+            &[RuntimeValue::String("{0:03}".into()), RuntimeValue::Int(12)],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("012".into()));
+
+        // Test multiple args
+        let result = registry.call(
+            "std.string.format",
+            &[
+                RuntimeValue::String("{0} - {1}".into()),
+                RuntimeValue::String("name".into()),
+                RuntimeValue::Int(42),
+            ],
+            &mut ctx,
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), RuntimeValue::String("name - 42".into()));
     }
 }

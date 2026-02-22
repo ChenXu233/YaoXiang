@@ -188,6 +188,9 @@ pub enum Opcode {
     /// List with capacity
     NewListWithCap = 0x7A,
 
+    /// Create struct instance
+    CreateStruct = 0x79,
+
     /// Arc operations
     ArcNew = 0x7B,
     ArcClone = 0x7C,
@@ -219,6 +222,9 @@ pub enum Opcode {
 
     /// Close upvalue
     CloseUpvalue = 0x86,
+
+    /// Native function call (FFI)
+    CallNative = 0x87,
 
     // =====================
     // String Operations (0x90-0x9F)
@@ -353,6 +359,7 @@ impl Opcode {
             Opcode::LoadElement => "LoadElement",
             Opcode::StoreElement => "StoreElement",
             Opcode::NewListWithCap => "NewListWithCap",
+            Opcode::CreateStruct => "CreateStruct",
             Opcode::ArcNew => "ArcNew",
             Opcode::ArcClone => "ArcClone",
             Opcode::ArcDrop => "ArcDrop",
@@ -365,6 +372,7 @@ impl Opcode {
             Opcode::LoadUpvalue => "LoadUpvalue",
             Opcode::StoreUpvalue => "StoreUpvalue",
             Opcode::CloseUpvalue => "CloseUpvalue",
+            Opcode::CallNative => "CallNative",
             Opcode::StringLength => "StringLength",
             Opcode::StringConcat => "StringConcat",
             Opcode::StringEqual => "StringEqual",
@@ -434,7 +442,7 @@ impl Opcode {
     pub fn is_call_op(&self) -> bool {
         matches!(
             self,
-            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn
+            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn | Opcode::CallNative
         )
     }
 
@@ -577,6 +585,9 @@ impl Opcode {
             | Opcode::SetField
             | Opcode::NewListWithCap => 3,
 
+            // Variable operands (like calls)
+            Opcode::CreateStruct => 5,
+
             // 4 operands
             Opcode::LoopStart
             | Opcode::TailCall
@@ -588,7 +599,7 @@ impl Opcode {
             | Opcode::StringGetChar => 4,
 
             // 5 operands (function calls)
-            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn => 5,
+            Opcode::CallStatic | Opcode::CallVirt | Opcode::CallDyn | Opcode::CallNative => 5,
 
             // Default
             _ => 0,
@@ -641,6 +652,7 @@ impl TryFrom<u8> for Opcode {
             0x77 => Ok(Opcode::LoadElement),
             0x78 => Ok(Opcode::StoreElement),
             0x7A => Ok(Opcode::NewListWithCap),
+            0x79 => Ok(Opcode::CreateStruct),
             0x7B => Ok(Opcode::ArcNew),
             0x7C => Ok(Opcode::ArcClone),
             0x7D => Ok(Opcode::ArcDrop),
@@ -653,6 +665,7 @@ impl TryFrom<u8> for Opcode {
             0x84 => Ok(Opcode::LoadUpvalue),
             0x85 => Ok(Opcode::StoreUpvalue),
             0x86 => Ok(Opcode::CloseUpvalue),
+            0x87 => Ok(Opcode::CallNative),
             0x90 => Ok(Opcode::StringLength),
             0x91 => Ok(Opcode::StringConcat),
             0x92 => Ok(Opcode::StringEqual),

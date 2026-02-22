@@ -294,6 +294,7 @@ impl ParserState<'_> {
             Expr::Var(name, span) => Some(vec![Param {
                 name: name.clone(),
                 ty: None,
+                is_mut: false,
                 span: *span,
             }]),
             // Empty tuple: () => expr
@@ -306,6 +307,7 @@ impl ParserState<'_> {
                         params.push(Param {
                             name: name.clone(),
                             ty: None,
+                            is_mut: false,
                             span: *span,
                         });
                     } else {

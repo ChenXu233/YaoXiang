@@ -7,7 +7,7 @@ title: RFC-004：柯里化方法的多位置联合绑定设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-02-12（与 RFC-010 统一语法对齐）
+> **最后更新**: 2026-02-18（新增内置绑定、后置绑定语法）
 
 ## 摘要
 
@@ -166,6 +166,35 @@ Point.transform = transform[1, 2]      # 绑定到第1,2参数
 类型     ::= 标识符 (泛型参数)?
 ```
 
+### 内置绑定
+
+绑定可以直接写在类型定义体内，无需单独的绑定语句：
+
+```yaoxiang
+# 方式1：在类型定义体内直接绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance = distance[0]           # 绑定到位置0
+}
+
+# 方式2：匿名函数 + 位置绑定
+Point: Type = {
+    x: Float = 0,
+    y: Float = 0,
+    distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
+        dx = a.x - b.x
+        dy = a.y - b.y
+        return (dx * dx + dy * dy).sqrt()
+    })
+}
+# 语法：((params) => body)[position]
+```
+
+**柯里化语义**：
+- 绑定 `distance = distance[0]` 时，原函数签名 `(a: Point, b: Point) -> Float`
+- 生成的 method 签名：`b: Point -> Float`（第0位由调用者填充）
+
 ### 使用示例
 
 ```yaoxiang
@@ -258,90 +287,6 @@ List.range: [T](self: List[T]) -> (T, T) = min_max[1]
 
 ### 编译器实现
 
-#### 绑定解析算法
-
-```rust
-struct Binding {
-    type_name: String,
-    method_name: String,
-    function_name: String,
-    positions: Vec<usize>,      // 绑定位置列表
-    is_partial: bool,           // 是否为部分绑定
-}
-
-fn parse_binding(expr: Expr) -> Binding {
-    // 格式：Type.method = function[positions]
-    // 或：Type.method = function（默认自动查找类型匹配位置）
-
-    let (type_name, method_name) = parse_left_side(expr.left);
-    let (function_name, positions) = parse_right_side(expr.right);
-
-    // 如果没有指定位置，自动查找第一个类型匹配的位置
-    let final_positions = match positions {
-        Some(pos) => normalize_positions(pos),
-        None => auto_find_matching_positions(type_name, function_name),
-    };
-
-    Binding {
-        type_name,
-        method_name,
-        function_name,
-        positions: final_positions,
-        is_partial: has_remaining_params(positions, function_name),
-    }
-}
-
-fn auto_find_matching_positions(type_name: &str, function_name: &str) -> Vec<usize> {
-    // 查找函数签名中第一个匹配 type_name 的位置
-    let func = find_function(function_name);
-
-    for (idx, param) in func.params.iter().enumerate() {
-        if param.type_ == type_name {
-            return vec![idx];
-        }
-    }
-
-    // 如果没找到匹配，返回错误或空向量
-    // 编译器将根据配置决定是报错、警告还是视为工厂函数
-    vec![]
-}
-```
-
-#### 调用代码生成
-
-```rust
-fn generate_method_call(
-    obj_type: Type,
-    method_name: String,
-    args: Vec<Expr>
-) -> Expr {
-    let binding = find_binding(obj_type, method_name);
-    let func = find_function(binding.function_name);
-
-    let param_count = func.params.len();
-    let mut new_args = vec![];
-    let mut user_arg_idx = 0;
-
-    for pos in 0..param_count {
-        if binding.positions.contains(&pos) {
-            // 这个位置由调用者对象（this）提供
-            new_args.push(Expr::This(obj_type));
-        } else {
-            // 这个位置由用户提供的参数填充
-            if user_arg_idx < args.len() {
-                new_args.push(args[user_arg_idx].clone());
-                user_arg_idx += 1;
-            } else {
-                // 参数不足，创建部分应用
-                return Expr::PartialApply(binding, args);
-            }
-        }
-    }
-
-    Expr::Call(binding.function_name, new_args)
-}
-```
-
 ### 类型检查规则
 
 ```rust
@@ -389,7 +334,6 @@ fn check_binding_type_compatibility(
 | 自动匹配 | `Point.transform = transform` | `p.transform(v)` | `transform(p, v)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
 | 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
-| 多位置 | `Point.transform = transform[0, _]` | `p.transform(v)` | `transform(p, v)` |
 | 自动柯里化 | `Point.scale = scale[0, _]` | `p.scale(2.0)` | `scale(p, 2.0)` |
 | 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
 
@@ -435,12 +379,7 @@ fn check_binding_type_compatibility(
    - 基本的类型检查和代码生成
    - 单元测试覆盖
 
-2. **Phase 2: 多位置绑定**（v0.4）
-   - 实现多位置 `[n, m, ...]` 联合绑定
-   - 占位符 `_` 支持
-   - 支持元组解构和部分应用
-
-3. **Phase 3: 高级特性**（v0.5）
+2. **Phase 2: 高级特性**（v0.5）
    - 支持范围语法 `[n..m]`
    - 编译时位置计算优化
 

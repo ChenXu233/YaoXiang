@@ -201,6 +201,7 @@ pub enum Instruction {
         /// Source span for error reporting
         span: Span,
     },
+    // 注意：迭代器协议已通过 Call 指令实现，无需独立的 IR 指令
     Cast {
         dst: Operand,
         src: Operand,
@@ -219,9 +220,17 @@ pub enum Instruction {
         dst: Operand,
         type_id: usize,
     },
+    /// 创建结构体实例
+    /// type_name: 结构体类型名
+    /// fields: 各字段值的操作数（按字段顺序）
+    CreateStruct {
+        dst: Operand,
+        type_name: String,
+        fields: Vec<Operand>,
+    },
     MakeClosure {
         dst: Operand,
-        func: usize,
+        func: String,
         env: Vec<Operand>,
     },
     /// Drop a value (ownership-based cleanup)
@@ -238,6 +247,12 @@ pub enum Instruction {
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
     ArcDrop(Operand),
+    /// Share reference across threads (requires Sync)
+    /// Used for thread-local sharing, requires the type to be Sync
+    ShareRef {
+        dst: Operand,
+        src: Operand,
+    },
     // =====================
     // unsafe 块和裸指针指令
     // =====================
@@ -391,4 +406,15 @@ pub struct ModuleIR {
     pub functions: Vec<FunctionIR>,
     /// 每个函数的可变局部变量索引映射 (function_name -> set of mutable local indices)
     pub mut_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
+    /// 每个函数的循环绑定变量索引映射 (function_name -> set of loop binding local indices)
+    /// 这些变量的 Store 是"绑定"操作，不是"修改"
+    pub loop_binding_locals: std::collections::HashMap<String, std::collections::HashSet<usize>>,
+    /// 每个函数的局部变量名列表 (function_name -> 变量名列表，按索引顺序)
+    pub local_names: std::collections::HashMap<String, Vec<String>>,
+    /// 用户声明的 native 函数绑定 (func_name -> native_symbol)
+    ///
+    /// 当源码中出现 `my_func: (a: Int) -> Int = Native("symbol")` 时，
+    /// IR 生成器会在此记录映射 `"my_func" -> "symbol"`，
+    /// 代码生成器会将这些函数名注册为 native，使调用点生成 `CallNative` 指令。
+    pub native_bindings: Vec<crate::std::ffi::NativeBinding>,
 }

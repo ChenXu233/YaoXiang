@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
+use crate::backends::{
+    Executor, DebuggableExecutor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig,
+};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::middle::bytecode::{
     BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, Label, BinaryOp, CompareOp, FunctionRef,
@@ -14,8 +16,10 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
+use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::util::i18n::MSG;
 use crate::tlog;
+use crate::std::NativeContext;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
@@ -36,6 +40,8 @@ pub struct Interpreter {
     constants: Vec<ConstValue>,
     /// Function table (name -> function)
     functions: HashMap<String, BytecodeFunction>,
+    /// Function table by index (for closure calls via func_id)
+    functions_by_id: Vec<BytecodeFunction>,
     /// Type table
     type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
@@ -44,6 +50,8 @@ pub struct Interpreter {
     config: ExecutorConfig,
     /// Breakpoints
     breakpoints: HashMap<usize, ()>,
+    /// FFI Registry for native function calls
+    ffi: FfiRegistry,
     /// Standard output
     #[allow(dead_code)] // Might be unused if only accessed via write!
     stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
@@ -59,10 +67,12 @@ impl fmt::Debug for Interpreter {
             .field("call_stack", &self.call_stack)
             .field("constants", &self.constants)
             .field("functions", &self.functions)
+            .field("functions_by_id", &self.functions_by_id)
             .field("type_table", &self.type_table)
             .field("state", &self.state)
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
+            .field("ffi", &self.ffi)
             .field(
                 "stdout",
                 &if self.stdout.is_some() {
@@ -94,10 +104,12 @@ impl Interpreter {
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             constants: Vec::new(),
             functions: HashMap::new(),
+            functions_by_id: Vec::new(),
             type_table: Vec::new(),
             state: ExecutionState::default(),
             config,
             breakpoints: HashMap::new(),
+            ffi: FfiRegistry::with_std(),
             stdout: None, // Default to stdout (handled by None check)
         }
     }
@@ -108,6 +120,36 @@ impl Interpreter {
         stdout: std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>,
     ) {
         self.stdout = Some(stdout);
+    }
+
+    /// Get mutable reference to the FFI registry for registering native functions
+    pub fn ffi_registry_mut(&mut self) -> &mut FfiRegistry {
+        &mut self.ffi
+    }
+
+    /// Get reference to the FFI registry
+    pub fn ffi_registry(&self) -> &FfiRegistry {
+        &self.ffi
+    }
+
+    /// Call a YaoXiang function by its FunctionId.
+    /// This is used by native functions (like map/filter/reduce) to invoke closures.
+    pub fn call_function_by_id(
+        &mut self,
+        func_id: crate::backends::common::value::FunctionId,
+        args: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let idx = func_id.0 as usize;
+        if idx >= self.functions_by_id.len() {
+            return Err(ExecutorError::FunctionNotFound(format!(
+                "Function with id {} not found (total functions: {})",
+                idx,
+                self.functions_by_id.len()
+            )));
+        }
+        // Clone the function to avoid borrow issues
+        let func = self.functions_by_id[idx].clone();
+        self.execute_function(&func, args)
     }
 
     /// Push a frame onto the call stack
@@ -128,17 +170,17 @@ impl Interpreter {
     }
 
     /// Get the current frame
-    fn current_frame(&mut self) -> Option<&mut Frame> {
+    pub fn current_frame(&mut self) -> Option<&mut Frame> {
         self.call_stack.last_mut()
     }
 
     /// Get the current function
-    fn current_function(&self) -> Option<&BytecodeFunction> {
+    pub fn current_function(&self) -> Option<&BytecodeFunction> {
         self.call_stack.last().map(|f| &f.function)
     }
 
     /// Resolve a label to an instruction offset
-    fn resolve_label(
+    pub fn resolve_label(
         &mut self,
         label: Label,
     ) -> Option<usize> {
@@ -167,7 +209,7 @@ impl Interpreter {
 
     /// Execute a binary operation
     fn exec_binary_op(
-        &self,
+        &mut self,
         dst: Reg,
         lhs: Reg,
         rhs: Reg,
@@ -247,6 +289,19 @@ impl Interpreter {
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l % r)
             }
+            (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
+                let mut merged = Vec::new();
+
+                if let Some(HeapValue::List(items)) = self.heap.get(lhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+                if let Some(HeapValue::List(items)) = self.heap.get(rhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+
+                let handle = self.heap.allocate(HeapValue::List(merged));
+                RuntimeValue::List(handle)
+            }
             _ => RuntimeValue::Unit,
         };
 
@@ -274,7 +329,8 @@ impl Interpreter {
             .cloned()
             .unwrap_or(RuntimeValue::Unit);
 
-        let result = match (cmp, a, b) {
+        let result = match (cmp, &a, &b) {
+            // Integer comparison
             (CompareOp::Eq, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 RuntimeValue::Bool(l == r)
             }
@@ -291,6 +347,25 @@ impl Interpreter {
                 RuntimeValue::Bool(l > r)
             }
             (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // String comparison
+            (CompareOp::Eq, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 RuntimeValue::Bool(l >= r)
             }
             _ => RuntimeValue::Bool(false),
@@ -313,6 +388,7 @@ impl Executor for Interpreter {
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
             self.functions.insert(func.name.clone(), func.clone());
+            self.functions_by_id.push(func.clone());
         }
         tlog!(debug, MSG::DebugTotalFunctions, &self.functions.len());
         tlog!(
@@ -566,31 +642,25 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    // Handle built-in functions (like print)
-                    if func_name == "print" || func_name == "println" {
-                        // For print/println, we join all arguments with space
-                        let output = call_args
-                            .iter()
-                            .map(|arg| format!("{}", arg))
-                            .collect::<Vec<String>>()
-                            .join(" ");
-
-                        if let Some(stdout_arc) = &self.stdout {
-                            if let Ok(mut lock) = stdout_arc.lock() {
-                                if func_name == "println" {
-                                    let _ = writeln!(lock, "{}", output);
-                                } else {
-                                    let _ = write!(lock, "{}", output);
-                                }
+                    // Try FFI registry first for native functions
+                    if self.ffi.has(&func_name) {
+                        // Create callback for calling YaoXiang functions (for map/filter/reduce)
+                        let interp_ptr = std::ptr::addr_of_mut!(*self);
+                        let mut call_fn = move |func: &RuntimeValue, args: &[RuntimeValue]| -> Result<RuntimeValue, ExecutorError> {
+                            if let RuntimeValue::Function(fv) = func {
+                                // SAFETY: The interpreter lives as long as the callback.
+                                // The callback is only used during the execution of the native function,
+                                // which is synchronous and completes before the interpreter continues.
+                                let interpreter = unsafe { &mut *interp_ptr };
+                                interpreter.call_function_by_id(fv.func_id, args)
+                            } else {
+                                Err(ExecutorError::Type("Expected function value".to_string()))
                             }
-                        } else if func_name == "println" {
-                            println!("{}", output);
-                        } else {
-                            print!("{}", output);
-                        }
-
+                        };
+                        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
+                        let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
                         if let Some(dst_reg) = dst {
-                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                            frame.set_register(dst_reg.index() as usize, result);
                         }
                         frame.advance();
                         continue;
@@ -670,6 +740,46 @@ impl Executor for Interpreter {
                         return Err(ExecutorError::FunctionNotFound(func_name));
                     }
                 }
+                BytecodeInstr::CallNative {
+                    dst,
+                    func_name,
+                    args: arg_regs,
+                } => {
+                    // Collect arguments from registers
+                    let call_args: Vec<RuntimeValue> = arg_regs
+                        .iter()
+                        .map(|r| {
+                            frame
+                                .registers
+                                .get(r.0 as usize)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        })
+                        .collect();
+
+                    // Delegate to FFI registry with NativeContext
+                    // Create callback for calling YaoXiang functions (for map/filter/reduce)
+                    let interp_ptr = std::ptr::addr_of_mut!(*self);
+                    let mut call_fn =
+                        move |func: &RuntimeValue,
+                              args: &[RuntimeValue]|
+                              -> Result<RuntimeValue, ExecutorError> {
+                            if let RuntimeValue::Function(fv) = func {
+                                // SAFETY: The interpreter lives as long as the callback.
+                                let interpreter = unsafe { &mut *interp_ptr };
+                                interpreter.call_function_by_id(fv.func_id, args)
+                            } else {
+                                Err(ExecutorError::Type("Expected function value".to_string()))
+                            }
+                        };
+                    let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
+                    let result = self.ffi.call(func_name, &call_args, &mut ctx)?;
+
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, result);
+                    }
+                    frame.advance();
+                }
                 BytecodeInstr::NewListWithCap { dst, capacity } => {
                     let handle = self
                         .heap
@@ -683,18 +793,45 @@ impl Executor for Interpreter {
                         .get(array.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    let idx = frame
+                    let idx_value = frame
                         .registers
                         .get(index.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0) as usize;
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
 
-                    if let RuntimeValue::List(handle) = arr {
-                        if let Some(HeapValue::List(items)) = self.heap.get(handle) {
-                            if idx < items.len() {
-                                frame.set_register(dst.0 as usize, items[idx].clone());
+                    match arr {
+                        RuntimeValue::List(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::List(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
                             }
                         }
+                        RuntimeValue::Tuple(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Tuple(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
+                            }
+                        }
+                        RuntimeValue::Array(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Array(items)) = self.heap.get(handle) {
+                                if idx < items.len() {
+                                    frame.set_register(dst.0 as usize, items[idx].clone());
+                                }
+                            }
+                        }
+                        RuntimeValue::Dict(handle) => {
+                            if let Some(HeapValue::Dict(map)) = self.heap.get(handle) {
+                                if let Some(value) = map.get(&idx_value) {
+                                    frame.set_register(dst.0 as usize, value.clone());
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                     frame.advance();
                 }
@@ -708,23 +845,42 @@ impl Executor for Interpreter {
                         .get(array.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    let idx = frame
+                    let idx_value = frame
                         .registers
                         .get(index.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0) as usize;
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
                     let val = frame
                         .registers
                         .get(value.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
 
-                    if let RuntimeValue::List(handle) = arr {
-                        if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
-                            if idx < items.len() {
-                                items[idx] = val;
+                    match arr {
+                        RuntimeValue::List(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::List(items)) = self.heap.get_mut(handle) {
+                                if idx < items.len() {
+                                    items[idx] = val;
+                                } else if idx == items.len() {
+                                    items.push(val);
+                                }
                             }
                         }
+                        RuntimeValue::Array(handle) => {
+                            let idx = idx_value.to_int().unwrap_or(0) as usize;
+                            if let Some(HeapValue::Array(items)) = self.heap.get_mut(handle) {
+                                if idx < items.len() {
+                                    items[idx] = val;
+                                }
+                            }
+                        }
+                        RuntimeValue::Dict(handle) => {
+                            if let Some(HeapValue::Dict(map)) = self.heap.get_mut(handle) {
+                                map.insert(idx_value, val);
+                            }
+                        }
+                        _ => {}
                     }
                     frame.advance();
                 }
@@ -828,6 +984,34 @@ impl Executor for Interpreter {
                     frame.set_register(dst.0 as usize, RuntimeValue::Tuple(handle));
                     frame.advance();
                 }
+                BytecodeInstr::CreateStruct {
+                    dst,
+                    type_name: _,
+                    fields,
+                } => {
+                    // 收集各字段值
+                    let field_values: Vec<RuntimeValue> = fields
+                        .iter()
+                        .map(|reg| {
+                            frame
+                                .registers
+                                .get(reg.0 as usize)
+                                .cloned()
+                                .unwrap_or(RuntimeValue::Unit)
+                        })
+                        .collect();
+                    let dst_idx = dst.0 as usize;
+                    // 在堆上分配字段存储
+                    let handle = self.heap.allocate(HeapValue::Tuple(field_values));
+                    // 创建结构体值
+                    let struct_val = RuntimeValue::Struct {
+                        type_id: crate::backends::common::value::TypeId(0),
+                        fields: handle,
+                        vtable: Vec::new(),
+                    };
+                    frame.set_register(dst_idx, struct_val);
+                    frame.advance();
+                }
                 BytecodeInstr::ArcNew { dst, src } => {
                     let val = frame
                         .registers
@@ -886,22 +1070,53 @@ impl Executor for Interpreter {
                 BytecodeInstr::MakeClosure {
                     dst,
                     func: func_ref,
-                    env: _,
+                    env,
                 } => {
-                    let func_name = match func_ref {
-                        FunctionRef::Static { name, .. } => name.clone(),
-                        FunctionRef::Index(idx) => format!("fn_{}", idx),
+                    let func_id = match func_ref {
+                        FunctionRef::Static { name, .. } => {
+                            // Find by name in functions_by_id
+                            if let Some((idx, _)) = self
+                                .functions_by_id
+                                .iter()
+                                .enumerate()
+                                .find(|(_, f)| f.name == *name)
+                            {
+                                crate::backends::common::value::FunctionId(idx as u32)
+                            } else if let Some(func) = self.functions.get(name.as_str()) {
+                                let idx = self.functions_by_id.len();
+                                self.functions_by_id.push(func.clone());
+                                crate::backends::common::value::FunctionId(idx as u32)
+                            } else {
+                                eprintln!(
+                                    "[warn] Closure: function '{}' not found, fallback to id 0",
+                                    name
+                                );
+                                crate::backends::common::value::FunctionId(0)
+                            }
+                        }
+                        FunctionRef::Index(idx) => {
+                            // Direct index into functions_by_id
+                            if (*idx as usize) < self.functions_by_id.len() {
+                                crate::backends::common::value::FunctionId(*idx)
+                            } else {
+                                eprintln!(
+                                    "[warn] Closure: function index {} out of range ({}), fallback to id 0",
+                                    idx,
+                                    self.functions_by_id.len()
+                                );
+                                crate::backends::common::value::FunctionId(0)
+                            }
+                        }
                     };
-                    let func_id = crate::backends::common::value::FunctionId(
-                        self.functions
-                            .get(&func_name)
-                            .map(|_| self.functions.len() as u32)
-                            .unwrap_or(0),
-                    );
+                    // Capture environment variables from registers
+                    let captured_env: Vec<RuntimeValue> = env
+                        .iter()
+                        .map(|r| frame.registers[r.0 as usize].clone())
+                        .collect();
                     let closure =
                         RuntimeValue::Function(crate::backends::common::value::FunctionValue {
                             func_id,
-                            env: Vec::new(),
+                            env: captured_env,
                         });
                     frame.set_register(dst.0 as usize, closure);
                     frame.advance();
@@ -970,25 +1185,24 @@ impl Executor for Interpreter {
                     // In debug mode, this would check types
                     frame.advance();
                 }
-                BytecodeInstr::LoadUpvalue {
-                    dst,
-                    upvalue_idx: _,
-                } => {
-                    // Simplified: upvalues are stored in the current frame for closures
-                    let val = frame.get_upvalue(0).cloned().unwrap_or(RuntimeValue::Unit);
+                BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
+                    // Load from captured environment using the actual upvalue_idx
+                    let idx = *upvalue_idx as usize;
+                    let val = frame
+                        .get_upvalue(idx)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
                     frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
-                BytecodeInstr::StoreUpvalue {
-                    src,
-                    upvalue_idx: _,
-                } => {
+                BytecodeInstr::StoreUpvalue { src, upvalue_idx } => {
                     let val = frame
                         .registers
                         .get(src.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
-                    frame.set_upvalue(0, val);
+                    let idx = *upvalue_idx as usize;
+                    frame.set_upvalue(idx, val);
                     frame.advance();
                 }
                 BytecodeInstr::CloseUpvalue { src: _ } => {
@@ -1057,22 +1271,107 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::CallVirt {
-                    dst: _,
-                    obj: _,
-                    method_idx: _,
-                    args: _,
+                    dst,
+                    obj,
+                    method_idx,
+                    args,
                 } => {
-                    // Virtual call - not fully implemented
+                    // Virtual call - 通过 vtable 查找方法并调用
+                    let obj_val = frame
+                        .registers
+                        .get(obj.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+
+                    // 从常量池获取方法名
+                    let method_name = self
+                        .constants
+                        .get(*method_idx as usize)
+                        .and_then(|c| {
+                            if let ConstValue::String(s) = c {
+                                Some(s.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default();
+
+                    // 从对象的 vtable 中查找方法
+                    if let Some(func_value) = obj_val.get_method(&method_name).cloned() {
+                        // 收集参数
+                        let call_args: Vec<RuntimeValue> = args
+                            .iter()
+                            .map(|r| {
+                                frame
+                                    .registers
+                                    .get(r.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(RuntimeValue::Unit)
+                            })
+                            .collect();
+
+                        // 调用方法
+                        let result = self.call_function_by_id(func_value.func_id, &call_args)?;
+
+                        // 保存返回值
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                    } else {
+                        // 方法未在 vtable 中找到，返回 Unit
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        }
+                    }
                     frame.advance();
                 }
                 BytecodeInstr::CallDyn {
-                    dst: _,
-                    obj: _,
+                    dst,
+                    obj,
                     name_idx: _,
-                    args: _,
+                    args,
                 } => {
-                    // Dynamic call - not fully implemented
-                    frame.advance();
+                    // Dynamic call - 闭包调用
+                    // obj 寄存器包含闭包值（FunctionValue）
+                    let closure_val = frame
+                        .registers
+                        .get(obj.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+
+                    if let RuntimeValue::Function(func_value) = closure_val {
+                        // 收集参数（包括捕获的环境变量）
+                        let env_args: Vec<RuntimeValue> = func_value.env.clone();
+                        let call_args: Vec<RuntimeValue> = args
+                            .iter()
+                            .map(|r| {
+                                frame
+                                    .registers
+                                    .get(r.0 as usize)
+                                    .cloned()
+                                    .unwrap_or(RuntimeValue::Unit)
+                            })
+                            .collect();
+
+                        // 合并环境变量和参数
+                        let mut final_args = env_args;
+                        final_args.extend(call_args);
+
+                        // 调用闭包函数
+                        let result = self.call_function_by_id(func_value.func_id, &final_args)?;
+
+                        // 保存返回值
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                        frame.advance();
+                    } else {
+                        // 不是有效的函数值，返回 Unit
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, RuntimeValue::Unit);
+                        }
+                        frame.advance();
+                    }
                 }
             }
         }
@@ -1095,6 +1394,58 @@ impl Executor for Interpreter {
 
     fn heap(&self) -> &Heap {
         &self.heap
+    }
+}
+
+impl DebuggableExecutor for Interpreter {
+    fn set_breakpoint(
+        &mut self,
+        offset: usize,
+    ) {
+        self.breakpoints.insert(offset, ());
+    }
+
+    fn remove_breakpoint(
+        &mut self,
+        offset: usize,
+    ) {
+        self.breakpoints.remove(&offset);
+    }
+
+    fn has_breakpoint(&self) -> bool {
+        if let Some(frame) = self.call_stack.last() {
+            self.breakpoints.contains_key(&frame.ip)
+        } else {
+            false
+        }
+    }
+
+    fn step(&mut self) -> ExecutorResult<()> {
+        todo!("step debugging not implemented")
+    }
+
+    fn step_over(&mut self) -> ExecutorResult<()> {
+        todo!("step_over debugging not implemented")
+    }
+
+    fn step_out(&mut self) -> ExecutorResult<()> {
+        todo!("step_out debugging not implemented")
+    }
+
+    fn run(&mut self) -> ExecutorResult<()> {
+        todo!("run debugging not implemented")
+    }
+
+    fn current_ip(&self) -> usize {
+        self.call_stack.last().map(|f| f.ip).unwrap_or(0)
+    }
+
+    fn current_function(&self) -> Option<&str> {
+        self.call_stack.last().map(|f| f.function.name.as_str())
+    }
+
+    fn breakpoints(&self) -> Vec<usize> {
+        self.breakpoints.keys().copied().collect()
     }
 }
 
@@ -1137,5 +1488,207 @@ mod tests {
         assert!(result.is_ok());
         // Function executes successfully (actual return value depends on implementation)
         let _ = result.unwrap();
+    }
+
+    // =============================================================================
+    // FFI End-to-End Tests
+    // =============================================================================
+
+    /// Create a CallNative bytecode instruction for testing
+    fn make_call_native_bytecode(
+        func_name: &str,
+        args: Vec<ConstValue>,
+    ) -> (BytecodeModule, usize) {
+        let mut module = BytecodeModule::new("test_ffi".to_string());
+
+        // Build instructions:
+        // 1. Load constants for args
+        // 2. CallNative
+        // 3. Return
+        let mut instructions = Vec::new();
+
+        for (i, arg) in args.iter().enumerate() {
+            let const_idx = module.constants.len() as u16;
+            module.constants.push(arg.clone());
+
+            instructions.push(BytecodeInstr::LoadConst {
+                dst: Reg(i as u16),
+                const_idx,
+            });
+        }
+
+        // CallNative instruction - func_name is String directly
+        let arg_regs: Vec<Reg> = (0..args.len()).map(|i| Reg(i as u16)).collect();
+
+        instructions.push(BytecodeInstr::CallNative {
+            dst: Some(Reg(100)), // Use a high register for return
+            func_name: func_name.to_string(),
+            args: arg_regs,
+        });
+
+        // Return the result
+        instructions.push(BytecodeInstr::ReturnValue { value: Reg(100) });
+
+        let func_idx = module.add_function(BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Void,
+            local_count: 101,
+            upvalue_count: 0,
+            instructions,
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        });
+
+        module.entry_point = Some(func_idx);
+        (module, func_idx)
+    }
+
+    #[test]
+    fn test_ffi_println_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Create: println("Hello, FFI!")
+        let (module, func_idx) = make_call_native_bytecode(
+            "std.io.println",
+            vec![ConstValue::String("Hello, FFI!".to_string())],
+        );
+
+        let result = interp.execute_function(&module.functions[func_idx], &[]);
+        assert!(result.is_ok(), "FFI call should succeed");
+    }
+
+    #[test]
+    fn test_ffi_write_and_read_file_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Test using std.io directly via FFI registry
+        let path_str = "test_e2e_file.txt".to_string();
+
+        // Test write_file via registry directly
+        let mut ctx = NativeContext::new(&mut interp.heap);
+        let result = interp.ffi.call(
+            "std.io.write_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String("E2E test content".into()),
+            ],
+            &mut ctx,
+        );
+        assert!(result.is_ok(), "write_file should succeed: {:?}", result);
+
+        // Test read_file via registry
+        let result = interp.ffi.call(
+            "std.io.read_file",
+            &[RuntimeValue::String(path_str.clone().into())],
+            &mut ctx,
+        );
+        assert!(result.is_ok(), "read_file should succeed");
+
+        // Verify content
+        let return_value = result.unwrap();
+        if let RuntimeValue::String(content) = return_value {
+            assert_eq!(content.to_string(), "E2E test content");
+        } else {
+            panic!("Expected String return value");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_ffi_custom_function_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Register a custom native function
+        interp
+            .ffi_registry_mut()
+            .register("test.multiply", |args, _ctx| {
+                eprintln!("DEBUG: multiply args = {:?}", args);
+                let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+                let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
+                eprintln!("DEBUG: multiply {} * {}", a, b);
+                Ok(RuntimeValue::Int(a * b))
+            });
+
+        // Test via registry directly
+        let mut ctx = NativeContext::new(&mut interp.heap);
+        let result = interp.ffi.call(
+            "test.multiply",
+            &[RuntimeValue::Int(6), RuntimeValue::Int(7)],
+            &mut ctx,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Custom FFI call should succeed: {:?}",
+            result
+        );
+
+        let return_value = result.unwrap();
+        if let RuntimeValue::Int(val) = return_value {
+            assert_eq!(val, 42, "6 * 7 should equal 42");
+        } else {
+            panic!("Expected Int return value");
+        }
+    }
+
+    #[test]
+    fn test_ffi_nonexistent_function_e2e() {
+        let mut interp = Interpreter::new();
+
+        // Try to call a non-existent function
+        let mut ctx = NativeContext::new(&mut interp.heap);
+        let result = interp.ffi.call("nonexistent.function", &[], &mut ctx);
+        assert!(result.is_err(), "Call to non-existent function should fail");
+    }
+
+    #[test]
+    fn test_ffi_append_file_e2e() {
+        let mut interp = Interpreter::new();
+
+        let path_str = "test_append_file.txt".to_string();
+
+        let mut ctx = NativeContext::new(&mut interp.heap);
+        // Write initial content
+        let result1 = interp.ffi.call(
+            "std.io.write_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String("First".into()),
+            ],
+            &mut ctx,
+        );
+        assert!(result1.is_ok());
+
+        // Append content
+        let result2 = interp.ffi.call(
+            "std.io.append_file",
+            &[
+                RuntimeValue::String(path_str.clone().into()),
+                RuntimeValue::String(" Second".into()),
+            ],
+            &mut ctx,
+        );
+        assert!(result2.is_ok());
+
+        // Read and verify
+        let result3 = interp.ffi.call(
+            "std.io.read_file",
+            &[RuntimeValue::String(path_str.clone().into())],
+            &mut ctx,
+        );
+        assert!(result3.is_ok());
+
+        let return_value = result3.unwrap();
+        if let RuntimeValue::String(content) = return_value {
+            assert_eq!(content.to_string(), "First Second");
+        } else {
+            panic!("Expected String");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&path_str);
     }
 }
