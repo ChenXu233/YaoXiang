@@ -10,7 +10,7 @@
 ### 1.1 问题 1：块内函数定义找不到变量
 
 **症状**：
-```yao
+```yaoxiang
 main = {
   add = (a, b) => a + b;      // 无类型注解的函数定义
   result = add(1, 2);         // ❌ Unknown variable: 'add'
@@ -44,7 +44,7 @@ check_module
 ### 1.3 问题 3：use std.{io} 字段访问错误
 
 **症状**：
-```yao
+```yaoxiang
 use std.{io}
 add: (a: Int, b: Int) -> Int = (a, b) => a + b;
 main = {
@@ -133,7 +133,7 @@ main = {
 - 从模块注册表中获取子模块的导出信息
 
 **验证结果**：
-```yao
+```yaoxiang
 use std.{io}
 main = {
   add = (a, b) => a + b;
@@ -148,7 +148,7 @@ main = {
 
 ### 4.1 块内函数定义测试
 
-```yao
+```yaoxiang
 // test_block_fn.yx
 main = {
   // 完整形式

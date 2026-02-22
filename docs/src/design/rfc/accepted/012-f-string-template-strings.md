@@ -222,7 +222,7 @@ f"Hello {name}, you are {age} years old"
 
 ## 开放问题
 
-- [x] 是否支持转义的大括号？与 Python 一致：`{{` → `{`，`}}` → `}`
+- [x] 是否支持转义的大括号？与 Python 一致：使用双大括号表示单大括号，如 <code v-pre>{{</code> 表示 <code v-pre>{</code>，<code v-pre>}}</code> 表示 <code v-pre>}</code>
 - [x] 是否支持自定义格式化函数？与 Python 一致：支持通过 `__format__` 方法自定义类型的格式化行为
 - [x] 格式化说明符的完整规范？与 Python 一致，详见上文 BNF
 - [x] 性能优化的具体策略？与 Python 一致：运行时拼接，无需特殊优化
