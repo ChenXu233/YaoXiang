@@ -4,6 +4,7 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
+use crate::std::io::format_value_with_prefix;
 use crate::std::{NativeContext, NativeExport, StdModule, NativeHandler};
 
 // ============================================================================
@@ -121,6 +122,12 @@ impl StdModule for StringModule {
                 "std.string.reverse",
                 "(s: String) -> String",
                 native_reverse as NativeHandler,
+            ),
+            NativeExport::new(
+                "format",
+                "std.string.format",
+                "(format: String, ...args) -> String",
+                native_format as NativeHandler,
             ),
         ]
     }
@@ -355,4 +362,162 @@ fn native_reverse(
     let s = args.get(0).map(extract_string).unwrap_or_default();
     let reversed: String = s.chars().rev().collect();
     Ok(RuntimeValue::String(reversed.into()))
+}
+
+/// Native implementation: format - Python-style string formatting
+/// Supports {0}, {1}, {2}... placeholders and {:03}, {:>3}, {:<3} format specifiers
+fn native_format(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let format_str = args.get(0).map(extract_string).unwrap_or_default();
+    let format_args = &args[1..];
+
+    // Convert all args to strings upfront
+    let arg_strings: Vec<String> = format_args
+        .iter()
+        .map(|arg| format_value_with_prefix(arg, ctx.heap, ""))
+        .collect();
+
+    // Parse and replace placeholders
+    let result = parse_format(&format_str, &arg_strings);
+
+    Ok(RuntimeValue::String(result.into()))
+}
+
+/// Parse format string and replace placeholders with argument values
+fn parse_format(
+    format_str: &str,
+    args: &[String],
+) -> String {
+    let mut result = String::new();
+    let mut chars = format_str.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '{' {
+            // Parse placeholder
+            let mut placeholder = String::new();
+
+            // Collect characters until closing brace
+            while let Some(&next) = chars.peek() {
+                if next == '}' {
+                    chars.next();
+                    break;
+                }
+                placeholder.push(chars.next().unwrap());
+            }
+
+            // Parse placeholder: {index} or {index:format}
+            if let Some((index_str, format_spec)) = placeholder.split_once(':') {
+                // Has format specifier: {0:03}
+                let index: usize = index_str.parse().unwrap_or(0);
+                let formatted = apply_format_spec(
+                    args.get(index).map(|s| s.as_str()).unwrap_or(""),
+                    format_spec,
+                );
+                result.push_str(&formatted);
+            } else {
+                // Simple placeholder: {0}
+                let index: usize = placeholder.parse().unwrap_or(0);
+                result.push_str(args.get(index).map(|s| s.as_str()).unwrap_or(""));
+            }
+        } else if c == '}' {
+            // Escape }} as }
+            if let Some(&next) = chars.peek() {
+                if next == '}' {
+                    chars.next();
+                    result.push('}');
+                } else {
+                    // Unmatched }, treat as literal
+                    result.push('}');
+                }
+            } else {
+                result.push('}');
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// Apply format specifier to a value
+/// Supported: {:03} (zero-pad), {:>3} (right-align), {:<3} (left-align), {:^3} (center)
+fn apply_format_spec(
+    value: &str,
+    spec: &str,
+) -> String {
+    // Parse format spec: [align][width]
+    // align: <, >, ^
+    // width: number
+    // fill (optional): character before align
+
+    if spec.is_empty() {
+        return value.to_string();
+    }
+
+    let mut fill_char = ' ';
+    let mut align = '>'; // Default right-align for numbers
+
+    let spec_chars: Vec<char> = spec.chars().collect();
+
+    // Check for fill character (before align)
+    let width_str = if spec_chars.len() >= 2 {
+        match spec_chars[0] {
+            '<' | '>' | '^' => {
+                align = spec_chars[0];
+                &spec[1..]
+            }
+            _ if spec_chars[0].is_ascii_digit() => {
+                fill_char = spec_chars[0];
+                if spec_chars.len() >= 2 {
+                    match spec_chars[1] {
+                        '<' | '>' | '^' => {
+                            align = spec_chars[1];
+                            &spec[2..]
+                        }
+                        _ => spec,
+                    }
+                } else {
+                    spec
+                }
+            }
+            _ => spec,
+        }
+    } else {
+        spec
+    };
+
+    // Parse width
+    let width: usize = width_str.parse().unwrap_or(0);
+
+    if width == 0 {
+        return value.to_string();
+    }
+
+    let len = value.len();
+
+    if len >= width {
+        return value.to_string();
+    }
+
+    let padding_len = width - len;
+    let padding: String = fill_char.to_string().repeat(padding_len);
+
+    match align {
+        '<' => format!("{}{}", value, padding), // Left align
+        '^' => {
+            // Center align
+            let left_pad = padding_len / 2;
+            let right_pad = padding_len - left_pad;
+            format!(
+                "{}{}{}",
+                padding.repeat(left_pad),
+                value,
+                padding.repeat(right_pad)
+            )
+        }
+        _ => format!("{}{}", padding, value), // Right align (default)
+    }
 }
