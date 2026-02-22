@@ -29,24 +29,6 @@ title: 'RFC-017: 语言服务器协议（LSP）支持设计'
 - 不在遇到错误时立即返回，而是继续检查
 - 检查完成后统一返回 `Vec<Diagnostic>`
 
-```rust
-// 伪代码：改为收集模式
-fn check_expression(&mut self, expr: &Expr) {
-    match expr {
-        Expr::Var(name, span) => {
-            if let Some(_) = self.env.get_var(name) {
-                // 变量存在，继续
-            } else {
-                // 使用 collector.add_error() 而不是 return Err()
-                self.errors.add_error(Diagnostic::undefined_var(name.clone(), *span));
-                // 继续检查，不阻断后续流程
-            }
-        }
-        // ...
-    }
-}
-```
-
 ### 问题 2：增量解析与缓存
 
 **现状**：每次 LSP 请求都重新解析整个文件，没有缓存机制。
@@ -54,42 +36,9 @@ fn check_expression(&mut self, expr: &Expr) {
 **LSP 需求**：像 `cargo check` 一样增量更新，但更轻量（每次编辑都应快速响应）。
 
 **解决方案**：
-
-```rust
-/// 文档缓存
-struct DocumentCache {
-    /// 文档版本
-    version: i32,
-    /// 内容哈希（用于快速检测变化）
-    content_hash: u64,
-    /// 解析后的 AST
-    ast: Option<Module>,
-    /// 符号表缓存
-    symbol_table: Option<SymbolTable>,
-    /// 增量更新区域（受影响的函数/模块列表）
-    affected_regions: Vec<Span>,
-}
-
-impl DocumentCache {
-    /// 检查是否需要完全重解析
-    fn needs_full_reparse(&self, new_content: &str) -> bool {
-        // 大面积修改需要完全重解析
-        let change_size = self.content.len() / 2;
-        new_content.len() > change_size
-    }
-
-    /// 增量更新
-    fn update(&mut self, changes: Vec<TextDocumentContentChangeEvent>) {
-        for change in changes {
-            if let Some(range) = change.range {
-                // 只标记受影响的区域，不立即重解析
-                self.affected_regions.push(range);
-            }
-        }
-        self.version += 1;
-    }
-}
-```
+- 文档版本管理 + 内容哈希
+- 增量更新：只重新解析受影响的函数/模块
+- 大面积修改时自动降级为全量解析
 
 ### 与现有模块的集成
 
@@ -191,186 +140,50 @@ src/lsp/
 
 ### 编译世界（World）设计
 
-```rust
-/// LSP 编译世界 - 管理全局编译状态
-struct World {
-    /// 文档缓存：uri -> DocumentCache
-    documents: HashMap<DocumentUri, DocumentCache>,
-    /// 全局符号索引
-    symbol_index: SymbolIndex,
-    /// 错误收集器（收集所有诊断）
-    diagnostics: ErrorCollector<Diagnostic>,
-    /// 类型环境缓存
-    type_env: Option<TypeEnvironment>,
-}
+管理全局编译状态：
+- 文档缓存（版本、AST、符号表）
+- 全局符号索引
+- 错误收集器
+- 类型环境缓存
 
-impl World {
-    /// 处理文档变更（增量）
-    fn on_document_change(&mut self, uri: &DocumentUri, changes: Vec<TextChange>) {
-        if let Some(cache) = self.documents.get_mut(uri) {
-            cache.update(changes);
-            // 标记需要增量重解析
-            self.schedule_incremental_reparse(uri);
-        }
-    }
-
-    /// 增量重解析
-    fn incremental_reparse(&mut self, uri: &DocumentUri) {
-        let cache = self.documents.get_mut(uri).unwrap();
-        if cache.needs_full_reparse() {
-            // 完全重解析
-            cache.full_reparse();
-        } else {
-            // 增量重解析（只处理受影响的函数）
-            cache.incremental_reparse();
-        }
-    }
-
-    /// 收集所有错误（不阻断）
-    fn collect_diagnostics(&mut self) -> Vec<Diagnostic> {
-        let mut all_diagnostics = Vec::new();
-        for (_, cache) in &mut self.documents {
-            if let Some(ast) = &cache.ast {
-                // 使用收集模式检查，不阻断
-                let diags = self.check_module_collect_all(ast);
-                all_diagnostics.extend(diags);
-            }
-        }
-        all_diagnostics
-    }
-}
-```
+核心方法：
+- `on_document_change`：处理增量变更
+- `incremental_reparse`：增量重解析
+- `collect_diagnostics`：收集所有错误（不阻断）
 
 ### 核心 LSP 方法支持
 
 | 类别 | 方法 | 说明 |
 |------|------|------|
-| **生命周期** | `initialize` | 客户端初始化 |
-| | `initialized` | 服务端初始化完成通知 |
-| | `shutdown` | 请求关闭 |
-| | `exit` | 退出通知 |
-| **文档同步** | `textDocument/didOpen` | 文档打开通知 |
-| | `textDocument/didChange` | 文档变更通知 |
-| | `textDocument/didClose` | 文档关闭通知 |
-| **诊断** | `textDocument/publishDiagnostics` | 发布诊断信息 |
-| **补全** | `textDocument/completion` | 代码补全 |
-| **跳转** | `textDocument/definition` | 跳转到定义 |
-| **引用** | `textDocument/references` | 查找引用 |
-| **悬停** | `textDocument/hover` | 悬停提示 |
+| **生命周期** | `initialize` / `initialized` / `shutdown` / `exit` | 服务端生命周期 |
+| **文档同步** | `didOpen` / `didChange` / `didClose` | 文档管理 |
+| **诊断** | `publishDiagnostics` | 发布诊断 |
+| **补全** | `completion` | 代码补全 |
+| **跳转** | `definition` | 跳转到定义 |
+| **引用** | `references` | 查找引用 |
+| **悬停** | `hover` | 悬停提示 |
 | **符号** | `workspace/symbol` | 工作区符号搜索 |
 
 ### 文本文档同步机制
 
 使用增量同步策略：
-
-```rust
-/// 文本文档内容缓存
-struct Document {
-    uri: DocumentUri,
-    version: i32,
-    content: String,
-    changes: Vec<TextDocumentContentChangeEvent>,
-}
-
-impl Document {
-    /// 应用增量变更
-    fn apply_changes(&mut self, changes: Vec<TextDocumentContentChangeEvent>) {
-        for change in changes {
-            if let Some(range) = change.range {
-                // 替换指定范围
-                self.content.replace_range(range, &change.text);
-            } else {
-                // 完全替换
-                self.content = change.text;
-            }
-        }
-        self.version += 1;
-    }
-}
-```
+- 保留文档版本号
+- 应用增量变更（range + text）
+- 大变更时降级为全量替换
 
 ### 符号索引构建
 
-利用现有的符号表系统（`src/frontend/core/lexer/symbols.rs`），构建反向索引：
-
-```rust
-/// 符号位置信息（扩展现有 SymbolEntry）
-struct SymbolLocation {
-    uri: DocumentUri,
-    span: Span,
-    name: String,
-    kind: SymbolKind,
-}
-
-/// 符号索引
-struct SymbolIndex {
-    /// 名称 -> 位置列表
-    by_name: HashMap<String, Vec<SymbolLocation>>,
-    /// 文件 -> 符号列表
-    by_file: HashMap<DocumentUri, Vec<SymbolLocation>>,
-}
-
-/// 扩展现有符号表，添加位置信息
-impl SymbolTable {
-    /// 添加带位置的符号
-    pub fn insert_with_location(&mut self, name: String, kind: SymbolKind, location: SymbolLocation) {
-        let entry = SymbolEntry {
-            name,
-            kind,
-            arity: None,
-            // 需扩展现有结构，添加 location 字段
-            location: Some(location),
-        };
-        self.symbols.push(entry);
-    }
-}
-```
-
-> **注意**：需要扩展 `src/frontend/core/lexer/symbols.rs` 中的 `SymbolEntry` 结构，添加 `location` 字段。
+利用现有的符号表系统，构建反向索引：
+- 需要扩展 `SymbolEntry`，添加 `location` 字段
+- 索引：名称 → 位置列表、文件 → 符号列表
 
 ### 代码补全实现
 
-```rust
-/// 补全项
-struct CompletionItem {
-    label: String,
-    kind: CompletionItemKind,
-    detail: Option<String>,
-    documentation: Option<String>,
-    insert_text: Option<String>,
-}
-
-/// 补全来源
-enum CompletionSource {
-    Keywords,      // 关键字
-    Variables,     // 变量
-    Functions,     // 函数
-    Types,         // 类型
-    Fields,        // 结构体字段
-    Modules,       // 模块
-}
-```
+补全来源：关键字、变量、函数、类型、结构体字段、模块
 
 ### 跳转定义实现
 
-基于 AST 的符号解析：
-
-```rust
-/// 查找符号定义位置
-fn find_definition(ast: &Ast, position: Position) -> Option<Location> {
-    let node = ast.find_node_at(position)?;
-    match node.kind() {
-        NodeKind::Identifier(name) => {
-            // 查找符号表
-            world.lookup_symbol(&name)
-        }
-        NodeKind::FunctionCall(name) => {
-            world.lookup_symbol(&name)
-        }
-        _ => None
-    }
-}
-```
+基于 AST 的符号解析：查找标识符/函数调用对应的定义位置
 
 ## 详细设计
 
@@ -453,479 +266,85 @@ fn to_lsp_range(span: &Span) -> lsp_types::Range {
 
 ### 1. 幽灵提示（Inlay Hints）
 
-利用 LSP 3.18 的 `textDocument/inlayHint` 能力：
-
-```rust
-/// 幽灵提示类型
-enum YaoInlayHint {
-    /// 常量值提示 - 显示编译期已计算好的常量
-    /// 例如: `const MAX = 100 + 200` 旁显示 `300`
-    ConstValue { value: String, span: Span },
-
-    /// 内联提示 - 显示已内联的函数结果
-    /// 例如: `let x = inline_add(1, 2)` 旁显示 `3`
-    InlinedResult { computed_value: String, span: Span },
-
-    /// 可变性提示 - 变量是否可变
-    /// 例如: `let mut x = 1` 旁显示 `mut`
-    Mutability { is_mut: bool, span: Span },
-
-    /// 所有权消费提示 - 函数的消费情况
-    /// 例如: `process(data)` 旁显示 `consumed` 或 `borrowed`
-    OwnershipConsume { kind: ConsumeKind, span: Span },
-
-    /// 类型推断提示 - 显示推断出的具体类型
-    /// 例如: `let x = vec![]` 旁显示 `Vec<i32>`
-    TypeHint { inferred_type: String, span: Span },
-}
-```
+- **常量值提示**：显示编译期已计算好的常量（如 `const MAX = 100 + 200` 旁显示 `300`）
+- **可变性提示**：显示变量是否可变（如 `let mut x` 旁显示 `mut`）
+- **所有权消费提示**：显示函数参数是否被消费（如 `consumed` / `borrowed`）
+- **类型推断提示**：显示推断出的具体类型（如 `let x = vec![]` 旁显示 `Vec<i32>`）
 
 ### 2. 所有权语义可视化
 
-利用 LSP 的语义Tokens 高亮：
+- 显示变量的 move 路径（从定义位置到所有使用位置）
+- 借用生命周期可视化
 
-```rust
-/// 所有权状态
-enum OwnershipState {
-    /// 所有权已转移（原位置变灰/淡化）
-    Moved { from_span: Span, to_span: Span },
-    /// 借用（显示借用生命周期）
-    Borrowed { lifetime: String, span: Span },
-    /// 引用计数（显示 RC/Arc 计数）
-    RefCounted { count: usize, span: Span },
-}
+### 3. 编译期求值预览
 
-/// 显示代码值的 move 路径
-fn visualize_ownership(ast: &Ast) -> Vec<OwnershipState> {
-    // 利用中间代码分析所有权的流动
-    // 在 IDE 中可视化显示
-}
-```
-
-### 3. 编译期求值结果预览
-
-```rust
-/// 常量求值结果
-struct ConstEvalResult {
-    /// 原始表达式
-    expr: String,
-    /// 编译期计算结果
-    value: String,
-    /// 是否涉及副作用（不允许编译期求值）
-    has_side_effects: bool,
-}
-
-/// 通过悬停显示编译期求值结果
-fn get_const_eval_hint(expr: &Expr) -> Option<ConstEvalResult> {
-    // 调用编译器的常量求值器
-    // 返回可以提前显示的结果
-}
-```
-
-### 4. LSP 方法扩展（YaoXiang 特有）
-
-```rust
-/// YaoXiang 自定义 LSP 能力
-enum YaoXiangCapability {
-    /// 所有权分析
-    ownershipAnalysis: bool,
-    /// 常量求值预览
-    constEvalPreview: bool,
-    /// 代码流动追踪
-    codeFlowTrace: bool,
-}
-
-/// 自定义请求：获取变量的所有流动路径
-/// "yaoxiang/textDocument/ownershipTrace"
-struct OwnershipTraceParams {
-    text_document_position: TextDocumentPositionParams,
-}
-
-struct OwnershipTraceResponse {
-    /// 变量的定义位置
-    definition: Location,
-    /// 所有移动/拷贝的位置
-    moves: Vec<Location>,
-    /// 借用的位置
-    borrows: Vec<Location>,
-    /// 当前活跃的使用位置
-    active_uses: Vec<Location>,
-}
-```
+- 悬停显示常量表达式的编译期计算结果
 
 ### 实现优先级
 
-| 特性 | 优先级 | 依赖 |
-|------|--------|------|
-| 常量值幽灵提示 | P0 | 编译期常量求值 |
-| 可变性提示 | P0 | 变量声明分析 |
-| 所有权消费提示 | P1 | 借用检查器 |
-| 所有权可视化 | P2 | 中间代码分析 |
-| 代码流动追踪 | P2 | 数据流分析 |
-
-> **注意**：这些高级特性依赖于编译器前端的分析能力，需要在实现 LSP 之前确保这些编译期分析已经可用。
+| 特性 | 优先级 |
+|------|--------|
+| 常量值幽灵提示 | P0 |
+| 可变性提示 | P0 |
+| 所有权消费提示 | P1 |
+| 所有权可视化 | P2 |
 
 ---
 
 ## 通信与远程支持
 
-### 1. 双协议支持
+### 通信模式
 
-LSP 服务器同时支持两种通信模式：
+支持三种模式：
 
-```rust
-/// 通信模式
-enum TransportMode {
-    /// 标准输入/输出（默认，本地开发用）
-    Stdio,
-    /// TCP Socket（远程开发/调试用）
-    Tcp { host: String, port: u16 },
-    /// Unix Domain Socket（本地高性能用）
-    UnixSocket { path: String },
-}
+| 模式 | 用途 |
+|------|------|
+| stdio | 本地开发（默认）|
+| TCP Socket | 远程开发/调试 |
+| Unix Domain Socket | 高性能本地通信 |
 
-impl LspServer {
-    /// 启动服务器
-    fn start(mode: TransportMode) {
-        match mode {
-            TransportMode::Stdio => {
-                // 读取 stdin，写入 stdout
-            }
-            TransportMode::Tcp { host, port } => {
-                // 监听 TCP 端口
-                let listener = TcpListener::bind(format!("{}:{}", host, port)).unwrap();
-                // 支持多客户端连接
-                for stream in listener.incoming() {
-                    self.handle_client(stream);
-                }
-            }
-            TransportMode::UnixSocket { path } => {
-                // Unix 套接字
-            }
-        }
-    }
-}
-```
+### 远程调试
 
-### 2. 远程调试支持
+基于 DAP（Debug Adapter Protocol）实现：
+- 支持行断点、函数断点、条件断点
+- YaoXiang 特有断点：变量被 move 时触发
 
-基于 DAP（Debug Adapter Protocol）实现远程调试，与 LSP 使用同一端口或独立端口：
-
-```rust
-/// YaoXiang 调试服务器
-struct DebugServer {
-    /// 调试会话管理
-    sessions: HashMap<String, DebugSession>,
-    /// 断点信息
-    breakpoints: HashMap<DocumentUri, Vec<Breakpoint>>,
-}
-
-impl DebugServer {
-    /// 支持的调试功能
-    fn capabilities() -> DebugCapabilities {
-        DebugCapabilities {
-            supports_configuration_done_request: true,
-            supports_function_breakpoints: true,
-            supports_conditional_breakpoints: true,
-            supports_hit_conditions: true,
-            supports_evaluate_for_hovers: true,
-            supports_step_back: false, // 暂不支持
-            supports_restart_frame: true,
-            supports_goto_targets_request: true,
-            supports_pause_request: true,
-            supports_terminate_threads_request: true,
-            supports_modules_request: true,
-            // YaoXiang 特有
-            supports_ownership_trace: true, // 所有权追踪
-            supports_const_eval: true,       // 常量求值
-        }
-    }
-
-    /// 断点类型
-    enum BreakpointKind {
-        /// 代码断点
-        Line,
-        /// 函数断点
-        Function { name: String },
-        /// 条件断点
-        Conditional { condition: String },
-        /// 所有权断点（YaoXiang 特有）- 变量被 move 时触发
-        OwnershipMoved { var_name: String },
-    }
-
-    /// 调试请求处理
-    fn on_launch(&mut self, args: LaunchArgs) -> Result<(), DebugError> {
-        // 编译目标程序
-        let artifact = self.compile(&args.program)?;
-        // 启动调试器
-        self.start_debuggee(artifact, args.debuggee_kind)
-    }
-
-    /// 变量求值（包括编译期常量）
-    fn evaluate(&self, expr: &str, context: EvaluationContext) -> Result<EvaluationResult> {
-        match context {
-            EvaluationContext::Hover => {
-                // 编译期求值
-                self.const_eval(expr)
-            }
-            EvaluationContext::Watch => {
-                // 运行时求值
-                self.runtime_eval(expr)
-            }
-            EvaluationContext::DebugConsole => {
-                // 两者皆可
-                self.try_const_eval(expr).or_else(|| self.runtime_eval(expr))
-            }
-        }
-    }
-}
-```
-
-### 3. 统一通信架构
-
-LSP + 调试共享同一底层传输层：
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     IDE (VS Code)                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ LSP Client  │  │ DAP Client  │  │  Terminal   │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
-└─────────┼────────────────┼────────────────┼────────────┘
-          │                │                │
-          ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────┐
-│                  YaoXiang Server                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │              Transport Layer (TCP/stdio)         │   │
-│  └─────────────────────┬───────────────────────────┘   │
-│                        │                                 │
-│        ┌──────────────┼──────────────┐                  │
-│        ▼              ▼              ▼                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │ LSP Server│  │Debug Server│ │ REPL    │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 4. 启动参数
+### 启动参数
 
 ```bash
-# 本地模式（默认）
+# 本地模式
 yaoxiang-lsp
 
-# TCP 服务器模式
+# TCP 服务器
 yaoxiang-lsp --tcp --port 8765
 
-# 远程开发模式（同时启动 LSP + 调试）
+# 同时启用调试
 yaoxiang-lsp --tcp --port 8765 --enable-debug
-
-# 指定绑定地址
-yaoxiang-lsp --tcp --host 0.0.0.0 --port 8765
 ```
 
 ---
 
 ## 并发模型
 
-### 设计决策：单线程 + 异步事件循环
+**设计决策：单线程 + 异步事件循环**
 
-```rust
-/// LSP 服务器运行时
-struct LspRuntime {
-    /// 异步运行时（单线程）
-    runtime: TokioRuntime,
-    /// 编译器实例（非线程安全）
-    compiler: Compiler,
-    /// 文档缓存
-    documents: DocumentCache,
-}
+理由：
+- 编译器非线程安全，改造成本高
+- LSP 请求天然串行，无需并发
+- 单线程更简单、易调试
+- async I/O 单线程性能足够
 
-impl LspRuntime {
-    /// 启动服务器
-    fn run(mode: TransportMode) {
-        // 使用单线程运行时
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        runtime.block_on(async {
-            // 事件循环 - 串行处理请求
-            loop {
-                match read_json_rpc().await {
-                    Ok(msg) => {
-                        // 单线程处理，无需锁
-                        self.handle_message(msg).await;
-                    }
-                    Err(e) => {
-                        log::error!("读取失败: {}", e);
-                        break;
-                    }
-                }
-            }
-        });
-    }
-
-    /// 处理消息（同步执行，不并发）
-    async fn handle_message(&mut self, msg: JsonRpcMessage) {
-        // 编译器调用是同步的，直接在当前线程执行
-        let response = match msg.method.as_str() {
-            "initialize" => self.on_initialize(msg.params).await,
-            "textDocument/completion" => self.on_completion(msg.params).await,
-            "textDocument/definition" => self.on_definition(msg.params).await,
-            // ... 其他方法
-            _ => Err(JsonRpcError::method_not_found()),
-        };
-        send_json_rpc(response).await;
-    }
-}
-```
-
-### 设计理由
-
-| 考量 | 分析 |
-|------|------|
-| 编译器非线程安全 | YaoXiang 的 lexer/parser/typecheck 没有实现 `Sync`，改造成本巨大 |
-| LSP 请求天然串行 | IDE 发请求是一个接一个的，不会并发 |
-| 简单可 Debug | 单线程模型调试直接看日志，不用考虑竞态条件 |
-| 性能足够 | 现代 async I/O 在单线程上吞吐量很高 |
-
-### 后台任务
-
-如需利用多核，后台任务使用 `spawn_blocking`：
-
-```rust
-/// 后台缓存预热（可并行）
-fn warmup_cache(&self) {
-    // 预解析标准库 - 在后台线程池执行
-    tokio::task::spawn_blocking(|| {
-        self.preparse_stdlib();
-    });
-}
-```
+后台任务使用 `spawn_blocking` 利用多核。
 
 ---
 
 ## LSP 内置测试工具
 
-### 测试命令格式
-
-```json
-// test_cases/completion.test
-{
-    "tests": [
-        {
-            "name": "关键字补全",
-            "setup": [
-                {"cmd": "open", "uri": "main.yx", "content": "fn main() { if true { } }"}
-            ],
-            "action": {"cmd": "complete", "uri": "main.yx", "position": {"line": 0, "character": 1}},
-            "expect": {
-                "items": ["if", "fn", "let", "true", "false"],
-                "item_detail": {
-                    "if": "if condition { } else { }",
-                    "fn": "fn name(params) -> ReturnType { }"
-                }
-            }
-        },
-        {
-            "name": "变量补全",
-            "setup": [
-                {"cmd": "open", "uri": "main.yx", "content": "let message = \"hello\"\nlet msg = |message|"}
-            ],
-            "action": {"cmd": "complete", "uri": "main.yx", "position": {"line": 1, "character": 8}},
-            "expect": {
-                "items": ["message"],
-                "item["message"].detail": "string"
-            }
-        },
-        {
-            "name": "跳转定义",
-            "setup": [
-                {"cmd": "open", "uri": "main.yx", "content": "fn add(a: int) -> int { a }\nlet x = add(1)"}
-            ],
-            "action": {"cmd": "goto", "uri": "main.yx", "position": {"line": 1, "character": 9}},
-            "expect": {
-                "uri": "main.yx",
-                "range": {"start": {"line": 0, "character": 3}, "end": {"line": 0, "character": 6}}
-            }
-        }
-    ]
-}
-```
-
-### 运行测试
+提供 JSON 测试用例格式：
 
 ```bash
-# 运行所有测试
+# 运行测试
 yaoxiang-lsp --test
-
-# 运行指定测试文件
-yaoxiang-lsp --test test_cases/completion.test
-
-# 运行指定测试用例
-yaoxiang-lsp --test test_cases/completion.test --name "关键字补全"
-
-# 详细输出
-yaoxiang-lsp --test -v
-```
-
-### 测试输出
-
-```
-$ yaoxiang-lsp --test
-
-Running LSP tests...
-✓ 关键字补全
-✓ 变量补全
-✓ 函数补全
-✓ 跳转定义
-✓ 悬停提示
-✗ 诊断错误 [FAILED]
-  Expected: 1 error at line 3
-  Actual: 0 errors
-
-FAILED: 1/6 tests failed
-```
-
-### 实现方式
-
-```rust
-/// LSP 测试运行器
-struct LspTestRunner {
-    /// 测试用例目录
-    test_dir: PathBuf,
-    /// 服务器实例
-    server: LspServer,
-}
-
-impl LspTestRunner {
-    /// 运行所有测试
-    fn run_all(&mut self) -> TestResult {
-        let test_files = self.test_dir.glob("*.test");
-        for file in test_files {
-            self.run_test_file(&file)?;
-        }
-        self.print_summary()
-    }
-
-    /// 运行单个测试用例
-    fn run_test_case(&mut self, case: &TestCase) -> Result<(), TestError> {
-        // 1. 执行 setup
-        for cmd in &case.setup {
-            self.execute_setup(cmd)?;
-        }
-
-        // 2. 执行 action
-        let result = self.execute_action(&case.action)?;
-
-        // 3. 验证结果
-        self.verify_expectation(&result, &case.expect)?;
-
-        Ok(())
-    }
-}
 ```
 
 ---

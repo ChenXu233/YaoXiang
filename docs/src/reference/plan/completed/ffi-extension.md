@@ -219,7 +219,7 @@ handler 内部可以：
 - [x] 编译通过
 
 **测试方案**：
-```yao
+```yaoxiang
 // 测试 split
 let result = std.string.split("hello,world", ",");
 assert(std.list.len(result) == 2);
@@ -289,7 +289,7 @@ fn native_map(args: &[RuntimeValue], ctx: &mut NativeContext<'_>) -> Result<Runt
 - [x] 编译通过
 
 **测试方案**：
-```yao
+```yaoxiang
 // 测试 push
 let list1 = std.list.push([1, 2], 3);
 assert(std.list.len(list1) == 3);
@@ -337,7 +337,7 @@ assert(sum == 6);
 - [x] 编译通过
 
 **测试方案**：
-```yao
+```yaoxiang
 // 测试 get
 let d = {name: "tom", age: 20};
 assert(std.dict.get(d, "name") == "tom");
@@ -427,7 +427,7 @@ mod tests {
 
 创建测试文件 `tests/std_primitives.yx`：
 
-```yao
+```yaoxiang
 // 字符串测试
 let s1 = std.string.trim("  hello  ");
 assert(s1 == "hello");
@@ -506,7 +506,7 @@ git checkout -- src/std/ src/backends/interpreter/ffi.rs src/backends/interprete
 
 **完成后能力**：
 
-```yao
+```yaoxiang
 // 字符串
 std.string.split("a,b,c", ",")  // ["a", "b", "c"]
 std.string.chars("hi")          // ["h", "i"]

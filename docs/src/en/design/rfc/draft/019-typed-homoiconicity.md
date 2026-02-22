@@ -1,5 +1,5 @@
 ---
-title: RFC-019: Typed Homoiconicity
+title: "RFC-019: Typed Homoiconicity"
 ---
 
 # RFC-019: Typed Homoiconicity - Syntax as Type
