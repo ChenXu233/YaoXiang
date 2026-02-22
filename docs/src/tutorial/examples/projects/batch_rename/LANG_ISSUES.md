@@ -4,7 +4,7 @@
 
 ---
 
-## 问题 1：List 遍历时类型标注导致的编译错误
+## 问题 1：List 遍历时类型标注导致的编译错误 已修复
 
 **状态**：🔴 未解决
 
@@ -36,32 +36,6 @@ for item in files {
 - 使用 `entry: FileEntry = item` 进行类型标注时，编译器将 item 推断为某种内部类型 t35
 - 访问字段时提示 "Cannot access field on non-struct type"
 
----
-
-## 问题 2：std.list 模块无法在代码中使用
-
-**状态**：🔴 未解决
-
-**错误信息**：
-```
-error [E1001] Unknown variable: 'list'
-```
-
-**代码示例**：
-```yaoxiang
-use std.list
-
-main = {
-    l = [1, 2, 3]
-    n = list.len(l)  // ← 报错
-}
-```
-
-**问题分析**：
-- 虽然 std/list.rs 存在，但 use 导入后仍无法在代码中使用
-- 这可能是模块导出问题或实现不完整
-
----
 
 ## 问题 3：变量作用域实现错误 - 块级作用域无效（严重 BUG） 已修复
 

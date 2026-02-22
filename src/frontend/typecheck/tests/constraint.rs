@@ -9,7 +9,7 @@
 //! - 结构化匹配规则正确实现
 
 use crate::frontend::core::type_system::MonoType;
-use crate::frontend::typecheck::checking::bounds::BoundsChecker;
+use crate::frontend::typecheck::inference::bounds::BoundsChecker;
 
 /// 测试约束类型识别
 #[test]
@@ -426,7 +426,7 @@ fn test_intersection_constraint() {
 /// 测试接口直接赋值 - AssignmentChecker
 #[test]
 fn test_constraint_direct_assignment_allowed() {
-    use crate::frontend::typecheck::checking::assignment::AssignmentChecker;
+    use crate::frontend::typecheck::inference::assignment::AssignmentChecker;
     use crate::util::span::Span;
 
     let mut checker = AssignmentChecker::new();
@@ -478,7 +478,7 @@ fn test_constraint_direct_assignment_allowed() {
 /// 测试接口直接赋值 - 具体类型推断信息
 #[test]
 fn test_constraint_assignment_concrete_type_info() {
-    use crate::frontend::typecheck::checking::assignment::{
+    use crate::frontend::typecheck::inference::assignment::{
         AssignmentChecker, ConstraintAssignmentInfo,
     };
     use crate::util::span::Span;
@@ -537,7 +537,7 @@ fn test_constraint_assignment_concrete_type_info() {
 /// 测试接口直接赋值 - 不满足约束时拒绝
 #[test]
 fn test_constraint_direct_assignment_rejected_missing_method() {
-    use crate::frontend::typecheck::checking::assignment::AssignmentChecker;
+    use crate::frontend::typecheck::inference::assignment::AssignmentChecker;
     use crate::util::span::Span;
 
     let mut checker = AssignmentChecker::new();
@@ -580,7 +580,7 @@ fn test_constraint_direct_assignment_rejected_missing_method() {
 /// 测试子类型检查器支持约束类型
 #[test]
 fn test_subtype_checker_constraint_support() {
-    use crate::frontend::typecheck::checking::subtyping::SubtypeChecker;
+    use crate::frontend::typecheck::inference::subtyping::SubtypeChecker;
 
     let checker = SubtypeChecker::new();
 
@@ -627,7 +627,7 @@ fn test_subtype_checker_constraint_support() {
 /// 测试子类型检查器 - 不满足约束
 #[test]
 fn test_subtype_checker_constraint_not_satisfied() {
-    use crate::frontend::typecheck::checking::subtyping::SubtypeChecker;
+    use crate::frontend::typecheck::inference::subtyping::SubtypeChecker;
 
     let checker = SubtypeChecker::new();
 
