@@ -1210,11 +1210,19 @@ pub sqrt(Float) -> Float = (x) => { ... }
 ### 7.2 模块导入
 
 ```
-Import      ::= 'use' ModuleRef ('as' Identifier)?
-              | 'use' ModuleRef '{' ImportItems '}'
-ImportItems ::= ImportItem (',' ImportItem)* ','?
-ImportItem  ::= Identifier ('as' Identifier)?
+Import       ::= 'use' ModuleRef ImportSpec?
+ImportSpec   ::= ('{' ImportItems '}') ('as' AliasList)?
+              |  'as' AliasList
+ImportItems  ::= Identifier (',' Identifier)* ','?
+AliasList    ::= Identifier (',' Identifier)*
 ```
+
+| 语法 | 说明 | 示例 |
+|------|------|------|
+| `use path;` | 导入模块，使用最后部分访问 | `use std.io;` → `io.print` |
+| `use path.{a, b};` | 导入指定项 | `use std.io.{print};` → `print` |
+| `use path as alias;` | 导入并重命名 | `use std.io as io;` → `io.print` |
+| `use path.{i1, i2} as a, b;` | 导入指定项并重命名 | `use std.io.{print, read} as p, r;` → `p`, `r` |
 
 ---
 
