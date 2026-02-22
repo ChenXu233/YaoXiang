@@ -433,7 +433,7 @@ impl AstToIrGenerator {
         }
 
         // 2. 兜底：遍历所有结构体定义查找字段名（当类型推导不可用时）
-        for (_struct_name, fields) in &self.struct_definitions {
+        for fields in self.struct_definitions.values() {
             for (i, field) in fields.iter().enumerate() {
                 if field.name == field_name {
                     return Some(i);
@@ -1629,26 +1629,25 @@ impl AstToIrGenerator {
             }
 
             Ok(())
-        } else if let Some(iter_ty) = self.get_expr_mono_type(iterable) {
-            match iter_ty {
-                // 使用迭代器协议的 For 循环
-                MonoType::List(_) | MonoType::Tuple(_) | MonoType::Dict(_, _) => self
-                    .generate_iterator_for_loop_ir(
-                        var_name,
-                        iterable,
-                        body,
-                        result_reg,
-                        for_span,
-                        instructions,
-                        constants,
-                    ),
-                _ => {
-                    // 不支持的迭代器类型，返回错误（使用实际类型名称）
-                    let iter_type = self.get_expr_type_name(iterable);
-                    let span = Self::get_expr_span(iterable);
-                    Err(IrGenError::UnsupportedIterator { iter_type, span })
-                }
-            }
+        } else if let Some(
+            _iter_ty @ (MonoType::List(_) | MonoType::Tuple(_) | MonoType::Dict(_, _)),
+        ) = self.get_expr_mono_type(iterable)
+        {
+            // 使用迭代器协议的 For 循环
+            self.generate_iterator_for_loop_ir(
+                var_name,
+                iterable,
+                body,
+                result_reg,
+                for_span,
+                instructions,
+                constants,
+            )
+        } else if let Some(_iter_ty) = self.get_expr_mono_type(iterable) {
+            // 不支持的迭代器类型，返回错误（使用实际类型名称）
+            let iter_type = self.get_expr_type_name(iterable);
+            let span = Self::get_expr_span(iterable);
+            Err(IrGenError::UnsupportedIterator { iter_type, span })
         } else {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
@@ -2247,7 +2246,7 @@ impl AstToIrGenerator {
                                     .and_then(|type_name| {
                                         // 如果变量类型是约束类型且不在 constraint_var_concrete_types 中
                                         // 说明具体类型无法在编译期确定，需要 vtable 调用
-                                        if self.struct_definitions.get(type_name).is_none()
+                                        if !self.struct_definitions.contains_key(type_name)
                                             && !self
                                                 .constraint_var_concrete_types
                                                 .contains_key(name)

@@ -102,7 +102,7 @@ fn native_get(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -123,7 +123,7 @@ fn native_set(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -148,7 +148,7 @@ fn native_has(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(false)),
     };
@@ -165,7 +165,7 @@ fn native_values(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -187,7 +187,7 @@ fn native_keys(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -209,7 +209,7 @@ fn native_entries(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -246,7 +246,7 @@ fn native_delete(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(
@@ -270,7 +270,7 @@ fn native_len(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => return Ok(RuntimeValue::Int(0)),
     };
@@ -286,7 +286,7 @@ fn native_is_empty(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let dict_handle = match args.get(0) {
+    let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => return Ok(RuntimeValue::Bool(true)),
     };
@@ -302,7 +302,7 @@ fn native_merge(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let handle_a = match args.get(0) {
+    let handle_a = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
             return Err(ExecutorError::Type(

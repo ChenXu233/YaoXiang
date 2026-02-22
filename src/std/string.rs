@@ -163,7 +163,7 @@ fn native_split(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let sep = args.get(1).map(extract_string).unwrap_or_default();
 
     let parts: Vec<RuntimeValue> = if sep.is_empty() {
@@ -188,7 +188,7 @@ fn native_trim(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let trimmed = s.trim();
     Ok(RuntimeValue::String(trimmed.to_string().into()))
 }
@@ -198,7 +198,7 @@ fn native_upper(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let upper = s.to_uppercase();
     Ok(RuntimeValue::String(upper.into()))
 }
@@ -208,7 +208,7 @@ fn native_lower(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let lower = s.to_lowercase();
     Ok(RuntimeValue::String(lower.into()))
 }
@@ -218,7 +218,7 @@ fn native_replace(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let old = args.get(1).map(extract_string).unwrap_or_default();
     let new = args.get(2).map(extract_string).unwrap_or_default();
 
@@ -236,7 +236,7 @@ fn native_contains(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let sub = args.get(1).map(extract_string).unwrap_or_default();
 
     Ok(RuntimeValue::Bool(s.contains(&sub)))
@@ -247,7 +247,7 @@ fn native_starts_with(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let prefix = args.get(1).map(extract_string).unwrap_or_default();
 
     Ok(RuntimeValue::Bool(s.starts_with(&prefix)))
@@ -258,7 +258,7 @@ fn native_ends_with(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let suffix = args.get(1).map(extract_string).unwrap_or_default();
 
     Ok(RuntimeValue::Bool(s.ends_with(&suffix)))
@@ -269,7 +269,7 @@ fn native_index_of(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let sub = args.get(1).map(extract_string).unwrap_or_default();
 
     match s.find(&sub) {
@@ -283,7 +283,7 @@ fn native_substring(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let start = args.get(1).map(extract_int).unwrap_or(0) as usize;
     let end = args.get(2).map(extract_int).unwrap_or(s.len() as i64) as usize;
 
@@ -300,7 +300,7 @@ fn native_is_empty(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     Ok(RuntimeValue::Bool(s.is_empty()))
 }
 
@@ -309,7 +309,7 @@ fn native_len(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     Ok(RuntimeValue::Int(s.len() as i64))
 }
 
@@ -319,7 +319,7 @@ fn native_chars(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let chars: Vec<RuntimeValue> = s
         .chars()
         .map(|c| RuntimeValue::String(c.to_string().into()))
@@ -335,7 +335,7 @@ fn native_concat(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s1 = args.get(0).map(extract_string).unwrap_or_default();
+    let s1 = args.first().map(extract_string).unwrap_or_default();
     let s2 = args.get(1).map(extract_string).unwrap_or_default();
 
     let result = format!("{}{}", s1, s2);
@@ -347,7 +347,7 @@ fn native_repeat(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let n = args.get(1).map(extract_int).unwrap_or(0) as usize;
 
     let result = s.repeat(n);
@@ -359,7 +359,7 @@ fn native_reverse(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let s = args.get(0).map(extract_string).unwrap_or_default();
+    let s = args.first().map(extract_string).unwrap_or_default();
     let reversed: String = s.chars().rev().collect();
     Ok(RuntimeValue::String(reversed.into()))
 }
@@ -370,7 +370,7 @@ fn native_format(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
-    let format_str = args.get(0).map(extract_string).unwrap_or_default();
+    let format_str = args.first().map(extract_string).unwrap_or_default();
     let format_args = &args[1..];
 
     // Convert all args to strings upfront

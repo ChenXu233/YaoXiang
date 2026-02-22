@@ -87,7 +87,7 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
-        self.scopes.last().map_or(false, |s| s.contains_key(name))
+        self.scopes.last().is_some_and(|s| s.contains_key(name))
     }
 
     /// 检查变量是否存在于任何作用域

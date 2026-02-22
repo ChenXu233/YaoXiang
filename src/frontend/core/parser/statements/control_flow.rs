@@ -93,11 +93,7 @@ pub fn parse_for_stmt(
     state.bump(); // consume 'for'
 
     // Check for 'mut' keyword after 'for'
-    let var_mut = if state.skip(&TokenKind::KwMut) {
-        true
-    } else {
-        false
-    };
+    let var_mut = state.skip(&TokenKind::KwMut);
 
     // Parse loop variable
     let var = match state.current().map(|t| &t.kind) {

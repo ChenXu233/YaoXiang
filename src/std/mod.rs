@@ -20,6 +20,10 @@ use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::ExecutorError;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
+/// Type alias for native function call signature
+/// Simplifies complex type definitions
+type CallFn = dyn FnMut(&RuntimeValue, &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>;
+
 /// Execution context passed to native functions.
 ///
 /// This gives native functions access to the heap (for allocating/reading
@@ -30,9 +34,7 @@ pub struct NativeContext<'a> {
     pub heap: &'a mut Heap,
     /// Callback to invoke a YaoXiang function value with given arguments.
     /// The closure takes (function_value, args) and returns a RuntimeValue.
-    pub call_fn: Option<
-        &'a mut dyn FnMut(&RuntimeValue, &[RuntimeValue]) -> Result<RuntimeValue, ExecutorError>,
-    >,
+    pub call_fn: Option<&'a mut CallFn>,
 }
 
 impl<'a> NativeContext<'a> {
@@ -47,10 +49,7 @@ impl<'a> NativeContext<'a> {
     /// Create a NativeContext with both heap access and function call capability.
     pub fn with_call_fn(
         heap: &'a mut Heap,
-        call_fn: &'a mut dyn FnMut(
-            &RuntimeValue,
-            &[RuntimeValue],
-        ) -> Result<RuntimeValue, ExecutorError>,
+        call_fn: &'a mut CallFn,
     ) -> Self {
         Self {
             heap,

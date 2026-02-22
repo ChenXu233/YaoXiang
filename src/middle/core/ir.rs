@@ -399,7 +399,7 @@ impl std::hash::Hash for ConstValue {
 }
 
 /// Module IR
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
     pub types: Vec<Type>,
     pub globals: Vec<(String, Type, Option<ConstValue>)>,
@@ -417,18 +417,4 @@ pub struct ModuleIR {
     /// IR 生成器会在此记录映射 `"my_func" -> "symbol"`，
     /// 代码生成器会将这些函数名注册为 native，使调用点生成 `CallNative` 指令。
     pub native_bindings: Vec<crate::std::ffi::NativeBinding>,
-}
-
-impl Default for ModuleIR {
-    fn default() -> Self {
-        Self {
-            types: Vec::new(),
-            globals: Vec::new(),
-            functions: Vec::new(),
-            mut_locals: std::collections::HashMap::new(),
-            loop_binding_locals: std::collections::HashMap::new(),
-            local_names: std::collections::HashMap::new(),
-            native_bindings: Vec::new(),
-        }
-    }
 }
