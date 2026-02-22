@@ -6,7 +6,7 @@
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::type_system::MonoType;
-use crate::frontend::typecheck::checking::bounds::BoundsChecker;
+use crate::frontend::typecheck::inference::bounds::BoundsChecker;
 use crate::util::span::Span;
 
 /// 泛型推断器

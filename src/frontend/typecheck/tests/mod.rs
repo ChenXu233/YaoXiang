@@ -4,7 +4,6 @@ mod basic;
 mod check;
 mod constraint;
 mod gat;
-mod generic;
 mod infer;
 mod inference;
 mod pub_bind;

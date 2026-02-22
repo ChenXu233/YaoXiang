@@ -10,17 +10,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{Module, Expr};
 
-// 导入推断模块
+// 导入推断模块（合并了原 checking/ 模块）
 pub mod inference;
-
-// 导入检查模块
-pub mod checking;
 
 // 导入特化模块
 pub mod specialization;
-
-// 导入旧特化模块（包含 GenericSpecializer）
-mod specialize;
 
 // 导入特质模块
 pub mod traits;
@@ -45,11 +39,9 @@ pub use crate::frontend::core::type_system::{
     ConstValue, ConstExpr, ConstKind, ConstVarDef, UniverseLevel,
 };
 
-// 重新导出推断、检查、特化等模块
+// 重新导出推断、特化等模块
 pub use inference::*;
-pub use checking::*;
 pub use specialization::*;
-pub use specialize::*;
 pub use gat::*;
 pub use overload::*;
 pub use type_eval::*;
@@ -295,8 +287,8 @@ impl TypeEnvironment {
 pub struct TypeChecker {
     /// 当前环境
     env: TypeEnvironment,
-    /// 函数体检查器
-    body_checker: Option<checking::BodyChecker>,
+    /// 语句检查器
+    body_checker: Option<inference::StatementChecker>,
 }
 
 impl TypeChecker {
@@ -350,7 +342,7 @@ impl TypeChecker {
         self.env.errors.errors()
     }
 
-    /// 检查单个语句（委托给 BodyChecker）
+    /// 检查单个语句（委托给 StatementChecker）
     pub fn check_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
@@ -385,7 +377,7 @@ impl TypeChecker {
         self.collect_exports(module);
 
         // 初始化函数体检查器
-        let mut body_checker = checking::BodyChecker::new(self.env.solver());
+        let mut body_checker = inference::StatementChecker::new(self.env.solver());
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         *self.body_checker_mut() = body_checker;
@@ -422,7 +414,7 @@ impl TypeChecker {
         }
 
         // 构建类型检查结果
-        // 合并 BodyChecker 中的局部变量类型到 bindings
+        // 合并 StatementChecker 中的局部变量类型到 bindings
         let mut bindings = self.env.vars.clone();
         let mut local_var_types = HashMap::new();
 
@@ -469,9 +461,9 @@ impl TypeChecker {
     }
 
     /// 获取 body_checker 的可变引用
-    fn body_checker_mut(&mut self) -> &mut checking::BodyChecker {
+    fn body_checker_mut(&mut self) -> &mut inference::StatementChecker {
         if self.body_checker.is_none() {
-            let mut body_checker = checking::BodyChecker::new(self.env.solver());
+            let mut body_checker = inference::StatementChecker::new(self.env.solver());
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             self.body_checker = Some(body_checker);
@@ -953,19 +945,19 @@ pub fn infer_expression(
     expr: &Expr,
     env: &mut TypeEnvironment,
 ) -> Result<MonoType, Vec<Diagnostic>> {
-    // 克隆环境变量，避免借用冲突
-    let vars_clone = env.vars.clone();
+    // 创建共享 ScopeManager 并添加环境变量
+    let mut scope = inference::ScopeManager::new();
+    for (name, poly) in env.vars.clone() {
+        scope.add_var(name, poly);
+    }
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();
-    let mut inferrer = crate::frontend::typecheck::inference::ExprInferrer::with_native_signatures(
+    let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
+        &mut scope,
         env.solver(),
         &overload_candidates_clone,
         &native_signatures_clone,
     );
-    // 添加环境中的变量到推断器
-    for (name, poly) in vars_clone {
-        inferrer.add_var(name, poly);
-    }
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
