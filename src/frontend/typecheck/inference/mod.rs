@@ -33,7 +33,6 @@ pub use patterns::PatternInferrer;
 pub use generics::GenericInferrer;
 
 // 向后兼容别名
-pub use statements::BodyChecker;
 pub use expressions::ExprInferrer;
 
 pub use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};

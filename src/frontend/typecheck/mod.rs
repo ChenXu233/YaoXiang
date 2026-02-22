@@ -592,49 +592,14 @@ impl TypeChecker {
             }
             crate::frontend::core::parser::ast::StmtKind::Use { path, items, alias } => {
                 // 计算导入模式
-                // use std.string → register as "std.string"
-                // use std.string as str → register as "str"
-                // use std.{string} → register as "string"
-                // use std.{string} as str → register as "str"
-                // use std.{string, io} → register as "string", "io"
-                // use std.{string, io} as str, my_io → register as "str.string", "my_io.io"
-                // use std → register as "std"
+                // use std.io → register as "io.print"
+                // use std.io as str → register as "str.print"
+                // use std.{print} → register as "print"
+                // use std.{print} as p → register as "p"
+                // use std.{print, read} → register as "print", "read"
+                // use std.{print, read} as p, r → register as "p", "r"
                 let import_all = items.is_none();
                 let aliases = alias.as_ref();
-
-                // 处理嵌套路径：use std.io 需要先注册父模块 "std"
-                if path.contains('.') {
-                    let parts: Vec<&str> = path.split('.').collect();
-                    if parts.len() >= 2 {
-                        let parent_path = parts[0];
-                        // 注册父模块作为命名空间变量（使用 StructType 模拟命名空间）
-                        if !self.env.get_var(parent_path).is_some() {
-                            // 创建命名空间结构体，包含所有子模块
-                            let mut fields = Vec::new();
-                            // 对于 std 命名空间，使用 std_submodule_names 获取子模块列表
-                            if parent_path == "std" {
-                                for submodule_name in self.env.module_registry.std_submodule_names()
-                                {
-                                    let sub_module_ty = MonoType::Fn {
-                                        params: vec![self.env.solver().new_var()],
-                                        return_type: Box::new(MonoType::Void),
-                                        is_async: false,
-                                    };
-                                    fields.push((submodule_name, sub_module_ty));
-                                }
-                            }
-                            let namespace_ty = MonoType::Struct(StructType {
-                                name: parent_path.to_string(),
-                                fields,
-                                methods: HashMap::new(),
-                                field_mutability: Vec::new(),
-                                field_has_default: Vec::new(),
-                            });
-                            self.env
-                                .add_var(parent_path.to_string(), PolyType::mono(namespace_ty));
-                        }
-                    }
-                }
 
                 // 通过 ModuleRegistry 查找模块导出，不再硬编码特定模块
                 if let Some(module) = self.env.module_registry.get(path).cloned() {
@@ -652,10 +617,14 @@ impl TypeChecker {
 
                     // 根据别名情况注册
                     match (items.as_ref(), aliases) {
-                        // use path (无 items，无 alias) → 整个模块路径注册
+                        // use path (无 items，无 alias) → 提取 path 最后部分作为模块别名
                         (None, None) => {
+                            let module_alias = path.split('.').last().unwrap_or(path);
+                            // 首先将模块本身注册为 Struct 类型（包含所有导出作为字段）
+                            self.register_module_as_struct(path, module_alias, &module);
+                            // 然后注册每个导出
                             for export in exports_to_import {
-                                self.register_use_export(path, export, false);
+                                self.register_use_export(module_alias, export, true);
                             }
                         }
                         // use path as alias → 整个模块用别名注册
@@ -693,6 +662,33 @@ impl TypeChecker {
         }
     }
 
+    /// 将模块注册为 Struct 类型（包含所有导出作为字段）
+    fn register_module_as_struct(
+        &mut self,
+        _module_path: &str,
+        module_alias: &str,
+        module: &crate::frontend::module::ModuleInfo,
+    ) {
+        let mut fields = Vec::new();
+        for (field_name, _export) in &module.exports {
+            let field_ty = MonoType::Fn {
+                params: vec![self.env.solver().new_var()],
+                return_type: Box::new(MonoType::Void),
+                is_async: false,
+            };
+            fields.push((field_name.clone(), field_ty));
+        }
+        let module_ty = MonoType::Struct(crate::frontend::core::type_system::mono::StructType {
+            name: module_alias.to_string(),
+            fields,
+            methods: HashMap::new(),
+            field_mutability: Vec::new(),
+            field_has_default: Vec::new(),
+        });
+        self.env
+            .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+    }
+
     /// 注册单个导出
     /// - `use_alias`: 是否使用别名模式，为 true 时注册名为 prefix，否则为 export.name
     fn register_use_export(
@@ -710,7 +706,7 @@ impl TypeChecker {
         match export.kind {
             crate::frontend::module::ExportKind::SubModule => {
                 // 子模块作为命名空间
-                let sub_module_path = format!("{}.{}", prefix, export.name);
+                let sub_module_path = export.full_path.clone();
                 let mut fields = Vec::new();
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
                     for (field_name, _) in &sub_module.exports {
@@ -733,6 +729,10 @@ impl TypeChecker {
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
             _ => {
+                // 如果变量已存在（比如已经是 Struct 类型），则跳过
+                if self.env.get_var(&register_name).is_some() {
+                    return;
+                }
                 let fn_ty = MonoType::Fn {
                     params: vec![self.env.solver().new_var()],
                     return_type: Box::new(MonoType::Void),

@@ -97,15 +97,6 @@ impl StatementChecker {
         self.scope.var_in_current_scope(name)
     }
 
-    /// 在现有作用域中更新变量（从内层到外层搜索）
-    fn update_var(
-        &mut self,
-        name: &str,
-        poly: PolyType,
-    ) {
-        self.scope.update_var(name, poly);
-    }
-
     /// 统一变量类型并更新（用于赋值操作）
     fn unify_and_update_var(
         &mut self,
@@ -852,6 +843,3 @@ impl StatementChecker {
         inferrer.infer_expr(expr).map_err(Box::new)
     }
 }
-
-/// 向后兼容：BodyChecker 是 StatementChecker 的类型别名
-pub type BodyChecker = StatementChecker;

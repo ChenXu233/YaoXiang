@@ -1,6 +1,6 @@
 //! 变量遮蔽检查和作用域管理测试
 //!
-//! 测试 BodyChecker 的作用域栈、遮蔽检查和变量销毁
+//! 测试 StatementChecker 的作用域栈、遮蔽检查和变量销毁
 
 use std::collections::HashMap;
 use crate::frontend::core::parser::ast;
@@ -8,7 +8,7 @@ use crate::frontend::typecheck::inference::ExprInferrer;
 use crate::frontend::typecheck::inference::ScopeManager;
 use crate::frontend::typecheck::overload;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::typecheck::inference::BodyChecker;
+use crate::frontend::typecheck::inference::StatementChecker;
 use crate::frontend::typecheck::TypeChecker;
 use crate::util::span::{Position, Span};
 
@@ -17,13 +17,13 @@ fn create_dummy_span() -> Span {
 }
 
 // ============================================================
-// BodyChecker 作用域栈基础测试
+// StatementChecker 作用域栈基础测试
 // ============================================================
 
 #[test]
 fn test_body_checker_scope_basic() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     // 全局作用域添加变量
     checker.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -51,7 +51,7 @@ fn test_body_checker_scope_basic() {
 #[test]
 fn test_body_checker_nested_scopes() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     checker.add_var("a".to_string(), PolyType::mono(MonoType::Int(64)));
 
@@ -78,7 +78,7 @@ fn test_body_checker_nested_scopes() {
 #[test]
 fn test_body_checker_get_var_finds_innermost() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     // 全局：x = Int
     checker.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -99,7 +99,7 @@ fn test_body_checker_get_var_finds_innermost() {
 #[test]
 fn test_body_checker_vars_returns_all() {
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     checker.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
 
@@ -160,7 +160,7 @@ fn test_var_reassignment_same_scope_ok() {
 fn test_var_shadowing_in_inner_scope() {
     // 外层 x = 1; 内层 x = 2 应该成功（更新外层变量）
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     // 外层声明 x
     checker.add_var("x".to_string(), PolyType::mono(MonoType::Int(64)));
@@ -248,7 +248,7 @@ fn test_for_loop_shadowing_error() {
 fn test_for_loop_variable_scoped() {
     // for i in [1, 2, 3] {} 之后 i 不应该存在于外层
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     // for 循环
     let for_stmt = ast::Stmt {
@@ -329,7 +329,7 @@ fn test_for_loop_no_conflict_with_unique_var() {
 fn test_if_block_creates_scope() {
     // if 块内声明的变量不应该泄漏到外层
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     let if_stmt = ast::Stmt {
         kind: ast::StmtKind::If {
@@ -378,7 +378,7 @@ fn test_assignment_shadowing_in_block() {
     // x = 1; if ... { x = 2 } 应该成功（更新外层变量）
     // 因为 x = 2 在 if 块内是对外层变量的赋值，而不是新声明
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     // 全局作用域：x = 1
     let assign_stmt = ast::Stmt {
@@ -432,7 +432,7 @@ fn test_assignment_shadowing_in_block() {
 fn test_assignment_in_same_scope_ok() {
     // x = 1; x = 2 在同一作用域应该正常（赋值操作）
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     let stmt1 = ast::Stmt {
         kind: ast::StmtKind::Expr(Box::new(ast::Expr::BinOp {
@@ -521,7 +521,7 @@ fn test_inferrer_scope_destroyed_on_exit() {
 fn test_fn_def_creates_scope() {
     // 函数内参数和局部变量不应泄漏到外层
     let mut solver = TypeConstraintSolver::new();
-    let mut checker = BodyChecker::new(&mut solver);
+    let mut checker = StatementChecker::new(&mut solver);
 
     let fn_stmt = ast::Stmt {
         kind: ast::StmtKind::Expr(Box::new(ast::Expr::FnDef {
