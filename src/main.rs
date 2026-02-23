@@ -220,10 +220,17 @@ fn main() -> Result<()> {
     });
     set_lang_from_string(lang);
 
-    // Initialize logger with specified level
-    match args.log_level {
-        Some(level) => yaoxiang::util::logger::init_with_level(level.into()),
-        None => yaoxiang::util::logger::init_cli(),
+    // 如果没有提供子命令，启动 TUI REPL
+    let command = args.command.unwrap_or(Commands::Repl { tui: false });
+
+    // Initialize logger
+    // LSP 模式必须写 stderr，避免污染 stdout 的 JSON-RPC 通道
+    match command {
+        Commands::Lsp => yaoxiang::util::logger::init_lsp(),
+        _ => match args.log_level {
+            Some(level) => yaoxiang::util::logger::init_with_level(level.into()),
+            None => yaoxiang::util::logger::init_cli(),
+        },
     }
 
     if args.verbose {
@@ -231,8 +238,6 @@ fn main() -> Result<()> {
         info!("Host: {}", std::env::consts::OS);
     }
 
-    // 如果没有提供子命令，启动 TUI REPL
-    let command = args.command.unwrap_or(Commands::Repl { tui: false });
     match command {
         Commands::Run { file } => {
             run_file_with_diagnostics(&file)?;

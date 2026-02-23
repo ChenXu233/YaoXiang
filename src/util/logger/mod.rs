@@ -12,7 +12,9 @@
 //! ```
 
 use std::sync::atomic::{AtomicU8, Ordering};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry};
+use tracing_subscriber::{
+    fmt::writer::MakeWriterExt, layer::SubscriberExt, util::SubscriberInitExt, Layer, Registry,
+};
 
 use crate::util::i18n::current_lang;
 
@@ -84,6 +86,21 @@ pub fn init_with_level(level: LogLevel) {
 /// Initialize logger for CLI use (INFO level)
 pub fn init_cli() {
     init_with_level(LogLevel::Info);
+}
+
+/// Initialize logger for LSP use (stderr only to avoid polluting JSON-RPC stdout)
+pub fn init_lsp() {
+    let filter = tracing_subscriber::filter::LevelFilter::from_level(LogLevel::Info.into());
+
+    let layer = tracing_subscriber::fmt::layer()
+        .without_time()
+        .with_target(false)
+        .with_level(true)
+        .with_ansi(false)
+        .with_writer(std::io::stderr.with_max_level(tracing::Level::TRACE))
+        .with_filter(filter);
+
+    Registry::default().with(layer).init();
 }
 
 /// Initialize logger for debug use (DEBUG level)
