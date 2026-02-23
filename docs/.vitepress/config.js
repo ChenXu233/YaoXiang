@@ -63,12 +63,17 @@ export default defineConfig({
           { text: '首页', link: '/' },
           { text: '下载', link: '/src/download' },
           { text: '教程', link: '/src/tutorial/' },
-          { text: '码场', link: '/src/playground/' },
-          { text: '工具', link: '/src/tools/' },
-          { text: '设计', link: '/src/design/' },
           { text: '参考', link: '/src/reference/' },
-          { text: '社区', link: '/src/community/' },
-          { text: '博客', link: '/src/blog/' },
+          {
+            text: '更多',
+            items: [
+              { text: '码场', link: '/src/playground/' },
+              { text: '工具', link: '/src/tools/' },
+              { text: '设计', link: '/src/design/' },
+              { text: '社区', link: '/src/community/' },
+              { text: '博客', link: '/src/blog/' },
+            ]
+          },
           { component: 'VersionSwitcher' },
         ],
         sidebar: {
@@ -240,12 +245,17 @@ export default defineConfig({
           { text: 'Home', link: '/src/en/' },
           { text: 'Download', link: '/src/en/download' },
           { text: 'Tutorial', link: '/src/en/tutorial/' },
-          { text: 'Playground', link: '/src/en/playground/' },
-          { text: 'Tools', link: '/src/en/tools/' },
-          { text: 'Design', link: '/src/en/design/' },
           { text: 'Reference', link: '/en/reference/' },
-          { text: 'Community', link: '/en/community/' },
-          { text: 'Blog', link: '/en/blog/' },
+          {
+            text: 'More',
+            items: [
+              { text: 'Playground', link: '/src/en/playground/' },
+              { text: 'Tools', link: '/src/en/tools/' },
+              { text: 'Design', link: '/src/en/design/' },
+              { text: 'Community', link: '/en/community/' },
+              { text: 'Blog', link: '/en/blog/' },
+            ]
+          },
           { component: 'VersionSwitcher' },
         ],
         sidebar: {
