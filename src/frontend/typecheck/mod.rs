@@ -351,9 +351,31 @@ impl TypeChecker {
     }
 
     /// 检查整个模块
+    ///
+    /// 在收集模式下，将收集所有错误后统一返回。
     pub fn check_module(
         &mut self,
         module: &Module,
+    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+        self.check_module_impl(module, false)
+    }
+
+    /// 检查整个模块（收集所有错误模式）
+    ///
+    /// 启用错误收集模式后，类型检查器会尽可能多地收集错误，
+    /// 而不是在第一个错误处停止。适用于 LSP 诊断场景。
+    pub fn check_module_collect_all(
+        &mut self,
+        module: &Module,
+    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+        self.check_module_impl(module, true)
+    }
+
+    /// 检查整个模块的内部实现
+    fn check_module_impl(
+        &mut self,
+        module: &Module,
+        collect_all: bool,
     ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
@@ -380,6 +402,10 @@ impl TypeChecker {
         let mut body_checker = inference::StatementChecker::new(self.env.solver());
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // 如果启用收集模式，设置收集所有错误
+        if collect_all {
+            body_checker.set_collect_all_errors(true);
+        }
         *self.body_checker_mut() = body_checker;
 
         // 将环境中的变量同步到 body_checker
@@ -394,19 +420,27 @@ impl TypeChecker {
             }
         }
 
+        // 收集 body_checker 中累积的错误（收集模式下产生的）
+        if let Some(ref mut bc) = self.body_checker {
+            for err in bc.drain_collected_errors() {
+                self.env.errors.add_error(err);
+            }
+        }
+
         // 求解所有约束
-        self.env.solver().solve().map_err(|e| {
-            e.into_iter()
-                .map(|e| {
+        let solve_result = self.env.solver().solve();
+        if let Err(constraint_errors) = solve_result {
+            for e in constraint_errors {
+                self.add_error(
                     ErrorCodeDefinition::type_mismatch(
                         &format!("{}", e.error.left),
                         &format!("{}", e.error.right),
                     )
                     .at(e.span)
-                    .build()
-                })
-                .collect::<Vec<_>>()
-        })?;
+                    .build(),
+                );
+            }
+        }
 
         // 如果有错误，返回所有错误
         if self.has_errors() {
@@ -915,6 +949,28 @@ pub fn check_module(
     ast: &Module,
     env: &mut Option<TypeEnvironment>,
 ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    check_module_inner(ast, env, false)
+}
+
+/// 检查模块（收集所有错误模式）
+///
+/// 与 `check_module` 相同，但启用错误收集模式。
+/// 类型检查器会尽可能多地收集错误，适用于 LSP 诊断。
+#[allow(unused_variables)]
+pub fn check_module_collect_all(
+    ast: &Module,
+    env: &mut Option<TypeEnvironment>,
+) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    check_module_inner(ast, env, true)
+}
+
+/// 模块检查内部实现
+#[allow(unused_variables)]
+fn check_module_inner(
+    ast: &Module,
+    env: &mut Option<TypeEnvironment>,
+    collect_all: bool,
+) -> Result<TypeCheckResult, Vec<Diagnostic>> {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = TypeChecker::new("main");
 
@@ -929,7 +985,11 @@ pub fn check_module(
     }
 
     // 执行模块检查
-    let result = checker.check_module(ast)?;
+    let result = if collect_all {
+        checker.check_module_collect_all(ast)?
+    } else {
+        checker.check_module(ast)?
+    };
 
     // 将 exports 和 method_bindings 导回传入的环境
     if let Some(ref mut ext_env) = env {

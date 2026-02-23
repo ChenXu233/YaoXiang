@@ -1,12 +1,38 @@
 //! Symbol table management
 //! Unified symbol management for RFC-004, RFC-010, and RFC-011 support
 
+use crate::util::span::Span;
+use std::collections::HashMap;
+
+/// 符号位置信息
+///
+/// 记录符号在源码中的精确位置，用于 LSP 跳转定义等功能。
+#[derive(Debug, Clone)]
+pub struct SymbolLocation {
+    /// 所在文件路径
+    pub file_path: String,
+    /// 符号所在的 Span
+    pub span: Span,
+}
+
+impl SymbolLocation {
+    /// 创建新的符号位置
+    pub fn new(
+        file_path: String,
+        span: Span,
+    ) -> Self {
+        Self { file_path, span }
+    }
+}
+
 /// Symbol table entry
 #[derive(Debug, Clone)]
 pub struct SymbolEntry {
     pub name: String,
     pub kind: SymbolKind,
     pub arity: Option<usize>,
+    /// 符号定义的位置信息（用于 LSP 跳转定义）
+    pub location: Option<SymbolLocation>,
 }
 
 /// Kind of symbol
@@ -56,6 +82,7 @@ impl SymbolTable {
             name,
             kind,
             arity: None,
+            location: None,
         });
     }
 
@@ -70,6 +97,38 @@ impl SymbolTable {
             name,
             kind,
             arity: Some(arity),
+            location: None,
+        });
+    }
+
+    /// 插入带位置信息的符号
+    pub fn insert_with_location(
+        &mut self,
+        name: String,
+        kind: SymbolKind,
+        location: SymbolLocation,
+    ) {
+        self.symbols.push(SymbolEntry {
+            name,
+            kind,
+            arity: None,
+            location: Some(location),
+        });
+    }
+
+    /// 插入带位置和元数信息的符号
+    pub fn insert_full(
+        &mut self,
+        name: String,
+        kind: SymbolKind,
+        arity: Option<usize>,
+        location: Option<SymbolLocation>,
+    ) {
+        self.symbols.push(SymbolEntry {
+            name,
+            kind,
+            arity,
+            location,
         });
     }
 
@@ -106,6 +165,128 @@ impl SymbolTable {
 impl Default for SymbolTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 符号索引（反向索引）
+///
+/// 提供名称→位置列表和文件→符号列表的快速查询。
+/// 主要用于 LSP 的跳转定义、查找引用和工作区符号搜索。
+#[derive(Debug, Default)]
+pub struct SymbolIndex {
+    /// 名称 → 符号信息列表（支持重名/重载）
+    by_name: HashMap<String, Vec<IndexedSymbol>>,
+    /// 文件路径 → 该文件中的所有符号
+    by_file: HashMap<String, Vec<IndexedSymbol>>,
+}
+
+/// 索引中的符号信息
+#[derive(Debug, Clone)]
+pub struct IndexedSymbol {
+    /// 符号名称
+    pub name: String,
+    /// 符号种类
+    pub kind: SymbolKind,
+    /// 元数（函数参数数量）
+    pub arity: Option<usize>,
+    /// 位置信息
+    pub location: SymbolLocation,
+}
+
+impl SymbolIndex {
+    /// 创建空索引
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 添加符号到索引
+    pub fn add(
+        &mut self,
+        symbol: IndexedSymbol,
+    ) {
+        self.by_file
+            .entry(symbol.location.file_path.clone())
+            .or_default()
+            .push(symbol.clone());
+        self.by_name
+            .entry(symbol.name.clone())
+            .or_default()
+            .push(symbol);
+    }
+
+    /// 从 SymbolTable 构建索引
+    pub fn from_table(table: &SymbolTable) -> Self {
+        let mut index = Self::new();
+        for entry in &table.symbols {
+            if let Some(ref loc) = entry.location {
+                index.add(IndexedSymbol {
+                    name: entry.name.clone(),
+                    kind: entry.kind.clone(),
+                    arity: entry.arity,
+                    location: loc.clone(),
+                });
+            }
+        }
+        index
+    }
+
+    /// 根据名称查找所有定义位置
+    pub fn find_by_name(
+        &self,
+        name: &str,
+    ) -> &[IndexedSymbol] {
+        self.by_name.get(name).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
+    /// 根据文件查找该文件中的所有符号
+    pub fn find_by_file(
+        &self,
+        file_path: &str,
+    ) -> &[IndexedSymbol] {
+        self.by_file
+            .get(file_path)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 检查名称是否存在于索引中
+    pub fn contains(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.by_name.contains_key(name)
+    }
+
+    /// 获取索引中的所有符号名称
+    pub fn all_names(&self) -> Vec<&str> {
+        self.by_name.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// 获取索引中的所有文件路径
+    pub fn all_files(&self) -> Vec<&str> {
+        self.by_file.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// 清空某个文件的符号（用于增量更新）
+    pub fn remove_file(
+        &mut self,
+        file_path: &str,
+    ) {
+        if let Some(symbols) = self.by_file.remove(file_path) {
+            for sym in &symbols {
+                if let Some(entries) = self.by_name.get_mut(&sym.name) {
+                    entries.retain(|s| s.location.file_path != file_path);
+                    if entries.is_empty() {
+                        self.by_name.remove(&sym.name);
+                    }
+                }
+            }
+        }
+    }
+
+    /// 获取索引中的符号总数
+    pub fn symbol_count(&self) -> usize {
+        self.by_file.values().map(|v| v.len()).sum()
     }
 }
 

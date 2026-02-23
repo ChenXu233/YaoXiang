@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "YaoXiang",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#delimiters"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.yaoxiang",
+          "match": "\\b(if|elif|else|match|while|for|in|return|break|continue)\\b"
+        },
+        {
+          "name": "keyword.declaration.yaoxiang",
+          "match": "\\b(pub|use|spawn|ref|mut)\\b"
+        },
+        {
+          "name": "keyword.other.yaoxiang",
+          "match": "\\b(as|unsafe)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.yaoxiang",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.yaoxiang",
+          "match": "\\\\."
+        },
+        {
+          "name": "string.interpolated.yaoxiang",
+          "match": "\\{[^}]+\\}"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.yaoxiang",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.yaoxiang",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.yaoxiang",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.yaoxiang",
+          "match": "(=|\\+|-|\\*|/|%|==|!=|>|<|>=|<=|&&|\\|\\||!)"
+        }
+      ]
+    },
+    "delimiters": {
+      "patterns": [
+        {
+          "name": "punctuation.yaoxiang",
+          "match": "[(),;:\\[\\]{}]"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.yaoxiang"
+}

@@ -166,6 +166,16 @@ impl<'a> ParserState<'a> {
         self.errors.len()
     }
 
+    /// 获取所有错误
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
+
+    /// 取出所有错误（消耗）
+    pub fn take_errors(&mut self) -> Vec<ParseError> {
+        std::mem::take(&mut self.errors)
+    }
+
     pub fn truncate_errors(
         &mut self,
         len: usize,
