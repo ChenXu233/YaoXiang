@@ -15,6 +15,7 @@
 
 pub mod capabilities;
 pub mod handlers;
+pub mod locate;
 pub mod protocol;
 pub mod server;
 pub mod session;
