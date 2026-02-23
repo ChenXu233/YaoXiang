@@ -78,6 +78,7 @@ fn log_token(token: &Token) {
         TokenKind::IntLiteral(n) => (MSG::LexTokenNumber, n.to_string()),
         TokenKind::FloatLiteral(f) => (MSG::LexTokenNumber, f.to_string()),
         TokenKind::StringLiteral(s) => (MSG::LexTokenString, s.clone()),
+        TokenKind::FStringLiteral(s) => (MSG::LexTokenString, format!("f\"{}\"", s)),
         TokenKind::CharLiteral(c) => (MSG::LexTokenChar, c.to_string()),
         TokenKind::Plus
         | TokenKind::Minus
@@ -181,3 +182,7 @@ mod tests {
         assert!(has_bracket, "Should have bracket token (Lt or LBracket)");
     }
 }
+
+#[cfg(test)]
+#[path = "tests/fstring.rs"]
+mod fstring_tests;

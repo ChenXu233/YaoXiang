@@ -14,6 +14,7 @@
 mod basic;
 mod boundary;
 mod fn_def;
+mod fstring;
 mod old_syntax_rejection;
 mod ref_test;
 mod state;

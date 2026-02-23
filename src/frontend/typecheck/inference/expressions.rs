@@ -795,6 +795,23 @@ impl<'a> ExpressionInferrer<'a> {
 
                 Ok(MonoType::List(Box::new(elem_ty)))
             }
+
+            // RFC-012: F-string 类型推断
+            // f-string 总是返回 String 类型
+            crate::frontend::core::parser::ast::Expr::FString { segments, .. } => {
+                // 验证每个插值表达式的类型
+                for segment in segments {
+                    if let crate::frontend::core::parser::ast::FStringSegment::Interpolation {
+                        expr,
+                        ..
+                    } = segment
+                    {
+                        let _expr_ty = self.infer_expr(expr)?;
+                        // 所有类型都支持转换为 String（通过 format()）
+                    }
+                }
+                Ok(MonoType::String)
+            }
         }
     }
 

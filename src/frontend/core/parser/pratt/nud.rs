@@ -40,6 +40,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::StringLiteral(_)) => Some((BP_HIGHEST, Self::parse_string_literal)),
             Some(TokenKind::CharLiteral(_)) => Some((BP_HIGHEST, Self::parse_char_literal)),
             Some(TokenKind::BoolLiteral(_)) => Some((BP_HIGHEST, Self::parse_bool_literal)),
+            // RFC-012: F-string literal
+            Some(TokenKind::FStringLiteral(_)) => Some((BP_HIGHEST, Self::parse_fstring)),
             // Identifier or path
             Some(TokenKind::Identifier(_)) => Some((BP_HIGHEST, Self::parse_identifier)),
             // Wildcard pattern (_)
@@ -272,6 +274,117 @@ impl<'a> ParserState<'a> {
         } else {
             None
         }
+    }
+
+    /// RFC-012: Parse f-string literal into FString AST node
+    ///
+    /// The FStringLiteral token contains the raw content of f"...".
+    /// This method splits it into Text and Interpolation segments.
+    fn parse_fstring(&mut self) -> Option<Expr> {
+        let span = self.span();
+        let token = self.current().cloned()?;
+        if let TokenKind::FStringLiteral(raw) = token.kind {
+            self.bump();
+            let segments = Self::parse_fstring_segments(&raw, span)?;
+            Some(Expr::FString { segments, span })
+        } else {
+            None
+        }
+    }
+
+    /// Parse f-string raw content into segments
+    ///
+    /// Splits "Hello {name}, pi is {pi:.2f}" into:
+    /// [Text("Hello "), Interpolation(name, None), Text(", pi is "), Interpolation(pi, Some(".2f"))]
+    fn parse_fstring_segments(
+        raw: &str,
+        span: Span,
+    ) -> Option<Vec<FStringSegment>> {
+        let mut segments = Vec::new();
+        let mut chars = raw.chars().peekable();
+        let mut text_buf = String::new();
+
+        while let Some(&c) = chars.peek() {
+            if c == '{' {
+                chars.next();
+                // Flush text buffer
+                if !text_buf.is_empty() {
+                    segments.push(FStringSegment::Text(text_buf.clone()));
+                    text_buf.clear();
+                }
+
+                // Collect expression content (until matching `}`)
+                let mut expr_buf = String::new();
+                let mut depth = 1;
+                while let Some(&inner) = chars.peek() {
+                    if inner == '{' {
+                        depth += 1;
+                        expr_buf.push(inner);
+                        chars.next();
+                    } else if inner == '}' {
+                        depth -= 1;
+                        if depth == 0 {
+                            chars.next();
+                            break;
+                        }
+                        expr_buf.push(inner);
+                        chars.next();
+                    } else {
+                        expr_buf.push(inner);
+                        chars.next();
+                    }
+                }
+
+                // Split on `:` for format spec (only at top level, not inside nested exprs)
+                let (expr_str, format_spec) = split_format_spec(&expr_buf);
+
+                // Parse the expression string using the lexer+parser
+                let expr_str_trimmed = expr_str.trim();
+                if expr_str_trimmed.is_empty() {
+                    // Empty interpolation: f"{}" → error, treat as empty text
+                    continue;
+                }
+
+                // Tokenize and parse the expression
+                let tokens_result = crate::frontend::core::lexer::tokenize(expr_str_trimmed);
+                match tokens_result {
+                    Ok(tokens) => {
+                        let mut parser = crate::frontend::core::parser::ParserState::new(&tokens);
+                        if let Some(expr) =
+                            parser.parse_expression(crate::frontend::core::parser::pratt::BP_LOWEST)
+                        {
+                            segments.push(FStringSegment::Interpolation {
+                                expr: Box::new(expr),
+                                format_spec,
+                            });
+                        } else {
+                            // Failed to parse expression, treat as text
+                            segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
+                        }
+                    }
+                    Err(_) => {
+                        // Lex error, treat as text
+                        segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
+                    }
+                }
+            } else {
+                text_buf.push(c);
+                chars.next();
+            }
+        }
+
+        // Flush remaining text
+        if !text_buf.is_empty() {
+            segments.push(FStringSegment::Text(text_buf));
+        }
+
+        // If no segments found, return a single empty text
+        if segments.is_empty() {
+            segments.push(FStringSegment::Text(String::new()));
+        }
+
+        let _ = span; // Used by caller for the FString node span
+        Some(segments)
     }
 
     /// Parse grouped expression or tuple: `(expr)` or `(expr, expr, ...)`
@@ -828,4 +941,41 @@ impl<'a> ParserState<'a> {
             _ => None,
         }
     }
+}
+
+/// RFC-012: Split an f-string interpolation into expression and format spec
+///
+/// "pi:.2f" → ("pi", Some(".2f"))
+/// "x + y" → ("x + y", None)
+/// "name" → ("name", None)
+fn split_format_spec(s: &str) -> (String, Option<String>) {
+    // Find the last ':' that is not inside balanced brackets/parens
+    let mut depth_paren = 0i32;
+    let mut depth_bracket = 0i32;
+    let mut last_colon_pos = None;
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth_paren += 1,
+            ')' => depth_paren -= 1,
+            '[' => depth_bracket += 1,
+            ']' => depth_bracket -= 1,
+            ':' if depth_paren == 0 && depth_bracket == 0 => {
+                last_colon_pos = Some(i);
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(pos) = last_colon_pos {
+        let expr_part = s[..pos].to_string();
+        let spec_part = s[pos + 1..].to_string();
+        // Only treat as format spec if the part after : looks like a format spec
+        // (doesn't contain spaces or look like another expression)
+        if !spec_part.is_empty() && !spec_part.contains(' ') {
+            return (expr_part, Some(spec_part));
+        }
+    }
+
+    (s.to_string(), None)
 }

@@ -22,6 +22,7 @@ mod errors;
 mod rfc004_lexer;
 mod rfc010_lexer;
 mod debug_lexer;
+mod fstring;
 
 // Re-export all tests for backward compatibility
 pub use basic::*;
@@ -34,3 +35,4 @@ pub use errors::*;
 pub use rfc004_lexer::*;
 pub use rfc010_lexer::*;
 pub use debug_lexer::*;
+pub use fstring::*;

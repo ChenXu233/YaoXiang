@@ -885,6 +885,33 @@ impl AstToIrGenerator {
                 ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
                 ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
             },
+            // RFC-012: F-string 常量求值
+            ast::Expr::FString { segments, .. } => {
+                let mut result = String::new();
+                for seg in segments {
+                    match seg {
+                        ast::FStringSegment::Text(s) => result.push_str(s),
+                        ast::FStringSegment::Interpolation { expr, format_spec } => {
+                            let val = self.eval_const_expr(expr)?;
+                            let val_str = match &val {
+                                ConstValue::Int(n) => n.to_string(),
+                                ConstValue::Float(f) => f.to_string(),
+                                ConstValue::Bool(b) => b.to_string(),
+                                ConstValue::String(s) => s.clone(),
+                                ConstValue::Char(c) => c.to_string(),
+                                ConstValue::Void => String::new(),
+                                ConstValue::Bytes(b) => format!("{:?}", b),
+                            };
+                            // 格式化说明符在常量求值中不处理，遇到则退回运行时
+                            if format_spec.is_some() {
+                                return None;
+                            }
+                            result.push_str(&val_str);
+                        }
+                    }
+                }
+                Some(ConstValue::String(result))
+            }
             // TODO: 支持更复杂的常量表达式
             _ => None,
         }
@@ -1773,6 +1800,7 @@ impl AstToIrGenerator {
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
+            ast::Expr::FString { span, .. } => *span,
         }
     }
 
@@ -2750,6 +2778,73 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
                     env: Vec::new(),
+                });
+            }
+            // RFC-012: F-string 代码生成
+            Expr::FString { segments, span: _ } => {
+                // 1. 尝试常量求值
+                if let Some(const_val) = self.eval_const_expr(expr) {
+                    constants.push(const_val.clone());
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Const(const_val),
+                    });
+                    return Ok(());
+                }
+
+                // 2. 转换为 format() 调用
+                // 构建 format_str: "Hello {} is {} years old"
+                // 构建 args: [name, age]
+                let mut format_str = String::new();
+                let mut arg_regs = Vec::new();
+                let mut arg_index = 0usize;
+
+                for segment in segments {
+                    match segment {
+                        ast::FStringSegment::Text(text) => {
+                            format_str.push_str(text);
+                        }
+                        ast::FStringSegment::Interpolation {
+                            expr: interp_expr,
+                            format_spec,
+                        } => {
+                            // Build format placeholder: {0}, {1}, or {0:.2f}
+                            if let Some(spec) = format_spec {
+                                format_str.push_str(&format!(
+                                    "{{{}}}",
+                                    format!("{0}:{1}", arg_index, spec)
+                                ));
+                            } else {
+                                format_str.push_str(&format!("{{{}}}", arg_index));
+                            }
+                            arg_index += 1;
+
+                            // Generate IR for the interpolation expression
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
+                            arg_regs.push(Operand::Local(arg_reg));
+                        }
+                    }
+                }
+
+                // Load format string constant
+                let fmt_reg = self.next_temp_reg();
+                let fmt_const = ConstValue::String(format_str);
+                constants.push(fmt_const.clone());
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(fmt_reg),
+                    src: Operand::Const(fmt_const),
+                });
+
+                // Build args: [format_str, arg0, arg1, ...]
+                let mut call_args = vec![Operand::Local(fmt_reg)];
+                call_args.extend(arg_regs);
+
+                // Generate Call to std.string.format
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String("std.string.format".to_string())),
+                    args: call_args,
                 });
             }
             _ => {
