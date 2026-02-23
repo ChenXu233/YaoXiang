@@ -196,6 +196,9 @@ enum Commands {
 
     /// List all dependencies
     List,
+
+    /// Start the Language Server Protocol (LSP) server
+    Lsp,
 }
 
 fn main() -> Result<()> {
@@ -344,6 +347,10 @@ fn main() -> Result<()> {
         }
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
+        }
+        Commands::Lsp => {
+            // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）
+            yaoxiang::lsp::run_lsp_server().context("LSP server error")?;
         }
     }
 

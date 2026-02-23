@@ -146,7 +146,7 @@
 
 ---
 
-## 阶段 1：LSP 基础框架（v0.7）
+## 阶段 1：LSP 基础框架（v0.7）✅ 已完成
 
 ### 1.1 项目结构创建
 
@@ -181,13 +181,20 @@ src/lsp/
 ```
 
 **验收标准**：
-- [ ] 目录结构创建完成
-- [ ] 依赖正确引入（lsp-types, serde_json, tokio 等）
-- [ ] 基础模块编译通过
+- [x] 目录结构创建完成
+- [x] 依赖正确引入（lsp-types 0.97, lsp-server 0.7, serde_json, tokio 等）
+- [x] 基础模块编译通过
+
+**实现说明**：
+- 创建 `src/lsp/` 目录，包含 `mod.rs`、`server.rs`、`session.rs`、`capabilities.rs`、`protocol.rs`、`world.rs`、`handlers/`
+- Cargo.toml 添加 `lsp-types = "0.97"` 和 `lsp-server = "0.7"` 依赖
+- `lib.rs` 注册 `pub mod lsp`
+- `main.rs` 添加 `yaoxiang lsp` 子命令入口
+- handlers 子模块：initialize、text_document、diagnostics（已实现）；completion、definition、references、hover（占位）
 
 **测试项目**：
-- [ ] 模块编译测试
-- [ ] 依赖版本兼容性测试
+- [x] 模块编译测试
+- [x] 依赖版本兼容性测试
 
 ---
 
@@ -200,14 +207,23 @@ src/lsp/
 - 声明支持的 LSP 协议版本（3.18）
 
 **验收标准**：
-- [ ] initialize 返回正确的 serverCapabilities
-- [ ] 支持的标准方法全部响应正确
-- [ ] 正确处理客户端关闭连接
+- [x] initialize 返回正确的 serverCapabilities
+- [x] 支持的标准方法全部响应正确
+- [x] 正确处理客户端关闭连接
+
+**实现说明**：
+- `handle_initialize()`：返回 ServerCapabilities（当前支持 TextDocumentSync Full 模式）+ ServerInfo
+- `handle_initialized()`：会话进入 Running 状态
+- `handle_shutdown()`：清理文档缓存，会话进入 ShuttingDown 状态
+- `exit` 通知结束主循环
+- Session 状态机：Uninitialized → Initializing → Running → ShuttingDown
+- 未知方法返回 MethodNotFound 错误
+- 修改文件：`src/lsp/handlers/initialize.rs`、`src/lsp/server.rs`、`src/lsp/session.rs`
 
 **测试项目**：
-- [ ] initialize 请求/响应测试
-- [ ] shutdown/exit 流程测试
-- [ ] capabilities 声明完整性测试
+- [x] initialize 请求/响应测试
+- [x] shutdown/exit 流程测试
+- [x] capabilities 声明完整性测试
 
 ---
 
@@ -219,14 +235,20 @@ src/lsp/
 - 错误信息格式化为可读日志
 
 **验收标准**：
-- [ ] 启动时输出配置信息
-- [ ] 错误请求返回正确的 error response
-- [ ] 日志包含请求/响应关键信息
+- [x] 启动时输出配置信息
+- [x] 错误请求返回正确的 error response
+- [x] 日志包含请求/响应关键信息
+
+**实现说明**：
+- 复用项目已有的 `tracing` 日志系统，每个请求/通知都记录 info 级别日志
+- `protocol.rs` 实现 JSON-RPC 响应构建函数：`ok_response()`、`error_response()`、`method_not_found()`、`internal_error()`、`notification()`
+- 支持 ErrorCode：MethodNotFound、InternalError、InvalidRequest 等
+- 修改文件：`src/lsp/protocol.rs`
 
 **测试项目**：
-- [ ] 日志输出测试
-- [ ] 错误响应格式测试
-- [ ] 异常请求处理测试
+- [x] 日志输出测试
+- [x] 错误响应格式测试
+- [x] 异常请求处理测试
 
 ---
 
