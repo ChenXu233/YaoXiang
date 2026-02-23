@@ -873,6 +873,7 @@ impl AstToIrGenerator {
     }
 
     /// 尝试将表达式求值为编译时常量
+    #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
         &self,
         expr: &ast::Expr,
@@ -2811,10 +2812,7 @@ impl AstToIrGenerator {
                         } => {
                             // Build format placeholder: {0}, {1}, or {0:.2f}
                             if let Some(spec) = format_spec {
-                                format_str.push_str(&format!(
-                                    "{{{}}}",
-                                    format!("{0}:{1}", arg_index, spec)
-                                ));
+                                format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
                             } else {
                                 format_str.push_str(&format!("{{{}}}", arg_index));
                             }

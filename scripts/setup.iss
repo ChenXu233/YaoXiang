@@ -1,7 +1,7 @@
 ; YaoXiang Inno Setup Script
 
 #define MyAppName "YaoXiang"
-#define MyAppVersion "0.6.3"
+#define MyAppVersion "0.6.4"
 #define MyAppPublisher "ChenXu233"
 #define MyAppURL "https://github.com/ChenXu233/yaoxiang"
 #define MyAppExeName "yaoxiang.exe"

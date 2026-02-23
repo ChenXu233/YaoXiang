@@ -1,7 +1,7 @@
 {
-  "name": "yaoxiang-language-support",
-  "displayName": "YaoXiang Language Support",
-  "description": "YaoXiang programming language support for VS Code",
+  "name": "yaoxiang-language-pack",
+  "displayName": "YaoXiang Language Pack",
+  "description": "YaoXiang programming language support - syntax highlighting and language configuration",
   "version": "0.1.0",
   "publisher": "yaoxiang",
   "engines": {

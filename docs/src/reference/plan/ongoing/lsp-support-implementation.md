@@ -35,7 +35,7 @@
 ### 0.1 错误收集模式
 
 **实现目标**：
-- 修改 `src/frontend/typecheck/inference/` 模块，返回 `Result<Type, Vec<Error>>` 而非遇到错误立即返回
+- 修改 `src/frontend/typecheck/inference/` 模块，返回 `Result&lt;Type, Vec&lt;Error>>` 而非遇到错误立即返回
 - 实现 `ErrorKind` 枚举，包含 `Error`（严重错误）、`Warning`（警告）、`Note`（附加信息）
 - 错误收集器持续累积错误，检查完成后统一返回所有错误
 
@@ -46,7 +46,7 @@
 - [x] 仅 Warning 时继续编译并显示警告
 
 **实现说明**：
-- `StatementChecker` 新增 `collect_all_errors` 模式，错误不再短路返回而是累积到 `collected_errors: Vec<Diagnostic>`
+- `StatementChecker` 新增 `collect_all_errors` 模式，错误不再短路返回而是累积到 `collected_errors: Vec&lt;Diagnostic>`
 - `TypeChecker::check_module_collect_all()` 为 LSP 提供全量错误收集入口
 - 复用已有的 `Severity` 枚举（Error/Warning/Info/Hint）
 - 修改文件：`src/frontend/typecheck/inference/statements.rs`、`src/frontend/typecheck/mod.rs`
@@ -98,7 +98,7 @@
 - [x] 能根据文件查询该文件所有符号
 
 **实现说明**：
-- `SymbolEntry` 新增 `location: Option<SymbolLocation>` 字段，`SymbolLocation` 包含 `file_path` 和 `Span`
+- `SymbolEntry` 新增 `location: Option&lt;SymbolLocation>>` 字段，`SymbolLocation` 包含 `file_path` 和 `Span`
 - `SymbolTable` 新增 `insert_with_location()` 和 `insert_full()` 方法
 - 新增 `SymbolIndex` 反向索引结构，支持 `by_name` 和 `by_file` 双向查询
 - 方法包括：`find_by_name()`、`find_by_file()`、`from_table()`、`remove_file()` 等
@@ -119,7 +119,7 @@
   - `version: u32` - LSP 文档版本号
   - `content: String` - 当前内容
   - `content_hash: u64` - 内容哈希（快速比较）
-  - `ast: Option<Ast>` - 缓存的 AST
+  - `ast: Option&lt;Ast>>` - 缓存的 AST
 - 实现增量变更检测（对比 content_hash）
 - 文件级缓存：变化时重新解析整个文件
 
@@ -130,8 +130,8 @@
 - [x] 内存占用合理（有清理机制）
 
 **实现说明**：
-- `DocumentCache` 结构：version、content、content_hash、ast (Option<Module>)、file_path、dirty
-- `DocumentStore` 管理所有打开文档，HashMap<String, DocumentCache>，支持容量限制和自动清理
+- `DocumentCache` 结构：version、content、content_hash、ast (`Option&lt;Module>>`)、file_path、dirty
+- `DocumentStore` 管理所有打开文档，`HashMap<String, DocumentCache>`，支持容量限制和自动清理
 - 内容哈希使用 `DefaultHasher`，`update()` 仅在哈希变化时更新内容和使 AST 缓存失效
 - 清理策略：超过 `max_documents`（默认 128）时移除版本号最低的文档
 - 包含完整测试套件（7 个单元测试）

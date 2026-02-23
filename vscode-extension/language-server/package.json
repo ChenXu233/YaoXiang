@@ -1,0 +1,30 @@
+{
+  "name": "yaoxiang-language-server",
+  "displayName": "YaoXiang Language Server",
+  "description": "YaoXiang LSP server for VS Code - provides code completion, diagnostics, and more",
+  "version": "0.1.0",
+  "publisher": "yaoxiang",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "yaoxiang",
+        "extensions": [
+          ".yx"
+        ],
+        "server": {
+          "id": "yaoxiang-lsp",
+          "runtime": "yaoxiang",
+          "args": [
+            "lsp"
+          ]
+        }
+      }
+    ]
+  }
+}
