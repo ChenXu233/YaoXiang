@@ -4,8 +4,8 @@
 
 use super::state::LexerState;
 use super::literals::{
-    scan_number, scan_string, scan_char, scan_leading_dot, is_identifier_start, is_identifier_char,
-    is_digit,
+    scan_number, scan_string, scan_char, scan_leading_dot, scan_fstring, is_identifier_start,
+    is_identifier_char, is_digit,
 };
 use crate::frontend::core::lexer::tokens::*;
 use crate::util::span::{Position, Span};
@@ -303,6 +303,14 @@ impl<'a> Lexer<'a> {
     ) -> Option<Token> {
         let mut value = String::new();
         value.push(first_char);
+
+        // RFC-012: Check for f-string prefix: f"..."
+        if first_char == 'f' {
+            if let Some(&'"') = self.peek() {
+                self.advance(); // consume '"'
+                return scan_fstring(self);
+            }
+        }
 
         while let Some(&c) = self.peek() {
             if is_identifier_char(c) {

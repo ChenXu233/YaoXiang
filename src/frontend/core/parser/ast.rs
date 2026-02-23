@@ -112,6 +112,24 @@ pub enum Expr {
         body: Box<Block>,
         span: Span,
     },
+    /// RFC-012: F-string template literal
+    /// `f"Hello {name}"` → FString { segments: [Text("Hello "), Interpolation { expr, format_spec }] }
+    FString {
+        segments: Vec<FStringSegment>,
+        span: Span,
+    },
+}
+
+/// RFC-012: F-string segment
+#[derive(Debug, Clone)]
+pub enum FStringSegment {
+    /// Plain text fragment
+    Text(String),
+    /// Interpolation expression with optional format specifier
+    Interpolation {
+        expr: Box<Expr>,
+        format_spec: Option<String>,
+    },
 }
 
 /// Binary operators

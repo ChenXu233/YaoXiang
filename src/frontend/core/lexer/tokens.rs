@@ -15,6 +15,8 @@ pub enum LexError {
     InvalidNumber(String),
     #[error("Unexpected character: '{ch}'")]
     UnexpectedChar { ch: char },
+    #[error("Unterminated f-string interpolation starting at {position}")]
+    UnterminatedFStringInterpolation { position: String },
 }
 
 /// Token kind
@@ -49,6 +51,9 @@ pub enum TokenKind {
     BoolLiteral(bool),
     CharLiteral(char),
     StringLiteral(String),
+    /// RFC-012: F-string template literal
+    /// Stores the raw content of f"..." including interpolation markers
+    FStringLiteral(String),
     VoidLiteral,
 
     // Operators

@@ -868,3 +868,191 @@ pub fn hex_digit_value(c: char) -> u128 {
         10 + c as u128 - b'A' as u128
     }
 }
+
+/// RFC-012: Scan f-string literal
+///
+/// Called after consuming `f` and `"`. Scans the content of f"..." including
+/// interpolation expressions delimited by `{` and `}`.
+/// The raw content is stored as a single string with `{` and `}` markers preserved.
+/// The parser will later split it into segments.
+///
+/// Escape sequences are handled the same as regular strings.
+/// `{{` and `}}` are escape sequences for literal `{` and `}`.
+pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
+    let start_pos = lexer.position();
+    let mut value = String::new();
+    let mut brace_depth = 0;
+
+    while let Some(&c) = lexer.peek() {
+        match c {
+            '"' if brace_depth == 0 => {
+                lexer.advance();
+                return Some(Token {
+                    kind: TokenKind::FStringLiteral(value.clone()),
+                    span: Span::new(
+                        Position::with_offset(
+                            lexer.start_line(),
+                            lexer.start_column(),
+                            lexer.start_offset(),
+                        ),
+                        lexer.position(),
+                    ),
+                    literal: None,
+                });
+            }
+            '{' => {
+                lexer.advance();
+                // Check for escape {{ → literal {
+                if brace_depth == 0 {
+                    if lexer.peek() == Some(&'{') {
+                        lexer.advance();
+                        value.push('{');
+                        continue;
+                    }
+                }
+                brace_depth += 1;
+                value.push('{');
+            }
+            '}' => {
+                lexer.advance();
+                if brace_depth == 0 {
+                    // Check for escape }} → literal }
+                    if lexer.peek() == Some(&'}') {
+                        lexer.advance();
+                        value.push('}');
+                        continue;
+                    }
+                    // Unmatched }, treat as literal
+                    value.push('}');
+                } else {
+                    brace_depth -= 1;
+                    value.push('}');
+                }
+            }
+            '\\' if brace_depth == 0 => {
+                lexer.advance();
+                if let Some(escaped) = lexer.advance() {
+                    match escaped {
+                        'n' => value.push('\n'),
+                        't' => value.push('\t'),
+                        'r' => value.push('\r'),
+                        '\\' => value.push('\\'),
+                        '"' => value.push('"'),
+                        '\'' => value.push('\''),
+                        '0' => value.push('\0'),
+                        'x' => {
+                            let mut hex = String::new();
+                            for _ in 0..2 {
+                                if let Some(&hc) = lexer.peek() {
+                                    if is_hex_digit(hc) {
+                                        hex.push(hc);
+                                        lexer.advance();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            if hex.len() == 2 {
+                                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                                    value.push(byte as char);
+                                } else {
+                                    lexer.error = Some(
+                                        crate::frontend::core::lexer::LexError::InvalidEscape {
+                                            sequence: format!("\\x{}", hex),
+                                        },
+                                    );
+                                }
+                            } else {
+                                lexer.error =
+                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                                        sequence: format!("\\x{}", hex),
+                                    });
+                            }
+                        }
+                        'u' => {
+                            if lexer.peek() == Some(&'{') {
+                                lexer.advance();
+                                let mut hex = String::new();
+                                while let Some(&hc) = lexer.peek() {
+                                    if is_hex_digit(hc) {
+                                        hex.push(hc);
+                                        lexer.advance();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                if lexer.peek() == Some(&'}') && !hex.is_empty() {
+                                    lexer.advance();
+                                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
+                                        if let Some(ch) = char::from_u32(codepoint) {
+                                            value.push(ch);
+                                        } else {
+                                            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                                                sequence: format!("\\u{{{}}}", hex),
+                                            });
+                                        }
+                                    } else {
+                                        lexer.error = Some(
+                                            crate::frontend::core::lexer::LexError::InvalidEscape {
+                                                sequence: format!("\\u{{{}}}", hex),
+                                            },
+                                        );
+                                    }
+                                } else {
+                                    lexer.error = Some(
+                                        crate::frontend::core::lexer::LexError::InvalidEscape {
+                                            sequence: "\\u{".to_string(),
+                                        },
+                                    );
+                                }
+                            } else {
+                                lexer.error =
+                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                                        sequence: "\\u".to_string(),
+                                    });
+                            }
+                        }
+                        c => {
+                            lexer.error =
+                                Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                                    sequence: c.to_string(),
+                                });
+                        }
+                    }
+                }
+            }
+            '\n' if brace_depth == 0 => {
+                lexer.error = Some(crate::frontend::core::lexer::LexError::UnterminatedString {
+                    position: format!("{}:{}", start_pos.line, start_pos.column),
+                });
+                return Some(Token {
+                    kind: TokenKind::Error("Unterminated f-string".to_string()),
+                    span: lexer.span(),
+                    literal: None,
+                });
+            }
+            c => {
+                value.push(c);
+                lexer.advance();
+            }
+        }
+    }
+
+    // Unterminated f-string
+    if brace_depth > 0 {
+        lexer.error = Some(
+            crate::frontend::core::lexer::LexError::UnterminatedFStringInterpolation {
+                position: format!("{}:{}", start_pos.line, start_pos.column),
+            },
+        );
+    } else {
+        lexer.error = Some(crate::frontend::core::lexer::LexError::UnterminatedString {
+            position: format!("{}:{}", start_pos.line, start_pos.column),
+        });
+    }
+    Some(Token {
+        kind: TokenKind::Error("Unterminated f-string".to_string()),
+        span: lexer.span(),
+        literal: None,
+    })
+}

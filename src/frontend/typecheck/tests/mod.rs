@@ -3,6 +3,7 @@
 mod basic;
 mod check;
 mod constraint;
+mod fstring;
 mod gat;
 mod infer;
 mod inference;
