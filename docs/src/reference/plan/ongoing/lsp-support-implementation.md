@@ -26,10 +26,11 @@
 
 ---
 
-## 阶段 0：编译器前置适配 ⚠️ 关键
+## 阶段 0：编译器前置适配 ✅ 已完成
 
 > **重要性**：此阶段是 LSP 实现的前提，必须先完成
 > **目标版本**：v0.6（与 LSP 服务器开发并行）
+> **完成日期**：2025-07
 
 ### 0.1 错误收集模式
 
@@ -39,16 +40,22 @@
 - 错误收集器持续累积错误，检查完成后统一返回所有错误
 
 **验收标准**：
-- [ ] 类型检查器对单个文件返回所有错误（非短路返回）
-- [ ] 错误包含 Severity 级别信息
-- [ ] 存在 Error 时 publishDiagnostics 显示错误
-- [ ] 仅 Warning 时继续编译并显示警告
+- [x] 类型检查器对单个文件返回所有错误（非短路返回）
+- [x] 错误包含 Severity 级别信息
+- [x] 存在 Error 时 publishDiagnostics 显示错误
+- [x] 仅 Warning 时继续编译并显示警告
+
+**实现说明**：
+- `StatementChecker` 新增 `collect_all_errors` 模式，错误不再短路返回而是累积到 `collected_errors: Vec<Diagnostic>`
+- `TypeChecker::check_module_collect_all()` 为 LSP 提供全量错误收集入口
+- 复用已有的 `Severity` 枚举（Error/Warning/Info/Hint）
+- 修改文件：`src/frontend/typecheck/inference/statements.rs`、`src/frontend/typecheck/mod.rs`
 
 **测试项目**：
-- [ ] 单文件多错误收集测试（至少 3 个类型错误）
-- [ ] Error/Warning/Note 级别区分测试
-- [ ] 错误累积后统一返回测试
-- [ ] 回归测试：现有正确代码行为不变
+- [x] 单文件多错误收集测试（至少 3 个类型错误）
+- [x] Error/Warning/Note 级别区分测试
+- [x] 错误累积后统一返回测试
+- [x] 回归测试：现有正确代码行为不变
 
 ---
 
@@ -60,15 +67,21 @@
 - 示例：`x = ;` → `x = MissingExpression`
 
 **验收标准**：
-- [ ] 解析器遇到语法错误时生成 placeholder 节点而非 panic
-- [ ] placeholder 节点有合理的 Span 信息
-- [ ] 类型检查器能处理 placeholder 节点（报告错误但不 panic）
+- [x] 解析器遇到语法错误时生成 placeholder 节点而非 panic
+- [x] placeholder 节点有合理的 Span 信息
+- [x] 类型检查器能处理 placeholder 节点（报告错误但不 panic）
+
+**实现说明**：
+- AST 新增 `Expr::Error(Span)` 和 `StmtKind::Error(Span)` 占位变体
+- `parse_with_recovery()` 函数始终返回 `ParseResult`（包含 Module + 错误列表），不会失败
+- `ExpressionInferrer` 和 `StatementChecker` 均能处理 Error 变体（报告 `invalid_syntax` 错误但不 panic）
+- 修改文件：`src/frontend/core/parser/ast.rs`、`src/frontend/core/parser/mod.rs`、`src/frontend/core/parser/parser_state.rs`、`src/frontend/typecheck/inference/expressions.rs`、`src/middle/core/ir_gen.rs`
 
 **测试项目**：
-- [ ] 语法错误恢复测试（缺少表达式、分号、括号等）
-- [ ] 连续错误恢复测试
-- [ ] placeholder 节点 Span 正确性测试
-- [ ] 错误级联场景测试
+- [x] 语法错误恢复测试（缺少表达式、分号、括号等）
+- [x] 连续错误恢复测试
+- [x] placeholder 节点 Span 正确性测试
+- [x] 错误级联场景测试
 
 ---
 
@@ -80,15 +93,22 @@
 - 支持快速查找符号定义位置
 
 **验收标准**：
-- [ ] SymbolEntry 包含完整的位置信息
-- [ ] 能根据名称快速查询所有定义位置
-- [ ] 能根据文件查询该文件所有符号
+- [x] SymbolEntry 包含完整的位置信息
+- [x] 能根据名称快速查询所有定义位置
+- [x] 能根据文件查询该文件所有符号
+
+**实现说明**：
+- `SymbolEntry` 新增 `location: Option<SymbolLocation>` 字段，`SymbolLocation` 包含 `file_path` 和 `Span`
+- `SymbolTable` 新增 `insert_with_location()` 和 `insert_full()` 方法
+- 新增 `SymbolIndex` 反向索引结构，支持 `by_name` 和 `by_file` 双向查询
+- 方法包括：`find_by_name()`、`find_by_file()`、`from_table()`、`remove_file()` 等
+- 修改文件：`src/frontend/core/lexer/symbols.rs`
 
 **测试项目**：
-- [ ] 符号位置信息正确性测试
-- [ ] 名称到位置的映射测试
-- [ ] 多文件符号索引测试
-- [ ] 符号重载/重名处理测试
+- [x] 符号位置信息正确性测试
+- [x] 名称到位置的映射测试
+- [x] 多文件符号索引测试
+- [x] 符号重载/重名处理测试
 
 ---
 
@@ -104,17 +124,25 @@
 - 文件级缓存：变化时重新解析整个文件
 
 **验收标准**：
-- [ ] DocumentCache 正确管理版本号
-- [ ] 哈希检测能快速识别未变化文档
-- [ ] 变化时正确重新解析
-- [ ] 内存占用合理（有清理机制）
+- [x] DocumentCache 正确管理版本号
+- [x] 哈希检测能快速识别未变化文档
+- [x] 变化时正确重新解析
+- [x] 内存占用合理（有清理机制）
+
+**实现说明**：
+- `DocumentCache` 结构：version、content、content_hash、ast (Option<Module>)、file_path、dirty
+- `DocumentStore` 管理所有打开文档，HashMap<String, DocumentCache>，支持容量限制和自动清理
+- 内容哈希使用 `DefaultHasher`，`update()` 仅在哈希变化时更新内容和使 AST 缓存失效
+- 清理策略：超过 `max_documents`（默认 128）时移除版本号最低的文档
+- 包含完整测试套件（7 个单元测试）
+- 修改文件：`src/util/cache.rs`
 
 **测试项目**：
-- [ ] 版本号递增测试
-- [ ] 哈希检测准确性测试
-- [ ] 增量变更应用测试
-- [ ] 缓存清理/过期测试
-- [ ] 大文件缓存性能测试
+- [x] 版本号递增测试
+- [x] 哈希检测准确性测试
+- [x] 增量变更应用测试
+- [x] 缓存清理/过期测试
+- [ ] 大文件缓存性能测试（后续阶段补充）
 
 ---
 

@@ -1801,6 +1801,7 @@ impl AstToIrGenerator {
             ast::Expr::Unsafe { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
+            ast::Expr::Error(span) => *span,
         }
     }
 

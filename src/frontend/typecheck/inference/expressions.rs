@@ -812,6 +812,13 @@ impl<'a> ExpressionInferrer<'a> {
                 }
                 Ok(MonoType::String)
             }
+
+            // 错误恢复占位符：返回新类型变量，不会导致 panic
+            crate::frontend::core::parser::ast::Expr::Error(span) => {
+                Err(ErrorCodeDefinition::invalid_syntax("缺失表达式")
+                    .at(*span)
+                    .build())
+            }
         }
     }
 

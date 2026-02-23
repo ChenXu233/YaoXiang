@@ -1,0 +1,35 @@
+{
+  "name": "yaoxiang-language-support",
+  "displayName": "YaoXiang Language Support",
+  "description": "YaoXiang programming language support for VS Code",
+  "version": "0.1.0",
+  "publisher": "yaoxiang",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "yaoxiang",
+        "aliases": [
+          "YaoXiang",
+          "yx"
+        ],
+        "extensions": [
+          ".yx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "yaoxiang",
+        "scopeName": "source.yaoxiang",
+        "path": "./syntaxes/yaoxiang.tmLanguage.json"
+      }
+    ]
+  }
+}

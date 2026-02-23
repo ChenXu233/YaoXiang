@@ -118,6 +118,12 @@ pub enum Expr {
         segments: Vec<FStringSegment>,
         span: Span,
     },
+    /// 错误恢复占位符：表示解析失败的表达式
+    ///
+    /// 当解析器遇到无法解析的表达式时，插入此占位符而非 panic。
+    /// 类型检查器遇到此节点时应报告错误但不 panic。
+    /// 用于 LSP 错误恢复场景。
+    Error(Span),
 }
 
 /// RFC-012: F-string segment
@@ -232,6 +238,12 @@ pub enum StmtKind {
         else_branch: Option<Box<Block>>,
         span: Span,
     },
+    /// 错误恢复占位符：表示解析失败的语句
+    ///
+    /// 当解析器遇到无法解析的语句时，插入此占位符而非 panic。
+    /// 类型检查器遇到此节点时应报告错误但不 panic。
+    /// 用于 LSP 错误恢复场景。
+    Error(Span),
 }
 
 /// Variant constructor definition (for variant types)
