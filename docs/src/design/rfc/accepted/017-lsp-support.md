@@ -27,7 +27,7 @@ title: 'RFC-017: 语言服务器协议（LSP）支持设计'
 **解决方案**：
 
 #### 1.1 错误收集模式
-- 修改 `src/frontend/typecheck/inference/` 模块，返回 `Result<Type, Vec<Error>>`
+- 修改 `src/frontend/typecheck/inference/` 模块，返回 `Result&lt;Type, Vec&lt;Error>>`
 - 不在遇到错误时立即返回，而是继续检查
 - 检查完成后统一返回所有错误
 
@@ -283,7 +283,7 @@ src/lsp/
 
 1. **事件系统** - 利用 `frontend/events/` 的事件订阅机制
 2. **诊断系统** - 复用 `util/diagnostic/` 的诊断输出
-   - 复用 `ErrorCollector<E>` 收集所有错误
+   - 复用 `ErrorCollector&lt;E>` 收集所有错误
    - 将 `Diagnostic` 转换为 LSP 的 `Diagnostic` 格式
 3. **符号表** - 扩展 `symbols.rs` 的符号定位能力
    - 扩展 `SymbolEntry`，添加 `location: Location` 字段
@@ -446,7 +446,7 @@ yaoxiang-lsp --test
 ### 阶段划分
 
 1. **阶段 0 (前置)**: 编译器适配 ⚠️ **关键**
-   - 修改类型检查器为「收集模式」，返回 `Result<Type, Vec<Error>>`
+   - 修改类型检查器为「收集模式」，返回 `Result&lt;Type, Vec&lt;Error>>`
    - 实现错误级别（Error / Warning / Note）
    - Parser 错误恢复：插入 placeholder 节点
    - 扩展符号表 `SymbolEntry`，添加 `location` 字段
@@ -517,7 +517,7 @@ yaoxiang-lsp --test
 |------|------|------|--------|
 | LSP 服务器架构 | 独立进程，通过 stdio 通信 | 2026-02-15 | 晨煦 |
 | 协议版本 | 支持 LSP 3.18（需要 Inlay Hints 等新特性） | 2026-02-22 | 晨煦 |
-| 错误收集模式 | 返回 Result<Type, Vec<Error>>，支持错误级别和错误恢复 | 2026-02-22 | 晨煦 |
+| 错误收集模式 | 返回 `Result&lt;Type, Vec&lt;Error>>`，支持错误级别和错误恢复 | 2026-02-22 | 晨煦 |
 | 缓存策略 | 文件级缓存：版本 + 内容 + 哈希，整个文件重新解析 | 2026-02-22 | 晨煦 |
 | 通信模式 | 支持 stdio + TCP + UnixSocket | 2026-02-22 | 晨煦 |
 | 远程调试 | 基于 DAP 协议，与 LSP 共享传输层 | 2026-02-22 | 晨煦 |

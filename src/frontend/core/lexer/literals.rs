@@ -903,12 +903,10 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
             '{' => {
                 lexer.advance();
                 // Check for escape {{ → literal {
-                if brace_depth == 0 {
-                    if lexer.peek() == Some(&'{') {
-                        lexer.advance();
-                        value.push('{');
-                        continue;
-                    }
+                if brace_depth == 0 && lexer.peek() == Some(&'{') {
+                    lexer.advance();
+                    value.push('{');
+                    continue;
                 }
                 brace_depth += 1;
                 value.push('{');

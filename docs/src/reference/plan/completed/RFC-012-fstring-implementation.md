@@ -497,7 +497,7 @@ fn test_fstring_json_like() {
 |------|---------|---------|
 | `src/frontend/core/lexer/tokens.rs` | 修改 | 新增 `FStringLiteral(String)` token 及 `UnterminatedFStringInterpolation` 错误 |
 | `src/frontend/core/lexer/tokenizer.rs` | 修改 | `scan_identifier()` 中检测 `f"` 前缀并调用 `scan_fstring()` |
-| `src/frontend/core/lexer/literals.rs` | 修改 | 新增 `scan_fstring()` 函数 (~180行)，支持 `{}` 插值、`{{`/`}}` 转义、嵌套大括号深度追踪 |
+| `src/frontend/core/lexer/literals.rs` | 修改 | 新增 `scan_fstring()` 函数 (~180行)，支持 `{}` 插值、`&lbrace;&lbrace;` / `&rbrace;&rbrace;` 转义、嵌套大括号深度追踪 |
 | `src/frontend/core/lexer/mod.rs` | 修改 | `log_token()` 中新增 FStringLiteral 分支；引入 fstring 测试模块 |
 | `src/frontend/core/parser/ast.rs` | 修改 | 新增 `FString` AST 节点及 `FStringSegment` 枚举 |
 | `src/frontend/core/parser/pratt/nud.rs` | 修改 | 新增 `parse_fstring()`、`parse_fstring_segments()`、`split_format_spec()` |
