@@ -4,7 +4,7 @@
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
-> 更新：2026-02-18 - RFC-010 新增默认值初始化、内置绑定；RFC-004 新增内置绑定语法
+> 更新：2026-02-22 - 元类型不属于关键字。
 
 ---
 
@@ -43,22 +43,22 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 YaoXiang 定义了极少量的关键字：
 
 ```
-Type   pub    use    spawn
+pub    use    spawn
 ref    mut    if     elif
 else   match  while  for    return
 break  continue as     in     unsafe
 ```
 
-**注意**：`Type` 是语言中唯一的元类型关键字（大写）。所有类型定义都使用统一语法 `Name: Type = ...`。
+这些关键字在任何上下文中都具有特殊含义，不能用作标识符。
 
 ### 2.4 保留字
 
 | 保留字 | 类型 | 说明 |
 |--------|------|------|
+| `Type` | Type | 元类型 |
 | `true` | Bool | 布尔真值 |
 | `false` | Bool | 布尔假值 |
-| `null` | Void | 空值 |
-| `none` | Option | Option 无值变体 |
+| `viod` | Void | 空值 |
 | `some(T)` | Option | Option 值变体 |
 | `ok(T)` | Result | Result 成功变体 |
 | `err(E)` | Result | Result 错误变体 |
@@ -154,6 +154,7 @@ TypeExpr    ::= PrimitiveType
 
 | 类型 | 描述 | 默认大小 |
 |------|------|----------|
+| `Type` | 元类型 | 0 字节 |
 | `Void` | 空值 | 0 字节 |
 | `Bool` | 布尔值 | 1 字节 |
 | `Int` | 有符号整数 | 8 字节 |
@@ -668,7 +669,7 @@ double: (x: Int) -> Int = x * 2  # ✅ 参数 x 覆盖外层 x，结果为 20
 |----------|------|------|
 | 仅签名 | `double: (x: Int) -> Int = x * 2` | ✅ 推荐 |
 | 仅 Lambda 头 | `double = (x: Int) => x * 2` | ✅ 合法 |
-| 两边都标 | `double: (x: Int) -> Int = (x) => x * 2` | ✅ 冗余但允许 |
+| 两边都标 | `double: (x: Int) -> Int = (x: Int) => x * 2` | ✅ 冗余但允许 |
 
 ### 4.1 表达式分类
 
@@ -817,25 +818,19 @@ IfStmt      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
 MatchStmt   ::= 'match' Expr '{' MatchArm+ '}'
 ```
 
-### 5.8 loop 语句
-
-```
-LoopStmt    ::= 'loop' Block
-```
-
-### 5.9 while 语句
+### 5.8 while 语句
 
 ```
 WhileStmt   ::= 'while' Expr Block
 ```
 
-### 5.10 for 语句
+### 5.9 for 语句
 
 ```
 ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
 
-#### 5.10.1 语义：每次迭代是绑定新值
+#### 5.9.1 语义：每次迭代是绑定新值
 
 YaoXiang 的 for 循环语义与传统语言不同：**每次迭代是绑定新值，而不是修改同一个变量**。
 
@@ -858,7 +853,7 @@ for i in 1..5 {
 
 **关键点**：每次迭代结束后，当次迭代创建的绑定会被销毁。下一次迭代是一个全新的绑定，与上一次迭代的绑定没有任何关系。
 
-#### 5.10.2 for 与 for mut 的区别
+#### 5.9.2 for 与 for mut 的区别
 
 | 语法 | 循环变量可变性 | 说明 |
 |------|----------------|------|
@@ -882,7 +877,7 @@ for mut i in 1..5 {
 }
 ```
 
-#### 5.10.3 遮蔽检查
+#### 5.9.3 遮蔽检查
 
 for 循环变量不能遮蔽外层作用域中已存在的变量：
 
@@ -902,7 +897,7 @@ for j in 1..5 {
 
 错误代码：`E2013 - Cannot shadow existing variable`
 
-#### 5.10.4 与其他语言的对比
+#### 5.9.4 与其他语言的对比
 
 | 语言 | for 循环变量语义 |
 |------|------------------|
@@ -1864,6 +1859,7 @@ result = f(arg2, arg3)
 | v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
 | v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
 | v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 新增默认值初始化、内置绑定语法；RFC-004 新增内置绑定、匿名函数绑定 |
+| v1.8.1 | 2026-02-20 | 晨煦 | 元类型不属于关键字。 |
 
 ---
 
