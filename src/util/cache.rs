@@ -263,6 +263,13 @@ impl DocumentStore {
         self.documents.keys().map(|s| s.as_str()).collect()
     }
 
+    /// 获取所有已打开文档的迭代器
+    ///
+    /// 返回 (uri, DocumentCache) 的引用对。
+    pub fn all_documents(&self) -> impl Iterator<Item = (&str, &DocumentCache)> {
+        self.documents.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
     /// 获取已打开的文档数量
     pub fn document_count(&self) -> usize {
         self.documents.len()

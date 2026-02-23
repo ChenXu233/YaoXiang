@@ -21,6 +21,9 @@
         "extensions": [
           ".yx"
         ],
+        "filenamePatterns": [
+          "*.yx"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],

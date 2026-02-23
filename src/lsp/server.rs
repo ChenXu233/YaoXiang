@@ -14,10 +14,12 @@ use anyhow::Result;
 use lsp_server::{Connection, Message, Notification, Request};
 use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
+    PublishDiagnostics,
 };
-use lsp_types::request::{Initialize, Shutdown};
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
+use lsp_types::request::HoverRequest;
 use lsp_types::InitializeParams;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::lsp::handlers;
 use crate::lsp::protocol;
@@ -77,7 +79,7 @@ fn main_loop(
                 }
             }
             Message::Notification(not) => {
-                if handle_notification(session, world, not)? {
+                if handle_notification(connection, session, world, not)? {
                     // exit 通知 → 退出循环
                     return Ok(());
                 }
@@ -97,7 +99,7 @@ fn main_loop(
 /// 返回 `Some(Response)` 表示需要发送响应，`None` 表示已处理。
 fn handle_request(
     session: &mut Session,
-    _world: &mut World,
+    world: &mut World,
     req: Request,
 ) -> Option<lsp_server::Response> {
     let method = req.method.as_str();
@@ -117,6 +119,74 @@ fn handle_request(
             Some(handlers::initialize::handle_shutdown(session, req.id))
         }
 
+        // textDocument/completion
+        m if m == <Completion as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::completion::handle_completion(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("补全请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/definition
+        m if m == <GotoDefinition as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::definition::handle_definition(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("跳转定义请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/references
+        m if m == <References as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::references::handle_references(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("查找引用请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/hover
+        m if m == <HoverRequest as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::hover::handle_hover(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("悬停提示请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
         // 未实现的方法
         _ => {
             warn!("未处理的请求方法: {}", method);
@@ -129,8 +199,9 @@ fn handle_request(
 ///
 /// 返回 `true` 表示应该退出服务器（收到 `exit` 通知）。
 fn handle_notification(
+    connection: &Connection,
     session: &mut Session,
-    _world: &mut World,
+    world: &mut World,
     not: Notification,
 ) -> Result<bool> {
     let method = not.method.as_str();
@@ -151,21 +222,35 @@ fn handle_notification(
         // textDocument/didOpen
         m if m == <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
-                handlers::text_document::handle_did_open(session, params);
+                let uri = handlers::text_document::handle_did_open(session, params);
+                update_symbol_index(session, world, &uri);
+                publish_diagnostics_for_uri(connection, session, &uri);
             }
         }
 
         // textDocument/didChange
         m if m == <DidChangeTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
-                handlers::text_document::handle_did_change(session, params);
+                if let Some(uri) = handlers::text_document::handle_did_change(session, params) {
+                    update_symbol_index(session, world, &uri);
+                    publish_diagnostics_for_uri(connection, session, &uri);
+                }
             }
         }
 
         // textDocument/didClose
         m if m == <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
-                handlers::text_document::handle_did_close(session, params);
+                let uri = handlers::text_document::handle_did_close(session, params);
+                // 移除关闭文档的符号索引
+                world.remove_file_symbols(&uri);
+                // 清除关闭文档的诊断
+                let clear_params = handlers::diagnostics::clear_diagnostics(&uri);
+                let not = protocol::notification::<PublishDiagnostics>(clear_params);
+                if let Err(e) = connection.sender.send(Message::Notification(not)) {
+                    warn!("发送清除诊断失败: {}", e);
+                }
+                debug!("已清除诊断: {}", uri);
             }
         }
 
@@ -178,11 +263,68 @@ fn handle_notification(
     Ok(false)
 }
 
+/// 更新指定文件的符号索引
+///
+/// 从 DocumentStore 获取文件内容，解析后更新 World 的符号索引。
+fn update_symbol_index(
+    session: &Session,
+    world: &mut World,
+    uri: &str,
+) {
+    if let Some(doc) = session.document_store().get(uri) {
+        let tokens = match crate::frontend::core::lexer::tokenize(doc.content()) {
+            Ok(t) => t,
+            Err(_) => {
+                // 词法错误时移除旧索引
+                world.remove_file_symbols(uri);
+                return;
+            }
+        };
+
+        let parse_result = crate::frontend::core::parser::parse_with_recovery(&tokens);
+        world.update_index_from_ast(uri, &parse_result.module);
+        debug!("已更新符号索引: {} ({} 个符号)", uri, world.symbol_count());
+    }
+}
+
+/// 对指定 URI 的文档运行诊断并发送 publishDiagnostics 通知
+fn publish_diagnostics_for_uri(
+    connection: &Connection,
+    session: &Session,
+    uri: &str,
+) {
+    if let Some(doc) = session.document_store().get(uri) {
+        let params = handlers::diagnostics::run_diagnostics(uri, doc.content());
+        let diag_count = params.diagnostics.len();
+
+        let not = protocol::notification::<PublishDiagnostics>(params);
+        if let Err(e) = connection.sender.send(Message::Notification(not)) {
+            warn!("发送诊断失败: {}", e);
+        }
+
+        debug!("已发布 {} 条诊断: {}", diag_count, uri);
+    } else {
+        warn!("文档未找到，跳过诊断: {}", uri);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lsp::session::SessionState;
+    use crossbeam::channel::unbounded;
     use std::str::FromStr;
+
+    /// 创建测试用的 Connection（不连接真实 IO）
+    fn test_connection() -> (Connection, crossbeam::channel::Receiver<Message>) {
+        let (to_client_tx, to_client_rx) = unbounded();
+        let (_to_server_tx, to_server_rx) = unbounded();
+        let conn = Connection {
+            sender: to_client_tx,
+            receiver: to_server_rx,
+        };
+        (conn, to_client_rx)
+    }
 
     #[test]
     fn test_handle_request_initialize() {
@@ -243,6 +385,7 @@ mod tests {
 
     #[test]
     fn test_handle_notification_initialized() {
+        let (conn, _rx) = test_connection();
         let mut session = Session::new();
         session.set_state(SessionState::Initializing);
         let mut world = World::new();
@@ -252,13 +395,14 @@ mod tests {
             params: serde_json::Value::Null,
         };
 
-        let should_exit = handle_notification(&mut session, &mut world, not).unwrap();
+        let should_exit = handle_notification(&conn, &mut session, &mut world, not).unwrap();
         assert!(!should_exit);
         assert!(session.is_ready());
     }
 
     #[test]
     fn test_handle_notification_exit() {
+        let (conn, _rx) = test_connection();
         let mut session = Session::new();
         session.set_state(SessionState::ShuttingDown);
         let mut world = World::new();
@@ -268,12 +412,13 @@ mod tests {
             params: serde_json::Value::Null,
         };
 
-        let should_exit = handle_notification(&mut session, &mut world, not).unwrap();
+        let should_exit = handle_notification(&conn, &mut session, &mut world, not).unwrap();
         assert!(should_exit);
     }
 
     #[test]
     fn test_handle_notification_did_open() {
+        let (conn, rx) = test_connection();
         let mut session = Session::new();
         session.set_state(SessionState::Running);
         let mut world = World::new();
@@ -293,8 +438,403 @@ mod tests {
             params: serde_json::to_value(params).unwrap(),
         };
 
-        let should_exit = handle_notification(&mut session, &mut world, not).unwrap();
+        let should_exit = handle_notification(&conn, &mut session, &mut world, not).unwrap();
         assert!(!should_exit);
         assert!(session.document_store().is_open("file:///test/main.yx"));
+
+        // 应该收到 publishDiagnostics 通知
+        let msg = rx.try_recv();
+        assert!(msg.is_ok(), "应发送 publishDiagnostics 通知");
+        if let Ok(Message::Notification(n)) = msg {
+            assert_eq!(
+                n.method,
+                <PublishDiagnostics as lsp_types::notification::Notification>::METHOD
+            );
+        }
+    }
+
+    #[test]
+    fn test_handle_notification_did_open_with_errors() {
+        let (conn, rx) = test_connection();
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        let mut world = World::new();
+
+        let params = lsp_types::DidOpenTextDocumentParams {
+            text_document: lsp_types::TextDocumentItem {
+                uri: lsp_types::Uri::from_str("file:///test/bad.yx").unwrap(),
+                language_id: "yaoxiang".to_string(),
+                version: 1,
+                text: "@ @ @\n".to_string(), // 语法错误
+            },
+        };
+
+        let not = Notification {
+            method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
+                .to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        handle_notification(&conn, &mut session, &mut world, not).unwrap();
+
+        // 应该收到带有诊断的 publishDiagnostics 通知
+        let msg = rx.try_recv();
+        assert!(msg.is_ok());
+        if let Ok(Message::Notification(n)) = msg {
+            let params: lsp_types::PublishDiagnosticsParams =
+                serde_json::from_value(n.params).unwrap();
+            assert!(!params.diagnostics.is_empty(), "语法错误的代码应产生诊断");
+        }
+    }
+
+    #[test]
+    fn test_handle_notification_did_close_clears_diagnostics() {
+        let (conn, rx) = test_connection();
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        let mut world = World::new();
+
+        // 先打开文档
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 42".to_string(),
+            1,
+        );
+
+        let params = lsp_types::DidCloseTextDocumentParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
+            },
+        };
+
+        let not = Notification {
+            method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD
+                .to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        handle_notification(&conn, &mut session, &mut world, not).unwrap();
+        assert!(!session.document_store().is_open("file:///test/main.yx"));
+
+        // 应该收到空诊断（清除）
+        let msg = rx.try_recv();
+        assert!(msg.is_ok());
+        if let Ok(Message::Notification(n)) = msg {
+            assert_eq!(
+                n.method,
+                <PublishDiagnostics as lsp_types::notification::Notification>::METHOD
+            );
+            let params: lsp_types::PublishDiagnosticsParams =
+                serde_json::from_value(n.params).unwrap();
+            assert!(params.diagnostics.is_empty(), "关闭文档应清除诊断");
+        }
+    }
+
+    #[test]
+    fn test_publish_diagnostics_for_uri() {
+        let (conn, rx) = test_connection();
+        let mut session = Session::new();
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 42\n".to_string(),
+            1,
+        );
+
+        publish_diagnostics_for_uri(&conn, &session, "file:///test/main.yx");
+
+        let msg = rx.try_recv();
+        assert!(msg.is_ok());
+        if let Ok(Message::Notification(n)) = msg {
+            assert_eq!(
+                n.method,
+                <PublishDiagnostics as lsp_types::notification::Notification>::METHOD
+            );
+        }
+    }
+
+    #[test]
+    fn test_handle_request_completion() {
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 42\n".to_string(),
+            1,
+        );
+        let mut world = World::new();
+
+        let params = lsp_types::CompletionParams {
+            text_document_position: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier {
+                    uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
+                },
+                position: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: None,
+        };
+
+        let req = Request {
+            id: 10.into(),
+            method: <Completion as lsp_types::request::Request>::METHOD.to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        let resp = handle_request(&mut session, &mut world, req);
+        assert!(resp.is_some());
+        let resp = resp.unwrap();
+        assert!(resp.error.is_none(), "补全请求不应返回错误");
+        assert!(resp.result.is_some(), "补全应有结果");
+    }
+
+    #[test]
+    fn test_did_open_updates_symbol_index() {
+        let (conn, _rx) = test_connection();
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        let mut world = World::new();
+
+        let params = lsp_types::DidOpenTextDocumentParams {
+            text_document: lsp_types::TextDocumentItem {
+                uri: lsp_types::Uri::from_str("file:///test/indexed.yx").unwrap(),
+                language_id: "yaoxiang".to_string(),
+                version: 1,
+                text: "x = 42\nadd = (a, b) => a + b\n".to_string(),
+            },
+        };
+
+        let not = Notification {
+            method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
+                .to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        handle_notification(&conn, &mut session, &mut world, not).unwrap();
+
+        // 符号索引应包含 x 和 add
+        assert!(
+            world.symbol_count() >= 2,
+            "应至少有 2 个符号，实际: {}",
+            world.symbol_count()
+        );
+    }
+
+    #[test]
+    fn test_did_close_removes_symbol_index() {
+        let (conn, _rx) = test_connection();
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        let mut world = World::new();
+
+        // 先打开
+        let open_params = lsp_types::DidOpenTextDocumentParams {
+            text_document: lsp_types::TextDocumentItem {
+                uri: lsp_types::Uri::from_str("file:///test/closing.yx").unwrap(),
+                language_id: "yaoxiang".to_string(),
+                version: 1,
+                text: "y = 99\n".to_string(),
+            },
+        };
+
+        let not = Notification {
+            method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD
+                .to_string(),
+            params: serde_json::to_value(open_params).unwrap(),
+        };
+        handle_notification(&conn, &mut session, &mut world, not).unwrap();
+
+        let count_before = world.symbol_count();
+        assert!(count_before > 0);
+
+        // 关闭
+        let close_params = lsp_types::DidCloseTextDocumentParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: lsp_types::Uri::from_str("file:///test/closing.yx").unwrap(),
+            },
+        };
+
+        let not = Notification {
+            method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD
+                .to_string(),
+            params: serde_json::to_value(close_params).unwrap(),
+        };
+        handle_notification(&conn, &mut session, &mut world, not).unwrap();
+
+        assert_eq!(world.symbol_count(), 0, "关闭文档后符号应被移除");
+    }
+
+    #[test]
+    fn test_handle_request_definition() {
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 42\n".to_string(),
+            1,
+        );
+        let mut world = World::new();
+
+        // 注册符号
+        use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
+        use crate::util::span::{Position, Span};
+        let module = Module {
+            items: vec![Stmt {
+                kind: StmtKind::Var {
+                    name: "x".to_string(),
+                    type_annotation: None,
+                    initializer: None,
+                    is_mut: false,
+                },
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 1,
+                        offset: 0,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 7,
+                        offset: 6,
+                    },
+                },
+            }],
+            span: Span::dummy(),
+        };
+        world.update_index_from_ast("file:///test/main.yx", &module);
+
+        let params = lsp_types::GotoDefinitionParams {
+            text_document_position_params: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier {
+                    uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
+                },
+                position: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let req = Request {
+            id: 20.into(),
+            method: <GotoDefinition as lsp_types::request::Request>::METHOD.to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        let resp = handle_request(&mut session, &mut world, req);
+        assert!(resp.is_some());
+        let resp = resp.unwrap();
+        assert!(resp.error.is_none(), "跳转定义请求不应返回错误");
+        assert!(resp.result.is_some());
+    }
+
+    #[test]
+    fn test_handle_request_references() {
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 1\ny = x\n".to_string(),
+            1,
+        );
+        let mut world = World::new();
+
+        let params = lsp_types::ReferenceParams {
+            text_document_position: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier {
+                    uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
+                },
+                position: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: lsp_types::ReferenceContext {
+                include_declaration: false,
+            },
+        };
+
+        let req = Request {
+            id: 21.into(),
+            method: <References as lsp_types::request::Request>::METHOD.to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        let resp = handle_request(&mut session, &mut world, req);
+        assert!(resp.is_some());
+        let resp = resp.unwrap();
+        assert!(resp.error.is_none(), "查找引用请求不应返回错误");
+    }
+
+    #[test]
+    fn test_handle_request_hover() {
+        let mut session = Session::new();
+        session.set_state(SessionState::Running);
+        session.document_store_mut().open(
+            "file:///test/main.yx".to_string(),
+            "x = 42\n".to_string(),
+            1,
+        );
+        let mut world = World::new();
+
+        // 注册符号以获得悬停信息
+        use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
+        use crate::util::span::{Position, Span};
+        let module = Module {
+            items: vec![Stmt {
+                kind: StmtKind::Var {
+                    name: "x".to_string(),
+                    type_annotation: None,
+                    initializer: None,
+                    is_mut: false,
+                },
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 1,
+                        offset: 0,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 7,
+                        offset: 6,
+                    },
+                },
+            }],
+            span: Span::dummy(),
+        };
+        world.update_index_from_ast("file:///test/main.yx", &module);
+
+        let params = lsp_types::HoverParams {
+            text_document_position_params: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier {
+                    uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
+                },
+                position: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+            },
+            work_done_progress_params: Default::default(),
+        };
+
+        let req = Request {
+            id: 22.into(),
+            method: <HoverRequest as lsp_types::request::Request>::METHOD.to_string(),
+            params: serde_json::to_value(params).unwrap(),
+        };
+
+        let resp = handle_request(&mut session, &mut world, req);
+        assert!(resp.is_some());
+        let resp = resp.unwrap();
+        assert!(resp.error.is_none(), "悬停提示请求不应返回错误");
+        assert!(resp.result.is_some());
     }
 }

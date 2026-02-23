@@ -3,20 +3,20 @@
 //! 定义 YaoXiang 语言服务器支持的 LSP 功能。
 
 use lsp_types::{
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    SaveOptions,
+    CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, SaveOptions,
 };
 
 /// 构建服务端能力声明
 ///
-/// 当前阶段（v0.7）支持的能力：
+/// 当前阶段（v0.8）支持的能力：
 /// - 文档同步（Full sync）
+/// - 代码补全（关键字、保留字、注解、标识符）
+/// - 跳转定义
+/// - 查找引用
+/// - 悬停提示
 ///
 /// 后续阶段将逐步添加：
-/// - 代码补全 (v0.8)
-/// - 跳转定义 (v0.8)
-/// - 查找引用 (v0.8)
-/// - 悬停提示 (v0.8)
 /// - 工作区符号搜索 (v0.9)
 pub fn server_capabilities() -> ServerCapabilities {
     ServerCapabilities {
@@ -31,11 +31,23 @@ pub fn server_capabilities() -> ServerCapabilities {
             },
         )),
 
+        // 代码补全（v0.8）
+        completion_provider: Some(CompletionOptions {
+            resolve_provider: Some(false),
+            trigger_characters: Some(vec![".".to_string(), "@".to_string()]),
+            ..CompletionOptions::default()
+        }),
+
+        // 跳转定义（v0.8）
+        definition_provider: Some(OneOf::Left(true)),
+
+        // 查找引用（v0.8）
+        references_provider: Some(OneOf::Left(true)),
+
+        // 悬停提示（v0.8）
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
+
         // 以下能力将在后续阶段启用
-        // completion_provider: None,        // v0.8
-        // definition_provider: None,        // v0.8
-        // references_provider: None,        // v0.8
-        // hover_provider: None,             // v0.8
         // workspace_symbol_provider: None,  // v0.9
         // document_formatting_provider: None, // v0.9
         ..ServerCapabilities::default()
@@ -60,6 +72,36 @@ mod tests {
         } else {
             panic!("Expected TextDocumentSyncOptions");
         }
+    }
+
+    #[test]
+    fn test_completion_capability() {
+        let caps = server_capabilities();
+        assert!(caps.completion_provider.is_some(), "补全能力应开启");
+
+        let comp = caps.completion_provider.unwrap();
+        assert_eq!(comp.resolve_provider, Some(false));
+        let triggers = comp.trigger_characters.unwrap();
+        assert!(triggers.contains(&".".to_string()));
+        assert!(triggers.contains(&"@".to_string()));
+    }
+
+    #[test]
+    fn test_definition_capability() {
+        let caps = server_capabilities();
+        assert!(caps.definition_provider.is_some(), "跳转定义能力应开启");
+    }
+
+    #[test]
+    fn test_references_capability() {
+        let caps = server_capabilities();
+        assert!(caps.references_provider.is_some(), "查找引用能力应开启");
+    }
+
+    #[test]
+    fn test_hover_capability() {
+        let caps = server_capabilities();
+        assert!(caps.hover_provider.is_some(), "悬停提示能力应开启");
     }
 
     #[test]
