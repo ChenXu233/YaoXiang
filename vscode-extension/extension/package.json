@@ -12,8 +12,8 @@
     "Extension Packs"
   ],
   "extensionPack": [
-    "yaoxiang.language-pack",
-    "yaoxiang.language-server"
+    "yaoxiang.yaoxiang-language-pack",
+    "yaoxiang.yaoxiang-language-server"
   ],
   "icon": "icon.png",
   "repository": "https://github.com/yaoxiang-lang/yaoxiang"

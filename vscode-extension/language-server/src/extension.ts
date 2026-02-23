@@ -1,16 +1,80 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  RevealOutputChannelOn,
+  ServerOptions,
+} from 'vscode-languageclient/node';
+
+let client: LanguageClient | undefined;
+
+function resolveServerCommand(): { command: string; args: string[] } {
+  const executable = process.platform === 'win32' ? 'yaoxiang.exe' : 'yaoxiang';
+  const folders = vscode.workspace.workspaceFolders ?? [];
+
+  for (const folder of folders) {
+    const root = folder.uri.fsPath;
+    const candidates = [
+      path.join(root, 'target', 'debug', executable),
+      path.join(root, 'target', 'release', executable),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return { command: candidate, args: ['lsp'] };
+      }
+    }
+  }
+
+  return { command: 'yaoxiang', args: ['lsp'] };
+}
 
 /**
  * YaoXiang Language Server 扩展入口
- *
- * 注意：此扩展使用 VS Code 的内置 LSP 客户端。
- * 通过 package.json 中的 "server" 配置，VS Code 会自动启动 yaoxiang lsp 命令。
- *
- * 如果 yaoxiang 命令不在 PATH 中，VS Code 会显示错误提示。
  */
 export function activate(context: vscode.ExtensionContext): void {
-  // Language Server 通过 package.json 的 server 字段自动启动
-  // 此处无需额外代码
+  const outputChannel = vscode.window.createOutputChannel('YaoXiang LSP');
+  outputChannel.appendLine('[client] Activating YaoXiang language server extension');
+
+  const resolved = resolveServerCommand();
+
+  const serverOptions: ServerOptions = {
+    command: resolved.command,
+    args: resolved.args,
+  };
+
+  outputChannel.appendLine(`[client] Server command: ${resolved.command} ${resolved.args.join(' ')}`);
+
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [
+      { scheme: 'file', language: 'yaoxiang' },
+      { scheme: 'untitled', language: 'yaoxiang' },
+    ],
+    outputChannel,
+    revealOutputChannelOn: RevealOutputChannelOn.Error,
+  };
+
+  client = new LanguageClient(
+    'yaoxiang-lsp',
+    'YaoXiang Language Server',
+    serverOptions,
+    clientOptions
+  );
+
+  context.subscriptions.push(client);
+  void client.start().then(
+    () => {
+      outputChannel.appendLine('[client] Language client started successfully');
+    },
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      outputChannel.appendLine(`[client] Failed to start language client: ${message}`);
+      void vscode.window.showErrorMessage(`YaoXiang LSP 启动失败: ${message}`);
+      outputChannel.show(true);
+    }
+  );
 
   // 可选：显示状态栏信息
   const statusBarItem = vscode.window.createStatusBarItem(
@@ -18,11 +82,13 @@ export function activate(context: vscode.ExtensionContext): void {
     100
   );
   statusBarItem.text = '$(code) YaoXiang LSP';
-  statusBarItem.command = 'yaoxiang.showLspStatus';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 }
 
-export function deactivate(): void {
-  // 清理资源
+export async function deactivate(): Promise<void> {
+  if (client) {
+    await client.stop();
+    client = undefined;
+  }
 }
