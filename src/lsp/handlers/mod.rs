@@ -8,4 +8,5 @@ pub mod diagnostics;
 pub mod hover;
 pub mod initialize;
 pub mod references;
+pub mod semantic_tokens;
 pub mod text_document;

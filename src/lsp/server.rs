@@ -18,6 +18,7 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
 use lsp_types::request::HoverRequest;
+use lsp_types::request::SemanticTokensFullRequest;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
 
@@ -187,6 +188,26 @@ fn handle_request(
             }
         }
 
+        // textDocument/semanticTokens/full
+        m if m == <SemanticTokensFullRequest as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::semantic_tokens::handle_semantic_tokens_full(
+                        world.semantic_db(),
+                        params,
+                    );
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("语义 tokens 请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
         // 未实现的方法
         _ => {
             warn!("未处理的请求方法: {}", method);
@@ -263,9 +284,10 @@ fn handle_notification(
     Ok(false)
 }
 
-/// 更新指定文件的符号索引
+/// 更新指定文件的符号索引和语义数据库
 ///
 /// 从 DocumentStore 获取文件内容，解析后更新 World 的符号索引。
+/// 同时运行 typecheck 收集语义 token 并存入 SemanticDB。
 fn update_symbol_index(
     session: &Session,
     world: &mut World,
@@ -283,7 +305,18 @@ fn update_symbol_index(
 
         let parse_result = crate::frontend::core::parser::parse_with_recovery(&tokens);
         world.update_index_from_ast(uri, &parse_result.module);
-        debug!("已更新符号索引: {} ({} 个符号)", uri, world.symbol_count());
+
+        // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
+        let mut tc = crate::frontend::typecheck::TypeChecker::new(uri);
+        if let Ok(tc_result) = tc.check_module_collect_all(&parse_result.module) {
+            world.update_semantic_db(tc_result.semantic_db);
+        }
+
+        debug!(
+            "已更新符号索引和语义数据库: {} ({} 个符号)",
+            uri,
+            world.symbol_count()
+        );
     }
 }
 
