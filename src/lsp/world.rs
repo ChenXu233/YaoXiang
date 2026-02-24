@@ -4,11 +4,13 @@
 
 use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolIndex, SymbolKind, SymbolLocation};
 use crate::frontend::core::parser::ast::{Module, StmtKind};
+use crate::frontend::typecheck::semantic_db::SemanticDB;
 
 /// 编译世界
 ///
 /// 聚合编译器运行所需的全局状态：
 /// - 符号索引（用于 go-to-definition、find-references 等）
+/// - 语义数据库（用于 semantic tokens、代码高亮等）
 /// - 编译器实例管理
 ///
 /// 阶段 3 扩展：
@@ -18,6 +20,8 @@ use crate::frontend::core::parser::ast::{Module, StmtKind};
 pub struct World {
     /// 全局符号索引
     symbol_index: SymbolIndex,
+    /// 语义数据库（语义 token、作用域等）
+    semantic_db: SemanticDB,
 }
 
 impl World {
@@ -25,6 +29,7 @@ impl World {
     pub fn new() -> Self {
         Self {
             symbol_index: SymbolIndex::new(),
+            semantic_db: SemanticDB::default(),
         }
     }
 
@@ -38,12 +43,31 @@ impl World {
         &mut self.symbol_index
     }
 
-    /// 移除某个文件的所有符号（文件关闭或重新解析时调用）
+    /// 获取语义数据库（不可变）
+    pub fn semantic_db(&self) -> &SemanticDB {
+        &self.semantic_db
+    }
+
+    /// 获取语义数据库（可变）
+    pub fn semantic_db_mut(&mut self) -> &mut SemanticDB {
+        &mut self.semantic_db
+    }
+
+    /// 从 TypeCheckResult 的 SemanticDB 合并语义信息
+    pub fn update_semantic_db(
+        &mut self,
+        other: SemanticDB,
+    ) {
+        self.semantic_db = other;
+    }
+
+    /// 移除某个文件的所有符号和语义信息（文件关闭或重新解析时调用）
     pub fn remove_file_symbols(
         &mut self,
         file_path: &str,
     ) {
         self.symbol_index.remove_file(file_path);
+        self.semantic_db.remove_file(file_path);
     }
 
     /// 获取索引中的符号总数

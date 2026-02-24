@@ -5,7 +5,11 @@
 use lsp_types::{
     CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, SaveOptions,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensServerCapabilities,
 };
+
+use crate::frontend::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
 
 /// 构建服务端能力声明
 ///
@@ -46,6 +50,25 @@ pub fn server_capabilities() -> ServerCapabilities {
 
         // 悬停提示（v0.8）
         hover_provider: Some(HoverProviderCapability::Simple(true)),
+
+        // 语义 tokens（v0.10）
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                legend: SemanticTokensLegend {
+                    token_types: SemanticTokenType::legend()
+                        .into_iter()
+                        .map(|s| lsp_types::SemanticTokenType::new(s))
+                        .collect(),
+                    token_modifiers: SemanticTokenModifier::legend()
+                        .into_iter()
+                        .map(|s| lsp_types::SemanticTokenModifier::new(s))
+                        .collect(),
+                },
+                full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }),
+                range: None,
+                ..SemanticTokensOptions::default()
+            },
+        )),
 
         // 以下能力将在后续阶段启用
         // workspace_symbol_provider: None,  // v0.9
