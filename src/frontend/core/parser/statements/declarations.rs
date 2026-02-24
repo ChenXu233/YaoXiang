@@ -905,62 +905,17 @@ fn is_const_param_type(ty: &Type) -> bool {
     }
 }
 
-/// Parse type definition (handles union types with |)
+/// Parse type definition (simple form without |)
+/// Note: Enum variants with | are now only supported in brace syntax: { red | green | blue }
 fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
     let first_type = parse_type_annotation(state)?;
 
+    // 检查是否有 | 符号（不允许使用不带花括号的枚举语法）
     if state.at(&TokenKind::Pipe) {
-        let mut types = vec![first_type];
-        while state.skip(&TokenKind::Pipe) {
-            types.push(parse_type_annotation(state)?);
-        }
-
-        // Check if all types are variant-like
-        let all_variants = types.iter().all(|t| {
-            matches!(
-                t,
-                Type::Name(_) | Type::Generic { .. } | Type::NamedStruct { .. }
-            )
-        });
-
-        if all_variants {
-            // Convert to Variant
-            let mut variants = Vec::new();
-            for ty in types.iter() {
-                match ty {
-                    Type::Generic { name, args } => {
-                        let params = args.iter().map(|a| (None, a.clone())).collect();
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params,
-                            span: state.span(),
-                        });
-                    }
-                    Type::NamedStruct { name, fields } => {
-                        let params = fields
-                            .iter()
-                            .map(|f| (Some(f.name.clone()), f.ty.clone()))
-                            .collect();
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params,
-                            span: state.span(),
-                        });
-                    }
-                    Type::Name(name) => {
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params: Vec::new(),
-                            span: state.span(),
-                        });
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            return Some(Type::Variant(variants));
-        } else {
-            return Some(Type::Sum(types));
-        }
+        state.error(ParseError::Message(
+            "Enum variants must use brace syntax: `{ red | green | blue }` instead of `red | green | blue`".to_string(),
+        ));
+        return None;
     }
 
     Some(first_type)
@@ -1931,6 +1886,11 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     name
                 )));
                 return None;
+            } else if state.at(&TokenKind::Pipe) || state.at(&TokenKind::LParen) {
+                // 枚举变体: red | green | blue 或 ok(Int) | err(String)
+                // 回退一个 token，从头开始解析枚举
+                state.restore_position(state.save_position() - 1);
+                return parse_enum_variants_in_braces(state);
             } else {
                 // 接口约束: InterfaceName
                 interfaces.push(name);
@@ -1946,6 +1906,92 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
     state.skip(&TokenKind::RBrace);
 
     Some(Type::Struct { fields, bindings })
+}
+
+/// 解析花括号内的枚举变体: { red | green | blue }
+fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
+    // 此时应该已经消费了 {
+    // 解析第一个变体
+    let first_variant = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(name)) => {
+            let name = name.clone();
+            state.bump();
+
+            // 检查是否有参数类型: ok(Int)
+            let params = if state.at(&TokenKind::LParen) {
+                state.bump(); // consume '('
+                let mut params = Vec::new();
+                while !state.at(&TokenKind::RParen) && !state.at_end() {
+                    if let Some(param_type) = parse_type_annotation(state) {
+                        params.push((None, param_type));
+                        state.skip(&TokenKind::Comma);
+                    } else {
+                        break;
+                    }
+                }
+                state.skip(&TokenKind::RParen);
+                params
+            } else {
+                Vec::new()
+            };
+
+            VariantDef {
+                name,
+                params,
+                span: state.span(),
+            }
+        }
+        _ => {
+            state.error(ParseError::Message("Expected variant name".to_string()));
+            return None;
+        }
+    };
+
+    // 收集后续变体
+    let mut variants = vec![first_variant];
+    while state.skip(&TokenKind::Pipe) {
+        match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(name)) => {
+                let name = name.clone();
+                state.bump();
+
+                // 检查是否有参数类型: ok(Int)
+                let params = if state.at(&TokenKind::LParen) {
+                    state.bump(); // consume '('
+                    let mut params = Vec::new();
+                    while !state.at(&TokenKind::RParen) && !state.at_end() {
+                        if let Some(param_type) = parse_type_annotation(state) {
+                            params.push((None, param_type));
+                            state.skip(&TokenKind::Comma);
+                        } else {
+                            break;
+                        }
+                    }
+                    state.skip(&TokenKind::RParen);
+                    params
+                } else {
+                    Vec::new()
+                };
+
+                variants.push(VariantDef {
+                    name,
+                    params,
+                    span: state.span(),
+                });
+            }
+            _ => {
+                state.error(ParseError::Message(
+                    "Expected variant name after '|'".to_string(),
+                ));
+                break;
+            }
+        }
+    }
+
+    state.skip(&TokenKind::RBrace);
+
+    // 返回 Variant 类型（保留参数信息）
+    Some(Type::Variant(variants))
 }
 
 /// 解析可选的位置绑定: `[0]` 或 `[0, 1]`
