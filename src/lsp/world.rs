@@ -5,12 +5,14 @@
 use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolIndex, SymbolKind, SymbolLocation};
 use crate::frontend::core::parser::ast::{Module, StmtKind};
 use crate::frontend::typecheck::semantic_db::SemanticDB;
+use crate::lsp::handlers::semantic_tokens::SemanticTokensCache;
 
 /// 编译世界
 ///
 /// 聚合编译器运行所需的全局状态：
 /// - 符号索引（用于 go-to-definition、find-references 等）
 /// - 语义数据库（用于 semantic tokens、代码高亮等）
+/// - 语义 tokens 缓存（用于 delta 模式增量更新）
 /// - 编译器实例管理
 ///
 /// 阶段 3 扩展：
@@ -22,6 +24,8 @@ pub struct World {
     symbol_index: SymbolIndex,
     /// 语义数据库（语义 token、作用域等）
     semantic_db: SemanticDB,
+    /// 语义 tokens 版本缓存（支持 delta 更新）
+    semantic_tokens_cache: SemanticTokensCache,
 }
 
 impl World {
@@ -30,6 +34,7 @@ impl World {
         Self {
             symbol_index: SymbolIndex::new(),
             semantic_db: SemanticDB::default(),
+            semantic_tokens_cache: SemanticTokensCache::new(),
         }
     }
 
@@ -51,6 +56,18 @@ impl World {
     /// 获取语义数据库（可变）
     pub fn semantic_db_mut(&mut self) -> &mut SemanticDB {
         &mut self.semantic_db
+    }
+
+    /// 获取语义 tokens 缓存（可变）
+    pub fn semantic_tokens_cache_mut(&mut self) -> &mut SemanticTokensCache {
+        &mut self.semantic_tokens_cache
+    }
+
+    /// 同时获取语义数据库（不可变）和 tokens 缓存（可变）
+    ///
+    /// 解决 Rust 借用规则限制：无法同时通过方法获取不可变和可变引用。
+    pub fn semantic_db_and_cache(&mut self) -> (&SemanticDB, &mut SemanticTokensCache) {
+        (&self.semantic_db, &mut self.semantic_tokens_cache)
     }
 
     /// 从 TypeCheckResult 的 SemanticDB 合并语义信息

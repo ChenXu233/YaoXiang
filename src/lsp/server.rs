@@ -19,6 +19,7 @@ use lsp_types::notification::{
 use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
 use lsp_types::request::HoverRequest;
 use lsp_types::request::SemanticTokensFullRequest;
+use lsp_types::request::SemanticTokensFullDeltaRequest;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
 
@@ -192,14 +193,38 @@ fn handle_request(
         m if m == <SemanticTokensFullRequest as lsp_types::request::Request>::METHOD => {
             match serde_json::from_value(req.params) {
                 Ok(params) => {
+                    let (db, cache) = world.semantic_db_and_cache();
                     let result = handlers::semantic_tokens::handle_semantic_tokens_full(
-                        world.semantic_db(),
+                        db,
+                        cache,
                         params,
                     );
                     Some(protocol::ok_response(req.id, result))
                 }
                 Err(e) => {
                     warn!("语义 tokens 请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/semanticTokens/full/delta
+        m if m == <SemanticTokensFullDeltaRequest as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let (db, cache) = world.semantic_db_and_cache();
+                    let result = handlers::semantic_tokens::handle_semantic_tokens_full_delta(
+                        db,
+                        cache,
+                        params,
+                    );
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("语义 tokens delta 请求参数解析失败: {}", e);
                     Some(protocol::internal_error(
                         req.id,
                         format!("参数解析失败: {}", e),
