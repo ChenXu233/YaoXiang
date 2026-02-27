@@ -33,6 +33,48 @@
         "scopeName": "source.yaoxiang",
         "path": "./syntaxes/yaoxiang.tmLanguage.json"
       }
-    ]
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "yaoxiang",
+        "scopes": {
+          "function": ["entity.name.function.yaoxiang"],
+          "function.declaration": ["entity.name.function.definition.yaoxiang"],
+          "type": ["entity.name.type.yaoxiang"],
+          "type.declaration": ["entity.name.type.definition.yaoxiang"],
+          "variable": ["variable.other.yaoxiang"],
+          "variable.readonly": ["variable.other.constant.yaoxiang"],
+          "variable.declaration": ["variable.other.definition.yaoxiang"],
+          "property": ["variable.other.property.yaoxiang"],
+          "method": ["entity.name.function.method.yaoxiang"],
+          "method.declaration": ["entity.name.function.method.definition.yaoxiang"],
+          "namespace": ["entity.name.namespace.yaoxiang"],
+          "parameter": ["variable.parameter.yaoxiang"],
+          "parameter.declaration": ["variable.parameter.definition.yaoxiang"],
+          "typeParameter": ["entity.name.type.parameter.yaoxiang"],
+          "keyword": ["keyword.yaoxiang"],
+          "string": ["string.yaoxiang"],
+          "number": ["constant.numeric.yaoxiang"]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "function:yaoxiang": "#DCDCAA",
+          "type:yaoxiang": "#4EC9B0",
+          "variable:yaoxiang": "#9CDCFE",
+          "variable.readonly:yaoxiang": "#4FC1FF",
+          "property:yaoxiang": "#9CDCFE",
+          "method:yaoxiang": "#DCDCAA",
+          "namespace:yaoxiang": "#4EC9B0",
+          "parameter:yaoxiang": "#9CDCFE",
+          "typeParameter:yaoxiang": "#4EC9B0",
+          "keyword:yaoxiang": "#569CD6",
+          "string:yaoxiang": "#CE9178",
+          "number:yaoxiang": "#B5CEA8"
+        }
+      }
+    }
   }
 }
