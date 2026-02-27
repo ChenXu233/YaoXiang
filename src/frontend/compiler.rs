@@ -175,6 +175,7 @@ impl Compiler {
     /// # 参数
     ///
     /// - `file`: 要检查的文件路径
+    /// - `source`: 当前源代码内容
     ///
     /// # 返回
     ///
@@ -183,8 +184,49 @@ impl Compiler {
     pub fn can_incremental_compile(
         &self,
         file: &std::path::Path,
+        source: &str,
     ) -> bool {
-        self.pipeline.can_incremental_compile(file)
+        self.pipeline.can_incremental_compile(file, source)
+    }
+
+    /// 使用增量编译（如果可能）
+    ///
+    /// 先检查缓存，如果命中则直接返回缓存结果，否则执行完整编译并缓存。
+    pub fn compile_incremental(
+        &mut self,
+        source_name: &str,
+        source: &str,
+        file: std::path::PathBuf,
+    ) -> Result<middle::ModuleIR, CompileError> {
+        // 尝试从缓存获取
+        if let Some(result) = self.pipeline.get_cached_result(&file, source) {
+            if let Some(ir) = result.ir {
+                return Ok(ir);
+            }
+        }
+
+        // 缓存未命中，执行编译并缓存
+        let result = self.pipeline.run_and_cache(source_name, source, file);
+
+        if result.is_success() {
+            Ok(result.ir.unwrap())
+        } else {
+            let first_error = result.errors.first();
+            let first_diagnostic = first_error.and_then(|e| e.diagnostic()).map(Box::new);
+            let error_message = result
+                .errors
+                .iter()
+                .map(|e| format!("{}", e))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(CompileError::TypeError(error_message, first_diagnostic))
+        }
+    }
+
+    /// 清空编译缓存（用于 --force 全量重编译）
+    #[inline]
+    pub fn clear_cache(&mut self) {
+        self.pipeline.clear_cache();
     }
 
     /// 获取当前编译状态
