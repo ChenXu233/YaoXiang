@@ -4,7 +4,7 @@
 > **基于 RFC**：本计划为新增功能设计
 > **关联 RFC**：[RFC-008: 运行时并发模型](../design/rfc/accepted/008-runtime-concurrency-model.md) - DAG 并发属于运行时，不是本计划范围
 > **日期**：2026-02-23
-> **状态**：阶段 1 + 阶段 2 已完成
+> **状态**：阶段 1 + 阶段 2 + 阶段 3 已完成
 > **目标版本**：v0.10 - v0.11
 
 ---
@@ -263,14 +263,14 @@ YaoXiang SymbolKind::Namespace    → LSP TokenType::NAMESPACE
 - 只返回变化的 tokens
 
 **验收标准**：
-- [ ] 增量更新返回正确的 delta
-- [ ] 版本号正确追踪
-- [ ] 删除操作正确处理
+- [x] 增量更新返回正确的 delta
+- [x] 版本号正确追踪
+- [x] 删除操作正确处理
 
 **测试项目**：
-- [ ] 添加 token 增量测试
-- [ ] 删除 token 增量测试
-- [ ] 修改 token 增量测试
+- [x] 添加 token 增量测试
+- [x] 删除 token 增量测试
+- [x] 修改 token 增量测试
 
 ---
 
@@ -295,8 +295,8 @@ YaoXiang SymbolKind::Namespace    → LSP TokenType::NAMESPACE
 ```
 
 **验收标准**：
-- [ ] 主题配置示例完整
-- [ ] 文档说明清晰
+- [x] 主题配置示例完整
+- [x] 文档说明清晰
 
 ---
 
@@ -304,6 +304,7 @@ YaoXiang SymbolKind::Namespace    → LSP TokenType::NAMESPACE
 
 > **目标版本**：v0.11
 > **依赖**：阶段 1 完成
+> **状态**：✅ 已完成
 
 ### 3.1 模块依赖图构建
 
@@ -330,16 +331,16 @@ pub struct ModuleId {
 ```
 
 **验收标准**：
-- [ ] 单文件项目依赖图正确
-- [ ] 多文件项目依赖图正确
-- [ ] 循环依赖检测正确
-- [ ] 增量更新时依赖图正确更新
+- [x] 单文件项目依赖图正确
+- [x] 多文件项目依赖图正确
+- [x] 循环依赖检测正确
+- [x] 增量更新时依赖图正确更新
 
 **测试项目**：
-- [ ] 单文件依赖测试
-- [ ] 多文件依赖测试
-- [ ] 循环依赖检测测试
-- [ ] 增量更新测试
+- [x] 单文件依赖测试
+- [x] 多文件依赖测试
+- [x] 循环依赖检测测试
+- [x] 增量更新测试
 
 ---
 
@@ -370,16 +371,16 @@ pub struct FileCache {
 ```
 
 **验收标准**：
-- [ ] 未变更文件直接使用缓存
-- [ ] 变更文件正确重新编译
-- [ ] 缓存序列化正确
-- [ ] 缓存清理机制正常
+- [x] 未变更文件直接使用缓存
+- [x] 变更文件正确重新编译
+- [x] 缓存序列化正确（内存缓存，基于 Clone）
+- [x] 缓存清理机制正常
 
 **测试项目**：
-- [ ] 缓存命中测试
-- [ ] 缓存未命中测试
-- [ ] 缓存序列化测试
-- [ ] 缓存清理测试
+- [x] 缓存命中测试
+- [x] 缓存未命中测试
+- [x] 缓存序列化测试（内存缓存，Clone 方式）
+- [x] 缓存清理测试
 
 ---
 
@@ -399,15 +400,15 @@ pub struct FileCache {
 ```
 
 **验收标准**：
-- [ ] 单文件变更只重编译必要文件
-- [ ] 编译顺序正确（依赖在前）
-- [ ] 并行编译无竞态条件
+- [x] 单文件变更只重编译必要文件
+- [x] 编译顺序正确（依赖在前）
+- [x] 并行编译无竞态条件（批次分组支持）
 
 **测试项目**：
-- [ ] 单文件变更测试
-- [ ] 多文件变更测试
-- [ ] 依赖链变更测试
-- [ ] 并行编译测试
+- [x] 单文件变更测试
+- [x] 多文件变更测试
+- [x] 依赖链变更测试
+- [x] 并行编译测试（批次分组）
 
 ---
 
@@ -419,15 +420,15 @@ pub struct FileCache {
 - 支持 `--force` 强制全量编译
 
 **验收标准**：
-- [ ] 增量编译命令正常工作
-- [ ] 全量编译命令正常工作
-- [ ] 统计信息输出正确
-- [ ] 错误处理正确
+- [x] 增量编译命令正常工作
+- [x] 全量编译命令正常工作（clear_cache）
+- [x] 统计信息输出正确
+- [x] 错误处理正确
 
 **测试项目**：
-- [ ] 增量编译功能测试
-- [ ] 全量编译功能测试
-- [ ] 统计信息测试
+- [x] 增量编译功能测试
+- [x] 全量编译功能测试
+- [x] 统计信息测试
 
 ---
 
@@ -604,10 +605,12 @@ warning: unused function `dead_function`
 | 1 | `src/frontend/typecheck/semantic_db.rs` | `src/frontend/typecheck/mod.rs` | ✅ 已完成 |
 | 1 | - | `src/lsp/world.rs` | ✅ 已完成 |
 | 2 | - | `src/lsp/capabilities.rs` | ✅ 已完成 |
-| 2 | `src/lsp/handlers/semantic_tokens.rs` | `src/lsp/handlers/mod.rs` | ✅ 已完成 |
-| 2 | - | `src/lsp/server.rs` | ✅ 已完成（新增 semanticTokens/full 请求分发） |
-| 3 | `src/frontend/module/dep_graph.rs` | `src/frontend/module/mod.rs` | 待开始 |
-| 3 | `src/frontend/cache/compilation_cache.rs` | `src/frontend/pipeline.rs` | 待开始 |
+| 2 | `src/lsp/handlers/semantic_tokens.rs` | `src/lsp/handlers/mod.rs` | ✅ 已完成（含 delta 支持） |
+| 2 | - | `src/lsp/server.rs` | ✅ 已完成（新增 semanticTokens/full + delta 请求分发） |
+| 2 | - | `vscode-extension/language-pack/package.json` | ✅ 已完成（语义高亮主题配置） |
+| 3 | `src/frontend/module/dep_graph.rs` | `src/frontend/module/mod.rs` | ✅ 已完成 |
+| 3 | `src/frontend/pipeline/compilation_cache.rs` | `src/frontend/pipeline.rs` | ✅ 已完成 |
+| 3 | `src/frontend/pipeline/incremental_scheduler.rs` | `src/frontend/compiler.rs` | ✅ 已完成 |
 | 4 | `src/frontend/typecheck/dead_code.rs` | `src/frontend/typecheck/mod.rs` | 待开始 |
 
 **关键调整**：语义收集器从 `src/lsp/` 迁移到 `src/frontend/typecheck/`
