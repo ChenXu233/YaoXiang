@@ -16,6 +16,7 @@
 //! 3. 支持循环依赖检测
 
 pub mod cache;
+pub mod dep_graph;
 pub mod hot_reload;
 pub mod loader;
 pub mod registry;
