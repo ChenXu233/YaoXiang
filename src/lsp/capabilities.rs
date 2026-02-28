@@ -57,11 +57,11 @@ pub fn server_capabilities() -> ServerCapabilities {
                 legend: SemanticTokensLegend {
                     token_types: SemanticTokenType::legend()
                         .into_iter()
-                        .map(|s| lsp_types::SemanticTokenType::new(s))
+                        .map(lsp_types::SemanticTokenType::new)
                         .collect(),
                     token_modifiers: SemanticTokenModifier::legend()
                         .into_iter()
-                        .map(|s| lsp_types::SemanticTokenModifier::new(s))
+                        .map(lsp_types::SemanticTokenModifier::new)
                         .collect(),
                 },
                 full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }),

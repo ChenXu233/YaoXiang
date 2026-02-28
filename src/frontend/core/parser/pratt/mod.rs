@@ -14,6 +14,9 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::statements::TypeStatementParser;
 
+/// Type alias for call arguments: (positional_args, named_args)
+type CallArgs = (Vec<Expr>, Vec<(String, Expr)>);
+
 /// Public entry point for expression parsing
 pub fn parse_expression_impl(
     state: &mut ParserState<'_>,
@@ -260,7 +263,7 @@ impl ParserState<'_> {
         }
     }
 
-    fn parse_call_args(&mut self) -> Option<(Vec<Expr>, Vec<(String, Expr)>)> {
+    fn parse_call_args(&mut self) -> Option<CallArgs> {
         let mut args = Vec::new();
         let mut named_args = Vec::new();
 
