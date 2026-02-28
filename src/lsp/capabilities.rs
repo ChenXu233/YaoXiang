@@ -72,7 +72,11 @@ pub fn server_capabilities() -> ServerCapabilities {
 
         // 以下能力将在后续阶段启用
         // workspace_symbol_provider: None,  // v0.9
-        // document_formatting_provider: None, // v0.9
+
+        // 文档格式化（v0.9）
+        document_formatting_provider: Some(OneOf::Left(true)),
+        document_range_formatting_provider: Some(OneOf::Left(true)),
+
         ..ServerCapabilities::default()
     }
 }
