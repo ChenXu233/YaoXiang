@@ -122,10 +122,7 @@ impl ModuleDependencyGraph {
         &self,
         module: &ModuleId,
     ) -> &[DependencyEdge] {
-        self.deps
-            .get(module)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.deps.get(module).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     /// 获取直接依赖某个模块的所有模块（反向依赖）

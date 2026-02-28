@@ -352,8 +352,7 @@ impl CompilationCache {
         }
 
         // 先淘汰过期条目
-        self.files
-            .retain(|_, entry| !entry.is_expired(self.ttl));
+        self.files.retain(|_, entry| !entry.is_expired(self.ttl));
         self.uri_files
             .retain(|_, entry| !entry.is_expired(self.ttl));
 
@@ -485,7 +484,9 @@ mod tests {
     #[test]
     fn test_cache_batch_invalidate() {
         let mut cache = CompilationCache::new();
-        let paths: Vec<PathBuf> = (0..5).map(|i| PathBuf::from(format!("/{}.yx", i))).collect();
+        let paths: Vec<PathBuf> = (0..5)
+            .map(|i| PathBuf::from(format!("/{}.yx", i)))
+            .collect();
 
         for (i, p) in paths.iter().enumerate() {
             cache.store(p.clone(), &format!("source_{}", i), None, None, None);
@@ -543,13 +544,7 @@ mod tests {
 
         let type_result = TypeCheckResult::default();
 
-        cache.store(
-            path.clone(),
-            source,
-            None,
-            Some(type_result),
-            None,
-        );
+        cache.store(path.clone(), source, None, Some(type_result), None);
 
         let entry = cache.get(&path, source).unwrap();
         assert!(entry.ast.is_none());

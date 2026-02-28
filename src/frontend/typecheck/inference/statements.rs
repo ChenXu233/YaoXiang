@@ -353,7 +353,9 @@ impl StatementChecker {
         use crate::frontend::core::parser::ast::Type;
 
         match definition {
-            Type::Struct { fields, bindings } => {
+            Type::Struct {
+                fields, bindings, ..
+            } => {
                 for field in fields {
                     if let Some(default_expr) = &field.default {
                         self.check_field_default(field, default_expr, span)?;
@@ -438,7 +440,7 @@ impl StatementChecker {
                         let param_count = param_types.len();
 
                         for &pos in positions {
-                            if pos >= param_count {
+                            if (pos as usize) >= param_count {
                                 return Err(Box::new(
                                     ErrorCodeDefinition::type_mismatch(
                                         &format!(
@@ -452,7 +454,7 @@ impl StatementChecker {
                                 ));
                             }
 
-                            let param_type = &param_types[pos];
+                            let param_type = &param_types[pos as usize];
                             let binding_type = MonoType::TypeRef(type_name.to_string());
                             if self.solver.unify(&binding_type, param_type).is_err() {
                                 return Err(Box::new(
@@ -489,7 +491,7 @@ impl StatementChecker {
 
                 let param_count = params.len();
                 for &pos in positions {
-                    if pos >= param_count {
+                    if (pos as usize) >= param_count {
                         return Err(Box::new(
                             ErrorCodeDefinition::type_mismatch(
                                 &format!(
@@ -503,7 +505,7 @@ impl StatementChecker {
                         ));
                     }
 
-                    if let Some(param_ty) = &params[pos].ty {
+                    if let Some(param_ty) = &params[pos as usize].ty {
                         let param_mono = MonoType::from(param_ty.clone());
                         let binding_type = MonoType::TypeRef(type_name.to_string());
                         if self.solver.unify(&binding_type, &param_mono).is_err() {
@@ -519,6 +521,10 @@ impl StatementChecker {
                     }
                 }
 
+                Ok(())
+            }
+            BindingKind::DefaultExternal { .. } => {
+                // DefaultExternal: 自动推导位置，此处无需额外检查
                 Ok(())
             }
         }

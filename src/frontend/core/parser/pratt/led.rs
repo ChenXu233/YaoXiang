@@ -144,6 +144,7 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume '('
 
         let mut args = Vec::new();
+        let mut named_args = Vec::new();
 
         // Empty argument list
         if self.at(&TokenKind::RParen) {
@@ -151,13 +152,37 @@ impl<'a> ParserState<'a> {
             return Some(Expr::Call {
                 func: Box::new(lhs),
                 args,
+                named_args,
                 span,
             });
         }
 
         loop {
             let arg = self.parse_expression(BP_LOWEST)?;
-            args.push(arg);
+
+            // RFC-010: 检测命名参数 `name=expr`
+            // 赋值表达式 x=1 会被解析为 BinOp { Assign, Var("x"), Lit(1) }
+            if let Expr::BinOp {
+                op: BinOp::Assign,
+                left,
+                right,
+                ..
+            } = arg
+            {
+                if let Expr::Var(name, _) = *left {
+                    named_args.push((name, *right));
+                } else {
+                    // 左侧不是简单变量，视为普通参数
+                    args.push(Expr::BinOp {
+                        op: BinOp::Assign,
+                        left,
+                        right,
+                        span,
+                    });
+                }
+            } else {
+                args.push(arg);
+            }
 
             if self.skip(&TokenKind::Comma) {
                 // Handle trailing comma
@@ -174,6 +199,7 @@ impl<'a> ParserState<'a> {
         Some(Expr::Call {
             func: Box::new(lhs),
             args,
+            named_args,
             span,
         })
     }
