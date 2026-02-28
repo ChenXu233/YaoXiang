@@ -1042,7 +1042,7 @@ impl Executor for Interpreter {
                     let handle = self.heap.allocate(HeapValue::Tuple(field_values));
 
                     // 构建 vtable
-                    let vtable = self.build_vtable(&type_name);
+                    let vtable = self.build_vtable(type_name);
 
                     // 创建结构体值
                     let struct_val = RuntimeValue::Struct {
