@@ -1,0 +1,20 @@
+{
+  "name": "yaoxiang-extension-pack",
+  "displayName": "YaoXiang Extension Pack",
+  "description": "Complete YaoXiang language support for VS Code including syntax highlighting, language configuration, and LSP server",
+  "version": "0.1.0",
+  "publisher": "yaoxiang",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Extension Packs"
+  ],
+  "extensionPack": [
+    "yaoxiang.yaoxiang-language-pack",
+    "yaoxiang.yaoxiang-language-server"
+  ],
+  "icon": "icon.png",
+  "repository": "https://github.com/yaoxiang-lang/yaoxiang"
+}

@@ -257,13 +257,13 @@ Point: Type = {
 
 ### 后续可选增强
 
-以下为非核心功能，可在后续版本中按需实现：
+以下功能已全部实现（测试覆盖在 `binding_enhancements` 测试模块中）：
 
-| 功能 | 对应 RFC | 说明 |
-|------|---------|------|
-| 命名参数构造 | RFC-010 | `Point(x=1, y=2)` 语法需要解析器支持命名参数 |
-| 负数索引绑定 | RFC-004 | `func[-1]` 绑定到最后一个参数 |
-| 默认绑定 | RFC-004 | `Type.method = function`（无位置）自动查找第一个类型匹配位置 |
-| 外部绑定语句 | RFC-004 | `Point.distance = distance[0]` 独立绑定语句 |
-| 接口约束 | RFC-010 | 类型体内的接口名作为约束 |
-| 匿名函数 IR 生成 | RFC-004 | 为匿名绑定生成独立的函数 IR |
+| 功能 | 对应 RFC | 状态 | 说明 |
+|------|---------|------|------|
+| 命名参数构造 | RFC-010 | ✅ 已实现 | `Point(x=1, y=2)` 解析器检测 `name=expr` 模式并分离到 `named_args`；IR 生成器按字段名重排参数 |
+| 负数索引绑定 | RFC-004 | ✅ 已实现 | `func[-1]` 位置类型改为 `Vec<i64>`，解析器支持 `Minus` + `IntLiteral` 模式 |
+| 默认绑定 | RFC-004 | ✅ 已实现 | `Type.method = function`（无位置）生成 `BindingKind::DefaultExternal`，IR 生成器默认位置 0 |
+| 外部绑定语句 | RFC-004 | ✅ 已实现 | `Point.distance = distance[0]` 解析为 `StmtKind::ExternalBindingStmt`，IR 生成器注册到 `type_bindings` |
+| 接口约束 | RFC-010 | ✅ 已实现 | `StructType` 新增 `interfaces: Vec<String>` 字段，解析器识别大写标识符为接口约束 |
+| 匿名函数 IR 生成 | RFC-004 | ✅ 已实现 | `generate_anon_binding_ir` 方法生成独立 `FunctionIR`，注册到模块级 `anon_function_irs` |

@@ -12,8 +12,10 @@
 //! - unsafe_ptr: unsafe 和裸指针测试（RFC-009 Phase 7）
 
 mod basic;
+mod binding_enhancements;
 mod boundary;
 mod fn_def;
+mod fstring;
 mod old_syntax_rejection;
 mod ref_test;
 mod state;

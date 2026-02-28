@@ -293,7 +293,7 @@ mod boundary_tests {
     /// Test union type definition with two variants -> Type::Variant
     #[test]
     fn test_parse_union_type_two_variants() {
-        let code = "Color: Type = red | green";
+        let code = "Color: Type = { red | green }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -304,7 +304,7 @@ mod boundary_tests {
     /// Test union type definition with three variants -> Type::Variant
     #[test]
     fn test_parse_union_type_three_variants() {
-        let code = "Color: Type = red | green | blue";
+        let code = "Color: Type = { red | green | blue }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -326,7 +326,7 @@ mod boundary_tests {
     /// Test generic union type definition
     #[test]
     fn test_parse_generic_union_type() {
-        let code = "Result: Type[T, E] = ok(T) | err(E)";
+        let code = "Result: Type[T, E] = { ok(T) | err(E) }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -337,7 +337,7 @@ mod boundary_tests {
     /// Test generic type with angle brackets
     #[test]
     fn test_parse_generic_type_with_angle_brackets() {
-        let code = "Result: Type<T, E> = ok(T) | err(E)";
+        let code = "Result: Type<T, E> = { ok(T) | err(E) }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -381,7 +381,7 @@ mod boundary_tests {
     /// Test multiple type definitions
     #[test]
     fn test_parse_multiple_type_definitions() {
-        let code = "Color: Type = red | green | blue; Point: Type = Point(x: Float, y: Float)";
+        let code = "Color: Type = { red | green | blue }; Point: Type = Point(x: Float, y: Float)";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -393,7 +393,7 @@ mod boundary_tests {
     #[test]
     fn test_parse_enum_like_type() {
         let code =
-            "Day: Type = Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday";
+            "Day: Type = { Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -404,8 +404,7 @@ mod boundary_tests {
     /// Test mixed constructor types (with and without params)
     #[test]
     fn test_parse_mixed_constructor_types() {
-        let code =
-            "Shape: Type = circle(radius: Float) | rect(width: Float, height: Float) | point";
+        let code = "Shape: Type = { circle(Float) | rect(Float, Float) | point }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);

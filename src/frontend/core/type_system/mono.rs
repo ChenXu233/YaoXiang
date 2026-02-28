@@ -398,7 +398,9 @@ impl From<ast::Type> for MonoType {
             ast::Type::Bytes => MonoType::Bytes,
             ast::Type::Bool => MonoType::Bool,
             ast::Type::Void => MonoType::Void,
-            ast::Type::Struct { fields, .. } => {
+            ast::Type::Struct {
+                fields, interfaces, ..
+            } => {
                 let (field_names, field_types, field_mutability, field_has_default) = fields
                     .into_iter()
                     .map(|f| (f.name, MonoType::from(f.ty), f.is_mut, f.default.is_some()))
@@ -418,6 +420,7 @@ impl From<ast::Type> for MonoType {
                     methods: HashMap::new(),
                     field_mutability,
                     field_has_default,
+                    interfaces,
                 })
             }
             ast::Type::Union(variants) => MonoType::Enum(EnumType {
@@ -492,6 +495,7 @@ impl From<ast::Type> for MonoType {
                     methods: HashMap::new(),
                     field_mutability,
                     field_has_default: Vec::new(),
+                    interfaces: vec![],
                 })
             }
             ast::Type::Sum(types) => {
@@ -577,6 +581,8 @@ pub struct StructType {
     pub field_mutability: Vec<bool>,
     /// 字段默认值标记：与 fields 索引对应，标记哪些字段有默认值
     pub field_has_default: Vec<bool>,
+    /// RFC-010: 接口约束列表
+    pub interfaces: Vec<String>,
 }
 
 impl StructType {

@@ -24,6 +24,12 @@
   gap: 0 !important;
 }
 
+/* 小屏幕下隐藏导航栏菜单，强制显示汉堡菜单 */
+@media (max-width: 768px) {
+  .VPNavBarMenu {
+    display: none !important;
+  }
+}
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
   width: 8px;

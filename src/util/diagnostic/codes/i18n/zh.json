@@ -542,5 +542,45 @@
         "help": "类型构造器如 'Type[T]' 不能引用 Type 自身",
         "example": "Type: Type[T] = { data: T }",
         "error_output": "error[E1091]: 泛型元类型自引用不允许：'Type: Type[T] = ...'"
+    },
+    "W1001": {
+        "title": "未使用的导出函数",
+        "message": "导出的函数从未被调用",
+        "template": "未使用的导出函数：'{name}'",
+        "help": "考虑移除导出或使用该函数",
+        "example": "pub fn dead_function() { }",
+        "error_output": "warning[W1001]: 未使用的导出函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 函数从未被使用"
+    },
+    "W1002": {
+        "title": "未使用的导出类型",
+        "message": "导出的类型从未被使用",
+        "template": "未使用的导出类型：'{name}'",
+        "help": "考虑移除导出或使用该类型",
+        "example": "pub type DeadType = Int",
+        "error_output": "warning[W1002]: 未使用的导出类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型从未被使用"
+    },
+    "W1003": {
+        "title": "未使用的导入",
+        "message": "导入的模块或符号从未被使用",
+        "template": "未使用的导入：'{name}'",
+        "help": "考虑移除未使用的导入",
+        "example": "use std.json; // json 从未被使用",
+        "error_output": "warning[W1003]: 未使用的导入：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入从未被使用"
+    },
+    "W1004": {
+        "title": "未使用的导出变量",
+        "message": "导出的变量从未被使用",
+        "template": "未使用的导出变量：'{name}'",
+        "help": "考虑移除导出或使用该变量",
+        "example": "pub let dead_var = 42;",
+        "error_output": "warning[W1004]: 未使用的导出变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 变量从未被使用"
+    },
+    "W1005": {
+        "title": "未使用的导出方法",
+        "message": "导出的方法从未被调用",
+        "template": "未使用的导出方法：'{name}'",
+        "help": "考虑移除导出或使用该方法",
+        "example": "pub fn Foo.dead_method() { }",
+        "error_output": "warning[W1005]: 未使用的导出方法：'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 方法从未被使用"
     }
 }

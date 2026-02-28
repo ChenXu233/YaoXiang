@@ -20,6 +20,7 @@
 // Public modules
 pub mod backends;
 pub mod frontend;
+pub mod lsp;
 pub mod middle;
 pub mod package;
 pub mod std;

@@ -17,6 +17,14 @@ use super::scope::ScopeManager;
 ///
 /// 负责检查函数体中的语句和表达式的类型正确性。
 /// 使用统一的 ScopeManager 实现作用域管理。
+///
+/// ## 错误收集模式
+///
+/// 支持两种错误处理模式：
+/// - **短路模式**（默认）：遇到错误立即返回，保持向后兼容
+/// - **收集模式**：收集所有错误后统一返回，用于 LSP 支持
+///
+/// 通过 `set_collect_all_errors(true)` 启用收集模式。
 pub struct StatementChecker {
     /// 约束求解器
     solver: TypeConstraintSolver,
@@ -31,6 +39,10 @@ pub struct StatementChecker {
     native_signatures: HashMap<String, MonoType>,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
+    /// 累积的错误（收集模式下使用）
+    collected_errors: Vec<Diagnostic>,
+    /// 是否启用错误收集模式（收集所有错误而非短路返回）
+    collect_all_errors: bool,
 }
 
 impl StatementChecker {
@@ -43,7 +55,49 @@ impl StatementChecker {
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
             is_top_level: true,
+            collected_errors: Vec::new(),
+            collect_all_errors: false,
         }
+    }
+
+    /// 设置是否启用错误收集模式
+    ///
+    /// 启用后，类型检查不会在遇到第一个错误时短路返回，
+    /// 而是尽可能多地收集错误，最终统一返回。
+    /// 这对于 LSP 诊断非常重要，因为用户需要看到所有错误。
+    pub fn set_collect_all_errors(
+        &mut self,
+        collect: bool,
+    ) {
+        self.collect_all_errors = collect;
+    }
+
+    /// 获取是否启用了错误收集模式
+    pub fn is_collect_all_errors(&self) -> bool {
+        self.collect_all_errors
+    }
+
+    /// 获取累积的错误
+    pub fn collected_errors(&self) -> &[Diagnostic] {
+        &self.collected_errors
+    }
+
+    /// 取出所有累积的错误（消耗）
+    pub fn drain_collected_errors(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.collected_errors)
+    }
+
+    /// 检查是否有累积的错误
+    pub fn has_collected_errors(&self) -> bool {
+        !self.collected_errors.is_empty()
+    }
+
+    /// 收集错误（在收集模式下添加到列表，否则忽略）
+    fn collect_error(
+        &mut self,
+        error: Diagnostic,
+    ) {
+        self.collected_errors.push(error);
     }
 
     /// 设置 native 函数签名表
@@ -119,6 +173,9 @@ impl StatementChecker {
     }
 
     /// 检查函数定义
+    ///
+    /// 在收集模式下，遇到错误不会短路返回，而是继续检查后续语句，
+    /// 尽可能收集所有错误。
     pub fn check_fn_def(
         &mut self,
         name: &str,
@@ -151,33 +208,63 @@ impl StatementChecker {
                 .add_var(param.name.clone(), PolyType::mono(param_ty));
         }
 
-        // 检查函数体语句
-        let mut err = None;
-        for stmt in &body.stmts {
-            if let Err(e) = self.check_stmt(stmt) {
-                err = Some(e);
-                break;
-            }
-        }
-
-        // 检查返回表达式
-        if err.is_none() {
-            if let Some(expr) = &body.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    err = Some(e);
+        if self.collect_all_errors {
+            // 收集模式：收集所有错误，不短路
+            let mut first_err = None;
+            for stmt in &body.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
                 }
             }
-        }
 
-        // 退出函数作用域
-        self.scope.exit_scope();
+            // 检查返回表达式
+            if let Some(expr) = &body.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
+                }
+            }
 
-        // 恢复顶层状态
-        self.is_top_level = was_top_level;
+            // 退出函数作用域
+            self.scope.exit_scope();
+            self.is_top_level = was_top_level;
 
-        match err {
-            Some(e) => Err(e),
-            None => Ok(()),
+            match first_err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
+        } else {
+            // 短路模式：遇到第一个错误立即返回
+            let mut err = None;
+            for stmt in &body.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    err = Some(e);
+                    break;
+                }
+            }
+
+            // 检查返回表达式
+            if err.is_none() {
+                if let Some(expr) = &body.expr {
+                    if let Err(e) = self.check_expr(expr) {
+                        err = Some(e);
+                    }
+                }
+            }
+
+            // 退出函数作用域
+            self.scope.exit_scope();
+            self.is_top_level = was_top_level;
+
+            match err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
         }
     }
 
@@ -246,6 +333,12 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::TypeDef {
                 name, definition, ..
             } => self.check_type_def(name, definition, stmt.span),
+            // 错误恢复占位符：报告错误但不 panic
+            crate::frontend::core::parser::ast::StmtKind::Error(span) => Err(Box::new(
+                ErrorCodeDefinition::invalid_syntax("缺失语句")
+                    .at(*span)
+                    .build(),
+            )),
             _ => Ok(()),
         }
     }
@@ -260,7 +353,9 @@ impl StatementChecker {
         use crate::frontend::core::parser::ast::Type;
 
         match definition {
-            Type::Struct { fields, bindings } => {
+            Type::Struct {
+                fields, bindings, ..
+            } => {
                 for field in fields {
                     if let Some(default_expr) = &field.default {
                         self.check_field_default(field, default_expr, span)?;
@@ -345,7 +440,7 @@ impl StatementChecker {
                         let param_count = param_types.len();
 
                         for &pos in positions {
-                            if pos >= param_count {
+                            if (pos as usize) >= param_count {
                                 return Err(Box::new(
                                     ErrorCodeDefinition::type_mismatch(
                                         &format!(
@@ -359,7 +454,7 @@ impl StatementChecker {
                                 ));
                             }
 
-                            let param_type = &param_types[pos];
+                            let param_type = &param_types[pos as usize];
                             let binding_type = MonoType::TypeRef(type_name.to_string());
                             if self.solver.unify(&binding_type, param_type).is_err() {
                                 return Err(Box::new(
@@ -396,7 +491,7 @@ impl StatementChecker {
 
                 let param_count = params.len();
                 for &pos in positions {
-                    if pos >= param_count {
+                    if (pos as usize) >= param_count {
                         return Err(Box::new(
                             ErrorCodeDefinition::type_mismatch(
                                 &format!(
@@ -410,7 +505,7 @@ impl StatementChecker {
                         ));
                     }
 
-                    if let Some(param_ty) = &params[pos].ty {
+                    if let Some(param_ty) = &params[pos as usize].ty {
                         let param_mono = MonoType::from(param_ty.clone());
                         let binding_type = MonoType::TypeRef(type_name.to_string());
                         if self.solver.unify(&binding_type, &param_mono).is_err() {
@@ -426,6 +521,10 @@ impl StatementChecker {
                     }
                 }
 
+                Ok(())
+            }
+            BindingKind::DefaultExternal { .. } => {
+                // DefaultExternal: 自动推导位置，此处无需额外检查
                 Ok(())
             }
         }
@@ -703,6 +802,8 @@ impl StatementChecker {
     }
 
     /// 检查 for 语句
+    ///
+    /// 在收集模式下，循环体内的错误会被收集而非短路。
     fn check_for_stmt(
         &mut self,
         var: &str,
@@ -731,26 +832,49 @@ impl StatementChecker {
 
         let _ = var_mut;
 
-        let mut err = None;
-        for stmt in &body.stmts {
-            if let Err(e) = self.check_stmt(stmt) {
-                err = Some(e);
-                break;
-            }
-        }
-        if err.is_none() {
-            if let Some(expr) = &body.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    err = Some(e);
+        if self.collect_all_errors {
+            let mut first_err = None;
+            for stmt in &body.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
                 }
             }
-        }
-
-        self.scope.exit_scope();
-
-        match err {
-            Some(e) => Err(e),
-            None => Ok(()),
+            if let Some(expr) = &body.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
+                }
+            }
+            self.scope.exit_scope();
+            match first_err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
+        } else {
+            let mut err = None;
+            for stmt in &body.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    err = Some(e);
+                    break;
+                }
+            }
+            if err.is_none() {
+                if let Some(expr) = &body.expr {
+                    if let Err(e) = self.check_expr(expr) {
+                        err = Some(e);
+                    }
+                }
+            }
+            self.scope.exit_scope();
+            match err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
         }
     }
 
@@ -797,32 +921,57 @@ impl StatementChecker {
     }
 
     /// 检查代码块（创建独立作用域）
+    ///
+    /// 在收集模式下，代码块内的错误会被收集而非短路。
     fn check_block(
         &mut self,
         block: &Block,
     ) -> Result<(), Box<Diagnostic>> {
         self.scope.enter_scope();
 
-        let mut err = None;
-        for stmt in &block.stmts {
-            if let Err(e) = self.check_stmt(stmt) {
-                err = Some(e);
-                break;
-            }
-        }
-        if err.is_none() {
-            if let Some(expr) = &block.expr {
-                if let Err(e) = self.check_expr(expr) {
-                    err = Some(e);
+        if self.collect_all_errors {
+            let mut first_err = None;
+            for stmt in &block.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
                 }
             }
-        }
-
-        self.scope.exit_scope();
-
-        match err {
-            Some(e) => Err(e),
-            None => Ok(()),
+            if let Some(expr) = &block.expr {
+                if let Err(e) = self.check_expr(expr) {
+                    if first_err.is_none() {
+                        first_err = Some(e.clone());
+                    }
+                    self.collect_error(*e);
+                }
+            }
+            self.scope.exit_scope();
+            match first_err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
+        } else {
+            let mut err = None;
+            for stmt in &block.stmts {
+                if let Err(e) = self.check_stmt(stmt) {
+                    err = Some(e);
+                    break;
+                }
+            }
+            if err.is_none() {
+                if let Some(expr) = &block.expr {
+                    if let Err(e) = self.check_expr(expr) {
+                        err = Some(e);
+                    }
+                }
+            }
+            self.scope.exit_scope();
+            match err {
+                Some(e) => Err(e),
+                None => Ok(()),
+            }
         }
     }
 

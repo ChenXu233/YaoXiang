@@ -14,6 +14,9 @@ use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::statements::TypeStatementParser;
 
+/// Type alias for call arguments: (positional_args, named_args)
+type CallArgs = (Vec<Expr>, Vec<(String, Expr)>);
+
 /// Public entry point for expression parsing
 pub fn parse_expression_impl(
     state: &mut ParserState<'_>,
@@ -40,13 +43,14 @@ impl ParserState<'_> {
                 }
                 // Parse function call
                 self.bump(); // consume '('
-                let args = self.parse_call_args()?;
+                let (args, named_args) = self.parse_call_args()?;
                 if !self.skip(&TokenKind::RParen) {
                     return None;
                 }
                 left = Expr::Call {
                     func: Box::new(left),
                     args,
+                    named_args,
                     span: _token.span,
                 };
                 continue;
@@ -259,17 +263,41 @@ impl ParserState<'_> {
         }
     }
 
-    fn parse_call_args(&mut self) -> Option<Vec<Expr>> {
+    fn parse_call_args(&mut self) -> Option<CallArgs> {
         let mut args = Vec::new();
+        let mut named_args = Vec::new();
 
         // Empty argument list
         if self.at(&TokenKind::RParen) {
-            return Some(args);
+            return Some((args, named_args));
         }
 
         loop {
             let arg = self.parse_expression(BP_LOWEST)?;
-            args.push(arg);
+
+            // RFC-010: 检测命名参数 `name=expr`
+            // 赋值表达式 x=1 会被解析为 BinOp { Assign, Var("x"), Lit(1) }
+            if let Expr::BinOp {
+                op: BinOp::Assign,
+                left,
+                right,
+                span: binop_span,
+            } = arg
+            {
+                if let Expr::Var(name, _) = *left {
+                    named_args.push((name, *right));
+                } else {
+                    // 左侧不是简单变量，视为普通参数
+                    args.push(Expr::BinOp {
+                        op: BinOp::Assign,
+                        left,
+                        right,
+                        span: binop_span,
+                    });
+                }
+            } else {
+                args.push(arg);
+            }
 
             if !self.skip(&TokenKind::Comma) {
                 break;
@@ -281,7 +309,7 @@ impl ParserState<'_> {
             }
         }
 
-        Some(args)
+        Some((args, named_args))
     }
 
     /// Convert an expression to lambda parameters

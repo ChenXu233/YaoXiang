@@ -2,10 +2,16 @@
 //!
 //! 管理编译状态机、执行编译流程、处理错误恢复。
 
+pub mod compilation_cache;
+pub mod incremental_scheduler;
+
 use crate::middle;
 use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
 use super::{config::CompileConfig, events::*, typecheck};
+
+use compilation_cache::CompilationCache;
+use incremental_scheduler::IncrementalStats;
 
 /// 管道错误类型
 #[derive(Debug, Clone)]
@@ -181,6 +187,10 @@ pub struct Pipeline {
     event_bus: EventBus,
     /// 缓存目录（用于增量编译）
     cache_dir: Option<PathBuf>,
+    /// 编译缓存（内存）
+    compilation_cache: CompilationCache,
+    /// 增量编译统计
+    incremental_stats: IncrementalStats,
 }
 
 impl Default for Pipeline {
@@ -204,11 +214,17 @@ impl fmt::Debug for Pipeline {
 impl Pipeline {
     /// 创建新流水线
     pub fn new(config: CompileConfig) -> Self {
+        let cache = CompilationCache::with_config(
+            config.incremental.cache_ttl,
+            (config.incremental.max_cache_size / 1024) as usize, // 粗略估计条目数
+        );
         Self {
             state: PipelineState::Idle,
             config,
             event_bus: EventBus::new(),
             cache_dir: None,
+            compilation_cache: cache,
+            incremental_stats: IncrementalStats::default(),
         }
     }
 
@@ -217,11 +233,17 @@ impl Pipeline {
         config: CompileConfig,
         event_bus: EventBus,
     ) -> Self {
+        let cache = CompilationCache::with_config(
+            config.incremental.cache_ttl,
+            (config.incremental.max_cache_size / 1024) as usize,
+        );
         Self {
             state: PipelineState::Idle,
             config,
             event_bus,
             cache_dir: None,
+            compilation_cache: cache,
+            incremental_stats: IncrementalStats::default(),
         }
     }
 
@@ -547,26 +569,72 @@ impl Pipeline {
     pub fn can_incremental_compile(
         &self,
         file: &Path,
+        source: &str,
     ) -> bool {
         if !self.config.incremental.enabled {
             return false;
         }
 
-        if let Some(ref cache_dir) = self.cache_dir {
-            let cache_file = cache_dir.join(file.file_stem().unwrap_or_default());
-            cache_file.exists() && cache_file.is_file()
-        } else {
-            false
-        }
+        self.compilation_cache.has_valid_cache(file, source)
     }
 
     /// 获取缓存的编译结果
     pub fn get_cached_result(
-        &self,
-        _file: &Path,
+        &mut self,
+        file: &Path,
+        source: &str,
     ) -> Option<CompilationResult> {
-        // TODO: 实现增量编译缓存逻辑
-        None
+        if !self.config.incremental.enabled {
+            return None;
+        }
+
+        let entry = self.compilation_cache.get(file, source)?;
+        let ir = entry.ir.clone()?;
+
+        Some(CompilationResult::success(ir, Vec::new(), 0))
+    }
+
+    /// 获取编译缓存的引用
+    pub fn compilation_cache(&self) -> &CompilationCache {
+        &self.compilation_cache
+    }
+
+    /// 获取编译缓存的可变引用
+    pub fn compilation_cache_mut(&mut self) -> &mut CompilationCache {
+        &mut self.compilation_cache
+    }
+
+    /// 获取增量编译统计
+    pub fn incremental_stats(&self) -> &IncrementalStats {
+        &self.incremental_stats
+    }
+
+    /// 运行编译并缓存结果
+    pub fn run_and_cache(
+        &mut self,
+        source_name: &str,
+        source: &str,
+        file: PathBuf,
+    ) -> CompilationResult {
+        let result = self.run(source_name, source);
+
+        // 缓存编译产物
+        if result.is_success() {
+            self.compilation_cache.store(
+                file,
+                source,
+                None, // AST 不在最终结果中（已被消耗）
+                None, // TypeCheckResult 不在最终结果中
+                result.ir.clone(),
+            );
+        }
+
+        result
+    }
+
+    /// 清空编译缓存
+    pub fn clear_cache(&mut self) {
+        self.compilation_cache.clear();
     }
 
     /// 重置流水线状态

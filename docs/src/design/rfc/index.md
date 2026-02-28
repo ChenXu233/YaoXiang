@@ -40,8 +40,6 @@ title: RFC 索引
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-003 | [版本规划与实现建议](./review/003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
-| RFC-017 | [语言服务器协议（LSP）支持设计](./review/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
-
 ---
 
 ## 已接受RFC
@@ -59,6 +57,8 @@ title: RFC 索引
 | RFC-013 | [错误代码规范设计](./accepted/013-error-code-specification.md) | 晨煦 | 2025-01-30 | 已接受 |
 | RFC-014 | [包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-015 | [YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
+| RFC-017 | [语言服务器协议（LSP）支持设计](./review/017-lsp-support.md) | 晨煦 | 2026-02-15 | 已接受 |
+
 
 ---
 

@@ -6,5 +6,7 @@ mod codegen;
 mod codegen_extended;
 #[path = "integration/execution.rs"]
 mod execution;
+#[path = "integration/fstring.rs"]
+mod fstring;
 #[path = "integration/interpreter.rs"]
 mod interpreter;

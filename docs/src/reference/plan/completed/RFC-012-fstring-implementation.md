@@ -1,8 +1,9 @@
 # RFC-012 F-String 模板字符串实现计划
 
-> **状态**: 规划中
+> **状态**: ✅ 已完成
 > **基于 RFC**: RFC-012 F-String Template Strings
 > **转换策略**: 统一转换为 `format()` 调用
+> **完成日期**: 2025-07
 
 ---
 
@@ -95,9 +96,9 @@ IR/目标代码
    ```
 
 **验收标准**:
-- [ ] `f"hello"` 被识别为 FStringLiteral token
-- [ ] `f"Hello {name}"` 正确解析插值边界
-- [ ] 报错: 未闭合的 `{` 给出明确错误信息
+- [x] `f"hello"` 被识别为 FStringLiteral token
+- [x] `f"Hello {name}"` 正确解析插值边界
+- [x] 报错: 未闭合的 `{` 给出明确错误信息（`UnterminatedFStringInterpolation`）
 
 ---
 
@@ -142,9 +143,9 @@ IR/目标代码
    ```
 
 **验收标准**:
-- [ ] `f"hello"` 解析为 `Expr::FString { segments: [Text("hello")] }`
-- [ ] `f"hello {x}"` 正确解析插值表达式
-- [ ] `f"Pi: {pi:.2f}"` 正确解析格式说明符
+- [x] `f"hello"` 解析为 `Expr::FString { segments: [Text("hello")] }`
+- [x] `f"hello {x}"` 正确解析插值表达式
+- [x] `f"Pi: {pi:.2f}"` 正确解析格式说明符
 
 ---
 
@@ -171,9 +172,9 @@ IR/目标代码
    ```
 
 **验收标准**:
-- [ ] `f"{42}"` 类型为 String
-- [ ] `f"{some_int}"` 正确验证 Int → Stringable
-- [ ] 报错: 不支持 Stringable 的类型给出明确错误
+- [x] `f"{42}"` 类型为 String
+- [x] `f"{some_int}"` 正确验证 Int → Stringable
+- [ ] 报错: 不支持 Stringable 的类型给出明确错误（待 trait 系统完善后实现）
 
 ---
 
@@ -202,9 +203,9 @@ IR/目标代码
    ```
 
 **验收标准**:
-- [ ] `f"hello"` 生成正确的 format 调用
-- [ ] `f"x = {x}"` 正确传递参数
-- [ ] `f"Pi: {pi:.2f}"` 格式化说明符正确传递
+- [x] `f"hello"` 生成正确的 format 调用
+- [x] `f"x = {x}"` 正确传递参数
+- [x] `f"Pi: {pi:.2f}"` 格式化说明符正确传递
 
 ---
 
@@ -257,9 +258,9 @@ IR/目标代码
    ```
 
 **验收标准**:
-- [ ] `f"hello"` 编译时求值为常量 "hello"
-- [ ] `f"x = {1+2}"` 编译时求值为 "x = 3"
-- [ ] 非常量插值正确生成运行时调用
+- [x] `f"hello"` 编译时求值为常量 "hello"
+- [x] `f"x = {1+2}"` 编译时求值为 "x = 3"
+- [x] 非常量插值正确生成运行时调用
 
 ---
 
@@ -466,12 +467,12 @@ fn test_fstring_json_like() {
 
 ## 里程碑
 
-- [ ] Phase 1: Lexer 识别 f-string
-- [ ] Phase 2: Parser 解析为 AST
-- [ ] Phase 3: TypeCheck 类型验证
-- [ ] Phase 4: Codegen 转换为 format()
-- [ ] Phase 5: 常量求值优化
-- [ ] 完整测试覆盖
+- [x] Phase 1: Lexer 识别 f-string
+- [x] Phase 2: Parser 解析为 AST
+- [x] Phase 3: TypeCheck 类型验证
+- [x] Phase 4: Codegen 转换为 format()
+- [x] Phase 5: 常量求值优化
+- [x] 完整测试覆盖（27 个测试: 10 词法器 + 6 解析器 + 4 类型检查 + 7 集成）
 
 ---
 
@@ -485,3 +486,32 @@ fn test_fstring_json_like() {
 ### 相关 RFC
 
 - RFC-012: F-String Template Strings (本文档基于)
+
+---
+
+## 实现记录
+
+### 实际修改文件
+
+| 文件 | 修改类型 | 具体变更 |
+|------|---------|---------|
+| `src/frontend/core/lexer/tokens.rs` | 修改 | 新增 `FStringLiteral(String)` token 及 `UnterminatedFStringInterpolation` 错误 |
+| `src/frontend/core/lexer/tokenizer.rs` | 修改 | `scan_identifier()` 中检测 `f"` 前缀并调用 `scan_fstring()` |
+| `src/frontend/core/lexer/literals.rs` | 修改 | 新增 `scan_fstring()` 函数 (~180行)，支持 `{}` 插值、`&lbrace;&lbrace;` / `&rbrace;&rbrace;` 转义、嵌套大括号深度追踪 |
+| `src/frontend/core/lexer/mod.rs` | 修改 | `log_token()` 中新增 FStringLiteral 分支；引入 fstring 测试模块 |
+| `src/frontend/core/parser/ast.rs` | 修改 | 新增 `FString` AST 节点及 `FStringSegment` 枚举 |
+| `src/frontend/core/parser/pratt/nud.rs` | 修改 | 新增 `parse_fstring()`、`parse_fstring_segments()`、`split_format_spec()` |
+| `src/frontend/typecheck/inference/expressions.rs` | 修改 | `infer_expr()` 中新增 `Expr::FString` 分支，返回 `MonoType::String` |
+| `src/middle/core/ir_gen.rs` | 修改 | `get_expr_span()`、`eval_const_expr()`、`generate_expr_ir()` 三处新增 FString 处理 |
+| `src/frontend/core/lexer/tests/fstring.rs` | 新增 | 10 个词法器测试 |
+| `src/frontend/core/parser/tests/fstring.rs` | 新增 | 6 个解析器测试 |
+| `src/frontend/typecheck/tests/fstring.rs` | 新增 | 4 个类型检查测试 |
+| `tests/integration/fstring.rs` | 新增 | 7 个端到端集成测试 |
+| `tests/integration.rs` | 修改 | 注册 fstring 集成测试模块 |
+
+### 实现要点
+
+1. **词法器**: f-string 整体存为单个 `FStringLiteral` token，`{}` 插值标记保留在字符串内容中
+2. **解析器**: `parse_fstring_segments()` 将原始内容拆分为 `Text`/`Interpolation` 段，插值表达式使用完整的 lexer+parser 重新解析
+3. **代码生成**: 转换为 `std.string.format()` 调用，使用位置占位符 `{0}`, `{1}` 等；格式说明符如 `{0:.2f}` 直接传递
+4. **常量优化**: 当所有插值表达式都是编译时常量（且无格式说明符），整个 f-string 在编译时折叠为常量字符串

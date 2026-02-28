@@ -1,4 +1,4 @@
-﻿#![allow(clippy::result_large_err)]
+#![allow(clippy::result_large_err)]
 
 //! RFC-011 约束（Constraint）测试
 //!
@@ -28,6 +28,7 @@ fn test_constraint_recognition() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     assert!(draw_constraint.is_constraint());
@@ -43,6 +44,7 @@ fn test_constraint_recognition() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     assert!(!point_type.is_constraint());
@@ -75,6 +77,7 @@ fn test_constraint_fields() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let fields = serializable.constraint_fields();
@@ -102,6 +105,7 @@ fn test_type_satisfies_constraint_success() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 定义满足 Drawable 的类型
@@ -121,6 +125,7 @@ fn test_type_satisfies_constraint_success() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Circle 应该满足 Drawable 约束
@@ -147,6 +152,7 @@ fn test_type_does_not_satisfy_constraint_missing_method() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 定义不满足 Drawable 的类型（缺少 draw 方法）
@@ -159,6 +165,7 @@ fn test_type_does_not_satisfy_constraint_missing_method() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Rect 不应该满足 Drawable 约束
@@ -188,6 +195,7 @@ fn test_type_does_not_satisfy_constraint_signature_mismatch() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 定义有 draw 但签名不兼容的类型
@@ -204,6 +212,7 @@ fn test_type_does_not_satisfy_constraint_signature_mismatch() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Shape 不应该满足 Drawable 约束（签名不兼容）
@@ -225,6 +234,7 @@ fn test_empty_constraint_satisfied_by_any_type() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let any_type = MonoType::Int(32);
@@ -261,6 +271,7 @@ fn test_multi_method_constraint() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 定义满足约束的类型
@@ -289,6 +300,7 @@ fn test_multi_method_constraint() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let result = checker.check_constraint(&person_type, &printable);
@@ -314,6 +326,7 @@ fn test_fn_signature_compatibility_with_self() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 类型的签名包含 self 作为第一个参数
@@ -337,6 +350,7 @@ fn test_fn_signature_compatibility_with_self() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Point 应该满足 Drawable 约束（self 参数被跳过比较）
@@ -366,6 +380,7 @@ fn test_intersection_constraint() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let serializable = MonoType::Struct(crate::frontend::core::type_system::StructType {
@@ -381,6 +396,7 @@ fn test_intersection_constraint() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 交集类型：Drawable & Serializable
@@ -411,6 +427,7 @@ fn test_intersection_constraint() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Circle 应该满足 Drawable & Serializable 约束
@@ -445,6 +462,7 @@ fn test_constraint_direct_assignment_allowed() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // 定义满足 Drawable 的 Circle 类型
@@ -464,6 +482,7 @@ fn test_constraint_direct_assignment_allowed() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // d: Drawable = Circle(1) 应该通过类型检查
@@ -498,6 +517,7 @@ fn test_constraint_assignment_concrete_type_info() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let circle_type = MonoType::Struct(crate::frontend::core::type_system::StructType {
@@ -516,6 +536,7 @@ fn test_constraint_assignment_concrete_type_info() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let _ = checker.check_assignment(&drawable, &circle_type, Span::default());
@@ -555,6 +576,7 @@ fn test_constraint_direct_assignment_rejected_missing_method() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Rect 缺少 draw 方法
@@ -567,6 +589,7 @@ fn test_constraint_direct_assignment_rejected_missing_method() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // d: Drawable = Rect(1, 2) 应该失败（缺少 draw 方法）
@@ -597,6 +620,7 @@ fn test_subtype_checker_constraint_support() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let circle_type = MonoType::Struct(crate::frontend::core::type_system::StructType {
@@ -615,6 +639,7 @@ fn test_subtype_checker_constraint_support() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Circle <: Drawable (结构化子类型)
@@ -644,6 +669,7 @@ fn test_subtype_checker_constraint_not_satisfied() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     let rect_type = MonoType::Struct(crate::frontend::core::type_system::StructType {
@@ -655,6 +681,7 @@ fn test_subtype_checker_constraint_not_satisfied() {
         methods: std::collections::HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
 
     // Rect 不满足 Drawable
