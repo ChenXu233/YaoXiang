@@ -20,6 +20,8 @@ use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shu
 use lsp_types::request::HoverRequest;
 use lsp_types::request::SemanticTokensFullRequest;
 use lsp_types::request::SemanticTokensFullDeltaRequest;
+use lsp_types::request::Formatting;
+use lsp_types::request::RangeFormatting;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
 
@@ -220,6 +222,40 @@ fn handle_request(
                 }
                 Err(e) => {
                     warn!("语义 tokens delta 请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/formatting
+        m if m == <Formatting as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::formatting::handle_formatting(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("格式化请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/rangeFormatting
+        m if m == <RangeFormatting as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::formatting::handle_range_formatting(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("范围格式化请求参数解析失败: {}", e);
                     Some(protocol::internal_error(
                         req.id,
                         format!("参数解析失败: {}", e),

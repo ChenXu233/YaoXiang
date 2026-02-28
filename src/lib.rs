@@ -19,6 +19,7 @@
 
 // Public modules
 pub mod backends;
+pub mod formatter;
 pub mod frontend;
 pub mod lsp;
 pub mod middle;

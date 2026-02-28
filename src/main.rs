@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
-use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
+use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::diagnostic::{
     run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
     ErrorInfo,
@@ -98,15 +98,39 @@ enum Commands {
         file: PathBuf,
     },
 
-    /// Format source file (unsupported yet)
+    /// Format source file
     Format {
-        /// Source file to format
-        #[arg(value_name = "FILE")]
+        /// Source file or directory to format
+        #[arg(value_name = "PATH")]
         file: PathBuf,
 
-        /// Output to stdout instead of modifying file
+        /// Check if files are formatted without modifying them
         #[arg(short, long)]
         check: bool,
+
+        /// Write formatted output back to file(s) in place
+        #[arg(short, long)]
+        write: bool,
+
+        /// Output to stdout (default when neither --write nor --check)
+        #[arg(long)]
+        stdout: bool,
+
+        /// Override indent width
+        #[arg(long)]
+        indent: Option<usize>,
+
+        /// Override max line width
+        #[arg(long)]
+        line_width: Option<usize>,
+
+        /// Use tab indentation
+        #[arg(long)]
+        use_tabs: bool,
+
+        /// Use single quotes for strings
+        #[arg(long)]
+        single_quote: bool,
     },
 
     /// Dump bytecode for debugging
@@ -248,9 +272,71 @@ fn main() -> Result<()> {
         Commands::Check { file } => {
             check_file_with_diagnostics(&file)?;
         }
-        Commands::Format { file: _, check: _ } => {
-            // TODO: Implement formatter
-            tracing::warn!("{}", t_cur_simple(MSG::FormatterNotImplemented));
+        Commands::Format {
+            file,
+            check,
+            write,
+            stdout: _,
+            indent,
+            line_width,
+            use_tabs,
+            single_quote,
+        } => {
+            // 构建格式化选项
+            let mut options = yaoxiang::formatter::FormatOptions::default();
+            if let Some(w) = indent {
+                options.indent_width = w;
+            }
+            if let Some(lw) = line_width {
+                options.line_width = lw;
+            }
+            if use_tabs {
+                options.use_tabs = true;
+            }
+            if single_quote {
+                options.single_quote = true;
+            }
+
+            // 收集需要格式化的文件
+            let files = collect_yx_files(&file)?;
+            if files.is_empty() {
+                eprintln!("No .yx files found at: {}", file.display());
+                ::std::process::exit(2);
+            }
+
+            let mut needs_formatting = false;
+
+            for f in &files {
+                let source = ::std::fs::read_to_string(f)
+                    .with_context(|| format!("Failed to read: {}", f.display()))?;
+                match yaoxiang::formatter::format_source(&source, &options) {
+                    Ok(formatted) => {
+                        if check {
+                            if formatted != source {
+                                eprintln!("Needs formatting: {}", f.display());
+                                needs_formatting = true;
+                            }
+                        } else if write {
+                            if formatted != source {
+                                ::std::fs::write(f, &formatted)
+                                    .with_context(|| format!("Failed to write: {}", f.display()))?;
+                                eprintln!("Formatted: {}", f.display());
+                            }
+                        } else {
+                            // 默认输出到 stdout
+                            print!("{}", formatted);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error formatting {}: {}", f.display(), e);
+                        ::std::process::exit(2);
+                    }
+                }
+            }
+
+            if check && needs_formatting {
+                ::std::process::exit(1);
+            }
         }
         Commands::Dump { file } => {
             dump_bytecode(&file).with_context(|| format!("Failed to dump: {}", file.display()))?;
@@ -359,5 +445,35 @@ fn main() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// 收集目录或文件下的所有 .yx 文件
+fn collect_yx_files(path: &std::path::Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    if path.is_file() {
+        files.push(path.to_path_buf());
+    } else if path.is_dir() {
+        collect_yx_files_recursive(path, &mut files)?;
+    }
+    Ok(files)
+}
+
+/// 递归收集 .yx 文件
+fn collect_yx_files_recursive(
+    dir: &std::path::Path,
+    files: &mut Vec<PathBuf>,
+) -> Result<()> {
+    for entry in std::fs::read_dir(dir)
+        .with_context(|| format!("Failed to read directory: {}", dir.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_yx_files_recursive(&path, files)?;
+        } else if path.extension().map(|e| e == "yx").unwrap_or(false) {
+            files.push(path);
+        }
+    }
     Ok(())
 }
