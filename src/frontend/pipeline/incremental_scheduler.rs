@@ -478,8 +478,20 @@ mod tests {
         graph.add_module(id_a.clone());
         graph.add_module(id_b.clone());
         graph.add_module(id_c.clone());
-        graph.add_dependency(&id_a, DependencyEdge { target: id_b.clone(), items: None });
-        graph.add_dependency(&id_b, DependencyEdge { target: id_c.clone(), items: None });
+        graph.add_dependency(
+            &id_a,
+            DependencyEdge {
+                target: id_b.clone(),
+                items: None,
+            },
+        );
+        graph.add_dependency(
+            &id_b,
+            DependencyEdge {
+                target: id_c.clone(),
+                items: None,
+            },
+        );
 
         // 缓存旧版本
         cache.store(PathBuf::from("/a.yx"), "a = 1", None, None, None);
@@ -592,7 +604,11 @@ mod tests {
                 reason: CompileReason::ContentChanged,
                 level: 0,
             }],
-            skipped: vec![PathBuf::from("/b.yx"), PathBuf::from("/c.yx"), PathBuf::from("/d.yx")],
+            skipped: vec![
+                PathBuf::from("/b.yx"),
+                PathBuf::from("/c.yx"),
+                PathBuf::from("/d.yx"),
+            ],
             total_files: 4,
             schedule_time_ms: 1,
         };

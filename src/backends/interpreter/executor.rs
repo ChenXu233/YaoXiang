@@ -10,6 +10,7 @@ use crate::backends::{
     Executor, DebuggableExecutor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig,
 };
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
+use crate::backends::common::value::{FunctionValue, FunctionId};
 use crate::middle::bytecode::{
     BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, Label, BinaryOp, CompareOp, FunctionRef,
     ConstValue,
@@ -130,6 +131,42 @@ impl Interpreter {
     /// Get reference to the FFI registry
     pub fn ffi_registry(&self) -> &FfiRegistry {
         &self.ffi
+    }
+
+    /// Build vtable for a struct type at runtime
+    ///
+    /// This method looks up methods in the function table by matching the type name prefix.
+    /// Functions are stored with keys like "TypeName.method_name".
+    fn build_vtable(
+        &mut self,
+        type_name: &str,
+    ) -> Vec<(String, FunctionValue)> {
+        let mut vtable = Vec::new();
+        let method_prefix = format!("{}.", type_name);
+
+        // Find all functions that match the type name prefix
+        for (func_name, bytecode_func) in &self.functions {
+            if func_name.starts_with(&method_prefix) {
+                // Extract method name (everything after the prefix)
+                let method_name = func_name[method_prefix.len()..].to_string();
+
+                // Create a new function ID for this method
+                let func_id = FunctionId(self.functions_by_id.len() as u32);
+
+                // Add to functions_by_id for runtime lookup
+                self.functions_by_id.push(bytecode_func.clone());
+
+                vtable.push((
+                    method_name,
+                    FunctionValue {
+                        func_id,
+                        env: Vec::new(), // Methods don't need closure env
+                    },
+                ));
+            }
+        }
+
+        vtable
     }
 
     /// Call a YaoXiang function by its FunctionId.
@@ -986,7 +1023,7 @@ impl Executor for Interpreter {
                 }
                 BytecodeInstr::CreateStruct {
                     dst,
-                    type_name: _,
+                    type_name,
                     fields,
                 } => {
                     // 收集各字段值
@@ -1003,11 +1040,15 @@ impl Executor for Interpreter {
                     let dst_idx = dst.0 as usize;
                     // 在堆上分配字段存储
                     let handle = self.heap.allocate(HeapValue::Tuple(field_values));
+
+                    // 构建 vtable
+                    let vtable = self.build_vtable(&type_name);
+
                     // 创建结构体值
                     let struct_val = RuntimeValue::Struct {
                         type_id: crate::backends::common::value::TypeId(0),
                         fields: handle,
-                        vtable: Vec::new(),
+                        vtable,
                     };
                     frame.set_register(dst_idx, struct_val);
                     frame.advance();

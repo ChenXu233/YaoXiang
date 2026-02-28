@@ -641,7 +641,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             | AstType::Enum(_) => ty.clone(),
 
             // 结构体：递归替换字段类型
-            AstType::Struct { fields, bindings } => AstType::Struct {
+            AstType::Struct {
+                fields,
+                bindings,
+                interfaces,
+            } => AstType::Struct {
                 fields: fields
                     .iter()
                     .map(|f| crate::frontend::core::parser::ast::StructField {
@@ -652,6 +656,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     })
                     .collect(),
                 bindings: bindings.clone(),
+                interfaces: interfaces.clone(),
             },
 
             // 命名结构体

@@ -4,6 +4,7 @@
 
 use crate::util::span::Span;
 use crate::util::span::SpannedError;
+use super::Diagnostic;
 /// 错误收集器
 ///
 /// 收集多个错误，支持批量报告
@@ -106,6 +107,26 @@ pub enum Warning {
     ImpreciseInference { span: Span },
     /// 可能的空指针解引用
     PotentialNullDereference { span: Span },
+    /// 基于 Diagnostic 的警告（带错误码，如 W1001 死代码警告）
+    Diagnostic(Diagnostic),
+}
+
+impl Warning {
+    /// 从带错误码的警告创建 Diagnostic 警告
+    pub fn from_diagnostic(diagnostic: Diagnostic) -> Self {
+        Warning::Diagnostic(diagnostic)
+    }
+
+    /// 获取警告的 span（如果存在）
+    pub fn span(&self) -> Option<&Span> {
+        match self {
+            Warning::UnusedVariable { span, .. } => Some(span),
+            Warning::UnusedImport { span, .. } => Some(span),
+            Warning::ImpreciseInference { span } => Some(span),
+            Warning::PotentialNullDereference { span } => Some(span),
+            Warning::Diagnostic(diag) => diag.span.as_ref(),
+        }
+    }
 }
 
 impl std::fmt::Display for Warning {
@@ -118,6 +139,7 @@ impl std::fmt::Display for Warning {
             Warning::UnusedImport { path, .. } => write!(f, "Unused import: {}", path),
             Warning::ImpreciseInference { .. } => write!(f, "Type inference may be imprecise"),
             Warning::PotentialNullDereference { .. } => write!(f, "Potential null dereference"),
+            Warning::Diagnostic(diag) => write!(f, "{}", diag.message),
         }
     }
 }
@@ -167,6 +189,13 @@ impl ErrorFormatter {
                     format!("Potential null dereference at {:?}", span)
                 } else {
                     "Potential null dereference".to_string()
+                }
+            }
+            Warning::Diagnostic(diag) => {
+                if self.verbose {
+                    format!("{} at {:?}", diag.message, diag.span)
+                } else {
+                    diag.message.clone()
                 }
             }
         }

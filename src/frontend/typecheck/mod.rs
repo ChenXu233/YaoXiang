@@ -729,6 +729,7 @@ impl TypeChecker {
             methods: HashMap::new(),
             field_mutability: Vec::new(),
             field_has_default: Vec::new(),
+            interfaces: vec![],
         });
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
@@ -770,6 +771,7 @@ impl TypeChecker {
                         methods: HashMap::new(),
                         field_mutability: Vec::new(),
                         field_has_default: Vec::new(),
+                        interfaces: vec![],
                     });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
@@ -1195,7 +1197,8 @@ impl TypeChecker {
                         self.collect_expr_tokens(&fp, ret_expr);
                     }
                 }
-                StmtKind::If { .. } | StmtKind::Error(_) => {}
+                StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                }
             }
         }
 

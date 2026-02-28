@@ -185,6 +185,15 @@ export default defineConfig({
               })
             },
             {
+              text: '警告码',
+              items: generateSidebar({
+                scanStartPath: '/src/reference/warning-code',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              }),
+            },
+            {
               text: '包管理系统',
               collapsed: true,
               items: [
@@ -221,7 +230,7 @@ export default defineConfig({
                   }),
                  },
               ],
-            }
+            },
           ],
 
           '/': [
@@ -359,6 +368,15 @@ export default defineConfig({
               text: 'Error Codes',
               items: generateSidebar({
                 scanStartPath: '/src/en/reference/error-code',
+                useTitleFromFrontmatter: true,
+                collapsed: true,
+                hyphenToSpace: true,
+              }),
+            },
+            {
+              text: 'Warning Codes',
+              items: generateSidebar({
+                scanStartPath: '/src/en/reference/warning-code',
                 useTitleFromFrontmatter: true,
                 collapsed: true,
                 hyphenToSpace: true,

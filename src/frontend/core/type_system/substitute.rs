@@ -207,6 +207,7 @@ impl Substituter {
                     methods: struct_type.methods.clone(),
                     field_mutability: struct_type.field_mutability.clone(),
                     field_has_default: struct_type.field_has_default.clone(),
+                    interfaces: struct_type.interfaces.clone(),
                 })
             }
             MonoType::Enum(e) => MonoType::Enum(EnumType {

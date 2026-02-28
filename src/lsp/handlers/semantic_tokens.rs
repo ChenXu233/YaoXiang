@@ -50,8 +50,7 @@ impl SemanticTokensCache {
         let result_id = format!("yx-{}", id);
 
         // 移除该文件的旧缓存
-        self.results
-            .retain(|_, v| v.file_uri != file_uri);
+        self.results.retain(|_, v| v.file_uri != file_uri);
 
         self.results.insert(
             result_id.clone(),
@@ -69,9 +68,7 @@ impl SemanticTokensCache {
         &self,
         result_id: &str,
     ) -> Option<&[SemanticToken]> {
-        self.results
-            .get(result_id)
-            .map(|r| r.tokens.as_slice())
+        self.results.get(result_id).map(|r| r.tokens.as_slice())
     }
 }
 
@@ -160,7 +157,7 @@ pub fn handle_semantic_tokens_full_delta(
 
 /// 将 SemanticDB tokens 转换为 LSP delta 编码格式
 fn convert_to_lsp_tokens(
-    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken],
+    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken]
 ) -> Vec<SemanticToken> {
     // 按行、列排序
     let mut sorted: Vec<_> = db_tokens.iter().collect();
