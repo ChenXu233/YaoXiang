@@ -505,7 +505,7 @@ err(E)      # Result 错误变体构造
 
 ---
 
-### 5.2 代码格式化
+x
 
 **实现目标**：
 - 实现 `textDocument/formatting` 处理
