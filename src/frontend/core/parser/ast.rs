@@ -22,6 +22,8 @@ pub enum Expr {
     Call {
         func: Box<Expr>,
         args: Vec<Expr>,
+        /// RFC-010: 命名参数 `Point(x=1, y=2)`
+        named_args: Vec<(String, Expr)>,
         span: Span,
     },
     FnDef {
@@ -111,6 +113,30 @@ pub enum Expr {
         params: Vec<Param>,
         body: Box<Block>,
         span: Span,
+    },
+    /// RFC-012: F-string template literal
+    /// `f"Hello {name}"` → FString { segments: [Text("Hello "), Interpolation { expr, format_spec }] }
+    FString {
+        segments: Vec<FStringSegment>,
+        span: Span,
+    },
+    /// 错误恢复占位符：表示解析失败的表达式
+    ///
+    /// 当解析器遇到无法解析的表达式时，插入此占位符而非 panic。
+    /// 类型检查器遇到此节点时应报告错误但不 panic。
+    /// 用于 LSP 错误恢复场景。
+    Error(Span),
+}
+
+/// RFC-012: F-string segment
+#[derive(Debug, Clone)]
+pub enum FStringSegment {
+    /// Plain text fragment
+    Text(String),
+    /// Interpolation expression with optional format specifier
+    Interpolation {
+        expr: Box<Expr>,
+        format_spec: Option<String>,
     },
 }
 
@@ -214,6 +240,18 @@ pub enum StmtKind {
         else_branch: Option<Box<Block>>,
         span: Span,
     },
+    /// RFC-004: 外部绑定语句: `Type.method = function[positions]`
+    ExternalBindingStmt {
+        type_name: String,
+        method_name: String,
+        binding: BindingKind,
+    },
+    /// 错误恢复占位符：表示解析失败的语句
+    ///
+    /// 当解析器遇到无法解析的语句时，插入此占位符而非 panic。
+    /// 类型检查器遇到此节点时应报告错误但不 panic。
+    /// 用于 LSP 错误恢复场景。
+    Error(Span),
 }
 
 /// Variant constructor definition (for variant types)
@@ -282,15 +320,18 @@ pub enum BindingKind {
     /// 外部函数绑定: `name = function[positions]`
     External {
         function: String,
-        positions: Vec<usize>,
+        positions: Vec<i64>,
     },
     /// 匿名函数绑定: `name: ((params) -> Return)[position] = ((params) => body)`
     Anonymous {
         params: Vec<Param>,
         return_type: Box<Type>,
-        positions: Vec<usize>,
+        positions: Vec<i64>,
         body: Box<Expr>,
     },
+    /// RFC-004: 默认绑定（无位置）: `name = function`
+    /// 自动查找函数参数中第一个类型匹配的位置
+    DefaultExternal { function: String },
 }
 
 /// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
@@ -330,6 +371,8 @@ pub enum Type {
     Struct {
         fields: Vec<StructField>,
         bindings: Vec<TypeBodyBinding>,
+        /// RFC-010: 接口约束列表
+        interfaces: Vec<String>,
     },
     NamedStruct {
         name: String,

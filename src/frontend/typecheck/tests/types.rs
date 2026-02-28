@@ -1,4 +1,4 @@
-﻿//! 类型系统核心数据结构测试
+//! 类型系统核心数据结构测试
 
 use std::collections::HashMap;
 
@@ -222,6 +222,7 @@ fn test_mono_type_struct() {
         methods: HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.name == "Point"));
 }
@@ -234,6 +235,7 @@ fn test_mono_type_struct_empty() {
         methods: HashMap::new(),
         field_mutability: vec![],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
     assert!(matches!(ty, MonoType::Struct(s) if s.fields.is_empty()));
 }

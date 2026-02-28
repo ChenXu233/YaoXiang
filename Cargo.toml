@@ -1,6 +1,6 @@
 [package]
 name = "yaoxiang"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 rust-version = "1.82"
 description = "YaoXiang (爻象) Programming Language - A high-performance language with type-as-everything philosophy"
@@ -83,6 +83,10 @@ rustyline = { version = "17.0.2", features = ["with-file-history", "with-dirs"] 
 
 # 异步运行时
 tokio = { version = "1.49.0", features = ["full"] }
+
+# LSP - 语言服务器协议
+lsp-types = "0.97"
+lsp-server = "0.7"
 
 [profile.release]
 lto = true

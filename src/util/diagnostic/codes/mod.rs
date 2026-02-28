@@ -10,6 +10,7 @@ pub mod e5xxx;
 pub mod e6xxx;
 pub mod e7xxx;
 pub mod e8xxx;
+pub mod w1xxx;
 
 pub use e0xxx::*;
 pub use e1xxx::*;
@@ -19,6 +20,7 @@ pub use e5xxx::*;
 pub use e6xxx::*;
 pub use e7xxx::*;
 pub use e8xxx::*;
+pub use w1xxx::*;
 
 pub mod builder;
 pub use builder::{DiagnosticBuilder, I18nRegistry, ErrorInfo};
@@ -37,6 +39,7 @@ pub enum ErrorCategory {
     Runtime,   // E6xxx: 运行时错误
     Io,        // E7xxx: I/O与系统错误
     Internal,  // E8xxx: 内部编译器错误
+    Warning,   // W1xxx: 警告（死代码等）
 }
 
 impl std::fmt::Display for ErrorCategory {
@@ -54,6 +57,7 @@ impl std::fmt::Display for ErrorCategory {
             ErrorCategory::Runtime => write!(f, "Runtime"),
             ErrorCategory::Io => write!(f, "I/O"),
             ErrorCategory::Internal => write!(f, "Internal"),
+            ErrorCategory::Warning => write!(f, "Warning"),
         }
     }
 }
@@ -91,6 +95,8 @@ static ERROR_CODES: Lazy<Vec<ErrorCodeDefinition>> = Lazy::new(|| {
     codes.extend_from_slice(e7xxx::E7XXX);
     // E8xxx: 内部编译器错误
     codes.extend_from_slice(e8xxx::E8XXX);
+    // W1xxx: 警告（死代码等）
+    codes.extend_from_slice(w1xxx::W1XXX);
 
     codes
 });

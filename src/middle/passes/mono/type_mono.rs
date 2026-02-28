@@ -153,6 +153,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 methods: HashMap::new(),
                 field_mutability: fields.iter().map(|f| f.is_mut).collect(),
                 field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
+                interfaces: vec![],
             }),
             AstType::NamedStruct { name, fields } => MonoType::Struct(StructType {
                 name: name.clone(),
@@ -163,6 +164,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 methods: HashMap::new(),
                 field_mutability: fields.iter().map(|f| f.is_mut).collect(),
                 field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
+                interfaces: vec![],
             }),
             AstType::Union(variants) => MonoType::Union(
                 variants
@@ -471,6 +473,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     methods: HashMap::new(),
                     field_mutability: struct_type.field_mutability.clone(),
                     field_has_default: struct_type.field_has_default.clone(),
+                    interfaces: struct_type.interfaces.clone(),
                 }))
             }
             MonoType::Enum(enum_type) => Some(MonoType::Enum(EnumType {
@@ -567,6 +570,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 methods: struct_type.methods.clone(),
                 field_mutability: struct_type.field_mutability.clone(),
                 field_has_default: struct_type.field_has_default.clone(),
+                interfaces: struct_type.interfaces.clone(),
             }),
             MonoType::List(elem) => MonoType::List(Box::new(self.substitute_type_args(
                 elem,

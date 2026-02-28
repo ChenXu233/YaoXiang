@@ -542,5 +542,45 @@
         "help": "Type constructors like 'Type[T]' cannot reference Type itself",
         "example": "Type: Type[T] = { data: T }",
         "error_output": "error[E1091]: Generic meta-type self-reference is not allowed: 'Type: Type[T] = ...'"
+    },
+    "W1001": {
+        "title": "Unused exported function",
+        "message": "Exported function is never used",
+        "template": "Unused exported function: '{name}'",
+        "help": "Consider removing the export or using the function",
+        "example": "pub fn dead_function() { }",
+        "error_output": "warning[W1001]: Unused exported function: 'dead_function'\n --> example.yx:1:1\n  |\n1 | pub fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: function is never used"
+    },
+    "W1002": {
+        "title": "Unused exported type",
+        "message": "Exported type is never used",
+        "template": "Unused exported type: '{name}'",
+        "help": "Consider removing the export or using the type",
+        "example": "pub type DeadType = Int",
+        "error_output": "warning[W1002]: Unused exported type: 'DeadType'\n --> example.yx:1:1\n  |\n1 | pub type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: type is never used"
+    },
+    "W1003": {
+        "title": "Unused import",
+        "message": "Imported module or symbol is never used",
+        "template": "Unused import: '{name}'",
+        "help": "Consider removing the unused import",
+        "example": "use std.json; // json is never used",
+        "error_output": "warning[W1003]: Unused import: 'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: import is never used"
+    },
+    "W1004": {
+        "title": "Unused exported variable",
+        "message": "Exported variable is never used",
+        "template": "Unused exported variable: '{name}'",
+        "help": "Consider removing the export or using the variable",
+        "example": "pub let dead_var = 42;",
+        "error_output": "warning[W1004]: Unused exported variable: 'dead_var'\n --> example.yx:1:1\n  |\n1 | pub let dead_var = 42;\n  | ^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: variable is never used"
+    },
+    "W1005": {
+        "title": "Unused exported method",
+        "message": "Exported method is never used",
+        "template": "Unused exported method: '{name}'",
+        "help": "Consider removing the export or using the method",
+        "example": "pub fn Foo.dead_method() { }",
+        "error_output": "warning[W1005]: Unused exported method: 'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: method is never used"
     }
 }

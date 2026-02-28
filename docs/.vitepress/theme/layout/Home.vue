@@ -145,10 +145,10 @@ const codeTransform = computed(() => {
           <div class="mockup-code bg-transparent text-sm p-4 overflow-x-auto">
             <pre data-prefix="$"><code>yaoxiang new universe</code></pre>
             <pre data-prefix=">" class="text-success"><code>Creating project...</code></pre>
-            <pre data-prefix=">"><code><span class="text-primary">type</span> <span class="text-warning">Universe</span> = {</code></pre>
+            <pre data-prefix=">"><code><span class="text-warning">Universe: Type</span> = {</code></pre>
             <pre data-prefix=">"><code>    matter: <span class="text-warning">Amount</span>,</code></pre>
             <pre data-prefix=">"><code>    energy: <span class="text-warning">Amount</span>,</code></pre>
-            <pre data-prefix=">"><code>    <span class="text-info">expand</span>: (<span class="text-secondary">self</span>) -> <span class="text-primary">Void</span> = ...</code></pre>
+            <pre data-prefix=">"><code>    <span class="text-info">expand</span>: (<span class="text-secondary">self: Universe</span>) -> <span class="text-primary">Void</span> = ...</code></pre>
             <pre data-prefix=">"><code>}</code></pre>
             <pre data-prefix=">" class="text-success"><code>Done in 0.04s ✨</code></pre>
           </div>
@@ -241,9 +241,9 @@ const codeTransform = computed(() => {
                   </div>
                   <div class="flex-1 w-full relative">
                       <div class="mockup-code bg-[#282c34] text-gray-300 shadow-2xl transform md:rotate-2 group-hover:rotate-0 transition-all duration-500 border border-white/10 text-xs">
-                        <pre data-prefix="1"><code><span class="text-[#e06c75]">x</span>: Int = <span class="text-[#d19a66]">42</span></code></pre>
-                        <pre data-prefix="2"><code><span class="text-[#61afef]">add</span>: (a:Int, b:Int)->Int = (a, b) => a + b</code></pre>
-                        <pre data-prefix="3"><code><span class="text-[#c678dd]">type</span> <span class="text-[#e5c07b]">Point</span> = { x: Int, y: Int }</code></pre>
+                        <pre data-prefix="1"><code><span class="text-[#e06c75]">x</span>: <span class="text-[#35bb75]">Int</span> = <span class="text-[#d19a66]">42</span></code></pre>
+                        <pre data-prefix="2"><code><span class="text-[#61afef]">add</span>: (<span class="text-[#e06c75]">a</span>: <span class="text-[#35bb75]">Int</span>, <span class="text-[#e06c75]">b</span>: <span class="text-[#35bb75]">Int</span>) -> <span class="text-[#35bb75]">Int</span> = (<span class="text-[#e06c75]">a</span>, <span class="text-[#e06c75]">b</span>) => <span class="text-[#e06c75]">a</span> + <span class="text-[#e06c75]">b</span></code></pre>
+                        <pre data-prefix="3"><code><span class="text-[#e5c07b]">Point</span>: <span class="text-[#c678dd]">Type</span> = { <span class="text-[#e06c75]">x</span>: <span class="text-[#35bb75]">Int</span>, <span class="text-[#e06c75]">y</span>: <span class="text-[#35bb75]">Int</span> }</code></pre>
                       </div>
                   </div>
                </div>

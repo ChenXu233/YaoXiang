@@ -77,6 +77,7 @@ fn test_arc_is_send_sync() {
             methods: HashMap::new(),
             field_mutability: vec![false, false],
             field_has_default: Vec::new(),
+            interfaces: vec![],
         },
     )));
     assert!(checker.is_send(&arc_struct));
@@ -97,6 +98,7 @@ fn test_struct_types() {
         methods: HashMap::new(),
         field_mutability: vec![false, false],
         field_has_default: Vec::new(),
+        interfaces: vec![],
     });
     assert!(checker.is_send(&point));
     assert!(checker.is_sync(&point));

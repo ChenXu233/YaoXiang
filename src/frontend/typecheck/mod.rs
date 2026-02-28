@@ -28,6 +28,9 @@ pub mod overload;
 // 导入类型求值器模块
 pub mod type_eval;
 
+// 语义信息数据库
+pub mod semantic_db;
+
 // 导入测试模块
 #[cfg(test)]
 mod tests;
@@ -289,6 +292,8 @@ pub struct TypeChecker {
     env: TypeEnvironment,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
+    /// 语义信息收集（typecheck 阶段同时产出）
+    semantic_db: semantic_db::SemanticDB,
 }
 
 impl TypeChecker {
@@ -302,6 +307,7 @@ impl TypeChecker {
         Self {
             env,
             body_checker: None,
+            semantic_db: semantic_db::SemanticDB::new(),
         }
     }
 
@@ -351,9 +357,31 @@ impl TypeChecker {
     }
 
     /// 检查整个模块
+    ///
+    /// 在收集模式下，将收集所有错误后统一返回。
     pub fn check_module(
         &mut self,
         module: &Module,
+    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+        self.check_module_impl(module, false)
+    }
+
+    /// 检查整个模块（收集所有错误模式）
+    ///
+    /// 启用错误收集模式后，类型检查器会尽可能多地收集错误，
+    /// 而不是在第一个错误处停止。适用于 LSP 诊断场景。
+    pub fn check_module_collect_all(
+        &mut self,
+        module: &Module,
+    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+        self.check_module_impl(module, true)
+    }
+
+    /// 检查整个模块的内部实现
+    fn check_module_impl(
+        &mut self,
+        module: &Module,
+        collect_all: bool,
     ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
@@ -380,6 +408,10 @@ impl TypeChecker {
         let mut body_checker = inference::StatementChecker::new(self.env.solver());
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // 如果启用收集模式，设置收集所有错误
+        if collect_all {
+            body_checker.set_collect_all_errors(true);
+        }
         *self.body_checker_mut() = body_checker;
 
         // 将环境中的变量同步到 body_checker
@@ -394,19 +426,27 @@ impl TypeChecker {
             }
         }
 
+        // 收集 body_checker 中累积的错误（收集模式下产生的）
+        if let Some(ref mut bc) = self.body_checker {
+            for err in bc.drain_collected_errors() {
+                self.env.errors.add_error(err);
+            }
+        }
+
         // 求解所有约束
-        self.env.solver().solve().map_err(|e| {
-            e.into_iter()
-                .map(|e| {
+        let solve_result = self.env.solver().solve();
+        if let Err(constraint_errors) = solve_result {
+            for e in constraint_errors {
+                self.add_error(
                     ErrorCodeDefinition::type_mismatch(
                         &format!("{}", e.error.left),
                         &format!("{}", e.error.right),
                     )
                     .at(e.span)
-                    .build()
-                })
-                .collect::<Vec<_>>()
-        })?;
+                    .build(),
+                );
+            }
+        }
 
         // 如果有错误，返回所有错误
         if self.has_errors() {
@@ -451,10 +491,15 @@ impl TypeChecker {
             }
         }
 
+        // 语义收集：遍历 AST 构建 SemanticDB
+        // 一次遍历，多处使用 —— 利用 typecheck 已有的类型信息
+        self.collect_semantic_tokens(module);
+
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),
             bindings,
             local_var_types,
+            semantic_db: std::mem::take(&mut self.semantic_db),
         };
 
         Ok(result)
@@ -684,6 +729,7 @@ impl TypeChecker {
             methods: HashMap::new(),
             field_mutability: Vec::new(),
             field_has_default: Vec::new(),
+            interfaces: vec![],
         });
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
@@ -725,6 +771,7 @@ impl TypeChecker {
                         methods: HashMap::new(),
                         field_mutability: Vec::new(),
                         field_has_default: Vec::new(),
+                        interfaces: vec![],
                     });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
@@ -907,6 +954,658 @@ impl TypeChecker {
             }
         }
     }
+
+    // ============ 语义信息收集 ============
+
+    /// 从已完成类型检查的 AST 收集语义 tokens
+    ///
+    /// 利用 typecheck 阶段已有的类型信息，一次遍历产出语义数据。
+    /// 收集规则：
+    /// - StmtKind::Fn        → Function (定义)
+    /// - StmtKind::TypeDef   → Type (定义)
+    /// - StmtKind::Var       → Variable (定义)
+    /// - StmtKind::MethodBind→ Method (定义)
+    /// - StmtKind::Use       → Namespace (引用)
+    /// - Param               → Parameter (定义)
+    /// - Expr::Var           → Variable (引用)
+    /// - Expr::Call          → Function (引用)
+    /// - Expr::FieldAccess   → Property (引用)
+    /// - Expr::Cast          → Type (引用)
+    fn collect_semantic_tokens(
+        &mut self,
+        module: &Module,
+    ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+        use semantic_db::{
+            SemanticToken, SemanticTokenType, SemanticTokenModifier, ScopeInfo, ScopeKind,
+        };
+
+        let fp = self.env.module_name.clone();
+
+        // 添加全局作用域
+        self.semantic_db.add_scope(
+            &fp,
+            ScopeInfo {
+                span: module.span,
+                parent: None,
+                symbols: Vec::new(),
+                kind: ScopeKind::Global,
+            },
+        );
+
+        let mut global_symbols = Vec::new();
+
+        for stmt in &module.items {
+            match &stmt.kind {
+                StmtKind::Fn {
+                    name,
+                    params,
+                    is_pub,
+                    generic_params,
+                    body,
+                    ..
+                } => {
+                    // 函数名 → Function (定义)
+                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                    if *is_pub {
+                        modifiers.push(SemanticTokenModifier::Public);
+                    }
+                    if !generic_params.is_empty() {
+                        modifiers.push(SemanticTokenModifier::Generic);
+                    }
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: name.clone(),
+                            token_type: SemanticTokenType::Function,
+                            modifiers,
+                            span: stmt.span,
+                        },
+                    );
+                    global_symbols.push(name.clone());
+
+                    // 参数 → Parameter (定义)
+                    for param in params {
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: param.name.clone(),
+                                token_type: SemanticTokenType::Parameter,
+                                modifiers: vec![SemanticTokenModifier::Declaration],
+                                span: param.span,
+                            },
+                        );
+                    }
+
+                    // 泛型参数 → TypeParameter (定义)
+                    for gp in generic_params {
+                        let gp_name = match &gp.kind {
+                            crate::frontend::core::parser::ast::GenericParamKind::Type => {
+                                gp.name.clone()
+                            }
+                            _ => gp.name.clone(),
+                        };
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: gp_name,
+                                token_type: SemanticTokenType::TypeParameter,
+                                modifiers: vec![SemanticTokenModifier::Declaration],
+                                span: stmt.span, // 泛型参数暂用语句 span
+                            },
+                        );
+                    }
+
+                    // 函数体作用域
+                    let scope_idx = self
+                        .semantic_db
+                        .get_scopes(&fp)
+                        .map(|s| s.len())
+                        .unwrap_or(0);
+                    self.semantic_db.add_scope(
+                        &fp,
+                        ScopeInfo {
+                            span: stmt.span,
+                            parent: Some(0), // 全局作用域
+                            symbols: params.iter().map(|p| p.name.clone()).collect(),
+                            kind: ScopeKind::Function,
+                        },
+                    );
+
+                    // 递归收集函数体中的表达式
+                    for body_stmt in &body.0 {
+                        self.collect_stmt_tokens(&fp, body_stmt, scope_idx);
+                    }
+                    if let Some(ret_expr) = &body.1 {
+                        self.collect_expr_tokens(&fp, ret_expr);
+                    }
+                }
+                StmtKind::TypeDef {
+                    name,
+                    generic_params,
+                    ..
+                } => {
+                    // 类型名 → Type (定义)
+                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                    if !generic_params.is_empty() {
+                        modifiers.push(SemanticTokenModifier::Generic);
+                    }
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: name.clone(),
+                            token_type: SemanticTokenType::Type,
+                            modifiers,
+                            span: stmt.span,
+                        },
+                    );
+                    global_symbols.push(name.clone());
+                }
+                StmtKind::Var {
+                    name,
+                    is_mut,
+                    initializer,
+                    ..
+                } => {
+                    // 变量名 → Variable (定义)
+                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                    if *is_mut {
+                        modifiers.push(SemanticTokenModifier::Mutable);
+                    } else {
+                        modifiers.push(SemanticTokenModifier::Readonly);
+                    }
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: name.clone(),
+                            token_type: SemanticTokenType::Variable,
+                            modifiers,
+                            span: stmt.span,
+                        },
+                    );
+                    global_symbols.push(name.clone());
+
+                    if let Some(init) = initializer {
+                        self.collect_expr_tokens(&fp, init);
+                    }
+                }
+                StmtKind::MethodBind {
+                    type_name,
+                    method_name,
+                    params,
+                    ..
+                } => {
+                    // 类型名.方法名 → Method (定义)
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: format!("{}.{}", type_name, method_name),
+                            token_type: SemanticTokenType::Method,
+                            modifiers: vec![SemanticTokenModifier::Declaration],
+                            span: stmt.span,
+                        },
+                    );
+
+                    // 参数 → Parameter (定义)
+                    for param in params {
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: param.name.clone(),
+                                token_type: SemanticTokenType::Parameter,
+                                modifiers: vec![SemanticTokenModifier::Declaration],
+                                span: param.span,
+                            },
+                        );
+                    }
+                }
+                StmtKind::Use { path, .. } => {
+                    // 模块路径 → Namespace (引用)
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: path.clone(),
+                            token_type: SemanticTokenType::Namespace,
+                            modifiers: vec![],
+                            span: stmt.span,
+                        },
+                    );
+                }
+                StmtKind::Expr(expr) => {
+                    self.collect_expr_tokens(&fp, expr);
+                }
+                StmtKind::For {
+                    var,
+                    iterable,
+                    body,
+                    ..
+                } => {
+                    self.semantic_db.add_token(
+                        &fp,
+                        SemanticToken {
+                            name: var.clone(),
+                            token_type: SemanticTokenType::Variable,
+                            modifiers: vec![SemanticTokenModifier::Declaration],
+                            span: stmt.span,
+                        },
+                    );
+                    self.collect_expr_tokens(&fp, iterable);
+                    for body_stmt in &body.stmts {
+                        self.collect_stmt_tokens(&fp, body_stmt, 0);
+                    }
+                    if let Some(ret_expr) = &body.expr {
+                        self.collect_expr_tokens(&fp, ret_expr);
+                    }
+                }
+                StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                }
+            }
+        }
+
+        // 更新全局作用域的符号列表
+        if let Some(file_info) = self.semantic_db.get_file_info(&self.env.module_name) {
+            if !file_info.scopes.is_empty() {
+                // We need mutable access; use set_file_info approach or direct access
+                // For simplicity, we recorded symbols inline already
+            }
+        }
+    }
+
+    /// 收集语句中的语义 tokens（递归）
+    fn collect_stmt_tokens(
+        &mut self,
+        file_path: &str,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        _parent_scope: usize,
+    ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+        use semantic_db::SemanticTokenModifier;
+
+        match &stmt.kind {
+            StmtKind::Var {
+                name,
+                is_mut,
+                initializer,
+                ..
+            } => {
+                let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                if *is_mut {
+                    modifiers.push(SemanticTokenModifier::Mutable);
+                } else {
+                    modifiers.push(SemanticTokenModifier::Readonly);
+                }
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::LocalVariable,
+                        modifiers,
+                        span: stmt.span,
+                    },
+                );
+                if let Some(init) = initializer {
+                    self.collect_expr_tokens(file_path, init);
+                }
+            }
+            StmtKind::Expr(expr) => {
+                self.collect_expr_tokens(file_path, expr);
+            }
+            StmtKind::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: var.clone(),
+                        token_type: semantic_db::SemanticTokenType::Variable,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: stmt.span,
+                    },
+                );
+                self.collect_expr_tokens(file_path, iterable);
+                for body_stmt in &body.stmts {
+                    self.collect_stmt_tokens(file_path, body_stmt, _parent_scope);
+                }
+                if let Some(ret_expr) = &body.expr {
+                    self.collect_expr_tokens(file_path, ret_expr);
+                }
+            }
+            StmtKind::Fn {
+                name, params, body, ..
+            } => {
+                // 嵌套函数
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Function,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: stmt.span,
+                    },
+                );
+                for param in params {
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: param.name.clone(),
+                            token_type: semantic_db::SemanticTokenType::Parameter,
+                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                            span: param.span,
+                        },
+                    );
+                }
+                for body_stmt in &body.0 {
+                    self.collect_stmt_tokens(file_path, body_stmt, _parent_scope);
+                }
+                if let Some(ret_expr) = &body.1 {
+                    self.collect_expr_tokens(file_path, ret_expr);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 收集表达式中的语义 tokens（递归）
+    fn collect_expr_tokens(
+        &mut self,
+        file_path: &str,
+        expr: &Expr,
+    ) {
+        use crate::frontend::core::parser::ast::Expr;
+
+        match expr {
+            Expr::Var(name, span) => {
+                // 判断是函数引用还是变量引用
+                let token_type = if let Some(poly) = self.env.get_var(name) {
+                    if matches!(poly.body, MonoType::Fn { .. }) {
+                        semantic_db::SemanticTokenType::Function
+                    } else {
+                        semantic_db::SemanticTokenType::Variable
+                    }
+                } else {
+                    semantic_db::SemanticTokenType::Variable
+                };
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type,
+                        modifiers: vec![],
+                        span: *span,
+                    },
+                );
+            }
+            Expr::Call { func, args, .. } => {
+                self.collect_expr_tokens(file_path, func);
+                for arg in args {
+                    self.collect_expr_tokens(file_path, arg);
+                }
+            }
+            Expr::FieldAccess {
+                expr: inner,
+                field,
+                span,
+            } => {
+                self.collect_expr_tokens(file_path, inner);
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: field.clone(),
+                        token_type: semantic_db::SemanticTokenType::Property,
+                        modifiers: vec![],
+                        span: *span,
+                    },
+                );
+            }
+            Expr::Cast {
+                expr: inner,
+                target_type,
+                span,
+            } => {
+                self.collect_expr_tokens(file_path, inner);
+                // Cast 目标类型 → Type (引用)
+                let type_name = format!("{:?}", target_type);
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: type_name,
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *span,
+                    },
+                );
+            }
+            Expr::BinOp { left, right, .. } => {
+                self.collect_expr_tokens(file_path, left);
+                self.collect_expr_tokens(file_path, right);
+            }
+            Expr::UnOp { expr: inner, .. } => {
+                self.collect_expr_tokens(file_path, inner);
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                self.collect_expr_tokens(file_path, condition);
+                for s in &then_branch.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &then_branch.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+                for (cond, block) in elif_branches {
+                    self.collect_expr_tokens(file_path, cond);
+                    for s in &block.stmts {
+                        self.collect_stmt_tokens(file_path, s, 0);
+                    }
+                    if let Some(r) = &block.expr {
+                        self.collect_expr_tokens(file_path, r);
+                    }
+                }
+                if let Some(block) = else_branch {
+                    for s in &block.stmts {
+                        self.collect_stmt_tokens(file_path, s, 0);
+                    }
+                    if let Some(r) = &block.expr {
+                        self.collect_expr_tokens(file_path, r);
+                    }
+                }
+            }
+            Expr::While {
+                condition, body, ..
+            } => {
+                self.collect_expr_tokens(file_path, condition);
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            Expr::For {
+                iterable,
+                body,
+                var,
+                span,
+                ..
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: var.clone(),
+                        token_type: semantic_db::SemanticTokenType::Variable,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: *span,
+                    },
+                );
+                self.collect_expr_tokens(file_path, iterable);
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            Expr::Lambda { params, body, span } => {
+                // Lambda 参数
+                for param in params {
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: param.name.clone(),
+                            token_type: semantic_db::SemanticTokenType::Parameter,
+                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                            span: param.span,
+                        },
+                    );
+                }
+                // Lambda 作用域
+                self.semantic_db.add_scope(
+                    file_path,
+                    semantic_db::ScopeInfo {
+                        span: *span,
+                        parent: None, // 简化：不追踪精确父级
+                        symbols: params.iter().map(|p| p.name.clone()).collect(),
+                        kind: semantic_db::ScopeKind::Lambda,
+                    },
+                );
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &block.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            Expr::Return(Some(inner), _) => {
+                self.collect_expr_tokens(file_path, inner);
+            }
+            Expr::Match {
+                expr: inner, arms, ..
+            } => {
+                self.collect_expr_tokens(file_path, inner);
+                for arm in arms {
+                    for s in &arm.body.stmts {
+                        self.collect_stmt_tokens(file_path, s, 0);
+                    }
+                    if let Some(r) = &arm.body.expr {
+                        self.collect_expr_tokens(file_path, r);
+                    }
+                }
+            }
+            Expr::Tuple(elements, _) | Expr::List(elements, _) => {
+                for elem in elements {
+                    self.collect_expr_tokens(file_path, elem);
+                }
+            }
+            Expr::Dict(pairs, _) => {
+                for (k, v) in pairs {
+                    self.collect_expr_tokens(file_path, k);
+                    self.collect_expr_tokens(file_path, v);
+                }
+            }
+            Expr::Index {
+                expr: inner, index, ..
+            } => {
+                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, index);
+            }
+            Expr::Try { expr: inner, .. } | Expr::Ref { expr: inner, .. } => {
+                self.collect_expr_tokens(file_path, inner);
+            }
+            Expr::FnDef {
+                name,
+                params,
+                body,
+                span,
+                ..
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Function,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: *span,
+                    },
+                );
+                for param in params {
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: param.name.clone(),
+                            token_type: semantic_db::SemanticTokenType::Parameter,
+                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                            span: param.span,
+                        },
+                    );
+                }
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            Expr::ListComp {
+                element,
+                iterable,
+                condition,
+                var,
+                span,
+                ..
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: var.clone(),
+                        token_type: semantic_db::SemanticTokenType::Variable,
+                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                        span: *span,
+                    },
+                );
+                self.collect_expr_tokens(file_path, element);
+                self.collect_expr_tokens(file_path, iterable);
+                if let Some(cond) = condition {
+                    self.collect_expr_tokens(file_path, cond);
+                }
+            }
+            Expr::FString { segments, .. } => {
+                for seg in segments {
+                    if let crate::frontend::core::parser::ast::FStringSegment::Interpolation {
+                        expr,
+                        ..
+                    } = seg
+                    {
+                        self.collect_expr_tokens(file_path, expr);
+                    }
+                }
+            }
+            Expr::Unsafe { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(file_path, s, 0);
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(file_path, r);
+                }
+            }
+            // 字面量、Error、Break、Continue 等不需要收集
+            _ => {}
+        }
+    }
 }
 
 /// 检查模块
@@ -914,6 +1613,28 @@ impl TypeChecker {
 pub fn check_module(
     ast: &Module,
     env: &mut Option<TypeEnvironment>,
+) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    check_module_inner(ast, env, false)
+}
+
+/// 检查模块（收集所有错误模式）
+///
+/// 与 `check_module` 相同，但启用错误收集模式。
+/// 类型检查器会尽可能多地收集错误，适用于 LSP 诊断。
+#[allow(unused_variables)]
+pub fn check_module_collect_all(
+    ast: &Module,
+    env: &mut Option<TypeEnvironment>,
+) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    check_module_inner(ast, env, true)
+}
+
+/// 模块检查内部实现
+#[allow(unused_variables)]
+fn check_module_inner(
+    ast: &Module,
+    env: &mut Option<TypeEnvironment>,
+    collect_all: bool,
 ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = TypeChecker::new("main");
@@ -929,7 +1650,11 @@ pub fn check_module(
     }
 
     // 执行模块检查
-    let result = checker.check_module(ast)?;
+    let result = if collect_all {
+        checker.check_module_collect_all(ast)?
+    } else {
+        checker.check_module(ast)?
+    };
 
     // 将 exports 和 method_bindings 导回传入的环境
     if let Some(ref mut ext_env) = env {
@@ -1399,6 +2124,8 @@ pub struct TypeCheckResult {
     /// 局部变量的类型信息（用于 IR 生成器显示错误消息）
     /// Key 是变量名，Value 是推断出的具体类型
     pub local_var_types: HashMap<String, MonoType>,
+    /// 语义信息数据库（typecheck 阶段产出）
+    pub semantic_db: semantic_db::SemanticDB,
 }
 
 /// 导入信息

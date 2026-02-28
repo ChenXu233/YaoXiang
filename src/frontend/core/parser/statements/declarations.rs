@@ -128,6 +128,101 @@ fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
     false
 }
 
+/// RFC-004: 检测是否是外部绑定语句语法: `Type.method = function[pos]`
+/// 模式: Identifier . Identifier = (没有冒号)
+fn is_external_binding_syntax(state: &mut ParserState<'_>) -> bool {
+    let saved = state.save_position();
+
+    let has_type_name = matches!(
+        state.current().map(|t| &t.kind),
+        Some(TokenKind::Identifier(_))
+    );
+
+    if has_type_name {
+        state.bump(); // consume type name
+
+        if state.at(&TokenKind::Dot) {
+            state.bump(); // consume dot
+
+            let has_method_name = matches!(
+                state.current().map(|t| &t.kind),
+                Some(TokenKind::Identifier(_))
+            );
+
+            if has_method_name {
+                state.bump(); // consume method name
+
+                // 检查是否是等号 (不是冒号)
+                let has_eq = state.at(&TokenKind::Eq);
+                state.restore_position(saved);
+                return has_eq;
+            }
+        }
+    }
+
+    state.restore_position(saved);
+    false
+}
+
+/// RFC-004: 解析外部绑定语句: `Type.method = function[pos]` 或 `Type.method = function`
+pub fn parse_external_binding_stmt(
+    state: &mut ParserState<'_>,
+    span: Span,
+) -> Option<Stmt> {
+    // Parse type name
+    let type_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => return None,
+    };
+    state.bump(); // consume type name
+
+    state.bump(); // consume '.'
+
+    // Parse method name
+    let method_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => return None,
+    };
+    state.bump(); // consume method name
+
+    state.bump(); // consume '='
+
+    // Parse function name
+    let func_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => {
+            state.error(ParseError::Message(format!(
+                "Expected function name after '=' in external binding '{}.{}'",
+                type_name, method_name
+            )));
+            return None;
+        }
+    };
+    state.bump(); // consume function name
+
+    // 解析可选的位置绑定 [positions]
+    let binding = if state.at(&TokenKind::LBracket) {
+        let positions = parse_binding_positions(state).ok()?;
+        BindingKind::External {
+            function: func_name,
+            positions,
+        }
+    } else {
+        BindingKind::DefaultExternal {
+            function: func_name,
+        }
+    };
+
+    Some(Stmt {
+        kind: StmtKind::ExternalBindingStmt {
+            type_name,
+            method_name,
+            binding,
+        },
+        span,
+    })
+}
+
 /// Parse method binding statement: `Type.method: (Params) -> ReturnType = (params) => body`
 /// Example: `Point.draw: (Point, Surface) -> Void = (self, surface) => { ... }`
 pub fn parse_method_bind_stmt(
@@ -905,62 +1000,17 @@ fn is_const_param_type(ty: &Type) -> bool {
     }
 }
 
-/// Parse type definition (handles union types with |)
+/// Parse type definition (simple form without |)
+/// Note: Enum variants with | are now only supported in brace syntax: { red | green | blue }
 fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
     let first_type = parse_type_annotation(state)?;
 
+    // 检查是否有 | 符号（不允许使用不带花括号的枚举语法）
     if state.at(&TokenKind::Pipe) {
-        let mut types = vec![first_type];
-        while state.skip(&TokenKind::Pipe) {
-            types.push(parse_type_annotation(state)?);
-        }
-
-        // Check if all types are variant-like
-        let all_variants = types.iter().all(|t| {
-            matches!(
-                t,
-                Type::Name(_) | Type::Generic { .. } | Type::NamedStruct { .. }
-            )
-        });
-
-        if all_variants {
-            // Convert to Variant
-            let mut variants = Vec::new();
-            for ty in types.iter() {
-                match ty {
-                    Type::Generic { name, args } => {
-                        let params = args.iter().map(|a| (None, a.clone())).collect();
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params,
-                            span: state.span(),
-                        });
-                    }
-                    Type::NamedStruct { name, fields } => {
-                        let params = fields
-                            .iter()
-                            .map(|f| (Some(f.name.clone()), f.ty.clone()))
-                            .collect();
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params,
-                            span: state.span(),
-                        });
-                    }
-                    Type::Name(name) => {
-                        variants.push(VariantDef {
-                            name: name.clone(),
-                            params: Vec::new(),
-                            span: state.span(),
-                        });
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            return Some(Type::Variant(variants));
-        } else {
-            return Some(Type::Sum(types));
-        }
+        state.error(ParseError::Message(
+            "Enum variants must use brace syntax: `{ red | green | blue }` instead of `red | green | blue`".to_string(),
+        ));
+        return None;
     }
 
     Some(first_type)
@@ -1084,6 +1134,11 @@ pub fn parse_identifier_stmt(
     // 检测方法绑定语法: Type.method: ...
     if is_method_bind_syntax(state) {
         return parse_method_bind_stmt(state, span);
+    }
+
+    // RFC-004: 检测外部绑定语句: Type.method = function[pos]
+    if is_external_binding_syntax(state) {
+        return parse_external_binding_stmt(state, span);
     }
 
     // 检测 pub 关键字
@@ -1902,7 +1957,7 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     fields.push(StructField::new(name, is_mut, field_type));
                 }
             } else if state.skip(&TokenKind::Eq) {
-                // 无冒号但有等号: 外部函数绑定 name = function[positions]
+                // 无冒号但有等号: 外部函数绑定 name = function[positions] 或默认绑定 name = function
                 let func_name = match state.current().map(|t| &t.kind) {
                     Some(TokenKind::Identifier(n)) => n.clone(),
                     _ => {
@@ -1915,15 +1970,25 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                 };
                 state.bump(); // consume function name
 
-                // 解析位置绑定 [positions]
-                let positions = parse_binding_positions(state).ok()?;
-                bindings.push(TypeBodyBinding {
-                    name,
-                    kind: BindingKind::External {
-                        function: func_name,
-                        positions,
-                    },
-                });
+                // RFC-004: 尝试解析位置绑定 [positions]，如果没有则为默认绑定
+                if state.at(&TokenKind::LBracket) {
+                    let positions = parse_binding_positions(state).ok()?;
+                    bindings.push(TypeBodyBinding {
+                        name,
+                        kind: BindingKind::External {
+                            function: func_name,
+                            positions,
+                        },
+                    });
+                } else {
+                    // 默认绑定: name = function（自动查找第一个类型匹配位置）
+                    bindings.push(TypeBodyBinding {
+                        name,
+                        kind: BindingKind::DefaultExternal {
+                            function: func_name,
+                        },
+                    });
+                }
             } else if is_mut {
                 // mut 后面没有冒号是语法错误
                 state.error(ParseError::Message(format!(
@@ -1931,6 +1996,11 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
                     name
                 )));
                 return None;
+            } else if state.at(&TokenKind::Pipe) || state.at(&TokenKind::LParen) {
+                // 枚举变体: red | green | blue 或 ok(Int) | err(String)
+                // 回退一个 token，从头开始解析枚举
+                state.restore_position(state.save_position() - 1);
+                return parse_enum_variants_in_braces(state);
             } else {
                 // 接口约束: InterfaceName
                 interfaces.push(name);
@@ -1945,22 +2015,112 @@ fn parse_struct_type(state: &mut ParserState<'_>) -> Option<Type> {
 
     state.skip(&TokenKind::RBrace);
 
-    Some(Type::Struct { fields, bindings })
+    Some(Type::Struct {
+        fields,
+        bindings,
+        interfaces,
+    })
+}
+
+/// 解析花括号内的枚举变体: { red | green | blue }
+fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
+    // 此时应该已经消费了 {
+    // 解析第一个变体
+    let first_variant = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(name)) => {
+            let name = name.clone();
+            state.bump();
+
+            // 检查是否有参数类型: ok(Int)
+            let params = if state.at(&TokenKind::LParen) {
+                state.bump(); // consume '('
+                let mut params = Vec::new();
+                while !state.at(&TokenKind::RParen) && !state.at_end() {
+                    if let Some(param_type) = parse_type_annotation(state) {
+                        params.push((None, param_type));
+                        state.skip(&TokenKind::Comma);
+                    } else {
+                        break;
+                    }
+                }
+                state.skip(&TokenKind::RParen);
+                params
+            } else {
+                Vec::new()
+            };
+
+            VariantDef {
+                name,
+                params,
+                span: state.span(),
+            }
+        }
+        _ => {
+            state.error(ParseError::Message("Expected variant name".to_string()));
+            return None;
+        }
+    };
+
+    // 收集后续变体
+    let mut variants = vec![first_variant];
+    while state.skip(&TokenKind::Pipe) {
+        match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(name)) => {
+                let name = name.clone();
+                state.bump();
+
+                // 检查是否有参数类型: ok(Int)
+                let params = if state.at(&TokenKind::LParen) {
+                    state.bump(); // consume '('
+                    let mut params = Vec::new();
+                    while !state.at(&TokenKind::RParen) && !state.at_end() {
+                        if let Some(param_type) = parse_type_annotation(state) {
+                            params.push((None, param_type));
+                            state.skip(&TokenKind::Comma);
+                        } else {
+                            break;
+                        }
+                    }
+                    state.skip(&TokenKind::RParen);
+                    params
+                } else {
+                    Vec::new()
+                };
+
+                variants.push(VariantDef {
+                    name,
+                    params,
+                    span: state.span(),
+                });
+            }
+            _ => {
+                state.error(ParseError::Message(
+                    "Expected variant name after '|'".to_string(),
+                ));
+                break;
+            }
+        }
+    }
+
+    state.skip(&TokenKind::RBrace);
+
+    // 返回 Variant 类型（保留参数信息）
+    Some(Type::Variant(variants))
 }
 
 /// 解析可选的位置绑定: `[0]` 或 `[0, 1]`
 /// 只在下一个 token 是 `[` 且内容是整数时才消费
-fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<usize>> {
+fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<i64>> {
     if !state.at(&TokenKind::LBracket) {
         return None;
     }
 
-    // 前瞻检查: 确认 `[` 后面是整数字面量
+    // 前瞻检查: 确认 `[` 后面是整数字面量或负号
     let saved = state.save_position();
     state.bump(); // consume '['
 
     match state.current().map(|t| &t.kind) {
-        Some(TokenKind::IntLiteral(_)) => {
+        Some(TokenKind::IntLiteral(_)) | Some(TokenKind::Minus) => {
             state.restore_position(saved);
             // 是位置绑定，解析之
             parse_binding_positions(state).ok()
@@ -1973,8 +2133,8 @@ fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<u
     }
 }
 
-/// 解析位置绑定: `[0]` 或 `[0, 1]`（必须存在）
-fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<usize>, ()> {
+/// 解析位置绑定: `[0]` 或 `[0, 1]` 或 `[-1]`（必须存在）
+fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<i64>, ()> {
     if !state.at(&TokenKind::LBracket) {
         state.error(ParseError::Message(
             "Expected '[' for binding position".to_string(),
@@ -1985,9 +2145,16 @@ fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<usize>, ()
 
     let mut positions = Vec::new();
     while !state.at(&TokenKind::RBracket) && !state.at_end() {
+        // RFC-004: 支持负数索引 `[-1]`
+        let is_negative = state.at(&TokenKind::Minus);
+        if is_negative {
+            state.bump(); // consume '-'
+        }
+
         match state.current().map(|t| &t.kind) {
             Some(TokenKind::IntLiteral(n)) => {
-                positions.push(*n as usize);
+                let value = *n as i64;
+                positions.push(if is_negative { -value } else { value });
                 state.bump();
                 state.skip(&TokenKind::Comma);
             }

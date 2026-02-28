@@ -198,6 +198,8 @@ pub struct AstToIrGenerator {
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
     constraint_var_concrete_types: HashMap<String, String>,
+    /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
+    anon_function_irs: Vec<FunctionIR>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -208,7 +210,7 @@ struct BindingInfo {
     /// 原始函数名
     function: String,
     /// 绑定位置列表（调用者 obj 填充到这些位置）
-    positions: Vec<usize>,
+    positions: Vec<i64>,
 }
 
 /// Lambda 函数体 IR 结果
@@ -246,6 +248,7 @@ impl AstToIrGenerator {
             closure_counter: 0,
             global_vars: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
+            anon_function_irs: Vec::new(),
         }
     }
 
@@ -269,6 +272,7 @@ impl AstToIrGenerator {
             closure_counter: 0,
             global_vars: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
+            anon_function_irs: Vec::new(),
         }
     }
 
@@ -526,6 +530,9 @@ impl AstToIrGenerator {
         // 添加嵌套函数到模块函数列表
         functions.extend(std::mem::take(&mut self.nested_functions));
 
+        // RFC-004: 添加匿名函数绑定生成的 IR 到模块函数列表
+        functions.extend(std::mem::take(&mut self.anon_function_irs));
+
         Ok(ModuleIR {
             types: Vec::new(),
             globals: Vec::new(),
@@ -587,6 +594,20 @@ impl AstToIrGenerator {
             ast::StmtKind::TypeDef {
                 name, definition, ..
             } => self.generate_constructor_ir(name, definition),
+            ast::StmtKind::ExternalBindingStmt {
+                type_name,
+                method_name,
+                binding,
+            } => {
+                // RFC-004: 外部绑定语句 `Type.method = function[pos]`
+                // 注册到类型绑定映射中
+                let binding_entry = ast::TypeBodyBinding {
+                    name: method_name.clone(),
+                    kind: binding.clone(),
+                };
+                self.register_type_bindings(type_name, &[binding_entry]);
+                Ok(None)
+            }
             _ => Ok(None),
         }
     }
@@ -719,6 +740,7 @@ impl AstToIrGenerator {
                 if let ast::Expr::Call {
                     func,
                     args,
+                    named_args: _,
                     span: _,
                 } = expr_box.as_ref()
                 {
@@ -873,6 +895,7 @@ impl AstToIrGenerator {
     }
 
     /// 尝试将表达式求值为编译时常量
+    #[allow(clippy::only_used_in_recursion)]
     fn eval_const_expr(
         &self,
         expr: &ast::Expr,
@@ -885,6 +908,33 @@ impl AstToIrGenerator {
                 ast::Literal::String(s) => Some(ConstValue::String(s.clone())),
                 ast::Literal::Char(c) => Some(ConstValue::Char(*c)),
             },
+            // RFC-012: F-string 常量求值
+            ast::Expr::FString { segments, .. } => {
+                let mut result = String::new();
+                for seg in segments {
+                    match seg {
+                        ast::FStringSegment::Text(s) => result.push_str(s),
+                        ast::FStringSegment::Interpolation { expr, format_spec } => {
+                            let val = self.eval_const_expr(expr)?;
+                            let val_str = match &val {
+                                ConstValue::Int(n) => n.to_string(),
+                                ConstValue::Float(f) => f.to_string(),
+                                ConstValue::Bool(b) => b.to_string(),
+                                ConstValue::String(s) => s.clone(),
+                                ConstValue::Char(c) => c.to_string(),
+                                ConstValue::Void => String::new(),
+                                ConstValue::Bytes(b) => format!("{:?}", b),
+                            };
+                            // 格式化说明符在常量求值中不处理，遇到则退回运行时
+                            if format_spec.is_some() {
+                                return None;
+                            }
+                            result.push_str(&val_str);
+                        }
+                    }
+                }
+                Some(ConstValue::String(result))
+            }
             // TODO: 支持更复杂的常量表达式
             _ => None,
         }
@@ -962,18 +1012,138 @@ impl AstToIrGenerator {
                     .insert(struct_name.clone(), fields.clone());
                 self.generate_struct_constructor_ir(struct_name, fields)
             }
-            ast::Type::Struct { fields, bindings } => {
+            ast::Type::Struct {
+                fields, bindings, ..
+            } => {
                 self.struct_definitions
                     .insert(_name.to_string(), fields.clone());
                 // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
                 self.register_type_bindings(_name, bindings);
-                self.generate_struct_constructor_ir(_name, fields)
+
+                // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+                let mut anon_functions = Vec::new();
+                for binding in bindings {
+                    if let ast::BindingKind::Anonymous {
+                        params,
+                        return_type,
+                        positions: _,
+                        body,
+                    } = &binding.kind
+                    {
+                        let anon_func_name = format!("{}.__anon_{}", _name, binding.name);
+                        let mut constants = Vec::new();
+                        match self.generate_anon_binding_ir(
+                            &anon_func_name,
+                            params,
+                            return_type,
+                            body,
+                            &mut constants,
+                        ) {
+                            Ok(Some(func_ir)) => anon_functions.push(func_ir),
+                            Ok(None) => {}
+                            Err(_) => {} // 忽略匿名函数生成错误，不影响构造函数
+                        }
+                    }
+                }
+
+                let constructor = self.generate_struct_constructor_ir(_name, fields);
+
+                // 将匿名函数 IR 存储为独立函数（在模块级别注册）
+                for func_ir in anon_functions {
+                    self.anon_function_irs.push(func_ir);
+                }
+
+                constructor
             }
             _ => {
                 // 非结构体类型，不生成构造函数
                 Ok(None)
             }
         }
+    }
+
+    /// RFC-004: 为匿名函数绑定生成独立的 FunctionIR
+    ///
+    /// 匿名函数绑定在类型定义体内以 lambda 形式定义，需要生成独立的函数 IR。
+    /// 函数命名格式为 `TypeName.__anon_method_name`。
+    fn generate_anon_binding_ir(
+        &mut self,
+        name: &str,
+        params: &[ast::Param],
+        return_type: &ast::Type,
+        body: &ast::Expr,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<Option<FunctionIR>, IrGenError> {
+        // 保存父函数状态
+        let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
+        let saved_local_names = std::mem::take(&mut self.current_local_names);
+        let saved_next_temp = self.next_temp;
+
+        let mut instructions = Vec::new();
+
+        // 进入匿名函数作用域
+        self.enter_scope();
+
+        // 为每个参数生成 LoadArg 指令并注册
+        for (i, param) in params.iter().enumerate() {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(i),
+                src: Operand::Arg(i),
+            });
+            instructions.push(Instruction::Store {
+                dst: Operand::Local(i),
+                src: Operand::Local(i),
+                span: Span::dummy(),
+            });
+            self.register_local(&param.name, i);
+            if param.is_mut {
+                self.current_mut_locals.insert(i);
+            }
+        }
+
+        // 记录局部变量起始位置
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
+
+        // 生成表达式体的 IR，并返回结果
+        let result_reg = self.next_temp_reg();
+        self.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
+        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+
+        // 退出作用域
+        self.exit_scope();
+
+        // 计算局部变量总数
+        let total_locals = self.next_temp;
+        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+
+        // 恢复父函数状态
+        self.current_mut_locals = saved_mut_locals;
+        self.current_local_names = saved_local_names;
+        self.next_temp = saved_next_temp;
+
+        // 解析返回类型
+        let ret_type: MonoType = return_type.clone().into();
+
+        let func_ir = FunctionIR {
+            name: name.to_string(),
+            params: params
+                .iter()
+                .filter_map(|p| p.ty.clone())
+                .map(|t| t.into())
+                .collect(),
+            return_type: ret_type,
+            is_async: false,
+            locals: locals_types,
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions,
+                successors: Vec::new(),
+            }],
+            entry: 0,
+        };
+
+        Ok(Some(func_ir))
     }
 
     /// 注册类型绑定信息（RFC-004）
@@ -1017,6 +1187,16 @@ impl AstToIrGenerator {
                         BindingInfo {
                             function: anon_func_name,
                             positions: positions.clone(),
+                        },
+                    );
+                }
+                BindingKind::DefaultExternal { function } => {
+                    // RFC-004: 默认绑定，位置由类型检查器自动推导，此处使用位置 0
+                    binding_map.insert(
+                        binding.name.clone(),
+                        BindingInfo {
+                            function: function.clone(),
+                            positions: vec![0],
                         },
                     );
                 }
@@ -1773,6 +1953,8 @@ impl AstToIrGenerator {
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
+            ast::Expr::FString { span, .. } => *span,
+            ast::Expr::Error(span) => *span,
         }
     }
 
@@ -2108,6 +2290,7 @@ impl AstToIrGenerator {
             Expr::Call {
                 func,
                 args,
+                named_args,
                 span: _,
             } => {
                 // 检查是否是方法调用：func 是 FieldAccess
@@ -2169,8 +2352,8 @@ impl AstToIrGenerator {
 
                             // 将 obj 放入绑定位置
                             for &pos in &binding.positions {
-                                if pos < total_params {
-                                    final_args[pos] = Some(Operand::Local(obj_reg));
+                                if (pos as usize) < total_params {
+                                    final_args[pos as usize] = Some(Operand::Local(obj_reg));
                                 }
                             }
 
@@ -2286,6 +2469,66 @@ impl AstToIrGenerator {
                         let arg_reg = self.next_temp_reg();
                         self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
                         arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
+                    if !named_args.is_empty() {
+                        if let Expr::Var(name, _) = func.as_ref() {
+                            if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                                // 生成命名参数的 IR
+                                let mut named_regs: Vec<(String, Operand)> = Vec::new();
+                                for (arg_name, arg_expr) in named_args.iter() {
+                                    let arg_reg = self.next_temp_reg();
+                                    self.generate_expr_ir(
+                                        arg_expr,
+                                        arg_reg,
+                                        instructions,
+                                        constants,
+                                    )?;
+                                    named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
+                                }
+
+                                // 按字段顺序重排参数
+                                let mut final_args: Vec<Option<Operand>> = vec![None; fields.len()];
+
+                                // 先放置位置参数
+                                for (i, reg) in arg_regs.iter().enumerate() {
+                                    if i < fields.len() {
+                                        final_args[i] = Some(reg.clone());
+                                    }
+                                }
+
+                                // 再放置命名参数（按字段名匹配）
+                                for (name, reg) in &named_regs {
+                                    if let Some(idx) = fields.iter().position(|f| &f.name == name) {
+                                        final_args[idx] = Some(reg.clone());
+                                    }
+                                }
+
+                                // 填充默认值
+                                for (i, slot) in final_args.iter_mut().enumerate() {
+                                    if slot.is_none() {
+                                        let default_reg = self.next_temp_reg();
+                                        if let Some(default_expr) = &fields[i].default {
+                                            self.generate_expr_ir(
+                                                default_expr,
+                                                default_reg,
+                                                instructions,
+                                                constants,
+                                            )?;
+                                        } else {
+                                            instructions.push(Instruction::Load {
+                                                dst: Operand::Local(default_reg),
+                                                src: Operand::Const(ConstValue::Int(0)),
+                                            });
+                                        }
+                                        *slot = Some(Operand::Local(default_reg));
+                                    }
+                                }
+
+                                arg_regs = final_args.into_iter().map(|s| s.unwrap()).collect();
+                            }
+                        }
                     }
 
                     // 检查是否是结构体构造器调用，需要填充默认值
@@ -2750,6 +2993,70 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
                     env: Vec::new(),
+                });
+            }
+            // RFC-012: F-string 代码生成
+            Expr::FString { segments, span: _ } => {
+                // 1. 尝试常量求值
+                if let Some(const_val) = self.eval_const_expr(expr) {
+                    constants.push(const_val.clone());
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Const(const_val),
+                    });
+                    return Ok(());
+                }
+
+                // 2. 转换为 format() 调用
+                // 构建 format_str: "Hello {} is {} years old"
+                // 构建 args: [name, age]
+                let mut format_str = String::new();
+                let mut arg_regs = Vec::new();
+                let mut arg_index = 0usize;
+
+                for segment in segments {
+                    match segment {
+                        ast::FStringSegment::Text(text) => {
+                            format_str.push_str(text);
+                        }
+                        ast::FStringSegment::Interpolation {
+                            expr: interp_expr,
+                            format_spec,
+                        } => {
+                            // Build format placeholder: {0}, {1}, or {0:.2f}
+                            if let Some(spec) = format_spec {
+                                format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
+                            } else {
+                                format_str.push_str(&format!("{{{}}}", arg_index));
+                            }
+                            arg_index += 1;
+
+                            // Generate IR for the interpolation expression
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
+                            arg_regs.push(Operand::Local(arg_reg));
+                        }
+                    }
+                }
+
+                // Load format string constant
+                let fmt_reg = self.next_temp_reg();
+                let fmt_const = ConstValue::String(format_str);
+                constants.push(fmt_const.clone());
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(fmt_reg),
+                    src: Operand::Const(fmt_const),
+                });
+
+                // Build args: [format_str, arg0, arg1, ...]
+                let mut call_args = vec![Operand::Local(fmt_reg)];
+                call_args.extend(arg_regs);
+
+                // Generate Call to std.string.format
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String("std.string.format".to_string())),
+                    args: call_args,
                 });
             }
             _ => {

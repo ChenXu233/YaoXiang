@@ -86,6 +86,7 @@ impl PatternInferrer {
                         methods: std::collections::HashMap::new(),
                         field_mutability,
                         field_has_default: Vec::new(),
+                        interfaces: vec![],
                     },
                 ))
             }
