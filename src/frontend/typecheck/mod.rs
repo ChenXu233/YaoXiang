@@ -31,6 +31,9 @@ pub mod type_eval;
 // 语义信息数据库
 pub mod semantic_db;
 
+// 死代码分析器
+pub mod dead_code;
+
 // 导入测试模块
 #[cfg(test)]
 mod tests;

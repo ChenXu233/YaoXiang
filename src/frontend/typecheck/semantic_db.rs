@@ -259,6 +259,16 @@ impl SemanticDB {
         self.symbol_defs.keys().collect()
     }
 
+    /// 获取所有符号引用（用于死代码分析）
+    pub fn all_symbol_refs(&self) -> &HashMap<String, Vec<SymbolLocation>> {
+        &self.symbol_refs
+    }
+
+    /// 获取所有符号定义（用于死代码分析）
+    pub fn all_symbol_defs(&self) -> &HashMap<String, Vec<SymbolLocation>> {
+        &self.symbol_defs
+    }
+
     /// 获取数据库中的 token 总数
     pub fn token_count(&self) -> usize {
         self.by_file.values().map(|info| info.tokens.len()).sum()
