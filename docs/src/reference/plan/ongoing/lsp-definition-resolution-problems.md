@@ -2,8 +2,9 @@
 
 > **任务**：修复 LSP 跳转定义功能
 > **日期**：2026-02-28
-> **状态**：待处理
+> **状态**：✅ 已完成
 > **发现时间**：2026-02-28
+> **完成时间**：2026-03-01
 
 ---
 
@@ -380,12 +381,123 @@ use std.list 查找顺序：
 
 ## 实现优先级
 
-| 顺序 | 问题 | 复杂度 | 理由 |
-|------|------|--------|------|
-| 1 | 问题 4：标准库接口 | 中 | 基础设施，其他问题可能依赖 |
-| 2 | 问题 1：Use 符号定位 | 低 | 修复后标准库跳转可用 |
-| 3 | 问题 2：同名函数跳转 | 中 | 改进查找算法 |
-| 4 | 问题 3：局部变量 | 高 | 需要遍历函数体 |
+| 顺序 | 问题 | 复杂度 | 理由 | 状态 |
+|------|------|--------|------|------|
+| 1 | 问题 4：标准库接口 | 中 | 基础设施，其他问题可能依赖 | ✅ 已完成 |
+| 2 | 问题 1：Use 符号定位 | 低 | 修复后标准库跳转可用 | ✅ 已完成 |
+| 3 | 问题 2：同名函数跳转 | 中 | 改进查找算法 | ✅ 已完成 |
+| 4 | 问题 3：局部变量 | 高 | 需要遍历函数体 | ✅ 已完成 |
+
+---
+
+## 实现记录
+
+### 完成日期：2026-03-01
+
+### 问题 2 实现：SemanticDB 精确匹配
+
+**修改文件**：`src/lsp/handlers/definition.rs`
+
+**实现内容**：
+- 重构 `handle_definition` 函数，采用两阶段查找策略：
+  1. **优先使用 SemanticDB**：通过 `try_semantic_db_lookup` 利用 `symbol_defs` 查找精确定义位置
+  2. **回退到 SymbolIndex**：当 SemanticDB 无结果时使用全局符号索引
+- 新增 `try_semantic_db_lookup` 函数：
+  - 利用 `SemanticDB.find_innermost_scope()` 查找光标所在的最内层作用域
+  - 利用作用域中的 `symbols` 信息进行上下文过滤
+  - 同文件定义优先匹配，减少误跳
+- 多个同名定义时，按当前文件优先级排序
+
+**新增测试**：
+- `test_definition_via_semantic_db`：验证 SemanticDB 精确匹配
+- `test_definition_semantic_db_disambiguates`：验证多定义消歧方案
+
+---
+
+### 问题 3 实现：局部变量和函数参数索引
+
+**修改文件**：`src/lsp/world.rs`
+
+**实现内容**：
+- 扩展 `update_index_from_ast` 方法，递归遍历函数体：
+  - 提取函数参数（`Param`）到符号索引
+  - 遍历函数体 / 方法体中的语句和表达式
+- 新增递归辅助方法：
+  - `index_stmt_symbols`：处理嵌套语句（Var, For, If, 嵌套 Fn 等）
+  - `index_expr_symbols`：处理表达式中的符号定义（Lambda, FnDef, For, ListComp 等）
+  - `index_block_symbols`：遍历块级代码
+
+**新增测试**：
+- `test_update_index_fn_params`：验证函数参数被正确索引
+
+---
+
+### 问题 1 实现：Use 语句符号定位
+
+**修改文件**：`src/lsp/world.rs`
+
+**实现内容**：
+- 在 `update_index_from_ast` 中新增 `StmtKind::Use` 分支处理
+- 新增 `index_use_symbols` 方法：
+  - 通过 `ModuleRegistry::with_std()` 查找模块导出
+  - 支持 `use std.io`（导入全部导出）
+  - 支持 `use std.io.{println}`（导入指定项）
+  - 将导入的符号添加到当前文件的符号索引
+
+**新增测试**：
+- `test_update_index_use_stmt`：验证 `use std.io` 导入所有导出
+- `test_update_index_use_stmt_with_items`：验证指定项导入
+
+---
+
+### 问题 4 实现：标准库接口文件生成
+
+**新增文件**：`src/std/gen_interfaces.rs`
+
+**实现内容**：
+- `generate_interface_content`：从 `StdModule::exports()` 自动生成 `.yx` 接口文件内容
+- `generate_all_interfaces`：为所有 10 个标准库模块批量生成接口
+- `write_interfaces_to_dir`：将接口文件写入指定目录
+- `default_std_interface_dir`：获取全局标准库接口目录（`~/.yaoxiang/std/`）
+- `find_std_interface_file`：双路径查找（项目本地 → 全局回退）
+
+**LSP 集成**（`src/lsp/world.rs`）：
+- 新增 `load_std_library_symbols` 方法：
+  - 从 `all_module_infos()` 获取标准库导出
+  - 如果存在 `.yx` 接口文件，解析获取精确 Span 信息
+  - 否则使用虚拟路径（`std://std.io` 等）和 `Span::dummy()`
+- 新增 `parse_interface_file_spans` 函数：简单文本解析获取函数名行号映射
+- 在 LSP 服务器启动时（`src/lsp/server.rs`）自动调用 `load_std_library_symbols`
+
+**接口文件格式**：
+```yaoxiang
+// io.yx - 标准库 std.io 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+print: (...args) -> () = {
+    ...
+}
+
+println: (...args) -> () = {
+    ...
+}
+```
+
+**模块查找顺序**：
+```
+1. 项目目录/.yaoxiang/vendor/std/<name>.yx  ← 项目本地（优先）
+2. ~/.yaoxiang/std/<name>.yx                 ← 全局回退
+```
+
+**新增测试**：
+- `test_generate_all_interfaces`：验证 10 个模块接口生成
+- `test_io_interface_content`：验证 io 接口内容
+- `test_math_interface_has_constants`：验证常量导出
+- `test_list_interface_content`：验证 list 接口内容
+- `test_write_interfaces_to_temp_dir`：验证文件写入
+- `test_find_std_interface_file`：验证路径查找
+- `test_load_std_library_symbols`：验证标准库符号加载
+- `test_parse_interface_file_spans`：验证接口文件 Span 解析
 
 ---
 
