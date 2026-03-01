@@ -6,6 +6,7 @@ use crate::frontend::core::parser::ast::Module;
 
 use super::context::FormatContext;
 use super::options::FormatOptions;
+use super::rules::sort_imports::sort_imports;
 use super::source_map::SourceMap;
 
 /// 格式化器
@@ -36,7 +37,12 @@ impl Formatter {
         &self,
         module: &Module,
     ) -> String {
-        super::handlers::module::format_module(module, &self.ctx, &self.source_map)
+        // 如果启用排序导入，先对模块进行排序
+        let mut sorted_module = module.clone();
+        if self.ctx.options.sort_imports {
+            sort_imports(&mut sorted_module.items);
+        }
+        super::handlers::module::format_module(&sorted_module, &self.ctx, &self.source_map)
     }
 
     /// 格式化单个表达式（用于测试）

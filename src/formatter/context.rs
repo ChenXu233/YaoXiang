@@ -55,4 +55,12 @@ impl FormatContext {
     pub fn exceeds_line_width(&self) -> bool {
         self.current_line_width > self.options.line_width
     }
+
+    /// 检查添加指定长度内容后是否超过行宽
+    pub fn should_break(
+        &self,
+        additional_len: usize,
+    ) -> bool {
+        self.current_line_width + additional_len > self.options.line_width
+    }
 }

@@ -23,6 +23,7 @@ pub mod context;
 pub mod formatter;
 pub mod handlers;
 pub mod options;
+pub mod rules;
 pub mod source_map;
 pub mod writers;
 

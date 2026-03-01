@@ -15,6 +15,8 @@ pub struct FormatOptions {
     pub use_tabs: bool,
     /// 使用单引号
     pub single_quote: bool,
+    /// 是否排序导入语句
+    pub sort_imports: bool,
 }
 
 impl Default for FormatOptions {
@@ -24,6 +26,7 @@ impl Default for FormatOptions {
             indent_width: 4,
             use_tabs: false,
             single_quote: false,
+            sort_imports: true,
         }
     }
 }
@@ -35,6 +38,7 @@ impl From<&FmtConfig> for FormatOptions {
             indent_width: config.indent_width,
             use_tabs: config.use_tabs,
             single_quote: config.single_quote,
+            sort_imports: config.sort_imports,
         }
     }
 }

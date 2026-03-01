@@ -100,10 +100,7 @@ pub fn format_expr(
             let items: Vec<String> = exprs.iter().map(|e| format_expr(e, ctx)).collect();
             format!("({})", items.join(", "))
         }
-        Expr::List(exprs, _span) => {
-            let items: Vec<String> = exprs.iter().map(|e| format_expr(e, ctx)).collect();
-            format!("[{}]", items.join(", "))
-        }
+        Expr::List(exprs, _span) => format_list(exprs, ctx),
         Expr::ListComp {
             element,
             var,
@@ -123,17 +120,7 @@ pub fn format_expr(
                 format!("{}]", base)
             }
         }
-        Expr::Dict(pairs, _span) => {
-            if pairs.is_empty() {
-                "{}".to_string()
-            } else {
-                let items: Vec<String> = pairs
-                    .iter()
-                    .map(|(k, v)| format!("{}: {}", format_expr(k, ctx), format_expr(v, ctx)))
-                    .collect();
-                format!("{{{}}}", items.join(", "))
-            }
-        }
+        Expr::Dict(pairs, _span) => format_dict(pairs, ctx),
         Expr::Index {
             expr: inner,
             index,
@@ -145,9 +132,7 @@ pub fn format_expr(
             expr: inner,
             field,
             span: _,
-        } => {
-            format!("{}.{}", format_expr(inner, ctx), field)
-        }
+        } => format_field_access(inner, field, ctx),
         Expr::Try {
             expr: inner,
             span: _,
@@ -216,12 +201,35 @@ fn format_binop(
         BinOp::Range => "..",
         BinOp::Assign => "=",
     };
-    format!(
-        "{} {} {}",
-        format_expr(left, ctx),
-        op_str,
-        format_expr(right, ctx)
-    )
+
+    let left_str = format_expr(left, ctx);
+    let right_str = format_expr(right, ctx);
+
+    // 计算完整表达式的预估长度
+    let total_len = left_str.len() + op_str.len() + right_str.len() + ctx.indent_width();
+
+    // 低优先级运算符（需要更多换行）
+    let is_low_priority = matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::And | BinOp::Assign
+    );
+
+    // 如果不超过行宽，使用单行格式
+    if total_len <= ctx.options.line_width {
+        return format!("{} {} {}", left_str, op_str, right_str);
+    }
+
+    // 需要换行时，根据优先级决定策略
+    let indent = ctx.indent_str();
+    let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
+
+    // 低优先级运算符：运算符放行首，保持对齐
+    if is_low_priority {
+        return format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str);
+    }
+
+    // 高优先级运算符：保持原有格式或简单换行
+    format!("{} {} {}\n{}", left_str, op_str, right_str, inner_indent)
 }
 
 /// 格式化一元运算
@@ -251,25 +259,24 @@ fn format_call(
         all_args.push(format!("{}={}", name, format_expr(expr, ctx)));
     }
 
+    if all_args.is_empty() {
+        return format!("{}()", func_str);
+    }
+
     let single_line = format!("{}({})", func_str, all_args.join(", "));
 
     // 如果单行不超过行宽，使用单行格式
     if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
         single_line
     } else {
-        // 多行格式
+        // 多行格式：尾随逗号风格，参数与开括号对齐
         let indent = ctx.indent_str();
         let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
         let mut result = format!("{}(\n", func_str);
-        for (i, arg) in all_args.iter().enumerate() {
+        for arg in all_args.iter() {
             result.push_str(&inner_indent);
             result.push_str(arg);
-            if i < all_args.len() - 1 {
-                result.push(',');
-            } else {
-                result.push(',');
-            }
-            result.push('\n');
+            result.push_str(",\n");
         }
         result.push_str(&indent);
         result.push(')');
@@ -365,15 +372,36 @@ fn format_match_expr(
     inner_ctx.indent();
     let inner_indent = inner_ctx.indent_str();
 
+    // 计算最长的 pattern 长度，用于对齐
+    let max_pattern_len = arms
+        .iter()
+        .map(|arm| format_pattern(&arm.pattern).len())
+        .max()
+        .unwrap_or(0);
+
     let mut result = format!("match {} {{\n", format_expr(match_expr, ctx));
 
     for arm in arms {
         let pattern_str = format_pattern(&arm.pattern);
         let body_str = format_block_inline(&arm.body, &inner_ctx);
-        result.push_str(&format!(
-            "{}{} => {},\n",
-            inner_indent, pattern_str, body_str
-        ));
+        let pattern_len = pattern_str.len();
+
+        // 超过行宽时 pattern 换行
+        let line_len = inner_indent.len() + pattern_len + 4 + body_str.len();
+        if line_len > ctx.options.line_width && pattern_len > 10 {
+            // pattern 过长，换行
+            result.push_str(&format!(
+                "{}{}\n{}    => {},\n",
+                inner_indent, pattern_str, inner_indent, body_str
+            ));
+        } else {
+            // 对齐 pattern
+            let padding = " ".repeat(max_pattern_len.saturating_sub(pattern_len));
+            result.push_str(&format!(
+                "{}{}{} => {},\n",
+                inner_indent, pattern_str, padding, body_str
+            ));
+        }
     }
 
     result.push_str(&indent);
@@ -555,4 +583,101 @@ fn format_fstring(
     }
     result.push('"');
     result
+}
+
+/// 格式化列表，支持元素过多时换行
+fn format_list(
+    exprs: &[Expr],
+    ctx: &FormatContext,
+) -> String {
+    if exprs.is_empty() {
+        return "[]".to_string();
+    }
+
+    let items: Vec<String> = exprs.iter().map(|e| format_expr(e, ctx)).collect();
+    let single_line = format!("[{}]", items.join(", "));
+
+    // 如果单行不超过行宽，使用单行格式
+    if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
+        single_line
+    } else {
+        // 多行格式：每个元素一行，保持对齐
+        let indent = ctx.indent_str();
+        let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
+        let mut result = "[\n".to_string();
+        for item in items.iter() {
+            result.push_str(&inner_indent);
+            result.push_str(item);
+            result.push_str(",\n");
+        }
+        result.push_str(&indent);
+        result.push(']');
+        result
+    }
+}
+
+/// 格式化字典，支持元素过多时换行
+fn format_dict(
+    pairs: &[(Expr, Expr)],
+    ctx: &FormatContext,
+) -> String {
+    if pairs.is_empty() {
+        return "{}".to_string();
+    }
+
+    let items: Vec<String> = pairs
+        .iter()
+        .map(|(k, v)| format!("{}: {}", format_expr(k, ctx), format_expr(v, ctx)))
+        .collect();
+
+    let single_line = format!("{{{}}}", items.join(", "));
+
+    // 如果单行不超过行宽，使用单行格式
+    if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
+        single_line
+    } else {
+        // 多行格式：每个键值对一行，保持对齐
+        let indent = ctx.indent_str();
+        let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
+        let mut result = "{\n".to_string();
+        for item in items.iter() {
+            result.push_str(&inner_indent);
+            result.push_str(item);
+            result.push_str(",\n");
+        }
+        result.push_str(&indent);
+        result.push('}');
+        result
+    }
+}
+
+/// 格式化字段访问，处理链式调用换行
+fn format_field_access(
+    inner: &Expr,
+    field: &str,
+    ctx: &FormatContext,
+) -> String {
+    let inner_str = format_expr(inner, ctx);
+    let field_str = format!(".{}", field);
+
+    // 计算完整表达式的长度
+    let total_len = inner_str.len() + field_str.len() + ctx.indent_width();
+
+    // 如果不超过行宽，使用单行格式
+    if total_len <= ctx.options.line_width {
+        return format!("{}{}", inner_str, field_str);
+    }
+
+    // 需要换行时，每行一个方法调用，保持缩进
+    let indent = ctx.indent_str();
+    let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
+
+    // 检查是否是链式调用（FieldAccess 嵌套）
+    if let Expr::FieldAccess { .. } = inner {
+        // 链式调用：换行并增加缩进
+        return format!("{}\n{}{}", inner_str, inner_indent, field_str);
+    }
+
+    // 普通字段访问
+    format!("{}{}", inner_str, field_str)
 }
