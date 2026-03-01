@@ -46,6 +46,9 @@ pub fn run_lsp_server() -> Result<()> {
     let mut session = Session::new();
     let mut world = World::new();
 
+    // 加载标准库符号到索引
+    world.load_std_library_symbols(None);
+
     // 主消息循环
     main_loop(&connection, &mut session, &mut world)?;
 

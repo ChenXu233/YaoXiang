@@ -6,6 +6,7 @@ pub mod concurrent;
 pub mod convert;
 pub mod dict;
 pub mod ffi;
+pub mod gen_interfaces;
 pub mod io;
 pub mod list;
 pub mod math;
