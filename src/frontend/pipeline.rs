@@ -478,9 +478,12 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::TypeChecking, duration));
 
-                // 执行死代码分析
-                let warnings =
-                    self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db);
+                // 执行死代码分析（根据配置决定是否启用）
+                let warnings = if self.config.dead_code.enabled {
+                    self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db)
+                } else {
+                    Vec::new()
+                };
 
                 let warning_count = warnings.len();
 
