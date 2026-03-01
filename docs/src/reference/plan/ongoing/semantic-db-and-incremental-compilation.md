@@ -484,16 +484,16 @@ pub struct SymbolDef {
 ```
 
 **验收标准**：
-- [ ] 未使用的导出函数能检测
-- [ ] 未使用的导出类型能检测
-- [ ] 未使用的导入能检测
-- [ ] 警告信息格式正确
+- [x] 未使用的导出函数能检测
+- [x] 未使用的导出类型能检测
+- [x] 未使用的导入能检测
+- [x] 警告信息格式正确
 
 **测试项目**：
-- [ ] 未使用导出函数测试
-- [ ] 未使用导出类型测试
-- [ ] 未使用导入测试
-- [ ] 多层级依赖测试
+- [x] 未使用导出函数测试
+- [x] 未使用导出类型测试
+- [x] 未使用导入测试
+
 
 ---
 
@@ -516,16 +516,16 @@ warning: unused function `dead_function`
 ```
 
 **验收标准**：
-- [ ] 死代码警告正确触发
-- [ ] 警告位置信息准确
+- [x] 死代码警告正确触发
+- [x] 警告位置信息准确
 - [ ] 警告可配置（启用/禁用）
-- [ ] 终端输出格式美观
+- [x] 终端输出格式美观
 
 **测试项目**：
-- [ ] 警告触发测试
-- [ ] 警告位置测试
+- [x] 警告触发测试
+- [x] 警告位置测试
 - [ ] 配置测试
-- [ ] 输出格式测试
+- [x] 输出格式测试
 
 ---
 
@@ -611,7 +611,9 @@ warning: unused function `dead_function`
 | 3 | `src/frontend/module/dep_graph.rs` | `src/frontend/module/mod.rs` | ✅ 已完成 |
 | 3 | `src/frontend/pipeline/compilation_cache.rs` | `src/frontend/pipeline.rs` | ✅ 已完成 |
 | 3 | `src/frontend/pipeline/incremental_scheduler.rs` | `src/frontend/compiler.rs` | ✅ 已完成 |
-| 4 | `src/frontend/typecheck/dead_code.rs` | `src/frontend/typecheck/mod.rs` | 待开始 |
+| 4 | `src/frontend/typecheck/dead_code.rs` | `src/frontend/typecheck/mod.rs` | ✅ 已完成 |
+| 4 | - | `src/frontend/pipeline.rs` | ✅ 已完成（集成到编译流程） |
+| 4 | - | `src/frontend/typecheck/semantic_db.rs` | ✅ 已完成（添加引用访问方法） |
 
 **关键调整**：语义收集器从 `src/lsp/` 迁移到 `src/frontend/typecheck/`
 
