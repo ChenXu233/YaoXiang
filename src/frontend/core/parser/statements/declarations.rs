@@ -363,14 +363,23 @@ fn parse_var_stmt_with_pub(
     };
 
     // Parse variable name (identifier)
-    let name = match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(n)) => n.clone(),
-        _ => {
+    let (name, name_span) = match state.current() {
+        Some(t) => match &t.kind {
+            TokenKind::Identifier(n) => (n.clone(), t.span),
+            _ => {
+                state.error(ParseError::UnexpectedToken {
+                    found: state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof),
+                    span: state.span(),
+                });
+                return None;
+            }
+        },
+        None => {
             state.error(ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
+                found: TokenKind::Eof,
                 span: state.span(),
             });
             return None;
@@ -862,6 +871,7 @@ fn parse_var_stmt_with_pub(
         return Some(Stmt {
             kind: StmtKind::Var {
                 name,
+                name_span,
                 type_annotation,
                 initializer,
                 is_mut,
@@ -875,6 +885,7 @@ fn parse_var_stmt_with_pub(
     Some(Stmt {
         kind: StmtKind::Var {
             name,
+            name_span,
             type_annotation,
             initializer: None,
             is_mut,
@@ -1158,6 +1169,7 @@ pub fn parse_identifier_stmt(
         let saved_position = state.save_position();
         let err_count = state.error_count();
 
+        let name_span = state.current().map(|t| t.span);
         let name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
@@ -1171,6 +1183,7 @@ pub fn parse_identifier_stmt(
                 return None;
             }
         };
+        let name_span = name_span.unwrap_or_else(Span::dummy);
         state.bump(); // consume identifier
 
         // Check if = is followed by (
@@ -1224,6 +1237,7 @@ pub fn parse_identifier_stmt(
             return Some(Stmt {
                 kind: StmtKind::Var {
                     name,
+                    name_span,
                     type_annotation: None,
                     initializer: Some(Box::new(initializer)),
                     is_mut: false,

@@ -48,6 +48,8 @@ pub fn run_lsp_server() -> Result<()> {
 
     // 加载标准库符号到索引
     world.load_std_library_symbols(None);
+    // 加载内置类型到索引
+    world.load_builtin_types();
 
     // 主消息循环
     main_loop(&connection, &mut session, &mut world)?;
@@ -777,6 +779,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
@@ -883,6 +897,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,

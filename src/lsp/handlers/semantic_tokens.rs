@@ -178,7 +178,8 @@ fn convert_to_lsp_tokens(
         // SemanticDB 中的 line 是 1-indexed，LSP 是 0-indexed
         let line = token.span.start.line.saturating_sub(1) as u32;
         let start = token.span.start.column.saturating_sub(1) as u32;
-        let length = token.name.len() as u32;
+        // 使用 span 计算实际长度，而不是 token 名字长度
+        let length = (token.span.end.column - token.span.start.column) as u32;
 
         let delta_line = line - prev_line;
         let delta_start = if delta_line == 0 {

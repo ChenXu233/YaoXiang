@@ -123,6 +123,42 @@ impl<'a> ExpressionInferrer<'a> {
         self.scope.vars()
     }
 
+    /// 变量赋值操作 - 统一处理变量赋值并写回 scope
+    ///
+    /// 统一变量类型并写回 scope，确保后续类型推断能获取最新类型。
+    /// 如果变量不存在，则创建新变量。
+    /// 这是修复 for 循环等场景类型丢失的关键方法。
+    /// 关键：直接使用右侧表达式的类型（new_ty），而不是依赖 solver.resolve()。
+    pub fn assign_var(
+        &mut self,
+        name: &str,
+        new_ty: crate::frontend::core::type_system::MonoType,
+    ) {
+        // 直接使用右侧表达式的类型更新变量
+        // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
+        self.scope.update_var(
+            name,
+            crate::frontend::core::type_system::PolyType::mono(new_ty),
+        );
+    }
+
+    /// 退出循环作用域时，将内部声明的变量提升到外层作用域
+    ///
+    /// 解决循环退出后变量丢失的问题，确保 IR 生成阶段能获取变量类型。
+    fn promote_loop_vars_to_parent_scope(&mut self) {
+        // 获取当前 scope（循环内部）的所有变量
+        let current_scope_vars = self.scope.vars();
+
+        // 退出当前 scope
+        self.scope.exit_scope();
+
+        // 将循环内声明的变量添加到外层 scope
+        // 无论外层是否有同名变量，都需要更新（因为类型可能已改变）
+        for (name, poly) in current_scope_vars {
+            self.scope.add_var(name, poly);
+        }
+    }
+
     /// 进入新的作用域
     pub fn enter_scope(&mut self) {
         self.scope.enter_scope();
@@ -290,9 +326,10 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Var(name, span) => {
                 let poly = self.scope.get_var(name).cloned();
                 if let Some(poly) = poly {
-                    let ty = self.solver.instantiate(&poly);
-                    let resolved = self.solver.resolve_type(&ty);
-                    Ok(resolved)
+                    // 关键：直接使用 scope 中存储的类型！
+                    // 因为 assign_var 已经将更新后的类型写入了 scope
+                    // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
+                    Ok(poly.body)
                 } else {
                     Err(ErrorCodeDefinition::unknown_variable(name)
                         .at(*span)
@@ -310,9 +347,8 @@ impl<'a> ExpressionInferrer<'a> {
                     if let crate::frontend::core::parser::ast::Expr::Var(var_name, _) =
                         left.as_ref()
                     {
-                        if let Some(poly) = self.scope.get_var(var_name).cloned() {
-                            let _ = self.solver.unify(&poly.body, &right_ty);
-                        }
+                        // 统一变量类型并写回 scope，确保后续类型推断正确
+                        self.assign_var(var_name, right_ty);
                     }
                     return Ok(MonoType::Void);
                 }
@@ -601,7 +637,8 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.scope.enter_scope();
                 let result = self.infer_block(body, true, None);
-                self.scope.exit_scope();
+                // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
+                self.promote_loop_vars_to_parent_scope();
 
                 self.exit_loop(label.as_deref());
 
@@ -636,7 +673,9 @@ impl<'a> ExpressionInferrer<'a> {
                     .try_add_var(var.clone(), PolyType::mono(element_type), *span)
                     .and_then(|_| self.infer_block(body, true, None));
 
-                self.scope.exit_scope();
+                // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
+                self.promote_loop_vars_to_parent_scope();
+
                 self.exit_loop(label.as_deref());
                 result
             }
