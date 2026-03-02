@@ -15,6 +15,7 @@ pub fn format_stmt(
         StmtKind::Expr(expr) => format_expr(expr, ctx),
         StmtKind::Var {
             name,
+            name_span: _,
             type_annotation,
             initializer,
             is_mut,

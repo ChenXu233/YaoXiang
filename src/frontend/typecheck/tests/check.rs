@@ -16,6 +16,7 @@ fn test_check_var_with_initializer() {
     let stmt = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: None,
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
@@ -39,6 +40,7 @@ fn test_check_var_with_type_annotation() {
     let stmt = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: Some(ast::Type::Name("Int".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
@@ -63,6 +65,7 @@ fn test_check_var_type_mismatch() {
     let stmt = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: Some(ast::Type::Name("String".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
@@ -119,6 +122,7 @@ fn test_check_type_alias() {
     let var_decl = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: Some(ast::Type::Name("MyInt".to_string())),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),

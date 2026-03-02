@@ -568,6 +568,7 @@ impl AstToIrGenerator {
             ),
             ast::StmtKind::Var {
                 name,
+                name_span: _,
                 type_annotation,
                 initializer,
                 is_mut: _,
@@ -1281,6 +1282,7 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::Var {
                 name,
+                name_span: _,
                 type_annotation,
                 initializer,
                 is_mut,

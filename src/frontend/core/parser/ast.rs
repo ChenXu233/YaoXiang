@@ -184,6 +184,8 @@ pub enum StmtKind {
     /// Variable declaration: [mut] name[: type] [= expr]
     Var {
         name: String,
+        /// 变量名的源码位置（用于代码染色等）
+        name_span: Span,
         type_annotation: Option<Type>,
         initializer: Option<Box<Expr>>,
         is_mut: bool,

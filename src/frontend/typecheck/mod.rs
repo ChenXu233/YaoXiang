@@ -485,14 +485,10 @@ impl TypeChecker {
             }
         }
 
-        // 对局部变量类型进行求解，将类型变量替换为具体类型
-        // 注意：必须使用 body_checker 的 solver，因为约束是在那里收集的
-        if let Some(ref mut bc) = self.body_checker {
-            let solver = bc.solver();
-            for (_, ty) in local_var_types.iter_mut() {
-                *ty = solver.resolve(ty);
-            }
-        }
+        // 注意：由于 body_checker.solver 是克隆的，无法通过 solver.resolve() 来解析类型变量。
+        // 幸运的是，assign_var 方法已经将更新后的类型写回到了 scope 中，
+        // 所以这里直接使用 scope 中的类型即可，不需要额外 resolve。
+        // （注：如果后续需要支持更复杂的泛型推导，可能需要重新设计 solver 的共享机制）
 
         // 语义收集：遍历 AST 构建 SemanticDB
         // 一次遍历，多处使用 —— 利用 typecheck 已有的类型信息
@@ -1106,6 +1102,7 @@ impl TypeChecker {
                 }
                 StmtKind::Var {
                     name,
+                    name_span,
                     is_mut,
                     initializer,
                     ..
@@ -1123,7 +1120,7 @@ impl TypeChecker {
                             name: name.clone(),
                             token_type: SemanticTokenType::Variable,
                             modifiers,
-                            span: stmt.span,
+                            span: *name_span,
                         },
                     );
                     global_symbols.push(name.clone());
@@ -1227,6 +1224,7 @@ impl TypeChecker {
         match &stmt.kind {
             StmtKind::Var {
                 name,
+                name_span,
                 is_mut,
                 initializer,
                 ..
@@ -1243,7 +1241,7 @@ impl TypeChecker {
                         name: name.clone(),
                         token_type: semantic_db::SemanticTokenType::LocalVariable,
                         modifiers,
-                        span: stmt.span,
+                        span: *name_span,
                     },
                 );
                 if let Some(init) = initializer {

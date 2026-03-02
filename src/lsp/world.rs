@@ -156,6 +156,26 @@ impl World {
         }
     }
 
+    /// 加载内置类型到符号索引
+    ///
+    /// 将 Int, Float, Bool, String, Void, Char 等内置类型添加到符号索引，
+    /// 使 LSP 功能（如 hover、definition）能够识别这些内置类型。
+    pub fn load_builtin_types(&mut self) {
+        use crate::util::span::Span;
+
+        // YaoXiang 语言的核心内置类型
+        let builtin_types = ["Int", "Float", "Bool", "String", "Void", "Char"];
+
+        for type_name in builtin_types {
+            self.symbol_index.add(IndexedSymbol {
+                name: type_name.to_string(),
+                kind: SymbolKind::Type,
+                arity: None,
+                location: SymbolLocation::new("builtin://types".to_string(), Span::dummy()),
+            });
+        }
+    }
+
     /// 从解析后的 AST 更新指定文件的符号索引
     ///
     /// 先移除该文件的旧符号，再从 AST 提取新符号。
@@ -614,6 +634,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span::dummy(),
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
@@ -685,6 +706,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "old".to_string(),
+                    name_span: Span::dummy(),
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
@@ -703,6 +725,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "new_var".to_string(),
+                    name_span: Span::dummy(),
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,

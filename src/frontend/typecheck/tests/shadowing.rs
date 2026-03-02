@@ -124,6 +124,7 @@ fn test_var_reassignment_same_scope_ok() {
     let stmt1 = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: None,
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(1),
@@ -137,6 +138,7 @@ fn test_var_reassignment_same_scope_ok() {
     let stmt2 = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: None,
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(2),
@@ -172,6 +174,7 @@ fn test_var_shadowing_in_inner_scope() {
     let inner_stmt = ast::Stmt {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
+            name_span: create_dummy_span(),
             type_annotation: None,
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(2),
@@ -341,6 +344,7 @@ fn test_if_block_creates_scope() {
                 stmts: vec![ast::Stmt {
                     kind: ast::StmtKind::Var {
                         name: "inner_var".to_string(),
+                        name_span: create_dummy_span(),
                         type_annotation: None,
                         initializer: Some(Box::new(ast::Expr::Lit(
                             crate::frontend::core::lexer::tokens::Literal::Int(42),

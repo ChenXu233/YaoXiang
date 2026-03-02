@@ -43,6 +43,8 @@ pub struct StatementChecker {
     collected_errors: Vec<Diagnostic>,
     /// 是否启用错误收集模式（收集所有错误而非短路返回）
     collect_all_errors: bool,
+    /// 保存函数体的变量（在退出函数作用域后保留）
+    function_local_vars: HashMap<String, PolyType>,
 }
 
 impl StatementChecker {
@@ -57,6 +59,7 @@ impl StatementChecker {
             is_top_level: true,
             collected_errors: Vec::new(),
             collect_all_errors: false,
+            function_local_vars: HashMap::new(),
         }
     }
 
@@ -131,8 +134,16 @@ impl StatementChecker {
     }
 
     /// 获取所有变量（从所有作用域，内层覆盖外层）
+    /// 包含函数体变量（在退出作用域后保留）
     pub fn vars(&self) -> HashMap<String, PolyType> {
-        self.scope.vars()
+        let mut result = self.scope.vars();
+        // 合并退出作用域前保存的变量
+        for (name, poly) in &self.function_local_vars {
+            if !result.contains_key(name) {
+                result.insert(name.clone(), poly.clone());
+            }
+        }
+        result
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -151,15 +162,19 @@ impl StatementChecker {
         self.scope.var_in_current_scope(name)
     }
 
-    /// 统一变量类型并更新（用于赋值操作）
-    fn unify_and_update_var(
+    /// 变量赋值操作 - 统一处理所有作用域的变量赋值
+    ///
+    /// 统一变量类型并写回 scope，确保后续类型推断能获取最新类型。
+    /// 修复了之前在当前作用域赋值时未写回导致 for 循环等场景类型丢失的问题。
+    /// 关键：直接使用右侧表达式的类型（new_ty），而不是依赖 solver.resolve()。
+    fn assign_var(
         &mut self,
         name: &str,
         new_ty: MonoType,
     ) {
-        let existing_poly = self.scope.get_var(name).unwrap().clone();
-        let _ = self.solver.unify(&existing_poly.body, &new_ty);
-        self.scope.update_var(name, existing_poly);
+        // 直接使用右侧表达式的类型更新变量
+        // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
+        self.scope.update_var(name, PolyType::mono(new_ty));
     }
 
     /// 进入新的作用域
@@ -230,6 +245,11 @@ impl StatementChecker {
                 }
             }
 
+            // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
+            for (name, poly) in self.scope.vars() {
+                self.function_local_vars.insert(name, poly);
+            }
+
             // 退出函数作用域
             self.scope.exit_scope();
             self.is_top_level = was_top_level;
@@ -255,6 +275,11 @@ impl StatementChecker {
                         err = Some(e);
                     }
                 }
+            }
+
+            // 退出函数作用域前，保存所有变量（解决退出作用域后变量丢失的问题）
+            for (name, poly) in self.scope.vars() {
+                self.function_local_vars.insert(name, poly);
             }
 
             // 退出函数作用域
@@ -551,12 +576,11 @@ impl StatementChecker {
                 let right_ty = self.check_expr(right)?;
 
                 if let Expr::Var(name, _) = left.as_ref() {
-                    if self.scope.var_in_current_scope(name) {
-                        let poly = self.scope.get_var(name).unwrap().clone();
-                        let _ = self.solver.unify(&poly.body, &right_ty);
-                    } else if self.scope.var_in_any_scope(name) {
-                        self.unify_and_update_var(name, right_ty);
+                    if self.scope.var_in_any_scope(name) {
+                        // 统一变量类型并写回 scope，确保后续类型推断正确
+                        self.assign_var(name, right_ty);
                     } else {
+                        // 新变量：创建类型变量并统一
                         let ty = self.solver.new_var();
                         let _ = self.solver.unify(&ty, &right_ty);
                         self.scope.add_var(name.clone(), PolyType::mono(ty));
@@ -680,13 +704,13 @@ impl StatementChecker {
         };
 
         if self.scope.var_in_current_scope(name) {
-            let existing_poly = self.scope.get_var(name).unwrap().clone();
-            let _ = self.solver.unify(&existing_poly.body, &ty);
+            // 统一变量类型并写回 scope，确保后续类型推断正确
+            self.assign_var(name, ty);
             return Ok(());
         }
 
         if self.scope.var_in_any_scope(name) {
-            self.unify_and_update_var(name, ty);
+            self.assign_var(name, ty);
             return Ok(());
         }
 
@@ -977,18 +1001,115 @@ impl StatementChecker {
 
     /// 检查表达式
     ///
-    /// 直接使用共享的 ScopeManager，无需拷贝变量。
+    /// 直接使用同一个 ScopeManager 和 Solver，确保变量状态正确传递。
+    /// 这是方案 C 的核心。
+    /// 直接使用同一个 scope 和 solver，确保类型状态正确传递
     pub fn check_expr(
         &mut self,
         expr: &Expr,
     ) -> Result<MonoType, Box<Diagnostic>> {
-        let mut inferrer = super::ExpressionInferrer::with_native_signatures(
-            &mut self.scope,
-            &mut self.solver,
-            &self.overload_candidates,
-            &self.native_signatures,
-        );
+        match expr {
+            // 变量：直接从 scope 中读取
+            Expr::Var(name, span) => {
+                if let Some(poly) = self.scope.get_var(name).cloned() {
+                    // 直接返回 scope 中的类型
+                    Ok(poly.body)
+                } else {
+                    Err(Box::new(
+                        ErrorCodeDefinition::unknown_variable(name)
+                            .at(*span)
+                            .build(),
+                    ))
+                }
+            }
+            // 列表字面量：直接处理
+            Expr::List(elems, _) => {
+                if elems.is_empty() {
+                    let elem_ty = self.solver.new_var();
+                    Ok(MonoType::List(Box::new(elem_ty)))
+                } else {
+                    let mut iter = elems.iter();
+                    let first = iter.next().expect("non-empty list");
+                    let mut elem_ty = self.check_expr(first)?;
+                    for e in iter {
+                        let ty = self.check_expr(e)?;
+                        let _ = self.solver.unify(&elem_ty, &ty);
+                        elem_ty = self.solver.resolve_type(&elem_ty);
+                    }
+                    Ok(MonoType::List(Box::new(elem_ty)))
+                }
+            }
+            // 二元运算 = 赋值：直接处理
+            Expr::BinOp {
+                op,
+                left,
+                right,
+                span: _,
+            } => {
+                use crate::frontend::core::parser::ast::BinOp;
+                let right_ty = self.check_expr(right)?;
 
-        inferrer.infer_expr(expr).map_err(Box::new)
+                if matches!(op, BinOp::Assign) {
+                    if let Expr::Var(var_name, _) = left.as_ref() {
+                        self.assign_var(var_name, right_ty);
+                    }
+                    return Ok(MonoType::Void);
+                }
+
+                // 其他二元运算：直接处理
+                let left_ty = self.check_expr(left)?;
+
+                match op {
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
+                        if let (MonoType::Int(_), MonoType::Int(_)) = (&left_ty, &right_ty) {
+                            Ok(left_ty)
+                        } else if let (MonoType::Float(_), MonoType::Float(_)) =
+                            (&left_ty, &right_ty)
+                        {
+                            Ok(left_ty)
+                        } else if let (MonoType::String, MonoType::String) = (&left_ty, &right_ty) {
+                            Ok(MonoType::String)
+                        } else if let (MonoType::List(left_elem), MonoType::List(right_elem)) =
+                            (&left_ty, &right_ty)
+                        {
+                            let _ = self.solver.unify(left_elem, right_elem);
+                            let elem_ty = self.solver.resolve_type(left_elem);
+                            Ok(MonoType::List(Box::new(elem_ty)))
+                        } else {
+                            Ok(self.solver.new_var())
+                        }
+                    }
+                    BinOp::Range => {
+                        let elem_ty = if left_ty == right_ty {
+                            left_ty
+                        } else {
+                            let _ = self.solver.unify(&left_ty, &right_ty);
+                            left_ty
+                        };
+                        Ok(MonoType::List(Box::new(elem_ty)))
+                    }
+                    _ => {
+                        // 其他操作符委托给 ExpressionInferrer
+                        let mut inferrer = super::ExpressionInferrer::with_native_signatures(
+                            &mut self.scope,
+                            &mut self.solver,
+                            &self.overload_candidates,
+                            &self.native_signatures,
+                        );
+                        inferrer.infer_expr(expr).map_err(Box::new)
+                    }
+                }
+            }
+            // 其他表达式：委托给 ExpressionInferrer
+            _ => {
+                let mut inferrer = super::ExpressionInferrer::with_native_signatures(
+                    &mut self.scope,
+                    &mut self.solver,
+                    &self.overload_candidates,
+                    &self.native_signatures,
+                );
+                inferrer.infer_expr(expr).map_err(Box::new)
+            }
+        }
     }
 }

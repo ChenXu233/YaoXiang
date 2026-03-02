@@ -156,6 +156,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
