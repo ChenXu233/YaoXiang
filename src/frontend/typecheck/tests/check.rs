@@ -41,7 +41,10 @@ fn test_check_var_with_type_annotation() {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
             name_span: create_dummy_span(),
-            type_annotation: Some(ast::Type::Name("Int".to_string())),
+            type_annotation: Some(ast::Type::Name {
+                name: "Int".to_string(),
+                span: create_dummy_span(),
+            }),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
@@ -66,7 +69,10 @@ fn test_check_var_type_mismatch() {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
             name_span: create_dummy_span(),
-            type_annotation: Some(ast::Type::Name("String".to_string())),
+            type_annotation: Some(ast::Type::Name {
+                name: "String".to_string(),
+                span: create_dummy_span(),
+            }),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
@@ -112,7 +118,11 @@ fn test_check_type_alias() {
     let type_def = ast::Stmt {
         kind: ast::StmtKind::TypeDef {
             name: "MyInt".to_string(),
-            definition: ast::Type::Name("Int".to_string()),
+            name_span: create_dummy_span(),
+            definition: ast::Type::Name {
+                name: "Int".to_string(),
+                span: create_dummy_span(),
+            },
             generic_params: Vec::new(),
         },
         span: create_dummy_span(),
@@ -123,7 +133,10 @@ fn test_check_type_alias() {
         kind: ast::StmtKind::Var {
             name: "x".to_string(),
             name_span: create_dummy_span(),
-            type_annotation: Some(ast::Type::Name("MyInt".to_string())),
+            type_annotation: Some(ast::Type::Name {
+                name: "MyInt".to_string(),
+                span: create_dummy_span(),
+            }),
             initializer: Some(Box::new(ast::Expr::Lit(
                 crate::frontend::core::lexer::tokens::Literal::Int(42),
                 create_dummy_span(),
@@ -199,18 +212,27 @@ fn test_check_fn_def() {
             params: vec![
                 ast::Param {
                     name: "a".to_string(),
-                    ty: Some(ast::Type::Name("Int".to_string())),
+                    ty: Some(ast::Type::Name {
+                        name: "Int".to_string(),
+                        span: create_dummy_span(),
+                    }),
                     is_mut: false,
                     span: create_dummy_span(),
                 },
                 ast::Param {
                     name: "b".to_string(),
-                    ty: Some(ast::Type::Name("Int".to_string())),
+                    ty: Some(ast::Type::Name {
+                        name: "Int".to_string(),
+                        span: create_dummy_span(),
+                    }),
                     is_mut: false,
                     span: create_dummy_span(),
                 },
             ],
-            return_type: Some(ast::Type::Name("Int".to_string())),
+            return_type: Some(ast::Type::Name {
+                name: "Int".to_string(),
+                span: create_dummy_span(),
+            }),
             body: Box::new(ast::Block {
                 stmts: vec![],
                 expr: Some(Box::new(ast::Expr::BinOp {

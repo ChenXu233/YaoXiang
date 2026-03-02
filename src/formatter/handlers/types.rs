@@ -5,7 +5,7 @@ use crate::frontend::core::parser::ast::*;
 /// 格式化类型
 pub fn format_type(ty: &Type) -> String {
     match ty {
-        Type::Name(name) => name.clone(),
+        Type::Name { name, .. } => name.clone(),
         Type::Int(size) => format!("i{}", size),
         Type::Float(size) => format!("f{}", size),
         Type::Char => "Char".to_string(),
@@ -18,7 +18,7 @@ pub fn format_type(ty: &Type) -> String {
             bindings,
             interfaces,
         } => format_struct_type(fields, bindings, interfaces),
-        Type::NamedStruct { name, fields } => {
+        Type::NamedStruct { name, fields, .. } => {
             let fields_str = format_struct_fields(fields);
             format!("{} {{ {} }}", name, fields_str)
         }
@@ -82,7 +82,7 @@ pub fn format_type(ty: &Type) -> String {
         Type::Result(ok, err) => {
             format!("Result[{}, {}]", format_type(ok), format_type(err))
         }
-        Type::Generic { name, args } => {
+        Type::Generic { name, args, .. } => {
             let args_str: Vec<String> = args.iter().map(format_type).collect();
             format!("{}[{}]", name, args_str.join(", "))
         }
@@ -90,6 +90,7 @@ pub fn format_type(ty: &Type) -> String {
             host_type,
             assoc_name,
             assoc_args,
+            ..
         } => {
             let base = format!("{}::{}", format_type(host_type), assoc_name);
             if assoc_args.is_empty() {
@@ -103,7 +104,9 @@ pub fn format_type(ty: &Type) -> String {
             let items: Vec<String> = types.iter().map(format_type).collect();
             items.join(" + ")
         }
-        Type::Literal { name, base_type: _ } => name.clone(),
+        Type::Literal {
+            name, base_type: _, ..
+        } => name.clone(),
         Type::Ptr(inner) => format!("*{}", format_type(inner)),
         Type::MetaType { args } => {
             if args.is_empty() {

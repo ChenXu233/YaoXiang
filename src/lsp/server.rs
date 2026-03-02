@@ -20,10 +20,13 @@ use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shu
 use lsp_types::request::HoverRequest;
 use lsp_types::request::SemanticTokensFullRequest;
 use lsp_types::request::SemanticTokensFullDeltaRequest;
+use lsp_types::request::SemanticTokensRefresh;
 use lsp_types::request::Formatting;
 use lsp_types::request::RangeFormatting;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
+
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::lsp::handlers;
 use crate::lsp::protocol;
@@ -62,6 +65,20 @@ pub fn run_lsp_server() -> Result<()> {
 }
 
 /// 主消息循环
+static OUTGOING_REQUEST_ID: AtomicI32 = AtomicI32::new(1);
+
+fn request_semantic_tokens_refresh(connection: &Connection) {
+    let id = OUTGOING_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    let req = lsp_server::Request {
+        id: id.into(),
+        method: <SemanticTokensRefresh as lsp_types::request::Request>::METHOD.to_string(),
+        params: serde_json::Value::Null,
+    };
+    if let Err(e) = connection.sender.send(Message::Request(req)) {
+        warn!("failed to request semanticTokens refresh: {}", e);
+    }
+}
+
 fn main_loop(
     connection: &Connection,
     session: &mut Session,
@@ -198,11 +215,17 @@ fn handle_request(
 
         // textDocument/semanticTokens/full
         m if m == <SemanticTokensFullRequest as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::SemanticTokensParams>(req.params) {
                 Ok(params) => {
+                    let uri = params.text_document.uri.as_str();
+                    let document_text = session.document_store().get(uri).map(|d| d.content());
                     let (db, cache) = world.semantic_db_and_cache();
-                    let result =
-                        handlers::semantic_tokens::handle_semantic_tokens_full(db, cache, params);
+                    let result = handlers::semantic_tokens::handle_semantic_tokens_full(
+                        db,
+                        cache,
+                        document_text,
+                        params,
+                    );
                     Some(protocol::ok_response(req.id, result))
                 }
                 Err(e) => {
@@ -217,11 +240,16 @@ fn handle_request(
 
         // textDocument/semanticTokens/full/delta
         m if m == <SemanticTokensFullDeltaRequest as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::SemanticTokensDeltaParams>(req.params) {
                 Ok(params) => {
+                    let uri = params.text_document.uri.as_str();
+                    let document_text = session.document_store().get(uri).map(|d| d.content());
                     let (db, cache) = world.semantic_db_and_cache();
                     let result = handlers::semantic_tokens::handle_semantic_tokens_full_delta(
-                        db, cache, params,
+                        db,
+                        cache,
+                        document_text,
+                        params,
                     );
                     Some(protocol::ok_response(req.id, result))
                 }
@@ -293,6 +321,7 @@ fn handle_notification(
         m if m == <Initialized as lsp_types::notification::Notification>::METHOD => {
             info!("← 通知: initialized");
             handlers::initialize::handle_initialized(session);
+            request_semantic_tokens_refresh(connection);
         }
 
         // exit

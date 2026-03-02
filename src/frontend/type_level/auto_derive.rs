@@ -61,7 +61,7 @@ pub fn can_auto_derive(
     // 检查所有字段是否都实现了该 trait
     for field in fields {
         let field_type_name = match &field.ty {
-            Type::Name(name) => name.clone(),
+            Type::Name { name, .. } => name.clone(),
             _ => return false, // 复杂类型暂不支持自动派生
         };
 

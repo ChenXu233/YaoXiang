@@ -89,6 +89,7 @@ pub enum SemanticTokenType {
     String,
     /// 数字字面量
     Number,
+    EnumMember,
 }
 
 impl SemanticTokenType {
@@ -109,6 +110,7 @@ impl SemanticTokenType {
             SemanticTokenType::Keyword => 8,
             SemanticTokenType::String => 9,
             SemanticTokenType::Number => 10,
+            SemanticTokenType::EnumMember => 11,
         }
     }
 
@@ -126,6 +128,7 @@ impl SemanticTokenType {
             "keyword",       // 8
             "string",        // 9
             "number",        // 10
+            "enumMember",    // 11
         ]
     }
 }
@@ -781,14 +784,16 @@ mod tests {
         assert_eq!(SemanticTokenType::Namespace.index(), 5);
         assert_eq!(SemanticTokenType::Parameter.index(), 6);
         assert_eq!(SemanticTokenType::TypeParameter.index(), 7);
+        assert_eq!(SemanticTokenType::EnumMember.index(), 11);
     }
 
     #[test]
     fn test_token_type_legend() {
         let legend = SemanticTokenType::legend();
-        assert_eq!(legend.len(), 11);
+        assert_eq!(legend.len(), 12);
         assert_eq!(legend[0], "function");
         assert_eq!(legend[1], "type");
+        assert_eq!(legend[11], "enumMember");
     }
 
     #[test]

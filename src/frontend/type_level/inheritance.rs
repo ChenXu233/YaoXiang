@@ -192,8 +192,11 @@ impl<'a> InheritanceChecker<'a> {
         self.graph.nodes.insert(name.to_string());
 
         for parent in parents {
-            if let crate::frontend::core::parser::ast::Type::Name(n) = parent {
-                self.graph.add_edge(name, n);
+            if let crate::frontend::core::parser::ast::Type::Name {
+                name: parent_name, ..
+            } = parent
+            {
+                self.graph.add_edge(name, parent_name);
             }
         }
     }

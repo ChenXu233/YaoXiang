@@ -201,6 +201,8 @@ pub enum StmtKind {
     /// Type definition: `RFC-010: `Name: Type = { ... }`
     TypeDef {
         name: String,
+        /// Type name span
+        name_span: Span,
         definition: Type,
         /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
         generic_params: Vec<String>,
@@ -208,6 +210,8 @@ pub enum StmtKind {
     /// Use statement: `use module.path` or `use module.{a, b} as c, d`
     Use {
         path: String,
+        /// Module path span
+        path_span: Span,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
     },
@@ -260,6 +264,7 @@ pub enum StmtKind {
 #[derive(Debug, Clone)]
 pub struct VariantDef {
     pub name: String,
+    pub name_span: Span,
     pub params: Vec<(Option<String>, Type)>,
     pub span: Span,
 }
@@ -362,7 +367,10 @@ pub struct GenericParam {
 /// Type
 #[derive(Debug, Clone)]
 pub enum Type {
-    Name(String),
+    Name {
+        name: String,
+        span: Span,
+    },
     Int(usize),
     Float(usize),
     Char,
@@ -378,6 +386,7 @@ pub enum Type {
     },
     NamedStruct {
         name: String,
+        name_span: Span,
         fields: Vec<StructField>,
     },
     Union(Vec<(String, Option<Type>)>),
@@ -393,6 +402,7 @@ pub enum Type {
     Result(Box<Type>, Box<Type>),
     Generic {
         name: String,
+        name_span: Span,
         args: Vec<Type>,
     },
     /// 关联类型访问（如 T::Item）
@@ -401,6 +411,7 @@ pub enum Type {
         host_type: Box<Type>,
         /// 关联类型名称
         assoc_name: String,
+        assoc_name_span: Span,
         /// 关联类型参数（如果有关联类型也是泛型的）
         assoc_args: Vec<Type>,
     },
@@ -411,6 +422,7 @@ pub enum Type {
     Literal {
         /// The literal name (e.g., "5")
         name: String,
+        name_span: Span,
         /// The underlying type (e.g., Int)
         base_type: Box<Type>,
     },

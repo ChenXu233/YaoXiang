@@ -10,6 +10,7 @@ use crate::frontend::type_level::auto_derive::{
 use crate::frontend::type_level::trait_bounds::TraitTable;
 use crate::frontend::type_level::std_traits::{init_std_traits, init_primitive_impls};
 use crate::frontend::core::parser::ast::{Type, StructField};
+use crate::util::span::Span;
 
 #[test]
 fn test_builtin_derives_list() {
@@ -75,8 +76,22 @@ fn test_auto_derive_with_primitive_fields() {
 
     // 定义 Point 类型（Int 字段）
     let point_fields: Vec<StructField> = vec![
-        StructField::new("x".to_string(), false, Type::Name("Int".to_string())),
-        StructField::new("y".to_string(), false, Type::Name("Int".to_string())),
+        StructField::new(
+            "x".to_string(),
+            false,
+            Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            },
+        ),
+        StructField::new(
+            "y".to_string(),
+            false,
+            Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            },
+        ),
     ];
 
     // 检查是否可以自动派生 Clone
@@ -104,8 +119,22 @@ fn test_auto_derive_not_derive_non_primitive() {
 
     // 定义 Point 类型
     let point_fields: Vec<StructField> = vec![
-        StructField::new("x".to_string(), false, Type::Name("Int".to_string())),
-        StructField::new("y".to_string(), false, Type::Name("Int".to_string())),
+        StructField::new(
+            "x".to_string(),
+            false,
+            Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            },
+        ),
+        StructField::new(
+            "y".to_string(),
+            false,
+            Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            },
+        ),
     ];
 
     // 检查是否可以自动派生 Clone（Int 还没有实现 Clone）

@@ -31,8 +31,11 @@ pub fn format_stmt(
             name,
             definition,
             generic_params,
+            ..
         } => format_type_def(name, definition, generic_params),
-        StmtKind::Use { path, items, alias } => format_use(path, items, alias),
+        StmtKind::Use {
+            path, items, alias, ..
+        } => format_use(path, items, alias),
         StmtKind::Fn {
             name,
             generic_params,

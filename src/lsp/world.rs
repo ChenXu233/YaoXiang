@@ -683,7 +683,11 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::TypeDef {
                     name: "Point".to_string(),
-                    definition: crate::frontend::core::parser::ast::Type::Name("Int".to_string()),
+                    name_span: dummy_span(),
+                    definition: crate::frontend::core::parser::ast::Type::Name {
+                        name: "Int".to_string(),
+                        span: dummy_span(),
+                    },
                     generic_params: vec![],
                 },
                 span: dummy_span(),
@@ -809,6 +813,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Use {
                     path: "std.io".to_string(),
+                    path_span: dummy_span(),
                     items: None,
                     alias: None,
                 },
@@ -836,6 +841,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Use {
                     path: "std.io".to_string(),
+                    path_span: dummy_span(),
                     items: Some(vec!["println".to_string()]),
                     alias: None,
                 },

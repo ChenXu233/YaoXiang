@@ -1007,6 +1007,7 @@ impl AstToIrGenerator {
             ast::Type::NamedStruct {
                 name: struct_name,
                 fields,
+                ..
             } => {
                 // 记录结构体定义（用于调用时填充默认值）
                 self.struct_definitions

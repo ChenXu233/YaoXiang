@@ -1,6 +1,6 @@
 //! # matrix_multiply - 矩阵乘法
 //!
-//! 测试嵌套循环和多维数组操作
+//! 测试嵌套循环和多维数组的执行效率
 
 create_matrix: (size: Int) -> List[List[Int]] = {
     mut matrix = [];

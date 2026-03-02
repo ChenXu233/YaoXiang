@@ -390,7 +390,7 @@ impl fmt::Display for MonoType {
 impl From<ast::Type> for MonoType {
     fn from(ast_type: ast::Type) -> Self {
         match ast_type {
-            ast::Type::Name(name) => MonoType::TypeRef(name),
+            ast::Type::Name { name, .. } => MonoType::TypeRef(name),
             ast::Type::Int(n) => MonoType::Int(n),
             ast::Type::Float(n) => MonoType::Float(n),
             ast::Type::Char => MonoType::Char,
@@ -455,7 +455,7 @@ impl From<ast::Type> for MonoType {
                 name: "Result".to_string(),
                 variants: vec!["Ok".to_string(), "Err".to_string()],
             }),
-            ast::Type::Generic { name, args } => {
+            ast::Type::Generic { name, args, .. } => {
                 // 泛型类型，如 List<T>
                 MonoType::TypeRef(format!(
                     "{}<{}>",
@@ -470,13 +470,14 @@ impl From<ast::Type> for MonoType {
                 host_type,
                 assoc_name,
                 assoc_args,
+                ..
             } => MonoType::AssocType {
                 host_type: Box::new(MonoType::from(*host_type)),
                 assoc_name,
                 assoc_args: assoc_args.into_iter().map(MonoType::from).collect(),
             },
             // NamedStruct and Sum types (placeholder implementations)
-            ast::Type::NamedStruct { name, fields } => {
+            ast::Type::NamedStruct { name, fields, .. } => {
                 let (field_names, field_types, field_mutability) = fields
                     .into_iter()
                     .map(|f| (f.name, MonoType::from(f.ty), f.is_mut))
@@ -509,7 +510,9 @@ impl From<ast::Type> for MonoType {
                         .join(" | ")
                 ))
             }
-            ast::Type::Literal { name: _, base_type } => {
+            ast::Type::Literal {
+                name: _, base_type, ..
+            } => {
                 // Literal type - for now, convert to the base type
                 // The actual literal value is handled during const evaluation
                 MonoType::from(*base_type)

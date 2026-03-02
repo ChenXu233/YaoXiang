@@ -424,7 +424,7 @@ impl Default for CrossModuleMonomorphizer {
 #[allow(clippy::only_used_in_recursion)]
 fn ast_type_to_mono_type(ty: &Type) -> MonoType {
     match ty {
-        Type::Name(name) => MonoType::TypeRef(name.clone()),
+        Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
         Type::Int(n) => MonoType::Int(*n),
         Type::Float(n) => MonoType::Float(*n),
         Type::Char => MonoType::Char,
@@ -446,7 +446,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
             interfaces: vec![],
         }),
-        Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
+        Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
             name: name.clone(),
             fields: fields
                 .iter()
@@ -483,7 +483,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
         },
         Type::Option(inner) => MonoType::Union(vec![ast_type_to_mono_type(inner)]),
         Type::Result(_, _) => MonoType::TypeRef("Result".to_string()),
-        Type::Generic { name, args } => {
+        Type::Generic { name, args, .. } => {
             let args_str = args
                 .iter()
                 .map(|t| ast_type_to_mono_type(t).type_name())
@@ -496,12 +496,15 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             host_type,
             assoc_name,
             assoc_args,
+            ..
         } => MonoType::AssocType {
             host_type: Box::new(ast_type_to_mono_type(host_type)),
             assoc_name: assoc_name.clone(),
             assoc_args: assoc_args.iter().map(ast_type_to_mono_type).collect(),
         },
-        Type::Literal { name, base_type } => {
+        Type::Literal {
+            name, base_type, ..
+        } => {
             // 对于字面量类型，转换为基础类型
             // 字面量的值会在类型检查阶段处理
             let base = ast_type_to_mono_type(base_type);

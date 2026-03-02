@@ -8,6 +8,7 @@
 
 use crate::frontend::core::parser::ast::{Type, GenericParam, GenericParamKind};
 use crate::frontend::core::type_system::{ConstValue, ConstKind, MonoType};
+use crate::util::span::Span;
 use crate::frontend::type_level::const_generics::{
     ConstGenericEval, LiteralTypeValidator, ConstExpr, ConstBinOp,
 };
@@ -19,7 +20,11 @@ fn test_literal_type_parsing() {
     // 测试从 AST 字面量类型解析
     let _ty = Type::Literal {
         name: "5".to_string(),
-        base_type: Box::new(Type::Name("Int".to_string())),
+        name_span: Span::dummy(),
+        base_type: Box::new(Type::Name {
+            name: "Int".to_string(),
+            span: Span::dummy(),
+        }),
     };
 
     // 验证字面量名称解析为 ConstValue
@@ -185,7 +190,10 @@ fn test_const_param_extraction() {
     let param = GenericParam {
         name: "N".to_string(),
         kind: GenericParamKind::Const {
-            const_type: Box::new(Type::Name("Int".to_string())),
+            const_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
         },
         constraints: vec![],
     };
@@ -319,7 +327,11 @@ fn test_literal_type_validator() {
     // 验证解析
     let ty = Type::Literal {
         name: "SIZE".to_string(),
-        base_type: Box::new(Type::Name("Int".to_string())),
+        name_span: Span::dummy(),
+        base_type: Box::new(Type::Name {
+            name: "Int".to_string(),
+            span: Span::dummy(),
+        }),
     };
     let result = validator.parse_literal_type(&ty);
     assert!(result.is_some());
@@ -337,7 +349,10 @@ fn test_const_param_binding() {
     validator.bind_const_param("n".to_string(), ConstValue::Int(5));
 
     // 验证解析
-    let ty = Type::Name("n".to_string());
+    let ty = Type::Name {
+        name: "n".to_string(),
+        span: Span::dummy(),
+    };
     let result = validator.parse_literal_type(&ty);
     assert!(result.is_some());
     let (name, value) = result.unwrap();
@@ -351,13 +366,19 @@ fn test_const_type_validation() {
     let validator = LiteralTypeValidator::new();
 
     // 验证 Int 类型
-    let ty = Type::Name("Int".to_string());
+    let ty = Type::Name {
+        name: "Int".to_string(),
+        span: Span::dummy(),
+    };
     let kind = validator.validate_const_type(&ty);
     assert!(kind.is_some());
     assert_eq!(kind.unwrap(), ConstKind::Int(None));
 
     // 验证 Bool 类型
-    let ty = Type::Name("Bool".to_string());
+    let ty = Type::Name {
+        name: "Bool".to_string(),
+        span: Span::dummy(),
+    };
     let kind = validator.validate_const_type(&ty);
     assert!(kind.is_some());
     assert_eq!(kind.unwrap(), ConstKind::Bool);
@@ -522,7 +543,10 @@ fn test_generic_param_kind() {
     let type_param = GenericParam {
         name: "T".to_string(),
         kind: GenericParamKind::Type,
-        constraints: vec![Type::Name("Clone".to_string())],
+        constraints: vec![Type::Name {
+            name: "Clone".to_string(),
+            span: Span::dummy(),
+        }],
     };
     match &type_param.kind {
         GenericParamKind::Type => {}
@@ -533,13 +557,16 @@ fn test_generic_param_kind() {
     let const_param = GenericParam {
         name: "N".to_string(),
         kind: GenericParamKind::Const {
-            const_type: Box::new(Type::Name("Int".to_string())),
+            const_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
         },
         constraints: vec![],
     };
     match &const_param.kind {
         GenericParamKind::Const { const_type } => match const_type.as_ref() {
-            Type::Name(name) => assert_eq!(name, "Int"),
+            Type::Name { name, .. } => assert_eq!(name, "Int"),
             _ => panic!("Expected Int type"),
         },
         _ => panic!("Expected Const kind"),

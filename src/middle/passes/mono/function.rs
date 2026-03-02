@@ -630,7 +630,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
     ) -> AstType {
         match ty {
             // 基本类型直接返回
-            AstType::Name(_)
+            AstType::Name { .. }
             | AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -660,8 +660,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             },
 
             // 命名结构体
-            AstType::NamedStruct { name, fields } => AstType::NamedStruct {
+            AstType::NamedStruct {
+                name,
+                name_span,
+                fields,
+            } => AstType::NamedStruct {
                 name: name.clone(),
+                name_span: *name_span,
                 fields: fields
                     .iter()
                     .map(|f| crate::frontend::core::parser::ast::StructField {
@@ -692,6 +697,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .iter()
                     .map(|v| crate::frontend::core::parser::ast::VariantDef {
                         name: v.name.clone(),
+                        name_span: v.name_span,
                         params: v
                             .params
                             .iter()
@@ -734,8 +740,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             ),
 
             // 泛型类型：替换类型参数
-            AstType::Generic { name, args } => AstType::Generic {
+            AstType::Generic {
+                name,
+                name_span,
+                args,
+            } => AstType::Generic {
                 name: name.clone(),
+                name_span: *name_span,
                 args: args
                     .iter()
                     .map(|t| self.substitute_type_ast(t, type_map))
@@ -746,10 +757,12 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             AstType::AssocType {
                 host_type,
                 assoc_name,
+                assoc_name_span,
                 assoc_args,
             } => AstType::AssocType {
                 host_type: Box::new(self.substitute_type_ast(host_type, type_map)),
                 assoc_name: assoc_name.clone(),
+                assoc_name_span: *assoc_name_span,
                 assoc_args: assoc_args
                     .iter()
                     .map(|t| self.substitute_type_ast(t, type_map))
@@ -765,8 +778,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             ),
 
             // 字面量类型：替换基础类型
-            AstType::Literal { name, base_type } => AstType::Literal {
+            AstType::Literal {
+                name,
+                name_span,
+                base_type,
+            } => AstType::Literal {
                 name: name.clone(),
+                name_span: *name_span,
                 base_type: Box::new(self.substitute_type_ast(base_type, type_map)),
             },
             AstType::Ptr(inner) => {
