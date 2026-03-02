@@ -316,7 +316,7 @@ impl ModuleLoader {
 /// 用于生成模块导出项的签名描述。
 fn format_type(ty: &AstType) -> String {
     match ty {
-        AstType::Name(name) => name.clone(),
+        AstType::Name { name, .. } => name.clone(),
         AstType::Int(bits) => format!("Int{}", bits),
         AstType::Float(bits) => format!("Float{}", bits),
         AstType::Char => "Char".to_string(),
@@ -335,7 +335,7 @@ fn format_type(ty: &AstType) -> String {
         AstType::Result(ok, err) => {
             format!("Result[{}, {}]", format_type(ok), format_type(err))
         }
-        AstType::Generic { name, args } => {
+        AstType::Generic { name, args, .. } => {
             let args_str: Vec<String> = args.iter().map(format_type).collect();
             format!("{}[{}]", name, args_str.join(", "))
         }
@@ -351,6 +351,7 @@ fn format_type(ty: &AstType) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::span::Span;
 
     #[test]
     fn test_detect_no_cycles() {
@@ -459,10 +460,19 @@ mut counter = 0
     fn test_format_type_fn() {
         let ty = AstType::Fn {
             params: vec![
-                AstType::Name("Int".to_string()),
-                AstType::Name("Int".to_string()),
+                AstType::Name {
+                    name: "Int".to_string(),
+                    span: Span::dummy(),
+                },
+                AstType::Name {
+                    name: "Int".to_string(),
+                    span: Span::dummy(),
+                },
             ],
-            return_type: Box::new(AstType::Name("Bool".to_string())),
+            return_type: Box::new(AstType::Name {
+                name: "Bool".to_string(),
+                span: Span::dummy(),
+            }),
         };
         assert_eq!(format_type(&ty), "(Int, Int) -> Bool");
     }
@@ -471,7 +481,11 @@ mut counter = 0
     fn test_format_type_generic() {
         let ty = AstType::Generic {
             name: "List".to_string(),
-            args: vec![AstType::Name("Int".to_string())],
+            name_span: Span::dummy(),
+            args: vec![AstType::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }],
         };
         assert_eq!(format_type(&ty), "List[Int]");
     }

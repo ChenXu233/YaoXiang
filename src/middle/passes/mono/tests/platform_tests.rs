@@ -198,15 +198,17 @@ mod platform_specializer_tests {
 mod parser_platform_param_tests {
     use crate::frontend::core::parser::ast::{GenericParam, GenericParamKind};
     use crate::middle::passes::mono::platform_specializer::PlatformSpecializer;
+    use crate::util::span::Span;
 
     #[test]
     fn test_extract_platform_constraint_with_name() {
         let params = vec![GenericParam {
             name: "P".to_string(),
             kind: GenericParamKind::Platform,
-            constraints: vec![crate::frontend::core::parser::ast::Type::Name(
-                "X86_64".to_string(),
-            )],
+            constraints: vec![crate::frontend::core::parser::ast::Type::Name {
+                name: "X86_64".to_string(),
+                span: Span::dummy(),
+            }],
         }];
 
         let (constraint, filtered) = PlatformSpecializer::extract_platform_constraint(&params);
@@ -224,12 +226,18 @@ mod parser_platform_param_tests {
             GenericParam {
                 name: "T".to_string(),
                 kind: GenericParamKind::Type,
-                constraints: vec![Type::Name("Clone".to_string())],
+                constraints: vec![Type::Name {
+                    name: "Clone".to_string(),
+                    span: Span::dummy(),
+                }],
             },
             GenericParam {
                 name: "P".to_string(),
                 kind: GenericParamKind::Platform,
-                constraints: vec![Type::Name("AArch64".to_string())],
+                constraints: vec![Type::Name {
+                    name: "AArch64".to_string(),
+                    span: Span::dummy(),
+                }],
             },
         ];
 

@@ -30,7 +30,7 @@ fn const_param_type_set() -> &'static HashSet<&'static str> {
 /// Returns None if the type is complex (e.g., MetaType) and doesn't have a simple name
 fn extract_type_name(ty: &Type) -> Option<String> {
     match ty {
-        Type::Name(name) => Some(name.clone()),
+        Type::Name { name, .. } => Some(name.clone()),
         // For MetaType like Type[T], extract T's name
         Type::MetaType { args } => {
             if args.len() == 1 {
@@ -807,6 +807,7 @@ fn parse_var_stmt_with_pub(
                         return Some(Stmt {
                             kind: StmtKind::TypeDef {
                                 name: "Type".to_string(),
+                                name_span,
                                 definition: Type::MetaType { args: Vec::new() },
                                 generic_params: meta_args
                                     .iter()
@@ -829,6 +830,7 @@ fn parse_var_stmt_with_pub(
             return Some(Stmt {
                 kind: StmtKind::TypeDef {
                     name,
+                    name_span,
                     definition,
                     generic_params: generic_params_for_type,
                 },
@@ -1005,7 +1007,7 @@ pub fn parse_generic_params_with_constraints(
 /// Type constraints are trait-like types
 fn is_const_param_type(ty: &Type) -> bool {
     match ty {
-        Type::Name(name) => const_param_type_set().contains(name.as_str()),
+        Type::Name { name, .. } => const_param_type_set().contains(name.as_str()),
         Type::Literal { .. } => true,
         _ => false,
     }
@@ -1034,7 +1036,7 @@ pub fn parse_use_stmt(
 ) -> Option<Stmt> {
     state.bump(); // consume 'use'
 
-    let path = parse_use_path(state)?;
+    let (path, path_span) = parse_use_path(state)?;
 
     // Parse import items: use path.{item1, item2};
     let items = if state.skip(&TokenKind::LBrace) {
@@ -1082,16 +1084,28 @@ pub fn parse_use_stmt(
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::Use { path, items, alias },
+        kind: StmtKind::Use {
+            path,
+            path_span,
+            items,
+            alias,
+        },
         span,
     })
 }
 
 /// Parse use path (dot-separated identifiers)
-fn parse_use_path(state: &mut ParserState<'_>) -> Option<String> {
+fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span)> {
     let mut parts = Vec::new();
+    let mut start = None;
+    let mut end = None;
 
     while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
+        let token_span = state.span();
+        if start.is_none() {
+            start = Some(token_span.start);
+        }
+        end = Some(token_span.end);
         parts.push(n.clone());
         state.bump();
         if !state.skip(&TokenKind::Dot) {
@@ -1109,7 +1123,9 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<String> {
         });
         None
     } else {
-        Some(parts.join("."))
+        let start = start.unwrap_or_else(|| Span::dummy().start);
+        let end = end.unwrap_or_else(|| Span::dummy().end);
+        Some((parts.join("."), Span::new(start, end)))
     }
 }
 
@@ -1430,6 +1446,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
         }
         Some(TokenKind::Identifier(name)) => {
             let name = name.clone();
+            let name_span = state.span();
             state.bump();
 
             // RFC-010: Check if this is the meta-type keyword `Type` or `Type[T]` or `Type<T>`
@@ -1472,10 +1489,10 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Check for generic parameters: Type<T> or Type[T]
             if state.at(&TokenKind::Lt) {
-                return parse_generic_type(name, state);
+                return parse_generic_type(name, name_span, state);
             }
             if state.at(&TokenKind::LBracket) {
-                return parse_generic_type_bracket(name, state);
+                return parse_generic_type_bracket(name, name_span, state);
             }
 
             // Check for old curried function type: Type -> ReturnType (single param without parentheses)
@@ -1510,14 +1527,17 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
                 if has_named_fields {
                     // Parse as named struct: Name(x: Type, y: Type)
-                    return parse_named_struct_type(name, state);
+                    return parse_named_struct_type(name, name_span, state);
                 } else {
                     // Parse as generic constructor: Name(Type1, Type2)
-                    return parse_constructor_type(name, state);
+                    return parse_constructor_type(name, name_span, state);
                 }
             }
 
-            Some(Type::Name(name))
+            Some(Type::Name {
+                name,
+                span: name_span,
+            })
         }
         Some(TokenKind::LParen) => {
             // This could be either:
@@ -1695,6 +1715,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 /// Parse generic type like `Vec[T]` or `HashMap[K, V]`
 fn parse_generic_type(
     name: String,
+    name_span: Span,
     state: &mut ParserState<'_>,
 ) -> Option<Type> {
     state.skip(&TokenKind::Lt); // consume '<'
@@ -1713,12 +1734,17 @@ fn parse_generic_type(
 
     state.skip(&TokenKind::Gt); // consume '>'
 
-    Some(Type::Generic { name, args })
+    Some(Type::Generic {
+        name,
+        name_span,
+        args,
+    })
 }
 
 /// Parse generic type with bracket syntax: `Type[T, U]`
 fn parse_generic_type_bracket(
     name: String,
+    name_span: Span,
     state: &mut ParserState<'_>,
 ) -> Option<Type> {
     state.skip(&TokenKind::LBracket); // consume '['
@@ -1737,12 +1763,17 @@ fn parse_generic_type_bracket(
 
     state.skip(&TokenKind::RBracket); // consume ']'
 
-    Some(Type::Generic { name, args })
+    Some(Type::Generic {
+        name,
+        name_span,
+        args,
+    })
 }
 
 /// Parse named struct type: `Name(x: Type, y: Type)` or `Name(mut x: Type, y: Type)`
 fn parse_named_struct_type(
     name: String,
+    name_span: Span,
     state: &mut ParserState<'_>,
 ) -> Option<Type> {
     state.bump(); // consume '('
@@ -1773,12 +1804,17 @@ fn parse_named_struct_type(
 
     state.expect(&TokenKind::RParen);
 
-    Some(Type::NamedStruct { name, fields })
+    Some(Type::NamedStruct {
+        name,
+        name_span,
+        fields,
+    })
 }
 
 /// Parse constructor type: `Name(Type1, Type2)`
 fn parse_constructor_type(
     name: String,
+    name_span: Span,
     state: &mut ParserState<'_>,
 ) -> Option<Type> {
     state.bump(); // consume '('
@@ -1796,7 +1832,11 @@ fn parse_constructor_type(
 
     state.expect(&TokenKind::RParen);
 
-    Some(Type::Generic { name, args })
+    Some(Type::Generic {
+        name,
+        name_span,
+        args,
+    })
 }
 
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`
@@ -1881,11 +1921,15 @@ fn wrap_literal_type_if_needed(
     // Check if the type is a simple identifier with the same name as the parameter
     // This indicates a const generic literal type reference
     match &parsed_type {
-        Type::Name(type_name) if type_name == &param_name => {
+        Type::Name { name, span } if name == &param_name => {
             // This is a literal type reference: the parameter value is used as a type
             Type::Literal {
                 name: param_name.clone(),
-                base_type: Box::new(Type::Name(param_name)),
+                name_span: *span,
+                base_type: Box::new(Type::Name {
+                    name: param_name,
+                    span: *span,
+                }),
             }
         }
         _ => parsed_type,
@@ -2043,6 +2087,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
     let first_variant = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(name)) => {
             let name = name.clone();
+            let name_span = state.span();
             state.bump();
 
             // 检查是否有参数类型: ok(Int)
@@ -2065,6 +2110,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
 
             VariantDef {
                 name,
+                name_span,
                 params,
                 span: state.span(),
             }
@@ -2081,6 +2127,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
         match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(name)) => {
                 let name = name.clone();
+                let name_span = state.span();
                 state.bump();
 
                 // 检查是否有参数类型: ok(Int)
@@ -2103,6 +2150,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
 
                 variants.push(VariantDef {
                     name,
+                    name_span,
                     params,
                     span: state.span(),
                 });
@@ -2217,6 +2265,7 @@ fn extract_fn_type_info(ty: &Type) -> (Vec<Param>, Type) {
 
 /// Parse a constructor: `Name` or `Name(params)`
 pub fn parse_constructor(state: &mut ParserState<'_>) -> Option<VariantDef> {
+    let name_span = state.span();
     let name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
@@ -2240,6 +2289,7 @@ pub fn parse_constructor(state: &mut ParserState<'_>) -> Option<VariantDef> {
 
     Some(VariantDef {
         name,
+        name_span,
         params,
         span: state.span(),
     })

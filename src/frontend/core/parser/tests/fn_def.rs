@@ -90,8 +90,8 @@ mod fn_def_tests {
                 assert_eq!(generic_params[0].name, "T");
                 assert_eq!(generic_params[0].constraints.len(), 1);
                 match &generic_params[0].constraints[0] {
-                    crate::frontend::core::parser::ast::Type::Name(n) => {
-                        assert_eq!(n, "Clone");
+                    crate::frontend::core::parser::ast::Type::Name { name, .. } => {
+                        assert_eq!(name, "Clone");
                     }
                     _ => panic!("Expected Type::Name for constraint"),
                 }
@@ -255,7 +255,7 @@ mod fn_def_tests {
                     assert_eq!(type_params.len(), 2);
                     // type_params 是 Vec<Type>，检查类型名称
                     match &type_params[0] {
-                        crate::frontend::core::parser::ast::Type::Name(name) => {
+                        crate::frontend::core::parser::ast::Type::Name { name, .. } => {
                             assert_eq!(name, "Point")
                         }
                         _ => panic!("Expected Point type for first param"),
@@ -553,6 +553,7 @@ mod fn_def_tests {
                 name,
                 definition,
                 generic_params,
+                ..
             } => {
                 assert_eq!(name, "Point");
                 assert!(generic_params.is_empty());
@@ -582,6 +583,7 @@ mod fn_def_tests {
                 name,
                 definition,
                 generic_params,
+                ..
             } => {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
@@ -609,6 +611,7 @@ mod fn_def_tests {
                 name,
                 definition,
                 generic_params,
+                ..
             } => {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
@@ -686,6 +689,7 @@ mod fn_def_tests {
                 name,
                 definition,
                 generic_params,
+                ..
             } => {
                 assert_eq!(name, "List");
                 assert_eq!(generic_params, &vec!["T".to_string()]);

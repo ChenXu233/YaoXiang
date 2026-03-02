@@ -292,6 +292,7 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::TypeDef {
                     name: "Point".to_string(),
+                    name_span: Span::dummy(),
                     definition: crate::frontend::core::parser::ast::Type::Void,
                     generic_params: vec![],
                 },

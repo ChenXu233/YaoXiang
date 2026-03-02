@@ -509,7 +509,10 @@ fn test_type_constraint_solver_generalize() {
 
 #[test]
 fn test_from_ast_type_name() {
-    let ast_type = ast::Type::Name("MyType".to_string());
+    let ast_type = ast::Type::Name {
+        name: "MyType".to_string(),
+        span: create_dummy_span(),
+    };
     let mono: MonoType = ast_type.into();
     assert!(matches!(mono, MonoType::TypeRef(s) if s == "MyType"));
 }
@@ -574,6 +577,7 @@ fn test_from_ast_type_tuple() {
 fn test_from_ast_type_list() {
     let ast_type = ast::Type::Generic {
         name: "List".to_string(),
+        name_span: create_dummy_span(),
         args: vec![ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();
@@ -584,6 +588,7 @@ fn test_from_ast_type_list() {
 fn test_from_ast_type_dict() {
     let ast_type = ast::Type::Generic {
         name: "Dict".to_string(),
+        name_span: create_dummy_span(),
         args: vec![ast::Type::String, ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();
@@ -605,6 +610,7 @@ fn test_from_ast_type_fn() {
 fn test_from_ast_type_generic() {
     let ast_type = ast::Type::Generic {
         name: "List".to_string(),
+        name_span: create_dummy_span(),
         args: vec![ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();

@@ -10,6 +10,7 @@ mod inference;
 mod pub_bind;
 mod ref_test;
 mod scope;
+mod semantic_tokens;
 mod shadowing;
 mod traits;
 mod typecheck_fixes;

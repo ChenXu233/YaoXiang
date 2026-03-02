@@ -228,8 +228,8 @@ impl PlatformSpecializer {
         use crate::frontend::core::parser::ast::Type;
 
         match ty {
-            Type::Name(name) => name.clone(),
-            Type::Generic { name, args: _ } => name.clone(),
+            Type::Name { name, .. } => name.clone(),
+            Type::Generic { name, args: _, .. } => name.clone(),
             _ => {
                 // 尝试获取字符串表示
                 format!("{:?}", ty)
@@ -451,6 +451,7 @@ impl SpecializationDecider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::span::Span;
 
     #[test]
     fn test_platform_constraint_matches() {
@@ -476,17 +477,19 @@ mod tests {
         let param_p = GenericParam {
             name: "P".to_string(),
             kind: GenericParamKind::Type,
-            constraints: vec![crate::frontend::core::parser::ast::Type::Name(
-                "X86_64".to_string(),
-            )],
+            constraints: vec![crate::frontend::core::parser::ast::Type::Name {
+                name: "X86_64".to_string(),
+                span: Span::dummy(),
+            }],
         };
 
         let param_t = GenericParam {
             name: "T".to_string(),
             kind: GenericParamKind::Type,
-            constraints: vec![crate::frontend::core::parser::ast::Type::Name(
-                "Clone".to_string(),
-            )],
+            constraints: vec![crate::frontend::core::parser::ast::Type::Name {
+                name: "Clone".to_string(),
+                span: Span::dummy(),
+            }],
         };
 
         let params = vec![param_p.clone(), param_t.clone()];

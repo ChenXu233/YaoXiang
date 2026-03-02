@@ -107,6 +107,7 @@ mod tests {
         Stmt {
             kind: StmtKind::Use {
                 path: path.to_string(),
+                path_span: Span::dummy(),
                 items: None,
                 alias: None,
             },

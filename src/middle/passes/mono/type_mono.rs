@@ -133,7 +133,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
         ty: &AstType,
     ) -> MonoType {
         match ty {
-            AstType::Name(name) => MonoType::TypeRef(name.clone()),
+            AstType::Name { name, .. } => MonoType::TypeRef(name.clone()),
             AstType::Int(n) => MonoType::Int(*n),
             AstType::Float(n) => MonoType::Float(*n),
             AstType::Char => MonoType::Char,
@@ -155,7 +155,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
                 interfaces: vec![],
             }),
-            AstType::NamedStruct { name, fields } => MonoType::Struct(StructType {
+            AstType::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
                 name: name.clone(),
                 fields: fields
                     .iter()
@@ -194,7 +194,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             },
             AstType::Option(inner) => MonoType::Union(vec![self.type_to_mono_type(inner)]),
             AstType::Result(_, _) => MonoType::TypeRef("Result".to_string()),
-            AstType::Generic { name, args } => {
+            AstType::Generic { name, args, .. } => {
                 let args_str = args
                     .iter()
                     .map(|t| self.type_to_mono_type(t).type_name())
@@ -209,6 +209,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 host_type,
                 assoc_name,
                 assoc_args,
+                ..
             } => MonoType::AssocType {
                 host_type: Box::new(self.type_to_mono_type(host_type)),
                 assoc_name: assoc_name.clone(),
@@ -217,7 +218,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .map(|t| self.type_to_mono_type(t))
                     .collect(),
             },
-            AstType::Literal { name, base_type } => {
+            AstType::Literal {
+                name, base_type, ..
+            } => {
                 let base = self.type_to_mono_type(base_type);
                 let value = crate::frontend::core::type_system::ConstValue::from_literal_name(name)
                     .unwrap_or(crate::frontend::core::type_system::ConstValue::Int(0));
@@ -238,7 +241,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
 
     fn get_type_name(ty: &AstType) -> String {
         match ty {
-            AstType::Name(name) => name.clone(),
+            AstType::Name { name, .. } => name.clone(),
             AstType::Int(n) => format!("int{}", n),
             AstType::Float(n) => format!("float{}", n),
             AstType::Char => "char".to_string(),
@@ -277,7 +280,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 // 递归调用get_type_name来获取宿主类型名称
                 Self::get_type_name(host_type) + "::" + assoc_name
             }
-            AstType::Literal { name, base_type } => Self::get_type_name(base_type) + "::" + name,
+            AstType::Literal {
+                name, base_type, ..
+            } => Self::get_type_name(base_type) + "::" + name,
             AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
             AstType::MetaType { .. } => "MetaType".to_string(),
         }
@@ -289,7 +294,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
         ty: &AstType,
     ) -> bool {
         match ty {
-            AstType::Name(_) => false,
+            AstType::Name { .. } => false,
             AstType::Int(_)
             | AstType::Float(_)
             | AstType::Char
@@ -352,7 +357,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
         seen: &mut std::collections::HashSet<String>,
     ) {
         match ty {
-            AstType::Name(name) => {
+            AstType::Name { name, .. } => {
                 if name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
                     && seen.insert(name.clone())
                 {

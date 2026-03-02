@@ -634,7 +634,9 @@ impl TypeChecker {
                     self.auto_bind_to_type(name, &param_types, fn_ty);
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Use { path, items, alias } => {
+            crate::frontend::core::parser::ast::StmtKind::Use {
+                path, items, alias, ..
+            } => {
                 // 计算导入模式
                 // use std.io → register as "io.print"
                 // use std.io as str → register as "str.print"
@@ -805,7 +807,7 @@ impl TypeChecker {
                 // 情况1: definition 是 MetaType（Type: Type = ...）
                 crate::frontend::core::parser::ast::Type::MetaType { .. } => true,
                 // 情况2: definition 是 Name("Type")（Type: Type = Type）
-                crate::frontend::core::parser::ast::Type::Name(type_name) => type_name == "Type",
+                crate::frontend::core::parser::ast::Type::Name { name, .. } => name == "Type",
                 // 情况3: definition 是 Generic { name: "Type", ... }（Type: Type = Type[T]）
                 crate::frontend::core::parser::ast::Type::Generic {
                     name: type_name, ..
@@ -970,6 +972,195 @@ impl TypeChecker {
     /// - Expr::Call          → Function (引用)
     /// - Expr::FieldAccess   → Property (引用)
     /// - Expr::Cast          → Type (引用)
+    fn constructor_names_from_module(module: &Module) -> HashSet<String> {
+        use crate::frontend::core::parser::ast::{StmtKind, Type};
+
+        let mut names = HashSet::new();
+        for stmt in &module.items {
+            if let StmtKind::TypeDef { definition, .. } = &stmt.kind {
+                if let Type::Variant(variants) = definition {
+                    for v in variants {
+                        names.insert(v.name.clone());
+                    }
+                }
+            }
+        }
+        names
+    }
+
+    fn collect_type_tokens(
+        &mut self,
+        file_path: &str,
+        ty: &crate::frontend::core::parser::ast::Type,
+    ) {
+        use crate::frontend::core::parser::ast::Type;
+
+        match ty {
+            Type::Name { name, span } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *span,
+                    },
+                );
+            }
+            Type::Generic {
+                name,
+                name_span,
+                args,
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *name_span,
+                    },
+                );
+                for arg in args {
+                    self.collect_type_tokens(file_path, arg);
+                }
+            }
+            Type::NamedStruct {
+                name,
+                name_span,
+                fields,
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *name_span,
+                    },
+                );
+                for f in fields {
+                    self.collect_type_tokens(file_path, &f.ty);
+                }
+            }
+            Type::Struct {
+                fields, bindings, ..
+            } => {
+                for f in fields {
+                    self.collect_type_tokens(file_path, &f.ty);
+                }
+                for b in bindings {
+                    match &b.kind {
+                        crate::frontend::core::parser::ast::BindingKind::Anonymous {
+                            params,
+                            return_type,
+                            ..
+                        } => {
+                            for p in params {
+                                if let Some(t) = &p.ty {
+                                    self.collect_type_tokens(file_path, t);
+                                }
+                            }
+                            self.collect_type_tokens(file_path, return_type);
+                        }
+                        crate::frontend::core::parser::ast::BindingKind::External { .. }
+                        | crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
+                            ..
+                        } => {}
+                    }
+                }
+            }
+            Type::Union(variants) => {
+                for (_name, maybe_ty) in variants {
+                    if let Some(t) = maybe_ty {
+                        self.collect_type_tokens(file_path, t);
+                    }
+                }
+            }
+            Type::Variant(variants) => {
+                for v in variants {
+                    for (_param_name, t) in &v.params {
+                        self.collect_type_tokens(file_path, t);
+                    }
+                }
+            }
+            Type::Tuple(types) => {
+                for t in types {
+                    self.collect_type_tokens(file_path, t);
+                }
+            }
+            Type::Fn {
+                params,
+                return_type,
+            } => {
+                for t in params {
+                    self.collect_type_tokens(file_path, t);
+                }
+                self.collect_type_tokens(file_path, return_type);
+            }
+            Type::Option(inner) => self.collect_type_tokens(file_path, inner),
+            Type::Result(ok, err) => {
+                self.collect_type_tokens(file_path, ok);
+                self.collect_type_tokens(file_path, err);
+            }
+            Type::AssocType {
+                host_type,
+                assoc_name,
+                assoc_name_span,
+                assoc_args,
+            } => {
+                self.collect_type_tokens(file_path, host_type);
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: assoc_name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *assoc_name_span,
+                    },
+                );
+                for t in assoc_args {
+                    self.collect_type_tokens(file_path, t);
+                }
+            }
+            Type::Sum(types) => {
+                for t in types {
+                    self.collect_type_tokens(file_path, t);
+                }
+            }
+            Type::Literal {
+                name,
+                name_span,
+                base_type,
+            } => {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Type,
+                        modifiers: vec![],
+                        span: *name_span,
+                    },
+                );
+                self.collect_type_tokens(file_path, base_type);
+            }
+            Type::Ptr(inner) => self.collect_type_tokens(file_path, inner),
+            Type::MetaType { args } => {
+                for t in args {
+                    self.collect_type_tokens(file_path, t);
+                }
+            }
+            Type::Int(_)
+            | Type::Float(_)
+            | Type::Char
+            | Type::String
+            | Type::Bytes
+            | Type::Bool
+            | Type::Void
+            | Type::Enum(_) => {}
+        }
+    }
+
     fn collect_semantic_tokens(
         &mut self,
         module: &Module,
@@ -980,6 +1171,10 @@ impl TypeChecker {
         };
 
         let fp = self.env.module_name.clone();
+
+        let mut declared: HashMap<usize, HashSet<String>> = HashMap::new();
+        declared.insert(0, HashSet::new());
+        let constructor_names = Self::constructor_names_from_module(module);
 
         // 添加全局作用域
         self.semantic_db.add_scope(
@@ -1001,6 +1196,7 @@ impl TypeChecker {
                     params,
                     is_pub,
                     generic_params,
+                    type_annotation,
                     body,
                     ..
                 } => {
@@ -1056,11 +1252,24 @@ impl TypeChecker {
                     }
 
                     // 函数体作用域
+                    // 泛型约束中的类型引用
+                    for gp in generic_params {
+                        for c in &gp.constraints {
+                            self.collect_type_tokens(&fp, c);
+                        }
+                    }
+
+                    // 函数签名中的类型引用
+                    if let Some(ty) = type_annotation {
+                        self.collect_type_tokens(&fp, ty);
+                    }
+
                     let scope_idx = self
                         .semantic_db
                         .get_scopes(&fp)
                         .map(|s| s.len())
                         .unwrap_or(0);
+                    declared.insert(scope_idx, params.iter().map(|p| p.name.clone()).collect());
                     self.semantic_db.add_scope(
                         &fp,
                         ScopeInfo {
@@ -1073,16 +1282,29 @@ impl TypeChecker {
 
                     // 递归收集函数体中的表达式
                     for body_stmt in &body.0 {
-                        self.collect_stmt_tokens(&fp, body_stmt, scope_idx);
+                        self.collect_stmt_tokens(
+                            &fp,
+                            body_stmt,
+                            scope_idx,
+                            &mut declared,
+                            &constructor_names,
+                        );
                     }
                     if let Some(ret_expr) = &body.1 {
-                        self.collect_expr_tokens(&fp, ret_expr);
+                        self.collect_expr_tokens(
+                            &fp,
+                            ret_expr,
+                            scope_idx,
+                            &mut declared,
+                            &constructor_names,
+                        );
                     }
                 }
                 StmtKind::TypeDef {
                     name,
+                    name_span,
+                    definition,
                     generic_params,
-                    ..
                 } => {
                     // 类型名 → Type (定义)
                     let mut modifiers = vec![SemanticTokenModifier::Declaration];
@@ -1095,25 +1317,44 @@ impl TypeChecker {
                             name: name.clone(),
                             token_type: SemanticTokenType::Type,
                             modifiers,
-                            span: stmt.span,
+                            span: *name_span,
                         },
                     );
                     global_symbols.push(name.clone());
+
+                    // ç±»åž‹å®šä¹‰ä½“ä¸­çš„ç±»åž‹å¼•ç”¨
+                    self.collect_type_tokens(&fp, definition);
+
+                    // Variant constructors â†’ EnumMember (å®šä¹‰)
+                    if let crate::frontend::core::parser::ast::Type::Variant(variants) = definition
+                    {
+                        for v in variants {
+                            self.semantic_db.add_token(
+                                &fp,
+                                SemanticToken {
+                                    name: v.name.clone(),
+                                    token_type: SemanticTokenType::EnumMember,
+                                    modifiers: vec![SemanticTokenModifier::Declaration],
+                                    span: v.name_span,
+                                },
+                            );
+                        }
+                    }
                 }
                 StmtKind::Var {
                     name,
                     name_span,
-                    is_mut,
+                    type_annotation,
                     initializer,
                     ..
                 } => {
                     // 变量名 → Variable (定义)
-                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                    if *is_mut {
-                        modifiers.push(SemanticTokenModifier::Mutable);
+                    let is_declaration = declared.entry(0).or_default().insert(name.clone());
+                    let modifiers = if is_declaration {
+                        vec![SemanticTokenModifier::Declaration]
                     } else {
-                        modifiers.push(SemanticTokenModifier::Readonly);
-                    }
+                        vec![SemanticTokenModifier::Mutable]
+                    };
                     self.semantic_db.add_token(
                         &fp,
                         SemanticToken {
@@ -1123,15 +1364,22 @@ impl TypeChecker {
                             span: *name_span,
                         },
                     );
-                    global_symbols.push(name.clone());
+                    if is_declaration {
+                        global_symbols.push(name.clone());
+                    }
+
+                    if let Some(ty) = type_annotation {
+                        self.collect_type_tokens(&fp, ty);
+                    }
 
                     if let Some(init) = initializer {
-                        self.collect_expr_tokens(&fp, init);
+                        self.collect_expr_tokens(&fp, init, 0, &mut declared, &constructor_names);
                     }
                 }
                 StmtKind::MethodBind {
                     type_name,
                     method_name,
+                    method_type,
                     params,
                     ..
                 } => {
@@ -1158,8 +1406,12 @@ impl TypeChecker {
                             },
                         );
                     }
+
+                    self.collect_type_tokens(&fp, method_type);
                 }
-                StmtKind::Use { path, .. } => {
+                StmtKind::Use {
+                    path, path_span, ..
+                } => {
                     // 模块路径 → Namespace (引用)
                     self.semantic_db.add_token(
                         &fp,
@@ -1167,12 +1419,12 @@ impl TypeChecker {
                             name: path.clone(),
                             token_type: SemanticTokenType::Namespace,
                             modifiers: vec![],
-                            span: stmt.span,
+                            span: *path_span,
                         },
                     );
                 }
                 StmtKind::Expr(expr) => {
-                    self.collect_expr_tokens(&fp, expr);
+                    self.collect_expr_tokens(&fp, expr, 0, &mut declared, &constructor_names);
                 }
                 StmtKind::For {
                     var,
@@ -1180,6 +1432,7 @@ impl TypeChecker {
                     body,
                     ..
                 } => {
+                    declared.entry(0).or_default().insert(var.clone());
                     self.semantic_db.add_token(
                         &fp,
                         SemanticToken {
@@ -1189,12 +1442,24 @@ impl TypeChecker {
                             span: stmt.span,
                         },
                     );
-                    self.collect_expr_tokens(&fp, iterable);
+                    self.collect_expr_tokens(&fp, iterable, 0, &mut declared, &constructor_names);
                     for body_stmt in &body.stmts {
-                        self.collect_stmt_tokens(&fp, body_stmt, 0);
+                        self.collect_stmt_tokens(
+                            &fp,
+                            body_stmt,
+                            0,
+                            &mut declared,
+                            &constructor_names,
+                        );
                     }
                     if let Some(ret_expr) = &body.expr {
-                        self.collect_expr_tokens(&fp, ret_expr);
+                        self.collect_expr_tokens(
+                            &fp,
+                            ret_expr,
+                            0,
+                            &mut declared,
+                            &constructor_names,
+                        );
                     }
                 }
                 StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
@@ -1216,7 +1481,9 @@ impl TypeChecker {
         &mut self,
         file_path: &str,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-        _parent_scope: usize,
+        scope_idx: usize,
+        declared: &mut HashMap<usize, HashSet<String>>,
+        constructor_names: &HashSet<String>,
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         use semantic_db::SemanticTokenModifier;
@@ -1225,16 +1492,16 @@ impl TypeChecker {
             StmtKind::Var {
                 name,
                 name_span,
-                is_mut,
+                type_annotation,
                 initializer,
                 ..
             } => {
-                let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                if *is_mut {
-                    modifiers.push(SemanticTokenModifier::Mutable);
+                let is_declaration = declared.entry(scope_idx).or_default().insert(name.clone());
+                let modifiers = if is_declaration {
+                    vec![SemanticTokenModifier::Declaration]
                 } else {
-                    modifiers.push(SemanticTokenModifier::Readonly);
-                }
+                    vec![SemanticTokenModifier::Mutable]
+                };
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
@@ -1244,12 +1511,21 @@ impl TypeChecker {
                         span: *name_span,
                     },
                 );
+                if let Some(ty) = type_annotation {
+                    self.collect_type_tokens(file_path, ty);
+                }
                 if let Some(init) = initializer {
-                    self.collect_expr_tokens(file_path, init);
+                    self.collect_expr_tokens(
+                        file_path,
+                        init,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             StmtKind::Expr(expr) => {
-                self.collect_expr_tokens(file_path, expr);
+                self.collect_expr_tokens(file_path, expr, scope_idx, declared, constructor_names);
             }
             StmtKind::For {
                 var,
@@ -1257,6 +1533,7 @@ impl TypeChecker {
                 body,
                 ..
             } => {
+                declared.entry(scope_idx).or_default().insert(var.clone());
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
@@ -1266,16 +1543,39 @@ impl TypeChecker {
                         span: stmt.span,
                     },
                 );
-                self.collect_expr_tokens(file_path, iterable);
+                self.collect_expr_tokens(
+                    file_path,
+                    iterable,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
                 for body_stmt in &body.stmts {
-                    self.collect_stmt_tokens(file_path, body_stmt, _parent_scope);
+                    self.collect_stmt_tokens(
+                        file_path,
+                        body_stmt,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
                 if let Some(ret_expr) = &body.expr {
-                    self.collect_expr_tokens(file_path, ret_expr);
+                    self.collect_expr_tokens(
+                        file_path,
+                        ret_expr,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             StmtKind::Fn {
-                name, params, body, ..
+                name,
+                params,
+                generic_params,
+                type_annotation,
+                body,
+                ..
             } => {
                 // 嵌套函数
                 self.semantic_db.add_token(
@@ -1298,11 +1598,31 @@ impl TypeChecker {
                         },
                     );
                 }
+                for gp in generic_params {
+                    for c in &gp.constraints {
+                        self.collect_type_tokens(file_path, c);
+                    }
+                }
+                if let Some(ty) = type_annotation {
+                    self.collect_type_tokens(file_path, ty);
+                }
                 for body_stmt in &body.0 {
-                    self.collect_stmt_tokens(file_path, body_stmt, _parent_scope);
+                    self.collect_stmt_tokens(
+                        file_path,
+                        body_stmt,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
                 if let Some(ret_expr) = &body.1 {
-                    self.collect_expr_tokens(file_path, ret_expr);
+                    self.collect_expr_tokens(
+                        file_path,
+                        ret_expr,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             _ => {}
@@ -1314,13 +1634,18 @@ impl TypeChecker {
         &mut self,
         file_path: &str,
         expr: &Expr,
+        scope_idx: usize,
+        declared: &mut HashMap<usize, HashSet<String>>,
+        constructor_names: &HashSet<String>,
     ) {
         use crate::frontend::core::parser::ast::Expr;
 
         match expr {
             Expr::Var(name, span) => {
                 // 判断是函数引用还是变量引用
-                let token_type = if let Some(poly) = self.env.get_var(name) {
+                let token_type = if constructor_names.contains(name) {
+                    semantic_db::SemanticTokenType::EnumMember
+                } else if let Some(poly) = self.env.get_var(name) {
                     if matches!(poly.body, MonoType::Fn { .. }) {
                         semantic_db::SemanticTokenType::Function
                     } else {
@@ -1340,9 +1665,15 @@ impl TypeChecker {
                 );
             }
             Expr::Call { func, args, .. } => {
-                self.collect_expr_tokens(file_path, func);
+                self.collect_expr_tokens(file_path, func, scope_idx, declared, constructor_names);
                 for arg in args {
-                    self.collect_expr_tokens(file_path, arg);
+                    self.collect_expr_tokens(
+                        file_path,
+                        arg,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             Expr::FieldAccess {
@@ -1350,7 +1681,7 @@ impl TypeChecker {
                 field,
                 span,
             } => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
@@ -1364,27 +1695,18 @@ impl TypeChecker {
             Expr::Cast {
                 expr: inner,
                 target_type,
-                span,
+                span: _,
             } => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
                 // Cast 目标类型 → Type (引用)
-                let type_name = format!("{:?}", target_type);
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: type_name,
-                        token_type: semantic_db::SemanticTokenType::Type,
-                        modifiers: vec![],
-                        span: *span,
-                    },
-                );
+                self.collect_type_tokens(file_path, target_type);
             }
             Expr::BinOp { left, right, .. } => {
-                self.collect_expr_tokens(file_path, left);
-                self.collect_expr_tokens(file_path, right);
+                self.collect_expr_tokens(file_path, left, scope_idx, declared, constructor_names);
+                self.collect_expr_tokens(file_path, right, scope_idx, declared, constructor_names);
             }
             Expr::UnOp { expr: inner, .. } => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
             }
             Expr::If {
                 condition,
@@ -1393,40 +1715,82 @@ impl TypeChecker {
                 else_branch,
                 ..
             } => {
-                self.collect_expr_tokens(file_path, condition);
+                self.collect_expr_tokens(
+                    file_path,
+                    condition,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
                 for s in &then_branch.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &then_branch.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
                 for (cond, block) in elif_branches {
-                    self.collect_expr_tokens(file_path, cond);
+                    self.collect_expr_tokens(
+                        file_path,
+                        cond,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                     for s in &block.stmts {
-                        self.collect_stmt_tokens(file_path, s, 0);
+                        self.collect_stmt_tokens(
+                            file_path,
+                            s,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                     if let Some(r) = &block.expr {
-                        self.collect_expr_tokens(file_path, r);
+                        self.collect_expr_tokens(
+                            file_path,
+                            r,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                 }
                 if let Some(block) = else_branch {
                     for s in &block.stmts {
-                        self.collect_stmt_tokens(file_path, s, 0);
+                        self.collect_stmt_tokens(
+                            file_path,
+                            s,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                     if let Some(r) = &block.expr {
-                        self.collect_expr_tokens(file_path, r);
+                        self.collect_expr_tokens(
+                            file_path,
+                            r,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                 }
             }
             Expr::While {
                 condition, body, ..
             } => {
-                self.collect_expr_tokens(file_path, condition);
+                self.collect_expr_tokens(
+                    file_path,
+                    condition,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
                 for s in &body.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
             }
             Expr::For {
@@ -1436,6 +1800,7 @@ impl TypeChecker {
                 span,
                 ..
             } => {
+                declared.entry(scope_idx).or_default().insert(var.clone());
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
@@ -1445,12 +1810,18 @@ impl TypeChecker {
                         span: *span,
                     },
                 );
-                self.collect_expr_tokens(file_path, iterable);
+                self.collect_expr_tokens(
+                    file_path,
+                    iterable,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
                 for s in &body.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
             }
             Expr::Lambda { params, body, span } => {
@@ -1467,6 +1838,15 @@ impl TypeChecker {
                     );
                 }
                 // Lambda 作用域
+                let lambda_scope_idx = self
+                    .semantic_db
+                    .get_scopes(file_path)
+                    .map(|s| s.len())
+                    .unwrap_or(0);
+                declared.insert(
+                    lambda_scope_idx,
+                    params.iter().map(|p| p.name.clone()).collect(),
+                );
                 self.semantic_db.add_scope(
                     file_path,
                     semantic_db::ScopeInfo {
@@ -1477,59 +1857,90 @@ impl TypeChecker {
                     },
                 );
                 for s in &body.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(
+                        file_path,
+                        s,
+                        lambda_scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
                 if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(
+                        file_path,
+                        r,
+                        lambda_scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             Expr::Block(block) => {
                 for s in &block.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &block.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
             }
             Expr::Return(Some(inner), _) => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
             }
             Expr::Match {
                 expr: inner, arms, ..
             } => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
                 for arm in arms {
                     for s in &arm.body.stmts {
-                        self.collect_stmt_tokens(file_path, s, 0);
+                        self.collect_stmt_tokens(
+                            file_path,
+                            s,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                     if let Some(r) = &arm.body.expr {
-                        self.collect_expr_tokens(file_path, r);
+                        self.collect_expr_tokens(
+                            file_path,
+                            r,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                 }
             }
             Expr::Tuple(elements, _) | Expr::List(elements, _) => {
                 for elem in elements {
-                    self.collect_expr_tokens(file_path, elem);
+                    self.collect_expr_tokens(
+                        file_path,
+                        elem,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             Expr::Dict(pairs, _) => {
                 for (k, v) in pairs {
-                    self.collect_expr_tokens(file_path, k);
-                    self.collect_expr_tokens(file_path, v);
+                    self.collect_expr_tokens(file_path, k, scope_idx, declared, constructor_names);
+                    self.collect_expr_tokens(file_path, v, scope_idx, declared, constructor_names);
                 }
             }
             Expr::Index {
                 expr: inner, index, ..
             } => {
-                self.collect_expr_tokens(file_path, inner);
-                self.collect_expr_tokens(file_path, index);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
+                self.collect_expr_tokens(file_path, index, scope_idx, declared, constructor_names);
             }
             Expr::Try { expr: inner, .. } | Expr::Ref { expr: inner, .. } => {
-                self.collect_expr_tokens(file_path, inner);
+                self.collect_expr_tokens(file_path, inner, scope_idx, declared, constructor_names);
             }
             Expr::FnDef {
                 name,
                 params,
+                return_type,
                 body,
                 span,
                 ..
@@ -1553,12 +1964,18 @@ impl TypeChecker {
                             span: param.span,
                         },
                     );
+                    if let Some(t) = &param.ty {
+                        self.collect_type_tokens(file_path, t);
+                    }
+                }
+                if let Some(t) = return_type {
+                    self.collect_type_tokens(file_path, t);
                 }
                 for s in &body.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
             }
             Expr::ListComp {
@@ -1569,6 +1986,7 @@ impl TypeChecker {
                 span,
                 ..
             } => {
+                declared.entry(scope_idx).or_default().insert(var.clone());
                 self.semantic_db.add_token(
                     file_path,
                     semantic_db::SemanticToken {
@@ -1578,10 +1996,28 @@ impl TypeChecker {
                         span: *span,
                     },
                 );
-                self.collect_expr_tokens(file_path, element);
-                self.collect_expr_tokens(file_path, iterable);
+                self.collect_expr_tokens(
+                    file_path,
+                    element,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
+                self.collect_expr_tokens(
+                    file_path,
+                    iterable,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                );
                 if let Some(cond) = condition {
-                    self.collect_expr_tokens(file_path, cond);
+                    self.collect_expr_tokens(
+                        file_path,
+                        cond,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                    );
                 }
             }
             Expr::FString { segments, .. } => {
@@ -1591,16 +2027,22 @@ impl TypeChecker {
                         ..
                     } = seg
                     {
-                        self.collect_expr_tokens(file_path, expr);
+                        self.collect_expr_tokens(
+                            file_path,
+                            expr,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                        );
                     }
                 }
             }
             Expr::Unsafe { body, .. } => {
                 for s in &body.stmts {
-                    self.collect_stmt_tokens(file_path, s, 0);
+                    self.collect_stmt_tokens(file_path, s, scope_idx, declared, constructor_names);
                 }
                 if let Some(r) = &body.expr {
-                    self.collect_expr_tokens(file_path, r);
+                    self.collect_expr_tokens(file_path, r, scope_idx, declared, constructor_names);
                 }
             }
             // 字面量、Error、Break、Continue 等不需要收集

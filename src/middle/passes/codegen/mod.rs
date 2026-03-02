@@ -243,7 +243,7 @@ impl CodegenContext {
         ast_type: &Type,
     ) -> MonoType {
         match ast_type {
-            Type::Name(name) => MonoType::TypeRef(name.clone()),
+            Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
             Type::Int(n) => MonoType::Int(*n),
             Type::Float(n) => MonoType::Float(*n),
             Type::Char => MonoType::Char,
@@ -262,7 +262,7 @@ impl CodegenContext {
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
             },
-            Type::Generic { name, args } => MonoType::TypeRef(format!(
+            Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
                 "{}<{}>",
                 name,
                 args.iter()

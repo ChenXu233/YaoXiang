@@ -532,11 +532,17 @@ fn test_fn_def_creates_scope() {
             name: "my_fn".to_string(),
             params: vec![ast::Param {
                 name: "param".to_string(),
-                ty: Some(ast::Type::Name("Int".to_string())),
+                ty: Some(ast::Type::Name {
+                    name: "Int".to_string(),
+                    span: create_dummy_span(),
+                }),
                 is_mut: false,
                 span: create_dummy_span(),
             }],
-            return_type: Some(ast::Type::Name("Int".to_string())),
+            return_type: Some(ast::Type::Name {
+                name: "Int".to_string(),
+                span: create_dummy_span(),
+            }),
             body: Box::new(ast::Block {
                 stmts: vec![],
                 expr: Some(Box::new(ast::Expr::Var(

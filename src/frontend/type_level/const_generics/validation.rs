@@ -92,7 +92,9 @@ impl LiteralTypeValidator {
         ty: &'a Type,
     ) -> Option<(String, ConstValue)> {
         match ty {
-            Type::Literal { name, base_type: _ } => {
+            Type::Literal {
+                name, base_type: _, ..
+            } => {
                 // 首先检查是否是已注册的 Const 参数
                 if let Some(value) = self.const_params.get(name) {
                     return Some((name.clone(), value.clone()));
@@ -107,7 +109,7 @@ impl LiteralTypeValidator {
                 }
                 None
             }
-            Type::Name(name) => {
+            Type::Name { name, .. } => {
                 // 检查是否是已注册的 Const 参数
                 if let Some(value) = self.const_params.get(name) {
                     return Some((name.clone(), value.clone()));
@@ -124,7 +126,7 @@ impl LiteralTypeValidator {
         ty: &Type,
     ) -> Option<ConstKind> {
         match ty {
-            Type::Name(name) => type_name_to_const_kind(name),
+            Type::Name { name, .. } => type_name_to_const_kind(name),
             Type::Literal { name, .. } => ConstValue::from_literal_name(name).map(|v| v.kind()),
             _ => None,
         }
@@ -161,7 +163,10 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
     match &param.kind {
         GenericParamKind::Const { const_type } => {
             let name = param.name.clone();
-            if let Type::Name(type_name) = const_type.as_ref() {
+            if let Type::Name {
+                name: type_name, ..
+            } = const_type.as_ref()
+            {
                 type_name_to_const_kind(type_name).map(|kind| (name, kind))
             } else {
                 None
@@ -175,7 +180,7 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
 /// 将 AST 类型转换为 MonoType
 pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
     match ty {
-        Type::Name(name) => Some(MonoType::TypeRef(name.clone())),
+        Type::Name { name, .. } => Some(MonoType::TypeRef(name.clone())),
         Type::Int(n) => Some(MonoType::Int(*n)),
         Type::Float(n) => Some(MonoType::Float(*n)),
         Type::Char => Some(MonoType::Char),
@@ -190,6 +195,7 @@ pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::span::Span;
 
     #[test]
     fn test_literal_type_parsing() {
@@ -201,7 +207,11 @@ mod tests {
         // 解析已注册的字面量
         let ty = Type::Literal {
             name: "N".to_string(),
-            base_type: Box::new(Type::Name("Int".to_string())),
+            name_span: Span::dummy(),
+            base_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
         };
         let result = validator.parse_literal_type(&ty);
         assert!(result.is_some());
@@ -218,7 +228,10 @@ mod tests {
         validator.bind_const_param("n".to_string(), ConstValue::Int(5));
 
         // 解析 Const 参数
-        let ty = Type::Name("n".to_string());
+        let ty = Type::Name {
+            name: "n".to_string(),
+            span: Span::dummy(),
+        };
         let result = validator.parse_literal_type(&ty);
         assert!(result.is_some());
         let (name, value) = result.unwrap();
@@ -231,12 +244,18 @@ mod tests {
         let validator = LiteralTypeValidator::new();
 
         // 验证 Int 类型
-        let ty = Type::Name("Int".to_string());
+        let ty = Type::Name {
+            name: "Int".to_string(),
+            span: Span::dummy(),
+        };
         let kind = validator.validate_const_type(&ty);
         assert_eq!(kind, Some(ConstKind::Int(None)));
 
         // 验证 Bool 类型
-        let ty = Type::Name("Bool".to_string());
+        let ty = Type::Name {
+            name: "Bool".to_string(),
+            span: Span::dummy(),
+        };
         let kind = validator.validate_const_type(&ty);
         assert_eq!(kind, Some(ConstKind::Bool));
     }

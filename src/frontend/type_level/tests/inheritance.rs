@@ -2,6 +2,7 @@
 
 use crate::frontend::core::parser::ast::Type;
 use crate::frontend::type_level::inheritance::InheritanceChecker;
+use crate::util::span::Span;
 
 #[test]
 fn test_simple_inheritance() {
@@ -10,7 +11,13 @@ fn test_simple_inheritance() {
     checker.register_trait("PartialEq");
 
     // type Eq = PartialEq {}
-    checker.add_trait("Eq", &[Type::Name("PartialEq".to_string())]);
+    checker.add_trait(
+        "Eq",
+        &[Type::Name {
+            name: "PartialEq".to_string(),
+            span: Span::dummy(),
+        }],
+    );
 
     assert!(checker.validate().is_ok());
 }
@@ -25,8 +32,14 @@ fn test_multiple_inheritance() {
     checker.add_trait(
         "Eq",
         &[
-            Type::Name("Clone".to_string()),
-            Type::Name("PartialEq".to_string()),
+            Type::Name {
+                name: "Clone".to_string(),
+                span: Span::dummy(),
+            },
+            Type::Name {
+                name: "PartialEq".to_string(),
+                span: Span::dummy(),
+            },
         ],
     );
 
@@ -38,9 +51,27 @@ fn test_cycle_detection() {
     let mut checker = InheritanceChecker::new();
 
     // A extends B, B extends C, C extends A
-    checker.add_trait("A", &[Type::Name("B".to_string())]);
-    checker.add_trait("B", &[Type::Name("C".to_string())]);
-    checker.add_trait("C", &[Type::Name("A".to_string())]);
+    checker.add_trait(
+        "A",
+        &[Type::Name {
+            name: "B".to_string(),
+            span: Span::dummy(),
+        }],
+    );
+    checker.add_trait(
+        "B",
+        &[Type::Name {
+            name: "C".to_string(),
+            span: Span::dummy(),
+        }],
+    );
+    checker.add_trait(
+        "C",
+        &[Type::Name {
+            name: "A".to_string(),
+            span: Span::dummy(),
+        }],
+    );
 
     assert!(checker.validate().is_err());
 }
@@ -51,7 +82,13 @@ fn test_undefined_parent() {
     checker.register_trait("A");
 
     // B extends Unknown
-    checker.add_trait("B", &[Type::Name("Unknown".to_string())]);
+    checker.add_trait(
+        "B",
+        &[Type::Name {
+            name: "Unknown".to_string(),
+            span: Span::dummy(),
+        }],
+    );
 
     assert!(checker.validate().is_err());
 }

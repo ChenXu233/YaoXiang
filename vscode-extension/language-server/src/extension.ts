@@ -91,7 +91,7 @@ async function startLanguageClient(): Promise<void> {
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       outputChannel?.appendLine(`[client] Failed to start language client: ${message}`);
-      void vscode.window.showErrorMessage(`YaoXiang LSP ����ʧ��: ${message}`);
+      void vscode.window.showErrorMessage(`YaoXiang LSP 重启失败: ${message}`);
       outputChannel?.show(true);
     }
   );
