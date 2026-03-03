@@ -108,7 +108,7 @@ pub fn format_type(ty: &Type) -> String {
             name, base_type: _, ..
         } => name.clone(),
         Type::Ptr(inner) => format!("*{}", format_type(inner)),
-        Type::MetaType { args } => {
+        Type::MetaType { args, .. } => {
             if args.is_empty() {
                 "Type".to_string()
             } else {

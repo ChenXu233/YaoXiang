@@ -814,6 +814,7 @@ mod tests {
                 kind: StmtKind::Use {
                     path: "std.io".to_string(),
                     path_span: dummy_span(),
+                    path_parts: vec![],
                     items: None,
                     alias: None,
                 },
@@ -842,6 +843,7 @@ mod tests {
                 kind: StmtKind::Use {
                     path: "std.io".to_string(),
                     path_span: dummy_span(),
+                    path_parts: vec![],
                     items: Some(vec!["println".to_string()]),
                     alias: None,
                 },

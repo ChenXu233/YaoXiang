@@ -32,7 +32,7 @@ fn extract_type_name(ty: &Type) -> Option<String> {
     match ty {
         Type::Name { name, .. } => Some(name.clone()),
         // For MetaType like Type[T], extract T's name
-        Type::MetaType { args } => {
+        Type::MetaType { args, .. } => {
             if args.len() == 1 {
                 extract_type_name(&args[0])
             } else {
@@ -791,7 +791,10 @@ fn parse_var_stmt_with_pub(
 
         // RFC-010: Check if type annotation is MetaType (`Type` or `Type[T]`)
         // If so, this is a type definition: `Name: Type = { ... }` or `Name: Type[T] = { ... }`
-        if let Some(Type::MetaType { args: meta_args }) = &type_annotation {
+        if let Some(Type::MetaType {
+            args: meta_args, ..
+        }) = &type_annotation
+        {
             // RFC-010 Easter Egg: Type: Type = Type
             // 检测 `Type: Type = Type` 彩蛋（用户尝试定义 Type 自身）
             if name == "Type" {
@@ -808,7 +811,10 @@ fn parse_var_stmt_with_pub(
                             kind: StmtKind::TypeDef {
                                 name: "Type".to_string(),
                                 name_span,
-                                definition: Type::MetaType { args: Vec::new() },
+                                definition: Type::MetaType {
+                                    name_span: Span::dummy(),
+                                    args: Vec::new(),
+                                },
                                 generic_params: meta_args
                                     .iter()
                                     .filter_map(extract_type_name)
@@ -1036,7 +1042,7 @@ pub fn parse_use_stmt(
 ) -> Option<Stmt> {
     state.bump(); // consume 'use'
 
-    let (path, path_span) = parse_use_path(state)?;
+    let (path, path_span, path_parts) = parse_use_path(state)?;
 
     // Parse import items: use path.{item1, item2};
     let items = if state.skip(&TokenKind::LBrace) {
@@ -1087,6 +1093,7 @@ pub fn parse_use_stmt(
         kind: StmtKind::Use {
             path,
             path_span,
+            path_parts,
             items,
             alias,
         },
@@ -1095,8 +1102,9 @@ pub fn parse_use_stmt(
 }
 
 /// Parse use path (dot-separated identifiers)
-fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span)> {
+fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span, Vec<SpannedIdent>)> {
     let mut parts = Vec::new();
+    let mut part_spans = Vec::new();
     let mut start = None;
     let mut end = None;
 
@@ -1107,6 +1115,10 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span)> {
         }
         end = Some(token_span.end);
         parts.push(n.clone());
+        part_spans.push(SpannedIdent {
+            name: n.clone(),
+            span: token_span,
+        });
         state.bump();
         if !state.skip(&TokenKind::Dot) {
             break;
@@ -1125,7 +1137,7 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span)> {
     } else {
         let start = start.unwrap_or_else(|| Span::dummy().start);
         let end = end.unwrap_or_else(|| Span::dummy().end);
-        Some((parts.join("."), Span::new(start, end)))
+        Some((parts.join("."), Span::new(start, end), part_spans))
     }
 }
 
@@ -1466,7 +1478,7 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                         }
                     }
                     state.skip(&TokenKind::RBracket);
-                    return Some(Type::MetaType { args });
+                    return Some(Type::MetaType { name_span, args });
                 }
                 // Also support angle bracket syntax: Type<T> or Type<K, V>
                 if state.at(&TokenKind::Lt) {
@@ -1482,9 +1494,12 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                         }
                     }
                     state.skip(&TokenKind::Gt);
-                    return Some(Type::MetaType { args });
+                    return Some(Type::MetaType { name_span, args });
                 }
-                return Some(Type::MetaType { args: Vec::new() });
+                return Some(Type::MetaType {
+                    name_span,
+                    args: Vec::new(),
+                });
             }
 
             // Check for generic parameters: Type<T> or Type[T]

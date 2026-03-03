@@ -62,8 +62,22 @@ impl ParserState<'_> {
                     break;
                 }
                 self.bump(); // consume '.'
-                let field = match self.current().map(|t| &t.kind) {
-                    Some(TokenKind::Identifier(name)) => name.clone(),
+                let (field, field_span) = match self.current() {
+                    Some(token) => match &token.kind {
+                        TokenKind::Identifier(name) => (name.clone(), token.span),
+                        _ => {
+                            self.error(
+                                crate::frontend::core::parser::ParseError::UnexpectedToken {
+                                    found: self
+                                        .current()
+                                        .map(|t| t.kind.clone())
+                                        .unwrap_or(TokenKind::Eof),
+                                    span: self.span(),
+                                },
+                            );
+                            return None;
+                        }
+                    },
                     _ => {
                         self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
                             found: self
@@ -79,7 +93,7 @@ impl ParserState<'_> {
                 left = Expr::FieldAccess {
                     expr: Box::new(left),
                     field,
-                    span: _token.span,
+                    span: field_span,
                 };
                 continue;
             }

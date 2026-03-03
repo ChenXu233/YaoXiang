@@ -141,14 +141,57 @@ fn test_type_annotation_emits_type_token() {
 }
 
 #[test]
-fn test_use_emits_namespace_token_on_path_span() {
+fn test_meta_type_annotation_emits_type_token_for_type_keyword() {
     let mut checker = TypeChecker::new("file:///test.yx");
 
-    let path_span = dummy_span();
+    let stmt = ast::Stmt {
+        kind: ast::StmtKind::Var {
+            name: "T".to_string(),
+            name_span: dummy_span(),
+            type_annotation: Some(ast::Type::MetaType {
+                name_span: dummy_span(),
+                args: vec![],
+            }),
+            initializer: None,
+            is_mut: false,
+        },
+        span: dummy_span(),
+    };
+
+    let module = ast::Module {
+        items: vec![stmt],
+        span: dummy_span(),
+    };
+
+    let result = checker.check_module_collect_all(&module).unwrap();
+    let tokens = result.semantic_db.get_tokens("file:///test.yx").unwrap();
+
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.token_type == SemanticTokenType::Type && t.name == "Type"),
+        "expected a Type token for meta-type keyword Type"
+    );
+}
+
+#[test]
+fn test_use_emits_segmented_namespace_tokens_on_path_parts() {
+    let mut checker = TypeChecker::new("file:///test.yx");
+
     let stmt = ast::Stmt {
         kind: ast::StmtKind::Use {
             path: "std.io".to_string(),
-            path_span,
+            path_span: dummy_span(),
+            path_parts: vec![
+                ast::SpannedIdent {
+                    name: "std".to_string(),
+                    span: dummy_span(),
+                },
+                ast::SpannedIdent {
+                    name: "io".to_string(),
+                    span: dummy_span(),
+                },
+            ],
             items: None,
             alias: None,
         },
@@ -166,10 +209,14 @@ fn test_use_emits_namespace_token_on_path_span() {
     assert!(
         tokens
             .iter()
-            .any(|t| t.token_type == SemanticTokenType::Namespace
-                && t.name == "std.io"
-                && t.span == path_span),
-        "expected a Namespace token for use path using path_span"
+            .any(|t| t.token_type == SemanticTokenType::Namespace && t.name == "std"),
+        "expected a Namespace token for first use path segment std"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.token_type == SemanticTokenType::Namespace && t.name == "io"),
+        "expected a Namespace token for second use path segment io"
     );
 }
 
