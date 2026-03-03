@@ -3,6 +3,12 @@
 pub use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
+#[derive(Debug, Clone)]
+pub struct SpannedIdent {
+    pub name: String,
+    pub span: Span,
+}
+
 /// Expression
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -185,6 +191,7 @@ pub enum StmtKind {
     Var {
         name: String,
         /// 变量名的源码位置（用于代码染色等）
+        /// Span of the `Type` meta-keyword identifier.
         name_span: Span,
         type_annotation: Option<Type>,
         initializer: Option<Box<Expr>>,
@@ -212,6 +219,8 @@ pub enum StmtKind {
         path: String,
         /// Module path span
         path_span: Span,
+        /// Spans of each identifier in the module path (dot-separated)
+        path_parts: Vec<SpannedIdent>,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
     },
@@ -434,6 +443,8 @@ pub enum Type {
     /// `Type` is the only meta-type keyword in the language
     /// Supports infinite universe levels: `Type[Type[T]]` → Type2, etc.
     MetaType {
+        /// `Type` 关键字的源码位置
+        name_span: Span,
         /// Generic type parameters (empty for plain `Type`)
         /// e.g., `Type[T]` has args = [T], `Type[K, V]` has args = [K, V]
         /// e.g., `Type[Type[T]]` has args = [MetaType { args: [T] }]

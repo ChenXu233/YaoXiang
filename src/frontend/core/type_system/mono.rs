@@ -521,7 +521,7 @@ impl From<ast::Type> for MonoType {
                 // Raw pointer type: *T
                 MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
             }
-            ast::Type::MetaType { args } => {
+            ast::Type::MetaType { args, .. } => {
                 // RFC-010: Meta-type `Type` or `Type[T]` or `Type[Type[T]]`
                 // Determine universe level recursively:
                 // - plain Type = Type0
@@ -558,7 +558,7 @@ pub fn calculate_meta_type_level(args: &[ast::Type]) -> UniverseLevel {
 /// Get the universe level of an AST type (before conversion to MonoType)
 pub fn get_ast_type_universe_level(ast_type: &ast::Type) -> usize {
     match ast_type {
-        ast::Type::MetaType { args } => {
+        ast::Type::MetaType { args, .. } => {
             // Recursively calculate level
             if args.is_empty() {
                 0 // Type itself is Type0

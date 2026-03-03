@@ -108,6 +108,7 @@ mod tests {
             kind: StmtKind::Use {
                 path: path.to_string(),
                 path_span: Span::dummy(),
+                path_parts: vec![],
                 items: None,
                 alias: None,
             },

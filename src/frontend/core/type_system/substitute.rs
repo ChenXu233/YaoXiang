@@ -412,11 +412,15 @@ mod universe_level_tests {
         assert_eq!(get_ast_type_universe_level(&plain_type), 0);
 
         // MetaType without args should be Type0
-        let meta_empty = Type::MetaType { args: Vec::new() };
+        let meta_empty = Type::MetaType {
+            name_span: Span::dummy(),
+            args: Vec::new(),
+        };
         assert_eq!(get_ast_type_universe_level(&meta_empty), 0);
 
         // MetaType with simple arg (Type0) should be Type1
         let meta_with_t = Type::MetaType {
+            name_span: Span::dummy(),
             args: vec![Type::Name {
                 name: "T".to_string(),
                 span: Span::dummy(),
@@ -426,7 +430,9 @@ mod universe_level_tests {
 
         // MetaType with MetaType arg (Type1) should be Type2
         let meta_nested = Type::MetaType {
+            name_span: Span::dummy(),
             args: vec![Type::MetaType {
+                name_span: Span::dummy(),
                 args: vec![Type::Name {
                     name: "T".to_string(),
                     span: Span::dummy(),
@@ -437,8 +443,11 @@ mod universe_level_tests {
 
         // MetaType with deeply nested (Type2) should be Type3
         let meta_deep = Type::MetaType {
+            name_span: Span::dummy(),
             args: vec![Type::MetaType {
+                name_span: Span::dummy(),
                 args: vec![Type::MetaType {
+                    name_span: Span::dummy(),
                     args: vec![Type::Name {
                         name: "T".to_string(),
                         span: Span::dummy(),
@@ -484,6 +493,7 @@ mod universe_level_tests {
 
         // Nested MetaType -> Type2
         let nested = vec![Type::MetaType {
+            name_span: Span::dummy(),
             args: vec![Type::Name {
                 name: "T".to_string(),
                 span: Span::dummy(),

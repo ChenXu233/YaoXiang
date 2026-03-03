@@ -16,7 +16,7 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
     PublishDiagnostics,
 };
-use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Rename, Shutdown};
 use lsp_types::request::HoverRequest;
 use lsp_types::request::SemanticTokensFullRequest;
 use lsp_types::request::SemanticTokensFullDeltaRequest;
@@ -147,7 +147,7 @@ fn handle_request(
 
         // textDocument/completion
         m if m == <Completion as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::CompletionParams>(req.params) {
                 Ok(params) => {
                     let result = handlers::completion::handle_completion(session, world, params);
                     Some(protocol::ok_response(req.id, result))
@@ -188,6 +188,47 @@ fn handle_request(
                 }
                 Err(e) => {
                     warn!("查找引用请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/rename
+        m if m == <Rename as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::rename::handle_rename(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("重命名请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/codeAction
+        "textDocument/codeAction" => {
+            match serde_json::from_value::<lsp_types::CodeActionParams>(req.params) {
+                Ok(params) => {
+                    // 获取文档内容
+                    let uri = params.text_document.uri.as_str();
+                    let content = session
+                        .document_store()
+                        .get(uri)
+                        .map(|d| d.content())
+                        .unwrap_or_default();
+                    let result = handlers::code_action::handle_code_action(params, content);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("Code action 请求参数解析失败: {}", e);
                     Some(protocol::internal_error(
                         req.id,
                         format!("参数解析失败: {}", e),
@@ -297,6 +338,21 @@ fn handle_request(
             }
         }
 
+        // workspace/symbol
+        "workspace/symbol" => match serde_json::from_value(req.params) {
+            Ok(params) => {
+                let result = handlers::workspace_symbol::handle_workspace_symbol(world, params);
+                Some(protocol::ok_response(req.id, result))
+            }
+            Err(e) => {
+                warn!("工作区符号搜索请求参数解析失败: {}", e);
+                Some(protocol::internal_error(
+                    req.id,
+                    format!("参数解析失败: {}", e),
+                ))
+            }
+        },
+
         // 未实现的方法
         _ => {
             warn!("未处理的请求方法: {}", method);
@@ -335,6 +391,7 @@ fn handle_notification(
             if let Ok(params) = serde_json::from_value(not.params) {
                 let uri = handlers::text_document::handle_did_open(session, params);
                 update_symbol_index(session, world, &uri);
+                request_semantic_tokens_refresh(connection);
                 publish_diagnostics_for_uri(connection, session, &uri);
             }
         }
@@ -344,6 +401,7 @@ fn handle_notification(
             if let Ok(params) = serde_json::from_value(not.params) {
                 if let Some(uri) = handlers::text_document::handle_did_change(session, params) {
                     update_symbol_index(session, world, &uri);
+                    request_semantic_tokens_refresh(connection);
                     publish_diagnostics_for_uri(connection, session, &uri);
                 }
             }

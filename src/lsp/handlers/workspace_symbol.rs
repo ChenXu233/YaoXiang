@@ -31,7 +31,10 @@ fn to_lsp_symbol_kind(kind: &SymbolKind) -> LspSymbolKind {
 /// 模糊匹配：查询字符串中的所有字符是否按顺序出现在目标中
 ///
 /// 例如："fib" 匹配 "fibonacci"、"find_by_id" 等
-fn fuzzy_match(query: &str, target: &str) -> bool {
+fn fuzzy_match(
+    query: &str,
+    target: &str,
+) -> bool {
     if query.is_empty() {
         return true;
     }
@@ -59,7 +62,10 @@ fn fuzzy_match(query: &str, target: &str) -> bool {
 /// - 前缀匹配：1
 /// - 包含匹配：2
 /// - 模糊匹配：3
-fn match_score(query: &str, target: &str) -> u32 {
+fn match_score(
+    query: &str,
+    target: &str,
+) -> u32 {
     let q = query.to_lowercase();
     let t = target.to_lowercase();
 
@@ -116,7 +122,11 @@ pub fn handle_workspace_symbol(
             continue;
         }
 
-        let score = if query.is_empty() { 3 } else { match_score(query, name) };
+        let score = if query.is_empty() {
+            3
+        } else {
+            match_score(query, name)
+        };
         let symbols = index.find_by_name(name);
 
         for sym in symbols {
@@ -153,13 +163,21 @@ pub fn handle_workspace_symbol(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolIndex, SymbolKind, SymbolLocation};
+    use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolKind, SymbolLocation};
     use crate::util::span::{Position, Span};
 
     fn dummy_span() -> Span {
         Span {
-            start: Position { line: 1, column: 1, offset: 0 },
-            end: Position { line: 1, column: 10, offset: 9 },
+            start: Position {
+                line: 1,
+                column: 1,
+                offset: 0,
+            },
+            end: Position {
+                line: 1,
+                column: 10,
+                offset: 9,
+            },
         }
     }
 
@@ -254,10 +272,19 @@ mod tests {
 
     #[test]
     fn test_to_lsp_symbol_kind_mapping() {
-        assert_eq!(to_lsp_symbol_kind(&SymbolKind::Variable), LspSymbolKind::VARIABLE);
-        assert_eq!(to_lsp_symbol_kind(&SymbolKind::Function), LspSymbolKind::FUNCTION);
+        assert_eq!(
+            to_lsp_symbol_kind(&SymbolKind::Variable),
+            LspSymbolKind::VARIABLE
+        );
+        assert_eq!(
+            to_lsp_symbol_kind(&SymbolKind::Function),
+            LspSymbolKind::FUNCTION
+        );
         assert_eq!(to_lsp_symbol_kind(&SymbolKind::Type), LspSymbolKind::CLASS);
-        assert_eq!(to_lsp_symbol_kind(&SymbolKind::Trait), LspSymbolKind::INTERFACE);
+        assert_eq!(
+            to_lsp_symbol_kind(&SymbolKind::Trait),
+            LspSymbolKind::INTERFACE
+        );
     }
 
     #[test]
@@ -368,10 +395,7 @@ mod tests {
         // "fi" 是 fibonacci 和 find_by_id 的前缀匹配（得分 1）
         // 应该在 format_string（模糊匹配，得分 3）之前
         if symbols.len() >= 2 {
-            let prefix_names: Vec<&str> = symbols.iter()
-                .take(2)
-                .map(|s| s.name.as_str())
-                .collect();
+            let prefix_names: Vec<&str> = symbols.iter().take(2).map(|s| s.name.as_str()).collect();
             assert!(
                 prefix_names.contains(&"fibonacci") || prefix_names.contains(&"find_by_id"),
                 "前缀匹配结果应排在前面"
