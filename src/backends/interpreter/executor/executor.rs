@@ -1,0 +1,699 @@
+//! Interpreter executor for YaoXiang bytecode
+//!
+//! This module implements the main interpreter that executes bytecode.
+//! It follows the standard fetch-decode-execute cycle.
+
+use std::collections::HashMap;
+use std::fmt;
+use std::time::Instant;
+use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
+use crate::backends::common::{RuntimeValue, Heap, HeapValue};
+use crate::backends::common::value::{
+    AsyncState, AsyncValue, FunctionValue, FunctionId, TaskId, ValueType,
+};
+use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
+use crate::backends::interpreter::Frame;
+use crate::backends::interpreter::ffi::FfiRegistry;
+use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+use crate::backends::runtime::engine::{
+    LocalRuntime, TaskMeta, TaskOutcome, TaskCancelReason, TaskResult, sv,
+};
+use crate::util::i18n::MSG;
+use crate::tlog;
+use crate::std::NativeContext;
+
+/// Maximum call stack depth
+const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
+
+#[derive(Debug)]
+pub enum InterpreterTask {
+    CallStatic {
+        func_name: String,
+        args: Vec<RuntimeValue>,
+    },
+    CallNative {
+        func_name: String,
+        args: Vec<RuntimeValue>,
+    },
+}
+
+/// The YaoXiang bytecode interpreter
+///
+/// The interpreter loads bytecode modules and executes them instruction by instruction.
+/// It maintains:
+/// - A heap for dynamically allocated objects
+/// - A call stack for function calls
+/// - A constant pool for literals
+pub struct Interpreter {
+    /// Heap for dynamic allocation
+    pub(super) heap: Heap,
+    /// Call stack
+    pub(super) call_stack: Vec<Frame>,
+    /// Constant pool (shared across modules)
+    pub(super) constants: Vec<ConstValue>,
+    /// Function table (name -> function)
+    pub(super) functions: HashMap<String, BytecodeFunction>,
+    /// Function table by index (for closure calls via func_id)
+    pub(super) functions_by_id: Vec<BytecodeFunction>,
+    /// Type table
+    pub(super) type_table: Vec<crate::middle::core::ir::Type>,
+    /// Current execution state
+    pub(super) state: ExecutionState,
+    /// Configuration
+    pub(super) config: ExecutorConfig,
+    /// Breakpoints
+    pub(super) breakpoints: HashMap<usize, ()>,
+    /// FFI Registry for native function calls
+    pub(super) ffi: FfiRegistry,
+    /// Standard output
+    #[allow(dead_code)] // Might be unused if only accessed via write!
+    stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
+    /// Interpreter-side runtime configuration (defaults to current behavior).
+    pub(super) runtime_config: InterpreterRuntimeConfig,
+    /// Standard runtime DAG used for lazy/concurrent evaluation (RFC-008/001).
+    pub(super) rt_dag: LocalRuntime,
+    /// Pending tasks keyed by `TaskId` (driven by `rt_dag`).
+    pub(super) rt_tasks: HashMap<TaskId, InterpreterTask>,
+}
+
+impl fmt::Debug for Interpreter {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("Interpreter")
+            .field("heap", &self.heap)
+            .field("call_stack", &self.call_stack)
+            .field("constants", &self.constants)
+            .field("functions", &self.functions)
+            .field("functions_by_id", &self.functions_by_id)
+            .field("type_table", &self.type_table)
+            .field("state", &self.state)
+            .field("config", &self.config)
+            .field("breakpoints", &self.breakpoints)
+            .field("ffi", &self.ffi)
+            .field(
+                "stdout",
+                &if self.stdout.is_some() {
+                    "Some(...)"
+                } else {
+                    "None"
+                },
+            )
+            .finish()
+    }
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Interpreter {
+    /// Create a new interpreter with default configuration
+    pub fn new() -> Self {
+        Self::with_config(ExecutorConfig::default())
+    }
+
+    /// Create an interpreter with custom configuration
+    pub fn with_config(config: ExecutorConfig) -> Self {
+        Self {
+            heap: Heap::new(),
+            call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
+            constants: Vec::new(),
+            functions: HashMap::new(),
+            functions_by_id: Vec::new(),
+            type_table: Vec::new(),
+            state: ExecutionState::default(),
+            config,
+            breakpoints: HashMap::new(),
+            ffi: FfiRegistry::with_std(),
+            stdout: None, // Default to stdout (handled by None check)
+            runtime_config: InterpreterRuntimeConfig::default(),
+            rt_dag: LocalRuntime::new(),
+            rt_tasks: HashMap::new(),
+        }
+    }
+
+    pub fn runtime_config(&self) -> &InterpreterRuntimeConfig {
+        &self.runtime_config
+    }
+
+    pub fn set_runtime_config(
+        &mut self,
+        runtime_config: InterpreterRuntimeConfig,
+    ) {
+        self.runtime_config = runtime_config;
+    }
+
+    /// Set standard output redirect
+    pub fn set_stdout(
+        &mut self,
+        stdout: std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>,
+    ) {
+        self.stdout = Some(stdout);
+    }
+
+    /// Get mutable reference to the FFI registry for registering native functions
+    pub fn ffi_registry_mut(&mut self) -> &mut FfiRegistry {
+        &mut self.ffi
+    }
+
+    /// Get reference to the FFI registry
+    pub fn ffi_registry(&self) -> &FfiRegistry {
+        &self.ffi
+    }
+
+    /// Build vtable for a struct type at runtime
+    ///
+    /// This method looks up methods in the function table by matching the type name prefix.
+    /// Functions are stored with keys like "TypeName.method_name".
+    pub(super) fn build_vtable(
+        &mut self,
+        type_name: &str,
+    ) -> Vec<(String, FunctionValue)> {
+        let mut vtable = Vec::new();
+        let method_prefix = format!("{}.", type_name);
+
+        // Find all functions that match the type name prefix
+        for (func_name, bytecode_func) in &self.functions {
+            if func_name.starts_with(&method_prefix) {
+                // Extract method name (everything after the prefix)
+                let method_name = func_name[method_prefix.len()..].to_string();
+
+                // Create a new function ID for this method
+                let func_id = FunctionId(self.functions_by_id.len() as u32);
+
+                // Add to functions_by_id for runtime lookup
+                self.functions_by_id.push(bytecode_func.clone());
+
+                vtable.push((
+                    method_name,
+                    FunctionValue {
+                        func_id,
+                        env: Vec::new(), // Methods don't need closure env
+                    },
+                ));
+            }
+        }
+
+        vtable
+    }
+
+    /// Call a YaoXiang function by its FunctionId.
+    /// This is used by native functions (like map/filter/reduce) to invoke closures.
+    pub fn call_function_by_id(
+        &mut self,
+        func_id: crate::backends::common::value::FunctionId,
+        args: &[RuntimeValue],
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let idx = func_id.0 as usize;
+        if idx >= self.functions_by_id.len() {
+            return Err(ExecutorError::FunctionNotFound(format!(
+                "Function with id {} not found (total functions: {})",
+                idx,
+                self.functions_by_id.len()
+            )));
+        }
+        // Clone the function to avoid borrow issues
+        let func = self.functions_by_id[idx].clone();
+        self.execute_function(&func, args)
+    }
+
+    /// Push a frame onto the call stack
+    pub(super) fn push_frame(
+        &mut self,
+        frame: Frame,
+    ) -> ExecutorResult<()> {
+        if self.call_stack.len() >= self.config.max_stack_depth {
+            return Err(ExecutorError::StackOverflow);
+        }
+        self.call_stack.push(frame);
+        Ok(())
+    }
+
+    /// Pop a frame from the call stack
+    pub(super) fn pop_frame(&mut self) -> Option<Frame> {
+        self.call_stack.pop()
+    }
+
+    /// Get the current frame
+    pub fn current_frame(&mut self) -> Option<&mut Frame> {
+        self.call_stack.last_mut()
+    }
+
+    /// Get the current function
+    pub fn current_function(&self) -> Option<&BytecodeFunction> {
+        self.call_stack.last().map(|f| &f.function)
+    }
+
+    /// Resolve a label to an instruction offset
+    pub fn resolve_label(
+        &mut self,
+        label: Label,
+    ) -> Option<usize> {
+        self.current_frame()
+            .and_then(|f| f.function.labels.get(&label).copied())
+    }
+
+    /// Load a constant by index
+    pub(super) fn load_constant(
+        &self,
+        idx: u16,
+    ) -> RuntimeValue {
+        self.constants
+            .get(idx as usize)
+            .map(|c| match c {
+                ConstValue::Void => RuntimeValue::Unit,
+                ConstValue::Bool(b) => RuntimeValue::Bool(*b),
+                ConstValue::Int(i) => RuntimeValue::Int((*i) as i64),
+                ConstValue::Float(f) => RuntimeValue::Float(*f),
+                ConstValue::Char(c) => RuntimeValue::Char((*c) as u32),
+                ConstValue::String(s) => RuntimeValue::String(s.as_str().into()),
+                ConstValue::Bytes(b) => RuntimeValue::Bytes(b.as_slice().into()),
+            })
+            .unwrap_or(RuntimeValue::Unit)
+    }
+
+    pub(super) fn make_async_pending(
+        &self,
+        task_id: TaskId,
+    ) -> RuntimeValue {
+        RuntimeValue::Async(Box::new(AsyncValue {
+            state: Box::new(AsyncState::Pending(task_id)),
+            value_type: ValueType::Unit,
+        }))
+    }
+
+    pub(super) fn deps_from_args(
+        &self,
+        args: &[RuntimeValue],
+    ) -> Vec<TaskId> {
+        let mut deps = Vec::new();
+        for arg in args {
+            let RuntimeValue::Async(av) = arg else {
+                continue;
+            };
+            if let AsyncState::Pending(id) = av.state.as_ref() {
+                deps.push(*id);
+            }
+        }
+        deps
+    }
+
+    pub(super) fn schedule_task(
+        &mut self,
+        task: InterpreterTask,
+        meta: TaskMeta,
+    ) -> ExecutorResult<TaskId> {
+        let id = self
+            .rt_dag
+            .spawn(meta)
+            .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+        if !self.rt_dag.is_complete(id) {
+            self.rt_tasks.insert(id, task);
+        }
+        Ok(id)
+    }
+
+    pub(super) fn prune_finished_tasks(&mut self) {
+        let finished: Vec<TaskId> = self
+            .rt_tasks
+            .keys()
+            .copied()
+            .filter(|id| self.rt_dag.is_complete(*id))
+            .collect();
+        for id in finished {
+            self.rt_tasks.remove(&id);
+        }
+    }
+
+    pub(super) fn drive_dag_until(
+        &mut self,
+        target: Option<TaskId>,
+    ) -> ExecutorResult<()> {
+        loop {
+            if let Some(t) = target {
+                if self.rt_dag.is_complete(t) {
+                    self.prune_finished_tasks();
+                    return Ok(());
+                }
+            }
+
+            let Some(next) = self.rt_dag.next_ready() else {
+                if let Some(t) = target {
+                    if !self.rt_dag.is_complete(t) {
+                        return Err(ExecutorError::Runtime(format!(
+                            "Runtime deadlock or cycle: {t:?}"
+                        )));
+                    }
+                }
+                self.prune_finished_tasks();
+                return Ok(());
+            };
+
+            self.rt_dag
+                .mark_running(next)
+                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+
+            let start = Instant::now();
+            let result = self.execute_scheduled_task(next);
+            let exec_time = start.elapsed();
+
+            let outcome = match result {
+                Ok(v) => TaskOutcome::Ok(v),
+                Err(e) => TaskOutcome::Err(e),
+            };
+
+            self.rt_dag
+                .complete(next, outcome, exec_time)
+                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+
+            self.prune_finished_tasks();
+        }
+    }
+
+    pub(super) fn execute_scheduled_task(
+        &mut self,
+        task_id: TaskId,
+    ) -> TaskResult {
+        let Some(task) = self.rt_tasks.remove(&task_id) else {
+            return Err(sv(RuntimeValue::String(
+                format!("Missing task payload: {task_id:?}").into(),
+            )));
+        };
+
+        let exec_result = match task {
+            InterpreterTask::CallStatic { func_name, args } => {
+                self.call_static_by_name(&func_name, &args)
+            }
+            InterpreterTask::CallNative { func_name, args } => {
+                self.call_native_by_name(&func_name, &args)
+            }
+        };
+
+        match exec_result {
+            Ok(v) => Ok(sv(v)),
+            Err(e) => Err(sv(RuntimeValue::String(format!("{e}").into()))),
+        }
+    }
+
+    pub(super) fn format_cancel_reason(
+        &self,
+        task_id: TaskId,
+        reason: &TaskCancelReason,
+    ) -> String {
+        match reason {
+            TaskCancelReason::Explicit => format!("Task {task_id:?} cancelled"),
+            TaskCancelReason::DependencyFailed { primary, others } => {
+                let mut msg = format!("Task {task_id:?} cancelled: dependency failed {primary:?}");
+                if !others.is_empty() {
+                    msg.push_str(&format!(" (others: {:?})", others));
+                }
+                msg
+            }
+            TaskCancelReason::DependencyCancelled { primary, others } => {
+                let mut msg =
+                    format!("Task {task_id:?} cancelled: dependency cancelled {primary:?}");
+                if !others.is_empty() {
+                    msg.push_str(&format!(" (others: {:?})", others));
+                }
+                msg
+            }
+        }
+    }
+
+    pub(super) fn force_value_in_place(
+        &mut self,
+        value: &mut RuntimeValue,
+    ) -> ExecutorResult<()> {
+        let RuntimeValue::Async(av) = value else {
+            return Ok(());
+        };
+
+        match av.state.as_ref() {
+            AsyncState::Ready(inner) => {
+                *value = (**inner).clone();
+                Ok(())
+            }
+            AsyncState::Error(err) => Err(ExecutorError::Runtime(format!("Async error: {err:?}"))),
+            AsyncState::Pending(task_id) => {
+                self.drive_dag_until(Some(*task_id))?;
+                let outcome = self.rt_dag.outcome(*task_id).ok_or_else(|| {
+                    ExecutorError::Runtime(format!("Task has no outcome: {task_id:?}"))
+                })?;
+
+                match outcome {
+                    TaskOutcome::Ok(payload) => {
+                        let rv = payload
+                            .downcast_ref::<RuntimeValue>()
+                            .cloned()
+                            .unwrap_or(RuntimeValue::Unit);
+                        *value = rv;
+                        Ok(())
+                    }
+                    TaskOutcome::Err(payload) => {
+                        let rv = payload
+                            .downcast_ref::<RuntimeValue>()
+                            .cloned()
+                            .unwrap_or(RuntimeValue::String("Unknown task error".into()));
+                        Err(ExecutorError::Runtime(format!("{rv:?}")))
+                    }
+                    TaskOutcome::Cancelled(reason) => Err(ExecutorError::Runtime(
+                        self.format_cancel_reason(*task_id, reason),
+                    )),
+                }
+            }
+        }
+    }
+
+    pub(super) fn force_register(
+        &mut self,
+        frame: &mut Frame,
+        reg: Reg,
+    ) -> ExecutorResult<RuntimeValue> {
+        if let Some(v) = frame.registers.get_mut(reg.0 as usize) {
+            self.force_value_in_place(v)?;
+            Ok(v.clone())
+        } else {
+            Ok(RuntimeValue::Unit)
+        }
+    }
+
+    pub(super) fn force_value_clone(
+        &mut self,
+        value: &RuntimeValue,
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut cloned = value.clone();
+        self.force_value_in_place(&mut cloned)?;
+        Ok(cloned)
+    }
+
+    pub(super) fn call_native_by_name(
+        &mut self,
+        func_name: &str,
+        call_args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut resolved = Vec::with_capacity(call_args.len());
+        for arg in call_args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+
+        let interp_ptr = std::ptr::addr_of_mut!(*self);
+        let mut call_fn = move |func: &RuntimeValue,
+                                args: &[RuntimeValue]|
+              -> Result<RuntimeValue, ExecutorError> {
+            if let RuntimeValue::Function(fv) = func {
+                // SAFETY: The interpreter lives as long as the callback.
+                let interpreter = unsafe { &mut *interp_ptr };
+                interpreter.call_function_by_id(fv.func_id, args)
+            } else {
+                Err(ExecutorError::Type("Expected function value".to_string()))
+            }
+        };
+        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
+        self.ffi.call(func_name, &resolved, &mut ctx)
+    }
+
+    pub(super) fn call_static_by_name(
+        &mut self,
+        func_name: &str,
+        call_args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut resolved = Vec::with_capacity(call_args.len());
+        for arg in call_args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+
+        if self.ffi.has(func_name) {
+            return self.call_native_by_name(func_name, &resolved);
+        }
+
+        let mut lookup_name = func_name.to_string();
+        if !self.functions.contains_key(func_name) {
+            let constructor_name = format!("{}_constructor", func_name);
+            if self.functions.contains_key(&constructor_name) {
+                lookup_name = constructor_name;
+            }
+        }
+
+        if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
+            self.execute_function(&target_func, &resolved)
+        } else {
+            Err(ExecutorError::FunctionNotFound(func_name.to_string()))
+        }
+    }
+
+    /// Execute a binary operation
+    pub(super) fn exec_binary_op(
+        &mut self,
+        dst: Reg,
+        lhs: Reg,
+        rhs: Reg,
+        op: BinaryOp,
+        frame: &mut Frame,
+    ) -> ExecutorResult<()> {
+        tlog!(
+            debug,
+            MSG::DebugRegisters,
+            &frame.registers.len(),
+            &(lhs.0 as usize),
+            &(rhs.0 as usize)
+        );
+        let a = self.force_register(frame, lhs)?;
+        let b = self.force_register(frame, rhs)?;
+
+        tlog!(debug, MSG::DebugBinaryOp, &a, &b);
+
+        tlog!(
+            debug,
+            MSG::DebugExecBinaryOp,
+            &format!("{:?}, {:?}, {:?}", &a, &b, &op)
+        );
+
+        let result = match (op, a, b) {
+            (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
+                tlog!(debug, MSG::VmI64Add, &l, &r);
+                RuntimeValue::Int(l + r)
+            }
+            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l - r),
+            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l * r),
+            (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                if r == 0 {
+                    return Err(ExecutorError::DivisionByZero);
+                }
+                RuntimeValue::Int(l / r)
+            }
+            (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                if r == 0 {
+                    return Err(ExecutorError::DivisionByZero);
+                }
+                RuntimeValue::Int(l % r)
+            }
+            (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
+            (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
+            (BinaryOp::Xor, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l ^ r),
+            (BinaryOp::Shl, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Int(l << r)
+            }
+            (BinaryOp::Sar, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Int(l >> r)
+            }
+            (BinaryOp::Shr, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Int(l >> r)
+            }
+            (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l + r)
+            }
+            (BinaryOp::Sub, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l - r)
+            }
+            (BinaryOp::Mul, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l * r)
+            }
+            (BinaryOp::Div, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l / r)
+            }
+            (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l % r)
+            }
+            (BinaryOp::Add, RuntimeValue::List(lhs_handle), RuntimeValue::List(rhs_handle)) => {
+                let mut merged = Vec::new();
+
+                if let Some(HeapValue::List(items)) = self.heap.get(lhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+                if let Some(HeapValue::List(items)) = self.heap.get(rhs_handle) {
+                    merged.extend(items.iter().cloned());
+                }
+
+                let handle = self.heap.allocate(HeapValue::List(merged));
+                RuntimeValue::List(handle)
+            }
+            _ => RuntimeValue::Unit,
+        };
+
+        frame.set_register(dst.0 as usize, result);
+        Ok(())
+    }
+
+    /// Execute a comparison
+    pub(super) fn exec_compare(
+        &mut self,
+        dst: Reg,
+        lhs: Reg,
+        rhs: Reg,
+        cmp: CompareOp,
+        frame: &mut Frame,
+    ) -> ExecutorResult<()> {
+        let a = self.force_register(frame, lhs)?;
+        let b = self.force_register(frame, rhs)?;
+
+        let result = match (cmp, &a, &b) {
+            // Integer comparison
+            (CompareOp::Eq, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            // String comparison
+            (CompareOp::Eq, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l == r)
+            }
+            (CompareOp::Ne, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l != r)
+            }
+            (CompareOp::Lt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l < r)
+            }
+            (CompareOp::Le, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l <= r)
+            }
+            (CompareOp::Gt, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l > r)
+            }
+            (CompareOp::Ge, RuntimeValue::String(l), RuntimeValue::String(r)) => {
+                RuntimeValue::Bool(l >= r)
+            }
+            _ => RuntimeValue::Bool(false),
+        };
+
+        frame.set_register(dst.0 as usize, result);
+        Ok(())
+    }
+}
