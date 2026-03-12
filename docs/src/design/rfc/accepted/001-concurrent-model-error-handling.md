@@ -7,7 +7,7 @@ title: RFC-001：并作模型与错误处理系统
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-03-10
+> **最后更新**: 2026-03-11
 
 ## 设计来源与参考
 
@@ -15,14 +15,18 @@ title: RFC-001：并作模型与错误处理系统
 
 | 文档 | 关系 | 说明 |
 |------|------|------|
-| [async-whitepaper](../async-whitepaper.md) | **设计源头** | 并作模型的理论基础和核心概念 |
-| [language-spec](../language-spec.md) | **规范目标** | 本RFC的设计将整合到语言规范中 |
+| [async-whitepaper](/src/archive/async-whitepaper) | **设计源头** | 并作模型的理论基础和核心概念 |
+| [language-spec](/src/design/language-spec) | **规范目标** | 本RFC的设计将整合到语言规范中 |
 
-> **说明**：本RFC是对 [async-whitepaper](../async-whitepaper.md) 中提出的并作模型的具体化和规范化，将其转化为可实现的语言设计。
+> **说明**：本RFC是对 [async-whitepaper](/src/archive/async-whitepaper) 中提出的并作模型的具体化和规范化，将其转化为可实现的语言设计。
 
 ## 摘要
 
 提出YaoXiang的并作模型（三层并发架构）、副作用处理机制、DAG依赖分析、Result类型系统和错误图可视化。核心设计理念源自《易经》"万物并作，吾以观复"——以同步语法描述逻辑，运行时自动并发执行。
+
+## 实现计划
+
+- [解释器优先：解耦式 Runtime（DAG+调度）实现计划](/src/reference/plan/ongoing/RFC-008-001-runtime-interpreter-decoupled-implementation)
 
 ## 快速选择
 
@@ -944,6 +948,6 @@ results = spawn for i in 0..100 {
 - [Go并发模式](https://golang.org/doc/effective_go#concurrency)
 - [工作窃取调度](https://en.wikipedia.org/wiki/Work_stealing)
 - [《易经》并作思想](https://en.wikipedia.org/wiki/I_Ching)
-- [并作模型白皮书](../async-whitepaper.md)
-- [YaoXiang 指南](../YaoXiang-book.md)
-- [YaoXiang 语言规范](../language-spec.md)
+- [并作模型白皮书](/src/archive/async-whitepaper)
+- [YaoXiang 指南](/src/tutorial/YaoXiang-book)
+- [YaoXiang 语言规范](/src/design/language-spec)

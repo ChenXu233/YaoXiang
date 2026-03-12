@@ -7,12 +7,13 @@ title: RFC-008：Runtime 并发模型与调度器脱耦设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-05
-> **最后更新**: 2026-03-10
+> **最后更新**: 2026-03-11
 
 > **参考**:
-> - [RFC-001: 并作模型与错误处理系统](../rfc/001-concurrent-model-error-handling.md)
-> - [RFC-003: 版本规划与实现建议](../rfc/003-version-planning.md)
-> - [RFC-011: 泛型系统设计](../rfc/011-generic-type-system.md) **类型约束已定义**
+> - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
+> - [RFC-003: 版本规划与实现建议](../review/003-version-planning.md)
+> - [RFC-011: 泛型系统设计](./011-generic-type-system.md) **类型约束已定义**
+> - [实现计划：解释器优先：解耦式 Runtime（DAG+调度）实现计划](/src/reference/plan/ongoing/RFC-008-001-runtime-interpreter-decoupled-implementation)
 
 ## 摘要
 
@@ -1228,10 +1229,10 @@ WorkStealer 应该放在 Core Runtime 还是 Full Runtime？
 ## 参考文献
 
 ### YaoXiang 官方文档
-- [RFC-001: 并作模型与错误处理系统](../rfc/001-concurrent-model-error-handling.md)
-- [RFC-003: 版本规划与实现建议](../rfc/003-version-planning.md)
-- [语言规范](../language-spec.md)
-- [YaoXiang 指南](../guides/YaoXiang-book.md)
+- [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
+- [RFC-003: 版本规划与实现建议](../review/003-version-planning.md)
+- [语言规范](/src/design/language-spec)
+- [YaoXiang 指南](/src/tutorial/YaoXiang-book)
 
 ### 外部参考
 - [Rust async 运行时设计](https://tokio.rs/)
