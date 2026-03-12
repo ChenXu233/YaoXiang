@@ -693,6 +693,92 @@ mod tests {
     }
 
     #[test]
+    fn full_runtime_serializes_tasks_with_same_resource_key() {
+        let mut rt = Runtime::new(RuntimeConfig {
+            mode: RuntimeMode::Full,
+            workers: 2,
+            work_stealing: true,
+        })
+        .unwrap();
+
+        let (started_tx, started_rx) = crossbeam::channel::unbounded::<TaskId>();
+        let (cont_tx, cont_rx) = crossbeam::channel::unbounded::<()>();
+
+        let _t1 = rt
+            .spawn(
+                TaskMeta {
+                    resources: vec!["io".into()],
+                    ..TaskMeta::default()
+                },
+                Box::new({
+                    let started_tx = started_tx.clone();
+                    let cont_rx = cont_rx.clone();
+                    move || {
+                        started_tx.send(TaskId(1)).unwrap();
+                        cont_rx.recv().unwrap();
+                        ok_i32(1)
+                    }
+                }),
+            )
+            .unwrap();
+        let t2 = rt
+            .spawn(
+                TaskMeta {
+                    resources: vec!["io".into()],
+                    ..TaskMeta::default()
+                },
+                Box::new({
+                    let started_tx = started_tx.clone();
+                    let cont_rx = cont_rx.clone();
+                    move || {
+                        started_tx.send(TaskId(2)).unwrap();
+                        cont_rx.recv().unwrap();
+                        ok_i32(2)
+                    }
+                }),
+            )
+            .unwrap();
+
+        // Drive in another thread so the test thread can observe starts.
+        let handle = std::thread::spawn(move || rt.drive_until(Some(t2)).unwrap());
+
+        let first = match started_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = cont_tx.send(());
+                let _ = cont_tx.send(());
+                let _ = handle.join();
+                panic!("failed to observe first task start: {e}");
+            }
+        };
+
+        // The second task should not start until the first one finishes.
+        if started_rx.recv_timeout(Duration::from_millis(100)).is_ok() {
+            let _ = cont_tx.send(());
+            let _ = cont_tx.send(());
+            let _ = handle.join();
+            panic!("expected resource serialization to prevent concurrent start");
+        }
+
+        cont_tx.send(()).unwrap();
+
+        let second = match started_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = cont_tx.send(());
+                let _ = handle.join();
+                panic!("failed to observe second task start: {e}");
+            }
+        };
+
+        cont_tx.send(()).unwrap();
+        handle.join().unwrap();
+
+        assert_eq!(first, TaskId(1));
+        assert_eq!(second, TaskId(2));
+    }
+
+    #[test]
     fn work_stealing_toggle_does_not_change_correctness() {
         fn run(work_stealing: bool) -> TaskOutcome {
             let mut rt = Runtime::new(RuntimeConfig {
