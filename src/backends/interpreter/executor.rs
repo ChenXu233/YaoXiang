@@ -6,11 +6,14 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Instant;
 use crate::backends::{
     Executor, DebuggableExecutor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig,
 };
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
-use crate::backends::common::value::{FunctionValue, FunctionId};
+use crate::backends::common::value::{
+    AsyncState, AsyncValue, FunctionValue, FunctionId, TaskId, ValueType,
+};
 use crate::middle::bytecode::{
     BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, Label, BinaryOp, CompareOp, FunctionRef,
     ConstValue,
@@ -18,12 +21,30 @@ use crate::middle::bytecode::{
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
 use crate::backends::interpreter::ffi::FfiRegistry;
+use crate::backends::interpreter::EvalStrategy;
+use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
+use crate::backends::runtime::RuntimeMode;
+use crate::backends::runtime::engine::{
+    LocalRuntime, ResourceKey, TaskMeta, TaskOutcome, TaskCancelReason, TaskResult, sv,
+};
 use crate::util::i18n::MSG;
 use crate::tlog;
 use crate::std::NativeContext;
 
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
+
+#[derive(Debug)]
+enum InterpreterTask {
+    CallStatic {
+        func_name: String,
+        args: Vec<RuntimeValue>,
+    },
+    CallNative {
+        func_name: String,
+        args: Vec<RuntimeValue>,
+    },
+}
 
 /// The YaoXiang bytecode interpreter
 ///
@@ -56,6 +77,12 @@ pub struct Interpreter {
     /// Standard output
     #[allow(dead_code)] // Might be unused if only accessed via write!
     stdout: Option<std::sync::Arc<std::sync::Mutex<dyn std::io::Write + Send>>>,
+    /// Interpreter-side runtime configuration (defaults to current behavior).
+    runtime_config: InterpreterRuntimeConfig,
+    /// Standard runtime DAG used for lazy/concurrent evaluation (RFC-008/001).
+    rt_dag: LocalRuntime,
+    /// Pending tasks keyed by `TaskId` (driven by `rt_dag`).
+    rt_tasks: HashMap<TaskId, InterpreterTask>,
 }
 
 impl fmt::Debug for Interpreter {
@@ -112,7 +139,21 @@ impl Interpreter {
             breakpoints: HashMap::new(),
             ffi: FfiRegistry::with_std(),
             stdout: None, // Default to stdout (handled by None check)
+            runtime_config: InterpreterRuntimeConfig::default(),
+            rt_dag: LocalRuntime::new(),
+            rt_tasks: HashMap::new(),
         }
+    }
+
+    pub fn runtime_config(&self) -> &InterpreterRuntimeConfig {
+        &self.runtime_config
+    }
+
+    pub fn set_runtime_config(
+        &mut self,
+        runtime_config: InterpreterRuntimeConfig,
+    ) {
+        self.runtime_config = runtime_config;
     }
 
     /// Set standard output redirect
@@ -244,6 +285,275 @@ impl Interpreter {
             .unwrap_or(RuntimeValue::Unit)
     }
 
+    fn make_async_pending(
+        &self,
+        task_id: TaskId,
+    ) -> RuntimeValue {
+        RuntimeValue::Async(Box::new(AsyncValue {
+            state: Box::new(AsyncState::Pending(task_id)),
+            value_type: ValueType::Unit,
+        }))
+    }
+
+    fn deps_from_args(
+        &self,
+        args: &[RuntimeValue],
+    ) -> Vec<TaskId> {
+        let mut deps = Vec::new();
+        for arg in args {
+            let RuntimeValue::Async(av) = arg else {
+                continue;
+            };
+            if let AsyncState::Pending(id) = av.state.as_ref() {
+                deps.push(*id);
+            }
+        }
+        deps
+    }
+
+    fn schedule_task(
+        &mut self,
+        task: InterpreterTask,
+        meta: TaskMeta,
+    ) -> ExecutorResult<TaskId> {
+        let id = self
+            .rt_dag
+            .spawn(meta)
+            .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+        if !self.rt_dag.is_complete(id) {
+            self.rt_tasks.insert(id, task);
+        }
+        Ok(id)
+    }
+
+    fn prune_finished_tasks(&mut self) {
+        let finished: Vec<TaskId> = self
+            .rt_tasks
+            .keys()
+            .copied()
+            .filter(|id| self.rt_dag.is_complete(*id))
+            .collect();
+        for id in finished {
+            self.rt_tasks.remove(&id);
+        }
+    }
+
+    fn drive_dag_until(
+        &mut self,
+        target: Option<TaskId>,
+    ) -> ExecutorResult<()> {
+        loop {
+            if let Some(t) = target {
+                if self.rt_dag.is_complete(t) {
+                    self.prune_finished_tasks();
+                    return Ok(());
+                }
+            }
+
+            let Some(next) = self.rt_dag.next_ready() else {
+                if let Some(t) = target {
+                    if !self.rt_dag.is_complete(t) {
+                        return Err(ExecutorError::Runtime(format!(
+                            "Runtime deadlock or cycle: {t:?}"
+                        )));
+                    }
+                }
+                self.prune_finished_tasks();
+                return Ok(());
+            };
+
+            self.rt_dag
+                .mark_running(next)
+                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+
+            let start = Instant::now();
+            let result = self.execute_scheduled_task(next);
+            let exec_time = start.elapsed();
+
+            let outcome = match result {
+                Ok(v) => TaskOutcome::Ok(v),
+                Err(e) => TaskOutcome::Err(e),
+            };
+
+            self.rt_dag
+                .complete(next, outcome, exec_time)
+                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+
+            self.prune_finished_tasks();
+        }
+    }
+
+    fn execute_scheduled_task(
+        &mut self,
+        task_id: TaskId,
+    ) -> TaskResult {
+        let Some(task) = self.rt_tasks.remove(&task_id) else {
+            return Err(sv(RuntimeValue::String(
+                format!("Missing task payload: {task_id:?}").into(),
+            )));
+        };
+
+        let exec_result = match task {
+            InterpreterTask::CallStatic { func_name, args } => {
+                self.call_static_by_name(&func_name, &args)
+            }
+            InterpreterTask::CallNative { func_name, args } => {
+                self.call_native_by_name(&func_name, &args)
+            }
+        };
+
+        match exec_result {
+            Ok(v) => Ok(sv(v)),
+            Err(e) => Err(sv(RuntimeValue::String(format!("{e}").into()))),
+        }
+    }
+
+    fn format_cancel_reason(
+        &self,
+        task_id: TaskId,
+        reason: &TaskCancelReason,
+    ) -> String {
+        match reason {
+            TaskCancelReason::Explicit => format!("Task {task_id:?} cancelled"),
+            TaskCancelReason::DependencyFailed { primary, others } => {
+                let mut msg = format!("Task {task_id:?} cancelled: dependency failed {primary:?}");
+                if !others.is_empty() {
+                    msg.push_str(&format!(" (others: {:?})", others));
+                }
+                msg
+            }
+            TaskCancelReason::DependencyCancelled { primary, others } => {
+                let mut msg =
+                    format!("Task {task_id:?} cancelled: dependency cancelled {primary:?}");
+                if !others.is_empty() {
+                    msg.push_str(&format!(" (others: {:?})", others));
+                }
+                msg
+            }
+        }
+    }
+
+    fn force_value_in_place(
+        &mut self,
+        value: &mut RuntimeValue,
+    ) -> ExecutorResult<()> {
+        let RuntimeValue::Async(av) = value else {
+            return Ok(());
+        };
+
+        match av.state.as_ref() {
+            AsyncState::Ready(inner) => {
+                *value = (**inner).clone();
+                Ok(())
+            }
+            AsyncState::Error(err) => Err(ExecutorError::Runtime(format!("Async error: {err:?}"))),
+            AsyncState::Pending(task_id) => {
+                self.drive_dag_until(Some(*task_id))?;
+                let outcome = self.rt_dag.outcome(*task_id).ok_or_else(|| {
+                    ExecutorError::Runtime(format!("Task has no outcome: {task_id:?}"))
+                })?;
+
+                match outcome {
+                    TaskOutcome::Ok(payload) => {
+                        let rv = payload
+                            .downcast_ref::<RuntimeValue>()
+                            .cloned()
+                            .unwrap_or(RuntimeValue::Unit);
+                        *value = rv;
+                        Ok(())
+                    }
+                    TaskOutcome::Err(payload) => {
+                        let rv = payload
+                            .downcast_ref::<RuntimeValue>()
+                            .cloned()
+                            .unwrap_or(RuntimeValue::String("Unknown task error".into()));
+                        Err(ExecutorError::Runtime(format!("{rv:?}")))
+                    }
+                    TaskOutcome::Cancelled(reason) => Err(ExecutorError::Runtime(
+                        self.format_cancel_reason(*task_id, reason),
+                    )),
+                }
+            }
+        }
+    }
+
+    fn force_register(
+        &mut self,
+        frame: &mut Frame,
+        reg: Reg,
+    ) -> ExecutorResult<RuntimeValue> {
+        if let Some(v) = frame.registers.get_mut(reg.0 as usize) {
+            self.force_value_in_place(v)?;
+            Ok(v.clone())
+        } else {
+            Ok(RuntimeValue::Unit)
+        }
+    }
+
+    fn force_value_clone(
+        &mut self,
+        value: &RuntimeValue,
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut cloned = value.clone();
+        self.force_value_in_place(&mut cloned)?;
+        Ok(cloned)
+    }
+
+    fn call_native_by_name(
+        &mut self,
+        func_name: &str,
+        call_args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut resolved = Vec::with_capacity(call_args.len());
+        for arg in call_args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+
+        let interp_ptr = std::ptr::addr_of_mut!(*self);
+        let mut call_fn = move |func: &RuntimeValue,
+                                args: &[RuntimeValue]|
+              -> Result<RuntimeValue, ExecutorError> {
+            if let RuntimeValue::Function(fv) = func {
+                // SAFETY: The interpreter lives as long as the callback.
+                let interpreter = unsafe { &mut *interp_ptr };
+                interpreter.call_function_by_id(fv.func_id, args)
+            } else {
+                Err(ExecutorError::Type("Expected function value".to_string()))
+            }
+        };
+        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
+        self.ffi.call(func_name, &resolved, &mut ctx)
+    }
+
+    fn call_static_by_name(
+        &mut self,
+        func_name: &str,
+        call_args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let mut resolved = Vec::with_capacity(call_args.len());
+        for arg in call_args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+
+        if self.ffi.has(func_name) {
+            return self.call_native_by_name(func_name, &resolved);
+        }
+
+        let mut lookup_name = func_name.to_string();
+        if !self.functions.contains_key(func_name) {
+            let constructor_name = format!("{}_constructor", func_name);
+            if self.functions.contains_key(&constructor_name) {
+                lookup_name = constructor_name;
+            }
+        }
+
+        if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
+            self.execute_function(&target_func, &resolved)
+        } else {
+            Err(ExecutorError::FunctionNotFound(func_name.to_string()))
+        }
+    }
+
     /// Execute a binary operation
     fn exec_binary_op(
         &mut self,
@@ -260,16 +570,8 @@ impl Interpreter {
             &(lhs.0 as usize),
             &(rhs.0 as usize)
         );
-        let a = frame
-            .registers
-            .get(lhs.0 as usize)
-            .cloned()
-            .unwrap_or(RuntimeValue::Unit);
-        let b = frame
-            .registers
-            .get(rhs.0 as usize)
-            .cloned()
-            .unwrap_or(RuntimeValue::Unit);
+        let a = self.force_register(frame, lhs)?;
+        let b = self.force_register(frame, rhs)?;
 
         tlog!(debug, MSG::DebugBinaryOp, &a, &b);
 
@@ -348,23 +650,15 @@ impl Interpreter {
 
     /// Execute a comparison
     fn exec_compare(
-        &self,
+        &mut self,
         dst: Reg,
         lhs: Reg,
         rhs: Reg,
         cmp: CompareOp,
         frame: &mut Frame,
     ) -> ExecutorResult<()> {
-        let a = frame
-            .registers
-            .get(lhs.0 as usize)
-            .cloned()
-            .unwrap_or(RuntimeValue::Unit);
-        let b = frame
-            .registers
-            .get(rhs.0 as usize)
-            .cloned()
-            .unwrap_or(RuntimeValue::Unit);
+        let a = self.force_register(frame, lhs)?;
+        let b = self.force_register(frame, rhs)?;
 
         let result = match (cmp, &a, &b) {
             // Integer comparison
@@ -524,10 +818,11 @@ impl Executor for Interpreter {
                     continue;
                 }
                 BytecodeInstr::JmpIf { cond, target } => {
-                    let c = frame
-                        .registers
-                        .get(cond.0 as usize)
-                        .and_then(|v| v.to_bool())
+                    let cond = *cond;
+                    let target = *target;
+                    let c = self
+                        .force_register(&mut frame, cond)?
+                        .to_bool()
                         .unwrap_or(false);
                     tracing::debug!("JmpIf: cond={}, target={:?}", c, target);
                     if c {
@@ -552,10 +847,11 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::JmpIfNot { cond, target } => {
-                    let c = frame
-                        .registers
-                        .get(cond.0 as usize)
-                        .and_then(|v| v.to_bool())
+                    let cond = *cond;
+                    let target = *target;
+                    let c = self
+                        .force_register(&mut frame, cond)?
+                        .to_bool()
                         .unwrap_or(false);
                     tracing::debug!("JmpIfNot: cond={}, target={:?}", c, target);
                     if !c {
@@ -640,11 +936,9 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::UnaryOp { dst, src, op: _ } => {
-                    let val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0);
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self.force_register(&mut frame, src)?.to_int().unwrap_or(0);
                     frame.set_register(dst.0 as usize, RuntimeValue::Int(-val));
                     frame.advance();
                 }
@@ -653,6 +947,9 @@ impl Executor for Interpreter {
                     func: func_ref,
                     args: arg_regs,
                 } => {
+                    let dst = *dst;
+                    let arg_regs = arg_regs.clone();
+
                     let func_name = match func_ref {
                         FunctionRef::Static { name, .. } => name.clone(),
                         FunctionRef::Index(idx) => {
@@ -679,23 +976,13 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    // Try FFI registry first for native functions
-                    if self.ffi.has(&func_name) {
-                        // Create callback for calling YaoXiang functions (for map/filter/reduce)
-                        let interp_ptr = std::ptr::addr_of_mut!(*self);
-                        let mut call_fn = move |func: &RuntimeValue, args: &[RuntimeValue]| -> Result<RuntimeValue, ExecutorError> {
-                            if let RuntimeValue::Function(fv) = func {
-                                // SAFETY: The interpreter lives as long as the callback.
-                                // The callback is only used during the execution of the native function,
-                                // which is synchronous and completes before the interpreter continues.
-                                let interpreter = unsafe { &mut *interp_ptr };
-                                interpreter.call_function_by_id(fv.func_id, args)
-                            } else {
-                                Err(ExecutorError::Type("Expected function value".to_string()))
-                            }
-                        };
-                        let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
-                        let result = self.ffi.call(&func_name, &call_args, &mut ctx)?;
+                    let eval = self.runtime_config.eval;
+                    let runtime = self.runtime_config.runtime;
+
+                    if matches!(eval, EvalStrategy::Block)
+                        || matches!(runtime, RuntimeMode::Embedded)
+                    {
+                        let result = self.call_static_by_name(&func_name, &call_args)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
                         }
@@ -703,85 +990,73 @@ impl Executor for Interpreter {
                         continue;
                     }
 
-                    // Resolve function and execute immediately to avoid re-executing call site
-                    let mut lookup_name = func_name.clone();
-
-                    // Special handling for struct constructors:
-                    // If "Point" is not found, try "Point_constructor"
-                    if !self.functions.contains_key(&func_name) {
-                        let constructor_name = format!("{}_constructor", func_name);
-                        if self.functions.contains_key(&constructor_name) {
-                            lookup_name = constructor_name.clone();
-                        }
-                    }
-
-                    tlog!(
-                        debug,
-                        MSG::DebugFunctionLookup,
-                        &format!("{}, {}", func_name, lookup_name)
-                    );
-                    tlog!(
-                        debug,
-                        MSG::DebugAvailableFunctions,
-                        &format!("{:?}", self.functions.keys().collect::<Vec<_>>())
-                    );
-
-                    if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
-                        tlog!(debug, MSG::DebugFunctionFound, &lookup_name);
-                        tlog!(
-                            debug,
-                            MSG::DebugAvailableFunctions,
-                            &format!(
-                                "name={}, instructions={}",
-                                lookup_name,
-                                target_func.instructions.len()
-                            )
-                        );
-                        tlog!(
-                            debug,
-                            MSG::DebugFunctionCall,
-                            &lookup_name,
-                            &format!("{:?}", call_args)
-                        );
-                        tlog!(
-                            debug,
-                            MSG::VmExecutingFunction,
-                            &lookup_name,
-                            &format!("{:?}", call_args)
-                        );
-                        let result = self.execute_function(&target_func, &call_args)?;
-                        tlog!(
-                            debug,
-                            MSG::VmFunctionReturned,
-                            &lookup_name,
-                            &format!("{:?}", result)
-                        );
-                        tlog!(
-                            debug,
-                            MSG::DebugFunctionReturn,
-                            &lookup_name,
-                            &format!("{:?}", result)
-                        );
-                        if let Some(dst_reg) = dst {
-                            tlog!(debug, MSG::VmStoringResult, &format!("{:?}", dst_reg));
-                            frame.set_register(dst_reg.index() as usize, result);
-                            tlog!(
-                                debug,
-                                MSG::VmRegistersAfter,
-                                &format!("{:?}", frame.registers)
-                            );
-                        }
-                        frame.advance();
-                        continue;
+                    let is_ffi = self.ffi.has(&func_name);
+                    let deps = self.deps_from_args(&call_args);
+                    let resources = if is_ffi {
+                        vec![ResourceKey::from("ffi")]
                     } else {
-                        return Err(ExecutorError::FunctionNotFound(func_name));
+                        Vec::new()
+                    };
+
+                    let task_id = self.schedule_task(
+                        if is_ffi {
+                            InterpreterTask::CallNative {
+                                func_name: func_name.clone(),
+                                args: call_args.clone(),
+                            }
+                        } else {
+                            InterpreterTask::CallStatic {
+                                func_name: func_name.clone(),
+                                args: call_args.clone(),
+                            }
+                        },
+                        TaskMeta {
+                            deps,
+                            resources,
+                            ..TaskMeta::default()
+                        },
+                    )?;
+
+                    match eval {
+                        EvalStrategy::Auto => {
+                            if is_ffi {
+                                self.drive_dag_until(Some(task_id))?;
+                                let mut v = self.make_async_pending(task_id);
+                                self.force_value_in_place(&mut v)?;
+                                if let Some(dst_reg) = dst {
+                                    frame.set_register(dst_reg.index() as usize, v);
+                                }
+                            } else if let Some(dst_reg) = dst {
+                                frame.set_register(
+                                    dst_reg.index() as usize,
+                                    self.make_async_pending(task_id),
+                                );
+                            } else {
+                                self.drive_dag_until(Some(task_id))?;
+                            }
+                        }
+                        EvalStrategy::Eager => {
+                            self.drive_dag_until(Some(task_id))?;
+                            let mut v = self.make_async_pending(task_id);
+                            self.force_value_in_place(&mut v)?;
+                            if let Some(dst_reg) = dst {
+                                frame.set_register(dst_reg.index() as usize, v);
+                            }
+                        }
+                        EvalStrategy::Block => {}
                     }
+
+                    frame.advance();
                 }
                 BytecodeInstr::CallNative {
                     dst,
                     func_name,
                     args: arg_regs,
                 } => {
+                    let dst = *dst;
+                    let func_name = func_name.clone();
+                    let arg_regs = arg_regs.clone();
+
                     // Collect arguments from registers
                     let call_args: Vec<RuntimeValue> = arg_regs
                         .iter()
@@ -794,27 +1069,54 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    // Delegate to FFI registry with NativeContext
-                    // Create callback for calling YaoXiang functions (for map/filter/reduce)
-                    let interp_ptr = std::ptr::addr_of_mut!(*self);
-                    let mut call_fn =
-                        move |func: &RuntimeValue,
-                              args: &[RuntimeValue]|
-                              -> Result<RuntimeValue, ExecutorError> {
-                            if let RuntimeValue::Function(fv) = func {
-                                // SAFETY: The interpreter lives as long as the callback.
-                                let interpreter = unsafe { &mut *interp_ptr };
-                                interpreter.call_function_by_id(fv.func_id, args)
-                            } else {
-                                Err(ExecutorError::Type("Expected function value".to_string()))
-                            }
-                        };
-                    let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
-                    let result = self.ffi.call(func_name, &call_args, &mut ctx)?;
+                    let eval = self.runtime_config.eval;
+                    let runtime = self.runtime_config.runtime;
 
-                    if let Some(dst_reg) = dst {
-                        frame.set_register(dst_reg.index() as usize, result);
+                    if matches!(eval, EvalStrategy::Block)
+                        || matches!(runtime, RuntimeMode::Embedded)
+                    {
+                        let result = self.call_native_by_name(&func_name, &call_args)?;
+                        if let Some(dst_reg) = dst {
+                            frame.set_register(dst_reg.index() as usize, result);
+                        }
+                        frame.advance();
+                        continue;
                     }
+
+                    let deps = self.deps_from_args(&call_args);
+                    let task_id = self.schedule_task(
+                        InterpreterTask::CallNative {
+                            func_name: func_name.clone(),
+                            args: call_args.clone(),
+                        },
+                        TaskMeta {
+                            deps,
+                            resources: vec![ResourceKey::from("ffi")],
+                            ..TaskMeta::default()
+                        },
+                    )?;
+
+                    match eval {
+                        EvalStrategy::Eager => {
+                            self.drive_dag_until(Some(task_id))?;
+                            let mut v = self.make_async_pending(task_id);
+                            self.force_value_in_place(&mut v)?;
+                            if let Some(dst_reg) = dst {
+                                frame.set_register(dst_reg.index() as usize, v);
+                            }
+                        }
+                        EvalStrategy::Auto => {
+                            // Native calls are treated as eager to preserve side effects.
+                            self.drive_dag_until(Some(task_id))?;
+                            let mut v = self.make_async_pending(task_id);
+                            self.force_value_in_place(&mut v)?;
+                            if let Some(dst_reg) = dst {
+                                frame.set_register(dst_reg.index() as usize, v);
+                            }
+                        }
+                        EvalStrategy::Block => {}
+                    }
+
                     frame.advance();
                 }
                 BytecodeInstr::NewListWithCap { dst, capacity } => {
@@ -825,16 +1127,11 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::LoadElement { dst, array, index } => {
-                    let arr = frame
-                        .registers
-                        .get(array.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let idx_value = frame
-                        .registers
-                        .get(index.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let dst = *dst;
+                    let array = *array;
+                    let index = *index;
+                    let arr = self.force_register(&mut frame, array)?;
+                    let idx_value = self.force_register(&mut frame, index)?;
 
                     match arr {
                         RuntimeValue::List(handle) => {
@@ -877,21 +1174,12 @@ impl Executor for Interpreter {
                     index,
                     value,
                 } => {
-                    let arr = frame
-                        .registers
-                        .get(array.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let idx_value = frame
-                        .registers
-                        .get(index.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let val = frame
-                        .registers
-                        .get(value.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let array = *array;
+                    let index = *index;
+                    let value = *value;
+                    let arr = self.force_register(&mut frame, array)?;
+                    let idx_value = self.force_register(&mut frame, index)?;
+                    let val = self.force_register(&mut frame, value)?;
 
                     match arr {
                         RuntimeValue::List(handle) => {
@@ -926,17 +1214,16 @@ impl Executor for Interpreter {
                     src,
                     field_idx,
                 } => {
-                    let obj = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let dst = *dst;
+                    let src = *src;
+                    let field_idx = *field_idx;
+                    let obj = self.force_register(&mut frame, src)?;
                     if let RuntimeValue::Struct { fields, .. } = obj {
                         if let Some(HeapValue::Tuple(items)) = self.heap.get(fields) {
-                            if (*field_idx as usize) < items.len() {
+                            if (field_idx as usize) < items.len() {
                                 frame.set_register(
                                     dst.0 as usize,
-                                    items[*field_idx as usize].clone(),
+                                    items[field_idx as usize].clone(),
                                 );
                             }
                         }
@@ -948,48 +1235,32 @@ impl Executor for Interpreter {
                     field_idx,
                     value,
                 } => {
-                    let obj = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let val = frame
-                        .registers
-                        .get(value.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let src = *src;
+                    let field_idx = *field_idx;
+                    let value = *value;
+                    let obj = self.force_register(&mut frame, src)?;
+                    let val = self.force_register(&mut frame, value)?;
                     if let RuntimeValue::Struct { fields, .. } = obj {
                         if let Some(HeapValue::Tuple(items)) = self.heap.get_mut(fields) {
-                            if (*field_idx as usize) < items.len() {
-                                items[*field_idx as usize] = val;
+                            if (field_idx as usize) < items.len() {
+                                items[field_idx as usize] = val;
                             }
                         }
                     }
                     frame.advance();
                 }
                 BytecodeInstr::StringConcat { dst, str1, str2 } => {
-                    let s1: String = frame
-                        .registers
-                        .get(str1.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
-                    let s2: String = frame
-                        .registers
-                        .get(str2.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
+                    let dst = *dst;
+                    let str1 = *str1;
+                    let str2 = *str2;
+                    let s1: String = match self.force_register(&mut frame, str1)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
+                    let s2: String = match self.force_register(&mut frame, str2)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
 
                     frame.set_register(
                         dst.0 as usize,
@@ -998,17 +1269,12 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::StringLength { dst, src } => {
-                    let s: String = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
+                    let dst = *dst;
+                    let src = *src;
+                    let s: String = match self.force_register(&mut frame, src)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
 
                     frame.set_register(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
                     frame.advance();
@@ -1178,29 +1444,26 @@ impl Executor for Interpreter {
                     src,
                     target_type_id: _,
                 } => {
-                    let val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self.force_register(&mut frame, src)?;
                     frame.set_register(dst.0 as usize, val);
                     frame.advance();
                 }
                 BytecodeInstr::StringFromInt { dst, src } => {
-                    let val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .and_then(|v| v.to_int())
-                        .unwrap_or(0);
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self.force_register(&mut frame, src)?.to_int().unwrap_or(0);
                     frame
                         .set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
                     frame.advance();
                 }
                 BytecodeInstr::StringFromFloat { dst, src } => {
-                    let val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .and_then(|v| v.to_float())
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self
+                        .force_register(&mut frame, src)?
+                        .to_float()
                         .unwrap_or(0.0);
                     frame
                         .set_register(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
@@ -1260,28 +1523,17 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::StringEqual { dst, str1, str2 } => {
-                    let s1: String = frame
-                        .registers
-                        .get(str1.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
-                    let s2: String = frame
-                        .registers
-                        .get(str2.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
+                    let dst = *dst;
+                    let str1 = *str1;
+                    let str2 = *str2;
+                    let s1: String = match self.force_register(&mut frame, str1)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
+                    let s2: String = match self.force_register(&mut frame, str2)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
 
                     frame.set_register(
                         dst.0 as usize,
@@ -1290,17 +1542,12 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::StringGetChar { dst, src, index: _ } => {
-                    let s: String = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .and_then(|v| {
-                            if let RuntimeValue::String(s) = v {
-                                Some(s.as_ref().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default();
+                    let dst = *dst;
+                    let src = *src;
+                    let s: String = match self.force_register(&mut frame, src)? {
+                        RuntimeValue::String(s) => s.as_ref().to_string(),
+                        _ => String::new(),
+                    };
 
                     frame.set_register(
                         dst.0 as usize,
@@ -1317,17 +1564,18 @@ impl Executor for Interpreter {
                     method_idx,
                     args,
                 } => {
+                    let dst = *dst;
+                    let obj = *obj;
+                    let method_idx = *method_idx;
+                    let args = args.clone();
+
                     // Virtual call - 通过 vtable 查找方法并调用
-                    let obj_val = frame
-                        .registers
-                        .get(obj.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let obj_val = self.force_register(&mut frame, obj)?;
 
                     // 从常量池获取方法名
                     let method_name = self
                         .constants
-                        .get(*method_idx as usize)
+                        .get(method_idx as usize)
                         .and_then(|c| {
                             if let ConstValue::String(s) = c {
                                 Some(s.clone())
@@ -1340,16 +1588,10 @@ impl Executor for Interpreter {
                     // 从对象的 vtable 中查找方法
                     if let Some(func_value) = obj_val.get_method(&method_name).cloned() {
                         // 收集参数
-                        let call_args: Vec<RuntimeValue> = args
-                            .iter()
-                            .map(|r| {
-                                frame
-                                    .registers
-                                    .get(r.0 as usize)
-                                    .cloned()
-                                    .unwrap_or(RuntimeValue::Unit)
-                            })
-                            .collect();
+                        let mut call_args = Vec::with_capacity(args.len());
+                        for r in args {
+                            call_args.push(self.force_register(&mut frame, r)?);
+                        }
 
                         // 调用方法
                         let result = self.call_function_by_id(func_value.func_id, &call_args)?;
@@ -1372,27 +1614,21 @@ impl Executor for Interpreter {
                     name_idx: _,
                     args,
                 } => {
+                    let dst = *dst;
+                    let obj = *obj;
+                    let args = args.clone();
+
                     // Dynamic call - 闭包调用
                     // obj 寄存器包含闭包值（FunctionValue）
-                    let closure_val = frame
-                        .registers
-                        .get(obj.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
+                    let closure_val = self.force_register(&mut frame, obj)?;
 
                     if let RuntimeValue::Function(func_value) = closure_val {
                         // 收集参数（包括捕获的环境变量）
                         let env_args: Vec<RuntimeValue> = func_value.env.clone();
-                        let call_args: Vec<RuntimeValue> = args
-                            .iter()
-                            .map(|r| {
-                                frame
-                                    .registers
-                                    .get(r.0 as usize)
-                                    .cloned()
-                                    .unwrap_or(RuntimeValue::Unit)
-                            })
-                            .collect();
+                        let mut call_args = Vec::with_capacity(args.len());
+                        for r in args {
+                            call_args.push(self.force_register(&mut frame, r)?);
+                        }
 
                         // 合并环境变量和参数
                         let mut final_args = env_args;
@@ -1427,6 +1663,8 @@ impl Executor for Interpreter {
         self.call_stack.clear();
         self.state = ExecutionState::default();
         self.breakpoints.clear();
+        self.rt_dag = LocalRuntime::new();
+        self.rt_tasks.clear();
     }
 
     fn state(&self) -> &ExecutionState {
@@ -1529,6 +1767,293 @@ mod tests {
         assert!(result.is_ok());
         // Function executes successfully (actual return value depends on implementation)
         let _ = result.unwrap();
+    }
+
+    #[test]
+    fn test_auto_lazy_call_forced_on_use() {
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime: RuntimeMode::Standard,
+            eval: EvalStrategy::Auto,
+            workers: 1,
+            work_stealing: false,
+        });
+
+        interp.constants = vec![ConstValue::Int(1), ConstValue::Int(2)];
+
+        let a = BytecodeFunction {
+            name: "a".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadConst {
+                    dst: Reg(0),
+                    const_idx: 0,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(0) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+        let b = BytecodeFunction {
+            name: "b".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadConst {
+                    dst: Reg(0),
+                    const_idx: 1,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(0) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        interp.functions.insert("a".to_string(), a.clone());
+        interp.functions.insert("b".to_string(), b.clone());
+
+        let main = BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(0)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "a".to_string(),
+                    },
+                    args: vec![],
+                },
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(1)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "b".to_string(),
+                    },
+                    args: vec![],
+                },
+                BytecodeInstr::BinaryOp {
+                    dst: Reg(2),
+                    lhs: Reg(0),
+                    rhs: Reg(1),
+                    op: BinaryOp::Add,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(2) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        let result = interp.execute_function(&main, &[]).unwrap();
+        assert_eq!(result.to_int(), Some(3));
+    }
+
+    #[test]
+    fn test_eager_call_no_async_placeholder() {
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime: RuntimeMode::Standard,
+            eval: EvalStrategy::Eager,
+            workers: 1,
+            work_stealing: false,
+        });
+
+        interp.constants = vec![ConstValue::Int(1), ConstValue::Int(2)];
+
+        let a = BytecodeFunction {
+            name: "a".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadConst {
+                    dst: Reg(0),
+                    const_idx: 0,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(0) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+        let b = BytecodeFunction {
+            name: "b".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadConst {
+                    dst: Reg(0),
+                    const_idx: 1,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(0) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        interp.functions.insert("a".to_string(), a.clone());
+        interp.functions.insert("b".to_string(), b.clone());
+
+        let main = BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(0)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "a".to_string(),
+                    },
+                    args: vec![],
+                },
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(1)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "b".to_string(),
+                    },
+                    args: vec![],
+                },
+                BytecodeInstr::BinaryOp {
+                    dst: Reg(2),
+                    lhs: Reg(0),
+                    rhs: Reg(1),
+                    op: BinaryOp::Add,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(2) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        let result = interp.execute_function(&main, &[]).unwrap();
+        assert_eq!(result.to_int(), Some(3));
+    }
+
+    #[test]
+    fn test_dependency_failure_cancels_dependent_task() {
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime: RuntimeMode::Standard,
+            eval: EvalStrategy::Auto,
+            workers: 1,
+            work_stealing: false,
+        });
+
+        // const[0]=1, const[1]=0, const[2]=1
+        interp.constants = vec![ConstValue::Int(1), ConstValue::Int(0), ConstValue::Int(1)];
+
+        let fail = BytecodeFunction {
+            name: "fail".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadConst {
+                    dst: Reg(0),
+                    const_idx: 0,
+                },
+                BytecodeInstr::LoadConst {
+                    dst: Reg(1),
+                    const_idx: 1,
+                },
+                BytecodeInstr::BinaryOp {
+                    dst: Reg(2),
+                    lhs: Reg(0),
+                    rhs: Reg(1),
+                    op: BinaryOp::Div,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(2) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        let inc = BytecodeFunction {
+            name: "inc".to_string(),
+            params: vec![crate::middle::core::ir::Type::Int(64)],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::LoadArg {
+                    dst: Reg(0),
+                    arg_idx: 0,
+                },
+                BytecodeInstr::LoadConst {
+                    dst: Reg(1),
+                    const_idx: 2,
+                },
+                BytecodeInstr::BinaryOp {
+                    dst: Reg(2),
+                    lhs: Reg(0),
+                    rhs: Reg(1),
+                    op: BinaryOp::Add,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(2) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        interp.functions.insert("fail".to_string(), fail.clone());
+        interp.functions.insert("inc".to_string(), inc.clone());
+
+        let main = BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Int(64),
+            local_count: 1,
+            upvalue_count: 0,
+            instructions: vec![
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(0)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "fail".to_string(),
+                    },
+                    args: vec![],
+                },
+                BytecodeInstr::CallStatic {
+                    dst: Some(Reg(1)),
+                    func: FunctionRef::Static {
+                        module: "".to_string(),
+                        name: "inc".to_string(),
+                    },
+                    args: vec![Reg(0)],
+                },
+                // Force the dependent value
+                BytecodeInstr::BinaryOp {
+                    dst: Reg(2),
+                    lhs: Reg(1),
+                    rhs: Reg(1),
+                    op: BinaryOp::Add,
+                },
+                BytecodeInstr::ReturnValue { value: Reg(2) },
+            ],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+        };
+
+        let err = interp.execute_function(&main, &[]).unwrap_err();
+        assert!(
+            matches!(err, ExecutorError::Runtime(_)),
+            "expected runtime error, got: {err:?}"
+        );
     }
 
     // =============================================================================
