@@ -323,6 +323,7 @@ impl Executor for Interpreter {
                         TaskMeta {
                             deps,
                             resources,
+                            label: Some(Arc::<str>::from(func_name.as_str())),
                             ..TaskMeta::default()
                         },
                     )?;
@@ -402,6 +403,7 @@ impl Executor for Interpreter {
                         TaskMeta {
                             deps,
                             resources: vec![ResourceKey::from("ffi")],
+                            label: Some(Arc::<str>::from(func_name.as_str())),
                             ..TaskMeta::default()
                         },
                     )?;

@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use std::time::Instant;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
@@ -16,7 +17,7 @@ use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
 use crate::backends::runtime::engine::{
-    LocalRuntime, TaskMeta, TaskOutcome, TaskCancelReason, TaskResult, sv,
+    LocalRuntime, SyncValue, TaskMeta, TaskOutcome, TaskCancelReason, TaskResult, sv,
 };
 use crate::util::i18n::MSG;
 use crate::tlog;
@@ -404,24 +405,117 @@ impl Interpreter {
         task_id: TaskId,
         reason: &TaskCancelReason,
     ) -> String {
+        let task = self.format_task_id(task_id);
         match reason {
-            TaskCancelReason::Explicit => format!("Task {task_id:?} cancelled"),
+            TaskCancelReason::Explicit => format!("Task {task} cancelled"),
             TaskCancelReason::DependencyFailed { primary, others } => {
-                let mut msg = format!("Task {task_id:?} cancelled: dependency failed {primary:?}");
-                if !others.is_empty() {
-                    msg.push_str(&format!(" (others: {:?})", others));
+                let mut deps = Vec::with_capacity(1 + others.len());
+                deps.push(*primary);
+                deps.extend(others.iter().copied());
+
+                let mut msg = format!("Task {task} cancelled: dependency failed");
+                let summaries: Vec<String> = deps
+                    .iter()
+                    .map(|dep| self.format_dependency_summary(*dep))
+                    .collect();
+                if !summaries.is_empty() {
+                    msg.push_str(&format!("; causes: {}", summaries.join("; ")));
                 }
                 msg
             }
             TaskCancelReason::DependencyCancelled { primary, others } => {
-                let mut msg =
-                    format!("Task {task_id:?} cancelled: dependency cancelled {primary:?}");
-                if !others.is_empty() {
-                    msg.push_str(&format!(" (others: {:?})", others));
+                let mut deps = Vec::with_capacity(1 + others.len());
+                deps.push(*primary);
+                deps.extend(others.iter().copied());
+
+                let mut msg = format!("Task {task} cancelled: dependency cancelled");
+                let summaries: Vec<String> = deps
+                    .iter()
+                    .map(|dep| self.format_dependency_summary(*dep))
+                    .collect();
+                if !summaries.is_empty() {
+                    msg.push_str(&format!("; causes: {}", summaries.join("; ")));
                 }
                 msg
             }
         }
+    }
+
+    fn format_task_id(
+        &self,
+        task_id: TaskId,
+    ) -> String {
+        if let Some(meta) = self.rt_dag.meta(task_id) {
+            if let Some(label) = &meta.label {
+                return format!("{label} ({task_id:?})");
+            }
+        }
+        format!("{task_id:?}")
+    }
+
+    fn format_dependency_summary(
+        &self,
+        task_id: TaskId,
+    ) -> String {
+        let task = self.format_task_id(task_id);
+        match self.rt_dag.outcome(task_id) {
+            Some(TaskOutcome::Err(payload)) => {
+                format!("{task}: {}", self.format_sync_value(payload))
+            }
+            Some(TaskOutcome::Cancelled(reason)) => {
+                format!(
+                    "{task}: cancelled ({})",
+                    self.format_cancel_reason_brief(reason)
+                )
+            }
+            Some(TaskOutcome::Ok(_)) => format!("{task}: ok"),
+            None => format!("{task}: pending"),
+        }
+    }
+
+    fn format_cancel_reason_brief(
+        &self,
+        reason: &TaskCancelReason,
+    ) -> String {
+        match reason {
+            TaskCancelReason::Explicit => "explicit".to_string(),
+            TaskCancelReason::DependencyFailed { primary, others } => {
+                if others.is_empty() {
+                    format!("dependency failed {primary:?}")
+                } else {
+                    format!("dependency failed {primary:?} (+{} others)", others.len())
+                }
+            }
+            TaskCancelReason::DependencyCancelled { primary, others } => {
+                if others.is_empty() {
+                    format!("dependency cancelled {primary:?}")
+                } else {
+                    format!(
+                        "dependency cancelled {primary:?} (+{} others)",
+                        others.len()
+                    )
+                }
+            }
+        }
+    }
+
+    fn format_sync_value(
+        &self,
+        payload: &SyncValue,
+    ) -> String {
+        if let Some(rv) = payload.downcast_ref::<RuntimeValue>() {
+            return rv.to_string();
+        }
+        if let Some(s) = payload.downcast_ref::<String>() {
+            return s.clone();
+        }
+        if let Some(s) = payload.downcast_ref::<Arc<str>>() {
+            return s.to_string();
+        }
+        if let Some(s) = payload.downcast_ref::<&'static str>() {
+            return s.to_string();
+        }
+        "Unknown task payload".to_string()
     }
 
     pub(super) fn force_value_in_place(
@@ -454,11 +548,7 @@ impl Interpreter {
                         Ok(())
                     }
                     TaskOutcome::Err(payload) => {
-                        let rv = payload
-                            .downcast_ref::<RuntimeValue>()
-                            .cloned()
-                            .unwrap_or(RuntimeValue::String("Unknown task error".into()));
-                        Err(ExecutorError::Runtime(format!("{rv:?}")))
+                        Err(ExecutorError::Runtime(self.format_sync_value(payload)))
                     }
                     TaskOutcome::Cancelled(reason) => Err(ExecutorError::Runtime(
                         self.format_cancel_reason(*task_id, reason),

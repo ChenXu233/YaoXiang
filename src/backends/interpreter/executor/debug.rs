@@ -390,10 +390,15 @@ mod tests {
         };
 
         let err = interp.execute_function(&main, &[]).unwrap_err();
-        assert!(
-            matches!(err, ExecutorError::Runtime(_)),
-            "expected runtime error, got: {err:?}"
-        );
+        match err {
+            ExecutorError::Runtime(msg) => {
+                assert!(
+                    msg.contains("Division by zero"),
+                    "expected dependency error to surface, got: {msg}"
+                );
+            }
+            other => panic!("expected runtime error, got: {other:?}"),
+        }
     }
 
     // =============================================================================
