@@ -342,7 +342,10 @@ impl Interpreter {
                 }
             }
 
-            let Some(next) = self.rt_dag.next_ready() else {
+            let Some(next) = (match target {
+                Some(t) => self.rt_dag.next_ready_for(t),
+                None => self.rt_dag.next_ready(),
+            }) else {
                 if let Some(t) = target {
                     if !self.rt_dag.is_complete(t) {
                         return Err(ExecutorError::Runtime(format!(

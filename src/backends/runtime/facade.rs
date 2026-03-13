@@ -12,7 +12,9 @@ use crossbeam::channel::{Receiver, Sender};
 
 use crate::backends::common::value::TaskId;
 
-use super::engine::{sv, LocalRuntime, RuntimeError, RuntimeStats, TaskMeta, TaskOutcome, TaskResult};
+use super::engine::{
+    sv, LocalRuntime, RuntimeError, RuntimeStats, TaskMeta, TaskOutcome, TaskPoll, TaskResult,
+};
 
 /// Runtime mode (three-tier per RFC-008).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +49,12 @@ impl Default for RuntimeConfig {
 
 /// A generic runnable task for Standard/Full runtimes.
 pub type TaskFn = Box<dyn FnOnce() -> TaskResult + Send + 'static>;
+
+/// A cooperative task that can yield (`Pending`) for fair time-slicing.
+///
+/// The boolean parameter indicates whether time-slicing is enabled (i.e. there
+/// are other runnable tasks).
+pub type CoopTaskFn = Box<dyn FnMut(bool) -> TaskPoll + Send + 'static>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeFacadeError {
@@ -94,6 +102,22 @@ impl Runtime {
             RuntimeInner::Embedded(rt) => Ok(rt.spawn(meta, task)),
             RuntimeInner::Standard(rt) => Ok(rt.spawn(meta, task)?),
             RuntimeInner::Full(rt) => Ok(rt.spawn(meta, task)?),
+        }
+    }
+
+    pub fn spawn_coop(
+        &mut self,
+        meta: TaskMeta,
+        task: CoopTaskFn,
+    ) -> Result<TaskId, RuntimeFacadeError> {
+        match &mut self.inner {
+            RuntimeInner::Embedded(_) => Err(RuntimeFacadeError::InvalidConfig(
+                "embedded runtime does not support cooperative tasks",
+            )),
+            RuntimeInner::Standard(rt) => Ok(rt.spawn_coop(meta, task)?),
+            RuntimeInner::Full(_) => Err(RuntimeFacadeError::InvalidConfig(
+                "full runtime does not support cooperative tasks yet",
+            )),
         }
     }
 
@@ -262,6 +286,7 @@ impl EmbeddedRuntime {
 struct StandardRuntime {
     graph: LocalRuntime,
     tasks: HashMap<TaskId, TaskFn>,
+    coop_tasks: HashMap<TaskId, CoopTaskFn>,
 }
 
 impl StandardRuntime {
@@ -279,12 +304,27 @@ impl StandardRuntime {
         Ok(id)
     }
 
+    fn spawn_coop(
+        &mut self,
+        meta: TaskMeta,
+        task: CoopTaskFn,
+    ) -> Result<TaskId, RuntimeError> {
+        let id = self.graph.spawn(meta)?;
+        if self.graph.is_complete(id) {
+            // Pre-cancelled due to failed/cancelled deps.
+            return Ok(id);
+        }
+        self.coop_tasks.insert(id, task);
+        Ok(id)
+    }
+
     fn cancel(
         &mut self,
         task_id: TaskId,
     ) -> Result<(), RuntimeError> {
         self.graph.cancel(task_id)?;
         self.tasks.remove(&task_id);
+        self.coop_tasks.remove(&task_id);
         self.prune_finished_tasks();
         Ok(())
     }
@@ -311,59 +351,40 @@ impl StandardRuntime {
         &mut self,
         target: Option<TaskId>,
     ) -> Result<(), RuntimeError> {
-        loop {
-            if let Some(t) = target {
-                if self.graph.is_complete(t) {
-                    self.prune_finished_tasks();
-                    return Ok(());
+        self.graph
+            .drive_until_polled(target, |id, time_slice_enabled| {
+                if let Some(task) = self.tasks.remove(&id) {
+                    return TaskPoll::Ready(task());
                 }
-            }
+                let Some(task) = self.coop_tasks.get_mut(&id) else {
+                    return TaskPoll::Ready(Err(sv("task payload missing")));
+                };
+                task(time_slice_enabled)
+            })?;
 
-            let Some(next) = self.graph.next_ready() else {
-                if let Some(t) = target {
-                    if !self.graph.is_complete(t) {
-                        return Err(RuntimeError::DeadlockOrCycle(t));
-                    }
-                }
-                self.prune_finished_tasks();
-                return Ok(());
-            };
-
-            self.graph.mark_running(next)?;
-            let task = match self.tasks.remove(&next) {
-                Some(t) => t,
-                None => {
-                    self.graph.complete(
-                        next,
-                        TaskOutcome::Err(sv("task payload missing")),
-                        Duration::ZERO,
-                    )?;
-                    continue;
-                }
-            };
-
-            let start = Instant::now();
-            let result = task();
-            let exec_time = start.elapsed();
-
-            match result {
-                Ok(v) => self.graph.complete(next, TaskOutcome::Ok(v), exec_time)?,
-                Err(e) => self.graph.complete(next, TaskOutcome::Err(e), exec_time)?,
-            }
-
-            self.prune_finished_tasks();
-        }
+        self.prune_finished_tasks();
+        Ok(())
     }
 
     fn prune_finished_tasks(&mut self) {
-        let finished: Vec<TaskId> = self
+        let finished_once: Vec<TaskId> = self
             .tasks
             .keys()
             .copied()
             .filter(|id| self.graph.is_complete(*id))
             .collect();
-        for id in finished {
+        for id in finished_once {
             self.tasks.remove(&id);
+        }
+
+        let finished_coop: Vec<TaskId> = self
+            .coop_tasks
+            .keys()
+            .copied()
+            .filter(|id| self.graph.is_complete(*id))
+            .collect();
+        for id in finished_coop {
+            self.coop_tasks.remove(&id);
         }
     }
 }
@@ -463,7 +484,13 @@ impl FullRuntime {
             }
 
             while in_flight < self.workers {
-                let Some(next) = self.graph.next_ready() else {
+                let Some(next) = (match target {
+                    Some(t) => self
+                        .graph
+                        .next_ready_for(t)
+                        .or_else(|| self.graph.next_ready()),
+                    None => self.graph.next_ready(),
+                }) else {
                     break;
                 };
                 self.graph.mark_running(next)?;
@@ -564,7 +591,7 @@ fn spawn_worker_threads(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     fn ok_i32(v: i32) -> TaskResult {
         Ok(sv(v))
@@ -812,5 +839,77 @@ mod tests {
             }
             (oa, ob) => panic!("unexpected outcomes: {oa:?} vs {ob:?}"),
         }
+    }
+
+    #[test]
+    fn standard_runtime_coop_tasks_time_slice_fairly() {
+        let mut rt = Runtime::new(RuntimeConfig {
+            mode: RuntimeMode::Standard,
+            workers: 1,
+            work_stealing: false,
+        })
+        .unwrap();
+
+        let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+
+        let a = rt
+            .spawn_coop(
+                TaskMeta {
+                    label: Some("a".into()),
+                    ..TaskMeta::default()
+                },
+                Box::new({
+                    let order = order.clone();
+                    let mut remaining = 3usize;
+                    move |time_slice_enabled| {
+                        order.lock().unwrap().push("a");
+                        if time_slice_enabled {
+                            remaining = remaining.saturating_sub(1);
+                            if remaining == 0 {
+                                TaskPoll::Ready(ok_i32(1))
+                            } else {
+                                TaskPoll::Pending
+                            }
+                        } else {
+                            remaining = 0;
+                            TaskPoll::Ready(ok_i32(1))
+                        }
+                    }
+                }),
+            )
+            .unwrap();
+
+        let b = rt
+            .spawn_coop(
+                TaskMeta {
+                    label: Some("b".into()),
+                    ..TaskMeta::default()
+                },
+                Box::new({
+                    let order = order.clone();
+                    let mut remaining = 3usize;
+                    move |time_slice_enabled| {
+                        order.lock().unwrap().push("b");
+                        if time_slice_enabled {
+                            remaining = remaining.saturating_sub(1);
+                            if remaining == 0 {
+                                TaskPoll::Ready(ok_i32(1))
+                            } else {
+                                TaskPoll::Pending
+                            }
+                        } else {
+                            remaining = 0;
+                            TaskPoll::Ready(ok_i32(1))
+                        }
+                    }
+                }),
+            )
+            .unwrap();
+
+        rt.drive_until(None).unwrap();
+
+        assert_eq!(*order.lock().unwrap(), vec!["a", "b", "a", "b", "a", "b"]);
+        assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
+        assert!(matches!(rt.outcome(b), Some(TaskOutcome::Ok(_))));
     }
 }
