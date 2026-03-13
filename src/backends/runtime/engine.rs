@@ -20,6 +20,15 @@ pub type SyncValue = Arc<dyn Any + Send + Sync>;
 /// Task result used by the runtime.
 pub type TaskResult = Result<SyncValue, SyncValue>;
 
+/// Result of polling/running a cooperative task slice.
+#[derive(Debug)]
+pub enum TaskPoll {
+    /// The task finished and produced its final result.
+    Ready(TaskResult),
+    /// The task yielded; it should be re-queued for later execution.
+    Pending,
+}
+
 /// Helper to build a [`SyncValue`].
 pub fn sv<T: Any + Send + Sync + 'static>(value: T) -> SyncValue {
     Arc::new(value)
@@ -131,6 +140,8 @@ pub enum RuntimeError {
     TaskAlreadyFinished(TaskId),
     #[error("Task is not cancellable in its current state: {0:?}")]
     TaskNotCancellable(TaskId),
+    #[error("Task is not yieldable in its current state: {0:?}")]
+    TaskNotYieldable(TaskId),
 }
 
 /// A single-threaded runtime graph.
@@ -390,6 +401,54 @@ impl LocalRuntime {
         None
     }
 
+    /// Pop the next runnable task id that is required to finish `target`.
+    ///
+    /// This prioritizes the main dependency chain and prevents unrelated "island"
+    /// tasks from delaying `drive_until(Some(target))`.
+    pub fn next_ready_for(
+        &mut self,
+        target: TaskId,
+    ) -> Option<TaskId> {
+        let mut skipped = Vec::new();
+        while let Some(id) = self.ready.pop_front() {
+            let Some(node) = self.tasks.get(&id) else {
+                continue;
+            };
+            if !matches!(node.status, TaskStatus::Pending) {
+                continue;
+            }
+
+            if id == target || self.depends_on(target, id) {
+                for s in skipped {
+                    self.ready.push_back(s);
+                }
+                return Some(id);
+            }
+
+            skipped.push(id);
+        }
+
+        for s in skipped {
+            self.ready.push_back(s);
+        }
+        None
+    }
+
+    /// Returns true if `task` transitively depends on `dep`.
+    pub fn depends_on(
+        &self,
+        task: TaskId,
+        dep: TaskId,
+    ) -> bool {
+        if task == dep {
+            return true;
+        }
+        if !self.tasks.contains_key(&task) || !self.tasks.contains_key(&dep) {
+            return false;
+        }
+        self.is_reachable(task, dep)
+    }
+
     pub fn mark_running(
         &mut self,
         task_id: TaskId,
@@ -456,6 +515,84 @@ impl LocalRuntime {
         Ok(())
     }
 
+    /// Yield a running task and re-queue it to run again later.
+    ///
+    /// This is the building block for fairness/time-slicing (RFC-001 A8).
+    pub fn yield_now(
+        &mut self,
+        task_id: TaskId,
+        exec_time: Duration,
+    ) -> Result<(), RuntimeError> {
+        let Some(node) = self.tasks.get_mut(&task_id) else {
+            return Err(RuntimeError::TaskNotFound(task_id));
+        };
+        if node.is_finished() {
+            return Err(RuntimeError::TaskAlreadyFinished(task_id));
+        }
+        if !matches!(node.status, TaskStatus::Running) {
+            return Err(RuntimeError::TaskNotYieldable(task_id));
+        }
+
+        node.status = TaskStatus::Pending;
+        node.started_at = None;
+        self.ready.push_back(task_id);
+
+        self.total_exec_time += exec_time;
+        self.recompute_counts();
+        Ok(())
+    }
+
+    /// Drive cooperative tasks until:
+    /// - `target` is finished (if provided), or
+    /// - there are no more ready tasks (if target is None).
+    ///
+    /// The executor returns [`TaskPoll::Pending`] to yield the current task slice.
+    /// When yielding, the scheduler will re-queue the task behind other runnable tasks,
+    /// enabling fair progress for multiple long-running loops.
+    pub fn drive_until_polled<F>(
+        &mut self,
+        target: Option<TaskId>,
+        mut poll: F,
+    ) -> Result<(), RuntimeError>
+    where
+        F: FnMut(TaskId, bool) -> TaskPoll,
+    {
+        loop {
+            if let Some(t) = target {
+                if self.is_complete(t) {
+                    return Ok(());
+                }
+            } else if self.ready.is_empty() {
+                return Ok(());
+            }
+
+            let Some(next) = (match target {
+                Some(t) => self.next_ready_for(t),
+                None => self.next_ready(),
+            }) else {
+                if let Some(t) = target {
+                    return Err(RuntimeError::DeadlockOrCycle(t));
+                }
+                return Ok(());
+            };
+
+            self.mark_running(next)?;
+
+            let time_slice_enabled = !self.ready.is_empty();
+            let start = Instant::now();
+            let polled = poll(next, time_slice_enabled);
+            let exec_time = start.elapsed();
+
+            match polled {
+                TaskPoll::Ready(result) => match result {
+                    Ok(v) => self.complete(next, TaskOutcome::Ok(v), exec_time)?,
+                    Err(e) => self.complete(next, TaskOutcome::Err(e), exec_time)?,
+                },
+                TaskPoll::Pending => self.yield_now(next, exec_time)?,
+            }
+        }
+    }
+
     /// Drive the scheduler until:
     /// - `target` is finished (if provided), or
     /// - there are no more ready tasks (if target is None).
@@ -476,7 +613,10 @@ impl LocalRuntime {
                 return Ok(());
             }
 
-            let Some(next) = self.next_ready() else {
+            let Some(next) = (match target {
+                Some(t) => self.next_ready_for(t),
+                None => self.next_ready(),
+            }) else {
                 if let Some(t) = target {
                     return Err(RuntimeError::DeadlockOrCycle(t));
                 }
@@ -626,6 +766,7 @@ impl LocalRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn ok_i32(v: i32) -> TaskResult {
         Ok(sv(v))
@@ -739,6 +880,70 @@ mod tests {
     }
 
     #[test]
+    fn drive_until_target_does_not_run_island_tasks() {
+        let mut rt = LocalRuntime::new();
+        let a = rt.spawn(TaskMeta::default()).unwrap();
+        let b = rt
+            .spawn(TaskMeta {
+                deps: vec![a],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+        let c = rt.spawn(TaskMeta::default()).unwrap();
+
+        let mut order = Vec::new();
+        let table: HashMap<TaskId, TaskResult> =
+            [(a, ok_i32(1)), (b, ok_i32(2)), (c, ok_i32(3))].into();
+
+        rt.drive_until(Some(b), |id| {
+            order.push(id);
+            table.get(&id).cloned().unwrap()
+        })
+        .unwrap();
+
+        assert_eq!(order, vec![a, b]);
+        assert!(rt.is_complete(a));
+        assert!(rt.is_complete(b));
+        assert!(!rt.is_complete(c));
+    }
+
+    #[test]
+    fn multiple_failed_deps_are_merged_into_cancel_reason() {
+        let mut rt = LocalRuntime::new();
+        let a = rt.spawn(TaskMeta::default()).unwrap();
+        let b = rt.spawn(TaskMeta::default()).unwrap();
+        let c = rt
+            .spawn(TaskMeta {
+                deps: vec![a, b],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+
+        let table: HashMap<TaskId, TaskResult> =
+            [(a, err_str("a")), (b, err_str("b")), (c, ok_i32(0))].into();
+
+        rt.drive_until(None, |id| table.get(&id).cloned().unwrap())
+            .unwrap();
+
+        assert!(matches!(rt.outcome(a), Some(TaskOutcome::Err(_))));
+        assert!(matches!(rt.outcome(b), Some(TaskOutcome::Err(_))));
+
+        let (primary, others) = match rt.outcome(c) {
+            Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
+                primary,
+                others,
+            })) => (*primary, others.clone()),
+            other => panic!("unexpected outcome for c: {other:?}"),
+        };
+
+        assert_eq!(others.len(), 1);
+        let mut all = vec![primary];
+        all.extend(others);
+        all.sort_by_key(|id| id.0);
+        assert_eq!(all, vec![a, b]);
+    }
+
+    #[test]
     fn failure_cancels_dependents() {
         let mut rt = LocalRuntime::new();
         let a = rt.spawn(TaskMeta::default()).unwrap();
@@ -844,5 +1049,103 @@ mod tests {
         rt.add_dependency(a, b).unwrap();
         let err = rt.add_dependency(b, a).unwrap_err();
         assert!(matches!(err, RuntimeError::CycleDetected { .. }));
+    }
+
+    #[test]
+    fn cooperative_time_slicing_is_fair_for_two_long_tasks() {
+        let mut rt = LocalRuntime::new();
+        let a = rt
+            .spawn(TaskMeta {
+                label: Some("a".into()),
+                ..TaskMeta::default()
+            })
+            .unwrap();
+        let b = rt
+            .spawn(TaskMeta {
+                label: Some("b".into()),
+                ..TaskMeta::default()
+            })
+            .unwrap();
+
+        let mut remaining: HashMap<TaskId, usize> = [(a, 3usize), (b, 3usize)].into();
+        let mut order = Vec::new();
+
+        rt.drive_until_polled(None, |id, time_slice_enabled| {
+            order.push(id);
+            let r = remaining.get_mut(&id).unwrap();
+            if *r == 0 {
+                return TaskPoll::Ready(ok_i32(0));
+            }
+
+            if time_slice_enabled {
+                *r -= 1;
+                if *r == 0 {
+                    TaskPoll::Ready(ok_i32(1))
+                } else {
+                    TaskPoll::Pending
+                }
+            } else {
+                *r = 0;
+                TaskPoll::Ready(ok_i32(1))
+            }
+        })
+        .unwrap();
+
+        assert_eq!(order, vec![a, b, a, b, a, b]);
+        assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
+        assert!(matches!(rt.outcome(b), Some(TaskOutcome::Ok(_))));
+    }
+
+    #[test]
+    fn single_task_can_finish_in_one_poll_without_slicing_overhead() {
+        let mut rt = LocalRuntime::new();
+        let a = rt.spawn(TaskMeta::default()).unwrap();
+
+        let polls = AtomicUsize::new(0);
+        let mut remaining = 5usize;
+
+        rt.drive_until_polled(None, |id, time_slice_enabled| {
+            assert_eq!(id, a);
+            assert!(!time_slice_enabled);
+            polls.fetch_add(1, Ordering::Relaxed);
+
+            // No competitors: finish in one go.
+            assert_eq!(remaining, 5);
+            remaining = 0;
+            TaskPoll::Ready(ok_i32(1))
+        })
+        .unwrap();
+
+        assert_eq!(polls.load(Ordering::Relaxed), 1);
+        assert!(matches!(rt.outcome(a), Some(TaskOutcome::Ok(_))));
+    }
+
+    #[test]
+    fn yielded_task_can_be_cancelled_between_slices() {
+        let mut rt = LocalRuntime::new();
+        let a = rt.spawn(TaskMeta::default()).unwrap();
+        let b = rt
+            .spawn(TaskMeta {
+                deps: vec![a],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+
+        let next = rt.next_ready().unwrap();
+        assert_eq!(next, a);
+        rt.mark_running(next).unwrap();
+        rt.yield_now(next, Duration::ZERO).unwrap();
+
+        rt.cancel(a).unwrap();
+
+        assert!(matches!(
+            rt.outcome(a),
+            Some(TaskOutcome::Cancelled(TaskCancelReason::Explicit))
+        ));
+        assert!(matches!(
+            rt.outcome(b),
+            Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled { primary, .. }))
+                if *primary == a
+        ));
     }
 }
