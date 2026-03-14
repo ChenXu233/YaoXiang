@@ -326,6 +326,11 @@ impl TypeChecker {
         &self.env.module_name
     }
 
+    /// 提取收集到的语义信息
+    pub fn take_semantic_db(&mut self) -> semantic_db::SemanticDB {
+        std::mem::take(&mut self.semantic_db)
+    }
+
     /// 添加错误
     fn add_error(
         &mut self,
@@ -458,6 +463,10 @@ impl TypeChecker {
             }
         }
 
+        // 语义收集：遍历 AST 构建 SemanticDB
+        // 即便类型检查存在错误（如语法或类型错误），我们也要尽可能收集当前的语义 token，保证代码染色等功能
+        self.collect_semantic_tokens(module);
+
         // 如果有错误，返回所有错误
         if self.has_errors() {
             return Err(self.errors().to_vec());
@@ -496,10 +505,6 @@ impl TypeChecker {
         // 幸运的是，assign_var 方法已经将更新后的类型写回到了 scope 中，
         // 所以这里直接使用 scope 中的类型即可，不需要额外 resolve。
         // （注：如果后续需要支持更复杂的泛型推导，可能需要重新设计 solver 的共享机制）
-
-        // 语义收集：遍历 AST 构建 SemanticDB
-        // 一次遍历，多处使用 —— 利用 typecheck 已有的类型信息
-        self.collect_semantic_tokens(module);
 
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),

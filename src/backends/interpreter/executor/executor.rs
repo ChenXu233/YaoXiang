@@ -215,11 +215,15 @@ impl Interpreter {
     ) -> Result<RuntimeValue, ExecutorError> {
         let idx = func_id.0 as usize;
         if idx >= self.functions_by_id.len() {
-            return Err(ExecutorError::FunctionNotFound(format!(
-                "Function with id {} not found (total functions: {})",
-                idx,
-                self.functions_by_id.len()
-            )));
+            let stack = self.capture_stack();
+            return Err(ExecutorError::function_not_found(
+                format!(
+                    "Function with id {} not found (total functions: {})",
+                    idx,
+                    self.functions_by_id.len()
+                ),
+                stack,
+            ));
         }
         // Clone the function to avoid borrow issues
         let func = self.functions_by_id[idx].clone();
@@ -232,7 +236,8 @@ impl Interpreter {
         frame: Frame,
     ) -> ExecutorResult<()> {
         if self.call_stack.len() >= self.config.max_stack_depth {
-            return Err(ExecutorError::StackOverflow);
+            let stack = self.capture_stack();
+            return Err(ExecutorError::stack_overflow(stack));
         }
         self.call_stack.push(frame);
         Ok(())
@@ -251,6 +256,18 @@ impl Interpreter {
     /// Get the current function
     pub fn current_function(&self) -> Option<&BytecodeFunction> {
         self.call_stack.last().map(|f| &f.function)
+    }
+
+    /// Capture the current call stack as a vector of StackFrame
+    pub fn capture_stack(&self) -> Vec<crate::backends::StackFrame> {
+        self.call_stack
+            .iter()
+            .rev()
+            .map(|frame| crate::backends::StackFrame {
+                function_name: frame.function.name.clone(),
+                ip: frame.ip,
+            })
+            .collect()
     }
 
     /// Resolve a label to an instruction offset
@@ -312,10 +329,10 @@ impl Interpreter {
         task: InterpreterTask,
         meta: TaskMeta,
     ) -> ExecutorResult<TaskId> {
-        let id = self
-            .rt_dag
-            .spawn(meta)
-            .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+        let id = self.rt_dag.spawn(meta).map_err(|e| {
+            let stack = self.capture_stack();
+            ExecutorError::runtime(format!("{e}"), stack)
+        })?;
         if !self.rt_dag.is_complete(id) {
             self.rt_tasks.insert(id, task);
         }
@@ -352,18 +369,21 @@ impl Interpreter {
             }) else {
                 if let Some(t) = target {
                     if !self.rt_dag.is_complete(t) {
-                        return Err(ExecutorError::Runtime(format!(
-                            "Runtime deadlock or cycle: {t:?}"
-                        )));
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
+                            format!("Runtime deadlock or cycle: {t:?}"),
+                            stack,
+                        ));
                     }
                 }
                 self.prune_finished_tasks();
                 return Ok(());
             };
 
-            self.rt_dag
-                .mark_running(next)
-                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+            self.rt_dag.mark_running(next).map_err(|e| {
+                let stack = self.capture_stack();
+                ExecutorError::runtime(format!("{e}"), stack)
+            })?;
 
             let start = Instant::now();
             let result = self.execute_scheduled_task(next);
@@ -376,7 +396,10 @@ impl Interpreter {
 
             self.rt_dag
                 .complete(next, outcome, exec_time)
-                .map_err(|e| ExecutorError::Runtime(format!("{e}")))?;
+                .map_err(|e| {
+                    let stack = self.capture_stack();
+                    ExecutorError::runtime(format!("{e}"), stack)
+                })?;
 
             self.prune_finished_tasks();
         }
@@ -548,11 +571,18 @@ impl Interpreter {
                 *value = (**inner).clone();
                 Ok(())
             }
-            AsyncState::Error(err) => Err(ExecutorError::Runtime(format!("Async error: {err:?}"))),
+            AsyncState::Error(err) => {
+                let stack = self.capture_stack();
+                Err(ExecutorError::runtime(
+                    format!("Async error: {err:?}"),
+                    stack,
+                ))
+            }
             AsyncState::Pending(task_id) => {
                 self.drive_dag_until(Some(*task_id))?;
                 let outcome = self.rt_dag.outcome(*task_id).ok_or_else(|| {
-                    ExecutorError::Runtime(format!("Task has no outcome: {task_id:?}"))
+                    let stack = self.capture_stack();
+                    ExecutorError::runtime(format!("Task has no outcome: {task_id:?}"), stack)
                 })?;
 
                 match outcome {
@@ -565,11 +595,19 @@ impl Interpreter {
                         Ok(())
                     }
                     TaskOutcome::Err(payload) => {
-                        Err(ExecutorError::Runtime(self.format_sync_value(payload)))
+                        let stack = self.capture_stack();
+                        Err(ExecutorError::runtime(
+                            self.format_sync_value(payload),
+                            stack,
+                        ))
                     }
-                    TaskOutcome::Cancelled(reason) => Err(ExecutorError::Runtime(
-                        self.format_cancel_reason(*task_id, reason),
-                    )),
+                    TaskOutcome::Cancelled(reason) => {
+                        let stack = self.capture_stack();
+                        Err(ExecutorError::runtime(
+                            self.format_cancel_reason(*task_id, reason),
+                            stack,
+                        ))
+                    }
                 }
             }
         }
@@ -607,6 +645,7 @@ impl Interpreter {
             resolved.push(self.force_value_clone(arg)?);
         }
 
+        let stack = self.capture_stack();
         let interp_ptr = std::ptr::addr_of_mut!(*self);
         let mut call_fn = move |func: &RuntimeValue,
                                 args: &[RuntimeValue]|
@@ -616,11 +655,16 @@ impl Interpreter {
                 let interpreter = unsafe { &mut *interp_ptr };
                 interpreter.call_function_by_id(fv.func_id, args)
             } else {
-                Err(ExecutorError::Type("Expected function value".to_string()))
+                Err(ExecutorError::type_error(
+                    "Expected function value".to_string(),
+                    vec![],
+                ))
             }
         };
         let mut ctx = NativeContext::with_call_fn(&mut self.heap, &mut call_fn);
-        self.ffi.call(func_name, &resolved, &mut ctx)
+        self.ffi
+            .call(func_name, &resolved, &mut ctx)
+            .map_err(|e| e.with_stack(stack))
     }
 
     pub(super) fn call_static_by_name(
@@ -648,7 +692,11 @@ impl Interpreter {
         if let Some(target_func) = self.functions.get(&lookup_name).cloned() {
             self.execute_function(&target_func, &resolved)
         } else {
-            Err(ExecutorError::FunctionNotFound(func_name.to_string()))
+            let stack = self.capture_stack();
+            Err(ExecutorError::function_not_found(
+                func_name.to_string(),
+                stack,
+            ))
         }
     }
 
@@ -689,13 +737,15 @@ impl Interpreter {
             (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l * r),
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
-                    return Err(ExecutorError::DivisionByZero);
+                    let stack = self.capture_stack();
+                    return Err(ExecutorError::division_by_zero(stack));
                 }
                 RuntimeValue::Int(l / r)
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
-                    return Err(ExecutorError::DivisionByZero);
+                    let stack = self.capture_stack();
+                    return Err(ExecutorError::division_by_zero(stack));
                 }
                 RuntimeValue::Int(l % r)
             }

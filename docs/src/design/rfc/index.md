@@ -31,8 +31,8 @@ title: RFC 索引
 |------|------|------|----------|------|
 | RFC-016 | [量子原生支持与多重后端集成](./draft/016-quantum-native-support.md) | 晨煦 | 2026-02-12 | 草案 |
 | RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./draft/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 草案 |
-| RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 草案 ⚠️ |
-| RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020.md) | 晨煦 | 2026-02-25 | 草案 |
+| RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 永久草案 ⚠️ |
+| RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020-dynamic-modules-ffi.md) | 晨煦 | 2026-02-25 | 草案 |
 | RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./draft/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 草案 |
 
 ---
