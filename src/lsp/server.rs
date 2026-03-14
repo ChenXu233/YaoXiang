@@ -473,10 +473,10 @@ fn update_symbol_index(
         world.update_index_from_ast(uri, &parse_result.module);
 
         // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
+        // 无论 typecheck 是否返回了错误配置（例如语法或类型错误），我们都能从中提取已收集的 semantic_db
         let mut tc = crate::frontend::typecheck::TypeChecker::new(uri);
-        if let Ok(tc_result) = tc.check_module_collect_all(&parse_result.module) {
-            world.update_semantic_db(tc_result.semantic_db);
-        }
+        let _ = tc.check_module_collect_all(&parse_result.module);
+        world.update_semantic_db(tc.take_semantic_db());
 
         debug!(
             "已更新符号索引和语义数据库: {} ({} 个符号)",

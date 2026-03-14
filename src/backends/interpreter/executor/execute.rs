@@ -62,10 +62,14 @@ impl Executor for Interpreter {
         args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
         if func.local_count > MAX_LOCALS {
-            return Err(ExecutorError::Runtime(format!(
-                "Too many locals in function '{}': {}",
-                func.name, func.local_count
-            )));
+            let stack = self.capture_stack();
+            return Err(ExecutorError::runtime(
+                format!(
+                    "Too many locals in function '{}': {}",
+                    func.name, func.local_count
+                ),
+                stack,
+            ));
         }
         // Create new frame
         let mut frame = Frame::with_args(func.clone(), args);
@@ -158,15 +162,19 @@ impl Executor for Interpreter {
 
                     let eval = frame.current_eval(self.runtime_config.eval);
                     if !matches!(eval, EvalStrategy::Block) {
-                        return Err(ExecutorError::Runtime(
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
                             "`spawn` is only allowed inside @block scope".to_string(),
+                            stack,
                         ));
                     }
 
                     let closure_val = self.force_register(&mut frame, func)?;
                     let RuntimeValue::Function(func_value) = closure_val else {
-                        return Err(ExecutorError::Type(
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::type_error(
                             "spawn expects a function value".to_string(),
+                            stack,
                         ));
                     };
 
@@ -870,7 +878,11 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::Throw { error: _ } => {
-                    return Err(ExecutorError::Runtime("User thrown error".to_string()));
+                    let stack = self.capture_stack();
+                    return Err(ExecutorError::runtime(
+                        "User thrown error".to_string(),
+                        stack,
+                    ));
                 }
                 BytecodeInstr::BoundsCheck { array: _, index: _ } => {
                     // In debug mode, this would check bounds

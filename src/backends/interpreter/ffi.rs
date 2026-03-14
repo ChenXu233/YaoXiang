@@ -161,10 +161,10 @@ impl FfiRegistry {
             return handler(args, ctx);
         }
 
-        Err(ExecutorError::FunctionNotFound(format!(
-            "Native function not found: {}",
-            name
-        )))
+        Err(ExecutorError::FunctionNotFound(
+            format!("Native function not found: {}", name),
+            None,
+        ))
     }
 
     /// Check if a function is registered.
@@ -277,7 +277,7 @@ mod tests {
         let result = registry.call("nonexistent", &[], &mut ctx);
         assert!(result.is_err());
         match result {
-            Err(ExecutorError::FunctionNotFound(msg)) => {
+            Err(ExecutorError::FunctionNotFound(msg, _stack)) => {
                 assert!(msg.contains("nonexistent"));
             }
             _ => panic!("Expected FunctionNotFound error"),

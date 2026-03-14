@@ -317,12 +317,12 @@ mod tests {
         interp
             .ffi_registry_mut()
             .register("fail_native", |_args, _ctx| {
-                Err(ExecutorError::Runtime("fail".to_string()))
+                Err(ExecutorError::runtime_only("fail".to_string()))
             });
 
         let err = interp.execute_module(&bytecode_module).unwrap_err();
         match err {
-            ExecutorError::Runtime(msg) => {
+            ExecutorError::Runtime(msg, _) => {
                 assert!(msg.contains("fail"), "unexpected error: {msg}");
             }
             other => panic!("expected runtime error, got: {other:?}"),
@@ -437,7 +437,7 @@ mod tests {
 
         let err = interp.execute_function(&main, &[]).unwrap_err();
         match err {
-            ExecutorError::Runtime(msg) => {
+            ExecutorError::Runtime(msg, _) => {
                 assert!(
                     msg.contains("Division by zero"),
                     "expected dependency error to surface, got: {msg}"

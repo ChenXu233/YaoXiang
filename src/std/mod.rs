@@ -69,7 +69,7 @@ impl<'a> NativeContext<'a> {
         if let Some(ref mut callback) = self.call_fn {
             callback(func, args)
         } else {
-            Err(ExecutorError::Runtime(
+            Err(ExecutorError::runtime_only(
                 "Cannot call YaoXiang functions from this native context".to_string(),
             ))
         }
@@ -187,7 +187,7 @@ fn builtin_len(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() != 1 {
-        return Err(ExecutorError::Type(
+        return Err(ExecutorError::type_only(
             "len expects exactly 1 argument".to_string(),
         ));
     }
@@ -213,7 +213,7 @@ fn builtin_dict_keys(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() != 1 {
-        return Err(ExecutorError::Type(
+        return Err(ExecutorError::type_only(
             "dict_keys expects exactly 1 argument".to_string(),
         ));
     }
@@ -223,7 +223,7 @@ fn builtin_dict_keys(
             _ => Vec::new(),
         },
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "dict_keys only supports dict".to_string(),
             ));
         }
