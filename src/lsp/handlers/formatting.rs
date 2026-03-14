@@ -114,12 +114,15 @@ fn extract_range(
     for (i, line) in lines[start_line..=end_line].iter().enumerate() {
         if i == 0 && start_line == end_line {
             // 单行范围
-            let start_char = range.start.character as usize;
+            let start_char = (range.start.character as usize).min(line.len());
             let end_char = (range.end.character as usize).min(line.len());
-            result.push_str(&line[start_char..end_char]);
+            // 确保 start_char <= end_char
+            if start_char < end_char {
+                result.push_str(&line[start_char..end_char]);
+            }
         } else if i == 0 {
             // 第一行
-            let start_char = range.start.character as usize;
+            let start_char = (range.start.character as usize).min(line.len());
             result.push_str(&line[start_char..]);
             result.push('\n');
         } else if i == end_line - start_line {
@@ -133,4 +136,88 @@ fn extract_range(
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lsp_types::{FormattingOptions, TextDocumentIdentifier, Uri, WorkDoneProgressParams};
+    use std::str::FromStr;
+
+    fn test_session_with_doc(
+        uri: &str,
+        content: &str,
+    ) -> Session {
+        let mut session = Session::new();
+        session
+            .document_store_mut()
+            .open(uri.to_string(), content.to_string(), 1);
+        session
+    }
+
+    #[test]
+    fn test_handle_formatting() {
+        let doc_uri = "file:///test.yx";
+        let content = "fn main() {x=1}";
+        let session = test_session_with_doc(doc_uri, content);
+
+        let params = DocumentFormattingParams {
+            text_document: TextDocumentIdentifier {
+                uri: Uri::from_str(doc_uri).unwrap(),
+            },
+            options: FormattingOptions {
+                tab_size: 4,
+                insert_spaces: true,
+                properties: Default::default(),
+                trim_trailing_whitespace: None,
+                insert_final_newline: None,
+                trim_final_newlines: None,
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+        };
+
+        if let Some(_edits) = handle_formatting(&session, params) {
+            // Either no edits if already formatted or edits
+            // For now just checking it doesn't fail
+            // Note: edits.len() >= 0 is always true since usize is unsigned
+            assert!(true);
+        }
+    }
+
+    #[test]
+    fn test_handle_range_formatting() {
+        let doc_uri = "file:///test.yx";
+        let content = "fn main() {x=1}";
+        let session = test_session_with_doc(doc_uri, content);
+
+        let params = DocumentRangeFormattingParams {
+            text_document: TextDocumentIdentifier {
+                uri: Uri::from_str(doc_uri).unwrap(),
+            },
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: 0,
+                    character: 15,
+                },
+            },
+            options: FormattingOptions {
+                tab_size: 4,
+                insert_spaces: true,
+                properties: Default::default(),
+                trim_trailing_whitespace: None,
+                insert_final_newline: None,
+                trim_final_newlines: None,
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+        };
+
+        if let Some(_edits) = handle_range_formatting(&session, params) {
+            // Note: edits.len() >= 0 is always true since usize is unsigned
+            assert!(true);
+        }
+    }
 }

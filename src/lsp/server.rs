@@ -23,6 +23,7 @@ use lsp_types::request::SemanticTokensFullDeltaRequest;
 use lsp_types::request::SemanticTokensRefresh;
 use lsp_types::request::Formatting;
 use lsp_types::request::RangeFormatting;
+use lsp_types::request::InlayHintRequest;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
 
@@ -330,6 +331,23 @@ fn handle_request(
                 }
                 Err(e) => {
                     warn!("范围格式化请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/inlayHint
+        m if m == <InlayHintRequest as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::inlay_hint::handle_inlay_hint(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("InlayHint请求参数解析失败: {}", e);
                     Some(protocol::internal_error(
                         req.id,
                         format!("参数解析失败: {}", e),
