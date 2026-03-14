@@ -94,16 +94,32 @@ impl TaskOutcome {
 enum TaskStatus {
     Pending,
     Running,
+    /// Cancelled but waiting for control deps to finish before becoming complete.
+    ///
+    /// This preserves resource ordering even when cancellation happens before
+    /// the task ever starts (or while an earlier task in the same resource chain
+    /// is still running).
+    Cancelling,
     Finished,
 }
 
 #[derive(Debug)]
 struct TaskNode {
     meta: TaskMeta,
+    /// All dependencies (hard + control), used for cycle/reachability checks.
     deps: Vec<TaskId>,
-    dependents: Vec<TaskId>,
-    remaining_deps: usize,
+    /// Hard dependencies: failure/cancellation propagates to this task.
+    hard_deps: Vec<TaskId>,
+    /// Control dependencies: must complete before running, but do not propagate failures.
+    control_deps: Vec<TaskId>,
+    /// Dependents that have this task as a hard dependency.
+    dependents_hard: Vec<TaskId>,
+    /// Dependents that have this task as a control dependency.
+    dependents_control: Vec<TaskId>,
+    remaining_hard: usize,
+    remaining_control: usize,
     status: TaskStatus,
+    cancel_pending: Option<TaskCancelReason>,
     outcome: Option<TaskOutcome>,
     started_at: Option<Instant>,
     finished_at: Option<Instant>,
@@ -112,6 +128,12 @@ struct TaskNode {
 impl TaskNode {
     fn is_finished(&self) -> bool {
         matches!(self.status, TaskStatus::Finished)
+    }
+
+    fn is_runnable(&self) -> bool {
+        matches!(self.status, TaskStatus::Pending)
+            && self.remaining_hard == 0
+            && self.remaining_control == 0
     }
 }
 
@@ -138,6 +160,8 @@ pub enum RuntimeError {
     DeadlockOrCycle(TaskId),
     #[error("Task already finished: {0:?}")]
     TaskAlreadyFinished(TaskId),
+    #[error("Task is not runnable in its current state: {0:?}")]
+    TaskNotRunnable(TaskId),
     #[error("Task is not cancellable in its current state: {0:?}")]
     TaskNotCancellable(TaskId),
     #[error("Task is not yieldable in its current state: {0:?}")]
@@ -195,55 +219,74 @@ impl LocalRuntime {
     /// Create a task node and return its id.
     pub fn spawn(
         &mut self,
-        mut meta: TaskMeta,
+        meta: TaskMeta,
     ) -> Result<TaskId, RuntimeError> {
         let task_id = TaskId(self.next_id);
         self.next_id += 1;
 
-        // Resource serialization: add dependency on the last task that used the same resource.
+        // Hard deps come from explicit metadata (data dependencies).
+        let hard_deps = dedup_stable(meta.deps.iter().copied());
+
+        // Control deps come from resource serialization (coarse-grained ordering).
+        let mut control_deps = Vec::new();
         for key in &meta.resources {
             if let Some(prev) = self.resource_last.get(key) {
-                meta.deps.push(*prev);
+                control_deps.push(*prev);
             }
         }
+        // Deduplicate control deps (keep order stable) and avoid duplicating hard deps.
+        let hard_set: std::collections::HashSet<TaskId> = hard_deps.iter().copied().collect();
+        control_deps.retain(|d| !hard_set.contains(d));
+        let control_deps = dedup_stable(control_deps.into_iter());
 
-        // Deduplicate deps (keep order stable).
-        let mut deps = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for d in meta.deps.iter().copied() {
-            if seen.insert(d) {
-                deps.push(d);
-            }
-        }
+        // All deps for reachability/cycle checks.
+        let deps = hard_deps
+            .iter()
+            .copied()
+            .chain(control_deps.iter().copied())
+            .collect::<Vec<_>>();
 
-        // Validate deps and compute remaining count; handle already-failed deps.
-        let mut remaining_deps = 0usize;
-        let mut failed_deps = Vec::new();
-        let mut cancelled_deps = Vec::new();
-        for dep in &deps {
+        // Validate deps and compute remaining counts; handle already-failed/cancelled hard deps.
+        let mut remaining_hard = 0usize;
+        let mut remaining_control = 0usize;
+        let mut failed_hard = Vec::new();
+        let mut cancelled_hard = Vec::new();
+
+        for dep in &hard_deps {
             let Some(dep_node) = self.tasks.get(dep) else {
                 return Err(RuntimeError::DependencyNotFound(*dep));
             };
-            match dep_node.outcome.as_ref() {
-                None => remaining_deps += 1,
-                Some(TaskOutcome::Ok(_)) => {}
-                Some(TaskOutcome::Err(_)) => failed_deps.push(*dep),
-                Some(TaskOutcome::Cancelled(_)) => cancelled_deps.push(*dep),
+            match dep_node.status {
+                TaskStatus::Pending | TaskStatus::Running => remaining_hard += 1,
+                TaskStatus::Cancelling => cancelled_hard.push(*dep),
+                TaskStatus::Finished => match dep_node.outcome.as_ref() {
+                    Some(TaskOutcome::Ok(_)) => {}
+                    Some(TaskOutcome::Err(_)) => failed_hard.push(*dep),
+                    Some(TaskOutcome::Cancelled(_)) => cancelled_hard.push(*dep),
+                    None => remaining_hard += 1,
+                },
             }
         }
 
-        let outcome = if !failed_deps.is_empty() {
-            Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
-                primary: failed_deps[0],
-                others: failed_deps.iter().copied().skip(1).collect(),
-            }))
-        } else if !cancelled_deps.is_empty() {
-            Some(TaskOutcome::Cancelled(
-                TaskCancelReason::DependencyCancelled {
-                    primary: cancelled_deps[0],
-                    others: cancelled_deps.iter().copied().skip(1).collect(),
-                },
-            ))
+        for dep in &control_deps {
+            let Some(dep_node) = self.tasks.get(dep) else {
+                return Err(RuntimeError::DependencyNotFound(*dep));
+            };
+            if !dep_node.is_finished() {
+                remaining_control += 1;
+            }
+        }
+
+        let cancel_pending = if !failed_hard.is_empty() {
+            Some(TaskCancelReason::DependencyFailed {
+                primary: failed_hard[0],
+                others: failed_hard.iter().copied().skip(1).collect(),
+            })
+        } else if !cancelled_hard.is_empty() {
+            Some(TaskCancelReason::DependencyCancelled {
+                primary: cancelled_hard[0],
+                others: cancelled_hard.iter().copied().skip(1).collect(),
+            })
         } else {
             None
         };
@@ -251,23 +294,41 @@ impl LocalRuntime {
         let node = TaskNode {
             meta: meta.clone(),
             deps: deps.clone(),
-            dependents: Vec::new(),
-            remaining_deps,
-            status: if outcome.is_some() {
-                TaskStatus::Finished
-            } else {
-                TaskStatus::Pending
+            hard_deps: hard_deps.clone(),
+            control_deps: control_deps.clone(),
+            dependents_hard: Vec::new(),
+            dependents_control: Vec::new(),
+            remaining_hard,
+            remaining_control,
+            status: match cancel_pending {
+                None => TaskStatus::Pending,
+                Some(_) if remaining_control > 0 => TaskStatus::Cancelling,
+                Some(_) => TaskStatus::Finished,
             },
-            outcome,
+            cancel_pending: cancel_pending.clone(),
+            outcome: match cancel_pending.clone() {
+                None => None,
+                Some(_) if remaining_control > 0 => None,
+                Some(r) => Some(TaskOutcome::Cancelled(r)),
+            },
             started_at: None,
-            finished_at: None,
+            finished_at: match cancel_pending {
+                None => None,
+                Some(_) if remaining_control > 0 => None,
+                Some(_) => Some(Instant::now()),
+            },
         };
         self.tasks.insert(task_id, node);
 
         // Link dependents.
-        for dep in deps {
+        for dep in hard_deps {
             if let Some(dep_node) = self.tasks.get_mut(&dep) {
-                dep_node.dependents.push(task_id);
+                dep_node.dependents_hard.push(task_id);
+            }
+        }
+        for dep in control_deps {
+            if let Some(dep_node) = self.tasks.get_mut(&dep) {
+                dep_node.dependents_control.push(task_id);
             }
         }
 
@@ -278,7 +339,7 @@ impl LocalRuntime {
 
         // Enqueue if ready.
         if let Some(n) = self.tasks.get(&task_id) {
-            if matches!(n.status, TaskStatus::Pending) && n.remaining_deps == 0 {
+            if n.is_runnable() {
                 self.ready.push_back(task_id);
             }
         }
@@ -309,51 +370,74 @@ impl LocalRuntime {
             return Err(RuntimeError::CycleDetected { task, dep });
         }
 
-        // Apply the edge.
-        let dep_outcome = self.tasks.get(&dep).and_then(|n| n.outcome.clone());
+        let dep_status = self.tasks.get(&dep).map(|n| (n.status, n.outcome.clone()));
+
+        // Apply the hard edge.
         {
             let task_node = self
                 .tasks
                 .get_mut(&task)
                 .ok_or(RuntimeError::TaskNotFound(task))?;
-            if task_node.is_finished() {
+            if matches!(
+                task_node.status,
+                TaskStatus::Cancelling | TaskStatus::Finished
+            ) {
                 return Err(RuntimeError::TaskAlreadyFinished(task));
             }
             if task_node.deps.iter().any(|d| *d == dep) {
                 return Ok(());
             }
-            task_node.deps.push(dep);
 
-            match dep_outcome.as_ref() {
-                None => {
-                    task_node.remaining_deps += 1;
-                }
-                Some(TaskOutcome::Ok(_)) => {}
-                Some(TaskOutcome::Err(_)) => {
-                    task_node.outcome =
-                        Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
-                            primary: dep,
-                            others: Vec::new(),
-                        }));
-                    task_node.status = TaskStatus::Finished;
-                    task_node.remaining_deps = 0;
-                }
-                Some(TaskOutcome::Cancelled(_)) => {
-                    task_node.outcome = Some(TaskOutcome::Cancelled(
-                        TaskCancelReason::DependencyCancelled {
-                            primary: dep,
-                            others: Vec::new(),
-                        },
-                    ));
-                    task_node.status = TaskStatus::Finished;
-                    task_node.remaining_deps = 0;
+            task_node.deps.push(dep);
+            task_node.hard_deps.push(dep);
+
+            if let Some((status, outcome)) = dep_status.as_ref() {
+                match status {
+                    TaskStatus::Pending | TaskStatus::Running => {
+                        task_node.remaining_hard += 1;
+                    }
+                    TaskStatus::Cancelling => {}
+                    TaskStatus::Finished => {
+                        if outcome.is_none() {
+                            task_node.remaining_hard += 1;
+                        }
+                    }
                 }
             }
         }
 
-        // Register dependent.
+        // Register hard dependent.
         if let Some(dep_node) = self.tasks.get_mut(&dep) {
-            dep_node.dependents.push(task);
+            dep_node.dependents_hard.push(task);
+        }
+
+        // If the dependency is already failed/cancelled, cancel propagation should be immediate.
+        let to_cancel = match dep_status {
+            Some((TaskStatus::Cancelling, _)) => Some(TaskCancelReason::DependencyCancelled {
+                primary: dep,
+                others: Vec::new(),
+            }),
+            Some((TaskStatus::Finished, Some(TaskOutcome::Err(_)))) => {
+                Some(TaskCancelReason::DependencyFailed {
+                    primary: dep,
+                    others: Vec::new(),
+                })
+            }
+            Some((TaskStatus::Finished, Some(TaskOutcome::Cancelled(_)))) => {
+                Some(TaskCancelReason::DependencyCancelled {
+                    primary: dep,
+                    others: Vec::new(),
+                })
+            }
+            _ => None,
+        };
+
+        if let Some(reason) = to_cancel {
+            self.propagate_cancel(dep, reason);
+        } else if let Some(n) = self.tasks.get(&task) {
+            if n.is_runnable() {
+                self.ready.push_back(task);
+            }
         }
 
         self.recompute_counts();
@@ -365,17 +449,33 @@ impl LocalRuntime {
         &mut self,
         task_id: TaskId,
     ) -> Result<(), RuntimeError> {
-        let Some(node) = self.tasks.get_mut(&task_id) else {
-            return Err(RuntimeError::TaskNotFound(task_id));
-        };
-        match node.status {
-            TaskStatus::Pending => {
-                node.outcome = Some(TaskOutcome::Cancelled(TaskCancelReason::Explicit));
-                node.status = TaskStatus::Finished;
-                node.finished_at = Some(Instant::now());
+        let control_to_release = {
+            let Some(node) = self.tasks.get_mut(&task_id) else {
+                return Err(RuntimeError::TaskNotFound(task_id));
+            };
+            match node.status {
+                TaskStatus::Pending => {
+                    let reason = TaskCancelReason::Explicit;
+                    if node.remaining_control > 0 {
+                        node.status = TaskStatus::Cancelling;
+                        node.cancel_pending = Some(reason);
+                        node.outcome = None;
+                        Vec::new()
+                    } else {
+                        node.outcome = Some(TaskOutcome::Cancelled(reason));
+                        node.status = TaskStatus::Finished;
+                        node.cancel_pending = None;
+                        node.finished_at = Some(Instant::now());
+                        node.dependents_control.clone()
+                    }
+                }
+                TaskStatus::Running => return Err(RuntimeError::TaskNotCancellable(task_id)),
+                TaskStatus::Cancelling | TaskStatus::Finished => return Ok(()),
             }
-            TaskStatus::Running => return Err(RuntimeError::TaskNotCancellable(task_id)),
-            TaskStatus::Finished => return Ok(()),
+        };
+
+        for t in control_to_release {
+            self.on_control_dependency_satisfied(t);
         }
 
         self.propagate_cancel(
@@ -393,7 +493,7 @@ impl LocalRuntime {
     pub fn next_ready(&mut self) -> Option<TaskId> {
         while let Some(id) = self.ready.pop_front() {
             if let Some(node) = self.tasks.get(&id) {
-                if matches!(node.status, TaskStatus::Pending) {
+                if node.is_runnable() {
                     return Some(id);
                 }
             }
@@ -414,11 +514,11 @@ impl LocalRuntime {
             let Some(node) = self.tasks.get(&id) else {
                 continue;
             };
-            if !matches!(node.status, TaskStatus::Pending) {
+            if !node.is_runnable() {
                 continue;
             }
 
-            if id == target || self.depends_on(target, id) {
+            if id == target || self.depends_on_for_completion(target, id) {
                 for s in skipped {
                     self.ready.push_back(s);
                 }
@@ -459,6 +559,9 @@ impl LocalRuntime {
         if node.is_finished() {
             return Err(RuntimeError::TaskAlreadyFinished(task_id));
         }
+        if !node.is_runnable() {
+            return Err(RuntimeError::TaskNotRunnable(task_id));
+        }
         node.status = TaskStatus::Running;
         node.started_at = Some(Instant::now());
         self.recompute_counts();
@@ -477,18 +580,30 @@ impl LocalRuntime {
         if node.is_finished() {
             return Err(RuntimeError::TaskAlreadyFinished(task_id));
         }
+        if !matches!(node.status, TaskStatus::Running) {
+            return Err(RuntimeError::TaskAlreadyFinished(task_id));
+        }
         node.status = TaskStatus::Finished;
         node.outcome = Some(outcome.clone());
+        node.cancel_pending = None;
         node.finished_at = Some(Instant::now());
 
         self.total_exec_time += exec_time;
 
-        // Propagate to dependents.
-        let dependents = node.dependents.clone();
+        let hard = node.dependents_hard.clone();
+        let control = node.dependents_control.clone();
+        let _ = node;
+
+        // Control deps are satisfied regardless of success/failure.
+        for t in control {
+            self.on_control_dependency_satisfied(t);
+        }
+
+        // Hard deps: only Ok satisfies; Err/Cancelled cancels dependents.
         match outcome {
             TaskOutcome::Ok(_) => {
-                for dep_task in dependents {
-                    self.on_dependency_satisfied(dep_task, task_id);
+                for t in hard {
+                    self.on_hard_dependency_satisfied(t);
                 }
             }
             TaskOutcome::Err(_) => {
@@ -635,10 +750,9 @@ impl LocalRuntime {
         }
     }
 
-    fn on_dependency_satisfied(
+    fn on_hard_dependency_satisfied(
         &mut self,
         task: TaskId,
-        _dep: TaskId,
     ) {
         let Some(node) = self.tasks.get_mut(&task) else {
             return;
@@ -646,11 +760,51 @@ impl LocalRuntime {
         if node.is_finished() {
             return;
         }
-        if node.remaining_deps > 0 {
-            node.remaining_deps -= 1;
+        if node.remaining_hard > 0 {
+            node.remaining_hard -= 1;
         }
-        if node.remaining_deps == 0 {
+        if node.is_runnable() {
             self.ready.push_back(task);
+        }
+    }
+
+    fn on_control_dependency_satisfied(
+        &mut self,
+        task: TaskId,
+    ) {
+        let Some(node) = self.tasks.get_mut(&task) else {
+            return;
+        };
+
+        if node.remaining_control > 0 {
+            node.remaining_control -= 1;
+        }
+
+        match node.status {
+            TaskStatus::Pending => {
+                if node.is_runnable() {
+                    self.ready.push_back(task);
+                }
+            }
+            TaskStatus::Cancelling => {
+                if node.remaining_control == 0 {
+                    // Finalize cancellation and release its control dependents.
+                    let reason = node
+                        .cancel_pending
+                        .take()
+                        .unwrap_or(TaskCancelReason::Explicit);
+                    node.status = TaskStatus::Finished;
+                    node.outcome = Some(TaskOutcome::Cancelled(reason));
+                    node.finished_at = Some(Instant::now());
+
+                    let control = node.dependents_control.clone();
+                    let _ = node;
+                    for t in control {
+                        self.on_control_dependency_satisfied(t);
+                    }
+                }
+            }
+            TaskStatus::Running | TaskStatus::Finished => {}
         }
     }
 
@@ -661,7 +815,7 @@ impl LocalRuntime {
     ) {
         let mut queue = VecDeque::new();
         if let Some(node) = self.tasks.get(&dep_task) {
-            for &child in &node.dependents {
+            for &child in &node.dependents_hard {
                 queue.push_back(child);
             }
         }
@@ -670,42 +824,130 @@ impl LocalRuntime {
             let Some(node) = self.tasks.get_mut(&t) else {
                 continue;
             };
-            if node.is_finished() {
-                // Merge "other" dependency ids for better diagnostics when possible.
-                if let Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
-                    primary,
-                    others,
-                })) = node.outcome.as_mut()
-                {
-                    if matches!(reason, TaskCancelReason::DependencyFailed { .. }) {
-                        if *primary != dep_task && !others.contains(&dep_task) {
-                            others.push(dep_task);
+
+            match node.status {
+                TaskStatus::Finished => {
+                    // Merge "other" dependency ids for better diagnostics when possible.
+                    if let Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyFailed {
+                        primary,
+                        others,
+                    })) = node.outcome.as_mut()
+                    {
+                        if matches!(reason, TaskCancelReason::DependencyFailed { .. }) {
+                            if *primary != dep_task && !others.contains(&dep_task) {
+                                others.push(dep_task);
+                            }
                         }
                     }
-                }
-                if let Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled {
-                    primary,
-                    others,
-                })) = node.outcome.as_mut()
-                {
-                    if matches!(reason, TaskCancelReason::DependencyCancelled { .. }) {
-                        if *primary != dep_task && !others.contains(&dep_task) {
-                            others.push(dep_task);
+                    if let Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled {
+                        primary,
+                        others,
+                    })) = node.outcome.as_mut()
+                    {
+                        if matches!(reason, TaskCancelReason::DependencyCancelled { .. }) {
+                            if *primary != dep_task && !others.contains(&dep_task) {
+                                others.push(dep_task);
+                            }
                         }
                     }
+                    continue;
                 }
-                continue;
+                TaskStatus::Cancelling => {
+                    // Merge reasons into pending cancellation if possible.
+                    if let Some(existing) = node.cancel_pending.as_mut() {
+                        if let TaskCancelReason::DependencyFailed { primary, others } = existing {
+                            if matches!(reason, TaskCancelReason::DependencyFailed { .. }) {
+                                if *primary != dep_task && !others.contains(&dep_task) {
+                                    others.push(dep_task);
+                                }
+                            }
+                        }
+                        if let TaskCancelReason::DependencyCancelled { primary, others } = existing
+                        {
+                            if matches!(reason, TaskCancelReason::DependencyCancelled { .. }) {
+                                if *primary != dep_task && !others.contains(&dep_task) {
+                                    others.push(dep_task);
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+                TaskStatus::Running => {
+                    // Should be unreachable for hard deps; keep conservative.
+                    continue;
+                }
+                TaskStatus::Pending => {}
             }
 
-            node.status = TaskStatus::Finished;
-            node.outcome = Some(TaskOutcome::Cancelled(reason.clone()));
-            node.finished_at = Some(Instant::now());
+            let hard_children = node.dependents_hard.clone();
 
-            // Propagate further.
-            for &child in &node.dependents {
+            // Cancel pending task (but keep ordering: wait for its control deps if any).
+            if node.remaining_control > 0 {
+                node.status = TaskStatus::Cancelling;
+                node.cancel_pending = Some(reason.clone());
+                node.outcome = None;
+            } else {
+                node.status = TaskStatus::Finished;
+                node.outcome = Some(TaskOutcome::Cancelled(reason.clone()));
+                node.cancel_pending = None;
+                node.finished_at = Some(Instant::now());
+
+                // Control dependents are released when this task becomes complete.
+                let control = node.dependents_control.clone();
+                let _ = node;
+                for t in control {
+                    self.on_control_dependency_satisfied(t);
+                }
+            }
+
+            // Propagate further along hard edges.
+            for child in hard_children {
                 queue.push_back(child);
             }
         }
+    }
+
+    fn depends_on_for_completion(
+        &self,
+        task: TaskId,
+        dep: TaskId,
+    ) -> bool {
+        if task == dep {
+            return true;
+        }
+        if !self.tasks.contains_key(&task) || !self.tasks.contains_key(&dep) {
+            return false;
+        }
+
+        let mut stack = vec![task];
+        let mut visited = std::collections::HashSet::new();
+        while let Some(cur) = stack.pop() {
+            if cur == dep {
+                return true;
+            }
+            if !visited.insert(cur) {
+                continue;
+            }
+            let Some(node) = self.tasks.get(&cur) else {
+                continue;
+            };
+
+            match node.status {
+                TaskStatus::Finished => {}
+                TaskStatus::Cancelling => {
+                    for &d in &node.control_deps {
+                        stack.push(d);
+                    }
+                }
+                TaskStatus::Pending | TaskStatus::Running => {
+                    for &d in &node.deps {
+                        stack.push(d);
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn is_reachable(
@@ -742,6 +984,7 @@ impl LocalRuntime {
             match (node.status, node.outcome.as_ref()) {
                 (TaskStatus::Pending, _) => pending += 1,
                 (TaskStatus::Running, _) => running += 1,
+                (TaskStatus::Cancelling, _) => pending += 1,
                 (TaskStatus::Finished, Some(TaskOutcome::Ok(_))) => completed += 1,
                 (TaskStatus::Finished, Some(TaskOutcome::Err(_))) => failed += 1,
                 (TaskStatus::Finished, Some(TaskOutcome::Cancelled(_))) => cancelled += 1,
@@ -761,6 +1004,17 @@ impl LocalRuntime {
             self.stats.avg_execution_time = self.total_exec_time / (finished as u32);
         }
     }
+}
+
+fn dedup_stable<I: IntoIterator<Item = TaskId>>(iter: I) -> Vec<TaskId> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for id in iter {
+        if seen.insert(id) {
+            out.push(id);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1038,6 +1292,92 @@ mod tests {
         .unwrap();
 
         assert_eq!(order, vec![t1, t2, t3]);
+    }
+
+    #[test]
+    fn resource_serialization_does_not_propagate_failure() {
+        let mut rt = LocalRuntime::new();
+        let r: ResourceKey = "io".into();
+
+        let t1 = rt
+            .spawn(TaskMeta {
+                resources: vec![r.clone()],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+        let t2 = rt
+            .spawn(TaskMeta {
+                resources: vec![r.clone()],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+
+        let mut order = Vec::new();
+        let table: HashMap<TaskId, TaskResult> = [(t1, err_str("boom")), (t2, ok_i32(2))].into();
+
+        rt.drive_until(Some(t2), |id| {
+            order.push(id);
+            table.get(&id).cloned().unwrap()
+        })
+        .unwrap();
+
+        assert_eq!(order, vec![t1, t2]);
+        assert!(matches!(rt.outcome(t1), Some(TaskOutcome::Err(_))));
+        assert!(matches!(rt.outcome(t2), Some(TaskOutcome::Ok(_))));
+    }
+
+    #[test]
+    fn cancelled_task_waits_for_control_deps_to_preserve_resource_order() {
+        let mut rt = LocalRuntime::new();
+        let r: ResourceKey = "io".into();
+
+        let t1 = rt
+            .spawn(TaskMeta {
+                resources: vec![r.clone()],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+        let t2 = rt
+            .spawn(TaskMeta {
+                resources: vec![r.clone()],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+        let t3 = rt
+            .spawn(TaskMeta {
+                resources: vec![r.clone()],
+                ..TaskMeta::default()
+            })
+            .unwrap();
+
+        let next = rt.next_ready().unwrap();
+        assert_eq!(next, t1);
+        rt.mark_running(next).unwrap();
+
+        // Cancel the middle task while the first one is still running.
+        rt.cancel(t2).unwrap();
+        assert!(!rt.is_complete(t2));
+
+        // If cancellation completed immediately, t3 would become runnable now (violating serialization).
+        assert_eq!(rt.next_ready(), None);
+
+        rt.complete(t1, TaskOutcome::Ok(sv(1)), Duration::ZERO)
+            .unwrap();
+
+        // Now that the control dep is satisfied, the cancelled task can become complete.
+        assert!(rt.is_complete(t2));
+        assert!(matches!(
+            rt.outcome(t2),
+            Some(TaskOutcome::Cancelled(TaskCancelReason::Explicit))
+        ));
+
+        let next = rt.next_ready().unwrap();
+        assert_eq!(next, t3);
+        rt.mark_running(next).unwrap();
+        rt.complete(t3, TaskOutcome::Ok(sv(3)), Duration::ZERO)
+            .unwrap();
+
+        assert!(matches!(rt.outcome(t3), Some(TaskOutcome::Ok(_))));
     }
 
     #[test]
