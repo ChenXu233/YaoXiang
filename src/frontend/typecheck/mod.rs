@@ -34,6 +34,8 @@ pub mod semantic_db;
 // 死代码分析器
 pub mod dead_code;
 
+mod spawn_placement;
+
 // 导入测试模块
 #[cfg(test)]
 mod tests;
@@ -406,6 +408,11 @@ impl TypeChecker {
 
         // 收集所有导出项
         self.collect_exports(module);
+
+        // RFC-001/008: `spawn` 仅允许在 `@block` 作用域内使用（编译期约束）
+        for err in spawn_placement::check_spawn_placement(module) {
+            self.add_error(err);
+        }
 
         // 初始化函数体检查器
         let mut body_checker = inference::StatementChecker::new(self.env.solver());

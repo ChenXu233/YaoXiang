@@ -9,7 +9,7 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 use std::collections::HashMap;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{Stmt, Expr, Param, Block};
+use crate::frontend::core::parser::ast::{Block, Expr, Param, Stmt};
 
 use super::scope::ScopeManager;
 
@@ -45,6 +45,8 @@ pub struct StatementChecker {
     collect_all_errors: bool,
     /// 保存函数体的变量（在退出函数作用域后保留）
     function_local_vars: HashMap<String, PolyType>,
+    /// 当前函数的 Result 错误类型栈（用于 `?` 运算符约束）
+    result_err_stack: Vec<Option<MonoType>>,
 }
 
 impl StatementChecker {
@@ -60,7 +62,12 @@ impl StatementChecker {
             collected_errors: Vec::new(),
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
+            result_err_stack: Vec::new(),
         }
+    }
+
+    fn current_result_err(&self) -> Option<MonoType> {
+        self.result_err_stack.last().cloned().flatten()
     }
 
     /// 设置是否启用错误收集模式
@@ -304,6 +311,7 @@ impl StatementChecker {
                 name,
                 generic_params: _,
                 type_annotation,
+                eval: _,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -655,6 +663,19 @@ impl StatementChecker {
                 .add_var(name.to_string(), PolyType::mono(fn_type));
         }
 
+        // 进入函数 Result 上下文（用于 `?` 运算符检查）
+        let fn_result_err = type_annotation.and_then(|t| match t {
+            crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                let ret_mono = MonoType::from((**return_type).clone());
+                match ret_mono {
+                    MonoType::Result(_, err) => Some((*err).clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        });
+        self.result_err_stack.push(fn_result_err);
+
         // 处理类型注解
         if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
             type_annotation
@@ -670,7 +691,12 @@ impl StatementChecker {
             let _ = self.check_expr(&fn_def_expr);
         }
 
-        self.check_fn_def(name, params, &body)
+        let out = self.check_fn_def(name, params, &body);
+
+        // 退出函数 Result 上下文
+        let _ = self.result_err_stack.pop();
+
+        out
     }
 
     /// 检查变量语句
@@ -1090,23 +1116,28 @@ impl StatementChecker {
                     }
                     _ => {
                         // 其他操作符委托给 ExpressionInferrer
-                        let mut inferrer = super::ExpressionInferrer::with_native_signatures(
-                            &mut self.scope,
-                            &mut self.solver,
-                            &self.overload_candidates,
-                            &self.native_signatures,
-                        );
+                        let current_result_err = self.current_result_err();
+                        let mut inferrer =
+                            super::ExpressionInferrer::with_native_signatures_and_result_err(
+                                &mut self.scope,
+                                &mut self.solver,
+                                &self.overload_candidates,
+                                &self.native_signatures,
+                                current_result_err,
+                            );
                         inferrer.infer_expr(expr).map_err(Box::new)
                     }
                 }
             }
             // 其他表达式：委托给 ExpressionInferrer
             _ => {
-                let mut inferrer = super::ExpressionInferrer::with_native_signatures(
+                let current_result_err = self.current_result_err();
+                let mut inferrer = super::ExpressionInferrer::with_native_signatures_and_result_err(
                     &mut self.scope,
                     &mut self.solver,
                     &self.overload_candidates,
                     &self.native_signatures,
+                    current_result_err,
                 );
                 inferrer.infer_expr(expr).map_err(Box::new)
             }

@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use crate::tlog;
 use crate::util::i18n::MSG;
 use crate::backends::common::Opcode;
+use crate::frontend::core::parser::ast::EvalMode;
 
 // Re-export types for conversion
 pub use crate::middle::core::ir::{Type as IrType, ConstValue};
@@ -153,6 +154,24 @@ pub enum BytecodeInstr {
     /// Return with value
     ReturnValue {
         value: Reg,
+    },
+
+    /// Yield execution (cooperative scheduling)
+    Yield,
+
+    /// Push evaluation strategy (`@block/@auto/@eager`) for current frame/scope.
+    EvalPush {
+        mode: EvalMode,
+    },
+
+    /// Pop evaluation strategy.
+    EvalPop,
+
+    /// Spawn a new concurrent task (dynamic call).
+    Spawn {
+        dst: Reg,
+        func: Reg,
+        args: Vec<Reg>,
     },
 
     /// Unconditional jump
@@ -461,6 +480,10 @@ impl BytecodeInstr {
             BytecodeInstr::Nop => Opcode::Nop,
             BytecodeInstr::Return => Opcode::Return,
             BytecodeInstr::ReturnValue { .. } => Opcode::ReturnValue,
+            BytecodeInstr::Yield => Opcode::Yield,
+            BytecodeInstr::EvalPush { .. } => Opcode::EvalPush,
+            BytecodeInstr::EvalPop => Opcode::EvalPop,
+            BytecodeInstr::Spawn { .. } => Opcode::Spawn,
             BytecodeInstr::Jmp { .. } => Opcode::Jmp,
             BytecodeInstr::JmpIf { .. } => Opcode::JmpIf,
             BytecodeInstr::JmpIfNot { .. } => Opcode::JmpIfNot,
@@ -536,6 +559,10 @@ impl BytecodeInstr {
             BytecodeInstr::Nop => 0,
             BytecodeInstr::Return => 0,
             BytecodeInstr::ReturnValue { .. } => 2,
+            BytecodeInstr::Yield => 0,
+            BytecodeInstr::EvalPush { .. } => 1,
+            BytecodeInstr::EvalPop => 0,
+            BytecodeInstr::Spawn { args, .. } => 3 + args.len(),
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
             BytecodeInstr::JmpIfNot { .. } => 4,
@@ -1094,6 +1121,46 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             }
                             Opcode::Return => {
                                 decoded_instructions.push(BytecodeInstr::Return);
+                            }
+                            Opcode::Yield => {
+                                decoded_instructions.push(BytecodeInstr::Yield);
+                            }
+                            Opcode::EvalPush => {
+                                if let Some(mode_byte) = instr.operands.first().copied() {
+                                    let mode = match mode_byte {
+                                        0 => EvalMode::Block,
+                                        1 => EvalMode::Auto,
+                                        2 => EvalMode::Eager,
+                                        _ => EvalMode::Auto,
+                                    };
+                                    decoded_instructions.push(BytecodeInstr::EvalPush { mode });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::EvalPop => {
+                                decoded_instructions.push(BytecodeInstr::EvalPop);
+                            }
+                            Opcode::Spawn => {
+                                // Spawn: dst(1) + func(1) + argc(1) + args(argc)
+                                if instr.operands.len() >= 3 {
+                                    let dst = instr.operands[0] as u16;
+                                    let func_reg = instr.operands[1] as u16;
+                                    let argc = instr.operands[2] as usize;
+                                    let mut args = Vec::with_capacity(argc);
+                                    for i in 0..argc {
+                                        if 3 + i < instr.operands.len() {
+                                            args.push(Reg(instr.operands[3 + i] as u16));
+                                        }
+                                    }
+                                    decoded_instructions.push(BytecodeInstr::Spawn {
+                                        dst: Reg(dst),
+                                        func: Reg(func_reg),
+                                        args,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
                             }
                             Opcode::LoadConst => {
                                 // LoadConst: dst(1) + const_idx(2)

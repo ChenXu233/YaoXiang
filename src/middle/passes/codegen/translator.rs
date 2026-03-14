@@ -277,7 +277,12 @@ impl Translator {
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
 
-            Spawn { .. } => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
+            Spawn { func, args, result } => self.translate_spawn(func, args, result),
+            EvalPush(mode) => Ok(BytecodeInstruction::new(
+                Opcode::EvalPush,
+                vec![*mode as u8],
+            )),
+            EvalPop => Ok(BytecodeInstruction::new(Opcode::EvalPop, vec![])),
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
@@ -529,6 +534,24 @@ impl Translator {
         };
 
         Ok(BytecodeInstruction::new(opcode, operands))
+    }
+
+    fn translate_spawn(
+        &mut self,
+        func: &Operand,
+        args: &[Operand],
+        result: &Operand,
+    ) -> Result<BytecodeInstruction, CodegenError> {
+        let dst_reg = self.operand_resolver.to_reg(result)?;
+        let func_reg = self.operand_resolver.to_reg(func)?;
+
+        let mut operands = vec![dst_reg, func_reg, args.len() as u8];
+        for arg in args {
+            let arg_reg = self.operand_resolver.to_reg(arg)?;
+            operands.push(arg_reg);
+        }
+
+        Ok(BytecodeInstruction::new(Opcode::Spawn, operands))
     }
 
     fn translate_call_virt(

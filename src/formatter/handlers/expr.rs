@@ -148,6 +148,17 @@ pub fn format_expr(
         Expr::Unsafe { body, span: _ } => {
             format!("unsafe {}", format_block(body, ctx))
         }
+        Expr::Eval { mode, body, .. } => {
+            let mode_str = match mode {
+                EvalMode::Block => "block",
+                EvalMode::Auto => "auto",
+                EvalMode::Eager => "eager",
+            };
+            format!("@{} {}", mode_str, format_block(body, ctx))
+        }
+        Expr::Spawn { body, .. } => {
+            format!("spawn {}", format_block(body, ctx))
+        }
         Expr::Lambda {
             params,
             body,

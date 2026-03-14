@@ -192,8 +192,11 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 return_type: Box::new(self.type_to_mono_type(return_type)),
                 is_async: false,
             },
-            AstType::Option(inner) => MonoType::Union(vec![self.type_to_mono_type(inner)]),
-            AstType::Result(_, _) => MonoType::TypeRef("Result".to_string()),
+            AstType::Option(inner) => MonoType::Option(Box::new(self.type_to_mono_type(inner))),
+            AstType::Result(ok, err) => MonoType::Result(
+                Box::new(self.type_to_mono_type(ok)),
+                Box::new(self.type_to_mono_type(err)),
+            ),
             AstType::Generic { name, args, .. } => {
                 let args_str = args
                     .iter()
@@ -728,6 +731,13 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             MonoType::Range { elem_type } => {
                 self.collect_type_vars_from_mono_type(elem_type, type_params, seen)
+            }
+            MonoType::Option(inner) => {
+                self.collect_type_vars_from_mono_type(inner, type_params, seen)
+            }
+            MonoType::Result(ok, err) => {
+                self.collect_type_vars_from_mono_type(ok, type_params, seen);
+                self.collect_type_vars_from_mono_type(err, type_params, seen);
             }
             MonoType::TypeRef(_)
             | MonoType::Void

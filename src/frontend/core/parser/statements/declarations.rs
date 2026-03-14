@@ -681,6 +681,33 @@ fn parse_var_stmt_with_pub(
         }
     }
 
+    // Optional function eval annotation: `@block/@auto/@eager`
+    // Only allowed on function definitions (RFC-001/008).
+    let fn_eval = if state.at(&TokenKind::At) {
+        if fn_params.is_none() {
+            state.error(ParseError::Message(
+                "Eval annotation is only allowed on function definitions".to_string(),
+            ));
+            return None;
+        }
+        state.bump(); // consume '@'
+        let mode = match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(name)) if name == "block" => EvalMode::Block,
+            Some(TokenKind::Identifier(name)) if name == "auto" => EvalMode::Auto,
+            Some(TokenKind::Identifier(name)) if name == "eager" => EvalMode::Eager,
+            _ => {
+                state.error(ParseError::Message(
+                    "Expected eval annotation name after '@' (block/auto/eager)".to_string(),
+                ));
+                return None;
+            }
+        };
+        state.bump(); // consume annotation name
+        Some(mode)
+    } else {
+        None
+    };
+
     // Optional initializer
     if state.skip(&TokenKind::Eq) {
         // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body
@@ -749,6 +776,7 @@ fn parse_var_stmt_with_pub(
                             name,
                             generic_params,
                             type_annotation: type_annotation.clone(),
+                            eval: fn_eval,
                             params: merged,
                             body: (body.stmts.clone(), body.expr.clone()),
                             is_pub: final_is_pub,
@@ -773,6 +801,7 @@ fn parse_var_stmt_with_pub(
                             name,
                             generic_params,
                             type_annotation: type_annotation.clone(),
+                            eval: fn_eval,
                             params: extracted_params.clone(),
                             body,
                             is_pub: final_is_pub,
@@ -867,6 +896,7 @@ fn parse_var_stmt_with_pub(
                         name,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
+                        eval: None,
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub: final_is_pub,
@@ -1254,6 +1284,7 @@ pub fn parse_identifier_stmt(
                         name,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
+                        eval: None,
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub,
@@ -1318,6 +1349,7 @@ pub fn parse_fn_stmt_with_name(
             name,
             generic_params: Vec::new(),
             type_annotation: None,
+            eval: None,
             params,
             body: (stmts, expr),
             is_pub,
@@ -1352,6 +1384,7 @@ pub fn parse_fn_stmt_with_name_simple(
             name,
             generic_params: Vec::new(),
             type_annotation: None,
+            eval: None,
             params: vec![Param {
                 name: param_name,
                 ty: None,
@@ -1749,11 +1782,21 @@ fn parse_generic_type(
 
     state.skip(&TokenKind::Gt); // consume '>'
 
-    Some(Type::Generic {
-        name,
-        name_span,
-        args,
-    })
+    // RFC-001: Lower well-known generic types to dedicated AST nodes.
+    match (name.as_str(), args.len()) {
+        ("Option", 1) => Some(Type::Option(Box::new(args.into_iter().next()?))),
+        ("Result", 2) => {
+            let mut it = args.into_iter();
+            let ok = it.next()?;
+            let err = it.next()?;
+            Some(Type::Result(Box::new(ok), Box::new(err)))
+        }
+        _ => Some(Type::Generic {
+            name,
+            name_span,
+            args,
+        }),
+    }
 }
 
 /// Parse generic type with bracket syntax: `Type[T, U]`
@@ -1778,11 +1821,21 @@ fn parse_generic_type_bracket(
 
     state.skip(&TokenKind::RBracket); // consume ']'
 
-    Some(Type::Generic {
-        name,
-        name_span,
-        args,
-    })
+    // RFC-001: Lower well-known generic types to dedicated AST nodes.
+    match (name.as_str(), args.len()) {
+        ("Option", 1) => Some(Type::Option(Box::new(args.into_iter().next()?))),
+        ("Result", 2) => {
+            let mut it = args.into_iter();
+            let ok = it.next()?;
+            let err = it.next()?;
+            Some(Type::Result(Box::new(ok), Box::new(err)))
+        }
+        _ => Some(Type::Generic {
+            name,
+            name_span,
+            args,
+        }),
+    }
 }
 
 /// Parse named struct type: `Name(x: Type, y: Type)` or `Name(mut x: Type, y: Type)`

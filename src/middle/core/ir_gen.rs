@@ -555,12 +555,14 @@ impl AstToIrGenerator {
                 name,
                 generic_params: _,
                 type_annotation,
+                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
             } => self.generate_function_ir(
                 name,
                 type_annotation.as_ref(),
+                *eval,
                 params,
                 stmts,
                 expr,
@@ -729,6 +731,7 @@ impl AstToIrGenerator {
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
+        eval: Option<ast::EvalMode>,
         params: &[ast::Param],
         stmts: &[ast::Stmt],
         expr: &Option<Box<ast::Expr>>,
@@ -769,6 +772,11 @@ impl AstToIrGenerator {
 
         // 生成函数体指令
         let mut instructions = Vec::new();
+
+        // Apply function-level eval strategy annotation (RFC-001/008).
+        if let Some(mode) = eval {
+            instructions.push(Instruction::EvalPush(mode));
+        }
 
         // 进入函数体作用域
         self.enter_scope();
@@ -817,8 +825,9 @@ impl AstToIrGenerator {
         if let Some(e) = expr {
             let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            // 注意：generate_expr_ir 会为 Return 表达式添加 Ret 指令，
-            // 所以这里不需要额外添加 Ret 指令
+            // 隐式返回：函数体末尾表达式即返回值。
+            // 若表达式内包含显式 return，此 Ret 不可达但无害。
+            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
         } else {
             // 纯语句块：隐式返回Void
             instructions.push(Instruction::Ret(None));
@@ -1351,6 +1360,7 @@ impl AstToIrGenerator {
                 name,
                 generic_params: _,
                 type_annotation,
+                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -1359,6 +1369,7 @@ impl AstToIrGenerator {
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),
+                    *eval,
                     params,
                     stmts,
                     expr,
@@ -1955,6 +1966,8 @@ impl AstToIrGenerator {
             ast::Expr::Try { span, .. } => *span,
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
+            ast::Expr::Eval { span, .. } => *span,
+            ast::Expr::Spawn { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
             ast::Expr::Error(span) => *span,
@@ -2821,6 +2834,11 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Ret(None));
                 }
             }
+            Expr::Try { expr, span: _ } => {
+                // `expr?`：当前阶段仅作为错误传播标记，运行时等价于 `expr`。
+                // 错误的传播由解释器/Runtime 的错误通道处理（RFC-001）。
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+            }
             Expr::If {
                 condition,
                 then_branch,
@@ -2893,6 +2911,28 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(ConstValue::Int(0)),
+                });
+            }
+            Expr::Eval { mode, body, .. } => {
+                // Eval-annotated block: @block/@auto/@eager { ... }
+                instructions.push(Instruction::EvalPush(*mode));
+                self.generate_block_expr_ir(body, result_reg, instructions, constants)?;
+                instructions.push(Instruction::EvalPop);
+            }
+            Expr::Spawn { body, span } => {
+                // Spawn block: spawn { ... }
+                // Lower to: spawn ((...) => { ... }) with no params for now.
+                let closure_reg = self.next_temp_reg();
+                let lambda = ast::Expr::Lambda {
+                    params: Vec::new(),
+                    body: body.clone(),
+                    span: *span,
+                };
+                self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                instructions.push(Instruction::Spawn {
+                    func: Operand::Local(closure_reg),
+                    args: Vec::new(),
+                    result: Operand::Local(result_reg),
                 });
             }
             Expr::UnOp { op, expr, span: _ } => {

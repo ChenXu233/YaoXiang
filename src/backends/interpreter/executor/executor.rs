@@ -36,6 +36,10 @@ pub enum InterpreterTask {
         func_name: String,
         args: Vec<RuntimeValue>,
     },
+    CallDyn {
+        func: FunctionValue,
+        args: Vec<RuntimeValue>,
+    },
 }
 
 /// The YaoXiang bytecode interpreter
@@ -395,6 +399,16 @@ impl Interpreter {
             InterpreterTask::CallNative { func_name, args } => {
                 self.call_native_by_name(&func_name, &args)
             }
+            InterpreterTask::CallDyn { func, args } => (|| {
+                let mut resolved = Vec::with_capacity(args.len());
+                for arg in &args {
+                    resolved.push(self.force_value_clone(arg)?);
+                }
+
+                let mut final_args = func.env.clone();
+                final_args.extend(resolved);
+                self.call_function_by_id(func.func_id, &final_args)
+            })(),
         };
 
         match exec_result {

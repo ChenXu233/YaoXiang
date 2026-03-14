@@ -262,6 +262,11 @@ impl CodegenContext {
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
             },
+            Type::Option(inner) => MonoType::Option(Box::new(self.type_from_ast(inner))),
+            Type::Result(ok, err) => MonoType::Result(
+                Box::new(self.type_from_ast(ok)),
+                Box::new(self.type_from_ast(err)),
+            ),
             Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
                 "{}<{}>",
                 name,

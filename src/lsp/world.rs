@@ -660,6 +660,7 @@ mod tests {
                     name: "add".to_string(),
                     generic_params: vec![],
                     type_annotation: None,
+                    eval: None,
                     params: vec![],
                     body: (vec![], None),
                     is_pub: false,
@@ -754,6 +755,7 @@ mod tests {
                     name: "add".to_string(),
                     generic_params: vec![],
                     type_annotation: None,
+                    eval: None,
                     params: vec![
                         crate::frontend::core::parser::ast::Param {
                             name: "a".to_string(),

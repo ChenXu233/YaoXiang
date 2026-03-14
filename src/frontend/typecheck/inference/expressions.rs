@@ -28,6 +28,8 @@ pub struct ExpressionInferrer<'a> {
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
     native_signatures: &'a HashMap<String, MonoType>,
+    /// 当前函数的 Result 错误类型（若为 None，则不允许使用 `?`）
+    result_err: Option<MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -45,6 +47,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_labels: Vec::new(),
             overload_candidates,
             native_signatures: &EMPTY_NATIVE,
+            result_err: None,
         }
     }
 
@@ -61,6 +64,25 @@ impl<'a> ExpressionInferrer<'a> {
             loop_labels: Vec::new(),
             overload_candidates,
             native_signatures,
+            result_err: None,
+        }
+    }
+
+    /// 创建带 native 函数签名 + Result 错误上下文的表达式推断器
+    pub fn with_native_signatures_and_result_err(
+        scope: &'a mut ScopeManager,
+        solver: &'a mut TypeConstraintSolver,
+        overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
+        native_signatures: &'a HashMap<String, MonoType>,
+        result_err: Option<MonoType>,
+    ) -> Self {
+        Self {
+            scope,
+            solver,
+            loop_labels: Vec::new(),
+            overload_candidates,
+            native_signatures,
+            result_err,
         }
     }
 
@@ -731,20 +753,44 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 self.scope.enter_scope();
-                for param in params {
-                    let param_ty = self.solver.new_var();
-                    self.scope
-                        .add_var(param.name.clone(), PolyType::mono(param_ty));
-                }
+                let result: Result<()> = (|| {
+                    for param in params {
+                        let param_ty = self.solver.new_var();
+                        self.scope
+                            .add_var(param.name.clone(), PolyType::mono(param_ty));
+                    }
 
-                let ret_mono: MonoType = return_type.clone().map_or(MonoType::Void, |t| t.into());
-                let body_ty = self.infer_block(body, true, Some(&ret_mono))?;
+                    let ret_mono: MonoType =
+                        return_type.clone().map_or(MonoType::Void, |t| t.into());
+                    // RFC-001: Result-returning functions implicitly wrap the final value in Ok(...),
+                    // so the body type is the Ok type (not Result[T, E]).
+                    let expected_body_ty = match &ret_mono {
+                        MonoType::Result(ok, _) => (**ok).clone(),
+                        _ => ret_mono.clone(),
+                    };
 
-                if return_type.is_some() {
-                    let _ = self.solver.unify(&body_ty, &ret_mono);
-                }
+                    // Enter a new `Result` context for this function body.
+                    let saved_result_err = self.result_err.take();
+                    self.result_err = match &ret_mono {
+                        MonoType::Result(_, err) => Some((**err).clone()),
+                        _ => None,
+                    };
 
+                    let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
+
+                    // Restore outer `Result` context (must run even if `infer_block` failed).
+                    self.result_err = saved_result_err;
+
+                    let body_ty = body_ty_res?;
+
+                    if return_type.is_some() {
+                        let _ = self.solver.unify(&body_ty, &expected_body_ty);
+                    }
+
+                    Ok(())
+                })();
                 self.scope.exit_scope();
+                result?;
 
                 let param_types: Vec<MonoType> =
                     params.iter().map(|_| self.solver.new_var()).collect();
@@ -771,9 +817,14 @@ impl<'a> ExpressionInferrer<'a> {
                         .add_var(param.name.clone(), PolyType::mono(param_ty));
                 }
 
-                let body_ty = self.infer_block(body, true, None)?;
+                // Lambda is a function boundary: it must not inherit outer `Result` context.
+                let saved_result_err = self.result_err.take();
+                self.result_err = None;
+                let body_ty = self.infer_block(body, true, None);
+                self.result_err = saved_result_err;
 
                 self.scope.exit_scope();
+                let body_ty = body_ty?;
 
                 let param_types: Vec<MonoType> =
                     params.iter().map(|_| self.solver.new_var()).collect();
@@ -791,8 +842,38 @@ impl<'a> ExpressionInferrer<'a> {
                 Ok(self.solver.new_var())
             }
 
-            // Try 表达式
-            crate::frontend::core::parser::ast::Expr::Try { expr, .. } => self.infer_expr(expr),
+            // Try 表达式: expr?
+            crate::frontend::core::parser::ast::Expr::Try { expr, span } => {
+                let Some(expected_err) = self.result_err.clone() else {
+                    return Err(ErrorCodeDefinition::try_only_allowed_in_result()
+                        .at(*span)
+                        .build());
+                };
+
+                let inner_ty = self.infer_expr(expr)?;
+                let ok_ty = self.solver.new_var();
+                let expected_result =
+                    MonoType::Result(Box::new(ok_ty.clone()), Box::new(expected_err.clone()));
+
+                if let Err(_e) = self.solver.unify(&inner_ty, &expected_result) {
+                    let resolved = self.solver.resolve_type(&inner_ty);
+                    if let MonoType::Result(_, err) = resolved {
+                        return Err(ErrorCodeDefinition::try_error_type_mismatch(
+                            &expected_err.to_string(),
+                            &err.to_string(),
+                        )
+                        .at(*span)
+                        .build());
+                    }
+                    return Err(
+                        ErrorCodeDefinition::try_requires_result(&resolved.to_string())
+                            .at(*span)
+                            .build(),
+                    );
+                }
+
+                Ok(ok_ty)
+            }
 
             // Ref 表达式
             crate::frontend::core::parser::ast::Expr::Ref { expr, .. } => {
@@ -807,6 +888,16 @@ impl<'a> ExpressionInferrer<'a> {
                 } else {
                     Ok(MonoType::Void)
                 }
+            }
+
+            // Eval 模式块：@block/@auto/@eager { ... }
+            crate::frontend::core::parser::ast::Expr::Eval { body, .. } => {
+                self.infer_block(body, true, None)
+            }
+
+            // spawn 块：spawn { ... }
+            crate::frontend::core::parser::ast::Expr::Spawn { body, .. } => {
+                self.infer_block(body, true, None)
             }
 
             // ListComp 表达式
@@ -931,21 +1022,23 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.add_var(name.clone(), PolyType::mono(fn_type));
 
                 self.scope.enter_scope();
+                let result: Result<()> = (|| {
+                    for (param, param_ty) in params.iter().zip(param_types.iter()) {
+                        self.scope
+                            .add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
+                    }
 
-                for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                    self.scope
-                        .add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
-                }
+                    let block = crate::frontend::core::parser::ast::Block {
+                        stmts: stmts.clone(),
+                        expr: expr.clone(),
+                        span: stmt.span,
+                    };
+                    let _ = self.infer_block(&block, true, Some(&return_type))?;
 
-                let block = crate::frontend::core::parser::ast::Block {
-                    stmts: stmts.clone(),
-                    expr: expr.clone(),
-                    span: stmt.span,
-                };
-                let _ = self.infer_block(&block, true, Some(&return_type))?;
-
+                    Ok(())
+                })();
                 self.scope.exit_scope();
-                Ok(())
+                result
             }
             _ => Ok(()),
         }

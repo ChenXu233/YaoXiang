@@ -2,6 +2,7 @@
 
 mod basic;
 mod check;
+mod concurrency;
 mod constraint;
 mod fstring;
 mod gat;
@@ -9,6 +10,7 @@ mod infer;
 mod inference;
 mod pub_bind;
 mod ref_test;
+mod result_try;
 mod scope;
 mod semantic_tokens;
 mod shadowing;

@@ -3,6 +3,8 @@
 //! This module provides the call frame structure used for function calls.
 
 use crate::backends::common::RuntimeValue;
+use crate::backends::common::value::TaskId;
+use crate::backends::interpreter::EvalStrategy;
 use crate::middle::bytecode::{BytecodeFunction, Label};
 
 /// Maximum number of local variables
@@ -26,6 +28,10 @@ pub struct Frame {
     upvalues: Vec<RuntimeValue>,
     /// Entry IP (for stack unwinding)
     entry_ip: usize,
+    /// Evaluation strategy stack (for `@block/@auto/@eager`).
+    eval_stack: Vec<EvalStrategy>,
+    /// Spawn task groups (only meaningful inside `@block` scopes).
+    spawn_groups: Vec<Vec<TaskId>>,
 }
 
 impl Frame {
@@ -39,6 +45,8 @@ impl Frame {
             locals: vec![RuntimeValue::Unit; local_count],
             upvalues: Vec::new(),
             entry_ip: 0,
+            eval_stack: Vec::new(),
+            spawn_groups: Vec::new(),
         }
     }
 
@@ -111,6 +119,49 @@ impl Frame {
             self.registers.resize(index + 1, RuntimeValue::Unit);
         }
         self.registers[index] = value;
+    }
+
+    pub fn current_eval(
+        &self,
+        fallback: EvalStrategy,
+    ) -> EvalStrategy {
+        self.eval_stack.last().copied().unwrap_or(fallback)
+    }
+
+    pub fn push_eval(
+        &mut self,
+        strategy: EvalStrategy,
+    ) {
+        self.eval_stack.push(strategy);
+    }
+
+    pub fn pop_eval(&mut self) -> Option<EvalStrategy> {
+        self.eval_stack.pop()
+    }
+
+    pub fn push_spawn_group(&mut self) {
+        self.spawn_groups.push(Vec::new());
+    }
+
+    pub fn pop_spawn_group(&mut self) -> Option<Vec<TaskId>> {
+        self.spawn_groups.pop()
+    }
+
+    pub fn record_spawned_task(
+        &mut self,
+        task_id: TaskId,
+    ) {
+        if let Some(group) = self.spawn_groups.last_mut() {
+            group.push(task_id);
+        }
+    }
+
+    pub fn take_all_spawned_tasks(&mut self) -> Vec<TaskId> {
+        let mut out = Vec::new();
+        for group in self.spawn_groups.drain(..) {
+            out.extend(group);
+        }
+        out
     }
 
     /// Get an upvalue

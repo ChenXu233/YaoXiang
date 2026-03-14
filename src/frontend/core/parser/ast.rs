@@ -9,6 +9,16 @@ pub struct SpannedIdent {
     pub span: Span,
 }
 
+/// Evaluation strategy annotation (RFC-001/008).
+///
+/// Used by `@block/@auto/@eager` on function signatures or blocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EvalMode {
+    Block,
+    Auto,
+    Eager,
+}
+
 /// Expression
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -110,6 +120,19 @@ pub enum Expr {
     /// unsafe 块：允许系统级操作
     /// `unsafe { *ptr = ... }`
     Unsafe {
+        body: Box<Block>,
+        span: Span,
+    },
+    /// Evaluation strategy annotation for a block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
+    Eval {
+        mode: EvalMode,
+        body: Box<Block>,
+        span: Span,
+    },
+    /// Spawn a concurrent block: `spawn { ... }`
+    ///
+    /// Only valid inside `@block` scope (enforced by type checker / compiler).
+    Spawn {
         body: Box<Block>,
         span: Span,
     },
@@ -230,6 +253,8 @@ pub enum StmtKind {
         name: String,
         generic_params: Vec<GenericParam>,
         type_annotation: Option<Type>,
+        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
+        eval: Option<EvalMode>,
         params: Vec<Param>,
         body: (Vec<Stmt>, Option<Box<Expr>>),
         is_pub: bool, // 是否公开导出并自动绑定到类型

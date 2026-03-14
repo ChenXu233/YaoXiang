@@ -284,6 +284,52 @@ mod tests {
     }
 
     #[test]
+    fn test_result_try_propagates_task_failure_to_top_level() {
+        let code = r#"
+            fail_native: () -> Result[Int, String] = Native("fail_native")
+
+            fail: () -> Result[Int, String] = () => {
+                fail_native()?
+            }
+
+            ok: () -> Int = () => { 1 }
+
+            main: () -> Result[Int, String] = () => {
+                a = ok()
+                b = fail()?
+                a + b
+            }
+        "#;
+
+        let mut compiler = crate::frontend::Compiler::new();
+        let module = compiler.compile_with_source("<test>", code).unwrap();
+        let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+        let bytecode_file = ctx.generate().unwrap();
+        let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime: RuntimeMode::Standard,
+            eval: EvalStrategy::Auto,
+            workers: 1,
+            work_stealing: false,
+        });
+        interp
+            .ffi_registry_mut()
+            .register("fail_native", |_args, _ctx| {
+                Err(ExecutorError::Runtime("fail".to_string()))
+            });
+
+        let err = interp.execute_module(&bytecode_module).unwrap_err();
+        match err {
+            ExecutorError::Runtime(msg) => {
+                assert!(msg.contains("fail"), "unexpected error: {msg}");
+            }
+            other => panic!("expected runtime error, got: {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_dependency_failure_cancels_dependent_task() {
         let mut interp = Interpreter::new();
         interp.set_runtime_config(InterpreterRuntimeConfig {

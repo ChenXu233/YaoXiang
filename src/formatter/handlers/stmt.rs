@@ -40,6 +40,7 @@ pub fn format_stmt(
             name,
             generic_params,
             type_annotation,
+            eval,
             params,
             body,
             is_pub,
@@ -47,6 +48,7 @@ pub fn format_stmt(
             name,
             generic_params,
             type_annotation,
+            eval,
             params,
             body,
             *is_pub,
@@ -175,6 +177,7 @@ fn format_fn_stmt(
     name: &str,
     generic_params: &[GenericParam],
     type_annotation: &Option<Type>,
+    eval: &Option<EvalMode>,
     params: &[Param],
     body: &(Vec<Stmt>, Option<Box<Expr>>),
     is_pub: bool,
@@ -205,6 +208,18 @@ fn format_fn_stmt(
         String::new()
     };
 
+    let eval_str = if type_annotation.is_some() {
+        match eval {
+            Some(EvalMode::Block) => " @block",
+            Some(EvalMode::Auto) => " @auto",
+            Some(EvalMode::Eager) => " @eager",
+            None => "",
+        }
+        .to_string()
+    } else {
+        String::new()
+    };
+
     let params_str = format_params(params);
 
     // 构建函数体
@@ -215,11 +230,12 @@ fn format_fn_stmt(
     };
 
     format!(
-        "{}{}{}{}  = ({}) => {}",
+        "{}{}{}{}{}  = ({}) => {}",
         pub_str,
         name,
         generics,
         type_str,
+        eval_str,
         params_str,
         format_block(&body_block, ctx)
     )

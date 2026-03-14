@@ -481,8 +481,11 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             return_type: Box::new(ast_type_to_mono_type(return_type)),
             is_async: false,
         },
-        Type::Option(inner) => MonoType::Union(vec![ast_type_to_mono_type(inner)]),
-        Type::Result(_, _) => MonoType::TypeRef("Result".to_string()),
+        Type::Option(inner) => MonoType::Option(Box::new(ast_type_to_mono_type(inner))),
+        Type::Result(ok, err) => MonoType::Result(
+            Box::new(ast_type_to_mono_type(ok)),
+            Box::new(ast_type_to_mono_type(err)),
+        ),
         Type::Generic { name, args, .. } => {
             let args_str = args
                 .iter()

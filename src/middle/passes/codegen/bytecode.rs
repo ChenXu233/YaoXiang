@@ -197,6 +197,8 @@ impl MonoTypeExt for MonoType {
             MonoType::Bytes => 12,
             MonoType::Struct(_) => 20,
             MonoType::Enum(_) => 21,
+            MonoType::Option(_) => 21,
+            MonoType::Result(_, _) => 21,
             MonoType::Tuple(_) => 22,
             MonoType::List(_) => 23,
             MonoType::Dict(_, _) => 24,

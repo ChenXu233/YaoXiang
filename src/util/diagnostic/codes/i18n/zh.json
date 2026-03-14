@@ -255,6 +255,22 @@
         "example": "break 'unknown;",
         "error_output": "error[E1070]: 未知标签\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ 未知标签 'unknown'"
     },
+    "E1080": {
+        "title": "spawn 仅允许在 @block 作用域内使用",
+        "help": "请将 `spawn { ... }` 放入 `@block { ... }` 中，或将外层函数标注为 `@block`（当前：@{mode}）。"
+    },
+    "E1081": {
+        "title": "`?` 仅允许在返回 Result 的函数内使用",
+        "help": "请先将外层函数返回类型改为 `Result[T, E]`，再使用 `expr?` 进行错误传播。"
+    },
+    "E1082": {
+        "title": "`?` 只能用于 Result 表达式",
+        "help": "请仅对类型为 `Result[T, E]` 的表达式使用 `?`。"
+    },
+    "E1083": {
+        "title": "`?` 的错误类型不匹配",
+        "help": "请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致。"
+    },
     "E2001": {
         "title": "作用域错误",
         "message": "变量不在当前作用域",
