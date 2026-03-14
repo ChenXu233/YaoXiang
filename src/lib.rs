@@ -313,6 +313,16 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
         crate::frontend::typecheck::MonoType::Set(elem) => {
             format!("{{{}}}", dump_type_detail(elem))
         }
+        crate::frontend::typecheck::MonoType::Option(inner) => {
+            format!("Option<{}>", dump_type_detail(inner))
+        }
+        crate::frontend::typecheck::MonoType::Result(ok, err) => {
+            format!(
+                "Result<{}, {}>",
+                dump_type_detail(ok),
+                dump_type_detail(err)
+            )
+        }
         crate::frontend::typecheck::MonoType::Fn {
             params,
             return_type,

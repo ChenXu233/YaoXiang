@@ -213,6 +213,11 @@ impl TypeConstraintSolver {
                 return_type: Box::new(self.expand_type(return_type)),
                 is_async: *is_async,
             },
+            MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type(inner))),
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(self.expand_type(ok)),
+                Box::new(self.expand_type(err)),
+            ),
             // 联合类型展开
             MonoType::Union(types) => {
                 MonoType::Union(types.iter().map(|t| self.expand_type(t)).collect())
@@ -362,6 +367,11 @@ impl TypeConstraintSolver {
                 return_type: Box::new(self.expand_type_mut(return_type)),
                 is_async: *is_async,
             },
+            MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type_mut(inner))),
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(self.expand_type_mut(ok)),
+                Box::new(self.expand_type_mut(err)),
+            ),
             MonoType::Union(types) => {
                 MonoType::Union(types.iter().map(|t| self.expand_type_mut(t)).collect())
             }
@@ -454,6 +464,16 @@ impl TypeConstraintSolver {
                     self.unify(p1, p2)?;
                 }
                 self.unify(r1, r2)?;
+                Ok(())
+            }
+
+            // Option 类型 unify
+            (MonoType::Option(t1), MonoType::Option(t2)) => self.unify(t1, t2),
+
+            // Result 类型 unify
+            (MonoType::Result(ok1, err1), MonoType::Result(ok2, err2)) => {
+                self.unify(ok1, ok2)?;
+                self.unify(err1, err2)?;
                 Ok(())
             }
 
@@ -652,6 +672,13 @@ impl TypeConstraintSolver {
                 return_type: Box::new(self.substitute_type(return_type, substitution)),
                 is_async: *is_async,
             },
+            MonoType::Option(inner) => {
+                MonoType::Option(Box::new(self.substitute_type(inner, substitution)))
+            }
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(self.substitute_type(ok, substitution)),
+                Box::new(self.substitute_type(err, substitution)),
+            ),
             // 范围类型替换
             MonoType::Range { elem_type } => MonoType::Range {
                 elem_type: Box::new(self.substitute_type(elem_type, substitution)),
@@ -881,15 +908,21 @@ impl TypeConstraintSolver {
                     self.collect_generalizable_vars(t, seen, out);
                 }
             }
-            MonoType::List(t) | MonoType::Set(t) | MonoType::Arc(t) | MonoType::Weak(t) => {
-                self.collect_generalizable_vars(t, seen, out)
-            }
+            MonoType::List(t)
+            | MonoType::Set(t)
+            | MonoType::Arc(t)
+            | MonoType::Weak(t)
+            | MonoType::Option(t) => self.collect_generalizable_vars(t, seen, out),
             MonoType::Range { elem_type } => {
                 self.collect_generalizable_vars(elem_type, seen, out);
             }
             MonoType::Dict(k, v) => {
                 self.collect_generalizable_vars(k, seen, out);
                 self.collect_generalizable_vars(v, seen, out);
+            }
+            MonoType::Result(ok, err) => {
+                self.collect_generalizable_vars(ok, seen, out);
+                self.collect_generalizable_vars(err, seen, out);
             }
             MonoType::Fn {
                 params,

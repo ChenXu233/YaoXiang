@@ -186,6 +186,15 @@ fn type_name_hash<H: Hasher>(
             "set".hash(state);
             type_name_hash(t, state);
         }
+        MonoType::Option(t) => {
+            "option".hash(state);
+            type_name_hash(t, state);
+        }
+        MonoType::Result(ok, err) => {
+            "result".hash(state);
+            type_name_hash(ok, state);
+            type_name_hash(err, state);
+        }
         MonoType::Fn { .. } => "fn".hash(state),
         MonoType::Range { elem_type } => {
             "range".hash(state);

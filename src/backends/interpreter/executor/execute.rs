@@ -97,7 +97,42 @@ impl Executor for Interpreter {
                 BytecodeInstr::Nop => {
                     frame.advance();
                 }
+                BytecodeInstr::Yield => {
+                    // Reserved for cooperative scheduling; currently a no-op in the interpreter VM.
+                    frame.advance();
+                }
+                BytecodeInstr::EvalPush { mode } => {
+                    // Dynamic scope override for evaluation strategy.
+                    let strategy = match mode {
+                        crate::frontend::core::parser::ast::EvalMode::Block => EvalStrategy::Block,
+                        crate::frontend::core::parser::ast::EvalMode::Auto => EvalStrategy::Auto,
+                        crate::frontend::core::parser::ast::EvalMode::Eager => EvalStrategy::Eager,
+                    };
+                    if matches!(strategy, EvalStrategy::Block) {
+                        frame.push_spawn_group();
+                    }
+                    frame.push_eval(strategy);
+                    frame.advance();
+                }
+                BytecodeInstr::EvalPop => {
+                    // Restore previous evaluation strategy.
+                    let popped = frame.pop_eval();
+                    if matches!(popped, Some(EvalStrategy::Block)) {
+                        if let Some(group) = frame.pop_spawn_group() {
+                            for task_id in group {
+                                let mut v = self.make_async_pending(task_id);
+                                self.force_value_in_place(&mut v)?;
+                            }
+                        }
+                    }
+                    frame.advance();
+                }
                 BytecodeInstr::Return => {
+                    // Structured-concurrency safety net: ensure all spawned tasks complete.
+                    for task_id in frame.take_all_spawned_tasks() {
+                        let mut v = self.make_async_pending(task_id);
+                        self.force_value_in_place(&mut v)?;
+                    }
                     self.pop_frame();
                     return Ok(RuntimeValue::Unit);
                 }
@@ -107,8 +142,55 @@ impl Executor for Interpreter {
                         .get(value.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Unit);
+                    // Structured-concurrency safety net: ensure all spawned tasks complete.
+                    for task_id in frame.take_all_spawned_tasks() {
+                        let mut v = self.make_async_pending(task_id);
+                        self.force_value_in_place(&mut v)?;
+                    }
                     self.pop_frame();
                     return Ok(result);
+                }
+                BytecodeInstr::Spawn { dst, func, args } => {
+                    // Spawn a dynamic call as a runtime task; only valid in @block scopes.
+                    let dst = *dst;
+                    let func = *func;
+                    let args = args.clone();
+
+                    let eval = frame.current_eval(self.runtime_config.eval);
+                    if !matches!(eval, EvalStrategy::Block) {
+                        return Err(ExecutorError::Runtime(
+                            "`spawn` is only allowed inside @block scope".to_string(),
+                        ));
+                    }
+
+                    let closure_val = self.force_register(&mut frame, func)?;
+                    let RuntimeValue::Function(func_value) = closure_val else {
+                        return Err(ExecutorError::Type(
+                            "spawn expects a function value".to_string(),
+                        ));
+                    };
+
+                    let mut call_args = Vec::with_capacity(args.len());
+                    for r in &args {
+                        call_args.push(self.force_register(&mut frame, *r)?);
+                    }
+
+                    let deps = self.deps_from_args(&call_args);
+                    let task_id = self.schedule_task(
+                        InterpreterTask::CallDyn {
+                            func: func_value.clone(),
+                            args: call_args,
+                        },
+                        TaskMeta {
+                            deps,
+                            label: Some(Arc::<str>::from("spawn")),
+                            ..TaskMeta::default()
+                        },
+                    )?;
+
+                    frame.record_spawned_task(task_id);
+                    frame.set_register(dst.0 as usize, self.make_async_pending(task_id));
+                    frame.advance();
                 }
                 BytecodeInstr::Jmp { target } => {
                     // target 是相对偏移量，直接使用
@@ -286,7 +368,7 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = self.runtime_config.eval;
+                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
                     if matches!(eval, EvalStrategy::Block)
@@ -380,7 +462,7 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = self.runtime_config.eval;
+                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
                     if matches!(eval, EvalStrategy::Block)

@@ -14,6 +14,7 @@
 mod basic;
 mod binding_enhancements;
 mod boundary;
+mod concurrency;
 mod fn_def;
 mod fstring;
 mod old_syntax_rejection;

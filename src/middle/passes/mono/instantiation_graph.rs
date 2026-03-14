@@ -799,6 +799,16 @@ impl<'a> InstantiationGraphBuilder<'a> {
             // Weak 包装：提取内部类型参数
             MonoType::Weak(inner) => Self::extract_type_args_from_type(inner),
 
+            // Option：提取内部类型参数
+            MonoType::Option(inner) => Self::extract_type_args_from_type(inner),
+
+            // Result：提取 Ok/Err 的类型参数
+            MonoType::Result(ok, err) => {
+                let mut args = Self::extract_type_args_from_type(ok);
+                args.extend(Self::extract_type_args_from_type(err));
+                args
+            }
+
             // 关联类型：提取主机类型和关联类型的参数
             MonoType::AssocType {
                 host_type,
@@ -852,23 +862,23 @@ impl<'a> InstantiationGraphBuilder<'a> {
                 Some(InstanceNode::Type(node))
             }
 
-            // 泛型 Option (通过名称判断)
-            MonoType::Enum(e) if e.name == "Option" => {
+            // 泛型 Option
+            MonoType::Option(inner) => {
                 let node = TypeInstanceNode::new(
                     GenericTypeId::new("Option".to_string(), vec!["T".to_string()]),
-                    vec![],
+                    vec![*inner.clone()],
                 );
                 Some(InstanceNode::Type(node))
             }
 
-            // 泛型 Result (通过名称判断)
-            MonoType::Enum(e) if e.name == "Result" => {
+            // 泛型 Result
+            MonoType::Result(ok, err) => {
                 let node = TypeInstanceNode::new(
                     GenericTypeId::new(
                         "Result".to_string(),
                         vec!["T".to_string(), "E".to_string()],
                     ),
-                    vec![],
+                    vec![*ok.clone(), *err.clone()],
                 );
                 Some(InstanceNode::Type(node))
             }

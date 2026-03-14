@@ -209,6 +209,7 @@ impl<'a> Lexer<'a> {
             }
             '{' => Some(self.make_token(TokenKind::LBrace)),
             '}' => Some(self.make_token(TokenKind::RBrace)),
+            '@' => Some(self.make_token(TokenKind::At)),
             '=' => {
                 if self.peek() == Some(&'>') {
                     self.advance();

@@ -165,6 +165,10 @@ pub enum MonoType {
         /// 是否异步
         is_async: bool,
     },
+    /// Option[T]（RFC-001）
+    Option(Box<MonoType>),
+    /// Result[T, E]（RFC-001）
+    Result(Box<MonoType>, Box<MonoType>),
     /// 范围类型 (start..end)
     Range {
         /// 元素类型
@@ -297,6 +301,10 @@ impl MonoType {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("fn({}) -> {}", params_str, return_type.type_name())
+            }
+            MonoType::Option(inner) => format!("{}?", inner.type_name()),
+            MonoType::Result(ok, err) => {
+                format!("Result[{}, {}]", ok.type_name(), err.type_name())
             }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
@@ -447,15 +455,22 @@ impl From<ast::Type> for MonoType {
                 return_type: Box::new(MonoType::from(*return_type)),
                 is_async: false,
             },
-            ast::Type::Option(_t) => MonoType::Enum(EnumType {
-                name: "Option".to_string(),
-                variants: vec!["Some".to_string(), "None".to_string()],
-            }),
-            ast::Type::Result(_ok, _err) => MonoType::Enum(EnumType {
-                name: "Result".to_string(),
-                variants: vec!["Ok".to_string(), "Err".to_string()],
-            }),
+            ast::Type::Option(t) => MonoType::Option(Box::new(MonoType::from(*t))),
+            ast::Type::Result(ok, err) => MonoType::Result(
+                Box::new(MonoType::from(*ok)),
+                Box::new(MonoType::from(*err)),
+            ),
             ast::Type::Generic { name, args, .. } => {
+                // RFC-001: lower well-known generics.
+                if name == "Option" && args.len() == 1 {
+                    return MonoType::Option(Box::new(MonoType::from(args[0].clone())));
+                }
+                if name == "Result" && args.len() == 2 {
+                    return MonoType::Result(
+                        Box::new(MonoType::from(args[0].clone())),
+                        Box::new(MonoType::from(args[1].clone())),
+                    );
+                }
                 // 泛型类型，如 List<T>
                 MonoType::TypeRef(format!(
                     "{}<{}>",
