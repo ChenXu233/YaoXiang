@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod formatting;
 pub mod hover;
 pub mod initialize;
+pub mod inlay_hint;
 pub mod references;
 pub mod rename;
 pub mod semantic_tokens;
