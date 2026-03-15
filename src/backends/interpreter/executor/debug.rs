@@ -99,6 +99,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         });
         module.constants.push(ConstValue::Int(42));
         module.entry_point = Some(func_idx);
@@ -136,6 +137,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
         let b = BytecodeFunction {
             name: "b".to_string(),
@@ -152,6 +154,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         interp.functions.insert("a".to_string(), a.clone());
@@ -190,6 +193,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         let result = interp.execute_function(&main, &[]).unwrap();
@@ -223,6 +227,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
         let b = BytecodeFunction {
             name: "b".to_string(),
@@ -239,6 +244,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         interp.functions.insert("a".to_string(), a.clone());
@@ -277,6 +283,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         let result = interp.execute_function(&main, &[]).unwrap();
@@ -367,6 +374,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         let inc = BytecodeFunction {
@@ -394,6 +402,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         interp.functions.insert("fail".to_string(), fail.clone());
@@ -433,6 +442,7 @@ mod tests {
             ],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         };
 
         let err = interp.execute_function(&main, &[]).unwrap_err();
@@ -495,6 +505,7 @@ mod tests {
             instructions,
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         });
 
         module.entry_point = Some(func_idx);

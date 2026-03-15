@@ -1876,6 +1876,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(iterator_reg)),
             func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
             args: vec![Operand::Local(iterable_reg)],
+            span: for_span,
         });
 
         // 3. 注册循环变量
@@ -1892,6 +1893,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(has_more_reg)),
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
         });
 
         // 6. 如果没有更多元素，跳转到结束
@@ -1905,6 +1907,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(element_reg)),
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
@@ -2160,27 +2163,22 @@ impl AstToIrGenerator {
                     src: Operand::Const(const_val),
                 });
             }
-            Expr::Var(_, _) => {
+            Expr::Var(var_name, var_span) => {
                 // 变量加载 - 首先查找局部变量，然后查找全局变量
-                let var_name = if let Expr::Var(name, _) = expr {
-                    name.clone()
-                } else {
-                    String::new()
-                };
-
-                if let Some(local_idx) = self.lookup_local(&var_name) {
+                if let Some(local_idx) = self.lookup_local(var_name) {
                     // 局部变量：直接加载
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(local_idx),
                     });
-                } else if self.lookup_global(&var_name).is_some() {
+                } else if self.lookup_global(var_name).is_some() {
                     // 全局变量：生成函数调用获取值
                     let func_name = var_name.clone();
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
                         func: Operand::Const(ConstValue::String(func_name)),
                         args: vec![],
+                        span: *var_span,
                     });
                 } else {
                     // 未找到变量，默认加载 0
@@ -2256,11 +2254,13 @@ impl AstToIrGenerator {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: *span,
                             },
                             ast::BinOp::Mod => Instruction::Mod {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: *span,
                             },
                             ast::BinOp::Eq => Instruction::Eq {
                                 dst: Operand::Local(result_reg),
@@ -2307,7 +2307,7 @@ impl AstToIrGenerator {
                 func,
                 args,
                 named_args,
-                span: _,
+                span,
             } => {
                 // 检查是否是方法调用：func 是 FieldAccess
                 if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
@@ -2331,6 +2331,7 @@ impl AstToIrGenerator {
                                 method_function_name.to_string(),
                             )),
                             args: arg_regs,
+                            span: *span,
                         });
                     } else {
                         // 非命名空间调用：检查是否有绑定信息（RFC-004）
@@ -2400,6 +2401,7 @@ impl AstToIrGenerator {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: Operand::Const(ConstValue::String(func_name)),
                                 args: final_arg_regs,
+                                span: *span,
                             });
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
@@ -2437,6 +2439,7 @@ impl AstToIrGenerator {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: Operand::Const(ConstValue::String(qualified_name)),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             } else if var_name.as_ref().is_some_and(|name| {
                                 // 检查变量的类型标注是否是约束类型（但具体类型未知）
@@ -2464,6 +2467,7 @@ impl AstToIrGenerator {
                                     obj: Operand::Local(obj_reg),
                                     method_name: field.to_string(),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             } else {
                                 // 普通方法调用
@@ -2474,6 +2478,7 @@ impl AstToIrGenerator {
                                         method_function_name.to_string(),
                                     )),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             }
                         }
@@ -2590,6 +2595,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Local(func_reg),
                             args: arg_regs,
+                            span: *span,
                         });
                     } else {
                         // ========== print/println 零开销分发处理 ==========
@@ -2636,6 +2642,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(to_string_reg)),
                                         func: Operand::Const(ConstValue::String(func_name)),
                                         args: arg_regs_for_method,
+                                        span: *span,
                                     });
 
                                     // 然后调用 std.io.print 输出字符串
@@ -2659,6 +2666,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(result_reg)),
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(to_string_reg)],
+                                        span: *span,
                                     });
                                 } else {
                                     // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
@@ -2685,6 +2693,7 @@ impl AstToIrGenerator {
                                             Operand::Local(arg_reg),
                                             Operand::Const(ConstValue::String(type_name)),
                                         ],
+                                        span: *span,
                                     });
 
                                     // 然后调用 std.io.print 输出
@@ -2707,6 +2716,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(result_reg)),
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(fallback_reg)],
+                                        span: *span,
                                     });
                                 }
                             } else {
@@ -2716,6 +2726,7 @@ impl AstToIrGenerator {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: func_operand,
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             }
                         } else {
@@ -2726,12 +2737,13 @@ impl AstToIrGenerator {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
                                 args: arg_regs,
+                                span: *span,
                             });
                         }
                     }
                 }
             }
-            Expr::FieldAccess { expr, field, .. } => {
+            Expr::FieldAccess { expr, field, span } => {
                 // 首先检查是否是模块变量的字段访问（如 io.println）
                 // io 是通过 use std.{io} 导入的模块变量
                 if let Expr::Var(module_name, _) = expr.as_ref() {
@@ -2744,6 +2756,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
+                            span: *span,
                         });
                     } else {
                         // 普通字段访问
@@ -2769,6 +2782,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
+                            span: *span,
                         });
                     } else {
                         // 普通字段访问
@@ -3039,7 +3053,7 @@ impl AstToIrGenerator {
                 });
             }
             // RFC-012: F-string 代码生成
-            Expr::FString { segments, span: _ } => {
+            Expr::FString { segments, span } => {
                 // 1. 尝试常量求值
                 if let Some(const_val) = self.eval_const_expr(expr) {
                     constants.push(const_val.clone());
@@ -3100,6 +3114,7 @@ impl AstToIrGenerator {
                     dst: Some(Operand::Local(result_reg)),
                     func: Operand::Const(ConstValue::String("std.string.format".to_string())),
                     args: call_args,
+                    span: *span,
                 });
             }
             _ => {

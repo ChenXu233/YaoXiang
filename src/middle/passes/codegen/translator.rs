@@ -8,6 +8,7 @@ use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
+use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
 
 /// IR 到字节码翻译器
@@ -30,6 +31,9 @@ pub struct Translator {
     closure_function_offset: Option<usize>,
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
+
+    /// 是否生成运行时调试信息（IP -> Span）
+    generate_debug_info: bool,
 }
 
 impl Translator {
@@ -50,7 +54,15 @@ impl Translator {
             native_functions,
             closure_function_offset: None,
             function_name_to_idx: None,
+            generate_debug_info: false,
         }
+    }
+
+    pub fn set_generate_debug_info(
+        &mut self,
+        enable: bool,
+    ) {
+        self.generate_debug_info = enable;
     }
 
     /// 注册一个 native 函数名
@@ -130,6 +142,7 @@ impl Translator {
         self.current_function = Some(func.clone());
 
         let mut instructions = Vec::new();
+        let mut debug_map = HashMap::new();
         let mut ir_to_bytecode_map = HashMap::new();
         let mut pending_jumps: Vec<(usize, usize, Opcode)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
         let mut global_ir_index = 0;
@@ -138,6 +151,14 @@ impl Translator {
             for instr in &block.instructions {
                 ir_to_bytecode_map.insert(global_ir_index, instructions.len());
                 let current_bytecode_idx = instructions.len();
+
+                if self.generate_debug_info {
+                    if let Some(span) = Self::extract_span(instr) {
+                        if !span.is_dummy() {
+                            debug_map.insert(current_bytecode_idx, span);
+                        }
+                    }
+                }
 
                 // 检查是否是跳转指令，记录待回填信息
                 if let Some((target, opcode)) = Self::get_jump_target(instr) {
@@ -162,7 +183,22 @@ impl Translator {
             return_type: func.return_type.clone(),
             instructions,
             local_count: func.locals.len(),
+            debug_map,
         })
+    }
+
+    fn extract_span(instr: &Instruction) -> Option<Span> {
+        match instr {
+            Instruction::Call { span, .. } => Some(*span),
+            Instruction::CallVirt { span, .. } => Some(*span),
+            Instruction::CallDyn { span, .. } => Some(*span),
+            Instruction::Store { span, .. } => Some(*span),
+            Instruction::StoreField { span, .. } => Some(*span),
+            Instruction::StoreIndex { span, .. } => Some(*span),
+            Instruction::Div { span, .. } => Some(*span),
+            Instruction::Mod { span, .. } => Some(*span),
+            _ => None,
+        }
     }
 
     /// 从指令中提取跳转目标（如果是跳转指令）
@@ -224,8 +260,8 @@ impl Translator {
             Add { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Add, dst, lhs, rhs),
             Sub { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Sub, dst, lhs, rhs),
             Mul { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Mul, dst, lhs, rhs),
-            Div { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Div, dst, lhs, rhs),
-            Mod { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Rem, dst, lhs, rhs),
+            Div { dst, lhs, rhs, .. } => self.translate_binary_op(Opcode::I64Div, dst, lhs, rhs),
+            Mod { dst, lhs, rhs, .. } => self.translate_binary_op(Opcode::I64Rem, dst, lhs, rhs),
 
             And { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64And, dst, lhs, rhs),
             Or { dst, lhs, rhs } => self.translate_binary_op(Opcode::I64Or, dst, lhs, rhs),
@@ -251,14 +287,19 @@ impl Translator {
             JmpIfNot(cond, target) => self.translate_jmp_if_not(cond, *target),
             Ret(value) => self.translate_ret(value),
 
-            Call { dst, func, args } => self.translate_call(dst, func, args),
+            Call {
+                dst, func, args, ..
+            } => self.translate_call(dst, func, args),
             CallVirt {
                 dst,
                 obj,
                 method_name,
                 args,
+                ..
             } => self.translate_call_virt(dst, obj, method_name.as_str(), args),
-            CallDyn { dst, func, args } => self.translate_call_dyn(dst, func, args),
+            CallDyn {
+                dst, func, args, ..
+            } => self.translate_call_dyn(dst, func, args),
             TailCall { func, args } => self.translate_tail_call(func, args),
 
             Alloc { dst, .. } => self.translate_alloc(dst),

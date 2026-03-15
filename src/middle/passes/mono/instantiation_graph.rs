@@ -333,7 +333,9 @@ impl InstantiationGraph {
         match inst {
             // ==================== 调用指令 ====================
             // 函数调用 (dst 是 Option<Operand>)
-            Instruction::Call { func, args, dst } => {
+            Instruction::Call {
+                func, args, dst, ..
+            } => {
                 self.extract_type_from_operand(func, params, locals, deps);
                 if let Some(d) = dst {
                     self.extract_type_from_operand(d, params, locals, deps);
@@ -343,7 +345,9 @@ impl InstantiationGraph {
                 }
             }
             // 动态调用 (dst 是 Option<Operand>)
-            Instruction::CallDyn { func, args, dst } => {
+            Instruction::CallDyn {
+                func, args, dst, ..
+            } => {
                 self.extract_type_from_operand(func, params, locals, deps);
                 if let Some(d) = dst {
                     self.extract_type_from_operand(d, params, locals, deps);
@@ -471,8 +475,8 @@ impl InstantiationGraph {
             Instruction::Add { dst, lhs, rhs }
             | Instruction::Sub { dst, lhs, rhs }
             | Instruction::Mul { dst, lhs, rhs }
-            | Instruction::Div { dst, lhs, rhs }
-            | Instruction::Mod { dst, lhs, rhs }
+            | Instruction::Div { dst, lhs, rhs, .. }
+            | Instruction::Mod { dst, lhs, rhs, .. }
             | Instruction::And { dst, lhs, rhs }
             | Instruction::Or { dst, lhs, rhs }
             | Instruction::Xor { dst, lhs, rhs }

@@ -637,6 +637,8 @@ pub struct BytecodeFunction {
     pub labels: HashMap<Label, usize>,
     /// Exception handlers (try-catch blocks)
     pub exception_handlers: Vec<ExceptionHandler>,
+    /// Debug info: mapping from IP to Span
+    pub debug_map: HashMap<usize, crate::util::span::Span>,
 }
 
 /// Exception handler information
@@ -726,6 +728,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             // Decode instructions from BytecodeInstruction to BytecodeInstr
             let mut decoded_instructions = Vec::new();
             let mut labels = std::collections::HashMap::new();
+            let debug_map = func.debug_map;
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -1385,6 +1388,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 instructions: decoded_instructions,
                 labels,                         // Populated from Opcode::Label
                 exception_handlers: Vec::new(), // Not implemented yet
+                debug_map,
             };
             functions.push(byte_func);
         }

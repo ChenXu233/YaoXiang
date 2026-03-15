@@ -234,6 +234,7 @@ mod tests {
             instructions: vec![],
             labels: HashMap::new(),
             exception_handlers: vec![],
+            debug_map: HashMap::new(),
         }
     }
 

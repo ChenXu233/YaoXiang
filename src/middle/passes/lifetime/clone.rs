@@ -99,6 +99,7 @@ impl CloneChecker {
                 dst,
                 func: Operand::Local(_) | Operand::Temp(_),
                 args,
+                ..
             } => {
                 if let Some(receiver) = args.first() {
                     self.check_clone(receiver, dst.as_ref());

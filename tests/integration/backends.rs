@@ -102,6 +102,7 @@ fn test_bytecode_module_add_function() {
         instructions: vec![],
         labels: std::collections::HashMap::new(),
         exception_handlers: vec![],
+        debug_map: std::collections::HashMap::new(),
     };
 
     let idx = module.add_function(func.clone());

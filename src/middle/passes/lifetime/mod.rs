@@ -239,8 +239,8 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::Add { dst, lhs, rhs }
         | Instruction::Sub { dst, lhs, rhs }
         | Instruction::Mul { dst, lhs, rhs }
-        | Instruction::Div { dst, lhs, rhs }
-        | Instruction::Mod { dst, lhs, rhs }
+        | Instruction::Div { dst, lhs, rhs, .. }
+        | Instruction::Mod { dst, lhs, rhs, .. }
         | Instruction::And { dst, lhs, rhs }
         | Instruction::Or { dst, lhs, rhs }
         | Instruction::Xor { dst, lhs, rhs }
@@ -312,7 +312,9 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         }
 
         // 动态调用：dst = func_ptr(args...)
-        Instruction::CallDyn { dst, func, args } => {
+        Instruction::CallDyn {
+            dst, func, args, ..
+        } => {
             let mut ops = vec![func.clone()];
             ops.extend(args.iter().cloned());
             if let Some(d) = dst {

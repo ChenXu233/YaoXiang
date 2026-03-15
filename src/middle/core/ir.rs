@@ -57,11 +57,15 @@ pub enum Instruction {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     Mod {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     // =====================
     // 位运算指令
@@ -137,6 +141,8 @@ pub enum Instruction {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     // =====================
     // 虚函数调用指令
@@ -150,12 +156,16 @@ pub enum Instruction {
         obj: Operand,
         method_name: String,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     /// 动态调用：直接调用寄存器中的函数值（闭包）
     CallDyn {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     // 注意：根据 RFC-008，await 不是关键字
     // CallAsync 和 Await 指令已移除，由运行时自动处理
