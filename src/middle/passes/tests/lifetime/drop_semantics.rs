@@ -3,6 +3,7 @@
 use crate::middle::core::ir::{Instruction, Operand};
 use crate::middle::passes::lifetime::error::{OwnershipCheck, OwnershipError};
 use crate::middle::passes::lifetime::drop_semantics::DropChecker;
+use crate::util::span::Span;
 use super::create_test_function_with_locals;
 
 // ============ 基础测试 ============
@@ -180,6 +181,7 @@ fn test_use_after_drop_in_div() {
             dst: Operand::Temp(0),
             lhs: Operand::Local(0),
             rhs: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+            span: Span::dummy(),
         },
     ];
 
@@ -197,6 +199,7 @@ fn test_use_after_drop_in_mod() {
             dst: Operand::Temp(0),
             lhs: Operand::Local(0),
             rhs: Operand::Const(crate::middle::core::ir::ConstValue::Int(2)),
+            span: Span::dummy(),
         },
     ];
 
@@ -325,6 +328,7 @@ fn test_drop_then_call() {
             dst: Some(Operand::Temp(0)),
             func: Operand::Global(0),
             args: vec![],
+            span: Span::dummy(),
         },
     ];
 

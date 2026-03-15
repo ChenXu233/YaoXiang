@@ -227,6 +227,7 @@ fn test_immutable_mutation_method_error() {
             Operand::Local(0),
             Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
         ],
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -262,6 +263,7 @@ fn test_mutable_mutation_method_allowed() {
             Operand::Local(0),
             Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
         ],
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -289,6 +291,7 @@ fn test_non_mutation_method_allowed() {
             Operand::Local(0),
             Operand::Const(crate::middle::core::ir::ConstValue::Int(42)),
         ],
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);
@@ -438,6 +441,7 @@ fn test_all_mutation_methods_error() {
                 method.to_string(),
             )),
             args: vec![Operand::Local(0)],
+            span: Span::dummy(),
         }];
 
         let func = create_test_function(instructions);
@@ -567,6 +571,7 @@ fn test_read_only_operations() {
             dst: Some(Operand::Temp(2)),
             func: Operand::Global(0),
             args: vec![Operand::Local(0)],
+            span: Span::dummy(),
         },
     ];
 
@@ -615,6 +620,7 @@ fn test_different_mutation_method_errors() {
                 method.to_string(),
             )),
             args: vec![Operand::Local(0)],
+            span: Span::dummy(),
         }];
 
         let func = create_test_function(instructions);
@@ -650,6 +656,7 @@ fn test_various_non_mutation_methods() {
                 method.to_string(),
             )),
             args: vec![Operand::Local(0)],
+            span: Span::dummy(),
         }];
 
         let func = create_test_function(instructions);
@@ -733,6 +740,7 @@ fn test_ownership_checker_all_error_types() {
                 "Vec.push".to_string(),
             )),
             args: vec![Operand::Local(1)],
+            span: Span::dummy(),
         },
     ];
 
@@ -796,6 +804,7 @@ fn test_method_call_with_non_target_args() {
             Operand::Const(crate::middle::core::ir::ConstValue::Int(1)),
             Operand::Local(0),
         ],
+        span: Span::dummy(),
     }];
 
     let func = create_test_function(instructions);

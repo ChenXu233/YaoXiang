@@ -17,6 +17,7 @@ mod unsafe_check;
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, Operand};
 use crate::middle::passes::lifetime::OwnershipAnalyzer;
+use crate::util::span::Span;
 
 /// 创建测试用的 FunctionIR
 pub fn create_test_function_with_locals(locals: usize) -> FunctionIR {
@@ -58,6 +59,7 @@ fn create_test_function() -> FunctionIR {
                     dst: Some(Operand::Temp(2)),
                     func: Operand::Global(0),
                     args: vec![Operand::Temp(0), Operand::Temp(1)],
+                    span: Span::dummy(),
                 },
                 Instruction::Ret(Some(Operand::Temp(2))),
             ],

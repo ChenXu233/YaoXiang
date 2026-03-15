@@ -68,6 +68,103 @@ pub fn parse_compile_error(error: &str) -> Diagnostic {
     ErrorCodeDefinition::internal_error(error).build()
 }
 
+/// 渲染运行时错误（带源码高亮）
+pub fn render_runtime_error(
+    error: &crate::backends::ExecutorError,
+    module: &crate::middle::bytecode::BytecodeModule,
+    source_file: Option<&SourceFile>,
+) -> String {
+    let emitter = TextEmitter::new();
+
+    let primary_span = error
+        .stack_trace()
+        .and_then(|stack| stack.first())
+        .and_then(|frame| resolve_runtime_span(module, frame))
+        .filter(|span| !span.is_dummy());
+
+    let diagnostic = build_runtime_diagnostic(error, primary_span, source_file);
+
+    let mut output = emitter.render_with_source(&diagnostic, source_file);
+    let stack_text = format_runtime_stack_trace(error, module);
+    if !stack_text.is_empty() {
+        output.push('\n');
+        output.push_str(&stack_text);
+    }
+
+    output
+}
+
+fn resolve_runtime_span(
+    module: &crate::middle::bytecode::BytecodeModule,
+    frame: &crate::backends::StackFrame,
+) -> Option<crate::util::span::Span> {
+    module
+        .functions
+        .iter()
+        .find(|f| f.name == frame.function_name)
+        .and_then(|f| f.debug_map.get(&frame.ip).copied())
+}
+
+fn build_runtime_diagnostic(
+    error: &crate::backends::ExecutorError,
+    primary_span: Option<crate::util::span::Span>,
+    source_file: Option<&SourceFile>,
+) -> Diagnostic {
+    use crate::backends::ExecutorError;
+
+    let mut builder = match error {
+        ExecutorError::FunctionNotFound(name, _) => {
+            ErrorCodeDefinition::runtime_function_not_found(name.as_str())
+        }
+        ExecutorError::DivisionByZero(_) => {
+            let expr = primary_span
+                .and_then(|span| {
+                    source_file
+                        .and_then(|sf| sf.source_text(span))
+                        .map(|s| s.trim())
+                })
+                .filter(|s| !s.is_empty())
+                .unwrap_or("<unknown>");
+            ErrorCodeDefinition::division_by_zero(expr)
+        }
+        ExecutorError::Runtime(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
+        ExecutorError::Type(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
+        ExecutorError::StackOverflow(_) => ErrorCodeDefinition::stack_overflow(0),
+        other => ErrorCodeDefinition::runtime_error(&other.to_string()),
+    };
+
+    if let Some(span) = primary_span {
+        builder = builder.at(span);
+    }
+
+    builder.build()
+}
+
+fn format_runtime_stack_trace(
+    error: &crate::backends::ExecutorError,
+    module: &crate::middle::bytecode::BytecodeModule,
+) -> String {
+    let Some(stack) = error.stack_trace() else {
+        return String::new();
+    };
+
+    let mut out = String::from("stack trace:\n");
+    for frame in stack {
+        if let Some(span) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
+            out.push_str(&format!(
+                "  at {} ({}:{}) (ip: {})\n",
+                frame.function_name, span.start.line, span.start.column, frame.ip
+            ));
+        } else {
+            out.push_str(&format!(
+                "  at {} (ip: {})\n",
+                frame.function_name, frame.ip
+            ));
+        }
+    }
+    out
+}
+
 /// 运行文件并美化错误输出
 ///
 /// # 参数
@@ -155,6 +252,7 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
 
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
+            ctx.set_generate_debug_info(true);
             let bytecode_file = ctx
                 .generate()
                 .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -162,9 +260,12 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
 
             // Execute
             let mut executor: Box<dyn Executor> = Box::new(Interpreter::new());
-            executor
-                .execute_module(&bytecode_module)
-                .map_err(|e| anyhow::anyhow!("Runtime error: {}", e))?;
+            if let Err(e) = executor.execute_module(&bytecode_module) {
+                eprintln!();
+                let output = render_runtime_error(&e, &bytecode_module, Some(&source_file));
+                eprintln!("{}", output);
+                return Err(anyhow::anyhow!("Runtime error"));
+            }
         }
         Err(e) => {
             // 使用渲染器输出美化后的错误
@@ -224,6 +325,9 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
 mod tests {
     use super::*;
     use crate::util::span::{SourceFile, Span, Position};
+    use crate::backends::{ExecutorError, StackFrame};
+    use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
+    use std::collections::HashMap;
 
     /// 移除 ANSI 转义序列
     fn strip_ansi(s: &str) -> String {
@@ -317,6 +421,58 @@ main = () => {
             all.len() > 30,
             "Expected more than 30 error codes, got {}",
             all.len()
+        );
+    }
+
+    #[test]
+    fn test_render_runtime_function_not_found_with_span() {
+        let source = r#"main = () => {
+  foo()
+}"#;
+        let source_file = SourceFile::new("error.yx".to_string(), source.to_string());
+
+        let span = Span::new(
+            Position::with_offset(2, 3, 0),
+            Position::with_offset(2, 6, 0),
+        );
+
+        let mut module = BytecodeModule::new("test".to_string());
+        module.add_function(BytecodeFunction {
+            name: "main".to_string(),
+            params: vec![],
+            return_type: crate::middle::core::ir::Type::Void,
+            local_count: 0,
+            upvalue_count: 0,
+            instructions: vec![BytecodeInstr::Nop],
+            labels: HashMap::new(),
+            exception_handlers: vec![],
+            debug_map: HashMap::from([(0usize, span)]),
+        });
+
+        let err = ExecutorError::function_not_found(
+            "foo".to_string(),
+            vec![StackFrame {
+                function_name: "main".to_string(),
+                ip: 0,
+            }],
+        );
+
+        let output = render_runtime_error(&err, &module, Some(&source_file));
+        let clean_output = strip_ansi(&output);
+
+        assert!(clean_output.contains("error [E6006]"), "{}", clean_output);
+        assert!(
+            clean_output.contains("Function not found"),
+            "{}",
+            clean_output
+        );
+        assert!(clean_output.contains("error.yx:2:3"), "{}", clean_output);
+        assert!(clean_output.contains("foo()"), "{}", clean_output);
+        assert!(clean_output.contains("stack trace:"), "{}", clean_output);
+        assert!(
+            clean_output.contains("at main (2:3) (ip: 0)"),
+            "{}",
+            clean_output
         );
     }
 }

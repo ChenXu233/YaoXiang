@@ -4,7 +4,9 @@
 
 use crate::frontend::typecheck::MonoType;
 use crate::middle::core::ir::ConstValue;
+use crate::util::span::Span;
 use crate::backends::common::Opcode;
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 /// 字节码文件头魔数 (YaoXiang ByteCode: YXBC)
@@ -65,6 +67,8 @@ pub struct FunctionCode {
     pub return_type: MonoType,
     pub instructions: Vec<BytecodeInstruction>,
     pub local_count: usize,
+    /// Debug info: mapping from IP to source Span
+    pub debug_map: HashMap<usize, Span>,
 }
 
 #[derive(Debug, Clone)]

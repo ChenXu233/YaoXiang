@@ -34,7 +34,12 @@ fn create_call_instruction(
     args: Vec<Operand>,
     dst: Option<Operand>,
 ) -> Instruction {
-    Instruction::Call { func, args, dst }
+    Instruction::Call {
+        dst,
+        func,
+        args,
+        span: Span::dummy(),
+    }
 }
 
 /// 创建 spawn 指令（用于并发函数调用）

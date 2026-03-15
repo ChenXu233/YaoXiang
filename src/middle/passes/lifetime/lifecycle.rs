@@ -883,6 +883,7 @@ mod tests {
                         dst: Some(Operand::Temp(0)),
                         func: Operand::Global(0), // 使用索引表示函数
                         args: vec![Operand::Arg(0)],
+                        span: Span::dummy(),
                     },
                     Instruction::Ret(Some(Operand::Temp(0))),
                 ],

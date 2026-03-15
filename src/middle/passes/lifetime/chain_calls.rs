@@ -103,6 +103,7 @@ impl ChainCallAnalyzer {
                 obj,
                 method_name,
                 args,
+                ..
             } => {
                 // 检查是否是链式调用（obj 等于上一个结果）
                 let is_chain_call = self.is_same_operand(obj, prev_result);
@@ -281,6 +282,7 @@ mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
     use crate::frontend::typecheck::MonoType;
+    use crate::util::span::Span;
 
     fn create_test_func_with_calls(calls: Vec<Instruction>) -> FunctionIR {
         FunctionIR {
@@ -308,12 +310,14 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "rotate".to_string(),
                 args: vec![Operand::Const(ConstValue::Int(90))],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(2)),
                 obj: Operand::Temp(1),
                 method_name: "scale".to_string(),
                 args: vec![Operand::Const(ConstValue::Int(2))],
+                span: Span::dummy(),
             },
         ];
 
@@ -332,6 +336,7 @@ mod tests {
             obj: Operand::Temp(0),
             method_name: "rotate".to_string(),
             args: vec![],
+            span: Span::dummy(),
         };
 
         // 返回值被使用
@@ -393,18 +398,21 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "rotate".to_string(),
                 args: vec![Operand::Const(ConstValue::Int(90))],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(2)),
                 obj: Operand::Temp(1),
                 method_name: "scale".to_string(),
                 args: vec![Operand::Const(ConstValue::Int(2))],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(3)),
                 obj: Operand::Temp(2),
                 method_name: "translate".to_string(),
                 args: vec![Operand::Const(ConstValue::Int(1))],
+                span: Span::dummy(),
             },
         ];
 
@@ -427,12 +435,14 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "method1".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(200)),
                 obj: Operand::Temp(100),
                 method_name: "method2".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
         ];
 
@@ -456,6 +466,7 @@ mod tests {
                 Operand::Const(ConstValue::Int(90)),
                 Operand::Const(ConstValue::Float(3.14)),
             ],
+            span: Span::dummy(),
         }];
 
         let result = analyzer.analyze_chain(Operand::Temp(0), &calls);
@@ -486,6 +497,7 @@ mod tests {
             obj: Operand::Temp(5), // 不同的索引，不匹配
             method_name: "method".to_string(),
             args: vec![],
+            span: Span::dummy(),
         }];
 
         let result = analyzer.analyze_chain(Operand::Temp(0), &calls);
@@ -503,11 +515,13 @@ mod tests {
                 dst: Some(Operand::Temp(1)),
                 func: Operand::Global(0),
                 args: vec![Operand::Temp(0), Operand::Const(ConstValue::Int(1))],
+                span: Span::dummy(),
             },
             Instruction::Call {
                 dst: Some(Operand::Temp(2)),
                 func: Operand::Global(0),
                 args: vec![Operand::Temp(1), Operand::Const(ConstValue::Int(2))],
+                span: Span::dummy(),
             },
         ];
 
@@ -529,17 +543,20 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "method1".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
             Instruction::Call {
                 dst: Some(Operand::Temp(2)),
                 func: Operand::Global(0),
                 args: vec![Operand::Temp(1)],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(3)),
                 obj: Operand::Temp(2),
                 method_name: "method2".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
         ];
 
@@ -559,6 +576,7 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "method1".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
             Instruction::Add {
                 dst: Operand::Temp(2),
@@ -570,6 +588,7 @@ mod tests {
                 obj: Operand::Temp(1),
                 method_name: "method2".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
         ];
 
@@ -613,12 +632,14 @@ mod tests {
                 obj: Operand::Temp(0),
                 method_name: "method1".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
             Instruction::CallVirt {
                 dst: Some(Operand::Temp(2)),
                 obj: Operand::Temp(1),
                 method_name: "method2".to_string(),
                 args: vec![],
+                span: Span::dummy(),
             },
         ];
 

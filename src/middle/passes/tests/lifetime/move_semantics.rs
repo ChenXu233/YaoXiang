@@ -3,6 +3,7 @@
 use crate::middle::core::ir::{Instruction, Operand};
 use crate::middle::passes::lifetime::error::{OwnershipCheck, OwnershipError};
 use crate::middle::passes::lifetime::move_semantics::MoveChecker;
+use crate::util::span::Span;
 use super::create_test_function_with_locals;
 
 // ============ 基础测试 ============
@@ -230,6 +231,7 @@ fn test_call_moves_arguments() {
             dst: Some(Operand::Temp(1)),
             func: Operand::Global(0),
             args: vec![Operand::Local(0), Operand::Local(1)],
+            span: Span::dummy(),
         },
     ];
 
@@ -257,6 +259,7 @@ fn test_call_with_temp_args() {
             dst: Some(Operand::Temp(2)),
             func: Operand::Global(0),
             args: vec![Operand::Temp(0), Operand::Temp(1)],
+            span: Span::dummy(),
         },
     ];
 

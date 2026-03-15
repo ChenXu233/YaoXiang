@@ -125,6 +125,14 @@ impl CodegenContext {
         ctx
     }
 
+    pub fn set_generate_debug_info(
+        &mut self,
+        enable: bool,
+    ) {
+        self.config.generate_debug_info = enable;
+        self.translator.set_generate_debug_info(enable);
+    }
+
     /// 生成下一个标签（委托给 FlowManager）
     pub fn next_label(&mut self) -> usize {
         self.flow.next_label()
@@ -175,6 +183,8 @@ impl CodegenContext {
 
         // 1. 翻译所有函数
         debug!("{}", t(MSG::CodegenCodeSection, lang, Some(&[&func_count])));
+        self.translator
+            .set_generate_debug_info(self.config.generate_debug_info);
         let output = self.translator.translate_module(&self.module)?;
 
         // 2. 生成常量池

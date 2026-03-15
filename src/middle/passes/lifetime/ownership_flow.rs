@@ -173,6 +173,7 @@ mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
     use crate::frontend::typecheck::MonoType;
+    use crate::util::span::Span;
 
     fn create_test_function(returns_param: bool) -> FunctionIR {
         let return_instr = if returns_param {
@@ -326,6 +327,7 @@ mod tests {
                         dst: Some(Operand::Temp(0)),
                         func: Operand::Global(0),
                         args: vec![Operand::Arg(0)],
+                        span: Span::dummy(),
                     },
                     Instruction::Ret(Some(Operand::Temp(0))),
                 ],
