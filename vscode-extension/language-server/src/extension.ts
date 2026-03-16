@@ -18,17 +18,12 @@ function resolveServerCommand(): { command: string; args: string[] } {
   const executable = process.platform === 'win32' ? 'yaoxiang.exe' : 'yaoxiang';
   const folders = vscode.workspace.workspaceFolders ?? [];
 
-  // 首先尝试从当前扩展所在的目录向上查找 target 目录（适用于在子目录打开工作区的情况）
+  // 首先尝试从当前扩展所在的目录向上查找 target/debug 目录
   let currentDir = __dirname;
   while (currentDir !== path.parse(currentDir).root) {
-    const releaseCandidate = path.join(currentDir, "target", "release", executable);
-    if (fs.existsSync(releaseCandidate)) {
-      console.log(`[client] Found YaoXiang language server executable at: ${releaseCandidate}`);
-      return { command: releaseCandidate, args: ['lsp'] };
-    }
     const debugCandidate = path.join(currentDir, "target", "debug", executable);
     if (fs.existsSync(debugCandidate)) {
-      console.log(`[client] Found YaoXiang language server executable at: ${debugCandidate}`);
+      console.log(`[client] Found YaoXiang language server at: ${debugCandidate}`);
       return { command: debugCandidate, args: ['lsp'] };
     }
     currentDir = path.dirname(currentDir);
@@ -36,11 +31,10 @@ function resolveServerCommand(): { command: string; args: string[] } {
 
   for (const folder of folders) {
     const root = folder.uri.fsPath;
-    const candidate = path.join(root, "target", "release", executable);
-    console.log(`[client] Checking for language server executable at: ${candidate}`);
-    if (fs.existsSync(candidate)) {
-      console.log(`[client] Found YaoXiang language server executable at: ${candidate}`);
-      return { command: candidate, args: ['lsp'] };
+    const debugCandidate = path.join(root, "target", "debug", executable);
+    if (fs.existsSync(debugCandidate)) {
+      console.log(`[client] Found YaoXiang language server at: ${debugCandidate}`);
+      return { command: debugCandidate, args: ['lsp'] };
     }
   }
 
@@ -107,16 +101,13 @@ async function stopLanguageClient(): Promise<void> {
 }
 
 async function startLanguageClient(): Promise<void> {
-  if (!outputChannel) {
-    outputChannel = vscode.window.createOutputChannel('YaoXiang LSP');
-  }
-
   if (client) {
     outputChannel.appendLine('[client] Language client already started');
     return;
   }
 
   const resolved = resolveServerCommand();
+  outputChannel.appendLine('[client] Starting in debug mode (target/debug)');
 
   // 如果是本地文件路径，复制到 temp 目录
   let command = resolved.command;
@@ -192,10 +183,48 @@ async function restartLanguageClient(): Promise<void> {
  * YaoXiang Language Server
  */
 export function activate(context: vscode.ExtensionContext): void {
-  outputChannel = vscode.window.createOutputChannel('YaoXiang LSP');
+  // 检查 target/debug 是否存在
+  const executable = process.platform === 'win32' ? 'yaoxiang.exe' : 'yaoxiang';
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  let hasDebug = false;
+
+  // 从当前扩展目录向上查找
+  let currentDir = __dirname;
+  while (currentDir !== path.parse(currentDir).root) {
+    const debugCandidate = path.join(currentDir, "target", "debug", executable);
+    if (fs.existsSync(debugCandidate)) {
+      hasDebug = true;
+      break;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+
+  // 从工作区目录查找
+  if (!hasDebug) {
+    for (const folder of folders) {
+      const root = folder.uri.fsPath;
+      const debugCandidate = path.join(root, "target", "debug", executable);
+      if (fs.existsSync(debugCandidate)) {
+        hasDebug = true;
+        break;
+      }
+    }
+  }
+
+  // 根据是否使用debug模式创建对应名称的output channel
+  const channelName = hasDebug ? 'YaoXiang Language Server (Debug)' : 'YaoXiang Language Server';
+  outputChannel = vscode.window.createOutputChannel(channelName);
   context.subscriptions.push(outputChannel);
 
   outputChannel.appendLine('[client] Activating YaoXiang language server extension');
+
+  // 无论是否找到 target/debug，都启动 LSP
+  // resolveServerCommand 中有 fallback 到全局 yaoxiang 的逻辑
+  if (hasDebug) {
+    outputChannel.appendLine('[client] target/debug found, using debug mode');
+  } else {
+    outputChannel.appendLine('[client] No target/debug found, using global yaoxiang');
+  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand('yaoxiang.restartLanguageServer', async () => {
@@ -215,9 +244,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Right,
     100
   );
-  statusBarItem.text = '$(code) YaoXiang LSP';
+  statusBarItem.text = '$(bug) YaoXiang LSP (Debug)';
   statusBarItem.command = 'yaoxiang.restartLanguageServer';
-  statusBarItem.tooltip = 'Restart YaoXiang Language Server';
+  statusBarItem.tooltip = 'Restart YaoXiang Language Server (Debug Mode)';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 }

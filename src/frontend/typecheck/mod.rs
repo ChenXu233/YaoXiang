@@ -1603,6 +1603,7 @@ impl TypeChecker {
                 }
                 StmtKind::For {
                     var,
+                    var_span,
                     iterable,
                     body,
                     ..
@@ -1614,7 +1615,7 @@ impl TypeChecker {
                             name: var.clone(),
                             token_type: SemanticTokenType::Variable,
                             modifiers: vec![SemanticTokenModifier::Declaration],
-                            span: stmt.span,
+                            span: *var_span,
                         },
                     );
                     self.collect_expr_tokens(
@@ -1722,6 +1723,7 @@ impl TypeChecker {
             }
             StmtKind::For {
                 var,
+                var_span,
                 iterable,
                 body,
                 ..
@@ -1733,7 +1735,7 @@ impl TypeChecker {
                         name: var.clone(),
                         token_type: semantic_db::SemanticTokenType::Variable,
                         modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                        span: stmt.span,
+                        span: *var_span,
                     },
                 );
                 self.collect_expr_tokens(

@@ -223,6 +223,8 @@ pub enum StmtKind {
     /// For loop: `for [mut] item in iterable { body }`
     For {
         var: String,
+        /// 变量名的源码位置（用于代码染色等）
+        var_span: Span,
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,

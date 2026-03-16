@@ -22,6 +22,7 @@ pub fn format_stmt(
         } => format_var_decl(name, type_annotation, initializer, *is_mut, ctx),
         StmtKind::For {
             var,
+            var_span: _,
             var_mut,
             iterable,
             body,
