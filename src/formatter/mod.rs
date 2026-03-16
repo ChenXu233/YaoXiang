@@ -19,6 +19,7 @@
 //! println!("{}", result);
 //! ```
 
+pub mod command;
 pub mod context;
 pub mod formatter;
 pub mod handlers;
@@ -29,6 +30,7 @@ pub mod writers;
 
 // Re-exports
 pub use options::FormatOptions;
+pub use command::{run_format_command, FormatRunResult};
 pub use formatter::Formatter;
 pub use source_map::SourceMap;
 

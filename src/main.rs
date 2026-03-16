@@ -2,18 +2,17 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use serde::Serialize;
-use serde_json::Value;
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
+use yaoxiang::formatter::run_format_command;
 use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
-use yaoxiang::util::logger::LogLevel;
-use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::diagnostic::{
-    run_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry, ErrorInfo,
-    check_files_with_diagnostics, EmitterConfig, JsonEmitter, TextEmitter,
+    render_explain_output, run_check_command_once, run_check_watch_command,
+    run_file_with_diagnostics,
 };
+use yaoxiang::util::i18n::set_lang_from_string;
+use yaoxiang::util::logger::LogLevel;
 use yaoxiang::package;
 
 /// Log level enum for CLI
@@ -104,8 +103,12 @@ enum Commands {
     /// Check source file for errors (type checking) (unsupported yet)
     Check {
         /// Source file(s) or directory path(s) to check
-        #[arg(value_name = "PATH", required = true, num_args = 1..)]
+        #[arg(value_name = "PATH", num_args = 0..)]
         paths: Vec<PathBuf>,
+
+        /// Exclude file(s) or directory path(s) from check and watch
+        #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
+        exclude: Vec<PathBuf>,
 
         /// Output diagnostics in JSON format
         #[arg(long)]
@@ -248,7 +251,11 @@ enum Commands {
     List,
 
     /// Start the Language Server Protocol (LSP) server
-    Lsp,
+    Lsp {
+        /// Enable debug mode (show debug! macro output)
+        #[arg(long)]
+        debug: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -275,8 +282,15 @@ fn main() -> Result<()> {
 
     // Initialize logger
     // LSP 模式必须写 stderr，避免污染 stdout 的 JSON-RPC 通道
-    match command {
-        Commands::Lsp => yaoxiang::util::logger::init_lsp(),
+    match &command {
+        Commands::Lsp { debug } => {
+            if *debug {
+                // LSP 模式下必须使用 stderr，debug 仅提升日志级别。
+                yaoxiang::util::logger::init_lsp_with_level(LogLevel::Debug);
+            } else {
+                yaoxiang::util::logger::init_lsp();
+            }
+        }
         _ => match args.log_level {
             Some(level) => yaoxiang::util::logger::init_with_level(level.into()),
             None => yaoxiang::util::logger::init_cli(),
@@ -297,6 +311,7 @@ fn main() -> Result<()> {
         }
         Commands::Check {
             paths,
+            exclude,
             json,
             watch,
             color,
@@ -309,9 +324,10 @@ fn main() -> Result<()> {
             };
 
             if watch {
-                run_check_watch(paths, json, use_colors, no_progress)?;
+                run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
             } else {
-                let error_count = run_check_once(&paths, json, use_colors, no_progress)?;
+                let error_count =
+                    run_check_command_once(&paths, &exclude, json, use_colors, no_progress)?;
                 if error_count > 0 {
                     ::std::process::exit(1);
                 }
@@ -342,44 +358,8 @@ fn main() -> Result<()> {
                 options.single_quote = true;
             }
 
-            // 收集需要格式化的文件
-            let files = collect_yx_files(&file)?;
-            if files.is_empty() {
-                eprintln!("No .yx files found at: {}", file.display());
-                ::std::process::exit(2);
-            }
-
-            let mut needs_formatting = false;
-
-            for f in &files {
-                let source = ::std::fs::read_to_string(f)
-                    .with_context(|| format!("Failed to read: {}", f.display()))?;
-                match yaoxiang::formatter::format_source(&source, &options) {
-                    Ok(formatted) => {
-                        if check {
-                            if formatted != source {
-                                eprintln!("Needs formatting: {}", f.display());
-                                needs_formatting = true;
-                            }
-                        } else if write {
-                            if formatted != source {
-                                ::std::fs::write(f, &formatted)
-                                    .with_context(|| format!("Failed to write: {}", f.display()))?;
-                                eprintln!("Formatted: {}", f.display());
-                            }
-                        } else {
-                            // 默认输出到 stdout
-                            print!("{}", formatted);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error formatting {}: {}", f.display(), e);
-                        ::std::process::exit(2);
-                    }
-                }
-            }
-
-            if check && needs_formatting {
+            let result = run_format_command(&file, &options, check, write)?;
+            if check && result.needs_formatting {
                 ::std::process::exit(1);
             }
         }
@@ -396,46 +376,9 @@ fn main() -> Result<()> {
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
         Commands::Explain { code, json, lang } => {
-            if let Some(definition) = ErrorCodeDefinition::find(&code) {
-                let lang_code = lang
-                    .map(Into::<String>::into)
-                    .unwrap_or_else(|| "zh".to_string());
-                let i18n = I18nRegistry::new(&lang_code);
-                let info = i18n.get_info(&code).unwrap_or(ErrorInfo {
-                    title: "",
-                    help: "",
-                    example: None,
-                    error_output: None,
-                });
-
-                if json {
-                    // JSON output
-                    #[derive(Serialize)]
-                    struct ExplainOutput<'a> {
-                        code: &'static str,
-                        category: String,
-                        title: &'a str,
-                        template: &'static str,
-                        help: &'a str,
-                    }
-                    let output = ExplainOutput {
-                        code: definition.code,
-                        category: definition.category.to_string(),
-                        title: info.title,
-                        template: definition.message_template,
-                        help: info.help,
-                    };
-                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
-                } else {
-                    // Human-readable output
-                    println!("Error {}", definition.code);
-                    println!("Category: {}", definition.category);
-                    println!("Title: {}", info.title);
-                    println!("Message Template: {}", definition.message_template);
-                    if !info.help.is_empty() {
-                        println!("Help: {}", info.help);
-                    }
-                }
+            let lang_code = lang.map(Into::<String>::into);
+            if let Some(output) = render_explain_output(&code, json, lang_code.as_deref())? {
+                println!("{}", output);
             } else {
                 eprintln!("Unknown error code: {}", code);
                 std::process::exit(1);
@@ -484,251 +427,9 @@ fn main() -> Result<()> {
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
         }
-        Commands::Lsp => {
+        Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）
             yaoxiang::lsp::run_lsp_server().context("LSP server error")?;
-        }
-    }
-
-    Ok(())
-}
-
-/// 收集目录或文件下的所有 .yx 文件
-fn collect_yx_files(path: &std::path::Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    if path.is_file() {
-        files.push(path.to_path_buf());
-    } else if path.is_dir() {
-        collect_yx_files_recursive(path, &mut files)?;
-    }
-    Ok(files)
-}
-
-/// 递归收集 .yx 文件
-fn collect_yx_files_recursive(
-    dir: &std::path::Path,
-    files: &mut Vec<PathBuf>,
-) -> Result<()> {
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("Failed to read directory: {}", dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_yx_files_recursive(&path, files)?;
-        } else if path.extension().map(|e| e == "yx").unwrap_or(false) {
-            files.push(path);
-        }
-    }
-    Ok(())
-}
-
-/// 从多个输入路径收集并去重所有 .yx 文件
-fn collect_yx_files_from_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
-    for path in paths {
-        if !path.exists() {
-            return Err(anyhow::anyhow!("Path does not exist: {}", path.display()));
-        }
-        files.extend(collect_yx_files(path)?);
-    }
-
-    files.sort();
-    files.dedup();
-    Ok(files)
-}
-
-/// 单次执行 check 流程，返回错误数量
-fn run_check_once(
-    paths: &[PathBuf],
-    json: bool,
-    use_colors: bool,
-    no_progress: bool,
-) -> Result<usize> {
-    let files = collect_yx_files_from_paths(paths)?;
-    if files.is_empty() {
-        eprintln!("No .yx files found in provided paths");
-        ::std::process::exit(2);
-    }
-
-    if !json && !no_progress {
-        eprintln!("Checking {} file(s)...", files.len());
-    }
-
-    let result = check_files_with_diagnostics(&files)?;
-
-    if json {
-        output_check_json(&result)?;
-    } else {
-        let emitter = TextEmitter::with_config(EmitterConfig {
-            use_colors,
-            ..Default::default()
-        });
-        for entry in &result.diagnostics {
-            let source_file = result.source_files.get(&entry.file);
-            let output = emitter.render_with_source(&entry.diagnostic, source_file);
-            eprintln!("\n{}", output);
-        }
-
-        if !no_progress {
-            if result.error_count == 0 {
-                eprintln!("Type check passed ({} file(s))", files.len());
-            }
-            eprintln!(
-                "Summary: {} error(s), {} warning(s)",
-                result.error_count, result.warning_count
-            );
-        }
-    }
-
-    Ok(result.error_count)
-}
-
-#[derive(Serialize)]
-struct CheckJsonDiagnostic {
-    file: String,
-    severity: String,
-    code: String,
-    message: String,
-    line: usize,
-    column: usize,
-    end_line: usize,
-    end_column: usize,
-    lsp: Value,
-}
-
-#[derive(Serialize)]
-struct CheckJsonOutput {
-    error_count: usize,
-    warning_count: usize,
-    diagnostics: Vec<CheckJsonDiagnostic>,
-}
-
-fn output_check_json(result: &yaoxiang::util::diagnostic::CheckResult) -> Result<()> {
-    let diagnostics = result
-        .diagnostics
-        .iter()
-        .map(|entry| {
-            let (line, column, end_line, end_column) = entry
-                .diagnostic
-                .span
-                .map(|span| {
-                    (
-                        span.start.line,
-                        span.start.column,
-                        span.end.line,
-                        span.end.column,
-                    )
-                })
-                .unwrap_or((0, 0, 0, 0));
-
-            let lsp: Value = serde_json::from_str(&JsonEmitter::render(&entry.diagnostic))
-                .unwrap_or_else(|_| serde_json::json!({}));
-
-            CheckJsonDiagnostic {
-                file: entry.file.clone(),
-                severity: entry.diagnostic.severity.to_string(),
-                code: entry.diagnostic.code.clone(),
-                message: entry.diagnostic.message.clone(),
-                line,
-                column,
-                end_line,
-                end_column,
-                lsp,
-            }
-        })
-        .collect();
-
-    let payload = CheckJsonOutput {
-        error_count: result.error_count,
-        warning_count: result.warning_count,
-        diagnostics,
-    };
-
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
-}
-
-fn is_yx_event(event: &notify::Event) -> bool {
-    event
-        .paths
-        .iter()
-        .any(|p| p.extension().map(|ext| ext == "yx").unwrap_or(false))
-}
-
-fn run_check_watch(
-    paths: Vec<PathBuf>,
-    json: bool,
-    use_colors: bool,
-    no_progress: bool,
-) -> Result<()> {
-    use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::sync::mpsc;
-    use std::time::{Duration, Instant};
-
-    run_check_once(&paths, json, use_colors, no_progress)?;
-
-    if !no_progress {
-        eprintln!("Watching for changes... press Ctrl+C to stop");
-    }
-
-    let (tx, rx) = mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(
-        move |res| {
-            let _ = tx.send(res);
-        },
-        Config::default().with_poll_interval(Duration::from_millis(200)),
-    )?;
-
-    for path in &paths {
-        let mode = if path.is_dir() {
-            RecursiveMode::Recursive
-        } else {
-            RecursiveMode::NonRecursive
-        };
-        watcher
-            .watch(path, mode)
-            .with_context(|| format!("Failed to watch path: {}", path.display()))?;
-    }
-
-    loop {
-        let event = match rx.recv() {
-            Ok(Ok(event)) => event,
-            Ok(Err(err)) => {
-                if !no_progress {
-                    eprintln!("watch error: {}", err);
-                }
-                continue;
-            }
-            Err(_) => break,
-        };
-
-        if !is_yx_event(&event) {
-            continue;
-        }
-
-        // 简单防抖：窗口内持续接收事件，直到静默再触发一次检查。
-        let mut deadline = Instant::now() + Duration::from_millis(250);
-        while Instant::now() < deadline {
-            match rx.recv_timeout(Duration::from_millis(50)) {
-                Ok(Ok(next_event)) if is_yx_event(&next_event) => {
-                    deadline = Instant::now() + Duration::from_millis(250);
-                }
-                Ok(Ok(_)) => {}
-                Ok(Err(_)) => {}
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
-        }
-
-        if !json && !no_progress && use_colors {
-            eprint!("\x1B[2J\x1B[H");
-        }
-
-        let error_count = run_check_once(&paths, json, use_colors, no_progress)?;
-        if !no_progress {
-            eprintln!("Last run: {} error(s)", error_count);
         }
     }
 
