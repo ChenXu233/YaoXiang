@@ -1,5 +1,4 @@
 use std.io
-use std.string
 
 main = {
     use std.string
