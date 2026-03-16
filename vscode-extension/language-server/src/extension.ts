@@ -7,14 +7,16 @@ import {
   LanguageClientOptions,
   RevealOutputChannelOn,
   ServerOptions,
+  Trace,
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient | undefined;
 let clientStartPromise: Promise<void> | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
+let traceOutputChannel: vscode.OutputChannel | undefined;
 let restartInProgress: Promise<void> | undefined;
 
-function resolveServerCommand(): { command: string; args: string[] } {
+function resolveServerCommand(): { command: string; args: string[]; isDebug: boolean } {
   const executable = process.platform === 'win32' ? 'yaoxiang.exe' : 'yaoxiang';
   const folders = vscode.workspace.workspaceFolders ?? [];
 
@@ -23,8 +25,7 @@ function resolveServerCommand(): { command: string; args: string[] } {
   while (currentDir !== path.parse(currentDir).root) {
     const debugCandidate = path.join(currentDir, "target", "debug", executable);
     if (fs.existsSync(debugCandidate)) {
-      console.log(`[client] Found YaoXiang language server at: ${debugCandidate}`);
-      return { command: debugCandidate, args: ['lsp'] };
+      return { command: debugCandidate, args: ['lsp', '--debug'], isDebug: true };
     }
     currentDir = path.dirname(currentDir);
   }
@@ -33,12 +34,11 @@ function resolveServerCommand(): { command: string; args: string[] } {
     const root = folder.uri.fsPath;
     const debugCandidate = path.join(root, "target", "debug", executable);
     if (fs.existsSync(debugCandidate)) {
-      console.log(`[client] Found YaoXiang language server at: ${debugCandidate}`);
-      return { command: debugCandidate, args: ['lsp'] };
+      return { command: debugCandidate, args: ['lsp', '--debug'], isDebug: true };
     }
   }
 
-  return { command: 'yaoxiang', args: ['lsp'] };
+  return { command: 'yaoxiang', args: ['lsp'], isDebug: false };
 }
 
 /**
@@ -92,8 +92,19 @@ async function stopLanguageClient(): Promise<void> {
     return;
   }
 
+  // 若客户端仍处于 starting，先等待启动流程结束，避免 stop() 因状态不合法抛错。
+  if (clientStartPromise) {
+    await clientStartPromise.catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      outputChannel?.appendLine(`[client] Ignored startup error before stop: ${message}`);
+    });
+  }
+
   try {
     await client.stop();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel?.appendLine(`[client] stop() skipped/failed during transition: ${message}`);
   } finally {
     client = undefined;
     clientStartPromise = undefined;
@@ -101,13 +112,25 @@ async function stopLanguageClient(): Promise<void> {
 }
 
 async function startLanguageClient(): Promise<void> {
+  // outputChannel 应该在 activate() 中创建，这里确保 TypeScript 知道它一定存在
+  if (!outputChannel) {
+    throw new Error('outputChannel not initialized - activate() must be called first');
+  }
+
   if (client) {
     outputChannel.appendLine('[client] Language client already started');
     return;
   }
 
   const resolved = resolveServerCommand();
-  outputChannel.appendLine('[client] Starting in debug mode (target/debug)');
+  outputChannel.appendLine(
+    resolved.isDebug
+      ? '[client] Starting in debug mode (target/debug)'
+      : '[client] Starting in normal mode (global yaoxiang)'
+  );
+  if (resolved.isDebug) {
+    outputChannel.appendLine(`[client] Resolved debug executable: ${resolved.command}`);
+  }
 
   // 如果是本地文件路径，复制到 temp 目录
   let command = resolved.command;
@@ -129,6 +152,7 @@ async function startLanguageClient(): Promise<void> {
       { scheme: 'untitled', language: 'yaoxiang' },
     ],
     outputChannel,
+    traceOutputChannel: traceOutputChannel ?? outputChannel,
     revealOutputChannelOn: RevealOutputChannelOn.Error,
   };
 
@@ -143,6 +167,8 @@ async function startLanguageClient(): Promise<void> {
 
   await clientStartPromise.then(
     () => {
+      // 开启协议级 trace，便于在 Output 面板中看到请求/响应日志。
+      void client?.setTrace(Trace.Verbose);
       outputChannel?.appendLine('[client] Language client started successfully');
     },
     (error: unknown) => {
@@ -215,6 +241,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const channelName = hasDebug ? 'YaoXiang Language Server (Debug)' : 'YaoXiang Language Server';
   outputChannel = vscode.window.createOutputChannel(channelName);
   context.subscriptions.push(outputChannel);
+  traceOutputChannel = vscode.window.createOutputChannel('YaoXiang Language Server Trace');
+  context.subscriptions.push(traceOutputChannel);
 
   outputChannel.appendLine('[client] Activating YaoXiang language server extension');
 
@@ -244,9 +272,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Right,
     100
   );
-  statusBarItem.text = '$(bug) YaoXiang LSP (Debug)';
+  statusBarItem.text = hasDebug
+    ? '$(bug) YaoXiang LSP (Debug)'
+    : '$(symbol-method) YaoXiang LSP';
   statusBarItem.command = 'yaoxiang.restartLanguageServer';
-  statusBarItem.tooltip = 'Restart YaoXiang Language Server (Debug Mode)';
+  statusBarItem.tooltip = hasDebug
+    ? 'Restart YaoXiang Language Server (Debug Mode)'
+    : 'Restart YaoXiang Language Server';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 }
