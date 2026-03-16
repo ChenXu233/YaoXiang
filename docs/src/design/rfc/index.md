@@ -34,6 +34,7 @@ title: RFC 索引
 | RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 永久草案 ⚠️ |
 | RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020-dynamic-modules-ffi.md) | 晨煦 | 2026-02-25 | 草案 |
 | RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./draft/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 草案 |
+| RFC-022 | [可选的霍尔逻辑静态验证（规约注释与规约类型）](./draft/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 草案 |
 
 ---
 
