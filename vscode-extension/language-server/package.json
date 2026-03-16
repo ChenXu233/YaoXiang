@@ -26,6 +26,10 @@
       {
         "command": "yaoxiang.restartLanguageServer",
         "title": "YaoXiang: Restart Language Server"
+      },
+      {
+        "command": "yaoxiang.startDebugMode",
+        "title": "YaoXiang: Start in Debug Mode"
       }
     ],
     "languages": [

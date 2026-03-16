@@ -12,6 +12,7 @@ use lsp_types::{
 };
 
 use crate::frontend::typecheck::semantic_db::SemanticDB;
+use tracing::debug;
 
 // ============ 版本缓存 ============
 
@@ -90,6 +91,12 @@ pub fn handle_semantic_tokens_full(
     let empty: &[crate::frontend::typecheck::semantic_db::SemanticToken] = &[];
     let db_tokens = semantic_db.get_tokens(uri).unwrap_or(empty);
 
+    debug!(
+        "semanticTokens full: uri={}, tokens_count={}",
+        uri,
+        db_tokens.len()
+    );
+
     if db_tokens.is_empty() {
         let result_id = cache.store(uri, vec![]);
         return Some(SemanticTokensResult::Tokens(SemanticTokens {
@@ -124,6 +131,11 @@ pub fn handle_semantic_tokens_full_delta(
 
     // 获取当前最新 tokens
     let db_tokens = semantic_db.get_tokens(uri);
+    debug!(
+        "semanticTokens delta: uri={}, db_tokens={:?}",
+        uri,
+        db_tokens.map(|t| t.len())
+    );
     let new_tokens = match db_tokens {
         Some(tokens) if !tokens.is_empty() => convert_to_lsp_tokens(tokens, document_text),
         _ => vec![],

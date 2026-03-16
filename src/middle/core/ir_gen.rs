@@ -1402,6 +1402,7 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::For {
                 var,
+                var_span: _,
                 var_mut,
                 iterable,
                 body,

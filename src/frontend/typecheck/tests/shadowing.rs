@@ -226,6 +226,7 @@ fn test_for_loop_shadowing_error() {
     let for_stmt = ast::Stmt {
         kind: ast::StmtKind::For {
             var: "x".to_string(),
+            var_span: create_dummy_span(),
             var_mut: false,
             iterable: Box::new(ast::Expr::List(
                 vec![ast::Expr::Lit(
@@ -257,6 +258,7 @@ fn test_for_loop_variable_scoped() {
     let for_stmt = ast::Stmt {
         kind: ast::StmtKind::For {
             var: "i".to_string(),
+            var_span: create_dummy_span(),
             var_mut: false,
             iterable: Box::new(ast::Expr::List(
                 vec![ast::Expr::Lit(
@@ -291,6 +293,7 @@ fn test_for_loop_no_conflict_with_unique_var() {
     let for_stmt = ast::Stmt {
         kind: ast::StmtKind::For {
             var: "i".to_string(),
+            var_span: create_dummy_span(),
             var_mut: false,
             iterable: Box::new(ast::Expr::List(
                 vec![
