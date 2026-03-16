@@ -24,6 +24,7 @@
 
 pub mod codes;
 pub mod collect;
+pub mod command;
 pub mod conversion;
 pub mod emitter;
 pub mod error;
@@ -35,6 +36,7 @@ pub mod suggest;
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
+pub use command::{render_explain_output, run_check_command_once, run_check_watch_command};
 pub use conversion::ErrorConvert;
 pub use emitter::{TextEmitter, JsonEmitter, RichEmitter, EmitterConfig, RichConfig};
 pub use error::{Diagnostic, Severity};
