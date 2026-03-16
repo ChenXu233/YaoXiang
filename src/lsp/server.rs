@@ -473,10 +473,15 @@ fn update_symbol_index(
         world.update_index_from_ast(uri, &parse_result.module);
 
         // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
-        // 无论 typecheck 是否返回了错误配置（例如语法或类型错误），我们都能从中提取已收集的 semantic_db
+        // 注意：成功路径下 check_module_collect_all 会把 semantic_db 放进 TypeCheckResult，
+        // 失败路径下 semantic_db 仍保留在 TypeChecker 内部。
+        // 因此这里必须分支提取，避免“无错误时 semantic_db 为空”的问题。
         let mut tc = crate::frontend::typecheck::TypeChecker::new(uri);
-        let _ = tc.check_module_collect_all(&parse_result.module);
-        world.update_semantic_db(tc.take_semantic_db());
+        let semantic_db = match tc.check_module_collect_all(&parse_result.module) {
+            Ok(result) => result.semantic_db,
+            Err(_) => tc.take_semantic_db(),
+        };
+        world.update_semantic_db(semantic_db);
 
         debug!(
             "已更新符号索引和语义数据库: {} ({} 个符号)",
@@ -820,6 +825,14 @@ mod tests {
             "应至少有 2 个符号，实际: {}",
             world.symbol_count()
         );
+
+        // 无语法错误时也应收集到 semantic tokens
+        let semantic_tokens = world
+            .semantic_db()
+            .get_tokens("file:///test/indexed.yx")
+            .map(|tokens| tokens.to_vec())
+            .unwrap_or_default();
+        assert!(!semantic_tokens.is_empty(), "无错误代码也应有语义 tokens");
     }
 
     #[test]

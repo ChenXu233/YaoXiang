@@ -131,10 +131,12 @@ pub fn handle_semantic_tokens_full_delta(
 
     // 获取当前最新 tokens
     let db_tokens = semantic_db.get_tokens(uri);
+    let all_files = semantic_db.all_files();
     debug!(
-        "semanticTokens delta: uri={}, db_tokens={:?}",
+        "semanticTokens delta: uri={}, db_tokens={:?}, all_files_in_db={:?}",
         uri,
-        db_tokens.map(|t| t.len())
+        db_tokens.map(|t| t.len()),
+        all_files
     );
     let new_tokens = match db_tokens {
         Some(tokens) if !tokens.is_empty() => convert_to_lsp_tokens(tokens, document_text),
