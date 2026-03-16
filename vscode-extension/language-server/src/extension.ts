@@ -165,19 +165,19 @@ async function startLanguageClient(): Promise<void> {
 
   clientStartPromise = Promise.resolve(client.start());
 
-  await clientStartPromise.then(
-    () => {
-      // 开启协议级 trace，便于在 Output 面板中看到请求/响应日志。
-      void client?.setTrace(Trace.Verbose);
-      outputChannel?.appendLine('[client] Language client started successfully');
-    },
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      outputChannel?.appendLine(`[client] Failed to start language client: ${message}`);
-      void vscode.window.showErrorMessage(`YaoXiang LSP 重启失败: ${message}`);
-      outputChannel?.show(true);
-    }
-  );
+  try {
+    await clientStartPromise;
+    // 开启协议级 trace，便于在 Output 面板中看到请求/响应日志。
+    void client.setTrace(Trace.Verbose);
+    outputChannel.appendLine('[client] Language client started successfully');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel.appendLine(`[client] Failed to start language client: ${message}`);
+    client = undefined;
+    throw error;
+  } finally {
+    clientStartPromise = undefined;
+  }
 }
 
 async function restartLanguageClient(): Promise<void> {
@@ -191,9 +191,17 @@ async function restartLanguageClient(): Promise<void> {
       { location: vscode.ProgressLocation.Notification, title: 'Restarting YaoXiang Language Server...' },
       async () => {
         outputChannel?.appendLine('[client] Restart requested');
-        await stopLanguageClient();
-        await startLanguageClient();
-        outputChannel?.appendLine('[client] Restart completed');
+        try {
+          await stopLanguageClient();
+          await startLanguageClient();
+          outputChannel?.appendLine('[client] Restart completed');
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          outputChannel?.appendLine(`[client] Restart failed: ${message}`);
+          void vscode.window.showErrorMessage(`YaoXiang LSP 重启失败: ${message}`);
+          outputChannel?.show(true);
+          throw error;
+        }
       }
     )
   );
