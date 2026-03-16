@@ -208,6 +208,11 @@ impl SemanticDB {
         Self::default()
     }
 
+    /// 获取数据库中所有文件路径（调试用）
+    pub fn all_files(&self) -> Vec<&str> {
+        self.by_file.keys().map(|s| s.as_str()).collect()
+    }
+
     /// 获取指定文件的语义信息
     pub fn get_file_info(
         &self,
