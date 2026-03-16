@@ -17,4 +17,6 @@ mod shadowing;
 mod traits;
 mod typecheck_fixes;
 mod types;
+mod use_block_scope;
+mod use_scope;
 mod visibility;

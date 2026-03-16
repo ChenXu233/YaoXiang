@@ -423,6 +423,8 @@ impl TypeChecker {
         let mut body_checker = inference::StatementChecker::new(self.env.solver());
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // 设置模块注册表，支持函数体/块作用域 use
+        body_checker.set_module_registry(self.env.module_registry.clone());
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);
@@ -522,6 +524,8 @@ impl TypeChecker {
             let mut body_checker = inference::StatementChecker::new(self.env.solver());
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
+            // 设置模块注册表，支持函数体/块作用域 use
+            body_checker.set_module_registry(self.env.module_registry.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()

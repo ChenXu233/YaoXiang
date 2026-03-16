@@ -8,6 +8,8 @@
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 use std::collections::HashMap;
+use crate::frontend::module::{Export, ExportKind, ModuleInfo};
+use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{Block, Expr, Param, Stmt};
 
@@ -37,6 +39,8 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::typecheck::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
+    /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
+    module_registry: ModuleRegistry,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
     /// 累积的错误（收集模式下使用）
@@ -58,6 +62,7 @@ impl StatementChecker {
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
+            module_registry: ModuleRegistry::with_std(),
             is_top_level: true,
             collected_errors: Vec::new(),
             collect_all_errors: false,
@@ -116,6 +121,137 @@ impl StatementChecker {
         signatures: HashMap<String, MonoType>,
     ) {
         self.native_signatures = signatures;
+    }
+
+    /// 设置模块注册表
+    pub fn set_module_registry(
+        &mut self,
+        registry: ModuleRegistry,
+    ) {
+        self.module_registry = registry;
+    }
+
+    fn default_callable_type(&mut self) -> MonoType {
+        MonoType::Fn {
+            params: vec![self.solver.new_var()],
+            return_type: Box::new(self.solver.new_var()),
+            is_async: false,
+        }
+    }
+
+    fn export_type(
+        &mut self,
+        export: &Export,
+    ) -> MonoType {
+        match export.kind {
+            ExportKind::SubModule => {
+                if let Some(sub_module) = self.module_registry.get(&export.full_path).cloned() {
+                    return self.module_as_struct_type(&sub_module, &export.name);
+                }
+                self.default_callable_type()
+            }
+            _ => self
+                .native_signatures
+                .get(&export.full_path)
+                .cloned()
+                .or_else(|| self.native_signatures.get(&export.name).cloned())
+                .unwrap_or_else(|| self.default_callable_type()),
+        }
+    }
+
+    fn module_as_struct_type(
+        &mut self,
+        module: &ModuleInfo,
+        name: &str,
+    ) -> MonoType {
+        let mut fields = Vec::new();
+        for export in module.exports.values() {
+            fields.push((export.name.clone(), self.export_type(export)));
+        }
+
+        MonoType::Struct(crate::frontend::core::type_system::mono::StructType {
+            name: name.to_string(),
+            fields,
+            methods: HashMap::new(),
+            field_mutability: Vec::new(),
+            field_has_default: Vec::new(),
+            interfaces: vec![],
+        })
+    }
+
+    fn import_binding(
+        &mut self,
+        binding_name: &str,
+        export: &Export,
+    ) {
+        let ty = self.export_type(export);
+        self.scope
+            .add_var(binding_name.to_string(), PolyType::mono(ty));
+    }
+
+    fn process_use_stmt(
+        &mut self,
+        path: &str,
+        items: &Option<Vec<String>>,
+        alias: &Option<Vec<String>>,
+    ) {
+        let Some(module) = self.module_registry.get(path).cloned() else {
+            return;
+        };
+
+        let selected_exports: Vec<Export> = match items {
+            Some(item_names) => item_names
+                .iter()
+                .filter_map(|item| module.exports.get(item).cloned())
+                .collect(),
+            None => module.exports.values().cloned().collect(),
+        };
+
+        match (items.as_ref(), alias.as_ref()) {
+            // use path
+            (None, None) => {
+                let module_alias = path.split('.').next_back().unwrap_or(path);
+                let module_ty = self.module_as_struct_type(&module, module_alias);
+                self.scope
+                    .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+            }
+            // use path as alias
+            (None, Some(aliases)) if aliases.len() == 1 => {
+                let module_alias = &aliases[0];
+                let module_ty = self.module_as_struct_type(&module, module_alias);
+                self.scope
+                    .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+            }
+            // use path.{a, b}
+            (Some(item_names), None) => {
+                for item_name in item_names {
+                    if let Some(export) = module.exports.get(item_name).cloned() {
+                        self.import_binding(item_name, &export);
+                    }
+                }
+            }
+            // use path.{a, b} as aa, bb
+            (Some(item_names), Some(aliases)) if item_names.len() == aliases.len() => {
+                for (item_name, alias_name) in item_names.iter().zip(aliases.iter()) {
+                    if let Some(export) = module.exports.get(item_name).cloned() {
+                        self.import_binding(alias_name, &export);
+                    }
+                }
+            }
+            // 不合法别名数量：按原名导入
+            (Some(item_names), Some(_)) => {
+                for item_name in item_names {
+                    if let Some(export) = module.exports.get(item_name).cloned() {
+                        self.import_binding(item_name, &export);
+                    }
+                }
+            }
+            _ => {
+                for export in selected_exports {
+                    self.import_binding(&export.name, &export);
+                }
+            }
+        }
     }
 
     /// 获取求解器
@@ -362,7 +498,12 @@ impl StatementChecker {
                     *span,
                 )
             }
-            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Use {
+                path, items, alias, ..
+            } => {
+                self.process_use_stmt(path, items, alias);
+                Ok(())
+            }
             crate::frontend::core::parser::ast::StmtKind::TypeDef {
                 name, definition, ..
             } => self.check_type_def(name, definition, stmt.span),
