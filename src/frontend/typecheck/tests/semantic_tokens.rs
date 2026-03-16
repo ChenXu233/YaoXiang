@@ -1,4 +1,6 @@
 use crate::frontend::core::parser::ast;
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
 use crate::frontend::typecheck::semantic_db::SemanticTokenModifier;
 use crate::frontend::typecheck::semantic_db::SemanticTokenType;
 use crate::frontend::typecheck::TypeChecker;
@@ -217,6 +219,85 @@ fn test_use_emits_segmented_namespace_tokens_on_path_parts() {
             .iter()
             .any(|t| t.token_type == SemanticTokenType::Namespace && t.name == "io"),
         "expected a Namespace token for second use path segment io"
+    );
+}
+
+#[test]
+fn test_use_path_symbol_segment_colored_as_function() {
+    let mut checker = TypeChecker::new("file:///test.yx");
+
+    let stmt = ast::Stmt {
+        kind: ast::StmtKind::Use {
+            path: "std.io.print".to_string(),
+            path_span: dummy_span(),
+            path_parts: vec![
+                ast::SpannedIdent {
+                    name: "std".to_string(),
+                    span: dummy_span(),
+                },
+                ast::SpannedIdent {
+                    name: "io".to_string(),
+                    span: dummy_span(),
+                },
+                ast::SpannedIdent {
+                    name: "print".to_string(),
+                    span: dummy_span(),
+                },
+            ],
+            items: None,
+            alias: None,
+        },
+        span: dummy_span(),
+    };
+
+    let module = ast::Module {
+        items: vec![stmt],
+        span: dummy_span(),
+    };
+
+    let result = checker.check_module_collect_all(&module).unwrap();
+    let tokens = result.semantic_db.get_tokens("file:///test.yx").unwrap();
+
+    assert!(
+        tokens
+            .iter()
+            .any(|t| t.name == "print" && t.token_type == SemanticTokenType::Function),
+        "expected print to be colored as Function in use std.io.print"
+    );
+    assert!(
+        !tokens
+            .iter()
+            .any(|t| t.name == "print" && t.token_type == SemanticTokenType::Namespace),
+        "print should not be colored as Namespace in use std.io.print"
+    );
+}
+
+#[test]
+fn test_block_scoped_use_colors_namespace_inside_block() {
+    let code = r#"
+main = {
+    if true {
+        use std.string
+        s = string.index_of("hello", "l")
+    }
+}
+"#;
+
+    let tokens = tokenize(code).unwrap();
+    let module = parse(&tokens).unwrap();
+
+    let mut checker = TypeChecker::new("file:///test.yx");
+    let result = checker.check_module_collect_all(&module).unwrap();
+    let semantic_tokens = result.semantic_db.get_tokens("file:///test.yx").unwrap();
+
+    let namespace_string_count = semantic_tokens
+        .iter()
+        .filter(|t| t.name == "string" && t.token_type == SemanticTokenType::Namespace)
+        .count();
+
+    assert!(
+        namespace_string_count >= 2,
+        "expected block use to color both use path and call-site string as Namespace"
     );
 }
 

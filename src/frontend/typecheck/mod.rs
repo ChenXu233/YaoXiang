@@ -1004,26 +1004,159 @@ impl TypeChecker {
         names
     }
 
-    fn imported_module_roots_from_module(module: &Module) -> HashSet<String> {
-        use crate::frontend::core::parser::ast::StmtKind;
+    fn add_use_module_root(
+        &self,
+        imported_module_roots: &mut HashSet<String>,
+        path: &str,
+        items: &Option<Vec<String>>,
+        alias: &Option<Vec<String>>,
+    ) {
+        if items.is_some() {
+            return;
+        }
 
-        let mut roots = HashSet::new();
-        roots.insert("std".to_string());
-        for stmt in &module.items {
-            if let StmtKind::Use {
-                path, path_parts, ..
-            } = &stmt.kind
-            {
-                if let Some(first) = path_parts.first() {
-                    roots.insert(first.name.clone());
-                } else if let Some(first) = path.split('.').next() {
-                    if !first.is_empty() {
-                        roots.insert(first.to_string());
-                    }
+        if self.env.module_registry.has_module(path) {
+            if let Some(aliases) = alias {
+                if aliases.len() == 1 {
+                    imported_module_roots.insert(aliases[0].clone());
+                    return;
                 }
             }
+
+            if let Some(last) = path.split('.').next_back() {
+                if !last.is_empty() {
+                    imported_module_roots.insert(last.to_string());
+                }
+            }
+            return;
         }
-        roots
+
+        // use std.io.print / use std.io.print as p 属于符号导入，不是命名空间根
+        if let Some(dot_pos) = path.rfind('.') {
+            let module_path = &path[..dot_pos];
+            if self.env.module_registry.has_module(module_path) {
+                return;
+            }
+        }
+
+        // 回退策略：未知路径按旧行为处理
+        if let Some(aliases) = alias {
+            if aliases.len() == 1 {
+                imported_module_roots.insert(aliases[0].clone());
+                return;
+            }
+        }
+        if let Some(last) = path.split('.').next_back() {
+            if !last.is_empty() {
+                imported_module_roots.insert(last.to_string());
+            }
+        }
+    }
+
+    fn semantic_token_type_for_export(
+        export: &crate::frontend::module::Export
+    ) -> semantic_db::SemanticTokenType {
+        match export.kind {
+            crate::frontend::module::ExportKind::Function => {
+                semantic_db::SemanticTokenType::Function
+            }
+            crate::frontend::module::ExportKind::SubModule => {
+                semantic_db::SemanticTokenType::Namespace
+            }
+            crate::frontend::module::ExportKind::Type => semantic_db::SemanticTokenType::Type,
+            crate::frontend::module::ExportKind::Constant => {
+                semantic_db::SemanticTokenType::Variable
+            }
+        }
+    }
+
+    fn collect_use_stmt_tokens(
+        &mut self,
+        file_path: &str,
+        path: &str,
+        path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
+        items: &Option<Vec<String>>,
+        alias: &Option<Vec<String>>,
+    ) {
+        // use path.{...} 的 path 部分始终是模块命名空间
+        if items.is_some() {
+            for part in path_parts {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: part.name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Namespace,
+                        modifiers: vec![],
+                        span: part.span,
+                    },
+                );
+            }
+            return;
+        }
+
+        // use path as alias：path 是命名空间，alias 是目标符号名（由别名决定）
+        if alias.is_some() {
+            for part in path_parts {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: part.name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Namespace,
+                        modifiers: vec![],
+                        span: part.span,
+                    },
+                );
+            }
+            return;
+        }
+
+        if self.env.module_registry.has_module(path) {
+            for part in path_parts {
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: part.name.clone(),
+                        token_type: semantic_db::SemanticTokenType::Namespace,
+                        modifiers: vec![],
+                        span: part.span,
+                    },
+                );
+            }
+            return;
+        }
+
+        if let Ok(export) = self.env.module_registry.resolve_export(path) {
+            for (idx, part) in path_parts.iter().enumerate() {
+                let token_type = if idx + 1 == path_parts.len() {
+                    Self::semantic_token_type_for_export(export)
+                } else {
+                    semantic_db::SemanticTokenType::Namespace
+                };
+                self.semantic_db.add_token(
+                    file_path,
+                    semantic_db::SemanticToken {
+                        name: part.name.clone(),
+                        token_type,
+                        modifiers: vec![],
+                        span: part.span,
+                    },
+                );
+            }
+            return;
+        }
+
+        // fallback
+        for part in path_parts {
+            self.semantic_db.add_token(
+                file_path,
+                semantic_db::SemanticToken {
+                    name: part.name.clone(),
+                    token_type: semantic_db::SemanticTokenType::Namespace,
+                    modifiers: vec![],
+                    span: part.span,
+                },
+            );
+        }
     }
 
     fn collect_type_tokens(
@@ -1224,7 +1357,7 @@ impl TypeChecker {
         scope_idx: usize,
         declared: &mut HashMap<usize, HashSet<String>>,
         constructor_names: &HashSet<String>,
-        imported_module_roots: &HashSet<String>,
+        imported_module_roots: &mut HashSet<String>,
         is_terminal: bool,
     ) {
         use semantic_db::SemanticTokenType;
@@ -1337,7 +1470,8 @@ impl TypeChecker {
         let mut declared: HashMap<usize, HashSet<String>> = HashMap::new();
         declared.insert(0, HashSet::new());
         let constructor_names = Self::constructor_names_from_module(module);
-        let imported_module_roots = Self::imported_module_roots_from_module(module);
+        let mut imported_module_roots = HashSet::new();
+        imported_module_roots.insert("std".to_string());
 
         // 添加全局作用域
         self.semantic_db.add_scope(
@@ -1444,6 +1578,7 @@ impl TypeChecker {
                     );
 
                     // 递归收集函数体中的表达式
+                    let mut fn_roots = imported_module_roots.clone();
                     for body_stmt in &body.0 {
                         self.collect_stmt_tokens(
                             &fp,
@@ -1451,7 +1586,7 @@ impl TypeChecker {
                             scope_idx,
                             &mut declared,
                             &constructor_names,
-                            &imported_module_roots,
+                            &mut fn_roots,
                         );
                     }
                     if let Some(ret_expr) = &body.1 {
@@ -1461,7 +1596,7 @@ impl TypeChecker {
                             scope_idx,
                             &mut declared,
                             &constructor_names,
-                            &imported_module_roots,
+                            &mut fn_roots,
                         );
                     }
                 }
@@ -1544,7 +1679,7 @@ impl TypeChecker {
                             0,
                             &mut declared,
                             &constructor_names,
-                            &imported_module_roots,
+                            &mut imported_module_roots,
                         );
                     }
                 }
@@ -1581,19 +1716,15 @@ impl TypeChecker {
 
                     self.collect_type_tokens(&fp, method_type);
                 }
-                StmtKind::Use { path_parts, .. } => {
-                    // 模块路径按段着色：`std.io` → `std`、`io`
-                    for part in path_parts {
-                        self.semantic_db.add_token(
-                            &fp,
-                            SemanticToken {
-                                name: part.name.clone(),
-                                token_type: SemanticTokenType::Namespace,
-                                modifiers: vec![],
-                                span: part.span,
-                            },
-                        );
-                    }
+                StmtKind::Use {
+                    path,
+                    path_parts,
+                    items,
+                    alias,
+                    ..
+                } => {
+                    self.collect_use_stmt_tokens(&fp, path, path_parts, items, alias);
+                    self.add_use_module_root(&mut imported_module_roots, path, items, alias);
                 }
                 StmtKind::Expr(expr) => {
                     self.collect_expr_tokens(
@@ -1602,7 +1733,7 @@ impl TypeChecker {
                         0,
                         &mut declared,
                         &constructor_names,
-                        &imported_module_roots,
+                        &mut imported_module_roots,
                     );
                 }
                 StmtKind::For {
@@ -1628,7 +1759,7 @@ impl TypeChecker {
                         0,
                         &mut declared,
                         &constructor_names,
-                        &imported_module_roots,
+                        &mut imported_module_roots,
                     );
                     for body_stmt in &body.stmts {
                         self.collect_stmt_tokens(
@@ -1637,7 +1768,7 @@ impl TypeChecker {
                             0,
                             &mut declared,
                             &constructor_names,
-                            &imported_module_roots,
+                            &mut imported_module_roots,
                         );
                     }
                     if let Some(ret_expr) = &body.expr {
@@ -1647,7 +1778,7 @@ impl TypeChecker {
                             0,
                             &mut declared,
                             &constructor_names,
-                            &imported_module_roots,
+                            &mut imported_module_roots,
                         );
                     }
                 }
@@ -1673,7 +1804,7 @@ impl TypeChecker {
         scope_idx: usize,
         declared: &mut HashMap<usize, HashSet<String>>,
         constructor_names: &HashSet<String>,
-        imported_module_roots: &HashSet<String>,
+        imported_module_roots: &mut HashSet<String>,
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         use semantic_db::SemanticTokenModifier;
@@ -1725,6 +1856,16 @@ impl TypeChecker {
                     imported_module_roots,
                 );
             }
+            StmtKind::Use {
+                path,
+                path_parts,
+                items,
+                alias,
+                ..
+            } => {
+                self.collect_use_stmt_tokens(file_path, path, path_parts, items, alias);
+                self.add_use_module_root(imported_module_roots, path, items, alias);
+            }
             StmtKind::For {
                 var,
                 var_span,
@@ -1771,6 +1912,101 @@ impl TypeChecker {
                     );
                 }
             }
+            StmtKind::If {
+                condition,
+                then_branch,
+                elif_branches,
+                else_branch,
+                ..
+            } => {
+                self.collect_expr_tokens(
+                    file_path,
+                    condition,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                    imported_module_roots,
+                );
+
+                let mut then_roots = imported_module_roots.clone();
+                for s in &then_branch.stmts {
+                    self.collect_stmt_tokens(
+                        file_path,
+                        s,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        &mut then_roots,
+                    );
+                }
+                if let Some(r) = &then_branch.expr {
+                    self.collect_expr_tokens(
+                        file_path,
+                        r,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        &mut then_roots,
+                    );
+                }
+
+                for (elif_cond, elif_block) in elif_branches {
+                    self.collect_expr_tokens(
+                        file_path,
+                        elif_cond,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        imported_module_roots,
+                    );
+
+                    let mut elif_roots = imported_module_roots.clone();
+                    for s in &elif_block.stmts {
+                        self.collect_stmt_tokens(
+                            file_path,
+                            s,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            &mut elif_roots,
+                        );
+                    }
+                    if let Some(r) = &elif_block.expr {
+                        self.collect_expr_tokens(
+                            file_path,
+                            r,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            &mut elif_roots,
+                        );
+                    }
+                }
+
+                if let Some(else_block) = else_branch {
+                    let mut else_roots = imported_module_roots.clone();
+                    for s in &else_block.stmts {
+                        self.collect_stmt_tokens(
+                            file_path,
+                            s,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            &mut else_roots,
+                        );
+                    }
+                    if let Some(r) = &else_block.expr {
+                        self.collect_expr_tokens(
+                            file_path,
+                            r,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            &mut else_roots,
+                        );
+                    }
+                }
+            }
             StmtKind::Fn {
                 name,
                 params,
@@ -1808,6 +2044,7 @@ impl TypeChecker {
                 if let Some(ty) = type_annotation {
                     self.collect_type_tokens(file_path, ty);
                 }
+                let mut fn_roots = imported_module_roots.clone();
                 for body_stmt in &body.0 {
                     self.collect_stmt_tokens(
                         file_path,
@@ -1815,7 +2052,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut fn_roots,
                     );
                 }
                 if let Some(ret_expr) = &body.1 {
@@ -1825,7 +2062,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut fn_roots,
                     );
                 }
             }
@@ -1841,7 +2078,7 @@ impl TypeChecker {
         scope_idx: usize,
         declared: &mut HashMap<usize, HashSet<String>>,
         constructor_names: &HashSet<String>,
-        imported_module_roots: &HashSet<String>,
+        imported_module_roots: &mut HashSet<String>,
     ) {
         use crate::frontend::core::parser::ast::Expr;
 
@@ -1979,6 +2216,7 @@ impl TypeChecker {
                     constructor_names,
                     imported_module_roots,
                 );
+                let mut then_roots = imported_module_roots.clone();
                 for s in &then_branch.stmts {
                     self.collect_stmt_tokens(
                         file_path,
@@ -1986,7 +2224,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut then_roots,
                     );
                 }
                 if let Some(r) = &then_branch.expr {
@@ -1996,7 +2234,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut then_roots,
                     );
                 }
                 for (cond, block) in elif_branches {
@@ -2008,6 +2246,7 @@ impl TypeChecker {
                         constructor_names,
                         imported_module_roots,
                     );
+                    let mut elif_roots = imported_module_roots.clone();
                     for s in &block.stmts {
                         self.collect_stmt_tokens(
                             file_path,
@@ -2015,7 +2254,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut elif_roots,
                         );
                     }
                     if let Some(r) = &block.expr {
@@ -2025,11 +2264,12 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut elif_roots,
                         );
                     }
                 }
                 if let Some(block) = else_branch {
+                    let mut else_roots = imported_module_roots.clone();
                     for s in &block.stmts {
                         self.collect_stmt_tokens(
                             file_path,
@@ -2037,7 +2277,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut else_roots,
                         );
                     }
                     if let Some(r) = &block.expr {
@@ -2047,7 +2287,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut else_roots,
                         );
                     }
                 }
@@ -2064,6 +2304,7 @@ impl TypeChecker {
                     constructor_names,
                     imported_module_roots,
                 );
+                let mut while_roots = imported_module_roots.clone();
                 for s in &body.stmts {
                     self.collect_stmt_tokens(
                         file_path,
@@ -2071,7 +2312,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut while_roots,
                     );
                 }
                 if let Some(r) = &body.expr {
@@ -2081,7 +2322,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut while_roots,
                     );
                 }
             }
@@ -2110,6 +2351,7 @@ impl TypeChecker {
                     constructor_names,
                     imported_module_roots,
                 );
+                let mut for_roots = imported_module_roots.clone();
                 for s in &body.stmts {
                     self.collect_stmt_tokens(
                         file_path,
@@ -2117,7 +2359,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut for_roots,
                     );
                 }
                 if let Some(r) = &body.expr {
@@ -2127,7 +2369,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut for_roots,
                     );
                 }
             }
@@ -2163,6 +2405,7 @@ impl TypeChecker {
                         kind: semantic_db::ScopeKind::Lambda,
                     },
                 );
+                let mut lambda_roots = imported_module_roots.clone();
                 for s in &body.stmts {
                     self.collect_stmt_tokens(
                         file_path,
@@ -2170,7 +2413,7 @@ impl TypeChecker {
                         lambda_scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut lambda_roots,
                     );
                 }
                 if let Some(r) = &body.expr {
@@ -2180,11 +2423,12 @@ impl TypeChecker {
                         lambda_scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut lambda_roots,
                     );
                 }
             }
             Expr::Block(block) => {
+                let mut block_roots = imported_module_roots.clone();
                 for s in &block.stmts {
                     self.collect_stmt_tokens(
                         file_path,
@@ -2192,7 +2436,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut block_roots,
                     );
                 }
                 if let Some(r) = &block.expr {
@@ -2202,7 +2446,7 @@ impl TypeChecker {
                         scope_idx,
                         declared,
                         constructor_names,
-                        imported_module_roots,
+                        &mut block_roots,
                     );
                 }
             }
@@ -2228,6 +2472,7 @@ impl TypeChecker {
                     imported_module_roots,
                 );
                 for arm in arms {
+                    let mut arm_roots = imported_module_roots.clone();
                     for s in &arm.body.stmts {
                         self.collect_stmt_tokens(
                             file_path,
@@ -2235,7 +2480,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut arm_roots,
                         );
                     }
                     if let Some(r) = &arm.body.expr {
@@ -2245,7 +2490,7 @@ impl TypeChecker {
                             scope_idx,
                             declared,
                             constructor_names,
-                            imported_module_roots,
+                            &mut arm_roots,
                         );
                     }
                 }
