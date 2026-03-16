@@ -43,6 +43,23 @@ pub use suggest::SuggestionEngine;
 
 // 渲染器
 use crate::util::span::SourceFile;
+use std::collections::HashMap;
+
+/// 单个检查诊断（包含所属文件）
+#[derive(Debug, Clone)]
+pub struct CheckDiagnostic {
+    pub file: String,
+    pub diagnostic: Diagnostic,
+}
+
+/// `yaoxiang check` 的聚合结果
+#[derive(Debug, Default)]
+pub struct CheckResult {
+    pub diagnostics: Vec<CheckDiagnostic>,
+    pub source_files: HashMap<String, SourceFile>,
+    pub error_count: usize,
+    pub warning_count: usize,
+}
 
 /// 渲染编译错误
 ///
@@ -287,38 +304,70 @@ pub fn run_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()
 /// # 返回
 /// 检查成功返回 `()`，失败返回错误
 pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<()> {
+    let result = check_files_with_diagnostics(std::slice::from_ref(file))?;
+    if result.error_count > 0 {
+        return Err(anyhow::anyhow!("Type check failed"));
+    }
+
+    println!("Type check passed for {}", file.display());
+    Ok(())
+}
+
+/// 对多个文件进行静态检查并聚合诊断信息
+///
+/// 说明：当前编译管线会优先返回首个结构化诊断，因此每个失败文件
+/// 通常会产生一个主诊断条目。
+pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
     use crate::frontend::Compiler;
 
-    let source = match std::fs::read_to_string(file) {
-        Ok(s) => s,
-        Err(e) => {
-            return Err(anyhow::anyhow!(
-                "Failed to read file {}: {}",
-                file.display(),
-                e
-            ));
-        }
-    };
+    let mut result = CheckResult::default();
 
-    let source_name = file.display().to_string();
-    let source_file = SourceFile::new(source_name.clone(), source.clone());
+    for file in files {
+        let source = match std::fs::read_to_string(file) {
+            Ok(s) => s,
+            Err(e) => {
+                let diagnostic = ErrorCodeDefinition::internal_error(&format!(
+                    "Failed to read file {}: {}",
+                    file.display(),
+                    e
+                ))
+                .build();
+                result.error_count += 1;
+                result.diagnostics.push(CheckDiagnostic {
+                    file: file.display().to_string(),
+                    diagnostic,
+                });
+                continue;
+            }
+        };
 
-    let mut compiler = Compiler::new();
-    match compiler.compile(&source_name, &source) {
-        Ok(_) => {
-            // 类型检查成功
-            println!("Type check passed for {}", file.display());
-        }
-        Err(e) => {
-            // 使用渲染器输出美化后的错误
-            eprintln!();
-            let output = render_compile_error(e.message(), &source_file, e.diagnostic());
-            eprintln!("{}", output);
-            return Err(anyhow::anyhow!("Type check failed"));
+        let source_name = file.display().to_string();
+        let source_file = SourceFile::new(source_name.clone(), source.clone());
+        result
+            .source_files
+            .insert(source_name.clone(), source_file.clone());
+
+        let mut compiler = Compiler::new();
+        if let Err(e) = compiler.compile(&source_name, &source) {
+            let diagnostic = e
+                .diagnostic()
+                .cloned()
+                .unwrap_or_else(|| parse_compile_error(e.message()));
+
+            if diagnostic.severity.is_error() {
+                result.error_count += 1;
+            } else {
+                result.warning_count += 1;
+            }
+
+            result.diagnostics.push(CheckDiagnostic {
+                file: source_name,
+                diagnostic,
+            });
         }
     }
 
-    Ok(())
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -328,6 +377,8 @@ mod tests {
     use crate::backends::{ExecutorError, StackFrame};
     use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
     use std::collections::HashMap;
+    use std::fs;
+    use tempfile::tempdir;
 
     /// 移除 ANSI 转义序列
     fn strip_ansi(s: &str) -> String {
@@ -474,5 +525,46 @@ main = () => {
             "{}",
             clean_output
         );
+    }
+
+    #[test]
+    fn test_check_files_with_diagnostics_ok() {
+        let dir = tempdir().expect("create temp dir");
+        let file = dir.path().join("ok.yx");
+        fs::write(
+            &file,
+            r#"use std.io
+
+main: () -> Void = {
+  print("ok")
+}
+"#,
+        )
+        .expect("write yx file");
+
+        let result = check_files_with_diagnostics(&vec![file]).expect("run check");
+        assert_eq!(result.error_count, 0);
+        assert_eq!(result.warning_count, 0);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn test_check_files_with_diagnostics_error() {
+        let dir = tempdir().expect("create temp dir");
+        let file = dir.path().join("bad.yx");
+        fs::write(
+            &file,
+            r#"use std.io
+
+main: () -> Void = {
+  print(a)
+}
+"#,
+        )
+        .expect("write yx file");
+
+        let result = check_files_with_diagnostics(&vec![file]).expect("run check");
+        assert!(result.error_count > 0);
+        assert!(!result.diagnostics.is_empty());
     }
 }

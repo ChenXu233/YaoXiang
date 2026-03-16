@@ -3,14 +3,16 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Serialize;
+use serde_json::Value;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::logger::LogLevel;
 use yaoxiang::util::i18n::set_lang_from_string;
 use yaoxiang::util::diagnostic::{
-    run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
-    ErrorInfo,
+    run_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry, ErrorInfo,
+    check_files_with_diagnostics, EmitterConfig, JsonEmitter, TextEmitter,
 };
 use yaoxiang::package;
 
@@ -50,6 +52,14 @@ impl From<LangArg> for String {
             LangArg::ZhMiao => "zh-x-miao".to_string(),
         }
     }
+}
+
+/// Color output behavior for diagnostics
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ColorChoice {
+    Auto,
+    Always,
+    Never,
 }
 
 /// A high-performance programming language with "everything is type" philosophy
@@ -93,9 +103,25 @@ enum Commands {
 
     /// Check source file for errors (type checking) (unsupported yet)
     Check {
-        /// Source file to check
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+        /// Source file(s) or directory path(s) to check
+        #[arg(value_name = "PATH", required = true, num_args = 1..)]
+        paths: Vec<PathBuf>,
+
+        /// Output diagnostics in JSON format
+        #[arg(long)]
+        json: bool,
+
+        /// Watch input paths and re-check on file changes
+        #[arg(short, long)]
+        watch: bool,
+
+        /// Control color output (auto, always, never)
+        #[arg(long, value_enum, default_value = "auto")]
+        color: ColorChoice,
+
+        /// Suppress progress and summary messages
+        #[arg(long)]
+        no_progress: bool,
     },
 
     /// Format source file
@@ -269,8 +295,27 @@ fn main() -> Result<()> {
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
         }
-        Commands::Check { file } => {
-            check_file_with_diagnostics(&file)?;
+        Commands::Check {
+            paths,
+            json,
+            watch,
+            color,
+            no_progress,
+        } => {
+            let use_colors = match color {
+                ColorChoice::Always => true,
+                ColorChoice::Never => false,
+                ColorChoice::Auto => std::io::stderr().is_terminal(),
+            };
+
+            if watch {
+                run_check_watch(paths, json, use_colors, no_progress)?;
+            } else {
+                let error_count = run_check_once(&paths, json, use_colors, no_progress)?;
+                if error_count > 0 {
+                    ::std::process::exit(1);
+                }
+            }
         }
         Commands::Format {
             file,
@@ -475,5 +520,217 @@ fn collect_yx_files_recursive(
             files.push(path);
         }
     }
+    Ok(())
+}
+
+/// 从多个输入路径收集并去重所有 .yx 文件
+fn collect_yx_files_from_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+
+    for path in paths {
+        if !path.exists() {
+            return Err(anyhow::anyhow!("Path does not exist: {}", path.display()));
+        }
+        files.extend(collect_yx_files(path)?);
+    }
+
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
+/// 单次执行 check 流程，返回错误数量
+fn run_check_once(
+    paths: &[PathBuf],
+    json: bool,
+    use_colors: bool,
+    no_progress: bool,
+) -> Result<usize> {
+    let files = collect_yx_files_from_paths(paths)?;
+    if files.is_empty() {
+        eprintln!("No .yx files found in provided paths");
+        ::std::process::exit(2);
+    }
+
+    if !json && !no_progress {
+        eprintln!("Checking {} file(s)...", files.len());
+    }
+
+    let result = check_files_with_diagnostics(&files)?;
+
+    if json {
+        output_check_json(&result)?;
+    } else {
+        let emitter = TextEmitter::with_config(EmitterConfig {
+            use_colors,
+            ..Default::default()
+        });
+        for entry in &result.diagnostics {
+            let source_file = result.source_files.get(&entry.file);
+            let output = emitter.render_with_source(&entry.diagnostic, source_file);
+            eprintln!("\n{}", output);
+        }
+
+        if !no_progress {
+            if result.error_count == 0 {
+                eprintln!("Type check passed ({} file(s))", files.len());
+            }
+            eprintln!(
+                "Summary: {} error(s), {} warning(s)",
+                result.error_count, result.warning_count
+            );
+        }
+    }
+
+    Ok(result.error_count)
+}
+
+#[derive(Serialize)]
+struct CheckJsonDiagnostic {
+    file: String,
+    severity: String,
+    code: String,
+    message: String,
+    line: usize,
+    column: usize,
+    end_line: usize,
+    end_column: usize,
+    lsp: Value,
+}
+
+#[derive(Serialize)]
+struct CheckJsonOutput {
+    error_count: usize,
+    warning_count: usize,
+    diagnostics: Vec<CheckJsonDiagnostic>,
+}
+
+fn output_check_json(result: &yaoxiang::util::diagnostic::CheckResult) -> Result<()> {
+    let diagnostics = result
+        .diagnostics
+        .iter()
+        .map(|entry| {
+            let (line, column, end_line, end_column) = entry
+                .diagnostic
+                .span
+                .map(|span| {
+                    (
+                        span.start.line,
+                        span.start.column,
+                        span.end.line,
+                        span.end.column,
+                    )
+                })
+                .unwrap_or((0, 0, 0, 0));
+
+            let lsp: Value = serde_json::from_str(&JsonEmitter::render(&entry.diagnostic))
+                .unwrap_or_else(|_| serde_json::json!({}));
+
+            CheckJsonDiagnostic {
+                file: entry.file.clone(),
+                severity: entry.diagnostic.severity.to_string(),
+                code: entry.diagnostic.code.clone(),
+                message: entry.diagnostic.message.clone(),
+                line,
+                column,
+                end_line,
+                end_column,
+                lsp,
+            }
+        })
+        .collect();
+
+    let payload = CheckJsonOutput {
+        error_count: result.error_count,
+        warning_count: result.warning_count,
+        diagnostics,
+    };
+
+    println!("{}", serde_json::to_string_pretty(&payload)?);
+    Ok(())
+}
+
+fn is_yx_event(event: &notify::Event) -> bool {
+    event
+        .paths
+        .iter()
+        .any(|p| p.extension().map(|ext| ext == "yx").unwrap_or(false))
+}
+
+fn run_check_watch(
+    paths: Vec<PathBuf>,
+    json: bool,
+    use_colors: bool,
+    no_progress: bool,
+) -> Result<()> {
+    use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    run_check_once(&paths, json, use_colors, no_progress)?;
+
+    if !no_progress {
+        eprintln!("Watching for changes... press Ctrl+C to stop");
+    }
+
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = RecommendedWatcher::new(
+        move |res| {
+            let _ = tx.send(res);
+        },
+        Config::default().with_poll_interval(Duration::from_millis(200)),
+    )?;
+
+    for path in &paths {
+        let mode = if path.is_dir() {
+            RecursiveMode::Recursive
+        } else {
+            RecursiveMode::NonRecursive
+        };
+        watcher
+            .watch(path, mode)
+            .with_context(|| format!("Failed to watch path: {}", path.display()))?;
+    }
+
+    loop {
+        let event = match rx.recv() {
+            Ok(Ok(event)) => event,
+            Ok(Err(err)) => {
+                if !no_progress {
+                    eprintln!("watch error: {}", err);
+                }
+                continue;
+            }
+            Err(_) => break,
+        };
+
+        if !is_yx_event(&event) {
+            continue;
+        }
+
+        // 简单防抖：窗口内持续接收事件，直到静默再触发一次检查。
+        let mut deadline = Instant::now() + Duration::from_millis(250);
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(Ok(next_event)) if is_yx_event(&next_event) => {
+                    deadline = Instant::now() + Duration::from_millis(250);
+                }
+                Ok(Ok(_)) => {}
+                Ok(Err(_)) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        if !json && !no_progress && use_colors {
+            eprint!("\x1B[2J\x1B[H");
+        }
+
+        let error_count = run_check_once(&paths, json, use_colors, no_progress)?;
+        if !no_progress {
+            eprintln!("Last run: {} error(s)", error_count);
+        }
+    }
+
     Ok(())
 }
