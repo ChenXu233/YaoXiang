@@ -137,7 +137,7 @@ fn handle_request(
         m if m == <Initialize as lsp_types::request::Request>::METHOD => {
             let params: InitializeParams = serde_json::from_value(req.params).unwrap_or_default();
             Some(handlers::initialize::handle_initialize(
-                session, req.id, params,
+                session, world, req.id, params,
             ))
         }
 

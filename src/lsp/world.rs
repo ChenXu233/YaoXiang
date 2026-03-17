@@ -38,6 +38,19 @@ impl World {
         }
     }
 
+    /// 为新的 LSP 会话重置运行时缓存
+    ///
+    /// 清空符号索引、语义数据库和语义 tokens 缓存，
+    /// 然后重新加载标准库符号和内置类型。
+    pub fn reset_for_new_session(&mut self) {
+        self.symbol_index = SymbolIndex::new();
+        self.semantic_db = SemanticDB::default();
+        self.semantic_tokens_cache = SemanticTokensCache::new();
+
+        self.load_std_library_symbols(None);
+        self.load_builtin_types();
+    }
+
     /// 获取符号索引（不可变）
     pub fn symbol_index(&self) -> &SymbolIndex {
         &self.symbol_index
