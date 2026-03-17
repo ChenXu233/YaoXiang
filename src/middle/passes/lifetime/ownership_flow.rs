@@ -359,6 +359,7 @@ mod tests {
                         dst: Operand::Temp(0),
                         src: Operand::Arg(0),
                         field: 0,
+                        span: crate::util::span::Span::dummy(),
                     },
                     Instruction::Ret(Some(Operand::Temp(0))),
                 ],

@@ -211,6 +211,7 @@ impl CodegenContext {
             type_table,
             const_pool,
             code_section: output.code_section,
+            debug_section: None,
         })
     }
 

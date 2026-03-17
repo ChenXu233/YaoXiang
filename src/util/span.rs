@@ -117,6 +117,39 @@ impl fmt::Display for Span {
     }
 }
 
+/// Source file id in a [`SourceMap`].
+pub type FileId = u32;
+
+/// Span with source file context, used for debug info (e.g. runtime error mapping).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct DebugSpan {
+    pub file_id: FileId,
+    pub span: Span,
+}
+
+impl DebugSpan {
+    #[inline]
+    pub fn new(
+        file_id: FileId,
+        span: Span,
+    ) -> Self {
+        Self { file_id, span }
+    }
+
+    #[inline]
+    pub fn dummy() -> Self {
+        Self {
+            file_id: 0,
+            span: Span::dummy(),
+        }
+    }
+
+    #[inline]
+    pub fn is_dummy(&self) -> bool {
+        self.span.is_dummy()
+    }
+}
+
 /// Source file information
 #[derive(Debug, Clone)]
 pub struct SourceFile {
@@ -198,6 +231,42 @@ impl fmt::Display for SourceFile {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+/// Multi-file source storage for diagnostics and debug rendering.
+#[derive(Debug, Clone, Default)]
+pub struct SourceMap {
+    files: Vec<SourceFile>,
+}
+
+impl SourceMap {
+    #[inline]
+    pub fn new() -> Self {
+        Self { files: Vec::new() }
+    }
+
+    pub fn add_file(
+        &mut self,
+        name: String,
+        content: String,
+    ) -> FileId {
+        let id = self.files.len() as FileId;
+        self.files.push(SourceFile::new(name, content));
+        id
+    }
+
+    #[inline]
+    pub fn get(
+        &self,
+        file_id: FileId,
+    ) -> Option<&SourceFile> {
+        self.files.get(file_id as usize)
+    }
+
+    #[inline]
+    pub fn files(&self) -> &[SourceFile] {
+        &self.files
     }
 }
 

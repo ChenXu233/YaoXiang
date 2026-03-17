@@ -166,6 +166,7 @@ fn test_use_after_move_in_load_index() {
             dst: Operand::Temp(1),
             src: Operand::Local(0),
             index: Operand::Const(crate::middle::core::ir::ConstValue::Int(0)),
+            span: Span::dummy(),
         },
     ];
 

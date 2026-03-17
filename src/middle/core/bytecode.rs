@@ -638,7 +638,7 @@ pub struct BytecodeFunction {
     /// Exception handlers (try-catch blocks)
     pub exception_handlers: Vec<ExceptionHandler>,
     /// Debug info: mapping from IP to Span
-    pub debug_map: HashMap<usize, crate::util::span::Span>,
+    pub debug_map: HashMap<usize, crate::util::span::DebugSpan>,
 }
 
 /// Exception handler information
