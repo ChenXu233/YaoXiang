@@ -27,12 +27,75 @@ impl StdModule for ConvertModule {
     }
 
     fn exports(&self) -> Vec<NativeExport> {
-        vec![NativeExport::new(
-            "to_string",
-            "std.convert.to_string",
-            "(value) -> String",
-            native_to_string,
-        )]
+        vec![
+            NativeExport::new(
+                "to_string",
+                "std.convert.to_string",
+                "(value) -> String",
+                native_to_string,
+            ),
+            // Built-in Stringable bindings for primitive/runtime core types.
+            NativeExport::new(
+                "int.to_string",
+                "int.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "float.to_string",
+                "float.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "bool.to_string",
+                "bool.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "char.to_string",
+                "char.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "string.to_string",
+                "string.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "list.to_string",
+                "list.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "dict.to_string",
+                "dict.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "tuple.to_string",
+                "tuple.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "set.to_string",
+                "set.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+            NativeExport::new(
+                "range.to_string",
+                "range.to_string",
+                "(self) -> String",
+                native_to_string,
+            ),
+        ]
     }
 }
 

@@ -1005,7 +1005,10 @@ impl StatementChecker {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
             MonoType::List(elem) => *elem,
+            MonoType::Range { elem_type } => *elem_type,
             MonoType::String => MonoType::Char,
+            MonoType::Dict(key_ty, value_ty) => MonoType::Tuple(vec![*key_ty, *value_ty]),
+            MonoType::Tuple(_) => self.solver.new_var(),
             _ => self.solver.new_var(),
         };
 
@@ -1253,7 +1256,9 @@ impl StatementChecker {
                             let _ = self.solver.unify(&left_ty, &right_ty);
                             left_ty
                         };
-                        Ok(MonoType::List(Box::new(elem_ty)))
+                        Ok(MonoType::Range {
+                            elem_type: Box::new(elem_ty),
+                        })
                     }
                     _ => {
                         // 其他操作符委托给 ExpressionInferrer

@@ -1825,7 +1825,10 @@ impl AstToIrGenerator {
 
             Ok(())
         } else if let Some(
-            _iter_ty @ (MonoType::List(_) | MonoType::Tuple(_) | MonoType::Dict(_, _)),
+            _iter_ty @ (MonoType::List(_)
+            | MonoType::Tuple(_)
+            | MonoType::Dict(_, _)
+            | MonoType::Range { .. }),
         ) = self.get_expr_mono_type(iterable)
         {
             // 使用迭代器协议的 For 循环
@@ -2034,6 +2037,23 @@ impl AstToIrGenerator {
         expr: &ast::Expr,
     ) -> Option<MonoType> {
         match expr {
+            ast::Expr::BinOp {
+                op: ast::BinOp::Range,
+                left,
+                right,
+                ..
+            } => {
+                let left_ty = self.get_expr_mono_type(left).unwrap_or(MonoType::Int(64));
+                let right_ty = self.get_expr_mono_type(right).unwrap_or(MonoType::Int(64));
+                let elem_type = if left_ty == right_ty {
+                    left_ty
+                } else {
+                    MonoType::Int(64)
+                };
+                Some(MonoType::Range {
+                    elem_type: Box::new(elem_type),
+                })
+            }
             ast::Expr::Var(name, _) => {
                 if let Some(ref type_result) = self.type_result {
                     if let Some(mono_type) = type_result.local_var_types.get(name) {
