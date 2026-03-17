@@ -261,7 +261,7 @@ pub fn run_file_with_diagnostics(
                                     let diagnostic = diag.build();
                                     let output = render_compile_error(
                                         &diagnostic.message,
-                                        &source_file,
+                                        source_file,
                                         Some(&diagnostic),
                                     );
                                     eprintln!("{}", output);
@@ -273,7 +273,7 @@ pub fn run_file_with_diagnostics(
                                             .build();
                                     let output = render_compile_error(
                                         &diag.message,
-                                        &source_file,
+                                        source_file,
                                         Some(&diag),
                                     );
                                     eprintln!("{}", output);
@@ -305,7 +305,7 @@ pub fn run_file_with_diagnostics(
         Err(e) => {
             // 使用渲染器输出美化后的错误
             eprintln!();
-            let output = render_compile_error(e.message(), &source_file, e.diagnostic());
+            let output = render_compile_error(e.message(), source_file, e.diagnostic());
             eprintln!("{}", output);
             return Err(anyhow::anyhow!("Compilation failed"));
         }

@@ -207,7 +207,7 @@ impl DeadCodeAnalyzer {
         for name in semantic_db.defined_symbols() {
             if let Some(refs) = semantic_db.get_symbol_refs(name) {
                 self.references
-                    .insert(name.clone(), refs.iter().map(|loc| loc.clone()).collect());
+                    .insert(name.clone(), refs.iter().cloned().collect());
             }
         }
     }
@@ -475,7 +475,7 @@ impl DeadCodeAnalyzer {
 
             // 也从 AST 引用中查找
             // 如果某个符号被引用，我们需要追踪它引用的其他符号
-            for (def_name, _) in &self.all_defs {
+            for def_name in self.all_defs.keys() {
                 // 如果 def_name 被引用过，添加到队列
                 if ast_references.contains(def_name) && !reachable.contains(def_name) {
                     queue.push_back(def_name.clone());

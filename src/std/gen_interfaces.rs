@@ -13,7 +13,7 @@ fn generate_interface_content(module: &dyn StdModule) -> String {
     // 文件头注释
     output.push_str(&format!(
         "// {}.yx - 标准库 {} 模块接口\n",
-        module_path.split('.').last().unwrap_or(module_path),
+        module_path.split('.').next_back().unwrap_or(module_path),
         module_path
     ));
     output.push_str("// 仅供 LSP 跳转和类型查看，不参与实际执行\n");
