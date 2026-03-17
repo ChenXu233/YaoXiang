@@ -8,7 +8,7 @@ use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
-use crate::util::span::Span;
+use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::{HashMap, HashSet};
 
 /// IR 到字节码翻译器
@@ -34,6 +34,9 @@ pub struct Translator {
 
     /// 是否生成运行时调试信息（IP -> Span）
     generate_debug_info: bool,
+
+    /// Debug info 关联的源文件 id（用于多文件/模块定位）
+    source_file_id: FileId,
 }
 
 impl Translator {
@@ -55,6 +58,7 @@ impl Translator {
             closure_function_offset: None,
             function_name_to_idx: None,
             generate_debug_info: false,
+            source_file_id: 0,
         }
     }
 
@@ -63,6 +67,13 @@ impl Translator {
         enable: bool,
     ) {
         self.generate_debug_info = enable;
+    }
+
+    pub fn set_source_file_id(
+        &mut self,
+        file_id: FileId,
+    ) {
+        self.source_file_id = file_id;
     }
 
     /// 注册一个 native 函数名
@@ -155,7 +166,10 @@ impl Translator {
                 if self.generate_debug_info {
                     if let Some(span) = Self::extract_span(instr) {
                         if !span.is_dummy() {
-                            debug_map.insert(current_bytecode_idx, span);
+                            debug_map.insert(
+                                current_bytecode_idx,
+                                DebugSpan::new(self.source_file_id, span),
+                            );
                         }
                     }
                 }
@@ -197,6 +211,8 @@ impl Translator {
             Instruction::StoreIndex { span, .. } => Some(*span),
             Instruction::Div { span, .. } => Some(*span),
             Instruction::Mod { span, .. } => Some(*span),
+            Instruction::LoadField { span, .. } => Some(*span),
+            Instruction::LoadIndex { span, .. } => Some(*span),
             _ => None,
         }
     }
@@ -306,11 +322,15 @@ impl Translator {
             Free(_) => Ok(BytecodeInstruction::new(Opcode::Nop, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
 
-            LoadField { dst, src, field } => self.translate_load_field(dst, src, *field),
+            LoadField {
+                dst, src, field, ..
+            } => self.translate_load_field(dst, src, *field),
             StoreField {
                 dst, field, src, ..
             } => self.translate_store_field(dst, *field, src),
-            LoadIndex { dst, src, index } => self.translate_load_index(dst, src, index),
+            LoadIndex {
+                dst, src, index, ..
+            } => self.translate_load_index(dst, src, index),
             StoreIndex {
                 dst, index, src, ..
             } => self.translate_store_index(dst, index, src),

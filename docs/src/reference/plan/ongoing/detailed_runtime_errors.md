@@ -1,6 +1,6 @@
 # 运行时详细错误追踪：分离存储与延迟渲染（Detached Storage & Deferred Loading）
 
-> 状态：核心链路已实现（2026-03-15）；可选序列化 / CLI 开关 / 更全面的 Span 覆盖仍属于后续工作。
+> 状态：核心链路已实现（2026-03-15）；DebugSection / CLI 开关已实现（2026-03）；更全面的 Span 覆盖仍属于后续工作。
 
 ## 1. 背景与目标
 当前姚相 (YaoXiang) 解释器在抛出运行时错误（例如 `Runtime error: Function not found: int.to_string`）时，仅能输出函数名和指令指针（IP），如 `at main (ip: 0)`。这导致开发者难以直观地将错误定位到具体的源代码行和列。
@@ -69,12 +69,12 @@ pub struct BytecodeFunction {
 ## 5. 任务分解清单 (Checklist)
 - [x] **Data Model准备**：`BytecodeFunction.debug_map` 与 `FunctionCode.debug_map` 数据链路贯通。
 - [x] **代码生成对齐**：Translator 在生成字节码时按 `ip` 收集 `Span`（可选开关）。
-- [ ] **配置与可选序列化**：已提供 `CodegenContext::set_generate_debug_info(bool)`；但 `.42` 写入/读取 DebugSection、CLI `--debug-info` 开关仍未实现。
+- [x] **配置与可选序列化**：`CodegenContext::set_generate_debug_info(bool)` + `.42` DebugSection 读写 + CLI `--debug-info` 已实现（2026-03）。
 - [x] **顶层错误捕获层构建**：`run_file_with_diagnostics` 捕获 `ExecutorError` 并调用 `render_runtime_error`。
 - [x] **终端渲染**：使用 `TextEmitter` 输出带源码片段高亮的运行时错误，并附加 stack trace。
 
 ## 6. 已知限制与后续工作
-1. **Span 覆盖面**：当前仅对部分 IR 指令（调用、除法/取模、部分 Store）提供 `Span`，因此并非所有运行时错误都能精确定位到源码位置；可逐步为更多 IR 指令补齐 `Span` 并纳入 DebugMap。
-2. **多文件/模块**：目前 `Span` 仅包含行列信息，不包含文件 ID；若要支持跨模块/多源文件，需要引入 `SourceMap`（`file_id -> path/content`）并在 DebugMap 中记录来源文件。
-3. **字节码文件 DebugSection**：若要在离线 `.42` 执行/调试时保留定位信息，需要扩展 `BytecodeFile` 格式，加入可选 DebugSection 并实现读写。
-4. **CLI 开关**：建议为 `run` / `build-bytecode` 等命令增加 `--debug-info`，以控制 DebugMap 的生成与（未来的）序列化。
+1. **Span 覆盖面**：已在阶段 1 的基础上扩展到 `LoadField/LoadIndex`（并纳入 DebugMap）；仍可继续为更多 IR 指令补齐 `Span` 以覆盖更多运行时错误类型。
+2. **多文件/模块**：`Span` 本身仍仅包含行列信息，但 DebugMap 已升级为 `ip -> (file_id + span)`，并引入 `SourceMap`（`file_id -> path/content`）用于跨文件渲染；后续可在编译管线引入真实的多文件 `file_id` 分配策略。
+3. **字节码文件 DebugSection**：已扩展 `.42` 格式加入可选 DebugSection（sources + ip 映射）并实现读写；可用于离线执行/调试时保留定位信息。
+4. **CLI 开关**：已为 `run` / `build` 增加 `--debug-info`，用于控制 DebugMap 的生成与 `.42` DebugSection 的嵌入。

@@ -2768,6 +2768,7 @@ impl AstToIrGenerator {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
                             field: field_index,
+                            span: *span,
                         });
                     }
                 } else {
@@ -2794,6 +2795,7 @@ impl AstToIrGenerator {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
                             field: field_index,
+                            span: *span,
                         });
                     }
                 }
@@ -2827,7 +2829,7 @@ impl AstToIrGenerator {
                     });
                 }
             }
-            Expr::Index { expr, index, .. } => {
+            Expr::Index { expr, index, span } => {
                 let src_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, src_reg, instructions, constants)?;
 
@@ -2838,6 +2840,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     src: Operand::Local(src_reg),
                     index: Operand::Local(index_reg),
+                    span: *span,
                 });
             }
             Expr::Return(expr, _) => {

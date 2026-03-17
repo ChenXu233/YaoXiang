@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::formatter::run_format_command;
-use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
+use yaoxiang::{dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
     render_explain_output, run_check_command_once, run_check_watch_command,
     run_file_with_diagnostics,
@@ -91,6 +91,10 @@ enum Commands {
         /// Source file to run
         #[arg(value_name = "FILE")]
         file: PathBuf,
+
+        /// Generate debug info for runtime errors (spans/source mapping)
+        #[arg(long)]
+        debug_info: bool,
     },
 
     /// Evaluate YaoXiang code from command line (not supported well yet)
@@ -178,6 +182,10 @@ enum Commands {
         /// Output file (optional, defaults to <input>.42)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Embed debug section into .42 (sources + ip->span mapping)
+        #[arg(long)]
+        debug_info: bool,
     },
 
     /// Explain an error code
@@ -303,8 +311,8 @@ fn main() -> Result<()> {
     }
 
     match command {
-        Commands::Run { file } => {
-            run_file_with_diagnostics(&file)?;
+        Commands::Run { file, debug_info } => {
+            run_file_with_diagnostics(&file, debug_info)?;
         }
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
@@ -366,13 +374,17 @@ fn main() -> Result<()> {
         Commands::Dump { file } => {
             dump_bytecode(&file).with_context(|| format!("Failed to dump: {}", file.display()))?;
         }
-        Commands::Build { file, output } => {
+        Commands::Build {
+            file,
+            output,
+            debug_info,
+        } => {
             let output_path = output.unwrap_or_else(|| {
                 let mut path = file.clone();
                 path.set_extension("42");
                 path
             });
-            build_bytecode(&file, &output_path)
+            yaoxiang::build_bytecode_with_options(&file, &output_path, debug_info)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
         Commands::Explain { code, json, lang } => {

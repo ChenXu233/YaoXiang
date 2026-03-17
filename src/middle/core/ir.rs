@@ -188,6 +188,8 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         field: usize,
+        /// Source span for error reporting
+        span: Span,
     },
     StoreField {
         dst: Operand,
@@ -204,6 +206,8 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         index: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     StoreIndex {
         dst: Operand,

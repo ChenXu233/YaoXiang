@@ -565,7 +565,9 @@ impl OwnershipAnalyzer {
             }
 
             // 加载：定义 dst，src 活跃
-            Instruction::LoadIndex { dst, src, index } => {
+            Instruction::LoadIndex {
+                dst, src, index, ..
+            } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 block_live.insert(index.clone());

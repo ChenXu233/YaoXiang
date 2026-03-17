@@ -112,6 +112,15 @@ pub fn build_bytecode(
     source_path: &Path,
     output_path: &Path,
 ) -> Result<()> {
+    build_bytecode_with_options(source_path, output_path, false)
+}
+
+/// Build bytecode file (.42) with options
+pub fn build_bytecode_with_options(
+    source_path: &Path,
+    output_path: &Path,
+    debug_info: bool,
+) -> Result<()> {
     use crate::middle::passes::codegen::CodegenContext;
 
     let source_path_str = source_path.display().to_string();
@@ -128,9 +137,21 @@ pub fn build_bytecode(
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
-    let bytecode_file = ctx
+    ctx.set_generate_debug_info(debug_info);
+    let mut bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+
+    if debug_info {
+        let mut sources = crate::util::span::SourceMap::new();
+        sources.add_file(source_path_str.clone(), source.clone());
+        bytecode_file.debug_section = Some(
+            crate::middle::passes::codegen::bytecode::DebugSection::from_sources_and_functions(
+                sources,
+                &bytecode_file.code_section.functions,
+            ),
+        );
+    }
 
     // Write to file
     let mut file = fs::File::create(output_path)

@@ -397,7 +397,9 @@ impl InstantiationGraph {
                 self.extract_type_from_operand(src, params, locals, deps);
             }
             // 加载索引
-            Instruction::LoadIndex { dst, src, index } => {
+            Instruction::LoadIndex {
+                dst, src, index, ..
+            } => {
                 self.extract_type_from_operand(dst, params, locals, deps);
                 self.extract_type_from_operand(src, params, locals, deps);
                 self.extract_type_from_operand(index, params, locals, deps);
