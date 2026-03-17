@@ -206,8 +206,7 @@ impl DeadCodeAnalyzer {
         // 从 SemanticDB 获取所有符号引用
         for name in semantic_db.defined_symbols() {
             if let Some(refs) = semantic_db.get_symbol_refs(name) {
-                self.references
-                    .insert(name.clone(), refs.iter().cloned().collect());
+                self.references.insert(name.clone(), refs.to_vec());
             }
         }
     }
@@ -387,13 +386,16 @@ impl DeadCodeAnalyzer {
                 }
                 StmtKind::Var {
                     name: _,
-                    initializer,
+                    initializer: Some(expr),
                     ..
                 } => {
-                    if let Some(expr) = initializer {
-                        collect_from_expr(expr, referenced);
-                    }
+                    collect_from_expr(expr, referenced);
                 }
+                StmtKind::Var {
+                    name: _,
+                    initializer: None,
+                    ..
+                } => {}
                 StmtKind::Fn { name, body, .. } => {
                     referenced.insert(name.clone());
                     collect_from_block(

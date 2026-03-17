@@ -58,7 +58,8 @@ pub fn handle_rename(
         }
     }
 
-    // 构建 changes HashMap (使用 Uri 作为键)
+    // 构建 changes HashMap
+    #[allow(clippy::mutable_key_type)]
     let mut changes: HashMap<Uri, Vec<TextEdit>> = HashMap::new();
 
     // 为每个文件生成 TextEdit

@@ -174,6 +174,7 @@ fn format_use(
 }
 
 /// 格式化函数定义语句
+#[allow(clippy::too_many_arguments)]
 fn format_fn_stmt(
     name: &str,
     generic_params: &[GenericParam],

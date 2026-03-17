@@ -719,11 +719,13 @@ impl TypeChecker {
 
         let mut names = HashSet::new();
         for stmt in &module.items {
-            if let StmtKind::TypeDef { definition, .. } = &stmt.kind {
-                if let Type::Variant(variants) = definition {
-                    for v in variants {
-                        names.insert(v.name.clone());
-                    }
+            if let StmtKind::TypeDef {
+                definition: Type::Variant(variants),
+                ..
+            } = &stmt.kind
+            {
+                for v in variants {
+                    names.insert(v.name.clone());
                 }
             }
         }
@@ -1076,6 +1078,7 @@ impl TypeChecker {
             .is_some_and(|poly| matches!(poly.body, MonoType::Struct(_)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn collect_call_target_tokens(
         &mut self,
         file_path: &str,
