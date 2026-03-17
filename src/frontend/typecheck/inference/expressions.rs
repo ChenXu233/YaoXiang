@@ -299,7 +299,9 @@ impl<'a> ExpressionInferrer<'a> {
                     let _ = self.solver.unify(left, right);
                     left.clone()
                 };
-                Ok(MonoType::List(Box::new(elem_ty)))
+                Ok(MonoType::Range {
+                    elem_type: Box::new(elem_ty),
+                })
             }
             BinOp::Assign => Ok(MonoType::Void),
         }
@@ -681,6 +683,8 @@ impl<'a> ExpressionInferrer<'a> {
 
                 let element_type = match &iter_ty {
                     MonoType::List(elem_ty) => *elem_ty.clone(),
+                    MonoType::Range { elem_type } => *elem_type.clone(),
+                    MonoType::String => MonoType::Char,
                     MonoType::Tuple(_elems) => self.solver.new_var(),
                     MonoType::Dict(key_ty, value_ty) => {
                         MonoType::Tuple(vec![*key_ty.clone(), *value_ty.clone()])
