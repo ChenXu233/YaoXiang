@@ -106,7 +106,7 @@ impl DebugSection {
             out.write_all(&(entries.len() as u32).to_le_bytes())?;
             for (ip, ds) in entries {
                 out.write_all(&(ip as u32).to_le_bytes())?;
-                out.write_all(&(ds.file_id as u32).to_le_bytes())?;
+                out.write_all(&ds.file_id.to_le_bytes())?;
                 write_position(&mut out, ds.span.start)?;
                 write_position(&mut out, ds.span.end)?;
             }

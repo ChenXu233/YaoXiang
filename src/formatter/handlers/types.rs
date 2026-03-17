@@ -35,10 +35,7 @@ pub fn format_type(ty: &Type) -> String {
                 .collect();
             items.join(" | ")
         }
-        Type::Enum(variants) => {
-            let items = variants.join(" | ");
-            items
-        }
+        Type::Enum(variants) => variants.join(" | "),
         Type::Variant(defs) => {
             let items: Vec<String> = defs
                 .iter()

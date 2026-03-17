@@ -237,7 +237,7 @@ impl LocalRuntime {
         // Deduplicate control deps (keep order stable) and avoid duplicating hard deps.
         let hard_set: std::collections::HashSet<TaskId> = hard_deps.iter().copied().collect();
         control_deps.retain(|d| !hard_set.contains(d));
-        let control_deps = dedup_stable(control_deps.into_iter());
+        let control_deps = dedup_stable(control_deps);
 
         // All deps for reachability/cycle checks.
         let deps = hard_deps
@@ -384,7 +384,7 @@ impl LocalRuntime {
             ) {
                 return Err(RuntimeError::TaskAlreadyFinished(task));
             }
-            if task_node.deps.iter().any(|d| *d == dep) {
+            if task_node.deps.contains(&dep) {
                 return Ok(());
             }
 
@@ -833,10 +833,11 @@ impl LocalRuntime {
                         others,
                     })) = node.outcome.as_mut()
                     {
-                        if matches!(reason, TaskCancelReason::DependencyFailed { .. }) {
-                            if *primary != dep_task && !others.contains(&dep_task) {
-                                others.push(dep_task);
-                            }
+                        if matches!(reason, TaskCancelReason::DependencyFailed { .. })
+                            && *primary != dep_task
+                            && !others.contains(&dep_task)
+                        {
+                            others.push(dep_task);
                         }
                     }
                     if let Some(TaskOutcome::Cancelled(TaskCancelReason::DependencyCancelled {
@@ -844,10 +845,11 @@ impl LocalRuntime {
                         others,
                     })) = node.outcome.as_mut()
                     {
-                        if matches!(reason, TaskCancelReason::DependencyCancelled { .. }) {
-                            if *primary != dep_task && !others.contains(&dep_task) {
-                                others.push(dep_task);
-                            }
+                        if matches!(reason, TaskCancelReason::DependencyCancelled { .. })
+                            && *primary != dep_task
+                            && !others.contains(&dep_task)
+                        {
+                            others.push(dep_task);
                         }
                     }
                     continue;
@@ -856,18 +858,20 @@ impl LocalRuntime {
                     // Merge reasons into pending cancellation if possible.
                     if let Some(existing) = node.cancel_pending.as_mut() {
                         if let TaskCancelReason::DependencyFailed { primary, others } = existing {
-                            if matches!(reason, TaskCancelReason::DependencyFailed { .. }) {
-                                if *primary != dep_task && !others.contains(&dep_task) {
-                                    others.push(dep_task);
-                                }
+                            if matches!(reason, TaskCancelReason::DependencyFailed { .. })
+                                && *primary != dep_task
+                                && !others.contains(&dep_task)
+                            {
+                                others.push(dep_task);
                             }
                         }
                         if let TaskCancelReason::DependencyCancelled { primary, others } = existing
                         {
-                            if matches!(reason, TaskCancelReason::DependencyCancelled { .. }) {
-                                if *primary != dep_task && !others.contains(&dep_task) {
-                                    others.push(dep_task);
-                                }
+                            if matches!(reason, TaskCancelReason::DependencyCancelled { .. })
+                                && *primary != dep_task
+                                && !others.contains(&dep_task)
+                            {
+                                others.push(dep_task);
                             }
                         }
                     }
