@@ -31,8 +31,8 @@ pub fn format_comments_between(
 pub fn normalize_single_line_comment(content: &str) -> String {
     if content.starts_with("// ") || content.starts_with("///") {
         content.to_string()
-    } else if content.starts_with("//") {
-        format!("// {}", &content[2..])
+    } else if let Some(stripped) = content.strip_prefix("//") {
+        format!("// {}", stripped)
     } else {
         content.to_string()
     }

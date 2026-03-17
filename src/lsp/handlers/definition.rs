@@ -89,9 +89,7 @@ pub fn handle_definition(
     }
 
     // 优先返回同文件的定义
-    let locations = if same_file.len() == 1 {
-        same_file
-    } else if !same_file.is_empty() {
+    let locations = if !same_file.is_empty() {
         same_file
     } else {
         other_files

@@ -28,15 +28,15 @@ const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 
 #[derive(Debug)]
 pub enum InterpreterTask {
-    CallStatic {
+    Static {
         func_name: String,
         args: Vec<RuntimeValue>,
     },
-    CallNative {
+    Native {
         func_name: String,
         args: Vec<RuntimeValue>,
     },
-    CallDyn {
+    Dyn {
         func: FunctionValue,
         args: Vec<RuntimeValue>,
     },
@@ -416,13 +416,13 @@ impl Interpreter {
         };
 
         let exec_result = match task {
-            InterpreterTask::CallStatic { func_name, args } => {
+            InterpreterTask::Static { func_name, args } => {
                 self.call_static_by_name(&func_name, &args)
             }
-            InterpreterTask::CallNative { func_name, args } => {
+            InterpreterTask::Native { func_name, args } => {
                 self.call_native_by_name(&func_name, &args)
             }
-            InterpreterTask::CallDyn { func, args } => (|| {
+            InterpreterTask::Dyn { func, args } => (|| {
                 let mut resolved = Vec::with_capacity(args.len());
                 for arg in &args {
                     resolved.push(self.force_value_clone(arg)?);

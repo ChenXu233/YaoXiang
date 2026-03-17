@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 //! Executor module for YaoXiang bytecode interpreter
 //!
 //! This module provides the main interpreter implementation split into:

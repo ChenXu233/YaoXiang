@@ -185,7 +185,7 @@ impl Executor for Interpreter {
 
                     let deps = self.deps_from_args(&call_args);
                     let task_id = self.schedule_task(
-                        InterpreterTask::CallDyn {
+                        InterpreterTask::Dyn {
                             func: func_value.clone(),
                             args: call_args,
                         },
@@ -400,12 +400,12 @@ impl Executor for Interpreter {
 
                     let task_id = self.schedule_task(
                         if is_ffi {
-                            InterpreterTask::CallNative {
+                            InterpreterTask::Native {
                                 func_name: func_name.clone(),
                                 args: call_args.clone(),
                             }
                         } else {
-                            InterpreterTask::CallStatic {
+                            InterpreterTask::Static {
                                 func_name: func_name.clone(),
                                 args: call_args.clone(),
                             }
@@ -414,7 +414,6 @@ impl Executor for Interpreter {
                             deps,
                             resources,
                             label: Some(Arc::<str>::from(func_name.as_str())),
-                            ..TaskMeta::default()
                         },
                     )?;
 
@@ -486,7 +485,7 @@ impl Executor for Interpreter {
 
                     let deps = self.deps_from_args(&call_args);
                     let task_id = self.schedule_task(
-                        InterpreterTask::CallNative {
+                        InterpreterTask::Native {
                             func_name: func_name.clone(),
                             args: call_args.clone(),
                         },
@@ -494,7 +493,6 @@ impl Executor for Interpreter {
                             deps,
                             resources: vec![ResourceKey::from("ffi")],
                             label: Some(Arc::<str>::from(func_name.as_str())),
-                            ..TaskMeta::default()
                         },
                     )?;
 

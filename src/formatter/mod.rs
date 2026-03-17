@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 //! YaoXiang 代码格式化工具
 //!
 //! 基于 AST + 源映射方案实现代码格式化。
