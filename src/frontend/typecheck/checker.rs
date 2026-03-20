@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::core::parser::ast::Module;
 use crate::frontend::core::type_system::{MonoType, PolyType};
 use crate::frontend::type_level::auto_derive;
+use crate::frontend::type_level::const_generics::eval::{ConstFunction, ConstExpr};
 
 use super::inference;
 use super::semantic_db;
@@ -38,11 +39,81 @@ impl TypeChecker {
         add_std_traits(&mut env);
         add_native_function_types(&mut env);
 
+        // 注册预定义的 const 函数
+        Self::register_predefined_const_functions(&mut env);
+
         Self {
             env,
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
         }
+    }
+
+    /// 注册预定义的 const 函数
+    /// 这些函数用于值依赖类型的编译期求值
+    fn register_predefined_const_functions(env: &mut TypeEnvironment) {
+        use crate::frontend::type_level::const_generics::eval::ConstBinOp;
+
+        // 注册 factorial 函数
+        let factorial = ConstFunction::new(
+            "factorial".to_string(),
+            vec!["n".to_string()],
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: ConstBinOp::Lte,
+                    lhs: Box::new(ConstExpr::Var("n".to_string())),
+                    rhs: Box::new(ConstExpr::Int(1)),
+                }),
+                true_branch: Box::new(ConstExpr::Int(1)),
+                false_branch: Box::new(ConstExpr::BinOp {
+                    op: ConstBinOp::Mul,
+                    lhs: Box::new(ConstExpr::Var("n".to_string())),
+                    rhs: Box::new(ConstExpr::Call {
+                        name: "factorial".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: ConstBinOp::Sub,
+                            lhs: Box::new(ConstExpr::Var("n".to_string())),
+                            rhs: Box::new(ConstExpr::Int(1)),
+                        }],
+                    }),
+                }),
+            },
+        );
+        env.add_const_function("factorial".to_string(), factorial);
+
+        // 注册 fibonacci 函数
+        let fibonacci = ConstFunction::new(
+            "fibonacci".to_string(),
+            vec!["n".to_string()],
+            ConstExpr::If {
+                condition: Box::new(ConstExpr::BinOp {
+                    op: ConstBinOp::Lte,
+                    lhs: Box::new(ConstExpr::Var("n".to_string())),
+                    rhs: Box::new(ConstExpr::Int(1)),
+                }),
+                true_branch: Box::new(ConstExpr::Var("n".to_string())),
+                false_branch: Box::new(ConstExpr::BinOp {
+                    op: ConstBinOp::Add,
+                    lhs: Box::new(ConstExpr::Call {
+                        name: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: ConstBinOp::Sub,
+                            lhs: Box::new(ConstExpr::Var("n".to_string())),
+                            rhs: Box::new(ConstExpr::Int(1)),
+                        }],
+                    }),
+                    rhs: Box::new(ConstExpr::Call {
+                        name: "fibonacci".to_string(),
+                        args: vec![ConstExpr::BinOp {
+                            op: ConstBinOp::Sub,
+                            lhs: Box::new(ConstExpr::Var("n".to_string())),
+                            rhs: Box::new(ConstExpr::Int(2)),
+                        }],
+                    }),
+                }),
+            },
+        );
+        env.add_const_function("fibonacci".to_string(), fibonacci);
     }
 
     /// 获取环境引用

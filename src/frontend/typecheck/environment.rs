@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::type_system::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::type_level::const_generics::eval::ConstFunction;
 
 use super::overload;
 use super::types::ImportInfo;
@@ -49,6 +50,9 @@ pub struct TypeEnvironment {
     pub native_signatures: HashMap<String, MonoType>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: super::super::module::registry::ModuleRegistry,
+    /// Const 函数表 - 存储编译期常量函数
+    /// 用于值依赖类型的编译期求值
+    pub const_functions: HashMap<String, ConstFunction>,
 }
 
 impl TypeEnvironment {
@@ -246,5 +250,31 @@ impl TypeEnvironment {
         name: &str,
     ) -> bool {
         self.native_signatures.contains_key(name)
+    }
+
+    /// 注册 const 函数
+    /// 用于值依赖类型的编译期求值
+    pub fn add_const_function(
+        &mut self,
+        name: String,
+        func: ConstFunction,
+    ) {
+        self.const_functions.insert(name, func);
+    }
+
+    /// 获取 const 函数
+    pub fn get_const_function(
+        &self,
+        name: &str,
+    ) -> Option<&ConstFunction> {
+        self.const_functions.get(name)
+    }
+
+    /// 检查是否是 const 函数
+    pub fn is_const_function(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.const_functions.contains_key(name)
     }
 }
