@@ -104,14 +104,24 @@ impl DeadCodeAnalyzer {
                     name,
                     type_name,
                     is_pub,
+                    params,
+                    body,
+                    type_annotation,
                     ..
                 } => {
                     let is_method = type_name.is_some();
+
+                    // 判定是否为类型构造器：参数为空、body为空、有类型注解
+                    let is_type_constructor =
+                        type_annotation.is_some() && params.is_empty() && body.0.is_empty();
+
                     let (def_name, kind) = if is_method {
                         let full_name = format!("{}.{}", type_name.as_ref().unwrap(), name);
                         (full_name, SymbolKind::Method)
+                    } else if is_type_constructor {
+                        // 类型构造器标记为类型，不是入口点
+                        (name.clone(), SymbolKind::Type)
                     } else {
-                        // 根据 is_pub 和是否存在 type_annotation 来判断是函数还是类型
                         (name.clone(), SymbolKind::Function)
                     };
 
@@ -122,15 +132,15 @@ impl DeadCodeAnalyzer {
                         is_exported: *is_pub,
                     };
 
-                    // main 函数是入口点
-                    if !is_method && name == "main" {
+                    // main 函数是入口点（但类型构造器不是）
+                    if !is_method && !is_type_constructor && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    // pub 函数也是入口点
-                    if *is_pub {
+                    // pub 函数也是入口点（但类型构造器不是，因为它不可调用）
+                    if *is_pub && kind == SymbolKind::Function {
                         self.entry_points.insert(def_name.clone());
                     }
-                    // 类型是入口点（可被实例化）
+                    // 类型本身是入口点（可被实例化）
                     if kind == SymbolKind::Type {
                         self.entry_points.insert(def_name.clone());
                     }

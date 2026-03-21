@@ -448,28 +448,33 @@ impl StatementChecker {
                 type_name,
                 generic_params: _,
                 type_annotation,
-                eval: _,
+                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
-                method_type: _,
+                method_type,
             } => {
-                // 根据是否有 type_name 来区分函数和方法绑定
-                let body = Block {
+                // 根据是否有 type_name 来区分方法绑定和其他绑定
+                // 注意：不能根据 params 是否为空来判断，因为空参数的函数也是函数
+                let body_block = Block {
                     stmts: stmts.to_vec(),
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                if type_name.is_some() {
-                    // MethodBind - 暂时跳过，后续会实现
-                    Ok(())
+                if let Some(_) = type_name {
+                    // 方法绑定：使用 method_type 作为签名
+                    // method_type 包含完整的 (params) -> ReturnType 签名
+                    let type_ann = method_type.as_ref();
+                    self.check_fn_stmt(name, type_ann, params, stmts, body_block, stmt.span)
                 } else {
+                    // 函数绑定（包括空参数的函数）
+                    // 使用 type_annotation 作为签名
                     self.check_fn_stmt(
                         name,
                         type_annotation.as_ref(),
                         params,
                         stmts,
-                        body,
+                        body_block,
                         stmt.span,
                     )
                 }
@@ -479,7 +484,13 @@ impl StatementChecker {
                 type_annotation,
                 initializer,
                 ..
-            } => self.check_var_stmt(name, type_annotation.as_ref(), initializer.as_deref()),
+            } => self.check_var_stmt(
+                name,
+                type_annotation.as_ref(),
+                None,
+                &[],
+                initializer.as_deref(),
+            ),
             crate::frontend::core::parser::ast::StmtKind::For {
                 var,
                 var_mut,
@@ -658,21 +669,19 @@ impl StatementChecker {
     }
 
     /// 检查变量语句
+    ///
+    /// 处理 Binding 类型的变量声明，支持编译期求值标记（eval）。
     fn check_var_stmt(
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        eval: Option<crate::frontend::core::parser::ast::EvalMode>,
+        prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
     ) -> Result<(), Box<Diagnostic>> {
-        // 顶层变量不支持函数调用检测
-        if self.is_top_level {
-            if let Some(init_expr) = initializer {
-                if self.contains_function_call(init_expr) {
-                    return Err(Box::new(
-                        ErrorCodeDefinition::top_level_function_call().build(),
-                    ));
-                }
-            }
+        // 处理 prelude 语句（编译期求值部分）
+        for stmt in prelude_stmts {
+            self.check_stmt(stmt)?;
         }
 
         let ty = match (initializer, type_annotation) {
@@ -687,6 +696,10 @@ impl StatementChecker {
             (None, None) => self.solver.new_var(),
         };
 
+        // 编译期求值标记：Eager 模式立即求值，Block 模式延迟，Auto 根据上下文推断
+        // 目前 eval 字段主要用于语义高亮和 IDE 支持，求值逻辑在 IR 生成阶段处理
+        let _ = eval;
+
         if self.scope.var_in_current_scope(name) {
             // 统一变量类型并写回 scope，确保后续类型推断正确
             self.assign_var(name, ty);
@@ -700,113 +713,6 @@ impl StatementChecker {
 
         self.scope.add_var(name.to_string(), PolyType::mono(ty));
         Ok(())
-    }
-
-    /// 检测表达式是否包含函数调用（递归）
-    fn contains_function_call(
-        &self,
-        expr: &Expr,
-    ) -> bool {
-        match expr {
-            Expr::Call { .. } => true,
-            Expr::BinOp { left, right, .. } => {
-                self.contains_function_call(left) || self.contains_function_call(right)
-            }
-            Expr::UnOp { expr: inner, .. } => self.contains_function_call(inner),
-            Expr::If {
-                condition,
-                then_branch,
-                elif_branches,
-                else_branch,
-                ..
-            } => {
-                self.contains_function_call(condition)
-                    || self.contains_function_call_block(then_branch)
-                    || elif_branches.iter().any(|(cond, block)| {
-                        self.contains_function_call(cond)
-                            || self.contains_function_call_block(block)
-                    })
-                    || else_branch
-                        .as_ref()
-                        .map(|b| self.contains_function_call_block(b))
-                        .unwrap_or(false)
-            }
-            Expr::Match {
-                expr: match_expr,
-                arms,
-                ..
-            } => {
-                self.contains_function_call(match_expr)
-                    || arms
-                        .iter()
-                        .any(|arm| self.contains_function_call_block(&arm.body))
-            }
-            Expr::For { iterable, body, .. } => {
-                self.contains_function_call(iterable) || self.contains_function_call_block(body)
-            }
-            Expr::While {
-                condition, body, ..
-            } => self.contains_function_call(condition) || self.contains_function_call_block(body),
-            Expr::Block(block) => self.contains_function_call_block(block),
-            Expr::Lit(..) => false,
-            Expr::Var(..) => false,
-            Expr::FnDef { .. } => false,
-            Expr::Index {
-                expr: obj, index, ..
-            } => self.contains_function_call(obj) || self.contains_function_call(index),
-            Expr::FieldAccess { expr: obj, .. } => self.contains_function_call(obj),
-            _ => false,
-        }
-    }
-
-    /// 检测代码块是否包含函数调用
-    fn contains_function_call_block(
-        &self,
-        block: &Block,
-    ) -> bool {
-        block
-            .stmts
-            .iter()
-            .any(|stmt| self.contains_function_call_stmt(stmt))
-            || block
-                .expr
-                .as_ref()
-                .map(|e| self.contains_function_call(e))
-                .unwrap_or(false)
-    }
-
-    /// 检测语句是否包含函数调用
-    fn contains_function_call_stmt(
-        &self,
-        stmt: &Stmt,
-    ) -> bool {
-        match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                self.contains_function_call(expr)
-            }
-            crate::frontend::core::parser::ast::StmtKind::If {
-                condition,
-                then_branch,
-                elif_branches,
-                else_branch,
-                ..
-            } => {
-                self.contains_function_call(condition)
-                    || self.contains_function_call_block(then_branch)
-                    || elif_branches.iter().any(|(cond, block)| {
-                        self.contains_function_call(cond)
-                            || self.contains_function_call_block(block)
-                    })
-                    || else_branch
-                        .as_ref()
-                        .map(|b| self.contains_function_call_block(b))
-                        .unwrap_or(false)
-            }
-            crate::frontend::core::parser::ast::StmtKind::For { iterable, body, .. } => {
-                self.contains_function_call(iterable) || self.contains_function_call_block(body)
-            }
-            _ => false,
-        }
     }
 
     /// 检查 for 语句

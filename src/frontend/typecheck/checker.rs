@@ -414,13 +414,64 @@ impl TypeChecker {
             }
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
+                type_name,
+                method_type,
                 type_annotation,
                 params,
                 is_pub,
                 ..
             } => {
                 // 处理统一函数语法
-                let (param_types, return_type) = if let Some(type_ann) = type_annotation {
+                // 方法绑定使用 method_type，普通函数使用 type_annotation
+                let (param_types, return_type) = if let Some(meth_ty) = method_type {
+                    // 方法绑定：优先使用 method_type 中的签名
+                    if let crate::frontend::core::parser::ast::Type::Fn {
+                        params: param_tys,
+                        return_type,
+                    } = meth_ty
+                    {
+                        let pts: Vec<MonoType> = param_tys
+                            .iter()
+                            .map(|t| MonoType::from(t.clone()))
+                            .collect();
+                        (pts, MonoType::from(*return_type.clone()))
+                    } else {
+                        // method_type 不是 Fn 类型，回退到 type_annotation 或 params
+                        if let Some(type_ann) = type_annotation {
+                            if let crate::frontend::core::parser::ast::Type::Fn {
+                                params: param_tys,
+                                return_type,
+                            } = type_ann
+                            {
+                                let pts: Vec<MonoType> = param_tys
+                                    .iter()
+                                    .map(|t| MonoType::from(t.clone()))
+                                    .collect();
+                                (pts, MonoType::from(*return_type.clone()))
+                            } else {
+                                let pts: Vec<MonoType> = params
+                                    .iter()
+                                    .map(|p| {
+                                        p.ty.as_ref()
+                                            .map(|t| MonoType::from(t.clone()))
+                                            .unwrap_or_else(|| self.env.solver().new_var())
+                                    })
+                                    .collect();
+                                (pts, self.env.solver().new_var())
+                            }
+                        } else {
+                            let pts: Vec<MonoType> = params
+                                .iter()
+                                .map(|p| {
+                                    p.ty.as_ref()
+                                        .map(|t| MonoType::from(t.clone()))
+                                        .unwrap_or_else(|| self.env.solver().new_var())
+                                })
+                                .collect();
+                            (pts, self.env.solver().new_var())
+                        }
+                    }
+                } else if let Some(type_ann) = type_annotation {
                     if let crate::frontend::core::parser::ast::Type::Fn {
                         params: param_tys,
                         return_type,
@@ -459,8 +510,16 @@ impl TypeChecker {
                     return_type: Box::new(return_type),
                     is_async: false,
                 };
-                self.env
-                    .add_var(name.clone(), PolyType::mono(fn_ty.clone()));
+
+                // 如果有 type_name（显式方法绑定），使用 add_fn_binding
+                if type_name.is_some() {
+                    self.env
+                        .add_fn_binding(name, type_name.as_deref(), fn_ty.clone());
+                } else {
+                    // 否则使用普通的 add_var
+                    self.env
+                        .add_var(name.clone(), PolyType::mono(fn_ty.clone()));
+                }
 
                 // 处理 pub 自动绑定
                 if *is_pub {
@@ -805,7 +864,7 @@ impl TypeChecker {
     /// 收集规则：
     /// - StmtKind::Binding   → Function/Type (定义，区分 type_annotation)
     /// - StmtKind::Var       → Variable (定义)
-    /// - StmtKind::MethodBind→ Method (定义)
+    /// - StmtKind::Binding   → Method/Type/Function (通过字段区分)
     /// - StmtKind::Use       → Namespace (引用)
     /// - Param               → Parameter (定义)
     /// - Expr::Var           → Variable (引用)
