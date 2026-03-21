@@ -116,14 +116,19 @@ fn test_check_type_alias() {
 
     // type MyInt = Int (RFC-010: MyInt: Type = Int)
     let type_def = ast::Stmt {
-        kind: ast::StmtKind::TypeDef {
+        kind: ast::StmtKind::Binding {
             name: "MyInt".to_string(),
-            name_span: create_dummy_span(),
-            definition: ast::Type::Name {
+            type_name: None,
+            method_type: None,
+            generic_params: Vec::new(),
+            type_annotation: Some(ast::Type::Name {
                 name: "Int".to_string(),
                 span: create_dummy_span(),
-            },
-            generic_params: Vec::new(),
+            }),
+            eval: None,
+            params: Vec::new(),
+            body: (Vec::new(), None),
+            is_pub: false,
         },
         span: create_dummy_span(),
     };

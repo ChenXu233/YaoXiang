@@ -116,7 +116,7 @@ impl SpawnPlacementChecker {
                     self.check_block(else_body);
                 }
             }
-            StmtKind::Fn { eval, body, .. } => {
+            StmtKind::Binding { eval, body, .. } => {
                 self.with_function_boundary(*eval, |this| {
                     for s in &body.0 {
                         this.check_stmt(s);
@@ -126,17 +126,6 @@ impl SpawnPlacementChecker {
                     }
                 });
             }
-            StmtKind::MethodBind { body, .. } => {
-                self.with_function_boundary(None, |this| {
-                    for s in &body.0 {
-                        this.check_stmt(s);
-                    }
-                    if let Some(expr) = &body.1 {
-                        this.check_expr(expr);
-                    }
-                });
-            }
-            StmtKind::TypeDef { definition, .. } => self.check_type(definition),
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
         }
     }

@@ -28,40 +28,31 @@ pub fn format_stmt(
             body,
             label,
         } => format_for_stmt(var, *var_mut, iterable, body, label, ctx),
-        StmtKind::TypeDef {
+        StmtKind::Binding {
             name,
-            definition,
-            generic_params,
-            ..
-        } => format_type_def(name, definition, generic_params),
-        StmtKind::Use {
-            path, items, alias, ..
-        } => format_use(path, items, alias),
-        StmtKind::Fn {
-            name,
+            type_name,
+            method_type,
             generic_params,
             type_annotation,
             eval,
             params,
             body,
             is_pub,
-        } => format_fn_stmt(
+        } => format_binding(
             name,
+            type_name.as_deref(),
+            method_type.as_ref(),
             generic_params,
-            type_annotation,
+            type_annotation.as_ref(),
             eval,
             params,
             body,
             *is_pub,
             ctx,
         ),
-        StmtKind::MethodBind {
-            type_name,
-            method_name,
-            method_type,
-            params,
-            body,
-        } => format_method_bind(type_name, method_name, method_type, params, body, ctx),
+        StmtKind::Use {
+            path, items, alias, ..
+        } => format_use(path, items, alias),
         StmtKind::If {
             condition,
             then_branch,
@@ -132,59 +123,65 @@ fn format_for_stmt(
     )
 }
 
-/// 格式化类型定义
-fn format_type_def(
-    name: &str,
-    definition: &Type,
-    generic_params: &[String],
-) -> String {
-    let generics = if generic_params.is_empty() {
-        String::new()
-    } else {
-        format!("[{}]", generic_params.join(", "))
-    };
-    format!("{}{}: Type = {}", name, generics, format_type(definition))
-}
-
-/// 格式化 use 语句
-fn format_use(
-    path: &str,
-    items: &Option<Vec<String>>,
-    alias: &Option<Vec<String>>,
-) -> String {
-    let mut result = format!("use {}", path);
-
-    if let Some(items) = items {
-        if items.len() == 1 {
-            result.push_str("::");
-            result.push_str(&items[0]);
-        } else {
-            result.push_str("::{ ");
-            result.push_str(&items.join(", "));
-            result.push_str(" }");
-        }
-    }
-
-    if let Some(aliases) = alias {
-        result.push_str(" as ");
-        result.push_str(&aliases.join(", "));
-    }
-
-    result
-}
-
-/// 格式化函数定义语句
+/// 格式化统一绑定语句 (函数/类型/方法)
 #[allow(clippy::too_many_arguments)]
-fn format_fn_stmt(
+fn format_binding(
     name: &str,
+    type_name: Option<&str>,
+    method_type: Option<&Type>,
     generic_params: &[GenericParam],
-    type_annotation: &Option<Type>,
+    type_annotation: Option<&Type>,
     eval: &Option<EvalMode>,
     params: &[Param],
     body: &(Vec<Stmt>, Option<Box<Expr>>),
     is_pub: bool,
     ctx: &FormatContext,
 ) -> String {
+    // 方法绑定: Type.method: (Type, ...) -> ReturnType = (params) => body
+    if let Some(ty_name) = type_name {
+        if let Some(mt) = method_type {
+            let params_str = format_params(params);
+            let body_block = Block {
+                stmts: body.0.clone(),
+                expr: body.1.clone(),
+                span: crate::util::span::Span::dummy(),
+            };
+            return format!(
+                "{}.{}: {} = ({}) => {}",
+                ty_name,
+                name,
+                format_type(mt),
+                params_str,
+                format_block(&body_block, ctx)
+            );
+        }
+    }
+
+    // 类型定义: name: Type = { ... }
+    if params.is_empty() {
+        if let Some(ty) = type_annotation {
+            let generics = if generic_params.is_empty() {
+                String::new()
+            } else {
+                let items: Vec<String> = generic_params
+                    .iter()
+                    .map(|gp| {
+                        let constraints = if gp.constraints.is_empty() {
+                            String::new()
+                        } else {
+                            let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
+                            format!(": {}", cs.join(" + "))
+                        };
+                        format!("{}{}", gp.name, constraints)
+                    })
+                    .collect();
+                format!("[{}]", items.join(", "))
+            };
+            return format!("{}{}: Type = {}", name, generics, format_type(ty));
+        }
+    }
+
+    // 函数定义: name: Type = (params) => body
     let pub_str = if is_pub { "pub " } else { "" };
     let generics = if generic_params.is_empty() {
         String::new()
@@ -224,7 +221,6 @@ fn format_fn_stmt(
 
     let params_str = format_params(params);
 
-    // 构建函数体
     let body_block = Block {
         stmts: body.0.clone(),
         expr: body.1.clone(),
@@ -243,29 +239,31 @@ fn format_fn_stmt(
     )
 }
 
-/// 格式化方法绑定
-fn format_method_bind(
-    type_name: &str,
-    method_name: &str,
-    method_type: &Type,
-    params: &[Param],
-    body: &(Vec<Stmt>, Option<Box<Expr>>),
-    ctx: &FormatContext,
+/// 格式化 use 语句
+fn format_use(
+    path: &str,
+    items: &Option<Vec<String>>,
+    alias: &Option<Vec<String>>,
 ) -> String {
-    let params_str = format_params(params);
-    let body_block = Block {
-        stmts: body.0.clone(),
-        expr: body.1.clone(),
-        span: crate::util::span::Span::dummy(),
-    };
-    format!(
-        "{}.{}: {} = ({}) => {}",
-        type_name,
-        method_name,
-        format_type(method_type),
-        params_str,
-        format_block(&body_block, ctx)
-    )
+    let mut result = format!("use {}", path);
+
+    if let Some(items) = items {
+        if items.len() == 1 {
+            result.push_str("::");
+            result.push_str(&items[0]);
+        } else {
+            result.push_str("::{ ");
+            result.push_str(&items.join(", "));
+            result.push_str(" }");
+        }
+    }
+
+    if let Some(aliases) = alias {
+        result.push_str(" as ");
+        result.push_str(&aliases.join(", "));
+    }
+
+    result
 }
 
 /// 格式化 if 语句

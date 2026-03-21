@@ -188,8 +188,10 @@ mod tests {
                     },
                 },
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "add".to_string(),
+                        type_name: None,
+                        method_type: None,
                         generic_params: vec![],
                         type_annotation: None,
                         eval: None,
@@ -291,11 +293,16 @@ mod tests {
 
         let module = Module {
             items: vec![Stmt {
-                kind: StmtKind::TypeDef {
+                kind: StmtKind::Binding {
                     name: "Point".to_string(),
-                    name_span: Span::dummy(),
-                    definition: crate::frontend::core::parser::ast::Type::Void,
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
+                    type_annotation: Some(crate::frontend::core::parser::ast::Type::Void),
+                    eval: None,
+                    params: vec![],
+                    body: (vec![], None),
+                    is_pub: false,
                 },
                 span: Span {
                     start: Position {

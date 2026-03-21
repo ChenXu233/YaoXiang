@@ -116,29 +116,26 @@ fn test_negative_index_binding_in_struct() {
 
     assert_eq!(module.items.len(), 1);
     match &module.items[0].kind {
-        StmtKind::TypeDef {
-            name, definition, ..
+        StmtKind::Binding {
+            name,
+            type_annotation: Some(ast::Type::Struct { bindings, .. }),
+            ..
         } => {
             assert_eq!(name, "Point");
-            match definition {
-                ast::Type::Struct { bindings, .. } => {
-                    assert_eq!(bindings.len(), 1);
-                    assert_eq!(bindings[0].name, "test");
-                    match &bindings[0].kind {
-                        BindingKind::External {
-                            function,
-                            positions,
-                        } => {
-                            assert_eq!(function, "func");
-                            assert_eq!(positions, &vec![-1i64]);
-                        }
-                        _ => panic!("Expected External binding, got {:?}", bindings[0].kind),
-                    }
+            assert_eq!(bindings.len(), 1);
+            assert_eq!(bindings[0].name, "test");
+            match &bindings[0].kind {
+                BindingKind::External {
+                    function,
+                    positions,
+                } => {
+                    assert_eq!(function, "func");
+                    assert_eq!(positions, &vec![-1i64]);
                 }
-                _ => panic!("Expected Struct type"),
+                _ => panic!("Expected External binding, got {:?}", bindings[0].kind),
             }
         }
-        _ => panic!("Expected TypeDef"),
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -150,19 +147,19 @@ fn test_negative_index_binding_multiple() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct { bindings, .. } => {
-                assert_eq!(bindings.len(), 1);
-                match &bindings[0].kind {
-                    BindingKind::External { positions, .. } => {
-                        assert_eq!(positions, &vec![0i64, -1i64]);
-                    }
-                    _ => panic!("Expected External binding"),
+        StmtKind::Binding {
+            type_annotation: Some(ast::Type::Struct { bindings, .. }),
+            ..
+        } => {
+            assert_eq!(bindings.len(), 1);
+            match &bindings[0].kind {
+                BindingKind::External { positions, .. } => {
+                    assert_eq!(positions, &vec![0i64, -1i64]);
                 }
+                _ => panic!("Expected External binding"),
             }
-            _ => panic!("Expected Struct type"),
-        },
-        _ => panic!("Expected TypeDef"),
+        }
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -176,8 +173,10 @@ fn test_default_binding_in_struct() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct { bindings, .. } => {
+        StmtKind::Binding {
+            type_annotation, ..
+        } => match type_annotation {
+            Some(ast::Type::Struct { bindings, .. }) => {
                 assert_eq!(bindings.len(), 1);
                 assert_eq!(bindings[0].name, "distance");
                 match &bindings[0].kind {
@@ -192,7 +191,7 @@ fn test_default_binding_in_struct() {
             }
             _ => panic!("Expected Struct type"),
         },
-        _ => panic!("Expected TypeDef"),
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -204,8 +203,10 @@ fn test_default_binding_vs_external_binding() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct { bindings, .. } => {
+        StmtKind::Binding {
+            type_annotation, ..
+        } => match type_annotation {
+            Some(ast::Type::Struct { bindings, .. }) => {
                 assert_eq!(bindings.len(), 2);
                 assert!(matches!(
                     &bindings[0].kind,
@@ -215,7 +216,7 @@ fn test_default_binding_vs_external_binding() {
             }
             _ => panic!("Expected Struct type"),
         },
-        _ => panic!("Expected TypeDef"),
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -351,18 +352,19 @@ fn test_interface_constraint_parsed() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct {
-                fields, interfaces, ..
-            } => {
-                assert_eq!(fields.len(), 2);
-                assert_eq!(interfaces.len(), 2);
-                assert_eq!(interfaces[0], "Drawable");
-                assert_eq!(interfaces[1], "Serializable");
-            }
-            _ => panic!("Expected Struct type"),
-        },
-        _ => panic!("Expected TypeDef"),
+        StmtKind::Binding {
+            type_annotation:
+                Some(ast::Type::Struct {
+                    fields, interfaces, ..
+                }),
+            ..
+        } => {
+            assert_eq!(fields.len(), 2);
+            assert_eq!(interfaces.len(), 2);
+            assert_eq!(interfaces[0], "Drawable");
+            assert_eq!(interfaces[1], "Serializable");
+        }
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -374,18 +376,19 @@ fn test_interface_constraint_only() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct {
-                fields, interfaces, ..
-            } => {
-                assert!(fields.is_empty());
-                assert_eq!(interfaces.len(), 2);
-                assert_eq!(interfaces[0], "Drawable");
-                assert_eq!(interfaces[1], "Serializable");
-            }
-            _ => panic!("Expected Struct type"),
-        },
-        _ => panic!("Expected TypeDef"),
+        StmtKind::Binding {
+            type_annotation:
+                Some(ast::Type::Struct {
+                    fields, interfaces, ..
+                }),
+            ..
+        } => {
+            assert!(fields.is_empty());
+            assert_eq!(interfaces.len(), 2);
+            assert_eq!(interfaces[0], "Drawable");
+            assert_eq!(interfaces[1], "Serializable");
+        }
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -397,22 +400,24 @@ fn test_interface_constraint_with_binding() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => match definition {
-            ast::Type::Struct {
-                fields,
-                bindings,
-                interfaces,
-            } => {
-                assert_eq!(fields.len(), 1);
-                assert_eq!(fields[0].name, "x");
-                assert_eq!(bindings.len(), 1);
-                assert_eq!(bindings[0].name, "distance");
-                assert_eq!(interfaces.len(), 1);
-                assert_eq!(interfaces[0], "Drawable");
-            }
-            _ => panic!("Expected Struct type"),
-        },
-        _ => panic!("Expected TypeDef"),
+        StmtKind::Binding {
+            type_annotation:
+                Some(ast::Type::Struct {
+                    fields,
+                    bindings,
+                    interfaces,
+                    ..
+                }),
+            ..
+        } => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].name, "x");
+            assert_eq!(bindings.len(), 1);
+            assert_eq!(bindings[0].name, "distance");
+            assert_eq!(interfaces.len(), 1);
+            assert_eq!(interfaces[0], "Drawable");
+        }
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -427,30 +432,29 @@ fn test_anonymous_binding_parses() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef { definition, .. } => {
-            match definition {
-                ast::Type::Struct {
+        StmtKind::Binding {
+            type_annotation:
+                Some(ast::Type::Struct {
                     fields, bindings, ..
+                }),
+            ..
+        } => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(bindings.len(), 1);
+            assert_eq!(bindings[0].name, "norm");
+            match &bindings[0].kind {
+                BindingKind::Anonymous {
+                    params, positions, ..
                 } => {
-                    assert_eq!(fields.len(), 1);
-                    assert_eq!(bindings.len(), 1);
-                    assert_eq!(bindings[0].name, "norm");
-                    match &bindings[0].kind {
-                        BindingKind::Anonymous {
-                            params, positions, ..
-                        } => {
-                            assert_eq!(params.len(), 1);
-                            // 参数名从类型注解推断，Type::Fn 不保留参数名，所以生成 arg0
-                            assert_eq!(params[0].name, "arg0");
-                            assert_eq!(positions, &vec![0i64]);
-                        }
-                        _ => panic!("Expected Anonymous binding, got {:?}", bindings[0].kind),
-                    }
+                    assert_eq!(params.len(), 1);
+                    // 参数名从类型注解推断，Type::Fn 不保留参数名，所以生成 arg0
+                    assert_eq!(params[0].name, "arg0");
+                    assert_eq!(positions, &vec![0i64]);
                 }
-                _ => panic!("Expected Struct type"),
+                _ => panic!("Expected Anonymous binding, got {:?}", bindings[0].kind),
             }
         }
-        _ => panic!("Expected TypeDef"),
+        _ => panic!("Expected Binding"),
     }
 }
 
@@ -470,16 +474,18 @@ fn test_struct_with_all_binding_types() {
     let module = parse(&tokens).unwrap();
 
     match &module.items[0].kind {
-        StmtKind::TypeDef {
-            name, definition, ..
+        StmtKind::Binding {
+            name,
+            type_annotation,
+            ..
         } => {
             assert_eq!(name, "Point");
-            match definition {
-                ast::Type::Struct {
+            match type_annotation {
+                Some(ast::Type::Struct {
                     fields,
                     bindings,
                     interfaces,
-                } => {
+                }) => {
                     assert_eq!(fields.len(), 2);
                     assert_eq!(bindings.len(), 2);
                     assert_eq!(interfaces.len(), 1);
@@ -501,6 +507,6 @@ fn test_struct_with_all_binding_types() {
                 _ => panic!("Expected Struct type"),
             }
         }
-        _ => panic!("Expected TypeDef"),
+        _ => panic!("Expected Binding"),
     }
 }

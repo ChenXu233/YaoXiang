@@ -230,14 +230,27 @@ pub enum StmtKind {
         body: Box<Block>,
         label: Option<String>,
     },
-    /// Type definition: `RFC-010: `Name: Type = { ... }`
-    TypeDef {
+    /// Unified binding: combines Fn, TypeDef, and MethodBind
+    /// Used for RFC-022: Unified binding syntax
+    Binding {
+        /// Binding name (function name, type name, or method name)
         name: String,
-        /// Type name span
-        name_span: Span,
-        definition: Type,
-        /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
-        generic_params: Vec<String>,
+        /// Optional type name for method binding
+        type_name: Option<String>,
+        /// Method type (for method binding)
+        method_type: Option<Type>,
+        /// Generic type parameters
+        generic_params: Vec<GenericParam>,
+        /// Type annotation / return type
+        type_annotation: Option<Type>,
+        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
+        eval: Option<EvalMode>,
+        /// Parameters (for functions and methods)
+        params: Vec<Param>,
+        /// Body: (prelude statements, optional tail expression)
+        body: (Vec<Stmt>, Option<Box<Expr>>),
+        /// Whether this binding is public
+        is_pub: bool,
     },
     /// Use statement: `use module.path` or `use module.{a, b} as c, d`
     Use {
@@ -248,31 +261,6 @@ pub enum StmtKind {
         path_parts: Vec<SpannedIdent>,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
-    },
-    /// Function definition: `name: Type = (params) => body`
-    /// With pub modifier: `pub name: Type = (params) => body` - auto-binds to first param type
-    Fn {
-        name: String,
-        generic_params: Vec<GenericParam>,
-        type_annotation: Option<Type>,
-        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
-        eval: Option<EvalMode>,
-        params: Vec<Param>,
-        body: (Vec<Stmt>, Option<Box<Expr>>),
-        is_pub: bool, // 是否公开导出并自动绑定到类型
-    },
-    /// Method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
-    MethodBind {
-        /// 类型名称
-        type_name: String,
-        /// 方法名称
-        method_name: String,
-        /// 方法类型（包含 self 参数）
-        method_type: Type,
-        /// 方法参数（不包含 self）
-        params: Vec<Param>,
-        /// 方法体
-        body: (Vec<Stmt>, Option<Box<Expr>>),
     },
     /// If statement: `if condition { then_branch } elif branches else_branch`
     If {

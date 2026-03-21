@@ -44,9 +44,9 @@ fn test_parse_fn_eval_annotation() {
     let module = parse(&tokens).unwrap();
     assert_eq!(module.items.len(), 1);
     match &module.items[0].kind {
-        crate::frontend::core::parser::ast::StmtKind::Fn { eval, .. } => {
+        crate::frontend::core::parser::ast::StmtKind::Binding { eval, .. } => {
             assert_eq!(*eval, Some(EvalMode::Block));
         }
-        other => panic!("expected StmtKind::Fn, got {other:?}"),
+        other => panic!("expected StmtKind::Binding, got {other:?}"),
     }
 }

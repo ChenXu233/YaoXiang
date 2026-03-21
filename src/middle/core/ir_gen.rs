@@ -551,23 +551,45 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
         match &stmt.kind {
-            ast::StmtKind::Fn {
+            ast::StmtKind::Binding {
                 name,
+                type_name,
+                method_type,
                 generic_params: _,
                 type_annotation,
                 eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
-            } => self.generate_function_ir(
-                name,
-                type_annotation.as_ref(),
-                *eval,
-                params,
-                stmts,
-                expr,
-                constants,
-            ),
+            } => {
+                // 区分函数定义、方法绑定和类型定义
+                if let Some(_) = type_name {
+                    // MethodBind: 有 type_name
+                    self.generate_method_ir(
+                        type_name.as_ref().unwrap(),
+                        name,
+                        method_type.as_ref().unwrap(),
+                        params,
+                        stmts,
+                        expr,
+                        constants,
+                    )
+                } else if params.is_empty() && stmts.is_empty() && expr.is_none() {
+                    // TypeDef: 没有参数和 body
+                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
+                } else {
+                    // Fn: 普通函数
+                    self.generate_function_ir(
+                        name,
+                        type_annotation.as_ref(),
+                        *eval,
+                        params,
+                        stmts,
+                        expr,
+                        constants,
+                    )
+                }
+            }
             ast::StmtKind::Var {
                 name,
                 name_span: _,
@@ -579,24 +601,6 @@ impl AstToIrGenerator {
                 type_annotation.as_ref(),
                 initializer.as_ref().map(|v| &**v),
             ),
-            ast::StmtKind::MethodBind {
-                type_name,
-                method_name,
-                method_type,
-                params,
-                body: (stmts, expr),
-            } => self.generate_method_ir(
-                type_name,
-                method_name,
-                method_type,
-                params,
-                stmts,
-                expr,
-                constants,
-            ),
-            ast::StmtKind::TypeDef {
-                name, definition, ..
-            } => self.generate_constructor_ir(name, definition),
             ast::StmtKind::ExternalBindingStmt {
                 type_name,
                 method_name,
@@ -1357,8 +1361,10 @@ impl AstToIrGenerator {
                     span: stmt.span,
                 });
             }
-            ast::StmtKind::Fn {
+            ast::StmtKind::Binding {
                 name,
+                type_name: None,
+                method_type: _,
                 generic_params: _,
                 type_annotation,
                 eval,
@@ -1366,7 +1372,7 @@ impl AstToIrGenerator {
                 body: (stmts, expr),
                 is_pub: _,
             } => {
-                // 生成嵌套函数的 IR
+                // 生成嵌套函数的 IR（排除方法绑定和类型定义）
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),

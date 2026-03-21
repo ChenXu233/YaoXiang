@@ -230,8 +230,10 @@ mod tests {
 
         let module_a = Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "foo".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
                     eval: None,

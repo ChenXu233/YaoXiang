@@ -306,10 +306,12 @@ fn test_variant_constructors_emit_enum_member_tokens_and_usages() {
     let mut checker = TypeChecker::new("file:///test.yx");
 
     let typedef = ast::Stmt {
-        kind: ast::StmtKind::TypeDef {
+        kind: ast::StmtKind::Binding {
             name: "Result".to_string(),
-            name_span: dummy_span(),
-            definition: ast::Type::Variant(vec![
+            type_name: None,
+            method_type: None,
+            generic_params: vec![],
+            type_annotation: Some(ast::Type::Variant(vec![
                 ast::VariantDef {
                     name: "Ok".to_string(),
                     name_span: dummy_span(),
@@ -334,8 +336,11 @@ fn test_variant_constructors_emit_enum_member_tokens_and_usages() {
                     )],
                     span: dummy_span(),
                 },
-            ]),
-            generic_params: vec![],
+            ])),
+            eval: None,
+            params: Vec::new(),
+            body: (Vec::new(), None),
+            is_pub: false,
         },
         span: dummy_span(),
     };

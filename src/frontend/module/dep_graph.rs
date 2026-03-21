@@ -416,15 +416,12 @@ impl ModuleDependencyGraph {
         let mut export_names = Vec::new();
         for stmt in &ast.items {
             match &stmt.kind {
-                StmtKind::Fn {
+                StmtKind::Binding {
                     name, is_pub: true, ..
                 } => {
                     export_names.push(name.clone());
                 }
-                StmtKind::TypeDef { name, .. } => {
-                    export_names.push(name.clone());
-                }
-                StmtKind::Fn { name, .. } => {
+                StmtKind::Binding { name, .. } => {
                     export_names.push(name.clone());
                 }
                 _ => {}
