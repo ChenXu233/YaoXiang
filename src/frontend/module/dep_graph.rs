@@ -421,8 +421,12 @@ impl ModuleDependencyGraph {
                 } => {
                     export_names.push(name.clone());
                 }
-                StmtKind::Binding { name, .. } => {
-                    export_names.push(name.clone());
+                StmtKind::Binding {
+                    name: _,
+                    is_pub: false,
+                    ..
+                } => {
+                    // 非公开绑定不导出
                 }
                 _ => {}
             }

@@ -296,15 +296,15 @@ mod tests {
             fail_native: () -> Result[Int, String] = Native("fail_native")
 
             fail: () -> Result[Int, String] = () => {
-                fail_native()?
+                return fail_native()?
             }
 
-            ok: () -> Int = () => { 1 }
+            ok: () -> Int = () => { return 1 }
 
             main: () -> Result[Int, String] = () => {
                 a = ok()
                 b = fail()?
-                a + b
+                return a + b
             }
         "#;
 
