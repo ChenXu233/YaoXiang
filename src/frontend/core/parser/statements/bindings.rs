@@ -56,12 +56,16 @@ pub fn parse_method_bind(
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::MethodBind {
-            type_name,
-            method_name,
-            method_type,
+        kind: StmtKind::Binding {
+            name: method_name,
+            type_name: Some(type_name),
+            method_type: Some(method_type),
+            generic_params: Vec::new(),
+            type_annotation: None,
+            eval: None,
             params,
             body: (stmts, expr),
+            is_pub: false,
         },
         span,
     })

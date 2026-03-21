@@ -271,8 +271,10 @@ mod tests {
                     },
                 },
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "add".to_string(),
+                        type_name: None,
+                        method_type: None,
                         generic_params: vec![],
                         type_annotation: None,
                         eval: None,
@@ -359,8 +361,10 @@ mod tests {
         // 文件 A 定义了 foo
         let module_a = Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "foo".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
                     eval: None,
@@ -414,8 +418,10 @@ mod tests {
         // 两个文件都定义了同名函数 'helper'
         let mk_module = |span_start: usize| Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "helper".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
                     eval: None,

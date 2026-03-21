@@ -195,14 +195,31 @@ impl TypeChecker {
     ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDef {
+            if let crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
-                definition,
+                type_name: None,
+                method_type: _,
+                type_annotation,
                 generic_params,
+                params,
+                body,
                 ..
             } = &stmt.kind
             {
-                self.add_type_definition(name, definition, generic_params, stmt.span);
+                // 如果没有 type_name 但有 type_annotation 且 params 和 body 为空，则是类型定义
+                if type_annotation.is_some()
+                    && params.is_empty()
+                    && body.0.is_empty()
+                    && body.1.is_none()
+                {
+                    // 这是一个类型定义
+                    if let Some(type_annotation) = type_annotation {
+                        // 从 GenericParam 中提取名称
+                        let param_names: Vec<String> =
+                            generic_params.iter().map(|p| p.name.clone()).collect();
+                        self.add_type_definition(name, type_annotation, &param_names, stmt.span);
+                    }
+                }
             }
         }
 
@@ -395,7 +412,7 @@ impl TypeChecker {
                     }
                 }
             }
-            crate::frontend::core::parser::ast::StmtKind::Fn {
+            crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 type_annotation,
                 params,
@@ -743,26 +760,37 @@ impl TypeChecker {
         &mut self,
         module: &Module,
     ) {
+        use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
             match &stmt.kind {
-                // pub 函数导出函数名
-                crate::frontend::core::parser::ast::StmtKind::Fn { name, is_pub, .. }
-                    if *is_pub =>
-                {
-                    self.env.add_export(name);
-                }
-                // 类型定义默认导出
-                crate::frontend::core::parser::ast::StmtKind::TypeDef { name, .. } => {
-                    self.env.add_export(name);
-                }
-                // 方法绑定导出为 Type.method
-                crate::frontend::core::parser::ast::StmtKind::MethodBind {
+                StmtKind::Binding {
+                    name,
                     type_name,
-                    method_name,
+                    type_annotation,
+
+                    body,
+                    is_pub,
                     ..
                 } => {
-                    self.env
-                        .add_export(&format!("{}.{}", type_name, method_name));
+                    // 方法绑定
+                    let is_method = type_name.is_some();
+
+                    // 函数定义：body 有 tail expression
+                    let has_body = body.1.is_some() || !body.0.is_empty();
+                    // 类型定义：没有 body 且有 type_annotation
+                    let is_type_def = !has_body && type_annotation.is_some();
+
+                    // 类型定义始终导出，方法绑定始终导出，函数仅 pub 导出
+                    if is_type_def || is_method || *is_pub {
+                        if is_method {
+                            // 方法绑定导出为 Type.method 格式
+                            if let Some(ty_name) = type_name {
+                                self.env.add_export(&format!("{}.{}", ty_name, name));
+                            }
+                        } else {
+                            self.env.add_export(name);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -775,8 +803,7 @@ impl TypeChecker {
     ///
     /// 利用 typecheck 阶段已有的类型信息，一次遍历产出语义数据。
     /// 收集规则：
-    /// - StmtKind::Fn        → Function (定义)
-    /// - StmtKind::TypeDef   → Type (定义)
+    /// - StmtKind::Binding   → Function/Type (定义，区分 type_annotation)
     /// - StmtKind::Var       → Variable (定义)
     /// - StmtKind::MethodBind→ Method (定义)
     /// - StmtKind::Use       → Namespace (引用)
@@ -790,8 +817,8 @@ impl TypeChecker {
 
         let mut names = HashSet::new();
         for stmt in &module.items {
-            if let StmtKind::TypeDef {
-                definition: Type::Variant(variants),
+            if let StmtKind::Binding {
+                type_annotation: Some(Type::Variant(variants)),
                 ..
             } = &stmt.kind
             {
@@ -1288,155 +1315,189 @@ impl TypeChecker {
 
         for stmt in &module.items {
             match &stmt.kind {
-                StmtKind::Fn {
+                StmtKind::Binding {
                     name,
-                    params,
-                    is_pub,
+                    type_name,
+                    method_type,
                     generic_params,
                     type_annotation,
+                    params,
                     body,
+                    is_pub,
                     ..
                 } => {
-                    // 函数名 → Function (定义)
-                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                    if *is_pub {
-                        modifiers.push(SemanticTokenModifier::Public);
-                    }
-                    if !generic_params.is_empty() {
-                        modifiers.push(SemanticTokenModifier::Generic);
-                    }
-                    self.semantic_db.add_token(
-                        &fp,
-                        SemanticToken {
-                            name: name.clone(),
-                            token_type: SemanticTokenType::Function,
-                            modifiers,
-                            span: stmt.span,
-                        },
-                    );
-                    global_symbols.push(name.clone());
+                    // 根据字段值区分类型：方法绑定 / 类型定义 / 函数
+                    let is_method = type_name.is_some();
+                    // 函数定义：body 有 tail expression
+                    let has_body = body.1.is_some() || !body.0.is_empty();
+                    // 类型定义：没有 body 且有 type_annotation
+                    let is_type_def = !has_body && type_annotation.is_some();
 
-                    // 参数 → Parameter (定义)
-                    for param in params {
+                    if is_method {
+                        // 方法绑定 → Method (定义)
                         self.semantic_db.add_token(
                             &fp,
                             SemanticToken {
-                                name: param.name.clone(),
-                                token_type: SemanticTokenType::Parameter,
+                                name: name.clone(),
+                                token_type: SemanticTokenType::Method,
                                 modifiers: vec![SemanticTokenModifier::Declaration],
-                                span: param.span,
+                                span: stmt.span,
                             },
                         );
-                    }
 
-                    // 泛型参数 → TypeParameter (定义)
-                    for gp in generic_params {
-                        let gp_name = match &gp.kind {
-                            crate::frontend::core::parser::ast::GenericParamKind::Type => {
-                                gp.name.clone()
-                            }
-                            _ => gp.name.clone(),
-                        };
-                        self.semantic_db.add_token(
-                            &fp,
-                            SemanticToken {
-                                name: gp_name,
-                                token_type: SemanticTokenType::TypeParameter,
-                                modifiers: vec![SemanticTokenModifier::Declaration],
-                                span: stmt.span, // 泛型参数暂用语句 span
-                            },
-                        );
-                    }
-
-                    // 函数体作用域
-                    // 泛型约束中的类型引用
-                    for gp in generic_params {
-                        for c in &gp.constraints {
-                            self.collect_type_tokens(&fp, c);
-                        }
-                    }
-
-                    // 函数签名中的类型引用
-                    if let Some(ty) = type_annotation {
-                        self.collect_type_tokens(&fp, ty);
-                    }
-
-                    let scope_idx = self
-                        .semantic_db
-                        .get_scopes(&fp)
-                        .map(|s| s.len())
-                        .unwrap_or(0);
-                    declared.insert(scope_idx, params.iter().map(|p| p.name.clone()).collect());
-                    self.semantic_db.add_scope(
-                        &fp,
-                        ScopeInfo {
-                            span: stmt.span,
-                            parent: Some(0), // 全局作用域
-                            symbols: params.iter().map(|p| p.name.clone()).collect(),
-                            kind: ScopeKind::Function,
-                        },
-                    );
-
-                    // 递归收集函数体中的表达式
-                    let mut fn_roots = imported_module_roots.clone();
-                    for body_stmt in &body.0 {
-                        self.collect_stmt_tokens(
-                            &fp,
-                            body_stmt,
-                            scope_idx,
-                            &mut declared,
-                            &constructor_names,
-                            &mut fn_roots,
-                        );
-                    }
-                    if let Some(ret_expr) = &body.1 {
-                        self.collect_expr_tokens(
-                            &fp,
-                            ret_expr,
-                            scope_idx,
-                            &mut declared,
-                            &constructor_names,
-                            &mut fn_roots,
-                        );
-                    }
-                }
-                StmtKind::TypeDef {
-                    name,
-                    name_span,
-                    definition,
-                    generic_params,
-                } => {
-                    // 类型名 → Type (定义)
-                    let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                    if !generic_params.is_empty() {
-                        modifiers.push(SemanticTokenModifier::Generic);
-                    }
-                    self.semantic_db.add_token(
-                        &fp,
-                        SemanticToken {
-                            name: name.clone(),
-                            token_type: SemanticTokenType::Type,
-                            modifiers,
-                            span: *name_span,
-                        },
-                    );
-                    global_symbols.push(name.clone());
-
-                    // ç±»åž‹å®šä¹‰ä½“ä¸­çš„ç±»åž‹å¼•ç”¨
-                    self.collect_type_tokens(&fp, definition);
-
-                    // Variant constructors â†’ EnumMember (å®šä¹‰)
-                    if let crate::frontend::core::parser::ast::Type::Variant(variants) = definition
-                    {
-                        for v in variants {
+                        // 参数 → Parameter (定义)
+                        for param in params {
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {
-                                    name: v.name.clone(),
-                                    token_type: SemanticTokenType::EnumMember,
+                                    name: param.name.clone(),
+                                    token_type: SemanticTokenType::Parameter,
                                     modifiers: vec![SemanticTokenModifier::Declaration],
-                                    span: v.name_span,
+                                    span: param.span,
                                 },
+                            );
+                        }
+
+                        if let Some(mt) = method_type {
+                            self.collect_type_tokens(&fp, mt);
+                        }
+                    } else if is_type_def {
+                        // 类型定义 → Type (定义)
+                        let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                        if !generic_params.is_empty() {
+                            modifiers.push(SemanticTokenModifier::Generic);
+                        }
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: name.clone(),
+                                token_type: SemanticTokenType::Type,
+                                modifiers,
+                                span: stmt.span,
+                            },
+                        );
+                        global_symbols.push(name.clone());
+
+                        // 类型定义体中的类型引用
+                        if let Some(def) = type_annotation {
+                            self.collect_type_tokens(&fp, def);
+
+                            // Variant constructors → EnumMember (定义)
+                            if let crate::frontend::core::parser::ast::Type::Variant(variants) = def
+                            {
+                                for v in variants {
+                                    self.semantic_db.add_token(
+                                        &fp,
+                                        SemanticToken {
+                                            name: v.name.clone(),
+                                            token_type: SemanticTokenType::EnumMember,
+                                            modifiers: vec![SemanticTokenModifier::Declaration],
+                                            span: v.name_span,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        // 函数定义 → Function (定义)
+                        let mut modifiers = vec![SemanticTokenModifier::Declaration];
+                        if *is_pub {
+                            modifiers.push(SemanticTokenModifier::Public);
+                        }
+                        if !generic_params.is_empty() {
+                            modifiers.push(SemanticTokenModifier::Generic);
+                        }
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: name.clone(),
+                                token_type: SemanticTokenType::Function,
+                                modifiers,
+                                span: stmt.span,
+                            },
+                        );
+                        global_symbols.push(name.clone());
+
+                        // 参数 → Parameter (定义)
+                        for param in params {
+                            self.semantic_db.add_token(
+                                &fp,
+                                SemanticToken {
+                                    name: param.name.clone(),
+                                    token_type: SemanticTokenType::Parameter,
+                                    modifiers: vec![SemanticTokenModifier::Declaration],
+                                    span: param.span,
+                                },
+                            );
+                        }
+
+                        // 泛型参数 → TypeParameter (定义)
+                        for gp in generic_params {
+                            let gp_name = match &gp.kind {
+                                crate::frontend::core::parser::ast::GenericParamKind::Type => {
+                                    gp.name.clone()
+                                }
+                                _ => gp.name.clone(),
+                            };
+                            self.semantic_db.add_token(
+                                &fp,
+                                SemanticToken {
+                                    name: gp_name,
+                                    token_type: SemanticTokenType::TypeParameter,
+                                    modifiers: vec![SemanticTokenModifier::Declaration],
+                                    span: stmt.span,
+                                },
+                            );
+                        }
+
+                        // 泛型约束中的类型引用
+                        for gp in generic_params {
+                            for c in &gp.constraints {
+                                self.collect_type_tokens(&fp, c);
+                            }
+                        }
+
+                        // 函数签名中的类型引用
+                        if let Some(ty) = type_annotation {
+                            self.collect_type_tokens(&fp, ty);
+                        }
+
+                        let scope_idx = self
+                            .semantic_db
+                            .get_scopes(&fp)
+                            .map(|s| s.len())
+                            .unwrap_or(0);
+                        declared.insert(scope_idx, params.iter().map(|p| p.name.clone()).collect());
+                        self.semantic_db.add_scope(
+                            &fp,
+                            ScopeInfo {
+                                span: stmt.span,
+                                parent: Some(0),
+                                symbols: params.iter().map(|p| p.name.clone()).collect(),
+                                kind: ScopeKind::Function,
+                            },
+                        );
+
+                        // 递归收集函数体中的表达式
+                        let mut fn_roots = imported_module_roots.clone();
+                        for body_stmt in &body.0 {
+                            self.collect_stmt_tokens(
+                                &fp,
+                                body_stmt,
+                                scope_idx,
+                                &mut declared,
+                                &constructor_names,
+                                &mut fn_roots,
+                            );
+                        }
+                        if let Some(ret_expr) = &body.1 {
+                            self.collect_expr_tokens(
+                                &fp,
+                                ret_expr,
+                                scope_idx,
+                                &mut declared,
+                                &constructor_names,
+                                &mut fn_roots,
                             );
                         }
                     }
@@ -1482,39 +1543,6 @@ impl TypeChecker {
                             &mut imported_module_roots,
                         );
                     }
-                }
-                StmtKind::MethodBind {
-                    type_name,
-                    method_name,
-                    method_type,
-                    params,
-                    ..
-                } => {
-                    // 类型名.方法名 → Method (定义)
-                    self.semantic_db.add_token(
-                        &fp,
-                        SemanticToken {
-                            name: format!("{}.{}", type_name, method_name),
-                            token_type: SemanticTokenType::Method,
-                            modifiers: vec![SemanticTokenModifier::Declaration],
-                            span: stmt.span,
-                        },
-                    );
-
-                    // 参数 → Parameter (定义)
-                    for param in params {
-                        self.semantic_db.add_token(
-                            &fp,
-                            SemanticToken {
-                                name: param.name.clone(),
-                                token_type: SemanticTokenType::Parameter,
-                                modifiers: vec![SemanticTokenModifier::Declaration],
-                                span: param.span,
-                            },
-                        );
-                    }
-
-                    self.collect_type_tokens(&fp, method_type);
                 }
                 StmtKind::Use {
                     path,
@@ -1807,7 +1835,7 @@ impl TypeChecker {
                     }
                 }
             }
-            StmtKind::Fn {
+            StmtKind::Binding {
                 name,
                 params,
                 generic_params,

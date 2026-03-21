@@ -100,38 +100,42 @@ impl DeadCodeAnalyzer {
     ) {
         for stmt in &ast.items {
             match &stmt.kind {
-                StmtKind::Fn { name, is_pub, .. } => {
+                StmtKind::Binding {
+                    name,
+                    type_name,
+                    is_pub,
+                    ..
+                } => {
+                    let is_method = type_name.is_some();
+                    let (def_name, kind) = if is_method {
+                        let full_name = format!("{}.{}", type_name.as_ref().unwrap(), name);
+                        (full_name, SymbolKind::Method)
+                    } else {
+                        // 根据 is_pub 和是否存在 type_annotation 来判断是函数还是类型
+                        (name.clone(), SymbolKind::Function)
+                    };
+
                     let def = SymbolDef {
-                        name: name.clone(),
-                        kind: SymbolKind::Function,
+                        name: def_name.clone(),
+                        kind: kind.clone(),
                         location: stmt.span,
                         is_exported: *is_pub,
                     };
 
                     // main 函数是入口点
-                    if name == "main" {
+                    if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
                     // pub 函数也是入口点
                     if *is_pub {
-                        self.entry_points.insert(name.clone());
+                        self.entry_points.insert(def_name.clone());
+                    }
+                    // 类型是入口点（可被实例化）
+                    if kind == SymbolKind::Type {
+                        self.entry_points.insert(def_name.clone());
                     }
 
-                    self.all_defs.insert(name.clone(), def);
-                }
-                StmtKind::TypeDef { name, .. } => {
-                    // 类型是入口点（可被实例化）
-                    self.entry_points.insert(name.clone());
-
-                    self.all_defs.insert(
-                        name.clone(),
-                        SymbolDef {
-                            name: name.clone(),
-                            kind: SymbolKind::Type,
-                            location: stmt.span,
-                            is_exported: true,
-                        },
-                    );
+                    self.all_defs.insert(def_name, def);
                 }
                 StmtKind::Var { name, .. } => {
                     self.all_defs.insert(
@@ -141,24 +145,6 @@ impl DeadCodeAnalyzer {
                             kind: SymbolKind::Variable,
                             location: stmt.span,
                             is_exported: false,
-                        },
-                    );
-                }
-                StmtKind::MethodBind {
-                    type_name,
-                    method_name,
-                    ..
-                } => {
-                    let full_name = format!("{}.{}", type_name, method_name);
-                    self.entry_points.insert(full_name.clone());
-
-                    self.all_defs.insert(
-                        full_name.clone(),
-                        SymbolDef {
-                            name: full_name,
-                            kind: SymbolKind::Method,
-                            location: stmt.span,
-                            is_exported: true,
                         },
                     );
                 }
@@ -396,7 +382,7 @@ impl DeadCodeAnalyzer {
                     initializer: None,
                     ..
                 } => {}
-                StmtKind::Fn { name, body, .. } => {
+                StmtKind::Binding { name, body, .. } => {
                     referenced.insert(name.clone());
                     collect_from_block(
                         &Block {
@@ -640,8 +626,10 @@ mod tests {
             items: vec![
                 // pub main - 入口点
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "main".to_string(),
+                        type_name: None,
+                        method_type: None,
                         is_pub: true,
                         params: vec![],
                         body: (vec![], None),
@@ -653,8 +641,10 @@ mod tests {
                 },
                 // pub helper_a - 入口点
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "helper_a".to_string(),
+                        type_name: None,
+                        method_type: None,
                         is_pub: true,
                         params: vec![],
                         body: (vec![], None),
@@ -666,8 +656,10 @@ mod tests {
                 },
                 // pub helper_b - 入口点
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "helper_b".to_string(),
+                        type_name: None,
+                        method_type: None,
                         is_pub: true,
                         params: vec![],
                         body: (vec![], None),
@@ -679,8 +671,10 @@ mod tests {
                 },
                 // fn private_func - 非入口点
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "private_func".to_string(),
+                        type_name: None,
+                        method_type: None,
                         is_pub: false,
                         params: vec![],
                         body: (vec![], None),

@@ -215,91 +215,114 @@ impl World {
                         location: SymbolLocation::new(file_path.to_string(), stmt.span),
                     });
                 }
-                StmtKind::Fn {
+                StmtKind::Binding {
                     name,
-                    params,
-                    generic_params,
-                    body,
-                    ..
-                } => {
-                    let kind = if generic_params.is_empty() {
-                        SymbolKind::Function
-                    } else {
-                        SymbolKind::GenericFunction
-                    };
-                    self.symbol_index.add(IndexedSymbol {
-                        name: name.clone(),
-                        kind,
-                        arity: Some(params.len()),
-                        location: SymbolLocation::new(file_path.to_string(), stmt.span),
-                    });
-
-                    // 提取函数参数
-                    for param in params {
-                        self.symbol_index.add(IndexedSymbol {
-                            name: param.name.clone(),
-                            kind: SymbolKind::Variable,
-                            arity: None,
-                            location: SymbolLocation::new(file_path.to_string(), param.span),
-                        });
-                    }
-
-                    // 递归提取函数体中的局部变量
-                    for body_stmt in &body.0 {
-                        self.index_stmt_symbols(file_path, body_stmt);
-                    }
-                    if let Some(ret_expr) = &body.1 {
-                        self.index_expr_symbols(file_path, ret_expr);
-                    }
-                }
-                StmtKind::TypeDef {
-                    name,
-                    generic_params,
-                    ..
-                } => {
-                    let kind = if generic_params.is_empty() {
-                        SymbolKind::Type
-                    } else {
-                        SymbolKind::GenericType
-                    };
-                    self.symbol_index.add(IndexedSymbol {
-                        name: name.clone(),
-                        kind,
-                        arity: None,
-                        location: SymbolLocation::new(file_path.to_string(), stmt.span),
-                    });
-                }
-                StmtKind::MethodBind {
                     type_name,
-                    method_name,
+                    type_annotation,
                     params,
+                    generic_params,
                     body,
                     ..
                 } => {
-                    let full_name = format!("{}.{}", type_name, method_name);
-                    self.symbol_index.add(IndexedSymbol {
-                        name: full_name,
-                        kind: SymbolKind::Function,
-                        arity: Some(params.len()),
-                        location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                    let has_body = !body.0.is_empty() || body.1.is_some();
+                    // 检查是否是类型定义语法 (Struct, Variant, Enum, NamedStruct)
+                    let is_type_def = type_annotation.as_ref().map_or(false, |t| {
+                        matches!(
+                            t,
+                            crate::frontend::core::parser::ast::Type::Struct { .. }
+                                | crate::frontend::core::parser::ast::Type::Variant { .. }
+                                | crate::frontend::core::parser::ast::Type::Enum { .. }
+                                | crate::frontend::core::parser::ast::Type::NamedStruct { .. }
+                                | crate::frontend::core::parser::ast::Type::Union(..)
+                        )
                     });
-
-                    // 提取方法参数
-                    for param in params {
+                    // 空 body 的是类型定义（即使 type_annotation 不是 struct 类型）
+                    let is_empty_body_type_def = !has_body && type_annotation.is_some();
+                    if let Some(type_name) = type_name {
+                        // 方法绑定: type_name.method_name
+                        let full_name = format!("{}.{}", type_name, name);
                         self.symbol_index.add(IndexedSymbol {
-                            name: param.name.clone(),
-                            kind: SymbolKind::Variable,
-                            arity: None,
-                            location: SymbolLocation::new(file_path.to_string(), param.span),
+                            name: full_name,
+                            kind: SymbolKind::Function,
+                            arity: Some(params.len()),
+                            location: SymbolLocation::new(file_path.to_string(), stmt.span),
                         });
-                    }
 
-                    // 递归提取方法体中的局部变量
-                    for body_stmt in &body.0 {
-                        self.index_stmt_symbols(file_path, body_stmt);
-                    }
-                    if let Some(ret_expr) = &body.1 {
-                        self.index_expr_symbols(file_path, ret_expr);
+                        // 提取方法参数
+                        for param in params {
+                            self.symbol_index.add(IndexedSymbol {
+                                name: param.name.clone(),
+                                kind: SymbolKind::Variable,
+                                arity: None,
+                                location: SymbolLocation::new(file_path.to_string(), param.span),
+                            });
+                        }
+
+                        // 递归提取方法体中的局部变量
+                        for body_stmt in &body.0 {
+                            self.index_stmt_symbols(file_path, body_stmt);
+                        }
+                        if let Some(ret_expr) = &body.1 {
+                            self.index_expr_symbols(file_path, ret_expr);
+                        }
+                    } else if is_type_def || is_empty_body_type_def {
+                        // 类型定义（struct 类型或空 body 有 type_annotation）
+                        let kind = if generic_params.is_empty() {
+                            SymbolKind::Type
+                        } else {
+                            SymbolKind::GenericType
+                        };
+                        self.symbol_index.add(IndexedSymbol {
+                            name: name.clone(),
+                            kind,
+                            arity: None,
+                            location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                        });
+                    } else if has_body {
+                        // 函数定义（有 body）
+                        let kind = if generic_params.is_empty() {
+                            SymbolKind::Function
+                        } else {
+                            SymbolKind::GenericFunction
+                        };
+                        self.symbol_index.add(IndexedSymbol {
+                            name: name.clone(),
+                            kind,
+                            arity: Some(params.len()),
+                            location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                        });
+
+                        // 提取函数参数
+                        for param in params {
+                            self.symbol_index.add(IndexedSymbol {
+                                name: param.name.clone(),
+                                kind: SymbolKind::Variable,
+                                arity: None,
+                                location: SymbolLocation::new(file_path.to_string(), param.span),
+                            });
+                        }
+
+                        // 递归提取函数体中的局部变量
+                        for body_stmt in &body.0 {
+                            self.index_stmt_symbols(file_path, body_stmt);
+                        }
+                        if let Some(ret_expr) = &body.1 {
+                            self.index_expr_symbols(file_path, ret_expr);
+                        }
+                    } else {
+                        // 空绑定（无 params、无 body、无 type_annotation）
+                        // 仍然添加到索引，类型检查阶段会报告错误
+                        let kind = if generic_params.is_empty() {
+                            SymbolKind::Function
+                        } else {
+                            SymbolKind::GenericFunction
+                        };
+                        self.symbol_index.add(IndexedSymbol {
+                            name: name.clone(),
+                            kind,
+                            arity: Some(params.len()),
+                            location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                        });
                     }
                 }
                 StmtKind::Use { path, items, .. } => {
@@ -346,38 +369,81 @@ impl World {
                 self.index_expr_symbols(file_path, iterable);
                 self.index_block_symbols(file_path, body);
             }
-            StmtKind::Fn {
+            StmtKind::Binding {
                 name,
+                type_name,
+                type_annotation,
                 params,
-                body,
                 generic_params,
+                body,
                 ..
             } => {
-                let kind = if generic_params.is_empty() {
-                    SymbolKind::Function
-                } else {
-                    SymbolKind::GenericFunction
-                };
-                self.symbol_index.add(IndexedSymbol {
-                    name: name.clone(),
-                    kind,
-                    arity: Some(params.len()),
-                    location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                let has_body = !body.0.is_empty() || body.1.is_some();
+                // 检查是否是类型定义语法 (Struct, Variant, Enum, NamedStruct)
+                let is_type_def = type_annotation.as_ref().map_or(false, |t| {
+                    matches!(
+                        t,
+                        crate::frontend::core::parser::ast::Type::Struct { .. }
+                            | crate::frontend::core::parser::ast::Type::Variant { .. }
+                            | crate::frontend::core::parser::ast::Type::Enum { .. }
+                            | crate::frontend::core::parser::ast::Type::NamedStruct { .. }
+                            | crate::frontend::core::parser::ast::Type::Union(..)
+                    )
                 });
-                for param in params {
+                if let Some(type_name) = type_name {
+                    // 方法绑定
+                    let full_name = format!("{}.{}", type_name, name);
                     self.symbol_index.add(IndexedSymbol {
-                        name: param.name.clone(),
-                        kind: SymbolKind::Variable,
-                        arity: None,
-                        location: SymbolLocation::new(file_path.to_string(), param.span),
+                        name: full_name,
+                        kind: SymbolKind::Function,
+                        arity: Some(params.len()),
+                        location: SymbolLocation::new(file_path.to_string(), stmt.span),
                     });
+                    for param in params {
+                        self.symbol_index.add(IndexedSymbol {
+                            name: param.name.clone(),
+                            kind: SymbolKind::Variable,
+                            arity: None,
+                            location: SymbolLocation::new(file_path.to_string(), param.span),
+                        });
+                    }
+                    for body_stmt in &body.0 {
+                        self.index_stmt_symbols(file_path, body_stmt);
+                    }
+                    if let Some(ret_expr) = &body.1 {
+                        self.index_expr_symbols(file_path, ret_expr);
+                    }
+                } else if is_type_def {
+                    // 类型定义 - 不在局部处理
+                } else if !params.is_empty() || has_body || type_annotation.is_some() {
+                    // 函数定义（有参数或有 body 或有类型注解）
+                    let kind = if generic_params.is_empty() {
+                        SymbolKind::Function
+                    } else {
+                        SymbolKind::GenericFunction
+                    };
+                    self.symbol_index.add(IndexedSymbol {
+                        name: name.clone(),
+                        kind,
+                        arity: Some(params.len()),
+                        location: SymbolLocation::new(file_path.to_string(), stmt.span),
+                    });
+                    for param in params {
+                        self.symbol_index.add(IndexedSymbol {
+                            name: param.name.clone(),
+                            kind: SymbolKind::Variable,
+                            arity: None,
+                            location: SymbolLocation::new(file_path.to_string(), param.span),
+                        });
+                    }
+                    for body_stmt in &body.0 {
+                        self.index_stmt_symbols(file_path, body_stmt);
+                    }
+                    if let Some(ret_expr) = &body.1 {
+                        self.index_expr_symbols(file_path, ret_expr);
+                    }
                 }
-                for body_stmt in &body.0 {
-                    self.index_stmt_symbols(file_path, body_stmt);
-                }
-                if let Some(ret_expr) = &body.1 {
-                    self.index_expr_symbols(file_path, ret_expr);
-                }
+                // 其他情况不处理
             }
             StmtKind::If {
                 condition,
@@ -669,13 +735,25 @@ mod tests {
         let mut world = World::new();
         let module = Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "add".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
-                    type_annotation: None,
+                    type_annotation: Some(crate::frontend::core::parser::ast::Type::Fn {
+                        params: vec![],
+                        return_type: Box::new(crate::frontend::core::parser::ast::Type::Void),
+                    }),
                     eval: None,
                     params: vec![],
-                    body: (vec![], None),
+                    // 函数必须有 body，body 是一个 tail expression
+                    body: (
+                        vec![],
+                        Some(Box::new(crate::frontend::core::parser::ast::Expr::Lit(
+                            crate::frontend::core::parser::ast::Literal::Int(1),
+                            dummy_span(),
+                        ))),
+                    ),
                     is_pub: false,
                 },
                 span: dummy_span(),
@@ -695,14 +773,20 @@ mod tests {
         let mut world = World::new();
         let module = Module {
             items: vec![Stmt {
-                kind: StmtKind::TypeDef {
+                kind: StmtKind::Binding {
                     name: "Point".to_string(),
-                    name_span: dummy_span(),
-                    definition: crate::frontend::core::parser::ast::Type::Name {
-                        name: "Int".to_string(),
-                        span: dummy_span(),
-                    },
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
+                    type_annotation: Some(crate::frontend::core::parser::ast::Type::Struct {
+                        fields: vec![],
+                        bindings: vec![],
+                        interfaces: vec![],
+                    }),
+                    eval: None,
+                    params: vec![],
+                    body: (vec![], None),
+                    is_pub: false,
                 },
                 span: dummy_span(),
             }],
@@ -764,8 +848,10 @@ mod tests {
         let mut world = World::new();
         let module = Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "add".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
                     eval: None,
@@ -805,7 +891,14 @@ mod tests {
                             },
                         },
                     ],
-                    body: (vec![], None),
+                    // 函数必须有 body
+                    body: (
+                        vec![],
+                        Some(Box::new(crate::frontend::core::parser::ast::Expr::Lit(
+                            crate::frontend::core::parser::ast::Literal::Int(1),
+                            dummy_span(),
+                        ))),
+                    ),
                     is_pub: false,
                 },
                 span: dummy_span(),

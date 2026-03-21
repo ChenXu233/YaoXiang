@@ -151,35 +151,49 @@ impl ModuleLoader {
 
         for stmt in &ast.items {
             match &stmt.kind {
-                // pub 函数 → 导出
-                StmtKind::Fn {
+                // Binding 导出 (函数、方法、类型)
+                StmtKind::Binding {
                     name,
+                    type_name,
+                    method_type,
                     type_annotation,
+                    params,
+                    body,
                     is_pub,
                     ..
                 } => {
-                    if *is_pub {
-                        let signature = type_annotation
-                            .as_ref()
-                            .map(format_type)
-                            .unwrap_or_else(|| "(...) -> Any".to_string());
+                    let is_type_def = params.is_empty() && body.0.is_empty() && body.1.is_none();
+                    if let Some(ty_name) = type_name {
+                        // 方法绑定导出为 Type.method
+                        module.add_export(Export {
+                            name: format!("{}.{}", ty_name, name),
+                            full_path: format!("{}.{}.{}", module_path, ty_name, name),
+                            kind: ExportKind::Function,
+                            signature: format_type(method_type.as_ref().unwrap()),
+                        });
+                    } else if is_type_def {
+                        // 类型定义始终导出
                         module.add_export(Export {
                             name: name.clone(),
                             full_path: format!("{}.{}", module_path, name),
-                            kind: ExportKind::Function,
-                            signature,
+                            kind: ExportKind::Type,
+                            signature: "Type".to_string(),
                         });
+                    } else {
+                        // 函数定义（pub 导出）
+                        if *is_pub {
+                            let signature = type_annotation
+                                .as_ref()
+                                .map(format_type)
+                                .unwrap_or_else(|| "(...) -> Any".to_string());
+                            module.add_export(Export {
+                                name: name.clone(),
+                                full_path: format!("{}.{}", module_path, name),
+                                kind: ExportKind::Function,
+                                signature,
+                            });
+                        }
                     }
-                }
-
-                // 类型定义始终导出
-                StmtKind::TypeDef { name, .. } => {
-                    module.add_export(Export {
-                        name: name.clone(),
-                        full_path: format!("{}.{}", module_path, name),
-                        kind: ExportKind::Type,
-                        signature: "Type".to_string(),
-                    });
                 }
 
                 // 顶层不可变绑定 → 常量导出

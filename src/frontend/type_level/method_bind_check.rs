@@ -44,13 +44,14 @@ impl<'a> TraitImplChecker<'a> {
     ) -> Result<(), TraitImplError> {
         // 提取 MethodBind 数据
         let (method_name, params) = match method_bind {
-            StmtKind::MethodBind {
-                type_name: _,
-                method_name,
+            StmtKind::Binding {
+                type_name: Some(_),
+                name,
                 method_type: _,
                 params,
                 body: _,
-            } => (method_name, params),
+                ..
+            } => (name, params),
             _ => return Err(TraitImplError::InvalidMethodBind),
         };
 
@@ -59,7 +60,7 @@ impl<'a> TraitImplChecker<'a> {
             Some(def) => def,
             None => {
                 return Err(TraitImplError::TraitNotFound {
-                    trait_name: method_name.clone(),
+                    trait_name: method_name.to_string(),
                 });
             }
         };

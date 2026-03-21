@@ -91,7 +91,7 @@ pub fn handle_inlay_hint(
                     });
                 }
             }
-            StmtKind::Fn { params, .. } => {
+            StmtKind::Binding { params, .. } => {
                 // 所有权消费/可变性提示
                 for param in params {
                     if param.is_mut {

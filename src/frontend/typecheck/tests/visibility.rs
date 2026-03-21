@@ -35,8 +35,8 @@ fn test_private_items_not_exported() {
 #[test]
 fn test_type_def_auto_exported() {
     let code = r#"
-        Point: Type = Point(x: Float, y: Float)
-        Line: Type = Line(start: Point, end: Point)
+        Point: Type = { x: Float, y: Float }
+        Line: Type = { start: Point, end: Point }
     "#;
 
     let tokens = tokenize(code).unwrap();

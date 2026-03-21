@@ -1003,7 +1003,7 @@ impl<'a> ExpressionInferrer<'a> {
                 }
                 Ok(())
             }
-            crate::frontend::core::parser::ast::StmtKind::Fn {
+            crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 params,
                 body: (stmts, expr),

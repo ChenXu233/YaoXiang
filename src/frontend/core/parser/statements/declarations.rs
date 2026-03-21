@@ -322,12 +322,16 @@ pub fn parse_method_bind_stmt(
     state.skip(&TokenKind::Semicolon);
 
     Some(Stmt {
-        kind: StmtKind::MethodBind {
-            type_name,
-            method_name,
-            method_type,
+        kind: StmtKind::Binding {
+            name: method_name,
+            type_name: Some(type_name),
+            method_type: Some(method_type),
+            generic_params: Vec::new(),
+            type_annotation: None,
+            eval: None,
             params,
             body: (body_stmts, body_expr),
+            is_pub: false,
         },
         span,
     })
@@ -772,8 +776,10 @@ fn parse_var_stmt_with_pub(
                     }
                     state.skip(&TokenKind::Semicolon);
                     return Some(Stmt {
-                        kind: StmtKind::Fn {
+                        kind: StmtKind::Binding {
                             name,
+                            type_name: None,
+                            method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
                             eval: fn_eval,
@@ -797,8 +803,10 @@ fn parse_var_stmt_with_pub(
                     };
 
                     return Some(Stmt {
-                        kind: StmtKind::Fn {
+                        kind: StmtKind::Binding {
                             name,
+                            type_name: None,
+                            method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
                             eval: fn_eval,
@@ -836,18 +844,29 @@ fn parse_var_stmt_with_pub(
                         // 返回一个特殊的 TypeDef 表示彩蛋
                         // 编译器后续阶段会检测并输出禅意消息
                         // 保留 meta_args 以便类型检查器区分 E1090 和 E1091
+                        let generic_params: Vec<GenericParam> = meta_args
+                            .iter()
+                            .filter_map(extract_type_name)
+                            .map(|name| GenericParam {
+                                name,
+                                kind: GenericParamKind::Type,
+                                constraints: Vec::new(),
+                            })
+                            .collect();
                         return Some(Stmt {
-                            kind: StmtKind::TypeDef {
+                            kind: StmtKind::Binding {
                                 name: "Type".to_string(),
-                                name_span,
-                                definition: Type::MetaType {
+                                type_name: None,
+                                method_type: None,
+                                generic_params,
+                                type_annotation: Some(Type::MetaType {
                                     name_span: Span::dummy(),
                                     args: Vec::new(),
-                                },
-                                generic_params: meta_args
-                                    .iter()
-                                    .filter_map(extract_type_name)
-                                    .collect(),
+                                }),
+                                eval: None,
+                                params: Vec::new(),
+                                body: (Vec::new(), None),
+                                is_pub: false,
                             },
                             span,
                         });
@@ -857,17 +876,29 @@ fn parse_var_stmt_with_pub(
             }
 
             // Extract generic parameter names from meta_args (Vec<Type>) for StmtKind::TypeDef
-            let generic_params_for_type: Vec<String> =
-                meta_args.iter().filter_map(extract_type_name).collect();
+            let generic_params_for_type: Vec<GenericParam> = meta_args
+                .iter()
+                .filter_map(extract_type_name)
+                .map(|name| GenericParam {
+                    name,
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
+                })
+                .collect();
 
             let definition = parse_type_definition(state)?;
             state.skip(&TokenKind::Semicolon);
             return Some(Stmt {
-                kind: StmtKind::TypeDef {
+                kind: StmtKind::Binding {
                     name,
-                    name_span,
-                    definition,
+                    type_name: None,
+                    method_type: None,
                     generic_params: generic_params_for_type,
+                    type_annotation: Some(definition),
+                    eval: None,
+                    params: Vec::new(),
+                    body: (Vec::new(), None),
+                    is_pub: false,
                 },
                 span,
             });
@@ -892,8 +923,10 @@ fn parse_var_stmt_with_pub(
         if let Some(ref init_expr) = initializer {
             if let Expr::Block(block) = init_expr.as_ref() {
                 return Some(Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name,
+                        type_name: None,
+                        method_type: None,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
                         eval: None,
@@ -1280,8 +1313,10 @@ pub fn parse_identifier_stmt(
             // If so, convert to function definition: name = { ... } => name: () -> Void = { ... }
             if let Expr::Block(block) = &initializer {
                 return Some(Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name,
+                        type_name: None,
+                        method_type: None,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
                         eval: None,
@@ -1345,8 +1380,10 @@ pub fn parse_fn_stmt_with_name(
     let (stmts, expr) = parse_fn_body(state)?;
 
     Some(Stmt {
-        kind: StmtKind::Fn {
+        kind: StmtKind::Binding {
             name,
+            type_name: None,
+            method_type: None,
             generic_params: Vec::new(),
             type_annotation: None,
             eval: None,
@@ -1380,8 +1417,10 @@ pub fn parse_fn_stmt_with_name_simple(
     let (stmts, expr) = parse_fn_body(state)?;
 
     Some(Stmt {
-        kind: StmtKind::Fn {
+        kind: StmtKind::Binding {
             name,
+            type_name: None,
+            method_type: None,
             generic_params: Vec::new(),
             type_annotation: None,
             eval: None,

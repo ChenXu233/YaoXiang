@@ -443,28 +443,36 @@ impl StatementChecker {
     ) -> Result<(), Box<Diagnostic>> {
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
-            crate::frontend::core::parser::ast::StmtKind::Fn {
+            crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
+                type_name,
                 generic_params: _,
                 type_annotation,
                 eval: _,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
+                method_type: _,
             } => {
+                // 根据是否有 type_name 来区分函数和方法绑定
                 let body = Block {
                     stmts: stmts.to_vec(),
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                self.check_fn_stmt(
-                    name,
-                    type_annotation.as_ref(),
-                    params,
-                    stmts,
-                    body,
-                    stmt.span,
-                )
+                if type_name.is_some() {
+                    // MethodBind - 暂时跳过，后续会实现
+                    Ok(())
+                } else {
+                    self.check_fn_stmt(
+                        name,
+                        type_annotation.as_ref(),
+                        params,
+                        stmts,
+                        body,
+                        stmt.span,
+                    )
+                }
             }
             crate::frontend::core::parser::ast::StmtKind::Var {
                 name,
@@ -504,9 +512,6 @@ impl StatementChecker {
                 self.process_use_stmt(path, items, alias);
                 Ok(())
             }
-            crate::frontend::core::parser::ast::StmtKind::TypeDef {
-                name, definition, ..
-            } => self.check_type_def(name, definition, stmt.span),
             // 错误恢复占位符：报告错误但不 panic
             crate::frontend::core::parser::ast::StmtKind::Error(span) => Err(Box::new(
                 ErrorCodeDefinition::invalid_syntax("缺失语句")
@@ -516,194 +521,6 @@ impl StatementChecker {
             _ => Ok(()),
         }
     }
-
-    /// 检查类型定义
-    fn check_type_def(
-        &mut self,
-        name: &str,
-        definition: &crate::frontend::core::parser::ast::Type,
-        span: crate::util::span::Span,
-    ) -> Result<(), Box<Diagnostic>> {
-        use crate::frontend::core::parser::ast::Type;
-
-        match definition {
-            Type::Struct {
-                fields, bindings, ..
-            } => {
-                for field in fields {
-                    if let Some(default_expr) = &field.default {
-                        self.check_field_default(field, default_expr, span)?;
-                    }
-                }
-
-                for binding in bindings {
-                    self.check_field_binding(name, binding, span)?;
-                }
-
-                Ok(())
-            }
-            _ => Ok(()),
-        }
-    }
-
-    /// 检查字段默认值类型是否与字段类型匹配
-    fn check_field_default(
-        &mut self,
-        field: &crate::frontend::core::parser::ast::StructField,
-        default_expr: &Expr,
-        span: crate::util::span::Span,
-    ) -> Result<(), Box<Diagnostic>> {
-        let expected_type = MonoType::from(field.ty.clone());
-        let actual_type = self.check_expr(default_expr)?;
-
-        if self.solver.unify(&expected_type, &actual_type).is_err() {
-            let is_numeric_promotion = matches!(
-                (&expected_type, &actual_type),
-                (MonoType::Float(_), MonoType::Int(_))
-            );
-
-            if !is_numeric_promotion {
-                return Err(Box::new(
-                    ErrorCodeDefinition::type_mismatch(
-                        &format!("{}", expected_type),
-                        &format!("{}", actual_type),
-                    )
-                    .at(span)
-                    .build(),
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// 检查绑定字段的有效性
-    fn check_field_binding(
-        &mut self,
-        type_name: &str,
-        binding: &crate::frontend::core::parser::ast::TypeBodyBinding,
-        span: crate::util::span::Span,
-    ) -> Result<(), Box<Diagnostic>> {
-        use crate::frontend::core::parser::ast::BindingKind;
-
-        match &binding.kind {
-            BindingKind::External {
-                function,
-                positions,
-            } => {
-                if positions.is_empty() {
-                    return Err(Box::new(
-                        ErrorCodeDefinition::type_mismatch(
-                            "at least one binding position",
-                            "empty positions",
-                        )
-                        .at(span)
-                        .build(),
-                    ));
-                }
-
-                if let Some(func_poly) = self.scope.get_var(function).cloned() {
-                    let func_mono = self.solver.instantiate(&func_poly);
-
-                    if let MonoType::Fn {
-                        params: param_types,
-                        return_type: _,
-                        is_async: _,
-                    } = &func_mono
-                    {
-                        let param_count = param_types.len();
-
-                        for &pos in positions {
-                            if (pos as usize) >= param_count {
-                                return Err(Box::new(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!(
-                                            "binding position < {} (function '{}' has {} params)",
-                                            param_count, function, param_count
-                                        ),
-                                        &format!("position {}", pos),
-                                    )
-                                    .at(span)
-                                    .build(),
-                                ));
-                            }
-
-                            let param_type = &param_types[pos as usize];
-                            let binding_type = MonoType::TypeRef(type_name.to_string());
-                            if self.solver.unify(&binding_type, param_type).is_err() {
-                                return Err(Box::new(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", param_type),
-                                        type_name,
-                                    )
-                                    .at(span)
-                                    .build(),
-                                ));
-                            }
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-            BindingKind::Anonymous {
-                params,
-                return_type: _,
-                positions,
-                body: _,
-            } => {
-                if positions.is_empty() {
-                    return Err(Box::new(
-                        ErrorCodeDefinition::type_mismatch(
-                            "at least one binding position",
-                            "empty positions",
-                        )
-                        .at(span)
-                        .build(),
-                    ));
-                }
-
-                let param_count = params.len();
-                for &pos in positions {
-                    if (pos as usize) >= param_count {
-                        return Err(Box::new(
-                            ErrorCodeDefinition::type_mismatch(
-                                &format!(
-                                    "binding position < {} (anonymous function has {} params)",
-                                    param_count, param_count
-                                ),
-                                &format!("position {}", pos),
-                            )
-                            .at(span)
-                            .build(),
-                        ));
-                    }
-
-                    if let Some(param_ty) = &params[pos as usize].ty {
-                        let param_mono = MonoType::from(param_ty.clone());
-                        let binding_type = MonoType::TypeRef(type_name.to_string());
-                        if self.solver.unify(&binding_type, &param_mono).is_err() {
-                            return Err(Box::new(
-                                ErrorCodeDefinition::type_mismatch(
-                                    &format!("{}", param_mono),
-                                    type_name,
-                                )
-                                .at(span)
-                                .build(),
-                            ));
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-            BindingKind::DefaultExternal { .. } => {
-                // DefaultExternal: 自动推导位置，此处无需额外检查
-                Ok(())
-            }
-        }
-    }
-
     /// 检查表达式语句
     fn check_expr_stmt(
         &mut self,

@@ -33,11 +33,11 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::Fn { name, params, .. } => {
+            StmtKind::Binding { name, params, .. } => {
                 assert_eq!(name, "main");
                 assert!(params.is_empty());
             }
-            _ => panic!("Expected Fn statement, got {:?}", module.items[0].kind),
+            _ => panic!("Expected Binding statement, got {:?}", module.items[0].kind),
         }
     }
 
@@ -50,13 +50,13 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::Fn { name, params, .. } => {
+            StmtKind::Binding { name, params, .. } => {
                 assert_eq!(name, "add");
                 assert_eq!(params.len(), 2);
                 assert_eq!(params[0].name, "a");
                 assert_eq!(params[1].name, "b");
             }
-            _ => panic!("Expected Fn statement"),
+            _ => panic!("Expected Binding statement"),
         }
     }
 
@@ -80,7 +80,7 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::Fn {
+            StmtKind::Binding {
                 name,
                 generic_params,
                 ..
@@ -96,7 +96,7 @@ mod fn_def_tests {
                     _ => panic!("Expected Type::Name for constraint"),
                 }
             }
-            _ => panic!("Expected Fn statement, got {:?}", module.items[0].kind),
+            _ => panic!("Expected Binding statement, got {:?}", module.items[0].kind),
         }
     }
 
@@ -109,7 +109,7 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::Fn {
+            StmtKind::Binding {
                 name,
                 generic_params,
                 ..
@@ -121,7 +121,7 @@ mod fn_def_tests {
                 assert_eq!(generic_params[1].name, "U");
                 assert_eq!(generic_params[1].constraints.len(), 1);
             }
-            _ => panic!("Expected Fn statement"),
+            _ => panic!("Expected Binding statement"),
         }
     }
 
@@ -134,7 +134,7 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::Fn {
+            StmtKind::Binding {
                 name,
                 generic_params,
                 ..
@@ -144,7 +144,7 @@ mod fn_def_tests {
                 assert_eq!(generic_params[0].name, "T");
                 assert!(generic_params[0].constraints.is_empty());
             }
-            _ => panic!("Expected Fn statement"),
+            _ => panic!("Expected Binding statement"),
         }
     }
 
@@ -159,20 +159,20 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 params,
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "draw");
+                assert_eq!(name, "draw");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: params 从签名解析，method_type 存储完整签名
-                if let crate::frontend::core::parser::ast::Type::Fn {
+                if let Some(crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
-                } = method_type
+                }) = method_type
                 {
                     assert_eq!(type_params.len(), 2); // self: Point, surface: Surface
                 } else {
@@ -182,7 +182,7 @@ mod fn_def_tests {
                 assert_eq!(params.len(), 0);
             }
             _ => panic!(
-                "Expected MethodBind statement, got {:?}",
+                "Expected Binding statement for method, got {:?}",
                 module.items[0].kind
             ),
         }
@@ -198,19 +198,19 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 body: (stmts, expr),
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "serialize");
+                assert_eq!(name, "serialize");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: params 从签名解析，存储在 method_type 中
                 // method_type 应该是 Fn 类型
                 match method_type {
-                    crate::frontend::core::parser::ast::Type::Fn { params, .. } => {
+                    Some(crate::frontend::core::parser::ast::Type::Fn { params, .. }) => {
                         assert_eq!(params.len(), 1); // self: Point
                     }
                     _ => panic!("Expected Fn type for method_type"),
@@ -218,7 +218,7 @@ mod fn_def_tests {
                 assert!(stmts.is_empty());
                 assert!(expr.is_some());
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -237,20 +237,20 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 body: (stmts, _expr),
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "distance");
+                assert_eq!(name, "distance");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: method_type 存储完整签名
-                if let crate::frontend::core::parser::ast::Type::Fn {
+                if let Some(crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
-                } = method_type
+                }) = method_type
                 {
                     assert_eq!(type_params.len(), 2);
                     // type_params 是 Vec<Type>，检查类型名称
@@ -266,7 +266,7 @@ mod fn_def_tests {
                 // Should have statements (dx = ..., dy = ...)
                 assert!(stmts.len() >= 2);
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -279,20 +279,20 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 params,
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "reset");
+                assert_eq!(name, "reset");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: Check method type has 0 params
-                if let crate::frontend::core::parser::ast::Type::Fn {
+                if let Some(crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
-                } = method_type
+                }) = method_type
                 {
                     assert_eq!(type_params.len(), 0);
                 } else {
@@ -300,7 +300,7 @@ mod fn_def_tests {
                 }
                 assert_eq!(params.len(), 0);
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -313,20 +313,20 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 params,
                 ..
             } => {
-                assert_eq!(type_name, "List");
-                assert_eq!(method_name, "map");
+                assert_eq!(name, "map");
+                assert_eq!(*type_name, Some("List".to_string()));
                 // RFC-010: method_type 存储完整签名
-                if let crate::frontend::core::parser::ast::Type::Fn {
+                if let Some(crate::frontend::core::parser::ast::Type::Fn {
                     params: type_params,
                     ..
-                } = method_type
+                }) = method_type
                 {
                     assert_eq!(type_params.len(), 2);
                     // type_params 是 Vec<Type>，检查类型名称
@@ -353,7 +353,7 @@ mod fn_def_tests {
                 }
                 assert_eq!(params.len(), 0); // RFC-010: body 是代码块
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -371,21 +371,21 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 body: (stmts, expr),
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "add");
+                assert_eq!(name, "add");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: params 从签名解析
                 match method_type {
-                    crate::frontend::core::parser::ast::Type::Fn {
+                    Some(crate::frontend::core::parser::ast::Type::Fn {
                         params: type_params,
                         ..
-                    } => {
+                    }) => {
                         assert_eq!(type_params.len(), 2);
                     }
                     _ => panic!("Expected Fn type"),
@@ -393,7 +393,7 @@ mod fn_def_tests {
                 assert!(stmts.len() >= 1);
                 assert!(expr.is_some());
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -406,17 +406,17 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 body: (_stmts, expr),
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "decompose");
+                assert_eq!(name, "decompose");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // Verify it parsed as Fn type
-                if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } =
+                if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                     method_type
                 {
                     match **return_type {
@@ -429,7 +429,7 @@ mod fn_def_tests {
                 // RFC-010: 直接表达式形式
                 assert!(expr.is_some());
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -446,36 +446,36 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 2);
 
-        // First item should be MethodBind
+        // First item should be Binding (method)
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 ..
             } => {
-                assert_eq!(type_name, "Point");
-                assert_eq!(method_name, "x");
+                assert_eq!(name, "x");
+                assert_eq!(*type_name, Some("Point".to_string()));
                 // RFC-010: Verify method_type has correct params
                 match method_type {
-                    crate::frontend::core::parser::ast::Type::Fn {
+                    Some(crate::frontend::core::parser::ast::Type::Fn {
                         params: type_params,
                         ..
-                    } => {
+                    }) => {
                         assert_eq!(type_params.len(), 1);
                     }
                     _ => panic!("Expected Fn type"),
                 }
             }
-            _ => panic!("Expected MethodBind statement as first item"),
+            _ => panic!("Expected Binding statement (method) as first item"),
         }
 
-        // Second item should be Fn
+        // Second item should be Binding (function)
         match &module.items[1].kind {
-            StmtKind::Fn { name, .. } => {
+            StmtKind::Binding { name, .. } => {
                 assert_eq!(name, "get_value");
             }
-            _ => panic!("Expected Fn statement as second item"),
+            _ => panic!("Expected Binding statement as second item"),
         }
     }
 
@@ -488,18 +488,18 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 body: (stmts, expr),
                 ..
             } => {
-                assert_eq!(type_name, "Number");
-                assert_eq!(method_name, "sign");
+                assert_eq!(name, "sign");
+                assert_eq!(*type_name, Some("Number".to_string()));
                 assert!(stmts.is_empty());
                 assert!(expr.is_some());
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -512,29 +512,33 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
                 method_type,
                 params,
                 ..
             } => {
-                assert_eq!(type_name, "Optional");
-                assert_eq!(method_name, "get_or_default");
+                assert_eq!(name, "get_or_default");
+                assert_eq!(*type_name, Some("Optional".to_string()));
                 // RFC-010: body 是代码块，params 为空（参数信息在 method_type 中）
                 assert_eq!(params.len(), 0);
                 // 验证方法类型签名有 2 个参数
-                if let crate::frontend::core::parser::ast::Type::Fn {
-                    params: type_params,
-                    ..
-                } = method_type
-                {
-                    assert_eq!(type_params.len(), 2);
+                if let Some(ref fn_type) = method_type {
+                    if let crate::frontend::core::parser::ast::Type::Fn {
+                        params: type_params,
+                        ..
+                    } = fn_type
+                    {
+                        assert_eq!(type_params.len(), 2);
+                    } else {
+                        panic!("Expected Fn type for method_type");
+                    }
                 } else {
-                    panic!("Expected Fn type for method_type");
+                    panic!("Expected Some for method_type");
                 }
             }
-            _ => panic!("Expected MethodBind statement"),
+            _ => panic!("Expected Binding statement for method"),
         }
     }
 
@@ -549,24 +553,24 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
+            StmtKind::Binding {
                 name,
-                definition,
+                type_annotation,
                 generic_params,
                 ..
             } => {
                 assert_eq!(name, "Point");
                 assert!(generic_params.is_empty());
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert_eq!(fields.len(), 2);
                         assert_eq!(fields[0].name, "x");
                         assert_eq!(fields[1].name, "y");
                     }
-                    _ => panic!("Expected Struct type, got {:?}", definition),
+                    _ => panic!("Expected Struct type, got {:?}", type_annotation),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 
@@ -579,22 +583,22 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
+            StmtKind::Binding {
                 name,
-                definition,
+                type_annotation,
                 generic_params,
                 ..
             } => {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert!(fields.is_empty()); // 只有接口约束
                     }
                     _ => panic!("Expected Struct type"),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 
@@ -607,22 +611,22 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
+            StmtKind::Binding {
                 name,
-                definition,
+                type_annotation,
                 generic_params,
                 ..
             } => {
                 assert_eq!(name, "EmptyType");
                 assert!(generic_params.is_empty());
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert!(fields.is_empty());
                     }
                     _ => panic!("Expected Struct type"),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 
@@ -635,19 +639,21 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
-                name, definition, ..
+            StmtKind::Binding {
+                name,
+                type_annotation,
+                ..
             } => {
                 assert_eq!(name, "Drawable");
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert_eq!(fields.len(), 1);
                         assert_eq!(fields[0].name, "draw");
                     }
                     _ => panic!("Expected Struct type"),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 
@@ -660,19 +666,21 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
-                name, definition, ..
+            StmtKind::Binding {
+                name,
+                type_annotation,
+                ..
             } => {
                 assert_eq!(name, "Serializable");
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert_eq!(fields.len(), 1);
                         assert_eq!(fields[0].name, "serialize");
                     }
                     _ => panic!("Expected Struct type"),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 
@@ -685,16 +693,18 @@ mod fn_def_tests {
 
         assert_eq!(module.items.len(), 1);
         match &module.items[0].kind {
-            StmtKind::TypeDef {
+            StmtKind::Binding {
                 name,
-                definition,
+                type_annotation,
                 generic_params,
                 ..
             } => {
                 assert_eq!(name, "List");
-                assert_eq!(generic_params, &vec!["T".to_string()]);
-                match definition {
-                    crate::frontend::core::parser::ast::Type::Struct { fields, .. } => {
+                // Note: generic_params is now Vec<GenericParam>, not Vec<String>
+                assert_eq!(generic_params.len(), 1);
+                assert_eq!(generic_params[0].name, "T");
+                match type_annotation {
+                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
                         assert_eq!(fields.len(), 2);
                         assert_eq!(fields[0].name, "data");
                         assert_eq!(fields[1].name, "length");
@@ -702,7 +712,7 @@ mod fn_def_tests {
                     _ => panic!("Expected Struct type"),
                 }
             }
-            _ => panic!("Expected TypeDef statement"),
+            _ => panic!("Expected Binding statement for type"),
         }
     }
 }
