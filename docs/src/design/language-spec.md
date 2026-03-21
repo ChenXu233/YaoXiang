@@ -186,7 +186,7 @@ Point: Type = { x: Float, y: Float }
 Empty: Type = {}
 
 # 带泛型的记录类型
-Pair: Type[T] = { first: T, second: T }
+Pair: (T: Type) -> Type = { first: T, second: T }
 
 # 实现接口的记录类型
 Point: Type = {
@@ -275,10 +275,10 @@ Variant     ::= Identifier (':' TypeExpr)?
 Color: Type = { red | green | blue }
 
 # 有参变体
-Option: Type[T] = { some(T) | none }
+Option: (T: Type) -> Type = { some(T) | none }
 
 # 混合
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # 无参变体等价于无参构造器
 Bool: Type = { true | false }
@@ -375,17 +375,17 @@ TypeBound       ::= Identifier
 
 ```yaoxiang
 # 基础泛型类型
-Option: Type[T] = {
+Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
 }
 
-Result: Type[T, E] = {
+Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Self,
     err: (E) -> Self
 }
 
-List: Type[T] = {
+List: (T: Type) -> Type = {
     data: Array[T],
     length: Int,
     push: [T](self: List[T], item: T) -> Void,
@@ -453,7 +453,7 @@ AssociatedType ::= Identifier ':' TypeExpr
 
 ```yaoxiang
 # Iterator trait（使用记录类型语法）
-Iterator: Type[T] = {
+Iterator: (T: Type) -> Type = {
     Item: T,                    # 关联类型
     next: (Self) -> Option[T],
     has_next: (Self) -> Bool
@@ -475,7 +475,7 @@ collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
 
 ```yaoxiang
 # 更复杂的关联类型
-Container: Type[T] = {
+Container: (T: Type) -> Type = {
     Item: T,
     IteratorType: Iterator[T],  # 关联类型也是泛型的
     iter: (Self) -> IteratorType
@@ -503,7 +503,7 @@ factorial: [n: Int](n: n) -> Int = {
 }
 
 # 编译期常量数组
-StaticArray: Type[T, N: Int] = {
+StaticArray: (T: Type, N: Int) -> Type = {
     data: T[N],      # 编译期已知大小的数组
     length: N
 }
@@ -516,7 +516,7 @@ arr: StaticArray[Int, factorial(5)]  # 编译器在编译期计算 factorial(5) 
 
 ```yaoxiang
 # 矩阵类型使用
-Matrix: Type[T, Rows: Int, Cols: Int] = {
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array[Array[T, Cols], Rows]
 }
 
@@ -536,16 +536,16 @@ IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
 
 ```yaoxiang
 # 类型级 If
-If: Type[C: Bool, T, E] = match C {
+If: (C: Bool, T: Type, E: Type) -> Type = match C {
     True => T,
     False => E
 }
 
 # 示例：编译期分支
-NonEmpty: Type[T] = If[T != Void, T, Never]
+NonEmpty: (T: Type) -> Type = If[T != Void, T, Never]
 
 # 编译期验证
-Assert: Type[C: Bool] = match C {
+Assert: (C: Bool) -> Type = match C {
     True => Void,
     False => compile_error("Assertion failed")
 }
@@ -555,7 +555,7 @@ Assert: Type[C: Bool] = match C {
 
 ```yaoxiang
 # 编译期类型转换
-AsString: Type[T] = match T {
+AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
     Bool => String,
@@ -1419,7 +1419,7 @@ with mutex.lock() {
 ### 9.1 Result 类型
 
 ```
-Result: Type[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 ```
 
 **变体构造**：
@@ -1432,7 +1432,7 @@ Result: Type[T, E] = ok(T) | err(E)
 ### 9.2 Option 类型
 
 ```
-Option: Type[T] = some(T) | none
+Option: (T: Type) -> Type = some(T) | none
 ```
 
 **变体构造**：
@@ -1474,7 +1474,7 @@ data = match fetch_data() {
 Point: Type = { x: Float, y: Float }
 
 # 枚举（变体类型）
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 Status: Type = { pending | processing | completed }
 
 # === 接口类型（花括号，字段全为函数） ===
@@ -1537,8 +1537,8 @@ pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 
 ```
 # 泛型类型
-List: Type[T] = { data: Array[T], length: Int }
-Result: Type[T, E] = { ok(T) | err(E) }
+List: (T: Type) -> Type = { data: Array[T], length: Int }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # 泛型函数
 map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = { ... }
@@ -1548,14 +1548,14 @@ clone: [T: Clone](value: T) -> T = value.clone()
 combine: [T: Clone + Add](a: T, b: T) -> T = body
 
 # 关联类型
-Iterator: Type[T] = { Item: T, next: () -> Option[T] }
+Iterator: (T: Type) -> Type = { Item: T, next: () -> Option[T] }
 
 # 编译期泛型
 factorial: [n: Int](n: n) -> Int = { ... }
-StaticArray: Type[T, N: Int] = { data: T[N], length: N }
+StaticArray: (T: Type, N: Int) -> Type = { data: T[N], length: N }
 
 # 条件类型
-If: Type[C: Bool, T, E] = match C { True => T, False => E }
+If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }
 
 # 函数特化
 sum: (arr: Array[Int]) -> Int = { ... }
