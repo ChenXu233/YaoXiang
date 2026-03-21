@@ -20,6 +20,7 @@ main = {
         pos = string.index_of("hello", "l")
     }
     pos2 = string.index_of("world", "o")
+    return
 }
 "#;
 
@@ -39,6 +40,7 @@ main = {
         a = string.index_of("hello", "l")
         b = string.index_of("world", "o")
     }
+    return
 }
 "#;
 
@@ -51,10 +53,12 @@ fn test_use_inside_function_not_visible_in_other_function() {
 f = {
     use std.string
     _ = string.index_of("hello", "l")
+    return
 }
 
 g = {
     x = string.index_of("world", "o")
+    return
 }
 "#;
 

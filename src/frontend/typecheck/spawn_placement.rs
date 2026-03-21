@@ -3,7 +3,7 @@
 //! RFC-001/008: `spawn { ... }` is only valid inside `@block` scopes.
 
 use crate::frontend::core::parser::ast::{
-    BindingKind, Block, EvalMode, Expr, FStringSegment, Module, Stmt, StmtKind, Type,
+    Block, EvalMode, Expr, FStringSegment, Module, Stmt, StmtKind,
 };
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
@@ -127,44 +127,6 @@ impl SpawnPlacementChecker {
                 });
             }
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
-        }
-    }
-
-    fn check_type(
-        &mut self,
-        ty: &Type,
-    ) {
-        match ty {
-            Type::Struct {
-                fields, bindings, ..
-            } => {
-                for field in fields {
-                    if let Some(expr) = &field.default {
-                        self.check_expr(expr);
-                    }
-                }
-                for b in bindings {
-                    self.check_binding(&b.kind);
-                }
-            }
-            Type::NamedStruct { fields, .. } => {
-                for field in fields {
-                    if let Some(expr) = &field.default {
-                        self.check_expr(expr);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn check_binding(
-        &mut self,
-        binding: &BindingKind,
-    ) {
-        match binding {
-            BindingKind::Anonymous { body, .. } => self.check_expr(body),
-            BindingKind::External { .. } | BindingKind::DefaultExternal { .. } => {}
         }
     }
 

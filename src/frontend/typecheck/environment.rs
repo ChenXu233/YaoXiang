@@ -80,6 +80,57 @@ impl TypeEnvironment {
         self.vars.insert(name, poly);
     }
 
+    /// 添加函数绑定（支持方法绑定）
+    ///
+    /// 统一处理 Binding 的注册：
+    /// - 如果 `type_name` 存在，则为方法绑定，同时注册到 vars 和 method_bindings
+    /// - 否则仅注册到 vars
+    ///
+    /// 这确保了 Binding 被正确转换为 MonoType::Fn 并注册到环境
+    pub fn add_fn_binding(
+        &mut self,
+        name: &str,
+        type_name: Option<&str>,
+        fn_type: MonoType,
+    ) {
+        // 注册到 vars
+        self.vars
+            .insert(name.to_string(), PolyType::mono(fn_type.clone()));
+
+        // 如果有 type_name，注册为方法绑定
+        if let Some(ty) = type_name {
+            self.add_method_binding(ty, name, fn_type);
+        }
+    }
+
+    /// 自动绑定 pub 函数到类型
+    ///
+    /// 根据第一个参数的类型自动将函数绑定到该类型。
+    /// 例如: pub distance: (self: Point, other: Point) -> Float 自动绑定为 Point.distance
+    ///
+    /// - 如果第一个参数类型是 TypeRef 且该类型在当前模块定义，则绑定
+    /// - 否则不做任何操作
+    pub fn auto_bind_to_type(
+        &mut self,
+        fn_name: &str,
+        param_types: &[MonoType],
+        fn_type: MonoType,
+    ) {
+        if param_types.is_empty() {
+            return;
+        }
+
+        // 获取第一个参数的类型名称
+        let first_param_ty = &param_types[0];
+        if let MonoType::TypeRef(type_name) = first_param_ty {
+            // 检查该类型是否在当前模块中定义
+            if self.types.contains_key(type_name) {
+                // 绑定方法到类型
+                self.add_method_binding(type_name, fn_name, fn_type);
+            }
+        }
+    }
+
     /// 获取变量类型
     pub fn get_var(
         &self,

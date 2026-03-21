@@ -164,13 +164,15 @@ impl ModuleLoader {
                 } => {
                     let is_type_def = params.is_empty() && body.0.is_empty() && body.1.is_none();
                     if let Some(ty_name) = type_name {
-                        // 方法绑定导出为 Type.method
-                        module.add_export(Export {
-                            name: format!("{}.{}", ty_name, name),
-                            full_path: format!("{}.{}.{}", module_path, ty_name, name),
-                            kind: ExportKind::Function,
-                            signature: format_type(method_type.as_ref().unwrap()),
-                        });
+                        // 方法绑定：pub 导出为 Type.method
+                        if *is_pub {
+                            module.add_export(Export {
+                                name: format!("{}.{}", ty_name, name),
+                                full_path: format!("{}.{}.{}", module_path, ty_name, name),
+                                kind: ExportKind::Function,
+                                signature: format_type(method_type.as_ref().unwrap()),
+                            });
+                        }
                     } else if is_type_def {
                         // 类型定义始终导出
                         module.add_export(Export {
@@ -180,7 +182,7 @@ impl ModuleLoader {
                             signature: "Type".to_string(),
                         });
                     } else {
-                        // 函数定义（pub 导出）
+                        // 函数定义：pub 导出
                         if *is_pub {
                             let signature = type_annotation
                                 .as_ref()
