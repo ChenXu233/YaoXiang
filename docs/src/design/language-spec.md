@@ -388,8 +388,8 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array[T],
     length: Int,
-    push: [T](self: List[T], item: T) -> Void,
-    get: [T](self: List[T], index: Int) -> Option[T]
+    push: (self: List[T], item: T) -> Void,
+    get: (self: List[T], index: Int) -> Option[T]
 }
 ```
 
@@ -405,7 +405,7 @@ numbers: List[Int] = List(1, 2, 3)  # 编译器推导 List[Int]
 #### 3.9.1 单一约束
 
 ```
-ConstrainedType ::= '[' Identifier ':' TypeBound ']' TypeExpr
+ConstrainedType ::= '(' Identifier ':' TypeBound ')' TypeExpr
 ```
 
 ```yaoxiang
@@ -414,20 +414,18 @@ Clone: Type = {
     clone: (Self) -> Self
 }
 
-# 使用约束
-clone: [T: Clone](value: T) -> T = value.clone()
+# 使用约束：T: Clone 表示 T 必须实现 Clone 接口
+clone: (T: Clone) -> ((value: T) -> T) = (value) => value.clone()
 ```
 
 #### 3.9.2 多重约束
 
 ```yaoxiang
-# 多重约束语法
-combine: [T: Clone + Add](a: T, b: T) -> T = {
-    a.clone() + b
-}
+# 多重约束语法：使用 & 表示交集
+combine: (T: Clone & Add) -> ((a: T, b: T) -> T) = (a, b) => a.clone() + b
 
 # 泛型容器的排序
-sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
+sort: (T: Clone & PartialOrd) -> ((list: List[T]) -> List[T]) = (list) => {
     result = list.clone()
     quicksort(&mut result)
     return result
@@ -438,9 +436,9 @@ sort: [T: Clone + PartialOrd](list: List[T]) -> List[T] = {
 
 ```yaoxiang
 # 高阶函数约束
-call_twice: [T, F: Fn() -> T](f: F) -> (T, T) = (f(), f())
+call_twice: (T: Type, F: () -> T) -> ((f: F) -> (T, T)) = (f) => (f(), f())
 
-compose: [A, B, C, F: Fn(A) -> B, G: Fn(B) -> C](a: A, f: F, g: G) -> C = g(f(a))
+compose: (A: Type, B: Type, C: Type, F: (A) -> B, G: (B) -> C) -> ((a: A, f: F, g: G) -> C) = (a, f, g) => g(f(a))
 ```
 
 ### 3.10 关联类型
@@ -460,7 +458,7 @@ Iterator: (T: Type) -> Type = {
 }
 
 # 使用关联类型
-collect: [T, I: Iterator[T]](iter: I) -> List[T] = {
+collect: (T: Type, I: Iterator[T]) -> ((iter: I) -> List[T]) = (iter) => {
     result = List[T]()
     while iter.has_next() {
         if let Some(item) = iter.next() {
@@ -488,14 +486,14 @@ Container: (T: Type) -> Type = {
 
 ```
 LiteralType   ::= Identifier ':' Int          # 编译期常量
-CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
+ValueDepType  ::= '(' Identifier ':' Int ')' '->' TypeExpr
 ```
 
-**核心设计**：用 `[n: Int]` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
+**核心设计**：用值依赖类型语法 `(n: Int)` 声明编译期常量参数，类型检查时自动要求编译期求值。
 
 ```yaoxiang
-# 编译期阶乘：参数必须是编译期已知的字面量
-factorial: [n: Int](n: n) -> Int = {
+# 编译期阶乘：使用 (n: Int) 声明，编译器强制在编译期求值
+factorial: (n: Int) -> Int = {
     match n {
         0 => 1,
         _ => n * factorial(n - 1)
@@ -508,8 +506,8 @@ StaticArray: (T: Type, N: Int) -> Type = {
     length: N
 }
 
-# 使用方式
-arr: StaticArray[Int, factorial(5)]  # 编译器在编译期计算 factorial(5) = 120
+# 使用方式：factorial(5) 在编译期求值
+arr: StaticArray[Int, factorial(5)]  # factorial(5) = 120
 ```
 
 #### 3.11.2 编译期常量数组
@@ -521,7 +519,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 }
 
 # 编译期维度验证
-identity_matrix: [T: Add + Zero + One, N: Int](size: N) -> Matrix[T, N, N] = {
+identity_matrix: (T: Add & Zero & One, N: Int) -> ((size: N) -> Matrix[T, N, N]) = (size) => {
     # ...
 }
 ```
@@ -582,7 +580,7 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 DrawableSerializable: Type = Drawable & Serializable
 
 # 使用交集类型
-process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
+process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) = (item, screen) => {
     item.draw(screen)
     return item.serialize()
 }
@@ -601,7 +599,7 @@ sum: (arr: Array[Float]) -> Float = {
 }
 
 # 通用实现
-sum: [T: Add](arr: Array[T]) -> T = {
+sum: (T: Add) -> ((arr: Array[T]) -> T) = (arr) => {
     result = Zero::zero()
     for item in arr {
         result = result + item
@@ -630,7 +628,33 @@ sum: [P: AArch64](arr: Array[Float]) -> Float = {
 
 ## 第三章（续）：语法设计说明
 
-### 3.17 具名函数与 Lambda 的关系
+### 3.17 类型宇宙思想概述
+
+**类型宇宙思想**是理解 YaoXiang 类型系统的核心心智模型，将语言中的概念按语义角色划分为不同层级：
+
+| 层级 | 角色 | 示例 |
+|------|------|------|
+| Type-1 | 值 | `42`, `"hello"`, 函数本身 |
+| Type0 | 元类型关键字 | `Type`（用于标注"这是一个类型"） |
+| Type1 | 具体类型 | `Int`, `String`, `Point` |
+| Type2 | 函数/类型构造器/值依赖类型 | `add: (Int,Int)->Int`, `List: (T: Type) -> Type`, `Vec: (n: Int) -> Type` |
+| Type3 | 接口/约束 | `Clone: Type = { clone: (Self) -> Self }` |
+| Type4+ | 元编程构件（预留） | 宏、代码生成器 |
+
+**统一语法**：`name: type = value`
+
+无论类型构造器还是函数，都使用相同的形式：
+- 变量：`x: Int = 42`
+- 函数：`add: (a: Int, b: Int) -> Int = a + b`
+- 记录类型：`Point: Type = { x: Float, y: Float }`
+- 泛型类型构造器：`List: (T: Type) -> Type = { data: Array[T] }`
+- 泛型函数：`map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R])`
+
+**核心规则**：
+- 有 `: Type` → 类型构造器
+- 无 `: Type` → HM 推断为函数/变量
+
+### 3.18 具名函数与 Lambda 的关系
 
 **核心理解**：具名函数和 Lambda 表达式是同一个东西！唯一的区别是：具名函数给 Lambda 取了个名字。
 
@@ -989,8 +1013,8 @@ greet: (name: String) -> String = "Hello, ${name}!"
 ### 6.4 泛型函数
 
 ```yaoxiang
-# 泛型函数定义
-map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = {
+# 泛型函数定义：类型参数使用 (T: Type) 语法
+map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R]) = {
     result = List[R]()
     for item in list {
         result.push(f(item))
@@ -999,10 +1023,10 @@ map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = {
 }
 
 # 使用泛型约束
-clone: [T: Clone](value: T) -> T = value.clone()
+clone: (T: Clone) -> ((value: T) -> T) = (value) => value.clone()
 
 # 多类型参数
-combine: [T, U](a: T, b: U) -> (T, U) = (a, b)
+combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b) => (a, b)
 ```
 
 ### 6.5 方法定义
@@ -1504,10 +1528,10 @@ name: (param1: Type1, param2: Type2) -> ReturnType = body
 name: (Type1, Type2) -> ReturnType = (params) => body
 
 # 泛型函数
-name: [T, R](param: T) -> R = body
+name: (T: Type, R: Type) -> ((param: T) -> R) = body
 
 # 泛型约束
-name: [T: Clone + Add](a: T, b: T) -> T = body
+name: (T: Clone & Add) -> ((a: T, b: T) -> T) = body
 ```
 
 ### A.3 方法定义
@@ -1540,18 +1564,18 @@ pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 List: (T: Type) -> Type = { data: Array[T], length: Int }
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-# 泛型函数
-map: [T, R](list: List[T], f: Fn(T) -> R) -> List[R] = { ... }
+# 泛型函数：类型参数使用 (T: Type) 语法
+map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R]) = { ... }
 
-# 类型约束
-clone: [T: Clone](value: T) -> T = value.clone()
-combine: [T: Clone + Add](a: T, b: T) -> T = body
+# 类型约束：约束使用 (T: Clone) 语法
+clone: (T: Clone) -> ((value: T) -> T) = (value) => value.clone()
+combine: (T: Clone & Add) -> ((a: T, b: T) -> T) = body
 
 # 关联类型
 Iterator: (T: Type) -> Type = { Item: T, next: () -> Option[T] }
 
-# 编译期泛型
-factorial: [n: Int](n: n) -> Int = { ... }
+# 编译期泛型：使用 (n: Int) 声明值依赖类型
+factorial: (n: Int) -> Int = { ... }
 StaticArray: (T: Type, N: Int) -> Type = { data: T[N], length: N }
 
 # 条件类型
