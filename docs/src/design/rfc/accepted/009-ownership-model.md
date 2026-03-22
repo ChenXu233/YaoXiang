@@ -7,7 +7,7 @@ title: RFC-009：所有权模型设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2026-02-12
+> **最后更新**: 2026-03-21（示例语法对齐统一 Binding 与并发注解规则）
 
 ## 摘要
 
@@ -55,31 +55,42 @@ title: RFC-009：所有权模型设计
 
 ```yaoxiang
 # 1. 默认 Move（零拷贝）
-create_and_forget: () -> Point = () => {
+create_and_forget: () -> Void = {
     p = Point(1.0, 2.0)
     # p 离开作用域自动释放
 }
 
 # 2. 显式 ref = Arc（安全共享，类型自动推断）
-shared = ref p   # Arc，类型从 p 推断
-spawn(() => print(shared.x))
+share_demo: () -> Void @block = {
+    p = Point(1.0, 2.0)
+    shared = ref p   # Arc，类型从 p 推断
+    spawn { print(shared.x) }
+}
 
 # 3. 显式 clone() = 复制
-p2 = p.clone()
+clone_demo: () -> Point = {
+    p = Point(1.0, 2.0)
+    p.clone()
+}
 
 # 4. 系统级 = unsafe + 裸指针
-unsafe {
-    ptr: *Point = &p
-    (*ptr).x = 0.0
+unsafe_demo: () -> Void = {
+    p = Point(1.0, 2.0)
+    unsafe {
+        ptr: *Point = &p
+        (*ptr).x = 0.0
+    }
 }
 
 # 5. 标准库 Rc/Arc/Weak
 use std.rc.{Rc, Weak}
 use std.sync.Arc
 
-rc: Rc[Node] = Rc.new(node)
-arc: Arc[Node] = Arc.new(node)
-weak: Weak[Node] = Weak.new(arc)
+rc_arc_demo: (node: Node) -> Void = {
+    rc: Rc[Node] = Rc.new(node)
+    arc: Arc[Node] = Arc.new(node)
+    weak: Weak[Node] = Weak.new(arc)
+}
 ```
 
 ### 与 Rust 的核心区别
@@ -101,13 +112,13 @@ weak: Weak[Node] = Weak.new(arc)
 
 ```yaoxiang
 # Rust 的问题
-returns_ref: () -> &Point {   # 需要 'a
+returns_ref: () -> &Point = {   # 需要 'a
     let p = Point(1.0, 2.0)
     return &p                  # 悬空指针！
 }
 
 # YaoXiang 的解决方案
-returns_value: () -> Point {   # 无生命周期
+returns_value: () -> Point = {   # 无生命周期
     p = Point(1.0, 2.0)
     return p                    # Move，所有权转移
 }
@@ -164,13 +175,13 @@ flowchart TB
 p: Point = Point(1.0, 2.0)
 p2 = p                        # Move，p 失效
 
-process: (p: Point) -> Point {
+process: (p: Point) -> Point = {
     p.transform()             # p 是参数，Move
 }
 
-create: () -> Point {
+create: () -> Point = {
     p = Point(1.0, 2.0)
-    return p                  # Move，返回值
+    p                          # Move，返回值
 }
 ```
 
@@ -184,17 +195,19 @@ create: () -> Point {
 ```yaoxiang
 # === 规则：ref 关键字 = Arc（引用计数） ===
 
-p: Point = Point(1.0, 2.0)
+main: () -> Void @block = {
+    p: Point = Point(1.0, 2.0)
 
-# 创建 Arc，类型自动推断
-shared = ref p
+    # 创建 Arc，类型自动推断
+    shared = ref p
 
-# Arc 自动管理生命周期
-spawn(() => print(shared.x))   # 安全
-spawn(() => print(shared.y))   # 安全
+    # Arc 自动管理生命周期（spawn 仅允许在 @block 作用域内）
+    spawn { print(shared.x) }   # 安全
+    spawn { print(shared.y) }   # 安全
 
-# Arc 计数自动增减
-# shared 离开作用域时，计数归零自动释放
+    # Arc 计数自动增减
+    # shared 离开作用域时，计数归零自动释放
+}
 ```
 
 **特点**：
@@ -229,18 +242,18 @@ use std.rc.{Rc, Weak}
 use std.sync.Arc
 
 # === Rc：非线程安全引用计数 ===
-node: Node = Node::new()
-rc: Rc[Node] = Rc::new(node)
+node: Node = Node.new()
+rc: Rc[Node] = Rc.new(node)
 rc2 = rc.clone()              # Rc 克隆，非线程安全
 
 # === Arc：线程安全引用计数 ===
-node: Node = Node::new()
-arc: Arc[Node] = Arc::new(node)
+node: Node = Node.new()
+arc: Arc[Node] = Arc.new(node)
 arc2 = arc.clone()            # Arc 克隆，原子操作
 
 # === Weak：不增加计数，防止循环 ===
-arc: Arc[Node] = Arc::new(Node::new())
-weak: Weak[Node] = Weak::new(arc)
+arc: Arc[Node] = Arc.new(Node.new())
+weak: Weak[Node] = Weak.new(arc)
 
 # 使用前检查是否存在
 if Some(node) = weak.upgrade() {
@@ -336,7 +349,7 @@ p = Point(5.0, 6.0)    # ✅ 可重新赋值
 |------|----------|------------------------|
 | 移动后变量 | 必须重新声明 `let p = ...` | 自动重新赋值 `p = ...` |
 | 变量命名 | 需避免 `p1, p2, p3` | 可复用同一变量名 |
-| 代码示例 | `let p = Point::new(); let p2 = move_p(p); let p = Point::new();` | `p = Point::new(); p2 = move_p(p); p = Point::new();` |
+| 代码示例 | `let p = Point::new(); let p2 = move_p(p); let p = Point::new();` | `p = Point(1.0, 2.0); p2 = move_p(p); p = Point(3.0, 4.0);` |
 
 ---
 
@@ -365,13 +378,13 @@ p = p.rotate(90).scale(2.0).translate(1.0, 1.0)
 ```yaoxiang
 # === 回流 vs 消费 ===
 
-transform: (x: Point) -> Point {
+transform: (x: Point) -> Point = {
     # x 被修改后返回 → 推断为 Returns 模式
     x.scale(2.0)
-    return x
+    x
 }
 
-consume: (x: Point) -> () {
+consume: (x: Point) -> Void = {
     # x 被消费，不返回 → 推断为 Consumes 模式
     print(x)
 }
@@ -388,10 +401,10 @@ consume(p)             # ⚠️ 消费：p 变空，后续不可用
 # === 显式标注参数所有权流向 ===
 
 # 消费参数（不返回）
-print_and_consume: (x: Point) -> () { ... }
+print_and_consume: (x: Point) -> Void = { ... }
 
 # 回流参数（返回）
-modify_and_return: (x: Point) -> Point { ... }
+modify_and_return: (x: Point) -> Point = { ... }
 ```
 
 **注意**：YaoXiang 不提供 `&Point` 借用语法。如果需要共享，用 `ref` 关键字；如果只想读不消费原值，用 `clone()` 复制。
@@ -435,12 +448,12 @@ p = p.translate(1.0, 1.0)
 # === 消费标记示例 ===
 
 # Consumes：完全消费（不返回）
-destroy: (config: Config) -> () {
+destroy: (config: Config) -> Void = {
     # config 被消费，不返回
 }
 
 # Returns：修改后回流（返回）
-update: (config: Config) -> Config {
+update: (config: Config) -> Config = {
     # config 被修改后返回
 }
 
@@ -465,21 +478,19 @@ print(copy.name)            # 读副本
 
 # ✅ 正确：显式标注 #[reversible]
 #[reversible]
-increment: (counter: Counter) -> Counter {
+increment: (counter: Counter) -> Counter = {
     counter.value += 1
-    return counter
+    counter
 }
 
 # 编译器生成逆函数
-undo_increment: (counter: Counter) -> Counter {
+undo_increment: (counter: Counter) -> Counter = {
     counter.value -= 1
-    return counter
+    counter
 }
 
 # ❌ 错误：没有标注，不会生成逆函数
-double: (x: Int) -> Int {
-    return x * 2
-}
+double: (x: Int) -> Int = x * 2
 
 # 使用
 c = Counter(0)
@@ -496,21 +507,21 @@ c = undo_increment(c)   # c.value = 0，回滚！
 ```yaoxiang
 # === 撤销/重做支持（手动实现）===
 
-struct Editor {
-    history: List[State]    # 撤销栈
-    current: State
+Editor: Type = {
+    history: List[State],    # 撤销栈
+    current: State,
 }
 
-undo: (editor: Editor) -> Editor {
+undo: (editor: Editor) -> Editor = {
     # 从历史栈弹出上一个状态
-    if let Some(previous) = editor.history.pop() {
+    if Some(previous) = editor.history.pop() {
         editor.current = previous
     }
-    return editor
+    editor
 }
 
 # 使用
-editor = Editor::new()
+editor = Editor.new()
 editor = editor.type_text("Hello")
 editor = editor.type_text(" World")
 editor = editor.undo()      # 回滚到 "Hello"
@@ -521,16 +532,16 @@ editor = editor.undo()      # 回滚到 "Hello"
 ```yaoxiang
 # === 部分消费结构体字段===
 
-struct Config {
-    timeout: Int
-    retries: Int
-    debug: Bool
+Config: Type = {
+    timeout: Int,
+    retries: Int,
+    debug: Bool,
 }
 
 # 只消费 timeout 部分
-set_timeout(config: Config, ms: Int) -> Config {
+set_timeout: (config: Config, ms: Int) -> Config = {
     config.timeout = ms
-    return config
+    config
 }
 ```
 
@@ -812,56 +823,61 @@ MutablePoint.draw: (self: MutablePoint, surface: Surface) -> Void = {
 ```yaoxiang
 # === 完整的所有权系统示例 ===
 
-use std::sync::Arc
+use std.sync.Arc
 
-struct Point {
-    x: Float
-    y: Float
+Point: Type = {
+    x: Float,
+    y: Float,
 }
 
-struct Shape {
-    points: List[Point]
-    color: Color
+Shape: Type = {
+    points: List[Point],
+    color: Color,
 }
 
-# 1. Move（默认）
-shape = Shape(Point(0.0, 0.0))
-shape2 = shape                      # Move，shape 变空
-
-# 2. ref = Arc（共享）
-shared_shape = ref shape            # Arc，线程安全
-spawn(() => print(shared_shape.color))
-
-# 3. 空状态重用
-shape = Shape(Point(1.0, 1.0))      # 重新赋值
-
-# 4. 所有权回流
-shape = shape.translate(10.0, 10.0)
-shape = shape.rotate(90)
-shape = shape.scale(2.0)
-
-# 5. 消费分析
-modify: (shape: Shape) -> Shape {
-    shape.color = Color::red()
-    return shape
+modify: (shape: Shape) -> Shape = {
+    shape.color = Color.red()
+    shape
 }
-shape = modify(shape)                # 回流，shape 被更新
 
-scale: (shape: Shape, factor: Float) -> Shape {
+scale: (shape: Shape, factor: Float) -> Shape = {
     shape.scale(factor)
-    return shape
-}
-shape = scale(shape, 2.0)
-
-# 7. unsafe 系统级操作
-unsafe {
-    ptr: *Point = &shape.points[0]
-    (*ptr).x = 0.0                  # 直接内存操作
+    shape
 }
 
-# 8. 标准库 Rc/Arc/Weak
-arc_shape: Arc[Shape] = Arc.new(shape)
-arc2 = arc_shape.clone()            # Arc 克隆，原子操作
+main: () -> Void @block = {
+    # 1. Move（默认）
+    shape1 = Shape([Point(0.0, 0.0)], Color.red())
+    shape2 = shape1                     # Move，shape1 变空
+
+    # 2. ref = Arc（共享）
+    shared_shape = ref shape2           # Arc，线程安全
+    spawn { print(shared_shape.color) }
+
+    # 3. 空状态重用
+    shape1 = Shape([Point(1.0, 1.0)], Color.red())
+
+    # 4. 所有权回流
+    shape1 = shape1.translate(10.0, 10.0)
+    shape1 = shape1.rotate(90)
+    shape1 = shape1.scale(2.0)
+
+    # 5. 消费分析（Returns）
+    shape1 = modify(shape1)             # 回流，shape1 被更新
+
+    # 6. 显式回流调用
+    shape1 = scale(shape1, 2.0)
+
+    # 7. unsafe 系统级操作
+    unsafe {
+        ptr: *Point = &shape1.points[0]
+        (*ptr).x = 0.0                  # 直接内存操作
+    }
+
+    # 8. 标准库 Arc
+    arc_shape: Arc[Shape] = Arc.new(shape1)
+    arc2 = arc_shape.clone()            # Arc 克隆，原子操作
+}
 ```
 
 ---
@@ -877,8 +893,8 @@ arc2 = arc_shape.clone()            # Arc 克隆，原子操作
 ```yaoxiang
 # 任务内循环引用：泄漏可控
 create_graph = {
-    a: Rc[RefCell[Node]] = Rc::new(RefCell::new(Node::new()))
-    b: Rc[RefCell[Node]] = Rc::new(RefCell::new(Node::new()))
+    a: Rc[RefCell[Node]] = Rc.new(RefCell.new(Node.new()))
+    b: Rc[RefCell[Node]] = Rc.new(RefCell.new(Node.new()))
 
     a.borrow_mut().child = Some(b.clone())   # a → b
     b.borrow_mut().child = Some(a.clone())   # b → a，循环！
@@ -920,12 +936,12 @@ spawn 参数 ────▶ spawn 内部
 
 ```yaoxiang
 # === 跨任务循环：编译器检测 ===
-parent_task = {
+parent_task: () -> Void @block = {
     shared_a = ref a     # 任务内
     shared_b = ref b     # 任务内
 
-    spawn(task_a)              # 子任务 A
-    spawn(task_b)              # 子任务 B
+    spawn { task_a() }         # 子任务 A
+    spawn { task_b() }         # 子任务 B
 
     # 假设 task_a 和 task_b 互相 ref：
     # ❌ 编译错误：跨任务循环引用
@@ -964,28 +980,30 @@ if condition {
 }
 
 # ⚠️ 可能漏检：闭包内的 ref
-closure = () => {
+closure = {
     a.child = ref b   # 闭包捕获的 ref，编译器难以追踪
 }
 ```
 
-#### 3.4 ref 与 Arc::new() 的选择
+#### 3.4 ref 与 Arc.new() 的选择
 
-| 特性 | `ref` 关键字 | `Arc::new()` |
+| 特性 | `ref` 关键字 | `Arc.new()` |
 |------|--------------|--------------|
-| 语法 | `shared = ref p` | `arc = Arc::new(p)` |
+| 语法 | `shared = ref p` | `arc = Arc.new(p)` |
 | 类型推断 | ✅ 自动 | ❌ 需显式泛型 |
 | 跨任务循环检测 | ✅ 自动检测 | ❌ 用户保证 |
 | 适用场景 | 日常共享 | 完全控制/特殊需求 |
 
 ```yaoxiang
 # 推荐：日常使用 ref
-shared = ref data
-spawn(() => use(shared))
+main: () -> Void @block = {
+    shared = ref data
+    spawn { use(shared) }
 
-# 可选：需要完全控制时用 Arc
-arc: Arc[Data] = Arc::new(data)
-arc2 = arc.clone()
+    # 可选：需要完全控制时用 Arc
+    arc: Arc[Data] = Arc.new(data)
+    arc2 = arc.clone()
+}
 ```
 
 #### 3.5 与 RFC-001 注解的交互
@@ -1000,14 +1018,12 @@ arc2 = arc.clone()
 
 ```yaoxiang
 # 无论什么注解，ref 都是 Arc
-@block
-blocked = {
+blocked: () -> Void @block = {
     shared = ref data     # 仍是 Arc，只是不会并发执行
     use(shared)
 }
 
-@eager
-eager = {
+eager: () -> Void @eager = {
     shared = ref data     # 仍是 Arc，只是会同步等待
     use(shared)
 }
@@ -1037,20 +1053,24 @@ main
 ```yaoxiang
 # === 并发共享：使用 ref ===
 
-p: Point = Point(1.0, 2.0)
-shared = ref p                      # Arc
+share_in_tasks: () -> Void @block = {
+    p: Point = Point(1.0, 2.0)
+    shared = ref p                      # Arc
 
-spawn(() => print(shared.x))        # ✅ 安全
-spawn(() => print(shared.y))        # ✅ 安全
+    spawn { print(shared.x) }           # ✅ 安全
+    spawn { print(shared.y) }           # ✅ 安全
+}
 
 # === 避免共享：使用 clone() ===
 
-p: Point = Point(1.0, 2.0)
-p1 = p.clone()
-p2 = p.clone()
+clone_in_tasks: () -> Void @block = {
+    p: Point = Point(1.0, 2.0)
+    p1 = p.clone()
+    p2 = p.clone()
 
-spawn(() => print(p1.x))            # ✅ 独立副本
-spawn(() => print(p2.x))            # ✅ 独立副本
+    spawn { print(p1.x) }            # ✅ 独立副本
+    spawn { print(p2.x) }            # ✅ 独立副本
+}
 
 # === 需要完全控制：使用 Rc/Arc/Weak ===
 use std.rc.{Rc, Weak}
@@ -1079,14 +1099,19 @@ weak: Weak[Node] = Weak.new(arc)
 # Int, Float, Bool, Point, ...
 
 # ref[T] 自动满足 Send + Sync（Arc 线程安全）
-p: Point = Point(1.0, 2.0)
-shared = ref p                       # Arc，线程安全
+main: () -> Void @block = {
+    p: Point = Point(1.0, 2.0)
+    shared = ref p                       # Arc，线程安全
 
-spawn(() => print(shared.x))         # ✅
+    spawn { print(shared.x) }            # ✅
+}
 
 # 裸指针 *T 不满足 Send + Sync
-unsafe {
-    ptr: *Point = &p                 # 只能在单线程使用
+unsafe_ptr_demo: () -> Void = {
+    p: Point = Point(1.0, 2.0)
+    unsafe {
+        ptr: *Point = &p                 # 只能在单线程使用
+    }
 }
 ```
 
@@ -1094,7 +1119,7 @@ unsafe {
 
 | 类型 | Send | Sync | 说明 |
 |------|------|------|------|
-| 值类型 | ✅ | ✅ | Int, Float, struct... |
+| 值类型 | ✅ | ✅ | Int, Float, Point... |
 | `ref T` | ✅ | ✅ | Arc，线程安全 |
 | `Rc[T]` | ❌ | ❌ | 非线程安全 |
 | `Arc[T]` | ✅ | ✅ | 线程安全 |
