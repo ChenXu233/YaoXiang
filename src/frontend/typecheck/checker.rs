@@ -197,7 +197,7 @@ impl TypeChecker {
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
-                type_name: None,
+                type_name,
                 method_type: _,
                 type_annotation,
                 generic_params,
@@ -206,11 +206,13 @@ impl TypeChecker {
                 ..
             } = &stmt.kind
             {
-                // 如果没有 type_name 但有 type_annotation 且 params 和 body 为空，则是类型定义
-                if type_annotation.is_some()
-                    && params.is_empty()
-                    && body.0.is_empty()
-                    && body.1.is_none()
+                if crate::frontend::core::parser::ast::classify_binding_semantic_kind(
+                    type_name.as_ref(),
+                    type_annotation.as_ref(),
+                    params,
+                    &body.0,
+                    body.1.as_deref(),
+                ) == crate::frontend::core::parser::ast::BindingSemanticKind::TypeConstructor
                 {
                     // 这是一个类型定义
                     if let Some(type_annotation) = type_annotation {

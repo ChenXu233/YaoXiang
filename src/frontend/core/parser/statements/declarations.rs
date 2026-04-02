@@ -43,6 +43,58 @@ fn extract_type_name(ty: &Type) -> Option<String> {
     }
 }
 
+fn fn_returns_meta_type(type_annotation: Option<&Type>) -> bool {
+    matches!(
+        type_annotation,
+        Some(Type::Fn {
+            return_type,
+            ..
+        }) if matches!(return_type.as_ref(), Type::MetaType { .. })
+    )
+}
+
+fn generic_params_from_constructor_params(params: &[Param]) -> Vec<GenericParam> {
+    params
+        .iter()
+        .map(|p| {
+            let kind = match p.ty.as_ref() {
+                Some(Type::MetaType { .. }) | None => GenericParamKind::Type,
+                Some(ty) => GenericParamKind::Const {
+                    const_type: Box::new(ty.clone()),
+                },
+            };
+            GenericParam {
+                name: p.name.clone(),
+                kind,
+                constraints: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+fn looks_like_parenthesized_lambda(state: &mut ParserState<'_>) -> bool {
+    if !state.at(&TokenKind::LParen) {
+        return false;
+    }
+
+    let saved = state.save_position();
+    state.bump();
+
+    let mut depth = 1;
+    while depth > 0 && !state.at_end() {
+        if state.at(&TokenKind::LParen) {
+            depth += 1;
+        } else if state.at(&TokenKind::RParen) {
+            depth -= 1;
+        }
+        state.bump();
+    }
+
+    let is_lambda = depth == 0 && state.at(&TokenKind::FatArrow);
+    state.restore_position(saved);
+    is_lambda
+}
+
 /// 检测是否是旧函数定义语法: identifier( 后跟类型参数和 ->
 /// 旧语法示例: add(Int, Int) -> Int = (a, b) => a + b
 /// 已被弃用，移除支持
@@ -928,7 +980,8 @@ fn parse_var_stmt_with_pub(
                         type_name: None,
                         method_type: None,
                         generic_params: Vec::new(),
-                        type_annotation: None, // Will be inferred
+                        // 保留变量的显式类型注解，供后续类型检查做 Void/Int 等一致性校验。
+                        type_annotation: type_annotation.clone(),
                         eval: None,
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),

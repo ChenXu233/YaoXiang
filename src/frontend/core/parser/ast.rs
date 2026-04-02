@@ -19,6 +19,17 @@ pub enum EvalMode {
     Eager,
 }
 
+/// Semantic category for unified binding statements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingSemanticKind {
+    /// `TypeName.method = ...`
+    Method,
+    /// Type definition / type constructor lowered form.
+    TypeConstructor,
+    /// Function-like binding (including block sugar and lambda forms).
+    Function,
+}
+
 /// Expression
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -530,4 +541,47 @@ impl Default for Module {
             span: Span::dummy(),
         }
     }
+}
+
+/// Returns true if a type is the `Type` meta keyword form.
+pub fn is_meta_type(ty: &Type) -> bool {
+    matches!(ty, Type::MetaType { .. })
+}
+
+/// Returns true if a type annotation semantically returns `Type`.
+pub fn type_annotation_returns_meta_type(ty: &Type) -> bool {
+    match ty {
+        Type::MetaType { .. } => true,
+        Type::Fn { return_type, .. } => matches!(return_type.as_ref(), Type::MetaType { .. }),
+        _ => false,
+    }
+}
+
+/// Classify a unified binding into method/type-constructor/function semantics.
+///
+/// The parser lowers type constructors into bindings with empty params/body and
+/// concrete type annotations, so downstream phases can use one stable predicate.
+pub fn classify_binding_semantic_kind(
+    type_name: Option<&String>,
+    type_annotation: Option<&Type>,
+    params: &[Param],
+    body_stmts: &[Stmt],
+    body_expr: Option<&Expr>,
+) -> BindingSemanticKind {
+    if type_name.is_some() {
+        return BindingSemanticKind::Method;
+    }
+
+    // 解析器会把类型构造器降级为"空 params + 空 body + concrete type annotation"形态。
+    // 例如 `Id: (T: Type) -> Type = { x: T }` 在 AST 中 type_annotation 已是 Struct，
+    // 不再保留 `-> Type` 的函数签名，因此这里必须按降级后的形状判断。
+    if type_annotation.is_some()
+        && params.is_empty()
+        && body_stmts.is_empty()
+        && body_expr.is_none()
+    {
+        return BindingSemanticKind::TypeConstructor;
+    }
+
+    BindingSemanticKind::Function
 }
