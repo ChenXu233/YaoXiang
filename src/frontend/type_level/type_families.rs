@@ -2,7 +2,7 @@
 //!
 //! 提供类型级基本类型族：
 //! - Bool: `True`, `False` 布尔类型
-//! - Nat: `Zero`, `Succ[N]` 自然数类型
+//! - Nat: `Zero`, `Succ(N)` 自然数类型
 //!
 //! 示例：
 //! ```yaoxiang
@@ -12,8 +12,8 @@
 //!
 //! // Nat 类型族
 //! type NatZero = Zero         // 零
-//! type NatOne = Succ[Zero]   // 一 (Zero 的后继)
-//! type NatTwo = Succ[Succ[Zero]]  // 二
+//! type NatOne = Succ(Zero)   // 一 (Zero 的后继)
+//! type NatTwo = Succ(Succ(Zero))  // 二
 //! ```
 
 use crate::frontend::core::type_system::MonoType;
@@ -77,20 +77,20 @@ impl Bool {
 ///
 /// 用于表示编译期的自然数：
 /// - `Zero`: 零
-/// - `Succ[N]`: N 的后继
+/// - `Succ(N)`: N 的后继
 ///
 /// # 示例
 /// ```yaoxiang
 /// type Zero = Zero
-/// type One = Succ[Zero]
-/// type Two = Succ[Succ[Zero]]
+/// type One = Succ(Zero)
+/// type Two = Succ(Succ(Zero))
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Nat {
     /// 零
     Zero,
 
-    /// 后继: Succ[N] = N + 1
+    /// 后继: Succ(N) = N + 1
     Succ(Box<Nat>),
 }
 
@@ -197,8 +197,8 @@ impl IsFalse {
 ///
 /// # 示例
 /// ```yaoxiang
-/// type Check1 = IsZero[Zero]        // => True
-/// type Check2 = IsZero[Succ[Zero]]  // => False
+/// type Check1 = IsZero(Zero)        // => True
+/// type Check2 = IsZero(Succ(Zero))  // => False
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IsZero {
@@ -218,14 +218,15 @@ impl IsZero {
     }
 }
 
-/// 条件类型 - IsSucc[N]
+/// 条件类型 - IsSucc(N)
+
 ///
 /// 检查自然数 N 是否为 Succ 变体（即非 Zero）
 ///
 /// # 示例
 /// ```yaoxiang
-/// type Check1 = IsSucc[Zero]        // => False
-/// type Check2 = IsSucc[Succ[Zero]]  // => True
+/// type Check1 = IsSucc(Zero)        // => False
+/// type Check2 = IsSucc(Succ(Zero))  // => True
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IsSucc {
