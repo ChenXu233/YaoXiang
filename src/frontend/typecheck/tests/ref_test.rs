@@ -42,7 +42,7 @@ fn test_arc_type_name() {
     let arc_type = MonoType::Arc(Box::new(int_type));
 
     let type_name = arc_type.type_name();
-    assert_eq!(type_name, "Arc<int64>");
+    assert_eq!(type_name, "Arc(int64)");
 }
 
 /// 测试 Arc 类型与其他类型不同
@@ -94,7 +94,7 @@ fn test_weak_type_name() {
     let weak_type = MonoType::Weak(Box::new(int_type));
 
     let type_name = weak_type.type_name();
-    assert_eq!(type_name, "Weak<int32>");
+    assert_eq!(type_name, "Weak(int32)");
 }
 
 /// 测试嵌套 Weak 类型

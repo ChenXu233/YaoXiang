@@ -203,7 +203,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     .map(|t| self.type_to_mono_type(t).type_name())
                     .collect::<Vec<_>>()
                     .join(", ");
-                MonoType::TypeRef(format!("{}<{}>", name, args_str))
+                MonoType::TypeRef(format!("{}({})", name, args_str))
             }
             AstType::Sum(types) => {
                 MonoType::Union(types.iter().map(|t| self.type_to_mono_type(t)).collect())
