@@ -581,7 +581,7 @@ fn test_from_ast_type_list() {
         args: vec![ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();
-    assert!(matches!(mono, MonoType::TypeRef(s) if s == "List<int64>"));
+    assert!(matches!(mono, MonoType::TypeRef(s) if s == "List(int64)"));
 }
 
 #[test]
@@ -592,7 +592,7 @@ fn test_from_ast_type_dict() {
         args: vec![ast::Type::String, ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();
-    assert!(matches!(mono, MonoType::TypeRef(s) if s == "Dict<string, int64>"));
+    assert!(matches!(mono, MonoType::TypeRef(s) if s == "Dict(string, int64)"));
 }
 
 #[test]
@@ -614,7 +614,7 @@ fn test_from_ast_type_generic() {
         args: vec![ast::Type::Int(64)],
     };
     let mono: MonoType = ast_type.into();
-    assert!(matches!(mono, MonoType::TypeRef(s) if s == "List<int64>"));
+    assert!(matches!(mono, MonoType::TypeRef(s) if s == "List(int64)"));
 }
 
 // =========================================================================

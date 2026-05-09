@@ -179,6 +179,6 @@ fn test_constraint_propagation() {
 
     // 约束传播应该返回空列表（简化实现）
     let constraints = solver
-        .propagate_constraints_to_type_args(&MonoType::TypeRef("Vec<T>".to_string()), "Clone");
+        .propagate_constraints_to_type_args(&MonoType::TypeRef("Vec(T)".to_string()), "Clone");
     assert!(constraints.is_empty());
 }

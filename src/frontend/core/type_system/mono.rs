@@ -461,9 +461,9 @@ impl From<ast::Type> for MonoType {
                         Box::new(MonoType::from(args[1].clone())),
                     );
                 }
-                // 泛型类型，如 List<T>
+                // 泛型类型，如 List(T)
                 MonoType::TypeRef(format!(
-                    "{}<{}>",
+                    "{}({})",
                     name,
                     args.iter()
                         .map(|t| MonoType::from(t.clone()).type_name())

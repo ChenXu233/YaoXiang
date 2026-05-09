@@ -310,21 +310,7 @@ impl PatternMatcher {
         &self,
         type_name: &str,
     ) -> Option<(String, Vec<String>)> {
-        // 首先尝试方括号格式：Some[T]
-        if let Some(start) = type_name.find('[') {
-            if let Some(end) = type_name.find(']') {
-                let ctor = type_name[..start].to_string();
-                let params_str = &type_name[start + 1..end];
-                let params: Vec<String> = params_str
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                return Some((ctor, params));
-            }
-        }
-
-        // 其次尝试圆括号格式：Succ(Zero)
+        // 尝试圆括号格式：Succ(Zero)
         if let Some(start) = type_name.find('(') {
             if let Some(end) = type_name.find(')') {
                 let ctor = type_name[..start].to_string();

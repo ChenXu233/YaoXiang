@@ -45,7 +45,7 @@ impl HigherRankChecker {
         ty: &str,
     ) -> bool {
         // 简化实现：检查是否包含生命周期参数
-        ty.contains("for<")
+        ty.contains("for(")
     }
 
     /// 验证高阶类型
