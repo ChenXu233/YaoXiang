@@ -94,7 +94,7 @@ pub fn format_type(ty: &Type) -> String {
                 base
             } else {
                 let args_str: Vec<String> = assoc_args.iter().map(format_type).collect();
-                format!("{}[{}]", base, args_str.join(", "))
+                format!("{}({})", base, args_str.join(", "))
             }
         }
         Type::Sum(types) => {
@@ -110,7 +110,7 @@ pub fn format_type(ty: &Type) -> String {
                 "Type".to_string()
             } else {
                 let args_str: Vec<String> = args.iter().map(format_type).collect();
-                format!("Type[{}]", args_str.join(", "))
+                format!("Type({})", args_str.join(", "))
             }
         }
     }

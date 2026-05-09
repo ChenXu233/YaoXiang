@@ -75,8 +75,18 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             let name_span = state.span();
             state.bump();
 
-            // RFC-010: `Type` is the meta-type keyword. No [] or <> syntax.
+            // RFC-010: `Type` is the meta-type keyword. Only () syntax is allowed.
+            // `Type[T]` and `Type<T>` are rejected.
             if name == "Type" {
+                // Reject old Type[T] or Type<T> syntax
+                if state.at(&TokenKind::LBracket) || state.at(&TokenKind::Lt) {
+                    state.error(ParseError::Message(
+                        "Old 'Type[...]' or 'Type<...>' syntax is no longer supported. \
+                         Use 'Type' alone for the meta-type, or '(T: Type, ...) -> Type' for type constructors."
+                            .to_string(),
+                    ));
+                    return None;
+                }
                 return Some(Type::MetaType {
                     name_span,
                     args: Vec::new(),
@@ -122,10 +132,29 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 }
             }
 
+            // Check for old angle bracket generic syntax: Name<Args>
+            if state.at(&TokenKind::Lt) {
+                state.error(ParseError::Message(
+                    "Old 'Name<...>' angle bracket syntax is no longer supported. \
+                     Use '()' application syntax: 'Name(Type1, Type2)'"
+                        .to_string(),
+                ));
+                return None;
+            }
+
             Some(Type::Name {
                 name,
                 span: name_span,
             })
+        }
+        Some(TokenKind::Lt) => {
+            // RFC-010: angle bracket syntax `Type<Args>` is rejected
+            state.error(ParseError::Message(
+                "Old 'Type<...>' angle bracket syntax is no longer supported. \
+                 Use '()' application syntax: 'Name(Type1, Type2)'"
+                    .to_string(),
+            ));
+            None
         }
         Some(TokenKind::LParen) => {
             // This could be either:

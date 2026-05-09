@@ -374,15 +374,12 @@ mod parser_basic_tests {
     }
 
     /// Test parsing generic type
+    /// Test that old generic syntax `List<Int>` is rejected (RFC-010: () only)
     #[test]
-    fn test_parse_generic_type() {
+    fn test_parse_generic_type_rejected() {
         let tokens = tokenize("list: List<Int> = [];").unwrap();
         let result = parse(&tokens);
-        assert!(
-            result.is_ok(),
-            "Failed to parse generic type: {:?}",
-            result.err()
-        );
+        assert!(result.is_err(), "Old 'List<Int>' syntax should be rejected");
     }
 
     // ========== RFC-010: Meta-type Universe Level Tests ==========
@@ -399,27 +396,22 @@ mod parser_basic_tests {
         );
     }
 
-    /// Test parsing Type[T] (Type1)
+    /// Test that old Type[T] syntax is rejected (RFC-010: () only)
     #[test]
-    fn test_parse_meta_type_single_param() {
+    fn test_parse_meta_type_single_param_rejected() {
         let tokens = tokenize("List: Type[T] = { data: Array[T] };").unwrap();
         let result = parse(&tokens);
-        assert!(
-            result.is_ok(),
-            "Failed to parse Type[T]: {:?}",
-            result.err()
-        );
+        assert!(result.is_err(), "Old 'Type[T]' syntax should be rejected");
     }
 
-    /// Test parsing Type[K, V] (Type1 with multiple params)
+    /// Test that old Type[K, V] syntax is rejected (RFC-010: () only)
     #[test]
-    fn test_parse_meta_type_multiple_params() {
+    fn test_parse_meta_type_multiple_params_rejected() {
         let tokens = tokenize("Map: Type[K, V] = { keys: Array[K], values: Array[V] };").unwrap();
         let result = parse(&tokens);
         assert!(
-            result.is_ok(),
-            "Failed to parse Type[K, V]: {:?}",
-            result.err()
+            result.is_err(),
+            "Old 'Type[K, V]' syntax should be rejected"
         );
     }
 
@@ -432,51 +424,44 @@ mod parser_basic_tests {
         assert!(result.is_err(), "Old Type[...] syntax should be rejected");
     }
 
-    /// Test parsing Type[Type[Type[T]]] (Type3)
+    /// Test that old Type[Type[Type[T]]] syntax is rejected (RFC-010: () only)
     #[test]
-    fn test_parse_meta_type_deeply_nested() {
+    fn test_parse_meta_type_deeply_nested_rejected() {
         let tokens = tokenize("DeepType: Type[Type[Type[T]]] = {};").unwrap();
         let result = parse(&tokens);
         assert!(
-            result.is_ok(),
-            "Failed to parse Type[Type[Type[T]]]: {:?}",
-            result.err()
+            result.is_err(),
+            "Old 'Type[Type[Type[T]]]' syntax should be rejected"
         );
     }
 
-    /// Test parsing with angle bracket syntax: Type<T>
+    /// Test that old angle bracket Type<T> syntax is rejected (RFC-010: () only)
     #[test]
-    fn test_parse_meta_type_angle_bracket() {
+    fn test_parse_meta_type_angle_bracket_rejected() {
         let tokens = tokenize("List: Type<T> = { data: Array[T] };").unwrap();
         let result = parse(&tokens);
-        assert!(
-            result.is_ok(),
-            "Failed to parse Type<T>: {:?}",
-            result.err()
-        );
+        assert!(result.is_err(), "Old 'Type<T>' syntax should be rejected");
     }
 
-    /// Test parsing with angle bracket nested: Type<Type<T>>
+    /// Test that old angle bracket nested Type<Type<T>> is rejected
     #[test]
-    fn test_parse_meta_type_angle_bracket_nested() {
+    fn test_parse_meta_type_angle_bracket_nested_rejected() {
         let tokens = tokenize("Nested: Type<Type<T>> = {};").unwrap();
         let result = parse(&tokens);
         assert!(
-            result.is_ok(),
-            "Failed to parse Type<Type<T>>: {:?}",
-            result.err()
+            result.is_err(),
+            "Old 'Type<Type<T>>' syntax should be rejected"
         );
     }
 
-    /// Test parsing mixed syntax: Type[T<U>]
+    /// Test that old mixed syntax Type[T<U>] is rejected
     #[test]
-    fn test_parse_meta_type_mixed_syntax() {
+    fn test_parse_meta_type_mixed_syntax_rejected() {
         let tokens = tokenize("Complex: Type[T<U>] = {};").unwrap();
         let result = parse(&tokens);
         assert!(
-            result.is_ok(),
-            "Failed to parse Type[T<U>]: {:?}",
-            result.err()
+            result.is_err(),
+            "Old 'Type[T<U>]' syntax should be rejected"
         );
     }
 
