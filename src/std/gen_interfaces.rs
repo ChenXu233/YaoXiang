@@ -23,8 +23,8 @@ fn generate_interface_content(module: &dyn StdModule) -> String {
         let sig = export.signature;
         let name = export.name;
 
-        // 常量（签名不以 '(' 或 '[' 开头）
-        if !sig.starts_with('(') && !sig.starts_with('[') {
+        // 常量（签名不以 '(' 开头）
+        if !sig.starts_with('(') {
             output.push_str(&format!("{}: {} = {{\n    ...\n}}\n\n", name, sig));
         } else {
             // 函数：name: signature = { ... }

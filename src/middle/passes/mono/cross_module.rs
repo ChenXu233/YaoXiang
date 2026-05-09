@@ -492,7 +492,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
                 .map(|t| ast_type_to_mono_type(t).type_name())
                 .collect::<Vec<_>>()
                 .join(",");
-            MonoType::TypeRef(format!("{}<{}>", name, args_str))
+            MonoType::TypeRef(format!("{}({})", name, args_str))
         }
         Type::Sum(types) => MonoType::Union(types.iter().map(ast_type_to_mono_type).collect()),
         Type::AssocType {

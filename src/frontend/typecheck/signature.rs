@@ -283,13 +283,13 @@ fn parse_type_str_with_generics(
         }
     }
 
-    // 处理泛型类型: List<T>, Dict<String, Int>
-    if let Some(angle_bracket) = type_str.find('<') {
-        let base = &type_str[..angle_bracket];
-        let inner_start = angle_bracket + 1;
+    // 处理泛型类型: List(T), Dict(String, Int)
+    if let Some(paren_start) = type_str.find('(') {
+        let base = &type_str[..paren_start];
+        let inner_start = paren_start + 1;
         let inner_end = type_str.len() - 1;
 
-        if inner_end > inner_start && type_str.ends_with('>') {
+        if inner_end > inner_start && type_str.ends_with(')') {
             let inner = &type_str[inner_start..inner_end];
 
             match base {

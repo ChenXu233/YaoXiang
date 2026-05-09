@@ -329,8 +329,8 @@ impl MonoType {
                         .join(" & ")
                 )
             }
-            MonoType::Arc(t) => format!("Arc<{}>", t.type_name()),
-            MonoType::Weak(t) => format!("Weak<{}>", t.type_name()),
+            MonoType::Arc(t) => format!("Arc({})", t.type_name()),
+            MonoType::Weak(t) => format!("Weak({})", t.type_name()),
             MonoType::AssocType {
                 host_type,
                 assoc_name,
