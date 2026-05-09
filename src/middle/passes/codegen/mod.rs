@@ -279,7 +279,7 @@ impl CodegenContext {
                 Box::new(self.type_from_ast(err)),
             ),
             Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
-                "{}<{}>",
+                "{}({})",
                 name,
                 args.iter()
                     .map(|t| self.type_from_ast(t).type_name())
