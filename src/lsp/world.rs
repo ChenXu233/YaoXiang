@@ -226,7 +226,7 @@ impl World {
                 } => {
                     let has_body = !body.0.is_empty() || body.1.is_some();
                     // 检查是否是类型定义语法 (Struct, Variant, Enum, NamedStruct)
-                    let is_type_def = type_annotation.as_ref().map_or(false, |t| {
+                    let is_type_def = type_annotation.as_ref().is_some_and(|t| {
                         matches!(
                             t,
                             crate::frontend::core::parser::ast::Type::Struct { .. }
@@ -380,7 +380,7 @@ impl World {
             } => {
                 let has_body = !body.0.is_empty() || body.1.is_some();
                 // 检查是否是类型定义语法 (Struct, Variant, Enum, NamedStruct)
-                let is_type_def = type_annotation.as_ref().map_or(false, |t| {
+                let is_type_def = type_annotation.as_ref().is_some_and(|t| {
                     matches!(
                         t,
                         crate::frontend::core::parser::ast::Type::Struct { .. }

@@ -423,16 +423,13 @@ mod parser_basic_tests {
         );
     }
 
-    /// Test parsing Type[Type[T]] (Type2)
+    /// Test that nested Type[...] syntax is rejected (RFC-010: () is the only syntax)
     #[test]
     fn test_parse_meta_type_nested() {
+        // Old Type[Type[T]] syntax should be rejected
         let tokens = tokenize("HigherKinded: Type[Type[T]] = { apply: (T) -> Type[T] };").unwrap();
         let result = parse(&tokens);
-        assert!(
-            result.is_ok(),
-            "Failed to parse Type[Type[T]]: {:?}",
-            result.err()
-        );
+        assert!(result.is_err(), "Old Type[...] syntax should be rejected");
     }
 
     /// Test parsing Type[Type[Type[T]]] (Type3)

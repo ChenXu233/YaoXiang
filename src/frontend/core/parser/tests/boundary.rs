@@ -323,10 +323,10 @@ mod boundary_tests {
         assert_eq!(module.items.len(), 1);
     }
 
-    /// Test generic union type definition
+    /// Test generic union type definition (RFC-010: () only)
     #[test]
     fn test_parse_generic_union_type() {
-        let code = "Result: Type[T, E] = { ok(T) | err(E) }";
+        let code = "Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -334,10 +334,11 @@ mod boundary_tests {
         assert_eq!(module.items.len(), 1);
     }
 
-    /// Test generic type with angle brackets
+    /// Test that the new () syntax works for generic types
     #[test]
     fn test_parse_generic_type_with_angle_brackets() {
-        let code = "Result: Type<T, E> = { ok(T) | err(E) }";
+        // RFC-010: () is the only generic application syntax
+        let code = "Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);
@@ -348,7 +349,8 @@ mod boundary_tests {
     /// Test single parameter constructor
     #[test]
     fn test_parse_single_param_constructor() {
-        let code = "Box: Type[T] = Box(value: T)";
+        // RFC-010: Constructor with named field
+        let code = "Box: Type = Box(value: T)";
         let tokens = tokenize(code).unwrap();
         let result = parse(&tokens);
         assert!(result.is_ok(), "Failed to parse: {}", code);

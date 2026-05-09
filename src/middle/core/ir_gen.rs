@@ -563,7 +563,7 @@ impl AstToIrGenerator {
                 is_pub: _,
             } => {
                 // 区分函数定义、方法绑定和类型定义
-                if let Some(_) = type_name {
+                if type_name.is_some() {
                     // MethodBind: 有 type_name
                     self.generate_method_ir(
                         type_name.as_ref().unwrap(),

@@ -448,7 +448,7 @@ impl StatementChecker {
                 type_name,
                 generic_params: _,
                 type_annotation,
-                eval,
+                eval: _,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -461,7 +461,7 @@ impl StatementChecker {
                     expr: expr.clone(),
                     span: stmt.span,
                 };
-                if let Some(_) = type_name {
+                if type_name.is_some() {
                     // 方法绑定：使用 method_type 作为签名
                     // method_type 包含完整的 (params) -> ReturnType 签名
                     let type_ann = method_type.as_ref();

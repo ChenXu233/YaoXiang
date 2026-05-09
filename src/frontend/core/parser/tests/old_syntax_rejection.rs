@@ -52,7 +52,7 @@ mod old_syntax_rejection_tests {
             r#"add = (a, b) => a + b"#,
             r#"main = { println("Hello") }"#,
             // 泛型函数
-            r#"identity: [T](x: T) -> T = x"#,
+            r#"identity: (T: Type) -> ((x: T) -> T) = x"#,
         ];
 
         for syntax in new_syntaxes {

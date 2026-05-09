@@ -4,7 +4,8 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
-use crate::frontend::core::parser::statements::declarations::parse_type_annotation;
+use crate::frontend::core::parser::statements::types::parse_type_annotation;
+use crate::frontend::core::parser::statements::functions::{parse_fn_params, parse_fn_body};
 use crate::util::span::Span;
 
 /// Parse method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
@@ -209,69 +210,4 @@ impl BindingPositionValidator {
         }
         Ok(())
     }
-}
-
-fn parse_fn_params(state: &mut ParserState<'_>) -> Option<Vec<Param>> {
-    let mut params = Vec::new();
-    while !state.at(&TokenKind::RParen) && !state.at_end() {
-        if !params.is_empty() && !state.expect(&TokenKind::Comma) {
-            return None;
-        }
-        if state.at(&TokenKind::RParen) {
-            break;
-        }
-        let param_span = state.span();
-        // Check for mut keyword
-        let is_mut = state.skip(&TokenKind::KwMut);
-        let name = match state.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(n)) => n.clone(),
-            _ => break,
-        };
-        state.bump();
-        let ty = if state.skip(&TokenKind::Colon) {
-            parse_type_annotation(state)
-        } else {
-            None
-        };
-        params.push(Param {
-            name,
-            ty,
-            is_mut,
-            span: param_span,
-        });
-    }
-    Some(params)
-}
-
-fn parse_fn_body(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, Option<Box<Expr>>)> {
-    if state.at(&TokenKind::LBrace) {
-        if !state.expect(&TokenKind::LBrace) {
-            return None;
-        }
-        let body = parse_block_body(state)?;
-        if !state.expect(&TokenKind::RBrace) {
-            return None;
-        }
-        Some(body)
-    } else {
-        let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
-        Some((Vec::new(), Some(Box::new(expr))))
-    }
-}
-
-fn parse_block_body(state: &mut ParserState<'_>) -> Option<(Vec<Stmt>, Option<Box<Expr>>)> {
-    let mut stmts = Vec::new();
-    while !state.at(&TokenKind::RBrace) && !state.at_end() {
-        if let Some(stmt) = state.parse_statement() {
-            stmts.push(stmt);
-        } else {
-            state.synchronize();
-        }
-    }
-    let expr = if !state.at(&TokenKind::RBrace) {
-        state.parse_expression(crate::frontend::core::parser::BP_LOWEST)
-    } else {
-        None
-    };
-    Some((stmts, expr.map(Box::new)))
 }

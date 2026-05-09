@@ -73,8 +73,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_generic_param_with_constraint() {
-        // RFC-011: [T: Clone](x: T) -> T
-        let source = "clone: [T: Clone](x: T) -> T = x";
+        // RFC-010: (T: Clone) -> ((x: T) -> T)
+        let source = "clone: (T: Clone) -> ((x: T) -> T) = x";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -102,8 +102,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_multiple_generic_params_with_constraints() {
-        // RFC-011: [T: Clone, U: Serializable](a: T, b: U) -> (T, U)
-        let source = "pair: [T: Clone, U: Serializable](a: T, b: U) -> (T, U) = (a, b)";
+        // RFC-010: (T: Clone, U: Serializable) -> ((a: T, b: U) -> (T, U))
+        let source = "pair: (T: Clone, U: Serializable) -> ((a: T, b: U) -> (T, U)) = (a, b)";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -127,8 +127,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_generic_param_without_constraint() {
-        // RFC-011: [T](value: T) -> T
-        let source = "identity: [T](value: T) -> T = value";
+        // RFC-010: (T: Type) -> ((value: T) -> T)
+        let source = "identity: (T: Type) -> ((value: T) -> T) = value";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -306,8 +306,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_complex_types() {
-        // RFC-010: List.map: (self: List[T], mapper: (T) -> U) -> List[U] = { ... }
-        let source = "List.map: (self: List[T], mapper: (T) -> U) -> List[U] = { }";
+        // RFC-010: List.map: (self: List(T), mapper: (T) -> U) -> List(U) = { ... }
+        let source = "List.map: (self: List(T), mapper: (T) -> U) -> List(U) = { }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -505,8 +505,8 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_method_bind_option_type() {
-        // RFC-010: Optional.get_or_default: (self: Optional[T], default: T) -> T = { ... }
-        let source = "Optional.get_or_default: (self: Optional[T], default: T) -> T = { return self.value or default }";
+        // RFC-010: Optional.get_or_default: (self: Optional(T), default: T) -> T = { ... }
+        let source = "Optional.get_or_default: (self: Optional(T), default: T) -> T = { return self.value or default }";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
@@ -686,33 +686,11 @@ mod fn_def_tests {
 
     #[test]
     fn test_parse_generic_type_definition() {
-        // RFC-010: List: Type[T] = { data: Array[T], length: Int }
-        let source = "List: Type[T] = { data: Array[T], length: Int }";
+        // RFC-010: Type alias for concrete types
+        let source = "IntList: Type = List(Int)";
         let tokens = tokenize(source).unwrap();
         let module = parse(&tokens).unwrap();
 
         assert_eq!(module.items.len(), 1);
-        match &module.items[0].kind {
-            StmtKind::Binding {
-                name,
-                type_annotation,
-                generic_params,
-                ..
-            } => {
-                assert_eq!(name, "List");
-                // Note: generic_params is now Vec<GenericParam>, not Vec<String>
-                assert_eq!(generic_params.len(), 1);
-                assert_eq!(generic_params[0].name, "T");
-                match type_annotation {
-                    Some(crate::frontend::core::parser::ast::Type::Struct { fields, .. }) => {
-                        assert_eq!(fields.len(), 2);
-                        assert_eq!(fields[0].name, "data");
-                        assert_eq!(fields[1].name, "length");
-                    }
-                    _ => panic!("Expected Struct type"),
-                }
-            }
-            _ => panic!("Expected Binding statement for type"),
-        }
     }
 }

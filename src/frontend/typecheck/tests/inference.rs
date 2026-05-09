@@ -316,7 +316,7 @@ fn test_higher_order_compose() {
 fn test_higher_order_map() {
     // 高阶函数处理列表测试
     assert!(check_type(
-        "map: (f: (x: Int) -> Int, xs: List[Int]) -> List[Int] = (f, xs) => xs"
+        "map: (f: (x: Int) -> Int, xs: List(Int)) -> List(Int) = (f, xs) => xs"
     ));
 }
 

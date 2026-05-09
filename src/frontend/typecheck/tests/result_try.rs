@@ -14,7 +14,7 @@ fn typecheck(code: &str) -> Result<(), Vec<crate::util::diagnostic::Diagnostic>>
 #[test]
 fn test_try_only_allowed_in_result_function() {
     let code = r#"
-        foo: () -> Result[Int, String] = () => { return 1 }
+        foo: () -> Result(Int, String) = () => { return 1 }
         main: () -> Int = () => { return foo()? }
     "#;
     let errors = typecheck(code).unwrap_err();
@@ -27,7 +27,7 @@ fn test_try_only_allowed_in_result_function() {
 #[test]
 fn test_try_requires_result_value() {
     let code = r#"
-        main: () -> Result[Int, String] = () => { return 1? }
+        main: () -> Result(Int, String) = () => { return 1? }
     "#;
     let errors = typecheck(code).unwrap_err();
     assert!(
@@ -39,8 +39,8 @@ fn test_try_requires_result_value() {
 #[test]
 fn test_try_error_type_mismatch() {
     let code = r#"
-        foo: () -> Result[Int, Int] = () => { return 1 }
-        bar: () -> Result[Int, String] = () => { return foo()? }
+        foo: () -> Result(Int, Int) = () => { return 1 }
+        bar: () -> Result(Int, String) = () => { return foo()? }
     "#;
     let errors = typecheck(code).unwrap_err();
     assert!(
@@ -52,8 +52,8 @@ fn test_try_error_type_mismatch() {
 #[test]
 fn test_try_allowed_with_matching_err_type() {
     let code = r#"
-        foo: () -> Result[Int, String] = () => { return 1 }
-        bar: () -> Result[Int, String] = () => { return foo()? }
+        foo: () -> Result(Int, String) = () => { return 1 }
+        bar: () -> Result(Int, String) = () => { return foo()? }
     "#;
     assert!(typecheck(code).is_ok());
 }
