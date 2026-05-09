@@ -198,7 +198,7 @@ fn format_binding(
                 format!("{}{}", gp.name, constraints)
             })
             .collect();
-        format!("[{}]", items.join(", "))
+        format!("({})", items.join(", "))
     };
 
     let type_str = if let Some(ty) = type_annotation {
