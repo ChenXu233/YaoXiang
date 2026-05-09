@@ -717,7 +717,7 @@ impl TypeChecker {
                 // 检查 type_annotation 是否有泛型参数（这表示 Type: Type[T] = ...）
                 if !generic_params.is_empty() {
                     // E1091: 泛型元类型自引用错误
-                    let decl = format!("Type: Type[{}] = ...", generic_params.join(", "));
+                    let decl = format!("Type: Type({}) = ...", generic_params.join(", "));
                     self.add_error(
                         ErrorCodeDefinition::invalid_generic_self_reference(&decl)
                             .at(span)

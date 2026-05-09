@@ -292,7 +292,7 @@ impl TypeFamilyOps for Nat {
     fn to_mono_type(&self) -> MonoType {
         match self {
             Nat::Zero => MonoType::TypeRef("Zero".to_string()),
-            Nat::Succ(n) => MonoType::TypeRef(format!("Succ[{}]", n.to_usize())),
+            Nat::Succ(n) => MonoType::TypeRef(format!("Succ({})", n.to_usize())),
         }
     }
 }

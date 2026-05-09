@@ -327,19 +327,25 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
                 .join(", ");
             format!("({})", inner)
         }
-        crate::frontend::typecheck::MonoType::List(elem) => format!("[{}]", dump_type_detail(elem)),
+        crate::frontend::typecheck::MonoType::List(elem) => {
+            format!("List({})", dump_type_detail(elem))
+        }
         crate::frontend::typecheck::MonoType::Dict(key, value) => {
-            format!("[{}: {}]", dump_type_detail(key), dump_type_detail(value))
+            format!(
+                "Dict({}, {})",
+                dump_type_detail(key),
+                dump_type_detail(value)
+            )
         }
         crate::frontend::typecheck::MonoType::Set(elem) => {
             format!("{{{}}}", dump_type_detail(elem))
         }
         crate::frontend::typecheck::MonoType::Option(inner) => {
-            format!("Option<{}>", dump_type_detail(inner))
+            format!("Option({})", dump_type_detail(inner))
         }
         crate::frontend::typecheck::MonoType::Result(ok, err) => {
             format!(
-                "Result<{}, {}>",
+                "Result({}, {})",
                 dump_type_detail(ok),
                 dump_type_detail(err)
             )
@@ -380,10 +386,10 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
             format!("({})", inner)
         }
         crate::frontend::typecheck::MonoType::Arc(inner) => {
-            format!("Arc<{}>", dump_type_detail(inner))
+            format!("Arc({})", dump_type_detail(inner))
         }
         crate::frontend::typecheck::MonoType::Weak(inner) => {
-            format!("Weak<{}>", dump_type_detail(inner))
+            format!("Weak({})", dump_type_detail(inner))
         }
         crate::frontend::typecheck::MonoType::AssocType {
             host_type,
@@ -394,7 +400,7 @@ fn dump_type_detail(ty: &crate::frontend::typecheck::MonoType) -> String {
                 String::new()
             } else {
                 format!(
-                    "<{}>",
+                    "({})",
                     assoc_args
                         .iter()
                         .map(dump_type_detail)
