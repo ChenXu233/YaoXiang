@@ -581,25 +581,25 @@ fn test_generic_size_array() {
     let size_calc = GenericSize::new();
 
     // 测试 Array<Int, 10> - Int 是 8 字节，所以 8 * 10 = 80
-    let array_type = MonoType::TypeRef("Array<Int, 10>".to_string());
+    let array_type = MonoType::TypeRef("Array(Int, 10)".to_string());
     let result = size_calc.size_of(&array_type);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 80);
 
     // 测试 Array<Float, 5> - Float 是 8 字节，所以 8 * 5 = 40
-    let array_type = MonoType::TypeRef("Array<Float, 5>".to_string());
+    let array_type = MonoType::TypeRef("Array(Float, 5)".to_string());
     let result = size_calc.size_of(&array_type);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 40);
 
     // 测试 Array<Bool, 100> - Bool 是 1 字节，所以 1 * 100 = 100
-    let array_type = MonoType::TypeRef("Array<Bool, 100>".to_string());
+    let array_type = MonoType::TypeRef("Array(Bool, 100)".to_string());
     let result = size_calc.size_of(&array_type);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 100);
 
     // 测试嵌套数组 Array<Array<Int, 2>, 3> - 外层 3 * (内层 2 * 8) = 48
-    let nested_type = MonoType::TypeRef("Array<Array<Int, 2>, 3>".to_string());
+    let nested_type = MonoType::TypeRef("Array(Array(Int, 2), 3)".to_string());
     let result = size_calc.size_of(&nested_type);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 48);
