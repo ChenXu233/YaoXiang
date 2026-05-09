@@ -35,7 +35,7 @@ title: RFC-011：泛型系统设计
 | 文档 | 关系 | 说明 |
 |------|------|------|
 | [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **语法基础** | 泛型语法与统一 `name: type = value` 模型集成 |
-| [RFC-023: 泛型调用语法](./draft/023-generic-call-syntax.md) | **调用语法** | Type 自描述机制，泛型参数自动推断 |
+| [RFC-010: 统一类型语法](./010-unified-type-syntax.md) | **调用语法** | 第6节：泛型调用语法——统一 `()` 应用，`[]` 彻底移除 |
 | [RFC-009: 所有权模型](./accepted/009-ownership-model.md) | **类型系统** | Move语义与泛型的自然结合 |
 | [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md) | **执行模型** | DAG分析与泛型类型检查 |
 | [RFC-008: 运行时模型](./accepted/008-runtime-concurrency-model.md) | **编译器架构** | 泛型单态化与编译期优化策略 |

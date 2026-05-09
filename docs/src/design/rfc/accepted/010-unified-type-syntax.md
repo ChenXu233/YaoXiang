@@ -506,6 +506,57 @@ List.get: (self: List(T), index: Int) -> Maybe(T) = {
 }
 ```
 
+#### 6. 泛型调用语法
+
+泛型类型和泛型函数的调用统一使用 `()` 语法。`[]` 不在任何泛型上下文中使用。
+
+**核心规则**：
+
+1. **`()` 做一切应用**：类型应用、函数调用、值构造全部用 `()`
+
+```yaoxiang
+# 类型标注
+numbers: List(Int) = List(1, 2, 3)
+
+# 空容器：T 从左侧来
+empty: List(Int) = List()
+
+# 泛型函数调用——类型从参数自动流动
+strings = map(numbers, f)
+// T=Int 来自 numbers: List(Int)
+// R=String 来自 f: (Int) -> String
+```
+
+2. **Type 在左，值在右**：`name: type = value`——Type 参数在左侧声明，右侧永远是具体值。空容器 `List()` 的 `T` 必须从左侧类型注解获取。
+
+3. **类型信息只需写一次**——在参数声明时，编译器带它流动：
+
+```yaoxiang
+numbers: List(Int) = List(1, 2, 3)  // Int 在左边写一次
+f: (Int) -> String = (x) => x.to_string()
+strings = map(numbers, f)   // T=Int, R=String 自动从 numbers 和 f 的类型来
+```
+
+4. **值构造从元素推断类型**：
+
+```yaoxiang
+x = List(1, 2, 3)       // 推断为 List(Int)
+y = List("a", "b")      // 推断为 List(String)
+z = List()              // ❌ 编译错误：无法推断 T
+z: List(Int) = List()   // ✅ T=Int 来自左侧注解
+```
+
+5. **类型别名**：
+
+```yaoxiang
+IntList: Type = List(Int)
+StringToInt: Type = (String) -> Int
+Matrix3x3: Type = Matrix(Float, 3, 3)
+```
+
+> **与旧语法对比**：`List[Int]` → `List(Int)`，`List[Int]()` → `List()`，`List[Int](1,2,3)` → `List(1,2,3)`。
+> 旧的 `[]` 泛型语法已彻底移除。`[]` 仅用于数组/列表字面量和索引访问。
+
 ### 示例
 
 #### 完整示例
