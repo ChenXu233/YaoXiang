@@ -349,11 +349,11 @@ fn format_type(ty: &AstType) -> String {
         }
         AstType::Option(inner) => format!("{}?", format_type(inner)),
         AstType::Result(ok, err) => {
-            format!("Result[{}, {}]", format_type(ok), format_type(err))
+            format!("Result({}, {})", format_type(ok), format_type(err))
         }
         AstType::Generic { name, args, .. } => {
             let args_str: Vec<String> = args.iter().map(format_type).collect();
-            format!("{}[{}]", name, args_str.join(", "))
+            format!("{}({})", name, args_str.join(", "))
         }
         AstType::Tuple(types) => {
             let parts: Vec<String> = types.iter().map(format_type).collect();
@@ -503,6 +503,6 @@ mut counter = 0
                 span: Span::dummy(),
             }],
         };
-        assert_eq!(format_type(&ty), "List[Int]");
+        assert_eq!(format_type(&ty), "List(Int)");
     }
 }
