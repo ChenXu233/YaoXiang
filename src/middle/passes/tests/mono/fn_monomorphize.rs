@@ -284,13 +284,13 @@ fn test_different_type_order_different_instances() {
 #[test]
 fn test_generic_function_id_signature() {
     let id1 = GenericFunctionId::new("single".to_string(), vec!["T".to_string()]);
-    assert_eq!(id1.signature(), "single<T>");
+    assert_eq!(id1.signature(), "single(T)");
 
     let id2 = GenericFunctionId::new(
         "multi".to_string(),
         vec!["A".to_string(), "B".to_string(), "C".to_string()],
     );
-    assert_eq!(id2.signature(), "multi<A, B, C>");
+    assert_eq!(id2.signature(), "multi(A, B, C)");
 
     let id3 = GenericFunctionId::new("no_params".to_string(), vec![]);
     assert_eq!(id3.signature(), "no_params");

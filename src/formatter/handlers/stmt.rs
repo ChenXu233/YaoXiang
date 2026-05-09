@@ -175,7 +175,7 @@ fn format_binding(
                         format!("{}{}", gp.name, constraints)
                     })
                     .collect();
-                format!("[{}]", items.join(", "))
+                format!("({})", items.join(", "))
             };
             return format!("{}{}: Type = {}", name, generics, format_type(ty));
         }

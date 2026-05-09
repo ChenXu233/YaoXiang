@@ -342,11 +342,11 @@ fn test_generic_function_id_signature() {
 
     // 单类型参数
     let id = GenericFunctionId::new("id".to_string(), vec!["T".to_string()]);
-    assert_eq!(id.signature(), "id<T>");
+    assert_eq!(id.signature(), "id(T)");
 
     // 多类型参数
     let id = GenericFunctionId::new("pair".to_string(), vec!["T".to_string(), "U".to_string()]);
-    assert_eq!(id.signature(), "pair<T, U>");
+    assert_eq!(id.signature(), "pair(T, U)");
 }
 
 /// 测试：GenericTypeId 访问器
@@ -776,7 +776,7 @@ fn test_generic_closure_id_signature() {
         vec!["T".to_string()],
         vec!["x".to_string()],
     );
-    assert_eq!(id.signature(), "generic<T>|[x]|");
+    assert_eq!(id.signature(), "generic(T)|[x]|");
 }
 
 /// 测试：泛型闭包 ID 哈希

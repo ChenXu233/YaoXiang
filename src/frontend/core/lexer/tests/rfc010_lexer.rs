@@ -23,7 +23,7 @@ fn test_simple_angle_brackets() {
 #[test]
 fn test_generic_syntax_tokenization() {
     // RFC-010: Basic generic syntax
-    let source = "List[T]";
+    let source = "List(T)";
     let tokens = tokenize(source).unwrap();
 
     // Debug output
@@ -41,22 +41,22 @@ fn test_generic_syntax_tokenization() {
     assert!(has_list, "Should have identifier token");
 
     // Check that we get some kind of bracket (might be LBracket due to current lexer state)
-    let has_bracket = tokens.iter().any(|t| matches!(t.kind, TokenKind::LBracket) || matches!(t.kind, TokenKind::Lt));
+    let has_bracket = tokens.iter().any(|t| matches!(t.kind, TokenKind::LBracket) || matches!(t.kind, TokenKind::LParen));
     assert!(has_bracket, "Should have bracket or lt token");
 }
 
 #[test]
 fn test_multiple_generic_parameters() {
     // RFC-010: Multiple type parameters
-    let source = "Map[K, V]";
+    let source = "Map(K, V)";
     let tokens = tokenize(source).unwrap();
 
     assert!(matches!(tokens[0].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[1].kind, TokenKind::Lt);
+    assert_eq!(tokens[1].kind, TokenKind::LParen);
     assert!(matches!(tokens[2].kind, TokenKind::Identifier(_)));
     assert_eq!(tokens[3].kind, TokenKind::Comma);
     assert!(matches!(tokens[4].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[5].kind, TokenKind::Gt);
+    assert_eq!(tokens[5].kind, TokenKind::RParen);
 }
 
 #[test]
@@ -139,12 +139,12 @@ fn test_nested_generics() {
 
     // Should tokenize: Option < Vec < T > >
     assert!(matches!(tokens[0].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[1].kind, TokenKind::Lt);
+    assert_eq!(tokens[1].kind, TokenKind::LParen);
     assert!(matches!(tokens[2].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[3].kind, TokenKind::Lt);
+    assert_eq!(tokens[3].kind, TokenKind::LParen);
     assert!(matches!(tokens[4].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[5].kind, TokenKind::Gt);
-    assert_eq!(tokens[6].kind, TokenKind::Gt);
+    assert_eq!(tokens[5].kind, TokenKind::RParen);
+    assert_eq!(tokens[6].kind, TokenKind::RParen);
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn test_complex_generic_expression() {
 
     // Should recognize generics, constraints, and function syntax
     assert!(matches!(tokens[0].kind, TokenKind::Identifier(_))); // func identifier
-    assert_eq!(tokens[1].kind, TokenKind::Lt);
+    assert_eq!(tokens[1].kind, TokenKind::LParen);
 
     // Find the constraint colon
     let colon_idx = tokens.iter().position(|t| t.kind == TokenKind::Colon).unwrap();

@@ -105,7 +105,7 @@ impl SpecializationKey {
             String::new()
         } else {
             let args: Vec<String> = self.type_args.iter().map(|t| t.type_name()).collect();
-            format!("<{}>", args.join(","))
+            format!("({})", args.join(","))
         };
 
         format!("{}{}{}", self.name, param_str, type_str)
@@ -347,7 +347,7 @@ impl GenericFunctionId {
         let generic_str = if self.type_params.is_empty() {
             String::new()
         } else {
-            format!("<{}>", self.type_params.join(", "))
+            format!("({})", self.type_params.join(", "))
         };
 
         format!("{}{}{}", self.name, param_str, generic_str)
@@ -425,7 +425,7 @@ impl fmt::Display for GenericTypeId {
         if self.type_params.is_empty() {
             write!(f, "{}", self.name)
         } else {
-            write!(f, "{}<{}>", self.name, self.type_params.join(", "))
+            write!(f, "{}({})", self.name, self.type_params.join(", "))
         }
     }
 }
@@ -742,7 +742,7 @@ impl GenericClosureId {
         if self.type_params.is_empty() {
             format!("{}{}", self.name, captures)
         } else {
-            format!("{}<{}>{}", self.name, self.type_params.join(", "), captures)
+            format!("{}({}){}", self.name, self.type_params.join(", "), captures)
         }
     }
 }
@@ -926,7 +926,7 @@ impl ClosureSpecializationKey {
                 .map(|t| t.type_name())
                 .collect::<Vec<_>>()
                 .join(",");
-            format!("<{}>", args_str)
+            format!("({})", args_str)
         };
 
         let capture_str = if self.capture_types.is_empty() {

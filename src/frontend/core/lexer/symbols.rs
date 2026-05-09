@@ -371,7 +371,7 @@ impl GenericValidator {
     }
 
     /// Validate generic parameter list
-    /// Supports RFC-010 syntax: [T], [T: Clone], [T, U], [T, N: Int]
+    /// Supports RFC-010 syntax: (T: Type), (T: Clone), (T: Type, N: Int)
     ///
     /// Note: This method validates type parameters only. For const parameters,
     /// use `validate_const_params` method separately.

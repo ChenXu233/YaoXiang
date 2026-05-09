@@ -246,7 +246,7 @@ fn test_generic_closure_id_signature() {
         vec!["T".to_string()],
         vec!["x".to_string()],
     );
-    assert_eq!(id3.signature(), "generic<T>|[x]|");
+    assert_eq!(id3.signature(), "generic(T)|[x]|");
 }
 
 /// 测试：闭包ID特化名称
@@ -272,7 +272,7 @@ fn test_closure_specialization_key() {
     assert_eq!(key1.as_string(), "closure1");
 
     let key2 = ClosureSpecializationKey::new("closure2".to_string(), vec![int_type()], vec![]);
-    assert_eq!(key2.as_string(), "closure2<int64>");
+    assert_eq!(key2.as_string(), "closure2(int64)");
 
     let key3 = ClosureSpecializationKey::new("closure3".to_string(), vec![], vec![int_type()]);
     assert_eq!(key3.as_string(), "closure3|[int64]|");
@@ -282,7 +282,7 @@ fn test_closure_specialization_key() {
         vec![int_type()],
         vec![string_type()],
     );
-    assert_eq!(key4.as_string(), "closure4<int64>|[string]|");
+    assert_eq!(key4.as_string(), "closure4(int64)|[string]|");
 }
 
 /// 测试：不存在的闭包单态化

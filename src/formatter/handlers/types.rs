@@ -77,11 +77,11 @@ pub fn format_type(ty: &Type) -> String {
         }
         Type::Option(inner) => format!("{}?", format_type(inner)),
         Type::Result(ok, err) => {
-            format!("Result[{}, {}]", format_type(ok), format_type(err))
+            format!("Result({}, {})", format_type(ok), format_type(err))
         }
         Type::Generic { name, args, .. } => {
             let args_str: Vec<String> = args.iter().map(format_type).collect();
-            format!("{}[{}]", name, args_str.join(", "))
+            format!("{}({})", name, args_str.join(", "))
         }
         Type::AssocType {
             host_type,

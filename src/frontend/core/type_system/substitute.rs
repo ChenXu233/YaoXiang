@@ -513,15 +513,15 @@ mod universe_level_tests {
         };
         assert_eq!(plain.type_name(), "Type");
 
-        // Type[T] - RFC-010: users only see "Type", not "Type1"
+        // Type(T) - RFC-010: users only see "Type", not "Type1"
         let with_t = MonoType::MetaType {
             universe_level: UniverseLevel::type1(),
             type_params: vec![MonoType::TypeVar(TypeVar::new(0))],
         };
         let name = with_t.type_name();
-        assert_eq!(name, "Type[t0]");
+        assert_eq!(name, "Type");
 
-        // Type[Type[T]]
+        // Type(Type(T))
         let nested = MonoType::MetaType {
             universe_level: UniverseLevel::new("2".to_string()),
             type_params: vec![MonoType::MetaType {
@@ -530,6 +530,6 @@ mod universe_level_tests {
             }],
         };
         let name = nested.type_name();
-        assert_eq!(name, "Type[Type[t0]]");
+        assert_eq!(name, "Type");
     }
 }
