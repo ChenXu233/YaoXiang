@@ -73,18 +73,18 @@ pub fn handle_hover(
             SymbolKind::GenericFunction => {
                 if let Some(arity) = sym.arity {
                     format!(
-                        "```yaoxiang\n(泛型函数) {}[T]({} 个参数)\n```",
+                        "```yaoxiang\n(泛型函数) {}(T: Type, ...{} 个参数)\n```",
                         sym.name, arity
                     )
                 } else {
-                    format!("```yaoxiang\n(泛型函数) {}[T]\n```", sym.name)
+                    format!("```yaoxiang\n(泛型函数) {}(T: Type)\n```", sym.name)
                 }
             }
             SymbolKind::Type => {
                 format!("```yaoxiang\n(类型) {}: Type\n```", sym.name)
             }
             SymbolKind::GenericType => {
-                format!("```yaoxiang\n(泛型类型) {}[T]: Type\n```", sym.name)
+                format!("```yaoxiang\n(泛型类型) {}(T): Type\n```", sym.name)
             }
             SymbolKind::TypeClass => {
                 format!("```yaoxiang\n(类型类) {}\n```", sym.name)

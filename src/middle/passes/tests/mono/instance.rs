@@ -22,7 +22,7 @@ mod specialization_key_tests {
     #[test]
     fn test_specialization_key_with_one_arg() {
         let key = SpecializationKey::new("identity".to_string(), vec![MonoType::Int(64)]);
-        assert_eq!(key.to_string(), "identity<int64>");
+        assert_eq!(key.to_string(), "identity(int64)");
     }
 
     #[test]
@@ -31,13 +31,13 @@ mod specialization_key_tests {
             "map".to_string(),
             vec![MonoType::Int(32), MonoType::Float(64)],
         );
-        assert_eq!(key.to_string(), "map<int32,float64>");
+        assert_eq!(key.to_string(), "map(int32,float64)");
     }
 
     #[test]
     fn test_specialization_key_with_string_type() {
         let key = SpecializationKey::new("print".to_string(), vec![MonoType::String]);
-        assert_eq!(key.to_string(), "print<string>");
+        assert_eq!(key.to_string(), "print(string)");
     }
 
     #[test]
@@ -46,7 +46,7 @@ mod specialization_key_tests {
             "len".to_string(),
             vec![MonoType::List(Box::new(MonoType::Int(32)))],
         );
-        assert_eq!(key.to_string(), "len<List<int32>>");
+        assert_eq!(key.to_string(), "len(List(int32))");
     }
 
     #[test]
@@ -90,20 +90,20 @@ mod generic_function_id_tests {
         let id = GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]);
         assert_eq!(id.name(), "identity");
         assert_eq!(id.type_params(), vec!["T"]);
-        assert_eq!(id.signature(), "identity<T>");
+        assert_eq!(id.signature(), "identity(T)");
     }
 
     #[test]
     fn test_generic_function_id_with_multiple_params() {
         let id = GenericFunctionId::new("pair".to_string(), vec!["T".to_string(), "U".to_string()]);
-        assert_eq!(id.signature(), "pair<T, U>");
+        assert_eq!(id.signature(), "pair(T, U)");
     }
 
     #[test]
     fn test_generic_function_id_display() {
         let id = GenericFunctionId::new("test".to_string(), vec!["T".to_string()]);
         let display = format!("{}", id);
-        assert_eq!(display, "test<T>");
+        assert_eq!(display, "test(T)");
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod instantiation_request_tests {
         let request = InstantiationRequest::new(generic_id, type_args, span);
 
         let key = request.specialization_key();
-        assert_eq!(key.to_string(), "identity<int64>");
+        assert_eq!(key.to_string(), "identity(int64)");
     }
 
     #[test]
@@ -492,7 +492,7 @@ mod generic_type_id_tests {
     fn test_generic_type_id_display() {
         let id = GenericTypeId::new("Generic".to_string(), vec!["T".to_string()]);
         let display = format!("{}", id);
-        assert_eq!(display, "Generic<T>");
+        assert_eq!(display, "Generic(T)");
     }
 
     #[test]

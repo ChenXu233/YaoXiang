@@ -287,9 +287,9 @@ impl MonoType {
                         .join(", ")
                 )
             }
-            MonoType::List(t) => format!("List<{}>", t.type_name()),
-            MonoType::Dict(k, v) => format!("Dict<{}, {}>", k.type_name(), v.type_name()),
-            MonoType::Set(t) => format!("Set<{}>", t.type_name()),
+            MonoType::List(t) => format!("List({})", t.type_name()),
+            MonoType::Dict(k, v) => format!("Dict({}, {})", k.type_name(), v.type_name()),
+            MonoType::Set(t) => format!("Set({})", t.type_name()),
             MonoType::Fn {
                 params,
                 return_type,
@@ -304,11 +304,11 @@ impl MonoType {
             }
             MonoType::Option(inner) => format!("{}?", inner.type_name()),
             MonoType::Result(ok, err) => {
-                format!("Result[{}, {}]", ok.type_name(), err.type_name())
+                format!("Result({}, {})", ok.type_name(), err.type_name())
             }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
-            MonoType::Range { elem_type } => format!("Range<{}>", elem_type.type_name()),
+            MonoType::Range { elem_type } => format!("Range({})", elem_type.type_name()),
             MonoType::Union(types) => {
                 format!(
                     "({})",
@@ -359,20 +359,10 @@ impl MonoType {
             }
             MonoType::MetaType {
                 universe_level: _,
-                type_params,
+                type_params: _,
             } => {
-                if type_params.is_empty() {
-                    // 用户只看见 "Type"，不看见层级数字
-                    "Type".to_string()
-                } else {
-                    // 递归显示类型参数
-                    let params_str = type_params
-                        .iter()
-                        .map(|p| p.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    format!("Type[{}]", params_str)
-                }
+                // RFC-010: Type is always just "Type", no [] syntax
+                "Type".to_string()
             }
         }
     }

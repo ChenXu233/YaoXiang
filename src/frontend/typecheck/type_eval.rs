@@ -267,13 +267,13 @@ impl TypeEvaluator {
         None
     }
 
-    /// 解析泛型参数
+    /// Parse generic arguments from type name: `Name(T1, T2)`
     fn parse_generic_args(name: &str) -> Option<Vec<String>> {
-        if !name.contains('<') || !name.ends_with('>') {
+        if !name.contains('(') || !name.ends_with(')') {
             return None;
         }
 
-        let inner = &name[name.find('<').unwrap() + 1..name.len() - 1];
+        let inner = &name[name.find('(').unwrap() + 1..name.len() - 1];
         let mut args = Vec::new();
         let mut current = String::new();
         let mut depth = 0;
@@ -284,8 +284,8 @@ impl TypeEvaluator {
                     args.push(current.trim().to_string());
                     current = String::new();
                 }
-                '<' => depth += 1,
-                '>' if depth > 0 => depth -= 1,
+                '(' => depth += 1,
+                ')' if depth > 0 => depth -= 1,
                 _ => current.push(c),
             }
         }
@@ -317,9 +317,9 @@ impl TypeEvaluator {
             "Never" => Some(MonoType::TypeRef("Never".to_string())),
             "True" => Some(MonoType::TypeRef("True".to_string())),
             "False" => Some(MonoType::TypeRef("False".to_string())),
-            s if s.starts_with("If<") => Some(MonoType::TypeRef(s.to_string())),
-            s if s.starts_with("Match<") => Some(MonoType::TypeRef(s.to_string())),
-            s if s.starts_with("Nat<") => Some(MonoType::TypeRef(s.to_string())),
+            s if s.starts_with("If(") => Some(MonoType::TypeRef(s.to_string())),
+            s if s.starts_with("Match(") => Some(MonoType::TypeRef(s.to_string())),
+            s if s.starts_with("Nat(") => Some(MonoType::TypeRef(s.to_string())),
             s => Some(MonoType::TypeRef(s.to_string())),
         }
     }
@@ -336,12 +336,12 @@ impl TypeEvaluator {
             MonoType::TypeRef(name) if name == "False" => EvalResult::Value(false),
 
             // 等式条件: L == R
-            MonoType::TypeRef(name) if name.starts_with("Eq<") => {
+            MonoType::TypeRef(name) if name.starts_with("Eq(") => {
                 self.eval_eq_condition(name, depth)
             }
 
             // 不等条件: L != R
-            MonoType::TypeRef(name) if name.starts_with("Neq<") => {
+            MonoType::TypeRef(name) if name.starts_with("Neq(") => {
                 match self.eval_eq_condition(name, depth) {
                     EvalResult::Value(b) => EvalResult::Value(!b),
                     other => other,
@@ -349,17 +349,17 @@ impl TypeEvaluator {
             }
 
             // 组合条件: And
-            MonoType::TypeRef(name) if name.starts_with("And<") => {
+            MonoType::TypeRef(name) if name.starts_with("And(") => {
                 self.eval_and_condition(name, depth)
             }
 
             // 组合条件: Or
-            MonoType::TypeRef(name) if name.starts_with("Or<") => {
+            MonoType::TypeRef(name) if name.starts_with("Or(") => {
                 self.eval_or_condition(name, depth)
             }
 
             // 否定条件: Not
-            MonoType::TypeRef(name) if name.starts_with("Not<") => {
+            MonoType::TypeRef(name) if name.starts_with("Not(") => {
                 match self.eval_condition(&self.extract_inner_type(name), depth) {
                     EvalResult::Value(b) => EvalResult::Value(!b),
                     other => other,
@@ -475,8 +475,8 @@ impl TypeEvaluator {
         &self,
         name: &str,
     ) -> MonoType {
-        if let Some(start) = name.find('<') {
-            if let Some(end) = name.rfind('>') {
+        if let Some(start) = name.find('(') {
+            if let Some(end) = name.rfind(')') {
                 let inner = &name[start + 1..end];
                 return self
                     .parse_type(inner)
@@ -527,7 +527,7 @@ impl TypeEvaluator {
         ty: &MonoType,
     ) -> Option<(MonoType, Vec<(MonoType, MonoType)>)> {
         if let MonoType::TypeRef(name) = ty {
-            if !name.starts_with("Match<") {
+            if !name.starts_with("Match(") {
                 return None;
             }
 
@@ -605,7 +605,7 @@ impl TypeEvaluator {
         &self,
         name: &str,
     ) -> Option<(String, Vec<MonoType>)> {
-        if !name.starts_with("Nat<") || !name.ends_with('>') {
+        if !name.starts_with("Nat(") || !name.ends_with(')') {
             return None;
         }
 
@@ -810,7 +810,7 @@ impl TypeEvaluator {
                 ..
             } => Some(*n),
             // 类型引用形式的 Nat 字面量: Nat<5>
-            MonoType::TypeRef(name) if name.starts_with("Nat<") => {
+            MonoType::TypeRef(name) if name.starts_with("Nat(") => {
                 if let Some(inner) = Self::extract_nat_literal(name) {
                     return Some(inner);
                 }
@@ -824,8 +824,8 @@ impl TypeEvaluator {
 
     /// 从类型引用中提取 Nat 字面量值
     fn extract_nat_literal(name: &str) -> Option<i128> {
-        if let Some(start) = name.find('<') {
-            if let Some(end) = name.rfind('>') {
+        if let Some(start) = name.find('(') {
+            if let Some(end) = name.rfind(')') {
                 let inner = &name[start + 1..end];
                 return inner.parse::<i128>().ok();
             }
@@ -838,7 +838,7 @@ impl TypeEvaluator {
         &self,
         n: i128,
     ) -> EvalResult<MonoType> {
-        EvalResult::Value(MonoType::TypeRef(format!("Nat<{}>", n)))
+        EvalResult::Value(MonoType::TypeRef(format!("Nat({})", n)))
     }
 
     // ============ 类型引用求值 ============
@@ -1009,7 +1009,7 @@ mod tests {
     fn test_parse_generic_args() {
         // If 有 3 个参数
         assert_eq!(
-            TypeEvaluator::parse_generic_args("If<True, Int, String>"),
+            TypeEvaluator::parse_generic_args("If(True, Int, String)"),
             Some(
                 vec!["True", "Int", "String"]
                     .into_iter()
@@ -1020,16 +1020,16 @@ mod tests {
 
         // Add 有 2 个参数
         assert_eq!(
-            TypeEvaluator::parse_generic_args("Add<1, 2>"),
+            TypeEvaluator::parse_generic_args("Add(1, 2)"),
             Some(vec!["1", "2"].into_iter().map(|s| s.to_string()).collect())
         );
     }
 
     #[test]
     fn test_extract_nat_literal() {
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat<42>"), Some(42));
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat<0>"), Some(0));
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat<abc>"), None);
+        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(42)"), Some(42));
+        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(0)"), Some(0));
+        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(abc)"), None);
     }
 
     #[test]
@@ -1064,7 +1064,7 @@ mod tests {
         let result = evaluator.eval_nat("Add", &[a, b]);
         assert_eq!(
             result,
-            EvalResult::Value(MonoType::TypeRef("Nat<8>".to_string()))
+            EvalResult::Value(MonoType::TypeRef("Nat(8)".to_string()))
         );
 
         // 测试减法
@@ -1082,7 +1082,7 @@ mod tests {
         let result = evaluator.eval_nat("Sub", &[a, b]);
         assert_eq!(
             result,
-            EvalResult::Value(MonoType::TypeRef("Nat<7>".to_string()))
+            EvalResult::Value(MonoType::TypeRef("Nat(7)".to_string()))
         );
     }
 
@@ -1104,13 +1104,13 @@ mod tests {
         );
 
         // 测试 And 条件
-        let and_cond = MonoType::TypeRef("And<True, False>".to_string());
+        let and_cond = MonoType::TypeRef("And(True, False)".to_string());
         assert_eq!(
             evaluator.eval_condition(&and_cond, 0),
             EvalResult::Value(false)
         );
 
-        let and_cond = MonoType::TypeRef("And<True, True>".to_string());
+        let and_cond = MonoType::TypeRef("And(True, True)".to_string());
         assert_eq!(
             evaluator.eval_condition(&and_cond, 0),
             EvalResult::Value(true)

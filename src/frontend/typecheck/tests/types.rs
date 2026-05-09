@@ -381,13 +381,13 @@ fn test_mono_type_type_name_bytes() {
 #[test]
 fn test_mono_type_type_name_list() {
     let ty = MonoType::List(Box::new(MonoType::Int(64)));
-    assert_eq!(ty.type_name(), "List<int64>");
+    assert_eq!(ty.type_name(), "List(int64)");
 }
 
 #[test]
 fn test_mono_type_type_name_dict() {
     let ty = MonoType::Dict(Box::new(MonoType::String), Box::new(MonoType::Int(64)));
-    assert_eq!(ty.type_name(), "Dict<string, int64>");
+    assert_eq!(ty.type_name(), "Dict(string, int64)");
 }
 
 #[test]
