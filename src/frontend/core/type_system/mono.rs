@@ -340,7 +340,7 @@ impl MonoType {
                     String::new()
                 } else {
                     format!(
-                        "<{}>",
+                        "({})",
                         assoc_args
                             .iter()
                             .map(|t| t.type_name())
