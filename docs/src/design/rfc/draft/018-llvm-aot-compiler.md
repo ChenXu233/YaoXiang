@@ -433,9 +433,9 @@ src/backends/llvm/
 | `Float` | `f64` |
 | `Bool` | `i1` |
 | `String` | `ptr` (结构体) |
-| `Arc[T]` | `{ i32, T }` (引用计数结构体) |
+| `Arc(T)` | `{ i32, T }` (引用计数结构体) |
 | `ref T` | `ptr` (Arc 指针) |
-| `List[T]` | `ptr` (动态数组) |
+| `List(T)` | `ptr` (动态数组) |
 | `Struct` | `struct` (对应结构体) |
 
 ### 指令翻译

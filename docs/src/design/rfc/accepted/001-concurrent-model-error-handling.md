@@ -385,7 +385,7 @@ main: () -> Void = {
    ```yaoxiang
    Database: Type
 
-   query: (Database, String) -> Result[Row, Error]
+   query: (Database, String) -> Result(Row, Error)
    # 参数 Database 是 Resource，自动识别为资源操作
    ```
 
@@ -421,7 +421,7 @@ path2 = compute_path("file2")       # 运行时计算
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }
 
 # ? 运算符透明错误传播
-process: () -> Result[Data, Error] = {
+process: () -> Result(Data, Error) = {
     data = fetch_data()?
     processed = transform(data)?
     save(processed)?
@@ -504,8 +504,8 @@ Send ──► 可安全跨线程传输
   └──► Sync ──► 可安全跨线程共享
        └──► 满足 Send + Sync 的类型可自动并发
 
-Arc[T] 实现 Send + Sync（线程安全引用计数）
-Mutex[T] 提供内部可变性
+Arc(T) 实现 Send + Sync（线程安全引用计数）
+Mutex(T) 提供内部可变性
 ```
 
 ### 9. 语法 BNF
@@ -711,7 +711,7 @@ ErrorPropagate ::= Expr '?'
   # 函数式接口设计
   dag_builder: (DAG, Node) -> Node
   scheduler: (DAG, RuntimeContext) -> ExecutionResult
-  executor: (Node, RuntimeContext) -> Result[Value, Error]
+  executor: (Node, RuntimeContext) -> Result(Value, Error)
   ```
 
 #### 已删除问题（不适用）
@@ -839,7 +839,7 @@ main:
 ```yaoxiang
 dag_builder: (DAG, Node) -> Node
 scheduler: (DAG, RuntimeContext) -> ExecutionResult
-executor: (Node, RuntimeContext) -> Result[Value, Error]
+executor: (Node, RuntimeContext) -> Result(Value, Error)
 ```
 
 ##### 讨论议题 8：错误图内存占用
@@ -879,7 +879,7 @@ executor: (Node, RuntimeContext) -> Result[Value, Error]
 ```yaoxiang
 # @ordered 已删除，使用 @eager 替代
 # @eager 既是同步执行保证，也是结果顺序收集的保证
-collect_results: () -> List[Int] @eager = {
+collect_results: () -> List(Int) @eager = {
     results = spawn for i in 0..100 {
         heavy_calc(i)  # 顺序执行
     }

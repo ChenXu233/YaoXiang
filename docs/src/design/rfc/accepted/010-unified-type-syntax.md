@@ -33,10 +33,10 @@ identifier : type = expression
 | 函数       | `add: (a: Int, b: Int) -> Int = a + b`       |
 | 记录类型   | `Point: Type = { x: Float, y: Float }`       |
 | 接口       | `Drawable: Type = { draw: (Surface) -> Void }` |
-| 泛型类型   | `List: (T: Type) -> Type = { data: Array[T], length: Int }` |
-| 泛型类型   | `Map: (K: Type, V: Type) -> Type = { keys: Array[K], values: Array[V] }` |
+| 泛型类型   | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
+| 泛型类型   | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }` |
 | 方法       | `Point.draw: (self: Point, s: Surface) -> Void = ...` |
-| 泛型函数   | `map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R])` |
+| 泛型函数   | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))` |
 
 **`Type` 是语言中唯一的元类型关键字**。
 它用于标注类型层级，编译器自动处理 Type0、Type1、Type2... 的区分，对用户透明。
@@ -79,19 +79,21 @@ Point.serialize: (self: Point) -> String = {
 
 // 泛型类型（(T: Type) -> Type = 接受类型参数的泛型类型）
 List: (T: Type) -> Type = {
-    data: Array[T],
+    data: Array(T),
     length: Int
 }
 
 Map: (K: Type, V: Type) -> Type = {
-    keys: Array[K],
-    values: Array[V]
+    keys: Array(K),
+    values: Array(V)
 }
 
 // 使用
 p: Point = Point(1.0, 2.0)
 p.draw(screen)           // 语法糖 → Point.draw(p, screen)
 s: Drawable = p           // 结构子类型：Point 实现 Drawable
+drawables: List(Drawable) = [p, r]
+process_all(drawables)
 ```
 
 ## 动机
@@ -121,16 +123,16 @@ RFC-010的统一语法模型与RFC-011的泛型系统设计**天然契合**，�
 
 ```yaoxiang
 // 基础泛型（RFC-011 Phase 1）
-List: (T: Type) -> Type = { data: Array[T], length: Int }
+List: (T: Type) -> Type = { data: Array(T), length: Int }
 
-// 泛型函数
-map: (T: Type, R: Type) -> ((list: List[T], f: Fn(T) -> R) -> List[R]) = ...
+// 泛型函数（RFC-023 语法：签名中 Type 位置可省略，调用时自动推断）
+map: (: Type, R: Type) -> (( list: List(T), f: (T) -> R) -> List(R)) = ...
 
 // 类型约束（RFC-011 Phase 2）
-clone: [T: Clone](value: T) -> T = value.clone()
+clone: (value: T) -> T = value.clone()  // T: Clone 约束由参数类型携带
 
 // Const泛型（RFC-011 Phase 4）
-Array: (T: Type, N: Int) -> Type = { data: T[N], length: N }
+Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 ```
 
 **依赖关系**：
@@ -182,22 +184,22 @@ Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！
 │   └── add: (a: Int, b: Int) -> Int = a + b  # 无 : Type，HM 推断为函数
 │
 ├── 记录类型
-│   └── Point: Type = { x: Float, y: Float }  # 必须有 : Type
+│   └── Point: Type = { x: Float, y: Float }  # 必须返回： Type
 │
 ├── 接口
-│   └── Drawable: Type = { draw: (Surface) -> Void }  # 必须有 : Type
+│   └── Drawable: Type = { draw: (Surface) -> Void }  # 必须返回： Type
 │
 ├── 泛型类型
-│   └── List: (T: Type) -> Type = { data: Array[T], length: Int }  # 必须有 : Type
+│   └── List: (T: Type) -> Type = { data: Array(T), length: Int }  # 必须返回： Type
 │
 ├── 泛型类型（多参数）
-│   └── Map: (K: Type, V: Type) -> Type = { keys: Array[K], values: Array[V] }  # 必须有 : Type
+│   └── Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }  # 必须返回： Type
 │
 ├── 方法
 │   └── Point.draw: (self: Point, surface: Surface) -> Void = ...
 │
 └── 泛型函数
-    └── map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R])  # 无 : Type，HM 推断为函数
+    └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # 不返回 Type，HM 推断为函数
 ```
 
 ### 元类型层级（编译器内部）
@@ -455,7 +457,7 @@ draw_point: (p: Point, surface: Surface) -> Void = Point.draw
 DrawableSerializable: Type = Drawable & Serializable
 
 // 使用交集类型
-process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
+process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) = {
     item.draw(screen)
     return item.serialize()
 }
@@ -466,22 +468,36 @@ process: [T: Drawable & Serializable](item: T, screen: Surface) -> String = {
 ```yaoxiang
 // 基础泛型（RFC-011 Phase 1）
 List: (T: Type) -> Type = {
-    data: Array[T],
+    data: Array(T),
     length: Int,
-    push: [T](self: List[T], item: T) -> Void,
-    get: [T](self: List[T], index: Int) -> Maybe[T]
+    push: (T:Type)-((self: List(T), item: T) -> Void),
+    get: (T:Type)->((self: List(T), index: Int) -> Maybe(T))
 }
 
-// 具体实例化（RFC-011语法）
-IntList: Type = List[Int]
+// 具体实例化（RFC-023 语法）
+IntList: Type = List(Int)
 
-// 泛型方法（RFC-011语法）
-List.push: [T](self: List[T], item: T) -> Void = {
+IntList.push = {
     self.data.append(item)
     self.length = self.length + 1
 }
 
-List.get: [T](self: List[T], index: Int) -> Maybe[T] = {
+List.push = (type: Type) -> {
+    return (self: List(type), item: type) -> {
+        self.data.append(item)
+        self.length = self.length + 1
+    }
+}
+
+IntList.push(Int)(self, item)  // 调用示例
+
+// 泛型方法（RFC-023 语法：类型参数由调用处自动推断）
+List.push: (self: List(T), item: T) -> Void = {
+    self.data.append(item)
+    self.length = self.length + 1
+}
+
+List.get: (self: List(T), index: Int) -> Maybe(T) = {
     if index >= 0 && index < self.length {
         return Maybe.Just(self.data[index])
     } else {
@@ -605,13 +621,13 @@ d: Float = distance(p, Point(0.0, 0.0))
 p2: Point = p.translate(1.0, 1.0).scale(2.0)
 
 // 接口赋值
-drawables: List[Drawable] = [p, r]
+drawables: List(Drawable) = [p, r]
 for d in drawables {
     d.draw(screen)
 }
 
-// 泛型函数
-process_all[T: Serializable](items: List[T]) {
+// 泛型函数（RFC-023 语法：调用时省略类型参数，自动推断）
+process_all: (items: List(T)) -> Void = {
     for item in items {
         print(item.serialize())
     }
@@ -670,7 +686,7 @@ d: Drawable = get_shape()
 d.draw(screen)  // 通过 vtable 查找方法
 
 // 异构集合 → 使用 vtable
-shapes: List[Drawable] = [Circle(1), Rect(2, 3)]
+shapes: List(Drawable) = [Circle(1), Rect(2, 3)]
 for s in shapes {
     s.draw(screen)  // 通过 vtable 查找方法
 }
@@ -682,7 +698,7 @@ for s in shapes {
 |------|----------|----------|
 | `d: Drawable = Circle(1)` | 具体类型 Circle | 直接调用（零开销） |
 | `d: Drawable = get_shape()` | 未知 | vtable |
-| `shapes: List[Drawable] = [...]` | 异构 | vtable |
+| `shapes: List(Drawable) = [...]` | 异构 | vtable |
 
 **规则**：
 1. 当右值是具体类型构造器且编译期可确定时，生成直接调用 IR
@@ -711,7 +727,7 @@ custom: CustomPoint = CustomPoint(
 | 之前 | 之后 |
 |------|------|
 | `type Point = Point(x: Float, y: Float)` | `type Point = { x: Float, y: Float }` |
-| `type Result[T, E] = ok(T) \| err(E)` | `type Result[T, E] = { ok: (T) -> Self, err: (E) -> Self }` |
+| `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }` |
 | 需要 `impl` 关键字 | 无需关键字，接口名写在类型体后 |
 
 ## 语法设计说明：具名函数本质是 Lambda 的语法糖
@@ -874,7 +890,7 @@ declaration ::= identifier ':' type_expr '=' expression
 
 # 类型表达式
 type_expr ::= identifier
-       | identifier '[' type_expr (',' type_expr)* ']'      # 类型构造器应用
+       | identifier '(' type_expr (',' type_expr)* ')'      # 类型应用
        | '(' type_expr (',' type_expr)* ')' '->' type_expr       # 函数类型
        | '{' type_field* '}'                       # 记录/接口类型
        | 'Type'                                    # 元类型
@@ -882,20 +898,13 @@ type_expr ::= identifier
 type_field ::= identifier ':' type_expr
              | identifier                           # 接口约束
 
-# 泛型参数
-generic_params ::= '[' identifier (':' type_expr)? (',' identifier (':' type_expr)?)* ']'
-
-# 函数签名
-function_signature ::= identifier generic_params? '(' parameter_list? ')' '->' type_expr
-
-parameter_list ::= parameter (',' parameter)*
-
-parameter ::= identifier ':' type_expr
+# 泛型参数：作为函数类型的一部分，如 (T: Type, R: Type) -> (...)
+# 无需独立的 BNF 规则——: Type 参数就是普通函数参数
 
 # 表达式
 expression ::= literal
               | identifier
-              | identifier '[' expression (',' expression)* ']'  # 构造器调用
+              | identifier '(' expression (',' expression)* ')'  # 函数调用 / 构造器调用
               | '(' expression (',' expression)* ')'              # 元组
               | expression '.' identifier '(' arguments? ')'    # 方法调用
               | lambda
@@ -917,7 +926,7 @@ block ::= expression | '{' expression* '}'
 | 接口 | 字段全为函数类型的记录类型 |
 | 泛型类型 | 定义为 `Name: (T: Type) -> Type = { ... }` 的类型，接受类型参数 |
 | 类型方法 | `Type.method` 形式的方法，关联到特定类型 |
-| 泛型函数 | 带 `[...]` 类型参数的函数 |
+| 泛型函数 | 使用 `(T: Type)` 语法的函数，类型参数作为第一个参数组 |
 | 元类型 | `Type`，语言中唯一的类型层级标记 |
 
 ---

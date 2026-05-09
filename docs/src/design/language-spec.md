@@ -386,10 +386,10 @@ Result: (T: Type, E: Type) -> Type = {
 }
 
 List: (T: Type) -> Type = {
-    data: Array[T],
+    data: Array(T),
     length: Int,
-    push: (self: List[T], item: T) -> Void,
-    get: (self: List[T], index: Int) -> Option[T]
+    push: (self: List(T), item: T) -> Void,
+    get: (self: List(T), index: Int) -> Option(T)
 }
 ```
 
@@ -397,7 +397,7 @@ List: (T: Type) -> Type = {
 
 ```yaoxiang
 # 编译器自动推导泛型参数
-numbers: List[Int] = List(1, 2, 3)  # 编译器推导 List[Int]
+numbers: List(Int) = List(1, 2, 3)  # 编译器推导 List(Int)
 ```
 
 ### 3.9 类型约束
@@ -425,7 +425,7 @@ clone: (T: Clone) -> ((value: T) -> T) = (value) => value.clone()
 combine: (T: Clone & Add) -> ((a: T, b: T) -> T) = (a, b) => a.clone() + b
 
 # 泛型容器的排序
-sort: (T: Clone & PartialOrd) -> ((list: List[T]) -> List[T]) = (list) => {
+sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = (list) => {
     result = list.clone()
     quicksort(&mut result)
     return result
@@ -453,13 +453,13 @@ AssociatedType ::= Identifier ':' TypeExpr
 # Iterator trait（使用记录类型语法）
 Iterator: (T: Type) -> Type = {
     Item: T,                    # 关联类型
-    next: (Self) -> Option[T],
+    next: (Self) -> Option(T),
     has_next: (Self) -> Bool
 }
 
 # 使用关联类型
-collect: (T: Type, I: Iterator[T]) -> ((iter: I) -> List[T]) = (iter) => {
-    result = List[T]()
+collect: (T: Type, I: Iterator(T)) -> ((iter: I) -> List(T)) = (iter) => {
+    result = List(T)()
     while iter.has_next() {
         if let Some(item) = iter.next() {
             result.push(item)
@@ -475,7 +475,7 @@ collect: (T: Type, I: Iterator[T]) -> ((iter: I) -> List[T]) = (iter) => {
 # 更复杂的关联类型
 Container: (T: Type) -> Type = {
     Item: T,
-    IteratorType: Iterator[T],  # 关联类型也是泛型的
+    IteratorType: Iterator(T),  # 关联类型也是泛型的
     iter: (Self) -> IteratorType
 }
 ```
@@ -502,12 +502,12 @@ factorial: (n: Int) -> Int = {
 
 # 编译期常量数组
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: T[N],      # 编译期已知大小的数组
+    data: Array(T, N),      # 编译期已知大小的数组
     length: N
 }
 
 # 使用方式：factorial(5) 在编译期求值
-arr: StaticArray[Int, factorial(5)]  # factorial(5) = 120
+arr: StaticArray(Int, factorial(5))  # factorial(5) = 120
 ```
 
 #### 3.11.2 编译期常量数组
@@ -515,11 +515,11 @@ arr: StaticArray[Int, factorial(5)]  # factorial(5) = 120
 ```yaoxiang
 # 矩阵类型使用
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
-    data: Array[Array[T, Cols], Rows]
+    data: Array(Array(T, Cols), Rows)
 }
 
 # 编译期维度验证
-identity_matrix: (T: Add & Zero & One, N: Int) -> ((size: N) -> Matrix[T, N, N]) = (size) => {
+identity_matrix: (T: Add & Zero & One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = (size) => {
     # ...
 }
 ```
@@ -540,7 +540,7 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
 }
 
 # 示例：编译期分支
-NonEmpty: (T: Type) -> Type = If[T != Void, T, Never]
+NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 
 # 编译期验证
 Assert: (C: Bool) -> Type = match C {
@@ -590,16 +590,16 @@ process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) 
 
 ```yaoxiang
 # 基本特化：使用函数重载（编译器自动选择）
-sum: (arr: Array[Int]) -> Int = {
+sum: (arr: Array(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array[Float]) -> Float = {
+sum: (arr: Array(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
 # 通用实现
-sum: (T: Add) -> ((arr: Array[T]) -> T) = (arr) => {
+sum: (T: Add) -> ((arr: Array(T)) -> T) = (arr) => {
     result = Zero::zero()
     for item in arr {
         result = result + item
@@ -615,11 +615,11 @@ sum: (T: Add) -> ((arr: Array[T]) -> T) = (arr) => {
 Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86
 
 # P 是预定义泛型参数名，代表当前编译平台
-sum: [P: X86_64](arr: Array[Float]) -> Float = {
+sum: (P: X86_64) -> ((arr: Array(Float)) -> Float) = {
     return avx2_sum(arr.data, arr.length)
 }
 
-sum: [P: AArch64](arr: Array[Float]) -> Float = {
+sum: (P: AArch64) -> ((arr: Array(Float)) -> Float) = {
     return neon_sum(arr.data, arr.length)
 }
 ```
@@ -647,8 +647,8 @@ sum: [P: AArch64](arr: Array[Float]) -> Float = {
 - 变量：`x: Int = 42`
 - 函数：`add: (a: Int, b: Int) -> Int = a + b`
 - 记录类型：`Point: Type = { x: Float, y: Float }`
-- 泛型类型构造器：`List: (T: Type) -> Type = { data: Array[T] }`
-- 泛型函数：`map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R])`
+- 泛型类型构造器：`List: (T: Type) -> Type = { data: Array(T) }`
+- 泛型函数：`map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))`
 
 **核心规则**：
 - 有 `: Type` → 类型构造器
@@ -1014,8 +1014,8 @@ greet: (name: String) -> String = "Hello, ${name}!"
 
 ```yaoxiang
 # 泛型函数定义：类型参数使用 (T: Type) 语法
-map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R]) = {
-    result = List[R]()
+map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
+    result = List(R)()
     for item in list {
         result.push(f(item))
     }
@@ -1205,7 +1205,7 @@ ErrorPropagate ::= Expr '?'
 **示例**：
 
 ```
-process: (p: Point) -> Result[Data, Error] = {
+process: (p: Point) -> Result(Data, Error) = {
     data = fetch_data()?      # 自动传播错误
     transform(data)?
 }
@@ -1369,10 +1369,10 @@ UnsafeBlock   ::= 'unsafe' '{' Stmt* '}'
 
 ```
 # Send 派生规则
-Struct[T1, T2]: Send ⇐ T1: Send 且 T2: Send
+Struct(T1, T2): Send ⇐ T1: Send 且 T2: Send
 
 # Sync 派生规则
-Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
+Struct(T1, T2): Sync ⇐ T1: Sync 且 T2: Sync
 ```
 
 **类型约束**：
@@ -1405,8 +1405,8 @@ Send ──► 可安全跨线程传输
        │
        └──► 满足 Send + Sync 的类型可自动并发
 
-Arc[T] 实现 Send + Sync（线程安全引用计数）
-Mutex[T] 提供内部可变性
+Arc(T) 实现 Send + Sync（线程安全引用计数）
+Mutex(T) 提供内部可变性
 ```
 
 ### 8.8 并发安全类型
@@ -1414,17 +1414,17 @@ Mutex[T] 提供内部可变性
 | 类型 | 语义 | 并发安全 | 说明 |
 |------|------|----------|------|
 | `T` | 不可变数据 | ✅ 安全 | 默认类型，多任务读取无竞争 |
-| `Ref[T]` | 可变引用 | ⚠️ 需同步 | 标记为可并发修改，编译检查锁使用 |
-| `Atomic[T]` | 原子类型 | ✅ 安全 | 底层原子操作，无锁并发 |
-| `Mutex[T]` | 互斥锁包装 | ✅ 安全 | 自动加锁解锁，编译保证 |
-| `RwLock[T]` | 读写锁包装 | ✅ 安全 | 读多写少场景优化 |
+| `Ref(T)` | 可变引用 | ⚠️ 需同步 | 标记为可并发修改，编译检查锁使用 |
+| `Atomic(T)` | 原子类型 | ✅ 安全 | 底层原子操作，无锁并发 |
+| `Mutex(T)` | 互斥锁包装 | ✅ 安全 | 自动加锁解锁，编译保证 |
+| `RwLock(T)` | 读写锁包装 | ✅ 安全 | 读多写少场景优化 |
 
 **语法**：
 
 ```
-Mutex[T]    # 互斥锁包装的可变数据
-Atomic[T]   # 原子类型（仅限 Int、Float 等）
-RwLock[T]   # 读写锁包装
+Mutex(T)    # 互斥锁包装的可变数据
+Atomic(T)   # 原子类型（仅限 Int、Float 等）
+RwLock(T)   # 读写锁包装
 ```
 
 **with 语法糖**：
@@ -1561,29 +1561,29 @@ pub name: (Type, ...) -> ReturnType = { ... }  # 自动绑定到 Type
 
 ```
 # 泛型类型
-List: (T: Type) -> Type = { data: Array[T], length: Int }
+List: (T: Type) -> Type = { data: Array(T), length: Int }
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # 泛型函数：类型参数使用 (T: Type) 语法
-map: (T: Type, R: Type) -> ((list: List[T], f: (x: T) -> R) -> List[R]) = { ... }
+map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = { ... }
 
 # 类型约束：约束使用 (T: Clone) 语法
 clone: (T: Clone) -> ((value: T) -> T) = (value) => value.clone()
 combine: (T: Clone & Add) -> ((a: T, b: T) -> T) = body
 
 # 关联类型
-Iterator: (T: Type) -> Type = { Item: T, next: () -> Option[T] }
+Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
 # 编译期泛型：使用 (n: Int) 声明值依赖类型
 factorial: (n: Int) -> Int = { ... }
-StaticArray: (T: Type, N: Int) -> Type = { data: T[N], length: N }
+StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 # 条件类型
 If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }
 
 # 函数特化
-sum: (arr: Array[Int]) -> Int = { ... }
-sum: (arr: Array[Float]) -> Float = { ... }
+sum: (arr: Array(Int)) -> Int = { ... }
+sum: (arr: Array(Float)) -> Float = { ... }
 ```
 
 ### A.6 模块
@@ -1658,11 +1658,11 @@ match value {
 | Mutex/Atomic 类型 | P2 | 并发安全数据类型 |
 | 错误图可视化 | P3 | 并发错误传播追踪 |
 | **泛型类型系统** | P1 | RFC-011 |
-| 基础泛型 `[T]` | P1 | 泛型类型参数和单态化 |
-| 类型约束 `[T: Clone]` | P2 | 单一/多重约束系统 |
+| 基础泛型 `(T: Type)` | P1 | 泛型类型参数和单态化 |
+| 类型约束 `(T: Clone)` | P2 | 单一/多重约束系统 |
 | 关联类型 `Item: T` | P3 | GAT 支持 |
-| 编译期泛型 `[N: Int]` | P3 | 字面量类型约束 |
-| 条件类型 `If[C, T, E]` | P3 | 类型级计算 |
+| 编译期泛型 `(N: Int)` | P3 | 字面量类型约束 |
+| 条件类型 `If(C, T, E)` | P3 | 类型级计算 |
 | 函数重载特化 | P2 | 平台特化与类型特化 |
 | 方法语法 `Type.method` | P1 | `Point.draw: (...) -> ... = ...` |
 
@@ -1880,7 +1880,7 @@ result = f(arg2, arg3)
 | v1.3.0 | 2025-01-05 | 沫郁酱 | 添加并作模型规范（三层并发架构、spawn语法、注解）；添加类型系统约束（Send/Sync）；添加并发安全类型（Mutex、Atomic）；更新错误处理（?运算符）；更新待实现特性列表 |
 | v1.4.0 | 2025-01-15 | 晨煦 | 更新所有权模型（默认Move + 显式ref=Arc）；添加unsafe关键字；删除生命周期 `'a` 和借用检查器；更新待实现特性列表 |
 | v1.5.0 | 2025-01-20 | 晨煦 | 添加方法绑定规范（RFC-004）：位置索引从 0 开始；默认绑定到第 0 位；支持负数索引和多位置绑定 |
-| v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `[T]`、类型约束 `[T: Clone]`、关联类型 `Item: T`、编译期泛型 `[N: Int]`、条件类型 `If[C, T, E]`、函数重载特化、平台特化 |
+| v1.6.0 | 2025-02-06 | 晨煦 | 整合 RFC-010（统一类型语法）：更新 `type Name = {...}` 语法、参数名在签名中的函数定义、Type.method 方法语法；整合 RFC-011（泛型系统）：添加泛型类型 `(T: Type)`、类型约束 `(T: Clone)`、关联类型 `Item: T`、编译期泛型 `(N: Int)`、条件类型 `If(C, T, E)`、函数重载特化、平台特化 |
 | v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
 | v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 新增默认值初始化、内置绑定语法；RFC-004 新增内置绑定、匿名函数绑定 |
 | v1.8.1 | 2026-02-20 | 晨煦 | 元类型不属于关键字。 |

@@ -66,10 +66,10 @@ main: () -> Void = () => { println("Hello") }          # 完整形式
 main: () -> Void = { println("Hello") }                # 省略 Lambda 头
 main = { println("Hello") }                            # 最简形式（推断为 () -> Void）
 
-# === 泛型函数（使用 RFC-011 语法）===
-identity: [T](x: T) -> T = x                           # 完整形式
-identity: [T](x: T) -> T = { x }                       # 省略 Lambda 头
-identity = [T](x: T) => x                              # 省略签名
+# === 泛型函数（使用 RFC-010 统一语法）===
+identity: (T: Type) -> ((x: T) -> T) = (x) => x         # 完整形式
+identity: (T: Type) -> ((x: T) -> T) = x                # 省略 Lambda 头
+identity = (x: T) => x                                  # 省略签名（lambda 头标注类型）
 
 # === 递归函数 ===
 factorial: (n: Int) -> Int = (n) => {
@@ -109,21 +109,21 @@ if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 
 **设计原理**：
 - **高阶函数**：函数作为参数传递时，需要泛型约束其函数类型
-- **类型注解形式**：`[T](f: (T) -> T, x: T) -> T` - 泛型参数约束函数类型
+- **类型注解形式**：`(T: Type) -> ((f: (T) -> T, x: T) -> T)` - 泛型参数约束函数类型
 - **HM工作流程**：通过泛型参数推断函数类型，实现多态函数组合
 
 **示例说明**：
 ```yaoxiang
 # ✅ 支持高阶多态：泛型约束函数类型参数
-call_twice: [T](f: (x: T) -> T, x: T) -> T = {
+call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = {
     return f(f(x))
 }
-# 使用：call_twice((x) => x + 1, 5)  # 推断为 call_twice[Int]
+# 使用：call_twice((x) => x + 1, 5)  # 推断 T=Int
 
-compose: [A, B, C](f: (x: B) -> C, g: (x: A) -> B, x: A) -> C = {
+compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) = {
     return f(g(x))
 }
-# 使用：compose((x) => x * 2, (x) => x + 1, 5)  # 推断为 compose[Int, Int, Int]
+# 使用：compose((x) => x * 2, (x) => x + 1, 5)  # 推断 A=Int, B=Int, C=Int
 
 # ❌ 不支持：缺少泛型约束的高阶函数
 # bad_hof: (f, x) => f(f(x))  # HM无法推断，缺少泛型参数
@@ -131,7 +131,7 @@ compose: [A, B, C](f: (x: B) -> C, g: (x: A) -> B, x: A) -> C = {
 
 **HM推断过程**：
 1. 识别高阶函数参数：`f: (T) -> T`
-2. 创建泛型约束：`[T]`
+2. 创建泛型约束：`(T: Type)`
 3. 通过泛型实例化推断具体类型
 4. 实现多态函数组合
 
@@ -164,32 +164,28 @@ main: () -> Void = println("Hello")               # 正确：表达式形式
 **核心思想**：
 1. 函数定义通过HM算法进行类型推断，尽量推断，无法推断时显式报错
 2. **HM算法工作原理**：通过操作符类型约束、函数调用关系等上下文信息自动推断类型
-3. **泛型支持**：多态函数使用泛型语法 `[T]` 明确约束类型参数（RFC-011）
+3. **泛型支持**：多态函数使用泛型语法 `(T: Type)` 明确约束类型参数（RFC-010/011）
 4. **推断边界**：返回类型与局部变量可推断；有参函数的参数类型需显式标注（签名或 lambda 头其一）
 5. 空参无返回函数使用 `name: () -> Void = { ... }`，与 RFC-010 统一
 6. 旧语法退役，提供迁移工具
 
 **类型推断示例**：
 ```yaoxiang
-# 泛型函数：显式类型参数（使用RFC-011语法）
-identity: [T](x: T) -> T = x
-map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = List[R]
+# 泛型函数：显式类型参数（使用RFC-010统一语法）
+identity: (T: Type) -> ((x: T) -> T) = x
+map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
+    result = List(R)()
+    for item in list { result.push(f(item)) }
+    return result
+}
 
-# 多态函数：通过显式泛型约束定义（RFC-011）
-add: [T: Add](a: T, b: T) -> T = a + b
+# 多态函数：通过显式泛型约束定义（RFC-010/011）
+add: (T: Add) -> ((a: T, b: T) -> T) = a + b
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
 
 # 高阶多态：通过泛型类型注解实现HM支持高阶多态
-# 高阶函数接受函数作为参数时，需要泛型约束函数类型
-call_twice: [T](f: (T) -> T, x: T) -> T = { return f(f(x)) }
-compose: [A, B, C](f: (B) -> C, g: (A) -> B, x: A) -> C = { return f(g(x)) }
-map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = {
-    result = List[R]()
-    for item in list {
-        result.push(f(item))
-    }
-    return result
-}
+call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = { return f(f(x)) }
+compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) = { return f(g(x)) }
 ```
 
 ```yaoxiang
@@ -203,11 +199,11 @@ main = { println("Hello") }                # 推断为 () -> Void
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
 greet: (name: String) -> Void = { println("Hello " + name) }  # 推断为 (String) -> Void
 
-# 泛型函数：明确约束多态类型参数（使用RFC-011语法）
-identity: [T](x: T) -> T = x               # 推断为 T -> T
-map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = {
+# 泛型函数：明确约束多态类型参数（使用RFC-010统一语法）
+identity: (T: Type) -> ((x: T) -> T) = x
+map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
     # 实现 map 函数
-    return List[R]()
+    return List(R)()
 }
 
 # 递归函数：通过HM算法和递归约束推断
@@ -288,10 +284,7 @@ let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
 ```bnf
 function_def ::= identifier ':' type_expr '=' expression
                | identifier '=' expression
-               | identifier ':' generic_params type_expr '=' expression
                | identifier '=' block                    # 最简形式：无参无返回
-
-generic_params ::= '[' identifier (',' identifier)* ']'
 
 identifier ::= [a-zA-Z_][a-zA-Z0-9_]*
 
@@ -299,6 +292,7 @@ type_expr ::= identifier                     # 类型引用
        | '()'                          # 空类型
        | '(' parameters ')' '->' type_expr   # 函数类型（参数名在签名中）
        | type_expr '->' type_expr            # 简单函数类型
+       | identifier '(' type_expr (',' type_expr)* ')'  # 类型应用
 
 expression ::= '(' parameters ')' '=>' block
              | '(' ')' '=>' block
@@ -307,10 +301,6 @@ expression ::= '(' parameters ')' '=>' block
 parameters ::= parameter (',' parameter)*
 parameter ::= identifier                # 类型推断
             | identifier ':' type_expr      # 部分显式类型
-            | identifier ':' generic_type  # 泛型类型
-
-generic_type ::= identifier            # 类型引用
-               | '[' identifier ']'   # 泛型类型引用
 
 block ::= '{' statement (',' statement)* '}'
         | expression
@@ -321,6 +311,7 @@ statement ::= identifier ':' expression  # 赋值语句
 
 # 注意：代码块返回其最后一个表达式的值；空块 {} 推断为 Void
 # 例如：{ 1 + 1 } 返回 Int；{ println("Hello") } 返回 Void
+# 注意：泛型参数使用 (T: Type) 语法，作为函数类型的一部分，无需独立 BNF 规则
 ```
 
 ### 错误处理
@@ -336,8 +327,8 @@ add: (a: Int, b: Int) -> Int = { println(a + b) }
 
 # 错误2：使用未声明的类型参数
 identity: (x: T) -> T = x
-// 错误：T 未声明；需要显式泛型参数（RFC-011）
-// 正确：identity: [T](x: T) -> T = x
+// 错误：T 未声明；需要显式泛型参数（RFC-010）
+// 正确：identity: (T: Type) -> ((x: T) -> T) = x
 
 # 正确：HM算法推断返回类型
 double = (x: Int) => x + x
@@ -448,7 +439,7 @@ main = {                                      # 等价于 main: () -> Void = { .
 - ~~Q3: HM算法是否支持参数类型推断？~~ → 已解决：返回值/局部可推断；有参函数的参数类型需显式标注
 - ~~Q4: 是否引入 `fn` 关键字？~~ → 已解决：不引入，函数就是 lambda
 - ~~Q5: 旧代码的迁移策略是什么？~~ → 已解决：提供 `yaoxiang-migrate` 工具
-- ~~Q6: 泛型函数如何使用？~~ → 已解决：使用RFC-011语法 `[T]`
+- ~~Q6: 泛型函数如何使用？~~ → 已解决：使用RFC-010统一语法 `(T: Type)`
 
 ---
 
@@ -483,7 +474,7 @@ main = {                                      # 等价于 main: () -> Void = { .
 | 术语 | 定义 |
 |------|------|
 | HM算法 | Hindley-Milner类型推断算法，自动推断函数和变量类型 |
-| 泛型 | 使用类型参数 `[T]` 约束多态函数，如 `identity = [T](x: T) => x`（RFC-011） |
+| 泛型 | 使用类型参数 `(T: Type)` 约束多态函数，如 `identity: (T: Type) -> ((x: T) -> T) = x`（RFC-010） |
 | 默认类型填充 | 空参无返回函数省略 `-> Void`，编译器自动填充 |
 | 语法糖 | 使代码更易读的语法简化写法 |
 | 规范化 | 将语法形式转换为统一内部表示 |
