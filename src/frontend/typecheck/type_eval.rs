@@ -251,7 +251,7 @@ impl TypeEvaluator {
         &self,
         ty: &MonoType,
     ) -> Option<(MonoType, MonoType, MonoType)> {
-        // If 类型的参数格式: If<condition, true_branch, false_branch>
+        // If 类型的参数格式: If(condition, true_branch, false_branch)
         // 通过解析类型引用名称来提取
         if let MonoType::TypeRef(name) = ty {
             if let Some(args) = Self::parse_generic_args(name) {
@@ -531,7 +531,7 @@ impl TypeEvaluator {
                 return None;
             }
 
-            // 简化实现：Match 的格式为 Match<target, pattern1 => result1, pattern2 => result2, ...>
+            // 简化实现：Match 的格式为 Match(target, pattern1 => result1, pattern2 => result2, ...)
             if let Some(args) = Self::parse_generic_args(name) {
                 if args.len() >= 2 {
                     let target = self.parse_type(&args[0])?;

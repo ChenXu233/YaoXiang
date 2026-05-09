@@ -90,12 +90,12 @@ impl GenericSize {
         &self,
         type_name: &str,
     ) -> Option<(Box<MonoType>, usize)> {
-        if !type_name.starts_with("Array<") {
+        if !type_name.starts_with("Array(") {
             return None;
         }
 
         // 提取泛型参数部分
-        let args_str = &type_name["Array<".len()..type_name.len().saturating_sub(1)];
+        let args_str = &type_name["Array(".len()..type_name.len().saturating_sub(1)];
 
         // 分割参数，找到元素类型和数量
         let mut args = Vec::new();
@@ -110,11 +110,11 @@ impl GenericSize {
                     }
                     current = String::new();
                 }
-                '<' => {
+                '(' => {
                     depth += 1;
                     current.push(c);
                 }
-                '>' => {
+                ')' => {
                     if depth == 0 {
                         break;
                     }

@@ -209,11 +209,11 @@ impl TypeNormalizer {
         &self,
         type_name: &str,
     ) -> Option<Vec<String>> {
-        if !type_name.starts_with("If<") && !type_name.starts_with("Match<") {
+        if !type_name.starts_with("If(") && !type_name.starts_with("Match(") {
             return None;
         }
 
-        let args_str = &type_name[type_name.find('<')? + 1..type_name.rfind('>')?];
+        let args_str = &type_name[type_name.find('(')? + 1..type_name.rfind(')')?];
         Self::parse_type_args(args_str)
     }
 
@@ -231,11 +231,11 @@ impl TypeNormalizer {
                     }
                     current = String::new();
                 }
-                '<' => {
+                '(' => {
                     depth += 1;
                     current.push(c);
                 }
-                '>' => {
+                ')' => {
                     if depth == 0 {
                         return None;
                     }
@@ -279,8 +279,8 @@ impl TypeNormalizer {
 
         // 根据类型名称调用对应的求值方法
         match type_name {
-            _ if type_name.starts_with("If<") => {
-                // If<Condition, TrueBranch, FalseBranch>
+            _ if type_name.starts_with("If(") => {
+                // If(Condition, TrueBranch, FalseBranch)
                 if parsed_args.len() >= 3 {
                     let result =
                         self.evaluator
@@ -300,8 +300,8 @@ impl TypeNormalizer {
                     NormalForm::Normalized
                 }
             }
-            _ if type_name.starts_with("Match<") => {
-                // Match<Target, Arm1, Arm2, ...>
+            _ if type_name.starts_with("Match(") => {
+                // Match(Target, Arm1, Arm2, ...)
                 let target = &parsed_args[0];
                 let arms: Vec<(MonoType, MonoType)> = parsed_args[1..]
                     .chunks(2)
