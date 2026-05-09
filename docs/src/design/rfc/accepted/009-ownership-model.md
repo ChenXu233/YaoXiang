@@ -87,9 +87,9 @@ use std.rc.{Rc, Weak}
 use std.sync.Arc
 
 rc_arc_demo: (node: Node) -> Void = {
-    rc: Rc[Node] = Rc.new(node)
-    arc: Arc[Node] = Arc.new(node)
-    weak: Weak[Node] = Weak.new(arc)
+    rc: Rc(Node) = Rc.new(node)
+    arc: Arc(Node) = Arc.new(node)
+    weak: Weak(Node) = Weak.new(arc)
 }
 ```
 
@@ -243,17 +243,17 @@ use std.sync.Arc
 
 # === Rc：非线程安全引用计数 ===
 node: Node = Node.new()
-rc: Rc[Node] = Rc.new(node)
+rc: Rc(Node) = Rc.new(node)
 rc2 = rc.clone()              # Rc 克隆，非线程安全
 
 # === Arc：线程安全引用计数 ===
 node: Node = Node.new()
-arc: Arc[Node] = Arc.new(node)
+arc: Arc(Node) = Arc.new(node)
 arc2 = arc.clone()            # Arc 克隆，原子操作
 
 # === Weak：不增加计数，防止循环 ===
-arc: Arc[Node] = Arc.new(Node.new())
-weak: Weak[Node] = Weak.new(arc)
+arc: Arc(Node) = Arc.new(Node.new())
+weak: Weak(Node) = Weak.new(arc)
 
 # 使用前检查是否存在
 if Some(node) = weak.upgrade() {
@@ -263,9 +263,9 @@ if Some(node) = weak.upgrade() {
 
 | 类型 | 线程安全 | 用途 |
 |------|----------|------|
-| `Rc[T]` | ❌ | 单线程共享 |
-| `Arc[T]` | ✅ | 多线程共享 |
-| `Weak[T]` | ✅/❌ | 打破循环（不增加计数） |
+| `Rc(T)` | ❌ | 单线程共享 |
+| `Arc(T)` | ✅ | 多线程共享 |
+| `Weak(T)` | ✅/❌ | 打破循环（不增加计数） |
 
 #### 2.5 unsafe + 裸指针（系统级）
 
@@ -508,7 +508,7 @@ c = undo_increment(c)   # c.value = 0，回滚！
 # === 撤销/重做支持（手动实现）===
 
 Editor: Type = {
-    history: List[State],    # 撤销栈
+    history: List(State),    # 撤销栈
     current: State,
 }
 
@@ -831,7 +831,7 @@ Point: Type = {
 }
 
 Shape: Type = {
-    points: List[Point],
+    points: List(Point),
     color: Color,
 }
 
@@ -875,7 +875,7 @@ main: () -> Void @block = {
     }
 
     # 8. 标准库 Arc
-    arc_shape: Arc[Shape] = Arc.new(shape1)
+    arc_shape: Arc(Shape) = Arc.new(shape1)
     arc2 = arc_shape.clone()            # Arc 克隆，原子操作
 }
 ```
@@ -893,8 +893,8 @@ main: () -> Void @block = {
 ```yaoxiang
 # 任务内循环引用：泄漏可控
 create_graph = {
-    a: Rc[RefCell[Node]] = Rc.new(RefCell.new(Node.new()))
-    b: Rc[RefCell[Node]] = Rc.new(RefCell.new(Node.new()))
+    a: Rc(RefCell(Node)) = Rc.new(RefCell.new(Node.new()))
+    b: Rc(RefCell(Node)) = Rc.new(RefCell.new(Node.new()))
 
     a.borrow_mut().child = Some(b.clone())   # a → b
     b.borrow_mut().child = Some(a.clone())   # b → a，循环！
@@ -1001,7 +1001,7 @@ main: () -> Void @block = {
     spawn { use(shared) }
 
     # 可选：需要完全控制时用 Arc
-    arc: Arc[Data] = Arc.new(data)
+    arc: Arc(Data) = Arc.new(data)
     arc2 = arc.clone()
 }
 ```
@@ -1077,15 +1077,15 @@ use std.rc.{Rc, Weak}
 use std.sync.Arc
 
 # 单线程共享
-rc: Rc[Node] = Rc.new(data)
+rc: Rc(Node) = Rc.new(data)
 rc2 = rc.clone()
 
 # 多线程共享
-arc: Arc[Node] = Arc.new(data)
+arc: Arc(Node) = Arc.new(data)
 arc2 = arc.clone()
 
 # 打破循环
-weak: Weak[Node] = Weak.new(arc)
+weak: Weak(Node) = Weak.new(arc)
 ```
 
 ---
@@ -1098,7 +1098,7 @@ weak: Weak[Node] = Weak.new(arc)
 # 基本类型自动满足 Send + Sync
 # Int, Float, Bool, Point, ...
 
-# ref[T] 自动满足 Send + Sync（Arc 线程安全）
+# ref(T) 自动满足 Send + Sync（Arc 线程安全）
 main: () -> Void @block = {
     p: Point = Point(1.0, 2.0)
     shared = ref p                       # Arc，线程安全
@@ -1121,9 +1121,9 @@ unsafe_ptr_demo: () -> Void = {
 |------|------|------|------|
 | 值类型 | ✅ | ✅ | Int, Float, Point... |
 | `ref T` | ✅ | ✅ | Arc，线程安全 |
-| `Rc[T]` | ❌ | ❌ | 非线程安全 |
-| `Arc[T]` | ✅ | ✅ | 线程安全 |
-| `Weak[T]` | ✅ | ✅ | 线程安全 |
+| `Rc(T)` | ❌ | ❌ | 非线程安全 |
+| `Arc(T)` | ✅ | ✅ | 线程安全 |
+| `Weak(T)` | ✅ | ✅ | 线程安全 |
 | `*T` | ❌ | ❌ | 裸指针 |
 
 ---

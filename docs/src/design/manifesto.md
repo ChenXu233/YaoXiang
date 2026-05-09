@@ -155,7 +155,7 @@ union IntOrFloat { i: i32, f: f32 }
 type Point = { x: Float, y: Float }
 
 # 枚举（多构造器）
-type Result[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # 零参构造器
 type Color = { red | green | blue }
@@ -177,8 +177,8 @@ type Drawable = [
 
 # === 泛型 ===
 
-type Option[T] = { some(T) | none }
-type Result[T, E] = { ok(T) | err(E) }
+Option: (T: Type) -> Type = { some(T) | none }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 ```
 
 **创新价值**：统一类型语法，消除 `enum`/`struct`/`union`/`trait` 关键字碎片。
@@ -190,7 +190,7 @@ type Result[T, E] = { ok(T) | err(E) }
 ```yaoxiang
 # 类型定义
 type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # 值构造：与函数调用相同
 p: Point = Point(3.0, 4.0)
@@ -272,7 +272,7 @@ main() -> Void = () => {
 | **并作函数** | `spawn (params) => body` | 定义可参与并作执行的计算单元 |
 | **并作块** | `spawn { a(), b() }` | 显式声明的并发疆域，块内任务并作执行 |
 | **并作循环** | `spawn for x in xs { ... }` | 数据并行，循环体在所有元素上并作执行 |
-| **并作值** | `Async[T]` | 正在并作中的未来值，使用时自动等待 |
+| **并作值** | `Async(T)` | 正在并作中的未来值，使用时自动等待 |
 | **并作图** | 惰性计算图(DAG) | 并作发生的舞台，描述依赖与并行关系 |
 | **并作调度器** | 运行时任务调度器 | 协调万物，让它们在正确时机并作的智能中枢 |
 
@@ -320,7 +320,7 @@ main() -> Void = () => {
 
 ```yaoxiang
 # Send/Sync 约束保证编译时线程安全
-type SafeCounter = SafeCounter(mutex: Mutex[Int])
+type SafeCounter = SafeCounter(mutex: Mutex(Int))
 
 main: () -> Void = () => {
     counter: Arc[SafeCounter] = Arc.new(SafeCounter(Mutex.new(0)))
@@ -346,7 +346,7 @@ main: () -> Void = () => {
 
 ```yaoxiang
 # 固定长度向量（未来语法）
-type Vector[T, n: Nat] = {
+Vector: (T: Type, n: Int) -> Type = {
     data: [T; n]
     length: n
 }
@@ -403,7 +403,7 @@ main() -> Void = () => {
 ```yaoxiang
 # 统一类型语法
 type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 type Color = { red | green | blue }
 
 # 接口类型
@@ -413,7 +413,7 @@ type Serializable = [ serialize() -> String ]
 add: (Int, Int) -> Int = (a, b) => a + b
 
 # 泛型函数
-identity: [T](T) -> T = (x) => x
+identity: (T: Type) -> ((x: T) -> T) = (x) => x
 
 # 多行函数
 fact: Int -> Int = (n) => {
@@ -482,7 +482,7 @@ p3 = p.clone()      # p 和 p3 独立
 
 ```yaoxiang
 # Result 类型
-type Result[T, E] = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 divide: (Float, Float) -> Result[Float, String] = (a, b) => {
     if b == 0.0 {
@@ -529,7 +529,7 @@ parallel_process: Int -> Int spawn = (n) => {
 }
 
 # 线程安全示例
-type ThreadSafeCounter = { value: Mutex[Int] }
+type ThreadSafeCounter = { value: Mutex(Int) }
 
 main: () -> Void = () => {
     counter = ThreadSafeCounter(Mutex.new(0))
@@ -644,7 +644,7 @@ main: () -> Void = () => {
 |--------|------|------|
 | spawn 关键字解析 | ✅ 完成 | 词法/语法分析支持 |
 | is_async 标志 | ✅ 完成 | AST/类型系统支持 |
-| Async[T] 类型设计 | ✅ 完成 | 设计文档完成 |
+| Async(T) 类型设计 | ✅ 完成 | 设计文档完成 |
 | 调度器框架 | ✅ 完成 | 基础工作窃取实现 |
 | Send/Sync 约束 | ✅ 完成 | 类型约束设计文档 |
 | IR 扩展 | 🔄 进行中 | CallAsync 指令已定义 |

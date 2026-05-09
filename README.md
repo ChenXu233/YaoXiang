@@ -321,7 +321,7 @@ compute_all: () -> (Int, Int, Int) spawn = {
 
 # === 泛型 ===
 
-identity: [T](x: T) -> T = x
+identity: (T: Type) -> ((x: T) -> T) = x
 ```
 
 ### 项目结构

@@ -16,7 +16,7 @@ title: RFC 022：霍尔逻辑静态验证支持（规约注释与规约类型）
 
 ## 摘要
 
-本文提出为 YaoXiang 语言引入一种**霍尔逻辑静态验证机制**，允许开发者在注释中以 `//!` 或 `/*! ... !*/` 的形式编写前置条件、后置条件和循环不变式。在 Debug Build 时进行强制静态验证，验证通过后才能进行 Release Build；Release Build 时忽略规约注释（零开销）并清除验证缓存。规约本身被视为类型系统的一部分，形成"规约类型"（如 `Requires[P]`、`Ensures[P]`），并可被用户扩展。该设计旨在保持语言简洁的同时，为关键代码提供高可靠性保障，且与 YaoXiang 的统一类型模型完美融合。
+本文提出为 YaoXiang 语言引入一种**霍尔逻辑静态验证机制**，允许开发者在注释中以 `//!` 或 `/*! ... !*/` 的形式编写前置条件、后置条件和循环不变式。在 Debug Build 时进行强制静态验证，验证通过后才能进行 Release Build；Release Build 时忽略规约注释（零开销）并清除验证缓存。规约本身被视为类型系统的一部分，形成"规约类型"（如 `Requires(P)`、`Ensures(P)`），并可被用户扩展。该设计旨在保持语言简洁的同时，为关键代码提供高可靠性保障，且与 YaoXiang 的统一类型模型完美融合。
 
 ## 动机
 
@@ -50,10 +50,10 @@ YaoXiang 已经通过所有权模型（RFC-009）和并发模型（RFC-001）保
 规约采用 YaoXiang 统一的 `name: Type = expression` 语法模型，与类型系统完全融合：
 
 ```yaoxiang
-max: [T: Ord](arr: Array[T, n]) -> T = {
-    //! requires: NonEmpty[n] = n > 0
-    //! ensures: GreaterOrEqual[result, arr[0..n]]
-    //! ensures: ExistsMax[result, arr[0..n]]
+max: (T: Ord) -> ((arr: Array(T, n)) -> T) = {
+    //! requires: NonEmpty(n) = n > 0
+    //! ensures: GreaterOrEqual(result, arr[0..n])
+    //! ensures: ExistsMax(result, arr[0..n])
     // 实现...
 }
 ```
@@ -90,11 +90,11 @@ while i < n {
 
 ```yaoxiang
 // 内置规约类型定义
-NonEmpty: Type[T] = { len: T; len > 0 }
-Positive: Type[Int] = { x: Int; x > 0 }
-GreaterOrEqual: Type[T, Array[T]] = { result: T, arr: Array[T]; result >= arr[0] && forall i in 1..arr.len: result >= arr[i] }
-Bounds: Type[T, T] = { i: T, n: T; 0 <= i && i <= n }
-SumInvariant: Type[T, Array[T]] = { s: T, arr: Array[T]; s == sum(arr[0..i]) }
+NonEmpty: (T: Type) -> Type = { len: T; len > 0 }
+Positive: Type = { x: Int; x > 0 }
+GreaterOrEqual: (T: Type) -> Type = { result: T, arr: Array(T); result >= arr[0] && forall i in 1..arr.len: result >= arr[i] }
+Bounds: (T: Type) -> Type = { i: T, n: T; 0 <= i && i <= n }
+SumInvariant: (T: Type) -> Type = { s: T, arr: Array(T); s == sum(arr[0..i]) }
 
 // 量词构造（语言内置，非函数）
 forall: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
@@ -107,17 +107,17 @@ exists: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 
 ```yaoxiang
 // 定义正整数规约
-Positive: Type[Int] = { x: Int; x > 0 }
+Positive: Type = { x: Int; x > 0 }
 
 // 定义已排序数组规约
-Sorted: Type[Array[T]] = [T: Ord] = {
-    arr: Array[T];
+Sorted: (T: Ord) -> Type = {
+    arr: Array(T);
     forall i in 0..arr.len-1: arr[i] <= arr[i+1]
 }
 
 // 定义最大值规约
-ExistsMax: Type[T, Array[T]] = [T: Ord] = {
-    result: T, arr: Array[T];
+ExistsMax: (T: Ord) -> Type = {
+    result: T, arr: Array(T);
     exists i in 0..arr.len: result == arr[i]
     && forall j in 0..arr.len: result >= arr[j]
 }
@@ -127,12 +127,12 @@ ExistsMax: Type[T, Array[T]] = [T: Ord] = {
 
 ```yaoxiang
 sqrt: (x: Positive) -> Float = {
-    //! ensures: SquareRootResult[result, x] = result * result <= x && (result+1)*(result+1) > x
+    //! ensures: SquareRootResult(result, x) = result * result <= x && (result+1)*(result+1) > x
     // 实现...
 }
 
-binary_search: [T: Ord](arr: Sorted[Array[T]], key: T) -> Option[Index] = {
-    //! ensures: SearchResult[result, arr, key]
+binary_search: (T: Ord) -> ((arr: Sorted(Array(T)), key: T) -> Option(Index)) = {
+    //! ensures: SearchResult(result, arr, key)
     // 实现...
 }
 ```
@@ -214,7 +214,7 @@ spec_block       ::= (spec_name ':' type_expr '=' expr ';')*
 ### 7.6 与现有设计集成
 
 - **所有权模型**：规约中的表达式遵守所有权规则，只能读不能写（纯函数），避免副作用
-- **泛型系统**：规约类型支持泛型参数（如 `Requires[P]`），可与泛型函数/类型结合
+- **泛型系统**：规约类型支持泛型参数（如 `Requires(P)`），可与泛型函数/类型结合
 - **依赖类型**：规约中的值依赖类型（如数组长度 `n`）自然可用
 
 ### 类型系统影响
