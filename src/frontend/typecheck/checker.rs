@@ -823,37 +823,35 @@ impl TypeChecker {
     ) {
         use crate::frontend::core::parser::ast::StmtKind;
         for stmt in &module.items {
-            match &stmt.kind {
-                StmtKind::Binding {
-                    name,
-                    type_name,
-                    type_annotation,
+            if let StmtKind::Binding {
+                name,
+                type_name,
+                type_annotation,
 
-                    body,
-                    is_pub,
-                    ..
-                } => {
-                    // 方法绑定
-                    let is_method = type_name.is_some();
+                body,
+                is_pub,
+                ..
+            } = &stmt.kind
+            {
+                // 方法绑定
+                let is_method = type_name.is_some();
 
-                    // 函数定义：body 有 tail expression
-                    let has_body = body.1.is_some() || !body.0.is_empty();
-                    // 类型定义：没有 body 且有 type_annotation
-                    let is_type_def = !has_body && type_annotation.is_some();
+                // 函数定义：body 有 tail expression
+                let has_body = body.1.is_some() || !body.0.is_empty();
+                // 类型定义：没有 body 且有 type_annotation
+                let is_type_def = !has_body && type_annotation.is_some();
 
-                    // 类型定义始终导出，方法绑定始终导出，函数仅 pub 导出
-                    if is_type_def || is_method || *is_pub {
-                        if is_method {
-                            // 方法绑定导出为 Type.method 格式
-                            if let Some(ty_name) = type_name {
-                                self.env.add_export(&format!("{}.{}", ty_name, name));
-                            }
-                        } else {
-                            self.env.add_export(name);
+                // 类型定义始终导出，方法绑定始终导出，函数仅 pub 导出
+                if is_type_def || is_method || *is_pub {
+                    if is_method {
+                        // 方法绑定导出为 Type.method 格式
+                        if let Some(ty_name) = type_name {
+                            self.env.add_export(&format!("{}.{}", ty_name, name));
                         }
+                    } else {
+                        self.env.add_export(name);
                     }
                 }
-                _ => {}
             }
         }
     }

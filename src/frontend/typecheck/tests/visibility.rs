@@ -274,7 +274,7 @@ fn test_pub_fn_auto_binds_to_counter() {
 #[test]
 fn test_method_bind_type_preserved() {
     let code = r#"
-        Container: Type = Container(items: Vec<Int>)
+        Container: Type = Container(items: Vec(Int))
 
         Container.size: (c: Container) -> Int = (c) => 0
     "#;
@@ -422,9 +422,9 @@ fn test_aliased_type_exported() {
 #[test]
 fn test_enum_type_exported() {
     let code = r#"
-        Option: Type[T] = { Some(T) | None }
+        Option: Type = { Some(Int) | None }
 
-        pub is_some: (o: Option[Int]) -> Bool = (o) => true
+        pub is_some: (o: Option) -> Bool = (o) => true
     "#;
 
     let tokens = tokenize(code).unwrap();

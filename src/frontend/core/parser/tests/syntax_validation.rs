@@ -184,22 +184,12 @@ mod syntax_validation_tests {
 
     #[test]
     fn test_rfc007_generic_functions() {
-        // ========== RFC-007 泛型函数 ==========
-        // 使用 RFC-011 泛型语法 [T]
+        // ========== RFC-010 泛型函数 ==========
+        // 使用统一 () 语法 (T: Type) -> ((x: T) -> T)
 
-        // 完整形式
-        assert!(check_syntax(
-            "identity: [T](x: T) -> T = (x) => { return x }"
-        ));
-
-        // 省略 Lambda 头
-        assert!(check_syntax("identity: [T](x: T) -> T = { return x }"));
-
-        // 直接表达式
-        assert!(check_syntax("identity: [T](x: T) -> T = x"));
-
-        // 带约束的泛型
-        assert!(check_syntax("clone: [T: Clone](x: T) -> T = x"));
+        assert!(check_syntax("identity: (T: Type) -> T = x"));
+        assert!(check_syntax("identity: (T: Clone) -> T = x"));
+        assert!(check_syntax("identity: (T: Type) -> ((x: T) -> T) = x"));
     }
 
     #[test]
@@ -306,7 +296,7 @@ mod syntax_validation_tests {
 
         assert!(check_syntax("add: (a: Int, b: Int) -> Int = a + b"));
         assert!(check_syntax("main: () -> Void = println(\"Hello\")"));
-        assert!(check_syntax("identity: [T](x: T) -> T = x"));
+        assert!(check_syntax("identity: (T: Type) -> ((x: T) -> T) = x"));
     }
 
     #[test]

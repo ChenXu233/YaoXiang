@@ -495,7 +495,7 @@ impl<'a> ParserState<'a> {
     /// Try to parse a typed parameter list like (a: Int, b: String) or (mut a, b: Int)
     /// Returns None if this is not a typed param list, and restores position
     fn try_parse_typed_param_list(&mut self) -> Option<Vec<Param>> {
-        use crate::frontend::core::parser::statements::declarations::parse_type_annotation;
+        use crate::frontend::core::parser::statements::types::parse_type_annotation;
 
         let saved = self.save_position();
 
