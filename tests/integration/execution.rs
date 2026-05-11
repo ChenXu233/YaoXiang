@@ -1,45 +1,113 @@
-// File disabled due to runtime stack overflow issue
-// TODO: Fix runtime stack overflow in interpreter
-// This test fails with "memory allocation of 4294967296 bytes failed"
-// This is a separate issue from the match arm return compilation bug
-// that was just fixed.
+//! Execution integration tests
+//!
+//! Tests that various .yx programs execute successfully end-to-end.
+//! Uses yaoxiang::run() to compile and execute source code.
+//!
+//! Note: Full output-capturing E2E tests are in tests/yx_runner.rs.
 
-/*
-use std::path::Path;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::time::Duration;
-use yaoxiang::run_file;
+use yaoxiang::run;
+
+fn run_ok(source: &str) {
+    run(source).unwrap_or_else(|e| panic!("Execution failed:\n{:?}", e));
+}
+
+// ============================================================================
+// 完整程序测试
+// ============================================================================
 
 #[test]
-fn test_run_complex_test() {
-    // This test assumes 'cargo run' works and the interpreter is built.
-    // It runs the complex_test.yx file and checks for success exit code.
-
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let complex_test_path = Path::new(&manifest_dir).join("docs/examples/complex_test.yx");
-
-    // Ensure the file exists (it was created in previous steps)
-    assert!(complex_test_path.exists(), "complex_test.yx not found");
-
-    // Run the interpreter in-process to avoid spawning `cargo run` from tests
-    let (tx, rx) = channel();
-    thread::spawn(move || {
-        let res = run_file(&complex_test_path);
-        let _ = tx.send(match res {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("{:?}", e)),
-        });
-    });
-
-    let timeout = Duration::from_secs(60);
-    match rx.recv_timeout(timeout) {
-        Ok(Ok(())) => {}
-        Ok(Err(err)) => panic!("Interpreter failed: {}", err),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            panic!("Interpreter timed out running complex_test.yx")
+fn test_simple_program() {
+    run_ok(
+        r#"
+        main = {
+            x = 42
+            y = x * 2
+            print(x)
+            print(y)
         }
-        Err(e) => panic!("Channel error: {}", e),
-    }
+        "#,
+    );
 }
-*/
+
+#[test]
+fn test_fibonacci_iterative() {
+    run_ok(
+        r#"
+        main = {
+            mut a = 0
+            mut b = 1
+            mut i = 0
+            while i < 10 {
+                mut next = a + b
+                a = b
+                b = next
+                i = i + 1
+            }
+            print(a)
+        }
+        "#,
+    );
+}
+
+#[test]
+fn test_factorial_iterative() {
+    run_ok(
+        r#"
+        main = {
+            mut result = 1
+            mut i = 1
+            while i <= 5 {
+                result = result * i
+                i = i + 1
+            }
+            print(result)
+        }
+        "#,
+    );
+}
+
+#[test]
+fn test_counter_loop() {
+    run_ok(
+        r#"
+        main = {
+            mut sum = 0
+            mut i = 1
+            while i <= 10 {
+                sum = sum + i
+                i = i + 1
+            }
+            print(sum)
+        }
+        "#,
+    );
+}
+
+#[test]
+fn test_match_simple() {
+    run_ok(
+        r#"
+        main = {
+            r1 = match 1 { 1 => 100, _ => 0 }
+        }
+        "#,
+    );
+}
+
+#[test]
+fn test_list_operations() {
+    run_ok(
+        r#"
+        use std.{io, list}
+        main = {
+            mut xs = [1, 2, 3, 4, 5]
+            ys = list.map(xs, x => x * 10)
+            zs = list.filter(xs, x => x > 2)
+            s = list.reduce(xs, (a, x) => a + x, 0)
+            io.println(ys)
+            io.println(zs)
+            io.println(s)
+        }
+        "#,
+    );
+}
