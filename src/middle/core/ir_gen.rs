@@ -574,8 +574,14 @@ impl AstToIrGenerator {
                         expr,
                         constants,
                     )
-                } else if params.is_empty() && stmts.is_empty() && expr.is_none() {
-                    // TypeDef: 没有参数和 body
+                } else if params.is_empty()
+                    && stmts.is_empty()
+                    && expr.is_none()
+                    && type_annotation.as_ref().map_or(false, |t| {
+                        crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                    })
+                {
+                    // TypeDef: 没有参数和 body，且类型标注返回 Type
                     self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else {
                     // Fn: 普通函数
