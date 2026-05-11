@@ -21,8 +21,6 @@ pub mod module_state;
 pub mod platform_info; // 平台信息获取
 pub mod platform_specializer; // 平台特化器
 pub mod reachability; // 可达性分析
-#[cfg(test)]
-pub mod tests;
 pub mod type_mono;
 
 use self::instance::{
