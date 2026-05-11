@@ -70,7 +70,7 @@ impl<'a> ParserState<'a> {
             // Indexing
             Some(TokenKind::LBracket) => Some((BP_CALL, BP_CALL + 1, Self::parse_index)),
             // Type cast
-            Some(TokenKind::KwAs) => Some((BP_ADD, BP_ADD + 1, Self::parse_cast)),
+            Some(TokenKind::KwAs) => Some((BP_CAST, BP_CAST + 1, Self::parse_cast)),
             // Try operator (error propagation)
             Some(TokenKind::Question) => Some((BP_CALL, BP_CALL + 1, Self::parse_try)),
             // Lambda (single parameter)

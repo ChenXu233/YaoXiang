@@ -12,6 +12,7 @@ pub const BP_COMPARISON: u8 = 5;
 pub const BP_TERM: u8 = 6;
 pub const BP_FACTOR: u8 = 7;
 pub const BP_UNARY: u8 = 8;
+pub const BP_CAST: u8 = 8;
 pub const BP_CALL: u8 = 9;
 pub const BP_HIGHEST: u8 = 10;
 
