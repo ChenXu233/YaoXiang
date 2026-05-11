@@ -1,0 +1,19 @@
+// 01-basics/comments.yx
+// 覆盖: 规范 §2.7 注释
+// 验证: 单行注释 // 和多行注释 /* */
+// 状态: ✅ 可运行
+
+// 这是单行注释
+
+/*
+  这是多行注释
+  可以跨越多行
+*/
+
+use std.io
+
+main = {
+    // 单行注释在函数体内
+    io.println("comments_work") // 行尾注释
+    io.println("ALL TESTS PASSED")
+}

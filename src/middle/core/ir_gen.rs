@@ -2827,6 +2827,132 @@ impl AstToIrGenerator {
                     }
                 }
             }
+            Expr::ListComp {
+                element,
+                var,
+                iterable,
+                condition,
+                span,
+            } => {
+                // 列表推导式 IR 生成
+                // [x * x for x in items] 等价于:
+                //   1. 创建空结果列表
+                //   2. 通过迭代器遍历 iterable
+                //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
+                //   4. 返回结果列表
+
+                // 1. 创建空结果列表
+                instructions.push(Instruction::AllocArray {
+                    dst: Operand::Local(result_reg),
+                    size: Operand::Const(ConstValue::Int(0)),
+                    elem_size: Operand::Const(ConstValue::Int(1)),
+                });
+
+                // 结果列表需要可变（因为 push 操作）
+                self.current_mut_locals.insert(result_reg);
+
+                // 2. 计算可迭代对象
+                let iterable_reg = self.next_temp_reg();
+                self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+                // 3. 创建迭代器
+                let iterator_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(iterator_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+                    args: vec![Operand::Local(iterable_reg)],
+                    span: *span,
+                });
+
+                // 4. 注册循环变量
+                let var_reg = self.next_temp_reg();
+                self.register_local(var, var_reg);
+
+                // 5. 循环开始
+                let loop_start_idx = instructions.len();
+
+                // 6. has_next?
+                let has_next_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(has_next_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+                    args: vec![Operand::Local(iterator_reg)],
+                    span: *span,
+                });
+
+                let jump_end_idx = instructions.len();
+                instructions.push(Instruction::JmpIfNot(
+                    Operand::Local(has_next_reg),
+                    0, // 占位符
+                ));
+
+                // 7. next element
+                let element_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(element_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+                    args: vec![Operand::Local(iterator_reg)],
+                    span: *span,
+                });
+
+                // 8. 存储到循环变量
+                instructions.push(Instruction::Store {
+                    dst: Operand::Local(var_reg),
+                    src: Operand::Local(element_reg),
+                    span: *span,
+                });
+
+                // 9. 如果有条件，检查条件
+                if let Some(cond_expr) = condition {
+                    let cond_reg = self.next_temp_reg();
+                    self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
+
+                    let skip_push_idx = instructions.len();
+                    instructions.push(Instruction::JmpIfNot(
+                        Operand::Local(cond_reg),
+                        0, // 占位符
+                    ));
+
+                    // 10. 计算元素表达式
+                    let comp_reg = self.next_temp_reg();
+                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+                    // 11. push 到结果列表
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                        span: *span,
+                    });
+
+                    // 修复条件跳转
+                    let after_push = instructions.len();
+                    if let Instruction::JmpIfNot(_, ref mut target) = instructions[skip_push_idx] {
+                        *target = after_push;
+                    }
+                } else {
+                    // 10. 计算元素表达式
+                    let comp_reg = self.next_temp_reg();
+                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+                    // 11. push 到结果列表
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                        span: *span,
+                    });
+                }
+
+                // 12. 跳回循环开始
+                instructions.push(Instruction::Jmp(loop_start_idx));
+
+                // 13. 修复跳出循环的跳转目标
+                let end_pos = instructions.len();
+                if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+                    *target = end_pos;
+                }
+            }
             Expr::List(elements, span) => {
                 // 列表字面量：先创建空列表，再按索引写入元素
                 instructions.push(Instruction::AllocArray {
@@ -3082,6 +3208,116 @@ impl AstToIrGenerator {
                     func: closure_name,
                     env: Vec::new(),
                 });
+            }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+                span: _,
+            } => {
+                // Match 表达式 IR 生成
+                // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
+                //
+                // IR 结构:
+                //   1. 评估 scrutinee
+                //   2. 对每个 arm:
+                //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
+                //      b. 如果模式是 Wildcard: 始终匹配
+                //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
+                //   3. 修复所有跳转目标
+
+                // 1. 评估 scrutinee
+                let scrutinee_reg = self.next_temp_reg();
+                self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+
+                let mut jumps_to_end: Vec<usize> = Vec::new();
+
+                for arm in arms {
+                    // 检查模式是否匹配
+                    let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
+                    let jump_to_next_idx;
+
+                    if needs_condition {
+                        // Wildcard: 始终匹配，不需条件跳转
+                        jump_to_next_idx = None;
+                    } else {
+                        // 生成条件: 比较 scrutinee 和模式值
+                        let cmp_reg = self.next_temp_reg();
+
+                        match &arm.pattern {
+                            ast::Pattern::Literal(lit) => {
+                                let const_val = match lit {
+                                    ast::Literal::Int(n) => ConstValue::Int(*n as i128),
+                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                                    ast::Literal::Float(f) => ConstValue::Float(*f as f64),
+                                    ast::Literal::String(s) => ConstValue::String(s.clone()),
+                                    ast::Literal::Char(c) => ConstValue::Char(*c),
+                                };
+                                constants.push(const_val.clone());
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(cmp_reg),
+                                    src: Operand::Const(const_val),
+                                });
+                            }
+                            _ => {
+                                // 不支持的 pattern: 加载 0，总会跳到下一个 arm
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(cmp_reg),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                });
+                            }
+                        }
+
+                        // 比较: scrutinee == pattern_value
+                        let eq_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Eq {
+                            dst: Operand::Local(eq_reg),
+                            lhs: Operand::Local(scrutinee_reg),
+                            rhs: Operand::Local(cmp_reg),
+                        });
+
+                        // 如果不相等，跳到下一个 arm
+                        let jmp_idx = instructions.len();
+                        instructions.push(Instruction::JmpIfNot(
+                            Operand::Local(eq_reg),
+                            0, // 占位符
+                        ));
+                        jump_to_next_idx = Some(jmp_idx);
+                    }
+
+                    // 生成 arm body，结果放入 result_reg
+                    let arm_result_reg = self.next_temp_reg();
+                    self.generate_block_expr_ir(
+                        &arm.body,
+                        arm_result_reg,
+                        instructions,
+                        constants,
+                    )?;
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(arm_result_reg),
+                    });
+
+                    // 跳转到 match 结束
+                    let jmp_end_idx = instructions.len();
+                    instructions.push(Instruction::Jmp(0)); // 占位符
+                    jumps_to_end.push(jmp_end_idx);
+
+                    // 修复条件跳转目标（指向当前 arm 之后的代码）
+                    if let Some(jmp_idx) = jump_to_next_idx {
+                        let current_pos = instructions.len();
+                        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jmp_idx] {
+                            *target = current_pos;
+                        }
+                    }
+                }
+
+                // 修复所有跳转到结束的指令
+                let end_pos = instructions.len();
+                for idx in jumps_to_end {
+                    if let Instruction::Jmp(ref mut target) = instructions[idx] {
+                        *target = end_pos;
+                    }
+                }
             }
             // RFC-012: F-string 代码生成
             Expr::FString { segments, span } => {
