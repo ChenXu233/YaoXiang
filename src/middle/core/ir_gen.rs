@@ -577,7 +577,7 @@ impl AstToIrGenerator {
                 } else if params.is_empty()
                     && stmts.is_empty()
                     && expr.is_none()
-                    && type_annotation.as_ref().map_or(false, |t| {
+                    && type_annotation.as_ref().is_some_and(|t| {
                         crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
                     })
                 {
@@ -3252,9 +3252,9 @@ impl AstToIrGenerator {
                         match &arm.pattern {
                             ast::Pattern::Literal(lit) => {
                                 let const_val = match lit {
-                                    ast::Literal::Int(n) => ConstValue::Int(*n as i128),
+                                    ast::Literal::Int(n) => ConstValue::Int(*n),
                                     ast::Literal::Bool(b) => ConstValue::Bool(*b),
-                                    ast::Literal::Float(f) => ConstValue::Float(*f as f64),
+                                    ast::Literal::Float(f) => ConstValue::Float(*f),
                                     ast::Literal::String(s) => ConstValue::String(s.clone()),
                                     ast::Literal::Char(c) => ConstValue::Char(*c),
                                 };
