@@ -1,0 +1,26 @@
+// 01-basics/literals.yx
+// 覆盖: 规范 §2.6 字面量
+// 验证: 整数、浮点、字符串、布尔、字符字面量
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // 整数字面量
+    io.println(42)
+    io.println(-7)
+
+    // 浮点字面量
+    io.println(3.14)
+    io.println(-0.5)
+
+    // 字符串字面量
+    io.println("hello")
+    io.println("")
+
+    // 布尔字面量
+    io.println(true)
+    io.println(false)
+
+    io.println("ALL TESTS PASSED")
+}
