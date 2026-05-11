@@ -8,6 +8,9 @@ pub mod functions;
 pub mod imports;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 // Re-export commonly used items
 pub use types::*;
 pub use declarations::*;

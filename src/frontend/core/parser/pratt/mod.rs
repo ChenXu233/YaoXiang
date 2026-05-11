@@ -5,6 +5,9 @@ pub mod led;
 pub mod nud;
 pub mod precedence;
 
+#[cfg(test)]
+mod tests;
+
 pub use nud::*;
 pub use led::*;
 pub use precedence::*;
