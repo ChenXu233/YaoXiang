@@ -219,7 +219,6 @@ impl IsZero {
 }
 
 /// 条件类型 - IsSucc(N)
-
 ///
 /// 检查自然数 N 是否为 Succ 变体（即非 Zero）
 ///

@@ -3240,11 +3240,10 @@ impl AstToIrGenerator {
                 for arm in arms {
                     // 检查模式是否匹配
                     let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
-                    let jump_to_next_idx;
 
-                    if needs_condition {
+                    let jump_to_next_idx = if needs_condition {
                         // Wildcard: 始终匹配，不需条件跳转
-                        jump_to_next_idx = None;
+                        None
                     } else {
                         // 生成条件: 比较 scrutinee 和模式值
                         let cmp_reg = self.next_temp_reg();
@@ -3287,8 +3286,8 @@ impl AstToIrGenerator {
                             Operand::Local(eq_reg),
                             0, // 占位符
                         ));
-                        jump_to_next_idx = Some(jmp_idx);
-                    }
+                        Some(jmp_idx)
+                    };
 
                     // 生成 arm body，结果放入 result_reg
                     let arm_result_reg = self.next_temp_reg();
