@@ -235,7 +235,7 @@ impl IntraTaskCycleTracker {
 mod tests {
     use super::*;
     use crate::middle::core::ir::BasicBlock;
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
     use crate::util::span::Span;
 
     /// 创建测试用的 FunctionIR

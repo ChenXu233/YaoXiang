@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::frontend::core::parser::ast::Module as AstModule;
-use crate::frontend::typecheck::TypeCheckResult;
+use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::middle::ModuleIR;
 
 // ============ FNV-1a 哈希 ============

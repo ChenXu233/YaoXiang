@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 

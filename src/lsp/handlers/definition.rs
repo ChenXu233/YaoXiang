@@ -195,7 +195,7 @@ fn try_semantic_db_lookup(
 mod tests {
     use super::*;
     use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
-    use crate::frontend::typecheck::semantic_db::{
+    use crate::frontend::core::typecheck::semantic_db::{
         FileSemanticInfo, SemanticToken, SemanticTokenModifier, SemanticTokenType, ScopeInfo,
         ScopeKind,
     };

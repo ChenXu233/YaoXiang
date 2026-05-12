@@ -12,7 +12,7 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
+use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -3455,7 +3455,7 @@ impl std::error::Error for IrGenError {}
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
     ast: &crate::frontend::core::parser::ast::Module,
-    result: &crate::frontend::typecheck::TypeCheckResult,
+    result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
     generator

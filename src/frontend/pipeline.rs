@@ -8,7 +8,7 @@ pub mod incremental_scheduler;
 use crate::middle;
 use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
-use super::{config::CompileConfig, events::*, typecheck};
+use super::{config::CompileConfig, events::*, core::typecheck};
 
 use compilation_cache::CompilationCache;
 use incremental_scheduler::IncrementalStats;
@@ -537,7 +537,7 @@ impl Pipeline {
         ast: &super::core::parser::Module,
         semantic_db: &typecheck::semantic_db::SemanticDB,
     ) -> Vec<String> {
-        use crate::frontend::typecheck::dead_code::DeadCodeAnalyzer;
+        use crate::frontend::core::typecheck::dead_code::DeadCodeAnalyzer;
 
         let mut analyzer = DeadCodeAnalyzer::new();
         let warnings = analyzer.analyze(ast, semantic_db);

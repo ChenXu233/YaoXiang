@@ -5,7 +5,7 @@
 //! 2. 基本块/指令类型替换
 //! 3. 特化名称生成
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction};
 use std::collections::HashMap;
 

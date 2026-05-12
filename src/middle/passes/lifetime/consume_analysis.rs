@@ -145,7 +145,7 @@ pub fn extract_function_name(instr: &Instruction) -> Option<String> {
 mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
 
     fn make_test_function(returns_param: bool) -> FunctionIR {
         let return_instr = if returns_param {

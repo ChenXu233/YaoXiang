@@ -2,7 +2,7 @@
 //!
 //! 单态化过程中的工作单元定义
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::util::span::Span;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -245,13 +245,13 @@ fn type_name_hash<H: Hasher>(
             type_name_hash(base_type, state);
             // 哈希常量值
             match value {
-                crate::frontend::core::type_system::ConstValue::Int(n) => {
+                crate::frontend::core::types::base::ConstValue::Int(n) => {
                     format!("int:{}", n).hash(state);
                 }
-                crate::frontend::core::type_system::ConstValue::Bool(b) => {
+                crate::frontend::core::types::base::ConstValue::Bool(b) => {
                     format!("bool:{}", b).hash(state);
                 }
-                crate::frontend::core::type_system::ConstValue::Float(f) => {
+                crate::frontend::core::types::base::ConstValue::Float(f) => {
                     format!("float:{}", f.to_bits()).hash(state);
                 }
             }

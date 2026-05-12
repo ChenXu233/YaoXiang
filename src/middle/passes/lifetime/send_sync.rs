@@ -11,7 +11,7 @@
 //! 4. Rc 既不是 Send 也不是 Sync
 
 use super::error::OwnershipError;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use std::collections::HashMap;
 
@@ -378,7 +378,7 @@ impl Default for SendSyncChecker {
 // 约束传播支持
 // =========================================================================
 
-use crate::frontend::typecheck::{SendSyncConstraint, SendSyncSolver};
+use crate::frontend::core::typecheck::{SendSyncConstraint, SendSyncSolver};
 
 /// Send/Sync 约束传播结果
 #[derive(Debug, Clone, Default)]

@@ -1415,8 +1415,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
 }
 
 /// Convert MonoType to IrType
-impl From<crate::frontend::typecheck::MonoType> for IrType {
-    fn from(_mono: crate::frontend::typecheck::MonoType) -> Self {
+impl From<crate::frontend::core::typecheck::MonoType> for IrType {
+    fn from(_mono: crate::frontend::core::typecheck::MonoType) -> Self {
         // Simplified conversion - needs proper implementation
         // For now, return Void type as placeholder
         IrType::Void

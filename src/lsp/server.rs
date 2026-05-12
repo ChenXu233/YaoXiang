@@ -476,7 +476,7 @@ fn update_symbol_index(
         // 注意：成功路径下 check_module_collect_all 会把 semantic_db 放进 TypeCheckResult，
         // 失败路径下 semantic_db 仍保留在 TypeChecker 内部。
         // 因此这里必须分支提取，避免“无错误时 semantic_db 为空”的问题。
-        let mut tc = crate::frontend::typecheck::TypeChecker::new(uri);
+        let mut tc = crate::frontend::core::typecheck::TypeChecker::new(uri);
         let semantic_db = match tc.check_module_collect_all(&parse_result.module) {
             Ok(result) => result.semantic_db,
             Err(_) => tc.take_semantic_db(),

@@ -29,7 +29,7 @@ use self::instance::{
     TypeInstance,
 };
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, ModuleIR};
 
 use self::function::FunctionMonomorphizer;
