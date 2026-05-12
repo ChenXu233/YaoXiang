@@ -9,7 +9,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities,
 };
 
-use crate::frontend::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
+use crate::frontend::core::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
 
 /// 构建服务端能力声明
 ///

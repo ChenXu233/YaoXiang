@@ -7,8 +7,8 @@
 //! 3. 跨模块实例化：在定义模块中实例化，使用模块引用结果
 
 use crate::frontend::core::parser::ast::Type;
-use crate::frontend::core::type_system::ConstValue;
-use crate::frontend::typecheck::{EnumType, MonoType, StructType};
+use crate::frontend::core::types::base::ConstValue;
+use crate::frontend::core::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR};
 use crate::middle::passes::module::{ModuleGraph, ModuleId};
 use crate::middle::passes::mono::module_state::{
@@ -181,7 +181,7 @@ impl CrossModuleMonomorphizer {
     pub fn collect_imports(
         &mut self,
         module_id: ModuleId,
-        imports: &[crate::frontend::typecheck::ImportInfo],
+        imports: &[crate::frontend::core::typecheck::ImportInfo],
     ) {
         let resolved_imports: Vec<_> = imports
             .iter()

@@ -4,7 +4,7 @@
 
 use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolIndex, SymbolKind, SymbolLocation};
 use crate::frontend::core::parser::ast::{Block, Expr, Module, Stmt, StmtKind};
-use crate::frontend::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::typecheck::semantic_db::SemanticDB;
 use crate::lsp::handlers::semantic_tokens::SemanticTokensCache;
 
 /// 编译世界

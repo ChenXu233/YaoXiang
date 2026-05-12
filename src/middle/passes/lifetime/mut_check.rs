@@ -29,7 +29,7 @@ pub struct MutChecker {
     /// 符号表：变量名 -> 是否可变（从外部传入）
     symbol_table: Option<HashMap<String, bool>>,
     /// 类型表：类型名 -> StructType（包含字段可变性信息）
-    type_table: Option<HashMap<String, crate::frontend::core::type_system::StructType>>,
+    type_table: Option<HashMap<String, crate::frontend::core::types::base::StructType>>,
     /// 兼容 OwnershipCheck trait 的状态字段（未使用）
     state: HashMap<Operand, super::error::ValueState>,
     /// 是否启用初始化追踪（允许首次赋值）
@@ -70,7 +70,7 @@ impl MutChecker {
     /// 设置类型表（用于查询字段可变性）
     pub fn with_type_table(
         mut self,
-        type_table: HashMap<String, crate::frontend::core::type_system::StructType>,
+        type_table: HashMap<String, crate::frontend::core::types::base::StructType>,
     ) -> Self {
         self.type_table = Some(type_table);
         self

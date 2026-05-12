@@ -2,7 +2,7 @@
 
 pub use crate::frontend::core::parser::ast::Type;
 use crate::frontend::core::parser::ast::EvalMode;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::util::span::Span;
 
 /// Instruction operand

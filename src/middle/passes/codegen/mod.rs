@@ -20,7 +20,7 @@ pub mod operand;
 pub mod translator;
 
 use crate::frontend::core::parser::ast::Type;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};

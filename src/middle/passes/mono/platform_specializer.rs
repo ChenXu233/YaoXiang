@@ -26,7 +26,7 @@
 
 use super::platform_info::{PlatformInfo, TargetPlatform};
 use crate::frontend::core::parser::ast::GenericParam;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use std::collections::HashMap;
 
 /// 平台约束

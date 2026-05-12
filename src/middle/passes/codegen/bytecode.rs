@@ -2,7 +2,7 @@
 //!
 //! 定义 .yx (.42) 字节码文件格式并实现序列化。
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::ConstValue;
 use crate::util::span::{DebugSpan, FileId, Position, SourceMap, Span};
 use crate::backends::common::Opcode;

@@ -5,9 +5,7 @@
 //!
 //! # 模块结构
 //!
-//! - [`core`] - 核心算法层（词法分析器、解析器、类型系统）
-//! - [`typecheck`] - 类型检查层
-//! - [`type_level`] - 类型级计算（RFC-011）
+//! - [`core`] - 核心算法层（词法分析器、解析器、类型系统、类型检查）
 //! - [`config`] - 编译配置
 //! - [`pipeline`] - 编译流水线
 //! - [`events`] - 事件系统
@@ -58,20 +56,14 @@ pub mod core;
 // 通用模块系统
 pub mod module;
 
-// 类型检查层
-pub mod typecheck;
-
-// 类型级计算（RFC-011）
-pub mod type_level;
-
-// 诊断系统
-pub use crate::util::diagnostic;
-
 // 编译配置
 pub mod config;
 
 // 编译流水线
 pub mod pipeline;
+
+// 诊断系统
+pub use crate::util::diagnostic;
 
 // 事件系统
 pub mod events;

@@ -728,7 +728,7 @@ fn operand_to_string(operand: &Operand) -> String {
 mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
     use crate::util::span::Span;
 
     fn make_simple_function() -> FunctionIR {

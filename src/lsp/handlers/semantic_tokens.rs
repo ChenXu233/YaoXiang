@@ -11,7 +11,7 @@ use lsp_types::{
     SemanticTokensFullDeltaResult, SemanticTokensParams, SemanticTokensResult,
 };
 
-use crate::frontend::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::typecheck::semantic_db::SemanticDB;
 use tracing::debug;
 
 // ============ 版本缓存 ============
@@ -88,7 +88,7 @@ pub fn handle_semantic_tokens_full(
 ) -> Option<SemanticTokensResult> {
     let uri = params.text_document.uri.as_str();
 
-    let empty: &[crate::frontend::typecheck::semantic_db::SemanticToken] = &[];
+    let empty: &[crate::frontend::core::typecheck::semantic_db::SemanticToken] = &[];
     let db_tokens = semantic_db.get_tokens(uri).unwrap_or(empty);
 
     debug!(
@@ -174,7 +174,7 @@ pub fn handle_semantic_tokens_full_delta(
 
 /// 将 SemanticDB tokens 转换为 LSP delta 编码格式
 fn convert_to_lsp_tokens_fallback(
-    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken]
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken]
 ) -> Vec<SemanticToken> {
     // 按行、列排序
     let mut sorted: Vec<_> = db_tokens.iter().collect();
@@ -262,7 +262,7 @@ fn utf16_len_between_offsets(
 }
 
 fn convert_to_lsp_tokens(
-    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken],
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken],
     document_text: Option<&str>,
 ) -> Vec<SemanticToken> {
     match document_text {
@@ -272,7 +272,7 @@ fn convert_to_lsp_tokens(
 }
 
 fn convert_to_lsp_tokens_utf16(
-    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken],
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken],
     document_text: &str,
 ) -> Vec<SemanticToken> {
     if db_tokens.is_empty() || document_text.is_empty() {
@@ -418,7 +418,7 @@ fn diff_semantic_tokens(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::typecheck::semantic_db::{
+    use crate::frontend::core::typecheck::semantic_db::{
         SemanticDB, SemanticToken as DbToken, SemanticTokenModifier, SemanticTokenType,
     };
     use crate::util::span::{Position, Span};

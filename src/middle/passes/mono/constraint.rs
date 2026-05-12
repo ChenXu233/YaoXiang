@@ -10,7 +10,7 @@
 //! - 实用：约束从 spawn 点自然产生，不需要显式标注
 //! - 零负担：用户代码不需要任何改变
 
-use crate::frontend::typecheck::{MonoType, SendSyncConstraint, SendSyncSolver};
+use crate::frontend::core::typecheck::{MonoType, SendSyncConstraint, SendSyncSolver};
 use crate::middle::passes::lifetime::send_sync::{SendSyncChecker, SendSyncPropagator};
 use std::collections::HashSet;
 use crate::util::span::Span;

@@ -388,7 +388,7 @@ fn extract_function_name(operand: &Operand) -> Option<String> {
 mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue};
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
 
     fn make_test_function() -> FunctionIR {
         FunctionIR {
