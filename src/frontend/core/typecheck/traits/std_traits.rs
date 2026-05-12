@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 use crate::frontend::core::types::base::MonoType;
-use super::bounds::{TraitDefinition, TraitTable, TraitImplementation};
+use crate::frontend::core::types::base::{TraitDefinition, TraitTable, TraitImplementation};
 
 /// RFC-011 定义的标准库 trait 列表
 pub const STD_TRAITS: &[&str] = &[
@@ -65,7 +65,7 @@ fn add_clone_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Clone 方法签名: clone: (self: Self) -> Self
-    let clone_sig = crate::frontend::core::typecheck::traits::bounds::TraitMethodSignature {
+    let clone_sig = crate::frontend::core::types::base::TraitMethodSignature {
         name: "clone".to_string(),
         params: vec![MonoType::TypeRef("Self".to_string())],
         return_type: MonoType::TypeRef("Self".to_string()),
@@ -104,7 +104,7 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Debug 方法签名: fmt: (self: Self, f: Formatter) -> Void
-    let fmt_sig = crate::frontend::core::typecheck::traits::bounds::TraitMethodSignature {
+    let fmt_sig = crate::frontend::core::types::base::TraitMethodSignature {
         name: "fmt".to_string(),
         params: vec![
             MonoType::TypeRef("Self".to_string()),
@@ -131,7 +131,7 @@ fn add_partial_eq_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // PartialEq 方法签名: eq: (self: Self, other: Self) -> Bool
-    let eq_sig = crate::frontend::core::typecheck::traits::bounds::TraitMethodSignature {
+    let eq_sig = crate::frontend::core::types::base::TraitMethodSignature {
         name: "eq".to_string(),
         params: vec![
             MonoType::TypeRef("Self".to_string()),
@@ -277,7 +277,7 @@ fn add_iterable_trait(trait_table: &mut TraitTable) {
 
     // Iterable::iter 方法: iter: (self: &Self) -> Iterator<T>
     // 返回迭代器类型，这里使用 TypeRef 表示，由具体类型参数决定
-    let iter_sig = crate::frontend::core::typecheck::traits::bounds::TraitMethodSignature {
+    let iter_sig = crate::frontend::core::types::base::TraitMethodSignature {
         name: "iter".to_string(),
         params: vec![MonoType::TypeRef("Self".to_string())],
         // 返回类型使用泛型占位符，在实现时具体化
@@ -302,7 +302,7 @@ fn add_iterator_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
     // Iterator::next 方法: next: (&mut self) -> Option<T>
-    let next_sig = crate::frontend::core::typecheck::traits::bounds::TraitMethodSignature {
+    let next_sig = crate::frontend::core::types::base::TraitMethodSignature {
         name: "next".to_string(),
         params: vec![MonoType::TypeRef("Self".to_string())],
         // 返回 Option<T>，Option 是内置类型

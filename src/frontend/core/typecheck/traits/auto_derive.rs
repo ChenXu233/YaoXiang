@@ -21,7 +21,7 @@
 use std::collections::HashMap;
 use crate::frontend::core::parser::ast::{Type, StructField};
 use crate::frontend::core::types::base::MonoType;
-use super::bounds::{TraitTable, TraitImplementation};
+use crate::frontend::core::types::base::{TraitTable, TraitImplementation};
 
 /// RFC-011 定义的标准库 traits（接口类型）
 pub const BUILTIN_DERIVES: &[&str] = &[

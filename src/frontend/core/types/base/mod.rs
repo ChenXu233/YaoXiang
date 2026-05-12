@@ -15,6 +15,7 @@ pub mod error;
 pub mod mono;
 pub mod solver;
 pub mod substitute;
+pub mod trait_data;
 pub mod var;
 
 // 重新导出主要类型
@@ -28,3 +29,6 @@ pub use substitute::{Substitution, Substituter};
 pub use constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};
 pub use solver::TypeConstraintSolver;
 pub use error::{TypeMismatch, TypeConstraintError, ConstEvalError};
+pub use trait_data::{
+    TraitMethodSignature, TraitDefinition, TraitBound, TraitBounds, TraitImplementation, TraitTable,
+};

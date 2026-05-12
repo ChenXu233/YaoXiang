@@ -18,7 +18,7 @@
 //! ```
 
 use crate::frontend::core::parser::ast::StmtKind;
-use crate::frontend::core::typecheck::traits::bounds::{TraitTable, TraitDefinition};
+use crate::frontend::core::types::base::{TraitTable, TraitDefinition};
 
 /// Trait 方法绑定检查器
 ///
