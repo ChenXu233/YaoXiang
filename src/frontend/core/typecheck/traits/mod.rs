@@ -18,6 +18,8 @@ pub mod object_safety;
 pub mod resolution;
 pub mod solver;
 pub mod std_traits;
+pub mod gat;
+pub mod specialization;
 
 // 重新导出
 pub use solver::{TraitSolver, TraitConstraint};

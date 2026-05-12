@@ -13,14 +13,8 @@ use crate::frontend::core::parser::ast::{Module, Expr};
 // 导入推断模块
 pub mod inference;
 
-// 导入特化模块
-pub mod specialization;
-
 // 导入特质模块
 pub mod traits;
-
-// 导入 GAT 模块
-pub mod gat;
 
 // 导入重载解析模块
 pub mod overload;
@@ -45,7 +39,6 @@ pub mod checker;
 
 // 签名解析
 pub mod signature;
-
 // 类型定义
 pub mod types;
 
@@ -61,8 +54,6 @@ pub use crate::frontend::core::types::base::{
 // 重新导出子模块
 pub use environment::*;
 pub use inference::*;
-pub use specialization::*;
-pub use gat::*;
 pub use overload::*;
 pub use type_eval::*;
 pub use checker::*;
