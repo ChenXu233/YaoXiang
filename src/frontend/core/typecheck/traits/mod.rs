@@ -1,14 +1,16 @@
 //! 特质系统模块
 //!
-//! 实现 RFC-011 特质系统。合并自 type_level 的 trait 相关功能：
-//! - bounds: Trait bounds (原 trait_bounds.rs)
+//! 实现 RFC-011 特质系统：
+//! - solver: 特质求解和错误定义
+//! - coherence: 连贯性检查
+//! - resolution: 特质解析
+//! - object_safety: 对象安全
+//! - std_traits: 标准库特质定义 (数据定义在 core::types::base)
 //! - auto_derive: 自动派生
 //! - inheritance: 特质继承
-//! - std_traits: 标准库特质
 //! - impl_check: 方法绑定检查
 
 pub mod auto_derive;
-pub mod bounds;
 pub mod coherence;
 pub mod impl_check;
 pub mod inheritance;

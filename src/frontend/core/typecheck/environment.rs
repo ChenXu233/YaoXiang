@@ -44,7 +44,7 @@ pub struct TypeEnvironment {
     /// 用于支持函数重载解析
     pub overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Trait 表：存储所有已解析的 Trait 定义和实现
-    pub trait_table: super::traits::bounds::TraitTable,
+    pub trait_table: crate::frontend::core::types::base::TraitTable,
     /// Native 函数签名表：存储已注册的 native 函数类型签名
     /// Key: 函数名（如 "std.io.println"），Value: 函数类型
     pub native_signatures: HashMap<String, MonoType>,
@@ -65,7 +65,7 @@ impl TypeEnvironment {
     pub fn new_with_module(module_name: String) -> Self {
         Self {
             module_name,
-            trait_table: super::traits::bounds::TraitTable::default(),
+            trait_table: crate::frontend::core::types::base::TraitTable::default(),
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
         }
@@ -231,7 +231,7 @@ impl TypeEnvironment {
     /// 添加 Trait 定义
     pub fn add_trait(
         &mut self,
-        definition: super::traits::bounds::TraitDefinition,
+        definition: crate::frontend::core::types::base::TraitDefinition,
     ) {
         self.trait_table.add_trait(definition);
     }
@@ -240,7 +240,7 @@ impl TypeEnvironment {
     pub fn get_trait(
         &self,
         name: &str,
-    ) -> Option<&super::traits::bounds::TraitDefinition> {
+    ) -> Option<&crate::frontend::core::types::base::TraitDefinition> {
         self.trait_table.get_trait(name)
     }
 
@@ -255,7 +255,7 @@ impl TypeEnvironment {
     /// 添加 Trait 实现
     pub fn add_trait_impl(
         &mut self,
-        impl_: super::traits::bounds::TraitImplementation,
+        impl_: crate::frontend::core::types::base::TraitImplementation,
     ) {
         self.trait_table.add_impl(impl_);
     }
@@ -274,7 +274,7 @@ impl TypeEnvironment {
         &self,
         trait_name: &str,
         for_type: &str,
-    ) -> Option<&super::traits::bounds::TraitImplementation> {
+    ) -> Option<&crate::frontend::core::types::base::TraitImplementation> {
         self.trait_table.get_impl(trait_name, for_type)
     }
 
