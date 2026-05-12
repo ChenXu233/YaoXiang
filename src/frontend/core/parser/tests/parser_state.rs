@@ -4,11 +4,9 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::{ParserState, ParseError};
 use crate::frontend::core::lexer::tokens::TokenKind;
 
-fn with_state<F>(
-    source: &str,
-    mut f: F,
-) where
-    F: FnMut(&mut ParserState),
+fn with_state<F>(source: &str, mut f: F)
+where
+    F: FnMut(&mut ParserState<'_>),
 {
     let tokens = tokenize(source).unwrap();
     let mut state = ParserState::new(&tokens);
