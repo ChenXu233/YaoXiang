@@ -235,7 +235,7 @@ mod tests {
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         }
@@ -251,7 +251,7 @@ mod tests {
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         }
@@ -307,7 +307,7 @@ mod tests {
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            Ok(args.get(0).cloned().unwrap_or(RuntimeValue::Unit))
+            Ok(args.first().cloned().unwrap_or(RuntimeValue::Unit))
         }
         registry.register("identity", identity);
 

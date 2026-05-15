@@ -6,7 +6,6 @@
 //! - unify: 类型级统一
 //! - compute: 类型计算引擎
 
-
 // 重新导出主要类型
 
 /// 范式类型标记
@@ -92,7 +91,6 @@ impl Default for ReductionConfig {
 /// - 类型表达式求值
 /// - 条件类型求解
 /// - 类型级函数应用
-
 use crate::frontend::core::types::base::{MonoType, TypeVar, Substitution, Substituter};
 use std::collections::HashMap;
 
@@ -422,7 +420,6 @@ pub mod functions {
 /// - 嵌套类型被扁平化
 ///
 /// 复用 core/type_system/substitute.rs 中的公共替换实现
-
 use crate::frontend::core::typecheck::type_eval::TypeEvaluator;
 
 /// 范式化上下文
@@ -765,8 +762,7 @@ impl TypeNormalizer {
 /// - Eta 归约：简化冗余抽象
 /// - Delta 归约：展开类型别名
 /// - Iota 归约：模式匹配求值
-
-
+///
 /// 归约状态
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReductionResult {
@@ -933,8 +929,6 @@ impl TypeReducer {
 /// - 联合类型求解
 ///
 /// 复用 core/type_system/substitute.rs 中的公共替换实现
-
-
 /// 统一结果
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]

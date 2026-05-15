@@ -937,6 +937,5 @@ impl TypeChecker {
             }
         }
     }
-
 }
 include!("semantic_tokens_impl.rs");

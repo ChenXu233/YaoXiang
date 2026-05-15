@@ -32,3 +32,6 @@ pub use error::{TypeMismatch, TypeConstraintError, ConstEvalError};
 pub use trait_data::{
     TraitMethodSignature, TraitDefinition, TraitBound, TraitBounds, TraitImplementation, TraitTable,
 };
+
+#[cfg(test)]
+mod tests;

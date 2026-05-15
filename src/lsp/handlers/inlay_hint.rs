@@ -187,14 +187,14 @@ mod tests {
     #[test]
     fn test_simple_infer_type() {
         let span = crate::util::span::Span::default();
-        let expr = Expr::Lit(Literal::Int(10), span.clone());
+        let expr = Expr::Lit(Literal::Int(10), span);
         assert_eq!(simple_infer_type(&expr), Some("Int".to_string()));
 
         let call_expr = Expr::Call {
-            func: Box::new(Expr::Var("vec!".to_string(), span.clone())),
+            func: Box::new(Expr::Var("vec!".to_string(), span)),
             args: vec![],
             named_args: vec![],
-            span: span.clone(),
+            span,
         };
         assert_eq!(simple_infer_type(&call_expr), Some("Vec<_>".to_string()));
     }
@@ -202,8 +202,8 @@ mod tests {
     #[test]
     fn test_evaluate_constant() {
         let span = crate::util::span::Span::default();
-        let left = Box::new(Expr::Lit(Literal::Int(100), span.clone()));
-        let right = Box::new(Expr::Lit(Literal::Int(200), span.clone()));
+        let left = Box::new(Expr::Lit(Literal::Int(100), span));
+        let right = Box::new(Expr::Lit(Literal::Int(200), span));
         let bin_op = Expr::BinOp {
             op: BinOp::Add,
             left,

@@ -3,10 +3,12 @@
 //! RFC-011 类型边界检查
 //!
 //! 检查泛型类型边界和约束
+//! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::base::MonoType;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
+use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 
 /// 约束检查错误
@@ -98,10 +100,15 @@ impl BoundsChecker {
     ///
     /// 规则：类型的字段必须包含约束要求的所有方法（函数字段）
     /// 方法签名需要兼容（参数和返回值类型匹配）
+    ///
+    /// 支持两种方法来源：
+    /// 1. 结构体字段中的函数字段
+    /// 2. 通过 Type.method 绑定的方法（从 TypeEnvironment 查询）
     pub fn check_constraint(
         &mut self,
         ty: &MonoType,
         constraint: &MonoType,
+        env: Option<&TypeEnvironment>,
     ) -> Result<(), ConstraintCheckError> {
         let constraint_fields = constraint.constraint_fields();
 
@@ -110,28 +117,58 @@ impl BoundsChecker {
             return Ok(());
         }
 
-        // 获取待检查类型的函数字段
-        let type_fn_fields = match ty {
+        // 获取待检查类型的函数字段和方法绑定
+        let type_name = match ty {
+            MonoType::Struct(s) => Some(s.name.clone()),
+            MonoType::TypeRef(name) => Some(name.clone()),
+            _ => None,
+        };
+
+        // 收集类型的函数字段
+        let type_fn_fields: Vec<(String, &MonoType)> = match ty {
             MonoType::Struct(s) => s
                 .fields
                 .iter()
                 .filter(|(_, ty)| matches!(ty, MonoType::Fn { .. }))
                 .map(|(name, ty)| (name.clone(), ty))
-                .collect::<Vec<_>>(),
+                .collect(),
             _ => Vec::new(),
         };
+
+        // 收集方法绑定（从 TypeEnvironment 查询）
+        let method_bindings: Vec<(String, MonoType)> =
+            if let (Some(env), Some(ref name)) = (env, &type_name) {
+                env.method_bindings
+                    .iter()
+                    .filter(|(key, _)| key.starts_with(&format!("{}.", name)))
+                    .map(|(key, fn_type)| {
+                        // 提取方法名：从 "Type.method" 中提取 "method"
+                        let method_name = key.split('.').next_back().unwrap_or(key).to_string();
+                        (method_name, fn_type.clone())
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
 
         // 检查每个约束字段是否存在且签名兼容
         let mut missing_fields = Vec::new();
         let mut mismatched_fields = Vec::new();
 
         for (field_name, constraint_fn) in constraint_fields {
-            // 在类型中查找同名方法
+            // 先在结构体字段中查找
             let type_fn = type_fn_fields.iter().find(|(name, _)| name == &field_name);
 
-            match type_fn {
-                Some((_, found_fn)) => {
-                    // 检查函数签名兼容性
+            // 如果字段中没有，再在方法绑定中查找
+            let method_fn = if type_fn.is_none() {
+                method_bindings.iter().find(|(name, _)| name == &field_name)
+            } else {
+                None
+            };
+
+            match (type_fn, method_fn) {
+                (Some((_, found_fn)), _) => {
+                    // 在结构体字段中找到，检查函数签名兼容性
                     if !Self::fn_signatures_compatible(found_fn, constraint_fn) {
                         mismatched_fields.push((
                             field_name,
@@ -140,7 +177,18 @@ impl BoundsChecker {
                         ));
                     }
                 }
-                None => {
+                (_, Some((_, found_fn))) => {
+                    // 在方法绑定中找到，检查函数签名兼容性
+                    if !Self::fn_signatures_compatible(found_fn, constraint_fn) {
+                        mismatched_fields.push((
+                            field_name,
+                            constraint_fn.type_name(),
+                            found_fn.type_name(),
+                        ));
+                    }
+                }
+                (None, None) => {
+                    // 两处都没有找到
                     missing_fields.push(field_name);
                 }
             }

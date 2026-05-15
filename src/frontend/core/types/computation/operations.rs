@@ -27,7 +27,11 @@ pub enum TypeLevelValue {
 /// 类型级运算 trait
 pub trait TypeLevelOps {
     /// 执行运算
-    fn op(&self, lhs: &TypeLevelValue, rhs: Option<&TypeLevelValue>) -> Option<TypeLevelValue>;
+    fn op(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: Option<&TypeLevelValue>,
+    ) -> Option<TypeLevelValue>;
 }
 
 /// 预定义的类型级常量
@@ -51,12 +55,20 @@ pub mod constants {
 /// 算术运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArithOp {
-    Add, Sub, Mul, Div, Mod,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
 }
 
 impl ArithOp {
     /// 执行二元运算
-    pub fn apply(self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn apply(
+        self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         match (self, lhs, rhs) {
             (ArithOp::Add, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
                 Some(TypeLevelValue::Int(a.saturating_add(*b)))
@@ -68,10 +80,18 @@ impl ArithOp {
                 Some(TypeLevelValue::Int(a.saturating_mul(*b)))
             }
             (ArithOp::Div, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
-                if *b != 0 { Some(TypeLevelValue::Int(a.saturating_div(*b))) } else { None }
+                if *b != 0 {
+                    Some(TypeLevelValue::Int(a.saturating_div(*b)))
+                } else {
+                    None
+                }
             }
             (ArithOp::Mod, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
-                if *b != 0 { Some(TypeLevelValue::Int(a % b)) } else { None }
+                if *b != 0 {
+                    Some(TypeLevelValue::Int(a % b))
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -80,8 +100,11 @@ impl ArithOp {
     /// 获取运算符名称
     pub fn name(&self) -> &'static str {
         match self {
-            ArithOp::Add => "Add", ArithOp::Sub => "Sub", ArithOp::Mul => "Mul",
-            ArithOp::Div => "Div", ArithOp::Mod => "Mod",
+            ArithOp::Add => "Add",
+            ArithOp::Sub => "Sub",
+            ArithOp::Mul => "Mul",
+            ArithOp::Div => "Div",
+            ArithOp::Mod => "Mod",
         }
     }
 }
@@ -91,33 +114,77 @@ impl ArithOp {
 pub struct TypeArithmetic;
 
 impl TypeArithmetic {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
-    pub fn add(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn add(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         ArithOp::Add.apply(lhs, rhs)
     }
-    pub fn sub(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn sub(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         ArithOp::Sub.apply(lhs, rhs)
     }
-    pub fn mul(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn mul(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         ArithOp::Mul.apply(lhs, rhs)
     }
-    pub fn div(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
-        if matches!(rhs, TypeLevelValue::Int(0)) { return None; }
+    pub fn div(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
+        if matches!(rhs, TypeLevelValue::Int(0)) {
+            return None;
+        }
         ArithOp::Div.apply(lhs, rhs)
     }
-    pub fn rem(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
-        if matches!(rhs, TypeLevelValue::Int(0)) { return None; }
+    pub fn rem(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
+        if matches!(rhs, TypeLevelValue::Int(0)) {
+            return None;
+        }
         ArithOp::Mod.apply(lhs, rhs)
     }
-    pub fn neg(&self, val: &TypeLevelValue) -> Option<TypeLevelValue> {
-        match val { TypeLevelValue::Int(n) => Some(TypeLevelValue::Int(-*n)), _ => None }
+    pub fn neg(
+        &self,
+        val: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
+        match val {
+            TypeLevelValue::Int(n) => Some(TypeLevelValue::Int(-*n)),
+            _ => None,
+        }
     }
-    pub fn binary_op(&self, op: ArithOp, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn binary_op(
+        &self,
+        op: ArithOp,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         op.apply(lhs, rhs)
     }
-    pub fn unary_op(&self, op: ArithOp, val: &TypeLevelValue) -> Option<TypeLevelValue> {
-        match op { ArithOp::Sub => self.neg(val), _ => None }
+    pub fn unary_op(
+        &self,
+        op: ArithOp,
+        val: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
+        match op {
+            ArithOp::Sub => self.neg(val),
+            _ => None,
+        }
     }
 }
 
@@ -128,28 +195,57 @@ impl TypeArithmetic {
 /// 比较运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    Eq, Neq, Lt, Gt, Lte, Gte,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
 }
 
 impl CmpOp {
-    pub fn apply(self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn apply(
+        self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         match (self, lhs, rhs) {
-            (CmpOp::Eq, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a == b)),
-            (CmpOp::Eq, TypeLevelValue::Bool(a), TypeLevelValue::Bool(b)) => Some(TypeLevelValue::Bool(a == b)),
-            (CmpOp::Neq, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a != b)),
-            (CmpOp::Neq, TypeLevelValue::Bool(a), TypeLevelValue::Bool(b)) => Some(TypeLevelValue::Bool(a != b)),
-            (CmpOp::Lt, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a < b)),
-            (CmpOp::Gt, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a > b)),
-            (CmpOp::Lte, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a <= b)),
-            (CmpOp::Gte, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => Some(TypeLevelValue::Bool(a >= b)),
+            (CmpOp::Eq, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a == b))
+            }
+            (CmpOp::Eq, TypeLevelValue::Bool(a), TypeLevelValue::Bool(b)) => {
+                Some(TypeLevelValue::Bool(a == b))
+            }
+            (CmpOp::Neq, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a != b))
+            }
+            (CmpOp::Neq, TypeLevelValue::Bool(a), TypeLevelValue::Bool(b)) => {
+                Some(TypeLevelValue::Bool(a != b))
+            }
+            (CmpOp::Lt, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a < b))
+            }
+            (CmpOp::Gt, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a > b))
+            }
+            (CmpOp::Lte, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a <= b))
+            }
+            (CmpOp::Gte, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
+                Some(TypeLevelValue::Bool(a >= b))
+            }
             _ => None,
         }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            CmpOp::Eq => "Eq", CmpOp::Neq => "Neq", CmpOp::Lt => "Lt",
-            CmpOp::Gt => "Gt", CmpOp::Lte => "Lte", CmpOp::Gte => "Gte",
+            CmpOp::Eq => "Eq",
+            CmpOp::Neq => "Neq",
+            CmpOp::Lt => "Lt",
+            CmpOp::Gt => "Gt",
+            CmpOp::Lte => "Lte",
+            CmpOp::Gte => "Gte",
         }
     }
 }
@@ -159,30 +255,67 @@ impl CmpOp {
 pub struct TypeComparison;
 
 impl TypeComparison {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
-    pub fn eq(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn eq(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Eq.apply(lhs, rhs)
     }
-    pub fn neq(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn neq(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Neq.apply(lhs, rhs)
     }
-    pub fn lt(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn lt(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Lt.apply(lhs, rhs)
     }
-    pub fn gt(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn gt(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Gt.apply(lhs, rhs)
     }
-    pub fn lte(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn lte(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Lte.apply(lhs, rhs)
     }
-    pub fn gte(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn gte(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         CmpOp::Gte.apply(lhs, rhs)
     }
-    pub fn compare(&self, op: CmpOp, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn compare(
+        &self,
+        op: CmpOp,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         op.apply(lhs, rhs)
     }
-    pub fn types_equal(&self, ty1: &MonoType, ty2: &MonoType) -> bool { ty1 == ty2 }
+    pub fn types_equal(
+        &self,
+        ty1: &MonoType,
+        ty2: &MonoType,
+    ) -> bool {
+        ty1 == ty2
+    }
 }
 
 // ============================================================================
@@ -192,11 +325,17 @@ impl TypeComparison {
 /// 逻辑运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LogicOp {
-    And, Or, Not,
+    And,
+    Or,
+    Not,
 }
 
 impl LogicOp {
-    pub fn apply(self, lhs: Option<&TypeLevelValue>, rhs: Option<&TypeLevelValue>) -> Option<TypeLevelValue> {
+    pub fn apply(
+        self,
+        lhs: Option<&TypeLevelValue>,
+        rhs: Option<&TypeLevelValue>,
+    ) -> Option<TypeLevelValue> {
         match (self, lhs, rhs) {
             (LogicOp::And, Some(TypeLevelValue::Bool(a)), Some(TypeLevelValue::Bool(b))) => {
                 Some(TypeLevelValue::Bool(*a && *b))
@@ -209,15 +348,26 @@ impl LogicOp {
         }
     }
 
-    pub fn binary_op(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn binary_op(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         LogicOp::And.apply(Some(lhs), Some(rhs))
     }
-    pub fn unary_op(&self, val: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn unary_op(
+        &self,
+        val: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         LogicOp::Not.apply(Some(val), None)
     }
 
     pub fn name(&self) -> &'static str {
-        match self { LogicOp::And => "And", LogicOp::Or => "Or", LogicOp::Not => "Not" }
+        match self {
+            LogicOp::And => "And",
+            LogicOp::Or => "Or",
+            LogicOp::Not => "Not",
+        }
     }
 }
 
@@ -228,27 +378,55 @@ pub struct TypeLogic {
 }
 
 impl TypeLogic {
-    pub fn new() -> Self { Self { short_circuit: true } }
-    pub fn with_short_circuit(mut self, enabled: bool) -> Self {
-        self.short_circuit = enabled; self
+    pub fn new() -> Self {
+        Self {
+            short_circuit: true,
+        }
+    }
+    pub fn with_short_circuit(
+        mut self,
+        enabled: bool,
+    ) -> Self {
+        self.short_circuit = enabled;
+        self
     }
 
-    pub fn and(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn and(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         if self.short_circuit {
-            if let TypeLevelValue::Bool(false) = lhs { return Some(TypeLevelValue::Bool(false)); }
+            if let TypeLevelValue::Bool(false) = lhs {
+                return Some(TypeLevelValue::Bool(false));
+            }
         }
         LogicOp::And.binary_op(lhs, rhs)
     }
-    pub fn or(&self, lhs: &TypeLevelValue, rhs: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn or(
+        &self,
+        lhs: &TypeLevelValue,
+        rhs: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         if self.short_circuit {
-            if let TypeLevelValue::Bool(true) = lhs { return Some(TypeLevelValue::Bool(true)); }
+            if let TypeLevelValue::Bool(true) = lhs {
+                return Some(TypeLevelValue::Bool(true));
+            }
         }
         LogicOp::Or.binary_op(lhs, rhs)
     }
-    pub fn not(&self, val: &TypeLevelValue) -> Option<TypeLevelValue> {
+    pub fn not(
+        &self,
+        val: &TypeLevelValue,
+    ) -> Option<TypeLevelValue> {
         LogicOp::Not.unary_op(val)
     }
-    pub fn op(&self, op: LogicOp, lhs: &TypeLevelValue, rhs: Option<&TypeLevelValue>) -> Option<TypeLevelValue> {
+    pub fn op(
+        &self,
+        op: LogicOp,
+        lhs: &TypeLevelValue,
+        rhs: Option<&TypeLevelValue>,
+    ) -> Option<TypeLevelValue> {
         match op {
             LogicOp::And => rhs.and_then(|r| self.and(lhs, r)),
             LogicOp::Or => rhs.and_then(|r| self.or(lhs, r)),
@@ -259,7 +437,10 @@ impl TypeLogic {
 
 /// 布尔类型构造器
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BoolType { False, True }
+pub enum BoolType {
+    False,
+    True,
+}
 
 impl BoolType {
     pub fn from_value(val: &TypeLevelValue) -> Option<Self> {
@@ -270,6 +451,9 @@ impl BoolType {
         }
     }
     pub fn to_value(&self) -> TypeLevelValue {
-        TypeLevelValue::Bool(match self { BoolType::False => false, BoolType::True => true })
+        TypeLevelValue::Bool(match self {
+            BoolType::False => false,
+            BoolType::True => true,
+        })
     }
 }

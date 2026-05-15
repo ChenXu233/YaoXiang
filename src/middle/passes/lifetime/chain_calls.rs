@@ -464,7 +464,7 @@ mod tests {
             method_name: "rotate".to_string(),
             args: vec![
                 Operand::Const(ConstValue::Int(90)),
-                Operand::Const(ConstValue::Float(3.14)),
+                Operand::Const(ConstValue::Float(std::f64::consts::PI)),
             ],
             span: Span::dummy(),
         }];

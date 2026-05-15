@@ -14,7 +14,6 @@
 //! type IntArray[10] = Array[Int, 10]
 //! ```
 
-
 // 重新导出主要类型
 use crate::frontend::core::types::base::ConstValue;
 
@@ -83,7 +82,6 @@ impl ConstGenericResult {
 /// - Const表达式求值
 /// - Const函数调用
 /// - Const参数替换
-
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::cmp::{PartialEq, Eq};
@@ -694,7 +692,6 @@ pub mod functions {
 /// RFC-011 泛型尺寸计算
 ///
 /// 实现泛型类型的尺寸计算，用于Const泛型和数组类型。
-
 use crate::frontend::core::types::base::MonoType;
 
 /// 泛型尺寸计算器
@@ -947,7 +944,6 @@ pub mod predefined_sizes {
 /// - 字面量类型到 ConstValue 的转换
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
-
 use crate::frontend::core::parser::ast::{Type, GenericParam, GenericParamKind};
 use crate::frontend::core::types::base::ConstKind;
 

@@ -12,14 +12,14 @@
 
 pub mod auto_derive;
 pub mod coherence;
+pub mod gat;
 pub mod impl_check;
 pub mod inheritance;
 pub mod object_safety;
 pub mod resolution;
 pub mod solver;
-pub mod std_traits;
-pub mod gat;
 pub mod specialization;
+pub mod std_traits;
 
 // 重新导出
 pub use solver::{TraitSolver, TraitConstraint};

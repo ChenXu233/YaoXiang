@@ -43,7 +43,7 @@ fn collect_yx_files(
         let path = entry.path();
         if path.is_dir() {
             collect_yx_files(&path, files);
-        } else if path.extension().map_or(false, |e| e == "yx") {
+        } else if path.extension().is_some_and(|e| e == "yx") {
             files.push(path);
         }
     }

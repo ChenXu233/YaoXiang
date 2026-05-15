@@ -10,6 +10,9 @@ pub mod operations;
 pub mod type_families;
 pub mod type_match;
 
+#[cfg(test)]
+mod tests;
+
 /// 高级类型错误
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum TypeLevelError {
