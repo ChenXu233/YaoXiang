@@ -574,7 +574,7 @@ mod tests {
             .ffi_registry_mut()
             .register("test.multiply", |args, _ctx| {
                 eprintln!("DEBUG: multiply args = {:?}", args);
-                let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+                let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
                 let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
                 eprintln!("DEBUG: multiply {} * {}", a, b);
                 Ok(RuntimeValue::Int(a * b))

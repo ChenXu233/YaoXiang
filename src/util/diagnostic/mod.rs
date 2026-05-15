@@ -562,7 +562,7 @@ main: () -> Void = {
         )
         .expect("write yx file");
 
-        let result = check_files_with_diagnostics(&vec![file]).expect("run check");
+        let result = check_files_with_diagnostics(&[file]).expect("run check");
         assert_eq!(result.error_count, 0);
         assert_eq!(result.warning_count, 0);
         assert!(result.diagnostics.is_empty());
@@ -583,7 +583,7 @@ main: () -> Void = {
         )
         .expect("write yx file");
 
-        let result = check_files_with_diagnostics(&vec![file]).expect("run check");
+        let result = check_files_with_diagnostics(&[file]).expect("run check");
         assert!(result.error_count > 0);
         assert!(!result.diagnostics.is_empty());
     }

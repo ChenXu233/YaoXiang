@@ -7,9 +7,12 @@
 //! 支持接口（约束）类型的直接赋值：
 //! - `d: Drawable = Circle(1)` — 编译期可确定具体类型 → 零开销调用
 //! - `d: Drawable = get_shape()` — 编译期无法确定 → vtable 调用
+//!
+//! 支持鸭子类型：检查右值类型是否满足左值接口要求的所有方法
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 use super::subtyping::SubtypeChecker;
 use super::bounds::BoundsChecker;
@@ -63,21 +66,24 @@ impl AssignmentChecker {
     /// 检查赋值类型兼容性
     ///
     /// 规则：
-    /// 1. 如果目标是约束类型，检查右值是否满足约束（结构化子类型）
+    /// 1. 如果目标是约束类型，检查右值是否满足约束（结构化子类型 - 鸭子类型）
     /// 2. 否则使用子类型检查
+    ///
+    /// 支持鸭子类型：通过 TypeEnvironment 查询方法绑定
     pub fn check_assignment(
         &mut self,
         lhs: &MonoType,
         rhs: &MonoType,
         span: Span,
+        env: Option<&TypeEnvironment>,
     ) -> Result<()> {
         // 清除上次的推断信息
         self.last_constraint_info = None;
 
-        // 如果目标是约束类型，执行约束满足检查
+        // 如果目标是约束类型，执行约束满足检查（鸭子类型）
         if lhs.is_constraint() {
             let mut bounds_checker = BoundsChecker::new();
-            match bounds_checker.check_constraint(rhs, lhs) {
+            match bounds_checker.check_constraint(rhs, lhs, env) {
                 Ok(()) => {
                     // 约束满足：判断具体类型是否可在编译期确定
                     // 如果右值是具体的 Struct 类型（非约束），编译期可确定

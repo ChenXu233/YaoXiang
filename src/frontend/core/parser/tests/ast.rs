@@ -546,7 +546,7 @@ fn test_pattern_guard() {
 #[test]
 fn test_binop_all_variants() {
     // Verify all BinOp variants exist and are constructable
-    let ops = vec![
+    let ops = [
         BinOp::Add,
         BinOp::Sub,
         BinOp::Mul,
@@ -568,7 +568,7 @@ fn test_binop_all_variants() {
 
 #[test]
 fn test_unop_all_variants() {
-    let ops = vec![UnOp::Neg, UnOp::Pos, UnOp::Not, UnOp::Deref];
+    let ops = [UnOp::Neg, UnOp::Pos, UnOp::Not, UnOp::Deref];
     assert_eq!(ops.len(), 4);
 }
 

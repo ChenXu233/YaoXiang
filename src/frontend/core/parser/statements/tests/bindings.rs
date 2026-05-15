@@ -128,10 +128,12 @@ fn test_rfc004_multi_position() {
 #[test]
 fn test_rfc004_triple_position() {
     let kind = parse_stmt("Point.calc = calculate[0, 1, 2]");
-    if let StmtKind::ExternalBindingStmt { binding, .. } = &kind {
-        if let BindingKind::External { positions, .. } = binding {
-            assert_eq!(positions, &vec![0, 1, 2]);
-        }
+    if let StmtKind::ExternalBindingStmt {
+        binding: BindingKind::External { positions, .. },
+        ..
+    } = &kind
+    {
+        assert_eq!(positions, &vec![0, 1, 2]);
     }
 }
 

@@ -963,7 +963,7 @@ mod tests {
 
         let lifecycles = tracker.get_all_lifecycles();
         // 应该包含参数
-        assert!(lifecycles.len() >= 1);
+        assert!(!lifecycles.is_empty());
     }
 
     #[test]

@@ -106,6 +106,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::const_is_empty)]
     fn test_server_info() {
         assert_eq!(SERVER_NAME, "yaoxiang-lsp");
         assert!(!SERVER_VERSION.is_empty());

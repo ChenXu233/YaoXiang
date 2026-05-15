@@ -569,7 +569,7 @@ mod ffi_tests {
 
         // Register a custom function
         registry.register("my_add", |args, _ctx| {
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         });

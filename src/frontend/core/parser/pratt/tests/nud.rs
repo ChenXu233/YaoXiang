@@ -5,8 +5,6 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::ast::{Expr, UnOp};
-use crate::frontend::core::parser::parse_expression;
-use crate::frontend::core::lexer::tokens::TokenKind;
 use crate::frontend::core::parser::ParserState;
 
 fn parse_expr(source: &str) -> Expr {

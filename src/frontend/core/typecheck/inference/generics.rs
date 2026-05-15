@@ -7,6 +7,7 @@
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::base::MonoType;
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
+use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 
 /// 泛型推断器
@@ -74,14 +75,17 @@ impl GenericInferrer {
     ///
     /// 在泛型函数实例化时，检查实际类型是否满足约束
     /// 约束格式：[T: ConstraintName](item: T)
+    ///
+    /// 支持鸭子类型：通过 TypeEnvironment 查询方法绑定
     pub fn check_type_constraint(
         &mut self,
         actual_type: &MonoType,
         constraint_type: &MonoType,
         span: Span,
+        env: Option<&TypeEnvironment>,
     ) -> Result<()> {
         self.bounds_checker
-            .check_constraint(actual_type, constraint_type)
+            .check_constraint(actual_type, constraint_type, env)
             .map_err(|e| {
                 ErrorCodeDefinition::trait_bound_not_satisfied(&e.type_name, &e.constraint_name)
                     .at(span)

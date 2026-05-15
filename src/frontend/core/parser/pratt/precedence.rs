@@ -192,6 +192,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_bp_ordering() {
         assert!(BP_LOWEST < BP_ASSIGN);
         assert!(BP_ASSIGN < BP_LOGICAL_OR);

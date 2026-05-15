@@ -177,6 +177,7 @@ mod tests {
         let result = handle_rename(&session, &world, params);
         assert!(result.is_some());
 
+        #[allow(clippy::mutable_key_type)]
         let changes = result.unwrap().changes.unwrap();
         assert_eq!(changes.len(), 2, "应修改 2 个文件");
     }
