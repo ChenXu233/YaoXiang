@@ -122,6 +122,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::mutable_key_type)]
     #[test]
     fn test_rename_single_file() {
         let mut session = Session::new();

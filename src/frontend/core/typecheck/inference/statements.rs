@@ -51,6 +51,18 @@ pub struct StatementChecker {
     function_local_vars: HashMap<String, PolyType>,
     /// 当前函数的 Result 错误类型栈（用于 `?` 运算符约束）
     result_err_stack: Vec<Option<MonoType>>,
+    /// 当前函数的预期返回类型（用于 return 语句的类型检查）
+    expected_return_type: Option<MonoType>,
+    /// 泛型类型定义模板表（从 TypeEnvironment 同步）
+    generic_type_defs: std::collections::HashMap<
+        String,
+        crate::frontend::core::typecheck::environment::GenericTypeDef,
+    >,
+    /// 方法绑定表: "Type.method" -> MonoType
+    method_bindings: HashMap<String, MonoType>,
+    /// 类型定义表: type_name -> MonoType(Struct)
+    /// 用于 TypeRef → Struct 解析
+    type_defs: HashMap<String, MonoType>,
 }
 
 impl StatementChecker {
@@ -68,6 +80,99 @@ impl StatementChecker {
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
             result_err_stack: Vec::new(),
+            expected_return_type: None,
+            generic_type_defs: std::collections::HashMap::new(),
+            method_bindings: HashMap::new(),
+            type_defs: HashMap::new(),
+        }
+    }
+
+    /// 设置类型定义表
+    pub fn set_type_defs(
+        &mut self,
+        defs: HashMap<String, MonoType>,
+    ) {
+        self.type_defs = defs;
+    }
+
+    /// 解析 TypeRef 为实际的类型定义
+    ///
+    /// 如果 `ty` 是 `TypeRef("Circle")` 且 `Circle` 在 `type_defs` 中定义为
+    /// `Struct { ... }`，则返回该 Struct 类型。对于内置类型名也进行解析。
+    fn resolve_type_ref_type(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                // Check built-in types first
+                match name.as_str() {
+                    "Int" | "int" | "Int64" | "int64" | "i64" => return MonoType::Int(64),
+                    "Int32" | "int32" | "i32" => return MonoType::Int(32),
+                    "Float" | "float" | "Float64" | "float64" | "f64" => {
+                        return MonoType::Float(64)
+                    }
+                    "Float32" | "float32" | "f32" => return MonoType::Float(32),
+                    "Bool" | "bool" => return MonoType::Bool,
+                    "Char" | "char" => return MonoType::Char,
+                    "String" | "string" => return MonoType::String,
+                    "Void" | "void" | "()" => return MonoType::Void,
+                    _ => {}
+                }
+                // Check type_defs for user-defined types
+                if let Some(struct_ty) = self.type_defs.get(name) {
+                    return struct_ty.clone();
+                }
+                ty.clone()
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    /// 设置泛型类型定义模板表
+    pub fn set_generic_type_defs(
+        &mut self,
+        defs: std::collections::HashMap<
+            String,
+            crate::frontend::core::typecheck::environment::GenericTypeDef,
+        >,
+    ) {
+        self.generic_type_defs = defs;
+    }
+
+    /// 设置方法绑定表
+    pub fn set_method_bindings(
+        &mut self,
+        bindings: HashMap<String, MonoType>,
+    ) {
+        self.method_bindings = bindings;
+    }
+
+    /// 尝试实例化泛型类型
+    ///
+    /// 当 type_annotation 为 `List(Int)` 时，查找 `List` 的泛型模板，
+    /// 将类型参数 `T` 替换为 `Int`，返回展开后的结构体类型。
+    fn try_instantiate_generic_type(
+        &self,
+        type_ann: &crate::frontend::core::parser::ast::Type,
+    ) -> Option<MonoType> {
+        match type_ann {
+            crate::frontend::core::parser::ast::Type::Generic { name, args, .. } => {
+                let def = self.generic_type_defs.get(name)?;
+                if def.param_names.len() != args.len() {
+                    return None;
+                }
+                let arg_types: Vec<MonoType> =
+                    args.iter().map(|a| MonoType::from(a.clone())).collect();
+                Some(
+                    crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
+                        &def.template,
+                        &def.param_names,
+                        &arg_types,
+                    ),
+                )
+            }
+            _ => None,
         }
     }
 
@@ -645,22 +750,19 @@ impl StatementChecker {
         });
         self.result_err_stack.push(fn_result_err);
 
-        // 处理类型注解
-        if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
-            type_annotation
-        {
-            let fn_def_expr = Expr::FnDef {
-                name: name.to_string(),
-                params: params.to_vec(),
-                return_type: Some(*return_type.clone()),
-                body: Box::new(body.clone()),
-                is_async: false,
-                span: _span,
-            };
-            let _ = self.check_expr(&fn_def_expr);
-        }
+        // Set expected return type for return statement type checking
+        let fn_expected_ret = type_annotation.and_then(|t| match t {
+            crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                Some(MonoType::from((**return_type).clone()))
+            }
+            _ => None,
+        });
+        self.expected_return_type = fn_expected_ret;
 
         let out = self.check_fn_def(name, params, &body);
+
+        // Clear expected return type after function body checking
+        self.expected_return_type = None;
 
         // 退出函数 Result 上下文
         let _ = self.result_err_stack.pop();
@@ -687,12 +789,80 @@ impl StatementChecker {
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), Some(type_ann)) => {
                 let init_ty = self.check_expr(init_expr)?;
-                let ann_ty = MonoType::from(type_ann.clone());
-                let _ = self.solver.unify(&init_ty, &ann_ty);
+                // Try generic type instantiation for List(Int) → struct expansion
+                let ann_ty = self
+                    .try_instantiate_generic_type(type_ann)
+                    .unwrap_or_else(|| MonoType::from(type_ann.clone()));
+                // Check type assignment compatibility:
+                // - Float cannot be assigned to Int (no implicit narrowing)
+                //   Resolve TypeRef("Int") to Int(32) for comparison
+                let resolved_ann = match &ann_ty {
+                    MonoType::TypeRef(n) if n == "Int" => MonoType::Int(32),
+                    MonoType::TypeRef(n) if n == "Float" => MonoType::Float(64),
+                    _ => ann_ty.clone(),
+                };
+                if matches!(
+                    (&resolved_ann, &init_ty),
+                    (MonoType::Int(_), MonoType::Float(_))
+                ) {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", ann_ty),
+                            &format!("{}", init_ty),
+                        )
+                        .build(),
+                    ));
+                }
+                // Resolve TypeRef("Circle") → Struct(Circle) for the source type,
+                // enabling interface assignment checks like d: Drawable = c.
+                // The annotation type is NOT resolved when it's a struct/interface TypeRef,
+                // so the solver can detect the Struct vs TypeRef pattern.
+                let resolved_init = self.resolve_type_ref_type(&init_ty);
+                // For the annotation type, resolve built-in primitives (Float → Float(64))
+                // to allow proper unify, but leave user-defined TypeRefs as-is
+                // for structural subtyping detection.
+                let resolved_ann = match &ann_ty {
+                    MonoType::TypeRef(name) => {
+                        if self.type_defs.contains_key(name) {
+                            // User-defined type (struct/interface) — keep as TypeRef
+                            ann_ty.clone()
+                        } else {
+                            // Built-in or unknown — try to resolve
+                            self.resolve_type_ref_type(&ann_ty)
+                        }
+                    }
+                    _ => ann_ty.clone(),
+                };
+                // Check Int → Float subtype (widening conversion is always safe)
+                let is_int_to_float = matches!(
+                    (&resolved_ann, &resolved_init),
+                    (MonoType::Float(_), MonoType::Int(_))
+                );
+                if !is_int_to_float {
+                    let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
+                    if unify_result.is_err() {
+                        // Unify failed — check structural subtyping (interface assignment)
+                        let is_structural_subtype = matches!(
+                            (&resolved_init, &resolved_ann),
+                            (MonoType::Struct(s), MonoType::TypeRef(iface)) if s.interfaces.contains(iface)
+                        );
+                        if !is_structural_subtype {
+                            return Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", ann_ty),
+                                    &format!("{}", init_ty),
+                                )
+                                .build(),
+                            ));
+                        }
+                    }
+                }
                 ann_ty
             }
             (Some(init_expr), None) => self.check_expr(init_expr)?,
-            (None, Some(type_ann)) => MonoType::from(type_ann.clone()),
+            (None, Some(type_ann)) => self
+                .try_instantiate_generic_type(type_ann)
+                .unwrap_or_else(|| MonoType::from(type_ann.clone())),
             (None, None) => self.solver.new_var(),
         };
 
@@ -994,6 +1164,7 @@ impl StatementChecker {
                                 &self.native_signatures,
                                 current_result_err,
                             );
+                        inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.infer_expr(expr).map_err(Box::new)
                     }
                 }
@@ -1008,6 +1179,7 @@ impl StatementChecker {
                     &self.native_signatures,
                     current_result_err,
                 );
+                inferrer.set_method_bindings(&self.method_bindings);
                 inferrer.infer_expr(expr).map_err(Box::new)
             }
         }

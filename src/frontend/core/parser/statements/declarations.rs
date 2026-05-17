@@ -79,6 +79,19 @@ fn extract_generic_params(params: &[Param]) -> Vec<GenericParam> {
                         None
                     }
                 }
+                // (T: Clone + Add) — Type::Tuple stores multiple constraints
+                Type::Tuple(types) => {
+                    let first_char = p.name.chars().next().unwrap_or('a');
+                    if first_char.is_uppercase() {
+                        Some(GenericParam {
+                            name: p.name.clone(),
+                            kind: GenericParamKind::Type,
+                            constraints: types.clone(),
+                        })
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             }
         })
@@ -341,15 +354,26 @@ pub fn parse_method_bind_stmt(
         return None;
     }
 
-    // Parse method type annotation
-    let method_type = match parse_type_annotation(state) {
-        Some(t) => t,
+    // Parse method type annotation - use parse_fn_type_with_names to preserve param names
+    // This returns (Vec<Param>, Box<Type>) where Param has name and ty.
+    let (method_fn_params, method_return_type) = match parse_fn_type_with_names(state) {
+        Some(result) => result,
         None => {
             state.error(ParseError::Message(
-                "Expected type annotation after ':' in method binding".to_string(),
+                "Expected function type annotation after ':' in method binding, e.g. (self: Type, ...) -> Ret".to_string(),
             ));
             return None;
         }
+    };
+
+    // Build Type::Fn from the parsed params (types only, as Type::Fn doesn't store names)
+    let method_param_types: Vec<Type> = method_fn_params
+        .iter()
+        .filter_map(|p| p.ty.clone())
+        .collect();
+    let method_type = Type::Fn {
+        params: method_param_types,
+        return_type: method_return_type,
     };
 
     // Expect equals sign
@@ -381,11 +405,21 @@ pub fn parse_method_bind_stmt(
         }
         Expr::Block(block) => {
             // RFC-010 新语法：代码块体，参数已在签名中声明
-            (Vec::new(), block.stmts.clone(), block.expr.clone())
+            // 使用从签名中解析出的方法参数（method_fn_params），
+            // 这样类型检查器可以正确地将参数添加到作用域
+            (
+                method_fn_params.clone(),
+                block.stmts.clone(),
+                block.expr.clone(),
+            )
         }
         expr => {
             // 直接表达式形式
-            (Vec::new(), Vec::new(), Some(Box::new(expr.clone())))
+            (
+                method_fn_params.clone(),
+                Vec::new(),
+                Some(Box::new(expr.clone())),
+            )
         }
     };
 
@@ -671,6 +705,39 @@ fn parse_var_stmt_with_pub(
         // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body
         // body 可以是表达式或 lambda
 
+        // Check if this is a generic type constructor definition:
+        //   name: (T: Type, ...) -> Type = { ... }
+        // When the return type is Type::MetaType (i.e. `-> Type`),
+        // treat it as a type constructor, not a function.
+        if let Some(Type::Fn { return_type, .. }) = &type_annotation {
+            if matches!(return_type.as_ref(), Type::MetaType { .. }) {
+                // This is a type constructor with generic params
+                let generic_params_for_type: Vec<GenericParam> = if let Some(ref params) = fn_params
+                {
+                    extract_generic_params(params)
+                } else {
+                    Vec::new()
+                };
+
+                let definition = parse_type_definition(state)?;
+                state.skip(&TokenKind::Semicolon);
+                return Some(Stmt {
+                    kind: StmtKind::Binding {
+                        name,
+                        type_name: None,
+                        method_type: None,
+                        generic_params: generic_params_for_type,
+                        type_annotation: Some(definition),
+                        eval: None,
+                        params: Vec::new(),
+                        body: (Vec::new(), None),
+                        is_pub: final_is_pub,
+                    },
+                    span,
+                });
+            }
+        }
+
         // Case 1: 有 fn_params (RFC-010 新语法)
         if let Some(ref extracted_params) = fn_params {
             // body 可以是表达式或 lambda
@@ -685,32 +752,46 @@ fn parse_var_stmt_with_pub(
                 }) => {
                     // Lambda 形式: name: (a: Int, b: Int) -> Int = (a, b) => a + b
                     // RFC-007: 签名参数名和 lambda 参数名必须匹配
-
-                    // 检查参数数量
-                    if lambda_params.len() != extracted_params.len() {
-                        state.error(ParseError::Message(format!(
-                            "Parameter count mismatch: signature has {} parameters, lambda has {}",
-                            extracted_params.len(),
-                            lambda_params.len()
-                        )));
-                        return None;
-                    }
-
-                    // 检查参数名匹配
-                    for (i, (sig_param, lambda_param)) in extracted_params
+                    //
+                    // For generic functions like `map: (T: Type, R: Type) -> (...) = (list, f) => ...`
+                    // or `clone: (T: Clone) -> ((value: T) -> T) = (value) => ...`,
+                    // the value-level parameter names are in the return type's function type,
+                    // not in the first parameter group. Filter out type params (uppercase names)
+                    // before matching, since type parameter names follow the uppercase convention.
+                    let value_params: Vec<&Param> = extracted_params
                         .iter()
-                        .zip(lambda_params.iter())
-                        .enumerate()
-                    {
-                        if sig_param.name != lambda_param.name {
+                        .filter(|p| {
+                            let first_char = p.name.chars().next().unwrap_or('a');
+                            first_char.is_lowercase()
+                        })
+                        .collect();
+
+                    // If there are value params in the signature, verify they match lambda.
+                    // If ALL params are type params (generic function), skip matching
+                    // since the real value params are embedded in the return type.
+                    if !value_params.is_empty() {
+                        if lambda_params.len() != value_params.len() {
                             state.error(ParseError::Message(format!(
-                                "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
-                                 RFC-007 requires matching parameter names, or omit the lambda head entirely.",
-                                i + 1,
-                                sig_param.name,
-                                lambda_param.name
+                                "Parameter count mismatch: signature has {} parameters, lambda has {}",
+                                value_params.len(),
+                                lambda_params.len()
                             )));
                             return None;
+                        }
+
+                        for (i, (sig_param, lambda_param)) in
+                            value_params.iter().zip(lambda_params.iter()).enumerate()
+                        {
+                            if sig_param.name != lambda_param.name {
+                                state.error(ParseError::Message(format!(
+                                    "Parameter name mismatch at position {}: signature has '{}', lambda has '{}'. \
+                                     RFC-007 requires matching parameter names, or omit the lambda head entirely.",
+                                    i + 1,
+                                    sig_param.name,
+                                    lambda_param.name
+                                )));
+                                return None;
+                            }
                         }
                     }
 

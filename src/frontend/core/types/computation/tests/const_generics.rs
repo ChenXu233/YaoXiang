@@ -57,6 +57,7 @@ fn test_eval_bool_literal() {
 fn test_eval_float_literal() {
     let e = ConstGenericEval::new();
     assert!(e.eval(&ConstExpr::Float(3.14)).is_ok());
+    assert!(e.eval(&ConstExpr::Float(std::f32::consts::PI)).is_ok());
     assert!(e.eval(&ConstExpr::Float(0.0)).is_ok());
     assert!(e.eval(&ConstExpr::Float(-1.5)).is_ok());
 }
@@ -782,7 +783,7 @@ fn test_eval_neg_float() {
     use crate::frontend::core::types::computation::const_generics::ConstUnOp;
     let neg = ConstExpr::UnOp {
         op: ConstUnOp::Neg,
-        expr: Box::new(ConstExpr::Float(3.14)),
+        expr: Box::new(ConstExpr::Float(std::f32::consts::PI)),
     };
     // Neg on float should fail (unsupported)
     assert!(e.eval(&neg).is_err());
@@ -938,10 +939,10 @@ fn test_eval_var_bound_bool() {
 #[test]
 fn test_eval_var_bound_float() {
     let mut e = ConstGenericEval::new();
-    e.bind_var("pi".to_string(), ConstValue::Float(3.14));
+    e.bind_var("pi".to_string(), ConstValue::Float(std::f32::consts::PI));
     assert_eq!(
         e.eval(&ConstExpr::Var("pi".to_string())),
-        Ok(ConstValue::Float(3.14))
+        Ok(ConstValue::Float(std::f32::consts::PI))
     );
 }
 
@@ -1141,6 +1142,7 @@ fn test_size_result_is_const() {
 #[test]
 fn test_const_result_float() {
     let r = ConstGenericResult::new(ConstValue::Float(3.14), true);
+    let r = ConstGenericResult::new(ConstValue::Float(std::f32::consts::PI), true);
     assert!(r.is_const());
     assert_eq!(r.as_int(), None);
     assert_eq!(r.as_bool(), None);

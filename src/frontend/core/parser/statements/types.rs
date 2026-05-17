@@ -375,9 +375,24 @@ pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Para
                 // e.g., (n: n) where n is a const generic parameter
                 let parsed_type = parse_type_annotation(state)?;
 
-                // Wrap in Literal if it's an identifier matching the parameter name
-                // This handles const generic literal types like (n: n)
-                Some(wrap_literal_type_if_needed(name.clone(), parsed_type))
+                // Handle `+` constraint syntax: T: Clone + Add
+                // Collect all constraint types separated by `+`
+
+                if state.at(&TokenKind::Plus) {
+                    let mut all_types = vec![parsed_type];
+                    while state.skip(&TokenKind::Plus) {
+                        if let Some(extra_type) = parse_type_annotation(state) {
+                            all_types.push(extra_type);
+                        } else {
+                            break;
+                        }
+                    }
+                    // Use Type::Tuple as a container for multiple constraints.
+                    // extract_generic_params will unpack this into multiple constraints.
+                    Some(Type::Tuple(all_types))
+                } else {
+                    Some(wrap_literal_type_if_needed(name.clone(), parsed_type))
+                }
             } else {
                 // 无类型标注，HM 推断
                 None

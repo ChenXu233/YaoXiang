@@ -13,6 +13,20 @@ use super::types::ImportInfo;
 /// 类型错误收集器
 pub type TypeErrorCollector = crate::util::diagnostic::ErrorCollector<super::Diagnostic>;
 
+/// 泛型类型定义模板
+///
+/// 存储泛型类型构造器的模板信息，用于类型实例化展开。
+/// 例如 `List: (T: Type) -> Type = { data: Array(T), length: Int }` 中：
+/// - param_names = ["T"]
+/// - template = Struct { fields: [("data", Array(TypeRef("T"))), ("length", Int)] }
+#[derive(Debug, Clone)]
+pub struct GenericTypeDef {
+    /// 类型参数名列表
+    pub param_names: Vec<String>,
+    /// 类型体模板（含 TypeRef 占位符）
+    pub template: MonoType,
+}
+
 /// 类型环境
 ///
 /// 存储类型检查过程中的所有状态信息：
@@ -53,6 +67,9 @@ pub struct TypeEnvironment {
     /// Const 函数表 - 存储编译期常量函数
     /// 用于值依赖类型的编译期求值
     pub const_functions: HashMap<String, ConstFunction>,
+    /// 泛型类型定义模板表
+    /// 存储泛型类型构造器的模板，用于 List(Int) → { data: Array(Int), length: Int } 的展开
+    pub generic_type_defs: HashMap<String, GenericTypeDef>,
 }
 
 impl TypeEnvironment {
@@ -159,6 +176,210 @@ impl TypeEnvironment {
         name: &str,
     ) -> Option<&PolyType> {
         self.types.get(name)
+    }
+
+    /// 添加泛型类型定义模板
+    ///
+    /// 记录泛型类型构造器的模板信息，用于后续的类型实例化展开。
+    pub fn add_generic_type_def(
+        &mut self,
+        name: String,
+        param_names: Vec<String>,
+        template: MonoType,
+    ) {
+        self.generic_type_defs.insert(
+            name,
+            GenericTypeDef {
+                param_names,
+                template,
+            },
+        );
+    }
+
+    /// 实例化泛型类型
+    ///
+    /// 将 `List(Int)` 展开为 `{ data: Array(Int), length: Int }`。
+    /// 查找泛型类型定义模板，将类型参数替换为具体的类型实参。
+    pub fn instantiate_generic_type(
+        &self,
+        name: &str,
+        args: &[MonoType],
+    ) -> Option<MonoType> {
+        let def = self.generic_type_defs.get(name)?;
+        if def.param_names.len() != args.len() {
+            return None;
+        }
+        Some(Self::instantiate_generic_type_static(
+            &def.template,
+            &def.param_names,
+            args,
+        ))
+    }
+
+    /// 在模板中替换类型参数占位符（静态方法）
+    ///
+    /// 递归遍历 MonoType，将所有匹配 param_names 的 TypeRef 替换为对应的 args。
+    /// 并对已知的内置类型名进行解析（TypeRef("Int") → Int(32) 等）。
+    pub fn instantiate_generic_type_static(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+    ) -> MonoType {
+        let result = Self::replace_type_params(ty, param_names, args);
+        Self::resolve_type_refs(&result)
+    }
+
+    /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
+    fn replace_type_params(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                // Check if this TypeRef is a type parameter name
+                if let Some(pos) = param_names.iter().position(|p| p == name) {
+                    if let Some(replacement) = args.get(pos) {
+                        return replacement.clone();
+                    }
+                }
+                ty.clone()
+            }
+            MonoType::Struct(s) => {
+                let new_fields: Vec<(String, MonoType)> = s
+                    .fields
+                    .iter()
+                    .map(|(name, field_ty)| {
+                        (
+                            name.clone(),
+                            Self::replace_type_params(field_ty, param_names, args),
+                        )
+                    })
+                    .collect();
+                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                    name: s.name.clone(),
+                    fields: new_fields,
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            MonoType::List(elem) => {
+                let new_elem = Self::replace_type_params(elem, param_names, args);
+                MonoType::List(Box::new(new_elem))
+            }
+            MonoType::Option(elem) => {
+                let new_elem = Self::replace_type_params(elem, param_names, args);
+                MonoType::Option(Box::new(new_elem))
+            }
+            MonoType::Result(ok, err) => {
+                let new_ok = Self::replace_type_params(ok, param_names, args);
+                let new_err = Self::replace_type_params(err, param_names, args);
+                MonoType::Result(Box::new(new_ok), Box::new(new_err))
+            }
+            MonoType::Tuple(elems) => {
+                let new_elems: Vec<MonoType> = elems
+                    .iter()
+                    .map(|e| Self::replace_type_params(e, param_names, args))
+                    .collect();
+                MonoType::Tuple(new_elems)
+            }
+            MonoType::Dict(k, v) => {
+                let new_k = Self::replace_type_params(k, param_names, args);
+                let new_v = Self::replace_type_params(v, param_names, args);
+                MonoType::Dict(Box::new(new_k), Box::new(new_v))
+            }
+            MonoType::Set(elem) => {
+                let new_elem = Self::replace_type_params(elem, param_names, args);
+                MonoType::Set(Box::new(new_elem))
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => {
+                let new_params: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| Self::replace_type_params(p, param_names, args))
+                    .collect();
+                let new_ret = Self::replace_type_params(return_type, param_names, args);
+                MonoType::Fn {
+                    params: new_params,
+                    return_type: Box::new(new_ret),
+                    is_async: *is_async,
+                }
+            }
+            MonoType::Arc(elem) => {
+                let new_elem = Self::replace_type_params(elem, param_names, args);
+                MonoType::Arc(Box::new(new_elem))
+            }
+            MonoType::Range { elem_type } => {
+                let new_elem = Self::replace_type_params(elem_type, param_names, args);
+                MonoType::Range {
+                    elem_type: Box::new(new_elem),
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    /// 解析 TypeRef 中的内置类型名
+    /// TypeRef("Int") → Int(32), TypeRef("Float") → Float(64), 等等。
+    fn resolve_type_refs(ty: &MonoType) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => match name.as_str() {
+                "Int" | "int" | "Int64" | "int64" | "i64" => MonoType::Int(64),
+                "Int32" | "int32" | "i32" => MonoType::Int(32),
+                "Float" | "float" | "Float64" | "float64" | "f64" => MonoType::Float(64),
+                "Float32" | "float32" | "f32" => MonoType::Float(32),
+                "Bool" | "bool" => MonoType::Bool,
+                "Char" | "char" => MonoType::Char,
+                "String" | "string" => MonoType::String,
+                "Bytes" | "bytes" => MonoType::Bytes,
+                "Void" | "void" | "()" => MonoType::Void,
+                _ => ty.clone(),
+            },
+            MonoType::Struct(s) => {
+                let new_fields: Vec<(String, MonoType)> = s
+                    .fields
+                    .iter()
+                    .map(|(name, field_ty)| (name.clone(), Self::resolve_type_refs(field_ty)))
+                    .collect();
+                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                    name: s.name.clone(),
+                    fields: new_fields,
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            MonoType::List(elem) => MonoType::List(Box::new(Self::resolve_type_refs(elem))),
+            MonoType::Option(elem) => MonoType::Option(Box::new(Self::resolve_type_refs(elem))),
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(Self::resolve_type_refs(ok)),
+                Box::new(Self::resolve_type_refs(err)),
+            ),
+            MonoType::Tuple(elems) => {
+                MonoType::Tuple(elems.iter().map(Self::resolve_type_refs).collect())
+            }
+            MonoType::Dict(k, v) => MonoType::Dict(
+                Box::new(Self::resolve_type_refs(k)),
+                Box::new(Self::resolve_type_refs(v)),
+            ),
+            MonoType::Set(elem) => MonoType::Set(Box::new(Self::resolve_type_refs(elem))),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => MonoType::Fn {
+                params: params.iter().map(Self::resolve_type_refs).collect(),
+                return_type: Box::new(Self::resolve_type_refs(return_type)),
+                is_async: *is_async,
+            },
+            _ => ty.clone(),
+        }
     }
 
     /// 添加方法绑定

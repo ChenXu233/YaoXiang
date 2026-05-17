@@ -42,6 +42,11 @@ pub mod signature;
 // 类型定义
 pub mod types;
 
+// ============ 测试模块 ============
+
+#[cfg(test)]
+mod tests;
+
 // ============ 类型导出 ============
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）

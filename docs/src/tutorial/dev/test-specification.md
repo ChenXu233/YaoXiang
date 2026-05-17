@@ -185,6 +185,117 @@ src/frontend/core/parser/
 
 关键判断标准：**`tests/` 放在哪个目录，哪个目录的 `mod.rs` 就必须用 `#[cfg(test)] mod tests;` 声明它。**
 
+#### 单文件模块 vs 目录模块的测试放置规则
+
+**核心区别**：模块的组织形式决定了测试的放置位置。
+
+| 模块类型 | 判断依据 | 测试位置 | 示例 |
+|----------|----------|----------|------|
+| **目录模块** | 有独立目录和 `mod.rs` | 该目录下的 `tests/` | `inference/tests/` |
+| **单文件模块** | 只有 `.rs` 文件，无独立目录 | 父级模块的 `tests/` | `overload.rs` → `typecheck/tests/overload.rs` |
+
+**详细说明**：
+
+```
+src/frontend/core/typecheck/
+├── mod.rs                          # typecheck 模块的 mod.rs
+├── checker.rs                      # 单文件模块
+├── environment.rs                  # 单文件模块
+├── overload.rs                     # 单文件模块
+├── type_eval.rs                    # 单文件模块
+├── dead_code.rs                    # 单文件模块
+├── spawn_placement.rs              # 单文件模块
+├── signature.rs                    # 单文件模块
+├── types.rs                        # 单文件模块
+│
+├── tests/                          # ✅ typecheck 的测试目录
+│   ├── mod.rs                      # 声明单文件模块的测试
+│   ├── checker.rs                  # checker.rs 的测试
+│   ├── environment.rs              # environment.rs 的测试
+│   ├── overload.rs                 # overload.rs 的测试（单文件模块测试放这里）
+│   ├── type_eval.rs                # type_eval.rs 的测试
+│   ├── dead_code.rs                # dead_code.rs 的测试
+│   ├── spawn_placement.rs          # spawn_placement.rs 的测试
+│   ├── signature.rs                # signature.rs 的测试
+│   └── types.rs                    # types.rs 的测试
+│
+├── inference/                      # 目录模块（有 mod.rs）
+│   ├── mod.rs                      # #[cfg(test)] mod tests; ——声明同级 tests/
+│   ├── expressions.rs
+│   ├── statements.rs
+│   ├── patterns.rs
+│   ├── bounds.rs
+│   ├── subtyping.rs
+│   ├── generics.rs
+│   ├── compatibility.rs
+│   ├── scope.rs
+│   ├── assignment.rs
+│   └── tests/                      # ✅ inference 的测试目录
+│       ├── mod.rs
+│       ├── expressions.rs          # expressions.rs 的测试
+│       ├── statements.rs           # statements.rs 的测试
+│       └── ...
+│
+└── traits/                         # 目录模块（有 mod.rs）
+    ├── mod.rs                      # #[cfg(test)] mod tests; ——声明同级 tests/
+    ├── solver.rs
+    ├── impl_check.rs
+    ├── inheritance.rs
+    ├── coherence.rs
+    ├── auto_derive.rs
+    ├── object_safety.rs
+    ├── resolution.rs
+    ├── std_traits.rs
+    ├── gat/
+    ├── specialization/
+    └── tests/                      # ✅ traits 的测试目录
+        ├── mod.rs
+        ├── solver.rs               # solver.rs 的测试
+        ├── impl_check.rs           # impl_check.rs 的测试
+        └── ...
+```
+
+**为什么单文件模块的测试放在父级 `tests/`？**
+
+因为单文件模块（如 `overload.rs`）没有自己的 `mod.rs`，它无法声明 `#[cfg(test)] mod tests;`。根据 Rust 模块系统，测试文件必须由某个 `mod.rs` 声明才能编译。因此，单文件模块的测试只能由父级模块的 `mod.rs` 声明，放在父级的 `tests/` 目录中。
+
+**判断流程**：
+
+```
+遇到一个模块，判断测试放哪里？
+│
+├── 该模块是目录（有 mod.rs）？
+│   └── 是 → 在该目录下创建 tests/，由该目录的 mod.rs 声明
+│
+├── 该模块是单文件（只有 .rs）？
+│   └── 是 → 测试放在父级的 tests/ 目录，由父级的 mod.rs 声明
+│
+└── 不确定？
+    └── 检查是否有独立目录和 mod.rs
+```
+
+**常见错误**：
+
+```
+# ❌ 错误 1：为单文件模块创建独立的 tests/ 目录
+src/frontend/core/typecheck/
+├── overload.rs
+└── overload/                       # ❌ 不应该为单文件模块创建目录
+    └── tests/
+        └── overload.rs
+
+# ❌ 错误 2：在单文件模块内声明 #[cfg(test)] mod tests;
+# overload.rs
+#[cfg(test)]                        # ❌ 单文件模块不能这样声明
+mod tests;                          # 因为没有 overload/tests/ 目录
+
+# ✅ 正确做法：测试放在父级 tests/
+src/frontend/core/typecheck/
+├── overload.rs                     # 源文件
+└── tests/
+    └── overload.rs                 # 测试文件，由 typecheck/mod.rs 声明
+```
+
 ⚠️ **反模式——不要这样写：**
 
 ```

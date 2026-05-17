@@ -18,7 +18,7 @@ fn test_expr_lit() {
     let span = Span::dummy();
     assert!(matches!(Expr::Lit(Literal::Int(42), span), Expr::Lit(..)));
     assert!(matches!(
-        Expr::Lit(Literal::Float(3.14), span),
+        Expr::Lit(Literal::Float(std::f64::consts::PI), span),
         Expr::Lit(..)
     ));
     assert!(matches!(

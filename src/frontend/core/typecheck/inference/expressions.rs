@@ -13,6 +13,10 @@ use std::collections::HashMap;
 
 use super::scope::ScopeManager;
 
+/// 空的 Native 签名表（默认值）
+static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// 表达式类型推断器
 ///
 /// 使用统一的 ScopeManager 管理变量作用域，
@@ -30,6 +34,11 @@ pub struct ExpressionInferrer<'a> {
     native_signatures: &'a HashMap<String, MonoType>,
     /// 当前函数的 Result 错误类型（若为 None，则不允许使用 `?`）
     result_err: Option<MonoType>,
+    /// 当前函数的预期返回类型（用于 return 语句的类型检查）
+    expected_return_type: Option<MonoType>,
+    /// 方法绑定表: "Type.method" -> MonoType(Fn)
+    /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
+    method_bindings: &'a HashMap<String, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -39,15 +48,15 @@ impl<'a> ExpressionInferrer<'a> {
         solver: &'a mut TypeConstraintSolver,
         overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     ) -> Self {
-        static EMPTY_NATIVE: std::sync::LazyLock<HashMap<String, MonoType>> =
-            std::sync::LazyLock::new(HashMap::new);
         Self {
             scope,
             solver,
             loop_labels: Vec::new(),
             overload_candidates,
-            native_signatures: &EMPTY_NATIVE,
+            native_signatures: &EMPTY_SIGNATURES,
             result_err: None,
+            expected_return_type: None,
+            method_bindings: &EMPTY_SIGNATURES,
         }
     }
 
@@ -65,6 +74,8 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures,
             result_err: None,
+            expected_return_type: None,
+            method_bindings: &EMPTY_SIGNATURES,
         }
     }
 
@@ -83,12 +94,44 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures,
             result_err,
+            expected_return_type: None,
+            method_bindings: &EMPTY_SIGNATURES,
+        }
+    }
+
+    /// 创建带完整上下文（native 签名 + Result + 预期返回类型 + 方法绑定）的表达式推断器
+    pub fn with_full_context(
+        scope: &'a mut ScopeManager,
+        solver: &'a mut TypeConstraintSolver,
+        overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
+        native_signatures: &'a HashMap<String, MonoType>,
+        result_err: Option<MonoType>,
+        expected_return_type: Option<MonoType>,
+        method_bindings: &'a HashMap<String, MonoType>,
+    ) -> Self {
+        Self {
+            scope,
+            solver,
+            loop_labels: Vec::new(),
+            overload_candidates,
+            native_signatures,
+            result_err,
+            expected_return_type,
+            method_bindings,
         }
     }
 
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         self.solver
+    }
+
+    /// 设置方法绑定表
+    pub fn set_method_bindings(
+        &mut self,
+        bindings: &'a HashMap<String, MonoType>,
+    ) {
+        self.method_bindings = bindings;
     }
 
     /// 添加变量到当前作用域
@@ -520,7 +563,23 @@ impl<'a> ExpressionInferrer<'a> {
                                 return Ok(field_ty.clone());
                             }
                         }
+                        // Field not found in struct — try method lookup
+                        let method_key = format!("{}.{}", struct_type.name, field);
+                        if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                            return Ok(method_ty.clone());
+                        }
                         Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
+                    }
+                    MonoType::TypeRef(ref type_name) => {
+                        // Try method lookup on TypeRef (generic type or forward reference)
+                        let method_key = format!("{}.{}", type_name, field);
+                        if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                            return Ok(method_ty.clone());
+                        }
+                        Err(
+                            ErrorCodeDefinition::field_access_on_non_struct(&format!("{}", obj_ty))
+                                .build(),
+                        )
                     }
                     _ => Err(ErrorCodeDefinition::field_access_on_non_struct(&format!(
                         "{}",
@@ -707,11 +766,25 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Return 表达式
-            crate::frontend::core::parser::ast::Expr::Return(expr, _) => {
+            crate::frontend::core::parser::ast::Expr::Return(expr, span) => {
                 if let Some(e) = expr {
-                    let _ = self.infer_expr(e)?;
+                    let ret_ty = self.infer_expr(e)?;
+                    // If we know the expected return type, check that the return
+                    // expression type matches it via unification.
+                    if let Some(ref expected) = self.expected_return_type {
+                        self.solver.unify(&ret_ty, expected).map_err(|_| {
+                            ErrorCodeDefinition::type_mismatch(
+                                &format!("{}", expected),
+                                &format!("{}", ret_ty),
+                            )
+                            .at(*span)
+                            .build()
+                        })?;
+                    }
+                    Ok(ret_ty)
+                } else {
+                    Ok(MonoType::Void)
                 }
-                Ok(MonoType::Void)
             }
 
             // Break 表达式
@@ -780,9 +853,14 @@ impl<'a> ExpressionInferrer<'a> {
                         _ => None,
                     };
 
+                    // Save and set expected return type for return statement checking
+                    let saved_expected_ret = self.expected_return_type.take();
+                    self.expected_return_type = Some(expected_body_ty.clone());
+
                     let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
 
-                    // Restore outer `Result` context (must run even if `infer_block` failed).
+                    // Restore outer contexts
+                    self.expected_return_type = saved_expected_ret;
                     self.result_err = saved_result_err;
 
                     let body_ty = body_ty_res?;
@@ -824,7 +902,11 @@ impl<'a> ExpressionInferrer<'a> {
                 // Lambda is a function boundary: it must not inherit outer `Result` context.
                 let saved_result_err = self.result_err.take();
                 self.result_err = None;
+                // Lambda is also a return type boundary
+                let saved_expected_ret = self.expected_return_type.take();
+                self.expected_return_type = None;
                 let body_ty = self.infer_block(body, true, None);
+                self.expected_return_type = saved_expected_ret;
                 self.result_err = saved_result_err;
 
                 self.scope.exit_scope();
