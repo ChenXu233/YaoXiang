@@ -244,6 +244,18 @@ impl TypeChecker {
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
+        // 设置泛型类型定义模板表
+        body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
+        // 设置方法绑定表
+        body_checker.set_method_bindings(self.env.method_bindings.clone());
+        // 设置类型定义表（用于 TypeRef → Struct 解析）
+        let type_defs: HashMap<String, MonoType> = self
+            .env
+            .types
+            .iter()
+            .map(|(name, poly)| (name.clone(), poly.body.clone()))
+            .collect();
+        body_checker.set_type_defs(type_defs);
         // 如果启用收集模式，设置收集所有错误
         if collect_all {
             body_checker.set_collect_all_errors(true);
@@ -598,6 +610,55 @@ impl TypeChecker {
                     }
                 }
             }
+            crate::frontend::core::parser::ast::StmtKind::ExternalBindingStmt {
+                type_name,
+                method_name,
+                binding,
+            } => {
+                // 外部方法绑定: Point.distance = distance[0] 或 Point.calc = calculate[1, 2]
+                // 查找函数的类型并注册为方法绑定
+                let (func_name, positions) = match binding {
+                    crate::frontend::core::parser::ast::BindingKind::External {
+                        function,
+                        positions,
+                    } => (function.clone(), positions.clone()),
+                    crate::frontend::core::parser::ast::BindingKind::DefaultExternal {
+                        function,
+                    } => (function.clone(), vec![0]),
+                    _ => return,
+                };
+                if let Some(poly) = self.env.get_var(&func_name) {
+                    let method_ty = if positions.len() <= 1 {
+                        // Single position [0] or default: use the full function type directly
+                        poly.body.clone()
+                    } else {
+                        // Multi-position [1, 2]: filter out bound params
+                        // The resulting method type has params minus the bound positions
+                        match &poly.body {
+                            MonoType::Fn {
+                                params,
+                                return_type,
+                                is_async,
+                            } => {
+                                let mut new_params: Vec<MonoType> = Vec::new();
+                                for (i, p) in params.iter().enumerate() {
+                                    if !positions.contains(&(i as i64)) {
+                                        new_params.push(p.clone());
+                                    }
+                                }
+                                MonoType::Fn {
+                                    params: new_params,
+                                    return_type: return_type.clone(),
+                                    is_async: *is_async,
+                                }
+                            }
+                            other => other.clone(),
+                        }
+                    };
+                    self.env
+                        .add_method_binding(type_name, method_name, method_ty);
+                }
+            }
             _ => {}
         }
     }
@@ -738,7 +799,28 @@ impl TypeChecker {
         }
 
         let poly = PolyType::mono(MonoType::from(definition.clone()));
+        // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
+        let poly = PolyType::mono(match &poly.body {
+            MonoType::Struct(s) if s.name.is_empty() => {
+                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                    name: name.to_string(),
+                    fields: s.fields.clone(),
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            _ => poly.body.clone(),
+        });
         self.env.add_type(name.to_string(), poly);
+
+        // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
+        if !generic_params.is_empty() {
+            let template = MonoType::from(definition.clone());
+            self.env
+                .add_generic_type_def(name.to_string(), generic_params.to_vec(), template);
+        }
 
         // 自动为 Record 类型派生标准库 traits
         self.auto_derive_traits(name, definition);

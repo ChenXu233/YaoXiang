@@ -37,3 +37,8 @@ pub use expressions::ExprInferrer;
 
 pub use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
 pub use crate::util::diagnostic::{Diagnostic, Result};
+
+// ============ 测试模块 ============
+
+#[cfg(test)]
+mod tests;

@@ -28,3 +28,8 @@ pub use object_safety::{ObjectSafetyChecker, ObjectSafetyError};
 pub use resolution::{TraitResolver, TraitResolutionError};
 
 pub use crate::util::diagnostic::Result;
+
+// ============ 测试模块 ============
+
+#[cfg(test)]
+mod tests;

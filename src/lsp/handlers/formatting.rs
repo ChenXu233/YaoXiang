@@ -176,12 +176,8 @@ mod tests {
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
 
-        if let Some(_edits) = handle_formatting(&session, params) {
-            // Either no edits if already formatted or edits
-            // For now just checking it doesn't fail
-            // Note: edits.len() >= 0 is always true since usize is unsigned
-            assert!(true);
-        }
+        // Handle formatting - just verify it doesn't panic
+        let _edits = handle_formatting(&session, params);
     }
 
     #[test]
@@ -215,9 +211,7 @@ mod tests {
             work_done_progress_params: WorkDoneProgressParams::default(),
         };
 
-        if let Some(_edits) = handle_range_formatting(&session, params) {
-            // Note: edits.len() >= 0 is always true since usize is unsigned
-            assert!(true);
-        }
+        // Handle range formatting - just verify it doesn't panic
+        let _edits = handle_range_formatting(&session, params);
     }
 }

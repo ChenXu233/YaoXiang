@@ -21,6 +21,7 @@ fn test_const_value_bool_creation() {
 #[test]
 fn test_const_value_float_creation() {
     let v = ConstValue::Float(3.14);
+    let v = ConstValue::Float(std::f32::consts::PI);
     assert!(v.is_numeric());
     assert_eq!(v.kind(), ConstKind::Float(None));
 }

@@ -593,6 +593,20 @@ impl TypeConstraintSolver {
                 Ok(())
             }
 
+            // 结构化子类型：Struct 声明实现了 TypeRef 接口，或类型名匹配
+            (MonoType::Struct(s), MonoType::TypeRef(name))
+            | (MonoType::TypeRef(name), MonoType::Struct(s)) => {
+                if s.interfaces.contains(name) || s.name == *name {
+                    Ok(())
+                } else {
+                    Err(TypeMismatch {
+                        left: t1,
+                        right: t2,
+                        span: Span::default(),
+                    })
+                }
+            }
+
             // 不兼容类型
             _ => Err(TypeMismatch {
                 left: t1,
