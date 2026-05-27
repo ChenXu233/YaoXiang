@@ -1141,7 +1141,6 @@ fn test_size_result_is_const() {
 
 #[test]
 fn test_const_result_float() {
-    let r = ConstGenericResult::new(ConstValue::Float(3.14), true);
     let r = ConstGenericResult::new(ConstValue::Float(std::f32::consts::PI), true);
     assert!(r.is_const());
     assert_eq!(r.as_int(), None);

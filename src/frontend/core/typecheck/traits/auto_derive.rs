@@ -1,7 +1,7 @@
 //! RFC-010/011 标准库 Derive 支持
 //!
 //! 提供编译器内置的标准库 trait 自动派生机制：
-//! - Record 类型自动派生 Clone, Copy, Debug 等
+//! - Record 类型自动派生 Clone, Equal, Debug 等
 //! - 字段全实现某 trait → Record 自动实现该 trait
 //! - 显式定义可覆盖自动派生
 //!
@@ -25,11 +25,11 @@ use crate::frontend::core::types::base::{TraitTable, TraitImplementation};
 
 /// RFC-011 定义的标准库 traits（接口类型）
 pub const BUILTIN_DERIVES: &[&str] = &[
-    "Clone",     // 可克隆
-    "Copy",      // 可复制
-    "Debug",     // 可调试打印
-    "PartialEq", // 可相等比较
-    "Eq",        // 完全相等
+    "Clone", // 可克隆
+    "Equal", // 可相等比较（合并了 PartialEq + Eq）
+    "Debug", // 可调试打印
+    "Send",  // 可发送（跨线程）
+    "Sync",  // 可同步（跨线程共享）
 ];
 
 /// 检查某 trait 是否为内置可派生
@@ -91,8 +91,17 @@ pub fn generate_auto_derive(
             };
             methods.insert("clone".to_string(), fn_type);
         }
-        "Copy" => {
-            // Copy 是标记 trait，不需要方法
+        "Equal" => {
+            // Equal 方法类型: (self: Self, other: Self) -> Bool
+            let fn_type = MonoType::Fn {
+                params: vec![
+                    MonoType::TypeRef("Self".to_string()),
+                    MonoType::TypeRef("Self".to_string()),
+                ],
+                return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
+                is_async: false,
+            };
+            methods.insert("equal".to_string(), fn_type);
         }
         "Debug" => {
             // Debug 方法类型: (self: Self, f: Formatter) -> Void
@@ -104,22 +113,10 @@ pub fn generate_auto_derive(
                 return_type: Box::new(MonoType::TypeRef("Void".to_string())),
                 is_async: false,
             };
-            methods.insert("fmt".to_string(), fn_type);
+            methods.insert("debug".to_string(), fn_type);
         }
-        "PartialEq" => {
-            // PartialEq 方法类型: (self: Self, other: Self) -> Bool
-            let fn_type = MonoType::Fn {
-                params: vec![
-                    MonoType::TypeRef("Self".to_string()),
-                    MonoType::TypeRef("Self".to_string()),
-                ],
-                return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
-                is_async: false,
-            };
-            methods.insert("eq".to_string(), fn_type);
-        }
-        "Eq" => {
-            // Eq 是标记 trait，不需要方法
+        "Send" | "Sync" => {
+            // Send/Sync 是标记 trait，不需要方法
         }
         _ => return None,
     }

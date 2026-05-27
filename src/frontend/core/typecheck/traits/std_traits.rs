@@ -2,10 +2,11 @@
 //!
 //! 定义 YaoXiang 语言的标准库 traits（接口类型）：
 //! - Clone: 可克隆
-//! - Copy: 可复制（标记 trait）
+//! - Equal: 可相等比较（合并了 PartialEq + Eq）
 //! - Debug: 可调试打印
-//! - PartialEq: 可相等比较
-//! - Eq: 完全相等（标记 trait）
+//! - Send: 可发送（跨线程）
+//! - Sync: 可同步（跨线程共享）
+//! - Iterator: 迭代器
 //!
 //! RFC-010 风格示例：
 //! ```yaoxiang
@@ -27,13 +28,12 @@ use crate::frontend::core::types::base::{TraitDefinition, TraitTable, TraitImple
 
 /// RFC-011 定义的标准库 trait 列表
 pub const STD_TRAITS: &[&str] = &[
-    "Clone",     // 可克隆
-    "Copy",      // 可复制（标记 trait）
-    "Debug",     // 可调试打印
-    "PartialEq", // 可相等比较
-    "Eq",        // 完全相等（标记 trait）
-    "Iterable",  // 可迭代（用于 for 循环）
-    "Iterator",  // 迭代器
+    "Clone",    // 可克隆
+    "Equal",    // 可相等比较（合并了 PartialEq + Eq）
+    "Debug",    // 可调试打印
+    "Send",     // 可发送（跨线程）
+    "Sync",     // 可同步（跨线程共享）
+    "Iterator", // 迭代器
 ];
 
 /// 初始化标准库 traits 到 TraitTable
@@ -41,20 +41,17 @@ pub fn init_std_traits(trait_table: &mut TraitTable) {
     // 添加 Clone trait 定义
     add_clone_trait(trait_table);
 
-    // 添加 Copy trait 定义（标记 trait）
-    add_copy_trait(trait_table);
+    // 添加 Equal trait 定义（合并了 PartialEq + Eq）
+    add_equal_trait(trait_table);
 
     // 添加 Debug trait 定义
     add_debug_trait(trait_table);
 
-    // 添加 PartialEq trait 定义
-    add_partial_eq_trait(trait_table);
+    // 添加 Send trait 定义（标记 trait）
+    add_send_trait(trait_table);
 
-    // 添加 Eq trait 定义（标记 trait）
-    add_eq_trait(trait_table);
-
-    // 添加 Iterable trait 定义（用于 for 循环）
-    add_iterable_trait(trait_table);
+    // 添加 Sync trait 定义（标记 trait）
+    add_sync_trait(trait_table);
 
     // 添加 Iterator trait 定义
     add_iterator_trait(trait_table);
@@ -84,28 +81,70 @@ fn add_clone_trait(trait_table: &mut TraitTable) {
     trait_table.add_trait(clone_def);
 }
 
-/// 添加 Copy trait 定义（标记 trait，通常不需要方法）
-fn add_copy_trait(trait_table: &mut TraitTable) {
-    // Copy 是标记 trait，语义由编译器处理
+/// 添加 Equal trait 定义（合并了 PartialEq + Eq）
+fn add_equal_trait(trait_table: &mut TraitTable) {
+    let mut methods = HashMap::new();
+
+    // Equal 方法签名: equal: (self: Self, other: Self) -> Bool
+    let equal_sig = crate::frontend::core::types::base::TraitMethodSignature {
+        name: "equal".to_string(),
+        params: vec![
+            MonoType::TypeRef("Self".to_string()),
+            MonoType::TypeRef("Self".to_string()),
+        ],
+        return_type: MonoType::TypeRef("Bool".to_string()),
+        is_static: false,
+    };
+    methods.insert("equal".to_string(), equal_sig);
+
+    let equal_def = TraitDefinition {
+        name: "Equal".to_string(),
+        methods,
+        parent_traits: Vec::new(),
+        generic_params: Vec::new(),
+        span: None,
+    };
+
+    trait_table.add_trait(equal_def);
+}
+
+/// 添加 Send trait 定义（标记 trait）
+fn add_send_trait(trait_table: &mut TraitTable) {
+    // Send 是标记 trait，语义由编译器处理
     // 不需要显式方法
-    let copy_def = TraitDefinition {
-        name: "Copy".to_string(),
+    let send_def = TraitDefinition {
+        name: "Send".to_string(),
         methods: HashMap::new(),
         parent_traits: Vec::new(),
         generic_params: Vec::new(),
         span: None,
     };
 
-    trait_table.add_trait(copy_def);
+    trait_table.add_trait(send_def);
+}
+
+/// 添加 Sync trait 定义（标记 trait）
+fn add_sync_trait(trait_table: &mut TraitTable) {
+    // Sync 是标记 trait，语义由编译器处理
+    // 不需要显式方法
+    let sync_def = TraitDefinition {
+        name: "Sync".to_string(),
+        methods: HashMap::new(),
+        parent_traits: Vec::new(),
+        generic_params: Vec::new(),
+        span: None,
+    };
+
+    trait_table.add_trait(sync_def);
 }
 
 /// 添加 Debug trait 定义
 fn add_debug_trait(trait_table: &mut TraitTable) {
     let mut methods = HashMap::new();
 
-    // Debug 方法签名: fmt: (self: Self, f: Formatter) -> Void
-    let fmt_sig = crate::frontend::core::types::base::TraitMethodSignature {
-        name: "fmt".to_string(),
+    // Debug 方法签名: debug: (self: Self, f: Formatter) -> Void
+    let debug_sig = crate::frontend::core::types::base::TraitMethodSignature {
+        name: "debug".to_string(),
         params: vec![
             MonoType::TypeRef("Self".to_string()),
             MonoType::TypeRef("Formatter".to_string()),
@@ -113,7 +152,7 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
         return_type: MonoType::TypeRef("Void".to_string()),
         is_static: false,
     };
-    methods.insert("fmt".to_string(), fmt_sig);
+    methods.insert("debug".to_string(), debug_sig);
 
     let debug_def = TraitDefinition {
         name: "Debug".to_string(),
@@ -126,72 +165,53 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
     trait_table.add_trait(debug_def);
 }
 
-/// 添加 PartialEq trait 定义
-fn add_partial_eq_trait(trait_table: &mut TraitTable) {
-    let mut methods = HashMap::new();
-
-    // PartialEq 方法签名: eq: (self: Self, other: Self) -> Bool
-    let eq_sig = crate::frontend::core::types::base::TraitMethodSignature {
-        name: "eq".to_string(),
-        params: vec![
-            MonoType::TypeRef("Self".to_string()),
-            MonoType::TypeRef("Self".to_string()),
-        ],
-        return_type: MonoType::TypeRef("Bool".to_string()),
-        is_static: false,
-    };
-    methods.insert("eq".to_string(), eq_sig);
-
-    let partial_eq_def = TraitDefinition {
-        name: "PartialEq".to_string(),
-        methods,
-        parent_traits: Vec::new(),
-        generic_params: Vec::new(),
-        span: None,
-    };
-
-    trait_table.add_trait(partial_eq_def);
-}
-
-/// 添加 Eq trait 定义（标记 trait）
-fn add_eq_trait(trait_table: &mut TraitTable) {
-    // Eq 是标记 trait，继承自 PartialEq
-    // 语义上要求类型是等价关系（自反、传递、对称）
-    let eq_def = TraitDefinition {
-        name: "Eq".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec!["PartialEq".to_string()],
-        generic_params: Vec::new(),
-        span: None,
-    };
-
-    trait_table.add_trait(eq_def);
-}
-
 /// 为 primitive 类型添加标准库 trait 实现
 pub fn init_primitive_impls(trait_table: &mut TraitTable) {
-    // 为 Int 添加 Clone, Copy, PartialEq, Debug 实现
+    // 为 Int 添加 Clone, Equal, Debug, Send, Sync 实现
     add_primitive_impl(trait_table, "Int", "Clone");
-    add_primitive_impl(trait_table, "Int", "Copy");
-    add_primitive_impl(trait_table, "Int", "PartialEq");
+    add_primitive_impl(trait_table, "Int", "Equal");
     add_primitive_impl(trait_table, "Int", "Debug");
+    add_primitive_impl(trait_table, "Int", "Send");
+    add_primitive_impl(trait_table, "Int", "Sync");
 
-    // 为 Float 添加 Clone, Copy, PartialEq, Debug 实现
+    // 为 Float 添加 Clone, Equal, Debug, Send, Sync 实现
     add_primitive_impl(trait_table, "Float", "Clone");
-    add_primitive_impl(trait_table, "Float", "Copy");
-    add_primitive_impl(trait_table, "Float", "PartialEq");
+    add_primitive_impl(trait_table, "Float", "Equal");
     add_primitive_impl(trait_table, "Float", "Debug");
+    add_primitive_impl(trait_table, "Float", "Send");
+    add_primitive_impl(trait_table, "Float", "Sync");
 
-    // 为 Bool 添加 Clone, Copy, PartialEq, Debug 实现
+    // 为 Bool 添加 Clone, Equal, Debug, Send, Sync 实现
     add_primitive_impl(trait_table, "Bool", "Clone");
-    add_primitive_impl(trait_table, "Bool", "Copy");
-    add_primitive_impl(trait_table, "Bool", "PartialEq");
+    add_primitive_impl(trait_table, "Bool", "Equal");
     add_primitive_impl(trait_table, "Bool", "Debug");
+    add_primitive_impl(trait_table, "Bool", "Send");
+    add_primitive_impl(trait_table, "Bool", "Sync");
 
-    // 为 String 添加 Clone, PartialEq, Debug 实现
+    // 为 String 添加 Clone, Equal, Debug, Send, Sync 实现
     add_primitive_impl(trait_table, "String", "Clone");
-    add_primitive_impl(trait_table, "String", "PartialEq");
+    add_primitive_impl(trait_table, "String", "Equal");
     add_primitive_impl(trait_table, "String", "Debug");
+    add_primitive_impl(trait_table, "String", "Send");
+    add_primitive_impl(trait_table, "String", "Sync");
+
+    // 为 Void 添加 Equal, Debug, Send, Sync 实现（不实现 Clone）
+    add_primitive_impl(trait_table, "Void", "Equal");
+    add_primitive_impl(trait_table, "Void", "Debug");
+    add_primitive_impl(trait_table, "Void", "Send");
+    add_primitive_impl(trait_table, "Void", "Sync");
+
+    // 为 Char 添加 Clone, Equal, Debug, Send, Sync 实现
+    add_primitive_impl(trait_table, "Char", "Clone");
+    add_primitive_impl(trait_table, "Char", "Equal");
+    add_primitive_impl(trait_table, "Char", "Debug");
+    add_primitive_impl(trait_table, "Char", "Send");
+    add_primitive_impl(trait_table, "Char", "Sync");
+
+    // 为 Bytes 添加 Debug, Send, Sync 实现（不实现 Clone, Equal）
+    add_primitive_impl(trait_table, "Bytes", "Debug");
+    add_primitive_impl(trait_table, "Bytes", "Send");
+    add_primitive_impl(trait_table, "Bytes", "Sync");
 }
 
 /// 为 primitive 类型添加 trait 实现
@@ -212,11 +232,8 @@ fn add_primitive_impl(
             };
             methods.insert("clone".to_string(), fn_type);
         }
-        "Copy" => {
-            // Copy 是标记 trait，不需要方法
-        }
-        "PartialEq" => {
-            // eq 方法: 比较两个值
+        "Equal" => {
+            // equal 方法: 比较两个值
             let fn_type = MonoType::Fn {
                 params: vec![
                     MonoType::TypeRef("Self".to_string()),
@@ -225,10 +242,10 @@ fn add_primitive_impl(
                 return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
                 is_async: false,
             };
-            methods.insert("eq".to_string(), fn_type);
+            methods.insert("equal".to_string(), fn_type);
         }
         "Debug" => {
-            // fmt 方法: 格式化输出
+            // debug 方法: 格式化输出
             let fn_type = MonoType::Fn {
                 params: vec![
                     MonoType::TypeRef("Self".to_string()),
@@ -237,10 +254,10 @@ fn add_primitive_impl(
                 return_type: Box::new(MonoType::TypeRef("Void".to_string())),
                 is_async: false,
             };
-            methods.insert("fmt".to_string(), fn_type);
+            methods.insert("debug".to_string(), fn_type);
         }
-        "Eq" => {
-            // Eq 是标记 trait，不需要方法
+        "Send" | "Sync" => {
+            // Send/Sync 是标记 trait，不需要方法
         }
         _ => {}
     }
@@ -270,32 +287,6 @@ pub fn std_trait_names() -> &'static [&'static str] {
 // ============================================================================
 // 迭代器协议 Traits
 // ============================================================================
-
-/// 添加 Iterable trait 定义（用于 for 循环）
-fn add_iterable_trait(trait_table: &mut TraitTable) {
-    let mut methods = HashMap::new();
-
-    // Iterable::iter 方法: iter: (self: &Self) -> Iterator<T>
-    // 返回迭代器类型，这里使用 TypeRef 表示，由具体类型参数决定
-    let iter_sig = crate::frontend::core::types::base::TraitMethodSignature {
-        name: "iter".to_string(),
-        params: vec![MonoType::TypeRef("Self".to_string())],
-        // 返回类型使用泛型占位符，在实现时具体化
-        return_type: MonoType::TypeRef("Iterator".to_string()),
-        is_static: false,
-    };
-    methods.insert("iter".to_string(), iter_sig);
-
-    let iterable_def = TraitDefinition {
-        name: "Iterable".to_string(),
-        methods,
-        parent_traits: Vec::new(),
-        generic_params: vec!["T".to_string()], // 元素类型参数
-        span: None,
-    };
-
-    trait_table.add_trait(iterable_def);
-}
 
 /// 添加 Iterator trait 定义
 fn add_iterator_trait(trait_table: &mut TraitTable) {
