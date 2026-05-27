@@ -36,3 +36,5 @@ proptest-regressions/
 node_modules/
 cache/
 dist/
+
+superpowers/
