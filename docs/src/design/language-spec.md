@@ -1,6 +1,6 @@
 # YaoXiang（爻象）编程语言规范
 
-> 版本：v1.8.0
+> 版本：v1.9.0
 > 状态：规范
 > 作者：晨煦
 > 日期：2024-12-31
@@ -166,6 +166,37 @@ TypeExpr    ::= PrimitiveType
 
 带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`, `Int128`
 带位宽的浮点：`Float32`, `Float64`
+
+#### 3.2.1 类型转换
+
+类型之间**不允许隐式转换**。所有类型转换必须使用目标类型的构造函数语法显式进行：
+
+```yaoxiang
+# 类型转换：使用目标类型名作为函数
+x: Int = 42
+y: Float = Float(x)          # Int → Float，显式转换
+s: String = String(x)        # Int → String，显式转换
+n: Int = Int(3.14)           # Float → Int，显式转换（截断小数）
+
+# 错误：不允许隐式转换
+# y: Float = x               # 类型不匹配
+# s: String = x              # 类型不匹配
+```
+
+**转换规则**：
+
+| 转换 | 语法 | 说明 |
+|------|------|------|
+| Int → Float | `Float(x)` | 安全，不丢失精度 |
+| Float → Int | `Int(x)` | 截断小数部分 |
+| Int → String | `String(x)` | 转为十进制字符串 |
+| Float → String | `String(x)` | 转为字符串表示 |
+| Bool → String | `String(x)` | `"true"` 或 `"false"` |
+
+**禁止的转换**：
+- 不同类型之间不允许隐式转换
+- 不允许隐式拓宽（Int32 → Int64）
+- 不允许隐式收窄（Float → Int）
 
 ### 3.3 记录类型
 
@@ -342,6 +373,75 @@ process: (d: Drawable) -> Void = d.draw(screen)
 |------|----------|----------|
 | 直接赋值具体类型 | 具体类型可确定 | 直接调用（零开销） |
 | 函数返回值 | 未知 | vtable |
+
+#### 3.5.1 接口实现唯一性规则
+
+**同一类型对同一接口只能实现一次。** 重复实现同一接口是编译错误。
+
+```yaoxiang
+# ✅ 合法：Point 实现 Drawable 一次
+Point: Type = { x: Float, y: Float, Drawable }
+
+# ❌ 错误：Point 不能再次实现 Drawable
+# Point 已经实现了 Drawable，重复实现是编译错误
+```
+
+#### 3.5.2 标准库接口
+
+语言内置以下标准库接口，原类型自动实现：
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `Clone` | `clone: (Self) -> Self` | 值复制 |
+| `Equal` | `equal: (Self, Self) -> Bool` | 相等比较（`==` / `!=`） |
+| `Debug` | `debug: (Self) -> String` | 调试输出 |
+| `Send` | （标记接口，无方法） | 可安全跨线程传输 |
+| `Sync` | （标记接口，无方法） | 可安全跨线程共享 |
+| `Iterator` | `next: (Self) -> Option(Item)` | 迭代器协议 |
+
+**原类型自动实现规则**：
+
+| 原类型 | Clone | Equal | Debug | Send | Sync |
+|--------|-------|-------|-------|------|------|
+| Int | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Float | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bool | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Char | ✅ | ✅ | ✅ | ✅ | ✅ |
+| String | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Void | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Bytes | ❌ | ❌ | ✅ | ✅ | ✅ |
+
+**说明**：
+- Void 不实现 Clone（无法复制空值）
+- Bytes 不实现 Clone 和 Equal（原始字节无法比较）
+- 所有原类型自动实现 Send + Sync（YaoXiang 默认 Move 语义，ref = Arc 线程安全）
+- 部分比较（PartialEq）与完全比较（Eq）合并为统一的 `Equal` 接口
+
+#### 3.5.3 自动派生机制
+
+如果一个类型的所有字段都实现了某个接口，该类型自动获得该接口的方法，无需手动实现。
+
+```yaoxiang
+# Float 自动实现了 Clone（原类型）
+# Point 的所有字段（x: Float, y: Float）都实现了 Clone
+# 因此 Point 自动获得 clone 方法
+Point: Type = { x: Float, y: Float }
+
+p: Point = Point(1.0, 2.0)
+p2: Point = p.clone()   # 自动派生的 clone 方法
+
+# Bytes 不实现 Clone
+# ComplexType 的 data 字段没有 Clone
+# 因此 ComplexType 不能自动派生 Clone — 编译报错
+ComplexType: Type = { data: Bytes, name: String }
+# c2: ComplexType = c.clone()   # 错误：Bytes 不实现 Clone
+```
+
+**自动派生规则**：
+1. 原类型按上表自动实现
+2. 记录类型：所有字段都实现了某接口 → 该记录类型自动获得该接口方法
+3. 泛型类型：所有类型参数满足约束 → 自动派生
+4. 如果任一字段未实现某接口 → 该记录类型不能自动派生该接口
 | 异构集合 | 多个类型 | vtable |
 
 ### 3.6 元组类型
@@ -607,6 +707,32 @@ sum: (T: Add) -> ((arr: Array(T)) -> T) = (arr) => {
     return result
 }
 ```
+
+#### 3.15.1 重载解析优先级
+
+当存在多个同名函数候选时，编译器按以下优先级选择：
+
+| 优先级 | 匹配类型 | 说明 |
+|--------|----------|------|
+| 1（最高） | 精确匹配 | 参数类型完全一致 |
+| 2 | 子类型匹配 | 参数类型是子类型（如 Int → Float） |
+| 3（最低） | 泛型匹配 | 泛型参数实例化后匹配 |
+
+```yaoxiang
+# 候选函数
+process: (x: Int) -> String = String(x)
+process: (T: Type) -> ((x: T) -> String) = String(x)
+
+# 调用：选择精确匹配（优先级 1）
+result: String = process(42)    # 选择 process: (Int) -> String
+
+# 如果没有精确匹配，选择泛型匹配（优先级 3）
+result: String = process(true)  # 选择 process: (T: Type) -> ...
+```
+
+**解析失败**：
+- 无匹配候选 → 编译错误
+- 多个同优先级候选且无法区分 → 编译错误（歧义调用）
 
 ### 3.16 平台特化
 
@@ -1884,6 +2010,7 @@ result = f(arg2, arg3)
 | v1.7.0 | 2026-02-13 | 晨煦 | RFC-010 更新：`Name: Type = {...}` 替换 `type Name = {...}`；仅 `Type`（大写）为元类型关键字；所有声明使用统一语法 |
 | v1.8.0 | 2026-02-18 | 晨煦 | RFC-010 新增默认值初始化、内置绑定语法；RFC-004 新增内置绑定、匿名函数绑定 |
 | v1.8.1 | 2026-02-20 | 晨煦 | 元类型不属于关键字。 |
+| v1.9.0 | 2026-05-27 | 晨煦 | §3.2 新增类型转换规则（显式 `Float(x)` 语法，禁止隐式拓宽）；§3.5 新增标准库接口定义（Clone/Equal/Debug/Send/Sync/Iterator）、自动派生机制、接口实现唯一性规则；PartialEq+Eq 合并为 Equal；§3.15 新增重载解析优先级规则 |
 
 ---
 
