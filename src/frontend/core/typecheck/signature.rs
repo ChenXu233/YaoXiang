@@ -127,17 +127,27 @@ pub fn parse_signature(
 
 /// 解析泛型参数前缀 (T: Type) 或 (T: Type, U: Type)
 /// 返回 (泛型参数列表, 剩余字符串)
+///
+/// 通过前瞻区分泛型前缀和函数参数列表：
+/// - 泛型前缀后紧跟 `(`，如 `(T: Type)(list: List(T)) -> T`
+/// - 函数参数列表后紧跟 `->`，如 `(a: Int, b: Int) -> Int`
 fn parse_generic_prefix(s: &str) -> (Vec<String>, &str) {
     let s = s.trim();
     if s.starts_with('(') {
         if let Some(close) = find_matching_close(s, 0) {
             let inner = &s[1..close];
-            let params: Vec<String> = inner
-                .split(',')
-                .map(|p| p.trim().split(':').next().unwrap_or("").trim().to_string())
-                .filter(|p| !p.is_empty())
-                .collect();
-            return (params, s[close + 1..].trim());
+            if inner.trim().is_empty() {
+                return (Vec::new(), s);
+            }
+            let after = s[close + 1..].trim_start();
+            if after.starts_with('(') {
+                let params: Vec<String> = inner
+                    .split(',')
+                    .map(|p| p.trim().split(':').next().unwrap_or("").trim().to_string())
+                    .filter(|p| !p.is_empty())
+                    .collect();
+                return (params, s[close + 1..].trim());
+            }
         }
     }
     (Vec::new(), s)

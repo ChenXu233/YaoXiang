@@ -481,6 +481,20 @@ impl DeadCodeAnalyzer {
             }
         }
 
+        // 将 AST 中引用的导入项也加入可达集合
+        for import in &self.imports {
+            if let Some(items) = &import.items {
+                for item in items {
+                    if ast_references.contains(item) {
+                        reachable.insert(item.clone());
+                    }
+                }
+            }
+            if ast_references.contains(&import.path) {
+                reachable.insert(import.path.clone());
+            }
+        }
+
         reachable
     }
 

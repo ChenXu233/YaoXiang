@@ -13,8 +13,11 @@
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// 辅助函数：解析源代码并类型检查
+///
+/// 解析失败也视为错误（返回 Err），不会 panic。
 fn check_source(
     source: &str
 ) -> Result<
@@ -22,7 +25,13 @@ fn check_source(
     Vec<crate::util::diagnostic::Diagnostic>,
 > {
     let tokens = tokenize(source).expect("tokenize failed");
-    let module = parse(&tokens).expect("parse failed");
+    let module = match parse(&tokens) {
+        Ok(m) => m,
+        Err(_) => {
+            // 解析错误也视为编译失败
+            return Err(vec![ErrorCodeDefinition::invalid_syntax("解析错误").build()]);
+        }
+    };
     let mut checker = TypeChecker::new("test");
     checker.check_module(&module)
 }
@@ -606,5 +615,60 @@ fn test_rfc010_interface_assignment_rejected_when_not_implemented() {
     assert!(
         result.is_err(),
         "interface assignment should be rejected when not implemented"
+    );
+}
+
+// ===================================================================
+// RFC-010: Error path — 返回类型不匹配 & 非 Type 注解
+// ===================================================================
+
+/// 规范：函数返回类型不匹配应报错（§6.3.2）
+///
+/// `fn_decl: (x: Int) -> String = { return x }` — 声明返回 String 但实际返回 Int
+///
+/// 预期行为：
+/// - 类型检查器检测到返回类型不匹配
+/// - 报告类型错误
+#[test]
+fn test_rfc010_function_return_type_mismatch() {
+    // Arrange - 声明返回 String 但函数体返回 Int 变量
+    let source = r#"
+        fn_decl: (x: Int) -> String = {
+            return x  // 错误：x 是 Int，但声明返回 String
+        }
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert - 规范 §6.3.2: 返回类型必须与声明一致
+    assert!(
+        result.is_err(),
+        "function returning Int when declared String should report type mismatch"
+    );
+}
+
+/// 规范：无 `: Type` 的 `{ }` 不是类型定义（§3.17）
+///
+/// 有 `: Type` → 类型构造器
+/// 无 `: Type` → HM 推断为函数/变量
+///
+/// 预期行为：
+/// - `Point = { x: Float, y: Float }` 没有 `: Type`，不应被解析为类型定义
+/// - 应产生类型错误（类型注解缺失或语法错误）
+#[test]
+fn test_rfc010_without_type_annotation_not_type_constructor() {
+    // Arrange - 无 `: Type` 的 record 语法不应被解析为类型定义
+    let source = r#"
+        Point = { x: Float, y: Float }
+    "#;
+
+    // Act
+    let result = check_source(source);
+
+    // Assert - 规范 §3.17: 无 `: Type` 不是类型构造器，应报错
+    assert!(
+        result.is_err(),
+        "record syntax without `: Type` annotation should not be a type definition"
     );
 }

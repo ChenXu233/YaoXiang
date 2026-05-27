@@ -431,6 +431,7 @@ impl TypeChecker {
                 type_name,
                 method_type,
                 type_annotation,
+                generic_params,
                 params,
                 is_pub,
                 ..
@@ -519,9 +520,49 @@ impl TypeChecker {
                     (pts, self.env.solver().new_var())
                 };
 
+                // 泛型函数处理：
+                // 当 generic_params 包含 Type 级别的参数时，外层 Fn 的前 N 个参数
+                // 是类型级参数（如 (T: Type)），return_type 才是实际的值级函数类型。
+                // 需要剥离类型级参数，并将 TypeRef("T") 替换为新的类型变量。
+                let type_generic_params: Vec<_> = generic_params
+                    .iter()
+                    .filter(|p| {
+                        matches!(
+                            p.kind,
+                            crate::frontend::core::parser::ast::GenericParamKind::Type
+                        )
+                    })
+                    .collect();
+
+                let (final_param_types, final_return_type) = if !type_generic_params.is_empty()
+                    && param_types.len() >= type_generic_params.len()
+                {
+                    // 为每个泛型类型参数创建新的类型变量
+                    let mut subst = HashMap::new();
+                    for gp in &type_generic_params {
+                        let fresh_var = self.env.solver().new_var();
+                        subst.insert(gp.name.clone(), fresh_var);
+                    }
+
+                    // 剥离类型级参数，使用 return_type 作为实际函数类型
+                    let inner_fn_ty = Self::substitute_type_refs(return_type.clone(), &subst);
+
+                    match inner_fn_ty {
+                        MonoType::Fn {
+                            params: inner_params,
+                            return_type: inner_ret,
+                            ..
+                        } => (inner_params, *inner_ret),
+                        // return_type 不是 Fn（可能是单值泛型），保持原样
+                        _ => (param_types, return_type),
+                    }
+                } else {
+                    (param_types, return_type)
+                };
+
                 let fn_ty = MonoType::Fn {
-                    params: param_types.clone(),
-                    return_type: Box::new(return_type),
+                    params: final_param_types.clone(),
+                    return_type: Box::new(final_return_type),
                     is_async: false,
                 };
 
@@ -537,7 +578,7 @@ impl TypeChecker {
 
                 // 处理 pub 自动绑定
                 if *is_pub {
-                    self.auto_bind_to_type(name, &param_types, fn_ty);
+                    self.auto_bind_to_type(name, &final_param_types, fn_ty);
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
@@ -1017,6 +1058,58 @@ impl TypeChecker {
             if !last.is_empty() {
                 imported_module_roots.insert(last.to_string());
             }
+        }
+    }
+
+    /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
+    ///
+    /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
+    fn substitute_type_refs(
+        ty: MonoType,
+        subst: &HashMap<String, MonoType>,
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => subst.get(&name).cloned().unwrap_or(MonoType::TypeRef(name)),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => MonoType::Fn {
+                params: params
+                    .into_iter()
+                    .map(|p| Self::substitute_type_refs(p, subst))
+                    .collect(),
+                return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
+                is_async,
+            },
+            MonoType::List(inner) => {
+                MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Option(inner) => {
+                MonoType::Option(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(Self::substitute_type_refs(*ok, subst)),
+                Box::new(Self::substitute_type_refs(*err, subst)),
+            ),
+            MonoType::Tuple(types) => MonoType::Tuple(
+                types
+                    .into_iter()
+                    .map(|t| Self::substitute_type_refs(t, subst))
+                    .collect(),
+            ),
+            MonoType::Dict(k, v) => MonoType::Dict(
+                Box::new(Self::substitute_type_refs(*k, subst)),
+                Box::new(Self::substitute_type_refs(*v, subst)),
+            ),
+            MonoType::Arc(inner) => {
+                MonoType::Arc(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Range { elem_type } => MonoType::Range {
+                elem_type: Box::new(Self::substitute_type_refs(*elem_type, subst)),
+            },
+            // 其他类型（Int, Float, Bool, String, Void, Struct, Enum, TypeVar, TypeRef 等）保持不变
+            other => other,
         }
     }
 }

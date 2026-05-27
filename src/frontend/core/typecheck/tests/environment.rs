@@ -65,7 +65,6 @@ fn test_environment_add_type() {
 #[test]
 fn test_environment_has_solver() {
     // Arrange & Act
-    let env = TypeEnvironment::new();
     let _env = TypeEnvironment::new();
 
     // Assert - solver 应该存在

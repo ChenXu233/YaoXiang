@@ -551,7 +551,7 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::Binding {
                 name,
                 type_name,
-                generic_params: _,
+                generic_params,
                 type_annotation,
                 eval: _,
                 params,
@@ -570,13 +570,22 @@ impl StatementChecker {
                     // 方法绑定：使用 method_type 作为签名
                     // method_type 包含完整的 (params) -> ReturnType 签名
                     let type_ann = method_type.as_ref();
-                    self.check_fn_stmt(name, type_ann, params, stmts, body_block, stmt.span)
+                    self.check_fn_stmt(
+                        name,
+                        type_ann,
+                        generic_params,
+                        params,
+                        stmts,
+                        body_block,
+                        stmt.span,
+                    )
                 } else {
                     // 函数绑定（包括空参数的函数）
                     // 使用 type_annotation 作为签名
                     self.check_fn_stmt(
                         name,
                         type_annotation.as_ref(),
+                        generic_params,
                         params,
                         stmts,
                         body_block,
@@ -682,6 +691,7 @@ impl StatementChecker {
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
+        generic_params: &[crate::frontend::core::parser::ast::GenericParam],
         params: &[Param],
         _stmts: &[Stmt],
         body: Block,
@@ -698,6 +708,17 @@ impl StatementChecker {
             }
         }
 
+        // 提取 Type 级别的泛型参数
+        let type_generic_params: Vec<_> = generic_params
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.kind,
+                    crate::frontend::core::parser::ast::GenericParamKind::Type
+                )
+            })
+            .collect();
+
         // 将函数自身注册到变量环境中
         if let Some(type_ann) = type_annotation {
             if let crate::frontend::core::parser::ast::Type::Fn {
@@ -710,9 +731,33 @@ impl StatementChecker {
                     .map(|t| MonoType::from(t.clone()))
                     .collect();
                 let fn_return_type = MonoType::from(*return_type.clone());
+
+                // 泛型函数处理：剥离类型级参数，替换 TypeRef 为类型变量
+                let (final_params, final_ret) = if !type_generic_params.is_empty()
+                    && fn_param_types.len() >= type_generic_params.len()
+                {
+                    let mut subst = std::collections::HashMap::new();
+                    for gp in &type_generic_params {
+                        let fresh_var = self.solver.new_var();
+                        subst.insert(gp.name.clone(), fresh_var);
+                    }
+
+                    let inner_fn_ty = Self::substitute_type_refs(fn_return_type.clone(), &subst);
+                    match inner_fn_ty {
+                        MonoType::Fn {
+                            params: inner_params,
+                            return_type: inner_ret,
+                            ..
+                        } => (inner_params, *inner_ret),
+                        _ => (fn_param_types, fn_return_type),
+                    }
+                } else {
+                    (fn_param_types, fn_return_type)
+                };
+
                 let fn_type = MonoType::Fn {
-                    params: fn_param_types,
-                    return_type: Box::new(fn_return_type),
+                    params: final_params,
+                    return_type: Box::new(final_ret),
                     is_async: false,
                 };
                 self.scope
@@ -738,28 +783,103 @@ impl StatementChecker {
         }
 
         // 进入函数 Result 上下文（用于 `?` 运算符检查）
-        let fn_result_err = type_annotation.and_then(|t| match t {
-            crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                let ret_mono = MonoType::from((**return_type).clone());
-                match ret_mono {
-                    MonoType::Result(_, err) => Some((*err).clone()),
-                    _ => None,
+        // 对于泛型函数，需要从内层 return_type 提取 Result 类型
+        let fn_result_err = if !type_generic_params.is_empty() {
+            // 泛型函数：从内层 Fn 的 return_type 提取
+            type_annotation.and_then(|t| match t {
+                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                    // return_type 本身可能是 Fn，取其 return_type
+                    match return_type.as_ref() {
+                        crate::frontend::core::parser::ast::Type::Fn {
+                            return_type: inner_ret,
+                            ..
+                        } => {
+                            let ret_mono = MonoType::from((**inner_ret).clone());
+                            match ret_mono {
+                                MonoType::Result(_, err) => Some((*err).clone()),
+                                _ => None,
+                            }
+                        }
+                        other => {
+                            let ret_mono = MonoType::from(other.clone());
+                            match ret_mono {
+                                MonoType::Result(_, err) => Some((*err).clone()),
+                                _ => None,
+                            }
+                        }
+                    }
                 }
-            }
-            _ => None,
-        });
+                _ => None,
+            })
+        } else {
+            type_annotation.and_then(|t| match t {
+                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                    let ret_mono = MonoType::from((**return_type).clone());
+                    match ret_mono {
+                        MonoType::Result(_, err) => Some((*err).clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+        };
         self.result_err_stack.push(fn_result_err);
 
         // Set expected return type for return statement type checking
-        let fn_expected_ret = type_annotation.and_then(|t| match t {
-            crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
-                Some(MonoType::from((**return_type).clone()))
-            }
-            _ => None,
-        });
+        // 对于泛型函数，预期返回类型是内层 Fn 的返回类型
+        let fn_expected_ret = if !type_generic_params.is_empty() {
+            type_annotation.and_then(|t| match t {
+                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                    match return_type.as_ref() {
+                        crate::frontend::core::parser::ast::Type::Fn {
+                            return_type: inner_ret,
+                            ..
+                        } => Some(MonoType::from((**inner_ret).clone())),
+                        other => Some(MonoType::from(other.clone())),
+                    }
+                }
+                _ => None,
+            })
+        } else {
+            type_annotation.and_then(|t| match t {
+                crate::frontend::core::parser::ast::Type::Fn { return_type, .. } => {
+                    Some(MonoType::from((**return_type).clone()))
+                }
+                _ => None,
+            })
+        };
         self.expected_return_type = fn_expected_ret;
 
-        let out = self.check_fn_def(name, params, &body);
+        // 对于泛型函数，将类型级参数（MetaType 类型）替换为新的类型变量
+        // 这些参数是泛型类型参数声明合并到值级参数的结果
+        let owned_value_params: Vec<Param>;
+        let value_params_slice: &[Param] = if !type_generic_params.is_empty() {
+            owned_value_params = params
+                .iter()
+                .map(|p| {
+                    let is_meta = matches!(
+                        p.ty.as_ref().map(|t| MonoType::from(t.clone())),
+                        Some(MonoType::MetaType { .. })
+                    );
+                    if is_meta {
+                        // MetaType 参数：移除类型标注，让 HM 推断
+                        Param {
+                            name: p.name.clone(),
+                            ty: None,
+                            is_mut: p.is_mut,
+                            span: p.span,
+                        }
+                    } else {
+                        p.clone()
+                    }
+                })
+                .collect();
+            &owned_value_params
+        } else {
+            params
+        };
+
+        let out = self.check_fn_def(name, value_params_slice, &body);
 
         // Clear expected return type after function body checking
         self.expected_return_type = None;
@@ -768,6 +888,57 @@ impl StatementChecker {
         let _ = self.result_err_stack.pop();
 
         out
+    }
+
+    /// 替换 MonoType 中的 TypeRef 名称为对应的类型变量
+    ///
+    /// 用于泛型函数类型推断：将 TypeRef("T") 替换为 solver 中的新类型变量。
+    fn substitute_type_refs(
+        ty: MonoType,
+        subst: &std::collections::HashMap<String, MonoType>,
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => subst.get(&name).cloned().unwrap_or(MonoType::TypeRef(name)),
+            MonoType::Fn {
+                params,
+                return_type,
+                is_async,
+            } => MonoType::Fn {
+                params: params
+                    .into_iter()
+                    .map(|p| Self::substitute_type_refs(p, subst))
+                    .collect(),
+                return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
+                is_async,
+            },
+            MonoType::List(inner) => {
+                MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Option(inner) => {
+                MonoType::Option(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Result(ok, err) => MonoType::Result(
+                Box::new(Self::substitute_type_refs(*ok, subst)),
+                Box::new(Self::substitute_type_refs(*err, subst)),
+            ),
+            MonoType::Tuple(types) => MonoType::Tuple(
+                types
+                    .into_iter()
+                    .map(|t| Self::substitute_type_refs(t, subst))
+                    .collect(),
+            ),
+            MonoType::Dict(k, v) => MonoType::Dict(
+                Box::new(Self::substitute_type_refs(*k, subst)),
+                Box::new(Self::substitute_type_refs(*v, subst)),
+            ),
+            MonoType::Arc(inner) => {
+                MonoType::Arc(Box::new(Self::substitute_type_refs(*inner, subst)))
+            }
+            MonoType::Range { elem_type } => MonoType::Range {
+                elem_type: Box::new(Self::substitute_type_refs(*elem_type, subst)),
+            },
+            other => other,
+        }
     }
 
     /// 检查变量语句
@@ -1172,14 +1343,15 @@ impl StatementChecker {
             // 其他表达式：委托给 ExpressionInferrer
             _ => {
                 let current_result_err = self.current_result_err();
-                let mut inferrer = super::ExpressionInferrer::with_native_signatures_and_result_err(
+                let mut inferrer = super::ExpressionInferrer::with_full_context(
                     &mut self.scope,
                     &mut self.solver,
                     &self.overload_candidates,
                     &self.native_signatures,
                     current_result_err,
+                    self.expected_return_type.clone(),
+                    &self.method_bindings,
                 );
-                inferrer.set_method_bindings(&self.method_bindings);
                 inferrer.infer_expr(expr).map_err(Box::new)
             }
         }

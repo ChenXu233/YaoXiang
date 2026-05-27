@@ -108,12 +108,102 @@ fn test_type_checker_reports_type_mismatch() {
 
     // Act
     let result = checker.check_module(&module);
-    let _result = checker.check_module(&module);
 
     // Assert - 应该报告类型错误
-    // 注意：具体行为取决于 TypeChecker 的实现
-    // 如果实现了类型检查，应该返回错误
-    // assert!(result.is_err() || checker.has_errors(), "should report type mismatch");
+    assert!(
+        result.is_err() || checker.has_errors(),
+        "x: String = 42 should report type mismatch error"
+    );
+    let has_type_error = result.is_err()
+        || checker.errors().iter().any(|e| {
+            let msg = format!("{:?}", e);
+            msg.contains("mismatch") || msg.contains("type")
+        });
+    assert!(has_type_error, "error should be related to type mismatch");
+}
+
+#[test]
+fn test_type_checker_reports_undefined_variable() {
+    // Arrange
+    let mut checker = TypeChecker::new("test");
+    let module = Module {
+        items: vec![Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
+                "undefined_var".to_string(),
+                Span::dummy(),
+            ))),
+            span: Span::dummy(),
+        }],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let result = checker.check_module(&module);
+
+    // Assert - 使用未定义变量应该报错
+    assert!(
+        result.is_err() || checker.has_errors(),
+        "using undefined variable should produce an error"
+    );
+}
+
+#[test]
+fn test_type_checker_reports_fn_param_type_mismatch() {
+    // Arrange: 定义 add: (x: Int) -> Int = x，然后调用 add("hello")
+    let mut checker = TypeChecker::new("test");
+    let module = Module {
+        items: vec![
+            // fn add(x: Int) -> Int { x }
+            Stmt {
+                kind: crate::frontend::core::parser::ast::StmtKind::Binding {
+                    name: "add".to_string(),
+                    type_name: None,
+                    method_type: None,
+                    generic_params: vec![],
+                    type_annotation: Some(AstType::Fn {
+                        params: vec![AstType::Int(32)],
+                        return_type: Box::new(AstType::Int(32)),
+                    }),
+                    eval: None,
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "x".to_string(),
+                        ty: Some(AstType::Int(32)),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    body: (
+                        vec![],
+                        Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+                    ),
+                    is_pub: false,
+                },
+                span: Span::dummy(),
+            },
+            // add("hello") — 传入 String 但参数期望 Int
+            Stmt {
+                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Call {
+                    func: Box::new(Expr::Var("add".to_string(), Span::dummy())),
+                    args: vec![Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
+                        Span::dummy(),
+                    )],
+                    named_args: vec![],
+                    span: Span::dummy(),
+                })),
+                span: Span::dummy(),
+            },
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let result = checker.check_module(&module);
+
+    // Assert - 规范 §6.3: 函数参数类型必须匹配，传入 String 但参数期望 Int 应报错
+    assert!(
+        result.is_err() || checker.has_errors(),
+        "add(\"hello\") with param type Int should report type mismatch"
+    );
 }
 
 // ===================================================================
@@ -143,9 +233,190 @@ fn test_type_checker_with_large_module() {
     // Act
     let result = checker.check_module(&module);
 
-    // Assert - 不应该 panic
+    // Assert - 100 个未定义变量的语句应报错（规范 §6.3: 使用未定义变量是编译错误）
     assert!(
-        result.is_ok() || result.is_err(),
-        "should handle large module"
+        result.is_err() || checker.has_errors(),
+        "100 undefined variables should produce errors"
+    );
+}
+
+#[test]
+fn test_type_checker_with_multiple_function_definitions() {
+    // Arrange: 定义三个函数
+    let mut checker = TypeChecker::new("test");
+    let make_fn_binding = |name: &str| -> Stmt {
+        Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::Binding {
+                name: name.to_string(),
+                type_name: None,
+                method_type: None,
+                generic_params: vec![],
+                type_annotation: Some(AstType::Fn {
+                    params: vec![AstType::Int(32)],
+                    return_type: Box::new(AstType::Int(32)),
+                }),
+                eval: None,
+                params: vec![crate::frontend::core::parser::ast::Param {
+                    name: "x".to_string(),
+                    ty: Some(AstType::Int(32)),
+                    is_mut: false,
+                    span: Span::dummy(),
+                }],
+                body: (
+                    vec![],
+                    Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+                ),
+                is_pub: false,
+            },
+            span: Span::dummy(),
+        }
+    };
+    let module = Module {
+        items: vec![
+            make_fn_binding("add"),
+            make_fn_binding("sub"),
+            make_fn_binding("mul"),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let result = checker.check_module(&module);
+
+    // Assert - 多个函数定义应该正常处理
+    assert!(
+        result.is_ok(),
+        "multiple function definitions should be accepted"
+    );
+}
+
+#[test]
+fn test_type_checker_with_nested_function_definition() {
+    // Arrange: 外层函数内部定义一个 FnDef 表达式
+    let mut checker = TypeChecker::new("test");
+    let inner_fn = Expr::FnDef {
+        name: "inner".to_string(),
+        params: vec![crate::frontend::core::parser::ast::Param {
+            name: "y".to_string(),
+            ty: Some(AstType::Int(32)),
+            is_mut: false,
+            span: Span::dummy(),
+        }],
+        return_type: Some(AstType::Int(32)),
+        body: Box::new(crate::frontend::core::parser::ast::Block {
+            stmts: vec![],
+            expr: Some(Box::new(Expr::Var("y".to_string(), Span::dummy()))),
+            span: Span::dummy(),
+        }),
+        is_async: false,
+        span: Span::dummy(),
+    };
+    let module = Module {
+        items: vec![Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::Binding {
+                name: "outer".to_string(),
+                type_name: None,
+                method_type: None,
+                generic_params: vec![],
+                type_annotation: Some(AstType::Fn {
+                    params: vec![AstType::Int(32)],
+                    return_type: Box::new(AstType::Int(32)),
+                }),
+                eval: None,
+                params: vec![crate::frontend::core::parser::ast::Param {
+                    name: "x".to_string(),
+                    ty: Some(AstType::Int(32)),
+                    is_mut: false,
+                    span: Span::dummy(),
+                }],
+                body: (
+                    vec![Stmt {
+                        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                            inner_fn,
+                        )),
+                        span: Span::dummy(),
+                    }],
+                    Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+                ),
+                is_pub: false,
+            },
+            span: Span::dummy(),
+        }],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let result = checker.check_module(&module);
+
+    // Assert - 规范 §6.3: 嵌套函数定义应通过类型检查（所有变量已定义，类型一致）
+    assert!(
+        result.is_ok(),
+        "nested function definition with correct types should pass type check"
+    );
+}
+
+#[test]
+fn test_type_checker_with_generic_type_binding() {
+    // Arrange: 定义泛型类型 Wrapper[T] = { value: T }，然后使用 Wrapper<Int>
+    let mut checker = TypeChecker::new("test");
+    let module = Module {
+        items: vec![
+            // Wrapper: Type = { value: T }  (泛型类型定义)
+            Stmt {
+                kind: crate::frontend::core::parser::ast::StmtKind::Binding {
+                    name: "Wrapper".to_string(),
+                    type_name: None,
+                    method_type: None,
+                    generic_params: vec![crate::frontend::core::parser::ast::GenericParam {
+                        name: "T".to_string(),
+                        kind: crate::frontend::core::parser::ast::GenericParamKind::Type,
+                        constraints: vec![],
+                    }],
+                    type_annotation: Some(AstType::Struct {
+                        fields: vec![crate::frontend::core::parser::ast::StructField {
+                            name: "value".to_string(),
+                            is_mut: false,
+                            ty: AstType::Name {
+                                name: "T".to_string(),
+                                span: Span::dummy(),
+                            },
+                            default: None,
+                        }],
+                        bindings: vec![],
+                        interfaces: vec![],
+                    }),
+                    eval: None,
+                    params: vec![],
+                    body: (vec![], None),
+                    is_pub: false,
+                },
+                span: Span::dummy(),
+            },
+            // let w: Wrapper<Int> = ...  (使用泛型类型)
+            Stmt {
+                kind: crate::frontend::core::parser::ast::StmtKind::Var {
+                    name: "w".to_string(),
+                    name_span: Span::dummy(),
+                    type_annotation: Some(AstType::Generic {
+                        name: "Wrapper".to_string(),
+                        name_span: Span::dummy(),
+                        args: vec![AstType::Int(32)],
+                    }),
+                    initializer: None,
+                    is_mut: false,
+                },
+                span: Span::dummy(),
+            },
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let result = checker.check_module(&module);
+
+    // Assert - 规范 §3.8: 泛型类型定义和使用应通过类型检查（所有类型参数已提供）
+    assert!(
+        result.is_ok(),
+        "generic type definition and usage with all type params provided should pass"
     );
 }

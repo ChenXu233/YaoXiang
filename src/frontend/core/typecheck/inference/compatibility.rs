@@ -46,11 +46,8 @@ impl CompatibilityChecker {
 
         // 检查类型变体兼容性
         match (expected, actual) {
-            // 数字类型兼容性
-            (MonoType::Int(_), MonoType::Int(_)) => true,
-            (MonoType::Int(_), MonoType::Float(_)) => true,
-            (MonoType::Float(_), MonoType::Int(_)) => true,
-            (MonoType::Float(_), MonoType::Float(_)) => true,
+            // 规范 §3.2.1：禁止隐式转换（不同位宽整数、Int↔Float 均需显式转换）
+            // 精确相等的类型已在上方 handled by `expected == actual`
 
             // 函数类型兼容性（参数和返回类型都要兼容）
             (

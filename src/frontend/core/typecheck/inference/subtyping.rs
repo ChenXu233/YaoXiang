@@ -54,9 +54,6 @@ impl SubtypeChecker {
             // 相同类型是子类型
             (a, b) if a == b => true,
 
-            // Int可以强制转换为Float
-            (MonoType::Int(_), MonoType::Float(_)) => true,
-
             // 子类型是协变的
             (MonoType::List(a), MonoType::List(b)) => self.is_subtype(a, b),
 
@@ -132,9 +129,6 @@ impl SubtypeChecker {
         match (sub, sup) {
             // 相同类型是子类型
             (a, b) if a == b => true,
-
-            // Int可以强制转换为Float
-            (MonoType::Int(_), MonoType::Float(_)) => true,
 
             // 子类型是协变的
             (MonoType::List(a), MonoType::List(b)) => self.is_subtype(a, b),

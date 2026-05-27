@@ -105,41 +105,38 @@ fn test_rfc011_generic_function_definition() {
 
 /// 规范：泛型函数调用时自动推导
 ///
-/// `strings = map(numbers, f)`
-/// T=Int 来自 numbers: List(Int)
-/// R=String 来自 f: (Int) -> String
+/// `result = id(42)` — T 应从参数 42 推导为 Int
 ///
 /// 预期行为：
-/// - 编译器自动推导 T 和 R
-/// 预期行为：
-/// - 编译器自动推导泛型参数
+/// - 编译器自动推导 T=Int
+/// - id(42) 返回 Int
 ///
-/// 注意：泛型函数推导需要类型检查器支持泛型类型实例化，
-/// 当前测试简化为验证多参数函数的定义。
+/// 注意：泛型函数推导需要类型检查器支持泛型函数实例化，
+/// 当前测试验证泛型函数定义和调用语法。
 #[test]
 fn test_rfc011_generic_function_inference() {
     // Arrange
     let source = r#"
-        add: (a: Int, b: Int) -> Int = a + b
-        result: Int = add(1, 2)
+        id: (T: Type) -> ((x: T) -> T) = (x) => x
+        result: Int = id(42)
     "#;
 
     // Act
     let result = check_source(source);
 
-    // Assert
+    // Assert - 泛型函数调用应成功（T 从参数推导为 Int）
     assert!(result.is_ok(), "generic function inference should pass");
 }
 
 /// 规范：无法推断时必须显式填充
 ///
-/// `map(numbers, (x) => x)` - 无法推断 R
+/// `strings = map(numbers, numbers)` — numbers 不是函数类型，无法匹配 f 参数
 ///
 /// 预期行为：
-/// - 编译器报告无法推断 R
+/// - 编译器报告参数类型不匹配
 ///
 /// 注意：泛型推导需要类型检查器支持泛型函数实例化，
-/// 当前测试简化为验证无效调用的类型错误。
+/// 当前测试简化为验证参数类型不匹配的类型错误。
 #[test]
 fn test_rfc011_generic_explicit_fill_required() {
     // Arrange
@@ -155,18 +152,17 @@ fn test_rfc011_generic_explicit_fill_required() {
             return result
         }
         numbers: List(Int) = List(1, 2, 3)
-        strings = map(numbers, (x) => x)  // 错误：无法推断 R
-            return list
-        }
-        numbers: List(Int) = List(1, 2, 3)
-        strings = map(numbers, numbers)  // 错误：参数类型不匹配
+        strings = map(numbers, numbers)  // 错误：numbers 不是函数，无法匹配 f 参数
     "#;
 
     // Act
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_err(), "should fail when cannot infer R");
+    assert!(
+        result.is_err(),
+        "should fail when argument type does not match parameter"
+    );
 }
 
 // ===================================================================
@@ -423,67 +419,77 @@ fn test_rfc011_compile_time_dimension_validation() {
 // RFC-011 §6: 函数重载特化
 // ===================================================================
 
-/// 规范：基本特化
+/// 规范：基本特化（§3.15）
 ///
+/// 同名函数多版本（重载）：
 /// ```
 /// sum: (arr: Array(Int)) -> Int = ...
 /// sum: (arr: Array(Float)) -> Float = ...
-/// sum: (T: Add) -> ((arr: Array(T)) -> T) = ...
 /// ```
 ///
 /// 预期行为：
-/// - 编译器自动选择最优特化版本
-/// 预期行为：
-/// - 函数重载：同名函数多版本
+/// - 函数重载：同名函数多版本共存
 /// - 编译器自动选择最优特化版本
 ///
 /// 注意：函数重载特化需要类型检查器支持同名函数多版本解析，
-/// 当前仅测试单版本函数定义语法。
+/// 当前测试验证同名函数定义语法和类型检查。
 #[test]
 fn test_rfc011_function_specialization() {
-    // Arrange
+    // Arrange - 定义多个同名重载函数（规范 §3.15）
     let source = r#"
-        Add: Type = { add: (Self, Self) -> Self }
-        Point: Type = { x: Int, y: Int }
-        make: (x: Int, y: Int) -> Point = Point(x, y)
-        p: Point = make(1, 2)
+        sum: (arr: Array(Int)) -> Int = {
+            return 0
+        }
+        sum: (arr: Array(Float)) -> Float = {
+            return 0.0
+        }
     "#;
 
     // Act
     let result = check_source(source);
 
-    // Assert
-    assert!(result.is_ok(), "function specialization should pass");
+    // Assert - 同名函数重载定义应通过语法解析
+    assert!(
+        result.is_ok(),
+        "function specialization (overloading) should pass"
+    );
 }
 
-/// 规范：平台特化
+/// 规范：平台特化（§3.16）
 ///
+/// P 是预定义泛型参数名，代表当前编译平台：
 /// ```
 /// sum: (P: X86_64) -> ((arr: Array(Float)) -> Float) = ...
 /// sum: (P: AArch64) -> ((arr: Array(Float)) -> Float) = ...
 /// ```
 ///
 /// 预期行为：
-/// - 根据编译平台选择特化版本
-/// 预期行为：
+/// - 同名函数可以按平台参数重载
 /// - 根据编译平台选择特化版本
 ///
-/// 注意：平台特化是编译期多态特性，当前仅测试语法解析。
+/// 注意：平台特化是编译期多态特性，当前测试验证带平台参数的同名函数定义语法。
 #[test]
 fn test_rfc011_platform_specialization() {
-    // Arrange
+    // Arrange - 定义带平台参数的同名重载函数（规范 §3.16）
     let source = r#"
         X86_64: Type = {}
         AArch64: Type = {}
-        id: (x: Int) -> Int = x
-        result: Int = id(42)
+        sum: (P: X86_64) -> Float = {
+            return 0.0
+        }
+        sum: (P: AArch64) -> Float = {
+            return 0.0
+        }
     "#;
 
     // Act
     let result = check_source(source);
 
-    // Assert
-    assert!(result.is_ok(), "platform specialization should pass");
+    // Assert - 带平台参数的同名函数重载定义应通过语法解析
+    assert!(
+        result.is_ok(),
+        "platform specialization definition should pass"
+    );
 }
 
 // ===================================================================
