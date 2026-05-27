@@ -131,10 +131,11 @@ impl TraitSolver {
         if let Some(ty) = constraint.args.first() {
             match constraint.name.as_str() {
                 "Clone" => self.check_clone_trait(ty),
+                "Equal" => self.check_equal_trait(ty),
                 "Debug" => self.check_debug_trait(ty),
                 "Send" => self.check_send_trait(ty),
                 "Sync" => self.check_sync_trait(ty),
-                _ => true,
+                _ => false,
             }
         } else {
             false
@@ -153,6 +154,22 @@ impl TraitSolver {
                 | MonoType::Bool
                 | MonoType::Char
                 | MonoType::String
+        )
+    }
+
+    /// 检查 Equal 特质
+    fn check_equal_trait(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        matches!(
+            ty,
+            MonoType::Int(_)
+                | MonoType::Float(_)
+                | MonoType::Bool
+                | MonoType::Char
+                | MonoType::String
+                | MonoType::Void
         )
     }
 
@@ -176,6 +193,7 @@ impl TraitSolver {
                 | MonoType::Bool
                 | MonoType::Char
                 | MonoType::String
+                | MonoType::Void
         )
     }
 
@@ -191,6 +209,7 @@ impl TraitSolver {
                 | MonoType::Bool
                 | MonoType::Char
                 | MonoType::String
+                | MonoType::Void
         )
     }
 
@@ -208,10 +227,11 @@ impl TraitSolver {
 
         match trait_name {
             "Clone" => self.check_clone_trait(ty),
+            "Equal" => self.check_equal_trait(ty),
             "Debug" => self.check_debug_trait(ty),
             "Send" => self.check_send_trait(ty),
             "Sync" => self.check_sync_trait(ty),
-            _ => true,
+            _ => false,
         }
     }
 
