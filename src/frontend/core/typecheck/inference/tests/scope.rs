@@ -12,7 +12,6 @@ use crate::frontend::core::types::base::{MonoType, PolyType};
 #[test]
 fn test_scope_manager_creation() {
     // Arrange & Act
-    let scope = ScopeManager::new();
     let _scope = ScopeManager::new();
 
     // Assert - 应该成功创建

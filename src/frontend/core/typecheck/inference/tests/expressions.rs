@@ -1,5 +1,6 @@
-//! 表达式推断测试 — 基于语言规范 §4 & RFC-010
+//! 表达式推断测试 — 基于语言规范 §3.2 & §4 & RFC-010
 //!
+//! §3.2: 原类型（Int 默认 8 字节 = Int(64)）
 //! §4.1-§4.10: 表达式分类
 //! RFC-010: 统一类型语法
 
@@ -21,12 +22,21 @@ fn test_expression_inferrer_creation() {
     let overload_candidates = std::collections::HashMap::new();
 
     // Act
-    let inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
-    let _inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
+    let mut inferrer = ExpressionInferrer::new(&mut scope, &mut solver, &overload_candidates);
 
-    // Assert - 应该成功创建
+    // Assert - 验证创建后能正常推断
+    let expr = Expr::Lit(
+        crate::frontend::core::lexer::tokens::Literal::Int(0),
+        Span::dummy(),
+    );
+    let result = inferrer.infer_expr(&expr);
+    assert!(
+        result.is_ok(),
+        "newly created inferrer should handle basic expressions"
+    );
 }
 
+/// §3.2: 整数字面量默认推断为 Int(64)（8 字节）
 #[test]
 fn test_infer_integer_literal() {
     // Arrange
@@ -42,15 +52,16 @@ fn test_infer_integer_literal() {
     // Act
     let result = inferrer.infer_expr(&expr);
 
-    // Assert
+    // Assert - 规范 §3.2：Int 默认 8 字节 = Int(64)
     assert!(result.is_ok(), "should infer integer literal");
     assert_eq!(
         result.unwrap(),
         MonoType::Int(64),
-        "integer literal should be Int(64)"
+        "integer literal should be Int(64) per spec §3.2"
     );
 }
 
+/// §3.2: 字符串字面量推断为 String
 #[test]
 fn test_infer_string_literal() {
     // Arrange
@@ -75,6 +86,7 @@ fn test_infer_string_literal() {
     );
 }
 
+/// §3.2: 布尔字面量推断为 Bool
 #[test]
 fn test_infer_bool_literal() {
     // Arrange
@@ -103,6 +115,7 @@ fn test_infer_bool_literal() {
 // Error path 测试
 // ===================================================================
 
+/// §4: 未定义变量应报错
 #[test]
 fn test_infer_undefined_variable() {
     // Arrange
@@ -123,6 +136,7 @@ fn test_infer_undefined_variable() {
 // Boundary 测试
 // ===================================================================
 
+/// §3.2 & §4: 嵌套表达式 (1 + 2) * 3 应推断为 Int(64)
 #[test]
 fn test_infer_nested_expressions() {
     // Arrange
@@ -155,6 +169,11 @@ fn test_infer_nested_expressions() {
     // Act
     let result = inferrer.infer_expr(&expr);
 
-    // Assert
+    // Assert - 断言推断出的具体类型为 Int(64)，而非仅检查 is_ok()
     assert!(result.is_ok(), "should handle nested expressions");
+    assert_eq!(
+        result.unwrap(),
+        MonoType::Int(64),
+        "nested int arithmetic expression should infer to Int(64)"
+    );
 }

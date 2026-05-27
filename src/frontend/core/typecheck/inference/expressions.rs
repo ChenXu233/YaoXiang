@@ -590,7 +590,9 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // 函数调用
-            crate::frontend::core::parser::ast::Expr::Call { func, args, .. } => {
+            crate::frontend::core::parser::ast::Expr::Call {
+                func, args, span, ..
+            } => {
                 // 检查 Native("...") 表达式
                 if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
                     if name == "Native" {
@@ -647,7 +649,37 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 }
 
-                if let MonoType::Fn { return_type, .. } = func_ty {
+                if let MonoType::Fn {
+                    params,
+                    return_type,
+                    ..
+                } = func_ty
+                {
+                    // 仅当参数数量匹配时检查类型（方法调用语法糖中 self 是隐式参数，
+                    // arg_types 不包含 self，所以长度不匹配时跳过检查）
+                    if arg_types.len() == params.len() {
+                        for (arg_ty, param_ty) in arg_types.iter().zip(params.iter()) {
+                            // Int -> Float 扩展转换是允许的
+                            if matches!((arg_ty, param_ty), (MonoType::Int(_), MonoType::Float(_)))
+                            {
+                                continue;
+                            }
+                            // 跳过未完全解析的类型（TypeRef 或 TypeVar）
+                            if matches!(param_ty, MonoType::TypeRef(_))
+                                || matches!(param_ty, MonoType::TypeVar(_))
+                            {
+                                continue;
+                            }
+                            if self.solver.unify(arg_ty, param_ty).is_err() {
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", param_ty),
+                                    &format!("{}", arg_ty),
+                                )
+                                .at(*span)
+                                .build());
+                            }
+                        }
+                    }
                     return Ok(*return_type);
                 }
                 Ok(self.solver.new_var())
