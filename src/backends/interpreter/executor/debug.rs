@@ -296,7 +296,7 @@ mod tests {
             fail_native: () -> Result(Int, String) = Native("fail_native")
 
             fail: () -> Result(Int, String) = () => {
-                return fail_native()?
+                return fail_native()
             }
 
             ok: () -> Int = () => { return 1 }
