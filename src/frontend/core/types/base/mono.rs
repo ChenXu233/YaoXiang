@@ -461,6 +461,18 @@ impl From<ast::Type> for MonoType {
                         Box::new(MonoType::from(args[1].clone())),
                     );
                 }
+                if name == "List" && args.len() == 1 {
+                    return MonoType::List(Box::new(MonoType::from(args[0].clone())));
+                }
+                if name == "Dict" && args.len() == 2 {
+                    return MonoType::Dict(
+                        Box::new(MonoType::from(args[0].clone())),
+                        Box::new(MonoType::from(args[1].clone())),
+                    );
+                }
+                if name == "Set" && args.len() == 1 {
+                    return MonoType::Set(Box::new(MonoType::from(args[0].clone())));
+                }
                 // 泛型类型，如 List(T)
                 MonoType::TypeRef(format!(
                     "{}({})",
