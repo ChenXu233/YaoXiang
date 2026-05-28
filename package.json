@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "vitepress-auto-translate": "^1.0.3"
+  }
+}
