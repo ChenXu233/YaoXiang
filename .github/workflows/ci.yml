@@ -121,11 +121,8 @@ jobs:
           toolchain: 1.91.0
           components: llvm-tools
 
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
-
       - name: Generate coverage
-        run: cargo tarpaulin --all-features --timeout 300 -o Html
+        run: cargo llvm-cov --all-features --html
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
