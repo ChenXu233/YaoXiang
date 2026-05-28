@@ -687,6 +687,7 @@ impl StatementChecker {
     }
 
     /// 检查函数语句
+    #[allow(clippy::too_many_arguments)]
     fn check_fn_stmt(
         &mut self,
         name: &str,
@@ -966,9 +967,9 @@ impl StatementChecker {
                     .unwrap_or_else(|| MonoType::from(type_ann.clone()));
                 // Check type assignment compatibility:
                 // - Float cannot be assigned to Int (no implicit narrowing)
-                //   Resolve TypeRef("Int") to Int(32) for comparison
+                //   Resolve TypeRef("Int") to Int(64) for comparison (§3.2: Int defaults to 8 bytes)
                 let resolved_ann = match &ann_ty {
-                    MonoType::TypeRef(n) if n == "Int" => MonoType::Int(32),
+                    MonoType::TypeRef(n) if n == "Int" => MonoType::Int(64),
                     MonoType::TypeRef(n) if n == "Float" => MonoType::Float(64),
                     _ => ann_ty.clone(),
                 };
