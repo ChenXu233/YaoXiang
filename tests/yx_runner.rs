@@ -49,15 +49,42 @@ fn collect_yx_files(
     }
 }
 
-/// Locate the `yaoxiang` binary (either from `cargo run` or pre-built).
+/// Locate the `yaoxiang` binary.
+///
+/// Priority:
+/// 1. `CARGO_BIN_EXE_yaoxiang` (set by `cargo test`)
+/// 2. Build once with `cargo build` and use the output path
 fn binary_name() -> String {
     // When running via `cargo test`, the binary should be discoverable
     // via CARGO_BIN_EXE_yaoxiang (set by cargo test --test).
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang") {
         return path;
     }
-    // Fallback: use `cargo run -- `
-    "cargo".to_string()
+    // Build once and use the binary directly
+    let build_output = Command::new("cargo")
+        .args(["build", "--bin", "yaoxiang"])
+        .output()
+        .expect("Failed to build yaoxiang binary");
+    if !build_output.status.success() {
+        panic!(
+            "Failed to build yaoxiang:\n{}",
+            String::from_utf8_lossy(&build_output.stderr)
+        );
+    }
+    // cargo build puts the binary in target/debug/yaoxiang
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let ext = if cfg!(target_os = "windows") {
+        ".exe"
+    } else {
+        ""
+    };
+    let path = format!("{manifest_dir}/target/debug/yaoxiang{ext}");
+    // Verify it exists
+    assert!(
+        std::path::Path::new(&path).exists(),
+        "Built binary not found at {path}"
+    );
+    path
 }
 
 // ============================================================================
@@ -70,7 +97,6 @@ fn test_all_yx_files_pass() {
     assert!(!files.is_empty(), "No .yx test files found!");
 
     let binary = binary_name();
-    let using_cargo = binary == "cargo";
     let mut failed = Vec::new();
 
     for file in &files {
@@ -80,22 +106,11 @@ fn test_all_yx_files_pass() {
             .display()
             .to_string();
 
-        let output = if using_cargo {
-            // FIXME: This approach is slower. For CI, prefer CARGO_BIN_EXE_yaoxiang.
-            Command::new("cargo")
-                .arg("run")
-                .arg("--")
-                .arg("run")
-                .arg(file)
-                .output()
-                .unwrap_or_else(|e| panic!("Failed to run cargo for {relative}: {e}"))
-        } else {
-            Command::new(&binary)
-                .arg("run")
-                .arg(file)
-                .output()
-                .unwrap_or_else(|e| panic!("Failed to run {binary} for {relative}: {e}"))
-        };
+        let output = Command::new(&binary)
+            .arg("run")
+            .arg(file)
+            .output()
+            .unwrap_or_else(|e| panic!("Failed to run {binary} for {relative}: {e}"));
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
