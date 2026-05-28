@@ -55,7 +55,7 @@ tracks:
       - label: Full
         sub: "工作窃取机制(WorkSteal)"
   track05:
-    title: 语言规范 v1.6
+    title: 语言规范 v1.8
     description: "拒绝语法糖轰炸。17 个关键字覆盖所有特性，没有复杂的语法糖，只有纯粹的表达力。"
 
 ---

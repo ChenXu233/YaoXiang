@@ -81,19 +81,19 @@ design/
 ## 代码示例
 
 ```yaoxiang
-# 类型定义
-type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
+// 类型定义
+Point: Type = { x: Float, y: Float }
+Result: Type[T, E] = { ok(T) | err(E) }
 
-# 函数定义
+// 函数定义
 add: (a: Int, b: Int) -> Int = a + b
 
-# 并作函数（自动并发）
+// 并作函数（自动并发）
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# 主函数
+// 主函数
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -103,27 +103,27 @@ main: () -> Void = {
 
 ### 1. 类型系统
 
-- **统一类型语法**：废除 `enum`、`struct`、`union`，统一用 `type`
+- **统一类型语法**：废除 `enum`、`struct`、`union`，统一用 `Name: Type = {...}`
 - **构造器即类型**：消除"类型"与"值"的鸿沟
 - **泛型支持**：编译期单态化，零运行时开销
 
 ### 2. 并作模型
 
 ```yaoxiang
-# 三层并发抽象
+// 三层并发抽象
 
-# L1: @blocking 同步（禁用并行）
+// L1: @blocking 同步（禁用并行）
 fetch: (String) -> JSON @blocking = (url) => { ... }
 
-# L2: spawn 显式并发
+// L2: spawn 显式并发
 process: () -> Void spawn = () => {
     users = fetch_users()
-    posts = fetch_posts()  # 自动并行
+    posts = fetch_posts()  // 自动并行
 }
 
-# L3: 完全透明（默认）
+// L3: 完全透明（默认）
 compute: (Int) -> Int = (n) => {
-    a = heavy_calc(1)  # 系统自动分析依赖
+    a = heavy_calc(1)  // 系统自动分析依赖
     b = heavy_calc(2)
     c = heavy_calc(3)
     a + b + c
@@ -133,10 +133,10 @@ compute: (Int) -> Int = (n) => {
 ### 3. 错误处理
 
 ```yaoxiang
-type Result[T, E] = ok(T) | err(E)
+Result: Type[T, E] = { ok(T) | err(E) }
 
 process: () -> Result[Data, Error] = {
-    data = fetch_data()?      # ? 运算符透明传播
+    data = fetch_data()?      // ? 运算符透明传播
     transformed = transform(data)?
     save(transformed)?
 }
@@ -146,6 +146,7 @@ process: () -> Result[Data, Error] = {
 
 - [教程](../tutorial/) - 学习使用 YaoXiang
 - [参考文档](../reference/) - API 和标准库
+- [语言规范](../reference/language-spec/index.md) - 完整的语言规范
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
 - [贡献指南](../tutorial/contributing.md)
 

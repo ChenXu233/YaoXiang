@@ -63,13 +63,15 @@ export default defineConfig({
           { text: '首页', link: '/' },
           { text: '下载', link: '/src/download' },
           { text: '教程', link: '/src/tutorial/' },
+          { text: '指南', link: '/src/guide/' },
           { text: '参考', link: '/src/reference/' },
           {
             text: '更多',
             items: [
+              { text: '设计', link: '/src/design/' },
+              { text: '开发', link: '/src/dev/' },
               { text: '码场', link: '/src/playground/' },
               { text: '工具', link: '/src/tools/' },
-              { text: '设计', link: '/src/design/' },
               { text: '社区', link: '/src/community/' },
               { text: '博客', link: '/src/blog/' },
             ]
@@ -85,7 +87,7 @@ export default defineConfig({
                 { text: '快速开始', link: '/src/tutorial/getting-started' },
                 { text: '爻象手册', link: '/src/tutorial/YaoXiang-book' },
                 {
-                  text: '零基础入门', 
+                  text: '零基础入门',
                   collapsed: true,
                   items: generateSidebar({
                     scanStartPath: '/src/tutorial/basics',
@@ -93,26 +95,16 @@ export default defineConfig({
                     collapsed: true,
                   }),
                  },
-                {
-                  text: '贡献指南',
-                  collapsed: true,
-                  items: [
-                    { text: '贡献指南', link: '/src/tutorial/dev/contributing' },
-                    { text: '提交指南', link: '/src/tutorial/dev/commit-convention' },
-                    { text: '分支指南', link: '/src/tutorial/dev/branch-maintenance-guide' },
-                  ]
-                },
-                { text: '包管理系统', link: '/src/tutorial/package' },
               ],
             },
           ],
 
           '/src/design/': [
             {
-              text: '设计文档', 
+              text: '设计文档',
               items: [
                 { text: '设计目录', link: '/src/design' },
-                { text: '语言规范', link: '/src/design/language-spec' },
+                { text: '语言规范', link: '/src/reference/language-spec/' },
                 { text: '爻象宣言', link: '/src/design/manifesto' },
                 { text: '爻象宣言 WTF 版', link: '/src/design/manifesto-wtf' },
                 { text: '一个 2006 年出生者的语言设计观', link: '/src/design/2006-born-language-design' },
@@ -173,6 +165,12 @@ export default defineConfig({
               text: '参考文档',
               items: [
                 { text: '参考目录', link: '/src/reference' },
+                { text: '语言规范', link: '/src/reference/language-spec/' },
+                { text: '语法规范', link: '/src/reference/language-spec/syntax' },
+                { text: '类型系统', link: '/src/reference/language-spec/type-system' },
+                { text: '模块系统', link: '/src/reference/language-spec/modules' },
+                { text: '并发模型', link: '/src/reference/language-spec/concurrency' },
+                { text: '标准库', link: '/src/reference/language-spec/stdlib' },
               ],
             },
             {
@@ -205,30 +203,52 @@ export default defineConfig({
                 })
               ]
             },
+          ],
+
+          '/src/dev/': [
+            {
+              text: '开发文档',
+              items: [
+                { text: '开发目录', link: '/src/dev/' },
+                { text: '贡献指南', link: '/src/dev/contributing' },
+                { text: '提交指南', link: '/src/dev/commit-convention' },
+                { text: '分支指南', link: '/src/dev/branch-maintenance-guide' },
+              ],
+            },
             {
               text: '计划',
               items: [
-                { text: '计划目录', link: '/src/reference/plan' },
+                { text: '计划目录', link: '/src/dev/plan' },
                 {
-                  text: '处理中', 
+                  text: '处理中',
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: '/src/reference/plan/ongoing',
+                    scanStartPath: '/src/dev/plan/ongoing',
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
                 },
                 {
-                  text: '已完成', 
+                  text: '已完成',
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: '/src/reference/plan/completed',
+                    scanStartPath: '/src/dev/plan/completed',
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
                  },
+              ],
+            },
+          ],
+
+          '/src/guide/': [
+            {
+              text: '指南文档',
+              items: [
+                { text: '指南目录', link: '/src/guide/' },
+                { text: '包管理系统', link: '/src/guide/packaging' },
               ],
             },
           ],
@@ -239,166 +259,6 @@ export default defineConfig({
               items: [
                 { text: '快速开始', link: '/src/getting-started' },
                 { text: '教程', link: '/src/tutorial/' },
-              ],
-            },
-          ],
-        },
-      },
-    },
-    en: {
-      lang: 'en-US',
-      label: 'English',
-      link: '/src/en/',
-      themeConfig: {
-        nav: [
-          { text: 'Home', link: '/src/en/' },
-          { text: 'Download', link: '/src/en/download' },
-          { text: 'Tutorial', link: '/src/en/tutorial/' },
-          { text: 'Reference', link: '/en/reference/' },
-          {
-            text: 'More',
-            items: [
-              { text: 'Playground', link: '/src/en/playground/' },
-              { text: 'Tools', link: '/src/en/tools/' },
-              { text: 'Design', link: '/src/en/design/' },
-              { text: 'Community', link: '/en/community/' },
-              { text: 'Blog', link: '/en/blog/' },
-            ]
-          },
-          { component: 'VersionSwitcher' },
-        ],
-        sidebar: {
-          '/src/en/tutorial/': [
-            {
-              text: 'Tutorial Documentation',
-              items: [
-                { text: 'Tutorial Index', link: '/src/en/tutorial/' },
-                { text: 'Quick Start', link: '/src/en/tutorial/getting-started' },
-                { text: 'YaoXiang Handbook', link: '/src/en/tutorial/YaoXiang-book' },
-                { text: 'Zero-to-Hero', 
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/src/en/tutorial/basics',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: 'Contribution Guide',
-                  collapsed: true,
-                  items: [
-                    { text: 'Contribution Guide', link: '/src/en/tutorial/dev/contributing' },
-                    { text: 'Commit Guide', link: '/src/en/tutorial/dev/commit-convention' },
-                    { text: 'Branch Maintenance Guide', link: '/src/en/tutorial/dev/branch-maintenance-guide' },
-                  ]
-                },
-                { text: 'Package Management System', link: '/src/en/tutorial/package' },
-              ],
-            },
-          ],
-          '/src/en/design/': [
-            {
-              text: 'Design Index',
-              items: [
-                { text: 'Design Index', link: '/src/en/design' },
-                { text: 'Language Spec', link: '/src/en/design/language-spec' },
-                { text: 'YaoXiang Manifesto', link: '/src/en/design/manifesto' },
-                { text: 'YaoXiang Manifesto WTF', link: '/src/en/design/manifesto-wtf' },
-                { text: 'A Language Design Observation from a 2006 Born', link: '/src/en/design/2006-born-language-design' },
-              ],
-             },
-            {
-              text: 'RFC Documentation',
-              items: [
-                { text: 'RFC Index', link: '/src/en/design/rfc' },
-                { text: 'RFC Template', link: '/src/en/design/rfc/RFC_TEMPLATE' },
-                { text: 'RFC Full Template (Example)', link: '/src/en/design/rfc/EXAMPLE_full_feature_proposal' },
-                {
-                  text: 'Accepted',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/src/en/design/rfc/accepted',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: 'Review',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/src/en/design/rfc/review',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: 'Draft',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/src/en/design/rfc/draft',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-                {
-                  text: 'Rejected',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/src/en/design/rfc/rejected',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                },
-              ]
-            },
-          ],
-          '/src/en/reference/': [
-            {
-              text: 'Reference Documentation',
-              items: [
-                { text: 'Reference Index', link: '/src/en/reference' },
-              ],
-            },
-            {
-              text: 'Error Codes',
-              items: generateSidebar({
-                scanStartPath: '/src/en/reference/error-code',
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              }),
-            },
-            {
-              text: 'Warning Codes',
-              items: generateSidebar({
-                scanStartPath: '/src/en/reference/warning-code',
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              }),
-            },
-            {
-              text: 'Package Management System',
-              collapsed: true,
-              items: generateSidebar({
-                scanStartPath: '/src/en/reference/package',
-                useTitleFromFrontmatter: true,
-                collapsed: true,
-                hyphenToSpace: true,
-              }),
-            }
-          ],
-          '/en/': [
-            {
-              text: 'English Documentation',
-              items: [
-                { text: 'Quick Start', link: '/src/en/getting-started' },
-                { text: 'Tutorial', link: '/src/en/tutorial/' },
               ],
             },
           ],
