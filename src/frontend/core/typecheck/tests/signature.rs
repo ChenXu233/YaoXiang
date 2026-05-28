@@ -55,8 +55,8 @@ fn test_parse_signature_with_params() {
         } => {
             assert_eq!(params.len(), 2, "应有 2 个参数，实际: {}", params.len());
             assert!(
-                matches!(params[0], MonoType::Int(32)),
-                "第 1 个参数应为 Int(32)，实际: {:?}",
+                matches!(params[0], MonoType::Int(64)),
+                "第 1 个参数应为 Int(64)，实际: {:?}",
                 params[0]
             );
             assert!(
@@ -147,8 +147,8 @@ fn test_parse_signature_empty_params() {
         } => {
             assert!(params.is_empty(), "空参数列表应解析为空 Vec");
             assert!(
-                matches!(*return_type, MonoType::Int(32)),
-                "返回类型应为 Int(32)，实际: {:?}",
+                matches!(*return_type, MonoType::Int(64)),
+                "返回类型应为 Int(64)，实际: {:?}",
                 return_type
             );
         }
@@ -174,15 +174,15 @@ fn test_parse_signature_many_params() {
             assert_eq!(params.len(), 5, "应有 5 个参数，实际: {}", params.len());
             for (i, param) in params.iter().enumerate() {
                 assert!(
-                    matches!(param, MonoType::Int(32)),
-                    "第 {} 个参数应为 Int(32)，实际: {:?}",
+                    matches!(param, MonoType::Int(64)),
+                    "第 {} 个参数应为 Int(64)，实际: {:?}",
                     i + 1,
                     param
                 );
             }
             assert!(
-                matches!(*return_type, MonoType::Int(32)),
-                "返回类型应为 Int(32)，实际: {:?}",
+                matches!(*return_type, MonoType::Int(64)),
+                "返回类型应为 Int(64)，实际: {:?}",
                 return_type
             );
         }
@@ -208,8 +208,8 @@ fn test_parse_signature_nested_function_type() {
             // 外层参数
             assert_eq!(params.len(), 1, "外层应有 1 个参数，实际: {}", params.len());
             assert!(
-                matches!(params[0], MonoType::Int(32)),
-                "外层参数应为 Int(32)，实际: {:?}",
+                matches!(params[0], MonoType::Int(64)),
+                "外层参数应为 Int(64)，实际: {:?}",
                 params[0]
             );
 

@@ -370,9 +370,10 @@ pub struct DebugState {
 }
 
 /// Step mode for debugging
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StepMode {
     /// Continue execution normally
+    #[default]
     Continue,
     /// Step one instruction
     Step,
@@ -382,27 +383,16 @@ pub enum StepMode {
     StepOut,
 }
 
-impl Default for StepMode {
-    fn default() -> Self {
-        Self::Continue
-    }
-}
-
 /// Build mode for the backend
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BuildMode {
     /// Debug mode with assertions and debugging info
+    #[default]
     Debug,
     /// Release mode with optimizations
     Release,
     /// Profile mode for performance analysis
     Profile,
-}
-
-impl Default for BuildMode {
-    fn default() -> Self {
-        Self::Debug
-    }
 }
 
 /// Configuration for an executor
