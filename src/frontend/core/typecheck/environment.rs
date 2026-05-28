@@ -219,7 +219,7 @@ impl TypeEnvironment {
     /// 在模板中替换类型参数占位符（静态方法）
     ///
     /// 递归遍历 MonoType，将所有匹配 param_names 的 TypeRef 替换为对应的 args。
-    /// 并对已知的内置类型名进行解析（TypeRef("Int") → Int(32) 等）。
+    /// 并对已知的内置类型名进行解析（TypeRef("Int") → Int(64) 等）。
     pub fn instantiate_generic_type_static(
         ty: &MonoType,
         param_names: &[String],
@@ -325,7 +325,7 @@ impl TypeEnvironment {
     }
 
     /// 解析 TypeRef 中的内置类型名
-    /// TypeRef("Int") → Int(32), TypeRef("Float") → Float(64), 等等。
+    /// TypeRef("Int") → Int(64), TypeRef("Float") → Float(64), 等等。
     fn resolve_type_refs(ty: &MonoType) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => match name.as_str() {

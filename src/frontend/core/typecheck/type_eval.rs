@@ -310,7 +310,7 @@ impl TypeEvaluator {
         match s.trim() {
             "Void" => Some(MonoType::Void),
             "Bool" => Some(MonoType::Bool),
-            "Int" => Some(MonoType::Int(32)),
+            "Int" => Some(MonoType::Int(64)),
             "Float" => Some(MonoType::Float(64)),
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::String),
@@ -1038,7 +1038,7 @@ mod tests {
 
         assert_eq!(evaluator.parse_type("Void"), Some(MonoType::Void));
         assert_eq!(evaluator.parse_type("Bool"), Some(MonoType::Bool));
-        assert_eq!(evaluator.parse_type("Int"), Some(MonoType::Int(32)));
+        assert_eq!(evaluator.parse_type("Int"), Some(MonoType::Int(64)));
         assert_eq!(
             evaluator.parse_type("CustomType"),
             Some(MonoType::TypeRef("CustomType".to_string()))

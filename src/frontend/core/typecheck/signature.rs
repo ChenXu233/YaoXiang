@@ -342,7 +342,7 @@ fn parse_type_str_with_generics(
     match type_str {
         "Void" | "void" => MonoType::Void,
         "Bool" | "bool" => MonoType::Bool,
-        "Int" | "int" => MonoType::Int(32),
+        "Int" | "int" => MonoType::Int(64),
         "Float" | "float" => MonoType::Float(64),
         "Char" | "char" => MonoType::Char,
         "String" | "string" => MonoType::String,
