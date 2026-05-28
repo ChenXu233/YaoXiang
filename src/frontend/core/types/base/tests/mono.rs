@@ -157,8 +157,8 @@ fn test_from_ast_type_generic_custom() {
         args: vec![ast::Type::Int(32)],
     };
     let mono: MonoType = ast_ty.into();
-    // Unknown generic becomes TypeRef("List(int32)")
-    assert!(matches!(mono, MonoType::TypeRef(n) if n.starts_with("List")));
+    // List(Int(32)) becomes MonoType::List(Box(Int(32)))
+    assert!(matches!(mono, MonoType::List(inner) if *inner == MonoType::Int(32)));
 }
 
 #[test]
