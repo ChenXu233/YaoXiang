@@ -28,3 +28,16 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: false
+
+      - id: cargo-doc
+        name: cargo doc
+        entry: cargo doc --no-deps
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo audit
+        language: system
+        pass_filenames: false
