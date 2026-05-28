@@ -19,7 +19,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           components: rustfmt, clippy
 
       - name: Check formatting
@@ -40,7 +40,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
 
       - name: Run tests
         run: cargo test --all --all-features
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.90
+        uses: dtolnay/rust-toolchain@1.91
 
       - name: Check MSRV compatibility
         run: cargo check --all-features
@@ -74,7 +74,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
 
       - name: Build release
         run: cargo build --release --all-features
@@ -104,7 +104,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
 
       - name: Run benchmarks
         run: cargo bench --all-features
@@ -118,7 +118,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           components: llvm-tools
 
       - name: Install tarpaulin
