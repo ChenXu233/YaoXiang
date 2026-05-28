@@ -1,0 +1,68 @@
+name: Auto Translate Docs
+
+on:
+  push:
+    paths:
+      - 'docs/src/**/*.md'
+      - '!docs/src/en/**'
+    branches:
+      - main
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install vitepress-auto-translate
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          # 获取本次提交变更的中文文档
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'docs/src/**/*.md' ':!docs/src/en/**' | tr '\n' ' ')
+          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "Changed files: $CHANGED_FILES"
+
+      - name: Translate changed documents
+        if: steps.changed-files.outputs.files != ''
+        env:
+          API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          # 创建临时目录存放待翻译文件
+          mkdir -p /tmp/to-translate
+
+          # 复制变更的文件到临时目录
+          for file in ${{ steps.changed-files.outputs.files }}; do
+            if [ -f "$file" ]; then
+              mkdir -p "/tmp/to-translate/$(dirname "$file")"
+              cp "$file" "/tmp/to-translate/$file"
+            fi
+          done
+
+          # 翻译临时目录中的文件
+          npx vitepress-auto-translate -s /tmp/to-translate/docs/src -l en
+
+          # 将翻译结果复制回原目录
+          cp -r /tmp/to-translate/docs/src/en/* docs/src/en/ 2>/dev/null || true
+
+      - name: Commit translations
+        if: steps.changed-files.outputs.files != ''
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/src/en/
+          git diff --staged --quiet || git commit -m "docs: auto-translate documentation"
+          git push
