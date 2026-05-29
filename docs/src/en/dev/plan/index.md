@@ -1,6 +1,6 @@
-# Implementation Plan Documents
+# Plan Document Directory
 
-This directory tracks the implementation progress of RFCs/modules (milestones, acceptance criteria, test items). For reference only; specific designs are subject to RFC documents.
+This directory is used to track the implementation progress of RFCs/modules (milestones, acceptance criteria, test items). For reference only; the specific design shall prevail according to RFC documents.
 
 ## In Progress
 

@@ -1,6 +1,6 @@
 ---
 title: "Package Manager"
-description: YaoXiang Package Manager reference documentation
+description: YaoXiang Package Manager Reference Documentation
 ---
 
 # Package Manager
@@ -12,8 +12,8 @@ YaoXiang's built-in package manager, providing project initialization, dependenc
 The YaoXiang Package Manager (YPM for short) adopts a design philosophy similar to Cargo:
 
 - **Declarative dependencies**: Declare required dependencies in `yaoxiang.toml`
-- **Deterministic builds**: Lock versions through `yaoxiang.lock` to ensure reproducible builds
-- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline use
+- **Deterministic build**: Lock versions through `yaoxiang.lock` to ensure reproducible builds
+- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline usage
 
 ## Quick Start
 
@@ -21,7 +21,7 @@ The YaoXiang Package Manager (YPM for short) adopts a design philosophy similar 
 # 1. Create a new project
 yaoxiang init my-project
 
-# 2. Add dependencies
+# 2. Add a dependency
 cd my-project
 yaoxiang add http
 
@@ -37,8 +37,8 @@ yaoxiang run src/main.yx
 | Command | Description |
 |---------|-------------|
 | [`yaoxiang init`](./commands#yaoxiang-init) | Initialize a new project |
-| [`yaoxiang add`](./commands#yaoxiang-add) | Add dependencies |
-| [`yaoxiang rm`](./commands#yaoxiang-rm) | Remove dependencies |
+| [`yaoxiang add`](./commands#yaoxiang-add) | Add a dependency |
+| [`yaoxiang rm`](./commands#yaoxiang-rm) | Remove a dependency |
 | [`yaoxiang install`](./commands#yaoxiang-install) | Install dependencies |
 | [`yaoxiang update`](./commands#yaoxiang-update) | Update dependencies |
 | [`yaoxiang list`](./commands#yaoxiang-list) | List dependencies |

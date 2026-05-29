@@ -1,10 +1,10 @@
-# E0xxx: Lexical and Syntax Analysis
+# E0xxx: Lexical and Syntactic Analysis
 
-> Automatically generated from `src/util/diagnostic/codes/`
+> Auto-generated from `src/util/diagnostic/codes/`
 
 ## Error List
 
-## E0001: Invalid character
+## E0001: Invalid Character
 
 **Category**: Lexer
 
@@ -14,7 +14,7 @@
 
 ---
 
-## E0002: Invalid number literal
+## E0002: Invalid Number Literal
 
 **Category**: Lexer
 
@@ -24,7 +24,7 @@
 
 ---
 
-## E0003: Unterminated string
+## E0003: Unterminated String
 
 **Category**: Lexer
 
@@ -34,7 +34,7 @@
 
 ---
 
-## E0004: Invalid character literal
+## E0004: Invalid Character Literal
 
 **Category**: Lexer
 
@@ -44,7 +44,7 @@
 
 ---
 
-## E0010: Expected token
+## E0010: Expected Token
 
 **Category**: Parser
 
@@ -54,7 +54,7 @@
 
 ---
 
-## E0011: Unexpected token
+## E0011: Unexpected Token
 
 **Category**: Parser
 
@@ -64,7 +64,7 @@
 
 ---
 
-## E0012: Invalid syntax
+## E0012: Invalid Syntax
 
 **Category**: Parser
 
@@ -74,7 +74,7 @@
 
 ---
 
-## E0013: Mismatched brackets
+## E0013: Mismatched Brackets
 
 **Category**: Parser
 
@@ -84,12 +84,10 @@
 
 ---
 
-## E0014: Missing semicolon
+## E0014: Missing Semicolon
 
 **Category**: Parser
 
 **Message**: Statement is missing a semicolon
 
 **Help**: Add a semicolon at the end of the statement
-
----

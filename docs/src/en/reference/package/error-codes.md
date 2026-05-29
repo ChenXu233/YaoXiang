@@ -1,11 +1,11 @@
 ---
 title: "Error Codes"
-description: YaoXiang package manager error codes and handling
+description: "YaoXiang package manager error codes and handling methods"
 ---
 
 # Error Codes
 
-This document lists the errors that the YaoXiang package manager may return and how to handle them.
+This document lists errors that the YaoXiang package manager may return and how to handle them.
 
 ## Error List
 
@@ -61,7 +61,7 @@ Error: Dependency already exists: <name>
 
 **Handling**:
 1. If you need to update the version, first remove it with `yaoxiang rm`
-2. Or just use the existing dependency
+2. Or simply use the existing dependency
 
 ---
 
@@ -74,7 +74,7 @@ Error: Invalid yaoxiang.toml format: <details>
 **Cause**: The `yaoxiang.toml` file format is incorrect.
 
 **Handling**:
-1. Check if the TOML syntax is correct
+1. Check if TOML syntax is correct
 2. Ensure all required fields are present
 3. Check for syntax errors (such as missing quotes, commas, etc.)
 
@@ -88,7 +88,7 @@ Error: IO error: <details>
 
 **Cause**: File read/write operation failed.
 
-**Common Causes**:
+**Common causes**:
 - Insufficient disk space
 - Insufficient permissions
 - File is being used by another program
@@ -110,22 +110,22 @@ Error: TOML parse error: <details>
 
 **Handling**:
 1. Validate TOML syntax
-2. Check if special characters are correctly escaped
+2. Check if special characters are properly escaped
 
 ---
 
 ## Frequently Asked Questions
 
-### Q: What to do if dependency installation fails?
+### Q: What should I do if dependency installation fails?
 
 1. Check network connection
 2. Confirm the dependency name and version are correct
 3. Try using `yaoxiang update` to refresh
 
-### Q: What to do if there is a version conflict?
+### Q: What should I do if I encounter version conflicts?
 
 Check if there are incompatible dependency version requirements in `yaoxiang.toml`.
 
-### Q: What to do if the vendor directory is corrupted?
+### Q: What should I do if the vendor directory is corrupted?
 
-Delete the `vendor` directory and rerun `yaoxiang install`.
+Delete the `vendor` directory and run `yaoxiang install` again.

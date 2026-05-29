@@ -1,5 +1,5 @@
 ---
-title: 'RFC-002: Cross-Platform I/O and libuv Integration (Rejected)'
+title: "RFC-002: Cross-Platform I/O and libuv Integration (Rejected)"
 ---
 
 # RFC-002: Cross-Platform I/O and libuv Integration
@@ -11,28 +11,28 @@ title: 'RFC-002: Cross-Platform I/O and libuv Integration (Rejected)'
 
 ## Rejection Reasons
 
-This RFC is rejected for the following reasons:
+This RFC was rejected for the following reasons:
 
 ### 1. libuv is a C library and cannot be used after YaoXiang self-hosts
 
-YaoXiang ultimately needs to self-host (implement an interpreter in YaoXiang itself), at which point it cannot depend on C libraries.
-libuv as a C library requires FFI calls, which would hinder the self-hosting process.
+YaoXiang ultimately needs to bootstrap (implement the interpreter in YaoXiang itself), at which point it cannot depend on C libraries.
+libuv as a C library requires FFI calls, which would hinder the bootstrap process.
 
 ### 2. tokio is a more suitable choice
 
-In the Rust ecosystem, tokio is the dominant async runtime (>90% market share), it's pure Rust,
-and after self-hosting it can continue to be used through bindings, making it more aligned with the long-term architecture than libuv.
+In the Rust ecosystem, tokio is the dominant async runtime (market share >90%), it's a pure Rust implementation,
+can continue to be used through bindings after bootstrapping, and is more aligned with the long-term architecture than libuv.
 
 ### 3. Pragmatic considerations
 
-At the current stage, priority should be given to getting the YaoXiang language working end-to-end; I/O can be implemented quickly using Rust std,
-and a proper async runtime can be developed after self-hosting using tokio bindings or custom development.
+At the current stage, priority should be given to getting the YaoXiang language to work end-to-end. I/O can be quickly implemented using Rust std,
+and a true async runtime can be developed after bootstrapping using tokio bindings or custom implementation.
 
 ---
 
 ## Summary
 
-This proposal presents a cross-platform async I/O solution for YaoXiang, integrating libuv to implement a unified async abstraction. The core design goal is to automatically and transparently async-ify blocking I/O operations, freeing developers from worrying about low-level details.
+This proposal presents a cross-platform async I/O solution for YaoXiang, integrating libuv to implement unified async abstractions. The core design goal is to automatically and transparently asyncify blocking I/O operations, so that developers don't need to care about underlying details.
 
 ## Motivation
 
@@ -40,33 +40,33 @@ This proposal presents a cross-platform async I/O solution for YaoXiang, integra
 
 YaoXiang's spawn model requires efficient async I/O support:
 
-| Requirement | Problems with Traditional Solutions |
-|-------------|-------------------------------------|
+| Requirement     | Problems with Traditional Approaches                                          |
+| ----------- | ------------------------------------------------ |
 | Cross-platform I/O | Inconsistent APIs across platforms (Windows IOCP, Linux epoll, macOS kqueue) |
-| Async event loop | Complex and error-prone to implement from scratch |
-| Thread pool management | Blocking operations require dedicated thread pools |
-| Performance requirements | Need zero-overhead async abstractions |
+| Async event loop | Complex and error-prone to implement from scratch                                       |
+| Thread pool management  | Blocking operations require dedicated thread pools                                      |
+| Performance requirements   | Need zero-overhead async abstractions                                       |
 
 ### Advantages of libuv
 
 ```
 libuv ✓ Mature and stable - Node.js underlying runtime, proven at scale
-libuv ✓ Cross-platform - Unified I/O API for Windows, Linux, macOS
+libuv ✓ Cross-platform - Unified I/O APIs for Windows, Linux, macOS
 libuv ✓ High performance - Event-driven, non-blocking I/O
 libuv ✓ Thread pool - Built-in blocking operation thread pool management
 ```
 
 ## Proposal
 
-### 1. Technology Selection Decision
+### 1. Technical Selection Decision
 
-| Component | Selection | Rationale |
-|-----------|-----------|-----------|
-| I/O Runtime | libuv | Cross-platform mature, Node.js verified |
-| Event Loop | libuv loop | Lightweight, efficient |
-| Thread Pool | libuv + custom | Dedicated for blocking operations |
-| Scheduling Algorithm | Work-stealing + DAG optimization | High performance, load balancing |
-| Memory Management | Ownership + stack allocation | No GC, zero-cost abstractions |
+| Component | Choice | Rationale |
+|------|------|------|
+| I/O runtime | libuv | Cross-platform mature, Node.js verified |
+| Event loop | libuv loop | Lightweight, efficient |
+| Thread pool | libuv + custom | Blocking operation dedicated |
+| Scheduling algorithm | Work-stealing + DAG optimization | High performance, load balancing |
+| Memory management | Ownership + stack allocation | No GC, zero-cost abstractions |
 
 ### 2. Architecture Design
 
@@ -90,11 +90,11 @@ libuv ✓ Thread pool - Built-in blocking operation thread pool management
 │                      │                                    │
 │          ┌───────────▼───────────┐                        │
 │          │   libuv Event Loop    │                        │
-│          │   (Cross-platform I/O) │                       │
+│          │   (Cross-platform I/O abstraction)      │        │
 │          └───────────┬───────────┘                        │
 │                      │                                    │
 │          ┌───────────▼───────────┐                        │
-│          │   Thread Pool         │  ← Blocking ops only   │
+│          │   Thread Pool         │  ← Blocking ops dedicated        │
 │          │   (libuv threads)     │                        │
 │          └───────────────────────┘                        │
 │                                                             │
@@ -111,7 +111,7 @@ struct YaoXiangRuntime {
     // Work-stealing scheduler
     scheduler: WorkStealingScheduler,
 
-    // Blocking operation thread pool
+    // Thread pool for blocking operations
     io_thread_pool: ThreadPool,
 
     // Task queues
@@ -140,21 +140,21 @@ struct ThreadPool {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Blocking C function  →  Auto-wrap  →  Transparent Async[T] │
+│  Blocking C function  →  Auto-wrap  →  Transparent Async[T]                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  // Original blocking API                                   │
-│  data = File.read("file.txt")  // Blocking call             │
+│  // Original blocking API                                             │
+│  data = File.read("file.txt")  // Blocking call                  │
 │                                                             │
-│  // YaoXiang auto-conversion                                │
-│  // 1. Detect blocking call                                 │
-│  // 2. Auto-submit to thread pool                          │
-│  // 3. Return Async[T] proxy                               │
-│  // 4. Auto-await when used                                │
+│  // YaoXiang auto-conversion                                        │
+│  // 1. Detect blocking call                                       │
+│  // 2. Auto-submit to thread pool                                     │
+│  // 3. Return Async[T] proxy                                   │
+│  // 4. Auto-wait for result when used                                    │
 │                                                             │
-│  // Developer perspective                                  │
+│  // Developer perspective                                              │
 │  content = File.read("config.yaml")  // Async[String]       │
-│  data = parse(content)               // Auto-await         │
+│  data = parse(content)               // Auto-wait            │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -162,7 +162,7 @@ struct ThreadPool {
 #### 3.2 I/O Operation Examples
 
 ```yaoxiang
-# Async file read (developer perspective: synchronous syntax, auto-async)
+# Async file read (developer perspective: sync syntax, auto-async)
 read_config: (String) -> Config spawn = (path) => {
     content = File.read(path)  # Auto-asyncified
     config = parse_yaml(content)
@@ -214,7 +214,7 @@ start_server: (Int) -> Void spawn = (port) => {
 # WebSocket
 chat_server: (String) -> Void spawn = (port) => {
     ws = WebSocket.new("ws://localhost:" + port.to_string())
-    for message in ws.incoming() {  # Auto-streaming
+    for message in ws.incoming() {  # Auto-streaming processing
         broadcast(message)
     }
 }
@@ -224,13 +224,13 @@ chat_server: (String) -> Void spawn = (port) => {
 
 #### 4.1 Platform Support Matrix
 
-| Platform | Status | Event Mechanism | Notes |
-|----------|--------|-----------------|-------|
-| **Linux** | ✅ Supported | epoll | Primary development platform |
-| **macOS** | ✅ Supported | kqueue | Native libuv support |
-| **Windows** | ✅ Supported | IOCP | Native libuv support |
-| **WASM** | ⚠️ TBD | Browser API | Requires additional adaptation |
-| **WASI** | ⚠️ TBD | WASI calls | Long-term goal |
+| Platform          | Status    | Event Mechanism   | Notes        |
+| ----------- | ----- | ------ | --------- |
+| **Linux**   | ✅ Supported  | epoll  | Primary development platform    |
+| **macOS**   | ✅ Supported  | kqueue | libuv native support |
+| **Windows** | ✅ Supported  | IOCP   | libuv native support |
+| **WASM**    | ⚠️ TBD | Browser API | Needs additional adaptation    |
+| **WASI**    | ⚠️ TBD | WASI calls | Long-term goal      |
 
 #### 4.2 Cross-Platform API Unification
 
@@ -284,7 +284,7 @@ when os() == "macos" {
 #### 5.1 Thread Pool Configuration
 
 ```yaoxiang
-# Script header configures thread pool size
+# Script header to configure thread pool size
 # @thread_pool: 4
 
 # Or runtime configuration
@@ -363,13 +363,13 @@ impl WorkStealingScheduler {
         if let Ok(worker) = self.current_worker() {
             worker.local_queue.push_back(task);
         } else {
-            // Add to global queue when no worker
+            // No worker, add to global queue
             self.global_queue.push_back(task);
         }
     }
 
     pub fn steal(&self, victim: &Worker) -> Option<Task> {
-        // Steal task from another worker's queue
+        // Steal tasks from other workers' queues
         victim.local_queue.pop_back()
     }
 }
@@ -418,35 +418,35 @@ impl From<uv::UvError> for IoError {
 }
 ```
 
-## Trade-offs
+## Tradeoffs
 
 ### Advantages
 
 1. **Cross-platform consistency**: One API covers all major platforms
-2. **High performance**: Event-driven + work-stealing, near hand-written async performance
-3. **Transparent async**: Developers don't need to handle async details manually
-4. **Blocking-safe**: Blocking operations auto-enter thread pool, don't block event loop
+2. **High performance**: Event-driven + work-stealing, close to hand-written async performance
+3. **Transparent async**: Developers don't need to manually handle async details
+4. **Blocking-safe**: Blocking operations automatically enter thread pool, don't block event loop
 5. **Mature and stable**: libuv proven at scale by Node.js
 
 ### Disadvantages
 
 1. **Dependency introduction**: Requires binding to libuv C library
-2. **Windows compatibility**: Some APIs have slightly different behavior on Windows
-3. **WASM support**: Requires additional adaptation work
+2. **Windows compatibility**: Some APIs behave slightly differently on Windows
+3. **WASM support**: Needs additional adaptation work
 4. **Debugging difficulty**: Async stack traces may be incomplete
 
-## Alternative Solutions
+## Alternative Approaches
 
-| Solution | Why Not Chosen |
-|----------|----------------|
-| Implement event loop from scratch | Complex and error-prone, cannot match libuv maturity |
+| Approach | Why Not Chosen |
+|------|--------------|
+| Implement event loop from scratch | Complex and error-prone, can't match libuv maturity |
 | Use mio | Only provides raw async primitives, lacks thread pool |
 | Use async-std/tokio | Rust ecosystem, but YaoXiang needs its own runtime |
-| Directly use libc epoll | Cannot cross-platform |
+| Use libc epoll directly | Can't cross platforms |
 
 ## Implementation Strategy
 
-### Phase Division
+### Phase Breakdown
 
 1. **Phase 1 (v0.1)**: Basic libuv bindings, simple file I/O
 2. **Phase 2 (v0.3)**: Network I/O, thread pool integration
@@ -456,11 +456,11 @@ impl From<uv::UvError> for IoError {
 ### Dependencies
 
 - No external RFC dependencies
-- **RFC-001 Concurrency Model**: Defines DAG scheduler; RFC-002 provides I/O abstraction
+- **RFC-001 Concurrency Model**: Defines DAG scheduler, RFC-002 provides I/O abstraction
 
 ## Integration with RFC-001 Concurrency Model
 
-RFC-001 defines the **DAG Scheduler** (scheduling layer), and RFC-002 defines **libuv + Thread Pool** (I/O layer). The two collaborate to implement "synchronous syntax, automatic concurrency".
+RFC-001 defines the **DAG Scheduler** (scheduling layer), RFC-002 defines **libuv + thread pool** (I/O layer). The two collaborate to achieve "sync syntax, auto-concurrent".
 
 ### Layered Architecture
 
@@ -472,20 +472,19 @@ RFC-001 defines the **DAG Scheduler** (scheduling layer), and RFC-002 defines **
 │  │   RFC-001: DAG      │    │  RFC-002: libuv     │        │
 │  │   Scheduling Layer  │    │  I/O Layer          │        │
 │  │                     │    │                     │        │
-│  │  • Topological sort │    │  • Cross-platform I/O│       │
+│  │  • Topological sort scheduling     │    │  • Cross-platform I/O       │        │
 │  │  • Work stealing    │    │  • Event loop       │        │
-│  │  • Dependency       │    │  • Thread pool      │        │
-│  │    analysis         │    │                     │        │
+│  │  • Dependency analysis     │    │  • Thread pool   │        │
 │  └──────────┬──────────┘    └──────────┬──────────┘        │
 │             │                         │                    │
 │             │     ┌───────────────────┘                    │
 │             │     │                                         │
 │             ▼     ▼                                         │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │              Runtime Interface Layer                 │   │
-│  │  • spawn/suspend/resume protocol                     │   │
-│  │  • IO Completion callbacks                           │   │
-│  │  • Task submission and wake-up                       │   │
+│  │              Runtime Interface Layer                          │   │
+│  │  • spawn/suspend/resume protocol                         │   │
+│  │  • IO Completion callback                                │   │
+│  │  • Task submission and wakeup                                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -493,15 +492,15 @@ RFC-001 defines the **DAG Scheduler** (scheduling layer), and RFC-002 defines **
 ### Collaboration Flow
 
 ```markdown
-1. **Compile time**: Resource type operations are identified as IO nodes
-   - File.read, HTTP.get etc. are marked as "need async execution"
-   - Create DAG node, mark as IO type
+1. **Compile-time**: Resource type operations are identified as IO nodes
+   - File.read, HTTP.get are marked as "requires async execution"
+   - Create DAG nodes, marked as IO type
 
 2. **Runtime**: DAG scheduler encounters IO node
    - Identified as non-compute node, submit to libuv
    - Scheduler continues executing other executable nodes
 
-3. **IO complete**: libuv callback triggers
+3. **IO Complete**: libuv callback triggers
    - libuv thread pool completes blocking operation
    - Completion callback notifies DAG scheduler
    - Downstream nodes become executable
@@ -524,7 +523,7 @@ impl IoScheduler for LibUvRuntime {
     fn submit_io(&self, task: IoTask) -> IoHandle {
         // 1. Submit task to libuv thread pool
         let handle = self.thread_pool.submit(|| {
-            // Blocking execute actual IO
+            // Blockingly execute actual IO
             let result = perform_blocking_io(&task);
             // 2. IO complete, call callback
             self.on_io_complete(handle);
@@ -544,7 +543,7 @@ impl IoScheduler for LibUvRuntime {
 #### Compile-time Processing
 
 ```yaoxiang
-# User code (synchronous syntax)
+# User code (sync syntax)
 read_config: String -> Config = (path) => {
     content = File.read(path)  # Resource operation
     parse_yaml(content)
@@ -560,22 +559,22 @@ read_config: String -> Config = (path) => {
 
 ```markdown
 | Step | Operation | Description |
-|------|-----------|-------------|
-| 1 | Parse DAG | Discover IO node |
+|------|------|------|
+| 1 | Parse DAG | Discover IO nodes |
 | 2 | Submit IO | Add task to libuv thread pool |
 | 3 | Continue scheduling | Execute other executable nodes |
 | 4 | IO complete | libuv callback triggers |
-| 5 | Wake up downstream | DAG scheduler resumes waiting node |
+| 5 | Wake up downstream | DAG scheduler resumes waiting nodes |
 ```
 
 ### Resource Type to IO Operation Mapping
 
 ```yaoxiang
-# RFC-001 defines: Resource types
+# RFC-001 definition: Resource types
 FilePath: Resource
 HttpUrl: Resource
 
-# RFC-002 implements: IO semantics for resource operations
+# RFC-002 implementation: IO semantics for resource operations
 File.read: (FilePath) -> String = path => {
     # Marked as IO operation, auto-enter libuv thread pool
 }
@@ -585,25 +584,25 @@ HTTP.get: (HttpUrl) -> Response = url => {
 }
 ```
 
-**Processing Rules**:
+**Processing rules**:
 - Operations with resource type parameters → Marked as IO nodes
 - IO nodes submitted to libuv thread pool for execution
 - Completion callback wakes up DAG downstream nodes
 
 ### Risks
 
-1. **libuv binding completeness**: Complete binding requires significant work
+1. **libuv binding completeness**: Complete bindings require significant work
 2. **Windows compatibility**: Some APIs need special handling
 3. **Performance overhead**: FFI calls have some overhead
 4. **Integration complexity**: Coordination between libuv thread pool and DAG scheduler requires careful design
 
 ## Open Questions
 
-- [ ] Event loop adaptation strategy for WASM environment
-- [ ] Cross-platform consistency of filesystem events
-- [ ] Network I/O timeout mechanism design
+- [ ] Event loop adaptation solution for WASM environment
+- [ ] Cross-platform consistency for file system events
+- [ ] Timeout mechanism design for network I/O
 - [ ] Boundaries for zero-copy optimization
-- [ ] Cancellation operation semantics design
+- [ ] Semantic design for cancellation operations
 - [ ] Dynamic adjustment strategy for libuv thread pool size
 - [ ] Coordination between IO node priority and compute node priority
 
@@ -611,5 +610,5 @@ HTTP.get: (HttpUrl) -> Response = url => {
 
 - [libuv Official Documentation](https://docs.libuv.org/)
 - [Node.js Event Loop](https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/)
-- [Work-stealing Paper](https://ieftimov.com/posts/understanding-stealing-queues/)
+- [Work-Stealing Paper](https://ieftimov.com/posts/understanding-stealing-queues/)
 - [Rust Async Runtime Design](https://smallcultfollowing.com/babysteps/blog/2019/08/22/async-await-simplified/)

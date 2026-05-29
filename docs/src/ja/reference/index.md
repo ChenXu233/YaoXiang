@@ -1,21 +1,21 @@
 # YaoXiang リファレンスドキュメント
 
-> 本ドキュメントは作成中です...
+> このドキュメントは作成中です...
 
-YaoXiang は現在 **実験検証段階** にあり、标准ライブラリと API は逐步的に整備中です。
+YaoXiang は現在 **実験検証フェーズ** にあり、標準ライブラリと API は徐々に整備中です。
 
 ## 言語仕様
 
 - [言語仕様概要](./language-spec/index.md)
 - [構文仕様](./language-spec/syntax.md) - 字句構造、構文規則、演算子の優先順位
 - [型システム](./language-spec/type-system.md) - 基本型、複合型、ジェネリクス、trait
-- [モジュールシステム](./language-spec/modules.md) - モジュール定義、インポート/エクスポート、スコープ
-- [並行モデル](./language-spec/concurrency.md) - 非同期プログラミング、並行プリミティブ、メモリモデル
+- [モジュールシステム](./language-spec/modules.md) - モジュールの定義、インポート・エクスポート、スコープ
+- [並行モデル](./language-spec/concurrency.md) - 非同期プログラミング、並行性プリミティブ、メモリモデル
 - [標準ライブラリ](./language-spec/stdlib.md) - コアライブラリ、IOライブラリ、数学ライブラリ
 
-## 現在の状態
+## 現在のステータス
 
-| モジュール | 状態 | 説明 |
+| モジュール | ステータス | 説明 |
 |------|------|------|
 | `std.io` | 🔨 施工中 | 入出力 |
 | `std.string` | 🔨 施工中 | 文字列操作 |
@@ -23,11 +23,11 @@ YaoXiang は現在 **実験検証段階** にあり、标准ライブラリと A
 | `std.dict` | 📋 計画中 | 辞書操作 |
 | `std.math` | 🔨 施工中 | 数学関数 |
 | `std.net` | 📋 計画中 | ネットワーク操作 |
-| `std.concurrent` | 📋 計画中 | 並行プリミティブ |
+| `std.concurrent` | 📋 計画中 | 並行性プリミティブ |
 
 ## 組み込み型
 
-### プリミティブ型
+### 原始型
 
 | 型 | 説明 | 例 |
 |------|------|------|
@@ -42,15 +42,15 @@ YaoXiang は現在 **実験検証段階** にあり、标准ライブラリと A
 
 | 型 | 説明 | 例 |
 |------|------|------|
-| `List[T]` | 同種要素のリスト | `[1, 2, 3]` |
+| `List[T]` | 同一型の要素リスト | `[1, 2, 3]` |
 | `Tuple(T1, T2, ...)` | 異種要素のタプル | `(1, "hello")` |
-| `Dict[K, V]` | キーと値のペアによるマップ | `{"a": 1}` |
+| `Dict[K, V]` | キーと値のペア | `{"a": 1}` |
 | `Fn(Args) -> Ret` | 関数型 | `(Int) -> Int` |
 
 ### ユーザー定義型
 
 ```yaoxiang
-// レコード型（ストラクチャ）
+// 記録型（ストラクト）
 Point: Type = { x: Float, y: Float }
 
 // 列挙型
@@ -65,8 +65,8 @@ Callable: Type = { call: (String) -> Void }
 ### 出力
 
 ```yaoxiang
-print(value)           // 改行なしで出力
-println(value)         // 改行ありで出力
+print(value)           // 出力、改行なし
+println(value)         // 出力、改行あり
 ```
 
 ### 変換
@@ -89,11 +89,11 @@ is_type(value, type)  // 型をチェック
 | キーワード | 説明 |
 |--------|------|
 | `Type` | メタ型 |
-| `spawn` | spawn関数をマーク |
+| `spawn` | spawn関数のマーク |
 | `spawn for` | 並列ループ |
 | `spawn {}` | spawnブロック |
 | `if` / `elif` / `else` | 条件分岐 |
-| `match` | パターンマッチング |
+| `match` | パターン照合 |
 | `while` / `for` | ループ |
 | `return` | 戻り値 |
 | `ref` | 参照を作成 |
@@ -119,10 +119,10 @@ count = count + 1
 // 通常関数
 add: (a: Int, b: Int) -> Int = a + b
 
-// spawn関数（自動並行化）
+// spawn関数（自動並行性）
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
-// ジェネリクス関数
+// ジェネリック関数
 identity: [T](x: T) -> T = x
 ```
 
@@ -138,7 +138,7 @@ if x > 0 {
     println("zero")
 }
 
-// パターンマッチング
+// パターン照合
 match result {
     ok(value) => println("success: " + value),
     err(error) => println("error: " + error),
@@ -164,9 +164,9 @@ data = fetch_file(path)?
 | 最高 | `( )` 関数呼び出し |
 | | `.` フィールドアクセス |
 | | `[ ]` インデックス |
-| | `unary -` 単項負号 |
-| | `* / %` 乗算/除算/剰余 |
-| | `+ -` 加算/減算 |
+| | `unary -` 単項マイナス |
+| | `* / %` 乗除算・剰余 |
+| | `+ -` 加減算 |
 | | `== != < > <= >=` 比較 |
 | | `and or` 論理演算 |
 | 最低 | `=` 代入 |
@@ -191,23 +191,23 @@ result = sqrt(16.0)  // 4.0
 ## コマンドラインツール
 
 ```bash
-# スクリプトの実行
+# スクリプトを実行
 yaoxiang run hello.yx
 
-# バイトコードのビルド
+# バイトコードを構築
 yaoxiang build hello.yx -o hello.42
 
-# インタープリタ実行
+# インタプリタで実行
 yaoxiang eval 'println("Hello")'
 
-# ヘルプの表示
+# ヘルプを表示
 yaoxiang --help
 ```
 
 ## 完全な例
 
 ```yaoxiang
-// フィボナッチ数列の計算
+// フィボナッチ数列を計算
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
@@ -222,15 +222,15 @@ main: () -> Void = {
 
 ## 関連リソース
 
-- [チュートリアル](../tutorial/) - YaoXiang の学習
-- [設計ドキュメント](../design/) - 言語設計の決定事項
+- [チュートリアル](../tutorial/) - YaoXiang を学ぶ
+- [設計ドキュメント](../design/) - 言語設計の決定
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
-## 貢献ガイドライン
+## 貢献ガイド
 
-標準ライブラリは作成中です。ご貢献を歓迎します！
+標準ライブラリは作成中です。貢献を歓迎します！
 
-1. モジュールを選択する（`std.io`、`std.net` など）
-2. `src/std/` で関数を実装する
-3. ドキュメントコメントを追加する
-4. PR を提交する
+1. モジュールを選択（例：`std.io`, `std.net`）
+2. `src/std/` で関数を実装
+3. ドキュメントコメントを追加
+4. PR を提交

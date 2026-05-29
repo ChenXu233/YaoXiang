@@ -1,11 +1,11 @@
 ---
 title: "Warning Codes"
-description: Compiler warning codes and descriptions
+description: "Compiler warning codes and descriptions"
 ---
 
 # Warning Codes
 
-This document lists warning codes that the YaoXiang compiler may produce. Warnings do not prevent compilation but may indicate potential issues in the code.
+This document lists the warning codes that the YaoXiang compiler may produce. Warnings do not block compilation but may indicate potential issues in your code.
 
 ## Configuration
 
@@ -18,7 +18,7 @@ dead-code = "warn"
 ```
 
 - `off`: Disable the warning
-- `warn`: Display the warning (default)
+- `warn`: Show the warning (default)
 - `deny`: Treat the warning as an error
 
 ## Warning List
@@ -29,16 +29,16 @@ dead-code = "warn"
 
 **Example**:
 ```yaoxiang
-pub fn dead_function() { }  // W1001: Unused exported function
+pub fn dead_function() { }  // W1001: Unused Exported Function
 
 fn main() {
     // dead_function is never called
 }
 ```
 
-**Suggestion**:
-- If the function doesn't need to be used externally, remove the `pub` modifier
-- If the function needs to be kept but is unused for now, set `dead-code = "off"` in the configuration
+**Recommendation**:
+- If the function does not need to be used externally, remove the `pub` modifier
+- If the function needs to be kept but is not yet used, set `dead-code = "off"` in the configuration
 
 ---
 
@@ -48,34 +48,34 @@ fn main() {
 
 **Example**:
 ```yaoxiang
-pub type DeadType = Int  // W1002: Unused exported type
+pub type DeadType = Int  // W1002: Unused Exported Type
 
 fn main() {
     let x: Int = 42;
 }
 ```
 
-**Suggestion**:
+**Recommendation**:
 - Remove the unnecessary `pub` modifier
-- If the type needs to be exported but is unused for now, ignore this warning
+- If the type needs to be exported but is not currently used, you may ignore this warning
 
 ---
 
 ### W1003: Unused Import
 
-**Reason**: A module or symbol imported via `use` is never used.
+**Reason**: A module or symbol imported via `use` statement is never used.
 
 **Example**:
 ```yaoxiang
-use std.json  // W1003: Unused import
+use std.json  // W1003: Unused Import
 
 fn main() {
     // json module is never used
 }
 ```
 
-**Suggestion**:
-- Remove unused imports to keep the code clean
+**Recommendation**:
+- Remove unused imports to keep code clean
 - If you need to keep the import (for side effects), consider using `use std.json.*` or add a comment explaining why
 
 ---
@@ -86,16 +86,16 @@ fn main() {
 
 **Example**:
 ```yaoxiang
-pub let dead_var = 42  // W1004: Unused exported variable
+pub let dead_var = 42  // W1004: Unused Exported Variable
 
 fn main() {
     // dead_var is never read
 }
 ```
 
-**Suggestion**:
+**Recommendation**:
 - Remove the unnecessary `pub` modifier
-- If the variable needs to be exported but is unused for now, ignore this warning
+- If the variable needs to be exported but is not currently used, you may ignore this warning
 
 ---
 
@@ -107,7 +107,7 @@ fn main() {
 ```yaoxiang
 type Foo { value: Int }
 
-pub fn Foo.dead_method(self) { }  // W1005: Unused exported method
+pub fn Foo.dead_method(self) { }  // W1005: Unused Exported Method
 
 fn main() {
     let foo = Foo { value: 1 };
@@ -115,31 +115,31 @@ fn main() {
 }
 ```
 
-**Suggestion**:
+**Recommendation**:
 - Remove the unnecessary `pub` modifier
-- If the method needs to be kept but is unused for now, ignore this warning
+- If the method needs to be kept but is not currently used, you may ignore this warning
 
 ---
 
-## Warning Level Details
+## Warning Levels Explained
 
 | Level | Effect |
 |------|--------|
 | `off` | Completely disable this warning |
-| `warn` | Display warning but continue compilation (default) |
-| `deny` | Treat warning as an error, block compilation |
+| `warn` | Display warning but continue compiling (default) |
+| `deny` | Treat warning as error, block compilation |
 
-### Use Cases
+### Usage Scenarios
 
-- **During development**: Use `warn` level to be aware of potential issues in the code
-- **Before release**: Use `deny` level to ensure no unused code remains
+- **During development**: Use `warn` level to be aware of potential issues
+- **Before release**: Use `deny` level to ensure no unused code
 - **Legacy code**: Use `off` level to temporarily ignore warnings
 
 ---
 
-## Difference from Error Codes
+## Distinction from Error Codes
 
-Warning codes use the `W` prefix (e.g., W1001), while error codes use the `E` prefix (e.g., E1001).
+Warning codes use the `W` prefix (like W1001), while error codes use the `E` prefix (like E1001).
 
 - **Error**: Blocks compilation and must be fixed
 - **Warning**: Indicates potential issues and can be optionally fixed

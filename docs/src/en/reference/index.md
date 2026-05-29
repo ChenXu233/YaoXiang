@@ -1,27 +1,27 @@
 # YaoXiang Reference Documentation
 
-> This document is under construction...
+> This documentation is under construction...
 
-YaoXiang is currently in the **experimental verification phase**, and the standard library and API are gradually being improved.
+YaoXiang is currently in the **experimental verification phase**, and the standard library and API are being gradually improved.
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator precedence
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator precedence
 - [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
 - [Module System](./language-spec/modules.md) - Module definition, import/export, scope
-- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency primitives, memory model
+- [Concurrency Model](./language-spec/concurrency.md) - Async programming, concurrency primitives, memory model
 - [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
 ## Current Status
 
 | Module | Status | Description |
 |------|------|------|
-| `std.io` | 🔨 In Progress | Input/Output |
-| `std.string` | 🔨 In Progress | String operations |
-| `std.list` | 🔨 In Progress | List operations |
+| `std.io` | 🔨 In progress | Input/output |
+| `std.string` | 🔨 In progress | String operations |
+| `std.list` | 🔨 In progress | List operations |
 | `std.dict` | 📋 Planned | Dictionary operations |
-| `std.math` | 🔨 In Progress | Math functions |
+| `std.math` | 🔨 In progress | Math functions |
 | `std.net` | 📋 Planned | Network operations |
 | `std.concurrent` | 📋 Planned | Concurrency primitives |
 
@@ -31,10 +31,10 @@ YaoXiang is currently in the **experimental verification phase**, and the standa
 
 | Type | Description | Example |
 |------|------|------|
-| `Void` | void/null, no return value | `()` |
+| `Void` | void/null | `()` |
 | `Bool` | Boolean | `true`, `false` |
 | `Int` | Integer | `42`, `-10` |
-| `Float` | Floating-point number | `3.14`, `-0.5` |
+| `Float` | Floating point | `3.14`, `-0.5` |
 | `Char` | Character | `'a'`, `'中'` |
 | `String` | String | `"hello"` |
 
@@ -42,9 +42,9 @@ YaoXiang is currently in the **experimental verification phase**, and the standa
 
 | Type | Description | Example |
 |------|------|------|
-| `List[T]` | List of elements of the same type | `[1, 2, 3]` |
+| `List[T]` | List of same-type elements | `[1, 2, 3]` |
 | `Tuple(T1, T2, ...)` | Tuple of heterogeneous elements | `(1, "hello")` |
-| `Dict[K, V]` | Key-value map | `{"a": 1}` |
+| `Dict[K, V]` | Key-value mapping | `{"a": 1}` |
 | `Fn(Args) -> Ret` | Function type | `(Int) -> Int` |
 
 ### User-Defined Types
@@ -74,7 +74,7 @@ println(value)         // Print with newline
 ```yaoxiang
 to_string(value)       // Convert to string
 to_int(value)          // Convert to integer
-to_float(value)        // Convert to float
+to_float(value)        // Convert to floating point
 ```
 
 ### Type Checking
@@ -91,13 +91,13 @@ is_type(value, type)  // Check type
 | `Type` | meta type |
 | `spawn` | Mark spawn function |
 | `spawn for` | Parallel loop |
-| `spawn {}` | Spawn block |
-| `if` / `elif` / `else` | Conditional branching |
-| `match` | Pattern matching |
-| `while` / `for` | Loop |
+| `spawn {}` | spawn block |
+| `if` / `elif` / `else` | Conditional branches |
+| `match` | pattern matching |
+| `while` / `for` | Loops |
 | `return` | Return value |
 | `ref` | Create reference |
-| `mut` | Mutable marker |
+| `mut` | mutable marker |
 
 ## Quick Syntax Reference
 
@@ -119,7 +119,7 @@ count = count + 1
 // Regular function
 add: (a: Int, b: Int) -> Int = a + b
 
-// Spawn function (automatic concurrency)
+// spawn function (automatic concurrency)
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
 // Generic function
@@ -138,7 +138,7 @@ if x > 0 {
     println("zero")
 }
 
-// Pattern matching
+// pattern matching
 match result {
     ok(value) => println("success: " + value),
     err(error) => println("error: " + error),
@@ -153,20 +153,20 @@ for i in 0..10 {
 ### Error Handling
 
 ```yaoxiang
-// ? operator propagates error
+// ? operator for error propagation
 data = fetch_file(path)?
 ```
 
 ## Operator Precedence
 
-| Priority | Operators |
+| Precedence | Operators |
 |--------|--------|
 | Highest | `( )` Function call |
 | | `.` Field access |
 | | `[ ]` Index |
 | | `unary -` Unary minus |
-| | `* / %` Multiplication, division, modulo |
-| | `+ -` Addition, subtraction |
+| | `* / %` Multiply, divide, modulo |
+| | `+ -` Add, subtract |
 | | `== != < > <= >=` Comparison |
 | | `and or` Logical operations |
 | Lowest | `=` Assignment |
@@ -233,4 +233,4 @@ The standard library is under construction, contributions are welcome!
 1. Choose a module (e.g., `std.io`, `std.net`)
 2. Implement functions in `src/std/`
 3. Add documentation comments
-4. Submit a PR
+4. Submit PR

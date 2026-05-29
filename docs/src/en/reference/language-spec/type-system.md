@@ -1,44 +1,44 @@
 # Type System Specification
 
-This document defines the type system specification for the YaoXiang programming language, including primitive types, composite types, generics, and traits.
+This document defines the type system specification for the YaoXiang programming language, including primitive types, compound types, generics, and traits.
 
 ---
 
 ## Chapter 0: Theoretical Foundation
 
-### 0.1 Curry-Howard Correspondence
+### 0.1 Curry-Howard Isomorphism
 
-The Curry-Howard correspondence (Curry-Howard isomorphism) is the theoretical foundation of YaoXiang's type system. It reveals the deep correspondence between type systems in programming languages and mathematical logic:
+The Curry-Howard correspondence is the theoretical foundation of YaoXiang's type system. It reveals the deep correspondence between type systems in programming languages and mathematical logic:
 
-| Logic | Programming Language | 
-|--------|----------|
+| Logic | Programming Language |
+|-------|----------------------|
 | Proposition \(P\) | Type `Type` |
 | Proof \(p: P\) | Program `x: T = ...` |
 | Implication \(P \rightarrow Q\) | Function type `(P) -> Q` |
 | Conjunction \(P \wedge Q\) | Product type `{ a: P, b: Q }` |
-| Disjunction \(P \vee Q\) | Sum type `{ a(P) \| b(Q) }` |
+| Disjunction \(P \vee Q\) | Sum type `{ a(P) | b(Q) }` |
 | Universal quantification \(\forall x:T. P(x)\) | Generics `(T: Type) -> ...` |
-| Truth \(\top\) | Empty type `{}` |
+| Truth \(\top\) | Void type `{}` |
 | Falsity \(\bot\) | `Void` / `Never` |
-| Type universes \(Type_n : Type_{n+1}\) | Universe stratification (preventing Russell's paradox) |
+| Type universe \(Type_n : Type_{n+1}\) | Universe stratification (preventing Russell's paradox) |
 | Mathematical induction | Type-level `match` |
 
-### 0.2 Types as Propositions, Programs as Proofs
+### 0.2 Types are Propositions, Programs are Proofs
 
 In YaoXiang, this correspondence is a first-class design principle:
 
-- **A type is a logical proposition**. `Int` is the proposition "an integer exists", `fn(a: Int, b: Int) -> Int` is the proposition "given two integers, an integer exists".
-- **Type checking is proof verification**. When a program passes type checking, it is equivalent to a constructive proof of a logical proposition.
-- **Terminating type-level computations correspond to correct inductive reasoning**. YaoXiang's type families (such as pattern matching of `Add` on `Nat`) are essentially type-level encodings of mathematical induction.
+- **A type is a logical proposition**. `Int` is the proposition "an integer exists", and `fn(a: Int, b: Int) -> Int` is the proposition "given two integers, an integer exists".
+- **Type checking is proof verification**. When a program passes type checking, it is as if a constructive proof of a logical proposition has been constructed.
+- **Terminating type-level computation corresponds to sound inductive reasoning**. YaoXiang's type families (such as pattern matching on `Add` over `Nat`) are essentially type-level encodings of mathematical induction.
 
 ### 0.3 Impact on Language Design
 
-The specific manifestations of the Curry-Howard correspondence in YaoXiang:
+The manifestations of Curry-Howard isomorphism in YaoXiang:
 
 1. **Universe stratification** (RFC-010): `Type₀ : Type₁ : Type₂ …` avoids logical paradoxes (Girard's paradox) caused by `Type: Type`
-2. **Type families** (RFC-011): Pattern matching on natural numbers `Nat(Zero/Succ)` at the type level corresponds to inductive proofs under Peano axioms
+2. **Type families** (RFC-011): Pattern matching at the type level on natural numbers `Nat(Zero/Succ)` corresponds to inductive proofs under Peano axioms
 3. **Conditional types** (RFC-011): `If: (C: Bool, T: Type, E: Type) -> Type` corresponds to case disjunction in logic
-4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to finite quantification "for each integer n, a type exists"
+4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to finite quantification over "for each integer n, a type exists"
 
 ---
 
@@ -68,23 +68,23 @@ TypeExpr    ::= PrimitiveType
 ### 2.1 Primitive Types
 
 | Type | Description | Default Size |
-|------|------|----------|
+|------|-------------|--------------|
 | `Type` | Meta type | 0 bytes |
-| `Void` | Void value | 0 bytes |
-| `Bool` | Boolean value | 1 byte |
-| `Int` | Signed integer | 8 bytes |
-| `Uint` | Unsigned integer | 8 bytes |
-| `Float` | Floating-point number | 8 bytes |
+| `Void` | void | 0 bytes |
+| `Bool` | boolean type | 1 byte |
+| `Int` | signed integer type | 8 bytes |
+| `Uint` | unsigned integer type | 8 bytes |
+| `Float` | float type | 8 bytes |
 | `String` | UTF-8 string | Variable |
 | `Char` | Unicode character | 4 bytes |
-| `Bytes` | Raw bytes | Variable |
+| `Bytes` | raw bytes | Variable |
 
 Width-specified integers: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
 Width-specified floats: `Float32`, `Float64`
 
 ---
 
-## Chapter 3: Composite Types
+## Chapter 3: Compound Types
 
 ### 3.1 Record Types
 
@@ -118,15 +118,15 @@ Point: Type = {
 
 **Rules**:
 - Record types are defined using curly braces `{}`
-- Field name is directly followed by a colon and type
-- Interface names written in the type body indicate implementation of those interfaces
+- Field names are followed directly by a colon and type
+- Interface names written within the type body indicate implementation of that interface
 
 #### 3.1.1 Field Default Values
 
 Type fields can specify default values, which are optional during construction:
 
 ```yaoxiang
-// Fields with defaults - optional during construction
+// Fields with default values - optional during construction
 Point: Type = {
     x: Float = 0,
     y: Float = 0
@@ -137,7 +137,7 @@ Point()           // -> Point(x=0, y=0)
 Point(x=1)       // -> Point(x=1, y=0)
 Point(x=1, y=2) // -> Point(x=1, y=2)
 
-// Fields without defaults - required during construction
+// Fields without default values - required during construction
 Point2: Type = {
     x: Float,
     y: Float
@@ -154,7 +154,7 @@ Point2()          // Error
 
 #### 3.1.2 Builtin Bindings
 
-Methods can be directly bound inside type definition bodies:
+Methods can be bound directly within type definition bodies:
 
 ```yaoxiang
 // Method 1: Reference external function binding
@@ -211,7 +211,7 @@ FnField       ::= Identifier ':' FnType
 FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
 ```
 
-**Syntax**: Interfaces are record types where all fields are function types
+**Syntax**: An interface is a record type where all fields are function types
 
 ```yaoxiang
 // Interface definition
@@ -228,15 +228,15 @@ Serializable: Type = {
 EmptyInterface: Type = {}
 ```
 
-**Interface implementation**: A type implements interfaces by listing interface names at the end of its definition
+**Interface Implementation**: A type implements an interface by listing the interface name at the end of its definition
 
 ```yaoxiang
-// Types implementing interfaces
+// Type implementing interfaces
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,        // Implement Drawable interface
-    Serializable     // Implement Serializable interface
+    Drawable,        // Implements Drawable interface
+    Serializable     // Implements Serializable interface
 }
 ```
 
@@ -249,7 +249,7 @@ d.draw(screen)        // After compilation: direct call to circle_draw, no vtabl
 
 // Function return value (concrete type not determinable at compile-time -> vtable call)
 d: Drawable = get_shape()
-d.draw(screen)        // Method lookup via vtable
+d.draw(screen)        // Method lookup through vtable
 
 // Interface as function parameter
 process: (d: Drawable) -> Void = d.draw(screen)
@@ -257,8 +257,8 @@ process: (d: Drawable) -> Void = d.draw(screen)
 
 **Compile-time optimization strategy**:
 
-| Scenario | Inference Result | Call Method |
-|------|----------|----------|
+| Scenario | Inference result | Call method |
+|----------|------------------|-------------|
 | Direct assignment of concrete type | Concrete type determinable | Direct call (zero overhead) |
 | Function return value | Unknown | vtable |
 | Heterogeneous collection | Multiple types | vtable |
@@ -295,7 +295,7 @@ TypeBound       ::= Identifier
 ### 4.2 Generic Type Definitions
 
 ```yaoxiang
-// Basic generic types
+// Basic generic type
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -431,7 +431,7 @@ factorial: (n: Int)(n: n) -> Int = {
 
 // Compile-time constant array
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),      // Array with size known at compile-time
+    data: Array(T, N),      // Array with compile-time known size
     length: N
 }
 
@@ -508,10 +508,10 @@ TypeUnion     ::= TypeExpr '|' TypeExpr
 TypeIntersection ::= TypeExpr '&' TypeExpr
 ```
 
-**Syntax**: Type intersection `A & B` represents types that simultaneously satisfy both A and B
+**Syntax**: Type intersection `A & B` represents types that satisfy both A and B
 
 ```yaoxiang
-// Interface composition = Type intersection
+// Interface composition = type intersection
 DrawableSerializable: Type = Drawable & Serializable
 
 // Using intersection types
@@ -588,7 +588,7 @@ Serializable: Type = { serialize: () -> String }
 Point: Type = {
     x: Float,
     y: Float,
-    Serializable    // Implement Serializable interface
+    Serializable    // Implements Serializable interface
 }
 
 // === Function types ===

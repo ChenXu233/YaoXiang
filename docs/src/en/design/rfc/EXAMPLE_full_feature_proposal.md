@@ -1,11 +1,11 @@
 ---
-title: 'RFC Example: Enhanced Pattern Matching Syntax'
+title: "RFC Example: Enhanced Pattern Matching Syntax"
 ---
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example that demonstrates how to write a complete RFC proposal.
-> Refer to this template when writing your own RFC.
+> **Note**: This is an RFC template example, demonstrating the writing of a complete RFC proposal.
+> Please refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
@@ -21,7 +21,7 @@ Add more powerful pattern matching capabilities to YaoXiang, including nested pa
 
 ### Why is this feature needed?
 
-The current `match` expression has limited functionality and cannot handle the following common scenarios:
+Current `match` expressions have limited functionality and cannot handle the following common scenarios:
 
 ```yaoxiang
 # Cannot destructure nested structures
@@ -33,7 +33,7 @@ match person {
 
 # Cannot bind variables in patterns
 match result {
-    ok(value) => print(value)          # ❌ Requires explicit destructuring
+    ok(value) => print(value)          # ❌ Explicit destructuring required
 }
 ```
 
@@ -49,7 +49,7 @@ match result {
 
 Extend `match` expression syntax to support:
 
-1. **Nested pattern destructuring**: Struct destructuring at arbitrary depth
+1. **Nested pattern destructuring**: Destructuring of structs at any depth
 2. **Guard expressions**: Add `if` conditions after patterns
 3. **Pattern variable binding**: Bind variables directly from patterns
 
@@ -88,11 +88,11 @@ match data {
 
 ```yaoxiang
 # New syntax
-let Point(x: 0, y: _) = point  # Only binds when x == 0
-let Ok(value) = result         # Destructures Result
+let Point(x: 0, y: _) = point  # Bind only when x == 0
+let Ok(value) = result         # Destructure Result
 
 # Multiple binding
-let (a, b, c) = tuple          # Destructures tuple
+let (a, b, c) = tuple          # Destructure tuple
 ```
 
 ## Detailed Design
@@ -120,14 +120,14 @@ RestPattern   ::= '...'
 
 ### Type System Impact
 
-- Pattern matching type checking needs to be extended
+- Type checking for pattern matching needs to be extended
 - Pattern variables receive the correct type upon successful match
 
 ### Compiler Changes
 
-| Component | Change |
-|-----------|--------|
-| lexer | New pattern-related tokens |
+| Component | Changes |
+|-----------|---------|
+| lexer | New tokens for patterns |
 | parser | New pattern parsing logic |
 | typecheck | Pattern type inference and binding |
 | codegen | Pattern matching code generation |
@@ -135,27 +135,27 @@ RestPattern   ::= '...'
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Only new syntax added, original `match` syntax unchanged
+- Only new syntax is added, original `match` syntax remains unchanged
 
 ## Trade-offs
 
-### Advantages
+### Pros
 
 - More expressive syntax, more concise code
 - Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
-- Reduces runtime errors, catches non-matches earlier
+- Reduces runtime errors, catches non-matches early
 
-### Disadvantages
+### Cons
 
 - Increased compiler implementation complexity
 - Slightly steeper learning curve
 
 ## Alternative Solutions
 
-| Solution | Why not chosen |
+| Solution | Why Not Chosen |
 |----------|----------------|
 | Top-level destructuring only | Cannot handle common nested scenarios |
-| Functional style only | Unnatural to mix with imperative code |
+| Use functional style | Not natural when mixed with imperative code |
 | Defer to v2.0 | Users already have strong demand |
 
 ## Implementation Strategy
@@ -169,7 +169,7 @@ RestPattern   ::= '...'
 ### Dependencies
 
 - No external dependencies
-- Basic type system needs to be completed first
+- Requires completion of the basic type system first
 
 ### Risks
 
@@ -178,9 +178,9 @@ RestPattern   ::= '...'
 
 ## Open Questions
 
-1. [ ] Syntax for at-pattern (`@` binding)?
+1. [ ] What is the syntax for binding patterns (`@` binding)?
 2. [ ] Should compile-time pattern exhaustiveness checking be supported?
-3. [ ] Performance optimization strategies?
+3. [ ] What are the performance optimization strategies?
 
 ## References
 
