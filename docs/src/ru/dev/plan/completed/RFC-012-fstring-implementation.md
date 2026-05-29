@@ -421,7 +421,7 @@ fn test_fstring_json_like() {
     let code = r#"
         name = "Alice"
         age = 30
-        print(f"{ {"name": "{name}", "age": {age}} }")
+        print(f"{{"name": "{name}", "age": {age}}}")
     "#;
     // Ожидаемый вывод: { "name": "Alice", "age": 30 }
 }
@@ -497,7 +497,7 @@ fn test_fstring_json_like() {
 |------|---------------|---------------------|
 | `src/frontend/core/lexer/tokens.rs` | Изменение | Добавлен токен `FStringLiteral(String)` и ошибка `UnterminatedFStringInterpolation` |
 | `src/frontend/core/lexer/tokenizer.rs` | Изменение | В `scan_identifier()` добавлено определение префикса `f"` и вызов `scan_fstring()` |
-| `src/frontend/core/lexer/literals.rs` | Изменение | Добавлена функция `scan_fstring()` (~180 строк), поддержка `{}` интерполяции, экранирование `{{` / `}}`, отслеживание глубины вложенных скобок |
+| `src/frontend/core/lexer/literals.rs` | Изменение | Добавлена функция `scan_fstring()` (~180 строк), поддержка `{}` интерполяции, экранирование `{ }` скобок |
 | `src/frontend/core/lexer/mod.rs` | Изменение | В `log_token()` добавлена ветка FStringLiteral; подключён модуль тестов fstring |
 | `src/frontend/core/parser/ast.rs` | Изменение | Добавлен AST узел `FString` и enum `FStringSegment` |
 | `src/frontend/core/parser/pratt/nud.rs` | Изменение | Добавлены `parse_fstring()`, `parse_fstring_segments()`, `split_format_spec()` |

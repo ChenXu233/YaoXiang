@@ -1,6 +1,6 @@
 ```markdown
 ---
-title: RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design
+title: 'RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design'
 ---
 
 # RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design

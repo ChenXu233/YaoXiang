@@ -1,5 +1,5 @@
 ---
-title: RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)
+title: 'RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)'
 ---
 
 # RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)

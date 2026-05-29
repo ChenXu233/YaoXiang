@@ -1,6 +1,10 @@
 import { defineConfig } from 'vitepress'
-import { generateSidebar } from 'vitepress-sidebar'
+import { generateSidebar as _generateSidebar } from 'vitepress-sidebar'
 import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
+
+// VitePress 源文件在 src/ 目录下，vitepress-sidebar 从 process.cwd() 解析路径
+// 需要 documentRootPath: '/src' 让插件从 docs/src/ 开始扫描
+const generateSidebar = (opts) => _generateSidebar({ documentRootPath: '/src', ...opts })
 
 export default defineConfig({
   base: '/YaoXiang/',

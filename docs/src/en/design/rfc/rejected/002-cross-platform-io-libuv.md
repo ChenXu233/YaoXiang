@@ -1,5 +1,5 @@
 ---
-title: RFC-002: Cross-Platform I/O and libuv Integration (Rejected)
+title: 'RFC-002: Cross-Platform I/O and libuv Integration (Rejected)'
 ---
 
 # RFC-002: Cross-Platform I/O and libuv Integration

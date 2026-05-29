@@ -1,5 +1,5 @@
 ---
-title: RFC-001: Spawn Model and Error Handling System
+title: 'RFC-001: Spawn Model and Error Handling System'
 ---
 
 # RFC-001: Spawn Model and Error Handling System

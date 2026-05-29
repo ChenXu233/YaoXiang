@@ -1,6 +1,6 @@
 ```en
 ---
-title: RFC-011: Generics System Design
+title: 'RFC-011: Generics System Design'
 ---
 
 # RFC-011: Generics System Design - Zero-Cost Abstraction and Macro Substitution

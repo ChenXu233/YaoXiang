@@ -1,5 +1,5 @@
 ---
-title: RFC-014: Package Management System Design
+title: 'RFC-014: Package Management System Design'
 ---
 
 # RFC-014: Package Management System Design

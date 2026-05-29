@@ -1,5 +1,5 @@
 ---
-title: RFC Example: Enhanced Pattern Matching Syntax
+title: 'RFC Example: Enhanced Pattern Matching Syntax'
 ---
 
 # RFC Example: Enhanced Pattern Matching Syntax

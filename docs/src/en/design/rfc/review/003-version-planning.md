@@ -1,5 +1,5 @@
 ---
-title: RFC-003: Version Planning
+title: 'RFC-003: Version Planning'
 ---
 
 # RFC-003: Version Planning

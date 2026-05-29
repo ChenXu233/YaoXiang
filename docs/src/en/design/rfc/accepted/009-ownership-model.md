@@ -1,5 +1,5 @@
 ---
-title: RFC-009: Ownership Model Design
+title: 'RFC-009: Ownership Model Design'
 ---
 
 # RFC-009: Ownership Model Design
