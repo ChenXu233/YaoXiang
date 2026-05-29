@@ -1,6 +1,6 @@
 # E7xxx: I/O and System Errors
 
-> Auto-generated from `src/util/diagnostic/codes/`
+> Automatically generated from `src/util/diagnostic/codes/`
 
 ## Error List
 
