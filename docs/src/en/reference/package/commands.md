@@ -1,6 +1,6 @@
 ---
 title: Command Line Interface
-description: Detailed documentation for all package manager commands
+description: Detailed description of all package manager commands
 ---
 
 # Command Line Interface
@@ -18,13 +18,13 @@ yaoxiang init <project-name>
 ### Arguments
 
 | Argument | Description |
-|----------|-------------|
+|------|------|
 | project-name | Name of the new project |
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
+|------|------|
 | `--help` | Display help information |
 
 ### Examples
@@ -57,15 +57,15 @@ yaoxiang add <package-name> --dev
 ### Arguments
 
 | Argument | Description |
-|----------|-------------|
+|------|------|
 | package-name | Name of the dependency to add |
 | version | Version number (optional, defaults to `*`) |
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
-| `--dev`, `-D` | Add as a development dependency |
+|------|------|
+| `--dev`, `-D` | Add as a dev dependency |
 
 ### Examples
 
@@ -73,13 +73,13 @@ yaoxiang add <package-name> --dev
 # Add latest version
 yaoxiang add http
 
-# Add specific version
+# Add specified version
 yaoxiang add http 1.0.0
 
 # Add version range
 yaoxiang add json ">=2.0.0"
 
-# Add development dependency
+# Add dev dependency
 yaoxiang add test-utils --dev
 yaoxiang add benchmark -D
 ```
@@ -100,14 +100,14 @@ yaoxiang rm <package-name> --dev
 ### Arguments
 
 | Argument | Description |
-|----------|-------------|
+|------|------|
 | package-name | Name of the dependency to remove |
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
-| `--dev`, `-D` | Remove development dependency |
+|------|------|
+| `--dev`, `-D` | Remove dev dependency |
 
 ### Examples
 
@@ -115,7 +115,7 @@ yaoxiang rm <package-name> --dev
 # Remove regular dependency
 yaoxiang rm http
 
-# Remove development dependency
+# Remove dev dependency
 yaoxiang rm test-utils --dev
 ```
 
@@ -135,7 +135,7 @@ yaoxiang install
 
 - Reads dependency declarations from `yaoxiang.toml`
 - Downloads all dependencies to the `vendor` directory
-- Generates/updates `yaoxiang.lock` with locked versions
+- Generates/updates `yaoxiang.lock` for version locking
 - Detects dependency version conflicts
 
 ### Examples
@@ -144,7 +144,7 @@ yaoxiang install
 # Install all dependencies
 yaoxiang install
 
-# Example output:
+# Sample output:
 # 📦 Resolving dependencies...
 #   http (1.0.0) [installed]
 #   json (2.0.0) [cached]
@@ -167,13 +167,13 @@ yaoxiang update <package-name>
 ### Arguments
 
 | Argument | Description |
-|----------|-------------|
+|------|------|
 | package-name | Specific dependency to update (optional) |
 
 ### Description
 
-- Without arguments: updates all dependencies
-- With arguments: updates only the specified dependency
+- Without arguments: update all dependencies
+- With argument: update only the specified dependency
 
 ### Examples
 
@@ -181,12 +181,12 @@ yaoxiang update <package-name>
 # Update all dependencies
 yaoxiang update
 
-# Example output:
+# Sample output:
 # 📦 Updating dependencies...
 #   http (0 → 1.1.0)
-# ✅ 1 dependency updated, lock file updated
+# ✅ Updated 1 dependency, lock file updated
 
-# Update a single dependency
+# Update single dependency
 yaoxiang update http
 ```
 
@@ -204,7 +204,7 @@ yaoxiang list
 
 ### Description
 
-Displays all runtime dependencies and development dependencies, along with their versions and sources.
+Displays all runtime dependencies and dev dependencies, along with their versions and sources.
 
 ### Examples
 
@@ -212,13 +212,13 @@ Displays all runtime dependencies and development dependencies, along with their
 # List dependencies
 yaoxiang list
 
-# Example output:
+# Sample output:
 # 📦 Project Dependencies
 #
-# Runtime Dependencies:
+# Runtime dependencies:
 #   http        1.0.0    registry
 #   json        2.0.0    registry
 #
-# Development Dependencies:
+# Dev dependencies:
 #   test-utils  0.5.0    registry
 ```

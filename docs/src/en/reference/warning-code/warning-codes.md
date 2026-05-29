@@ -1,3 +1,4 @@
+```yaml
 ---
 title: Warning Codes
 description: Compiler warning codes and descriptions
@@ -18,14 +19,14 @@ dead-code = "warn"
 ```
 
 - `off`: Disable the warning
-- `warn`: Display the warning (default)
+- `warn`: Show the warning (default)
 - `deny`: Treat the warning as an error
 
 ## Warning List
 
 ### W1001: Unused Exported Function
 
-**Reason**: An exported function is never called by any code.
+**Cause**: An exported function is never called by any code.
 
 **Example**:
 ```yaoxiang
@@ -37,14 +38,14 @@ fn main() {
 ```
 
 **Suggestion**:
-- If the function doesn't need to be used externally, remove the `pub` modifier
-- If the function needs to be kept but is unused for now, set `dead-code = "off"` in the configuration
+- If the function does not need to be used externally, remove the `pub` modifier
+- If the function needs to be kept but is not currently used, set `dead-code = "off"` in the configuration
 
 ---
 
 ### W1002: Unused Exported Type
 
-**Reason**: An exported type (type alias or custom type) is never used.
+**Cause**: An exported type (type alias or custom type) is never used.
 
 **Example**:
 ```yaoxiang
@@ -57,13 +58,13 @@ fn main() {
 
 **Suggestion**:
 - Remove the unnecessary `pub` modifier
-- If the type needs to be exported but is unused for now, ignore this warning
+- If the type needs to be exported but is not currently used, ignore this warning
 
 ---
 
 ### W1003: Unused Import
 
-**Reason**: A module or symbol imported via `use` is never used.
+**Cause**: A module or symbol imported via `use` is never used.
 
 **Example**:
 ```yaoxiang
@@ -75,14 +76,14 @@ fn main() {
 ```
 
 **Suggestion**:
-- Remove unused imports to keep the code clean
+- Remove unused imports to keep code clean
 - If you need to keep the import (for side effects), consider using `use std.json.*` or add a comment explaining why
 
 ---
 
 ### W1004: Unused Exported Variable
 
-**Reason**: A variable exported with `pub let` is never read.
+**Cause**: A variable exported with `pub let` is never read.
 
 **Example**:
 ```yaoxiang
@@ -95,13 +96,13 @@ fn main() {
 
 **Suggestion**:
 - Remove the unnecessary `pub` modifier
-- If the variable needs to be exported but is unused for now, ignore this warning
+- If the variable needs to be exported but is not currently used, ignore this warning
 
 ---
 
 ### W1005: Unused Exported Method
 
-**Reason**: A method exported on a type is never called.
+**Cause**: A method exported on a type is never called.
 
 **Example**:
 ```yaoxiang
@@ -117,22 +118,22 @@ fn main() {
 
 **Suggestion**:
 - Remove the unnecessary `pub` modifier
-- If the method needs to be kept but is unused for now, ignore this warning
+- If the method needs to be kept but is not currently used, ignore this warning
 
 ---
 
 ## Warning Level Details
 
 | Level | Effect |
-|------|--------|
+|-------|--------|
 | `off` | Completely disable this warning |
-| `warn` | Display warning but continue compilation (default) |
+| `warn` | Show warning but continue compilation (default) |
 | `deny` | Treat warning as an error, block compilation |
 
-### Use Cases
+### Usage Scenarios
 
 - **During development**: Use `warn` level to be aware of potential issues in the code
-- **Before release**: Use `deny` level to ensure no unused code remains
+- **Before release**: Use `deny` level to ensure there is no unused code
 - **Legacy code**: Use `off` level to temporarily ignore warnings
 
 ---
@@ -141,5 +142,6 @@ fn main() {
 
 Warning codes use the `W` prefix (e.g., W1001), while error codes use the `E` prefix (e.g., E1001).
 
-- **Error**: Blocks compilation and must be fixed
-- **Warning**: Indicates potential issues and can be optionally fixed
+- **Error**: Blocks compilation, must be fixed
+- **Warning**: Indicates potential issues, can be optionally fixed
+```

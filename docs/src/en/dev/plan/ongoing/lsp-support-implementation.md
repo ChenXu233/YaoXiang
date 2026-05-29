@@ -1,6 +1,6 @@
 # LSP Support Implementation Plan
 
-> **Task**: Implement YaoXiang Language Server Protocol (LSP) support
+> **Task**: Implement Language Server Protocol (LSP) support for YaoXiang
 > **Based on RFC**: RFC-017 Language Server Protocol (LSP) Support Design
 > **Date**: 2026-02-23
 > **Status**: In Progress
@@ -10,34 +10,34 @@
 
 ## Overview
 
-This plan, based on RFC-017 document, decomposes LSP implementation into 6 phases with a total of 20 sub-steps. Each step includes detailed implementation goals, acceptance criteria, and test items.
+This plan, based on RFC-017, decomposes LSP implementation into 6 phases with 20 sub-steps. Each step includes detailed implementation goals, acceptance criteria, and test items.
 
 ### Dependency Overview
 
 ```
-Phase 0 (Prerequisites) ──────┐
-    │                         │
-    ▼                         │
+Phase 0 (Prerequisite) ──────┐
+    │                        │
+    ▼                        │
 Phase 1 ─────────────────────┼──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5
-                              │         │         │         │
-                              └─────────┴─────────┴─────────┘
-                                        (Parallelizable Development)
+                             │         │         │         │
+                             └─────────┴─────────┴─────────┘
+                                       (Can be developed in parallel)
 ```
 
 ---
 
-## Phase 0: Compiler Prerequisites ✅ Completed
+## Phase 0: Compiler Prerequisite Adaptation ✅ Completed
 
 > **Importance**: This phase is a prerequisite for LSP implementation and must be completed first
-> **Target Version**: v0.6 (parallel with LSP server development)
+> **Target Version**: v0.6 (in parallel with LSP server development)
 > **Completion Date**: 2025-07
 
 ### 0.1 Error Collection Pattern
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Modify the `src/frontend/typecheck/inference/` module to return `Result<Type, Vec<Error>>` instead of returning immediately on error
-- Implement `ErrorKind` enum with `Error` (severe error), `Warning` (warning), and `Note` (additional information)
-- Error collector continuously accumulates errors, returning all errors after the check is complete
+- Implement `ErrorKind` enum, containing `Error` (severe error), `Warning` (warning), `Note` (additional information)
+- Error collector continuously accumulates errors, returning all errors together after check completion
 
 **Acceptance Criteria**:
 - [x] Type checker returns all errors for a single file (non-short-circuit return)
@@ -46,14 +46,14 @@ Phase 1 ─────────────────────┼──
 - [x] When only Warning exists, continue compilation and display warnings
 
 **Implementation Notes**:
-- `StatementChecker` adds `collect_all_errors` mode; errors no longer short-circuit but accumulate into `collected_errors: Vec<Diagnostic>`
-- `TypeChecker::check_module_collect_all()` provides full error collection entry point for LSP
-- Reuses existing `Severity` enum (Error/Warning/Info/Hint)
+- `StatementChecker` adds `collect_all_errors` mode; errors no longer short-circuit return but accumulate to `collected_errors: Vec<Diagnostic>`
+- `TypeChecker::check_module_collect_all()` provides a full error collection entry point for LSP
+- Reuse existing `Severity` enum (Error/Warning/Info/Hint)
 - Modified files: `src/frontend/typecheck/inference/statements.rs`, `src/frontend/typecheck/mod.rs`
 
 **Test Items**:
 - [x] Single file multi-error collection test (at least 3 type errors)
-- [x] Error/Warning/Note level distinction test
+- [x] Error/Warning/Note level differentiation test
 - [x] Error accumulation and unified return test
 - [x] Regression test: existing correct code behavior unchanged
 
@@ -61,24 +61,24 @@ Phase 1 ─────────────────────┼──
 
 ### 0.2 Parser Error Recovery
 
-**Implementation Goal**:
+**Implementation Goals**:
 - When parsing encounters errors, insert placeholder nodes like `MissingExpression`, `MissingStatement`, etc.
-- Prevent type check panics due to incomplete AST
+- Avoid type check panics due to incomplete AST
 - Example: `x = ;` → `x = MissingExpression`
 
 **Acceptance Criteria**:
 - [x] Parser generates placeholder nodes instead of panicking when encountering syntax errors
 - [x] Placeholder nodes have reasonable Span information
-- [x] Type checker handles placeholder nodes (reports error but does not panic)
+- [x] Type checker can handle placeholder nodes (report error but no panic)
 
 **Implementation Notes**:
 - AST adds `Expr::Error(Span)` and `StmtKind::Error(Span)` placeholder variants
 - `parse_with_recovery()` function always returns `ParseResult` (containing Module + error list), never fails
-- Both `ExpressionInferrer` and `StatementChecker` can handle Error variants (reports `invalid_syntax` error but does not panic)
+- Both `ExpressionInferrer` and `StatementChecker` can handle Error variants (report `invalid_syntax` error but no panic)
 - Modified files: `src/frontend/core/parser/ast.rs`, `src/frontend/core/parser/mod.rs`, `src/frontend/core/parser/parser_state.rs`, `src/frontend/typecheck/inference/expressions.rs`, `src/middle/core/ir_gen.rs`
 
 **Test Items**:
-- [x] Syntax error recovery test (missing expressions, semicolons, parentheses, etc.)
+- [x] Syntax error recovery test (missing expressions, semicolons, brackets, etc.)
 - [x] Continuous error recovery test
 - [x] Placeholder node Span correctness test
 - [x] Error cascade scenario test
@@ -87,9 +87,9 @@ Phase 1 ─────────────────────┼──
 
 ### 0.3 Symbol Table Location Extension
 
-**Implementation Goal**:
-- Extend `SymbolEntry` structure to add `location: Location` field (file path, line number, column number)
-- Build `SymbolIndex` reverse index (name → list of locations)
+**Implementation Goals**:
+- Extend `SymbolEntry` structure, adding `location: Location` field (file path, line number, column number)
+- Build `SymbolIndex` reverse index (name → location list)
 - Support fast lookup of symbol definition locations
 
 **Acceptance Criteria**:
@@ -98,51 +98,51 @@ Phase 1 ─────────────────────┼──
 - [x] Can query all symbols in a file by file
 
 **Implementation Notes**:
-- `SymbolEntry` adds `location: Option<SymbolLocation>>` field; `SymbolLocation` contains `file_path` and `Span`
+- `SymbolEntry` adds `location: Option<SymbolLocation>>` field, where `SymbolLocation` contains `file_path` and `Span`
 - `SymbolTable` adds `insert_with_location()` and `insert_full()` methods
-- New `SymbolIndex` reverse index structure supports `by_name` and `by_file` bidirectional queries
+- New `SymbolIndex` reverse index structure, supporting bidirectional query by `by_name` and `by_file`
 - Methods include: `find_by_name()`, `find_by_file()`, `from_table()`, `remove_file()`, etc.
-- Modified file: `src/frontend/core/lexer/symbols.rs`
+- Modified files: `src/frontend/core/lexer/symbols.rs`
 
 **Test Items**:
 - [x] Symbol location information correctness test
 - [x] Name to location mapping test
 - [x] Multi-file symbol index test
-- [x] Symbol overload/duplicate name handling test
+- [x] Symbol overload/overload handling test
 
 ---
 
 ### 0.4 Document Cache System (DocumentCache)
 
-**Implementation Goal**:
-- Implement `DocumentCache` structure containing:
+**Implementation Goals**:
+- Implement `DocumentCache` structure, containing:
   - `version: u32` - LSP document version number
   - `content: String` - Current content
-  - `content_hash: u64` - Content hash (fast comparison)
+  - `content_hash: u64` - Content hash (for quick comparison)
   - `ast: Option<Ast>>` - Cached AST
 - Implement incremental change detection (compare content_hash)
 - File-level cache: re-parse entire file when changed
 
 **Acceptance Criteria**:
 - [x] DocumentCache correctly manages version numbers
-- [x] Hash detection quickly identifies unchanged documents
-- [x] Correctly re-parses when changed
-- [x] Reasonable memory footprint (has cleanup mechanism)
+- [x] Hash detection can quickly identify unchanged documents
+- [x] Correctly re-parse when changed
+- [x] Reasonable memory usage (has cleanup mechanism)
 
 **Implementation Notes**:
 - `DocumentCache` structure: version, content, content_hash, ast (`Option<Module>>`), file_path, dirty
 - `DocumentStore` manages all open documents, `HashMap<String, DocumentCache>`, supports capacity limits and auto-cleanup
-- Content hash uses `DefaultHasher`; `update()` only updates content and invalidates AST cache when hash changes
-- Cleanup strategy: When exceeding `max_documents` (default 128), removes documents with lowest version number
-- Contains complete test suite (7 unit tests)
-- Modified file: `src/util/cache.rs`
+- Content hash uses `DefaultHasher`, `update()` only updates content and invalidates AST cache when hash changes
+- Cleanup strategy: When exceeding `max_documents` (default 128), remove documents with lowest version number
+- Includes complete test suite (7 unit tests)
+- Modified files: `src/util/cache.rs`
 
 **Test Items**:
 - [x] Version number increment test
 - [x] Hash detection accuracy test
 - [x] Incremental change application test
 - [x] Cache cleanup/expiration test
-- [ ] Large file cache performance test (to be added in subsequent phases)
+- [ ] Large file cache performance test (to be added in later phases)
 
 ---
 
@@ -150,7 +150,7 @@ Phase 1 ─────────────────────┼──
 
 ### 1.1 Project Structure Creation
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Create `src/lsp/` directory structure
 - Introduce `lsp-types` crate dependency
 - Configure Cargo.toml
@@ -164,15 +164,15 @@ src/lsp/
 ├── capabilities.rs     # Server capability declaration
 ├── handlers/
 │   ├── mod.rs
-│   ├── initialize.rs   # Initialization handler
+│   ├── initialize.rs   # Initialize handler
 │   ├── text_document.rs # Document operation handler
 │   ├── completion.rs   # Completion handler
 │   ├── definition.rs   # Go-to definition handler
-│   ├── references.rs   # Reference search handler
+│   ├── references.rs   # Find references handler
 │   ├── hover.rs        # Hover tooltip handler
 │   └── diagnostics.rs  # Diagnostics handler
 ├── world.rs            # Compilation world
-├── scroller.rs         # Symbol index builder
+├── scroller.rs         # Symbol index construction
 ├── protocol.rs         # LSP protocol type definitions
 └── cache/              # Incremental cache module
     ├── mod.rs
@@ -186,11 +186,11 @@ src/lsp/
 - [x] Basic modules compile successfully
 
 **Implementation Notes**:
-- Create `src/lsp/` directory containing `mod.rs`, `server.rs`, `session.rs`, `capabilities.rs`, `protocol.rs`, `world.rs`, `handlers/`
+- Create `src/lsp/` directory, containing `mod.rs`, `server.rs`, `session.rs`, `capabilities.rs`, `protocol.rs`, `world.rs`, `handlers/`
 - Cargo.toml adds `lsp-types = "0.97"` and `lsp-server = "0.7"` dependencies
 - `lib.rs` registers `pub mod lsp`
 - `main.rs` adds `yaoxiang lsp` subcommand entry
-- Handler submodules: initialize, text_document, diagnostics (implemented); completion, definition, references, hover (placeholders)
+- handlers submodules: initialize, text_document, diagnostics (implemented); completion, definition, references, hover (placeholder)
 
 **Test Items**:
 - [x] Module compilation test
@@ -200,10 +200,10 @@ src/lsp/
 
 ### 1.2 Lifecycle Method Implementation
 
-**Implementation Goal**:
-- Implement `initialize` request handler (return serverCapabilities)
-- Implement `initialized` notification handler
-- Implement `shutdown` / `exit` request handlers
+**Implementation Goals**:
+- Implement `initialize` request handling (return serverCapabilities)
+- Implement `initialized` notification handling
+- Implement `shutdown` / `exit` request handling
 - Declare supported LSP protocol version (3.18)
 
 **Acceptance Criteria**:
@@ -214,7 +214,7 @@ src/lsp/
 **Implementation Notes**:
 - `handle_initialize()`: returns ServerCapabilities (currently supports TextDocumentSync Full mode) + ServerInfo
 - `handle_initialized()`: session enters Running state
-- `handle_shutdown()`: cleans up document cache, session enters ShuttingDown state
+- `handle_shutdown()`: cleanup document cache, session enters ShuttingDown state
 - `exit` notification ends main loop
 - Session state machine: Uninitialized → Initializing → Running → ShuttingDown
 - Unknown methods return MethodNotFound error
@@ -229,26 +229,26 @@ src/lsp/
 
 ### 1.3 Basic Logging and Error Handling
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Configure logging system (env_logger or tracing)
 - Implement JSON-RPC error responses
 - Format error messages into readable logs
 
 **Acceptance Criteria**:
-- [x] Output configuration information at startup
+- [x] Output configuration information on startup
 - [x] Error requests return correct error response
-- [x] Logs contain key request/response information
+- [x] Logs contain request/response key information
 
 **Implementation Notes**:
-- Reuse project's existing `tracing` logging system; every request/notification logs info-level
-- `protocol.rs` implements JSON-RPC response building functions: `ok_response()`, `error_response()`, `method_not_found()`, `internal_error()`, `notification()`
-- Supports ErrorCode: MethodNotFound, InternalError, InvalidRequest, etc.
-- Modified file: `src/lsp/protocol.rs`
+- Reuse project's existing `tracing` logging system, each request/notification logs info level
+- `protocol.rs` implements JSON-RPC response construction functions: `ok_response()`, `error_response()`, `method_not_found()`, `internal_error()`, `notification()`
+- Support ErrorCode: MethodNotFound, InternalError, InvalidRequest, etc.
+- Modified files: `src/lsp/protocol.rs`
 
 **Test Items**:
 - [x] Log output test
 - [x] Error response format test
-- [x] Abnormal request handling test
+- [x] Exception request handling test
 
 ---
 
@@ -256,17 +256,17 @@ src/lsp/
 
 ### 2.1 Text Document Synchronization
 
-**Implementation Goal**:
-- Implement `textDocument/didOpen` notification handler
-- Implement `textDocument/didChange` notification handler
-- Implement `textDocument/didClose` notification handler
-- Integrate DocumentCache for document state management
+**Implementation Goals**:
+- Implement `textDocument/didOpen` notification handling
+- Implement `textDocument/didChange` notification handling
+- Implement `textDocument/didClose` notification handling
+- Integrate DocumentCache to manage document state
 
 **Acceptance Criteria**:
-- [x] didOpen correctly parses and caches documents
+- [x] didOpen correctly parses and caches document
 - [x] didChange correctly updates document content
 - [x] didClose correctly cleans up document cache
-- [x] Document version numbers correctly managed
+- [x] Document version number correctly managed
 
 **Test Items**:
 - [x] didOpen/didChange/didClose complete flow test
@@ -278,10 +278,10 @@ src/lsp/
 
 ### 2.2 Diagnostics Integration
 
-**Implementation Goal**:
-- Reuse `util/diagnostic/` diagnostics system
+**Implementation Goals**:
+- Reuse `util/diagnostic/` diagnostic system
 - Convert YaoXiang Diagnostic to LSP Diagnostic
-- Implement diagnostics format conversion function
+- Implement diagnostic format conversion functions
 
 **Conversion Rules**:
 ```
@@ -291,7 +291,7 @@ YaoXiang Severity::Info    → LSP DiagnosticSeverity::INFORMATION
 ```
 
 **Acceptance Criteria**:
-- [x] Type errors converted to correct severity
+- [x] Type errors convert to correct severity
 - [x] Syntax errors correctly reported
 - [x] Location information accurate (line number 0-indexed)
 
@@ -304,10 +304,10 @@ YaoXiang Severity::Info    → LSP DiagnosticSeverity::INFORMATION
 
 ### 2.3 publishDiagnostics Publishing
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Implement `textDocument/publishDiagnostics` notification
 - Automatically trigger diagnostics after document changes
-- Support incremental diagnostics updates
+- Support incremental diagnostics update
 
 **Acceptance Criteria**:
 - [x] Correctly send publishDiagnostics notification
@@ -325,13 +325,13 @@ YaoXiang Severity::Info    → LSP DiagnosticSeverity::INFORMATION
 
 ### 3.1 Symbol Index Construction
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Implement symbol index for World structure
-- Build: name → list of locations reverse index
+- Build: name → location list reverse index
 - Implement file → symbol list index
 
 **Acceptance Criteria**:
-- [x] Can get context symbols at cursor position
+- [x] Can get context symbols based on cursor position
 - [x] Completion response time < 100ms
 - [x] Index supports incremental updates
 
@@ -344,65 +344,65 @@ YaoXiang Severity::Info    → LSP DiagnosticSeverity::INFORMATION
 
 ### 3.2 Keyword Completion
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Implement YaoXiang keyword completion
 - Support keyword suggestion sorting
 
-**Keyword List** (based on language-spec.md section 2.3, 17 total):
+**Keyword List** (based on language-spec.md Section 2.3, 17 total):
 ```
 pub         # Public declaration
 use         # Module import
 spawn       # spawn function marker
-ref         # Arc reference counting shared
+ref         # Arc reference count sharing
 mut         # Mutable binding
 if          # Conditional branch
 elif        # Else if
 else        # Else branch
-match       # Pattern matching
+match       # pattern matching
 while       # Conditional loop
 for         # Iterative loop
 return      # Function return
 break       # Loop break
 continue    # Loop continue
-as          # Type cast
+as          # Type casting
 in          # for loop iteration
 unsafe      # Unsafe code block
 ```
 
-**Reserved Words** (based on language-spec.md section 2.4, 7 total):
+**Reserved Words** (based on language-spec.md Section 2.4, 7 total):
 ```
-Type        # meta type (used in type definitions)
+Type        # meta type (for type definitions)
 true        # Bool true value
 false       # Bool false value
-void        # Void null value
-some(T)     # Option value variant constructor
-ok(T)       # Result success variant constructor
-err(E)      # Result error variant constructor
+void        # void empty value
+some(T)     # Option value variant construction
+ok(T)       # Result success variant construction
+err(E)      # Result error variant construction
 ```
 
-**Function Annotations** (based on language-spec.md section 6.9.1):
+**Function Annotations** (based on language-spec.md Section 6.9.1):
 ```
-@block      # Disable concurrent optimization
+@block      # Disable concurrency optimization
 @eager      # Force eager evaluation
 ```
 
 **Acceptance Criteria**:
 - [x] All 17 keywords appear in completion list
 - [x] All 7 reserved words appear in completion list
-- [x] Both 2 function annotations (@block, @eager) appear in completion list
-- [x] Keywords correctly categorized (keywords/reserved words/annotations)
+- [x] All 2 function annotations (@block, @eager) appear in completion list
+- [x] Keywords correctly categorized (keyword/reserved word/annotation)
 
 **Test Items**:
 - [x] Keyword completion test (pub, use, spawn, ref, mut, if, elif, else, match, while, for, return, break, continue, as, in, unsafe)
 - [x] Reserved word completion test (Type, true, false, void, some, ok, err)
 - [x] Function annotation completion test (@block, @eager)
-- [x] Context-dependent keyword test (e.g., if/elif/else appear together)
+- [x] Context-related keyword test (e.g., if/elif/else appear as a group)
 
 ---
 
 ### 3.3 Identifier Completion
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Completion based on symbols in current scope
 - Completion based on imported module symbols
 - Support type prefix filtering (e.g., `Vec::`)
@@ -425,16 +425,16 @@ err(E)      # Result error variant constructor
 
 ### 4.1 Go to Definition
 
-**Implementation Goal**:
-- Implement `textDocument/definition` handler
+**Implementation Goals**:
+- Implement `textDocument/definition` handling
 - Find identifier definition location based on AST
-- Support jumps for functions, structs, variables, type definitions
+- Support jump to functions, structs, variables, type definitions
 
 **Acceptance Criteria**:
-- [x] Function calls jump to function definitions
-- [x] Variable references jump to variable definitions
-- [x] Type usage jumps to type definitions
-- [x] Support cross-file jumps
+- [x] Function calls jump to function definition
+- [x] Variable references jump to variable definition
+- [x] Type usage jumps to type definition
+- [x] Support cross-file jump
 
 **Test Items**:
 - [x] Function definition jump test
@@ -447,29 +447,29 @@ err(E)      # Result error variant constructor
 
 ### 4.2 Find References
 
-**Implementation Goal**:
-- Implement `textDocument/references` handler
-- Find all reference locations of a symbol
+**Implementation Goals**:
+- Implement `textDocument/references` handling
+- Find all reference locations for a symbol
 - Exclude the definition itself
 
 **Acceptance Criteria**:
 - [x] Returns all reference locations
 - [x] Does not include definition location
-- [x] References include definition location information
+- [x] References contain definition location information
 
 **Test Items**:
-- [x] Variable reference find test
-- [x] Function reference find test
-- [x] Cross-file reference find test
+- [x] Variable reference search test
+- [x] Function reference search test
+- [x] Cross-file reference search test
 
 ---
 
-### 4.3 Hover Tooltips
+### 4.3 Hover Tooltip
 
-**Implementation Goal**:
-- Implement `textDocument/hover` handler
+**Implementation Goals**:
+- Implement `textDocument/hover` handling
 - Display symbol type information
-- Display function signatures and documentation comments
+- Display function signature and documentation comments
 
 **Acceptance Criteria**:
 - [x] Variables display inferred type
@@ -488,8 +488,8 @@ err(E)      # Result error variant constructor
 
 ### 5.1 Workspace Symbol Search
 
-**Implementation Goal**:
-- Implement `workspace/symbol` handler
+**Implementation Goals**:
+- Implement `workspace/symbol` handling
 - Support fuzzy search
 - Support symbol type filtering
 
@@ -507,13 +507,13 @@ err(E)      # Result error variant constructor
 
 ### 5.2 Formatting Support (Optional)
 
-**Implementation Goal**:
-- Implement `textDocument/formatting` handler
-- Implement `textDocument/rangeFormatting` handler
+**Implementation Goals**:
+- Implement `textDocument/formatting` handling
+- Implement `textDocument/rangeFormatting` handling
 - Define YaoXiang code style
 
 **Acceptance Criteria**:
-- [x] Basic formatting correct (indentation, spacing)
+- [x] Basic formatting correct (indentation, spaces)
 - [x] Range formatting correct
 
 **Test Items**:
@@ -525,7 +525,7 @@ err(E)      # Result error variant constructor
 
 ### 5.3 Refactoring Support (Optional)
 
-**Implementation Goal**:
+**Implementation Goals**:
 - Implement symbol rename (textDocument/rename)
 - Implement code actions (textDocument/codeAction)
 
@@ -547,13 +547,13 @@ err(E)      # Result error variant constructor
 
 | Feature | Implementation Goal |
 |---------|---------------------|
-| Constant Value Hints | Display compile-time computed constants (e.g., show `300` beside `const MAX = 100 + 200`) |
-| Mutability Hints | Show whether a variable is mutable (e.g., `mut x` has obvious marker) |
-| Ownership Consumption Hints | Show whether function parameters are consumed |
-| Type Inference Hints | Show inferred specific types (e.g., show `Vec<i32>` beside `x = vec()`) |
+| Constant value hint | Display compile-time computed constants (e.g., display `300` next to `const MAX = 100 + 200`) |
+| Mutability hint | Display whether variable is mutable (e.g., `mut x` has clear marker) |
+| ownership consumption hint | Display whether function parameters are consumed |
+| Type inference hint | Display inferred concrete type (e.g., display `Vec<i32>` next to `x = vec()`) |
 
 **Acceptance Criteria**:
-- [x] All Inlay Hint types display correctly
+- [x] All Inlay Hints display correctly
 - [x] Performance impact < 50ms
 
 ---
@@ -562,8 +562,8 @@ err(E)      # Result error variant constructor
 
 **Priority**: P2
 
-**Implementation Goal**:
-- Display variable move paths (from definition location to all usage locations)
+**Implementation Goals**:
+- Display variable move path (from definition location to all usage locations)
 - Borrow lifetime visualization
 
 ---
@@ -581,7 +581,7 @@ err(E)      # Result error variant constructor
 ### Performance Tests
 - Large file parsing performance
 - Completion response time
-- Navigation response time
+- Jump response time
 
 ---
 

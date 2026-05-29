@@ -1,12 +1,12 @@
 # Concurrency Model Specification
 
-This document defines the concurrency model specification for the YaoXiang programming language, including asynchronous programming, concurrency primitives, and memory model.
+This document defines the concurrency model specification for the YaoXiang programming language, including asynchronous programming, concurrency primitives, and the memory model.
 
 ---
 
 ## Chapter 1: Spawn Functions
 
-### 1.1 spawn Functions
+### 1.1 Spawn Functions
 
 ```
 SpawnFn     ::= Identifier ':' FnType 'spawn' '=' Lambda
@@ -36,13 +36,13 @@ compute: (n: Int) -> Int @eager = { ... }
 
 ### 1.2 Spawn Blocks
 
-Explicitly declared concurrency domains where tasks within the block will spawn:
+Explicitly declared concurrency boundaries where tasks within the block execute concurrently:
 
 ```
 SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' Expr (',' Expr)* '}'
 ```
 
-**Example**:
+**Examples**:
 
 ```
 // Spawn block: explicit concurrency
@@ -54,13 +54,13 @@ SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' Expr (',' Expr)* 
 
 ### 1.3 Spawn Loops
 
-Data-parallel loops where the loop body spawns across all data elements:
+Data-parallel loops where the loop body executes concurrently across all data elements:
 
 ```
 SpawnFor    ::= Identifier '=' 'spawn' 'for' Identifier 'in' Expr '{' Expr '}'
 ```
 
-**Example**:
+**Examples**:
 
 ```
 // Spawn loop: data parallelism
@@ -75,11 +75,11 @@ results = spawn for item in items {
 ErrorPropagate ::= Expr '?'
 ```
 
-**Example**:
+**Examples**:
 
 ```
 process: (p: Point) -> Result[Data, Error] = {
-    data = fetch_data()?      // Auto-propagates errors
+    data = fetch_data()?      // Automatically propagates errors
     transform(data)?
 }
 ```
@@ -92,9 +92,9 @@ process: (p: Point) -> Result[Data, Error] = {
 
 YaoXiang uses an **ownership model** to manage memory, where each value has a unique owner:
 
-| Semantics | Description | Syntax |
-|-----------|-------------|--------|
-| **Move** | Default semantics, ownership transfer | `p2 = p` |
+| Semantic | Description | Syntax |
+|----------|-------------|--------|
+| **Move** | Default semantic, ownership transfer | `p2 = p` |
 | **ref** | Shared (Arc reference counting) | `shared = ref p` |
 | **clone()** | Explicit copy | `p2 = p.clone()` |
 
@@ -113,13 +113,13 @@ process: (p: Point) -> Void = {
 // Return value = Move
 create: () -> Point = {
     p = Point(1.0, 2.0)
-    return p        // Move, ownership transferred
+    return p        // Move, ownership is transferred
 }
 ```
 
 ### 2.3 ref Keyword (Arc)
 
-The `ref` keyword creates an **reference-counted pointer** (Arc), used for safe sharing:
+The `ref` keyword creates a **reference-counted pointer** (Arc) for safe sharing:
 
 ```yaoxiang
 // Create Arc
@@ -129,19 +129,19 @@ shared = ref p      // Arc, thread-safe
 // Shared access
 spawn(() => print(shared.x))   // Safe
 
-// Arc auto-manages lifecycle
-// When shared goes out of scope, count drops to zero and is auto-freed
+// Arc automatically manages lifecycle
+// When shared goes out of scope, count reaches zero and is freed
 ```
 
 **Characteristics**:
 - Thread-safe reference counting
-- Auto-managed lifecycle
+- Automatic lifecycle management
 - Safe across spawn boundaries
 
 ### 2.4 clone() Explicit Copy
 
 ```yaoxiang
-// Explicitly copy value
+// Explicitly copy a value
 p: Point = Point(1.0, 2.0)
 p2 = p.clone()      // p and p2 are independent
 
@@ -150,19 +150,19 @@ p.x = 0.0           // Correct
 p2.x = 0.0          // Correct
 ```
 
-### 2.5 unsafe Blocks
+### 2.5 unsafe Code Blocks
 
-`unsafe` blocks allow the use of raw pointers for system-level programming:
+`unsafe` code blocks allow the use of raw pointers for system-level programming:
 
 ```yaoxiang
 // Raw pointer type
 PtrType ::= '*' TypeExpr
 
-// unsafe block
+// unsafe code block
 UnsafeBlock ::= 'unsafe' '{' Stmt* '}'
 ```
 
-**Example**:
+**Examples**:
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
@@ -176,7 +176,7 @@ unsafe {
 
 **Restrictions**:
 - Raw pointers can only be used in `unsafe` blocks
-- User guarantees no dangling or use-after-free
+- User guarantees no dangling pointers or use-after-free
 - Not subject to Send/Sync checks
 
 ### 2.6 Ownership Syntax BNF
@@ -205,12 +205,12 @@ UnsafeBlock   ::= 'unsafe' '{' Stmt* '}'
 
 ### 3.1 Send / Sync Constraints
 
-| Constraint | Semantics | Description |
-|------------|-----------|-------------|
-| **Send** | Safe to transfer across threads | Value can be moved to another thread |
-| **Sync** | Safe to share across threads | Immutable references can be shared to another thread |
+| Constraint | Semantic | Description |
+|------------|----------|-------------|
+| **Send** | Can be safely transferred across threads | Value can be moved to another thread |
+| **Sync** | Can be safely shared across threads | Immutable references can be shared to another thread |
 
-**Auto-derivation**:
+**Automatic Derivation**:
 
 ```
 // Send derivation rule
@@ -231,11 +231,11 @@ Struct[T1, T2]: Sync ⇐ T1: Sync 且 T2: Sync
 ### 3.2 Send/Sync Constraint Hierarchy
 
 ```
-Send ──► Safe to transfer across threads
+Send ──► Can be safely transferred across threads
   │
-  └──► Sync ──► Safe to share across threads
+  └──► Sync ──► Can be safely shared across threads
        │
-       └──► Types satisfying Send + Sync can auto-concurrentize
+       └──► Types satisfying Send + Sync can auto-concurrent
 
 Arc[T] implements Send + Sync (thread-safe reference counting)
 Mutex[T] provides interior mutability
@@ -243,19 +243,19 @@ Mutex[T] provides interior mutability
 
 ### 3.3 Concurrency-Safe Types
 
-| Type | Semantics | Concurrency Safe | Description |
-|------|-----------|------------------|-------------|
-| `T` | Immutable data | ✅ Safe | Default type, multi-task reads have no races |
-| `Ref[T]` | Mutable reference | ⚠️ Needs sync | Marked as concurrently modifiable, compiler checks lock usage |
+| Type | Semantic | Concurrency Safe | Description |
+|------|----------|------------------|-------------|
+| `T` | Immutable data | ✅ Safe | Default type, multi-task reads without race |
+| `Ref[T]` | Mutable reference | ⚠️ Needs sync | Marked for concurrent modification, compiler checks lock usage |
 | `Atomic[T]` | Atomic type | ✅ Safe | Low-level atomic operations, lock-free concurrency |
-| `Mutex[T]` | Mutex wrapper | ✅ Safe | Auto lock/unlock, compiler-guaranteed |
-| `RwLock[T]` | Read-write lock wrapper | ✅ Safe | Read-heavy, write-light scenario optimization |
+| `Mutex[T]` | Mutex wrapper | ✅ Safe | Auto lock/unlock, compiler guaranteed |
+| `RwLock[T]` | Read-write lock wrapper | ✅ Safe | Optimized for read-heavy scenarios |
 
 **Syntax**:
 
 ```
 Mutex[T]    // Mutex-wrapped mutable data
-Atomic[T]   // Atomic type (Int, Float only, etc.)
+Atomic[T]   // Atomic type (only for Int, Float, etc.)
 RwLock[T]   // Read-write lock wrapper
 ```
 
@@ -272,7 +272,7 @@ with mutex.lock() {
 
 ## Appendix: Concurrency Syntax Quick Reference
 
-### A.1 spawn Syntax
+### A.1 Spawn Syntax
 
 ```yaoxiang
 // Spawn function

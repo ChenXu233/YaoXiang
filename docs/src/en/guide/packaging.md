@@ -1,11 +1,11 @@
 ---
 title: Package Manager
-description: YaoXiang Official Package Manager Tutorial
+description: Official YaoXiang Package Manager Tutorial
 ---
 
 # Package Manager
 
-YaoXiang's built-in package manager providing complete dependency management functionality.
+The built-in package manager for YaoXiang, providing complete dependency management functionality.
 
 ## Overview
 
@@ -59,12 +59,12 @@ yaoxiang init <name>
 ### Parameters
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+|------|------|------|
 | `name` | string | Project name |
 
 ### Description
 
-Creates a new YaoXiang project in the current directory or at the specified path.
+Creates a new YaoXiang project in the current directory or specified path.
 
 ### Created Files
 
@@ -103,24 +103,24 @@ yaoxiang add <name> --dev
 ### Parameters
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+|------|------|------|
 | `name` | string | Package name |
-| `version` | string | Version number (optional, default `*`) |
+| `version` | string | Version (optional, default `*`) |
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
-| `--dev`, `-D` | Add as dev dependency |
+|------|------|
+| `--dev`, `-D` | Add as development dependency |
 
 ### Description
 
-Adds the dependency to the project's `yaoxiang.toml` file and updates `yaoxiang.lock`.
+Adds dependencies to the project's `yaoxiang.toml` and updates `yaoxiang.lock`.
 
 ### Version Specifications
 
-| Specifier | Description | Example |
-|-----------|-------------|---------|
+| Spec | Description | Example |
+|------|------|------|
 | `*` | Any version | `http = "*"` |
 | `1.0.0` | Exact version | `http = "1.0.0"` |
 | `>=1.0.0` | Minimum version | `http = ">1.0.0"` |
@@ -139,14 +139,14 @@ yaoxiang add http 1.0.0
 #### Git Repository
 
 ```bash
-# This generates the following configuration in the manifest
+# Generates the following configuration in manifest
 # http = { version = "1.0.0", git = "https://github.com/example/http" }
 ```
 
 #### Local Path
 
 ```bash
-# This generates the following configuration in the manifest
+# Generates the following configuration in manifest
 # mylib = { version = "0.1.0", path = "./mylib" }
 ```
 
@@ -162,7 +162,7 @@ yaoxiang add http 1.0.0
 # Add version range
 yaoxiang add json ">=2.0.0"
 
-# Add dev dependency
+# Add development dependency
 yaoxiang add test-utils --dev
 yaoxiang add benchmark -D
 ```
@@ -183,14 +183,14 @@ yaoxiang rm <name> --dev
 ### Parameters
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+|------|------|------|
 | `name` | string | Package name |
 
 ### Options
 
 | Option | Description |
-|--------|-------------|
-| `--dev`, `-D` | Remove dev dependency |
+|------|------|
+| `--dev`, `-D` | Remove development dependency |
 
 ### Description
 
@@ -202,7 +202,7 @@ Removes the specified dependency from the project's `yaoxiang.toml` and updates 
 # Remove runtime dependency
 yaoxiang rm http
 
-# Remove dev dependency
+# Remove development dependency
 yaoxiang rm test-utils --dev
 ```
 
@@ -229,9 +229,9 @@ Reads dependency declarations from `yaoxiang.toml` and performs the following:
 
 ### Behavior
 
-- If there are no dependencies, displays a notification and exits
-- If the `vendor` directory already exists, checks and reuses cached dependencies
-- If version conflicts are detected, displays an error message and exits
+- If there are no dependencies, displays a message and exits
+- If `vendor` directory exists, checks and reuses cache
+- If version conflicts are detected, displays error and exits
 
 ### Examples
 
@@ -280,28 +280,28 @@ yaoxiang update <name>
 ### Parameters
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+|------|------|------|
 | `name` | string | Package name (optional) |
 
 ### Description
 
 ### Full Update
 
-When called without arguments, updates all dependencies:
+Without parameters, updates all dependencies:
 
-1. Clears currently locked versions
-2. Cleans old versions from the `vendor` directory
-3. Re-downloads all dependencies
-4. Updates `yaoxiang.lock`
+1. Clear currently locked versions
+2. Clean old versions from `vendor` directory
+3. Redownload all dependencies
+4. Update `yaoxiang.lock`
 
 ### Single Update
 
-When called with an argument, only updates the specified dependency:
+With parameters, only updates the specified dependency:
 
-1. Removes the old version from `vendor`
-2. Re-downloads the new version
-3. Updates the corresponding entry in `yaoxiang.lock`
-4. Other dependencies are unaffected
+1. Delete old version from `vendor`
+2. Redownload new version
+3. Update corresponding entry in `yaoxiang.lock`
+4. Other dependencies are not affected
 
 ### Examples
 
@@ -339,7 +339,7 @@ yaoxiang list
 Displays all dependencies in the project, including:
 
 - Runtime dependencies (from `[dependencies]`)
-- Dev dependencies (from `[dev-dependencies]`)
+- Development dependencies (from `[dev-dependencies]`)
 - Version and source for each dependency
 
 ### Examples
@@ -354,7 +354,7 @@ yaoxiang list
 #   http        1.0.0    registry
 #   json        2.0.0    registry
 #
-# Dev Dependencies:
+# Development Dependencies:
 #   test-utils  0.5.0    registry
 ```
 
@@ -364,7 +364,7 @@ yaoxiang list
 
 ### yaoxiang.toml
 
-Project manifest file that declares project metadata and dependencies.
+Project manifest file, declares project metadata and dependencies.
 
 ```toml
 [package]
@@ -387,7 +387,7 @@ test-utils = "0.5.0"
 Dependency lock file, automatically generated by the package manager.
 
 ```toml
-# Auto-generated by YaoXiang Package Manager
+# Automatically generated by YaoXiang Package Manager
 
 [package]
 version = 1
@@ -401,22 +401,22 @@ source = "registry"
 
 ## Core Concepts
 
-### Runtime Dependencies vs Dev Dependencies
+### Runtime vs Development Dependencies
 
-- **Runtime dependencies** (`[dependencies]`): Packages required for the project to run
-- **Dev dependencies** (`[dev-dependencies]`): Packages only needed during development and testing
+- **Runtime dependencies** (`[dependencies]`): Packages required for project runtime
+- **Development dependencies** (`[dev-dependencies]`): Packages needed only for development and testing
 
 ### Dependency Sources
 
 | Type | Configuration Example | Description |
-|------|----------------------|-------------|
-| Registry | `http = "1.0.0"` | Fetched from remote package registry |
-| Git | `{ version = "1.0.0", git = "https://..." }` | Fetched from Git repository |
-| Path | `{ version = "0.1.0", path = "./lib" }` | Fetched from local path |
+|------|----------|------|
+| Registry | `http = "1.0.0"` | Fetch from remote package registry |
+| Git | `{ version = "1.0.0", git = "https://..." }` | Fetch from Git repository |
+| Path | `{ version = "0.1.0", path = "./lib" }` | Fetch from local path |
 
 ### Lock File
 
-`yaoxiang.lock` is automatically generated by the package manager. Please **be sure to commit it to version control**:
+`yaoxiang.lock` is automatically generated by the package manager. **Please commit to version control**:
 
 - Ensures all team members use exactly the same dependency versions
 - Ensures CI builds are reproducible
@@ -424,11 +424,11 @@ source = "registry"
 
 ### vendor Directory
 
-Dependencies are stored in the `vendor` directory after downloading:
+Dependencies are stored in the `vendor` directory after download:
 
 - Automatically managed by `yaoxiang install` and `yaoxiang update`
 - Can be deleted and rebuilt by running `install` again
-- Recommended to add to `.gitignore` so team members manage independently
+- Recommended to add to `.gitignore`, managed independently by different team members
 
 ---
 
@@ -439,12 +439,12 @@ Dependencies are stored in the `vendor` directory after downloading:
 YPM detects dependency version conflicts and reports errors. Solutions:
 
 1. Adjust dependency version requirements
-2. Wait for the dependency author to fix it
-3. Consider removing the conflicting dependency
+2. Wait for dependency author to fix
+3. Consider removing conflicting dependencies
 
 ### Q: How to use private packages?
 
-For private packages, you can use the Git source:
+For private packages, you can use Git source:
 
 ```bash
 # Add via Git URL
@@ -453,10 +453,10 @@ For private packages, you can use the Git source:
 private-pkg = { version = "1.0.0", git = "https://github.com/org/private-pkg" }
 ```
 
-### Q: Can the vendor directory be deleted?
+### Q: Can I delete the vendor directory?
 
-Yes. After deletion, running `yaoxiang install` will re-download all dependencies.
+Yes. After deletion, running `yaoxiang install` will redownload all dependencies.
 
-### Q: How to view information about a specific package?
+### Q: How to view information about a package?
 
 Use `yaoxiang list` to view all dependencies, or check `yaoxiang.toml`.

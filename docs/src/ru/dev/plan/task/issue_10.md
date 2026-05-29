@@ -1,59 +1,63 @@
-# Задача: Разработка небольших приложений для проверки возможностей языка и накопления экосистемы
+# Task: Developing Small Applications to Verify Language Features and Build Ecosystem
 
-## Обзор
+## Overview
 
-Frontend, middle-end и интерпретатор YaoXiang уже готовы, а backend компилятора находится в разработке. Для тестирования практичности языка, обнаружения скрытых багов, накопления примеров кода и привлечения ранних пользователей необходимо разработать серию небольших приложений. Эти приложения должны работать плавно на интерпретаторе, не зависеть от высокопроизводительных оптимизаций backend компилятора, и при этом в полной мере демонстрировать основные концепции YaoXiang: унифицированный синтаксис, модель владения, изменчивость на уровне полей и другие.
+The frontend, middle-end, and interpreter backend of YaoXiang are complete, while the compiler backend is under development. To test the language's practicality, discover hidden bugs, accumulate sample code, and attract early users, a series of small applications needs to be developed. These applications should run smoothly on the interpreter without relying on high-performance optimizations from the compiler backend, while fully demonstrating YaoXiang's core design features such as unified syntax, ownership model, and field-level mutability.
 
-## Цели
+## Goals
 
-Разработать не менее 3 небольших приложений в разных областях, охватывающих сценарии использования: скрипты, алгоритмы, парсинг конфигурации и др.
+Develop at least 3 small applications across different domains, covering scenarios such as scripting tools, algorithm implementations, and configuration parsing.
 
-Каждое приложение должно содержать полный исходный код, тестовые случаи и краткую документацию.
+Each application should include complete source code, test cases, and brief documentation.
 
-В процессе разработки собирать обратную связь по проблемам дизайна языка, совершенствовать стандартную библиотеку и инструментарий.
+Through the development process, provide feedback on language design issues and improve the standard library and toolchain.
 
-## Рекомендуемые направления приложений (можно выбрать или предложить своё)
+## Suggested Application Directions (optional or self-designed)
 
-### Инструмент массового переименования файлов
+### Batch File Renaming Tool
 
-**Функции:** обход указанного каталога, сопоставление имён файлов по регулярным выражениям, переименование (замена, добавление префикса/суффикса и т.д.).
+**Functionality:** Traverse a specified directory, match filenames using regular expressions, and perform renaming (replacement, adding prefix/suffix, etc.).
 
-**Задействованные возможности:** файловые операции (через FFI или стандартную библиотеку), строковая обработка, управление владением (предотвращение утечек ресурсов).
+**Involved Features:** File system operations (requires FFI or standard library), string processing, ownership management (preventing resource leaks).
 
-**Вывод:** исполняемый скрипт с поддержкой аргументов командной строки.
+**Output:** Executable script with command-line argument support.
 
-### Демонстрация алгоритма быстрой сортировки
+### QuickSort Algorithm Demonstration
 
-**Функции:** реализация классического алгоритма быстрой сортировки, поддержка сортировки массива целых чисел.
+**Functionality:** Implement the classic QuickSort algorithm, supporting sorting of integer arrays.
 
-**Задействованные возможности:** рекурсия, операции с массивами/списками, generics (если поддерживается), передача владения (перемещение элементов массива).
+**Involved Features:** Recursion, array/list operations, generics (if supported), ownership flow (array element moving).
 
-**Вывод:** библиотека функций + тестовая программа, демонстрирующая корректность алгоритма.
+**Output:** Function library + test program demonstrating algorithm correctness.
 
-### Прототип парсера конфигурации TOML
+### TOML Configuration Parser Prototype
 
-**Функции:** парсинг простых TOML-файлов конфигурации (только базовые типы и таблицы), маппинг в record type YaoXiang.
+**Functionality:** Parse simple TOML configuration files (only basic types and tables supported), mapping to YaoXiang record types.
 
-**Задействованные возможности:** строковый парсинг, record type, обработка ошибок.
+**Involved Features:** String parsing, record types, error propagation.
 
-**Вывод:** парсер-функция + пример конфигурационного файла и код использования.
+**Output:** Parser function + example configuration files and usage code.
 
-### Терминальная игра «Крестики-нолики»
+### Terminal Tic-Tac-Toe Game
 
-**Функции:** игра двух игроков в терминале, отображение доски, ходы, определение победителя.
+**Functionality:** Two-player terminal Tic-Tac-Toe with board display, move input, and win detection.
 
-**Задействованные возможности:** управление состоянием (изменчивость полей), ввод/вывод, управление циклом.
+**Involved Features:** State management (field mutability), input/output, loop control.
 
-**Вывод:** запускаемая игровая программа.
+**Output:** Runnable game program.
 
-## Критерии приёмки
+## Acceptance Criteria
 
-- Приложения работают как ожидается и проходят все ручные тесты.
-- Код соответствует стандартам стиля YaoXiang (если есть).
-- Отсутствуют ошибки безопасности памяти (гарантируется автоматически правилами владения).
-- Все обнаруженные в процессе разработки баги языка или отсутствующие возможности стандартной библиотеки зафиксированы как отдельные issue.
+Applications run as expected and pass all manual tests.
 
-## Зависимости
+Code follows YaoXiang style guidelines (if any).
 
-- Backend интерпретатора должен быть стабильным и работоспособным.
-- Возможно потребуются модули стандартной библиотеки для файлового I/O, строковых операций и др.
+No memory safety errors (guaranteed by ownership rules).
+
+Any language bugs or standard library gaps discovered during development are recorded as separate issues.
+
+## Dependencies
+
+The interpreter backend must be stable and usable.
+
+Standard library modules for file I/O, string operations, etc. may be required.

@@ -41,5 +41,3 @@
 **Message**: Modules have circular dependencies
 
 **Help**: Refactor to remove the circular dependency
-
----

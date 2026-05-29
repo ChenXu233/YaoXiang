@@ -1,90 +1,86 @@
-> **⚠️ Note: This documentation is outdated and for reference only.**
->
-> The content described in this document is no longer applicable. Please refer to the latest documentation.
+# **"YaoXiang: A Transparent Asynchronous Concurrency Model Based on Lazy Evaluation" Technical Whitepaper**
 
-# **"Spawn: A Seamless Asynchronous Concurrency Model Based on Lazy Evaluation" Technical Whitepaper**
+## 🏛️ 1. Core Definition: The YaoXiang Model
 
-## 🏛️ I. Core Definition: The Spawn Model
-
-The **Spawn Model**, inspired by "万物并作，吾以观复" (All things arise together; I observe their return) from the Yi Jing (Book of Changes) Fu Hexagram, is a programming language concurrency paradigm that allows developers to describe logic in a synchronous, sequential manner, while the language runtime automatically and efficiently executes the computational units concurrently like all things arising together, finally converging in unified coordination.
+The **YaoXiang model**, inspired by the I Ching's Hexagram of Return (复卦) — "All things flourish and grow, and I observe their return" — is a programming language concurrency paradigm that allows developers to describe logic in a synchronous, sequential manner, while the language runtime automatically and efficiently executes the computation units concurrently like flourishing things, ultimately unifying and coordinating them.
 
 ### Core Design Principles: Default Lazy + spawn Type Markers
 
 | Design Principle | Description |
 |----------|------|
 | **Default Lazy Evaluation** | All functions are lazy by default (similar to Haskell), returning Lazy[T] |
-| **Core Count Configuration** | Script header declares `// @cores: N` to automatically enable parallelization |
-| **spawn Type Marker** | `-> T spawn` marks functions as strictly asyncable and concurrently executable; others are implicitly concurrent-capable |
-| **Mixed Evaluation Modes** | `@eager` (decorator, forces eager), `@auto` (decorator, maintains parallelism) |
-| **Void Auto-Eager** | Functions returning `Void` are automatically eagerly evaluated (side effects must execute) |
+| **Core Count Configuration** | Script header declares `// @cores: N` to enable parallelization |
+| **spawn Type Markers** | `-> T spawn` marks functions as strictly async and concurrent capable; others are implicitly concurrency-ready |
+| **Mixed Evaluation Modes** | `@eager` (decorator, forces eager evaluation), `@auto` (decorator, maintains parallelism) |
+| **Void Auto-Eager** | Functions returning `Void` automatically evaluate eagerly (side effects must execute) |
 
 ### Core Three Principles
 
 | Core Principle | Explanation |
 |----------|------|
-| **Synchronous Syntax** | What you see is what you get: sequential code, with execution flow matching the written order |
-| **Concurrency by Nature** | The runtime automatically extracts parallelism, uncovering concurrency opportunities in data dependencies |
+| **Synchronous Syntax** | What you see is what you get — sequential code with straightforward execution flow |
+| **Concurrency by Nature** | The runtime automatically extracts parallelism, mining concurrency opportunities from data dependencies |
 | **Unified Coordination** | Results automatically converge when needed, ensuring logical correctness |
 
-**It achieves this goal through two fundamental transformations:**
+**It achieves this through two fundamental transformations:**
 
-1. **Transforming "Control Flow" into "Data Flow"**: The program is viewed as a pure functional lazy-evaluated data flow graph
-2. **Transforming "Async Contagion" into "Dependency Resolution"**: Asynchronicity is no longer an effect in the function signature, but becomes an automatic waiting operation at data dependency points during runtime
+1. **Transforming "Control Flow" into "Data Flow"**: The program is viewed as a pure functional lazy evaluation data flow graph
+2. **Transforming "Async Poison" into "Dependency Resolution"**: Asynchronicity is no longer an effect in function signatures, but rather becomes automatic wait operations at data dependency points during runtime
 
 ---
 
-## 📚 II. Terminology System: A Unified Conceptual Map
+## 📚 2. Terminology System: A Unified Conceptual Map
 
-Around "spawn," we have constructed a clear, self-consistent terminology system that ties all designs together:
+Around "YaoXiang," we have constructed a clear, self-consistent terminology system that connects all designs:
 
 | Official Term | Corresponding Syntax/Concept | Explanation |
 |----------|---------------|------|
-| **Spawn Function** | `-> T spawn` | Return type marker, indicating a computational unit that can strictly participate in concurrent "spawn" execution |
-| **Spawn Block** | `spawn { a(), b() }` | Developer-explicitly declared concurrency boundary; tasks within the block will "spawn" execute |
-| **Spawn Loop** | `spawn for x in xs { ... }` | Data parallelism paradigm; the loop body "spawns" execution across all data elements |
-| **Spawn Value** | `Async[T]` proxy type | A "future value" currently in spawn; automatically waits for its "spawn" to complete when used |
-| **Spawn Graph** | Lazy evaluation graph (DAG) | The stage where "spawn" occurs; describes dependencies and parallelism between all computational units |
-| **Spawn Scheduler** | Runtime task scheduler | The intelligent hub responsible for coordinating "all things," making them "spawn" at the right moments |
-| **Error Graph** | Error Graph | Visualization of error propagation paths in a concurrent environment; similar to call stack but shows error flow in the DAG |
+| **Spawn Function** | `-> T spawn` | Return type marker, indicating this is a computation unit that can strictly participate in "YaoXiang" concurrent execution |
+| **Spawn Block** | `spawn { a(), b() }` | Developer-explicitly declared concurrency boundary; tasks within will "YaoXiang" execute |
+| **Spawn Loop** | `spawn for x in xs { ... }` | Data parallelism paradigm; the loop body "YaoXiang" executes on all data elements |
+| **Spawn Value** | `Async[T]` proxy type | A "future value" currently in YaoXiang execution; automatically waits for completion when used |
+| **Spawn Graph** | Lazy computation graph (DAG) | The stage where "YaoXiang" occurs; describes dependencies and parallelism between all computation units |
+| **Spawn Scheduler** | Runtime task scheduler | The intelligent coordinator responsible for orchestrating "all things" so they "YaoXiang" at the right moments |
+| **Error Graph** | Error Graph | Error propagation path visualization in concurrent environments; similar to call stacks but showing error flow in the DAG |
 | **Resource Conflict** | Resource Conflict | Conflict when multiple tasks simultaneously access the same writable resource; detected at compile time and automatically serialized |
 
-> **Technical Exchange Example**: "Here we use a spawn block to concurrently call two spawn functions, and we automatically get their spawn values."
+> **Technical Exchange Example**: "Here we use a spawn block to concurrently call two spawn functions, automatically obtaining their spawn values."
 
 ---
 
-## III. Three-Layer Concurrency Architecture: Progressive Transparency
+## 3. Three-Layer Concurrency Architecture: Progressive Transparency
 
 ### 3.1 Architecture Overview
 
-The spawn model provides **three progressive layers of concurrency abstraction**, allowing developers of different skill levels to find the appropriate usage pattern:
+The YaoXiang model provides **three progressive concurrency abstractions**, allowing developers of different skill levels to find suitable usage patterns:
 
-| Layer | Pattern | Syntax Marker | Execution Mode | Controllability | Applicable Scenario |
-|------|------|----------|----------|--------|----------|
-| **L1** | `@blocking` Sync | `@blocking` | Fully sequential execution | Highest | Debugging, beginner learning, critical code sections |
-| **L2** | Explicit spawn | `spawn` | Developer-controlled concurrency | Medium | Intermediate users, fine-grained concurrency control needed |
+| Level | Pattern | Syntax Marker | Execution Mode | Controllability | Applicable Scenarios |
+|------|------|----------|----------|--------|------|
+| **L1** | `@blocking` Synchronous | `@blocking` | Fully sequential execution | Highest | Debugging, beginner learning, critical code sections |
+| **L2** | Explicit spawn | `spawn` | Developer-controllable concurrency | Medium | Intermediate users, fine-grained concurrency control needed |
 | **L3** | Fully Transparent | None (default) | Automatic optimal parallelism | Lowest | Experts, automatic parallel optimization |
 
 ### 3.2 L1: `@blocking` Synchronous Mode
 
-**Core Feature**: Disables all concurrency optimizations, fully sequential execution, easy for debugging and understanding.
+**Core Features**: Disable all concurrency optimizations, fully sequential execution, easy for debugging and understanding.
 
 ```yaoxiang
-# L1: @blocking synchronous mode (annotation after return type)
+# L1: @blocking synchronous mode (annotation placed after return type)
 fetch_sync: (String) -> JSON @blocking = (url) => {
     HTTP.get(url).json()
 }
 
 main: () -> Void @blocking = () => {
-    # Strictly sequential execution, no concurrency
+    # Strictly sequential execution, no concurrency whatsoever
     data1 = fetch_sync("https://api.example.com/data1")
     data2 = fetch_sync("https://api.example.com/data2")
     process(data1, data2)
 }
 ```
 
-### 3.3 L2: Explicit spawn Concurrency
+### 3.3 L2: Explicit Spawn Concurrency
 
-**Core Feature**: Developer explicitly marks concurrent units, maintaining controllability while gaining concurrency benefits.
+**Core Features**: Developer explicitly marks concurrency-ready units, maintaining controllability while gaining concurrency benefits.
 
 ```yaoxiang
 # L2: Explicit spawn concurrency
@@ -95,7 +91,7 @@ fetch_data: (String) -> JSON spawn = (url) => {
 process_users_and_posts: () -> Void spawn = () => {
     users = fetch_data("https://api.example.com/users")
     posts = fetch_data("https://api.example.com/posts")
-    # users and posts execute in parallel automatically
+    # users and posts execute automatically in parallel
     print(users.length.to_string())
     print(posts.length.to_string())
 }
@@ -113,7 +109,7 @@ compute_all: () -> (Int, Int, Int) spawn = () => {
 
 ### 3.4 L3: Fully Transparent (Default)
 
-**Core Feature**: No markers needed; the compiler automatically analyzes dependencies and generates optimal parallel execution plans.
+**Core Features**: No markers required; the compiler automatically analyzes dependencies and generates optimal parallel execution plans.
 
 ```yaoxiang
 # L3: Fully transparent (default mode)
@@ -122,7 +118,7 @@ heavy_calc: (Int) -> Int = (n) => {
 }
 
 auto_parallel: (Int) -> Int = (n) => {
-    # System automatically analyzes: a, b, c have no dependencies, can be fully parallel
+    # System automatically analyzes: a, b, c have no dependencies, fully parallel
     a = heavy_calc(1)
     b = heavy_calc(2)
     c = heavy_calc(3)
@@ -132,35 +128,35 @@ auto_parallel: (Int) -> Int = (n) => {
 
 ### 3.5 Manual Control Annotations
 
-| Annotation | Behavior | Usage Scenario |
+| Annotation | Behavior | Use Cases |
 |------|------|------|
-| `@eager` | Forces eager evaluation | Computations requiring immediate results |
+| `@eager` | Force eager evaluation | Need immediate result |
 
 ---
 
-## IV. Core Concepts
+## 2. Core Concepts
 
-### 2.1 Spawn Graph: The Stage Where All Things Spawn
+### 2.1 Spawn Graph: The Stage for All Things to Flourish
 
-All programs are transformed at compile time into a **directed acyclic computational graph (DAG)**, which we call the **spawn graph**.
+All programs are transformed into a **directed acyclic computation graph (DAG)** at compile time, which we call the **spawn graph**.
 
 | Element | Description |
 |------|------|
-| **Node** | Represents an expression computational unit |
+| **Node** | Represents an expression computation unit |
 | **Edge** | Represents data dependency relationship (A → B means B depends on A's result) |
-| **Laziness** | Nodes are only evaluated when their output is **truly needed** |
+| **Lazy** | Nodes are only evaluated when their output is **truly needed** |
 
 ### 2.2 Default Lazy Evaluation
 
-All functions use **lazy evaluation** strategy by default:
+All functions use the **lazy evaluation** strategy by default:
 
 ```yaoxiang
 # Script header configures parallel core count
 # @cores: 4
 
-# All functions use lazy evaluation by default (implicitly concurrent)
+# All functions default to lazy evaluation (implicitly concurrency-ready)
 heavy_computation: (Int) -> Int = (x) => {
-    # This function does not execute immediately
+    # This function will not execute immediately
     # It only executes when the result is used
     fibonacci(x)
 }
@@ -177,42 +173,42 @@ main: () -> Void = () => {
 
 ### 2.3 Mixed Evaluation Annotations (Decorator Style)
 
-YaoXiang annotations are similar to Python decorators, used to modify the behavior of functions or expressions:
+YaoXiang's annotations are similar to Python's decorators, used to modify the behavior of functions or expressions:
 
 | Annotation (Decorator) | Behavior |
 |----------------|------|
 | `@eager` | **Decorator**: Forces eager evaluation, executes immediately |
 | `@auto` | **Decorator**: Maintains parallelism (default, can be omitted) |
 
-**Void Auto-Eager Rule:** Functions returning `Void` are automatically eagerly evaluated (no annotation needed), because side effects must execute.
+**Void Auto-Eager Rule:** Functions returning `Void` automatically evaluate eagerly (no annotation needed), because side effects must execute.
 
 ```yaoxiang
-# @eager decorator: Forces eager evaluation
+# @eager decorator: forces eager evaluation
 heavy_computation: (Int) -> Int = (x) => {
     fibonacci(x)
 }
 
-# Functions returning Void are auto-eagerly evaluated (side effect functions)
+# Functions returning Void automatically evaluate eagerly (side effect functions)
 log: (String) -> Void = (message) => {
     print(message)
 }
 
 main: () -> Void = () => {
-    # log is auto-eagerly executed because it returns Void
+    # log executes automatically eagerly because it returns Void
     log("Processing started")
 
-    # Use @eager to force eager evaluation
+    # Use @eager to force eagerness
     @eager heavy_computation(100)
 }
 ```
 
-### 2.4 Spawn Value: Async[T] Lazy Proxy Type
+### 2.4 Spawn Values: Async[T] Lazy Proxy Type
 
 Any function whose return type is marked `-> T spawn` immediately returns a value of type `Async[T]`, which we call a **spawn value**.
 
 ```yaoxiang
 # Spawn function: return type marked as -> JSON spawn
-# Indicates this is a strictly spawn-able computational unit
+# Indicates this is a strictly YaoXiang-executable computation unit
 fetch: (String) -> JSON spawn = (url) => {
     HTTP.get(url).json()
 }
@@ -227,29 +223,29 @@ main: () -> Void = () => {
 }
 ```
 
-#### Core Characteristics of Spawn Values
+#### Core Features of Spawn Values
 
-| Characteristic | Description |
+| Feature | Description |
 |------|------|
-| **Syntax Transparency** | `Async[T]` is a subtype of `T` in the type system, usable in any context expecting `T` |
-| **On-Demand Waiting** | When a concrete `T` type value must be used (e.g., field access, arithmetic), the runtime automatically suspends and waits |
-| **Error Propagation** | Internally it's actually `Result<T, E>`, with errors propagating naturally along the data flow |
+| **Syntax Transparent** | `Async[T]` is a subtype of `T` in the type system, can be used in any context expecting `T` |
+| **On-Demand Waiting** | When a concrete value of type `T` must be used (e.g., field access, arithmetic), the runtime automatically suspends and waits |
+| **Error Propagation** | Internally backed by `Result<T, E>`; errors propagate naturally along the data flow |
 
-### 2.7 Spawn Constructs: From "Modifiers" to "Type Markers"
+### 2.7 YaoXiang Constructs: From "Modifier" to "Type Marker"
 
-The `spawn` keyword is the sole bridge connecting synchronous thinking with async implementation, with three layers of semantics:
+The `spawn` keyword is the sole bridge connecting synchronous thinking with asynchronous implementation, possessing triple semantics:
 
 | Syntax Form | Official Term | Semantics | Runtime Behavior |
 |:---------|:---------|:-----|:----------|
-| **`-> T spawn`** | Spawn Function | Return type marker, indicating a strictly spawn-able computational unit | Its call returns `Async[T]`, marking the creation of a spawn graph node |
-| **`spawn { ... }`** | Spawn Block | Explicitly declared concurrency boundary | Runtime **aggressively** executes each expression in the block as an independent task concurrently, implicitly waiting for all results at block end |
+| **`-> T spawn`** | Spawn Function | Return type marker, indicating this is a strictly YaoXiang-executable computation unit | Its call returns `Async[T]`, marking the creation of a spawn graph node |
+| **`spawn { ... }`** | Spawn Block | Explicitly declared concurrency boundary | The runtime **aggressively** executes each expression within the block as independent tasks concurrently, implicitly waiting for all results at block end |
 | **`spawn for`** | Spawn Loop | Data parallel loop | Transforms the loop body into multiple parallel tasks, automatically performing data sharding, scheduling, and result collection |
 
 ---
 
-## V. How It Works: From Code to Execution
+## 3. How It Works: From Code to Execution
 
-### 3.1 Compile Time: Constructing the Spawn Graph
+### 3.1 Compile Time: Building the Spawn Graph
 
 ```yaoxiang
 # Spawn function definition: return type marked as spawn
@@ -267,23 +263,23 @@ process: () -> Report = () => {
         parse(data_b)   # Node D: depends on B
     }
 
-    # Final convergence node
+    # Final merge node
     generate_report(model_a, model_b)  # Node E
 }
 ```
 
 **Compiler Operations:**
-1. Parse source code, construct global spawn graph
-2. Create computational nodes for each expression
+1. Parse source code, build global spawn graph
+2. Create computation nodes for each expression
 3. Analyze data dependencies, establish edge relationships
-4. Sub-graphs within `spawn { }` and `spawn for` blocks are tagged with **"parallel evaluation"**
+4. Subgraphs within `spawn { }` and `spawn for` blocks are tagged with **"parallel evaluation"**
 
-### 4.2 Runtime: Spawn Scheduler
+### 4.2 Runtime: YaoXiang Scheduler
 
-An intelligent, work-stealing **spawn scheduler** is responsible for executing the spawn graph:
+An intelligent, work-stealing **YaoXiang scheduler** is responsible for executing the spawn graph:
 
 ```rust
-// Spawn scheduler core logic
+// YaoXiang scheduler core logic
 impl FlowScheduler {
     fn execute_node(&self, node_id: NodeId) {
         let node = self.get_node(node_id);
@@ -294,7 +290,7 @@ impl FlowScheduler {
                 self.submit_async(node_id);
             }
             NodeKind::ParallelBlock => {
-                // Spawn block: aggressively execute all direct child nodes in parallel
+                // Spawn block: aggressively parallel execute all immediate child nodes
                 self.submit_parallel(node_id);
             }
             NodeKind::DataParallel { iterator, body } => {
@@ -312,8 +308,8 @@ impl FlowScheduler {
 ```
 1. To evaluate [E], need [C] and [D]
 2. [C] depends on [A], [D] depends on [B]
-3. Spawn scheduler finds [A] and [B] have no dependency → execute in parallel immediately
-4. After [A], [B] complete, due to spawn block tag → execute [C] and [D] in parallel immediately
+3. YaoXiang scheduler discovers [A] and [B] have no dependency → immediately parallel execute
+4. After [A], [B] complete, due to spawn block tag → immediately parallel execute [C] and [D]
 5. After [C], [D] complete, execute [E]
 ```
 
@@ -327,41 +323,41 @@ impl FlowScheduler {
 
 ---
 
-## VI. Key Mechanisms in Detail
+## 4. Key Mechanism Details
 
 ### 4.1 Side Effects and Evaluation Guarantees
 
-Pure lazy evaluation may cause side effects (such as logging, writing) to never execute. The spawn model uses **automatic inference based on return type**:
+Pure lazy evaluation could cause side effects (such as logging, writing) to never execute. The YaoXiang model adopts **automatic derivation based on return type**:
 
 | Rule | Condition | Behavior |
 |------|------|------|
-| **Rule 1** | Functions returning `Void` | **Auto-eager evaluation** (side effects must execute) |
-| **Rule 2** | Expressions using `@eager` decorator | **Forced eager evaluation** regardless of return type |
-| **Rule 3** | Functions returning non-Void types | **Lazy evaluation** (default) |
+| **Rule One** | Functions returning `Void` | **Automatic eager evaluation** (side effects must execute) |
+| **Rule Two** | Expressions using `@eager` decorator | **Forced eager evaluation** regardless of return type |
+| **Rule Three** | Functions returning non-Void types | **Lazy evaluation** (default) |
 
 ```yaoxiang
-# Functions returning Void are auto-eagerly executed (side effects)
+# Functions returning Void automatically execute eagerly (side effects)
 log: (String) -> Void = (message) => {
     print(message)
 }
 
-# @eager decorator: Forces eager evaluation
+# @eager decorator: forces eager evaluation
 cache_compute: (Int) -> Int = (x) => {
-    # Forces immediate execution even though it returns Int
+    # Even though it returns Int, force immediate execution
     expensive_calculation(x)
 }
 
 main: () -> Void = () => {
-    # log is auto-eagerly executed (returns Void)
+    # log executes automatically eagerly (returns Void)
     log("Processing started")
 
     # @eager forces eager execution
     @eager
     cache_compute(100)
 
-    # Regular function uses lazy evaluation (returns Int)
-    result = heavy_computation(200)  # Does not execute yet
-    print(result)  # Executes here
+    # Normal function lazy executes (returns Int)
+    result = heavy_computation(200)  # Not executed yet
+    print(result)  # Executed here
 }
 ```
 
@@ -387,17 +383,17 @@ parse_config: (String) -> Result[Config, ParseError] = (content) => {
 
 #### Error Propagation Syntax
 
-Uses Rust-style `?` operator for transparent error propagation:
+Adopting Rust-style `?` operator for transparent error propagation:
 
 ```yaoxiang
 # Rust-style ? operator
 process() -> Result[Data, Error] = {
-    data = fetch_data()?      # Auto-wait and check error
+    data = fetch_data()?      # Automatically wait and check errors
     processed = transform(data)?
-    save(processed)?          # Error auto-propagates upward
+    save(processed)?          # Errors automatically propagate upward
 }
 
-# Pattern matching to handle errors
+# Pattern matching for error handling
 handle_result: (Result[Int, Error]) -> String = (result) => {
     match result {
         ok(value) => "Success: " + value.to_string()
@@ -412,7 +408,7 @@ handle_result: (Result[Int, Error]) -> String = (result) => {
 
 #### Error Graph Visualization
 
-Error graph is similar to call stack but displays error propagation paths in the DAG:
+The error graph is similar to a call stack, but shows error propagation paths in the DAG:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -428,7 +424,7 @@ Error graph is similar to call stack but displays error propagation paths in the
 │     │                                                       │
 │     └──► fallback()  ✓                                      │
 │                                                             │
-│ Causal chain: main → calculate → divide                     │
+│ Causality chain: main → calculate → divide                   │
 │ Capture location: calculate (line 42)                       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -436,7 +432,7 @@ Error graph is similar to call stack but displays error propagation paths in the
 #### Error Handling Best Practices
 
 ```yaoxiang
-# Combine multiple operations that may fail
+# Combining multiple operations that may fail
 batch_process: ([String]) -> Result[[String], Error] = (items) => {
     results = items.map(item => {
         process_item(item)?
@@ -458,49 +454,49 @@ validate_user: (User) -> Result[ValidatedUser, ValidationError] = (user) => {
 
 Because:
 - Pure functions have no I/O, only CPU computation
-- No matter how long the computation, it doesn't block the scheduler, only occupies CPU time
+- No matter how long the computation takes, it doesn't block the scheduler, only occupies CPU time
 
 **Execution Strategy:**
 
 | Function Type | Execution Strategy | Blocks? |
 |----------|----------|--------|
-| Pure function (no I/O) | Synchronous execution | No (only CPU occupation) |
-| Async function (returns `Async[T]`) | Async execution | No |
-| `@blocking` annotated function | Synchronous execution, internal scheduling | No |
+| Pure functions (no I/O) | Synchronous execution | No (only CPU usage) |
+| Async functions (returning `Async[T]`) | Async execution | No |
+| `@blocking` annotated functions | Synchronous execution, internal scheduling | No |
 
 **`@blocking` Annotation: Synchronous Execution Guarantee**
 
 The `@blocking` annotation guarantees the function executes in a synchronous manner:
-- When the function returns, the result is already ready
-- If there are async calls inside, scheduling completes internally
+- When the function returns, the result is ready
+- If there are async calls internally, they complete before return
 - Suitable for scenarios requiring synchronous semantics but potentially containing async operations internally
 
 ```yaoxiang
-# @blocking: Synchronous execution, internal async scheduling completes before returning
+# @blocking: synchronous execution, internal async scheduling completes before returning
 heavy_compute: (List[Int]) -> Int = (data) => {
-    # Internal may have async operations, but completes before returning
+    # Internal may have async operations, but completes before return
     processed = data.map(x => async_transform(x))
     processed.sum()
 }
 
-# Regular async function: returns Async[T]
+# Normal async function: returns Async[T]
 fetch_user: (Int) -> Async[User] = (id) => {
     database.query("SELECT * FROM users WHERE id = ?", id)
 }
 
-# Pure function: auto-synchronous (no I/O)
+# Pure function: automatically synchronous (no I/O)
 factorial: (Int) -> Int = (n) => {
     if n <= 1 then 1 else n * factorial(n - 1)
 }
 
 main: () -> Void = () => {
     # @blocking function: synchronous execution
-    result = heavy_compute([1, 2, 3, 4, 5])  # Returns result immediately
+    result = heavy_compute([1, 2, 3, 4, 5])  # Returns immediately with result
     print(result)  # 15
 
     # Async function: returns Async[User]
     user = fetch_user(123)  # Async[User]
-    print(user.name)  # Auto-wait and unpack
+    print(user.name)  # Automatically waits and unpacks
 }
 ```
 
@@ -518,7 +514,7 @@ fn execute_function(node: &DAGNode) {
             async_runtime.submit(node);
         }
         ExecutionMode::Blocking => {
-            // @blocking function: synchronous execution, internal scheduling of async operations
+            // @blocking function: synchronous execution, internal async operation scheduling
             execute_blocking(node);
         }
     }
@@ -542,9 +538,9 @@ fn execute_blocking(node: &DAGNode) {
 ```
 
 **Design Advantages:**
-- **Concise**: No complex effect system needed
-- **Flexible**: `@blocking` is optional, use when synchronous semantics are needed
-- **Efficient**: Pure functions auto-execute synchronously
+- **Simple**: No complex effect system needed
+- **Flexible**: `@blocking` is optional, used when synchronous semantics are needed
+- **Efficient**: Pure functions automatically execute synchronously
 - **Safe**: Main scheduler never blocks
 
 ### 4.4 Resource Conflict Detection
@@ -554,17 +550,17 @@ Compile-time analysis of resource access patterns, automatically serializing con
 ```
 Resource Conflict Rule Matrix:
 ╔═══════════╦══════════╦══════════╗
-║  Access   ║   Read   ║   Write  ║
+║   Access  ║   Read   ║   Write  ║
 ╠═══════════╬══════════╬══════════╣
 ║   Read    ║  Parallel║ Serialize║
 ║   Write   ║ Serialize║ Serialize║
 ╚═══════════╩══════════╩══════════╝
 ```
 
-**Compile-Time Analysis Example:**
+**Compile-Time Analysis Example**:
 
 ```rust
-// Compile-time resource access analysis
+// Compile-time analysis of resource access
 struct ResourceAccess {
     reads: Set<ResourceId>,   // Resources being read
     writes: Set<ResourceId>,  // Resources being written
@@ -580,10 +576,10 @@ file3 = open("c.txt")  // Resource 3: write
 // file2 read and file3 write → serialize
 ```
 
-**Code Example:**
+**Code Example**:
 
 ```yaoxiang
-# Compiler auto-detects and serializes conflicting operations
+# Compiler automatically detects and serializes conflicting operations
 process_files: () -> Void = () => {
     file_a = open("a.txt")  # Resource 1: read
     file_b = open("b.txt")  # Resource 2: read
@@ -594,7 +590,7 @@ process_files: () -> Void = () => {
     # file_b read and file_c write → serialize
 }
 
-# Multiple write operations auto-serialized
+# Multiple write operations automatically serialize
 write_logs: () -> Void = () => {
     log1 = open_log("log1.txt")  # Resource 1: write
     log2 = open_log("log2.txt")  # Resource 2: write
@@ -610,11 +606,11 @@ write_logs: () -> Void = () => {
 
 | Type | Semantics | Concurrency Safe | Description |
 |------|------|----------|------|
-| `T` | Immutable data | ✅ Safe | Default type; multiple tasks reading has no race |
-| `Ref[T]` | Mutable reference | ⚠️ Needs sync | Marked as concurrently modifiable; compiler checks lock usage |
+| `T` | Immutable data | ✅ Safe | Default type; multiple tasks reading has no races |
+| `Ref[T]` | Mutable reference | ⚠️ Needs synchronization | Marked as concurrently modifiable; compiler checks lock usage |
 | `Atomic[T]` | Atomic type | ✅ Safe | Low-level atomic operations; lock-free concurrency |
-| `Mutex[T]` | Mutex wrapper | ✅ Safe | Auto lock/unlock; compiler guarantees |
-| `RwLock[T]` | Read-write lock wrapper | ✅ Safe | Optimization for read-heavy, write-light scenarios |
+| `Mutex[T]` | Mutex-wrapped | ✅ Safe | Automatic lock/unlock; compiler-guaranteed |
+| `RwLock[T]` | Read-write lock wrapped | ✅ Safe | Optimization for read-heavy, write-light scenarios |
 
 **Type Safety Guarantees:**
 
@@ -626,15 +622,15 @@ spawn for x in data { process(x) }  # ✅ Safe, read-only no race
 # Mutable reference - needs synchronization
 counter: Ref[Int] = Ref.new(0)
 
-# Wrong example: Unlocked Ref access (compile error)
+# Wrong example: accessing Ref without lock (compile error)
 spawn for i in 1..10 {
     # ❌ Compile error: Ref must be accessed through synchronization primitives
     counter.value = counter.value + i
 }
 
-# Correct example: Using with syntax sugar for auto-locking
+# Correct example: using with syntax sugar for automatic locking
 spawn for i in 1..10 {
-    # ✅ with block auto-acquires and releases lock
+    # ✅ with block automatically acquires and releases lock
     with counter.lock() {
         counter.value = counter.value + i
     }
@@ -654,10 +650,10 @@ spawn for i in 1..10 {
 # Create mutex-wrapped data
 shared_state: Mutex[Map[String, Int]] = Mutex.new(Map.empty())
 
-# Use with syntax sugar (similar to Go's defer)
+# Using with syntax sugar (similar to Go's defer)
 main: () -> Void = () => {
     spawn for i in 1..100 {
-        # with auto-acquires lock, auto-releases after block
+        # with automatically acquires lock, automatically releases after block
         with shared_state.lock() {
             # Critical section: protected by Mutex
             current = shared_state.get("count").or(0)
@@ -678,15 +674,15 @@ fn compile_check_locks(func: &Function) {
     for node in func.nodes {
         match node {
             NodeKind::ReadRef(ref_var) => {
-                // Check if within lock protection scope
+                // Check if inside lock protection scope
                 if !is_inside_lock_guard(ref_var) {
-                    compile_error!("Ref access must be within lock() protection scope");
+                    compile_error!("Ref access must be within lock() protection");
                 }
             }
             NodeKind::WriteRef(ref_var, _) => {
                 // Double check: lock + unique writer
                 if !is_inside_lock_guard(ref_var) {
-                    compile_error!("Ref modification must be within lock() protection scope");
+                    compile_error!("Ref modification must be within lock() protection");
                 }
                 if has_multiple_writers(func, ref_var) {
                     compile_error!("Mutex[T] can only have one writer; use RwLock[T]");
@@ -702,61 +698,61 @@ fn compile_check_locks(func: &Function) {
 
 | Advantage | Description |
 |------|------|
-| **Compile-Time Checking** | Missing locks caught at compile time, not runtime deadlock |
-| **Zero Runtime Overhead** | Mutex wrapper has no overhead when there's no contention |
-| **Concise Syntax** | `with lock() { ... }` syntax sugar, auto-manages lifecycle |
-| **Type Safe** | Misusing Ref instead of Atomic results in type-level error |
+| **Compile-Time Checking** | Missing locks caught at compile time, not runtime deadlocks |
+| **Zero Runtime Overhead** | Mutex wrapper has no overhead when uncontended |
+| **Concise Syntax** | `with lock() { ... }` syntax sugar, automatic lifecycle management |
+| **Type Safe** | Misusing Ref instead of Atomic causes type-level errors |
 
 ---
 
-## VII. Advantages Summary
+## 5. Advantages Summary
 
 | Advantage | Description |
 |------|------|
-| **Zero Contagion** | Async code and sync code have no difference in syntax or type signature, completely eradicating "async/await" contagion |
-| **High-Performance Parallelism** | Lazy spawn graph combined with explicit `spawn` markers allows runtime to automatically discover parallelism while giving programmers clear tools for extreme performance optimization |
+| **Zero Poison** | Async code is indistinguishable from sync code in syntax and type signatures, completely eradicating "async/await" poison |
+| **High-Performance Parallelism** | Lazy YaoXiang graph combined with explicit `spawn` markers allows the runtime to automatically discover parallelism while giving programmers explicit tools for extreme performance optimization |
 | **Simple Mental Model** | Developers only need to focus on data flow and business logic, no need to understand complex concurrency primitives and callbacks |
-| **Easy Refactoring** | Extremely low cost to switch between sequential and concurrent logic; just add or remove `spawn {}` wrapper |
+| **Easy Refactoring** | Switching between sequential and concurrent logic has extremely low cost; just add or remove `spawn {}` wrappers |
 | **Intuitive Terminology** | "Spawn function," "spawn block," "spawn value" make technical discussions extremely intuitive |
 
 ---
 
-## VIII. Implementation Considerations
+## 6. Implementation Considerations
 
 ### 6.1 Compiler
 
-- [ ] Implement data flow analysis, construct spawn graph
-- [ ] Implement parsing and type inference for `spawn` return type marker
+- [ ] Implement data flow analysis, build YaoXiang graph
+- [ ] Implement parsing and type inference for `spawn` return type markers
 - [ ] Desugar `spawn {}` and `spawn for` into runtime parallel primitives
 - [ ] Support annotations (`@eager`, `@blocking`)
-- [ ] Implement Void return type auto-eager evaluation logic
+- [ ] Implement Void return type automatic eager evaluation logic
 - [ ] Implement resource conflict detection
-- [ ] Implement Send/Sync type constraint checking
+- [ ] Implement Send/Sync trait constraint checking
 
 ### 6.2 Runtime
 
-- [ ] Implement work-stealing spawn scheduler
-- [ ] Implement computation graph dependency-aware task scheduling
-- [ ] Implement `Async[T]` type auto-unwrapping mechanism
-- [ ] Implement Void function auto-eager execution
-- [ ] Implement Error Graph generation and propagation
+- [ ] Implement work-stealing YaoXiang scheduler
+- [ ] Implement dependency-aware task scheduling for computation graph
+- [ ] Implement `Async[T]` type automatic unwrapping mechanism
+- [ ] Implement Void function automatic eager execution
+- [ ] Implement error graph generation and propagation
 - [ ] Implement resource access serialization
 
-### 6.3 Debugging Tools ⚠️ Required
+### 6.3 Debugging Tools ⚠️ Must-Have
 
-**Computational Graph Visual Debugger** is key to understanding complex program behavior:
+**Computation Graph Visual Debugger** is key to understanding complex program behavior:
 
 | Feature | Description |
 |------|------|
-| **Node State Visualization** | Observe Pending/Running/Completed state of each computational node |
+| **Node State Visualization** | Observe Pending/Running/Completed state of each computation node |
 | **Dependency Relationship Display** | Show data dependency edges between nodes |
 | **Task Flow Tracking** | Observe task flow between threads |
-| **Performance Bottleneck Identification** | Identify long chains and hot spots |
-| **Error Graph Visualization** | Display error propagation paths in concurrent environment |
+| **Performance Bottleneck Locating** | Identify long chains and hot nodes |
+| **Error Graph Visualization** | Error propagation path display in concurrent environments |
 
 ---
 
-## IX. Code Examples
+## 7. Code Examples
 
 ### 7.1 Basic Spawn Function
 
@@ -775,11 +771,11 @@ fetch_posts: (Int) -> List[Post] spawn = (user_id) => {
 }
 
 main: () -> Void = () => {
-    # Auto-parallel execution (no dependencies)
+    # Automatically parallel execute (no dependencies)
     user = fetch_user(123)      # Async[User]
     posts = fetch_posts(123)    # Async[List[Post]]
 
-    # Auto-wait and unpack here
+    # Automatically wait and unpack here
     print(user.name)            # As natural as synchronous code
     print(posts.length)
 }
@@ -797,7 +793,7 @@ parallel_fetch: () -> (Model, Model) = () => {
         parse(fetch("https://api1.com/data")),
         parse(fetch("https://api2.com/data"))
     }
-    # Models a and b are ready here
+    # Both models a and b are ready here
     (model_a, model_b)
 }
 ```
@@ -819,7 +815,7 @@ batch_process: (List[Item]) -> List[Result[Processed, Error]] = (items) => {
 
 ---
 
-> *"All things arise together; I observe their return."*
-> —— Yi Jing, Fu Hexagram
+> *"All things flourish and grow, and I observe their return."*
+> —— I Ching, Hexagram of Return (复卦)
 >
-> The spawn model combines the declarative elegance of lazy evaluation with the demands of high-performance concurrency, aiming to provide a paradigm for systems programming that is both safe and extremely expressive.
+> The YaoXiang model combines the declarative elegance of lazy evaluation with the demands of high-performance concurrency, aiming to provide system programming with a paradigm that is both safe and extraordinarily expressive.

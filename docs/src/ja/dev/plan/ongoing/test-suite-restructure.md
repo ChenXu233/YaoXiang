@@ -1,51 +1,51 @@
-# テストスイート再構築計画
+# テストスイートリファクタリング計画
 
 > 状態：計画
-> 分岐：refactor/test-suite
+> ブランチ：refactor/test-suite
 > 日付：2026-05-10
 
-## 一、再構築の理由
+## 一、リファクタリングの理由
 
 ### 現状の問題
 
-1. **1752個のテストが全て成功したが、実際のバグを検出できなかった**
-   - match式が実行時に0を返す（ir_genがMatchノードを処理していない）
-   - リスト内包表記が0を返す（ir_genがListCompノードを処理していない）
-   - `x: Int = 42` 型注釈付き変数宣言のパースに失敗
+1. **1752個のテストがすべてパスしているが、実際のバグを検出できていない**
+   - match 式が実行時に 0 を返す（ir_gen が Match ノードを処理していない）
+   - リスト内包表記が 0 を返す（ir_gen が ListComp ノードを処理していない）
+   - `x: Int = 42` 型注釈付き変数宣言のパースに失敗する
 
 2. **統合テストはコンパイル成功のみ検証し、実行時出力の正しさを検証していない**
-   - `tests/integration/interpreter.rs`は`assert!(result.is_ok())`のみ実行
-   - `tests/integration/execution.rs`は完全にコメントアウトされている
+   - `tests/integration/interpreter.rs` は `assert!(result.is_ok())` のみを実行
+   - `tests/integration/execution.rs` は完全にコメントアウトされている
 
-3. **E2E .yxファイルの体系がない**
-   - 新旧混在：`closure_test.yx`（旧）と`spec_features_test.yx`（新）が同ディレクトリ
+3. **E2E .yx ファイルに体系がない**
+   - 新旧混在：`closure_test.yx`（旧）と `spec_features_test.yx`（新）が同一ディレクトリ
    - 命名規則なし：`closure_test.yx`、`closure_test2.yx`、`mut_param_test.yx`
    - カバー計画なし：言語仕様書の章対応マッピングがない
 
-4. **インラインテストが断片化**
-   - `src/frontend/typecheck/tests/`に23ファイルあり、多くのテストが重複
-   - scopeテストが4ファイルに分散
-   - inferテストが3ファイルに分散
-   - `typecheck_fixes.rs`は歴史的パッチの残骸の可能性
+4. **インラインテストが断片化している**
+   - `src/frontend/typecheck/tests/` に23ファイルあり、多くのファイルが同一の内容をテスト
+   - scope テストが4ファイルに分散
+   - infer テストが3ファイルに分散
+   - `typecheck_fixes.rs` は過去の修正の残骸と疑われる
 
-5. **Codegenテストが孤立**
-   - 全て手書きのIRで、parser→typecheck→ir_genの完全パイプラインを経由しない
-   - 「手書きIRがバイトコードに翻訳できるか」をテストしており、「ソースコードのコンパイル結果が正しいか」をテストしていない
+5. **Codegen テストが孤立している**
+   - すべて手書き IR で、parser→typecheck→ir_gen の完全パイプラインを経由しない
+   - 「手書き IR がバイトコードに翻訳できるか」をテストしており、「ソースコードのコンパイル結果が正しいか」をテストしていない
 
-### 再構築目標
+### リファクタリングの目標
 
-1. **三層テスト体系の確立** — 各層が明確な責任とカバー基準を持つ
-2. **E2Eテストのベンチマーク兼用** — 各.yxテストファイルで実行時間を測定可能
-3. **内部テストの正規化** — 統一されたテスト規約、命名、アサーションスタイル
-4. **言語仕様書の主要パスのカバー** — 言語仕様書で定義された構文機能が対応するテストを持つことを保証
+1. **三層テスト体系を確立**し、各層に明確な責任とカバー基準を設定する
+2. **E2E テストをベンチマークとしても兼用** — 各 .yx テストファイルで実行時間を測定可能
+3. **内部テストの標準化** — 統一されたテスト規則、命名、アサートパターンを適用
+4. **言語仕様書の主要パスをカバー** — 言語仕様で定義された構文機能に対応するテストが存在することを保証
 
 ---
 
 ## 二、三層テスト体系
 
-### 第一層：E2E .yxテストスイート（tests/yaoxiang/）
+### 第一層：E2E .yx テストスイート（tests/yaoxiang/）
 
-言語仕様書の章별로構成され、各ファイルが1つの構文機能に対応。
+言語仕様書の章ごとに構成し、各ファイルが1つの構文機能に対応。
 
 ```
 tests/yaoxiang/
@@ -53,7 +53,7 @@ tests/yaoxiang/
 │   └── hello.yx
 │
 ├── 01-basics/                # 基本構文（仕様書 第2/4/5章）
-│   ├── variables.yx          # 変数宣言 + 型推論
+│   ├── variables.yx          # 変数宣言 + 型推到
 │   ├── typed_vars.yx         # 型注釈付き変数 x: Int = 42
 │   ├── operators.yx          # 全演算子
 │   ├── literals.yx           # 全リテラル
@@ -61,11 +61,11 @@ tests/yaoxiang/
 │
 ├── 02-functions/             # 関数（仕様書 第6章）
 │   ├── definitions.yx        # name: (params) -> Ret = ...
-│   ├── lambdas.yx            # ラムダ式
+│   ├── lambdas.yx            # Lambda 式
 │   ├── closures.yx           # 高階関数
-│   └── generics.yx           # ジェネリクス関数
+│   └── generics.yx           # 泛型関数
 │
-├── 03-control-flow/          # 制御フロー（仕様書 第4/5章）
+├── 03-control-flow/          # 制御流れ（仕様書 第4/5章）
 │   ├── if_else.yx
 │   ├── while.yx
 │   ├── for.yx
@@ -86,18 +86,18 @@ tests/yaoxiang/
 │   ├── imports.yx
 │   └── lib/
 │
-└── 07-errors/                # エラー処理（仕様書 第9章、未実装機能はマーク）
+└── 07-errors/                # エラー処理（仕様書 第9章、未実装機能をマーク）
     ├── result.yx
     └── option.yx
 ```
 
-**ファイル規約**：
+**ファイル規則**：
 
 ```yaoxiang
 // 01-basics/variables.yx
-// カバー: 仕様書 §5.2 変数宣言, §6.2 型推論
-// 検証: 基本宣言、型推論、可変性
-// 分岐: refactor/test-suite
+// カバー: 仕様書 §5.2 変数宣言, §6.2 型推到
+// 検証: 基本宣言、型推到、可变性
+// ブランチ: refactor/test-suite
 // 状態: ✅ 実行可能
 
 use std.io
@@ -115,109 +115,109 @@ main = {
 }
 ```
 
-**アサーション機構**：Rustテストフレームワークがstdoutをキャプチャし、各.yxファイルの出力に`ALL TESTS PASSED`文字列が出現することを検証。
+**アサート機構**：Rust テストフレームワークが stdout をキャプチャし、各 .yx ファイルの出力に `ALL TESTS PASSED` 文字列が含まれることを検証。
 
-**ベンチマーク拡張**：`.yx`テストファイルは自然に応用力ベンチマークとなる—実行時間を測定可能。将来的には`criterion`でラップし、パフォーマンスリグレッションを追跡可能。
+**ベンチマーク拡張**：`.yx` テストファイルは自然스럽게パフォーマンスベンチマークとして機能—実行時間を測定可能。将来的には `criterion` でラップし、パフォーマンスリグレッションを追跡可能。
 
 ### 第二層：統合テスト（tests/integration/）
 
-完全コンパイル+実行パイプラインをテストし、出力値を検証。
+完全なコンパイル+実行パイプラインをテストし、出力値を検証。
 
-| 現行ファイル | 操作 | 説明 |
+| 現在のファイル | 操作 | 説明 |
 |---------|------|------|
-| `interpreter.rs` | 再構築 | ソースコードコンパイル→実行→出力値アサーションに変更 |
-| `execution.rs` | 再構築（コメント解除） | stack overflowを修正し、実際の.yxファイルを実行 |
-| `codegen.rs` | 保持 | バイトコードシリアライズ/デシリアライズ |
-| `codegen_extended.rs` | 保持 | opcode/メタデータテスト |
+| `interpreter.rs` | リライト | ソースコードのコンパイル→実行→出力値のアサートに変更 |
+| `execution.rs` | リライト（コメント解除） | stack overflow を修正し、実際の .yx ファイルを実行 |
+| `codegen.rs` | 保持 | バイトコードのシリアライズ/デシリアライズ |
+| `codegen_extended.rs` | 保持 | opcode/metadata テスト |
 | `fstring.rs` | 保持 | 実行検証を補完 |
-| `backends.rs` | 保持 | RuntimeValue型テスト |
+| `backends.rs` | 保持 | RuntimeValue 型テスト |
 
-**補完**：`tests/yx_runner.rs` — `tests/yaoxiang/`下の全.yxファイルを自動発見・実行。
+**補完**：`tests/yx_runner.rs` — `tests/yaoxiang/` 下の全 .yx ファイルを自動検出・実行。
 
 ### 第三層：ユニットテスト（src/*/tests/）
 
-単一モジュールの内部ロジックをテストし、プライベートAPIにアクセス可能。
+单个モジュールの内部ロジックをテストし、private API へのアクセスが可能。
 
-#### 3.1 Lexerテスト（src/frontend/core/lexer/tests/）
+#### 3.1 Lexer テスト（src/frontend/core/lexer/tests/）
 
-11ファイル → デバッグ用1ファイルを削除し、10ファイルを保持。
+11ファイル → デバッグ用ファイルを1つ削除し、10ファイルを保持。
 
-| 操作 | ファイル | |
-|------|------|
-| 削除 | `debug_lexer.rs` — デバッグ専用 | |
-| 保持 | `basic.rs`, `comments.rs`, `keywords.rs`, `literals.rs`, `operators.rs` | |
-| 保持 | `delimiters.rs`, `errors.rs`, `fstring.rs` | |
-| 保持 | `rfc004_lexer.rs`, `rfc010_lexer.rs` | |
+| 操作 | ファイル |
+|------|---------|
+| 削除 | `debug_lexer.rs` — デバッグのみ使用 |
+| 保持 | `basic.rs`, `comments.rs`, `keywords.rs`, `literals.rs`, `operators.rs` |
+| 保持 | `delimiters.rs`, `errors.rs`, `fstring.rs` |
+| 保持 | `rfc004_lexer.rs`, `rfc010_lexer.rs` |
 
-#### 3.2 Parserテスト（src/frontend/core/parser/tests/）
+#### 3.2 Parser テスト（src/frontend/core/parser/tests/）
 
-13ファイル → 審査後に微調整。
+13ファイル → レビュー後、微調整。
 
-| 操作 | ファイル | |
-|------|------|
-| 保持 | `basic.rs`, `fn_def.rs`, `syntax_validation.rs`, `old_syntax_rejection.rs` | |
-| 保持 | `boundary.rs`, `concurrency.rs`, `fstring.rs` | |
-| 保持 | `ref_test.rs`, `unsafe_ptr.rs`, `state.rs` | |
-| 審査 | `binding_enhancements.rs` — fn_defとの重複を確認 | |
+| 操作 | ファイル |
+|------|---------|
+| 保持 | `basic.rs`, `fn_def.rs`, `syntax_validation.rs`, `old_syntax_rejection.rs` |
+| 保持 | `boundary.rs`, `concurrency.rs`, `fstring.rs` |
+| 保持 | `ref_test.rs`, `unsafe_ptr.rs`, `state.rs` |
+| レビュー | `binding_enhancements.rs` — fn_def と重複していないか確認 |
 
-#### 3.3 Typecheckテスト（src/frontend/typecheck/tests/)
+#### 3.3 Typecheck テスト（src/frontend/typecheck/tests/)
 
-**最大問題エリア**：23ファイル → 12ファイルに統合。
+**最大の問題エリア**：23ファイル → 12ファイルに統合。
 
 | 操作 | 元ファイル | 対象ファイル |
-|------|--------|--------|
+|------|--------|---------|
 | 統合 | `infer.rs` + `inference.rs` + `types.rs` | `type_inference.rs` |
 | 統合 | `scope.rs` + `shadowing.rs` + `use_scope.rs` + `use_block_scope.rs` | `scoping.rs` |
 | 統合 | `visibility.rs` + `pub_bind.rs` | `visibility.rs` |
-| 審査 | `typecheck_fixes.rs` | 歴史的パッチテストのみであれば対応ファイルに統合後削除 |
+| レビュー | `typecheck_fixes.rs` | 過去の修正テストのみであれば対応するファイルに統合して削除 |
 | 保持 | `basic.rs`, `check.rs` | — |
 | 保持 | `constraint.rs`, `concurrency.rs`, `fstring.rs` | — |
 | 保持 | `gat.rs`, `ref_test.rs`, `result_try.rs` | — |
 | 保持 | `semantic_tokens.rs`, `traits.rs`, `type_constructor_rules.rs` | — |
 
-#### 3.4 Middle/Codegenテスト（src/middle/passes/tests/)
+#### 3.4 Middle/Codegen テスト（src/middle/passes/tests/）
 
-| ディレクトリ | 操作 | |
+| ディレクトリ | 操作 |
 |------|------|
-| `codegen/` | 既存を保持、**統合型codegenテストを補完**（ソースからIRまでコンパイル結果の構造検証） | |
-| `lifetime/` | 変更なし | |
-| `mono/` | 変更なし | |
-| `module/` | 変更なし | |
+| `codegen/` | 既存を保持、**統合型 codegen テストを補完**（ソースからIRへのコンパイル結果を構造的に検証） |
+| `lifetime/` | 変更なし |
+| `mono/` | 変更なし |
+| `module/` | 変更なし |
 
 ## 三、テスト標準ドキュメント
 
-同ディレクトリに`TEST_STANDARD.md`を作成：
+同一ディレクトリに `TEST_STANDARD.md` を作成，内容：
 
 ### 命名規則
 
 ```
-用途        パターン                    例
+用途        パターン                      例
 ─────────────────────────────────────────────────────
 テストモジュール mod_<説明>_tests          mod_parser_basic_tests
-テスト関数    test_<機能>_<シナリオ>      test_parse_fn_def_no_params
-E2Eファイル   <章>-<機能>.yx              01-basics-variables.yx
+テスト関数    test_<機能>_<シナリオ>        test_parse_fn_def_no_params
+E2E ファイル   <章>-<機能>.yx          01-basics-variables.yx
 ```
 
-### アサーション規則
+### アサート規則
 
-- E2E `.yx`ファイル：末尾に`ALL TESTS PASSED`を出力
-- 統合テスト：stdoutが期待値を含むことを検証
-- ユニットテスト：データ構造体のフィールド値を検証し、`assert!(result.is_ok())`を唯一のassertにしない
+- E2E `.yx` ファイル：末尾に `ALL TESTS PASSED` を出力
+- 統合テスト：stdout が期待値を含むことを検証
+- ユニットテスト：データ構造のフィールド値を検証し、`assert!(result.is_ok())` のみを唯一のアサートとしない
 
 ### コメント規則
 
 ```
-// E2Eファイルヘッダー：
+// E2E ファイルヘッダー：
 // カバー: 仕様書 §X.X
 // 検証: 一文での説明
-// 分岐: refactor/test-suite
+// ブランチ: refactor/test-suite
 // 状態: ✅ 実行可能 / ⚠️ 修正待ち / 🔴 未実装
 ```
 
 ### 未実装機能の処理
 
-- 存在しない機能のE2E `.yx`：書かず、実装後に補完
-- ユニットテストで未実装機能を参照：`#[ignore]`でマークし、コメントに「XXX実装後に有効化」と記載
+- 存在しない機能の E2E `.yx`：書かず、実装後に追加
+- 未実装機能を参照するユニットテスト：`#[ignore]` でマークし、コメントに "待 XXX 実装後に有効化" と記載
 
 ---
 
@@ -225,40 +225,40 @@ E2Eファイル   <章>-<機能>.yx              01-basics-variables.yx
 
 ### Phase 0：準備作業
 
-- [ ] `dev`から分岐`refactor/test-suite`を作成
-- [ ] `typecheck_fixes.rs`と`binding_enhancements.rs`を審査し、削除候補を決定
-- [ ] `tests/integration/execution.rs`のstack overflow問題を審査
+- [ ] `dev` からブランチ `refactor/test-suite` を作成
+- [ ] `typecheck_fixes.rs` と `binding_enhancements.rs` をレビューし、削除対象か確定
+- [ ] `tests/integration/execution.rs` の stack overflow 問題をレビュー
 
-### Phase 1：E2Eテストフレームワーク
+### Phase 1：E2E テストフレームワーク
 
-- [ ] `tests/yx_runner.rs`を作成 — `tests/yaoxiang/**/*.yx`を自動発見・実行
-- [ ] `tests/yaoxiang/`の新規ディレクトリ構造を作成
-- [ ] 00-smokeスモークテストを作成
-- [ ] 01-basics層を作成（現在実行可能な構文）
-- [ ] 02-functions層を作成
+- [ ] `tests/yx_runner.rs` を作成 — `tests/yaoxiang/**/*.yx` を自動検出・実行
+- [ ] `tests/yaoxiang/` の新しいディレクトリ構造を作成
+- [ ] 00-smoke スモークテストを作成
+- [ ] 01-basics 層を作成（現在実行可能な構文）
+- [ ] 02-functions 層を作成
 
 ### Phase 2：実行時バグ修正 + 対応テスト
 
-- [ ] match式を修正（ir_genにMatch処理を追加）
-- [ ] リスト内包表記を修正（ir_genにListComp処理を追加）
-- [ ] `x: Int = 42`変数型注釈を修正
-- [ ] 上記修正に対応する.yx E2Eテストを補完
+- [ ] match 式を修正（ir_gen に Match 処理を追加）
+- [ ] リスト内包表記を修正（ir_gen に ListComp 処理を追加）
+- [ ] `x: Int = 42` 変数型注釈を修正
+- [ ] 上記修正に対応する .yx E2E テストを補完
 
-### Phase 3：統合テスト再構築
+### Phase 3：統合テストのリライト
 
-- [ ] `tests/integration/interpreter.rs`を再構築（実行時出力値を検証）
-- [ ] `tests/integration/execution.rs`を再構築（stack overflowを修正）
-- [ ] 統合型codegenテストを補完（ソースからIRまで）
+- [ ] `tests/integration/interpreter.rs` をリライト（実行時出力値を検証）
+- [ ] `tests/integration/execution.rs` をリライト（stack overflow を修正）
+- [ ] 統合型 codegen テストを補完（ソースからIR）
 
-### Phase 4：インラインテスト統合
+### Phase 4：インラインテストの統合
 
-- [ ] typecheckテストを23→12に統合
-- [ ] `debug_lexer.rs`を削除
-- [ ] parserテストの重複を審査
+- [ ] typecheck テストを 23→12 に統合
+- [ ] `debug_lexer.rs` を削除
+- [ ] parser テストの重複をレビュー
 
 ### Phase 5：テスト標準ドキュメントの作成
 
-- [ ] `tests/yaoxiang/`ルートディレクトリに`TEST_STANDARDS.md`を作成
+- [ ] `tests/yaoxiang/` ルートディレクトリに `TEST_STANDARDS.md` を作成
 
 ---
 
@@ -268,13 +268,13 @@ E2Eファイル   <章>-<機能>.yx              01-basics-variables.yx
 # 全テスト
 cargo test
 
-# E2Eテスト
+# E2E テスト
 cargo test --test yx_runner
 
 # ユニットテスト
 cargo test --lib
 
-# .yxファイルの手動実行
+# .yx ファイルの手動実行
 cargo run -- run tests/yaoxiang/01-basics/variables.yx
 
 # ベンチマーク実行
@@ -283,10 +283,10 @@ cargo bench
 
 ---
 
-## 六、関連ファイル一覧
+## 六、涉及文件清单
 
 ### 新規作成ファイル
-- `tests/yx_runner.rs` — E2Eテストランナー
+- `tests/yx_runner.rs` — E2E テストランナー
 - `tests/yaoxiang/TEST_STANDARDS.md` — テスト標準
 - `tests/yaoxiang/00-smoke/hello.yx`
 - `tests/yaoxiang/01-basics/variables.yx`
@@ -320,8 +320,8 @@ cargo bench
 - `src/frontend/core/lexer/tests/debug_lexer.rs`（確認待ち）
 
 ### 変更ファイル
-- `tests/integration/interpreter.rs` — 再構築
-- `tests/integration/execution.rs` — 再構築
-- `src/frontend/core/ir_gen.rs` — matchとlistcompの修正
-- `src/frontend/typecheck/` — `x: Int = 42`の修正
-- `src/frontend/typecheck/tests/` — 23→12ファイル統合
+- `tests/integration/interpreter.rs` — リライト
+- `tests/integration/execution.rs` — リライト
+- `src/frontend/core/ir_gen.rs` — match と listcomp の修正
+- `src/frontend/typecheck/` — `x: Int = 42` の修正
+- `src/frontend/typecheck/tests/` — 23→12 ファイルの統合

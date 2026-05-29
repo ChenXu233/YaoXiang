@@ -1,6 +1,6 @@
 # Module System Specification
 
-This document defines the module system specification for the YaoXiang programming language, including module definition, import/export, and scope.
+This document defines the module system specification for the YaoXiang programming language, including module definition, imports/exports, and scope.
 
 ---
 
@@ -8,7 +8,7 @@ This document defines the module system specification for the YaoXiang programmi
 
 ### 1.1 Module Basics
 
-Modules use files as boundaries. Each `.yx` file is a module.
+A module is bounded by a file. Each `.yx` file is a module.
 
 ```
 // The filename is the module name
@@ -19,9 +19,9 @@ pub sqrt(Float) -> Float = (x) => { ... }
 
 ### 1.2 Module Naming Rules
 
-- The module name is determined by the filename
+- Module names are determined by the filename
 - The file extension `.yx` is not part of the module name
-- Module names use PascalCase naming convention
+- Module names use PascalCase naming
 
 ---
 
@@ -39,12 +39,12 @@ AliasList    ::= Identifier (',' Identifier)*
 
 ### 2.2 Import Styles
 
-| Syntax | Description | Example | |
-|--------|-------------|---------|--|
-| `use path;` | Import the module, access via the last segment | `use std.io;` -> `io.print` | |
-| `use path.{a, b};` | Import specified items | `use std.io.{print};` -> `print` | |
-| `use path as alias;` | Import and rename | `use std.io as io;` -> `io.print` | |
-| `use path.{i1, i2} as a, b;` | Import specified items and rename | `use std.io.{print, read} as p, r;` -> `p`, `r` | |
+| Syntax | Description | Example |
+|------|------|------|
+| `use path;` | Import module, access via last part | `use std.io;` -> `io.print` |
+| `use path.{a, b};` | Import specified items | `use std.io.{print};` -> `print` |
+| `use path as alias;` | Import and rename | `use std.io as io;` -> `io.print` |
+| `use path.{i1, i2} as a, b;` | Import specified items and rename | `use std.io.{print, read} as p, r;` -> `p`, `r` |
 
 ### 2.3 Import Examples
 
@@ -70,7 +70,7 @@ p("Hello")
 
 ## Chapter 3: Module Export
 
-### 3.1 The pub Keyword
+### 3.1 pub Keyword
 
 Use the `pub` keyword to declare exported items:
 
@@ -79,22 +79,22 @@ Use the `pub` keyword to declare exported items:
 pub pi: Float = 3.14159
 pub sqrt: (x: Float) -> Float = (x) => { ... }
 
-// Private items (not exported)
+// Private item (not exported)
 internal_value: Int = 42
 ```
 
 ### 3.2 Export Rules
 
-- By default, all items are private
+- All items are private by default
 - Items declared with `pub` can be accessed by other modules
 - Private items can only be accessed within the current module
 
-### 3.3 pub Automatic Binding
+### 3.3 pub Auto Binding
 
-For functions declared with `pub`, the compiler automatically binds them to types defined in the same file:
+When a function is declared with `pub`, the compiler automatically binds it to types defined in the same file:
 
 ```yaoxiang
-// Declared with pub, compiler auto-binds
+// Using pub declaration, compiler auto-binds
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -102,11 +102,11 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 }
 
 // Compiler auto-infers:
-// 1. Point is defined in the current file
+// 1. Point is defined in current file
 // 2. Function parameters include Point
 // 3. Executes Point.distance = distance[0]
 
-// Invocations
+// Call
 d = distance(p1, p2)           // Functional style
 d2 = p1.distance(p2)           // OOP syntax sugar
 ```
@@ -117,15 +117,15 @@ d2 = p1.distance(p2)           // OOP syntax sugar
 
 ### 4.1 Module Scope
 
-Each module has its own scope. Items within a module are not visible externally by default.
+Each module has its own scope; items within a module are not visible externally by default.
 
-### 4.2 Nested Scopes
+### 4.2 Nested Scope
 
 ```yaoxiang
 // Block scope
 {
     x = 10
-    // x is visible within this scope
+    // x is visible in this scope
 }
 // x is not visible outside this scope
 
@@ -163,15 +163,15 @@ x = 10
 src/
 ├── main.yx          // Main module
 ├── math/
-│   ├── index.yx     // Math module entry point
+│   ├── index.yx     // Math module entry
 │   ├── vector.yx    // Vector module
 │   └── matrix.yx    // Matrix module
 └── utils/
-    ├── index.yx     // Utils module entry point
+    ├── index.yx     // Utils module entry
     └── string.yx    // String utilities
 ```
 
-### 5.2 Module Entry Point
+### 5.2 Module Entry
 
 The `index.yx` file in a directory serves as the module entry point:
 
@@ -194,9 +194,9 @@ use .matrix      // Relative import (same directory)
 
 ---
 
-## Appendix: Module Syntax Quick Reference
+## Appendix: Module Syntax Cheatsheet
 
-### A.1 Module is File
+### A.1 Module Is File
 
 ```
 // filename.yx is the module name

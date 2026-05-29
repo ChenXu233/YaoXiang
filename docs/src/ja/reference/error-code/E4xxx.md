@@ -1,45 +1,43 @@
-# E4xxx：泛型と特质
+# E4xxx：泛型と特質
 
-> `src/util/diagnostic/codes/` から自動生成
+> 自動生成自 `src/util/diagnostic/codes/`
 
 ## エラー一覧
 
-## E4001：泛型制約違反
+## E4001：Generic constraint violated（泛型约束违反）
 
-**カテゴリー**: 泛型
+**カテゴリ**: Generic（泛型）
 
-**メッセージ**: 型は泛型制約を満たしていません
+**メッセージ**: Type does not satisfy the generic constraint（型が泛型制約を満たしません）
 
-**ヘルプ**: 型がすべての必須trait境界を満たすことを確認してください
-
----
-
-## E4002：特质未找到
-
-**カテゴリー**: 泛型
-
-**メッセージ**: 参照された特质が存在しません
-
-**ヘルプ**: 特质名を確認するか、正しい特质をインポートしてください
+**ヘルプ**: Ensure the type satisfies all required trait bounds（すべての必要な特質境界を型が満たすことを確認してください）
 
 ---
 
-## E4003：特质実装が欠落しています
+## E4002：Trait not found（特質が見つかりません）
 
-**カテゴリー**: 泛型
+**カテゴリ**: Generic（泛型）
 
-**メッセージ**: 型は必要な特质を実装していません
+**メッセージ**: Referenced trait does not exist（参照された特質が存在しません）
 
-**ヘルプ**: この型に特质実装を追加してください
+**ヘルプ**: Check the trait name or import the correct trait（特質名を確認するか、正しい特質をインポートしてください）
+
+---
+
+## E4003：Trait implementation missing（特質の実装がありません）
+
+**カテゴリ**: Generic（泛型）
+
+**メッセージ**: Type does not implement the required trait（型が必要な特質を実装していません）
+
+**ヘルプ**: Add a trait implementation for this type（この型に特質の実装を追加してください）
 
 ---
 
-## E4004：競合する特质実装
+## E4004：Conflicting trait implementations（競合する特質の実装）
 
-**カテゴリー**: 泛型
+**カテゴリ**: Generic（泛型）
 
-**メッセージ**: 複数の特质実装が競合しています
+**メッセージ**: Multiple trait implementations conflict（複数の特質の実装が競合しています）
 
-**ヘルプ**: 競合する実装を解決してください
-
----
+**ヘルプ**: Resolve the conflicting implementations（競合する実装を解決してください）

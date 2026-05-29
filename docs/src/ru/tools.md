@@ -1,7 +1,8 @@
+```markdown
 ---
 layout: page
 sidebar: false
-title: Tools
+title: Инструменты
 permalink: /tools/
 
 ---
@@ -31,3 +32,4 @@ a:hover {
   text-decoration: underline !important;
 }
 </style>
+```

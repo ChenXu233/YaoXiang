@@ -1,12 +1,11 @@
-```md
----
-title: yaoxiang.toml フォーマット
-description: プロジェクト設定ファイルのフォーマット説明
----
+```yaml
+title: yaoxiang.toml の形式
+description: プロジェクト設定ファイルの形式についての説明
+```
 
-# yaoxiang.toml フォーマット
+# yaoxiang.toml の形式
 
-`yaoxiang.toml` は YaoXiang プロジェクトのマニフェストファイルであり、プロジェクトメタデータと依存関係を宣言します。
+`yaoxiang.toml` は、YaoXiang プロジェクトのメタデータと依存関係を宣言する マニフェストファイルです。
 
 ## ファイル構造
 
@@ -22,18 +21,18 @@ license = "MIT"
 # 通常依存関係
 
 [dev-dependencies]
-# 開発依存関係
+# 開発用依存関係
 ```
 
-## package 部
+## package 部分
 
-| フィールド | 型 | 必須 | 説明 |
+| フィールド | タイプ | 必須 | 説明 |
 |------|------|------|------|
-| `name` | string | はい | プロジェクト名。命名規則（小文字、数字、ハイフン）に従う必要がある |
-| `version` | string | はい | セマンティックバージョニング番号。semver 仕様に準拠 |
-| `description` | string | いいえ | プロジェクト короткое описание |
-| `authors` | array | いいえ | 作者リスト |
-| `license` | string | いいえ | ライセンス識別子 |
+| `name` | string | ○ | プロジェクト名（命名規則：小文字、数字、ハイフン） |
+| `version` | string | ○ | セマンティックバージョニング（semver） |
+| `description` | string | × | プロジェクトの概要 |
+| `authors` | array | × | 著者リスト |
+| `license` | string | × | ライセンス識別子 |
 
 ### 例
 
@@ -42,13 +41,13 @@ license = "MIT"
 name = "my-awesome-app"
 version = "1.2.3"
 description = "素晴らしいアプリケーション"
-authors = ["張三 <zhangsan@example.com>"]
+authors = ["山田太郎 <taro@example.com>"]
 license = "MIT"
 ```
 
-## 依存関係宣言
+## 依存関係の宣言
 
-### シンプルバージョン
+### シンプルなバージョン指定
 
 ```toml
 [dependencies]
@@ -56,7 +55,7 @@ http = "1.0.0"
 json = "*"
 ```
 
-### 詳細設定
+### 詳細な設定
 
 ```toml
 [dependencies]
@@ -66,28 +65,28 @@ http = { version = "1.0.0", git = "https://github.com/example/http" }
 # ローカルパス依存関係
 utils = { version = "0.1.0", path = "./utils" }
 
-# ブランチ付き Git 依存関係
+# ブランチ指定の Git 依存関係
 bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 ```
 
 ### 依存関係フィールドの説明
 
-| フィールド | 型 | 説明 |
+| フィールド | タイプ | 説明 |
 |------|------|------|
 | `version` | string | バージョン番号またはバージョン範囲 |
-| `git` | string | Git リポジトリアドレス |
+| `git` | string | Git リポジトリのアドレス |
 | `branch` | string | Git ブランチ名 |
 | `path` | string | ローカル相対パス |
 
-## バージョン番号構文
+## バージョン番号の構文
 
 | 構文 | 説明 | 例 |
 |------|------|------|
-| `*` | 任意のバージョン | `"*"` |
-| `1.0.0` | 正確なバージョン | `"1.0.0"` |
-| `>=1.0.0` | 最小バージョン | `">=1.0.0"` |
-| `<2.0.0` | 最大バージョン | `"<2.0.0"` |
-| `>=1.0.0, <2.0.0` | 範囲バージョン | `">=1.0.0, <2.0.0"` |
+| `*` | 任意バージョン | `"*"` |
+| `1.0.0` | 完全一致 | `"1.0.0"` |
+| `>=1.0.0` | 最低バージョン | `">=1.0.0"` |
+| `<2.0.0` | 最高バージョン | `"<2.0.0"` |
+| `>=1.0.0, <2.0.0` | バージョン範囲 | `">=1.0.0, <2.0.0"` |
 | `~1.0.0` | 互換バージョン | `"~1.0.0"` |
 | `^1.0.0` | caret バージョン | `"^1.0.0"` |
 

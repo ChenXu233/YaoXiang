@@ -1,11 +1,11 @@
 ---
-title: 'RFC Example: Enhanced Pattern Matching Syntax'
+title: RFC Example: Enhanced Pattern Matching Syntax
 ---
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example that demonstrates how to write a complete RFC proposal.
-> Refer to this template when writing your own RFC.
+> **Note**: This is an RFC template example demonstrating the complete structure of an RFC proposal.
+> Please use this template as a reference when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
@@ -37,10 +37,10 @@ match result {
 }
 ```
 
-### Current Problems
+### Current problems
 
 1. Nested pattern destructuring not supported
-2. Guard expressions cannot be used in patterns
+2. Guard expressions not usable in patterns
 3. `let` statements do not support pattern matching
 
 ## Proposal
@@ -120,14 +120,14 @@ RestPattern   ::= '...'
 
 ### Type System Impact
 
-- Pattern matching type checking needs to be extended
-- Pattern variables receive the correct type upon successful match
+- Type checking for pattern matching needs to be extended
+- Pattern variables receive correct types upon successful match
 
 ### Compiler Changes
 
-| Component | Change |
-|-----------|--------|
-| lexer | New pattern-related tokens |
+| Component | Changes |
+|-----------|---------|
+| lexer | New tokens for patterns |
 | parser | New pattern parsing logic |
 | typecheck | Pattern type inference and binding |
 | codegen | Pattern matching code generation |
@@ -135,15 +135,15 @@ RestPattern   ::= '...'
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Only new syntax added, original `match` syntax unchanged
+- Only adds new syntax, original `match` syntax unchanged
 
 ## Trade-offs
 
 ### Advantages
 
 - More expressive syntax, more concise code
-- Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
-- Reduces runtime errors, catches non-matches earlier
+- Consistent with pattern matching in mainstream languages (Rust, Scala, Elixir)
+- Reduces runtime errors by catching non-matches earlier
 
 ### Disadvantages
 
@@ -152,15 +152,15 @@ RestPattern   ::= '...'
 
 ## Alternative Solutions
 
-| Solution | Why not chosen |
+| Solution | Why Not Chosen |
 |----------|----------------|
 | Top-level destructuring only | Cannot handle common nested scenarios |
-| Functional style only | Unnatural to mix with imperative code |
+| Use functional style | Not natural when mixed with imperative code |
 | Defer to v2.0 | Users already have strong demand |
 
 ## Implementation Strategy
 
-### Phases
+### Phase Breakdown
 
 1. **Phase 1 (v0.6)**: Nested destructuring and guard expressions
 2. **Phase 2 (v0.7)**: Pattern variable binding
@@ -169,18 +169,18 @@ RestPattern   ::= '...'
 ### Dependencies
 
 - No external dependencies
-- Basic type system needs to be completed first
+- Requires completion of basic type system first
 
 ### Risks
 
 - Pattern compilation complexity may cause performance issues
-- Deep nesting may cause stack overflow
+- Deeply nested patterns may cause stack overflow
 
 ## Open Questions
 
-1. [ ] Syntax for at-pattern (`@` binding)?
+1. [ ] What is the syntax for at-patterns (`@` binding)?
 2. [ ] Should compile-time pattern exhaustiveness checking be supported?
-3. [ ] Performance optimization strategies?
+3. [ ] What are the performance optimization strategies?
 
 ## References
 

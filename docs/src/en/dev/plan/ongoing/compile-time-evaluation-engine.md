@@ -1,6 +1,6 @@
-# Compile-Time Evaluation (CTE) Engine and Hoare Logic Static Verification — Implementation Plan
+# Compile-Time Evaluation Engine (CTE Engine) and Hoare Logic Static Verification — Implementation Plan
 
-> **Task**: Implement compile-time evaluation engine + Hoare logic static verification pipeline to support value-dependent types and compile-time dimension verification  
+> **Task**: Implement compile-time evaluation engine + Hoare logic static verification channel to support value-dependent types and compile-time dimension verification  
 > **Based on RFCs**: RFC-010 (Unified Type Syntax), RFC-011 (Generics/Value-Dependent Types), RFC-022 (Hoare Logic Static Verification)  
 > **Date**: 2026-05-10  
 > **Status**: In Design  
@@ -14,59 +14,59 @@
 
 ## Abstract
 
-YaoXiang's value-dependent types (RFC-011) require types to depend on compile-time-known values (e.g., `Vec(factorial(5))` → `Vec(120)`), while Hoare logic static verification (RFC-022) requires compile-time specification checking of pure functions. Both share the same core requirement: **safely execute/analyze pure functions at compile time**.
+YaoXiang's value-dependent types (RFC-011) require types to depend on compile-time known values (e.g., `Vec(factorial(5))` → `Vec(120)`), while Hoare logic static verification (RFC-022) requires compile-time specification checking for pure functions. Both share the same core requirement: **safely execute/analyze pure functions at compile time**.
 
-This plan proposes a **unified Compile-Time Evaluation Engine (CTE Engine)**, abstracting purity analysis, termination checking, and expression evaluation as shared infrastructure, serving two consumers: type-level evaluation and Hoare logic verification.
+This plan proposes a **unified Compile-Time Evaluation Engine (CTE Engine)**, abstracting purity analysis, termination checking, and expression evaluation as common infrastructure, serving two consumers: type-level evaluation and Hoare logic verification.
 
 ---
 
 ## Core Design Principles
 
-1. **Reuse ownership system for purity analysis**: YaoXiang's `&mut` is the side effect marker—borrow checking already tells us what will be modified
+1. **Reuse ownership system for purity analysis**: YaoXiang's `&mut` is the side-effect marker—the borrow checker already tells us what will be modified
 2. **Pure functions are compile-time evaluable**: No `const fn` keyword needed; the compiler infers purity automatically
 3. **Termination proof = cornerstone of type safety**: Evaluation in type positions must prove termination (`decreases` specification), otherwise the type system becomes undecidable
-4. **Partial evaluation is better than full evaluation**: Evaluate with as many known parameters as possible; leave what can't be computed for runtime
-5. **Compile-time evaluation and Hoare logic share the interpreter**: Same expression evaluation core supports both consumers
-6. **Dual-mode evaluation**: Concrete evaluation (known parameters → produce `CTValue`) and symbolic evaluation (unknown parameters → produce SMT expression) share the same interpreter framework, differing only in evaluation environment
+4. **Partial evaluation over full evaluation**: Compute with as many known parameters as available; leave what can't be computed for runtime
+5. **Shared interpreter for compile-time evaluation and Hoare logic**: The same expression evaluation core supports both types of consumers
+6. **Dual-mode evaluation**: Concrete evaluation (known parameters → produce `CTValue`) and symbolic evaluation (unknown parameters → produce SMT expression) share the same interpreter framework, differing only in the evaluation environment
 
 ---
 
 ## Architecture Overview
 
 ```
-                             Source file + //! specifications
+                           Source File + //! Specifications
                                     ↓
                             ┌──────────────┐
                             │   Parser      │
-                            │ (recognizes //! comments)│
+                            │ (recognize //! comments)│
                             └──────┬───────┘
                                    ↓
                             ┌──────────────┐
                             │  Type Checker │
                             │ • Collect specs│
-                            │ • Discover value dependencies│
+                            │ • Discover value deps│
                             └──────┬───────┘
                                    ↓
               ┌────────────────────┴────────────────────┐
               ↓                                         ↓
    ┌──────────────────────┐                ┌──────────────────────┐
-   │   CTE Engine          │                │  Hoare Logic Verifier│
+   │   CTE Engine          │                │  Hoare Logic Verifier │
    │                      │                │                      │
    │  ┌────────────────┐  │                │  1. Collect //! specs │
-   │  │  Purity Analyzer │  │                │  2. Generate VC      │
-   │  │  (based on ownership)│  │                │  3. SMT Solver (Z3) │
+   │  │  Purity Analyzer │  │                │  2. Generate VCs     │
+   │  │  (based on ownership)│  │                │  3. SMT Solver (Z3)   │
    │  └───────┬────────┘  │                │  4. Counterexample report│
    │  ┌───────┴────────┐  │                └──────────┬───────────┘
    │  │  Termination Checker│  │                           │
    │  │  (decreases)    │  │                           ↓
    │  └───────┬────────┘  │                ┌──────────────────────┐
    │  ┌───────┴────────┐  │                │  Verification Result │
-   │  │  AST Interpreter│  │                │  • Pass → Cache      │
-   │  │                │  │                │  • Fail → Block release│
+   │  │  AST Interpreter │  │                │  • Pass → cached     │
+   │  │                │  │                │  • Fail → block release│
    │  │ ┌────────────┐ │  │                └──────────────────────┘
    │  │ │ Concrete Eval│ │  │                       ↑
    │  │ │ env: all known│ │  │                       │
-   │  │ │ → CTValue   │ │  │  Shared interpreter    │
+   │  │ │ → CTValue   │ │  │  Shared interpreter framework│
    │  │ └────────────┘ │  │  (AST traversal/inlining/loop unrolling)│
    │  │ ┌────────────┐ │  │                       │
    │  │ │ Symbolic Eval│─┼──┼───────────────────────┘
@@ -75,7 +75,7 @@ This plan proposes a **unified Compile-Time Evaluation Engine (CTE Engine)**, ab
    │  │ └────────────┘ │  │
    │  └───────┬────────┘  │
    │          ↓           │
-   │  Embed result in type/monomorphize│
+   │  Embed results in types/monomorphize│
    └──────────────────────┘
 ```
 
@@ -83,7 +83,7 @@ This plan proposes a **unified Compile-Time Evaluation Engine (CTE Engine)**, ab
 
 ## 1. Compile-Time Values (CTValue)
 
-The core data type for compile-time computation. Designed as a compiler-internal IR value, distinct from runtime values.
+The core data type for compile-time computation. Designed as a compiler-internal IR value, not confused with runtime values.
 
 ```rust
 /// Compile-time evaluation result
@@ -98,7 +98,7 @@ enum CTValue {
     String(SmolStr),
 
     /// Type reference—the core of type-level computation
-    /// In YaoXiang, types themselves are "values" at the Type1 layer
+    /// YaoXiang's types are themselves "values" at the Type1 layer
     Type(TypeId),
 
     /// Heterogeneous tuple
@@ -114,7 +114,7 @@ enum CTValue {
     },
 
     /// Unevaluated function reference (retained during partial evaluation)
-    /// When all parameters are known, inline and evaluate; otherwise keep as runtime call
+    /// When all parameters are known, inline and evaluate; otherwise retain as runtime call
     Thunk {
         func: FunctionId,
         known_args: Vec<CTValue>,
@@ -123,7 +123,7 @@ enum CTValue {
 }
 ```
 
-**Key Design**: `CTValue::Type(TypeId)` makes types first-class compile-time values. When `If(C, T, E)` evaluates C to `CTValue::Bool`, and T/E to `CTValue::Type`.
+**Key Design**: `CTValue::Type(TypeId)` makes types first-class compile-time values. `If(C, T, E)` evaluates C to `CTValue::Bool`, T/E to `CTValue::Type`.
 
 ---
 
@@ -133,13 +133,13 @@ enum CTValue {
 
 Reuse YaoXiang's ownership system (RFC-009); side effects are naturally expressed by type signatures:
 
-| Parameter Pattern | Meaning | Compile-Time Evaluable? |
-|----------|------|---------------|
+| Parameter Mode | Meaning | Compile-Time Evaluable? |
+|----------------|---------|--------------------------|
 | `x: T` (owned) | Takes ownership, can freely modify | ✅ |
 | `x: &T` (shared reference) | Read-only | ✅ |
-| `x: &mut T` (exclusive reference) | Can modify | ⚠️ Depends on T source |
+| `x: &mut T` (exclusive reference) | Can modify | ⚠️ Depends on T's source |
 | I/O calls | External side effects | ❌ |
-| Calling impure function | Transitivity | ❌ |
+| Calling impure function | Transitive | ❌ |
 
 ### 2.2 Algorithm
 
@@ -168,19 +168,19 @@ analyze_purity(func: FunctionId, ctx: &mut PurityContext) -> PurityResult:
 
 ### 2.3 No Explicit Purity Annotations
 
-**Design Decision: No explicit annotations like `//! pure` are provided.**
+**Design Decision: No explicit annotations like `//! pure`.**
 
-The ownership system (RFC-009) already expresses side effect information through type signatures—`&mut T` means modification, I/O operations mean external side effects. The compiler has the capability to infer purity automatically.
+The ownership system (RFC-009) already expresses side-effect information through type signatures—`&mut T` means modification, I/O operations mean external side effects. The compiler has the capability to infer purity automatically.
 
-If the compiler misidentifies a pure function as impure, that's a compiler bug, and the compiler should be fixed—not have users add workarounds. Providing an "trust me, this function is pure" annotation would only mask the real problem.
+If the compiler misjudges a pure function as impure, that's a compiler bug that should be fixed, not patched with user annotations. Providing an "trust me, this function is pure" annotation would only mask real problems.
 
-> *"Don't write compatibility, fallback, temporary, backup, or pattern-specific code. Let problems surface directly."*
+> *"Don't write compatible, fallback, temporary, alternate, or mode-specific code. Let problems surface directly."*
 
 ### 2.4 Relationship with RFC-022
 
 The purity analyzer serves both:
 - **CTE**: Non-pure functions cannot be used in type positions
-- **Hoare Logic**: Specification expressions (`requires`/`ensures` right-hand sides) must be pure function calls
+- **Hoare logic**: Specification expressions (`requires`/`ensures` right-hand side) must be pure function calls
 
 ---
 
@@ -188,7 +188,7 @@ The purity analyzer serves both:
 
 ### 3.1 Design Approach
 
-Compile-time evaluation in type positions must guarantee termination; otherwise the type system becomes undecidable. YaoXiang uses `//! decreases` specifications to prove termination.
+Compile-time evaluation in type positions must guarantee termination, otherwise the type system becomes undecidable. YaoXiang uses `//! decreases` specifications to prove termination.
 
 ```
 //! decreases: <expr>
@@ -256,8 +256,8 @@ factorial: (n: Int) -> Int = {
 ### 3.4 Relationship with RFC-022
 
 The termination checker serves both:
-- **CTE**: decreases is the entry gate for compile-time evaluation
-- **Hoare Logic**: decreases variants of loop invariants (`/*! decreases: n - i !*/`) are also verified by the termination checker
+- **CTE**: decreases is the admission gate for compile-time evaluation
+- **Hoare logic**: decreases variants of loop invariants (`/*! decreases: n - i !*/`) are also verified by the termination checker
 
 ---
 
@@ -265,7 +265,7 @@ The termination checker serves both:
 
 ### 4.1 Design Approach
 
-The interpreter is based on AST traversal, maintaining an evaluation environment (variable name → CTValue mapping). The core capability is **partial evaluation**: compute with known parameters, preserve unknowns.
+The interpreter is based on AST traversal, maintaining an evaluation environment (variable name → CTValue mapping). The core capability is **partial evaluation**: compute when parameters are known, retain when unknown.
 
 ```
 eval(expr: &Expr, env: &mut EvalEnv) -> EvalResult<CTValue>:
@@ -273,7 +273,7 @@ eval(expr: &Expr, env: &mut EvalEnv) -> EvalResult<CTValue>:
         // Literal → direct conversion
         Literal(lit) => lit.into_ctvalue()
 
-        // Variable → lookup environment
+        // Variable → lookup in environment
         Variable(name) => env.get(name).ok_or(NotInScope)
 
         // Binary operation
@@ -293,10 +293,10 @@ eval(expr: &Expr, env: &mut EvalEnv) -> EvalResult<CTValue>:
         Call(func, args) =>
             let known_args = args.filter_map(|a| eval(a, env).ok())
             if known_args.len() == args.len():
-                // All args known → inline and evaluate
+                // All params known → inline and evaluate
                 inline_and_eval(func, known_args, env)
             else if known_args.len() > 0:
-                // Some known → partial evaluate (produce monomorphic code)
+                // Partial known → partial evaluation (produce monomorphic code)
                 partial_eval(func, known_args, env)
             else:
                 // All unknown → Thunk
@@ -355,7 +355,7 @@ inline_and_eval(func, args, env):
 
 Compile-time evaluation must have a hard limit to prevent unexpected timeouts even with `decreases`:
 
-```rust
+```
 const MAX_EVAL_STEPS: u64 = 1_000_000;  // One million step hard cap
 
 struct EvalEnv {
@@ -367,15 +367,15 @@ struct EvalEnv {
 
 ### 4.4 Dual-Mode Evaluation: Concrete vs Symbolic
 
-The interpreter core framework (AST traversal, inlining expansion, pattern matching) is unified, but the **evaluation environment** determines the two modes:
+The interpreter core framework (AST traversal, inlining, pattern matching) is unified, but the **evaluation environment** determines the two modes:
 
 #### 4.4.1 Concrete Evaluation
 
 **Consumer**: CTE Engine → type-level evaluation, monomorphization
 
 **Characteristics**:
-- All variables in the environment have concrete `CTValue`s
-- Function call parameters all known → inline evaluation
+- All variables in the environment have concrete `CTValue`
+- Function call parameters all known → inline and evaluate
 - Output: `CTValue` (concrete value or type reference)
 - Failure = compile error
 
@@ -400,27 +400,27 @@ eval(Call("factorial", [Literal(5)]), env):
 - Failure = verification failure (not a compile error)
 
 ```
-// Scenario: Verify max's ensures:
+// Scenario: Verify ensures for max:
 //   //! ensures: GreaterOrEqual(result, arr[0..n]) = result >= forall arr[i]
 // env = { result → Symbol("result"), arr → Symbol("arr"), n → Symbol("n") }
 eval(BinaryOp(Variable("result"), GtEq, Call("arr_max", [Symbol("arr"), Symbol("n")]))):
-    // result is symbolic → keep
+    // result is symbolic → retained
     // arr_max(arr, n) is pure but params unknown → expand to logical definition
     → SMTExpr::Forall(i in 0..n, Symbol("result") >= Symbol("arr")[i])
 // Pass to Z3: ∀arr, n, result. (n > 0 ∧ ...) → result >= arr[0] ∧ ... ∧ result >= arr[n-1]
 ```
 
-#### 4.4.3 Key Differences Between Two Modes
+#### 4.4.3 Key Differences Between the Two Modes
 
 | Dimension | Concrete Evaluation | Symbolic Evaluation |
-|------|----------|----------|
+|-----------|---------------------|---------------------|
 | Environment | `HashMap<Name, CTValue>` | `HashMap<Name, SMTTerm>` |
-| When variable unknown | Error | Keep as symbol |
+| Unknown variable | Error | Retain as symbol |
 | Function call | Inline + evaluate body | Expand to logical definition (don't execute) |
-| Loop | Actual iteration (with step limit) | Convert to loop invariant VC |
+| Loop | Actually iterate (with step limit) | Convert to loop invariant VC |
 | Output type | `Result<CTValue, CTError>` | `Result<SMTExpr, SMError>` |
-| Failure semantics | Compile error | Verification failure (can downgrade to Runtime Check) |
-| Performance | Fast (direct computation) | Slow (SMT solving) |
+| Failure semantics | Compile error | Verification failure (can degrade to Runtime Check) |
+| Performance profile | Fast (direct computation) | Slow (SMT solving) |
 
 #### 4.4.4 Shared Interpreter Framework
 
@@ -453,73 +453,71 @@ fn eval_ast<I: Interpreter>(interp: &mut I, expr: &Expr) -> Result<I::Value, I::
         }
         Expr::Call { func, args } => interp.eval_call(*func, args),
         Expr::If { cond, then, else_ } => interp.eval_if(cond, then, else_),
-        // ... other AST nodes follow similarly
+        // ... remaining AST nodes similarly
     }
 }
 ```
 
-**Key Insight**: Concrete and symbolic evaluation have identical AST traversal logic; the differences are only:
+**Key Insight**: Concrete and symbolic evaluation share identical AST traversal logic; the differences are only:
 - **What represents values** (`CTValue` vs `SMTExpr`)
-- **How function calls are handled** (inline execution vs logical expansion)
-- **How unknown variables are handled** (error vs keep as symbol)
+- **How function calls are handled** (inline and execute vs logical expansion)
+- **How unknown variables are handled** (error vs retain as symbol)
 
 ---
 
-## 5. Interactions
+## 5. CTE Engine Consumers
 
-### 5.1 With Type-Level Computation
+### 5.1 Type-Level Computation
 
-```
-CTE evaluation is invoked at these type expression locations:
+The CTE engine evaluates expressions in type positions:
 
-1. Type annotation position
-   Vec(factorial(5))        → CTE::eval(factorial(5)) → CTValue::Int(120)
-   Type substituted as Vec(120)
+1. Type annotation positions
+   `Vec(factorial(5))` → CTE::eval(factorial(5)) → CTValue::Int(120)
+   Type substituted to Vec(120)
 
-2. Generic value parameter
-   Array(Int, factorial(3)) → CTE::eval(factorial(3)) → CTValue::Int(6)
+2. Generic value parameters
+   `Array(Int, factorial(3))` → CTE::eval(factorial(3)) → CTValue::Int(6)
    Instantiate Array(Int, 6)
 
 3. Assert type
-   Assert(N > 0)            → CTE::eval(N > 0) → CTValue::Bool(true/false)
+   `Assert(N > 0)` → CTE::eval(N > 0) → CTValue::Bool(true/false)
    True → Void, False → compile_error("N must be > 0")
 
 4. If conditional type
-   If(C, T, E)              → CTE::eval(C) → CTValue::Bool(b)
+   `If(C, T, E)` → CTE::eval(C) → CTValue::Bool(b)
    True → T, False → E
 
 5. Match type family
-   AsString(Int)            → match Int { Int => String, ... } → String
-```
+   `AsString(Int)` → match Int { Int => String, ... } → String
 
 ### 5.2 Interaction with Monomorphization
 
+Monomorphization uses CTE results at the following positions:
+
 ```
-Monomorphization uses CTE results at these locations:
+1. Known generic value parameters → generate concrete instance
+   List(Int) push method → generate push_List_Int
 
-1. Known generic value parameter → generate concrete instance
-   List(Int)'s push method → generate push_List_Int
-
-2. Known value-dependent type → expand to concrete type
+2. Known value-dependent types → expand to concrete type
    Matrix(Float, 3, 3).data → Array(Array(Float, 3), 3)
 
 3. Partial evaluation → generate monomorphic code
-   map(Int, String) → generate map_Int_String, where T=Int, R=String are already fixed
+   map(Int, String) → generate map_Int_String, where T=Int, R=String are fixed
 ```
 
 ### 5.3 Interaction with Hoare Logic Verifier
 
-```
-The verifier uses CTE at these locations:
+The verifier uses CTE at the following positions:
 
+```
 1. Partial evaluation of specification expressions
    //! requires: n > 0 && factorial(n) < MAX
-   CTE::eval(factorial(n)) → if n known at compile time → constant
-                           → if n unknown → keep as symbol, pass to SMT
+   CTE::eval(factorial(n)) → If n is compile-time known → constant
+                           → If n is unknown → retain as symbol, pass to SMT
 
 2. Specification condition simplification
    //! ensures: result >= 0 && result < n
-   CTE tries to simplify known sub-expressions to reduce SMT solving burden
+   CTE attempts to simplify known sub-expressions to reduce SMT solving burden
 
 3. Specification type instantiation
    NonEmpty(n) = n > 0
@@ -577,11 +575,11 @@ generate_vc(func: FunctionId) -> Vec<VerificationCondition>:
 
     // VC3: Loop invariants
     for (loop_, invariant) in invariants:
-        // Holds on loop entry
+        // Holds before entering loop
         vcs.push(VC::InvariantEntry { loop_, invariant })
-        // Preserved on each iteration
+        // Preserved at each iteration
         vcs.push(VC::InvariantPreservation { loop_, invariant })
-        // Implies postcondition on exit
+        // Implies postcondition after exit
         vcs.push(VC::InvariantExit { loop_, invariant, post: ensures })
 
     vcs
@@ -599,24 +597,24 @@ generate_vc(func: FunctionId) -> Vec<VerificationCondition>:
                       unsat                            sat
                           ↓                                ↓
                     ┌──────────┐                   ┌──────────────┐
-                    │ Verification Passed │   │ Extract Counterexample│
-                    │ Cache Result  │   │ Format for readability│
+                    │  Verified  │                   │  Extract counterexample│
+                    │  Cache result│                   │  Format for readability│
                     └──────────┘                   └──────┬───────┘
                                                          ↓
                                                   ┌──────────────┐
-                                                  │  Compile Error Report  │
-                                                  │ • Input values       │
-                                                  │ • Violated spec      │
+                                                  │  Compile error report│
+                                                  │  • Input values       │
+                                                  │  • Violated spec     │
                                                   └──────────────┘
 ```
 
 ### 6.4 Compilation Modes
 
 | Mode | Behavior | CLI |
-|------|------|-----|
-| **Debug Build** | Parse specs, generate VC, call Z3 to prove; verification must pass for Release Build | `yaoxiangc --debug` |
+|------|----------|-----|
+| **Debug Build** | Parse specs, generate VCs, call Z3 to prove; must pass verification before Release Build | `yaoxiangc --debug` |
 | **Release Build** | Ignore all `//!` comments, zero overhead, clear verification cache | `yaoxiangc --release` |
-| **Runtime Checks** | Downgrade specs to `assert` statements, panic on violation | `yaoxiangc --runtime-checks` |
+| **Runtime Checks** | Degrade specs to `assert` statements, panic on violation | `yaoxiangc --runtime-checks` |
 
 ---
 
@@ -624,74 +622,74 @@ generate_vc(func: FunctionId) -> Vec<VerificationCondition>:
 
 ### Phase 1: Constant Folding + Purity Analysis Skeleton
 
-**Goal**: Establish CTE infrastructure, support most basic compile-time evaluation
+**Goal**: Establish CTE infrastructure, support basic compile-time evaluation
 
-**Content**:
+**Contents**:
 - [ ] Define `CTValue` enum and `EvalEnv` struct
-- [ ] Implement basic paths for `eval()`: literals, variables, binary operations, conditionals, code blocks
+- [ ] Implement basic paths for `eval()`: literals, variables, binary ops, conditionals, blocks
 - [ ] Implement first version of purity analyzer: identify I/O calls as impure, default others to pure
 - [ ] Insert CTE call sites in type checker (type annotation positions)
 - [ ] Constant folding: `1 + 2 * 3` computed to `7` at compile time
-- [ ] Dead branch elimination: `if true { ... } else { ... }` → take then branch directly
+- [ ] Dead branch elimination: `if true { ... } else { ... }` → directly take then branch
 - [ ] Unit tests: literal evaluation, simple expressions, constant folding
 
-**Deliverable**: `src/middle/cte/` module, containing `value.rs`, `eval.rs`, `purity.rs`
+**Output**: `src/middle/cte/` module, containing `value.rs`, `eval.rs`, `purity.rs`
 
 ### Phase 2: Pure Function Compile-Time Evaluation + Termination Checking
 
-**Goal**: Support full compile-time evaluation of pure functions
+**Goal**: Support complete compile-time evaluation of pure functions
 
-**Content**:
-- [ ] Implement function inline evaluation: all params known → expand function body and evaluate
+**Contents**:
+- [ ] Implement function inline evaluation: all parameters known → expand function body and evaluate
 - [ ] Implement `//! decreases` parsing and termination verification
 - [ ] Implement recursive function compile-time evaluation (with step limit)
 - [ ] Implement evaluation result caching (Memoization)
-- [ ] Enhance purity analyzer: use ownership info to identify `&mut` side effects
+- [ ] Complete purity analyzer: use ownership info to identify `&mut` side effects
 - [ ] Partial evaluation: code generation optimization when some parameters are known
 - [ ] Integration test: `factorial(5)` evaluates to `120` in type position
 
-**Deliverable**: `src/middle/cte/interpreter.rs`, `src/middle/cte/termination.rs`
+**Output**: `src/middle/cte/interpreter.rs`, `src/middle/cte/termination.rs`
 
 ### Phase 3: Type-Level Computation
 
 **Goal**: Support `If`/`Assert`/`match` type families
 
-**Content**:
-- [ ] Implement `CTValue::Type(TypeId)` type-level operations
+**Contents**:
+- [ ] Implement type-level operations for `CTValue::Type(TypeId)`
 - [ ] Implement `If: (C: Bool, T: Type, E: Type) -> Type` conditional type evaluation
 - [ ] Implement `Assert(C)` → `True → Void, False → compile_error`
 - [ ] Implement type-level `match`: `AsString: (T: Type) -> Type = match T { ... }`
-- [ ] Full instantiation of value-dependent types: `Matrix(Float, 3, 3)` → concrete type
+- [ ] Complete instantiation of value-dependent types: `Matrix(Float, 3, 3)` → concrete type
 - [ ] Compile-time dimension verification: matrix multiplication dimension mismatch → compile error
 - [ ] Integration with monomorphization (mono pass)
 
-**Deliverable**: `src/middle/cte/type_level.rs`, updated `src/middle/passes/mono/`
+**Output**: `src/middle/cte/type_level.rs`, updated `src/middle/passes/mono/`
 
 ### Phase 4: Hoare Logic Static Verification
 
 **Goal**: Complete specification parsing, VC generation, SMT verification pipeline
 
-**Content**:
+**Contents**:
 - [ ] Parser extension: recognize `//!` and `/*! ... !*/` as specification nodes
 - [ ] Specification type definitions (`NonEmpty`, `Sorted`, `GreaterOrEqual`, etc. standard library spec types)
 - [ ] User-defined specification type support
 - [ ] VC generator: Weakest Precondition calculus
 - [ ] Z3 SMT solver integration (via `z3` crate)
 - [ ] SMT-LIB format translation
-- [ ] Counterexample extraction and human-readable reporting
-- [ ] Debug/Release/RuntimeChecks compilation mode switching
-- [ ] Integration tests: verify specs for `max`, `binary_search`, and other functions
+- [ ] Counterexample extraction and readable reporting
+- [ ] Debug/Release/RuntimeChecks triple compilation mode switching
+- [ ] Integration tests: verify specs for `max`, `binary_search`, etc.
 
-**Deliverable**: `src/middle/verification/` module
+**Output**: `src/middle/verification/` module
 
 ---
 
-## 8. Module Structure
+## 8. Module Layout
 
 ```
 src/middle/
 ├── cte/                          # Compile-Time Evaluation Engine
-│   ├── mod.rs                    # CTE entry point, coordinates three subsystems
+│   ├── mod.rs                    # CTE entry, coordinates three subsystems
 │   ├── value.rs                  # CTValue definition + basic operations
 │   ├── eval.rs                   # Unified AST traverser (Interpreter trait + eval_ast)
 │   ├── concrete.rs               # Concrete evaluation implementation (ConcreteInterpreter → CTValue)
@@ -700,10 +698,10 @@ src/middle/
 │   ├── purity.rs                 # Purity analyzer
 │   ├── termination.rs            # Termination checker (decreases verification)
 │   ├── type_level.rs             # Type-level computation (If/Assert/match type families)
-│   └── cache.rs                  # Evaluation result cache
+│   └── cache.rs                  # Evaluation result caching
 │
 ├── verification/                 # Hoare Logic Static Verification
-│   ├── mod.rs                    # Verification entry point
+│   ├── mod.rs                    # Verification entry
 │   ├── spec_parser.rs            # //! specification parsing
 │   ├── spec_types.rs             # Built-in specification type definitions
 │   ├── vcgen.rs                  # Verification condition generation (WP calculus)
@@ -717,43 +715,43 @@ src/middle/
 
 ---
 
-## 9. Key Design Decision Log
+## 9. Key Design Decisions Log
 
 | Decision | Options | Choice | Rationale |
-|------|------|------|------|
+|----------|---------|--------|-----------|
 | Purity determination method | Explicit annotation vs auto-inference vs both | **Auto-inference** | Ownership system provides sufficient info; no explicit annotation escape hatch |
-| Compile-time evaluator | Restricted subset vs full language | **Full language (with step limit)** | Consistent with Unified Type Syntax's "everything is `name: type = value`" |
-| Termination proof | Mandatory annotation vs auto-inference | **Mandatory in type positions, auto elsewhere** | Type positions undecidable = compile error; elsewhere can be lenient |
+| Compile-time evaluator | Restricted subset vs full language | **Full language (with step limit)** | Consistent with unified type syntax's "everything is `name: type = value`" |
+| Termination proof | Mandatory annotation vs auto-inference | **Mandatory in type positions, auto elsewhere** | Undecidable in type position = compile error; can be lenient elsewhere |
 | VC generation | WP calculus vs SP calculus | **WP calculus** | Simpler and more direct; clearer error localization |
-| SMT solver | Z3 vs CVC5 vs custom | **Z3** | Most mature, best Rust bindings, largest community |
+| SMT solver | Z3 vs CVC5 vs custom | **Z3** | Most mature, best Rust binding, largest community |
 | Caching strategy | No cache vs cross-module cache | **LRU cache + incremental invalidation** | Compile-time evaluation results are deterministic pure functions, naturally cacheable |
-| Compilation mode | Unified mode vs Debug/Release separation | **Debug verified → Release zero overhead** | Verification is expensive; Release should not bear the cost |
+| Compilation mode | Unified vs Debug/Release split | **Debug verify → Release zero-overhead** | Verification is expensive; Release shouldn't bear the cost |
 
 ---
 
 ## 10. Risks and Mitigations
 
 | Risk | Impact | Mitigation |
-|------|------|------|
+|------|--------|------------|
 | Z3 integration complexity | Phase 4 delay | Use mature `z3` crate; support simple arithmetic first, expand gradually |
 | Compile-time evaluation timeout | Poor user experience | Step limit + clear timeout error messages + suggestions to simplify expressions |
 | Purity misjudgment | Compile-time evaluation result inconsistent with runtime | Ownership system provides strong guarantees; if misjudged, it's a compiler bug to fix |
-| SMT verification failures hard to debug | Users don't understand why specs don't hold | Counterexample extraction + concrete input value display + execution path highlighting |
-| Significant compilation time increase | Slower CI | Incremental verification + module-level cache + verification result files (like `.o` files) |
+| SMT verification failure hard to debug | Users don't understand why spec doesn't hold | Counterexample extraction + concrete input value display + execution path highlighting |
+| Significant compile time increase | CI slower | Incremental verification + module-level cache + verification result files (like `.o` files) |
 
 ---
 
-## 11. Cross-References with Existing RFCs
+## 11. Cross-References to Existing RFCs
 
 | RFC | Relationship | How This Plan Satisfies |
-|------|------|---------------|
-| RFC-010 §Unified Syntax | CTValue must support all type expressions | `CTValue::Type(TypeId)` + `CTValue::Struct` coverage |
+|-----|--------------|------------------------|
+| RFC-010 §Unified Type Syntax | CTValue must support all type expressions | `CTValue::Type(TypeId)` + `CTValue::Struct` coverage |
 | RFC-011 §4.2 Compile-Time Computation | Core mechanism for value-dependent types | Phase 2/3 implementation |
 | RFC-011 §6 Type-Level Computation | `If`/`Assert`/`match` type families | Phase 3 implementation |
-| RFC-011 §Termination Checking Mechanism | decreases specification | Phase 2 termination checker implementation |
+| RFC-011 §Termination Checking Mechanism | decreases specifications | Termination checker implementation in Phase 2 |
 | RFC-022 §1 Specification Comment Syntax | `//!` parsing + specification types | Phase 4 implementation |
 | RFC-022 §3 Verification Mechanism | VC generation + SMT integration | Phase 4 VCGen + SMT modules |
-| RFC-009 §Ownership Model | Foundation for purity analysis | Phase 1/2 reuse ownership info |
+| RFC-009 §Ownership Model | Basis for purity analysis | Phase 1/2 reuse ownership info |
 
 ---
 
