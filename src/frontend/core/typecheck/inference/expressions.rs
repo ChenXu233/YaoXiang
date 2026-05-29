@@ -9,8 +9,10 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::overload;
-use std::collections::HashMap;
+use crate::frontend::core::typecheck::traits::solver::TraitSolver;
+use std::collections::{HashMap, HashSet};
 
+use super::capture::{self, CaptureInfo};
 use super::scope::ScopeManager;
 
 /// 空的 Native 签名表（默认值）
@@ -39,6 +41,9 @@ pub struct ExpressionInferrer<'a> {
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
     method_bindings: &'a HashMap<String, MonoType>,
+    /// 闭包捕获分析结果: Span -> CaptureInfo
+    /// 用于 IR 生成阶段确定闭包的捕获模式
+    capture_infos: HashMap<crate::util::span::Span, CaptureInfo>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -57,6 +62,7 @@ impl<'a> ExpressionInferrer<'a> {
             result_err: None,
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
+            capture_infos: HashMap::new(),
         }
     }
 
@@ -76,6 +82,7 @@ impl<'a> ExpressionInferrer<'a> {
             result_err: None,
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
+            capture_infos: HashMap::new(),
         }
     }
 
@@ -96,6 +103,7 @@ impl<'a> ExpressionInferrer<'a> {
             result_err,
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
+            capture_infos: HashMap::new(),
         }
     }
 
@@ -118,12 +126,18 @@ impl<'a> ExpressionInferrer<'a> {
             result_err,
             expected_return_type,
             method_bindings,
+            capture_infos: HashMap::new(),
         }
     }
 
     /// 获取求解器引用（可变）
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         self.solver
+    }
+
+    /// 获取闭包捕获分析结果（供 IR 生成使用）
+    pub fn capture_infos(&self) -> &HashMap<crate::util::span::Span, CaptureInfo> {
+        &self.capture_infos
     }
 
     /// 设置方法绑定表
@@ -913,7 +927,13 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // Lambda 表达式
-            crate::frontend::core::parser::ast::Expr::Lambda { params, body, .. } => {
+            crate::frontend::core::parser::ast::Expr::Lambda {
+                params, body, span, ..
+            } => {
+                // 在进入 Lambda 作用域之前，收集外部作用域变量信息（用于捕获分析）
+                let outer_scope_vars = self.scope.vars();
+                let outer_scope_names: HashSet<String> = outer_scope_vars.keys().cloned().collect();
+
                 self.scope.enter_scope();
                 for param in params {
                     let param_ty = self.solver.new_var();
@@ -933,6 +953,19 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.scope.exit_scope();
                 let body_ty = body_ty?;
+
+                // 运行闭包捕获分析
+                let lambda_expr = expr;
+                let trait_solver = TraitSolver::new();
+                let capture_info = capture::analyze_lambda_captures(
+                    lambda_expr,
+                    body,
+                    &outer_scope_names,
+                    &outer_scope_vars,
+                    &trait_solver,
+                    None, // parent 暂不可用，后续可增强
+                );
+                self.capture_infos.insert(*span, capture_info);
 
                 let param_types: Vec<MonoType> =
                     params.iter().map(|_| self.solver.new_var()).collect();
