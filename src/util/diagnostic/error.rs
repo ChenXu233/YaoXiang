@@ -43,10 +43,10 @@ impl Severity {
     /// 获取严重级别对应的数字值
     pub fn as_u8(&self) -> u8 {
         match self {
-            Severity::Error => 4,
-            Severity::Warning => 3,
-            Severity::Info => 2,
-            Severity::Hint => 1,
+            Severity::Error => 1,
+            Severity::Warning => 2,
+            Severity::Info => 3,
+            Severity::Hint => 4,
         }
     }
 
@@ -56,14 +56,16 @@ impl Severity {
     }
 }
 
-impl From<i32> for Severity {
-    fn from(val: i32) -> Self {
+impl TryFrom<i32> for Severity {
+    type Error = String;
+
+    fn try_from(val: i32) -> Result<Self, String> {
         match val {
-            1 => Severity::Error,
-            2 => Severity::Warning,
-            3 => Severity::Info,
-            4 => Severity::Hint,
-            _ => Severity::Info,
+            1 => Ok(Severity::Error),
+            2 => Ok(Severity::Warning),
+            3 => Ok(Severity::Info),
+            4 => Ok(Severity::Hint),
+            _ => Err(format!("Invalid severity value: {}", val)),
         }
     }
 }
@@ -99,7 +101,7 @@ pub struct Diagnostic {
     /// 位置信息
     pub span: Option<Span>,
     /// 相关诊断
-    pub related: Vec<Diagnostic>,
+    pub related: Vec<Box<Diagnostic>>,
 }
 
 impl Diagnostic {
@@ -185,7 +187,7 @@ impl Diagnostic {
         mut self,
         related: Vec<Diagnostic>,
     ) -> Self {
-        self.related = related;
+        self.related = related.into_iter().map(Box::new).collect();
         self
     }
 }
