@@ -1,5 +1,5 @@
 ---
-title: RFC-013: Error Code Standards
+title: 'RFC-013: Error Code Standards'
 ---
 
 # RFC 013: Error Code Standards

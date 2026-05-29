@@ -422,7 +422,7 @@ fn test_fstring_json_like() {
     let code = r#"
         name = "Alice"
         age = 30
-        print(f"{ {"name": "{name}", "age": {age}} }")
+        print(f"{ '{name}': '{name}', 'age': {age} }")
     "#;
     // 期待出力: { "name": "Alice", "age": 30 }
 }
@@ -498,7 +498,7 @@ fn test_fstring_json_like() {
 |------|---------|-----------|
 | `src/frontend/core/lexer/tokens.rs` | 変更 | `FStringLiteral(String)` token および `UnterminatedFStringInterpolation` エラーの新規追加 |
 | `src/frontend/core/lexer/tokenizer.rs` | 変更 | `scan_identifier()` 内で `f"` 接頭辞を検出し `scan_fstring()` を呼び出し |
-| `src/frontend/core/lexer/literals.rs` | 変更 | `scan_fstring()` 関数（约180行）の新規追加。`{}` 補間、`{{` / `}}` エスケープ、ネスト波括弧深度追跡をサポート |
+| `src/frontend/core/lexer/literals.rs` | 変更 | `scan_fstring()` 関数（约180行）の新規追加。`{}` 補間、`{ }` エスケープ、ネスト波括弧深度追跡をサポート |
 | `src/frontend/core/lexer/mod.rs` | 変更 | `log_token()` に FStringLiteral 分岐を新規追加；fstring テストモジュールの導入 |
 | `src/frontend/core/parser/ast.rs` | 変更 | `FString` AST ノードおよび `FStringSegment` 列挙型の新規追加 |
 | `src/frontend/core/parser/pratt/nud.rs` | 変更 | `parse_fstring()`、`parse_fstring_segments()`、`split_format_spec()` の新規追加 |

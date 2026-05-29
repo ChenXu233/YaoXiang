@@ -1,5 +1,5 @@
 ---
-title: RFC-010: Unified Type Syntax
+title: 'RFC-010: Unified Type Syntax'
 ---
 
 # RFC-010: Unified Type Syntax - the name: type = value Model

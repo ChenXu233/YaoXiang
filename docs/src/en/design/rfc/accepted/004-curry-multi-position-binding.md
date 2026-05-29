@@ -1,5 +1,5 @@
 ---
-title: RFC-004: Multi-Position Union Binding Design for Curried Methods
+title: 'RFC-004: Multi-Position Union Binding Design for Curried Methods'
 ---
 
 # RFC-004: Multi-Position Union Binding Design for Curried Methods

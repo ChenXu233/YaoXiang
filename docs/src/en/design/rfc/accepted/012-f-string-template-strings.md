@@ -1,5 +1,5 @@
 ---
-title: RFC-012: F-String Template Strings
+title: 'RFC-012: F-String Template Strings'
 ---
 
 # RFC 012: F-String Template Strings

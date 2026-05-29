@@ -1,5 +1,5 @@
 ---
-title: RFC-006: Documentation Site Construction
+title: 'RFC-006: Documentation Site Construction'
 ---
 
 # RFC-006: Documentation Site Construction

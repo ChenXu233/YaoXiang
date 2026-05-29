@@ -1,5 +1,5 @@
 ---
-title: RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design
+title: 'RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design'
 ---
 
 # RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design

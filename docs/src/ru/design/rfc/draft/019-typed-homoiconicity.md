@@ -1,5 +1,5 @@
 ---
-title: RFC-019: Типовая гомоиконичность (Typed Homoiconicity)
+title: 'RFC-019: Типовая гомоиконичность (Typed Homoiconicity)'
 ---
 
 # RFC-019: Типовая гомоиконичность (Typed Homoiconicity) — синтаксис как тип

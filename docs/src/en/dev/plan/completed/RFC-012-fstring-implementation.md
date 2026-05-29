@@ -421,7 +421,7 @@ fn test_fstring_json_like() {
     let code = r#"
         name = "Alice"
         age = 30
-        print(f"{ {"name": "{name}", "age": {age}} }")
+        print(f"{{"name": "{name}", "age": {age}}}")
     "#;
     // Expected output: { "name": "Alice", "age": 30 }
 }
@@ -497,7 +497,7 @@ fn test_fstring_json_like() {
 |------|-------------------|------------------|
 | `src/frontend/core/lexer/tokens.rs` | Modify | Added `FStringLiteral(String)` token and `UnterminatedFStringInterpolation` error |
 | `src/frontend/core/lexer/tokenizer.rs` | Modify | In `scan_identifier()`, detect `f"` prefix and call `scan_fstring()` |
-| `src/frontend/core/lexer/literals.rs` | Modify | Added `scan_fstring()` function (~180 lines), supports `{}` interpolation, `{{` / `}}` escaping, nested brace depth tracking |
+| `src/frontend/core/lexer/literals.rs` | Modify | Added `scan_fstring()` function (~180 lines), supports `{}` interpolation, `{` `}` escaping, nested brace depth tracking |
 | `src/frontend/core/lexer/mod.rs` | Modify | Added FStringLiteral branch in `log_token()`; introduced fstring test module |
 | `src/frontend/core/parser/ast.rs` | Modify | Added `FString` AST node and `FStringSegment` enum |
 | `src/frontend/core/parser/pratt/nud.rs` | Modify | Added `parse_fstring()`, `parse_fstring_segments()`, `split_format_spec()` |

@@ -1,5 +1,5 @@
 ---
-title: RFC-007: Unified Function Definition Syntax
+title: 'RFC-007: Unified Function Definition Syntax'
 ---
 
 # RFC-007: Unified Function Definition Syntax
