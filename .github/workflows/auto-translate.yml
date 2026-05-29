@@ -38,21 +38,25 @@ jobs:
       - name: Create .env for vpi
         run: |
           cat > .env << EOF
-          AI_API_KEY=${{ secrets.AI_API_KEY || '' }}
-          AI_MODEL=${{ secrets.AI_MODEL || '' }}
-          AI_BASE_URL=${{ secrets.AI_BASE_URL || '' }}
+          AI_API_KEY=${{ secrets.AI_API_KEY }}
+          AI_MODEL=${{ secrets.AI_MODEL || 'MiniMax-M2.7-highspeed' }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL || 'http://101.132.38.216:3000/v1' }}
           EOF
         working-directory: docs
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
 
-      - name: Set default env values
+      - name: Validate secrets
         run: |
           if [ -z "$AI_API_KEY" ]; then
             echo "ERROR: AI_API_KEY secret is required but not set"
             exit 1
           fi
-          if [ -z "$AI_MODEL" ]; then echo "AI_MODEL=MiniMax-M2.7-highspeed" >> .env; fi
-          if [ -z "$AI_BASE_URL" ]; then echo "AI_BASE_URL=http://101.132.38.216:3000/v1" >> .env; fi
-        working-directory: docs
+          echo "Secrets validated successfully"
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
 
       - name: Sync nav/sidebar
         run: npx vpi sync
