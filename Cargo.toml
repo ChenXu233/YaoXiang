@@ -58,7 +58,7 @@ urlencoding = "2"
 # 文件系统
 walkdir = "2"
 tempfile = "3.25.0"
-notify = "7.0.0"
+notify = "8.2.0"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
