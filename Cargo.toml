@@ -82,7 +82,7 @@ owo-colors = "4.0"
 rustyline = { version = "17.0.2", features = ["with-file-history", "with-dirs"] }
 
 # 异步运行时
-tokio = { version = "1.50.0", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 
 # LSP - 语言服务器协议
 lsp-types = "0.97"
