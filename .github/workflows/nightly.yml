@@ -2,7 +2,7 @@ name: Nightly
 
 on:
   schedule:
-    - cron: '17 3 * * *'  # UTC 03:17 = 北京时间 11:17
+    - cron: '17 22 * * *'
 
 env:
   CARGO_TERM_COLOR: always
