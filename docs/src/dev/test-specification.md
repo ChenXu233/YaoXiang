@@ -816,8 +816,8 @@ cargo test -- --nocapture
 # 单线程运行（排查并发问题）
 cargo test -- --test-threads=1
 
-# 生成覆盖率报告（需要 cargo-tarpaulin）
-cargo tarpaulin --out Html
+# 生成覆盖率报告（需要 cargo-llvm-cov）
+cargo llvm-cov --html
 ```
 
 ### B. 提交信息模板

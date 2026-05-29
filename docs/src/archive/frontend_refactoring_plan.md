@@ -1016,7 +1016,7 @@ mkdir -p src/frontend/shared/events
 - **子任务 2.7.3: 增加RFC测试覆盖 (4小时)**
   - **2.7.3.1**: 识别RFC测试盲点
     ```bash
-    cargo tarpaulin --out Xml --features rfc011_generics
+    cargo llvm-cov --xml --features rfc011_generics
     ```
   - **2.7.3.2**: 添加缺失的单元测试
     ```rust

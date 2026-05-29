@@ -214,6 +214,8 @@ Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！
 
 **用户从不看见这些数字**，只看见 `: Type`。
 
+> **Curry-Howard 同构**：宇宙层级的存在不是工程实现细节，而是逻辑一致性的必要条件。Curry-Howard 同构将类型等同于命题，如果允许 `Type: Type`（即"类型的类型也是类型"），就会产生类似"这句话是假的"的 Russell 悖论——在类型系统中表现为 Girard 悖论。YaoXiang 的 `Type0 / Type1 / Type2…` 分层（即 Martin-Löf 类型论中的累积宇宙），确保每个类型只属于某一层级，`Typeₙ : Typeₙ₊₁` 形成永不闭合的上升链条，从根本上避免了悖论。这意味着，YaoXiang 的类型系统在 Curry-Howard 意义上是 **逻辑一致的**。
+
 ### 语法定义
 
 #### 1. 变量声明

@@ -2,17 +2,11 @@ import { build } from 'vitepress'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// 当前目录即为 docs 根目录
-const root = __dirname 
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'src')
 
-console.log('Building docs...')
+console.log('Building docs from', root)
 
-try {
-  await build(root)
-  console.log('Build complete. Forcing exit.')
-  process.exit(0)
-} catch (e) {
-  console.error('Build failed:', e)
-  process.exit(1)
-}
+build(root).then(
+  () => process.exit(0),
+  e => { console.error('Build failed:', e); process.exit(1) }
+)

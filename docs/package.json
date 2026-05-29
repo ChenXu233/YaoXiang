@@ -4,9 +4,9 @@
   "description": "YaoXiang 官方文档站点",
   "type": "module",
   "scripts": {
-    "docs:dev": "vitepress dev",
+    "docs:dev": "vitepress dev src",
     "docs:build": "node build.js",
-    "docs:preview": "vitepress preview",
+    "docs:preview": "vitepress preview src",
     "info": "vuepress info"
   },
   "dependencies": {
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "cd": "^0.3.3",
-    "docs": "0.3.2-canary.0"
+    "docs": "0.3.1",
+    "vitepress-ai-i18n": "^1.0.1"
   }
 }
