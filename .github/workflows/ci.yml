@@ -121,6 +121,9 @@ jobs:
           toolchain: 1.91.0
           components: llvm-tools
 
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+
       - name: Generate coverage
         run: cargo llvm-cov --all-features --html
 
