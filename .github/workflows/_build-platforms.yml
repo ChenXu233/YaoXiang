@@ -1,0 +1,202 @@
+name: Build Platforms (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      build-profile:
+        description: 'Build profile: debug or release'
+        type: string
+        default: 'release'
+      build-features:
+        description: 'Cargo features flags'
+        type: string
+        default: '--all-features'
+      artifact-prefix:
+        description: 'Prefix for artifact names'
+        type: string
+        default: 'yaoxiang'
+      retention-days:
+        description: 'Artifact retention days'
+        type: number
+        default: 30
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Linux (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Install ARM64 cross-compile toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: linux-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            linux-${{ matrix.target }}-cargo-
+
+      - name: Build
+        run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang
+          retention-days: ${{ inputs.retention-days }}
+
+  build-macos:
+    name: macOS (${{ matrix.target }})
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: macos-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            macos-${{ matrix.target }}-cargo-
+
+      - name: Build
+        run: cargo build ${{ inputs.build-features }} --target ${{ matrix.target }} ${{ inputs.build-profile == 'release' && '--release' || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ inputs.build-profile }}/yaoxiang
+          retention-days: ${{ inputs.retention-days }}
+
+  build-windows:
+    name: Windows (x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          targets: x86_64-pc-windows-gnu
+
+      - name: Install mingw
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64-x86-64-dev \
+            mingw-w64-tools \
+            gcc-mingw-w64-x86-64 \
+            g++-mingw-w64-x86-64
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: windows-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            windows-x86_64-cargo-
+
+      - name: Build
+        run: cargo build ${{ inputs.build-features }} --target x86_64-pc-windows-gnu ${{ inputs.build-profile == 'release' && '--release' || '' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-windows-x86_64
+          path: target/x86_64-pc-windows-gnu/${{ inputs.build-profile }}/yaoxiang.exe
+          retention-days: ${{ inputs.retention-days }}
+
+  build-installer:
+    name: Windows Installer
+    runs-on: windows-latest
+    timeout-minutes: 20
+    if: inputs.build-profile == 'release'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: windows-installer-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            windows-installer-cargo-
+
+      - name: Build release
+        run: cargo build --release ${{ inputs.build-features }}
+
+      - name: Sync setup.iss version from Cargo.toml
+        shell: bash
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "Detected version: $VERSION"
+          sed -i "s/#define MyAppVersion \".*\"/#define MyAppVersion \"${VERSION}\"/" scripts/setup.iss
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Create dist directory
+        run: mkdir dist
+
+      - name: Build installer
+        run: iscc scripts/setup.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-windows-installer
+          path: dist/YaoXiang-Setup-*.exe
+          retention-days: ${{ inputs.retention-days }}
