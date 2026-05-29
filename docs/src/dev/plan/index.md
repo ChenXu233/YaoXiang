@@ -4,11 +4,9 @@
 
 ## 处理中
 
-- [解释器优先：解耦式 Runtime（DAG+调度）实现计划](./ongoing/RFC-008-001-runtime-interpreter-decoupled-implementation)
-- [RFC-018 LLVM AOT 编译器与 L3 透明并发实现计划](./ongoing/RFC-018-llvm-aot-compiler-implementation)
+- [RFC-018 LLVM AOT 编译器实现计划](./ongoing/RFC-018-llvm-aot-compiler-implementation)
 - [LSP 支持实现计划](./ongoing/lsp-support-implementation)
-- [RFC-023 泛型调用语法实现计划](./design/rfc/draft/023-generic-call-syntax.md)
-
-## 已完成
-
-已完成计划数量较多，请通过侧边栏浏览 `completed/` 目录。
+- [编译期求值引擎](./ongoing/compile-time-evaluation-engine)
+- [语义信息中台与增量编译](./ongoing/semantic-db-and-incremental-compilation)
+- [测试套件重构](./ongoing/test-suite-restructure)
+- [类型检查未支持特性](./ongoing/typecheck-unsupported)
