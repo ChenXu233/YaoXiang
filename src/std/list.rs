@@ -179,7 +179,7 @@ fn native_push(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "push expects a List as first argument".to_string(),
             ))
         }
@@ -188,7 +188,11 @@ fn native_push(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
     items.push(item);
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
@@ -203,7 +207,7 @@ fn native_pop(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "pop expects a List as first argument".to_string(),
             ))
         }
@@ -211,7 +215,11 @@ fn native_pop(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     match items.pop() {
@@ -240,7 +248,7 @@ fn native_prepend(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "prepend expects a List as first argument".to_string(),
             ))
         }
@@ -249,7 +257,11 @@ fn native_prepend(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
     items.insert(0, item);
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
@@ -264,7 +276,7 @@ fn native_remove_at(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "remove_at expects a List as first argument".to_string(),
             ))
         }
@@ -273,7 +285,11 @@ fn native_remove_at(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     if index < items.len() {
@@ -281,7 +297,7 @@ fn native_remove_at(
         let _ = ctx.heap.write(list_handle, HeapValue::List(items));
         Ok(removed)
     } else {
-        Err(ExecutorError::Runtime(format!(
+        Err(ExecutorError::runtime_only(format!(
             "Index {} out of bounds for list of length {}",
             index,
             items.len()
@@ -297,7 +313,7 @@ fn native_reverse(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "reverse expects a List as first argument".to_string(),
             ))
         }
@@ -305,7 +321,11 @@ fn native_reverse(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
     items.reverse();
     let new_handle = ctx.heap.allocate(HeapValue::List(items));
@@ -320,7 +340,7 @@ fn native_concat(
     let handle_a = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "concat expects a List as first argument".to_string(),
             ))
         }
@@ -328,7 +348,7 @@ fn native_concat(
     let handle_b = match args.get(1) {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "concat expects a List as second argument".to_string(),
             ))
         }
@@ -336,11 +356,19 @@ fn native_concat(
 
     let items_a = match ctx.heap.get(handle_a) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
     let items_b = match ctx.heap.get(handle_b) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     let mut merged = items_a;
@@ -357,18 +385,22 @@ fn native_map(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "map expects a List as first argument".to_string(),
             ))
         }
     };
     let func_value = args.get(1).cloned().ok_or_else(|| {
-        ExecutorError::Type("map expects a function as second argument".to_string())
+        ExecutorError::type_only("map expects a function as second argument".to_string())
     })?;
 
     let items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     let mut result_items = Vec::with_capacity(items.len());
@@ -389,18 +421,22 @@ fn native_filter(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "filter expects a List as first argument".to_string(),
             ))
         }
     };
     let func_value = args.get(1).cloned().ok_or_else(|| {
-        ExecutorError::Type("filter expects a function as second argument".to_string())
+        ExecutorError::type_only("filter expects a function as second argument".to_string())
     })?;
 
     let items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     let mut result_items = Vec::new();
@@ -423,19 +459,23 @@ fn native_reduce(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "reduce expects a List as first argument".to_string(),
             ))
         }
     };
     let func_value = args.get(1).cloned().ok_or_else(|| {
-        ExecutorError::Type("reduce expects a function as second argument".to_string())
+        ExecutorError::type_only("reduce expects a function as second argument".to_string())
     })?;
     let mut accumulator = args.get(2).cloned().unwrap_or(RuntimeValue::Unit);
 
     let items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     for item in items {
@@ -485,7 +525,7 @@ fn native_get(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "get expects a List as first argument".to_string(),
             ))
         }
@@ -506,7 +546,7 @@ fn native_set(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "set expects a List as first argument".to_string(),
             ))
         }
@@ -516,7 +556,11 @@ fn native_set(
 
     let mut items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     if index < items.len() {
@@ -534,7 +578,7 @@ fn native_first(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "first expects a List as first argument".to_string(),
             ))
         }
@@ -554,7 +598,7 @@ fn native_last(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "last expects a List as first argument".to_string(),
             ))
         }
@@ -574,7 +618,7 @@ fn native_slice(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "slice expects a List as first argument".to_string(),
             ))
         }
@@ -584,7 +628,11 @@ fn native_slice(
 
     let items = match ctx.heap.get(list_handle) {
         Some(HeapValue::List(items)) => items.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid list handle".to_string())),
+        _ => {
+            return Err(ExecutorError::runtime_only(
+                "Invalid list handle".to_string(),
+            ))
+        }
     };
 
     let end = end.min(items.len());
@@ -645,7 +693,7 @@ fn native_iter(
     let list_handle = match args.first() {
         Some(RuntimeValue::List(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "iter expects a List as first argument".to_string(),
             ))
         }

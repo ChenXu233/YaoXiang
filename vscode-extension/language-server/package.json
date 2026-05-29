@@ -2,11 +2,12 @@
   "name": "yaoxiang-language-server",
   "displayName": "YaoXiang Language Server",
   "description": "YaoXiang LSP server for VS Code - provides code completion, diagnostics, and more",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "yaoxiang",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onLanguage:yaoxiang"
+    "onLanguage:yaoxiang",
+    "onCommand:yaoxiang.restartLanguageServer"
   ],
   "engines": {
     "vscode": "^1.70.0"
@@ -21,6 +22,16 @@
     "Programming Languages"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "yaoxiang.restartLanguageServer",
+        "title": "YaoXiang: Restart Language Server"
+      },
+      {
+        "command": "yaoxiang.startDebugMode",
+        "title": "YaoXiang: Start in Debug Mode"
+      }
+    ],
     "languages": [
       {
         "id": "yaoxiang",

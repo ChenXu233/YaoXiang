@@ -4,18 +4,18 @@ title: 'RFC Example: Enhanced Pattern Matching Syntax'
 
 # RFC Example: Enhanced Pattern Matching Syntax
 
-> **Note**: This is an RFC template example showing how to write a complete RFC proposal.
-> Please refer to this template when writing your own RFC.
+> **Note**: This is an RFC template example that demonstrates how to write a complete RFC proposal.
+> Refer to this template when writing your own RFC.
 >
 > **Status**: Example (for reference only)
 
-> **Author**: ChenXu (example author)
-> **Created Date**: 2025-01-05
-> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
+> **Author**: Chen Xu (example author)
+> **Created**: 2025-01-05
+> **Last Updated**: 2026-02-12
 
 ## Summary
 
-Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard expressions, and `let` pattern binding.
+Add more powerful pattern matching capabilities to YaoXiang, including nested patterns, guard expressions, and `let` pattern bindings.
 
 ## Motivation
 
@@ -33,7 +33,7 @@ match person {
 
 # Cannot bind variables in patterns
 match result {
-    ok(value) => print(value)          # ❌ Need explicit destructuring
+    ok(value) => print(value)          # ❌ Requires explicit destructuring
 }
 ```
 
@@ -41,7 +41,7 @@ match result {
 
 1. Nested pattern destructuring not supported
 2. Guard expressions cannot be used in patterns
-3. `let` statement does not support pattern matching
+3. `let` statements do not support pattern matching
 
 ## Proposal
 
@@ -49,7 +49,7 @@ match result {
 
 Extend `match` expression syntax to support:
 
-1. **Nested pattern destructuring**: Struct destructuring of arbitrary depth
+1. **Nested pattern destructuring**: Struct destructuring at arbitrary depth
 2. **Guard expressions**: Add `if` conditions after patterns
 3. **Pattern variable binding**: Bind variables directly from patterns
 
@@ -88,11 +88,11 @@ match data {
 
 ```yaoxiang
 # New syntax
-let Point(x: 0, y: _) = point  # Only bind when x == 0
-let Ok(value) = result         # Destructuring Result
+let Point(x: 0, y: _) = point  # Only binds when x == 0
+let Ok(value) = result         # Destructures Result
 
 # Multiple binding
-let (a, b, c) = tuple          # Destructuring tuple
+let (a, b, c) = tuple          # Destructures tuple
 ```
 
 ## Detailed Design
@@ -121,14 +121,14 @@ RestPattern   ::= '...'
 ### Type System Impact
 
 - Pattern matching type checking needs to be extended
-- Pattern variables get correct types when matching succeeds
+- Pattern variables receive the correct type upon successful match
 
 ### Compiler Changes
 
 | Component | Change |
 |-----------|--------|
-| lexer | Add pattern-related tokens |
-| parser | Add pattern parsing logic |
+| lexer | New pattern-related tokens |
+| parser | New pattern parsing logic |
 | typecheck | Pattern type inference and binding |
 | codegen | Pattern matching code generation |
 
@@ -143,24 +143,24 @@ RestPattern   ::= '...'
 
 - More expressive syntax, more concise code
 - Consistent with mainstream language pattern matching (Rust, Scala, Elixir)
-- Reduce runtime errors, catch mismatches early
+- Reduces runtime errors, catches non-matches earlier
 
 ### Disadvantages
 
 - Increased compiler implementation complexity
-- Slight increase in learning curve
+- Slightly steeper learning curve
 
 ## Alternative Solutions
 
-| Solution | Why Not Chosen |
+| Solution | Why not chosen |
 |----------|----------------|
-| Only support top-level destructuring | Cannot handle common nested scenarios |
-| Use functional style | Not natural when mixed with imperative code |
+| Top-level destructuring only | Cannot handle common nested scenarios |
+| Functional style only | Unnatural to mix with imperative code |
 | Defer to v2.0 | Users already have strong demand |
 
 ## Implementation Strategy
 
-### Phase Division
+### Phases
 
 1. **Phase 1 (v0.6)**: Nested destructuring and guard expressions
 2. **Phase 2 (v0.7)**: Pattern variable binding
@@ -169,18 +169,18 @@ RestPattern   ::= '...'
 ### Dependencies
 
 - No external dependencies
-- Need to complete basic type system first
+- Basic type system needs to be completed first
 
 ### Risks
 
 - Pattern compilation complexity may cause performance issues
-- Too deep nesting may cause stack overflow
+- Deep nesting may cause stack overflow
 
 ## Open Questions
 
-1. [ ] What is the syntax for at-binding (`@` binding)?
+1. [ ] Syntax for at-pattern (`@` binding)?
 2. [ ] Should compile-time pattern exhaustiveness checking be supported?
-3. [ ] Performance optimization strategy?
+3. [ ] Performance optimization strategies?
 
 ## References
 

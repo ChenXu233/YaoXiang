@@ -2,7 +2,7 @@
 //!
 //! 单态化过程中的工作单元定义
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::util::span::Span;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -105,7 +105,7 @@ impl SpecializationKey {
             String::new()
         } else {
             let args: Vec<String> = self.type_args.iter().map(|t| t.type_name()).collect();
-            format!("<{}>", args.join(","))
+            format!("({})", args.join(","))
         };
 
         format!("{}{}{}", self.name, param_str, type_str)
@@ -186,6 +186,15 @@ fn type_name_hash<H: Hasher>(
             "set".hash(state);
             type_name_hash(t, state);
         }
+        MonoType::Option(t) => {
+            "option".hash(state);
+            type_name_hash(t, state);
+        }
+        MonoType::Result(ok, err) => {
+            "result".hash(state);
+            type_name_hash(ok, state);
+            type_name_hash(err, state);
+        }
         MonoType::Fn { .. } => "fn".hash(state),
         MonoType::Range { elem_type } => {
             "range".hash(state);
@@ -236,13 +245,13 @@ fn type_name_hash<H: Hasher>(
             type_name_hash(base_type, state);
             // 哈希常量值
             match value {
-                crate::frontend::core::type_system::ConstValue::Int(n) => {
+                crate::frontend::core::types::base::ConstValue::Int(n) => {
                     format!("int:{}", n).hash(state);
                 }
-                crate::frontend::core::type_system::ConstValue::Bool(b) => {
+                crate::frontend::core::types::base::ConstValue::Bool(b) => {
                     format!("bool:{}", b).hash(state);
                 }
-                crate::frontend::core::type_system::ConstValue::Float(f) => {
+                crate::frontend::core::types::base::ConstValue::Float(f) => {
                     format!("float:{}", f.to_bits()).hash(state);
                 }
             }
@@ -338,7 +347,7 @@ impl GenericFunctionId {
         let generic_str = if self.type_params.is_empty() {
             String::new()
         } else {
-            format!("<{}>", self.type_params.join(", "))
+            format!("({})", self.type_params.join(", "))
         };
 
         format!("{}{}{}", self.name, param_str, generic_str)
@@ -416,7 +425,7 @@ impl fmt::Display for GenericTypeId {
         if self.type_params.is_empty() {
             write!(f, "{}", self.name)
         } else {
-            write!(f, "{}<{}>", self.name, self.type_params.join(", "))
+            write!(f, "{}({})", self.name, self.type_params.join(", "))
         }
     }
 }
@@ -733,7 +742,7 @@ impl GenericClosureId {
         if self.type_params.is_empty() {
             format!("{}{}", self.name, captures)
         } else {
-            format!("{}<{}>{}", self.name, self.type_params.join(", "), captures)
+            format!("{}({}){}", self.name, self.type_params.join(", "), captures)
         }
     }
 }
@@ -917,7 +926,7 @@ impl ClosureSpecializationKey {
                 .map(|t| t.type_name())
                 .collect::<Vec<_>>()
                 .join(",");
-            format!("<{}>", args_str)
+            format!("({})", args_str)
         };
 
         let capture_str = if self.capture_types.is_empty() {

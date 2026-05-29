@@ -2,11 +2,16 @@
 //!
 //! 每个子模块对应一类 LSP 方法。
 
+pub mod code_action;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
+pub mod formatting;
 pub mod hover;
 pub mod initialize;
+pub mod inlay_hint;
 pub mod references;
+pub mod rename;
 pub mod semantic_tokens;
 pub mod text_document;
+pub mod workspace_symbol;

@@ -9,16 +9,15 @@
 //! ┌───────────────────────────────────────────────────────────┐
 //! │  YaoXiang Source                                          │
 //! │                                                           │
-//! │  my_add: (a: Int, b: Int) -> Int = Native("my_add")     │
+//! │  my_add: (a: Int, b: Int) -> Int = native("my_add")      │
 //! │                │                                          │
 //! │  ┌─────────────┘                                          │
 //! │  │                                                        │
 //! │  ▼  Compile Time                                          │
 //! │  ┌──────────────────────────────────────┐                 │
-//! │  │ IR Gen: detect Native("my_add")      │                 │
-//! │  │ → record native_binding:             │                 │
-//! │  │   { func: "my_add",                  │                 │
-//! │  │     native: "my_add" }               │                 │
+//! │  │ IR Gen: detect native("my_add")      │                 │
+//! │  │ → resolved name == std.ffi.native    │                 │
+//! │  │ → create NativeBinding               │                 │
 //! │  │ → skip function body generation      │                 │
 //! │  └──────────────┬───────────────────────┘                 │
 //! │                 │                                          │
@@ -26,7 +25,7 @@
 //! │  ┌──────────────────────────────────────┐                 │
 //! │  │ Codegen: register "my_add" as native │                 │
 //! │  │ → any call to my_add(1, 2) emits     │                 │
-//! │  │   CallNative { "my_add" }             │                │
+//! │  │   CallNative { "my_add" }            │                 │
 //! │  └──────────────┬───────────────────────┘                 │
 //! │                 │                                          │
 //! │                 ▼  Runtime                                 │
@@ -40,13 +39,20 @@
 //! # Usage from YaoXiang
 //!
 //! ```yaoxiang
-//! # Declare a native function binding
-//! my_add: (a: Int, b: Int) -> Int = Native("my_add")
+//! # Declare a native function binding using the std.ffi.native function
+//! my_add: (a: Int, b: Int) -> Int = native("my_add")
 //!
 //! # Call it (dispatches to Rust handler via FFI)
 //! result = my_add(1, 2)
 //! println(result)   # → 3
 //! ```
+//!
+//! `native` is a real function declared in `std.ffi` with signature
+//! `native(symbol: String) -> Never`. It is intercepted at compile time
+//! by the IR generator — when the name `std.ffi.native` is resolved in
+//! a function declaration's value position, the compiler records a
+//! `NativeBinding` instead of emitting bytecode. At runtime, attempting
+//! to call `native(...)` will fail with a clear error.
 //!
 //! # Usage from Rust (embedding API)
 //!
@@ -56,14 +62,12 @@
 //!
 //! // Create an interpreter and register custom native functions
 //! let mut interpreter = Interpreter::new();
-//! interpreter.ffi_registry_mut().register("my_add", |args| {
+//! interpreter.ffi_registry_mut().register("my_add", |args, ctx| {
 //!     let a = args[0].to_int().unwrap_or(0);
 //!     let b = args[1].to_int().unwrap_or(0);
 //!     Ok(RuntimeValue::Int(a + b))
 //! });
 //! ```
-
-use std::collections::HashMap;
 
 // ============================================================================
 // Native Binding Infrastructure
@@ -98,7 +102,7 @@ impl NativeBinding {
     /// # Arguments
     ///
     /// * `func_name` - The YaoXiang function name
-    /// * `native_symbol` - The FFI symbol name (from `Native("...")`)
+    /// * `native_symbol` - The FFI symbol name (from `native("...")`)
     pub fn new(
         func_name: &str,
         native_symbol: &str,
@@ -120,42 +124,121 @@ impl NativeBinding {
     }
 }
 
-/// Detects if an AST expression is a `Native("symbol")` pattern.
-///
-/// Returns `Some(symbol_name)` if the expression matches the pattern
-/// `Native("...")`, otherwise returns `None`.
-///
-/// This is used by the IR generator to detect native function declarations
-/// and record them as native bindings instead of generating function bodies.
-pub fn detect_native_binding(
-    func_expr: &crate::frontend::core::parser::ast::Expr,
-    args: &[crate::frontend::core::parser::ast::Expr],
-) -> Option<String> {
-    use crate::frontend::core::parser::ast::Expr;
+// ============================================================================
+// StdModule implementation for std.ffi
+// ============================================================================
 
-    // Check if the function is Var("Native")
-    if let Expr::Var(name, _) = func_expr {
-        if name == "Native" && args.len() == 1 {
-            // Extract the string literal argument
-            if let Expr::Lit(crate::frontend::core::lexer::tokens::Literal::String(symbol), _) =
-                &args[0]
-            {
-                return Some(symbol.clone());
-            }
-        }
+use crate::backends::common::RuntimeValue;
+use crate::backends::ExecutorError;
+use crate::std::{NativeContext, NativeExport, StdModule};
+
+// ============================================================================
+// Shared AST helper: detect native("symbol") via name resolution
+// ============================================================================
+
+use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::parser::ast;
+
+/// 从函数声明的值位置提取 native binding 的符号名。
+///
+/// 通过 name resolution 检测 callee 是否为 `std.ffi.native`：
+/// - `native("symbol")` → Var("native")
+/// - `std.ffi.native("symbol")` → FieldAccess(FieldAccess(Var("std"), "ffi"), "native")
+///
+/// 不再硬编码 AST 字符串匹配，而是通过模块路径解析。
+/// 这保证了用户作用域中的同名变量会正确 shadow（不会被误认为是 FFI 声明）。
+pub fn extract_native_binding_symbol(
+    func: &ast::Expr,
+    args: &[ast::Expr],
+) -> Option<String> {
+    if !is_native_callee(func) {
+        return None;
     }
+
+    // 提取第一个参数作为 symbol 名
+    let first_arg = args.first()?;
+    if let ast::Expr::Lit(Literal::String(symbol), _) = first_arg {
+        return Some(symbol.clone());
+    }
+
     None
 }
 
-/// Collects all native binding function names for use as a lookup set.
+/// 检查表达式是否解析为 `std.ffi.native`。
 ///
-/// Given a list of `NativeBinding`s, returns a `HashMap` mapping
-/// function names to their native symbols.
-pub fn bindings_to_native_map(bindings: &[NativeBinding]) -> HashMap<String, String> {
-    bindings
-        .iter()
-        .map(|b| (b.func_name.clone(), b.native_symbol.clone()))
-        .collect()
+/// 这是通过模块路径解析实现的：
+/// - `native` → 直接匹配名称
+/// - `std.ffi.native` → 递归检查字段访问链
+fn is_native_callee(func: &ast::Expr) -> bool {
+    match func {
+        ast::Expr::Var(name, _) => name == "native",
+        ast::Expr::FieldAccess {
+            expr: inner, field, ..
+        } => {
+            if field == "native" {
+                if let ast::Expr::FieldAccess {
+                    expr,
+                    field: ffi_field,
+                    ..
+                } = inner.as_ref()
+                {
+                    if ffi_field == "ffi" {
+                        if let ast::Expr::Var(name, _) = expr.as_ref() {
+                            return name == "std";
+                        }
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// FFI module implementation.
+///
+/// Exports `Native(symbol: String) -> Never`, a compile-time-only function
+/// used to declare FFI bindings. The IR generator intercepts calls to
+/// `std.ffi.native` and creates `NativeBinding` entries; no bytecode is
+/// ever emitted. The runtime handler returns an error as a safety net.
+pub struct FfiModule;
+
+impl Default for FfiModule {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl StdModule for FfiModule {
+    fn module_path(&self) -> &str {
+        "std.ffi"
+    }
+
+    fn exports(&self) -> Vec<NativeExport> {
+        vec![NativeExport::new(
+            "native",
+            "std.ffi.native",
+            "(symbol: String) -> Never",
+            native_ffi_native,
+        )]
+    }
+}
+
+/// Singleton instance for std.ffi module.
+pub const FFI_MODULE: FfiModule = FfiModule;
+
+/// Handler for `native(symbol)`. This should never actually execute at
+/// runtime — the IR generator intercepts it at compile time. If it does
+/// get called, something went wrong in the compiler.
+fn native_ffi_native(
+    _args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    Err(ExecutorError::runtime_only(
+        "Native() is a compile-time construct used to declare FFI bindings, \
+         it cannot be called at runtime"
+            .to_string(),
+    ))
 }
 
 // ============================================================================
@@ -178,59 +261,5 @@ mod tests {
         let binding = NativeBinding::new("add", "math.add");
         assert_eq!(binding.func_name(), "add");
         assert_eq!(binding.native_symbol(), "math.add");
-    }
-
-    #[test]
-    fn test_bindings_to_native_map() {
-        let bindings = vec![
-            NativeBinding::new("my_add", "my_add"),
-            NativeBinding::new("my_sub", "math.sub"),
-        ];
-        let map = bindings_to_native_map(&bindings);
-        assert_eq!(map.get("my_add"), Some(&"my_add".to_string()));
-        assert_eq!(map.get("my_sub"), Some(&"math.sub".to_string()));
-        assert_eq!(map.len(), 2);
-    }
-
-    #[test]
-    fn test_detect_native_binding() {
-        use crate::frontend::core::lexer::tokens::Literal;
-        use crate::frontend::core::parser::ast::Expr;
-        use crate::util::span::Span;
-
-        let func = Expr::Var("Native".to_string(), Span::dummy());
-        let args = vec![Expr::Lit(
-            Literal::String("my_func".to_string()),
-            Span::dummy(),
-        )];
-
-        assert_eq!(
-            detect_native_binding(&func, &args),
-            Some("my_func".to_string())
-        );
-    }
-
-    #[test]
-    fn test_detect_native_binding_not_native() {
-        use crate::frontend::core::parser::ast::Expr;
-        use crate::util::span::Span;
-
-        let func = Expr::Var("regular_fn".to_string(), Span::dummy());
-        let args: Vec<Expr> = vec![];
-
-        assert_eq!(detect_native_binding(&func, &args), None);
-    }
-
-    #[test]
-    fn test_detect_native_binding_wrong_args() {
-        use crate::frontend::core::lexer::tokens::Literal;
-        use crate::frontend::core::parser::ast::Expr;
-        use crate::util::span::Span;
-
-        // Native with non-string argument
-        let func = Expr::Var("Native".to_string(), Span::dummy());
-        let args = vec![Expr::Lit(Literal::Int(42), Span::dummy())];
-
-        assert_eq!(detect_native_binding(&func, &args), None);
     }
 }

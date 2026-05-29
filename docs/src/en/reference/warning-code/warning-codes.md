@@ -1,145 +1,145 @@
 ---
-title: 警告码
-description: 编译器警告码及说明
+title: Warning Codes
+description: Compiler warning codes and descriptions
 ---
 
-# 警告码
+# Warning Codes
 
-本文档列出 YaoXiang 编译器可能产生的警告码。警告不会阻止编译，但可能指示代码中存在潜在问题。
+This document lists warning codes that the YaoXiang compiler may produce. Warnings do not prevent compilation but may indicate potential issues in the code.
 
-## 配置
+## Configuration
 
-可以通过 `yaoxiang.toml` 配置警告行为：
+Warning behavior can be configured via `yaoxiang.toml`:
 
 ```toml
 [lint]
-# 死代码警告级别：off | warn | deny
+# Dead code warning level: off | warn | deny
 dead-code = "warn"
 ```
 
-- `off`：禁用警告
-- `warn`：显示警告（默认）
-- `deny`：将警告视为错误
+- `off`: Disable the warning
+- `warn`: Display the warning (default)
+- `deny`: Treat the warning as an error
 
-## 警告列表
+## Warning List
 
-### W1001: 未使用的导出函数
+### W1001: Unused Exported Function
 
-**原因**：导出的函数从未被任何代码调用。
+**Reason**: An exported function is never called by any code.
 
-**示例**：
+**Example**:
 ```yaoxiang
-pub fn dead_function() { }  // W1001: 未使用的导出函数
+pub fn dead_function() { }  // W1001: Unused exported function
 
 fn main() {
-    // dead_function 从未被调用
+    // dead_function is never called
 }
 ```
 
-**建议**：
-- 如果函数不需要被外部使用，移除 `pub` 修饰符
-- 如果函数需要保留但暂未使用，可以在配置中设置 `dead-code = "off"`
+**Suggestion**:
+- If the function doesn't need to be used externally, remove the `pub` modifier
+- If the function needs to be kept but is unused for now, set `dead-code = "off"` in the configuration
 
 ---
 
-### W1002: 未使用的导出类型
+### W1002: Unused Exported Type
 
-**原因**：导出的类型（type 别名或自定义类型）从未被使用。
+**Reason**: An exported type (type alias or custom type) is never used.
 
-**示例**：
+**Example**:
 ```yaoxiang
-pub type DeadType = Int  // W1002: 未使用的导出类型
+pub type DeadType = Int  // W1002: Unused exported type
 
 fn main() {
     let x: Int = 42;
 }
 ```
 
-**建议**：
-- 移除不必要的 `pub` 修饰符
-- 如果类型需要导出但暂未使用，忽略此警告
+**Suggestion**:
+- Remove the unnecessary `pub` modifier
+- If the type needs to be exported but is unused for now, ignore this warning
 
 ---
 
-### W1003: 未使用的导入
+### W1003: Unused Import
 
-**原因**：`use` 语句导入的模块或符号从未被使用。
+**Reason**: A module or symbol imported via `use` is never used.
 
-**示例**：
+**Example**:
 ```yaoxiang
-use std.json  // W1003: 未使用的导入
+use std.json  // W1003: Unused import
 
 fn main() {
-    // json 模块从未被使用
+    // json module is never used
 }
 ```
 
-**建议**：
-- 移除未使用的导入以保持代码整洁
-- 如果需要保留导入（用于副作用），考虑使用 `use std.json.*` 或添加注释说明
+**Suggestion**:
+- Remove unused imports to keep the code clean
+- If you need to keep the import (for side effects), consider using `use std.json.*` or add a comment explaining why
 
 ---
 
-### W1004: 未使用的导出变量
+### W1004: Unused Exported Variable
 
-**原因**：使用 `pub let` 导出的变量从未被读取。
+**Reason**: A variable exported with `pub let` is never read.
 
-**示例**：
+**Example**:
 ```yaoxiang
-pub let dead_var = 42  // W1004: 未使用的导出变量
+pub let dead_var = 42  // W1004: Unused exported variable
 
 fn main() {
-    // dead_var 从未被读取
+    // dead_var is never read
 }
 ```
 
-**建议**：
-- 移除不必要的 `pub` 修饰符
-- 如果变量需要导出但暂未使用，忽略此警告
+**Suggestion**:
+- Remove the unnecessary `pub` modifier
+- If the variable needs to be exported but is unused for now, ignore this warning
 
 ---
 
-### W1005: 未使用的导出方法
+### W1005: Unused Exported Method
 
-**原因**：在类型上导出的方法从未被调用。
+**Reason**: A method exported on a type is never called.
 
-**示例**：
+**Example**:
 ```yaoxiang
 type Foo { value: Int }
 
-pub fn Foo.dead_method(self) { }  // W1005: 未使用的导出方法
+pub fn Foo.dead_method(self) { }  // W1005: Unused exported method
 
 fn main() {
     let foo = Foo { value: 1 };
-    // dead_method 从未被调用
+    // dead_method is never called
 }
 ```
 
-**建议**：
-- 移除不必要的 `pub` 修饰符
-- 如果方法需要保留但暂未使用，忽略此警告
+**Suggestion**:
+- Remove the unnecessary `pub` modifier
+- If the method needs to be kept but is unused for now, ignore this warning
 
 ---
 
-## 警告级别详解
+## Warning Level Details
 
-| 级别 | 效果 |
-|------|------|
-| `off` | 完全禁用此警告 |
-| `warn` | 显示警告但继续编译（默认） |
-| `deny` | 将警告视为错误，阻止编译 |
+| Level | Effect |
+|------|--------|
+| `off` | Completely disable this warning |
+| `warn` | Display warning but continue compilation (default) |
+| `deny` | Treat warning as an error, block compilation |
 
-### 使用场景
+### Use Cases
 
-- **开发过程中**：使用 `warn` 级别了解代码中的潜在问题
-- **发布前**：使用 `deny` 级别确保没有未使用的代码
-- **遗留代码**：使用 `off` 级别暂时忽略警告
+- **During development**: Use `warn` level to be aware of potential issues in the code
+- **Before release**: Use `deny` level to ensure no unused code remains
+- **Legacy code**: Use `off` level to temporarily ignore warnings
 
 ---
 
-## 与错误码的区别
+## Difference from Error Codes
 
-警告码使用 `W` 前缀（如 W1001），错误码使用 `E` 前缀（如 E1001）。
+Warning codes use the `W` prefix (e.g., W1001), while error codes use the `E` prefix (e.g., E1001).
 
-- **错误 (Error)**：阻止编译，必须修复
-- **警告 (Warning)**：提示潜在问题，可选择修复
+- **Error**: Blocks compilation and must be fixed
+- **Warning**: Indicates potential issues and can be optionally fixed

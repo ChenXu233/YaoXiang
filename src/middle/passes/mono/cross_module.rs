@@ -7,8 +7,8 @@
 //! 3. 跨模块实例化：在定义模块中实例化，使用模块引用结果
 
 use crate::frontend::core::parser::ast::Type;
-use crate::frontend::core::type_system::ConstValue;
-use crate::frontend::typecheck::{EnumType, MonoType, StructType};
+use crate::frontend::core::types::base::ConstValue;
+use crate::frontend::core::typecheck::{EnumType, MonoType, StructType};
 use crate::middle::core::ir::{BasicBlock, FunctionIR, Instruction, ModuleIR};
 use crate::middle::passes::module::{ModuleGraph, ModuleId};
 use crate::middle::passes::mono::module_state::{
@@ -181,7 +181,7 @@ impl CrossModuleMonomorphizer {
     pub fn collect_imports(
         &mut self,
         module_id: ModuleId,
-        imports: &[crate::frontend::typecheck::ImportInfo],
+        imports: &[crate::frontend::core::typecheck::ImportInfo],
     ) {
         let resolved_imports: Vec<_> = imports
             .iter()
@@ -424,7 +424,7 @@ impl Default for CrossModuleMonomorphizer {
 #[allow(clippy::only_used_in_recursion)]
 fn ast_type_to_mono_type(ty: &Type) -> MonoType {
     match ty {
-        Type::Name(name) => MonoType::TypeRef(name.clone()),
+        Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
         Type::Int(n) => MonoType::Int(*n),
         Type::Float(n) => MonoType::Float(*n),
         Type::Char => MonoType::Char,
@@ -446,7 +446,7 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             field_has_default: fields.iter().map(|f| f.default.is_some()).collect(),
             interfaces: vec![],
         }),
-        Type::NamedStruct { name, fields } => MonoType::Struct(StructType {
+        Type::NamedStruct { name, fields, .. } => MonoType::Struct(StructType {
             name: name.clone(),
             fields: fields
                 .iter()
@@ -481,27 +481,33 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             return_type: Box::new(ast_type_to_mono_type(return_type)),
             is_async: false,
         },
-        Type::Option(inner) => MonoType::Union(vec![ast_type_to_mono_type(inner)]),
-        Type::Result(_, _) => MonoType::TypeRef("Result".to_string()),
-        Type::Generic { name, args } => {
+        Type::Option(inner) => MonoType::Option(Box::new(ast_type_to_mono_type(inner))),
+        Type::Result(ok, err) => MonoType::Result(
+            Box::new(ast_type_to_mono_type(ok)),
+            Box::new(ast_type_to_mono_type(err)),
+        ),
+        Type::Generic { name, args, .. } => {
             let args_str = args
                 .iter()
                 .map(|t| ast_type_to_mono_type(t).type_name())
                 .collect::<Vec<_>>()
                 .join(",");
-            MonoType::TypeRef(format!("{}<{}>", name, args_str))
+            MonoType::TypeRef(format!("{}({})", name, args_str))
         }
         Type::Sum(types) => MonoType::Union(types.iter().map(ast_type_to_mono_type).collect()),
         Type::AssocType {
             host_type,
             assoc_name,
             assoc_args,
+            ..
         } => MonoType::AssocType {
             host_type: Box::new(ast_type_to_mono_type(host_type)),
             assoc_name: assoc_name.clone(),
             assoc_args: assoc_args.iter().map(ast_type_to_mono_type).collect(),
         },
-        Type::Literal { name, base_type } => {
+        Type::Literal {
+            name, base_type, ..
+        } => {
             // 对于字面量类型，转换为基础类型
             // 字面量的值会在类型检查阶段处理
             let base = ast_type_to_mono_type(base_type);

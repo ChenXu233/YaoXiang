@@ -239,8 +239,8 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::Add { dst, lhs, rhs }
         | Instruction::Sub { dst, lhs, rhs }
         | Instruction::Mul { dst, lhs, rhs }
-        | Instruction::Div { dst, lhs, rhs }
-        | Instruction::Mod { dst, lhs, rhs }
+        | Instruction::Div { dst, lhs, rhs, .. }
+        | Instruction::Mod { dst, lhs, rhs, .. }
         | Instruction::And { dst, lhs, rhs }
         | Instruction::Or { dst, lhs, rhs }
         | Instruction::Xor { dst, lhs, rhs }
@@ -312,7 +312,9 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         }
 
         // 动态调用：dst = func_ptr(args...)
-        Instruction::CallDyn { dst, func, args } => {
+        Instruction::CallDyn {
+            dst, func, args, ..
+        } => {
             let mut ops = vec![func.clone()];
             ops.extend(args.iter().cloned());
             if let Some(d) = dst {
@@ -362,7 +364,11 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::Push(v) | Instruction::Pop(v) => vec![v.clone()],
 
         // 无操作数的指令
-        Instruction::Dup | Instruction::Swap | Instruction::Yield => Vec::new(),
+        Instruction::Dup
+        | Instruction::Swap
+        | Instruction::Yield
+        | Instruction::EvalPush(_)
+        | Instruction::EvalPop => Vec::new(),
 
         // 简单的跳转
         Instruction::Jmp(_) => Vec::new(),
@@ -559,7 +565,9 @@ impl OwnershipAnalyzer {
             }
 
             // 加载：定义 dst，src 活跃
-            Instruction::LoadIndex { dst, src, index } => {
+            Instruction::LoadIndex {
+                dst, src, index, ..
+            } => {
                 block_live.remove(dst);
                 block_live.insert(src.clone());
                 block_live.insert(index.clone());

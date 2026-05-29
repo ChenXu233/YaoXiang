@@ -2,7 +2,7 @@
 //!
 //! 提供闭包单态化相关的辅助函数和trait
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::FunctionIR;
 use crate::middle::passes::mono::instance::{
     ClosureId, ClosureInstance, ClosureSpecializationKey, GenericClosureId,

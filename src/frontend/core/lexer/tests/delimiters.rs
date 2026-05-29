@@ -43,6 +43,12 @@ mod lexer_delimiters_tests {
     }
 
     #[test]
+    fn test_at() {
+        let tokens = tokenize("@").unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::At));
+    }
+
+    #[test]
     fn test_comma() {
         let tokens = tokenize(",").unwrap();
         assert!(matches!(tokens[0].kind, TokenKind::Comma));

@@ -57,13 +57,13 @@ fn test_constant_pool_types() {
 
     // Test various constant types
     let int_val = ConstValue::Int(42);
-    let float_val = ConstValue::Float(3.14);
+    let float_val = ConstValue::Float(std::f64::consts::PI);
     let string_val = ConstValue::String("test".to_string());
     let bool_val = ConstValue::Bool(true);
 
     // These should all be constructible
     assert_eq!(int_val, ConstValue::Int(42));
-    assert_eq!(float_val, ConstValue::Float(3.14));
+    assert_eq!(float_val, ConstValue::Float(std::f64::consts::PI));
     assert_eq!(string_val, ConstValue::String("test".to_string()));
     assert_eq!(bool_val, ConstValue::Bool(true));
 }

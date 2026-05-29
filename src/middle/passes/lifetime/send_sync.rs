@@ -11,7 +11,7 @@
 //! 4. Rc 既不是 Send 也不是 Sync
 
 use super::error::OwnershipError;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use std::collections::HashMap;
 
@@ -200,6 +200,12 @@ impl SendSyncChecker {
             MonoType::Dict(key, value) => self.is_send(key) && self.is_send(value),
             MonoType::Set(elem) => self.is_send(elem),
 
+            // Option：内部类型必须 Send
+            MonoType::Option(inner) => self.is_send(inner),
+
+            // Result：Ok/Err 必须 Send
+            MonoType::Result(ok, err) => self.is_send(ok) && self.is_send(err),
+
             // 元组：所有元素必须 Send
             MonoType::Tuple(types) => types.iter().all(|t| self.is_send(t)),
 
@@ -265,6 +271,12 @@ impl SendSyncChecker {
 
             // 集合：保守返回 false
             MonoType::Set(_) => false,
+
+            // Option：内部类型必须 Sync
+            MonoType::Option(inner) => self.is_sync(inner),
+
+            // Result：Ok/Err 必须 Sync
+            MonoType::Result(ok, err) => self.is_sync(ok) && self.is_sync(err),
 
             // 元组：如果是 (T, &T) 形式可能 Sync，保守返回 false
             MonoType::Tuple(types) => types.iter().all(|t| self.is_sync(t)),
@@ -366,7 +378,7 @@ impl Default for SendSyncChecker {
 // 约束传播支持
 // =========================================================================
 
-use crate::frontend::typecheck::{SendSyncConstraint, SendSyncSolver};
+use crate::frontend::core::typecheck::{SendSyncConstraint, SendSyncSolver};
 
 /// Send/Sync 约束传播结果
 #[derive(Debug, Clone, Default)]

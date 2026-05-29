@@ -11,7 +11,7 @@ use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 ///
 /// 存储所有已注册的模块信息，支持按路径查询。
 /// 对外提供统一的模块发现接口。
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ModuleRegistry {
     /// 模块映射（path -> ModuleInfo）
     modules: HashMap<String, ModuleInfo>,

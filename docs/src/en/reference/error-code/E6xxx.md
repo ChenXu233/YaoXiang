@@ -1,147 +1,53 @@
-﻿# E6xxx: Runtime Errors
+# E6xxx: Runtime Errors
 
-> Errors occurring during execution.
+> Auto-generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E6001: Division by zero
 
-Integer division by zero.
+**Category**: Runtime
 
-```yaoxiang
-main: () -> Void = {
-    x = 10 / 0;
-}
-```
+**Message**: Attempted to divide by zero
 
-```
-error[E6001]: Division by zero
-  --> example.yx:2:17
-   |
- 2 |     x = 10 / 0;
-   |                 ^ division by zero
-```
+**Help**: Add a check to prevent division by zero
 
-## E6002: Assertion failed
+---
 
-assert! macro failed.
+## E6002: Null pointer dereference
 
-```yaoxiang
-main: () -> Void = {
-    x = 10;
-    assert!(x > 100, "x must be greater than 100");
-}
-```
+**Category**: Runtime
 
-```
-error[E6002]: Assertion failed: x must be greater than 100
-  --> example.yx:3:5
-   |
- 3 |     assert!(x > 100, "x must be greater than 100");
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ assertion failed
-```
+**Message**: Attempted to access a null value
 
-## E6003: Arithmetic overflow
+**Help**: Add a null check before accessing the value
 
-Arithmetic operation overflow.
+---
 
-```yaoxiang
-main: () -> Void = {
-    max_int = 9223372036854775807;  # Max Int value
-    overflow = max_int + 1;  # Overflow
-}
-```
+## E6003: Array index out of bounds
 
-```
-error[E6003]: Arithmetic overflow
-  --> example.yx:3:21
-   |
- 3 |     overflow = max_int + 1;
-   |                     ^^^^^^^^^^^ arithmetic overflow
-```
+**Category**: Runtime
+
+**Message**: Array index is out of bounds at runtime
+
+**Help**: Ensure the index is within the array bounds
+
+---
 
 ## E6004: Stack overflow
 
-Stack space exhausted (excessive recursion depth).
+**Category**: Runtime
 
-```yaoxiang
-fibonacci: (n: Int) -> Int = {
-    if n <= 1 {
-        return n;
-    }
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
+**Message**: Recursion depth exceeded stack limit
 
-main: () -> Void = {
-    result = fibonacci(10000);
-}
-```
+**Help**: Reduce recursion depth or use iteration
 
-```
-error[E6004]: Stack overflow: maximum recursion depth exceeded
-  --> example.yx:7:22
-   |
- 7 |     result = fibonacci(10000);
-   |                      ^^^^^^^^^^^^ recursion depth too large
-```
+---
 
-## E6005: Heap allocation failed
+## E6005: Assert failed
 
-Memory allocation failure.
+**Category**: Runtime
 
-```yaoxiang
-main: () -> Void = {
-    huge_list = List::new(1_000_000_000_000);
-}
-```
+**Message**: Assertion failed at runtime
 
-```
-error[E6005]: Heap allocation failed
-  --> example.yx:2:19
-   |
- 2 |     huge_list = List::new(1_000_000_000_000);
-   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ memory allocation failed
-```
-
-## E6006: Runtime index out of bounds
-
-Index out of bounds at runtime.
-
-```yaoxiang
-main: () -> Void = {
-    arr = [1, 2, 3];  # Array
-    index = get_index();  # Dynamic index
-    value = arr[index];
-}
-```
-
-```
-error[E6006]: Runtime index out of bounds
-  --> example.yx:4:18
-   |
- 4 |     value = arr[index];
-   |                  ^^^^^^^^^^ index out of bounds at runtime
-```
-
-## E6007: Type cast failed
-
-Attempting to cast type to incompatible type.
-
-```yaoxiang
-main: () -> Void = {
-    value: Any = 42;
-    string_value = value as String;
-}
-```
-
-```
-error[E6007]: Type cast failed
-  --> example.yx:3:22
-   |
- 3 |     string_value = value as String;
-   |                      ^^^^^^^^^^^^^^^^ cannot cast `Int` to `String`
-```
-
-## Related
-
-- [E5xxx: Modules & Imports](./E5xxx.md)
-- [E7xxx: I/O & System Errors](./E7xxx.md)
-- [Error Code Index](./index.md)
+**Help**: Fix the assertion condition or provide valid input

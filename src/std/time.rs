@@ -198,14 +198,14 @@ fn get_timestamp_arg(
         if default_to_now {
             Ok(get_current_timestamp())
         } else {
-            Err(ExecutorError::Runtime(
+            Err(ExecutorError::runtime_only(
                 "Expected timestamp argument".to_string(),
             ))
         }
     } else {
         match &args[0] {
             RuntimeValue::Int(ts) => Ok(*ts as u64),
-            other => Err(ExecutorError::Type(format!(
+            other => Err(ExecutorError::type_only(format!(
                 "Expected Int timestamp, got {:?}",
                 other
             ))),
@@ -283,7 +283,7 @@ fn native_sleep(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "sleep expects 1 argument (seconds: Float)".to_string(),
         ));
     }
@@ -292,7 +292,7 @@ fn native_sleep(
         RuntimeValue::Float(f) => *f,
         RuntimeValue::Int(i) => *i as f64,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "sleep expects Float or Int argument, got {:?}",
                 other
             )))
@@ -313,7 +313,7 @@ fn native_format_time(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "format_time expects 2 arguments (timestamp: Int, fmt: String)".to_string(),
         ));
     }
@@ -321,7 +321,7 @@ fn native_format_time(
     let timestamp = match &args[0] {
         RuntimeValue::Int(ts) => *ts as u64,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "format_time expects Int timestamp, got {:?}",
                 other
             )))
@@ -331,7 +331,7 @@ fn native_format_time(
     let fmt = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "format_time expects String format, got {:?}",
                 other
             )))
@@ -361,7 +361,7 @@ fn native_parse_time(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "parse_time expects 2 arguments (fmt: String, s: String)".to_string(),
         ));
     }
@@ -369,7 +369,7 @@ fn native_parse_time(
     let _fmt = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "parse_time expects String format, got {:?}",
                 other
             )))
@@ -379,7 +379,7 @@ fn native_parse_time(
     let s = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "parse_time expects String argument, got {:?}",
                 other
             )))
@@ -390,7 +390,7 @@ fn native_parse_time(
     let parts: Vec<&str> = s.split(['T', ' ']).collect();
 
     if parts.len() < 2 {
-        return Err(ExecutorError::Runtime(format!(
+        return Err(ExecutorError::runtime_only(format!(
             "Invalid time format: {}",
             s
         )));
@@ -400,7 +400,7 @@ fn native_parse_time(
     let time_parts: Vec<&str> = parts[1].split(':').collect();
 
     if date_parts.len() < 3 || time_parts.len() < 3 {
-        return Err(ExecutorError::Runtime(format!(
+        return Err(ExecutorError::runtime_only(format!(
             "Invalid time format: {}",
             s
         )));

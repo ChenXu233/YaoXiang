@@ -72,7 +72,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -94,7 +94,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           targets: ${{ matrix.target }}
 
       - name: Install ARM64 cross-compile toolchain
@@ -148,7 +148,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           targets: ${{ matrix.target }}
 
       - name: Configure linker
@@ -200,7 +200,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           targets: x86_64-pc-windows-gnu
 
       - name: Install mingw
@@ -250,7 +250,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
 
       - name: Build release
         run: cargo build --release --all-features
@@ -282,7 +282,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
+          toolchain: 1.91.0
           components: rustfmt, clippy
 
       - name: Cache cargo registry

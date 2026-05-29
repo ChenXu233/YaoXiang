@@ -1,28 +1,28 @@
 ---
-title: 'RFC-014: Package Manager Design'
+title: 'RFC-014: Package Management System Design'
 ---
 
-# RFC-014: Package Manager Design
+# RFC-014: Package Management System Design
 
 > **Status**: Accepted
 > **Author**: Chen Xu
-> **Created Date**: 2026-02-12
+> **Created**: 2026-02-12
 > **Last Updated**: 2026-02-14
 
 ## Summary
 
-Design the package management system for YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration files, and `yaoxiang.lock` lock files.
+Design a package management system for YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration file, and `yaoxiang.lock` lock file.
 
 ## Motivation
 
-### Why this feature/change is needed?
+### Why is this feature/change needed?
 
-Package management is fundamental infrastructure for modern programming language ecosystems. YaoXiang language currently lacks:
+Package management is the foundation of modern programming language ecosystems. The YaoXiang language currently lacks:
 - Dependency declaration mechanism
 - Version management capability
 - Standard distribution channel
 
-### Current problems
+### Current Problems
 
 ```
 my-project/
@@ -48,14 +48,14 @@ my-project/
 ┌─────────────────────────────────────────────┐
 │              Source Trait                   │ ← Extensible sources
 ├─────────────┬─────────────┬─────────────────┤
-│   Local     │    Git      │   Registry      │
-│             │  (GitHub)   │   (Reserved)   │
+│   Local     │    Git      │   Registry     │
+│   (Local)   │  (GitHub)   │   (Reserved)   │
 └─────────────┴─────────────┴─────────────────┘
 ```
 
-**Extension mechanism**: Adding a new Source type only requires implementing the trait, without modifying the resolution engine.
+**Extension Mechanism**: Adding a new Source type only requires implementing the trait, without modifying the resolution engine.
 
-### Example
+### Examples
 
 ```bash
 # 1. Create project
@@ -90,7 +90,7 @@ my-project/
 
 ## Detailed Design
 
-### Configuration file format
+### Configuration File Format
 
 **yaoxiang.toml**:
 ```toml
@@ -122,19 +122,19 @@ resolved = "https://github.com/user/foo?tag=v1.2.3"
 integrity = "sha256-xxxx"
 ```
 
-### Module resolution order
+### Module Resolution Order
 
 ```
 use foo.bar.baz;
 
-Lookup order:
+Search order:
 1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
-2. ./src/foo/bar/baz.yx           (Local modules)
-3. $YXPATH/foo/bar/baz.yx         (Global path, reserved)
-4. $YXLIB/std/foo/bar/baz.yx      (Standard library)
+2. ./src/foo/bar/baz.yx           (local modules)
+3. $YXPATH/foo/bar/baz.yx         (global path, reserved)
+4. $YXLIB/std/foo/bar/baz.yx      (standard library)
 ```
 
-### Core data structures
+### Core Data Structures
 
 ```rust
 // Dependency source (extensible)
@@ -144,7 +144,7 @@ enum Source {
     Registry { registry: String, namespace: Option<String> }, // Reserved
 }
 
-// Dependency declaration
+// Dependency specification
 enum DependencySpec {
     Version(VersionConstraint),
     Git { url: Url, version: Option<VersionConstraint> },
@@ -160,11 +160,11 @@ struct ResolvedDependency {
 }
 ```
 
-### CLI command design
+### CLI Command Design
 
-Adopt a unified approach, integrating compiler, package manager, and REPL into a single CLI tool:
+Adopt a unified approach, integrating the compiler, package manager, and REPL into a single CLI tool:
 
-#### Single-file mode vs Project mode
+#### Single-file Mode vs Project Mode
 
 | Command | Single-file | Project Mode | Description |
 |---------|-------------|--------------|-------------|
@@ -176,9 +176,9 @@ Adopt a unified approach, integrating compiler, package manager, and REPL into a
 | `yaoxiang update` | ❌ | ✅ | Update dependencies |
 | `yaoxiang fmt` | ✅ | ✅ | Format |
 | `yaoxiang check` | ✅ | ✅ | Type check |
-| `yaoxiang` (no args) | ✅ | ✅ | Enter REPL directly |
+| `yaoxiang` (no arguments) | ✅ | ✅ | Enter REPL directly |
 
-#### Command details
+#### Command Details
 
 | Command | Function | Example |
 |---------|----------|---------|
@@ -191,7 +191,7 @@ Adopt a unified approach, integrating compiler, package manager, and REPL into a
 | `yaoxiang add -D <dep>` | Add dev dependency | `yaoxiang add -D test` |
 | `yaoxiang rm <dep>` | Remove dependency | `yaoxiang rm foo` |
 | `yaoxiang update` | Update all dependencies | `yaoxiang update` |
-| `yaoxiang update foo` | Update specific dependency | `yaoxiang update foo` |
+| `yaoxiang update foo` | Update specified dependency | `yaoxiang update foo` |
 | `yaoxiang install` | Install all dependencies | `yaoxiang install` |
 | `yaoxiang list` | List dependencies | `yaoxiang list` |
 | `yaoxiang outdated` | Check outdated dependencies | `yaoxiang outdated` |
@@ -200,10 +200,10 @@ Adopt a unified approach, integrating compiler, package manager, and REPL into a
 | `yaoxiang clean` | Clean build artifacts | `yaoxiang clean` |
 | `yaoxiang task <name>` | Run custom task | `yaoxiang task lint` |
 
-#### Command constraint notes
+#### Command Constraint Explanation
 
 ```bash
-# Single-file mode: yaoxiang.toml not required
+# Single-file mode: no yaoxiang.toml needed
 yaoxiang run hello.yx   # ✅ Works normally
 yaoxiang add foo        # ❌ Error: not a project directory
 
@@ -214,11 +214,11 @@ yaoxiang build          # ✅ Build project
 yaoxiang add foo        # ✅ Add dependency
 ```
 
-### Backward compatibility
+### Backward Compatibility
 
 - ✅ Existing `use` syntax fully preserved
 - ✅ Existing module resolution logic unchanged
-- ✅ New .yaoxiang/vendor directory doesn't affect existing projects
+- ✅ New .yaoxiang/vendor directory does not affect existing projects
 
 ## Trade-offs
 
@@ -226,50 +226,50 @@ yaoxiang add foo        # ✅ Add dependency
 
 - Unified import syntax, users don't need to care about dependency sources
 - Deterministic builds, lock file ensures build consistency
-- Offline support, can develop offline after downloading to local
-- Source trait enables easy future extensions
+- Offline support, can develop offline after downloading locally
+- Source trait facilitates future extensions
 
 ### Disadvantages
 
-- Additional storage space required (.yaoxiang/vendor directory)
-- Version conflicts require manual resolution by users
+- Requires additional storage space (.yaoxiang/vendor directory)
+- Version conflicts need to be resolved manually by users
 
-## Alternative approaches
+## Alternative Solutions
 
-| Approach | Why not chosen |
+| Solution | Why Not Chosen |
 |----------|----------------|
-| Real-time GitHub access | Security and cache reuse are hard to guarantee |
+| Real-time GitHub access | Security and cache reuse are difficult to guarantee |
 | Global cache ($HOME/.yaoxiang) | Poor isolation, complex version conflicts |
-| Registry only | GitHub is the current mainstream code hosting platform |
+| Registry-only support | GitHub is the current mainstream code hosting platform |
 
-## Implementation strategy
+## Implementation Strategy
 
-### Phase breakdown
+### Phase Division
 
 | Phase | Content |
 |-------|---------|
 | **Phase 1** | toml parsing, local dependencies, lock generation, basic algorithms |
-| **Phase 2** | GitHub support, .yaoxiang/vendor management, download tools |
-| **Future Extensions** | Registry sources, workspaces, integrity checks, dependency overrides |
+| **Phase 2** | GitHub support, .yaoxiang/vendor management, download utilities |
+| **Future Extensions** | Registry source, workspaces, integrity verification, dependency overrides |
 
 ### Dependencies
 
 - No prerequisites
-- Must integrate with `ModuleGraph` (`middle/passes/module/`)
+- Needs integration with `ModuleGraph` (`middle/passes/module/`)
 
 ### Risks
 
 | Risk | Mitigation |
 |------|------------|
 | Complex dependency resolution algorithm | Implement simple version first, add conflict detection later |
-| Unstable Git downloads | Retry and caching mechanisms |
-| Performance issues | Lazy loading, incremental parsing |
+| Unstable Git downloads | Retry and cache mechanisms |
+| Performance issues | Lazy loading, incremental resolution |
 
-## Open questions
+## Open Questions
 
 - [ ] `dev-dependencies` conditional compilation syntax?
 - [ ] Integrity verification algorithm (SHA-256 / BLAKE3)?
-- [ ] `excludes` to exclude specific files from download?
+- [ ] `excludes` to exclude specific files from downloading?
 
 ---
 

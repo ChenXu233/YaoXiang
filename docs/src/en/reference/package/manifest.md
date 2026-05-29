@@ -1,6 +1,6 @@
 ---
 title: yaoxiang.toml Format
-description: Project Configuration File Format Specification
+description: Project configuration file format description
 ---
 
 # yaoxiang.toml Format
@@ -18,16 +18,16 @@ authors = ["author name"]
 license = "MIT"
 
 [dependencies]
-# Regular dependencies
+# regular dependencies
 
 [dev-dependencies]
-# Development dependencies
+# development dependencies
 ```
 
-## Package Section
+## package Section
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|------|------|----------|-------------|
 | `name` | string | Yes | Project name, must follow naming conventions (lowercase letters, numbers, hyphens) |
 | `version` | string | Yes | Semantic version number, follows semver specification |
 | `description` | string | No | Short project description |
@@ -69,16 +69,16 @@ utils = { version = "0.1.0", path = "./utils" }
 bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 ```
 
-### Dependency Field Reference
+### Dependency Field Description
 
 | Field | Type | Description |
-|-------|------|-------------|
-| `version` | string | Version number or range |
+|------|------|-------------|
+| `version` | string | Version number or version range |
 | `git` | string | Git repository URL |
 | `branch` | string | Git branch name |
 | `path` | string | Local relative path |
 
-## Version Syntax
+## Version Number Syntax
 
 | Syntax | Description | Example |
 |--------|-------------|---------|

@@ -1,131 +1,45 @@
-﻿# E4xxx: Generics & Traits
+# E4xxx: Generics and Traits
 
-> Generic parameters and trait constraint errors.
+> Auto-generated from `src/util/diagnostic/codes/`
 
-## E4001: Generic parameter mismatch
+## Error List
 
-Generic parameter count or type mismatch.
+## E4001: Generic constraint violated
 
-```yaoxiang
-identity: [T](x: T) -> T = x;
-result = identity[Int, String](10);  # Too many generic parameters
-```
+**Category**: Generic
 
-```
-error[E4001]: Generic parameter mismatch: expected 1, found 2
-  --> example.yx:2:27
-   |
- 2 | result = identity[Int, String](10);
-   |                            ^^^^^^^^ too many generic parameters
-```
+**Message**: Type does not satisfy the generic constraint
 
-## E4002: Trait bound violated
+**Help**: Ensure the type satisfies all required trait bounds
 
-Trait constraint not satisfied.
+---
 
-```yaoxiang
-double: [T: Addable](x: T) -> T = x + x;
-s = double("hello");  # String does not implement Addable
-```
+## E4002: Trait not found
 
-```
-error[E4002]: Trait bound violated: String does not implement Addable
-  --> example.yx:2:18
-   |
- 2 | s = double("hello");
-   |                  ^^^^^ trait bound `Addable` not satisfied
-```
+**Category**: Generic
 
-## E4003: Associated type error
+**Message**: Referenced trait does not exist
 
-Associated type definition or usage error.
+**Help**: Check the trait name or import the correct trait
 
-```yaoxiang
-# Using type to define interface (RFC-010 syntax)
-type Container = {
-    type Item;  # Associated type
-    get: () -> Item,
-}
-```
+---
 
-```
-error[E4003]: Associated type error
-  --> example.yx:3:5
-   |
- 3 |     type Item;
-   |           ^^^ associated type definition error
-```
+## E4003: Trait implementation missing
 
-## E4004: Duplicate trait implementation
+**Category**: Generic
 
-Duplicate implementation of the same trait (RFC-010 uses interface composition syntax).
+**Message**: Type does not implement the required trait
 
-```yaoxiang
-# Interface definition
-type Printable = {
-    print: () -> Void,
-}
+**Help**: Add a trait implementation for this type
 
-# Implementing interface (list interface name at end of type definition)
-type IntPrinter = {
-    value: Int,
-    Printable,  # Implement Printable interface
-}
+---
 
-type IntPrinter2 = {
-    value: Int,
-    Printable,  # Duplicate implementation
-}
-```
+## E4004: Conflicting trait implementations
 
-```
-error[E4004]: Duplicate trait implementation: Printable is already implemented for Int
-  --> example.yx:10:5
-   |
-10 |     Printable,  # Duplicate implementation
-   |     ^^^^^^^^^^ conflicting implementation
-```
+**Category**: Generic
 
-## E4005: Trait not found
+**Message**: Multiple trait implementations conflict
 
-Required trait not found.
+**Help**: Resolve the conflicting implementations
 
-```yaoxiang
-print_all: [T: MyPrintable](items: List[T]) -> Void = {
-    for item in items {
-        item.print();
-    }
-}
-```
-
-```
-error[E4005]: Trait not found: MyPrintable
-  --> example.yx:1:16
-   |
- 1 | print_all: [T: MyPrintable](items: List[T]) -> Void = {
-   |                ^^^^^^^^^^^ trait not defined
-```
-
-## E4006: Sized bound violated
-
-Sized constraint not satisfied.
-
-```yaoxiang
-store: [T](value: T) -> Void = {
-    # T must be Sized
-}
-```
-
-```
-error[E4006]: Sized bound violated: T may not be sized
-  --> example.yx:1:14
-   |
- 1 | store: [T](value: T) -> Void = {
-   |              ^^^^^^^^^ T does not satisfy `Sized` bound
-```
-
-## Related
-
-- [E1xxx: Type Checking](./E1xxx.md)
-- [E5xxx: Modules & Imports](./E5xxx.md)
-- [Error Code Index](./index.md)
+---
