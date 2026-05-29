@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: Playground
+title: "Playground"
 permalink: /playground/
 
 ---

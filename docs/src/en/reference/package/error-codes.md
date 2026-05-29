@@ -1,5 +1,5 @@
 ---
-title: Error Codes
+title: "Error Codes"
 description: YaoXiang package manager error codes and handling
 ---
 

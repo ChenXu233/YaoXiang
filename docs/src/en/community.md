@@ -1,8 +1,9 @@
+```yaml
 ---
 layout: page
 is_community: true
 title: "Community"
 sidebar: false
-description: "Though I stand alone for now, the sparks will eventually set the prairie ablaze."
-
+description: "Though I'm alone for now, the sparks will eventually spread like a wildfire."
 ---
+```

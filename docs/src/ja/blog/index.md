@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: Blog
+title: "Blog"
 permalink: /blog/
 
 ---

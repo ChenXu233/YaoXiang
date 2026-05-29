@@ -1,6 +1,6 @@
 ```yaml
 ---
-title: RFC-010：統一タイプ構文
+title: "RFC-010：統一タイプ構文"
 ---
 
 # RFC-010: 統一タイプ構文 - name: type = value モデル

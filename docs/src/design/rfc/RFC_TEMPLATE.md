@@ -1,5 +1,5 @@
 ---
-title: RFC 模板
+title: "RFC 模板"
 ---
 
 # RFC [编号]: [提案标题]

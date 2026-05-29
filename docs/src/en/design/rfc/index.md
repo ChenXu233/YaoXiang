@@ -1,5 +1,5 @@
 ---
-title: RFC Index
+title: "RFC Index"
 ---
 
 # YaoXiang RFC (Request for Comments) Index

@@ -1,5 +1,5 @@
 ---
-title: Package Manager
+title: "Package Manager"
 description: YaoXiang Package Manager reference documentation
 ---
 

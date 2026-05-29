@@ -1,5 +1,5 @@
 ---
-title: Формат yaoxiang.lock
+title: "Формат yaoxiang.lock"
 description: Описание формата файла блокировки зависимостей
 ---
 

@@ -1,5 +1,5 @@
 ```yaml
-title: 警告コード
+title: "警告コード"
 description: コンパイラの警告コードと説明
 ```
 

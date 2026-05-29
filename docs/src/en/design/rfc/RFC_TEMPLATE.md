@@ -1,5 +1,5 @@
 ---
-title: RFC Template
+title: "RFC Template"
 ---
 
 # RFC [Number]: [Proposal Title]

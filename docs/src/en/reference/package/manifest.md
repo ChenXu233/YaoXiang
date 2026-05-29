@@ -1,5 +1,5 @@
 ---
-title: yaoxiang.toml Format
+title: "yaoxiang.toml Format"
 description: Project configuration file format description
 ---
 

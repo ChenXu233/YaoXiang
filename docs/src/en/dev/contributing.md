@@ -1,3 +1,4 @@
+```markdown
 ---
 title: Contributing Guide
 description: Learn how to contribute code to the YaoXiang project
@@ -24,15 +25,16 @@ Welcome to contribute code and documentation to the YaoXiang project!
 ## Commit Convention
 
 ```
-feat: new feature
-fix: bug fix
-docs: documentation update
-refactor: refactoring
-test: test related
-chore: build/tool update
+feat: New feature
+fix: Bug fix
+docs: Documentation update
+refactor: Refactoring
+test: Test-related
+chore: Build/tool update
 ```
 
 ## Related Resources
 
 - [GitHub](https://github.com/yaoxiang-lang/yaoxiang)
 - [Issue Tracker](https://github.com/yaoxiang-lang/yaoxiang/issues)
+```
