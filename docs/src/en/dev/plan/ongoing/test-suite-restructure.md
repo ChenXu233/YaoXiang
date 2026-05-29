@@ -4,48 +4,48 @@
 > Branch: refactor/test-suite
 > Date: 2026-05-10
 
-## I. Why Refactor
+## 1. Why Refactor
 
 ### Current Problems
 
-1. **All 1752 tests pass, but real bugs were missed**
-   - match expressions return 0 at runtime (ir_gen doesn't handle Match nodes)
-   - list comprehensions return 0 (ir_gen doesn't handle ListComp nodes)
-   - `x: Int = 42` typed variable declaration fails to parse
+1. **All 1752 tests pass, but real bugs slip through**
+   - Match expressions return 0 at runtime (ir_gen doesn't handle Match nodes)
+   - List comprehensions return 0 (ir_gen doesn't handle ListComp nodes)
+   - `x: Int = 42` typed variable declarations fail parsing
 
-2. **Integration tests only verify compilation success, not runtime output correctness**
+2. **Integration tests only verify compilation succeeds, not runtime output correctness**
    - `tests/integration/interpreter.rs` only does `assert!(result.is_ok())`
    - `tests/integration/execution.rs` is completely commented out
 
-3. **No E2E .yx file organization**
-   - Old and new files mixed: `closure_test.yx` (old) and `spec_features_test.yx` (new) in the same directory
-   - No naming conventions: `closure_test.yx`, `closure_test2.yx`, `mut_param_test.yx`
-   - No coverage planning: no mapping to language spec chapters
+3. **E2E .yx files are disorganized**
+   - Old and new mixed together: `closure_test.yx` (old) and `spec_features_test.yx` (new) in the same directory
+   - Inconsistent naming: `closure_test.yx`, `closure_test2.yx`, `mut_param_test.yx`
+   - No coverage plan: no mapping to language specification sections
 
 4. **Inline tests are fragmented**
-   - `src/frontend/typecheck/tests/` has 23 files, many testing the same thing
-   - scope tests scattered across 4 files
-   - infer tests scattered across 3 files
-   - `typecheck_fixes.rs` appears to be a historical patch leftover
+   - `src/frontend/typecheck/tests/` has 23 files, many testing the same things
+   - Scope tests scattered across 4 files
+   - Infer tests scattered across 3 files
+   - `typecheck_fixes.rs` looks like leftover historical patches
 
 5. **Codegen tests are isolated**
-   - All hand-crafted IR, not through the full parser→typecheck→ir_gen pipeline
-   - Tests "can hand-written IR be translated to bytecode" instead of "does source code compilation produce correct results"
+   - All hand-craft IR, never go through the full parser→typecheck→ir_gen pipeline
+   - Tests "can hand-written IR be translated to bytecode" instead of "is source code compilation correct"
 
 ### Refactoring Goals
 
-1. **Establish a three-layer test system**, each layer with clear responsibilities and coverage standards
-2. **E2E tests can double as benchmarks** — each .yx test file can measure execution time
-3. **Internal tests are normalized** — unified testing conventions, naming, and assertion patterns
-4. **Coverage of key language spec paths** — ensure syntax features defined in the language spec have corresponding tests
+1. **Establish a three-tier test system**, with clear responsibilities and coverage standards at each tier
+2. **E2E tests double as benchmarks** — each .yx test file can measure execution time
+3. **Standardize internal tests** — unified test conventions, naming, and assertion patterns
+4. **Cover language specification critical paths** — ensure every syntax feature defined in the spec has corresponding tests
 
 ---
 
-## II. Three-Layer Test System
+## 2. Three-Tier Test System
 
-### Layer 1: E2E .yx Test Suite (tests/yaoxiang/)
+### Tier 1: E2E .yx Test Suite (tests/yaoxiang/)
 
-Organized by language spec chapters, each file corresponds to one syntax feature.
+Organized by language specification chapters, each file corresponds to one syntax feature.
 
 ```
 tests/yaoxiang/
@@ -53,7 +53,7 @@ tests/yaoxiang/
 │   └── hello.yx
 │
 ├── 01-basics/                # Basic syntax (spec chapters 2/4/5)
-│   ├── variables.yx          # Variable declaration + type inference
+│   ├── variables.yx          # Variable declarations + type inference
 │   ├── typed_vars.yx         # Typed variables x: Int = 42
 │   ├── operators.yx          # All operators
 │   ├── literals.yx           # All literals
@@ -86,17 +86,17 @@ tests/yaoxiang/
 │   ├── imports.yx
 │   └── lib/
 │
-└── 07-errors/                # Error handling (spec chapter 9, marks unimplemented features)
+└── 07-errors/                # Error handling (spec chapter 9, unimplemented features marked)
     ├── result.yx
     └── option.yx
 ```
 
-**File conventions**:
+**File convention**:
 
 ```yaoxiang
 // 01-basics/variables.yx
 // Covers: spec §5.2 Variable declarations, §6.2 Type inference
-// Verifies: Basic declarations, type inference, mutability
+// Validates: basic declarations, type inference, mutability
 // Branch: refactor/test-suite
 // Status: ✅ Runnable
 
@@ -115,13 +115,13 @@ main = {
 }
 ```
 
-**Assertion mechanism**: The Rust test framework captures stdout and verifies that the string `ALL TESTS PASSED` appears in the output of each .yx file.
+**Assertion mechanism**: Rust test framework captures stdout, verifies that the `ALL TESTS PASSED` string appears in each .yx file's output.
 
-**Benchmark extension**: `.yx` test files naturally serve as performance benchmarks — measure execution time on each run. In the future, they can be wrapped with `criterion` to track performance regressions.
+**Benchmark extension**: `.yx` test files naturally serve as performance benchmarks — measure execution time per run. In the future, wrap with `criterion` to track performance regressions.
 
-### Layer 2: Integration Tests (tests/integration/)
+### Tier 2: Integration Tests (tests/integration/)
 
-Test the complete compile+execute pipeline, verify output values.
+Test the complete compile+execute pipeline, validate output values.
 
 | Current file | Action | Description |
 |-------------|--------|-------------|
@@ -129,47 +129,47 @@ Test the complete compile+execute pipeline, verify output values.
 | `execution.rs` | Rewrite (uncomment) | Fix stack overflow, run real .yx files |
 | `codegen.rs` | Keep | Bytecode serialization/deserialization |
 | `codegen_extended.rs` | Keep | opcode/metadata tests |
-| `fstring.rs` | Keep | Add execution verification |
+| `fstring.rs` | Keep | Supplement execution validation |
 | `backends.rs` | Keep | RuntimeValue type tests |
 
-**Supplement**: `tests/yx_runner.rs` — Auto-discover and run all .yx files under `tests/yaoxiang/`.
+**Supplement**: `tests/yx_runner.rs` — auto-discover and run all .yx files under `tests/yaoxiang/`.
 
-### Layer 3: Unit Tests (src/*/tests/)
+### Tier 3: Unit Tests (src/*/tests/)
 
-Test internal logic of individual modules, can access private APIs.
+Test individual module internal logic, can access private APIs.
 
 #### 3.1 Lexer Tests (src/frontend/core/lexer/tests/)
 
-11 files → Delete 1 debug file, keep 10.
+11 files → delete 1 debug file, keep 10.
 
 | Action | File |
 |--------|------|
-| Delete | `debug_lexer.rs` — Debug only |
+| Delete | `debug_lexer.rs` — debug only |
 | Keep | `basic.rs`, `comments.rs`, `keywords.rs`, `literals.rs`, `operators.rs` |
 | Keep | `delimiters.rs`, `errors.rs`, `fstring.rs` |
 | Keep | `rfc004_lexer.rs`, `rfc010_lexer.rs` |
 
 #### 3.2 Parser Tests (src/frontend/core/parser/tests/)
 
-13 files → Minor adjustments after review.
+13 files → review and fine-tune.
 
 | Action | File |
 |--------|------|
 | Keep | `basic.rs`, `fn_def.rs`, `syntax_validation.rs`, `old_syntax_rejection.rs` |
 | Keep | `boundary.rs`, `concurrency.rs`, `fstring.rs` |
 | Keep | `ref_test.rs`, `unsafe_ptr.rs`, `state.rs` |
-| Review | `binding_enhancements.rs` — Check for duplication with fn_def |
+| Review | `binding_enhancements.rs` — check if it duplicates fn_def |
 
 #### 3.3 Typecheck Tests (src/frontend/typecheck/tests/)
 
-**Largest problem area**: 23 files → Merge into 12.
+**Biggest problem area**: 23 files → merge into 12.
 
 | Action | Original file | Target file |
 |--------|--------------|-------------|
 | Merge | `infer.rs` + `inference.rs` + `types.rs` | `type_inference.rs` |
 | Merge | `scope.rs` + `shadowing.rs` + `use_scope.rs` + `use_block_scope.rs` | `scoping.rs` |
 | Merge | `visibility.rs` + `pub_bind.rs` | `visibility.rs` |
-| Review | `typecheck_fixes.rs` | Merge into corresponding file if it's just historical patch testing, then delete |
+| Review | `typecheck_fixes.rs` | If just historical patch tests, merge into corresponding files then delete |
 | Keep | `basic.rs`, `check.rs` | — |
 | Keep | `constraint.rs`, `concurrency.rs`, `fstring.rs` | — |
 | Keep | `gat.rs`, `ref_test.rs`, `result_try.rs` | — |
@@ -179,90 +179,90 @@ Test internal logic of individual modules, can access private APIs.
 
 | Directory | Action |
 |-----------|--------|
-| `codegen/` | Keep existing, **supplement integrated codegen tests** (compile from source to IR verify structure) |
+| `codegen/` | Keep existing, **supplement integrated codegen tests** (compile from source to IR validate structure) |
 | `lifetime/` | Keep as-is |
 | `mono/` | Keep as-is |
 | `module/` | Keep as-is |
 
-## III. Test Standards Documentation
+## 3. Test Standards Documentation
 
-Create `TEST_STANDARD.md` in the same directory, with the following content:
+Create `TEST_STANDARD.md` in the same directory, content:
 
 ### Naming Conventions
 
 ```
-Purpose        Pattern                    Example
-─────────────────────────────────────────────────────────────────────────
-Test module    mod_<description>_tests     mod_parser_basic_tests
-Test function  test_<feature>_<scenario>   test_parse_fn_def_no_params
-E2E file       <chapter>-<feature>.yx      01-basics-variables.yx
+Purpose      Pattern                     Example
+────────────────────────────────────────────────────
+Test module   mod_<description>_tests      mod_parser_basic_tests
+Test fn      test_<feature>_<scenario>     test_parse_fn_def_no_params
+E2E file     <chapter>-<feature>.yx        01-basics-variables.yx
 ```
 
 ### Assertion Conventions
 
-- E2E `.yx` files: Output `ALL TESTS PASSED` at the end
-- Integration tests: Verify stdout contains expected values
-- Unit tests: Verify data structure field values, don't use `assert!(result.is_ok())` as the sole assertion
+- E2E `.yx` files: output `ALL TESTS PASSED` at the end
+- Integration tests: verify stdout contains expected values
+- Unit tests: verify data structure field values, don't use `assert!(result.is_ok())` as the sole assertion
 
 ### Comment Conventions
 
 ```
 // E2E file header:
- // Covers: spec §X.X
-// Verifies: One-sentence description
+// Covers: spec §X.X
+// Validates: one-line description
 // Branch: refactor/test-suite
 // Status: ✅ Runnable / ⚠️ Needs Fix / 🔴 Not Implemented
 ```
 
 ### Handling Unimplemented Features
 
-- E2E `.yx` for non-existent features: Don't write tests, add them after implementation
-- Unit tests referencing unimplemented features: Mark with `#[ignore]`, comment "Enable after XXX is implemented"
+- E2E `.yx` for non-existent features: don't write tests, add when implemented
+- Unit tests referencing unimplemented features: mark with `#[ignore]`, comment "Enable after XXX is implemented"
 
 ---
 
-## IV. Execution Plan
+## 4. Execution Plan
 
 ### Phase 0: Preparation
 
 - [ ] Create branch `refactor/test-suite` from `dev`
-- [ ] Review `typecheck_fixes.rs` and `binding_enhancements.rs`, determine if they should be deleted
-- [ ] Review the stack overflow issue in `tests/integration/execution.rs`
+- [ ] Review `typecheck_fixes.rs` and `binding_enhancements.rs`, determine if delete
+- [ ] Review `tests/integration/execution.rs` stack overflow issue
 
 ### Phase 1: E2E Test Framework
 
-- [ ] Create `tests/yx_runner.rs` — Auto-discover and run `tests/yaoxiang/**/*.yx`
-- [ ] Create new directory structure for `tests/yaoxiang/`
+- [ ] Create `tests/yx_runner.rs` — auto-discover and run `tests/yaoxiang/**/*.yx`
+- [ ] Create `tests/yaoxiang/` new directory structure
 - [ ] Write 00-smoke smoke tests
-- [ ] Write 01-basics layer (currently runnable syntax)
-- [ ] Write 02-functions layer
+- [ ] Write 01-basics tier (currently runnable syntax)
+- [ ] Write 02-functions tier
 
 ### Phase 2: Runtime Bug Fixes + Corresponding Tests
 
-- [ ] Fix match expressions (ir_gen adds Match handling)
-- [ ] Fix list comprehensions (ir_gen adds ListComp handling)
+- [ ] Fix match expressions (ir_gen add Match handling)
+- [ ] Fix list comprehensions (ir_gen add ListComp handling)
 - [ ] Fix `x: Int = 42` variable type annotation
 - [ ] Add corresponding .yx E2E tests for the above fixes
 
 ### Phase 3: Integration Test Rewrite
 
-- [ ] Rewrite `tests/integration/interpreter.rs` (verify runtime output values)
+- [ ] Rewrite `tests/integration/interpreter.rs` (validate runtime output values)
 - [ ] Rewrite `tests/integration/execution.rs` (fix stack overflow)
-- [ ] Supplement integrated codegen tests (from source code to IR)
+- [ ] Supplement integrated codegen tests (from source to IR)
 
 ### Phase 4: Inline Test Consolidation
 
-- [ ] typecheck tests 23→12 merge
+- [ ] Consolidate typecheck tests 23→12
 - [ ] Delete `debug_lexer.rs`
 - [ ] Review parser test duplicates
 
-### Phase 5: Create Test Standards Documentation
+### Phase 5: Create Test Standards Document
 
-- [ ] Create `TEST_STANDARDS.md` in `tests/yaoxiang/` root directory
+- [ ] Create `TEST_STANDARDS.md` at `tests/yaoxiang/` root
 
 ---
 
-## V. Verification Methods
+## 5. Verification Methods
 
 ```bash
 # All tests
@@ -274,19 +274,18 @@ cargo test --test yx_runner
 # Unit tests
 cargo test --lib
 
-# Manually run .yx file
+# Manual .yx file run
 cargo run -- run tests/yaoxiang/01-basics/variables.yx
 
-# Benchmark run
+# benchmark run
 cargo bench
 ```
 
 ---
 
-## VI. File Checklist
+## 6. File清单 Affected Files List
 
 ### New Files
-
 - `tests/yx_runner.rs` — E2E test runner
 - `tests/yaoxiang/TEST_STANDARDS.md` — Test standards
 - `tests/yaoxiang/00-smoke/hello.yx`
@@ -308,7 +307,6 @@ cargo bench
 - `tests/yaoxiang/06-modules/lib/math.yx`
 
 ### Files to Delete
-
 - `tests/yaoxiang/closure_test.yx`
 - `tests/yaoxiang/closure_test2.yx`
 - `tests/yaoxiang/list_test.yx`
@@ -322,9 +320,8 @@ cargo bench
 - `src/frontend/core/lexer/tests/debug_lexer.rs` (pending confirmation)
 
 ### Files to Modify
-
-- `tests/integration/interpreter.rs` — Rewrite
-- `tests/integration/execution.rs` — Rewrite
-- `src/frontend/core/ir_gen.rs` — Fix match and listcomp
-- `src/frontend/typecheck/` — Fix `x: Int = 42`
-- `src/frontend/typecheck/tests/` — Merge 23→12 files
+- `tests/integration/interpreter.rs` — rewrite
+- `tests/integration/execution.rs` — rewrite
+- `src/frontend/core/ir_gen.rs` — fix match and listcomp
+- `src/frontend/typecheck/` — fix `x: Int = 42`
+- `src/frontend/typecheck/tests/` — consolidate 23→12 files
