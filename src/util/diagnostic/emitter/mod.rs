@@ -1,5 +1,6 @@
 //! 诊断输出模块
 
+pub mod ansi;
 pub mod json;
 pub mod rich;
 pub mod text;
