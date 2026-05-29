@@ -9,11 +9,11 @@
       "link": "/ru/download"
     },
     {
-      "text": "Руководство",
+      "text": "Учебник",
       "link": "/ru/tutorial/"
     },
     {
-      "text": "Гайды",
+      "text": "Руководство",
       "link": "/ru/guide/"
     },
     {
@@ -32,7 +32,7 @@
           "link": "/ru/dev/"
         },
         {
-          "text": "Песочница",
+          "text": "Площадка",
           "link": "/ru/playground/"
         },
         {
@@ -48,15 +48,18 @@
           "link": "/ru/blog/"
         }
       ]
+    },
+    {
+      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
-    "/tutorial/": [
+    "/ru/tutorial/": [
       {
-        "text": "Документация руководства",
+        "text": "Документация учебника",
         "items": [
           {
-            "text": "Главная страница руководства",
+            "text": "Главная учебника",
             "link": "/ru/tutorial/"
           },
           {
@@ -64,7 +67,7 @@
             "link": "/ru/tutorial/getting-started"
           },
           {
-            "text": "Справочник по YaoXiang",
+            "text": "Руководство по ЯоСян",
             "link": "/ru/tutorial/YaoXiang-book"
           },
           {
@@ -75,12 +78,12 @@
         ]
       }
     ],
-    "/design/": [
+    "/ru/design/": [
       {
         "text": "Документация по дизайну",
         "items": [
           {
-            "text": "Содержание дизайна",
+            "text": "Каталог дизайна",
             "link": "/ru/design"
           },
           {
@@ -88,24 +91,24 @@
             "link": "/ru/reference/language-spec/"
           },
           {
-            "text": "Манифест YaoXiang",
+            "text": "Манифест ЯоСян",
             "link": "/ru/design/manifesto"
           },
           {
-            "text": "Манифест YaoXiang WTF версия",
+            "text": "Манифест ЯоСян WTF版",
             "link": "/ru/design/manifesto-wtf"
           },
           {
-            "text": "Взгляд на дизайн языка от человека, родившегося в 2006",
+            "text": "Взгляд на дизайн языка от человека, родившегося в 2006 году",
             "link": "/ru/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "RFC документация",
+        "text": "Документация RFC",
         "items": [
           {
-            "text": "Содержание RFC",
+            "text": "Каталог RFC",
             "link": "/ru/design/rfc"
           },
           {
@@ -117,34 +120,34 @@
             "link": "/ru/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
-            "text": "Принято",
+            "text": "Принятые",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "В процессе",
+            "text": "На рассмотрении",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "Черновик",
+            "text": "Черновики",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "Отклонено",
+            "text": "Отклонённые",
             "collapsed": true,
             "items": []
           }
         ]
       }
     ],
-    "/reference/": [
+    "/ru/reference/": [
       {
-        "text": "Справочная документация",
+        "text": "Справочные материалы",
         "items": [
           {
-            "text": "Содержание справочника",
+            "text": "Каталог справочника",
             "link": "/ru/reference"
           },
           {
@@ -187,24 +190,24 @@
         "items": []
       }
     ],
-    "/dev/": [
+    "/ru/dev/": [
       {
-        "text": "Документация по разработке",
+        "text": "Документация разработки",
         "items": [
           {
-            "text": "Содержание разработки",
+            "text": "Каталог разработки",
             "link": "/ru/dev/"
           },
           {
-            "text": "Руководство по участию",
+            "text": "Руководство участника",
             "link": "/ru/dev/contributing"
           },
           {
-            "text": "Руководство по коммитам",
+            "text": "Соглашение о коммитах",
             "link": "/ru/dev/commit-convention"
           },
           {
-            "text": "Руководство по ветвлению",
+            "text": "Руководство по веткам",
             "link": "/ru/dev/branch-maintenance-guide"
           }
         ]
@@ -213,28 +216,23 @@
         "text": "Планы",
         "items": [
           {
-            "text": "Содержание планов",
+            "text": "Каталог планов",
             "link": "/ru/dev/plan"
           },
           {
-            "text": "В обработке",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "Завершено",
+            "text": "В процессе",
             "collapsed": true,
             "items": []
           }
         ]
       }
     ],
-    "/guide/": [
+    "/ru/guide/": [
       {
-        "text": "Документация-гайды",
+        "text": "Документация руководства",
         "items": [
           {
-            "text": "Содержание гайдов",
+            "text": "Каталог руководства",
             "link": "/ru/guide/"
           },
           {
@@ -244,7 +242,7 @@
         ]
       }
     ],
-    "/": [
+    "/ru/": [
       {
         "text": "Документация на китайском",
         "items": [
@@ -253,7 +251,7 @@
             "link": "/ru/getting-started"
           },
           {
-            "text": "Руководство",
+            "text": "Учебник",
             "link": "/ru/tutorial/"
           }
         ]

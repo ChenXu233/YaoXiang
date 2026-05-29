@@ -1,7 +1,7 @@
 {
   "nav": [
     {
-      "text": "ホームページ",
+      "text": "ホーム",
       "link": "/ja/"
     },
     {
@@ -21,7 +21,7 @@
       "link": "/ja/reference/"
     },
     {
-      "text": "もっと見る",
+      "text": "もっと",
       "items": [
         {
           "text": "デザイン",
@@ -48,9 +48,6 @@
           "link": "/ja/blog/"
         }
       ]
-    },
-    {
-      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
@@ -67,11 +64,11 @@
             "link": "/ja/tutorial/getting-started"
           },
           {
-            "text": "爻象マニュアル",
+            "text": "爻象手册",
             "link": "/ja/tutorial/YaoXiang-book"
           },
           {
-            "text": "初心者向け入門",
+            "text": "ゼロからの入門",
             "collapsed": true,
             "items": []
           }
@@ -83,7 +80,7 @@
         "text": "デザインドキュメント",
         "items": [
           {
-            "text": "デザイン目次",
+            "text": "デザインディレクトリ",
             "link": "/ja/design"
           },
           {
@@ -91,15 +88,15 @@
             "link": "/ja/reference/language-spec/"
           },
           {
-            "text": "爻象マニフェスト",
+            "text": "爻象宣言",
             "link": "/ja/design/manifesto"
           },
           {
-            "text": "爻象マニフェスト WTF版",
+            "text": "爻象宣言 WTF版",
             "link": "/ja/design/manifesto-wtf"
           },
           {
-            "text": "2006年生まれの人の言語設計観",
+            "text": "2006年生まれの言語設計観",
             "link": "/ja/design/2006-born-language-design"
           }
         ]
@@ -108,7 +105,7 @@
         "text": "RFCドキュメント",
         "items": [
           {
-            "text": "RFC目次",
+            "text": "RFCディレクトリ",
             "link": "/ja/design/rfc"
           },
           {
@@ -135,7 +132,7 @@
             "items": []
           },
           {
-            "text": "却下済み",
+            "text": "却下",
             "collapsed": true,
             "items": []
           }
@@ -144,10 +141,10 @@
     ],
     "/reference/": [
       {
-        "text": "リファレンシードキュメント",
+        "text": "リファレンスドキュメント",
         "items": [
           {
-            "text": "リファレンス目次",
+            "text": "リファレンスディレクトリ",
             "link": "/ja/reference"
           },
           {
@@ -185,7 +182,7 @@
         "items": []
       },
       {
-        "text": "パッケージ管理系统",
+        "text": "パッケージ管理システム",
         "collapsed": true,
         "items": []
       }
@@ -195,11 +192,11 @@
         "text": "開発ドキュメント",
         "items": [
           {
-            "text": "開発目次",
+            "text": "開発ディレクトリ",
             "link": "/ja/dev/"
           },
           {
-            "text": "貢献ガイド",
+            "text": "コントリビューションガイド",
             "link": "/ja/dev/contributing"
           },
           {
@@ -207,7 +204,7 @@
             "link": "/ja/dev/commit-convention"
           },
           {
-            "text": "ブランチメンテナンスガイド",
+            "text": "ブランチガイド",
             "link": "/ja/dev/branch-maintenance-guide"
           }
         ]
@@ -216,16 +213,11 @@
         "text": "計画",
         "items": [
           {
-            "text": "計画目次",
+            "text": "計画ディレクトリ",
             "link": "/ja/dev/plan"
           },
           {
-            "text": "進行中",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "完了済み",
+            "text": "処理中",
             "collapsed": true,
             "items": []
           }
@@ -237,11 +229,11 @@
         "text": "ガイドドキュメント",
         "items": [
           {
-            "text": "ガイド目次",
+            "text": "ガイドディレクトリ",
             "link": "/ja/guide/"
           },
           {
-            "text": "パッケージ管理",
+            "text": "パッケージ管理システム",
             "link": "/ja/guide/packaging"
           }
         ]
@@ -249,7 +241,7 @@
     ],
     "/": [
       {
-        "text": "日本語ドキュメント",
+        "text": "中国語ドキュメント",
         "items": [
           {
             "text": "クイックスタート",
