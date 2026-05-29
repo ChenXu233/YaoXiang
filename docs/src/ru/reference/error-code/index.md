@@ -1,0 +1,56 @@
+# Справочник кодов ошибок
+
+> Автоматически сгенерировано из `src/util/diagnostic/codes/`
+
+Компилятор YaoXiang использует унифицированную систему кодов ошибок, где каждый код ошибки содержит:
+
+- **Код**: Идентификатор ошибки (например, `E1001`)
+- **Категория**: Этап, к которому относится ошибка
+- **Заголовок**: Краткое описание ошибки
+- **Сообщение**: Подробное сообщение об ошибке
+- **Справка**: Возможные решения
+
+## Список кодов ошибок
+
+| Префикс | Категория | Описание |
+|---------|-----------|----------|
+| E0xxx | Lexer/Parser | Ошибки лексического и синтаксического анализа |
+| E1xxx | TypeCheck | Ошибки проверки типов |
+| E2xxx | Semantic | Ошибки семантического анализа |
+| E4xxx | Generic | Ошибки generics и trait |
+| E5xxx | Module | Ошибки module и import |
+| E6xxx | Runtime | Ошибки runtime |
+| E7xxx | I/O | Ошибки I/O и системы |
+| E8xxx | Internal | Внутренние ошибки компилятора |
+
+## Инструкция по использованию
+
+### CLI команды
+
+Используйте команду `yaoxiang explain` для просмотра деталей ошибки:
+
+```bash
+# Просмотр деталей ошибки
+yaoxiang explain E1001
+
+# Вывод в формате JSON
+yaoxiang explain E1001 --json
+```
+
+### В коде
+
+```rust
+use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
+
+// Поиск кода ошибки и получение заголовка и справки через I18nRegistry
+let i18n = I18nRegistry::default();
+
+if let Some(code) = ErrorCodeDefinition::find("E1001") {
+    let title = i18n.get_title(&code);
+    println!("Title: {}", title);
+
+    if let Some(help) = i18n.get_help(&code) {
+        println!("Help: {}", help);
+    }
+}
+```
