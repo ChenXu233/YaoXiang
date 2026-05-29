@@ -1,0 +1,263 @@
+{
+  "nav": [
+    {
+      "text": "Home",
+      "link": "/en/"
+    },
+    {
+      "text": "Download",
+      "link": "/en/download"
+    },
+    {
+      "text": "Tutorial",
+      "link": "/en/tutorial/"
+    },
+    {
+      "text": "Guide",
+      "link": "/en/guide/"
+    },
+    {
+      "text": "Reference",
+      "link": "/en/reference/"
+    },
+    {
+      "text": "More",
+      "items": [
+        {
+          "text": "Design",
+          "link": "/en/design/"
+        },
+        {
+          "text": "Development",
+          "link": "/en/dev/"
+        },
+        {
+          "text": "Playground",
+          "link": "/en/playground/"
+        },
+        {
+          "text": "Tools",
+          "link": "/en/tools/"
+        },
+        {
+          "text": "Community",
+          "link": "/en/community/"
+        },
+        {
+          "text": "Blog",
+          "link": "/en/blog/"
+        }
+      ]
+    }
+  ],
+  "sidebar": {
+    "/en/tutorial/": [
+      {
+        "text": "Tutorial Documentation",
+        "items": [
+          {
+            "text": "Tutorial Home",
+            "link": "/en/tutorial/"
+          },
+          {
+            "text": "Quick Start",
+            "link": "/en/tutorial/getting-started"
+          },
+          {
+            "text": "YaoXiang Manual",
+            "link": "/en/tutorial/YaoXiang-book"
+          },
+          {
+            "text": "Beginner's Guide",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/en/design/": [
+      {
+        "text": "Design Documentation",
+        "items": [
+          {
+            "text": "Design Index",
+            "link": "/en/design"
+          },
+          {
+            "text": "Language Specification",
+            "link": "/en/reference/language-spec/"
+          },
+          {
+            "text": "YaoXiang Manifesto",
+            "link": "/en/design/manifesto"
+          },
+          {
+            "text": "YaoXiang Manifesto WTF Edition",
+            "link": "/en/design/manifesto-wtf"
+          },
+          {
+            "text": "Language Design Views from a 2006-born Developer",
+            "link": "/en/design/2006-born-language-design"
+          }
+        ]
+      },
+      {
+        "text": "RFC Documentation",
+        "items": [
+          {
+            "text": "RFC Index",
+            "link": "/en/design/rfc"
+          },
+          {
+            "text": "RFC Template",
+            "link": "/en/design/rfc/RFC_TEMPLATE"
+          },
+          {
+            "text": "Full RFC Template (Example)",
+            "link": "/en/design/rfc/EXAMPLE_full_feature_proposal"
+          },
+          {
+            "text": "Accepted",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "In Review",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Draft",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Rejected",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/en/reference/": [
+      {
+        "text": "Reference Documentation",
+        "items": [
+          {
+            "text": "Reference Index",
+            "link": "/en/reference"
+          },
+          {
+            "text": "Language Specification",
+            "link": "/en/reference/language-spec/"
+          },
+          {
+            "text": "Syntax Specification",
+            "link": "/en/reference/language-spec/syntax"
+          },
+          {
+            "text": "Type System",
+            "link": "/en/reference/language-spec/type-system"
+          },
+          {
+            "text": "Module System",
+            "link": "/en/reference/language-spec/modules"
+          },
+          {
+            "text": "Concurrency Model",
+            "link": "/en/reference/language-spec/concurrency"
+          },
+          {
+            "text": "Standard Library",
+            "link": "/en/reference/language-spec/stdlib"
+          }
+        ]
+      },
+      {
+        "text": "Error Codes",
+        "items": []
+      },
+      {
+        "text": "Warning Codes",
+        "items": []
+      },
+      {
+        "text": "Package Management System",
+        "collapsed": true,
+        "items": []
+      }
+    ],
+    "/en/dev/": [
+      {
+        "text": "Development Documentation",
+        "items": [
+          {
+            "text": "Development Index",
+            "link": "/en/dev/"
+          },
+          {
+            "text": "Contributing Guide",
+            "link": "/en/dev/contributing"
+          },
+          {
+            "text": "Commit Convention",
+            "link": "/en/dev/commit-convention"
+          },
+          {
+            "text": "Branch Maintenance Guide",
+            "link": "/en/dev/branch-maintenance-guide"
+          }
+        ]
+      },
+      {
+        "text": "Plans",
+        "items": [
+          {
+            "text": "Plan Index",
+            "link": "/en/dev/plan"
+          },
+          {
+            "text": "In Progress",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Completed",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/en/guide/": [
+      {
+        "text": "Guide Documentation",
+        "items": [
+          {
+            "text": "Guide Index",
+            "link": "/en/guide/"
+          },
+          {
+            "text": "Package Management System",
+            "link": "/en/guide/packaging"
+          }
+        ]
+      }
+    ],
+    "/en/": [
+      {
+        "text": "Documentation",
+        "items": [
+          {
+            "text": "Quick Start",
+            "link": "/en/getting-started"
+          },
+          {
+            "text": "Tutorial",
+            "link": "/en/tutorial/"
+          }
+        ]
+      }
+    ]
+  }
+}

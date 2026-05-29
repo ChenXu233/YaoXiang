@@ -1,0 +1,266 @@
+{
+  "nav": [
+    {
+      "text": "ホームページ",
+      "link": "/ja/"
+    },
+    {
+      "text": "ダウンロード",
+      "link": "/ja/download"
+    },
+    {
+      "text": "チュートリアル",
+      "link": "/ja/tutorial/"
+    },
+    {
+      "text": "ガイド",
+      "link": "/ja/guide/"
+    },
+    {
+      "text": "リファレンス",
+      "link": "/ja/reference/"
+    },
+    {
+      "text": "もっと見る",
+      "items": [
+        {
+          "text": "デザイン",
+          "link": "/ja/design/"
+        },
+        {
+          "text": "開発",
+          "link": "/ja/dev/"
+        },
+        {
+          "text": "プレイグラウンド",
+          "link": "/ja/playground/"
+        },
+        {
+          "text": "ツール",
+          "link": "/ja/tools/"
+        },
+        {
+          "text": "コミュニティ",
+          "link": "/ja/community/"
+        },
+        {
+          "text": "ブログ",
+          "link": "/ja/blog/"
+        }
+      ]
+    },
+    {
+      "component": "VersionSwitcher"
+    }
+  ],
+  "sidebar": {
+    "/tutorial/": [
+      {
+        "text": "チュートリアルドキュメント",
+        "items": [
+          {
+            "text": "チュートリアルホーム",
+            "link": "/ja/tutorial/"
+          },
+          {
+            "text": "クイックスタート",
+            "link": "/ja/tutorial/getting-started"
+          },
+          {
+            "text": "爻象マニュアル",
+            "link": "/ja/tutorial/YaoXiang-book"
+          },
+          {
+            "text": "初心者向け入門",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/design/": [
+      {
+        "text": "デザインドキュメント",
+        "items": [
+          {
+            "text": "デザイン目次",
+            "link": "/ja/design"
+          },
+          {
+            "text": "言語仕様",
+            "link": "/ja/reference/language-spec/"
+          },
+          {
+            "text": "爻象マニフェスト",
+            "link": "/ja/design/manifesto"
+          },
+          {
+            "text": "爻象マニフェスト WTF版",
+            "link": "/ja/design/manifesto-wtf"
+          },
+          {
+            "text": "2006年生まれの人の言語設計観",
+            "link": "/ja/design/2006-born-language-design"
+          }
+        ]
+      },
+      {
+        "text": "RFCドキュメント",
+        "items": [
+          {
+            "text": "RFC目次",
+            "link": "/ja/design/rfc"
+          },
+          {
+            "text": "RFCテンプレート",
+            "link": "/ja/design/rfc/RFC_TEMPLATE"
+          },
+          {
+            "text": "RFC完全テンプレート（例）",
+            "link": "/ja/design/rfc/EXAMPLE_full_feature_proposal"
+          },
+          {
+            "text": "承認済み",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "進行中",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "草案",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "却下済み",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/reference/": [
+      {
+        "text": "リファレンシードキュメント",
+        "items": [
+          {
+            "text": "リファレンス目次",
+            "link": "/ja/reference"
+          },
+          {
+            "text": "言語仕様",
+            "link": "/ja/reference/language-spec/"
+          },
+          {
+            "text": "構文仕様",
+            "link": "/ja/reference/language-spec/syntax"
+          },
+          {
+            "text": "型システム",
+            "link": "/ja/reference/language-spec/type-system"
+          },
+          {
+            "text": "モジュールシステム",
+            "link": "/ja/reference/language-spec/modules"
+          },
+          {
+            "text": "並行モデル",
+            "link": "/ja/reference/language-spec/concurrency"
+          },
+          {
+            "text": "標準ライブラリ",
+            "link": "/ja/reference/language-spec/stdlib"
+          }
+        ]
+      },
+      {
+        "text": "エラーコード",
+        "items": []
+      },
+      {
+        "text": "警告コード",
+        "items": []
+      },
+      {
+        "text": "パッケージ管理系统",
+        "collapsed": true,
+        "items": []
+      }
+    ],
+    "/dev/": [
+      {
+        "text": "開発ドキュメント",
+        "items": [
+          {
+            "text": "開発目次",
+            "link": "/ja/dev/"
+          },
+          {
+            "text": "貢献ガイド",
+            "link": "/ja/dev/contributing"
+          },
+          {
+            "text": "コミットガイド",
+            "link": "/ja/dev/commit-convention"
+          },
+          {
+            "text": "ブランチメンテナンスガイド",
+            "link": "/ja/dev/branch-maintenance-guide"
+          }
+        ]
+      },
+      {
+        "text": "計画",
+        "items": [
+          {
+            "text": "計画目次",
+            "link": "/ja/dev/plan"
+          },
+          {
+            "text": "進行中",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "完了済み",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/guide/": [
+      {
+        "text": "ガイドドキュメント",
+        "items": [
+          {
+            "text": "ガイド目次",
+            "link": "/ja/guide/"
+          },
+          {
+            "text": "パッケージ管理",
+            "link": "/ja/guide/packaging"
+          }
+        ]
+      }
+    ],
+    "/": [
+      {
+        "text": "日本語ドキュメント",
+        "items": [
+          {
+            "text": "クイックスタート",
+            "link": "/ja/getting-started"
+          },
+          {
+            "text": "チュートリアル",
+            "link": "/ja/tutorial/"
+          }
+        ]
+      }
+    ]
+  }
+}
