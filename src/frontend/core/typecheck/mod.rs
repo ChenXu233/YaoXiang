@@ -172,7 +172,7 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
 
 /// 注册标准库 native 函数类型签名到类型环境
 ///
-/// 这些签名用于类型检查 `Native("...")` 表达式，确保调用签名匹配。
+/// 这些签名用于类型检查 `native("...")` 表达式，确保调用签名匹配。
 /// 通过 ModuleRegistry 自动发现所有 std 模块的 native 函数。
 pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     use crate::frontend::module::registry::ModuleRegistry;

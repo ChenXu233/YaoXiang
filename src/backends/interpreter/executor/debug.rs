@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn test_result_try_propagates_task_failure_to_top_level() {
         let code = r#"
-            fail_native: () -> Result(Int, String) = Native("fail_native")
+            fail_native: () -> Result(Int, String) = native("fail_native")
 
             fail: () -> Result(Int, String) = () => {
                 return fail_native()

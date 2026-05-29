@@ -748,8 +748,11 @@ impl AstToIrGenerator {
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
-        // 检测 Native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
+        //
+        // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
+        // Native 是 std.ffi 模块中真实存在的函数，名称通过 SHORT_TO_QUALIFIED 解析。
         if stmts.is_empty() {
             if let Some(expr_box) = expr {
                 if let ast::Expr::Call {
@@ -759,11 +762,10 @@ impl AstToIrGenerator {
                     span: _,
                 } = expr_box.as_ref()
                 {
-                    if let Some(native_symbol) = crate::std::ffi::detect_native_binding(func, args)
+                    if let Some(symbol) = crate::std::ffi::extract_native_binding_symbol(func, args)
                     {
-                        // 记录 native 绑定，跳过函数体生成
                         self.native_bindings
-                            .push(crate::std::ffi::NativeBinding::new(name, &native_symbol));
+                            .push(crate::std::ffi::NativeBinding::new(name, &symbol));
                         return Ok(None);
                     }
                 }
