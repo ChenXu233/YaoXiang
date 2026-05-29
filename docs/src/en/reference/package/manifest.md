@@ -1,6 +1,6 @@
 ---
 title: "yaoxiang.toml Format"
-description: Project configuration file format description
+description: "Project manifest file format description"
 ---
 
 # yaoxiang.toml Format
@@ -11,10 +11,10 @@ description: Project configuration file format description
 
 ```toml
 [package]
-name = "project name"
+name = "project-name"
 version = "0.1.0"
-description = "project description"
-authors = ["author name"]
+description = "project-description"
+authors = ["author-name"]
 license = "MIT"
 
 [dependencies]
@@ -27,7 +27,7 @@ license = "MIT"
 ## package Section
 
 | Field | Type | Required | Description |
-|------|------|----------|-------------|
+|-------|------|----------|-------------|
 | `name` | string | Yes | Project name, must follow naming conventions (lowercase letters, numbers, hyphens) |
 | `version` | string | Yes | Semantic version number, follows semver specification |
 | `description` | string | No | Short project description |
@@ -41,7 +41,7 @@ license = "MIT"
 name = "my-awesome-app"
 version = "1.2.3"
 description = "An awesome application"
-authors = ["Zhang San <zhangsan@example.com>"]
+authors = ["John Doe <john@example.com>"]
 license = "MIT"
 ```
 
@@ -72,7 +72,7 @@ bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 ### Dependency Field Description
 
 | Field | Type | Description |
-|------|------|-------------|
+|-------|------|-------------|
 | `version` | string | Version number or version range |
 | `git` | string | Git repository URL |
 | `branch` | string | Git branch name |

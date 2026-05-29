@@ -1,5 +1,5 @@
 ---
-title: 'RFC-003: Version Planning'
+title: "RFC-003: Version Planning"
 ---
 
 # RFC-003: Version Planning
@@ -11,43 +11,43 @@ title: 'RFC-003: Version Planning'
 
 ## Abstract
 
-Version release plan for YaoXiang, roadmap from v0.1 to v1.0.
+The version release plan for YaoXiang, a roadmap from v0.1 to v1.0.
 
-**Core Objectives**:
-1. **Bytecode Compilation**: Support REPL and incremental compilation
-2. **Bootstrap**: Write YaoXiang compiler using YaoXiang
+**Core Goals**:
+1. **Bytecode Compilation**: Support for REPL and incremental compilation
+2. **Bootstrap**: Write the YaoXiang compiler in YaoXiang
 3. **AOT Compilation**: Compile bytecode to native machine code
 
 ## 1. Motivation
 
-### Why Version Planning is Needed?
+### Why Do We Need Version Planning?
 
 1. **Project Management**: Break down goals into executable milestones
-2. **User Expectations**: Let users understand the development stage of the language
+2. **User Expectations**: Let users understand the development stages of the language
 3. **Resource Allocation**: Clarify focus areas for each phase
-4. **Risk Control**: Identify issues promptly and adjust direction
+4. **Risk Control**: Identify issues early and adjust direction
 
 ### Core Design Decisions
 
 - **Bytecode First**: Implement interpreter execution first, then consider AOT
 - **Incremental Delivery**: Every version has usable features
-- **Backward Compatibility**: API may change before v1.0, but advance notice will be given
-- **Bootstrap Verification**: Prove language expressiveness through self-hosting
-- **Performance Tiering**: Get it working first, then optimize
+- **Backward Compatibility**: APIs may change before v1.0, but with advance notice
+- **Bootstrap Verification**: Prove the language's expressiveness through bootstrapping
+- **Performance Layering**: Get it working first, then optimize
 
 ## 2. Component Status (Phase)
 
 | Phase | Module | Status | Location | Last Updated |
 |-------|--------|--------|----------|--------------|
-| P1 | Lexer | ✅ Complete | `src/frontend/lexer/` | 2025-01-23 |
-| P2 | Type Checker | ✅ Complete | `src/frontend/typecheck/` | 2025-01-23 |
-| P3 | Bytecode Generator | ✅ Complete | `src/middle/codegen/` | 2025-01-25 |
-| P4 | Virtual Machine | ✅ Complete | `src/middle/` | 2025-01-25 |
-| P4.1 | Task System | ✅ Complete | `src/backends/runtime/task.rs` | 2025-01-23 |
-| P4.2 | DAG Scheduler | 🔶 Design Complete | `.claude/plan/flow-scheduler-implementation.md` | 2026-01-04 |
-| P5 | Standard Library | ⚠️ Partially Complete | `src/std/` | 2025-01-23 |
-| P6 | TUI REPL | ✅ Complete | `src/backends/dev/repl/` | 2025-01-24 |
-| P7 | Generics System | ✅ Complete | `docs/design/rfc/011-generic-type-system.md` | 2025-01-25 |
+| P1 | Lexer | ✅ Done | `src/frontend/lexer/` | 2025-01-23 |
+| P2 | Type Checker | ✅ Done | `src/frontend/typecheck/` | 2025-01-23 |
+| P3 | Bytecode Generator | ✅ Done | `src/middle/codegen/` | 2025-01-25 |
+| P4 | Virtual Machine | ✅ Done | `src/middle/` | 2025-01-25 |
+| P4.1 | Task System | ✅ Done | `src/backends/runtime/task.rs` | 2025-01-23 |
+| P4.2 | DAG Scheduler | 🔶 Design Done | `.claude/plan/flow-scheduler-implementation.md` | 2026-01-04 |
+| P5 | Standard Library | ⚠️ Partially Done | `src/std/` | 2025-01-23 |
+| P6 | TUI REPL | ✅ Done | `src/backends/dev/repl/` | 2025-01-24 |
+| P7 | Generics System | ✅ Done | `docs/design/rfc/011-generic-type-system.md` | 2025-01-25 |
 
 **Core Achievements**:
 - ✅ Compiler frontend fully implemented (P1-P2)
@@ -62,11 +62,11 @@ Version release plan for YaoXiang, roadmap from v0.1 to v1.0.
 
 ### v0.1: Runnable Milestone ✅
 
-**Status**: Basic completion (2025-01-25)
+**Status**: Basically complete (2025-01-25)
 
 **Completed**:
-- ✅ Complete lexer, parser, type checker
-- ✅ Bytecode generation available
+- ✅ Complete lexical analysis, parsing, and type checking
+- ✅ Bytecode generation usable
 - ✅ VM can interpret and execute basic programs
 - ✅ Basic print function
 - ✅ TUI REPL complete
@@ -87,9 +87,9 @@ Hello, YaoXiang!
 
 ### v0.2: FlowScheduler 🚧
 
-**Goal**: Implement complete dependency-aware scheduler
+**Goal**: Implement a complete dependency-aware scheduler
 
-- ✅ Design document complete
+- ✅ Design documentation complete
 - 🔶 Implementation in progress
 - [ ] DAG nodes and graph implementation
 - [ ] Work-stealing algorithm
@@ -100,7 +100,7 @@ Hello, YaoXiang!
 **Technical Focus**:
 - FlowScheduler architecture implementation
 - Industrial-grade IO scheduling (libuv)
-- Zero-cost abstractions
+- Zero-cost abstraction
 
 ### v0.3: Concurrency Preview 📋
 
@@ -122,14 +122,14 @@ Hello, YaoXiang!
 
 **Technical Focus**:
 - Dead code elimination
-- Zero-cost abstractions
-- Function overloading + inline optimization
+- Zero-cost abstraction
+- Function overloading + inlining optimization
 
-### v0.5: Standard Library Improvement 📋
+### v0.5: Standard Library Enhancement 📋
 
-**Goal**: Usability enhancement
+**Goal**: Usability improvement
 
-- IO, dictionary, network modules
+- IO, dictionary, networking modules
 - Toolchain (fmt, basic LSP)
 - Performance optimization
 
@@ -144,18 +144,18 @@ Hello, YaoXiang!
 
 ### v0.7: Stable Version 📋
 
-**Goal**: API stabilization
+**Goal**: API趋于稳定
 
 - Complete documentation
-- Toolchain improvement
+- Toolchain improvements
 - Edge case fixes
 
-### v0.9: Bootstrap Begins 📋
+### v0.9: Bootstrap Start 📋
 
 **Goal**: Core modules rewritten in YaoXiang
 
 - Lexer → Parser → TypeChecker → Codegen gradual replacement
-- Cross-validation: results from both compilers match
+- Cross-validation: both compilers produce consistent results
 
 ### v1.0: Production Ready 📋
 
@@ -169,22 +169,22 @@ Hello, YaoXiang!
 
 | Layer | Version | Input | Output | Description |
 |-------|---------|-------|--------|-------------|
-| L1: Bytecode | v0.1+ | Source code (.yx) | Bytecode (.yxb) | VM interprets execution |
-| L2: Bootstrap | v0.9+ | YaoXiang source | Bytecode | Self-compilation |
-| L3: AOT | v1.0+ | Source/Bytecode | Machine code | Native performance |
+| L1: Bytecode | v0.1+ | Source code (.yx) | Bytecode (.yxb) | VM interpreted execution |
+| L2: Bootstrap | v0.9+ | YaoXiang source code | Bytecode | Self-compilation |
+| L3: AOT | v1.0+ | Source code/Bytecode | Machine code | Native performance |
 
 **Reasons for Bytecode First**:
-1. **REPL Support**: Immediately compile entered code, interactive development
+1. **REPL Support**: Compile input code immediately for interactive development
 2. **Incremental Compilation**: Modifying a single function only requires recompiling that part
-3. **Platform Independent**: .yxb files run cross-platform, only need corresponding platform VM
+3. **Platform Independent**: .yxb files run cross-platform with just the corresponding VM
 
 ## 5. Dependency Strategy
 
-**Short-term**: Call Rust libraries to reuse crates.io (Cargo parasitism)
+**Short-term**: Leverage Rust libraries and reuse crates.io (Cargo parasitism)
 
 **Current Dependencies**:
 - Concurrency: parking_lot, crossbeam, rayon
-- Data structures: indexmap, hashbrown, smallvec
+- Data Structures: indexmap, hashbrown, smallvec
 - Networking: tokio
 - Serialization: serde, ron
 
@@ -194,8 +194,8 @@ Hello, YaoXiang!
 
 | Version | Tool | Status |
 |---------|------|--------|
-| v0.1 | yaoxiang-cli | ✅ Complete |
-| v0.1 | TUI REPL | ✅ Complete |
+| v0.1 | yaoxiang-cli | ✅ Done |
+| v0.1 | TUI REPL | ✅ Done |
 | v0.2 | yaoxiang-debug | 🚧 In Design |
 | v0.3 | yaoxiang-fmt | 📋 Planned |
 | v0.3 | yaoxiang-lsp (basic) | 📋 Planned |
@@ -209,8 +209,8 @@ Hello, YaoXiang!
 | End-to-end execution | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Basic task system | ✅ | ✅ | ✅ | ✅ | ✅ |
 | FlowScheduler | ❌ | 🚧 | ✅ | ✅ | ✅ |
-| Concurrency support | ⚠️ | 🚧 | ✅ Basic | ✅ Complete | ✅ |
-| Standard library | Basic | Basic | Basic | Improved | Complete |
+| Concurrency support | ⚠️ | 🚧 | ✅ basic | ✅ full | ✅ |
+| Standard library | basic | basic | basic | enhanced | complete |
 | Generics system | ⚠️ | ⚠️ | 🚧 | ✅ | ✅ |
 | TUI REPL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bootstrap | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -218,9 +218,9 @@ Hello, YaoXiang!
 | Code coverage | 60% | 70% | 80% | 90% | 95% |
 
 **Legend**:
-- ✅ Complete
+- ✅ Done
 - 🚧 In Progress
-- ⚠️ Partially Complete
+- ⚠️ Partially Done
 - 📋 Planned
 
 ## 8. Open Questions
@@ -230,11 +230,11 @@ Hello, YaoXiang!
 - [ ] Bootstrap module replacement order
 - [ ] AOT backend selection (LLVM vs custom)
 
-## 9. Version Release Standards
+## 9. Version Release Criteria
 
 **v0.x Series**:
 - Feature complete but may have edge case issues
-- API may change
+- APIs may change
 - For learning and experimentation only
 
 **v1.0**:
@@ -247,5 +247,5 @@ Hello, YaoXiang!
 
 - [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/)
 - [Rust Release Model](https://forge.rust-lang.org/release.html)
-- [RFC-001: Concurrency Model & Error Handling](./001-concurrent-model-error-handling.md)
+- [RFC-001: Concurrency Model and Error Handling](./001-concurrent-model-error-handling.md)
 - [RFC-008: Runtime Concurrency Model](./008-runtime-concurrency-model.md)

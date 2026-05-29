@@ -6,9 +6,9 @@ This document defines the standard library specification for the YaoXiang progra
 
 ## Chapter 1: Core Library
 
-### 1.1 Primitive Types
+### 1.1 Basic Types
 
-The standard library provides implementations for the following primitive types:
+The standard library provides implementations for the following basic types:
 
 | Type | Module | Description |
 |------|--------|-------------|
@@ -25,14 +25,14 @@ The standard library provides implementations for the following primitive types:
 Option: Type[T] = some(T) | none
 ```
 
-**Value variant Constructors**:
+**Value variant constructors**:
 
 | Variant | Syntax | Description |
 |---------|--------|-------------|
-| `some(T)` | `some(value)` | Has value |
+| `some(T)` | `some(value)` | Has a value |
 | `none` | `none` | No value |
 
-**Common Methods**:
+**Common methods**:
 
 ```yaoxiang
 // Check if has value
@@ -55,14 +55,14 @@ map: [R](self: Option[T], f: Fn(T) -> R) -> Option[R]
 Result: Type[T, E] = ok(T) | err(E)
 ```
 
-**Value variant Constructors**:
+**Value variant constructors**:
 
 | Variant | Syntax | Description |
 |---------|--------|-------------|
 | `ok(T)` | `ok(value)` | Success value |
 | `err(E)` | `err(error)` | Error value |
 
-**Common Methods**:
+**Common methods**:
 
 ```yaoxiang
 // Check if success
@@ -88,7 +88,7 @@ map_err: [F](self: Result[T, E], f: Fn(E) -> F) -> Result[T, F]
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors of Result type:
+The `?` operator automatically propagates Result type errors:
 
 ```
 // Returns value on success, returns err upward on failure
@@ -342,7 +342,7 @@ for i in 0..10 step 2 {
 | `std.collection` | Collection types like List, Map |
 | `std.string` | String operations |
 | `std.array` | Array operations |
-| `std.iterator` | Iterators |
+| `std.iterator` | Iterator |
 
 ### A.2 IO Modules
 
@@ -365,5 +365,5 @@ for i in 0..10 step 2 {
 | Module | Description |
 |--------|-------------|
 | `std.random` | Random number generation |
-| `std.time` | Time and date |
+| `std.time` | Date and time |
 | `std.regex` | Regular expressions |

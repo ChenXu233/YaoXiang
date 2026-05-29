@@ -1,5 +1,6 @@
+```yaml
 ---
-title: 'RFC-012: F-String Template Strings'
+title: "RFC-012: F-String Template Strings"
 ---
 
 # RFC 012: F-String Template Strings
@@ -11,9 +12,9 @@ title: 'RFC-012: F-String Template Strings'
 
 ## Abstract
 
-Add f-string template string feature to YaoXiang language, supporting variable interpolation, expression evaluation, and formatted output. F-strings use Python-style syntax (`f"..."` prefix), embedding expressions via `{expression}` syntax within strings, and are transformed into efficient string operations at compile time.
+Add f-string template string support to the YaoXiang language, enabling variable interpolation, expression evaluation, and formatted output. F-strings use Python-style syntax (`f"..."` prefix), embedding expressions via `{expression}` syntax within strings, and are compiled into efficient string operations at compile-time.
 
-> **Note**: F-string syntax and behavior are consistent with Python. For specific specifications, refer to the [Python official documentation](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals).
+> **Note**: F-string syntax and behavior are consistent with Python; for specific specifications, refer to the [Python official documentation](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals).
 
 ## Motivation
 
@@ -28,16 +29,16 @@ age = 30
 message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
 print(message)
 
-# Or using format function
+# Or using the format function
 message2 = format("Hello {}, age: {}", name, age)
 ```
 
 ### Current Problems
 
 1. **Poor readability**: String concatenation and formatting require multiple calls, resulting in verbose code
-2. **Error-prone**: Manual type conversion, easy to miss `.to_string()`
-3. **Performance considerations**: Multiple string concatenations may affect performance
-4. **Limited expressiveness**: Unable to intuitively embed complex expressions in strings
+2. **Error-prone**: Manual type conversion，容易遗漏 `.to_string()`
+3. **Performance concerns**: Multiple string concatenations may affect performance
+4. **Limited expressiveness**: Cannot intuitively embed complex expressions within strings
 
 ## Proposal
 
@@ -76,11 +77,11 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 
 ### Syntax Changes
 
-| Before | After | |
-|--------|-------|------|
-| `"Hello ".concat(name)` | `f"Hello {name}"` | |
-| `format("Value: {}", value)` | `f"Value: {value}"` | |
-| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` | |
+| Before | After |
+|--------|-------|
+| `"Hello ".concat(name)` | `f"Hello {name}"` |
+| `format("Value: {}", value)` | `f"Value: {value}"` |
+| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` |
 
 ### Grammar Specification
 
@@ -96,13 +97,13 @@ type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 
 
 ## Detailed Design
 
-### Parsing
+### Syntax Analysis
 
-The compiler identifies `f` prefixed string literals during lexical analysis, parsing expressions within curly braces and optional format specifiers.
+The compiler recognizes `f`-prefixed string literals during lexical analysis, parsing expressions within braces and optional format specifiers.
 
 ### Transformation Strategy
 
-F-strings are transformed into efficient string operations at compile time:
+F-strings are transformed into efficient string operations at compile-time:
 
 **Simple interpolation**:
 ```yaoxiang
@@ -142,9 +143,9 @@ Transforms to:
 
 ### Type System Impact
 
-- Interpolation expressions must implement `Stringable` interface (automatically implemented for primitive types and strings)
-- Format specifiers require the type to support corresponding formatting
-- Compiler checks expression type and format rule matching
+- Interpolation expressions must implement the `Stringable` interface (automatically implemented for primitive types and strings)
+- Format specifiers require type support for corresponding formatting
+- The compiler checks expression type and format rule matching
 
 ### Compiler Changes
 
@@ -159,36 +160,36 @@ Transforms to:
 
 - ✅ Fully backward compatible
 - Existing string literals `"..."` remain unchanged
-- F-string is new syntax, does not affect existing code
+- F-string is new syntax and does not affect existing code
 
 ## Trade-offs
 
 ### Advantages
 
 1. **Concise syntax**: Reduces boilerplate code, improves readability
-2. **Type safety**: Compile-time checking, reduces runtime errors
+2. **Type safety**: Compile-time checking reduces runtime errors
 3. **Performance optimization**: Compiler can optimize string concatenation
 4. **Strong expressiveness**: Supports arbitrary expressions and formatting
 5. **Low learning curve**: Consistent with Python ecosystem
 
 ### Disadvantages
 
-1. **Compiler complexity**: Requires new parsing and transformation logic
-2. **Syntax ambiguity**: Needs to distinguish from existing string syntax
+1. **Compiler complexity**: Requires new syntax analysis and transformation logic
+2. **Syntax ambiguity**: Needs to be distinguished from existing string syntax
 3. **Debugging challenges**: Transformed code differs from source code structure
 
-## Alternative Solutions
+## Alternative Approaches
 
-| Solution | Why Not Chosen |
+| Approach | Why Not Chosen |
 |----------|----------------|
 | Variable interpolation only | Cannot meet complex formatting requirements |
 | Functional style `format(...)` | Syntax not concise enough |
-| Defer to v2.0 | Users have clear demand for string convenience |
-| Backticks or other prefix | Inconsistent with Python ecosystem |
+| Defer to v2.0 | Users have clear needs for string convenience |
+| Backticks or other prefixes | Inconsistent with Python ecosystem |
 
 ## Implementation Strategy
 
-### Phased Approach
+### Phases
 
 1. **Phase 1 (v0.9)**:
    - Basic f-string syntax support
@@ -201,7 +202,7 @@ Transforms to:
    - Performance optimization
 
 3. **Phase 3 (v1.1)**:
-   - Enhanced debug information
+   - Enhanced debugging information
    - Improved error messages
    - More formatting options
 
@@ -209,26 +210,26 @@ Transforms to:
 
 - No external dependencies
 - Requires basic type system support
-- Requires string library foundation
+- Requires string library basic functionality
 
 ### Risks
 
-1. **Performance risk**: Multiple interpolations may create too many string objects
-   - **Mitigation**: Compiler optimization to merge adjacent string constants
+1. **Performance risk**: Multiple interpolations may create excessive string objects
+   - **Mitigation**: Compiler optimizes adjacent string constant merging
 2. **Type checking complexity**: Format specifier type checking
-   - **Mitigation**: Reference Python implementation, use simple and direct checks
+   - **Mitigation**: Reference Python implementation, use simple direct checking
 3. **Syntax ambiguity**: Nested use of `{` and `}`
    - **Mitigation**: Clear grammar rules, limit nesting
 
 ## Open Questions
 
-- [x] Should escaped braces be supported? Consistent with Python: use double braces for single braces, e.g. <code v-pre>{{</code> represents <code v-pre>{</code>, <code v-pre>}}</code> represents <code v-pre>}</code>
-- [x] Should custom format functions be supported? Consistent with Python: support custom formatting behavior via `__format__` method
+- [x] Should escaped braces be supported? Consistent with Python: double braces represent single braces, e.g., <code v-pre>{{</code> represents <code v-pre>{</code>, <code v-pre>}}</code> represents <code v-pre>}</code>
+- [x] Should custom formatting functions be supported? Consistent with Python: support custom formatting behavior for types via `__format__` method
 - [x] Complete specification of format specifiers? Consistent with Python, see BNF above
 - [x] Specific performance optimization strategies? Consistent with Python: runtime concatenation, no special optimization needed
-- [x] Best practices for error diagnostics? Consistent with Python: display original f-string content and position in error messages
+- [x] Best practices for error diagnostics? Consistent with Python: show original f-string content and location when reporting errors
 
-## Appendices
+## Appendix
 
 ### Appendix A: Format Specifier Reference
 
@@ -281,7 +282,7 @@ status_msg = if is_active {
 
 ## Lifecycle and Disposition
 
-RFCs have the following state transitions:
+RFC has the following state transitions:
 
 ```
 ┌─────────────┐
@@ -290,7 +291,8 @@ RFCs have the following state transitions:
        │
        ▼
 ┌─────────────┐
-│ Under Review│  ← Community discussion
+│  Under      │  ← Community discussion
+│  Review     │
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -301,7 +303,8 @@ RFCs have the following state transitions:
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│   accepted/ │    │     rfc/    │
-│ (canonical) │    │ (preserved) │
+│   accepted/ │    │    rfc/     │
+│ (Final      │    │ (Preserved  │
+│  Design)    │    │  in place)  │
 └─────────────┘    └─────────────┘
 ```

@@ -15,18 +15,17 @@ created: 2026-05-29
 ```
 RFC-009 v9 (借用令牌设计) ← 已完成
     │
-    ├── 1. 类型属性系统 (新 RFC)
-    │      ├── Copy trait 定义与实现
-    │      ├── MonoType 类型标记 (bitflags)
+    ├── 1. 类型属性系统 [设计完成 → type-property-system-dup.md]
+    │      ├── Dup trait 定义与实现
     │      ├── trait solver 递归 struct 检查
     │      └── auto-derive 递归字段检查
     │
-    ├── 2. 闭包捕获模型 (新 RFC)
+    ├── 2. 闭包捕获模型 [设计完成 → closure-capture-model.md]
     │      ├── 变量捕获分析
-    │      ├── 借用捕获 vs 移动捕获
+    │      ├── 逃逸分析
     │      └── MakeClosure env 填充
     │
-    └── 3. 借用令牌实现
+    └── 3. 借用令牌实现 [待阶段 1、2 完成]
            ├── MonoType::Ref { mutable, inner }
            ├── borrow checker pass (middle/passes/lifetime/)
            ├── 令牌冲突检测 (流敏感活性分析)
@@ -37,15 +36,15 @@ RFC-009 v9 (借用令牌设计) ← 已完成
 
 ### 阶段 1：类型属性系统
 
-**状态**：设计中
+**状态**：设计完成 → [type-property-system-dup.md](type-property-system-dup.md)
 
 **范围**：
-- MonoType 新增 `TypeFlags`（Copy/Linear/Move 标记）
-- `Copy` trait 注册为内置 marker trait
-- 原语类型自动标记为 Copy
-- struct 自动推导：所有字段 Copy → struct Copy
-- trait solver 支持递归 struct 检查
-- auto-derive 支持泛型容器字段
+- Dup trait 注册为内置 marker trait
+- 原语类型自动标记为 Dup
+- struct/枚举/元组 自动推导：所有字段 Dup → 类型 Dup
+- trait solver 支持递归 struct/枚举/元组 检查
+- auto-derive 支持泛型容器字段（`List(Int)` 等）
+- 删除 Send/Sync（非用户可见，编译器全自动处理）
 
 **相关文件**：
 - `src/frontend/core/types/base/mono.rs`

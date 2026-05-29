@@ -1,7 +1,7 @@
-# Semantic Information Middleware and Incremental Compilation Implementation Plan
+# Semantic Information Platform and Incremental Compilation Implementation Plan
 
-> **Task**: Implement the semantic information middleware to provide LSP semantic highlighting, incremental compilation, and dead code warning capabilities
-> **Based on RFC**: This plan is designed as new functionality
+> **Task**: Implement the semantic information platform, providing LSP semantic highlighting, incremental compilation, and dead code warning capabilities
+> **Based on RFC**: This plan is for new feature design
 > **Related RFC**: [RFC-008: Runtime Concurrency Model](../design/rfc/accepted/008-runtime-concurrency-model.md) - DAG concurrency belongs to the runtime and is not in scope for this plan
 > **Date**: 2026-02-23
 > **Status**: Phase 1 + Phase 2 + Phase 3 completed
@@ -11,15 +11,15 @@
 
 ## Overview
 
-This plan decomposes the semantic information middleware implementation into 3 main phases. The core idea is **single traversal, multiple uses**:
+This plan decomposes the semantic information platform implementation into 3 main phases. The core idea is **single traversal, multiple uses**:
 
-1. **Semantic collection is completed during the typecheck phase** (instead of the LSP layer traversing the AST separately)
-2. The collected semantic information serves both LSP semantic highlighting, incremental compilation, and dead code analysis simultaneously
+1. **Semantic collection is completed during the typecheck phase** (instead of LSP layer traversing AST separately)
+2. Collected semantic information simultaneously serves LSP semantic highlighting, incremental compilation, and dead code analysis
 
 > **Important Clarification**:
-> - **DAG concurrency** belongs to runtime features (RFC-008) and is not in scope for this plan
-> - **Parallel compilation of module dependency graphs** is a build system feature, distinct from runtime DAG
-> - Semantic collection should be completed during the typecheck phase, and LSP directly reuses it, rather than writing an independent traverser
+> - **DAG concurrency** is a runtime feature (RFC-008) and is not in scope for this plan
+> - **Parallel compilation of module dependency graph** is a build system feature, which is a different concept from runtime DAG
+> - Semantic collection should be completed during the typecheck phase, and LSP directly reuses the data instead of writing a separate traverser
 
 ---
 
@@ -31,17 +31,17 @@ This plan decomposes the semantic information middleware implementation into 3 m
 
 
 **Implementation Goals**:
-- Define the `SemanticDB` struct to uniformly manage semantic information
-- Define the `SemanticToken` enum, including LSP standard TokenType
-- Define the `SymbolReference` struct to record symbol reference locations
-- Define the `ModuleSymbol` struct to record module-level symbol definitions
+- Define `SemanticDB` struct to uniformly manage semantic information
+- Define `SemanticToken` enum containing LSP standard TokenType
+- Define `SymbolReference` struct to record symbol reference locations
+- Define `ModuleSymbol` struct to record module-level symbol definitions
 
 **Data Structure Design**:
 
 ```rust
-// Semantic information database (implemented in src/frontend/typecheck/semantic_db.rs)
+// Semantic Information Database (implemented in src/frontend/typecheck/semantic_db.rs)
 pub struct SemanticDB {
-    // File path -> semantic information in that file
+    // File path -> semantic information for that file
     by_file: HashMap<String, FileSemanticInfo>,
     // Symbol name -> all definition locations
     symbol_defs: HashMap<String, Vec<SymbolLocation>>,
@@ -49,14 +49,14 @@ pub struct SemanticDB {
     symbol_refs: HashMap<String, Vec<SymbolLocation>>,
 }
 
-// Single file semantic information
+// Semantic information for a single file
 pub struct FileSemanticInfo {
     pub file_path: String,
     pub tokens: Vec<SemanticToken>,
     pub scopes: Vec<ScopeInfo>,
 }
 
-// Semantic Token (uses struct + type enum, not enum variants as originally planned)
+// Semantic Token (using struct + type enum, instead of enum variants as originally planned)
 pub struct SemanticToken {
     pub name: String,
     pub token_type: SemanticTokenType,
@@ -87,7 +87,7 @@ pub struct ScopeInfo {
 - [x] SemanticDB struct definition completed
 - [x] SemanticToken covers LSP standard token types (12 types + 5 modifiers)
 - [x] Support querying semantic information by file
-- [x] Support querying definitions and reference locations by symbol name
+- [x] Support querying symbol definitions and reference locations by symbol name
 
 **Test Items**:
 - [x] SemanticDB struct creation test
@@ -103,17 +103,17 @@ pub struct ScopeInfo {
 
 **Design Decision**: Semantic collection **should not** be implemented separately in the LSP layer, but should be completed during the typecheck phase.
 
-**Reasons**:
+**Reason**:
 - Typecheck is already traversing the AST and already knows all symbol definitions and reference locations
-- LSP implementing a separate SemanticCollector = duplicate traversal + maintaining two sets of logic
-- **Good taste**: Single traversal, multiple uses
+- LSP implementing SemanticCollector separately = duplicate traversal + maintaining two sets of logic
+- **Good Taste**: Single traversal, multiple uses
 
 **Implementation Goals**:
-- Extend semantic collection functionality in the `src/frontend/typecheck/` module
+- Extend semantic collection functionality in `src/frontend/typecheck/` module
 - Produce `SemanticDB` data simultaneously during type checking
-- LSP layer directly queries and reuses, without traversing AST again
+- LSP layer directly queries and reuses without re-traversing AST
 
-**Collection Rules by TypeCheck** (phase output):
+**Collection Rules for Typecheck** (phase output):
 ```
 StmtKind::Fn        → SemanticTokenType::Function (definition)
 StmtKind::TypeDef   → SemanticTokenType::Type (definition)
@@ -139,7 +139,7 @@ Expr::Cast          → SemanticTokenType::Type (reference)
 **Implementation Goals**:
 - Scope information is also produced during the typecheck phase
 - Record start and end positions of each scope
-- Record the list of symbols within the scope
+- Record symbol lists within scopes
 - Support correct parent-child relationships for nested scopes
 - Support 4 scope types: Global, Function, Block, Lambda
 
@@ -152,7 +152,7 @@ Expr::Cast          → SemanticTokenType::Type (reference)
 - [x] Nested scope parent-child relationships correct
 
 **Test Items**:
-- [x] Single-layer scope test (global scope)
+- [x] Single-level scope test (global scope)
 - [x] Nested scope test (global + function)
 - [x] Lambda scope test
 - [x] Innermost scope lookup test
@@ -162,10 +162,10 @@ Expr::Cast          → SemanticTokenType::Type (reference)
 ### 1.4 World Extension Integration
 
 **Implementation Goals**:
-- Extend the World struct in `src/lsp/world.rs`
+- Extend World struct in `src/lsp/world.rs`
 - Add SemanticDB field
 - When LSP document changes, trigger typecheck re-execution to update semantic information
-- LSP handlers directly query the SemanticDB produced by typecheck
+- LSP handlers directly query SemanticDB produced by typecheck
 
 **Design Adjustment**:
 - No longer need to call SemanticCollector separately in LSP layer
@@ -174,11 +174,11 @@ Expr::Cast          → SemanticTokenType::Type (reference)
 
 **Acceptance Criteria**:
 - [x] World contains SemanticDB field
-- [x] Document changes trigger typecheck re-execution and update semantic information
+- [x] Document changes trigger typecheck re-execution and semantic information update
 - [x] LSP handlers can query semantic information
 
 **Test Items**:
-- [x] World updates semantic information test (verified through existing server tests)
+- [x] World update semantic information test (verified through existing server tests)
 - [x] Multi-file semantic information management test
 - [x] Semantic information query interface test
 
@@ -202,11 +202,11 @@ Expr::Cast          → SemanticTokenType::Type (reference)
 YaoXiang SymbolKind::Function    → LSP TokenType::FUNCTION
 YaoXiang SymbolKind::Type        → LSP TokenType::TYPE
 YaoXiang SymbolKind::Variable    → LSP TokenType::VARIABLE
-YaoXiang SymbolKind::GenericType → LSP TokenType::TYPE
-YaoXiang SymbolKind::Parameter   → LSP TokenType::PARAMETER
-YaoXiang SymbolKind::Property    → LSP TokenType::PROPERTY
-YaoXiang SymbolKind::Method      → LSP TokenType::METHOD
-YaoXiang SymbolKind::Namespace   → LSP TokenType::NAMESPACE
+YaoXiang SymbolKind::GenericType  → LSP TokenType::TYPE
+YaoXiang SymbolKind::Parameter    → LSP TokenType::PARAMETER
+YaoXiang SymbolKind::Property     → LSP TokenType::PROPERTY
+YaoXiang SymbolKind::Method       → LSP TokenType::METHOD
+YaoXiang SymbolKind::Namespace    → LSP TokenType::NAMESPACE
 ```
 
 **Acceptance Criteria**:
@@ -242,7 +242,7 @@ YaoXiang SymbolKind::Namespace   → LSP TokenType::NAMESPACE
 ```
 
 **Acceptance Criteria**:
-- [x] Returns correct semantic tokens data
+- [x] Return correct semantic tokens data
 - [x] Line and column numbers start from 0
 - [x] Response time < 200ms (single file < 1000 lines)
 - [x] Empty file returns empty array
@@ -258,12 +258,12 @@ YaoXiang SymbolKind::Namespace   → LSP TokenType::NAMESPACE
 ### 2.3 textDocument/semanticTokens/full/delta Handler
 
 **Implementation Goals**:
-- Implement incremental semantic tokens updates
+- Implement incremental semantic tokens update
 - Track document version differences
 - Return only changed tokens
 
 **Acceptance Criteria**:
-- [x] Incremental updates return correct delta
+- [x] Incremental update returns correct delta
 - [x] Version number tracking correct
 - [x] Delete operations handled correctly
 
@@ -295,7 +295,7 @@ YaoXiang SymbolKind::Namespace   → LSP TokenType::NAMESPACE
 ```
 
 **Acceptance Criteria**:
-- [x] Theme configuration examples complete
+- [x] Theme configuration example complete
 - [x] Documentation clear
 
 ---
@@ -310,8 +310,8 @@ YaoXiang SymbolKind::Namespace   → LSP TokenType::NAMESPACE
 
 **Implementation Goals**:
 - Implement `ModuleDependencyGraph` struct
-- Parse import/use statements to build module dependency relationships
-- Support cycle dependency detection
+- Parse import/use statements to construct module dependency relationships
+- Support circular dependency detection
 
 **Data Structure**:
 ```rust
@@ -333,13 +333,13 @@ pub struct ModuleId {
 **Acceptance Criteria**:
 - [x] Single-file project dependency graph correct
 - [x] Multi-file project dependency graph correct
-- [x] Cycle dependency detection correct
-- [x] Dependency graph correctly updated during incremental updates
+- [x] Circular dependency detection correct
+- [x] Incremental update correctly updates dependency graph
 
 **Test Items**:
 - [x] Single-file dependency test
 - [x] Multi-file dependency test
-- [x] Cycle dependency detection test
+- [x] Circular dependency detection test
 - [x] Incremental update test
 
 ---
@@ -351,7 +351,7 @@ pub struct ModuleId {
 - Detect changes based on file content hash
 - Implement cache serialization/deserialization
 
-**Cache Content**:
+**Cache Contents**:
 ```rust
 pub struct CompilationCache {
     // File path -> file cache
@@ -372,14 +372,14 @@ pub struct FileCache {
 
 **Acceptance Criteria**:
 - [x] Unchanged files directly use cache
-- [x] Changed files correctly recompiled
-- [x] Cache serialization correct (memory cache, based on Clone)
-- [x] Cache cleanup mechanism works
+- [x] Changed files correctly recompile
+- [x] Cache serialization correct (in-memory cache, based on Clone)
+- [x] Cache cleanup mechanism works correctly
 
 **Test Items**:
 - [x] Cache hit test
 - [x] Cache miss test
-- [x] Cache serialization test (memory cache, Clone method)
+- [x] Cache serialization test (in-memory cache, Clone method)
 - [x] Cache cleanup test
 
 ---
@@ -387,16 +387,16 @@ pub struct FileCache {
 ### 3.3 Incremental Compilation Scheduler
 
 **Implementation Goals**:
-- Implement dependency graph-based compilation scheduling
+- Implement compilation scheduling based on dependency graph
 - Only compile files affected by changes
-- Topological sort to determine compilation order
+- Determine compilation order via topological sort
 
 **Scheduling Strategy**:
 ```
 1. Detect changed file list
-2. Find all modules that depend on changed files (recursive upward)
+2. Find all modules depending on changed files (recursive upward)
 3. Topological sort to determine compilation order
-4. Parallel/serial scheduling compilation
+4. Parallel/serial scheduling for compilation
 ```
 
 **Acceptance Criteria**:
@@ -417,7 +417,7 @@ pub struct FileCache {
 **Implementation Goals**:
 - Implement incremental compilation support for `yaoxiang build` command
 - Output incremental compilation statistics
-- Support `--force` for full recompilation
+- Support `--force` for forced full compilation
 
 **Acceptance Criteria**:
 - [x] Incremental compilation command works correctly
@@ -432,12 +432,12 @@ pub struct FileCache {
 
 ---
 
-## Phase 4: Dead Code Warnings (Integrated into Compilation Flow)
+## Phase 4: Dead Code Warning (Integrated into Compilation Flow)
 
 > **Target Version**: v0.11
 > **Dependency**: Phase 1 completed (semantic information from typecheck phase)
 
-> **Note**: Dead code warnings depend on symbol reference information from the typecheck phase and are a compile-time analysis feature, not a runtime feature.
+> **Note**: Dead code warning depends on symbol reference information from the typecheck phase and is a compile-time analysis feature, not a runtime feature.
 
 > **Architecture Adjustment**: Dead code analysis is integrated into the typecheck phase, as both need to traverse AST/SemanticDB
 
@@ -458,8 +458,8 @@ pub struct FileCache {
 ```
 1. Collect all entry points (main, pub functions)
 2. Starting from entry points, mark all reachable symbols
-3. Unreachable exported symbols -> warning
-4. Unused imports -> warning
+3. Unreachable exported symbols -> Warning
+4. Unused imports -> Warning
 ```
 
 **Data Structure**:
@@ -517,7 +517,7 @@ warning: unused function `dead_function`
 ```
 
 **Acceptance Criteria**:
-- [x] Dead code warnings trigger correctly
+- [x] Dead code warning triggered correctly
 - [x] Warning location information accurate
 - [x] Warnings configurable (enable/disable)
 - [x] Terminal output format aesthetically pleasing
@@ -532,7 +532,7 @@ warning: unused function `dead_function`
 
 ## Note on DAG Concurrency
 
-**DAG concurrent compilation is not included in this plan**, for the following reasons:
+**This plan does not include DAG concurrent compilation**, for the following reasons:
 
 | Concept | Belongs To | Description |
 |---------|------------|-------------|
@@ -540,7 +540,7 @@ warning: unused function `dead_function`
 | **Module Dependency Graph** | Phase 3 of this plan | Module dependencies at compiler level, used for incremental compilation |
 | **Module-level Parallel Compilation** | Build System | Implemented based on Phase 3's dependency graph, not part of LSP |
 
-**Correct Locations**:
+**Correct Placement**:
 - Runtime DAG concurrency → See [RFC-008: Runtime Concurrency Model](../design/rfc/accepted/008-runtime-concurrency-model.md)
 - Module dependency graph → Phase 3 of this plan (completed/in progress)
 - Module-level parallel compilation → Should be implemented as a build system feature, can be based on Phase 3's dependency graph
@@ -553,27 +553,27 @@ warning: unused function `dead_function`
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Semantic Information Middleware Architecture  │
+│                   Semantic Information Platform Architecture     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   Source Code                                                     │
 │     │                                                              │
 │     ▼                                                              │
 │   ┌─────────────────┐                                            │
-│   │  Lexing/Parsing  │ ──▶ AST                                    │
+│   │  Lexing/Parsing │ ──▶ AST                                    │
 │   └────────┬────────┘                                            │
 │            │                                                       │
 │            ▼                                                       │
 │   ┌─────────────────┐                                            │
 │   │  Type Checking  │ ──┬─▶ TypeResult + Bindings                │
-│   │                   │   │                                        │
-│   │  Also produces    │   │                                        │
-│   │  SemanticDB       │   │  ← Single traversal, multiple uses   │
+│   │                  │   │                                        │
+│   │  Also produces   │   │  ← Single traversal, multiple uses    │
+│   │  SemanticDB      │   │                                        │
 │   └────────┬────────┘   │                                        │
 │            │            │                                        │
 │            ▼            │                                        │
 │   ┌─────────────────┐  │                                        │
-│   │  SemanticDB     │◄─┘  ← typecheck output                     │
+│   │  SemanticDB     │◄─┘  ← typecheck output                    │
 │   │  - Symbol defs  │                                            │
 │   │  - Symbol refs  │                                            │
 │   │  - Scope chain  │                                            │
@@ -582,14 +582,14 @@ warning: unused function `dead_function`
 │    ┌───────┴───────┐                                            │
 │    ▼               ▼                                             │
 │ ┌──────┐       ┌──────────┐                                    │
-│ │ LSP  │       │ Incremental │                                 │
-│ │Semantic│       │ Compiling │                                 │
-│ │Highlight│       │ + Dead Code │                                │
+│ │ LSP  │       │ Incremental │
+│ │Semantic│     │ Compilation│
+│ │Highlight│   │ + Dead Code │
 │ └──────┘       └──────────┘                                    │
 │                                                                 │
 │   ▲                                                         ▲    │
 │   │                                                         │    │
-│   │  DAG concurrency → RFC-008 Runtime, not in scope        │    │
+│   │  DAG Concurrency → RFC-008 Runtime, not in this plan   │    │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -598,7 +598,7 @@ warning: unused function `dead_function`
 
 1. **Single traversal**: Typecheck phase produces semantic information simultaneously, no duplicate AST traversal
 2. **Multiple uses**: LSP semantic highlighting, incremental compilation, and dead code analysis share the same data
-3. **Good taste**: No unnecessary abstraction layers for the sake of "decoupling"
+3. **Good Taste**: Do not add unnecessary abstraction layers for the sake of "decoupling"
 
 ### File Modification Checklist
 
@@ -607,9 +607,9 @@ warning: unused function `dead_function`
 | 1 | `src/frontend/typecheck/semantic_db.rs` | `src/frontend/typecheck/mod.rs` | ✅ Completed |
 | 1 | - | `src/lsp/world.rs` | ✅ Completed |
 | 2 | - | `src/lsp/capabilities.rs` | ✅ Completed |
-| 2 | `src/lsp/handlers/semantic_tokens.rs` | `src/lsp/handlers/mod.rs` | ✅ Completed (includes delta support) |
-| 2 | - | `src/lsp/server.rs` | ✅ Completed (added semanticTokens/full + delta request dispatch) |
-| 2 | - | `vscode-extension/language-pack/package.json` | ✅ Completed (semantic highlighting theme config) |
+| 2 | `src/lsp/handlers/semantic_tokens.rs` | `src/lsp/handlers/mod.rs` | ✅ Completed (including delta support) |
+| 2 | - | `src/lsp/server.rs` | ✅ Completed (new semanticTokens/full + delta request dispatch) |
+| 2 | - | `vscode-extension/language-pack/package.json` | ✅ Completed (semantic highlighting theme configuration) |
 | 3 | `src/frontend/module/dep_graph.rs` | `src/frontend/module/mod.rs` | ✅ Completed |
 | 3 | `src/frontend/pipeline/compilation_cache.rs` | `src/frontend/pipeline.rs` | ✅ Completed |
 | 3 | `src/frontend/pipeline/incremental_scheduler.rs` | `src/frontend/compiler.rs` | ✅ Completed |
@@ -617,7 +617,7 @@ warning: unused function `dead_function`
 | 4 | - | `src/frontend/pipeline.rs` | ✅ Completed (integrated into compilation flow) |
 | 4 | - | `src/frontend/typecheck/semantic_db.rs` | ✅ Completed (added reference access methods) |
 
-**Key Adjustment**: Semantic collector moved from `src/lsp/` to `src/frontend/typecheck/`
+**Key Adjustment**: Semantic collector migrated from `src/lsp/` to `src/frontend/typecheck/`
 
 ---
 
@@ -625,8 +625,8 @@ warning: unused function `dead_function`
 
 | Risk | Mitigation |
 |------|------------|
-| Typecheck coupled with semantic information | Decoupled design, SemanticDB as independent data structure |
-| Cycle dependency handling | Explicit detection and warning |
+| Typecheck coupling with semantic information | Decoupled design, SemanticDB as independent data structure |
+| Circular dependency handling | Explicit detection and warning |
 | Incremental compilation race conditions | Use Mutex to protect shared state |
 | Cache consistency | Version number tracking, hash verification |
 

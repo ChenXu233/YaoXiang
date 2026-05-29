@@ -16,7 +16,7 @@ title: "RFC-011：泛型系统设计"
 **核心设计**：
 - **统一签名语法**：`(T: Type, R: Type) -> ...` 泛型参数与普通参数统一
 - **Type 自描述机制**：`Type` 是语言级特殊存在，签名中的 `Type` 位置可自动推断填充
-- **类型约束**：`T: Clone + Add` 多重约束，函数类型约束
+- **类型约束**：`T: Dup + Add` 多重约束，函数类型约束
 - **关联类型**：`Iterator: (Item: Type) -> Type = { next: () -> Option(Item), has_next: () -> Bool }`
 - **编译期泛型**：`N: Int` 泛型值参数，编译期常量实例化
 - **条件类型**：`If: (C: Bool, T: Type, E: Type) -> Type` 类型级计算，类型族
@@ -548,6 +548,62 @@ composed: String = compose(
     (s: String) => s + " WORLD"
 )  # composed = "HELLO WORLD"
 ```
+
+#### 2.4 内置 marker trait：Dup 与 Clone
+
+**两类复制语义**：
+
+| 属性 | 含义 | 触发方式 | 成本 |
+|------|------|----------|------|
+| **Dup** | 隐式浅复制 | 赋值/传参自动 | 零（比特复制或零大小类型） |
+| **Clone** | 显式深拷贝 | `value.clone()` | 视类型而定 |
+
+**Dup 的语义**：实现了 Dup 的类型在赋值/传参时不转移所有权——编译器自动复制一份。这是 RFC-009 所有权模型中 Move 默认语义的互补。
+
+**规则**：
+
+```
+1. Dup → Clone     所有 Dup 类型自动实现 Clone（字段逐一 clone）
+2. Clone ↛ Dup     有 Clone 不一定有 Dup
+3. 默认 Move       不实现 Dup 的类型保持默认 Move 语义
+```
+
+**哪些类型是 Dup**：
+
+| 类型 | Dup | 原因 |
+|------|-----|------|
+| Int, Float, Bool, Char | ✅ | 原语，编译器内置 |
+| String, Bytes | ✅ | 内部引用计数，浅复制安全 |
+| `&T`（借用令牌） | ✅ | 零大小编译期证明，复制无副作用 |
+| `&mut T`（可变令牌） | ❌ | 线性独占，不能复制 |
+| struct | 推导 | 所有字段 Dup → struct Dup |
+| enum | 推导 | 所有 variant 的所有字段 Dup → enum Dup |
+| tuple | 推导 | 所有元素 Dup → tuple Dup |
+| Fn（闭包） | ❌ | 捕获环境可能非 Dup |
+| Arc(T) | ✅ | Arc 本身可浅复制 |
+
+**Dup 和 Clone 都是 marker trait**——无方法的 trait。在原语上由编译器自动注册 impl。对 struct/enum/tuple，编译器递归检查所有字段/元素：若全部实现 Dup/Clone，则自动生成 impl（auto-derive）。
+
+```yaoxiang
+# Dup：隐式浅复制
+x: Int = 42
+y = x          # Int: Dup → 复制
+print(x)       # ✅
+
+# Clone：显式深拷贝
+backup = big_struct.clone()  # 显式调用
+
+# 泛型约束
+dup_use: (x: T: Dup) -> T = x         # T: Dup → 可以隐式复制
+clone_use: (x: T: Clone) -> T = x.clone()  # T: Clone → 显式深拷贝
+
+# Dup 令牌——零成本传播
+view: &Point = &point
+view2 = view    # ✅ &T: Dup
+print(view.x)   # ✅ 零成本——零大小令牌
+```
+
+> **注意**：`Send`/`Sync` 不作为用户可见 trait。跨任务安全保障由 `ref` 关键字和编译器全自动处理——`ref` 自动选择 Rc 或 Arc，用户不需要理解 Send/Sync。
 
 ### 3. 关联类型
 

@@ -1,145 +1,143 @@
-# E1xxx：Проверка типов
+# E1xxx: Проверка типов
 
 > Автоматически сгенерировано из `src/util/diagnostic/codes/`
 
 ## Список ошибок
 
-## E1001：Unknown variable
+## E1001: Неизвестная переменная
 
 **Категория**: TypeCheck
 
-**Сообщение**: Referenced variable is not defined
+**Сообщение**: Ссылаемая переменная не определена
 
-**Помощь**: Check if the variable name is spelled correctly, or define it first
+**Помощь**: Проверьте правильность написания имени переменной или определите её сначала
 
 ---
 
-## E1002：Type mismatch
+## E1002: Несоответствие типов
 
 **Категория**: TypeCheck
 
-**Сообщение**: Expected type does not match actual type
+**Сообщение**: Ожидаемый тип не соответствует фактическому
 
-**Помощь**: Use the correct type or add a type conversion
+**Помощь**: Используйте корректный тип или добавьте преобразование типа
 
 ---
 
-## E1003：Unknown type
+## E1003: Неизвестный тип
 
 **Категория**: TypeCheck
 
-**Сообщение**: Referenced type does not exist
+**Сообщение**: Ссылаемый тип не существует
 
-**Помощь**: Check if the type name is spelled correctly
+**Помощь**: Проверьте правильность написания имени типа
 
 ---
 
-## E1010：Parameter count mismatch
+## E1010: Несоответствие количества параметров
 
 **Категория**: TypeCheck
 
-**Сообщение**: Function call arguments do not match definition
+**Сообщение**: Аргументы вызова функции не соответствуют определению
 
-**Помощь**: Check the number of arguments in the function call
+**Помощь**: Проверьте количество аргументов в вызове функции
 
 ---
 
-## E1011：Parameter type mismatch
+## E1011: Несоответствие типа параметра
 
 **Категория**: TypeCheck
 
-**Сообщение**: Parameter type check failed
+**Сообщение**: Проверка типа параметра не прошла
 
-**Помощь**: Ensure the argument types match the function signature
+**Помощь**: Убедитесь, что типы аргументов соответствуют сигнатуре функции
 
 ---
 
-## E1012：Return type mismatch
+## E1012: Несоответствие типа возврата
 
 **Категория**: TypeCheck
 
-**Сообщение**: Function return type is incorrect
+**Сообщение**: Тип возврата функции некорректен
 
-**Помощь**: Ensure the return value matches the declared return type
+**Помощь**: Убедитесь, что возвращаемое значение соответствует объявленному типу возврата
 
 ---
 
-## E1013：Function not found
+## E1013: Функция не найдена
 
 **Категория**: TypeCheck
 
-**Сообщение**: Calling an undefined function
+**Сообщение**: Вызов неопределённой функции
 
-**Помощь**: Check if the function name is spelled correctly
+**Помощь**: Проверьте правильность написания имени функции
 
 ---
 
-## E1020：Cannot infer type
+## E1020: Не удаётся вывести тип
 
 **Категория**: TypeCheck
 
-**Сообщение**: Context cannot infer the type
+**Сообщение**: Контекст не может вывести тип
 
-**Помощь**: Add a type annotation or explicit type arguments
+**Помощь**: Добавьте аннотацию типа или явные аргументы типа
 
 ---
 
-## E1021：Type inference conflict
+## E1021: Конфликт вывода типов
 
 **Категория**: TypeCheck
 
-**Сообщение**: Multiple constraints lead to type contradiction
+**Сообщение**: Множественные ограничения приводят к противоречию типов
 
-**Помощь**: Check type annotations for consistency
+**Помощь**: Проверьте согласованность аннотаций типов
 
 ---
 
-## E1030：Pattern non-exhaustive
+## E1030: Образец не исчерпывающий
 
 **Категория**: TypeCheck
 
-**Сообщение**: Match expression does not cover all cases
+**Сообщение**: Выражение match не покрывает все случаи
 
-**Помощь**: Add missing patterns to the match expression
+**Помощь**: Добавьте недостающие образцы в выражение match
 
 ---
 
-## E1031：Unreachable pattern
+## E1031: Недостижимый образец
 
 **Категория**: TypeCheck
 
-**Сообщение**: Pattern that can never match
+**Сообщение**: Образец, который никогда не сможет сопоставиться
 
-**Помощь**: Remove or modify the unreachable pattern
+**Помощь**: Удалите или измените недостижимый образец
 
 ---
 
-## E1040：Operation not supported
+## E1040: Операция не поддерживается
 
 **Категория**: TypeCheck
 
-**Сообщение**: Type does not support the operation
+**Сообщение**: Тип не поддерживает данную операцию
 
-**Помощь**: Check the supported operations for this type
+**Помощь**: Проверьте поддерживаемые операции для этого типа
 
 ---
 
-## E1041：Index out of bounds
+## E1041: Индекс за пределами
 
 **Категория**: TypeCheck
 
-**Сообщение**: Array/list index is out of range
+**Сообщение**: Индекс массива/списка за пределами диапазона
 
-**Помощь**: Ensure the index is within the bounds of the collection
+**Помощь**: Убедитесь, что индекс находится в пределах коллекции
 
 ---
 
-## E1042：Field not found
+## E1042: Поле не найдено
 
 **Категория**: TypeCheck
 
-**Сообщение**: Accessing a non-existent struct field
+**Сообщение**: Обращение к несуществующему полю структуры
 
-**Помощь**: Check the available fields of the struct
-
----
+**Помощь**: Проверьте доступные поля структуры

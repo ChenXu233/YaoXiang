@@ -1,6 +1,6 @@
 # Syntax Specification
 
-This document defines the syntax specification for the YaoXiang programming language, including lexical structure, grammar rules, and operator precedence.
+This document defines the syntax specification of the YaoXiang programming language, including lexical structure, grammatical rules, and operator precedence.
 
 ---
 
@@ -14,15 +14,15 @@ YaoXiang source files must use UTF-8 encoding. Source files typically use the `.
 
 | Category | Description | Examples |
 |----------|-------------|----------|
-| Identifiers | Starting with a letter or underscore | `x`, `_private`, `my_var` |
-| Keywords | Language-reserved words | `Type`, `pub`, `use` |
+| Identifiers | Starting with letter or underscore | `x`, `_private`, `my_var` |
+| Keywords | Language-predefined reserved words | `Type`, `pub`, `use` |
 | Literals | Fixed values | `42`, `"hello"`, `true` |
-| Operators | Arithmetic symbols | `+`, `-`, `*`, `/` |
+| Operators | Operation symbols | `+`, `-`, `*`, `/` |
 | Delimiters | Syntax separators | `(`, `)`, `{`, `}`, `,` |
 
 ### 1.3 Keywords
 
-YaoXiang defines very few keywords:
+YaoXiang defines a very small set of keywords:
 
 ```
 pub    use    spawn
@@ -38,8 +38,8 @@ These keywords have special meaning in any context and cannot be used as identif
 | Reserved Word | Type | Description |
 |---------------|------|-------------|
 | `Type` | Type | Meta type |
-| `true` | Bool | Boolean true |
-| `false` | Bool | Boolean false |
+| `true` | Bool | Boolean true value |
+| `false` | Bool | Boolean false value |
 | `void` | Void | Empty value |
 | `some(T)` | Option | Option value variant |
 | `ok(T)` | Result | Result success variant |
@@ -50,8 +50,8 @@ These keywords have special meaning in any context and cannot be used as identif
 Identifiers start with a letter or underscore, and subsequent characters can be letters, digits, or underscores. Identifiers are case-sensitive.
 
 Special identifiers:
-- `_` is used as a placeholder, indicating ignoring a value
-- Identifiers starting with underscore indicate private members
+- `_` is used as a placeholder, indicating that a value should be ignored
+- Identifiers starting with an underscore denote private members
 
 ### 1.6 Literals
 
@@ -92,7 +92,7 @@ Set         ::= '{' Expr (',' Expr)* '}'
 ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 ```
 
-#### 1.6.6 Membership Tests
+#### 1.6.6 Membership Testing
 
 ```
 Membership  ::= Expr 'in' Expr
@@ -109,11 +109,11 @@ Membership  ::= Expr 'in' Expr
 
 ### 1.8 Indentation Rules
 
-Code must use 4 spaces for indentation; Tab characters are prohibited. This is a mandatory syntax rule.
+Code must use 4 spaces for indentation. Tab characters are prohibited. This is a mandatory syntactic rule.
 
 ---
 
-## Chapter 2: Grammar Rules
+## Chapter 2: Grammatical Rules
 
 ### 2.1 Expression Classification
 
@@ -232,43 +232,43 @@ Stmt        ::= LetStmt
 LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ```
 
-### 3.3 return Statements
+### 3.3 return Statement
 
 ```
 ReturnStmt  ::= 'return' Expr?
 ```
 
-### 3.4 break Statements
+### 3.4 break Statement
 
 ```
 BreakStmt   ::= 'break' Identifier?
 ```
 
-### 3.5 continue Statements
+### 3.5 continue Statement
 
 ```
 ContinueStmt::= 'continue'
 ```
 
-### 3.6 if Statements
+### 3.6 if Statement
 
 ```
 IfStmt      ::= 'if' Expr Block ('elif' Expr Block)* ('else' Block)?
 ```
 
-### 3.7 match Statements
+### 3.7 match Statement
 
 ```
 MatchStmt   ::= 'match' Expr '{' MatchArm+ '}'
 ```
 
-### 3.8 while Statements
+### 3.8 while Statement
 
 ```
 WhileStmt   ::= 'while' Expr Block
 ```
 
-### 3.9 for Statements
+### 3.9 for Statement
 
 ```
 ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
@@ -287,27 +287,27 @@ for i in 1..5 {
 
 **Execution Process**:
 
-| Iteration | Behavior of Loop Variable |
-|-----------|---------------------------|
+| Iteration | Loop Variable Behavior |
+|-----------|------------------------|
 | 1st | Create new binding `i = 1`, execute loop body, print 1 |
 | 2nd | Create new binding `i = 2` (previous binding destroyed), execute loop body, print 2 |
 | 3rd | Create new binding `i = 3`, execute loop body, print 3 |
 | 4th | Create new binding `i = 4`, execute loop body, print 4 |
 | End | Loop body ends, binding destroyed |
 
-**Key Point**: After each iteration ends, the binding created during that iteration is destroyed. The next iteration is a completely new binding that has no relationship with the previous iteration's binding.
+**Key Point**: After each iteration ends, the binding created during that iteration is destroyed. The next iteration is a completely new binding with no relation to the previous iteration's binding.
 
 #### 3.9.2 Difference Between for and for mut
 
 | Syntax | Loop Variable Mutability | Description |
-|--------|---------------------------|-------------|
+|--------|--------------------------|--------------|
 | `for i in 1..5` | Immutable | Cannot modify binding in loop body |
 | `for mut i in 1..5` | Mutable | Can modify binding in loop body |
 
 ```yaoxiang
 // Valid: Each iteration binds a new value, no need to modify
 for i in 1..5 {
-    print(i)  // Read the value of i
+    print(i)  // Read value of i
 }
 
 // Error: Immutable binding, cannot modify
@@ -315,18 +315,18 @@ for i in 1..5 {
     i = i + 1  // Error: Cannot modify immutable binding
 }
 
-// Valid: Using for mut allows modification
+// Valid: Using for mut allows modifying the binding
 for mut i in 1..5 {
-    i = i + 1  // Allowed to modify
+    i = i + 1  // Allowed
 }
 ```
 
 #### 3.9.3 Shadowing Check
 
-for loop variables cannot shadow variables that already exist in the outer scope:
+Loop variables cannot shadow variables that already exist in an outer scope:
 
 ```yaoxiang
-// Error: i is already declared externally
+// Error: i has already been declared outside
 i = 10
 for i in 1..5 {
     print(i)
@@ -347,13 +347,13 @@ Error code: `E2013 - Cannot shadow existing variable`
 |----------|----------------------------|
 | YaoXiang | Each iteration binds a new value |
 | Rust | Modifies the same variable (requires mut) |
-| Python | Modifies the same variable (no mut needed) |
+| Python | Modifies the same variable (no mut required) |
 | C/C++ | Modifies the same variable (requires pointer or reference) |
 
-**Design Rationale**: YaoXiang uses binding semantics because:
-1. Variables in the loop body are destroyed after each iteration ends
+**Design Rationale**: YaoXiang adopts binding semantics because:
+1. Variables inside the loop body are destroyed after each iteration ends
 2. The next iteration is a completely new binding
-3. This is safer; no need to consider state between iterations
+3. This is safer, no need to consider state between iterations
 
 ---
 

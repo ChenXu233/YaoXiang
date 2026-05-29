@@ -1,5 +1,5 @@
 ---
-title: 'RFC-014: Package Management System Design'
+title: "RFC-014: Package Management System Design"
 ---
 
 # RFC-014: Package Management System Design
@@ -9,15 +9,15 @@ title: 'RFC-014: Package Management System Design'
 > **Created**: 2026-02-12
 > **Last Updated**: 2026-02-14
 
-## Summary
+## Abstract
 
-Design a package management system for YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration file, and `yaoxiang.lock` lock file.
+Design a package management system for the YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration file and `yaoxiang.lock` lock file.
 
 ## Motivation
 
 ### Why is this feature/change needed?
 
-Package management is the foundation of modern programming language ecosystems. The YaoXiang language currently lacks:
+Package management is the foundation of modern programming language ecosystems. Currently, the YaoXiang language lacks:
 - Dependency declaration mechanism
 - Version management capability
 - Standard distribution channel
@@ -55,10 +55,10 @@ my-project/
 
 **Extension Mechanism**: Adding a new Source type only requires implementing the trait, without modifying the resolution engine.
 
-### Examples
+### Example
 
 ```bash
-# 1. Create project
+# 1. Create a project
 yaoxiang init my-project
 
 # 2. Edit yaoxiang.toml to add dependencies
@@ -127,7 +127,7 @@ integrity = "sha256-xxxx"
 ```
 use foo.bar.baz;
 
-Search order:
+Lookup order:
 1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
 2. ./src/foo/bar/baz.yx           (local modules)
 3. $YXPATH/foo/bar/baz.yx         (global path, reserved)
@@ -162,11 +162,11 @@ struct ResolvedDependency {
 
 ### CLI Command Design
 
-Adopt a unified approach, integrating the compiler, package manager, and REPL into a single CLI tool:
+Adopt a unified approach that integrates the compiler, package manager, and REPL into a single CLI tool:
 
 #### Single-file Mode vs Project Mode
 
-| Command | Single-file | Project Mode | Description |
+| Command | Single File | Project Mode | Description |
 |---------|-------------|--------------|-------------|
 | `yaoxiang run <file>` | ✅ | ✅ | Run file/project entry |
 | `yaoxiang build` | ❌ | ✅ | Build project |
@@ -176,7 +176,7 @@ Adopt a unified approach, integrating the compiler, package manager, and REPL in
 | `yaoxiang update` | ❌ | ✅ | Update dependencies |
 | `yaoxiang fmt` | ✅ | ✅ | Format |
 | `yaoxiang check` | ✅ | ✅ | Type check |
-| `yaoxiang` (no arguments) | ✅ | ✅ | Enter REPL directly |
+| `yaoxiang` (no args) | ✅ | ✅ | Enter REPL directly |
 
 #### Command Details
 
@@ -191,7 +191,7 @@ Adopt a unified approach, integrating the compiler, package manager, and REPL in
 | `yaoxiang add -D <dep>` | Add dev dependency | `yaoxiang add -D test` |
 | `yaoxiang rm <dep>` | Remove dependency | `yaoxiang rm foo` |
 | `yaoxiang update` | Update all dependencies | `yaoxiang update` |
-| `yaoxiang update foo` | Update specified dependency | `yaoxiang update foo` |
+| `yaoxiang update foo` | Update specific dependency | `yaoxiang update foo` |
 | `yaoxiang install` | Install all dependencies | `yaoxiang install` |
 | `yaoxiang list` | List dependencies | `yaoxiang list` |
 | `yaoxiang outdated` | Check outdated dependencies | `yaoxiang outdated` |
@@ -200,10 +200,10 @@ Adopt a unified approach, integrating the compiler, package manager, and REPL in
 | `yaoxiang clean` | Clean build artifacts | `yaoxiang clean` |
 | `yaoxiang task <name>` | Run custom task | `yaoxiang task lint` |
 
-#### Command Constraint Explanation
+#### Command Constraint Notes
 
 ```bash
-# Single-file mode: no yaoxiang.toml needed
+# Single-file mode: yaoxiang.toml not required
 yaoxiang run hello.yx   # ✅ Works normally
 yaoxiang add foo        # ❌ Error: not a project directory
 
@@ -232,7 +232,7 @@ yaoxiang add foo        # ✅ Add dependency
 ### Disadvantages
 
 - Requires additional storage space (.yaoxiang/vendor directory)
-- Version conflicts need to be resolved manually by users
+- Version conflicts require manual user resolution
 
 ## Alternative Solutions
 
@@ -262,7 +262,7 @@ yaoxiang add foo        # ✅ Add dependency
 | Risk | Mitigation |
 |------|------------|
 | Complex dependency resolution algorithm | Implement simple version first, add conflict detection later |
-| Unstable Git downloads | Retry and cache mechanisms |
+| Unstable Git downloads | Retry and cache mechanism |
 | Performance issues | Lazy loading, incremental resolution |
 
 ## Open Questions

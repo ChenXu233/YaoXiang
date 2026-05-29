@@ -1,8 +1,8 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started with YaoXiang programming language.
+> This guide helps you get started with the YaoXiang programming language.
 >
-> **Note**: Code examples in this document are written based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../design/language-spec.md).
+> **Note**: The code examples in this document are written based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../design/language-spec.md).
 
 ## Installation
 
@@ -36,7 +36,7 @@ cargo test
 
 ## Your First Program
 
-Create a file named `hello.yx`:
+Create a file `hello.yx`:
 
 ```yaoxiang
 # hello.yx
@@ -52,7 +52,7 @@ Run it:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# or use release version
+# or using the release version
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -73,7 +73,7 @@ name = "YaoXiang"         # Inferred as String
 pi = 3.14159              # Inferred as Float
 is_valid = true           # Inferred as Bool
 
-# Explicit type annotation (recommended per type convention)
+# Explicit type annotations (recommended per type convention)
 count: Int = 100
 
 # Immutable by default (safety feature)
@@ -122,7 +122,7 @@ p.y  # 2.0
 #### Record Types
 
 ```yaoxiang
-# Struct type
+# Struct types
 type Point = { x: Float, y: Float }
 type Rect = { x: Float, y: Float, width: Float, height: Float }
 
@@ -133,10 +133,10 @@ r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
 
 #### Interface Definitions
 
-Interfaces are record types whose fields are all function types:
+Interfaces are record types where all fields are function types:
 
 ```yaoxiang
-# Define interface
+# Define interfaces
 type Drawable = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -152,7 +152,7 @@ type EmptyInterface = {}
 
 #### Type Methods
 
-Define type methods using `Type.method: (Type, ...) -> Return = ...` syntax:
+Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 
 ```yaoxiang
 # Type definition
@@ -280,19 +280,19 @@ message = match result {
 }
 ```
 
-## Spawn Programming (Asynchronous)
+## Spawn Programming (Async)
 
-YaoXiang's distinctive feature: functions marked with `spawn` automatically gain asynchronous capabilities.
+YaoXiang's unique feature: functions marked with `spawn` automatically gain async capabilities.
 
 ```yaoxiang
-# Define spawn function (automatically executes asynchronously)
+# Define a spawn function (automatically async)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Call spawn function (automatically runs in parallel, no await needed)
+# Calling spawn functions (auto-parallel, no await needed)
 main: () -> Void = {
-    # Two calls automatically execute in parallel
+    # Two calls execute in parallel automatically
     user = fetch_user(1)     # Auto-parallel
     posts = fetch_posts()    # Auto-parallel
 
@@ -316,15 +316,15 @@ println("Hello!")
 
 ## Frequently Asked Questions
 
-### Q: Variables are immutable by default, how do I modify a variable?
+### Q: Variables are immutable by default, how do I modify them?
 
 ```yaoxiang
-# Use the mut keyword to declare a mutable variable
+# Use the mut keyword to declare mutable variables
 mut x = 10
 x = 20                       # ✅ OK
 ```
 
-### Q: How do I define a function?
+### Q: How do I define functions?
 
 ```yaoxiang
 # Full form (recommended)
@@ -337,7 +337,7 @@ add = (a, b) => a + b
 ### Q: How do I handle errors?
 
 ```yaoxiang
-# Use Result type
+# Use the Result type
 Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 
 # Handle with pattern matching
@@ -352,8 +352,8 @@ match result {
 
 - 📖 Read the [YaoXiang Guide](../YaoXiang-book.md) to learn about core features
 - 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for complete syntax
-- 🏗️ Browse [Architecture Docs](../architecture/) for implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core principles
+- 🏗️ Browse the [Architecture Docs](../architecture/) to understand implementation details
+- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to learn about core principles
 
 ## Related Resources
 
