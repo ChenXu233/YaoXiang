@@ -35,7 +35,6 @@ title: "RFC 索引"
 | RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020-dynamic-modules-ffi.md) | 晨煦 | 2026-02-25 | 草案 |
 | RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./draft/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 草案 |
 | RFC-022 | [可选的霍尔逻辑静态验证（规约注释与规约类型）](./draft/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 草案 |
-| RFC-023 | [闭包捕获模型](./draft/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 草案 |
 
 ---
 
@@ -63,6 +62,7 @@ title: "RFC 索引"
 | RFC-014 | [包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-015 | [YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-017 | [语言服务器协议（LSP）支持设计](./review/017-lsp-support.md) | 晨煦 | 2026-02-15 | 已接受 |
+| RFC-023 | [闭包捕获模型](./accepted/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已接受 |
 
 
 ---
