@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! 错误转换
 //!
 //! 提供不同错误类型之间的转换
