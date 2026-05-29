@@ -79,7 +79,7 @@ crossterm = "0.29.0"
 owo-colors = "4.0"
 
 # REPL - 交互式编辑
-rustyline = { version = "17.0.2", features = ["with-file-history", "with-dirs"] }
+rustyline = { version = "18.0.0", features = ["with-file-history", "with-dirs"] }
 
 # 异步运行时
 tokio = { version = "1.50.0", features = ["full"] }
