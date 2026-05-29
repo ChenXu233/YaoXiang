@@ -13,7 +13,7 @@ export default defineConfig({
 
   // 排除有问题文件的目录
   srcExclude: [
-    'archived/**',
+    'archive/**',
     'old/**',
     '**/*.backup.md',
   ],
@@ -233,16 +233,6 @@ export default defineConfig({
                     hyphenToSpace: true,
                   }),
                 },
-                {
-                  text: '已完成',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/dev/plan/completed',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                 },
               ],
             },
           ],
