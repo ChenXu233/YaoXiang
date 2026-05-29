@@ -644,16 +644,18 @@ impl LifecycleTracker {
 
         for lifecycle in self.get_all_lifecycles() {
             // 检查未消费就释放
-            if lifecycle.drop_location.is_some() && !lifecycle.is_consumed() {
-                issues.push(LifecycleIssue {
-                    kind: LifecycleIssueKind::DropWithoutConsume,
-                    operand: lifecycle.operand.clone(),
-                    location: lifecycle.drop_location.unwrap(),
-                    description: format!(
-                        "variable '{}' dropped without being consumed",
-                        operand_to_string(&lifecycle.operand)
-                    ),
-                });
+            if let Some(location) = lifecycle.drop_location {
+                if !lifecycle.is_consumed() {
+                    issues.push(LifecycleIssue {
+                        kind: LifecycleIssueKind::DropWithoutConsume,
+                        operand: lifecycle.operand.clone(),
+                        location,
+                        description: format!(
+                            "variable '{}' dropped without being consumed",
+                            operand_to_string(&lifecycle.operand)
+                        ),
+                    });
+                }
             }
 
             // 检查多次消费

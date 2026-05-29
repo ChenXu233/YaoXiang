@@ -8,6 +8,7 @@
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::types::base::MonoType;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
+use crate::frontend::core::typecheck::traits::auto_derive::can_auto_derive_for_monotype;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
 
@@ -48,6 +49,14 @@ impl BoundsChecker {
         // 检查每个边界
         for bound in bounds {
             if !self.trait_solver.check_trait(ty, bound) {
+                // 尝试自动派生（仅对结构体类型）
+                if let MonoType::Struct(s) = ty {
+                    if let Some(trait_table) = self.trait_solver.trait_table() {
+                        if can_auto_derive_for_monotype(trait_table, bound, s) {
+                            continue; // 自动派生通过
+                        }
+                    }
+                }
                 return Err(ErrorCodeDefinition::trait_bound_not_satisfied(
                     &format!("{}", ty),
                     bound,

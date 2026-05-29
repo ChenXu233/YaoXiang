@@ -159,35 +159,69 @@ fn test_solve_debug_for_void() {
 }
 
 #[test]
-fn test_solve_send_for_int() {
-    // Arrange
+fn test_solve_dup_for_int() {
     let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Send".to_string(),
-        args: vec![MonoType::Int(64)],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_ok(), "Int 类型应满足 Send 约束");
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::Int(64), "Dup"),
+        "Int should satisfy Dup"
+    );
 }
 
 #[test]
-fn test_solve_sync_for_string() {
-    // Arrange
+fn test_solve_dup_for_float() {
     let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Sync".to_string(),
-        args: vec![MonoType::String],
-    };
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::Float(64), "Dup"),
+        "Float should satisfy Dup"
+    );
+}
 
-    // Act
-    let result = solver.solve(&constraint);
+#[test]
+fn test_solve_dup_for_bool() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::Bool, "Dup"),
+        "Bool should satisfy Dup"
+    );
+}
 
-    // Assert
-    assert!(result.is_ok(), "String 类型应满足 Sync 约束");
+#[test]
+fn test_solve_dup_for_char() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::Char, "Dup"),
+        "Char should satisfy Dup"
+    );
+}
+
+#[test]
+fn test_solve_dup_for_string() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::String, "Dup"),
+        "String should satisfy Dup"
+    );
+}
+
+#[test]
+fn test_solve_dup_for_bytes() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    assert!(
+        solver.check_trait(&MonoType::Bytes, "Dup"),
+        "Bytes should satisfy Dup"
+    );
 }
 
 #[test]
@@ -224,7 +258,7 @@ fn test_solve_all_multiple_constraints() {
             args: vec![MonoType::Bool],
         },
         TraitConstraint {
-            name: "Send".to_string(),
+            name: "Dup".to_string(),
             args: vec![MonoType::String],
         },
     ];
@@ -288,6 +322,7 @@ fn test_solve_user_defined_trait_with_impl() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_impl(TraitImplementation {
         trait_name: "Printable".to_string(),
@@ -355,6 +390,7 @@ fn test_check_trait_user_defined() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_impl(TraitImplementation {
         trait_name: "Serializable".to_string(),
@@ -393,8 +429,8 @@ fn test_propagate_constraints_returns_empty() {
 // ===================================================================
 
 #[test]
-fn test_solve_clone_for_void_fails() {
-    // Arrange
+fn test_solve_clone_for_void_succeeds() {
+    // Arrange - Void 是基本类型，应满足 Clone
     let mut solver = TraitSolver::new();
     let constraint = TraitConstraint {
         name: "Clone".to_string(),
@@ -405,18 +441,12 @@ fn test_solve_clone_for_void_fails() {
     let result = solver.solve(&constraint);
 
     // Assert
-    assert!(result.is_err(), "Void 类型不应满足 Clone 约束");
-    let diag = result.unwrap_err();
-    assert!(
-        diag.message.contains("Clone"),
-        "错误消息应提及 Clone trait，实际: {}",
-        diag.message
-    );
+    assert!(result.is_ok(), "Void 类型应满足 Clone 约束");
 }
 
 #[test]
-fn test_solve_clone_for_bytes_fails() {
-    // Arrange
+fn test_solve_clone_for_bytes_succeeds() {
+    // Arrange - Bytes 是基本类型，应满足 Clone
     let mut solver = TraitSolver::new();
     let constraint = TraitConstraint {
         name: "Clone".to_string(),
@@ -427,39 +457,7 @@ fn test_solve_clone_for_bytes_fails() {
     let result = solver.solve(&constraint);
 
     // Assert
-    assert!(result.is_err(), "Bytes 类型不应满足 Clone 约束");
-}
-
-#[test]
-fn test_solve_send_for_void_succeeds() {
-    // Arrange - 规范 §3.5.2: Void 实现 Send（所有原类型自动实现 Send + Sync）
-    let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Send".to_string(),
-        args: vec![MonoType::Void],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_ok(), "Void 类型应满足 Send 约束（规范 §3.5.2）");
-}
-
-#[test]
-fn test_solve_sync_for_void_succeeds() {
-    // Arrange - 规范 §3.5.2: Void 实现 Sync（所有原类型自动实现 Send + Sync）
-    let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Sync".to_string(),
-        args: vec![MonoType::Void],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_ok(), "Void 类型应满足 Sync 约束（规范 §3.5.2）");
+    assert!(result.is_ok(), "Bytes 类型应满足 Clone 约束");
 }
 
 #[test]
@@ -472,6 +470,7 @@ fn test_solve_user_trait_without_impl_fails() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     // 故意不添加 impl
 
@@ -514,12 +513,12 @@ fn test_solve_empty_args_fails() {
 
 #[test]
 fn test_solve_all_first_failure_stops() {
-    // Arrange
+    // Arrange - List 不满足 Clone，应作为首个失败约束
     let mut solver = TraitSolver::new();
     let constraints = vec![
         TraitConstraint {
             name: "Clone".to_string(),
-            args: vec![MonoType::Void], // 失败
+            args: vec![MonoType::List(Box::new(MonoType::Int(32)))], // 失败：List 不满足 Clone
         },
         TraitConstraint {
             name: "Clone".to_string(),
@@ -567,8 +566,8 @@ fn test_unsatisfied_constraints_empty_after_creation() {
 // ===================================================================
 
 #[test]
-fn test_solve_clone_for_struct_fails() {
-    // Arrange
+fn test_solve_clone_for_struct_succeeds() {
+    // Arrange - 结构体所有字段都是 Clone 类型时应满足 Clone
     let mut solver = TraitSolver::new();
     let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
         name: "Point".to_string(),
@@ -588,8 +587,8 @@ fn test_solve_clone_for_struct_fails() {
 
     // Assert
     assert!(
-        result.is_err(),
-        "Struct 类型不应满足 Clone 约束（未在内置 Clone 检查列表中）"
+        result.is_ok(),
+        "Struct（所有字段可 Clone）应满足 Clone 约束"
     );
 }
 
@@ -611,8 +610,8 @@ fn test_solve_clone_for_list_fails() {
 }
 
 #[test]
-fn test_solve_clone_for_tuple_fails() {
-    // Arrange
+fn test_solve_clone_for_tuple_succeeds() {
+    // Arrange - 元组所有元素都是 Clone 类型时应满足 Clone
     let mut solver = TraitSolver::new();
     let tuple_ty = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool]);
     let constraint = TraitConstraint {
@@ -624,48 +623,7 @@ fn test_solve_clone_for_tuple_fails() {
     let result = solver.solve(&constraint);
 
     // Assert
-    assert!(result.is_err(), "Tuple 类型不应满足 Clone 约束");
-}
-
-#[test]
-fn test_solve_send_for_list_fails() {
-    // Arrange
-    let mut solver = TraitSolver::new();
-    let list_ty = MonoType::List(Box::new(MonoType::String));
-    let constraint = TraitConstraint {
-        name: "Send".to_string(),
-        args: vec![list_ty],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_err(), "List 类型不应满足 Send 约束");
-}
-
-#[test]
-fn test_solve_sync_for_struct_fails() {
-    // Arrange
-    let mut solver = TraitSolver::new();
-    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
-        name: "Data".to_string(),
-        fields: vec![],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
-    let constraint = TraitConstraint {
-        name: "Sync".to_string(),
-        args: vec![struct_ty],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_err(), "Struct 类型不应满足 Sync 约束");
+    assert!(result.is_ok(), "Tuple（所有元素可 Clone）应满足 Clone 约束");
 }
 
 #[test]
@@ -693,7 +651,7 @@ fn test_solve_different_types_same_trait() {
     // Arrange - 使用独立 solver 避免 simple_constraints 缓存干扰
     let mut solver_int = TraitSolver::new();
     let mut solver_float = TraitSolver::new();
-    let mut solver_void = TraitSolver::new();
+    let mut solver_list = TraitSolver::new();
 
     // Act
     let r_int = solver_int.solve(&TraitConstraint {
@@ -704,15 +662,15 @@ fn test_solve_different_types_same_trait() {
         name: "Clone".to_string(),
         args: vec![MonoType::Float(64)],
     });
-    let r_void = solver_void.solve(&TraitConstraint {
+    let r_list = solver_list.solve(&TraitConstraint {
         name: "Clone".to_string(),
-        args: vec![MonoType::Void],
+        args: vec![MonoType::List(Box::new(MonoType::Int(32)))],
     });
 
     // Assert
     assert!(r_int.is_ok(), "Int 应满足 Clone");
     assert!(r_float.is_ok(), "Float 应满足 Clone");
-    assert!(r_void.is_err(), "Void 不应满足 Clone");
+    assert!(r_list.is_err(), "List 不应满足 Clone");
 }
 
 #[test]
@@ -730,20 +688,20 @@ fn test_solve_same_type_different_traits() {
         name: "Debug".to_string(),
         args: vec![ty.clone()],
     });
-    let r_send = solver.solve(&TraitConstraint {
-        name: "Send".to_string(),
+    let r_dup = solver.solve(&TraitConstraint {
+        name: "Dup".to_string(),
         args: vec![ty.clone()],
     });
-    let r_sync = solver.solve(&TraitConstraint {
-        name: "Sync".to_string(),
+    let r_equal = solver.solve(&TraitConstraint {
+        name: "Equal".to_string(),
         args: vec![ty],
     });
 
     // Assert
     assert!(r_clone.is_ok(), "String 应满足 Clone");
     assert!(r_debug.is_ok(), "String 应满足 Debug");
-    assert!(r_send.is_ok(), "String 应满足 Send");
-    assert!(r_sync.is_ok(), "String 应满足 Sync");
+    assert!(r_dup.is_ok(), "String 应满足 Dup");
+    assert!(r_equal.is_ok(), "String 应满足 Equal");
 }
 
 #[test]
@@ -756,6 +714,7 @@ fn test_solve_user_trait_with_wrong_type_name() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_impl(TraitImplementation {
         trait_name: "Printable".to_string(),
@@ -786,6 +745,7 @@ fn test_solve_user_trait_not_in_table_falls_back_to_builtin() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
 
     let mut solver = TraitSolver::new();
@@ -977,35 +937,94 @@ fn test_solve_clone_for_result_fails() {
 }
 
 #[test]
-fn test_solve_send_for_float() {
-    // Arrange
+fn test_solve_dup_for_struct_succeeds() {
     let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Send".to_string(),
-        args: vec![MonoType::Float(32)],
-    };
-
-    // Act
-    let result = solver.solve(&constraint);
-
-    // Assert
-    assert!(result.is_ok(), "Float 类型应满足 Send 约束");
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Float(64)),
+            ("y".to_string(), MonoType::Float(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+    assert!(
+        solver.check_trait(&struct_ty, "Dup"),
+        "Point with Dup fields should satisfy Dup"
+    );
 }
 
 #[test]
-fn test_solve_sync_for_char() {
-    // Arrange
+fn test_solve_dup_for_struct_fails() {
     let mut solver = TraitSolver::new();
-    let constraint = TraitConstraint {
-        name: "Sync".to_string(),
-        args: vec![MonoType::Char],
-    };
+    let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
+        name: "Container".to_string(),
+        fields: vec![(
+            "data".to_string(),
+            MonoType::List(Box::new(MonoType::Int(32))),
+        )],
+        methods: HashMap::new(),
+        field_mutability: vec![false],
+        field_has_default: vec![false],
+        interfaces: vec![],
+    });
+    assert!(
+        !solver.check_trait(&struct_ty, "Dup"),
+        "Struct with non-Dup field (List) should NOT satisfy Dup"
+    );
+}
 
-    // Act
-    let result = solver.solve(&constraint);
+#[test]
+fn test_solve_dup_for_tuple_succeeds() {
+    let mut solver = TraitSolver::new();
+    let tuple_ty = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool, MonoType::String]);
+    assert!(
+        solver.check_trait(&tuple_ty, "Dup"),
+        "Tuple with all Dup elements should satisfy Dup"
+    );
+}
 
-    // Assert
-    assert!(result.is_ok(), "Char 类型应满足 Sync 约束");
+#[test]
+fn test_solve_dup_for_tuple_fails() {
+    let mut solver = TraitSolver::new();
+    let tuple_ty = MonoType::Tuple(vec![
+        MonoType::Int(32),
+        MonoType::List(Box::new(MonoType::Bool)),
+    ]);
+    assert!(
+        !solver.check_trait(&tuple_ty, "Dup"),
+        "Tuple with non-Dup element (List) should NOT satisfy Dup"
+    );
+}
+
+#[test]
+fn test_solve_dup_for_list_fails() {
+    let mut solver = TraitSolver::new();
+    let list_ty = MonoType::List(Box::new(MonoType::Int(32)));
+    assert!(
+        !solver.check_trait(&list_ty, "Dup"),
+        "List type should NOT satisfy Dup (conservative)"
+    );
+}
+
+#[test]
+fn test_solve_dup_for_void() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    let ty = MonoType::Void;
+    assert!(solver.check_trait(&ty, "Dup"), "Void should satisfy Dup");
+}
+
+#[test]
+fn test_solve_dup_for_arc() {
+    let mut solver = TraitSolver::new();
+    let table = TraitTable::new();
+    solver.set_trait_table(table);
+    let ty = MonoType::Arc(Box::new(MonoType::Int(64)));
+    assert!(solver.check_trait(&ty, "Dup"), "Arc should satisfy Dup");
 }
 
 #[test]
@@ -1059,6 +1078,7 @@ fn test_user_trait_same_name_as_builtin_prefers_user() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_impl(TraitImplementation {
         trait_name: "Clone".to_string(),

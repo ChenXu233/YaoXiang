@@ -50,7 +50,7 @@ fn test_pattern_infer_float_literal() {
 
     // Act
     let result = inferrer
-        .infer_pattern(&Pattern::Literal(Literal::Float(3.14)))
+        .infer_pattern(&Pattern::Literal(Literal::Float(std::f64::consts::PI)))
         .unwrap();
 
     // Assert

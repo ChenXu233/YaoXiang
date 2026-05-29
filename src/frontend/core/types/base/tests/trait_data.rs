@@ -24,6 +24,7 @@ fn test_trait_table_add_and_get() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     assert!(table.has_trait("Clone"));
     assert!(table.get_trait("Clone").is_some());
@@ -91,6 +92,7 @@ fn test_trait_table_get_method_impl() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     let mut methods = HashMap::new();
     methods.insert(
@@ -142,6 +144,7 @@ fn test_trait_table_get_method_impl_missing_type() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     let method = table.get_method_impl("Clone", "MissingType", "clone");
     assert!(method.is_none(), "should return None for missing type");
@@ -158,6 +161,7 @@ fn test_trait_table_multiple_traits() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_trait(TraitDefinition {
         name: "Display".to_string(),
@@ -165,6 +169,7 @@ fn test_trait_table_multiple_traits() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     assert!(table.has_trait("Clone"), "should have Clone");
     assert!(table.has_trait("Display"), "should have Display");
@@ -207,6 +212,7 @@ fn test_trait_table_trait_names() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     table.add_trait(TraitDefinition {
         name: "B".to_string(),
@@ -214,6 +220,7 @@ fn test_trait_table_trait_names() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     let names: Vec<&String> = table.trait_names().collect();
     assert_eq!(names.len(), 2, "should have 2 trait names");
@@ -230,6 +237,7 @@ fn test_trait_table_overwrite_trait() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     let mut methods = HashMap::new();
     methods.insert(
@@ -247,6 +255,7 @@ fn test_trait_table_overwrite_trait() {
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     });
     let def = table.get_trait("Clone").unwrap();
     assert!(
@@ -293,6 +302,7 @@ fn test_trait_definition_with_parents() {
         parent_traits: vec!["Eq".to_string()],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     };
     assert_eq!(def.parent_traits[0], "Eq");
     assert_eq!(def.parent_traits.len(), 1);
@@ -306,6 +316,7 @@ fn test_trait_definition_with_generic_params() {
         parent_traits: vec![],
         generic_params: vec!["T".to_string()],
         span: None,
+        is_marker: false,
     };
     assert_eq!(def.generic_params.len(), 1, "should have 1 generic param");
     assert_eq!(def.generic_params[0], "T");
