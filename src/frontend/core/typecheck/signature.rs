@@ -11,9 +11,9 @@ use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// 解析函数签名字符串为 MonoType
 ///
-/// 格式: "[T](param1: Type1, param2: Type2) -> ReturnType"
-/// 支持泛型前缀 [T]、函数类型参数 (item: T) -> T
-/// 例如: "[T](list: List<T>, fn: (item: T) -> T) -> List<T>"
+/// 格式: `[T](param1: Type1, param2: Type2) -> ReturnType`
+/// 支持泛型前缀 `T`、函数类型参数 `(item: T) -> T`
+/// 例如: `[T](list: List<T>, fn: (item: T) -> T) -> List<T>`
 pub fn parse_signature(
     signature: &str,
     env: &mut TypeEnvironment,

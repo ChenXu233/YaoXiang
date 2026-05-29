@@ -8,8 +8,8 @@
 //! Configuration priority (high → low):
 //! 1. CLI arguments (--lang)
 //! 2. Environment variable (YAOXIANG_LANG)
-//! 3. Project-level config (yaoxiang.toml [i18n])
-//! 4. User-level config (~/.config/yaoxiang/config.toml [i18n])
+//! 3. Project-level config (yaoxiang.toml i18n section)
+//! 4. User-level config (~/.config/yaoxiang/config.toml i18n section)
 //! 5. Default values
 //!
 //! # Usage

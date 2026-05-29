@@ -290,9 +290,9 @@ impl SendSyncPropagator {
     /// 传播约束到类型参数
     ///
     /// 约束传播规则：
-    /// - Vec[T] 约束 Send → T 约束 Send
-    /// - (T, U) 约束 Send → T 和 U 都约束 Send
-    /// - fn(T) -> U 约束 Send → T 和 U 都约束 Send
+    /// - `Vec[T]` 约束 Send → T 约束 Send
+    /// - `(T, U)` 约束 Send → T 和 U 都约束 Send
+    /// - `fn(T) -> U` 约束 Send → T 和 U 都约束 Send
     pub fn propagate(&self) -> Vec<(MonoType, SendSyncConstraint)> {
         let mut propagated = Vec::new();
         let mut visited = std::collections::HashSet::new();

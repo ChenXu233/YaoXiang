@@ -4,13 +4,13 @@
 //!
 //! # 模块结构
 //!
-//! - [`diagnostic`] - 诊断数据结构 (Diagnostic, Severity)
-//! - [`codes`] - 错误码注册表
-//! - [`emitter`] - 诊断输出渲染器
-//! - [`suggest`] - 智能建议引擎
-//! - [`collect`] - 错误收集器
-//! - [`result`] - 统一 Result 类型
-//! - [`conversion`] - 错误转换
+//! - diagnostic - 诊断数据结构 (Diagnostic, Severity)
+//! - codes - 错误码注册表
+//! - emitter - 诊断输出渲染器
+//! - suggest - 智能建议引擎
+//! - collect - 错误收集器
+//! - result - 统一 Result 类型
+//! - conversion - 错误转换
 //!
 //! # 示例
 //!

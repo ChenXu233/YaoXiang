@@ -165,7 +165,7 @@ pub enum MonoType {
         /// 是否异步
         is_async: bool,
     },
-    /// Option[T]（RFC-001）
+    /// `Option[T]`（RFC-001）
     Option(Box<MonoType>),
     /// Result[T, E]（RFC-001）
     Result(Box<MonoType>, Box<MonoType>),
@@ -198,12 +198,12 @@ pub enum MonoType {
     /// RFC-010: 元类型 `Type`
     /// 表示一个值是类型本身
     /// universe_level 表示类型宇宙层级（用户不可见，编译器自动管理）
-    /// 支持无限层级：Type[Type[T]] → Type2, Type[Type[Type[T]]] → Type3, etc.
+    /// 支持无限层级：`Type[Type[T]]` → Type2, `Type[Type[Type[T]]]` → Type3, etc.
     MetaType {
         /// 类型宇宙层级
         universe_level: UniverseLevel,
-        /// 泛型参数（Type[T] 中的 T，可以是嵌套的 MetaType）
-        /// e.g., Type[Type[T]] 的 type_params = [MetaType { type_params: [T] }]
+        /// 泛型参数（`Type[T]` 中的 T，可以是嵌套的 MetaType）
+        /// e.g., `Type[Type[T]]` 的 type_params = `MetaType { type_params: T }`
         type_params: Vec<MonoType>,
     },
     /// 字面量类型（编译期常量值作为类型）

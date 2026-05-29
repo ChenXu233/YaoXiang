@@ -221,7 +221,7 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Expr(Box<Expr>),
-    /// Variable declaration: [mut] name[: type] [= expr]
+    /// Variable declaration: `mut` name `:` type `=` expr
     Var {
         name: String,
         /// 变量名的源码位置（用于代码染色等）
@@ -379,14 +379,14 @@ pub enum BindingKind {
 /// Generic parameter kind: Type parameter, Const parameter, or Platform parameter
 #[derive(Debug, Clone)]
 pub enum GenericParamKind {
-    /// Type parameter: [T]
+    /// Type parameter: `T`
     Type,
     /// Const parameter: [N: Int]
     Const {
         /// The type of the const parameter (e.g., Int)
         const_type: Box<Type>,
     },
-    /// Platform parameter: [P] or [P: X86_64]
+    /// Platform parameter: `P` or `P: X86_64`
     /// RFC-011: P is reserved for platform specialization
     Platform,
 }
@@ -472,8 +472,8 @@ pub enum Type {
         /// `Type` 关键字的源码位置
         name_span: Span,
         /// Generic type parameters (empty for plain `Type`)
-        /// e.g., `Type[T]` has args = [T], `Type[K, V]` has args = [K, V]
-        /// e.g., `Type[Type[T]]` has args = [MetaType { args: [T] }]
+        /// e.g., `Type[T]` has args = `T`, `Type[K, V]` has args = `K, V`
+        /// e.g., `Type[Type[T]]` has args = `MetaType { args: T }`
         args: Vec<Type>,
     },
 }

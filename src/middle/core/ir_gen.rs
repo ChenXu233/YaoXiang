@@ -3173,12 +3173,38 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                // 4. 生成闭包函数体 IR
+                // 4. 收集被捕获的外部变量（在进入闭包作用域之前）
+                // 构建当前作用域中所有变量名的集合
+                let outer_scope: std::collections::HashSet<String> = self
+                    .symbols
+                    .iter()
+                    .flat_map(|scope| scope.keys().cloned())
+                    .collect();
+
+                // 使用捕获分析模块扫描闭包体，找出引用的外部变量
+                let captured_vars =
+                    crate::frontend::core::typecheck::inference::capture::analyze_captures(
+                        body.as_ref(),
+                        &outer_scope,
+                    );
+
+                // 为每个被捕获的变量查找其在当前作用域中的 Operand
+                let mut env_vars = Vec::new();
+                for captured in &captured_vars {
+                    if let Some(local_idx) = self.lookup_local(&captured.name) {
+                        // TODO: ZST 优化 — 如果被捕获的变量是 ZST（如 &T 令牌），
+                        // 应跳过它，因为它没有运行时表示。
+                        // 当前简化处理：所有被捕获的变量都加入 env。
+                        env_vars.push(Operand::Local(local_idx));
+                    }
+                }
+
+                // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
                 let closure_body =
                     self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
 
-                // 5. 创建闭包函数 IR
+                // 6. 创建闭包函数 IR
                 let param_types: Vec<MonoType> = params
                     .iter()
                     .filter_map(|p| p.ty.clone())
@@ -3199,22 +3225,21 @@ impl AstToIrGenerator {
                     entry: 0,
                 };
 
-                // 6. 将闭包函数添加到嵌套函数列表
+                // 7. 将闭包函数添加到嵌套函数列表
                 self.nested_functions.push(closure_func);
 
-                // 7. 保存闭包函数的可变局部变量信息
+                // 8. 保存闭包函数的可变局部变量信息
                 if !closure_body.mut_locals.is_empty() {
                     self.module_mut_locals
                         .insert(closure_name.clone(), closure_body.mut_locals);
                 }
 
-                // 8. 创建 MakeClosure 指令
-                // env 为空，因为当前不处理捕获变量（后续可扩展）
-                // 使用闭包函数名而不是索引
+                // 9. 创建 MakeClosure 指令
+                // env 包含被捕获的外部变量的 Operand
                 instructions.push(Instruction::MakeClosure {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
-                    env: Vec::new(),
+                    env: env_vars,
                 });
             }
             Expr::Match {
