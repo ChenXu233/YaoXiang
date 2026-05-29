@@ -59,10 +59,6 @@ jobs:
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
 
-      - name: Sync nav/sidebar
-        run: npx vpi sync
-        working-directory: docs
-
       - name: Translate documents
         run: npx vpi gen
         working-directory: docs

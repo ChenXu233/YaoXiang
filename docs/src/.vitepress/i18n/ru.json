@@ -9,7 +9,7 @@
       "link": "/ru/download"
     },
     {
-      "text": "Учебник",
+      "text": "Уроки",
       "link": "/ru/tutorial/"
     },
     {
@@ -32,7 +32,7 @@
           "link": "/ru/dev/"
         },
         {
-          "text": "Площадка",
+          "text": "Песочница",
           "link": "/ru/playground/"
         },
         {
@@ -54,12 +54,12 @@
     }
   ],
   "sidebar": {
-    "/ru/tutorial/": [
+    "/tutorial/": [
       {
-        "text": "Документация учебника",
+        "text": "Документация уроков",
         "items": [
           {
-            "text": "Главная учебника",
+            "text": "Главная уроков",
             "link": "/ru/tutorial/"
           },
           {
@@ -67,7 +67,7 @@
             "link": "/ru/tutorial/getting-started"
           },
           {
-            "text": "Руководство по ЯоСян",
+            "text": "Руководство по YaoXiang",
             "link": "/ru/tutorial/YaoXiang-book"
           },
           {
@@ -78,9 +78,9 @@
         ]
       }
     ],
-    "/ru/design/": [
+    "/design/": [
       {
-        "text": "Документация по дизайну",
+        "text": "Документация дизайна",
         "items": [
           {
             "text": "Каталог дизайна",
@@ -91,15 +91,15 @@
             "link": "/ru/reference/language-spec/"
           },
           {
-            "text": "Манифест ЯоСян",
+            "text": "Манифест YaoXiang",
             "link": "/ru/design/manifesto"
           },
           {
-            "text": "Манифест ЯоСян WTF版",
+            "text": "Манифест YaoXiang WTF",
             "link": "/ru/design/manifesto-wtf"
           },
           {
-            "text": "Взгляд на дизайн языка от человека, родившегося в 2006 году",
+            "text": "Взгляд на дизайн языка от человека 2006 г.р.",
             "link": "/ru/design/2006-born-language-design"
           }
         ]
@@ -142,9 +142,9 @@
         ]
       }
     ],
-    "/ru/reference/": [
+    "/reference/": [
       {
-        "text": "Справочные материалы",
+        "text": "Справочная документация",
         "items": [
           {
             "text": "Каталог справочника",
@@ -190,7 +190,7 @@
         "items": []
       }
     ],
-    "/ru/dev/": [
+    "/dev/": [
       {
         "text": "Документация разработки",
         "items": [
@@ -199,15 +199,15 @@
             "link": "/ru/dev/"
           },
           {
-            "text": "Руководство участника",
+            "text": "Руководство по вкладу",
             "link": "/ru/dev/contributing"
           },
           {
-            "text": "Соглашение о коммитах",
+            "text": "Руководство по коммитам",
             "link": "/ru/dev/commit-convention"
           },
           {
-            "text": "Руководство по веткам",
+            "text": "Руководство по ветвлению",
             "link": "/ru/dev/branch-maintenance-guide"
           }
         ]
@@ -227,7 +227,7 @@
         ]
       }
     ],
-    "/ru/guide/": [
+    "/guide/": [
       {
         "text": "Документация руководства",
         "items": [
@@ -242,16 +242,16 @@
         ]
       }
     ],
-    "/ru/": [
+    "/": [
       {
-        "text": "Документация на китайском",
+        "text": "Китайская документация",
         "items": [
           {
             "text": "Быстрый старт",
             "link": "/ru/getting-started"
           },
           {
-            "text": "Учебник",
+            "text": "Уроки",
             "link": "/ru/tutorial/"
           }
         ]
