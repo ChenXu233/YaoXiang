@@ -6,17 +6,17 @@ This document defines the type system specification for the YaoXiang programming
 
 ## Chapter 0: Theoretical Foundation
 
-### 0.1 Curry-Howard Correspondence
+### 0.1 Curry-Howard Isomorphism
 
-The Curry-Howard correspondence (Curry-Howard isomorphism) is the theoretical foundation of YaoXiang's type system. It reveals the deep correspondence between type systems in programming languages and mathematical logic:
+The Curry-Howard correspondence is the theoretical foundation of YaoXiang's type system. It reveals the deep correspondence between type systems in programming languages and mathematical logic:
 
-| Logic | Programming Language | 
-|--------|----------|
+| Logic | Programming Language |
+|-------|---------------------|
 | Proposition \(P\) | Type `Type` |
 | Proof \(p: P\) | Program `x: T = ...` |
 | Implication \(P \rightarrow Q\) | Function type `(P) -> Q` |
 | Conjunction \(P \wedge Q\) | Product type `{ a: P, b: Q }` |
-| Disjunction \(P \vee Q\) | Sum type `{ a(P) \| b(Q) }` |
+| Disjunction \(P \vee Q\) | Sum type `{ a(P) | b(Q) }` |
 | Universal quantification \(\forall x:T. P(x)\) | Generics `(T: Type) -> ...` |
 | Truth \(\top\) | Empty type `{}` |
 | Falsity \(\bot\) | `Void` / `Never` |
@@ -28,17 +28,17 @@ The Curry-Howard correspondence (Curry-Howard isomorphism) is the theoretical fo
 In YaoXiang, this correspondence is a first-class design principle:
 
 - **A type is a logical proposition**. `Int` is the proposition "an integer exists", `fn(a: Int, b: Int) -> Int` is the proposition "given two integers, an integer exists".
-- **Type checking is proof verification**. When a program passes type checking, it is equivalent to a constructive proof of a logical proposition.
-- **Terminating type-level computations correspond to correct inductive reasoning**. YaoXiang's type families (such as pattern matching of `Add` on `Nat`) are essentially type-level encodings of mathematical induction.
+- **Type checking is proof verification**. When a program passes type checking, it is as if a logical proposition has been constructively proven.
+- **Terminating type-level computations correspond to valid inductive reasoning**. YaoXiang's type families (such as pattern matching on `Add` over `Nat`) are essentially type-level encodings of mathematical induction.
 
 ### 0.3 Impact on Language Design
 
-The specific manifestations of the Curry-Howard correspondence in YaoXiang:
+The manifestations of the Curry-Howard isomorphism in YaoXiang:
 
 1. **Universe stratification** (RFC-010): `Type₀ : Type₁ : Type₂ …` avoids logical paradoxes (Girard's paradox) caused by `Type: Type`
-2. **Type families** (RFC-011): Pattern matching on natural numbers `Nat(Zero/Succ)` at the type level corresponds to inductive proofs under Peano axioms
+2. **Type families** (RFC-011): Pattern matching at the type level on natural numbers `Nat(Zero/Succ)` corresponds to inductive proofs under Peano axioms
 3. **Conditional types** (RFC-011): `If: (C: Bool, T: Type, E: Type) -> Type` corresponds to case disjunction in logic
-4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to finite quantification "for each integer n, a type exists"
+4. **Value-dependent types** (RFC-011): `Vec: (n: Int) -> Type` corresponds to finite quantification of "for each integer n there exists a type"
 
 ---
 
@@ -68,10 +68,10 @@ TypeExpr    ::= PrimitiveType
 ### 2.1 Primitive Types
 
 | Type | Description | Default Size |
-|------|------|----------|
+|------|-------------|--------------|
 | `Type` | Meta type | 0 bytes |
-| `Void` | Void value | 0 bytes |
-| `Bool` | Boolean value | 1 byte |
+| `Void` | void | 0 bytes |
+| `Bool` | Boolean | 1 byte |
 | `Int` | Signed integer | 8 bytes |
 | `Uint` | Unsigned integer | 8 bytes |
 | `Float` | Floating-point number | 8 bytes |
@@ -79,8 +79,8 @@ TypeExpr    ::= PrimitiveType
 | `Char` | Unicode character | 4 bytes |
 | `Bytes` | Raw bytes | Variable |
 
-Width-specified integers: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
-Width-specified floats: `Float32`, `Float64`
+Width-specific integers: `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
+Width-specific floats: `Float32`, `Float64`
 
 ---
 
@@ -118,15 +118,15 @@ Point: Type = {
 
 **Rules**:
 - Record types are defined using curly braces `{}`
-- Field name is directly followed by a colon and type
-- Interface names written in the type body indicate implementation of those interfaces
+- Field names are directly followed by a colon and the type
+- Interface names written within the type body indicate implementation of those interfaces
 
 #### 3.1.1 Field Default Values
 
 Type fields can specify default values, which are optional during construction:
 
 ```yaoxiang
-// Fields with defaults - optional during construction
+// Fields with default values - optional during construction
 Point: Type = {
     x: Float = 0,
     y: Float = 0
@@ -137,7 +137,7 @@ Point()           // -> Point(x=0, y=0)
 Point(x=1)       // -> Point(x=1, y=0)
 Point(x=1, y=2) // -> Point(x=1, y=2)
 
-// Fields without defaults - required during construction
+// Fields without default values - required during construction
 Point2: Type = {
     x: Float,
     y: Float
@@ -154,7 +154,7 @@ Point2()          // Error
 
 #### 3.1.2 Builtin Bindings
 
-Methods can be directly bound inside type definition bodies:
+Methods can be directly bound within type definition bodies:
 
 ```yaoxiang
 // Method 1: Reference external function binding
@@ -228,28 +228,28 @@ Serializable: Type = {
 EmptyInterface: Type = {}
 ```
 
-**Interface implementation**: A type implements interfaces by listing interface names at the end of its definition
+**Interface implementation**: Types implement interfaces by listing the interface names at the end of their definition
 
 ```yaoxiang
 // Types implementing interfaces
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,        // Implement Drawable interface
-    Serializable     // Implement Serializable interface
+    Drawable,        // Implements Drawable interface
+    Serializable     // Implements Serializable interface
 }
 ```
 
-**Direct interface assignment**: Concrete types can be directly assigned to interface type variables (structural subtyping)
+**Direct assignment to interface type**: Concrete types can be directly assigned to interface type variables (structural subtyping)
 
 ```yaoxiang
-// Direct assignment (concrete type determinable at compile-time -> zero-overhead call)
+// Direct assignment (concrete type determinable at compile-time -> zero-cost call)
 d: Drawable = Circle(1)
 d.draw(screen)        // After compilation: direct call to circle_draw, no vtable
 
 // Function return value (concrete type not determinable at compile-time -> vtable call)
 d: Drawable = get_shape()
-d.draw(screen)        // Method lookup via vtable
+d.draw(screen)        // Method lookup through vtable
 
 // Interface as function parameter
 process: (d: Drawable) -> Void = d.draw(screen)
@@ -258,7 +258,7 @@ process: (d: Drawable) -> Void = d.draw(screen)
 **Compile-time optimization strategy**:
 
 | Scenario | Inference Result | Call Method |
-|------|----------|----------|
+|----------|-----------------|-------------|
 | Direct assignment of concrete type | Concrete type determinable | Direct call (zero overhead) |
 | Function return value | Unknown | vtable |
 | Heterogeneous collection | Multiple types | vtable |
@@ -295,7 +295,7 @@ TypeBound       ::= Identifier
 ### 4.2 Generic Type Definitions
 
 ```yaoxiang
-// Basic generic types
+// Basic generic type
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -418,10 +418,10 @@ LiteralType   ::= Identifier ':' Int          // Compile-time constant
 CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
 ```
 
-**Core design**: Using `(n: Int)` generic parameter + `(n: n)` value parameter distinguishes compile-time constants from runtime values.
+**Core design**: Use `(n: Int)` generic parameter + `(n: n)` value parameter to distinguish compile-time constants from runtime values.
 
 ```yaoxiang
-// Compile-time factorial: parameter must be a literal known at compile-time
+// Compile-time factorial: parameter must be a compile-time known literal
 factorial: (n: Int)(n: n) -> Int = {
     match n {
         0 => 1,
@@ -431,7 +431,7 @@ factorial: (n: Int)(n: n) -> Int = {
 
 // Compile-time constant array
 StaticArray: (T: Type, N: Int) -> Type = {
-    data: Array(T, N),      // Array with size known at compile-time
+    data: Array(T, N),      // Array with compile-time known size
     length: N
 }
 
@@ -457,7 +457,7 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
 
 ## Chapter 8: Conditional Types
 
-### 8.1 If Conditional Types
+### 8.1 If Conditional Type
 
 ```
 IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
@@ -511,7 +511,7 @@ TypeIntersection ::= TypeExpr '&' TypeExpr
 **Syntax**: Type intersection `A & B` represents types that simultaneously satisfy both A and B
 
 ```yaoxiang
-// Interface composition = Type intersection
+// Interface composition = type intersection
 DrawableSerializable: Type = Drawable & Serializable
 
 // Using intersection types
@@ -553,7 +553,7 @@ sum: (T: Add)(arr: Array(T)) -> T = {
 // Platform type enum (standard library definition)
 Platform: Type = X86_64 | AArch64 | RISC_V | ARM | X86
 
-// P is a predefined generic parameter name, representing the current compilation platform
+// P is the predefined generic parameter name, representing the current compilation platform
 sum: (P: X86_64)(arr: Array(Float)) -> Float = {
     return avx2_sum(arr.data, arr.length)
 }
@@ -584,11 +584,11 @@ Status: Type = { pending | processing | completed }
 // Interface definition
 Serializable: Type = { serialize: () -> String }
 
-// Type implementing interface
+// Type implementing interfaces
 Point: Type = {
     x: Float,
     y: Float,
-    Serializable    // Implement Serializable interface
+    Serializable    // Implements Serializable interface
 }
 
 // === Function types ===
@@ -599,11 +599,11 @@ Adder: Type = (Int, Int) -> Int
 ### A.2 Generic Syntax
 
 ```
-// Generic types
+// Generic type
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// Generic functions
+// Generic function
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = { ... }
 
 // Type constraints

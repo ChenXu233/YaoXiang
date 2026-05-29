@@ -6,7 +6,7 @@ API reference documentation for the YaoXiang language standard library.
 
 This directory is used to store standard library related documentation, including:
 
-- primitive type
-- core modules
-- utility functions
-- example code
+- Built-in types
+- Core modules
+- Utility functions
+- Example code

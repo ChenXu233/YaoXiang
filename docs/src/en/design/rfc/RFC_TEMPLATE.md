@@ -9,17 +9,17 @@ title: RFC Template
 > **Created**: [YYYY-MM-DD]
 > **Last Updated**: 2026-02-12
 
-> **Reference**: See [Full Example](EXAMPLE_full_feature_proposal.md) to learn how to write an RFC.
+> **Reference**: See the [full example](EXAMPLE_full_feature_proposal.md) for how to write an RFC.
 
 ## Summary
 
-A brief 1-2 sentence summary of the problem this RFC aims to solve and the proposed solution.
+Summarize in 1-2 sentences the problem this RFC aims to solve and the proposed solution.
 
 ## Motivation
 
 ### Why is this feature/change needed?
 
-Explain why this RFC is necessary, what problem it solves or what need it fulfills.
+Explain why this RFC is necessary, what problem it solves or what need it addresses.
 
 ### Current Problem
 
@@ -63,21 +63,21 @@ List the compiler components that need to be modified.
 
 ### Backward Compatibility
 
-Evaluate whether this is backward compatible and how existing code will be handled.
+Assess whether this is backward compatible and how existing code should be handled.
 
-## Trade-offs
+## Tradeoffs
 
 ### Advantages
 
-- List the benefits of adopting this proposal
+- List the advantages of adopting this proposal
 
 ### Disadvantages
 
 - List the disadvantages or risks of this proposal
 
-## Alternatives
+## Alternative Approaches
 
-List the alternative solutions that were considered and why they were not chosen.
+List the alternative approaches that were considered and why they were not chosen.
 
 ## Implementation Strategy
 
@@ -104,11 +104,11 @@ Format:
 
 ---
 
-## Appendices (Optional)
+## Appendix (Optional)
 
-### Appendix A: Design Discussion Log
+### Appendix A: Design Discussion Record
 
-> Used to record detailed discussions during the design decision-making process.
+> Used to record detailed discussions during the design decision process.
 
 #### Discussion Template
 
@@ -125,8 +125,8 @@ Format:
 
 #### Options
 
-| Option | Description | Pros | Cons |
-|--------|-------------|------|------|
+| Option | Description | Advantages | Disadvantages |
+|--------|-------------|------------|---------------|
 | A | ... | ... | ... |
 | B | ... | ... | ... |
 
@@ -142,22 +142,22 @@ Format:
 
 #### Discussion Management Rules
 
-| Phase | Action |
+| Stage | Action |
 |-------|--------|
-| In Discussion | Record in appendix, keep open |
-| Resolved | Update resolution, mark status, **update relevant content in body** |
+| In Discussion | Keep in appendix, maintain open status |
+| Resolved | Update resolution, mark status, **update main body content** |
 | Abandoned | Mark reason for abandonment, keep record for reference |
 
-> **Important**: Once a discussion is resolved, the relevant content in the body must be updated! Discussion logs can be kept as historical reference.
+> **Important**: After a discussion is concluded, the main body content must be updated! Discussion records may be retained as historical reference.
 
 ---
 
-### Appendix B: Design Decision Records
+### Appendix B: Design Decision Record
 
-> Records the design decisions made in this RFC and their rationale.
+> Records the design decisions made in the RFC and their rationale.
 
-| Decision | Decision | Date | Recorded By |
-|----------|----------|------|-------------|
+| Decision | Decision Made | Date | Recorder |
+|----------|---------------|------|----------|
 | ... | ... | ... | ... |
 
 ---
@@ -173,7 +173,7 @@ Format:
 ## References
 
 - Links to related documentation or external resources
-- Similar implementations or references from other languages
+- References to similar implementations or other languages
 
 ---
 
@@ -183,7 +183,7 @@ RFCs have the following status transitions:
 
 ```
 ┌─────────────┐
-│   Draft     │  ← Author creates
+│   Draft     │  ← Created by author
 └──────┬──────┘
        │
        ▼
@@ -199,42 +199,43 @@ RFCs have the following status transitions:
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│   accepted/ │    │    rfc/     │
-│(formal spec)│    │ (preserved) │
+│   accepted/ │    │     rfc/    │
+│ (official   │    │ (kept in    │
+│  design)    │    │  place)     │
 └─────────────┘    └─────────────┘
 ```
 
-### Status Description
+### Status Descriptions
 
 | Status | Location | Description |
 |--------|----------|-------------|
-| **Draft** | `docs/design/rfc/` | Author draft, awaiting review submission |
+| **Draft** | `docs/design/rfc/` | Author draft, awaiting submission for review |
 | **Under Review** | `docs/design/rfc/` | Open for community discussion and feedback |
-| **Accepted** | `docs/design/accepted/` | Becomes a formal design document, enters implementation phase |
-| **Rejected** | `docs/design/rfc/` | Preserved in RFC directory, status updated |
+| **Accepted** | `docs/design/accepted/` | Becomes an official design document, enters implementation phase |
+| **Rejected** | `docs/design/rfc/` | Kept in RFC directory, status updated |
 
 ### Post-Acceptance Actions
 
-1. Move the RFC to `docs/design/accepted/` directory
-2. Update filename to a descriptive name (e.g., `enhanced-pattern-matching.md`)
-3. Update status to "Formal"
-4. Update status to "Accepted", add acceptance date
+1. Move the RFC to the `docs/design/accepted/` directory
+2. Update the filename to a descriptive name (e.g., `enhanced-pattern-matching.md`)
+3. Update the status to "Official"
+4. Update the status to "Accepted" and add the acceptance date
 
 ### Post-Rejection Actions
 
-1. Keep in `docs/design/rfc/` directory
+1. Keep in the `docs/design/rfc/` directory
 2. Add rejection reason and date at the top of the file
-3. Update status to "Rejected"
+3. Update the status to "Rejected"
 
 ### Post-Discussion Actions
 
 When consensus is reached on an open question:
 
 1. **Update Appendix A**: Fill in the "Resolution" section for the discussion topic
-2. **Update Body**: Sync the decision to the document body
-3. **Record Decision**: Add to "Appendix B: Design Decision Records"
-4. **Mark Question**: Check `[x]` in the "Open Questions" list
+2. **Update Main Body**: Sync the decision to the document's main body
+3. **Record Decision**: Add to "Appendix B: Design Decision Record"
+4. **Mark Question**: Check the item `[x]` in the "Open Questions" list
 
 ---
 
-> **Note**: RFC numbers are only used during the discussion phase. They are removed upon acceptance, and a descriptive filename is used instead.
+> **Note**: RFC numbers are only used during the discussion phase. After acceptance, the number is removed and a descriptive filename is used instead.

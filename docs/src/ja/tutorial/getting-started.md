@@ -1,28 +1,28 @@
-# YaoXiang クイックスタートガイド
+# YaoXiang クイックスタート
 
-> 本ガイドは、YaoXiang プログラミング言語をすぐに使い始めるためのものです。
+> このガイドでは、YaoXiang プログラミング言語の基本的な使い方を説明します。
 >
-> **注意**：本ドキュメントのコード例は YaoXiang 言語仕様に基づいて書かれています。実際の実行で構文の違いが発生した場合は、[言語仕様](../design/language-spec.md)を参照してください。
+> **注意**：このドキュメントのコード例は、YaoXiang 言語仕様に基づいて記述されています。実際の実行で構文の差異が発生した場合は、[言語仕様](../design/language-spec.md)を参照してください。
 
 ## インストール
 
-### ソースからのビルド（推奨）
+### ソースからのコンパイル（推奨）
 
 ```bash
 # リポジトリのクローン
 git clone https://github.com/yourusername/yaoxiang.git
 cd yaoxiang
 
-# ビルド（デバッグバージョン、開発テスト用）
+# コンパイル（デバッグバージョン、開発テスト用）
 cargo build
 
-# ビルド（リリースバージョン、本番環境推奨）
+# コンパイル（リリースバージョン、本番環境推奨）
 cargo build --release
 
-# テスト実行
+# テストの実行
 cargo test
 
-# バージョン確認
+# バージョンの確認
 ./target/debug/yaoxiang --version
 # または
 ./target/release/yaoxiang --version
@@ -31,7 +31,7 @@ cargo test
 **インストール成功の確認**：
 ```bash
 ./target/debug/yaoxiang --version
-# 以下のように出力されるはず: yaoxiang x.y.z
+# 次のように出力されるはず: yaoxiang x.y.z
 ```
 
 ## 最初のプログラム
@@ -52,13 +52,13 @@ main: () -> Void = {
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# または release バージョンを使う場合
+# または release バージョンを使用
 ./target/release/yaoxiang hello.yx
 ```
 
 出力：
 
-```bash
+```
 Hello, YaoXiang!
 ```
 
@@ -67,16 +67,16 @@ Hello, YaoXiang!
 ### 変数と型
 
 ```yaoxiang
-# 自動型推断
-x = 42                    # Int と推断
-name = "YaoXiang"         # String と推断
-pi = 3.14159              # Float と推断
-is_valid = true           # Bool と推断
+# 自動型推論
+x = 42                    # Int に推論
+name = "YaoXiang"         # String に推論
+pi = 3.14159              # Float に推論
+is_valid = true           # Bool に推論
 
-# 明示的な型注釈（型集中的約束の使用を推奨）
+# 明示的な型注釈（型集約の規則を使用することが推奨）
 count: Int = 100
 
-# デフォルトで不変（安全機能）
+# デフォルトで不変（安全上の特性）
 x = 10
 x = 20                    # ❌ コンパイルエラー！不変
 
@@ -94,13 +94,13 @@ add: (a: Int, b: Int) -> Int = a + b
 # 呼び出し
 result = add(1, 2)        # result = 3
 
-# 単一引数関数
+# 単一パラメータ関数
 inc: (x: Int) -> Int = x + 1
 ```
 
 ### 型定義
 
-YaoXiang は統合された `name: type = value` 構文モデルを使用します：
+YaoXiang は統一された `name: type = value` 構文モデルを使用します：
 
 ```yaoxiang
 # 変数宣言
@@ -119,7 +119,7 @@ p.x  # 1.0
 p.y  # 2.0
 ```
 
-#### 記録类型
+#### 記録型
 
 ```yaoxiang
 # 構造体型
@@ -133,7 +133,7 @@ r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
 
 #### インターフェース定義
 
-インターフェースは、すべてのフィールドが関数型である記録类型です：
+インターフェースとは、すべてのフィールドが関数型である記録型です：
 
 ```yaoxiang
 # インターフェース定義
@@ -150,7 +150,7 @@ type Serializable = {
 type EmptyInterface = {}
 ```
 
-#### 型メソッド
+#### 型のメソッド
 
 `Type.method: (Type, ...) -> Return = ...` 構文を使用して型メソッドを定義します：
 
@@ -180,7 +180,7 @@ str = p.serialize()      # → Point.serialize(p)
 ```yaoxiang
 type Point = { x: Float, y: Float }
 
-# pub 宣言は Point に自動バインド
+# pub 宣言で Point に自動バインディング
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -194,7 +194,7 @@ p2 = Point(x: 1.0, y: 2.0)
 # 関数呼び出し
 d = distance(p1, p2)           # 3.606...
 
-# OOP 糖衣構文（Point.distance に自動バインド）
+# OOP 糖衣構文（Point.distance に自動バインディング）
 d2 = p1.distance(p2)           # → distance(p1, p2)
 ```
 
@@ -215,7 +215,7 @@ failure: Result(Int, String) = err("not found")
 #### ジェネリック型
 
 ```yaoxiang
-# ジェネリック型定義
+# ジェネリック型の定義
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -280,23 +280,23 @@ message = match result {
 }
 ```
 
-## 並列プログラミング（非同期）
+## 並作プログラミング（非同期）
 
-YaoXiang のユニークな機能：`spawn` でマークされた関数は自動的に非同期能力を獲得します。
+YaoXiang の特徴的な機能：`spawn` でマークされた関数は自動的に非同期能力を獲得します。
 
 ```yaoxiang
-# 並列関数の定義（自動非同期実行）
+# 並作関数の定義（自動的非同期実行）
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# 並列関数の呼び出し（自動並列、await 不要）
+# 並作関数の呼び出し（自動的並列実行、await 不要）
 main: () -> Void = {
-    # 2回の呼び出しは自動並列実行
-    user = fetch_user(1)     # 自動並列
-    posts = fetch_posts()    # 自動並列
+    # 2回の呼び出しは自動的に並列実行
+    user = fetch_user(1)     # 自動的並列
+    posts = fetch_posts()    # 自動的並列
 
-    # 結果が必要になると自動的に待機
+    # 結果が必要になった時点で自動的に待機
     print(user.name)
     print(posts.length)
 }
@@ -316,25 +316,25 @@ println("Hello!")
 
 ## よくある質問
 
-### Q: 変数はデフォルトで不変ですが、修正するにはどうすればいいですか？
+### Q: 変数はデフォルトで不変ですが、変数を変更するにはどうすればいいですか？
 
 ```yaoxiang
-# mut キーワードで可変変数を宣言
+# mut キーワードを使用して可変変数を宣言
 mut x = 10
 x = 20                       # ✅ OK
 ```
 
-### Q: 関数はどのように定義しますか？
+### Q: 関数を定義するにはどうすればいいですか？
 
 ```yaoxiang
 # 完全な形式（推奨）
 add: (a: Int, b: Int) -> Int = a + b
 
-# 短縮形式（型推断）
+# 短い形式（型推論）
 add = (a, b) => a + b
 ```
 
-### Q: エラーはどのように処理しますか？
+### Q: エラーを処理するにはどうすればいいですか？
 
 ```yaoxiang
 # Result 型を使用
@@ -350,13 +350,13 @@ match result {
 
 ## 次のステップ
 
-- 📖 [YaoXiang ガイド](../YaoXiang-book.md)でコア機能について学ぶ
-- 📚 [言語仕様](../YaoXiang-language-specification.md)で完全な構文を確認する
-- 🏗️ [アーキテクチャドキュメント](../architecture/)で実装の詳細を理解する
-- 💡 [設計マニフェスト](../YaoXiang-design-manifesto.md)で核心理念を学ぶ
+- 📖 [YaoXiang ガイド](../YaoXiang-book.md) でコア機能を学ぶ
+- 📚 [言語仕様](../YaoXiang-language-specification.md) で完全な構文を学ぶ
+- 🏗️ [アーキテクチャドキュメント](../architecture/) で実装の詳細を学ぶ
+- 💡 [設計マニフェスト](../YaoXiang-design-manifesto.md) で核心理念を学ぶ
 
 ## 関連リソース
 
 - [GitHub リポジトリ](https://github.com/yourusername/yaoxiang)
-- [Issue 報告](https://github.com/yourusername/yaoxiang/issues)
-- [コントリビューションガイド](../guides/dev/)
+- [Issue フィードバック](https://github.com/yourusername/yaoxiang/issues)
+- [貢献ガイド](../guides/dev/)

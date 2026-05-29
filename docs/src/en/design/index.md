@@ -2,17 +2,17 @@
 
 > The Tao gives birth to the One, the One gives birth to the Two, the Two gives birth to the Three, the Three gives birth to all things.
 
-This directory contains design decisions, proposals, and discussions for the YaoXiang programming language.
+This directory contains the design decisions, proposals, and discussions for the YaoXiang programming language.
 
 ## Core Design Principles
 
 | Principle | Description |
 |------|------|
-| **Everything is a type** | Values, functions, and modules are all types; types are first-class citizens |
-| **Natural syntax** | Python-like readability, close to natural language |
-| **Ownership model** | Zero-cost abstraction, no GC, high performance |
-| **Spawn model** | Synchronous syntax, asynchronous nature, automatic parallelism |
-| **AI-friendly** | Strictly structured, clear AST |
+| **Everything is a Type** | Values, functions, and modules are all types; types are first-class citizens |
+| **Natural Syntax** | Python-like readability, close to natural language |
+| **Ownership Model** | Zero-cost abstraction, no GC, high performance |
+| **Spawn Model** | Synchronous syntax, asynchronous nature, automatic parallelism |
+| **AI-Friendly** | Strictly structured, clear AST |
 
 ## Design Document Structure
 
@@ -38,11 +38,11 @@ design/
 
 ## RFC Proposals
 
-> RFC (Request for Comments) is the proposal process for new features and major changes.
+> RFC (Request for Comments) is the proposal process for new features and significant changes.
 
 ### Active Proposals
 
-| ID | Title | Status |
+| Number | Title | Status |
 |------|------|------|
 | RFC-003 | Version Planning | Pending Review |
 | RFC-005 | Automated CVE Scanning | Pending Review |
@@ -60,7 +60,7 @@ Before submitting a new proposal, please refer to:
 ### Proposal Process
 
 ```
-1. Draft proposal (using RFC template)
+1. Draft the proposal (use RFC template)
    → Place in rfc/ directory
 
 2. Community discussion
@@ -73,15 +73,15 @@ Before submitting a new proposal, please refer to:
 
 ### Design Principles
 
-- **Clear boundaries**: Each design decision should have a clear scope of application
-- **Practicality first**: Solve real problems, not imagined threats
-- **Gradual transparency**: Layered design of concurrency model (L1-L3)
-- **User-visible behavior unchanged**: Never break userspace
+- **Clear Boundaries**: Each design decision should have a clear scope of application
+- **Practicality First**: Solve real problems, not imagined threats
+- **Gradual Transparency**: Layered design of concurrency model (L1-L3)
+- **User-Visible Behavior Invariant**: Never break userspace
 
 ## Code Examples
 
 ```yaoxiang
-// Type definition
+// Type definitions
 Point: Type = { x: Float, y: Float }
 Result: Type[T, E] = { ok(T) | err(E) }
 
@@ -103,16 +103,16 @@ main: () -> Void = {
 
 ### 1. Type System
 
-- **Unified type syntax**: Abolish `enum`, `struct`, `union`, unify using `Name: Type = {...}`
-- **Constructors are types**: Eliminate the gap between "type" and "value"
-- **Generics support**: Compile-time monomorphization, zero runtime overhead
+- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`, unify with `Name: Type = {...}`
+- **Constructors are Types**: Eliminate the gap between "type" and "value"
+- **Generics Support**: Compile-time monomorphization, zero runtime overhead
 
 ### 2. Spawn Model
 
 ```yaoxiang
 // Three-layer concurrency abstraction
 
-// L1: @blocking synchronous (disable parallelism)
+// L1: @blocking synchronous (parallelism disabled)
 fetch: (String) -> JSON @blocking = (url) => { ... }
 
 // L2: spawn explicit concurrency
@@ -136,7 +136,7 @@ compute: (Int) -> Int = (n) => {
 Result: Type[T, E] = { ok(T) | err(E) }
 
 process: () -> Result[Data, Error] = {
-    data = fetch_data()?      // ? operator transparent propagation
+    data = fetch_data()?      // ? operator propagates transparently
     transformed = transform(data)?
     save(transformed)?
 }
@@ -148,7 +148,7 @@ process: () -> Result[Data, Error] = {
 - [Reference Documentation](../reference/) - API and standard library
 - [Language Specification](../reference/language-spec/index.md) - Complete language specification
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
-- [Contributing Guide](../tutorial/contributing.md)
+- [Contribution Guide](../tutorial/contributing.md)
 
 ## Historical Archive
 

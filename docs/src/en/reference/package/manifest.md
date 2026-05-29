@@ -1,6 +1,7 @@
+```markdown
 ---
 title: yaoxiang.toml Format
-description: Project configuration file format description
+description: Project configuration file format documentation
 ---
 
 # yaoxiang.toml Format
@@ -27,7 +28,7 @@ license = "MIT"
 ## package Section
 
 | Field | Type | Required | Description |
-|------|------|----------|-------------|
+|-------|------|----------|-------------|
 | `name` | string | Yes | Project name, must follow naming conventions (lowercase letters, numbers, hyphens) |
 | `version` | string | Yes | Semantic version number, follows semver specification |
 | `description` | string | No | Short project description |
@@ -62,7 +63,7 @@ json = "*"
 # Git dependency
 http = { version = "1.0.0", git = "https://github.com/example/http" }
 
-# Local path dependency
+# local path dependency
 utils = { version = "0.1.0", path = "./utils" }
 
 # Git dependency with branch
@@ -72,7 +73,7 @@ bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 ### Dependency Field Description
 
 | Field | Type | Description |
-|------|------|-------------|
+|-------|------|-------------|
 | `version` | string | Version number or version range |
 | `git` | string | Git repository URL |
 | `branch` | string | Git branch name |
@@ -86,7 +87,7 @@ bleeding-edge = { git = "https://github.com/example/edge", branch = "main" }
 | `1.0.0` | Exact version | `"1.0.0"` |
 | `>=1.0.0` | Minimum version | `">=1.0.0"` |
 | `<2.0.0` | Maximum version | `"<2.0.0"` |
-| `>=1.0.0, <2.0.0` | Range version | `">=1.0.0, <2.0.0"` |
+| `>=1.0.0, <2.0.0` | Version range | `">=1.0.0, <2.0.0"` |
 | `~1.0.0` | Compatible version | `"~1.0.0"` |
 | `^1.0.0` | Caret version | `"^1.0.0"` |
 

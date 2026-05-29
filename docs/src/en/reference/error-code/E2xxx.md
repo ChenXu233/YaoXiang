@@ -4,7 +4,7 @@
 
 ## Error List
 
-## E2001: Scope error
+## E2001: Scope Error
 
 **Category**: Semantic
 
@@ -14,7 +14,7 @@
 
 ---
 
-## E2002: Duplicate definition
+## E2002: Duplicate Definition
 
 **Category**: Semantic
 
@@ -24,7 +24,7 @@
 
 ---
 
-## E2003: Ownership error
+## E2003: Ownership Error
 
 **Category**: Semantic
 
@@ -34,7 +34,7 @@
 
 ---
 
-## E2010: Immutable assignment
+## E2010: Immutable Assignment
 
 **Category**: Semantic
 
@@ -44,7 +44,7 @@
 
 ---
 
-## E2011: Uninitialized use
+## E2011: Uninitialized Use
 
 **Category**: Semantic
 
@@ -54,7 +54,7 @@
 
 ---
 
-## E2012: Mutability conflict
+## E2012: Mutability Conflict
 
 **Category**: Semantic
 

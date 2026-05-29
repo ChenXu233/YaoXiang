@@ -1,6 +1,6 @@
 # 標準ライブラリ仕様
 
-本ファイルは、YaoXiang プログラミング言語の標準ライブラリ仕様を定義ものであり、コアライブラリ、IOライブラリ、数学ライブラリを含みます。
+本ドキュメントでは、YaoXiang プログラミング言語の標準ライブラリ仕様を定義します。これには、コアライブラリ、IOライブラリ、および数学ライブラリが含まれます。
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 1.1 基本型
 
-標準ライブラリは次の基本型を提供します：
+標準ライブラリは以下の基本型を提供します：
 
 | 型 | モジュール | 説明 |
 |------|------|------|
@@ -17,7 +17,7 @@
 | `List[T]` | `std.collection` | 動的配列 |
 | `Map[K, V]` | `std.collection` | ハッシュマップ |
 | `String` | `std.string` | 文字列型 |
-| `Array[T, N]` | `std.array` | 固定長配列 |
+| `Array[T, N]` | `std.array` | 固定サイズ配列 |
 
 ### 1.2 Option 型
 
@@ -25,17 +25,17 @@
 Option: Type[T] = some(T) | none
 ```
 
-**値変体構築子**：
+**値変体の構築**：
 
 | 値変体 | 構文 | 説明 |
 |------|------|------|
 | `some(T)` | `some(value)` | 値あり |
 | `none` | `none` | 値なし |
 
-**主なメソッド**：
+**主要メソッド**：
 
 ```yaoxiang
-// 値があるかどうかチェック
+// 値の有無を確認
 is_some: (self: Option[T]) -> Bool
 is_none: (self: Option[T]) -> Bool
 
@@ -45,7 +45,7 @@ unwrap: (self: Option[T]) -> T
 // 値またはデフォルト値を取得
 unwrap_or: (self: Option[T], default: T) -> T
 
-// 値をマップ
+// 値を写像
 map: [R](self: Option[T], f: Fn(T) -> R) -> Option[R]
 ```
 
@@ -55,17 +55,17 @@ map: [R](self: Option[T], f: Fn(T) -> R) -> Option[R]
 Result: Type[T, E] = ok(T) | err(E)
 ```
 
-**値変体構築子**：
+**値変体の構築**：
 
 | 値変体 | 構文 | 説明 |
 |------|------|------|
 | `ok(T)` | `ok(value)` | 成功値 |
 | `err(E)` | `err(error)` | エラー値 |
 
-**主なメソッド**：
+**主要メソッド**：
 
 ```yaoxiang
-// 成功かどうかチェック
+// 成功の有無を確認
 is_ok: (self: Result[T, E]) -> Bool
 is_err: (self: Result[T, E]) -> Bool
 
@@ -75,10 +75,10 @@ unwrap: (self: Result[T, E]) -> T
 // 値またはデフォルト値を取得
 unwrap_or: (self: Result[T, E], default: T) -> T
 
-// 成功値をマップ
+// 成功値を写像
 map: [R](self: Result[T, E], f: Fn(T) -> R) -> Result[R, E]
 
-// エラー値をマップ
+// エラー値を写像
 map_err: [F](self: Result[T, E], f: Fn(E) -> F) -> Result[T, F]
 ```
 
@@ -90,8 +90,8 @@ ErrorPropagate ::= Expr '?'
 
 `?` 演算子は Result 型のエラーを自動的に伝播します：
 
-```yaoxiang
-// 成功時は値を返し、失敗時は err を返す
+```
+// 成功時は値を返し、失敗時は err を上位に返す
 data = fetch_data()?
 
 // 以下と同等
@@ -239,7 +239,7 @@ to_string: (x: Int) -> String
 to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
-// パース
+// 解析
 parse_int: (s: String) -> Result[Int, Error]
 parse_float: (s: String) -> Result[Float, Error]
 ```
@@ -292,10 +292,10 @@ Map: Type[K, V] = {
 
 ## 第6章：イテレータライブラリ
 
-### 6.1 Iterator trait
+### 6.1 Iterator 特質
 
 ```yaoxiang
-// Iterator trait
+// Iterator 特質
 Iterator: Type[T] = {
     Item: T,
     next: (self: Self) -> Option[T],
@@ -311,7 +311,7 @@ Iterator: Type[T] = {
 ### 6.2 イテレータアダプタ
 
 ```yaoxiang
-// 範囲イテレータ
+// レンジイテレータ
 Range: Type = {
     start: Int,
     end: Int,
@@ -331,7 +331,7 @@ for i in 0..10 step 2 {
 
 ---
 
-## 付録：標準ライブラリモジュール索引
+## 付録：標準ライプラリモジュールインデックス
 
 ### A.1 コアモジュール
 
@@ -365,5 +365,5 @@ for i in 0..10 step 2 {
 | モジュール | 説明 |
 |------|------|
 | `std.random` | 乱数生成 |
-| `std.time` | 日時 |
+| `std.time` | 時刻・日付 |
 | `std.regex` | 正規表現 |

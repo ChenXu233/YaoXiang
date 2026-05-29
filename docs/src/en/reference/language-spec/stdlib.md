@@ -6,9 +6,9 @@ This document defines the standard library specification for the YaoXiang progra
 
 ## Chapter 1: Core Library
 
-### 1.1 Primitive Types
+### 1.1 Basic Types
 
-The standard library provides implementations for the following primitive types:
+The standard library provides implementations for the following basic types:
 
 | Type | Module | Description |
 |------|--------|-------------|
@@ -25,14 +25,14 @@ The standard library provides implementations for the following primitive types:
 Option: Type[T] = some(T) | none
 ```
 
-**Value variant Constructors**:
+**Variant constructors**:
 
 | Variant | Syntax | Description |
 |---------|--------|-------------|
 | `some(T)` | `some(value)` | Has value |
 | `none` | `none` | No value |
 
-**Common Methods**:
+**Common methods**:
 
 ```yaoxiang
 // Check if has value
@@ -55,14 +55,14 @@ map: [R](self: Option[T], f: Fn(T) -> R) -> Option[R]
 Result: Type[T, E] = ok(T) | err(E)
 ```
 
-**Value variant Constructors**:
+**Variant constructors**:
 
 | Variant | Syntax | Description |
 |---------|--------|-------------|
 | `ok(T)` | `ok(value)` | Success value |
 | `err(E)` | `err(error)` | Error value |
 
-**Common Methods**:
+**Common methods**:
 
 ```yaoxiang
 // Check if success
@@ -163,7 +163,7 @@ delete_dir: (path: String) -> Result[Void, Error]
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// Max and min
+// Maximum and minimum
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
@@ -292,7 +292,7 @@ Map: Type[K, V] = {
 
 ## Chapter 6: Iterator Library
 
-### 6.1 Iterator trait
+### 6.1 Iterator Trait
 
 ```yaoxiang
 // Iterator trait
@@ -342,7 +342,7 @@ for i in 0..10 step 2 {
 | `std.collection` | Collection types like List, Map |
 | `std.string` | String operations |
 | `std.array` | Array operations |
-| `std.iterator` | Iterators |
+| `std.iterator` | Iterator |
 
 ### A.2 IO Modules
 

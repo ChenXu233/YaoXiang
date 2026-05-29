@@ -1,8 +1,8 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started with YaoXiang programming language.
+> This guide helps you get started with YaoXiang programming language quickly.
 >
-> **Note**: Code examples in this document are written based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../design/language-spec.md).
+> **Note**: Code examples in this document are written based on YaoXiang language specification. If you encounter syntax differences in actual execution, please refer to [Language Specification](../design/language-spec.md).
 
 ## Installation
 
@@ -13,10 +13,10 @@
 git clone https://github.com/yourusername/yaoxiang.git
 cd yaoxiang
 
-# Build (debug version, for development testing)
+# Build (debug build, for development and testing)
 cargo build
 
-# Build (release version, recommended for production)
+# Build (release build, recommended for production)
 cargo build --release
 
 # Run tests
@@ -28,15 +28,15 @@ cargo test
 ./target/release/yaoxiang --version
 ```
 
-**Verify successful installation**:
+**Verify Installation Success**:
 ```bash
 ./target/debug/yaoxiang --version
-# Should output something like: yaoxiang x.y.z
+# should output something like: yaoxiang x.y.z
 ```
 
-## Your First Program
+## First Program
 
-Create a file named `hello.yx`:
+Create file `hello.yx`:
 
 ```yaoxiang
 # hello.yx
@@ -48,11 +48,11 @@ main: () -> Void = {
 }
 ```
 
-Run it:
+Run:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# or use release version
+# or use release build
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -68,19 +68,19 @@ Hello, YaoXiang!
 
 ```yaoxiang
 # Automatic type inference
-x = 42                    # Inferred as Int
-name = "YaoXiang"         # Inferred as String
-pi = 3.14159              # Inferred as Float
-is_valid = true           # Inferred as Bool
+x = 42                    # inferred as Int
+name = "YaoXiang"         # inferred as String
+pi = 3.14159              # inferred as Float
+is_valid = true           # inferred as Bool
 
-# Explicit type annotation (recommended per type convention)
+# Explicit type annotation (recommended to use centralized type conventions)
 count: Int = 100
 
 # Immutable by default (safety feature)
 x = 10
 x = 20                    # ❌ Compile error! Immutable
 
-# Mutable variables (requires explicit declaration)
+# Mutable variable (requires explicit declaration)
 mut counter = 0
 counter = counter + 1     # ✅ OK
 ```
@@ -94,11 +94,11 @@ add: (a: Int, b: Int) -> Int = a + b
 # Call
 result = add(1, 2)        # result = 3
 
-# Single parameter function
+# Single-argument function
 inc: (x: Int) -> Int = x + 1
 ```
 
-### Type Definitions
+### Type Definition
 
 YaoXiang uses a unified `name: type = value` syntax model:
 
@@ -131,9 +131,9 @@ p = Point(x: 3.0, y: 4.0)
 r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
 ```
 
-#### Interface Definitions
+#### Interface Definition
 
-Interfaces are record types whose fields are all function types:
+An interface is a record type where all fields are function types:
 
 ```yaoxiang
 # Define interface
@@ -173,14 +173,14 @@ p.draw(screen)           # → Point.draw(p, screen)
 str = p.serialize()      # → Point.serialize(p)
 ```
 
-#### Automatic Binding
+#### Auto Binding
 
 Functions declared with the `pub` keyword are automatically bound to types defined in the same file:
 
 ```yaoxiang
 type Point = { x: Float, y: Float }
 
-# pub declaration auto-binds to Point
+# pub declaration auto-binding to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -255,15 +255,15 @@ while n < 5 {
 ### Lists and Dictionaries
 
 ```yaoxiang
-# Lists
+# List
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]         # 1
 
-# Dictionaries
+# Dictionary
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  # 90
 
-# Adding elements
+# Add element
 mut list = [1, 2, 3]
 list.append(4)
 ```
@@ -280,23 +280,23 @@ message = match result {
 }
 ```
 
-## Spawn Programming (Asynchronous)
+## Concurrency Programming (Async)
 
-YaoXiang's distinctive feature: functions marked with `spawn` automatically gain asynchronous capabilities.
+YaoXiang's unique feature: functions marked with `spawn` automatically gain async capabilities.
 
 ```yaoxiang
-# Define spawn function (automatically executes asynchronously)
+# Define spawn function (automatically async execution)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Call spawn function (automatically runs in parallel, no await needed)
+# Call spawn function (automatically parallel, no await needed)
 main: () -> Void = {
-    # Two calls automatically execute in parallel
-    user = fetch_user(1)     # Auto-parallel
-    posts = fetch_posts()    # Auto-parallel
+    # Both calls execute in parallel automatically
+    user = fetch_user(1)     # auto parallel
+    posts = fetch_posts()    # auto parallel
 
-    # Automatically waits when results are needed
+    # Auto wait when results are needed
     print(user.name)
     print(posts.length)
 }
@@ -314,12 +314,12 @@ result = math.sqrt(16)      # 4.0
 println("Hello!")
 ```
 
-## Frequently Asked Questions
+## FAQ
 
 ### Q: Variables are immutable by default, how do I modify a variable?
 
 ```yaoxiang
-# Use the mut keyword to declare a mutable variable
+# Use mut keyword to declare mutable variable
 mut x = 10
 x = 20                       # ✅ OK
 ```
@@ -350,13 +350,13 @@ match result {
 
 ## Next Steps
 
-- 📖 Read the [YaoXiang Guide](../YaoXiang-book.md) to learn about core features
-- 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for complete syntax
-- 🏗️ Browse [Architecture Docs](../architecture/) for implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core principles
+- 📖 Read [YaoXiang Guide](../YaoXiang-book.md) to understand core features
+- 📚 Check [Language Specification](../YaoXiang-language-specification.md) for complete syntax
+- 🏗️ Explore [Architecture Documentation](../architecture/) for implementation details
+- 💡 Review [Design Manifesto](../YaoXiang-design-manifesto.md) for core philosophy
 
 ## Related Resources
 
 - [GitHub Repository](https://github.com/yourusername/yaoxiang)
-- [Issue Tracker](https://github.com/yourusername/yaoxiang/issues)
+- [Issue Feedback](https://github.com/yourusername/yaoxiang/issues)
 - [Contribution Guide](../guides/dev/)

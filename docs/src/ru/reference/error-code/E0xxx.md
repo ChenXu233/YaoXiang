@@ -4,90 +4,92 @@
 
 ## 错误列表
 
-## E0001：Invalid character（无效字符）
+## E0001：Invalid character
 
-**Категория**: Lexer
+**类别**: Lexer
 
-**Сообщение**: Source contains illegal character
+**消息**: Source contains illegal character
 
-**Помощь**: Remove the illegal character
-
----
-
-## E0002：Invalid number literal（无效数字字面量）
-
-**Категория**: Lexer
-
-**Сообщение**: Number literal format is incorrect
-
-**Помощь**: Check the format of the number literal
+**帮助**: Remove the illegal character
 
 ---
 
-## E0003：Unterminated string（未终止的字符串）
+## E0002：Invalid number literal
 
-**Категория**: Lexer
+**类别**: Lexer
 
-**Сообщение**: Multi-line string is missing closing quote
+**消息**: Number literal format is incorrect
 
-**Помощь**: Add the closing quote for the string
-
----
-
-## E0004：Invalid character literal（无效字符字面量）
-
-**Категория**: Lexer
-
-**Сообщение**: Character literal is incorrect
-
-**Помощь**: Character literals must contain exactly one character
+**帮助**: Check the format of the number literal
 
 ---
 
-## E0010：Expected token（期望的标记）
+## E0003：Unterminated string
 
-**Категория**: Parser
+**类别**: Lexer
 
-**Сообщение**: Parser expected a specific token
+**消息**: Multi-line string is missing closing quote
 
-**Помощь**: Check the syntax and add the expected token
-
----
-
-## E0011：Unexpected token（意外的标记）
-
-**Категория**: Parser
-
-**Сообщение**: Encountered an unexpected token
-
-**Помощь**: Remove or replace the unexpected token
+**帮助**: Add the closing quote for the string
 
 ---
 
-## E0012：Invalid syntax（无效语法）
+## E0004：Invalid character literal
 
-**Категория**: Parser
+**类别**: Lexer
 
-**Сообщение**: Expression/statement has syntax error
+**消息**: Character literal is incorrect
 
-**Помощь**: Check the syntax of the expression or statement
-
----
-
-## E0013：Mismatched brackets（不匹配的括号）
-
-**Категория**: Parser
-
-**Сообщение**: Parentheses, brackets, or braces are mismatched
-
-**Помощь**: Ensure all brackets are properly closed
+**帮助**: Character literals must contain exactly one character
 
 ---
 
-## E0014：Missing semicolon（缺少分号）
+## E0010：Expected token
 
-**Категория**: Parser
+**类别**: Parser
 
-**Сообщение**: Statement is missing a semicolon
+**消息**: Parser expected a specific token
 
-**Помощь**: Add a semicolon at the end of the statement
+**帮助**: Check the syntax and add the expected token
+
+---
+
+## E0011：Unexpected token
+
+**类别**: Parser
+
+**消息**: Encountered an unexpected token
+
+**帮助**: Remove or replace the unexpected token
+
+---
+
+## E0012：Invalid syntax
+
+**类别**: Parser
+
+**消息**: Expression/statement has syntax error
+
+**帮助**: Check the syntax of the expression or statement
+
+---
+
+## E0013：Mismatched brackets
+
+**类别**: Parser
+
+**消息**: Parentheses, brackets, or braces are mismatched
+
+**帮助**: Ensure all brackets are properly closed
+
+---
+
+## E0014：Missing semicolon
+
+**类别**: Parser
+
+**消息**: Statement is missing a semicolon
+
+**帮助**: Add a semicolon at the end of the statement
+
+---

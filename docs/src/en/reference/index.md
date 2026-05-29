@@ -2,13 +2,13 @@
 
 > This document is under construction...
 
-YaoXiang is currently in the **experimental verification phase**, and the standard library and API are gradually being improved.
+YaoXiang is currently in the **experimental verification phase**, and the standard library and API are being gradually improved.
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator precedence
-- [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, syntax rules, operator precedence
+- [Type System](./language-spec/type-system.md) - Basic types, compound types, generics, traits
 - [Module System](./language-spec/modules.md) - Module definition, import/export, scope
 - [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency primitives, memory model
 - [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
@@ -17,11 +17,11 @@ YaoXiang is currently in the **experimental verification phase**, and the standa
 
 | Module | Status | Description |
 |------|------|------|
-| `std.io` | 🔨 In Progress | Input/Output |
-| `std.string` | 🔨 In Progress | String operations |
-| `std.list` | 🔨 In Progress | List operations |
+| `std.io` | 🔨 In progress | Input/Output |
+| `std.string` | 🔨 In progress | String operations |
+| `std.list` | 🔨 In progress | List operations |
 | `std.dict` | 📋 Planned | Dictionary operations |
-| `std.math` | 🔨 In Progress | Math functions |
+| `std.math` | 🔨 In progress | Math functions |
 | `std.net` | 📋 Planned | Network operations |
 | `std.concurrent` | 📋 Planned | Concurrency primitives |
 
@@ -31,20 +31,20 @@ YaoXiang is currently in the **experimental verification phase**, and the standa
 
 | Type | Description | Example |
 |------|------|------|
-| `Void` | void/null, no return value | `()` |
+| `Void` | Void/null/no return value | `()` |
 | `Bool` | Boolean | `true`, `false` |
 | `Int` | Integer | `42`, `-10` |
 | `Float` | Floating-point number | `3.14`, `-0.5` |
 | `Char` | Character | `'a'`, `'中'` |
 | `String` | String | `"hello"` |
 
-### Composite Types
+### Compound Types
 
 | Type | Description | Example |
 |------|------|------|
 | `List[T]` | List of elements of the same type | `[1, 2, 3]` |
-| `Tuple(T1, T2, ...)` | Tuple of heterogeneous elements | `(1, "hello")` |
-| `Dict[K, V]` | Key-value map | `{"a": 1}` |
+| `Tuple(T1, T2, ...)` | Tuple of elements of different types | `(1, "hello")` |
+| `Dict[K, V]` | Key-value mapping | `{"a": 1}` |
 | `Fn(Args) -> Ret` | Function type | `(Int) -> Int` |
 
 ### User-Defined Types
@@ -74,7 +74,7 @@ println(value)         // Print with newline
 ```yaoxiang
 to_string(value)       // Convert to string
 to_int(value)          // Convert to integer
-to_float(value)        // Convert to float
+to_float(value)        // Convert to floating-point number
 ```
 
 ### Type Checking
@@ -88,13 +88,13 @@ is_type(value, type)  // Check type
 
 | Keyword | Description |
 |--------|------|
-| `Type` | meta type |
-| `spawn` | Mark spawn function |
+| `Type` | Meta type |
+| `spawn` | Mark a spawn function |
 | `spawn for` | Parallel loop |
 | `spawn {}` | Spawn block |
 | `if` / `elif` / `else` | Conditional branching |
 | `match` | Pattern matching |
-| `while` / `for` | Loop |
+| `while` / `for` | Loops |
 | `return` | Return value |
 | `ref` | Create reference |
 | `mut` | Mutable marker |
@@ -153,13 +153,13 @@ for i in 0..10 {
 ### Error Handling
 
 ```yaoxiang
-// ? operator propagates error
+// ? operator for error propagation
 data = fetch_file(path)?
 ```
 
 ## Operator Precedence
 
-| Priority | Operators |
+| Precedence | Operators |
 |--------|--------|
 | Highest | `( )` Function call |
 | | `.` Field access |
@@ -226,11 +226,11 @@ main: () -> Void = {
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
-## Contribution Guide
+## Contribution Guidelines
 
-The standard library is under construction, contributions are welcome!
+The standard library is under construction. Contributions are welcome!
 
-1. Choose a module (e.g., `std.io`, `std.net`)
+1. Choose a module (such as `std.io`, `std.net`)
 2. Implement functions in `src/std/`
 3. Add documentation comments
-4. Submit a PR
+4. Submit PR

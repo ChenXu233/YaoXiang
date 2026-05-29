@@ -1,6 +1,6 @@
 ---
 title: Package Manager
-description: YaoXiang Package Manager reference documentation
+description: YaoXiang Package Manager Reference Documentation
 ---
 
 # Package Manager
@@ -9,11 +9,11 @@ YaoXiang's built-in package manager, providing project initialization, dependenc
 
 ## Overview
 
-The YaoXiang Package Manager (YPM for short) adopts a design philosophy similar to Cargo:
+The YaoXiang Package Manager (YPM for short) adopts a Cargo-like design philosophy:
 
 - **Declarative dependencies**: Declare required dependencies in `yaoxiang.toml`
-- **Deterministic builds**: Lock versions through `yaoxiang.lock` to ensure reproducible builds
-- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline use
+- **Deterministic builds**: Lock versions via `yaoxiang.lock` to ensure reproducible builds
+- **Local cache**: Dependencies are downloaded to the `vendor` directory, supporting offline usage
 
 ## Quick Start
 

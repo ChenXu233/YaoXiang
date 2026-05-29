@@ -41,5 +41,3 @@
 **Message**: Multiple trait implementations conflict
 
 **Help**: Resolve the conflicting implementations
-
----

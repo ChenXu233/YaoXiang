@@ -4,8 +4,8 @@
 
 The YaoXiang compiler uses a unified error code system, where each error code includes:
 - **Code**: Error identifier (e.g., `E1001`)
-- **Category**: Error phase
-- **Title**: Short error description
+- **Category**: The phase the error belongs to
+- **Title**: Brief description of the error
 - **Message**: Detailed error message
 - **Help**: Possible solutions
 
@@ -41,7 +41,7 @@ yaoxiang explain E1001 --json
 ```rust
 use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
 
-// Find error codes and retrieve titles and help information via I18nRegistry
+// Find the error code, and retrieve title and help information through I18nRegistry
 let i18n = I18nRegistry::default();
 
 if let Some(code) = ErrorCodeDefinition::find("E1001") {

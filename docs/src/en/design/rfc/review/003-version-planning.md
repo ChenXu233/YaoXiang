@@ -1,5 +1,5 @@
 ---
-title: 'RFC-003: Version Planning'
+title: RFC-003: Version Planning
 ---
 
 # RFC-003: Version Planning
@@ -9,31 +9,31 @@ title: 'RFC-003: Version Planning'
 > **Created**: 2025-01-05
 > **Last Updated**: 2025-01-06
 
-## Abstract
+## Summary
 
-Version release plan for YaoXiang, roadmap from v0.1 to v1.0.
+YaoXiang's version release plan, roadmap from v0.1 to v1.0.
 
-**Core Objectives**:
+**Core Goals**:
 1. **Bytecode Compilation**: Support REPL and incremental compilation
 2. **Bootstrap**: Write YaoXiang compiler using YaoXiang
 3. **AOT Compilation**: Compile bytecode to native machine code
 
 ## 1. Motivation
 
-### Why Version Planning is Needed?
+### Why Do We Need Version Planning?
 
-1. **Project Management**: Break down goals into executable milestones
-2. **User Expectations**: Let users understand the development stage of the language
+1. **Project Management**: Decompose goals into executable milestones
+2. **User Expectations**: Let users understand the language's development stage
 3. **Resource Allocation**: Clarify focus areas for each phase
-4. **Risk Control**: Identify issues promptly and adjust direction
+4. **Risk Control**: Detect problems early and adjust direction
 
 ### Core Design Decisions
 
-- **Bytecode First**: Implement interpreter execution first, then consider AOT
+- **Bytecode First**: Implement interpreted execution first, then consider AOT
 - **Incremental Delivery**: Every version has usable features
-- **Backward Compatibility**: API may change before v1.0, but advance notice will be given
-- **Bootstrap Verification**: Prove language expressiveness through self-hosting
-- **Performance Tiering**: Get it working first, then optimize
+- **Backward Compatibility**: APIs may change before v1.0, but with advance notice
+- **Bootstrap Verification**: Prove language expressiveness through bootstrapping
+- **Performance Tiers**: Get it working first, then optimize
 
 ## 2. Component Status (Phase)
 
@@ -56,16 +56,16 @@ Version release plan for YaoXiang, roadmap from v0.1 to v1.0.
 - ✅ TUI REPL development complete (P6)
 - ✅ Generics system design complete (P7)
 
-**Next Priority**: Implement FlowScheduler → Complete standard library (P5) → v0.1 release
+**Next Priorities**: Implement FlowScheduler scheduler → Improve standard library (P5) → v0.1 release
 
 ## 3. Version Roadmap
 
 ### v0.1: Runnable Milestone ✅
 
-**Status**: Basic completion (2025-01-25)
+**Status**: Basically complete (2025-01-25)
 
 **Completed**:
-- ✅ Complete lexer, parser, type checker
+- ✅ Complete lexer, parser, type checking
 - ✅ Bytecode generation available
 - ✅ VM can interpret and execute basic programs
 - ✅ Basic print function
@@ -85,13 +85,13 @@ Hello, YaoXiang!
 
 **Not Included**: Complete DAG scheduling (basic scheduler already implemented)
 
-### v0.2: FlowScheduler 🚧
+### v0.2: FlowScheduler Scheduler 🚧
 
 **Goal**: Implement complete dependency-aware scheduler
 
 - ✅ Design document complete
 - 🔶 Implementation in progress
-- [ ] DAG nodes and graph implementation
+- [ ] DAG node and graph implementation
 - [ ] Work-stealing algorithm
 - [ ] libuv IO scheduling engine
 - [ ] Lazy evaluation strategy
@@ -123,13 +123,13 @@ Hello, YaoXiang!
 **Technical Focus**:
 - Dead code elimination
 - Zero-cost abstractions
-- Function overloading + inline optimization
+- Function overloading + inlining optimization
 
 ### v0.5: Standard Library Improvement 📋
 
-**Goal**: Usability enhancement
+**Goal**: Usability improvement
 
-- IO, dictionary, network modules
+- IO, dictionary, networking modules
 - Toolchain (fmt, basic LSP)
 - Performance optimization
 
@@ -144,18 +144,18 @@ Hello, YaoXiang!
 
 ### v0.7: Stable Version 📋
 
-**Goal**: API stabilization
+**Goal**: API趋于稳定
 
 - Complete documentation
 - Toolchain improvement
 - Edge case fixes
 
-### v0.9: Bootstrap Begins 📋
+### v0.9: Bootstrap Start 📋
 
 **Goal**: Core modules rewritten in YaoXiang
 
 - Lexer → Parser → TypeChecker → Codegen gradual replacement
-- Cross-validation: results from both compilers match
+- Cross-validation: Two compilers produce consistent results
 
 ### v1.0: Production Ready 📋
 
@@ -169,26 +169,26 @@ Hello, YaoXiang!
 
 | Layer | Version | Input | Output | Description |
 |-------|---------|-------|--------|-------------|
-| L1: Bytecode | v0.1+ | Source code (.yx) | Bytecode (.yxb) | VM interprets execution |
-| L2: Bootstrap | v0.9+ | YaoXiang source | Bytecode | Self-compilation |
-| L3: AOT | v1.0+ | Source/Bytecode | Machine code | Native performance |
+| L1: Bytecode | v0.1+ | Source code (.yx) | Bytecode (.yxb) | VM interpreted execution |
+| L2: Bootstrap | v0.9+ | YaoXiang source code | Bytecode | Self-compilation |
+| L3: AOT | v1.0+ | Source code/Bytecode | Machine code | Native performance |
 
 **Reasons for Bytecode First**:
-1. **REPL Support**: Immediately compile entered code, interactive development
+1. **REPL Support**: Compile input code immediately, interactive development
 2. **Incremental Compilation**: Modifying a single function only requires recompiling that part
 3. **Platform Independent**: .yxb files run cross-platform, only need corresponding platform VM
 
 ## 5. Dependency Strategy
 
-**Short-term**: Call Rust libraries to reuse crates.io (Cargo parasitism)
+**Short Term**: Call Rust libraries, reuse crates.io (Cargo parasitism)
 
 **Current Dependencies**:
 - Concurrency: parking_lot, crossbeam, rayon
-- Data structures: indexmap, hashbrown, smallvec
+- Data Structures: indexmap, hashbrown, smallvec
 - Networking: tokio
 - Serialization: serde, ron
 
-**Long-term**: Build our own standard library and package manager
+**Long Term**: Build our own standard library and package manager
 
 ## 6. Toolchain
 
@@ -209,8 +209,8 @@ Hello, YaoXiang!
 | End-to-end execution | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Basic task system | ✅ | ✅ | ✅ | ✅ | ✅ |
 | FlowScheduler | ❌ | 🚧 | ✅ | ✅ | ✅ |
-| Concurrency support | ⚠️ | 🚧 | ✅ Basic | ✅ Complete | ✅ |
-| Standard library | Basic | Basic | Basic | Improved | Complete |
+| Concurrency support | ⚠️ | 🚧 | ✅ basic | ✅ complete | ✅ |
+| Standard library | basic | basic | basic | improved | complete |
 | Generics system | ⚠️ | ⚠️ | 🚧 | ✅ | ✅ |
 | TUI REPL | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bootstrap | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -225,16 +225,16 @@ Hello, YaoXiang!
 
 ## 8. Open Questions
 
-- [ ] JIT vs AOT timing selection
+- [ ] Timing choice for JIT vs AOT
 - [ ] Package manager design
 - [ ] Bootstrap module replacement order
 - [ ] AOT backend selection (LLVM vs custom)
 
-## 9. Version Release Standards
+## 9. Version Release Criteria
 
 **v0.x Series**:
-- Feature complete but may have edge case issues
-- API may change
+- Features complete but may have edge case issues
+- APIs may change
 - For learning and experimentation only
 
 **v1.0**:

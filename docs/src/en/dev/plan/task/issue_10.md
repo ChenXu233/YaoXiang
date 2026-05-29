@@ -1,12 +1,12 @@
-# Task: Developing Small Applications to Verify Language Features and Build Ecosystem
+# Task: Develop Small Applications to Verify Language Features and Build Ecosystem
 
 ## Overview
 
-The frontend, middle-end, and interpreter backend of YaoXiang have been completed, and the compiler backend is under development. To test the practicality of the language, discover hidden bugs, accumulate example code, and attract early users, a series of small applications need to be developed. These applications should run smoothly on the interpreter, not relying on the high-performance optimizations of the compiler backend, while fully demonstrating core design features such as YaoXiang's unified syntax, ownership model, and field-level mutability.
+The front-end, middle-end, and interpreter backend of YaoXiang have been completed, while the compiler backend is under development. To test the language's practicality, discover hidden bugs, accumulate example code, and attract early users, a series of small applications need to be developed. These applications should run smoothly on the interpreter without relying on high-performance optimizations from the compiler backend, while fully demonstrating YaoXiang's core design features such as unified syntax, ownership model, and field-level mutability.
 
 ## Goals
 
-- Develop at least 3 small applications across different domains, covering scenarios such as scripting tools, algorithm implementations, and configuration parsing.
+- Develop at least 3 small applications across different domains, covering scenarios like scripting tools, algorithm implementations, and configuration parsing.
 
 - Each application should include complete source code, test cases, and brief documentation.
 
@@ -16,33 +16,33 @@ The frontend, middle-end, and interpreter backend of YaoXiang have been complete
 
 ### Batch File Renaming Tool
 
-**Functionality**: Traverse a specified directory, match filenames according to regular expressions, and perform renaming (replacement, adding prefix/suffix, etc.).
+**Features**: Traverse a specified directory, match filenames using regular expressions, and perform renaming (replacement, adding prefixes/suffixes, etc.).
 
-**Involved Features**: File system operations (requires FFI or standard library), string processing, ownership management (preventing resource leaks).
+**Involves**: File system operations (requires FFI or standard library), string processing, ownership management (preventing resource leaks).
 
-**Output**: Executable script with command-line argument support.
+**Output**: Executable script supporting command-line arguments.
 
-### Quick Sort Algorithm Demo
+### QuickSort Algorithm Demonstration
 
-**Functionality**: Implement the classic quick sort algorithm, supporting sorting of integer arrays.
+**Features**: Implement the classic QuickSort algorithm, supporting sorting of integer arrays.
 
-**Involved Features**: Recursion, array/list operations, generics (if supported), ownership flow (array element movement).
+**Involves**: Recursion, array/list operations, generics (if supported), ownership flow (array element movement).
 
-**Output**: Function library + test program demonstrating algorithm correctness.
+**Output**: Function library + test program, demonstrating algorithm correctness.
 
 ### TOML Configuration Parser Prototype
 
-**Functionality**: Parse simple TOML configuration files (only basic types and tables), mapping to YaoXiang record types.
+**Features**: Parse simple TOML configuration files (basic types and tables only), mapping to YaoXiang record types.
 
-**Involved Features**: String parsing, record types, error handling.
+**Involves**: String parsing, record types, error propagation.
 
-**Output**: Parser function + example configuration file and usage code.
+**Output**: Parser function + example configuration files and usage code.
 
 ### Terminal Tic-Tac-Toe Game
 
-**Functionality**: Two-player tic-tac-toe game in the terminal, supporting board display, move placement, and win/loss determination.
+**Features**: Two-player terminal Tic-Tac-Toe with board display, moves, and win detection.
 
-**Involved Features**: State management (field mutability), input/output, loop control.
+**Involves**: State management (field-level mutability), input/output, loop control.
 
 **Output**: Runnable game program.
 
@@ -54,10 +54,10 @@ The frontend, middle-end, and interpreter backend of YaoXiang have been complete
 
 - No memory safety errors (guaranteed by ownership rules).
 
-- Any language bugs or missing standard library features discovered during development are recorded as separate issues.
+- Any language bugs or standard library deficiencies discovered during development have been recorded as separate issues.
 
 ## Dependencies
 
-- Interpreter backend must be stable and usable.
+- The interpreter backend must be stable and usable.
 
-- May require file I/O, string manipulation modules from the standard library.
+- May require file I/O and string manipulation modules from the standard library.

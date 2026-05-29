@@ -1,10 +1,9 @@
-```yaml
 ---
 layout: page
 is_download: true
 
-title: TYPE THE UNIVERSE
-description: "Выберите вашу платформу, начните строить мир."
+title: ТИПИРУЙ ВСЕЛЕННУЮ
+description: "Выберите вашу платформу и начните создавать мир."
 
 download:
   latest_stable: "Последняя стабильная версия v{version}"
@@ -17,10 +16,10 @@ download:
   checksum: "Контрольная сумма / Подпись"
   build_from_source:
     title: "Сборка из исходников"
-    description: "Сборка YaoXiang из исходников с помощью Cargo, требуется установленный Rust."
+    description: "Сборка YaoXiang из исходного кода с помощью Cargo. Убедитесь, что Rust установлен."
   nightly_builds:
     title: "Ночные сборки"
-    description: "Доступны последние передовые версии. Рекомендуется для тестирования, используйте осторожно в производственной среде."
+    description: "Доступны самые свежие версии. Рекомендуется для тестирования. В продакшене используйте с осторожностью."
   github_actions: "Перейти к GitHub Actions"
 
 versions:
@@ -53,4 +52,3 @@ versions:
 sidebar: false
 
 ---
-```
