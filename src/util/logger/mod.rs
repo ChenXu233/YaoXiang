@@ -90,7 +90,12 @@ pub fn init_cli() {
 
 /// Initialize logger for LSP use (stderr only to avoid polluting JSON-RPC stdout)
 pub fn init_lsp() {
-    let filter = tracing_subscriber::filter::LevelFilter::from_level(LogLevel::Info.into());
+    init_lsp_with_level(LogLevel::Info);
+}
+
+/// Initialize logger for LSP use with custom level (always stderr)
+pub fn init_lsp_with_level(level: LogLevel) {
+    let filter = tracing_subscriber::filter::LevelFilter::from_level(level.into());
 
     let layer = tracing_subscriber::fmt::layer()
         .without_time()

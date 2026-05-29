@@ -105,8 +105,8 @@ fn native_get(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.get expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.get expects a Dict as first argument",
             ))
         }
     };
@@ -126,8 +126,8 @@ fn native_set(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.set expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.set expects a Dict as first argument",
             ))
         }
     };
@@ -136,7 +136,7 @@ fn native_set(
 
     let mut map = match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => map.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid dict handle".to_string())),
+        _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.insert(key, value);
     let new_handle = ctx.heap.allocate(HeapValue::Dict(map));
@@ -168,8 +168,8 @@ fn native_values(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.values expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.values expects a Dict as first argument",
             ))
         }
     };
@@ -190,8 +190,8 @@ fn native_keys(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.keys expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.keys expects a Dict as first argument",
             ))
         }
     };
@@ -212,8 +212,8 @@ fn native_entries(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.entries expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.entries expects a Dict as first argument",
             ))
         }
     };
@@ -249,8 +249,8 @@ fn native_delete(
     let dict_handle = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.delete expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.delete expects a Dict as first argument",
             ))
         }
     };
@@ -258,7 +258,7 @@ fn native_delete(
 
     let mut map = match ctx.heap.get(dict_handle) {
         Some(HeapValue::Dict(map)) => map.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid dict handle".to_string())),
+        _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     map.remove(&key);
     let new_handle = ctx.heap.allocate(HeapValue::Dict(map));
@@ -305,27 +305,27 @@ fn native_merge(
     let handle_a = match args.first() {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.merge expects a Dict as first argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.merge expects a Dict as first argument",
             ))
         }
     };
     let handle_b = match args.get(1) {
         Some(RuntimeValue::Dict(h)) => *h,
         _ => {
-            return Err(ExecutorError::Type(
-                "dict.merge expects a Dict as second argument".to_string(),
+            return Err(ExecutorError::type_only(
+                "dict.merge expects a Dict as second argument",
             ))
         }
     };
 
     let map_a = match ctx.heap.get(handle_a) {
         Some(HeapValue::Dict(map)) => map.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid dict handle".to_string())),
+        _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
     let map_b = match ctx.heap.get(handle_b) {
         Some(HeapValue::Dict(map)) => map.clone(),
-        _ => return Err(ExecutorError::Runtime("Invalid dict handle".to_string())),
+        _ => return Err(ExecutorError::runtime_only("Invalid dict handle")),
     };
 
     let mut merged = map_a;

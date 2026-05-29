@@ -1,8 +1,8 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started with the YaoXiang programming language.
+> This guide helps you get started with YaoXiang programming language.
 >
-> **Note**: The code examples in this document are written according to the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../YaoXiang-language-specification.md).
+> **Note**: Code examples in this document are written based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../design/language-spec.md).
 
 ## Installation
 
@@ -36,7 +36,7 @@ cargo test
 
 ## Your First Program
 
-Create a file `hello.yx`:
+Create a file named `hello.yx`:
 
 ```yaoxiang
 # hello.yx
@@ -52,7 +52,7 @@ Run it:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# or use the release version
+# or use release version
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -62,25 +62,25 @@ Output:
 Hello, YaoXiang!
 ```
 
-## Core Concepts
+## Basic Concepts
 
 ### Variables and Types
 
 ```yaoxiang
 # Automatic type inference
-x = 42                    # inferred as Int
-name = "YaoXiang"         # inferred as String
-pi = 3.14159              # inferred as Float
-is_valid = true           # inferred as Bool
+x = 42                    # Inferred as Int
+name = "YaoXiang"         # Inferred as String
+pi = 3.14159              # Inferred as Float
+is_valid = true           # Inferred as Bool
 
-# Explicit type annotation (recommended, using type conventions)
+# Explicit type annotation (recommended per type convention)
 count: Int = 100
 
 # Immutable by default (safety feature)
 x = 10
 x = 20                    # ❌ Compile error! Immutable
 
-# Mutable variable (requires explicit declaration)
+# Mutable variables (requires explicit declaration)
 mut counter = 0
 counter = counter + 1     # ✅ OK
 ```
@@ -110,10 +110,10 @@ name: String = "YaoXiang"
 # Function definition
 add: (a: Int, b: Int) -> Int = a + b
 
-# Type definition (using braces)
+# Type definition (using curly braces)
 type Point = { x: Float, y: Float }
 
-# Using a type
+# Using the type
 p: Point = Point(x: 1.0, y: 2.0)
 p.x  # 1.0
 p.y  # 2.0
@@ -122,7 +122,7 @@ p.y  # 2.0
 #### Record Types
 
 ```yaoxiang
-# Struct types
+# Struct type
 type Point = { x: Float, y: Float }
 type Rect = { x: Float, y: Float, width: Float, height: Float }
 
@@ -133,10 +133,10 @@ r = Rect(x: 0.0, y: 0.0, width: 10.0, height: 20.0)
 
 #### Interface Definitions
 
-Interfaces are record types where all fields are function types:
+Interfaces are record types whose fields are all function types:
 
 ```yaoxiang
-# Define an interface
+# Define interface
 type Drawable = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -152,7 +152,7 @@ type EmptyInterface = {}
 
 #### Type Methods
 
-Use `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
+Define type methods using `Type.method: (Type, ...) -> Return = ...` syntax:
 
 ```yaoxiang
 # Type definition
@@ -173,7 +173,7 @@ p.draw(screen)           # → Point.draw(p, screen)
 str = p.serialize()      # → Point.serialize(p)
 ```
 
-#### Auto-Binding
+#### Automatic Binding
 
 Functions declared with the `pub` keyword are automatically bound to types defined in the same file:
 
@@ -194,7 +194,7 @@ p2 = Point(x: 1.0, y: 2.0)
 # Functional call
 d = distance(p1, p2)           # 3.606...
 
-# OOP syntactic sugar (auto-binds to Point.distance)
+# OOP syntactic sugar (auto-bound to Point.distance)
 d2 = p1.distance(p2)           # → distance(p1, p2)
 ```
 
@@ -205,21 +205,21 @@ d2 = p1.distance(p2)           # → distance(p1, p2)
 type Color = red | green | blue
 
 # Enum with data
-type Result[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 
 # Using generics
-success: Result[Int, String] = ok(42)
-failure: Result[Int, String] = err("not found")
+success: Result(Int, String) = ok(42)
+failure: Result(Int, String) = err("not found")
 ```
 
 #### Generic Types
 
 ```yaoxiang
 # Generic type definition
-type List[T] = {
-    data: Array[T],
+List: (T: Type) -> Type = {
+    data: Array(T),
     length: Int,
-    push: (List[T], T) -> Void
+    push: (List(T), T) -> Void
 }
 
 # Concrete instantiation
@@ -255,15 +255,15 @@ while n < 5 {
 ### Lists and Dictionaries
 
 ```yaoxiang
-# List
+# Lists
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]         # 1
 
-# Dictionary
+# Dictionaries
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  # 90
 
-# Add element
+# Adding elements
 mut list = [1, 2, 3]
 list.append(4)
 ```
@@ -272,7 +272,7 @@ list.append(4)
 
 ```yaoxiang
 # match expression
-result: Result[Int, String] = ok(42)
+result: Result(Int, String) = ok(42)
 
 message = match result {
     ok(value) => "Success: " + value.to_string()
@@ -280,23 +280,23 @@ message = match result {
 }
 ```
 
-## Concurrent Programming (Async)
+## Spawn Programming (Asynchronous)
 
-YaoXiang's unique feature: functions marked with `spawn` automatically gain async capabilities.
+YaoXiang's distinctive feature: functions marked with `spawn` automatically gain asynchronous capabilities.
 
 ```yaoxiang
-# Define a concurrent function (auto async execution)
+# Define spawn function (automatically executes asynchronously)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Call concurrent function (auto parallel, no await needed)
+# Call spawn function (automatically runs in parallel, no await needed)
 main: () -> Void = {
-    # Two calls execute automatically in parallel
-    user = fetch_user(1)     # Auto parallel
-    posts = fetch_posts()    # Auto parallel
+    # Two calls automatically execute in parallel
+    user = fetch_user(1)     # Auto-parallel
+    posts = fetch_posts()    # Auto-parallel
 
-    # Auto-wait when results are needed
+    # Automatically waits when results are needed
     print(user.name)
     print(posts.length)
 }
@@ -314,12 +314,12 @@ result = math.sqrt(16)      # 4.0
 println("Hello!")
 ```
 
-## FAQ
+## Frequently Asked Questions
 
 ### Q: Variables are immutable by default, how do I modify a variable?
 
 ```yaoxiang
-# Use mut keyword to declare mutable variable
+# Use the mut keyword to declare a mutable variable
 mut x = 10
 x = 20                       # ✅ OK
 ```
@@ -338,9 +338,9 @@ add = (a, b) => a + b
 
 ```yaoxiang
 # Use Result type
-type Result[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 
-# Pattern match to handle
+# Handle with pattern matching
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -352,11 +352,11 @@ match result {
 
 - 📖 Read the [YaoXiang Guide](../YaoXiang-book.md) to learn about core features
 - 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for complete syntax
-- 🏗️ Browse [Architecture Documentation](../architecture/) for implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core philosophy
+- 🏗️ Browse [Architecture Docs](../architecture/) for implementation details
+- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core principles
 
 ## Related Resources
 
 - [GitHub Repository](https://github.com/yourusername/yaoxiang)
-- [Issue Reporting](https://github.com/yourusername/yaoxiang/issues)
+- [Issue Tracker](https://github.com/yourusername/yaoxiang/issues)
 - [Contribution Guide](../guides/dev/)

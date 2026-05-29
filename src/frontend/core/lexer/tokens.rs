@@ -83,6 +83,7 @@ pub enum TokenKind {
     RBracket,
     LBrace,
     RBrace,
+    At,
     Comma,
     Colon,
     Semicolon,

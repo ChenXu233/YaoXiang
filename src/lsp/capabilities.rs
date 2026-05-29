@@ -3,13 +3,13 @@
 //! 定义 YaoXiang 语言服务器支持的 LSP 功能。
 
 use lsp_types::{
-    CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
+    CodeActionOptions, CompletionOptions, HoverProviderCapability, OneOf, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, SaveOptions,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
     SemanticTokensServerCapabilities,
 };
 
-use crate::frontend::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
+use crate::frontend::core::typecheck::semantic_db::{SemanticTokenModifier, SemanticTokenType};
 
 /// 构建服务端能力声明
 ///
@@ -48,6 +48,12 @@ pub fn server_capabilities() -> ServerCapabilities {
         // 查找引用（v0.8）
         references_provider: Some(OneOf::Left(true)),
 
+        // 重命名（v0.9）
+        rename_provider: Some(OneOf::Left(true)),
+
+        // 代码操作（v0.9）
+        code_action_provider: Some(CodeActionOptions::default().into()),
+
         // 悬停提示（v0.8）
         hover_provider: Some(HoverProviderCapability::Simple(true)),
 
@@ -70,9 +76,16 @@ pub fn server_capabilities() -> ServerCapabilities {
             },
         )),
 
-        // 以下能力将在后续阶段启用
-        // workspace_symbol_provider: None,  // v0.9
-        // document_formatting_provider: None, // v0.9
+        // 工作区符号搜索（v0.9）
+        workspace_symbol_provider: Some(OneOf::Left(true)),
+
+        // 文档格式化（v0.9）
+        document_formatting_provider: Some(OneOf::Left(true)),
+        document_range_formatting_provider: Some(OneOf::Left(true)),
+
+        // 幽灵提示（Inlay Hints）
+        inlay_hint_provider: Some(OneOf::Left(true)),
+
         ..ServerCapabilities::default()
     }
 }

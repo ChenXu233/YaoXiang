@@ -70,7 +70,7 @@ impl<'a> ParserState<'a> {
             // Indexing
             Some(TokenKind::LBracket) => Some((BP_CALL, BP_CALL + 1, Self::parse_index)),
             // Type cast
-            Some(TokenKind::KwAs) => Some((BP_ADD, BP_ADD + 1, Self::parse_cast)),
+            Some(TokenKind::KwAs) => Some((BP_CAST, BP_CAST + 1, Self::parse_cast)),
             // Try operator (error propagation)
             Some(TokenKind::Question) => Some((BP_CALL, BP_CALL + 1, Self::parse_try)),
             // Lambda (single parameter)
@@ -210,11 +210,11 @@ impl<'a> ParserState<'a> {
         lhs: Expr,
         _left_bp: u8,
     ) -> Option<Expr> {
-        let span = self.span();
         self.bump(); // consume '.'
 
         let token = self.current().cloned()?;
         if let TokenKind::Identifier(name) = token.kind {
+            let span = token.span;
             self.bump();
             Some(Expr::FieldAccess {
                 expr: Box::new(lhs),

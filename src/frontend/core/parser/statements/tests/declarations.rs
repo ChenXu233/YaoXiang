@@ -1,0 +1,216 @@
+//! Variable declaration tests — based on spec §5.2, §6.1
+
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
+use crate::frontend::core::parser::ast::{StmtKind, Type};
+
+fn parse_stmt(source: &str) -> StmtKind {
+    let tokens = tokenize(source).unwrap();
+    let module = parse(&tokens).unwrap();
+    assert_eq!(module.items.len(), 1);
+    module.items.into_iter().next().unwrap().kind
+}
+
+// ============================================================================
+// 变量声明 (Spec §5.2)
+// ============================================================================
+
+#[test]
+fn test_var_simple() {
+    let kind = parse_stmt("x = 42");
+    assert!(matches!(&kind, StmtKind::Var { name, .. } if name == "x"));
+}
+
+#[test]
+fn test_var_typed() {
+    // §6.2: name: type = value
+    let kind = parse_stmt("x: Int = 42");
+    if let StmtKind::Var {
+        name,
+        type_annotation,
+        ..
+    } = &kind
+    {
+        assert_eq!(name, "x");
+        assert!(type_annotation.is_some());
+    } else {
+        panic!("Expected StmtKind::Var");
+    }
+}
+
+#[test]
+fn test_var_mut() {
+    let kind = parse_stmt("mut x: Int = 0");
+    if let StmtKind::Var { name, is_mut, .. } = &kind {
+        assert_eq!(name, "x");
+        assert!(is_mut);
+    } else {
+        panic!("Expected StmtKind::Var");
+    }
+}
+
+#[test]
+fn test_var_no_annotation() {
+    let kind = parse_stmt("x = 42");
+    if let StmtKind::Var {
+        name,
+        type_annotation,
+        ..
+    } = &kind
+    {
+        assert_eq!(name, "x");
+        assert!(type_annotation.is_none());
+    } else {
+        panic!("Expected StmtKind::Var");
+    }
+}
+
+// RFC-010 uses StmtKind::Binding for block assignments
+#[test]
+fn test_var_block_initializer_is_binding() {
+    let kind = parse_stmt("main = { x = 42 }");
+    // main = { ... } 应该解析为 Binding（函数体）
+    assert!(matches!(&kind, StmtKind::Binding { name, .. } if name == "main"));
+}
+
+// ============================================================================
+// 函数定义 (RFC-010 / Spec §6.1)
+// ============================================================================
+
+#[test]
+fn test_fn_def_simple() {
+    let kind = parse_stmt("add: (a: Int, b: Int) -> Int = a + b");
+    if let StmtKind::Binding { name, params, .. } = &kind {
+        assert_eq!(name, "add");
+        assert_eq!(params.len(), 2);
+    } else {
+        panic!("Expected StmtKind::Binding, got {:?}", kind);
+    }
+}
+
+#[test]
+fn test_fn_def_no_params() {
+    let kind = parse_stmt("main: () -> Void = {}");
+    if let StmtKind::Binding { name, params, .. } = &kind {
+        assert_eq!(name, "main");
+        assert!(params.is_empty());
+    } else {
+        panic!("Expected StmtKind::Binding");
+    }
+}
+
+#[test]
+fn test_fn_def_block_body() {
+    let kind = parse_stmt("add: (a: Int, b: Int) -> Int = { return a + b }");
+    if let StmtKind::Binding { name, .. } = &kind {
+        assert_eq!(name, "add");
+    } else {
+        panic!("Expected StmtKind::Binding");
+    }
+}
+
+// ============================================================================
+// 类型定义 (RFC-010)
+// ============================================================================
+
+#[test]
+fn test_type_def_struct() {
+    let kind = parse_stmt("Point: Type = { x: Float, y: Float }");
+    if let StmtKind::Binding {
+        name,
+        type_annotation,
+        ..
+    } = &kind
+    {
+        assert_eq!(name, "Point");
+        assert!(type_annotation.is_some());
+        assert!(matches!(
+            type_annotation.as_ref().unwrap(),
+            Type::Struct { .. }
+        ));
+    } else {
+        panic!("Expected StmtKind::Binding for type def");
+    }
+}
+
+#[test]
+fn test_type_def_enum() {
+    let kind = parse_stmt("Color: Type = { red | green | blue }");
+    if let StmtKind::Binding { name, .. } = &kind {
+        assert_eq!(name, "Color");
+    } else {
+        panic!("Expected StmtKind::Binding for enum def");
+    }
+}
+
+#[test]
+fn test_type_def_generic() {
+    // RFC-011: Option: (T: Type) -> Type = { some(T) | none }
+    let kind = parse_stmt("Option: (T: Type) -> Type = { some(T) | none }");
+    if let StmtKind::Binding {
+        name,
+        generic_params,
+        ..
+    } = &kind
+    {
+        assert_eq!(name, "Option");
+        assert_eq!(generic_params.len(), 1);
+        assert_eq!(generic_params[0].name, "T");
+    } else {
+        panic!("Expected StmtKind::Binding for generic type def");
+    }
+}
+
+// ============================================================================
+// 方法定义 (RFC-010)
+// ============================================================================
+
+#[test]
+fn test_method_def() {
+    let kind = parse_stmt("Point.draw: (self: Point, s: Surface) -> Void = { }");
+    if let StmtKind::Binding {
+        name, type_name, ..
+    } = &kind
+    {
+        assert_eq!(name, "draw");
+        assert_eq!(type_name, &Some("Point".to_string()));
+    } else {
+        panic!("Expected StmtKind::Binding for method def");
+    }
+}
+
+// ============================================================================
+// 外部绑定 (RFC-004)
+// ============================================================================
+
+#[test]
+fn test_external_binding() {
+    let kind = parse_stmt("Point.distance = distance[0]");
+    if let StmtKind::ExternalBindingStmt {
+        type_name,
+        method_name,
+        ..
+    } = &kind
+    {
+        assert_eq!(type_name, "Point");
+        assert_eq!(method_name, "distance");
+    } else {
+        panic!("Expected StmtKind::ExternalBindingStmt");
+    }
+}
+
+// ============================================================================
+// 表达式语句
+// ============================================================================
+
+#[test]
+fn test_expr_stmt_literal() {
+    let kind = parse_stmt("42");
+    assert!(matches!(&kind, StmtKind::Expr(..)));
+}
+
+#[test]
+fn test_expr_stmt_call() {
+    let kind = parse_stmt("foo()");
+    assert!(matches!(&kind, StmtKind::Expr(..)));
+}

@@ -9,6 +9,7 @@ use tracing::info;
 use crate::lsp::capabilities::server_capabilities;
 use crate::lsp::protocol::{self, SERVER_NAME, SERVER_VERSION};
 use crate::lsp::session::{Session, SessionState};
+use crate::lsp::world::World;
 
 /// 处理 `initialize` 请求
 ///
@@ -16,6 +17,7 @@ use crate::lsp::session::{Session, SessionState};
 /// 调用后会话进入 `Initializing` 状态。
 pub fn handle_initialize(
     session: &mut Session,
+    world: &mut World,
     id: lsp_server::RequestId,
     params: InitializeParams,
 ) -> Response {
@@ -34,6 +36,10 @@ pub fn handle_initialize(
             #[allow(deprecated)]
             params.root_path.clone()
         });
+
+    // initialize 时主动清理一次运行时缓存，避免异常重连时残留旧状态。
+    session.document_store_mut().clear();
+    world.reset_for_new_session();
 
     session.set_root_path(root_path.clone());
     session.set_state(SessionState::Initializing);
@@ -94,9 +100,10 @@ mod tests {
     #[test]
     fn test_handle_initialize() {
         let mut session = Session::new();
+        let mut world = World::new();
         let params = make_init_params(Some("file:///workspace/project"));
 
-        let resp = handle_initialize(&mut session, 1.into(), params);
+        let resp = handle_initialize(&mut session, &mut world, 1.into(), params);
 
         // 响应成功
         assert!(resp.error.is_none());
@@ -117,9 +124,10 @@ mod tests {
     #[test]
     fn test_handle_initialize_no_root() {
         let mut session = Session::new();
+        let mut world = World::new();
         let params = make_init_params(None);
 
-        let resp = handle_initialize(&mut session, 1.into(), params);
+        let resp = handle_initialize(&mut session, &mut world, 1.into(), params);
         assert!(resp.error.is_none());
         assert!(session.root_path().is_none());
     }

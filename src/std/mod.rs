@@ -6,6 +6,7 @@ pub mod concurrent;
 pub mod convert;
 pub mod dict;
 pub mod ffi;
+pub mod gen_interfaces;
 pub mod io;
 pub mod list;
 pub mod math;
@@ -34,7 +35,8 @@ pub struct NativeContext<'a> {
     pub heap: &'a mut Heap,
     /// Callback to invoke a YaoXiang function value with given arguments.
     /// The closure takes (function_value, args) and returns a RuntimeValue.
-    pub call_fn: Option<&'a mut CallFn>,
+    /// Use `call_function()` instead of accessing this directly.
+    call_fn: Option<&'a mut CallFn>,
 }
 
 impl<'a> NativeContext<'a> {
@@ -68,7 +70,7 @@ impl<'a> NativeContext<'a> {
         if let Some(ref mut callback) = self.call_fn {
             callback(func, args)
         } else {
-            Err(ExecutorError::Runtime(
+            Err(ExecutorError::runtime_only(
                 "Cannot call YaoXiang functions from this native context".to_string(),
             ))
         }
@@ -186,7 +188,7 @@ fn builtin_len(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() != 1 {
-        return Err(ExecutorError::Type(
+        return Err(ExecutorError::type_only(
             "len expects exactly 1 argument".to_string(),
         ));
     }
@@ -212,7 +214,7 @@ fn builtin_dict_keys(
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() != 1 {
-        return Err(ExecutorError::Type(
+        return Err(ExecutorError::type_only(
             "dict_keys expects exactly 1 argument".to_string(),
         ));
     }
@@ -222,7 +224,7 @@ fn builtin_dict_keys(
             _ => Vec::new(),
         },
         _ => {
-            return Err(ExecutorError::Type(
+            return Err(ExecutorError::type_only(
                 "dict_keys only supports dict".to_string(),
             ));
         }
@@ -236,13 +238,14 @@ fn builtin_dict_keys(
 /// This is the single entry point that ffi.rs should call.
 /// New std modules only need to be added to this function.
 pub fn register_all(registry: &mut FfiRegistry) {
+    concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
+    ffi::FFI_MODULE.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     net::NetModule.register_ffi(registry);
-    concurrent::ConcurrentModule.register_ffi(registry);
     string::StringModule.register_ffi(registry);
     time::TimeModule.register_ffi(registry);
     os::OsModule.register_ffi(registry);
@@ -257,13 +260,14 @@ pub fn register_all(registry: &mut FfiRegistry) {
 /// This is used by the frontend module system.
 pub fn all_module_infos() -> Vec<ModuleInfo> {
     vec![
+        concurrent::ConcurrentModule.to_module_info(),
         convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
+        ffi::FFI_MODULE.to_module_info(),
         io::IoModule.to_module_info(),
         list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
         net::NetModule.to_module_info(),
-        concurrent::ConcurrentModule.to_module_info(),
         string::StringModule.to_module_info(),
         time::TimeModule.to_module_info(),
         os::OsModule.to_module_info(),

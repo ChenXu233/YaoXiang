@@ -1,46 +1,55 @@
-﻿# Error Code Reference
+# Error Code Reference
 
-> Complete reference for YaoXiang compiler error codes, organized by category.
+> Auto-generated from `src/util/diagnostic/codes/`
 
-## Quick Navigation
+The YaoXiang compiler uses a unified error code system, where each error code includes:
+- **Code**: Error identifier (e.g., `E1001`)
+- **Category**: Error phase
+- **Title**: Short error description
+- **Message**: Detailed error message
+- **Help**: Possible solutions
 
-| Category | Range | Description |
-|----------|-------|-------------|
-| [Lexer & Parser](./E0xxx.md) | E0xxx | Lexical and parsing errors |
-| [Type Checking](./E1xxx.md) | E1xxx | Type system errors |
-| [Semantic Analysis](./E2xxx.md) | E2xxx | Scope, lifetime, etc. |
-| [Generics & Traits](./E4xxx.md) | E4xxx | Generic bounds, trait impl |
-| [Modules & Imports](./E5xxx.md) | E5xxx | Module resolution, imports |
-| [Runtime Errors](./E6xxx.md) | E6xxx | Execution-time errors |
-| [I/O & System Errors](./E7xxx.md) | E7xxx | File, network, system errors |
-| [Internal Compiler Errors](./E8xxx.md) | E8xxx | Compiler internal errors |
+## Error Code List
 
-## Error Message Format
+| Prefix | Category | Description |
+|--------|----------|-------------|
+| E0xxx | Lexer/Parser | Lexical and syntax analysis errors |
+| E1xxx | TypeCheck | Type checking errors |
+| E2xxx | Semantic | Semantic analysis errors |
+| E4xxx | Generic | Generics and trait errors |
+| E5xxx | Module | Module and import errors |
+| E6xxx | Runtime | Runtime errors |
+| E7xxx | I/O | I/O and system errors |
+| E8xxx | Internal | Internal compiler errors |
 
-```
-error[E0001]: Type mismatch: expected `Int`, found `String`
-  --> file.yx:10:5
-   |
-10 | x: Int = "hello";
-   |            ^^^^^^^^ expected `Int`, found `String`
-   |
-   = help: Consider using `.to_int()` method
-```
+## Usage
 
-## Using `yaoxiang explain`
+### CLI Commands
+
+Use the `yaoxiang explain` command to view error details:
 
 ```bash
 # View error details
-yaoxiang explain E0001
+yaoxiang explain E1001
 
-# Specify language
-yaoxiang explain E0001 --lang en
-
-# JSON format (for IDE/LSP)
-yaoxiang explain E0001 --json
+# JSON format output
+yaoxiang explain E1001 --json
 ```
 
-## Related Resources
+### In Code
 
-- [Error System Design](../../old/guides/error-system-design.md)
-- [RFC-013: Error Code Specification](../../old/design/accepted/013-error-code-specification.md)
+```rust
+use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};
+
+// Find error codes and retrieve titles and help information via I18nRegistry
+let i18n = I18nRegistry::default();
+
+if let Some(code) = ErrorCodeDefinition::find("E1001") {
+    let title = i18n.get_title(&code);
+    println!("Title: {}", title);
+
+    if let Some(help) = i18n.get_help(&code) {
+        println!("Help: {}", help);
+    }
+}
+```

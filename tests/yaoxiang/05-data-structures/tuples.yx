@@ -1,0 +1,14 @@
+// 05-data-structures/tuples.yx
+// 覆盖: 规范 §3.6 元组类型
+// 验证: 元组字面量
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // 元组
+    mut t = (1, "one", true)
+    io.println(t)
+
+    io.println("ALL TESTS PASSED")
+}

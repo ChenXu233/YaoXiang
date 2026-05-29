@@ -321,7 +321,7 @@ compute_all: () -> (Int, Int, Int) spawn = {
 
 # === 泛型 ===
 
-identity: [T](x: T) -> T = x
+identity: (T: Type) -> ((x: T) -> T) = x
 ```
 
 ### 项目结构
@@ -426,7 +426,7 @@ YaoXiang 的设计灵感来自以下项目和语言：
 
 ### 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
 
-- [爻象设计宣言WTF版](docs/design/manifesto-wtf.md) - DeepSeek锐评
+- [爻象设计宣言WTF版](docs/src/design/manifesto-wtf.md) - DeepSeek锐评
 
 > 「道生一，一生二，二生三，三生万物。」
 > —— 《道德经》

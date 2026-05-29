@@ -192,7 +192,7 @@ fn native_open(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "open expects 2 arguments (path: String, mode: String)".to_string(),
         ));
     }
@@ -200,7 +200,7 @@ fn native_open(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "open expects String path, got {:?}",
                 other.value_type(None)
             )))
@@ -210,7 +210,7 @@ fn native_open(
     let mode = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "open expects String mode, got {:?}",
                 other.value_type(None)
             )))
@@ -238,7 +238,7 @@ fn native_open(
             .create(true)
             .open(&path),
         _ => {
-            return Err(ExecutorError::Runtime(format!(
+            return Err(ExecutorError::runtime_only(format!(
                 "Invalid file mode: {}. Use 'r', 'w', 'a', 'r+', 'w+', 'a+'",
                 mode
             )))
@@ -252,12 +252,12 @@ fn native_open(
                 files.insert(fd, file);
                 Ok(RuntimeValue::Int(fd))
             } else {
-                Err(ExecutorError::Runtime(
+                Err(ExecutorError::runtime_only(
                     "Failed to lock file table".to_string(),
                 ))
             }
         }
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to open file '{}': {}",
             path, e
         ))),
@@ -270,7 +270,7 @@ fn native_close(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "close expects 1 argument (file: File)".to_string(),
         ));
     }
@@ -278,7 +278,7 @@ fn native_close(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "close expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -289,13 +289,13 @@ fn native_close(
         if files.remove(&fd).is_some() {
             Ok(RuntimeValue::Unit)
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -307,7 +307,7 @@ fn native_read(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "read expects 2 arguments (file: File, n: Int)".to_string(),
         ));
     }
@@ -315,7 +315,7 @@ fn native_read(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "read expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -325,7 +325,7 @@ fn native_read(
     let n = match &args[1] {
         RuntimeValue::Int(n) => *n as usize,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "read expects Int argument, got {:?}",
                 other.value_type(None)
             )))
@@ -345,19 +345,19 @@ fn native_read(
                         )),
                     }
                 }
-                Err(e) => Err(ExecutorError::Runtime(format!(
+                Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to read from file: {}",
                     e
                 ))),
             }
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -369,7 +369,7 @@ fn native_write(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "write expects 2 arguments (file: File, content: String)".to_string(),
         ));
     }
@@ -377,7 +377,7 @@ fn native_write(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "write expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -387,7 +387,7 @@ fn native_write(
     let content = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "write expects String content, got {:?}",
                 other.value_type(None)
             )))
@@ -398,19 +398,19 @@ fn native_write(
         if let Some(file) = files.get_mut(&fd) {
             match file.write_all(content.as_bytes()) {
                 Ok(()) => Ok(RuntimeValue::Int(content.len() as i64)),
-                Err(e) => Err(ExecutorError::Runtime(format!(
+                Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to write to file: {}",
                     e
                 ))),
             }
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -422,7 +422,7 @@ fn native_seek(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "seek expects 2 arguments (file: File, offset: Int)".to_string(),
         ));
     }
@@ -430,7 +430,7 @@ fn native_seek(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "seek expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -440,7 +440,7 @@ fn native_seek(
     let offset = match &args[1] {
         RuntimeValue::Int(offset) => *offset,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "seek expects Int offset, got {:?}",
                 other.value_type(None)
             )))
@@ -451,19 +451,19 @@ fn native_seek(
         if let Some(file) = files.get_mut(&fd) {
             match file.seek(SeekFrom::Start(offset as u64)) {
                 Ok(_) => Ok(RuntimeValue::Bool(true)),
-                Err(e) => Err(ExecutorError::Runtime(format!(
+                Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to seek in file: {}",
                     e
                 ))),
             }
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -475,7 +475,7 @@ fn native_tell(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "tell expects 1 argument (file: File)".to_string(),
         ));
     }
@@ -483,7 +483,7 @@ fn native_tell(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "tell expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -494,19 +494,19 @@ fn native_tell(
         if let Some(file) = files.get_mut(&fd) {
             match file.stream_position() {
                 Ok(pos) => Ok(RuntimeValue::Int(pos as i64)),
-                Err(e) => Err(ExecutorError::Runtime(format!(
+                Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to get file position: {}",
                     e
                 ))),
             }
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -518,7 +518,7 @@ fn native_flush(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "flush expects 1 argument (file: File)".to_string(),
         ));
     }
@@ -526,7 +526,7 @@ fn native_flush(
     let fd = match &args[0] {
         RuntimeValue::Int(fd) => *fd,
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "flush expects File (Int) argument, got {:?}",
                 other.value_type(None)
             )))
@@ -537,19 +537,19 @@ fn native_flush(
         if let Some(file) = files.get_mut(&fd) {
             match file.flush() {
                 Ok(()) => Ok(RuntimeValue::Unit),
-                Err(e) => Err(ExecutorError::Runtime(format!(
+                Err(e) => Err(ExecutorError::runtime_only(format!(
                     "Failed to flush file: {}",
                     e
                 ))),
             }
         } else {
-            Err(ExecutorError::Runtime(format!(
+            Err(ExecutorError::runtime_only(format!(
                 "Invalid file descriptor: {}",
                 fd
             )))
         }
     } else {
-        Err(ExecutorError::Runtime(
+        Err(ExecutorError::runtime_only(
             "Failed to lock file table".to_string(),
         ))
     }
@@ -565,7 +565,7 @@ fn native_mkdir(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "mkdir expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -573,7 +573,7 @@ fn native_mkdir(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "mkdir expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -582,7 +582,7 @@ fn native_mkdir(
 
     match fs::create_dir(&path) {
         Ok(()) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to create directory '{}': {}",
             path, e
         ))),
@@ -595,7 +595,7 @@ fn native_rmdir(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "rmdir expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -603,7 +603,7 @@ fn native_rmdir(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "rmdir expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -612,7 +612,7 @@ fn native_rmdir(
 
     match fs::remove_dir(&path) {
         Ok(()) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to remove directory '{}': {}",
             path, e
         ))),
@@ -625,7 +625,7 @@ fn native_read_dir(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "read_dir expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -633,7 +633,7 @@ fn native_read_dir(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "read_dir expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -651,7 +651,7 @@ fn native_read_dir(
                 .collect();
             Ok(RuntimeValue::String(names.join("\n").into()))
         }
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to read directory '{}': {}",
             path, e
         ))),
@@ -668,7 +668,7 @@ fn native_remove(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "remove expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -676,7 +676,7 @@ fn native_remove(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "remove expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -685,7 +685,7 @@ fn native_remove(
 
     match fs::remove_file(&path) {
         Ok(()) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to remove file '{}': {}",
             path, e
         ))),
@@ -698,7 +698,7 @@ fn native_exists(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "exists expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -706,7 +706,7 @@ fn native_exists(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "exists expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -722,7 +722,7 @@ fn native_is_file(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "is_file expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -730,7 +730,7 @@ fn native_is_file(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "is_file expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -746,7 +746,7 @@ fn native_is_dir(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "is_dir expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -754,7 +754,7 @@ fn native_is_dir(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "is_dir expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -770,7 +770,7 @@ fn native_copy(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "copy expects 2 arguments (src: String, dst: String)".to_string(),
         ));
     }
@@ -778,7 +778,7 @@ fn native_copy(
     let src = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "copy expects String src, got {:?}",
                 other.value_type(None)
             )))
@@ -788,7 +788,7 @@ fn native_copy(
     let dst = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "copy expects String dst, got {:?}",
                 other.value_type(None)
             )))
@@ -797,7 +797,7 @@ fn native_copy(
 
     match fs::copy(&src, &dst) {
         Ok(_) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to copy file from '{}' to '{}': {}",
             src, dst, e
         ))),
@@ -810,7 +810,7 @@ fn native_rename(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "rename expects 2 arguments (old: String, new: String)".to_string(),
         ));
     }
@@ -818,7 +818,7 @@ fn native_rename(
     let old = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "rename expects String old, got {:?}",
                 other.value_type(None)
             )))
@@ -828,7 +828,7 @@ fn native_rename(
     let new = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "rename expects String new, got {:?}",
                 other.value_type(None)
             )))
@@ -837,7 +837,7 @@ fn native_rename(
 
     match fs::rename(&old, &new) {
         Ok(()) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to rename '{}' to '{}': {}",
             old, new, e
         ))),
@@ -854,7 +854,7 @@ fn native_get_env(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "get_env expects 1 argument (name: String)".to_string(),
         ));
     }
@@ -862,7 +862,7 @@ fn native_get_env(
     let name = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "get_env expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -881,7 +881,7 @@ fn native_set_env(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "set_env expects 2 arguments (name: String, value: String)".to_string(),
         ));
     }
@@ -889,7 +889,7 @@ fn native_set_env(
     let name = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "set_env expects String name, got {:?}",
                 other.value_type(None)
             )))
@@ -899,7 +899,7 @@ fn native_set_env(
     let value = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "set_env expects String value, got {:?}",
                 other.value_type(None)
             )))
@@ -929,7 +929,7 @@ fn native_chdir(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "chdir expects 1 argument (path: String)".to_string(),
         ));
     }
@@ -937,7 +937,7 @@ fn native_chdir(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "chdir expects String argument, got {:?}",
                 other.value_type(None)
             )))
@@ -949,13 +949,13 @@ fn native_chdir(
             if Path::new(&path).is_dir() {
                 Ok(RuntimeValue::Bool(true))
             } else {
-                Err(ExecutorError::Runtime(format!(
+                Err(ExecutorError::runtime_only(format!(
                     "Directory does not exist: {}",
                     path
                 )))
             }
         }
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to get current directory: {}",
             e
         ))),
@@ -969,7 +969,7 @@ fn native_getcwd(
 ) -> Result<RuntimeValue, ExecutorError> {
     match std::env::current_dir() {
         Ok(path) => Ok(RuntimeValue::String(path.to_string_lossy().into())),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to get current directory: {}",
             e
         ))),
@@ -982,7 +982,7 @@ fn native_append_file(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "append_file expects 2 arguments (path: String, content: String)".to_string(),
         ));
     }
@@ -990,7 +990,7 @@ fn native_append_file(
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "append_file expects String path, got {:?}",
                 other.value_type(None)
             )))
@@ -1000,7 +1000,7 @@ fn native_append_file(
     let content = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "append_file expects String content, got {:?}",
                 other.value_type(None)
             )))
@@ -1010,12 +1010,12 @@ fn native_append_file(
     match OpenOptions::new().append(true).create(true).open(&path) {
         Ok(mut file) => match file.write_all(content.as_bytes()) {
             Ok(()) => Ok(RuntimeValue::Bool(true)),
-            Err(e) => Err(ExecutorError::Runtime(format!(
+            Err(e) => Err(ExecutorError::runtime_only(format!(
                 "Failed to append to file '{}': {}",
                 path, e
             ))),
         },
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to open file '{}' for appending: {}",
             path, e
         ))),

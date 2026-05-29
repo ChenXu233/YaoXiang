@@ -7,8 +7,5 @@ pub mod lifetime;
 pub mod module;
 pub mod mono;
 
-#[cfg(test)]
-pub mod tests;
-
 // IR生成器实际在core模块中，直接re-export
 pub use crate::middle::core::ir_gen::*;

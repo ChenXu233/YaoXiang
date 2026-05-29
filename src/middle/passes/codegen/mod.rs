@@ -20,7 +20,7 @@ pub mod operand;
 pub mod translator;
 
 use crate::frontend::core::parser::ast::Type;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
 use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
@@ -125,6 +125,14 @@ impl CodegenContext {
         ctx
     }
 
+    pub fn set_generate_debug_info(
+        &mut self,
+        enable: bool,
+    ) {
+        self.config.generate_debug_info = enable;
+        self.translator.set_generate_debug_info(enable);
+    }
+
     /// 生成下一个标签（委托给 FlowManager）
     pub fn next_label(&mut self) -> usize {
         self.flow.next_label()
@@ -175,6 +183,8 @@ impl CodegenContext {
 
         // 1. 翻译所有函数
         debug!("{}", t(MSG::CodegenCodeSection, lang, Some(&[&func_count])));
+        self.translator
+            .set_generate_debug_info(self.config.generate_debug_info);
         let output = self.translator.translate_module(&self.module)?;
 
         // 2. 生成常量池
@@ -201,6 +211,7 @@ impl CodegenContext {
             type_table,
             const_pool,
             code_section: output.code_section,
+            debug_section: None,
         })
     }
 
@@ -243,7 +254,7 @@ impl CodegenContext {
         ast_type: &Type,
     ) -> MonoType {
         match ast_type {
-            Type::Name(name) => MonoType::TypeRef(name.clone()),
+            Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
             Type::Int(n) => MonoType::Int(*n),
             Type::Float(n) => MonoType::Float(*n),
             Type::Char => MonoType::Char,
@@ -262,8 +273,13 @@ impl CodegenContext {
                 return_type: Box::new(self.type_from_ast(return_type)),
                 is_async: false,
             },
-            Type::Generic { name, args } => MonoType::TypeRef(format!(
-                "{}<{}>",
+            Type::Option(inner) => MonoType::Option(Box::new(self.type_from_ast(inner))),
+            Type::Result(ok, err) => MonoType::Result(
+                Box::new(self.type_from_ast(ok)),
+                Box::new(self.type_from_ast(err)),
+            ),
+            Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
+                "{}({})",
                 name,
                 args.iter()
                     .map(|t| self.type_from_ast(t).type_name())

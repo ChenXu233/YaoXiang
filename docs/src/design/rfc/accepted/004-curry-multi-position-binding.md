@@ -273,13 +273,13 @@ Coord.describe = process_coordinates[1]
 ```yaoxiang
 # === 多返回值绑定 ===
 
-min_max: (list: List[Int]) -> (Int, Int) = {
+min_max: (list: List(Int)) -> (Int, Int) = {
     min = list.reduce(Int.MAX, (a, b) => if a < b then a else b)
     max = list.reduce(Int.MIN, (a, b) => if a > b then a else b)
     return (min, max)
 }
 
-List.range: [T](self: List[T]) -> (T, T) = min_max[1]
+List.range: (T:Type)->((self: List(T)) -> (T, T)) = min_max[1]
 # 使用：(min_val, max_val) = list.range()
 ```
 

@@ -4,38 +4,40 @@ title: 'RFC-012: F-String Template Strings'
 
 # RFC 012: F-String Template Strings
 
-> **Status**: Draft
+> **Status**: Accepted
 > **Author**: Chen Xu
-> **Created Date**: 2025-01-27
-> **Last Updated**: 2026-02-12 (Aligned with RFC-010 unified syntax)
+> **Created**: 2025-01-27
+> **Last Updated**: 2026-02-12
 
-## Summary
+## Abstract
 
-Add f-string template string feature to YaoXiang language, supporting variable interpolation, expression evaluation, and formatted output. F-strings use Python-style syntax (`f"..."` prefix), embedding expressions through `{expression}` syntax in strings, compiled into efficient string operations at compile time.
+Add f-string template string feature to YaoXiang language, supporting variable interpolation, expression evaluation, and formatted output. F-strings use Python-style syntax (`f"..."` prefix), embedding expressions via `{expression}` syntax within strings, and are transformed into efficient string operations at compile time.
+
+> **Note**: F-string syntax and behavior are consistent with Python. For specific specifications, refer to the [Python official documentation](https://docs.python.org/3/tutorial/inputoutput.html#formatted-string-literals).
 
 ## Motivation
 
-### Why this feature is needed?
+### Why is this feature needed?
 
-Current YaoXiang string concatenation methods are cumbersome:
+Current string concatenation in YaoXiang is cumbersome:
 
 ```yaoxiang
-# Current: use + concatenation
+# Current: using + concatenation
 name = "Alice"
 age = 30
 message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
 print(message)
 
-# Or use format function
-message2 = format("Hello {}, {}", name, age)
+# Or using format function
+message2 = format("Hello {}, age: {}", name, age)
 ```
 
 ### Current Problems
 
-1. **Poor readability**: String concatenation and formatting require multiple calls, code is verbose
+1. **Poor readability**: String concatenation and formatting require multiple calls, resulting in verbose code
 2. **Error-prone**: Manual type conversion, easy to miss `.to_string()`
-3. **Performance consideration**: Multiple string concatenations may affect performance
-4. **Insufficient expressiveness**: Cannot intuitively embed complex expressions in strings
+3. **Performance considerations**: Multiple string concatenations may affect performance
+4. **Limited expressiveness**: Unable to intuitively embed complex expressions in strings
 
 ## Proposal
 
@@ -74,63 +76,66 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 
 ### Syntax Changes
 
-| Before | After |
-|--------|-------|
-| `"Hello ".concat(name)` | `f"Hello {name}"` |
-| `format("Value: {}", value)` | `f"Value: {value}"` |
-| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` |
+| Before | After | |
+|--------|-------|------|
+| `"Hello ".concat(name)` | `f"Hello {name}"` | |
+| `format("Value: {}", value)` | `f"Value: {value}"` | |
+| `format("Pi: {:.2f}", pi)` | `f"Pi: {pi:.2f}"` | |
 
-### Syntax Specification
+### Grammar Specification
 
 ```
 FStringLiteral ::= 'f' '"' FStringContent* '"'
 FStringContent ::= FStringChar | EscapeSequence | FStringInterpolation
 FStringInterpolation ::= '{' Expression (':' FormatSpec)? '}'
-FormatSpec      ::= [precision][type]
+FormatSpec      ::= [width] ['.' precision] type
+width           ::= digit+
+precision       ::= digit+
+type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 'o' | 's' | 'x' | 'X' | '%'
 ```
 
 ## Detailed Design
 
-### Syntax Analysis
+### Parsing
 
-The compiler recognizes `f` prefix string literals during lexical analysis, parsing expressions and optional format specifiers inside curly braces.
+The compiler identifies `f` prefixed string literals during lexical analysis, parsing expressions within curly braces and optional format specifiers.
 
-### Conversion Strategy
+### Transformation Strategy
 
-F-strings are converted to efficient string operations at compile time:
+F-strings are transformed into efficient string operations at compile time:
 
-**Simple Interpolation**:
+**Simple interpolation**:
 ```yaoxiang
 f"Hello {name}"
 ```
-Converts to:
+Transforms to:
 ```yaoxiang
 "Hello ".concat(name.to_string())
 ```
 
-**Expression Interpolation**:
+**Expression interpolation**:
 ```yaoxiang
 f"Sum: {x + y}"
 ```
-Converts to:
+Transforms to:
 ```yaoxiang
 "Sum: ".concat((x + y).to_string())
 ```
 
-**Format Specifiers**:
+**Format specifiers**:
 ```yaoxiang
 f"Pi: {pi:.2f}"
 ```
-Converts to:
+Transforms to:
 ```yaoxiang
 format("Pi: {:.2f}", pi)
 ```
 
-**Multiple Interpolations**:
+**Multiple interpolations**:
 ```yaoxiang
 f"Hello {name}, you are {age} years old"
 ```
-Converts to:
+Transforms to:
 ```yaoxiang
 "Hello ".concat(name.to_string()).concat(", you are ").concat(age.to_string()).concat(" years old")
 ```
@@ -138,15 +143,15 @@ Converts to:
 ### Type System Impact
 
 - Interpolation expressions must implement `Stringable` interface (automatically implemented for primitive types and strings)
-- Format specifiers require types to support corresponding formatting
-- Compiler checks expression type and format specifier matching
+- Format specifiers require the type to support corresponding formatting
+- Compiler checks expression type and format rule matching
 
 ### Compiler Changes
 
-| Component | Change |
-|-----------|--------|
-| lexer | Recognize f prefix, parse in-string interpolation syntax |
-| parser | New FStringLiteral syntax node |
+| Component | Changes |
+|-----------|---------|
+| lexer | Recognize f prefix, parse string interpolation syntax |
+| parser | Add FStringLiteral syntax node |
 | typecheck | Check interpolation expression types, validate format rules |
 | codegen | Generate string concatenation or format call code |
 
@@ -160,30 +165,30 @@ Converts to:
 
 ### Advantages
 
-1. **Concise syntax**: Reduce boilerplate code, improve readability
-2. **Type safety**: Compile-time checks, reduce runtime errors
+1. **Concise syntax**: Reduces boilerplate code, improves readability
+2. **Type safety**: Compile-time checking, reduces runtime errors
 3. **Performance optimization**: Compiler can optimize string concatenation
-4. **Strong expressiveness**: Support arbitrary expressions and formatting
-5. **Low learning cost**: Consistent with Python ecosystem
+4. **Strong expressiveness**: Supports arbitrary expressions and formatting
+5. **Low learning curve**: Consistent with Python ecosystem
 
 ### Disadvantages
 
-1. **Compiler complexity**: Need new syntax analysis and conversion logic
-2. **Syntax ambiguity**: Need to distinguish from existing string syntax
-3. **Debugging challenges**: Compiled code differs from source structure
+1. **Compiler complexity**: Requires new parsing and transformation logic
+2. **Syntax ambiguity**: Needs to distinguish from existing string syntax
+3. **Debugging challenges**: Transformed code differs from source code structure
 
 ## Alternative Solutions
 
 | Solution | Why Not Chosen |
 |----------|----------------|
-| Only support variable interpolation | Cannot meet complex formatting needs |
-| Use functional style `format(...)` | Syntax not concise enough |
-| Delay to v2.0 | Users have clear needs for string convenience |
-| Use backticks or other prefix | Inconsistent with Python ecosystem |
+| Variable interpolation only | Cannot meet complex formatting requirements |
+| Functional style `format(...)` | Syntax not concise enough |
+| Defer to v2.0 | Users have clear demand for string convenience |
+| Backticks or other prefix | Inconsistent with Python ecosystem |
 
 ## Implementation Strategy
 
-### Phase Division
+### Phased Approach
 
 1. **Phase 1 (v0.9)**:
    - Basic f-string syntax support
@@ -196,34 +201,34 @@ Converts to:
    - Performance optimization
 
 3. **Phase 3 (v1.1)**:
-   - Enhanced debugging information
+   - Enhanced debug information
    - Improved error messages
    - More formatting options
 
 ### Dependencies
 
 - No external dependencies
-- Needs basic type system support
-- Needs string library basic functionality
+- Requires basic type system support
+- Requires string library foundation
 
 ### Risks
 
 1. **Performance risk**: Multiple interpolations may create too many string objects
-   - **Mitigation**: Compiler optimizes adjacent string constant merging
+   - **Mitigation**: Compiler optimization to merge adjacent string constants
 2. **Type checking complexity**: Format specifier type checking
-   - **Mitigation**: Reference Python implementation, use simple direct checking
+   - **Mitigation**: Reference Python implementation, use simple and direct checks
 3. **Syntax ambiguity**: Nested use of `{` and `}`
-   - **Mitigation**: Clear syntax rules, limit nesting
+   - **Mitigation**: Clear grammar rules, limit nesting
 
 ## Open Questions
 
-- [ ] Whether to support escaped braces? `f"{{ literal }}" → "{"`
-- [ ] Whether to support custom formatting functions?
-- [ ] Complete specification of format specifiers?
-- [ ] Specific strategies for performance optimization?
-- [ ] Best practices for error diagnostics?
+- [x] Should escaped braces be supported? Consistent with Python: use double braces for single braces, e.g. <code v-pre>{{</code> represents <code v-pre>{</code>, <code v-pre>}}</code> represents <code v-pre>}</code>
+- [x] Should custom format functions be supported? Consistent with Python: support custom formatting behavior via `__format__` method
+- [x] Complete specification of format specifiers? Consistent with Python, see BNF above
+- [x] Specific performance optimization strategies? Consistent with Python: runtime concatenation, no special optimization needed
+- [x] Best practices for error diagnostics? Consistent with Python: display original f-string content and position in error messages
 
-## Appendix
+## Appendices
 
 ### Appendix A: Format Specifier Reference
 
@@ -244,15 +249,15 @@ log(level: String, msg: String, count: Int) = () => {
     print(f"[{timestamp}] {level}: {msg} (count: {count})")
 }
 
-# JSON Building
+# JSON construction
 json = "{\n    \"name\": \"".concat(user.name).concat("\",\n    \"age\": ")
     .concat(user.age.to_string()).concat(",\n    \"email\": \"")
     .concat(user.email).concat("\"\n}")
 
-# SQL Query Building (note SQL injection risks)
+# SQL query construction (note SQL injection risk)
 query = f"SELECT * FROM users WHERE age > {min_age} AND status = '{status}'"
 
-# Debugging info
+# Debug information
 debug_info = f"Point({x:.2f}, {y:.2f}) at {timestamp}"
 
 # Conditional formatting
@@ -274,9 +279,9 @@ status_msg = if is_active {
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and Disposition
 
-RFC has the following status transitions:
+RFCs have the following state transitions:
 
 ```
 ┌─────────────┐
@@ -285,7 +290,7 @@ RFC has the following status transitions:
        │
        ▼
 ┌─────────────┐
-│  In Review  │  ← Community discussion
+│ Under Review│  ← Community discussion
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -296,7 +301,7 @@ RFC has the following status transitions:
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│   accepted/ │    │    rfc/     │
-│ (Final Doc) │    │ (Keep site) │
+│   accepted/ │    │     rfc/    │
+│ (canonical) │    │ (preserved) │
 └─────────────┘    └─────────────┘
 ```

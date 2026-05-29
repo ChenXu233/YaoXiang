@@ -1,8 +1,8 @@
 //! # matrix_multiply - 矩阵乘法
 //!
-//! 测试嵌套循环和多维数组操作
+//! 测试嵌套循环和多维数组的执行效率
 
-create_matrix: (size: Int) -> List[List[Int]] = {
+create_matrix: (size: Int) -> List(List(Int)) = {
     mut matrix = [];
     for i in 0..size {
         mut row = [];
@@ -14,7 +14,7 @@ create_matrix: (size: Int) -> List[List[Int]] = {
     return matrix
 };
 
-multiply: (a: List[List[Int]], b: List[List[Int]], size: Int) -> List[List[Int]] = {
+multiply: (a: List(List(Int)), b: List(List(Int)), size: Int) -> List(List(Int)) = {
     mut result = [];
     for i in 0..size {
         mut row = [];

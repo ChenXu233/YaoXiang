@@ -64,6 +64,10 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
             // unsafe 块：系统级操作
             Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
+            // Eval annotation: @block/@auto/@eager { ... }
+            Some(TokenKind::At) => Some((BP_HIGHEST, Self::parse_eval_block)),
+            // Spawn block: spawn { ... }
+            Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn_block)),
             // Control flow expressions (return, break, continue)
             Some(TokenKind::KwReturn) => Some((BP_LOWEST, Self::parse_return_expr)),
             Some(TokenKind::KwBreak) => Some((BP_LOWEST, Self::parse_break_expr)),
@@ -105,6 +109,58 @@ impl<'a> ParserState<'a> {
         };
 
         Some(Expr::Unsafe {
+            body: Box::new(body),
+            span,
+        })
+    }
+
+    /// Parse eval-annotated block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
+    fn parse_eval_block(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume '@'
+
+        let mode = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(name)) if name == "block" => EvalMode::Block,
+            Some(TokenKind::Identifier(name)) if name == "auto" => EvalMode::Auto,
+            Some(TokenKind::Identifier(name)) if name == "eager" => EvalMode::Eager,
+            _ => {
+                self.error(crate::frontend::core::parser::ParseError::Message(
+                    "Expected eval annotation name after '@' (block/auto/eager)".to_string(),
+                ));
+                return None;
+            }
+        };
+        self.bump(); // consume annotation name
+
+        if !self.at(&TokenKind::LBrace) {
+            self.error(crate::frontend::core::parser::ParseError::Message(
+                "Expected block `{ ... }` after eval annotation".to_string(),
+            ));
+            return None;
+        }
+        let body = self.parse_block_expr()?;
+
+        Some(Expr::Eval {
+            mode,
+            body: Box::new(body),
+            span,
+        })
+    }
+
+    /// Parse spawn block: `spawn { ... }`
+    fn parse_spawn_block(&mut self) -> Option<Expr> {
+        let span = self.span();
+        self.bump(); // consume 'spawn'
+
+        if !self.at(&TokenKind::LBrace) {
+            self.error(crate::frontend::core::parser::ParseError::Message(
+                "Expected block `{ ... }` after `spawn`".to_string(),
+            ));
+            return None;
+        }
+        let body = self.parse_block_expr()?;
+
+        Some(Expr::Spawn {
             body: Box::new(body),
             span,
         })
@@ -439,7 +495,7 @@ impl<'a> ParserState<'a> {
     /// Try to parse a typed parameter list like (a: Int, b: String) or (mut a, b: Int)
     /// Returns None if this is not a typed param list, and restores position
     fn try_parse_typed_param_list(&mut self) -> Option<Vec<Param>> {
-        use crate::frontend::core::parser::statements::declarations::parse_type_annotation;
+        use crate::frontend::core::parser::statements::types::parse_type_annotation;
 
         let saved = self.save_position();
 
