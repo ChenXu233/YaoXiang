@@ -186,6 +186,14 @@ pub enum MonoType {
     Arc(Box<MonoType>),
     /// Weak 类型（不增加引用计数）
     Weak(Box<MonoType>),
+    /// 借用引用类型：`&T`（不可变）或 `&mut T`（可变）
+    /// 编译期零大小类型 — 无运行时表示
+    Ref {
+        /// 是否可变引用
+        mutable: bool,
+        /// 被引用的内部类型
+        inner: Box<MonoType>,
+    },
     /// 关联类型访问（如 T::Item）
     AssocType {
         /// 宿主类型
@@ -331,6 +339,13 @@ impl MonoType {
             }
             MonoType::Arc(t) => format!("Arc({})", t.type_name()),
             MonoType::Weak(t) => format!("Weak({})", t.type_name()),
+            MonoType::Ref { mutable, inner } => {
+                if *mutable {
+                    format!("&mut {}", inner.type_name())
+                } else {
+                    format!("&{}", inner.type_name())
+                }
+            }
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -538,6 +553,10 @@ impl From<ast::Type> for MonoType {
                 // Raw pointer type: *T
                 MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
             }
+            ast::Type::Ref { mutable, inner, .. } => MonoType::Ref {
+                mutable,
+                inner: Box::new(MonoType::from(*inner)),
+            },
             ast::Type::MetaType { args, .. } => {
                 // RFC-010: Meta-type `Type` or `Type[T]` or `Type[Type[T]]`
                 // Determine universe level recursively:

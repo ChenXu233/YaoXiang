@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 // 子模块
+pub mod borrow_checker;
 pub mod chain_calls;
 pub mod clone;
 pub mod consume_analysis;
@@ -33,6 +34,7 @@ pub mod ref_semantics;
 pub mod send_sync;
 pub mod unsafe_check;
 
+pub use borrow_checker::*;
 pub use chain_calls::*;
 pub use clone::*;
 pub use consume_analysis::*;
@@ -107,7 +109,7 @@ impl Lifetime {
 /// 统一的所有权检查器
 ///
 /// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、
-/// 跨 spawn 循环检查和任务内循环追踪，返回所有错误。
+/// 借用检查、跨 spawn 循环检查和任务内循环追踪，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
     move_checker: MoveChecker,
@@ -117,6 +119,7 @@ pub struct OwnershipChecker {
     clone_checker: CloneChecker,
     cycle_checker: CycleChecker,
     intra_task_tracker: IntraTaskCycleTracker,
+    borrow_checker: BorrowChecker,
 }
 
 impl OwnershipChecker {
@@ -130,6 +133,7 @@ impl OwnershipChecker {
             clone_checker: CloneChecker::default(),
             cycle_checker: CycleChecker::new(),
             intra_task_tracker: IntraTaskCycleTracker::new(),
+            borrow_checker: BorrowChecker::new(),
         }
     }
 
@@ -145,6 +149,10 @@ impl OwnershipChecker {
         let clone_errors = self.clone_checker.check_function(func);
         let cycle_errors = self.cycle_checker.check_function(func);
 
+        // 借用检查
+        let _borrow_errors = self.borrow_checker.check_function(func);
+        let borrow_ownership_errors = self.borrow_checker.to_ownership_errors();
+
         // 任务内循环追踪（警告模式，不计入错误）
         let _intra_task_warnings = self.intra_task_tracker.track_function(func);
 
@@ -157,6 +165,7 @@ impl OwnershipChecker {
             .chain(clone_errors)
             .chain(cycle_errors)
             .cloned()
+            .chain(borrow_ownership_errors)
             .collect()
     }
 

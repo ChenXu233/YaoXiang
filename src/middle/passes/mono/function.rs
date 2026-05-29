@@ -793,6 +793,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
 
             // 元类型：直接返回
             AstType::MetaType { .. } => ty.clone(),
+            AstType::Ref { mutable, inner, .. } => AstType::Ref {
+                mutable: *mutable,
+                inner: Box::new(self.substitute_type_ast(inner, type_map)),
+                span: crate::util::span::Span::default(),
+            },
         }
     }
 

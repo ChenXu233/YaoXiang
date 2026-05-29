@@ -34,6 +34,10 @@ impl<'a> ParserState<'a> {
             | Some(TokenKind::Plus)
             | Some(TokenKind::Not)
             | Some(TokenKind::Star) => Some((BP_UNARY, Self::parse_unary)),
+            // Borrow operators: &expr / &mut expr
+            Some(TokenKind::Ampersand) | Some(TokenKind::MutRef) => {
+                Some((BP_UNARY, Self::parse_borrow))
+            }
             // Literals
             Some(TokenKind::IntLiteral(_)) => Some((BP_HIGHEST, Self::parse_int_literal)),
             Some(TokenKind::FloatLiteral(_)) => Some((BP_HIGHEST, Self::parse_float_literal)),
@@ -184,6 +188,26 @@ impl<'a> ParserState<'a> {
         Some(Expr::UnOp {
             op,
             expr: Box::new(operand),
+            span,
+        })
+    }
+
+    /// Parse borrow expression: `&expr` or `&mut expr`
+    fn parse_borrow(&mut self) -> Option<Expr> {
+        let span = self.span();
+        let mutable = match self.current().map(|t| &t.kind) {
+            Some(TokenKind::Ampersand) => false,
+            Some(TokenKind::MutRef) => true,
+            _ => return None,
+        };
+        self.bump(); // consume & or &mut
+
+        // Parse operand with higher binding power
+        let expr = self.parse_expression(BP_UNARY + 1)?;
+
+        Some(Expr::Borrow {
+            mutable,
+            expr: Box::new(expr),
             span,
         })
     }

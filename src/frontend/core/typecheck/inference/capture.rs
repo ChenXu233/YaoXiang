@@ -535,6 +535,9 @@ fn extract_read_vars_from_expr(
                 }
             }
         }
+        Expr::Borrow { expr, .. } => {
+            extract_read_vars_from_expr(expr, vars);
+        }
         Expr::Error(_) => {
             // 错误恢复节点，跳过
         }
@@ -977,6 +980,51 @@ mod tests {
         };
         let usage = analyze_closure_usage(&lambda, Some(&parent));
         assert_eq!(usage, ClosureUsage::Escaping);
+    }
+
+    #[test]
+    fn test_analyze_captures_no_captures() {
+        // lambda: () => 42
+        // outer scope: {x, y} — body references nothing
+        let block = Block {
+            stmts: vec![],
+            expr: Some(Box::new(Expr::Lit(
+                crate::frontend::core::lexer::tokens::Literal::Int(42),
+                dummy_span(),
+            ))),
+            span: dummy_span(),
+        };
+
+        let outer: HashSet<String> = ["x", "y"].iter().map(|s| s.to_string()).collect();
+        let captures = analyze_captures(&block, &outer);
+
+        assert_eq!(captures.len(), 0);
+    }
+
+    #[test]
+    fn test_closure_usage_escaping_return() {
+        // Build the full parent expression, then extract a reference to the
+        // inner lambda so that std::ptr::eq inside analyze_closure_usage sees
+        // the same allocation.
+        let parent = Expr::Return(
+            Some(Box::new(Expr::Lambda {
+                params: vec![],
+                body: Box::new(Block {
+                    stmts: vec![],
+                    expr: None,
+                    span: dummy_span(),
+                }),
+                span: dummy_span(),
+            })),
+            dummy_span(),
+        );
+        if let Expr::Return(Some(ret_expr), _) = &parent {
+            let lambda_ref = ret_expr.as_ref();
+            let usage = analyze_closure_usage(lambda_ref, Some(&parent));
+            assert_eq!(usage, ClosureUsage::Escaping);
+        } else {
+            panic!("expected Return expression");
+        }
     }
 
     #[test]

@@ -927,6 +927,7 @@ impl TypeConstraintSolver {
             | MonoType::Arc(t)
             | MonoType::Weak(t)
             | MonoType::Option(t) => self.collect_generalizable_vars(t, seen, out),
+            MonoType::Ref { inner, .. } => self.collect_generalizable_vars(inner, seen, out),
             MonoType::Range { elem_type } => {
                 self.collect_generalizable_vars(elem_type, seen, out);
             }

@@ -95,6 +95,8 @@ impl SendSyncChecker {
             MonoType::Literal { base_type, .. } => self.is_send(base_type),
             // 元类型：编译期概念，总是 Send
             MonoType::MetaType { .. } => true,
+            // 借用引用：检查内部类型
+            MonoType::Ref { inner, .. } => self.is_send(inner),
         }
     }
 
@@ -163,6 +165,8 @@ impl SendSyncChecker {
             MonoType::Literal { base_type, .. } => self.is_sync(base_type),
             // 元类型：编译期概念，总是 Sync
             MonoType::MetaType { .. } => true,
+            // 借用引用：检查内部类型
+            MonoType::Ref { inner, .. } => self.is_sync(inner),
         }
     }
 }

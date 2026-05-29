@@ -251,9 +251,20 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Some(self.make_token(TokenKind::And))
                 } else {
-                    self.error =
-                        Some(crate::frontend::core::lexer::LexError::UnexpectedChar { ch: '&' });
-                    Some(self.make_token(TokenKind::Error("Unexpected character: &".to_string())))
+                    // Check for &mut: peek ahead 3 chars for 'm','u','t'
+                    let mut ahead = self.chars_clone();
+                    if ahead.next() == Some('m')
+                        && ahead.next() == Some('u')
+                        && ahead.next() == Some('t')
+                    {
+                        // Consume 'm','u','t'
+                        self.advance();
+                        self.advance();
+                        self.advance();
+                        Some(self.make_token(TokenKind::MutRef))
+                    } else {
+                        Some(self.make_token(TokenKind::Ampersand))
+                    }
                 }
             }
             '|' => {
