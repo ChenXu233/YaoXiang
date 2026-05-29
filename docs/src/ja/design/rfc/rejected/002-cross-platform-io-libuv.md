@@ -1,6 +1,6 @@
 ```markdown
 ---
-title: RFC-002：クロスプラットフォームI/Oとlibuv統合（却下）
+title: "RFC-002：クロスプラットフォームI/Oとlibuv統合（却下）"
 ---
 
 # RFC-002：クロスプラットフォームI/Oとlibuv統合

@@ -1,5 +1,5 @@
 ---
-title: Tutorial
+title: "Tutorial"
 description: Systematically learn YaoXiang core concepts
 ---
 

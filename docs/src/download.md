@@ -2,7 +2,7 @@
 layout: page
 is_download: true
 
-title: TYPE THE UNIVERSE
+title: "TYPE THE UNIVERSE"
 description: "选择你的平台，开始构建世界。"
 
 download:

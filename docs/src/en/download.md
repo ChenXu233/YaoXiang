@@ -3,8 +3,8 @@
 layout: page
 is_download: true
 
-title: TYPE THE UNIVERSE
-description: "Choose your platform, start building the world."
+title: "TYPE THE UNIVERSE"
+description: "Choose your platform and start building the world."
 
 download:
   latest_stable: "Latest Stable v{version}"
@@ -17,10 +17,10 @@ download:
   checksum: "Checksum / Signature"
   build_from_source:
     title: "Build from Source"
-    description: "Build YaoXiang from source using Cargo, make sure Rust is installed."
+    description: "Build YaoXiang from source using Cargo, ensure Rust is installed."
   nightly_builds:
     title: "Nightly Builds"
-    description: "The latest cutting-edge version is available. Recommended for testing, use with caution in production."
+    description: "The latest cutting-edge builds are available. Recommended for testing; use with caution in production."
   github_actions: "Go to GitHub Actions"
 
 versions:

@@ -1,5 +1,5 @@
 ---
-title: yaoxiang.lock Format
+title: "yaoxiang.lock Format"
 description: Dependency lock file format specification
 ---
 

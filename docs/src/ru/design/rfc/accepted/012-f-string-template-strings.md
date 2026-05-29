@@ -1,5 +1,5 @@
 ---
-title: RFC-012：Шаблонные строки F-String
+title: "RFC-012：Шаблонные строки F-String"
 ---
 
 # RFC 012: Шаблонные строки F-String

@@ -1,6 +1,6 @@
 ```markdown
 ---
-title: 貢献ガイドライン
+title: "貢献ガイドライン"
 description: YaoXiang プロジェクトへのコード貢献方法を学ぶ
 ---
 

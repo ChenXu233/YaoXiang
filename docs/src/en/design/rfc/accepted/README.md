@@ -1,5 +1,5 @@
 ---
-title: Accepted Design Proposals
+title: "Accepted Design Proposals"
 ---
 
 # Accepted Design Proposals

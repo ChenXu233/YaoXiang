@@ -1,5 +1,5 @@
 ---
-title: 教程
+title: "教程"
 description: 系统学习 YaoXiang 核心概念
 ---
 

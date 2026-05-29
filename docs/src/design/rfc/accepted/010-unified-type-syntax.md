@@ -1,5 +1,5 @@
 ---
-title: RFC-010：统一类型语法
+title: "RFC-010：统一类型语法"
 ---
 
 # RFC-010: 统一类型语法 - name: type = value 模型

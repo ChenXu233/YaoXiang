@@ -1,7 +1,7 @@
 ---
 layout: page
 sidebar: false
-title: ツール
+title: "ツール"
 permalink: /tools/
 
 ---

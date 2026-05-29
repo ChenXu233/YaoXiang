@@ -1,6 +1,6 @@
 ```yaml
 ---
-title: 並作 (spawn)
+title: "並作 (spawn)"
 description: 新しいランタイムで非同期計算を開始します
 order: 4
 state: Draft

@@ -1,5 +1,5 @@
 ---
-title: RFC-015：YaoXiang 配置系统设计
+title: "RFC-015：YaoXiang 配置系统设计"
 ---
 
 # RFC-015: YaoXiang 配置系统设计

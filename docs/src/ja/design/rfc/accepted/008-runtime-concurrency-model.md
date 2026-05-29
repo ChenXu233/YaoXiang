@@ -1,6 +1,6 @@
 ```md
 ---
-title: RFC-008：Runtime並行モデルとスケジューラ分離設計
+title: "RFC-008：Runtime並行モデルとスケジューラ分離設計"
 ---
 
 # RFC-008：Runtime並行モデルとスケジューラ分離設計

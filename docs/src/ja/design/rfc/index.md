@@ -1,5 +1,5 @@
 ---
-title: RFC インデックス
+title: "RFC インデックス"
 ---
 
 # YaoXiang RFC（リクエスト・コメント）インデックス

@@ -1,6 +1,6 @@
 ```markdown
 ---
-title: RFC-019：類型レベル同像性（Typed Homoiconicity）
+title: "RFC-019：類型レベル同像性（Typed Homoiconicity）"
 ---
 
 # RFC-019: 類型レベル同像性 (Typed Homoiconicity) - 構文即ち型

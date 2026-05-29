@@ -1,5 +1,5 @@
 ---
-title: RFC-019：类型级同像性 (Typed Homoiconicity)
+title: "RFC-019：类型级同像性 (Typed Homoiconicity)"
 ---
 
 # RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型

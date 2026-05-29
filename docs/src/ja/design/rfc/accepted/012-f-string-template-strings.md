@@ -1,5 +1,5 @@
 ---
-title: RFC-012：F-String テンプレート文字列
+title: "RFC-012：F-String テンプレート文字列"
 ---
 
 # RFC 012: F-String テンプレート文字列

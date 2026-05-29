@@ -1,5 +1,5 @@
 ---
-title: RFC 索引
+title: "RFC 索引"
 ---
 
 # YaoXiang RFC（请求评议）索引
