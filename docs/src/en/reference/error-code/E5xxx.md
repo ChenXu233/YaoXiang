@@ -1,109 +1,45 @@
-﻿# E5xxx: Modules & Imports
+# E5xxx: Modules and Imports
 
-> Module resolution and import/export errors.
+> Auto-generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E5001: Module not found
 
-Imported module does not exist.
+**Category**: Module
 
-```yaoxiang
-use "./nonexistent";  # Module does not exist
-```
+**Message**: Referenced module does not exist
 
-```
-error[E5001]: Module not found: ./nonexistent
-  --> example.yx:1:5
-   |
- 1 | use "./nonexistent";
-   |     ^^^^^^^^^^^^^^^^^ file not found
-```
+**Help**: Check the module path and ensure it exists
 
-## E5002: Cyclic import
+---
 
-Circular dependency between modules.
+## E5002: Import error
 
-```yaoxiang
-# a.yx
-import "./b";
+**Category**: Module
 
-a_func: () -> Void = b.b_func();
-```
+**Message**: Failed to import the module
 
-```yaoxiang
-# b.yx
-import "./a";
+**Help**: Check the import path and module resolution
 
-b_func: () -> Void = a.a_func();
-```
+---
 
-```
-error[E5002]: Cyclic import detected
-  --> a.yx:1:1
-   |
- 1 | import "./b";
-   | ^^^^^^^^^^^ circular dependency: a -> b -> a
-```
+## E5003: Export not found
 
-## E5003: Symbol not exported
+**Category**: Module
 
-Attempting to access non-exported symbol.
+**Message**: Referenced export does not exist in the module
 
-```yaoxiang
-# my_module.yx
-internal = 10;  # Not exported
+**Help**: Check the exports of the module
 
-# main.yx
-import "./my_module";
-x = my_module.internal;
-```
+---
 
-```
-error[E5003]: Symbol not exported: internal
-  --> main.yx:3:18
-   |
- 3 | x = my_module.internal;
-   |                  ^^^^^^^^ `internal` is not exported by `./my_module`
-```
+## E5004: Circular dependency
 
-## E5004: Invalid module path
+**Category**: Module
 
-Module path format error.
+**Message**: Modules have circular dependencies
 
-```yaoxiang
-import "invalid/path/../to/module";  # Path contains ..
-```
+**Help**: Refactor to remove the circular dependency
 
-```
-error[E5004]: Invalid module path
-  --> example.yx:1:8
-   |
- 1 | import "invalid/path/../to/module";
-   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ invalid path format
-```
-
-## E5005: Private access
-
-Accessing private symbol.
-
-```yaoxiang
-# other.yx
-private_value = 42;
-
-# main.yx
-import "./other";
-x = other.private_value;
-```
-
-```
-error[E5005]: Private access: private_value is private
-  --> main.yx:3:18
-   |
- 3 | x = other.private_value;
-   |                  ^^^^^^^^^^^ cannot access private symbol
-```
-
-## Related
-
-- [E1xxx: Type Checking](./E1xxx.md)
-- [E6xxx: Runtime Errors](./E6xxx.md)
-- [Error Code Index](./index.md)
+---

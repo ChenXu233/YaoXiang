@@ -1,0 +1,29 @@
+// 02-functions/lambdas.yx
+// 覆盖: 规范 §4.10 Lambda 表达式, §6.3 函数定义
+// 验证: Lambda 定义和调用
+// 状态: ✅ 可运行
+
+use std.io
+
+main = {
+    // 基本 Lambda
+    double = (x) => x * 2
+    io.println(double(21))
+
+    // 多参数 Lambda
+    add = (a, b) => a + b
+    io.println(add(3, 4))
+
+    // Lambda 代码块
+    max = (a, b) => {
+        if a > b {
+            return a
+        } else {
+            return b
+        }
+    }
+    io.println(max(10, 20))
+    io.println(max(30, 5))
+
+    io.println("ALL TESTS PASSED")
+}

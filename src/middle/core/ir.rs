@@ -1,7 +1,8 @@
 //! Intermediate Representation
 
 pub use crate::frontend::core::parser::ast::Type;
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::parser::ast::EvalMode;
+use crate::frontend::core::typecheck::MonoType;
 use crate::util::span::Span;
 
 /// Instruction operand
@@ -56,11 +57,15 @@ pub enum Instruction {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     Mod {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     // =====================
     // 位运算指令
@@ -136,6 +141,8 @@ pub enum Instruction {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     // =====================
     // 虚函数调用指令
@@ -149,12 +156,16 @@ pub enum Instruction {
         obj: Operand,
         method_name: String,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     /// 动态调用：直接调用寄存器中的函数值（闭包）
     CallDyn {
         dst: Option<Operand>,
         func: Operand,
         args: Vec<Operand>,
+        /// Source span for error reporting
+        span: Span,
     },
     // 注意：根据 RFC-008，await 不是关键字
     // CallAsync 和 Await 指令已移除，由运行时自动处理
@@ -177,6 +188,8 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         field: usize,
+        /// Source span for error reporting
+        span: Span,
     },
     StoreField {
         dst: Operand,
@@ -193,6 +206,8 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         index: Operand,
+        /// Source span for error reporting
+        span: Span,
     },
     StoreIndex {
         dst: Operand,
@@ -214,6 +229,10 @@ pub enum Instruction {
         args: Vec<Operand>,
         result: Operand,
     },
+    /// Push an evaluation strategy for the current frame/scope.
+    EvalPush(EvalMode),
+    /// Pop the current evaluation strategy.
+    EvalPop,
     Yield,
     // Phase 5 additions
     HeapAlloc {

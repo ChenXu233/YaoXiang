@@ -255,6 +255,22 @@
         "example": "break 'unknown;",
         "error_output": "error[E1070]: Unknown label\n --> example.yx:1:7\n  |\n1 | break 'unknown;\n  |       ^ unknown label 'unknown'"
     },
+    "E1080": {
+        "title": "spawn is only allowed inside @block scope",
+        "help": "Wrap this `spawn { ... }` inside `@block { ... }`, or mark the enclosing function as `@block` (current: @{mode})."
+    },
+    "E1081": {
+        "title": "`?` is only allowed inside functions returning Result",
+        "help": "Change the enclosing function's return type to `Result[T, E]` before using `expr?`."
+    },
+    "E1082": {
+        "title": "`?` requires a Result expression",
+        "help": "Use `?` only on expressions of type `Result[T, E]`."
+    },
+    "E1083": {
+        "title": "Result error type mismatch for `?`",
+        "help": "Ensure the error type `E` matches between the current function's return type `Result[_, E]` and the `Result[_, E]` value being unwrapped."
+    },
     "E2001": {
         "title": "Scope error",
         "message": "Variable is not in current scope",

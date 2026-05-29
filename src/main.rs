@@ -2,16 +2,17 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
-use serde::Serialize;
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
-use yaoxiang::{build_bytecode, dump_bytecode, run, NAME, VERSION};
-use yaoxiang::util::logger::LogLevel;
-use yaoxiang::util::i18n::{set_lang_from_string, t_cur_simple, MSG};
+use yaoxiang::formatter::run_format_command;
+use yaoxiang::{dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
-    run_file_with_diagnostics, check_file_with_diagnostics, ErrorCodeDefinition, I18nRegistry,
-    ErrorInfo,
+    render_explain_output, run_check_command_once, run_check_watch_command,
+    run_file_with_diagnostics,
 };
+use yaoxiang::util::i18n::set_lang_from_string;
+use yaoxiang::util::logger::LogLevel;
 use yaoxiang::package;
 
 /// Log level enum for CLI
@@ -52,6 +53,14 @@ impl From<LangArg> for String {
     }
 }
 
+/// Color output behavior for diagnostics
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ColorChoice {
+    Auto,
+    Always,
+    Never,
+}
+
 /// A high-performance programming language with "everything is type" philosophy
 #[derive(Parser, Debug)]
 #[command(name = "yaoxiang")]
@@ -82,6 +91,10 @@ enum Commands {
         /// Source file to run
         #[arg(value_name = "FILE")]
         file: PathBuf,
+
+        /// Generate debug info for runtime errors (spans/source mapping)
+        #[arg(long)]
+        debug_info: bool,
     },
 
     /// Evaluate YaoXiang code from command line (not supported well yet)
@@ -93,20 +106,64 @@ enum Commands {
 
     /// Check source file for errors (type checking) (unsupported yet)
     Check {
-        /// Source file to check
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+        /// Source file(s) or directory path(s) to check
+        #[arg(value_name = "PATH", num_args = 0..)]
+        paths: Vec<PathBuf>,
+
+        /// Exclude file(s) or directory path(s) from check and watch
+        #[arg(long = "exclude", value_name = "PATH", num_args = 1..)]
+        exclude: Vec<PathBuf>,
+
+        /// Output diagnostics in JSON format
+        #[arg(long)]
+        json: bool,
+
+        /// Watch input paths and re-check on file changes
+        #[arg(short, long)]
+        watch: bool,
+
+        /// Control color output (auto, always, never)
+        #[arg(long, value_enum, default_value = "auto")]
+        color: ColorChoice,
+
+        /// Suppress progress and summary messages
+        #[arg(long)]
+        no_progress: bool,
     },
 
-    /// Format source file (unsupported yet)
+    /// Format source file
     Format {
-        /// Source file to format
-        #[arg(value_name = "FILE")]
+        /// Source file or directory to format
+        #[arg(value_name = "PATH")]
         file: PathBuf,
 
-        /// Output to stdout instead of modifying file
+        /// Check if files are formatted without modifying them
         #[arg(short, long)]
         check: bool,
+
+        /// Write formatted output back to file(s) in place
+        #[arg(short, long)]
+        write: bool,
+
+        /// Output to stdout (default when neither --write nor --check)
+        #[arg(long)]
+        stdout: bool,
+
+        /// Override indent width
+        #[arg(long)]
+        indent: Option<usize>,
+
+        /// Override max line width
+        #[arg(long)]
+        line_width: Option<usize>,
+
+        /// Use tab indentation
+        #[arg(long)]
+        use_tabs: bool,
+
+        /// Use single quotes for strings
+        #[arg(long)]
+        single_quote: bool,
     },
 
     /// Dump bytecode for debugging
@@ -125,6 +182,10 @@ enum Commands {
         /// Output file (optional, defaults to <input>.42)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Embed debug section into .42 (sources + ip->span mapping)
+        #[arg(long)]
+        debug_info: bool,
     },
 
     /// Explain an error code
@@ -198,7 +259,11 @@ enum Commands {
     List,
 
     /// Start the Language Server Protocol (LSP) server
-    Lsp,
+    Lsp {
+        /// Enable debug mode (show debug! macro output)
+        #[arg(long)]
+        debug: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -225,8 +290,15 @@ fn main() -> Result<()> {
 
     // Initialize logger
     // LSP 模式必须写 stderr，避免污染 stdout 的 JSON-RPC 通道
-    match command {
-        Commands::Lsp => yaoxiang::util::logger::init_lsp(),
+    match &command {
+        Commands::Lsp { debug } => {
+            if *debug {
+                // LSP 模式下必须使用 stderr，debug 仅提升日志级别。
+                yaoxiang::util::logger::init_lsp_with_level(LogLevel::Debug);
+            } else {
+                yaoxiang::util::logger::init_lsp();
+            }
+        }
         _ => match args.log_level {
             Some(level) => yaoxiang::util::logger::init_with_level(level.into()),
             None => yaoxiang::util::logger::init_cli(),
@@ -239,72 +311,86 @@ fn main() -> Result<()> {
     }
 
     match command {
-        Commands::Run { file } => {
-            run_file_with_diagnostics(&file)?;
+        Commands::Run { file, debug_info } => {
+            run_file_with_diagnostics(&file, debug_info)?;
         }
         Commands::Eval { code } => {
             run(&code).context("Failed to evaluate code")?;
         }
-        Commands::Check { file } => {
-            check_file_with_diagnostics(&file)?;
+        Commands::Check {
+            paths,
+            exclude,
+            json,
+            watch,
+            color,
+            no_progress,
+        } => {
+            let use_colors = match color {
+                ColorChoice::Always => true,
+                ColorChoice::Never => false,
+                ColorChoice::Auto => std::io::stderr().is_terminal(),
+            };
+
+            if watch {
+                run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
+            } else {
+                let error_count =
+                    run_check_command_once(&paths, &exclude, json, use_colors, no_progress)?;
+                if error_count > 0 {
+                    ::std::process::exit(1);
+                }
+            }
         }
-        Commands::Format { file: _, check: _ } => {
-            // TODO: Implement formatter
-            tracing::warn!("{}", t_cur_simple(MSG::FormatterNotImplemented));
+        Commands::Format {
+            file,
+            check,
+            write,
+            stdout: _,
+            indent,
+            line_width,
+            use_tabs,
+            single_quote,
+        } => {
+            // 构建格式化选项
+            let mut options = yaoxiang::formatter::FormatOptions::default();
+            if let Some(w) = indent {
+                options.indent_width = w;
+            }
+            if let Some(lw) = line_width {
+                options.line_width = lw;
+            }
+            if use_tabs {
+                options.use_tabs = true;
+            }
+            if single_quote {
+                options.single_quote = true;
+            }
+
+            let result = run_format_command(&file, &options, check, write)?;
+            if check && result.needs_formatting {
+                ::std::process::exit(1);
+            }
         }
         Commands::Dump { file } => {
             dump_bytecode(&file).with_context(|| format!("Failed to dump: {}", file.display()))?;
         }
-        Commands::Build { file, output } => {
+        Commands::Build {
+            file,
+            output,
+            debug_info,
+        } => {
             let output_path = output.unwrap_or_else(|| {
                 let mut path = file.clone();
                 path.set_extension("42");
                 path
             });
-            build_bytecode(&file, &output_path)
+            yaoxiang::build_bytecode_with_options(&file, &output_path, debug_info)
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
         Commands::Explain { code, json, lang } => {
-            if let Some(definition) = ErrorCodeDefinition::find(&code) {
-                let lang_code = lang
-                    .map(Into::<String>::into)
-                    .unwrap_or_else(|| "zh".to_string());
-                let i18n = I18nRegistry::new(&lang_code);
-                let info = i18n.get_info(&code).unwrap_or(ErrorInfo {
-                    title: "",
-                    help: "",
-                    example: None,
-                    error_output: None,
-                });
-
-                if json {
-                    // JSON output
-                    #[derive(Serialize)]
-                    struct ExplainOutput<'a> {
-                        code: &'static str,
-                        category: String,
-                        title: &'a str,
-                        template: &'static str,
-                        help: &'a str,
-                    }
-                    let output = ExplainOutput {
-                        code: definition.code,
-                        category: definition.category.to_string(),
-                        title: info.title,
-                        template: definition.message_template,
-                        help: info.help,
-                    };
-                    println!("{}", serde_json::to_string_pretty(&output).unwrap());
-                } else {
-                    // Human-readable output
-                    println!("Error {}", definition.code);
-                    println!("Category: {}", definition.category);
-                    println!("Title: {}", info.title);
-                    println!("Message Template: {}", definition.message_template);
-                    if !info.help.is_empty() {
-                        println!("Help: {}", info.help);
-                    }
-                }
+            let lang_code = lang.map(Into::<String>::into);
+            if let Some(output) = render_explain_output(&code, json, lang_code.as_deref())? {
+                println!("{}", output);
             } else {
                 eprintln!("Unknown error code: {}", code);
                 std::process::exit(1);
@@ -353,7 +439,7 @@ fn main() -> Result<()> {
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
         }
-        Commands::Lsp => {
+        Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）
             yaoxiang::lsp::run_lsp_server().context("LSP server error")?;
         }

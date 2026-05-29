@@ -8,7 +8,7 @@ pub mod incremental_scheduler;
 use crate::middle;
 use crate::util::span::SourceFile;
 use crate::util::diagnostic::Diagnostic;
-use super::{config::CompileConfig, events::*, typecheck};
+use super::{config::CompileConfig, events::*, core::typecheck};
 
 use compilation_cache::CompilationCache;
 use incremental_scheduler::IncrementalStats;
@@ -129,16 +129,17 @@ impl CompilationResult {
         ir: middle::ModuleIR,
         durations: Vec<(CompilationPhase, u64)>,
         total_ms: u64,
+        warnings: Vec<String>,
     ) -> Self {
         Self {
             state: PipelineState::Completed,
             ir: Some(ir),
             error_count: 0,
-            warning_count: 0,
+            warning_count: warnings.len(),
             phase_durations: durations,
             total_duration_ms: total_ms,
             errors: Vec::new(),
-            warnings: Vec::new(),
+            warnings,
         }
     }
 
@@ -363,7 +364,9 @@ impl Pipeline {
         ));
 
         if ir_result.is_success() {
-            CompilationResult::success(ir_result.ir.unwrap(), phase_durations, total_ms)
+            // 收集所有警告（来自 typecheck 阶段）
+            let warnings = typecheck_result.warnings;
+            CompilationResult::success(ir_result.ir.unwrap(), phase_durations, total_ms, warnings)
         } else {
             // IR 生成错误被归类为类型检查错误
             let pipeline_errors: Vec<PipelineError> = ir_result
@@ -475,14 +478,29 @@ impl Pipeline {
                 let duration = start.elapsed().as_millis() as u64;
                 phase_durations.push((CompilationPhase::TypeChecking, duration));
 
+                // 执行死代码分析（根据配置决定是否启用）
+                let warnings = if self.config.dead_code.enabled {
+                    self.run_dead_code_analysis(source_name, ast, &type_result.semantic_db)
+                } else {
+                    Vec::new()
+                };
+
+                let warning_count = warnings.len();
+
                 self.event_bus.emit(TypeCheckingComplete::new(
                     type_result.bindings.len(),
                     0, // errors
-                    0, // warnings
+                    warning_count,
                     duration,
                 ));
 
-                TypecheckResult::success(type_result)
+                // 发送警告事件
+                for warning in &warnings {
+                    self.event_bus
+                        .emit(WarningOccurred::new(warning.clone(), "W1000"));
+                }
+
+                TypecheckResult::success(type_result, warnings)
             }
             Err(errors) => {
                 let duration = start.elapsed().as_millis() as u64;
@@ -510,6 +528,25 @@ impl Pipeline {
                 TypecheckResult::failed(errors)
             }
         }
+    }
+
+    /// 死代码分析阶段
+    fn run_dead_code_analysis(
+        &mut self,
+        _source_name: &str,
+        ast: &super::core::parser::Module,
+        semantic_db: &typecheck::semantic_db::SemanticDB,
+    ) -> Vec<String> {
+        use crate::frontend::core::typecheck::dead_code::DeadCodeAnalyzer;
+
+        let mut analyzer = DeadCodeAnalyzer::new();
+        let warnings = analyzer.analyze(ast, semantic_db);
+
+        // 渲染警告消息
+        warnings
+            .iter()
+            .map(|w| format!("warning [{}]: {} at {:?}", w.code, w.message, w.span))
+            .collect()
     }
 
     /// IR 生成阶段
@@ -591,7 +628,7 @@ impl Pipeline {
         let entry = self.compilation_cache.get(file, source)?;
         let ir = entry.ir.clone()?;
 
-        Some(CompilationResult::success(ir, Vec::new(), 0))
+        Some(CompilationResult::success(ir, Vec::new(), 0, Vec::new()))
     }
 
     /// 获取编译缓存的引用
@@ -699,13 +736,18 @@ impl ParseResult {
 struct TypecheckResult {
     type_result: typecheck::TypeCheckResult,
     errors: Vec<Diagnostic>,
+    warnings: Vec<String>,
 }
 
 impl TypecheckResult {
-    fn success(type_result: typecheck::TypeCheckResult) -> Self {
+    fn success(
+        type_result: typecheck::TypeCheckResult,
+        warnings: Vec<String>,
+    ) -> Self {
         Self {
             type_result,
             errors: Vec::new(),
+            warnings,
         }
     }
 
@@ -713,6 +755,7 @@ impl TypecheckResult {
         Self {
             type_result: typecheck::TypeCheckResult::default(),
             errors,
+            warnings: Vec::new(),
         }
     }
 

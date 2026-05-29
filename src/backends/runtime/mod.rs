@@ -9,7 +9,12 @@
 //! - ❌ No GC - reference counting via Arc
 //! - Task boundary is the leak boundary
 
+pub mod engine;
+pub mod facade;
 pub mod task;
+
+pub use engine::TaskPoll;
+pub use facade::{CoopTaskFn, Runtime, RuntimeConfig, RuntimeFacadeError, RuntimeMode, TaskFn};
 
 pub use task::{
     Task, TaskId, TaskContext, TaskPriority, TaskConfig, TaskSpawner, TaskState, Scheduler,

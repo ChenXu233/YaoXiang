@@ -4,7 +4,6 @@
 //! allowing YaoXiang code to call Rust functions. It supports:
 //! - Pre-registered standard library functions (std.io, etc.)
 //! - User-defined native function registration
-//! - Cached function lookup for zero-overhead repeated calls
 //!
 //! # Architecture
 //!
@@ -12,28 +11,19 @@
 //! CallNative { "std.io.println" }
 //!       │
 //!       ▼
-//! FfiRegistry.call() → cache lookup → handler execution
+//! FfiRegistry.call() → direct handler lookup
 //! ```
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::ExecutorError;
-use crate::std::NativeContext;
-
-/// Type alias for native function handlers.
-///
-/// A `NativeHandler` takes a slice of `RuntimeValue` arguments and a
-/// `NativeContext` that provides heap access and function call capability.
-pub type NativeHandler =
-    fn(args: &[RuntimeValue], ctx: &mut NativeContext<'_>) -> Result<RuntimeValue, ExecutorError>;
+use crate::std::{NativeContext, NativeHandler};
 
 /// FFI Registry that manages native function bindings.
 ///
 /// The registry holds a mapping from function names (e.g., `"std.io.println"`)
-/// to their native Rust implementations. It uses a cache layer for fast repeated
-/// lookups.
+/// to their native Rust implementations.
 ///
 /// # Example
 ///
@@ -47,8 +37,6 @@ pub type NativeHandler =
 pub struct FfiRegistry {
     /// Function handler table: name -> handler
     handlers: HashMap<String, NativeHandler>,
-    /// Runtime cache for accelerated lookup (thread-safe)
-    cache: Mutex<HashMap<String, NativeHandler>>,
 }
 
 impl std::fmt::Debug for FfiRegistry {
@@ -77,7 +65,6 @@ impl FfiRegistry {
     pub fn new() -> Self {
         Self {
             handlers: HashMap::new(),
-            cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -104,30 +91,9 @@ impl FfiRegistry {
         handler: NativeHandler,
     ) {
         self.handlers.insert(name.to_string(), handler);
-        // Invalidate cache entry if it exists
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.remove(name);
-        }
     }
 
     /// Call a registered native function by name.
-    ///
-    /// This method first checks the cache, then falls back to the handler table.
-    /// Successfully resolved handlers are cached for subsequent calls.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - The fully qualified function name
-    /// * `args` - The arguments to pass to the function
-    ///
-    /// # Errors
-    ///
-    /// Returns `ExecutorError::FunctionNotFound` if no handler is registered
-    /// for the given name.
-    /// Call a registered native function by name.
-    ///
-    /// This method first checks the cache, then falls back to the handler table.
-    /// Successfully resolved handlers are cached for subsequent calls.
     ///
     /// # Arguments
     ///
@@ -145,26 +111,13 @@ impl FfiRegistry {
         args: &[RuntimeValue],
         ctx: &mut NativeContext<'_>,
     ) -> Result<RuntimeValue, ExecutorError> {
-        // Fast path: check cache first
-        if let Ok(cache) = self.cache.lock() {
-            if let Some(handler) = cache.get(name) {
-                return handler(args, ctx);
-            }
+        match self.handlers.get(name) {
+            Some(handler) => handler(args, ctx),
+            None => Err(ExecutorError::FunctionNotFound(
+                format!("Native function not found: {}", name),
+                None,
+            )),
         }
-
-        // Slow path: look up in handler table
-        if let Some(handler) = self.handlers.get(name) {
-            // Cache the handler for future calls
-            if let Ok(mut cache) = self.cache.lock() {
-                cache.insert(name.to_string(), *handler);
-            }
-            return handler(args, ctx);
-        }
-
-        Err(ExecutorError::FunctionNotFound(format!(
-            "Native function not found: {}",
-            name
-        )))
     }
 
     /// Check if a function is registered.
@@ -235,7 +188,7 @@ mod tests {
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         }
@@ -251,7 +204,7 @@ mod tests {
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            let a = args.get(0).and_then(|v| v.to_int()).unwrap_or(0);
+            let a = args.first().and_then(|v| v.to_int()).unwrap_or(0);
             let b = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
             Ok(RuntimeValue::Int(a + b))
         }
@@ -277,7 +230,7 @@ mod tests {
         let result = registry.call("nonexistent", &[], &mut ctx);
         assert!(result.is_err());
         match result {
-            Err(ExecutorError::FunctionNotFound(msg)) => {
+            Err(ExecutorError::FunctionNotFound(msg, _stack)) => {
                 assert!(msg.contains("nonexistent"));
             }
             _ => panic!("Expected FunctionNotFound error"),
@@ -301,25 +254,23 @@ mod tests {
     }
 
     #[test]
-    fn test_cache_accelerates_repeated_calls() {
+    fn test_repeated_calls_work() {
         let mut registry = FfiRegistry::new();
         fn identity(
             args: &[RuntimeValue],
             _ctx: &mut NativeContext<'_>,
         ) -> Result<RuntimeValue, ExecutorError> {
-            Ok(args.get(0).cloned().unwrap_or(RuntimeValue::Unit))
+            Ok(args.first().cloned().unwrap_or(RuntimeValue::Unit))
         }
         registry.register("identity", identity);
 
         let mut heap = Heap::new();
         let mut ctx = test_ctx(&mut heap);
-        // First call populates cache
         let r1 = registry
             .call("identity", &[RuntimeValue::Int(42)], &mut ctx)
             .unwrap();
         assert_eq!(r1, RuntimeValue::Int(42));
 
-        // Second call should hit cache
         let r2 = registry
             .call("identity", &[RuntimeValue::Int(99)], &mut ctx)
             .unwrap();

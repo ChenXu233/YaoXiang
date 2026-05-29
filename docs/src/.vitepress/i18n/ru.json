@@ -1,0 +1,263 @@
+{
+  "nav": [
+    {
+      "text": "Главная",
+      "link": "/ru/"
+    },
+    {
+      "text": "Скачать",
+      "link": "/ru/download"
+    },
+    {
+      "text": "Руководство",
+      "link": "/ru/tutorial/"
+    },
+    {
+      "text": "Гайды",
+      "link": "/ru/guide/"
+    },
+    {
+      "text": "Справочник",
+      "link": "/ru/reference/"
+    },
+    {
+      "text": "Ещё",
+      "items": [
+        {
+          "text": "Дизайн",
+          "link": "/ru/design/"
+        },
+        {
+          "text": "Разработка",
+          "link": "/ru/dev/"
+        },
+        {
+          "text": "Песочница",
+          "link": "/ru/playground/"
+        },
+        {
+          "text": "Инструменты",
+          "link": "/ru/tools/"
+        },
+        {
+          "text": "Сообщество",
+          "link": "/ru/community/"
+        },
+        {
+          "text": "Блог",
+          "link": "/ru/blog/"
+        }
+      ]
+    }
+  ],
+  "sidebar": {
+    "/tutorial/": [
+      {
+        "text": "Документация руководства",
+        "items": [
+          {
+            "text": "Главная страница руководства",
+            "link": "/ru/tutorial/"
+          },
+          {
+            "text": "Быстрый старт",
+            "link": "/ru/tutorial/getting-started"
+          },
+          {
+            "text": "Справочник по YaoXiang",
+            "link": "/ru/tutorial/YaoXiang-book"
+          },
+          {
+            "text": "Начало с нуля",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/design/": [
+      {
+        "text": "Документация по дизайну",
+        "items": [
+          {
+            "text": "Содержание дизайна",
+            "link": "/ru/design"
+          },
+          {
+            "text": "Спецификация языка",
+            "link": "/ru/reference/language-spec/"
+          },
+          {
+            "text": "Манифест YaoXiang",
+            "link": "/ru/design/manifesto"
+          },
+          {
+            "text": "Манифест YaoXiang WTF версия",
+            "link": "/ru/design/manifesto-wtf"
+          },
+          {
+            "text": "Взгляд на дизайн языка от человека, родившегося в 2006",
+            "link": "/ru/design/2006-born-language-design"
+          }
+        ]
+      },
+      {
+        "text": "RFC документация",
+        "items": [
+          {
+            "text": "Содержание RFC",
+            "link": "/ru/design/rfc"
+          },
+          {
+            "text": "Шаблон RFC",
+            "link": "/ru/design/rfc/RFC_TEMPLATE"
+          },
+          {
+            "text": "Полный шаблон RFC (пример)",
+            "link": "/ru/design/rfc/EXAMPLE_full_feature_proposal"
+          },
+          {
+            "text": "Принято",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "В процессе",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Черновик",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Отклонено",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/reference/": [
+      {
+        "text": "Справочная документация",
+        "items": [
+          {
+            "text": "Содержание справочника",
+            "link": "/ru/reference"
+          },
+          {
+            "text": "Спецификация языка",
+            "link": "/ru/reference/language-spec/"
+          },
+          {
+            "text": "Спецификация синтаксиса",
+            "link": "/ru/reference/language-spec/syntax"
+          },
+          {
+            "text": "Система типов",
+            "link": "/ru/reference/language-spec/type-system"
+          },
+          {
+            "text": "Система модулей",
+            "link": "/ru/reference/language-spec/modules"
+          },
+          {
+            "text": "Модель параллелизма",
+            "link": "/ru/reference/language-spec/concurrency"
+          },
+          {
+            "text": "Стандартная библиотека",
+            "link": "/ru/reference/language-spec/stdlib"
+          }
+        ]
+      },
+      {
+        "text": "Коды ошибок",
+        "items": []
+      },
+      {
+        "text": "Коды предупреждений",
+        "items": []
+      },
+      {
+        "text": "Система управления пакетами",
+        "collapsed": true,
+        "items": []
+      }
+    ],
+    "/dev/": [
+      {
+        "text": "Документация по разработке",
+        "items": [
+          {
+            "text": "Содержание разработки",
+            "link": "/ru/dev/"
+          },
+          {
+            "text": "Руководство по участию",
+            "link": "/ru/dev/contributing"
+          },
+          {
+            "text": "Руководство по коммитам",
+            "link": "/ru/dev/commit-convention"
+          },
+          {
+            "text": "Руководство по ветвлению",
+            "link": "/ru/dev/branch-maintenance-guide"
+          }
+        ]
+      },
+      {
+        "text": "Планы",
+        "items": [
+          {
+            "text": "Содержание планов",
+            "link": "/ru/dev/plan"
+          },
+          {
+            "text": "В обработке",
+            "collapsed": true,
+            "items": []
+          },
+          {
+            "text": "Завершено",
+            "collapsed": true,
+            "items": []
+          }
+        ]
+      }
+    ],
+    "/guide/": [
+      {
+        "text": "Документация-гайды",
+        "items": [
+          {
+            "text": "Содержание гайдов",
+            "link": "/ru/guide/"
+          },
+          {
+            "text": "Система управления пакетами",
+            "link": "/ru/guide/packaging"
+          }
+        ]
+      }
+    ],
+    "/": [
+      {
+        "text": "Документация на китайском",
+        "items": [
+          {
+            "text": "Быстрый старт",
+            "link": "/ru/getting-started"
+          },
+          {
+            "text": "Руководство",
+            "link": "/ru/tutorial/"
+          }
+        ]
+      }
+    ]
+  }
+}

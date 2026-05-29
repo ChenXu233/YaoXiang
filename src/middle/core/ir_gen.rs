@@ -12,7 +12,7 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::typecheck::{MonoType, PolyType, TypeCheckResult};
+use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR, Instruction, ModuleIR, Operand};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -551,23 +551,54 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
         match &stmt.kind {
-            ast::StmtKind::Fn {
+            ast::StmtKind::Binding {
                 name,
+                type_name,
+                method_type,
                 generic_params: _,
                 type_annotation,
+                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
-            } => self.generate_function_ir(
-                name,
-                type_annotation.as_ref(),
-                params,
-                stmts,
-                expr,
-                constants,
-            ),
+            } => {
+                // 区分函数定义、方法绑定和类型定义
+                if type_name.is_some() {
+                    // MethodBind: 有 type_name
+                    self.generate_method_ir(
+                        type_name.as_ref().unwrap(),
+                        name,
+                        method_type.as_ref().unwrap(),
+                        params,
+                        stmts,
+                        expr,
+                        constants,
+                    )
+                } else if params.is_empty()
+                    && stmts.is_empty()
+                    && expr.is_none()
+                    && type_annotation.as_ref().is_some_and(|t| {
+                        crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                    })
+                {
+                    // TypeDef: 没有参数和 body，且类型标注返回 Type
+                    self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
+                } else {
+                    // Fn: 普通函数
+                    self.generate_function_ir(
+                        name,
+                        type_annotation.as_ref(),
+                        *eval,
+                        params,
+                        stmts,
+                        expr,
+                        constants,
+                    )
+                }
+            }
             ast::StmtKind::Var {
                 name,
+                name_span: _,
                 type_annotation,
                 initializer,
                 is_mut: _,
@@ -576,24 +607,6 @@ impl AstToIrGenerator {
                 type_annotation.as_ref(),
                 initializer.as_ref().map(|v| &**v),
             ),
-            ast::StmtKind::MethodBind {
-                type_name,
-                method_name,
-                method_type,
-                params,
-                body: (stmts, expr),
-            } => self.generate_method_ir(
-                type_name,
-                method_name,
-                method_type,
-                params,
-                stmts,
-                expr,
-                constants,
-            ),
-            ast::StmtKind::TypeDef {
-                name, definition, ..
-            } => self.generate_constructor_ir(name, definition),
             ast::StmtKind::ExternalBindingStmt {
                 type_name,
                 method_name,
@@ -723,18 +736,23 @@ impl AstToIrGenerator {
     }
 
     /// 生成函数 IR
+    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::only_used_in_recursion)]
     fn generate_function_ir(
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
+        eval: Option<ast::EvalMode>,
         params: &[ast::Param],
         stmts: &[ast::Stmt],
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, IrGenError> {
-        // 检测 Native("symbol") 模式：函数体为空语句 + Native("...") 表达式
+        // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
+        //
+        // 通过 name resolution 检测，不再硬编码 Var("Native") 字符串匹配。
+        // Native 是 std.ffi 模块中真实存在的函数，名称通过 SHORT_TO_QUALIFIED 解析。
         if stmts.is_empty() {
             if let Some(expr_box) = expr {
                 if let ast::Expr::Call {
@@ -744,11 +762,10 @@ impl AstToIrGenerator {
                     span: _,
                 } = expr_box.as_ref()
                 {
-                    if let Some(native_symbol) = crate::std::ffi::detect_native_binding(func, args)
+                    if let Some(symbol) = crate::std::ffi::extract_native_binding_symbol(func, args)
                     {
-                        // 记录 native 绑定，跳过函数体生成
                         self.native_bindings
-                            .push(crate::std::ffi::NativeBinding::new(name, &native_symbol));
+                            .push(crate::std::ffi::NativeBinding::new(name, &symbol));
                         return Ok(None);
                     }
                 }
@@ -768,6 +785,11 @@ impl AstToIrGenerator {
 
         // 生成函数体指令
         let mut instructions = Vec::new();
+
+        // Apply function-level eval strategy annotation (RFC-001/008).
+        if let Some(mode) = eval {
+            instructions.push(Instruction::EvalPush(mode));
+        }
 
         // 进入函数体作用域
         self.enter_scope();
@@ -816,8 +838,9 @@ impl AstToIrGenerator {
         if let Some(e) = expr {
             let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            // 注意：generate_expr_ir 会为 Return 表达式添加 Ret 指令，
-            // 所以这里不需要额外添加 Ret 指令
+            // 隐式返回：函数体末尾表达式即返回值。
+            // 若表达式内包含显式 return，此 Ret 不可达但无害。
+            instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
         } else {
             // 纯语句块：隐式返回Void
             instructions.push(Instruction::Ret(None));
@@ -1006,6 +1029,7 @@ impl AstToIrGenerator {
             ast::Type::NamedStruct {
                 name: struct_name,
                 fields,
+                ..
             } => {
                 // 记录结构体定义（用于调用时填充默认值）
                 self.struct_definitions
@@ -1281,6 +1305,7 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::Var {
                 name,
+                name_span: _,
                 type_annotation,
                 initializer,
                 is_mut,
@@ -1344,18 +1369,22 @@ impl AstToIrGenerator {
                     span: stmt.span,
                 });
             }
-            ast::StmtKind::Fn {
+            ast::StmtKind::Binding {
                 name,
+                type_name: None,
+                method_type: _,
                 generic_params: _,
                 type_annotation,
+                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
             } => {
-                // 生成嵌套函数的 IR
+                // 生成嵌套函数的 IR（排除方法绑定和类型定义）
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),
+                    *eval,
                     params,
                     stmts,
                     expr,
@@ -1388,6 +1417,7 @@ impl AstToIrGenerator {
             }
             ast::StmtKind::For {
                 var,
+                var_span: _,
                 var_mut,
                 iterable,
                 body,
@@ -1810,7 +1840,10 @@ impl AstToIrGenerator {
 
             Ok(())
         } else if let Some(
-            _iter_ty @ (MonoType::List(_) | MonoType::Tuple(_) | MonoType::Dict(_, _)),
+            _iter_ty @ (MonoType::List(_)
+            | MonoType::Tuple(_)
+            | MonoType::Dict(_, _)
+            | MonoType::Range { .. }),
         ) = self.get_expr_mono_type(iterable)
         {
             // 使用迭代器协议的 For 循环
@@ -1862,6 +1895,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(iterator_reg)),
             func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
             args: vec![Operand::Local(iterable_reg)],
+            span: for_span,
         });
 
         // 3. 注册循环变量
@@ -1878,6 +1912,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(has_more_reg)),
             func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
         });
 
         // 6. 如果没有更多元素，跳转到结束
@@ -1891,6 +1926,7 @@ impl AstToIrGenerator {
             dst: Some(Operand::Local(element_reg)),
             func: Operand::Const(ConstValue::String("std.list.next".to_string())),
             args: vec![Operand::Local(iterator_reg)],
+            span: for_span,
         });
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
@@ -1952,6 +1988,8 @@ impl AstToIrGenerator {
             ast::Expr::Try { span, .. } => *span,
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
+            ast::Expr::Eval { span, .. } => *span,
+            ast::Expr::Spawn { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
             ast::Expr::Error(span) => *span,
@@ -2014,6 +2052,23 @@ impl AstToIrGenerator {
         expr: &ast::Expr,
     ) -> Option<MonoType> {
         match expr {
+            ast::Expr::BinOp {
+                op: ast::BinOp::Range,
+                left,
+                right,
+                ..
+            } => {
+                let left_ty = self.get_expr_mono_type(left).unwrap_or(MonoType::Int(64));
+                let right_ty = self.get_expr_mono_type(right).unwrap_or(MonoType::Int(64));
+                let elem_type = if left_ty == right_ty {
+                    left_ty
+                } else {
+                    MonoType::Int(64)
+                };
+                Some(MonoType::Range {
+                    elem_type: Box::new(elem_type),
+                })
+            }
             ast::Expr::Var(name, _) => {
                 if let Some(ref type_result) = self.type_result {
                     if let Some(mono_type) = type_result.local_var_types.get(name) {
@@ -2144,27 +2199,22 @@ impl AstToIrGenerator {
                     src: Operand::Const(const_val),
                 });
             }
-            Expr::Var(_, _) => {
+            Expr::Var(var_name, var_span) => {
                 // 变量加载 - 首先查找局部变量，然后查找全局变量
-                let var_name = if let Expr::Var(name, _) = expr {
-                    name.clone()
-                } else {
-                    String::new()
-                };
-
-                if let Some(local_idx) = self.lookup_local(&var_name) {
+                if let Some(local_idx) = self.lookup_local(var_name) {
                     // 局部变量：直接加载
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(local_idx),
                     });
-                } else if self.lookup_global(&var_name).is_some() {
+                } else if self.lookup_global(var_name).is_some() {
                     // 全局变量：生成函数调用获取值
                     let func_name = var_name.clone();
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
                         func: Operand::Const(ConstValue::String(func_name)),
                         args: vec![],
+                        span: *var_span,
                     });
                 } else {
                     // 未找到变量，默认加载 0
@@ -2240,11 +2290,13 @@ impl AstToIrGenerator {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: *span,
                             },
                             ast::BinOp::Mod => Instruction::Mod {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: *span,
                             },
                             ast::BinOp::Eq => Instruction::Eq {
                                 dst: Operand::Local(result_reg),
@@ -2291,7 +2343,7 @@ impl AstToIrGenerator {
                 func,
                 args,
                 named_args,
-                span: _,
+                span,
             } => {
                 // 检查是否是方法调用：func 是 FieldAccess
                 if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
@@ -2315,6 +2367,7 @@ impl AstToIrGenerator {
                                 method_function_name.to_string(),
                             )),
                             args: arg_regs,
+                            span: *span,
                         });
                     } else {
                         // 非命名空间调用：检查是否有绑定信息（RFC-004）
@@ -2384,6 +2437,7 @@ impl AstToIrGenerator {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: Operand::Const(ConstValue::String(func_name)),
                                 args: final_arg_regs,
+                                span: *span,
                             });
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
@@ -2421,6 +2475,7 @@ impl AstToIrGenerator {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: Operand::Const(ConstValue::String(qualified_name)),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             } else if var_name.as_ref().is_some_and(|name| {
                                 // 检查变量的类型标注是否是约束类型（但具体类型未知）
@@ -2448,6 +2503,7 @@ impl AstToIrGenerator {
                                     obj: Operand::Local(obj_reg),
                                     method_name: field.to_string(),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             } else {
                                 // 普通方法调用
@@ -2458,6 +2514,7 @@ impl AstToIrGenerator {
                                         method_function_name.to_string(),
                                     )),
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             }
                         }
@@ -2574,6 +2631,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Local(func_reg),
                             args: arg_regs,
+                            span: *span,
                         });
                     } else {
                         // ========== print/println 零开销分发处理 ==========
@@ -2620,6 +2678,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(to_string_reg)),
                                         func: Operand::Const(ConstValue::String(func_name)),
                                         args: arg_regs_for_method,
+                                        span: *span,
                                     });
 
                                     // 然后调用 std.io.print 输出字符串
@@ -2643,6 +2702,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(result_reg)),
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(to_string_reg)],
+                                        span: *span,
                                     });
                                 } else {
                                     // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
@@ -2669,6 +2729,7 @@ impl AstToIrGenerator {
                                             Operand::Local(arg_reg),
                                             Operand::Const(ConstValue::String(type_name)),
                                         ],
+                                        span: *span,
                                     });
 
                                     // 然后调用 std.io.print 输出
@@ -2691,6 +2752,7 @@ impl AstToIrGenerator {
                                         dst: Some(Operand::Local(result_reg)),
                                         func: Operand::Const(ConstValue::String(print_func_name)),
                                         args: vec![Operand::Local(fallback_reg)],
+                                        span: *span,
                                     });
                                 }
                             } else {
@@ -2700,6 +2762,7 @@ impl AstToIrGenerator {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: func_operand,
                                     args: arg_regs,
+                                    span: *span,
                                 });
                             }
                         } else {
@@ -2710,12 +2773,13 @@ impl AstToIrGenerator {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
                                 args: arg_regs,
+                                span: *span,
                             });
                         }
                     }
                 }
             }
-            Expr::FieldAccess { expr, field, .. } => {
+            Expr::FieldAccess { expr, field, span } => {
                 // 首先检查是否是模块变量的字段访问（如 io.println）
                 // io 是通过 use std.{io} 导入的模块变量
                 if let Expr::Var(module_name, _) = expr.as_ref() {
@@ -2728,6 +2792,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
+                            span: *span,
                         });
                     } else {
                         // 普通字段访问
@@ -2738,6 +2803,7 @@ impl AstToIrGenerator {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
                             field: field_index,
+                            span: *span,
                         });
                     }
                 } else {
@@ -2753,6 +2819,7 @@ impl AstToIrGenerator {
                             dst: Some(Operand::Local(result_reg)),
                             func: Operand::Const(ConstValue::String(full_path)),
                             args: vec![],
+                            span: *span,
                         });
                     } else {
                         // 普通字段访问
@@ -2763,8 +2830,135 @@ impl AstToIrGenerator {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(obj_reg),
                             field: field_index,
+                            span: *span,
                         });
                     }
+                }
+            }
+            Expr::ListComp {
+                element,
+                var,
+                iterable,
+                condition,
+                span,
+            } => {
+                // 列表推导式 IR 生成
+                // [x * x for x in items] 等价于:
+                //   1. 创建空结果列表
+                //   2. 通过迭代器遍历 iterable
+                //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
+                //   4. 返回结果列表
+
+                // 1. 创建空结果列表
+                instructions.push(Instruction::AllocArray {
+                    dst: Operand::Local(result_reg),
+                    size: Operand::Const(ConstValue::Int(0)),
+                    elem_size: Operand::Const(ConstValue::Int(1)),
+                });
+
+                // 结果列表需要可变（因为 push 操作）
+                self.current_mut_locals.insert(result_reg);
+
+                // 2. 计算可迭代对象
+                let iterable_reg = self.next_temp_reg();
+                self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+                // 3. 创建迭代器
+                let iterator_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(iterator_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+                    args: vec![Operand::Local(iterable_reg)],
+                    span: *span,
+                });
+
+                // 4. 注册循环变量
+                let var_reg = self.next_temp_reg();
+                self.register_local(var, var_reg);
+
+                // 5. 循环开始
+                let loop_start_idx = instructions.len();
+
+                // 6. has_next?
+                let has_next_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(has_next_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+                    args: vec![Operand::Local(iterator_reg)],
+                    span: *span,
+                });
+
+                let jump_end_idx = instructions.len();
+                instructions.push(Instruction::JmpIfNot(
+                    Operand::Local(has_next_reg),
+                    0, // 占位符
+                ));
+
+                // 7. next element
+                let element_reg = self.next_temp_reg();
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(element_reg)),
+                    func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+                    args: vec![Operand::Local(iterator_reg)],
+                    span: *span,
+                });
+
+                // 8. 存储到循环变量
+                instructions.push(Instruction::Store {
+                    dst: Operand::Local(var_reg),
+                    src: Operand::Local(element_reg),
+                    span: *span,
+                });
+
+                // 9. 如果有条件，检查条件
+                if let Some(cond_expr) = condition {
+                    let cond_reg = self.next_temp_reg();
+                    self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
+
+                    let skip_push_idx = instructions.len();
+                    instructions.push(Instruction::JmpIfNot(
+                        Operand::Local(cond_reg),
+                        0, // 占位符
+                    ));
+
+                    // 10. 计算元素表达式
+                    let comp_reg = self.next_temp_reg();
+                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+                    // 11. push 到结果列表
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                        span: *span,
+                    });
+
+                    // 修复条件跳转
+                    let after_push = instructions.len();
+                    if let Instruction::JmpIfNot(_, ref mut target) = instructions[skip_push_idx] {
+                        *target = after_push;
+                    }
+                } else {
+                    // 10. 计算元素表达式
+                    let comp_reg = self.next_temp_reg();
+                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+                    // 11. push 到结果列表
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                        span: *span,
+                    });
+                }
+
+                // 12. 跳回循环开始
+                instructions.push(Instruction::Jmp(loop_start_idx));
+
+                // 13. 修复跳出循环的跳转目标
+                let end_pos = instructions.len();
+                if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+                    *target = end_pos;
                 }
             }
             Expr::List(elements, span) => {
@@ -2796,7 +2990,7 @@ impl AstToIrGenerator {
                     });
                 }
             }
-            Expr::Index { expr, index, .. } => {
+            Expr::Index { expr, index, span } => {
                 let src_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, src_reg, instructions, constants)?;
 
@@ -2807,6 +3001,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     src: Operand::Local(src_reg),
                     index: Operand::Local(index_reg),
+                    span: *span,
                 });
             }
             Expr::Return(expr, _) => {
@@ -2817,6 +3012,11 @@ impl AstToIrGenerator {
                 } else {
                     instructions.push(Instruction::Ret(None));
                 }
+            }
+            Expr::Try { expr, span: _ } => {
+                // `expr?`：当前阶段仅作为错误传播标记，运行时等价于 `expr`。
+                // 错误的传播由解释器/Runtime 的错误通道处理（RFC-001）。
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
             }
             Expr::If {
                 condition,
@@ -2890,6 +3090,28 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(ConstValue::Int(0)),
+                });
+            }
+            Expr::Eval { mode, body, .. } => {
+                // Eval-annotated block: @block/@auto/@eager { ... }
+                instructions.push(Instruction::EvalPush(*mode));
+                self.generate_block_expr_ir(body, result_reg, instructions, constants)?;
+                instructions.push(Instruction::EvalPop);
+            }
+            Expr::Spawn { body, span } => {
+                // Spawn block: spawn { ... }
+                // Lower to: spawn ((...) => { ... }) with no params for now.
+                let closure_reg = self.next_temp_reg();
+                let lambda = ast::Expr::Lambda {
+                    params: Vec::new(),
+                    body: body.clone(),
+                    span: *span,
+                };
+                self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                instructions.push(Instruction::Spawn {
+                    func: Operand::Local(closure_reg),
+                    args: Vec::new(),
+                    result: Operand::Local(result_reg),
                 });
             }
             Expr::UnOp { op, expr, span: _ } => {
@@ -2995,8 +3217,117 @@ impl AstToIrGenerator {
                     env: Vec::new(),
                 });
             }
+            Expr::Match {
+                expr: match_expr,
+                arms,
+                span: _,
+            } => {
+                // Match 表达式 IR 生成
+                // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
+                //
+                // IR 结构:
+                //   1. 评估 scrutinee
+                //   2. 对每个 arm:
+                //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
+                //      b. 如果模式是 Wildcard: 始终匹配
+                //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
+                //   3. 修复所有跳转目标
+
+                // 1. 评估 scrutinee
+                let scrutinee_reg = self.next_temp_reg();
+                self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+
+                let mut jumps_to_end: Vec<usize> = Vec::new();
+
+                for arm in arms {
+                    // 检查模式是否匹配
+                    let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
+
+                    let jump_to_next_idx = if needs_condition {
+                        // Wildcard: 始终匹配，不需条件跳转
+                        None
+                    } else {
+                        // 生成条件: 比较 scrutinee 和模式值
+                        let cmp_reg = self.next_temp_reg();
+
+                        match &arm.pattern {
+                            ast::Pattern::Literal(lit) => {
+                                let const_val = match lit {
+                                    ast::Literal::Int(n) => ConstValue::Int(*n),
+                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                                    ast::Literal::Float(f) => ConstValue::Float(*f),
+                                    ast::Literal::String(s) => ConstValue::String(s.clone()),
+                                    ast::Literal::Char(c) => ConstValue::Char(*c),
+                                };
+                                constants.push(const_val.clone());
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(cmp_reg),
+                                    src: Operand::Const(const_val),
+                                });
+                            }
+                            _ => {
+                                // 不支持的 pattern: 加载 0，总会跳到下一个 arm
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(cmp_reg),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                });
+                            }
+                        }
+
+                        // 比较: scrutinee == pattern_value
+                        let eq_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Eq {
+                            dst: Operand::Local(eq_reg),
+                            lhs: Operand::Local(scrutinee_reg),
+                            rhs: Operand::Local(cmp_reg),
+                        });
+
+                        // 如果不相等，跳到下一个 arm
+                        let jmp_idx = instructions.len();
+                        instructions.push(Instruction::JmpIfNot(
+                            Operand::Local(eq_reg),
+                            0, // 占位符
+                        ));
+                        Some(jmp_idx)
+                    };
+
+                    // 生成 arm body，结果放入 result_reg
+                    let arm_result_reg = self.next_temp_reg();
+                    self.generate_block_expr_ir(
+                        &arm.body,
+                        arm_result_reg,
+                        instructions,
+                        constants,
+                    )?;
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(arm_result_reg),
+                    });
+
+                    // 跳转到 match 结束
+                    let jmp_end_idx = instructions.len();
+                    instructions.push(Instruction::Jmp(0)); // 占位符
+                    jumps_to_end.push(jmp_end_idx);
+
+                    // 修复条件跳转目标（指向当前 arm 之后的代码）
+                    if let Some(jmp_idx) = jump_to_next_idx {
+                        let current_pos = instructions.len();
+                        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jmp_idx] {
+                            *target = current_pos;
+                        }
+                    }
+                }
+
+                // 修复所有跳转到结束的指令
+                let end_pos = instructions.len();
+                for idx in jumps_to_end {
+                    if let Instruction::Jmp(ref mut target) = instructions[idx] {
+                        *target = end_pos;
+                    }
+                }
+            }
             // RFC-012: F-string 代码生成
-            Expr::FString { segments, span: _ } => {
+            Expr::FString { segments, span } => {
                 // 1. 尝试常量求值
                 if let Some(const_val) = self.eval_const_expr(expr) {
                     constants.push(const_val.clone());
@@ -3057,6 +3388,7 @@ impl AstToIrGenerator {
                     dst: Some(Operand::Local(result_reg)),
                     func: Operand::Const(ConstValue::String("std.string.format".to_string())),
                     args: call_args,
+                    span: *span,
                 });
             }
             _ => {
@@ -3124,7 +3456,7 @@ impl std::error::Error for IrGenError {}
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
     ast: &crate::frontend::core::parser::ast::Module,
-    result: &crate::frontend::typecheck::TypeCheckResult,
+    result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
     generator

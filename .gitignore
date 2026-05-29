@@ -28,7 +28,7 @@ coverage/
 *.tmp
 *.bak
 
-tarpaulin-report.html
+llvm-cov/
 
 proptest-regressions/
 .last_version_bump
@@ -36,3 +36,8 @@ proptest-regressions/
 node_modules/
 cache/
 dist/
+
+superpowers/
+
+.env
+docs/.env

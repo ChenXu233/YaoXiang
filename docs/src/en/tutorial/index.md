@@ -1,83 +1,83 @@
 ---
 title: Tutorial
-description: Systematically learn the core concepts of YaoXiang
+description: Systematically learn YaoXiang core concepts
 ---
 
 # Welcome to the YaoXiang Universe!
 
-> "From the Infinite comes the Taiji. Taiji moves to produce yang, stillness to produce yin."
-> — Zhou Dunyi, "Explanation of the Taiji Diagram"
+> 「From the Ultimate Void comes the Great Ultimate. The Great Ultimate moves to generate Yang, stillness to generate Yin.」
+> —— Zhou Dunyi, *Explanation of the Diagram of the Great Ultimate*
 
-This is the center of the YaoXiang Universe.
+Here is the center of the YaoXiang universe.
 
-In Eastern philosophy, "Yao" is the fundamental symbol that forms hexagrams, containing all the changes of yin and yang. "Xiang" is the external manifestation of a thing's essence, with all things having patterns to follow.
+In Eastern philosophy, 「Yao (爻)」 are the fundamental symbols that compose hexagrams, where the transformations of Yin and Yang are fully contained. 「Xiang (象)」 are the external manifestations of the essence of things—all things in the universe follow discernible patterns.
 
-**YaoXiang Programming Language** is an attempt to integrate this ancient wisdom into modern type systems.
+**YaoXiang Programming Language** is an attempt to integrate this ancient wisdom into a modern type system.
 
 ## What is YaoXiang?
 
-Imagine building with LEGO bricks:
+Imagine you are building with Lego bricks:
 
-| Concept | LEGO | YaoXiang |
-|---------|------|-----------|
-| Basic unit | Brick | **Type** |
-| Combination | Assembly | **Function mapping** |
-| Final product | Plane, car | **Program** |
+| Concept | Lego | YaoXiang |
+|---------|------|----------|
+| Basic unit | Building block | **Type** |
+| Way of combining | Snapping together | **Function mapping** |
+| End product | Airplane, car | **Program** |
 
 In YaoXiang's world, **everything is a type**:
-- Numbers are types, text is types
-- Types themselves are also types (metatypes)
+- Numbers are types, text is a type
+- Types themselves are also types (meta type)
 - Functions are bridges from type to type
 
 ## Core Features
 
-| Feature | YaoXiang | Other Language Examples |
-|---------|-----------|------------------------|
-| Type System | Dependent types + parametric polymorphism | TypeScript |
-| Memory Management | Ownership model (no GC) | Rust |
-| Async Programming | Concurrent model (effortless concurrency) | async/await |
-| Syntax Style | Python style | Python |
+| Feature | YaoXiang | Other languages example |
+|---------|----------|------------------------|
+| Type system | Dependently typed + parametric polymorphism | TypeScript |
+| Memory management | Ownership model (no GC) | Rust |
+| Async programming | Spawn model (seamless concurrency) | async/await |
+| Syntax style | Python-style | Python |
 
-**One-line summary**: As smooth as writing Python, as safe as Rust.
+**One-line summary**: As fluid as writing Python, as safe as Rust.
 
 ## Learning Path
 
-### Users with Programming Experience
+### Users with programming experience
 
-If you have programming experience, we recommend starting with "Quick Start".
+If you have programming experience, we recommend starting with "Getting Started for Experienced Developers."
 
-[🚀 Quick Start →](/tutorial/getting-started)
+[🚀 Getting Started for Experienced Developers →](./getting-started)
 
-### Users without Programming Experience
+### Users without programming experience
 
-If you don't have programming experience, we recommend starting with "Basics".
+If you do not have programming experience, we recommend starting with "Zero-Basics Introduction."
 
-[💡 Basics →](/tutorial/basics/01-what-is-type)
+[💡 Zero-Basics Introduction →](./basics/01-hello-program.md)
 
-> **💡 Tip**: Not having programming experience is actually an advantage — no baggage from other languages, able to understand YaoXiang's design philosophy most directly.
+> **💡 Tip**: Not having a programming background can actually be an advantage—you carry no baggage from other languages, allowing you to most directly understand YaoXiang's design philosophy.
 
-## Who Should Learn YaoXiang?
+## Who is YaoXiang for?
 
-- ✅ Explorers who want to understand programming language design
+- ✅ Explorers curious about programming language design
 - ✅ Enthusiasts who enjoy functional programming
 - ✅ Practitioners interested in type systems
-- ✅ Developers who want to experience "effortless concurrency"
-- ❌ Teams that need to immediately use in production projects (language is still experimental)
+- ✅ Developers wanting to experience "seamless concurrency"
+- ❌ Teams needing immediate production deployment (language is still experimental)
 
-> "The Tao that can be told is not the eternal Tao." — YaoXiang is still in early exploration stage, and every pioneer is shaping its future.
+> 「The Tao that can be told is not the eternal Tao.」—— YaoXiang is still in early exploration, and every pioneer is shaping its future.
 
 ## Next Steps
 
-[🚀 Quick Start →](/tutorial/getting-started)
+[🚀 Quick Start →](./getting-started)
 
-Or start with core concepts:
+Or, start with core concepts:
 
-- [What is "Everything is a Type"?](/tutorial/YaoXiang-book#1-language-overview)
-- [Why don't you need to write await?](/tutorial/YaoXiang-book#5-async-programming-and-concurrency)
-- [What is ownership?](/tutorial/YaoXiang-book#4-memory-management)
+- [What is "everything is a type"?](./YaoXiang-book#一语言概述)
+- [Why no need to write await?](./YaoXiang-book#五异步编程与并发)
+- [What is ownership?](./YaoXiang-book#四内存管理)
 
 ---
 
-> "Heaven moves vigorously, the gentleman strives for unremitting self-improvement."
+> 「Heaven moves vigorously; the gentleman cultivates unremitting self-improvement.」
 >
-> May you find your own Tao in the YaoXiang Universe.
+> May you discover your own Dao within the YaoXiang universe.

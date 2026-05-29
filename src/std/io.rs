@@ -253,7 +253,7 @@ fn native_read_line(
     stdin
         .lock()
         .read_line(&mut line)
-        .map_err(|e| ExecutorError::Runtime(format!("Failed to read line: {}", e)))?;
+        .map_err(|e| ExecutorError::runtime_only(format!("Failed to read line: {}", e)))?;
     // Remove trailing newline
     if line.ends_with('\n') {
         line.pop();
@@ -270,14 +270,14 @@ fn native_read_file(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
-            "read_file expects 1 argument (path: String)".to_string(),
+        return Err(ExecutorError::runtime_only(
+            "read_file expects 1 argument (path: String)",
         ));
     }
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "read_file expects String argument, got {:?}",
                 other.value_type(None)
             )));
@@ -285,7 +285,7 @@ fn native_read_file(
     };
     match std::fs::read_to_string(&path) {
         Ok(content) => Ok(RuntimeValue::String(content.into())),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to read file '{}': {}",
             path, e
         ))),
@@ -298,14 +298,14 @@ fn native_write_file(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
-            "write_file expects 2 arguments (path: String, content: String)".to_string(),
+        return Err(ExecutorError::runtime_only(
+            "write_file expects 2 arguments (path: String, content: String)",
         ));
     }
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "write_file expects String path, got {:?}",
                 other.value_type(None)
             )));
@@ -314,7 +314,7 @@ fn native_write_file(
     let content = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "write_file expects String content, got {:?}",
                 other.value_type(None)
             )));
@@ -322,7 +322,7 @@ fn native_write_file(
     };
     match std::fs::write(&path, &content) {
         Ok(()) => Ok(RuntimeValue::Bool(true)),
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to write file '{}': {}",
             path, e
         ))),
@@ -337,14 +337,14 @@ fn native_append_file(
     use std::io::Write;
 
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "append_file expects 2 arguments (path: String, content: String)".to_string(),
         ));
     }
     let path = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "append_file expects String path, got {:?}",
                 other.value_type(None)
             )));
@@ -353,7 +353,7 @@ fn native_append_file(
     let content = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "append_file expects String content, got {:?}",
                 other.value_type(None)
             )));
@@ -366,12 +366,12 @@ fn native_append_file(
     {
         Ok(mut file) => match file.write_all(content.as_bytes()) {
             Ok(()) => Ok(RuntimeValue::Bool(true)),
-            Err(e) => Err(ExecutorError::Runtime(format!(
+            Err(e) => Err(ExecutorError::runtime_only(format!(
                 "Failed to append to file '{}': {}",
                 path, e
             ))),
         },
-        Err(e) => Err(ExecutorError::Runtime(format!(
+        Err(e) => Err(ExecutorError::runtime_only(format!(
             "Failed to open file '{}' for appending: {}",
             path, e
         ))),

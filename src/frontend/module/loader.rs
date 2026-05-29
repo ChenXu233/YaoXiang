@@ -151,35 +151,51 @@ impl ModuleLoader {
 
         for stmt in &ast.items {
             match &stmt.kind {
-                // pub 函数 → 导出
-                StmtKind::Fn {
+                // Binding 导出 (函数、方法、类型)
+                StmtKind::Binding {
                     name,
+                    type_name,
+                    method_type,
                     type_annotation,
+                    params,
+                    body,
                     is_pub,
                     ..
                 } => {
-                    if *is_pub {
-                        let signature = type_annotation
-                            .as_ref()
-                            .map(format_type)
-                            .unwrap_or_else(|| "(...) -> Any".to_string());
+                    let is_type_def = params.is_empty() && body.0.is_empty() && body.1.is_none();
+                    if let Some(ty_name) = type_name {
+                        // 方法绑定：pub 导出为 Type.method
+                        if *is_pub {
+                            module.add_export(Export {
+                                name: format!("{}.{}", ty_name, name),
+                                full_path: format!("{}.{}.{}", module_path, ty_name, name),
+                                kind: ExportKind::Function,
+                                signature: format_type(method_type.as_ref().unwrap()),
+                            });
+                        }
+                    } else if is_type_def {
+                        // 类型定义始终导出
                         module.add_export(Export {
                             name: name.clone(),
                             full_path: format!("{}.{}", module_path, name),
-                            kind: ExportKind::Function,
-                            signature,
+                            kind: ExportKind::Type,
+                            signature: "Type".to_string(),
                         });
+                    } else {
+                        // 函数定义：pub 导出
+                        if *is_pub {
+                            let signature = type_annotation
+                                .as_ref()
+                                .map(format_type)
+                                .unwrap_or_else(|| "(...) -> Any".to_string());
+                            module.add_export(Export {
+                                name: name.clone(),
+                                full_path: format!("{}.{}", module_path, name),
+                                kind: ExportKind::Function,
+                                signature,
+                            });
+                        }
                     }
-                }
-
-                // 类型定义始终导出
-                StmtKind::TypeDef { name, .. } => {
-                    module.add_export(Export {
-                        name: name.clone(),
-                        full_path: format!("{}.{}", module_path, name),
-                        kind: ExportKind::Type,
-                        signature: "Type".to_string(),
-                    });
                 }
 
                 // 顶层不可变绑定 → 常量导出
@@ -316,7 +332,7 @@ impl ModuleLoader {
 /// 用于生成模块导出项的签名描述。
 fn format_type(ty: &AstType) -> String {
     match ty {
-        AstType::Name(name) => name.clone(),
+        AstType::Name { name, .. } => name.clone(),
         AstType::Int(bits) => format!("Int{}", bits),
         AstType::Float(bits) => format!("Float{}", bits),
         AstType::Char => "Char".to_string(),
@@ -333,11 +349,11 @@ fn format_type(ty: &AstType) -> String {
         }
         AstType::Option(inner) => format!("{}?", format_type(inner)),
         AstType::Result(ok, err) => {
-            format!("Result[{}, {}]", format_type(ok), format_type(err))
+            format!("Result({}, {})", format_type(ok), format_type(err))
         }
-        AstType::Generic { name, args } => {
+        AstType::Generic { name, args, .. } => {
             let args_str: Vec<String> = args.iter().map(format_type).collect();
-            format!("{}[{}]", name, args_str.join(", "))
+            format!("{}({})", name, args_str.join(", "))
         }
         AstType::Tuple(types) => {
             let parts: Vec<String> = types.iter().map(format_type).collect();
@@ -351,6 +367,7 @@ fn format_type(ty: &AstType) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::span::Span;
 
     #[test]
     fn test_detect_no_cycles() {
@@ -459,10 +476,19 @@ mut counter = 0
     fn test_format_type_fn() {
         let ty = AstType::Fn {
             params: vec![
-                AstType::Name("Int".to_string()),
-                AstType::Name("Int".to_string()),
+                AstType::Name {
+                    name: "Int".to_string(),
+                    span: Span::dummy(),
+                },
+                AstType::Name {
+                    name: "Int".to_string(),
+                    span: Span::dummy(),
+                },
             ],
-            return_type: Box::new(AstType::Name("Bool".to_string())),
+            return_type: Box::new(AstType::Name {
+                name: "Bool".to_string(),
+                span: Span::dummy(),
+            }),
         };
         assert_eq!(format_type(&ty), "(Int, Int) -> Bool");
     }
@@ -471,8 +497,12 @@ mut counter = 0
     fn test_format_type_generic() {
         let ty = AstType::Generic {
             name: "List".to_string(),
-            args: vec![AstType::Name("Int".to_string())],
+            name_span: Span::dummy(),
+            args: vec![AstType::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }],
         };
-        assert_eq!(format_type(&ty), "List[Int]");
+        assert_eq!(format_type(&ty), "List(Int)");
     }
 }

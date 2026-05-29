@@ -113,28 +113,28 @@ main: () -> Void = {
     return
 }
 
-// ======== 9. 泛型函数（RFC-011 语法）======
+// ======== 9. 泛型函数 ========
 
-// 泛型函数使用 [T] 语法约束类型参数
-identity: [T](x: T) -> T = x
+// RFC-010: 泛型参数使用 (T: Type) -> ((params) -> Ret) 统一语法
+identity: (T: Type) -> ((x: T) -> T) = (x) => x
 
 // 泛型函数带约束
-clone: [T: Clone](value: T) -> T = value.clone()
+clone: (T: Clone) -> ((value: T) -> T) = value.clone()
 
 // 泛型高阶函数
-map: [T, R](f: (T) -> R, list: List[T]) -> List[R] = {
+map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
     // 实现 map
-    List[R]()
+    return List(R)()
 }
 
 // ======== 10. 泛型类型 ========
 
 // 泛型列表类型
 List: (T: Type) -> Type = {
-    data: Array[T],
+    data: Array(T),
     length: Int,
-    push: [T](self: List[T], item: T) -> Void,
-    get: [T](self: List[T], index: Int) -> Maybe[T]
+    push: (self: List(T), item: T) -> Void,
+    get: (self: List(T), index: Int) -> Maybe(T)
 }
 
 // ======== 11. Lambda 表达式 ========
@@ -143,7 +143,7 @@ List: (T: Type) -> Type = {
 add_fn = (a: Int, b: Int) => a + b
 
 // 高阶函数
-apply_twice: [T](f: (T) -> T, x: T) -> T = {
+apply_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = {
     return f(f(x))
 }
 

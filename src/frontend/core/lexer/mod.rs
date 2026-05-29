@@ -14,7 +14,7 @@ pub use tokenizer::Lexer;
 /// Tokenize source code with RFC support
 /// Supports:
 /// - RFC-004: Binding syntax (e.g., function[0, 1, 2])
-/// - RFC-010: Generic syntax (e.g., List[T], Vec[T: Clone])
+/// - RFC-010: Generic syntax (e.g., List(T), Vec(T: Clone))
 /// - RFC-011: Advanced type system features
 pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
     use crate::util::i18n::{t_cur, MSG};
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_rfc010_generic_syntax() {
         // RFC-010: Generic syntax support
-        let source = "List[T]";
+        let source = "List(T)";
         let tokens = tokenize(source).unwrap();
 
         // Should recognize angle brackets for generics
@@ -176,10 +176,15 @@ mod tests {
         );
 
         // Check that we have some kind of bracket token (Lt or LBracket)
-        let has_bracket = tokens
-            .iter()
-            .any(|t| matches!(t.kind, TokenKind::Lt) || matches!(t.kind, TokenKind::LBracket));
-        assert!(has_bracket, "Should have bracket token (Lt or LBracket)");
+        let has_bracket = tokens.iter().any(|t| {
+            matches!(t.kind, TokenKind::LParen)
+                || matches!(t.kind, TokenKind::Lt)
+                || matches!(t.kind, TokenKind::LBracket)
+        });
+        assert!(
+            has_bracket,
+            "Should have bracket token (LParen, Lt or LBracket)"
+        );
     }
 }
 

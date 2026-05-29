@@ -425,7 +425,7 @@ impl super::error::OwnershipCheck for CycleChecker {
 mod tests {
     use super::*;
     use crate::middle::core::ir::BasicBlock;
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
 
     /// 创建测试用的 FunctionIR
     fn create_test_function(instructions: Vec<Instruction>) -> FunctionIR {

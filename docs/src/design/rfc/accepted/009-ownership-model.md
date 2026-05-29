@@ -7,38 +7,40 @@ title: RFC-009：所有权模型设计
 > **状态**: 已接受
 > **作者**: 晨煦
 > **创建日期**: 2025-01-08
-> **最后更新**: 2026-02-12
+> **最后更新**: 2026-05-11（新增丐版借用 &T/&mut T，完善所有权梯度）
 
 ## 摘要
 
-本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**，包括所有权语义、移动语义、共享机制和循环引用处理。
+本文档定义 YaoXiang 编程语言的**所有权模型（Ownership Model）**。
 
-**核心设计**：
-- 默认 **Move（值传递）**，零拷贝
-- 显式 **`ref` 关键字** = Arc（线程安全引用计数）
-- **`clone()`** = 显式复制
-- **`*T` 裸指针** + `unsafe` = 系统级编程
-- 标准库提供 **`Rc`** / **`Arc`** / **`Weak`**
+**核心设计——五个概念，一个梯度**：
 
-**增强特性**：
-- **空状态重用**：Move 后变量可重新赋值
-- **所有权回流**：函数自动返回修改后的所有权
-- **消费分析**：自动推断参数是否被消费（Consumes/Returns）
-- **逆函数生成**：⚠️ **未来特性**
-- **部分消费**：⚠️ **未来特性**
+```
+看一眼/原地改     拿走           共享持有         复制一份        系统级
+    │              │              │              │              │
+   &T            Move           ref          clone()        unsafe
+  &mut T         零拷贝        编译器自动      显式深拷贝      *T
+  函数参数         默认          选Rc/Arc                   用户负责
+  禁止逃逸                     任务内环静默
+                               跨任务环 lint
+                               标准库Weak
+```
 
-**循环引用处理**：
-- 任务内循环：允许（泄漏可控，任务结束后释放）
-- 跨任务循环：编译器检测并报错
-- `unsafe` 逃生舱：绕过检测（用户负责）
+- **Move（默认）**：赋值/传参/返回 = 所有权转移，零拷贝，RAII 自动释放
+- **`&T` / `&mut T`（丐版借用）**：只做函数参数，禁止逃逸。零标注，零生命周期。编译器在调用侧自动借用
+- **`ref` 关键字**：跨作用域共享。编译器自动选 Rc（不跨任务）还是 Arc（跨任务）
+- **`clone()`**：显式深拷贝
+- **`unsafe` + `*T`**：裸指针，系统级逃生舱
 
-**消除复杂性**：
+**消除的复杂性**：
 - ❌ 无生命周期 `'a`
-- ❌ 无借用检查器
+- ❌ 无借用检查器（禁止而非标注，不需要 Rust 式的全局生命周期推导）
 - ❌ 无 GC
+- ❌ 无消费分析/所有权回流等"迷你借用检查器"
+- ❌ 用户不需要知道 Rc/Arc 的区别（编译器自动选）
 
-> **编程负担**：⭐☆☆☆☆（几乎为零）
-> **性能保证**：零运行时开销，无 GC 暂停
+> **编程负担**：`&T`/`&mut T` 三条规则，`ref` 一个关键字，编译器全自动。
+> **性能保证**：Move 零开销，borrow 零开销，ref 按需付费，无 GC 暂停。
 
 ## 动机
 
@@ -48,1081 +50,441 @@ title: RFC-009：所有权模型设计
 |------|----------|------|
 | C/C++ | 手动管理 | 内存泄漏、野指针、双重释放 |
 | Java/Python | GC | 延迟波动、内存开销、无法预测的暂停 |
-| Rust | 所有权 + 借用检查 | 复杂度高、学习曲线陡 |
-| **YaoXiang** | **所有权 + ref** | **简单安全、无 GC** |
+| Rust | 所有权 + 借用检查 | 生命周期 `'a` 学习曲线陡峭 |
+| **YaoXiang** | **Move + Borrow + ref** | **简单、确定、无 GC** |
 
 ### 设计目标
 
 ```yaoxiang
 # 1. 默认 Move（零拷贝）
-create_and_forget: () -> Point = () => {
-    p = Point(1.0, 2.0)
-    # p 离开作用域自动释放
-}
+p = Point(1.0, 2.0)
+p2 = p                         # Move，p 不可再读
 
-# 2. 显式 ref = Arc（安全共享，类型自动推断）
-shared = ref p   # Arc，类型从 p 推断
-spawn(() => print(shared.x))
+# 2. &T / &mut T 借用（零开销，只读/原地修改，禁止逃逸）
+print_info(p2)                 # 编译器自动借用 &p2，用完即还
+shift(p2, 1.0, 1.0)           # 编译器自动借用 &mut p2
 
-# 3. 显式 clone() = 复制
-p2 = p.clone()
+# 3. ref = 共享（编译器自动选 Rc/Arc）
+shared = ref p2                # 跨作用域持有
+spawn { use(shared) }          # 编译器：跨任务 → Arc
 
-# 4. 系统级 = unsafe + 裸指针
+# 4. clone() = 显式复制
+backup = p2.clone()            # 深拷贝，独有
+
+# 5. unsafe + *T = 系统级
 unsafe {
     ptr: *Point = &p
     (*ptr).x = 0.0
 }
-
-# 5. 标准库 Rc/Arc/Weak
-use std.rc.{Rc, Weak}
-use std.sync.Arc
-
-rc: Rc[Node] = Rc.new(node)
-arc: Arc[Node] = Arc.new(node)
-weak: Weak[Node] = Weak.new(arc)
 ```
 
 ### 与 Rust 的核心区别
 
 | 特性 | Rust | YaoXiang |
 |------|------|----------|
-| 默认语义 | 借用 `&T` | **Move（值传递）** |
-| 共享机制 | `Arc::new()` | **`ref` 关键字** |
+| 默认语义 | 借用 `&T`（需显式 `.clone()`） | **Move（值传递，零拷贝）** |
+| 借用 | `&T`/`&mut T`，可返回，需生命周期 | **`&T`/`&mut T` 只做参数，禁止逃逸** |
+| 共享机制 | `Arc::new()` + 手动 Weak | **`ref` 关键字（编译器自动选 Rc/Arc）** |
 | 复制 | `clone()` | `clone()` |
 | 裸指针 | `*T` | `*T` |
-| unsafe | unsafe | unsafe |
 | 生命周期 | `'a` | ❌ 无 |
-| 借用检查 | borrow checker | ❌ 无 |
-| 循环引用 | Weak 或 unsafe | **同** |
-
-### 为什么消除生命周期？
-
-**核心洞察**：没有 `&T` 引用，就不需要生命周期 `'a`。
-
-```yaoxiang
-# Rust 的问题
-returns_ref: () -> &Point {   # 需要 'a
-    let p = Point(1.0, 2.0)
-    return &p                  # 悬空指针！
-}
-
-# YaoXiang 的解决方案
-returns_value: () -> Point {   # 无生命周期
-    p = Point(1.0, 2.0)
-    return p                    # Move，所有权转移
-}
-```
+| 借用检查 | 全局推导 | **仅函数体范围内检查** |
+| 循环引用 | 手动 Weak | **任务结束统一释放 / 跨任务 lint / 标准库 Weak** |
 
 ---
 
 ## 提案
 
-### 1. 所有权核心规则
-
-```mermaid
-flowchart TB
-    subgraph 默认["默认：Move（零拷贝）"]
-        A1["赋值 / 传参 / 返回"] --> A2["所有权转移"]
-        A2 --> A3["零拷贝（指针移动）"]
-    end
-
-    subgraph 共享["共享：ref = Arc"]
-        B1["ref 关键字"] --> B2["引用计数"]
-        B2 --> B3["线程安全"]
-        B3 --> B4["跨任务循环检测"]
-    end
-
-    subgraph 复制["复制：clone()"]
-        C1["clone()"] --> C2["值复制"]
-        C2 --> C3["原所有者保持有效"]
-    end
-
-    subgraph 标准库["标准库：Rc/Arc/Weak"]
-        D1["Rc"] --> D2["非线程安全"]
-        B1 --> D3["Arc"] --> D4["线程安全"]
-        D3 --> D5["Weak"] --> D6["不增加计数"]
-    end
-
-    subgraph 系统["系统：unsafe + *T"]
-        E1["unsafe 块"] --> E2["裸指针"]
-        E2 --> E3["用户保证安全"]
-    end
-
-    subgraph 未来["⚠️ 未来特性"]
-        F1["逆函数生成"] --> F2["需宏/代码生成"]
-        F3["部分消费"] --> F4["字段级别所有权"]
-    end
-```
-
-### 2. 语义详解
-
-#### 2.1 Move（默认）
+### 1. Move（默认所有权转移）
 
 ```yaoxiang
-# === 规则：赋值 / 传参 / 返回 = Move ===
+# 规则：赋值 / 传参 / 返回 = Move，零拷贝
 
 p: Point = Point(1.0, 2.0)
-p2 = p                        # Move，p 失效
+p2 = p                           # Move，p 不可再读
 
-process: (p: Point) -> Point {
-    p.transform()             # p 是参数，Move
+# 变量可以重新赋值（Python 风格，无遮蔽）
+p = Point(3.0, 4.0)              # p 重新绑定，类型必须一致
+
+# 函数参数：Move
+process: (p: Point) -> Point = {
+    p.transform()
+    p                            # Move 返回
 }
 
-create: () -> Point {
+# 函数返回：Move
+create: () -> Point = {
     p = Point(1.0, 2.0)
-    return p                  # Move，返回值
+    p                            # Move 返回，零拷贝
 }
 ```
 
 **特点**：
-- 零拷贝（只移动指针）
-- 原所有者失效
-- RAII 自动释放
+- 零拷贝（编译器移动指针）
+- 移动后原绑定不可读（编译错误）
+- RAII：作用域结束自动释放
+- 函数签名 `(T) -> T` 本身就是文档——消费 T，返回 T
 
-#### 2.2 ref = Arc（显式共享）
+---
 
-```yaoxiang
-# === 规则：ref 关键字 = Arc（引用计数） ===
+### 2. &T / &mut T（丐版借用）
 
-p: Point = Point(1.0, 2.0)
+**核心原则：借用只是"看一眼"或"原地改一下"，不允许占有。**
 
-# 创建 Arc，类型自动推断
-shared = ref p
+#### 2.1 三条规则
 
-# Arc 自动管理生命周期
-spawn(() => print(shared.x))   # 安全
-spawn(() => print(shared.y))   # 安全
-
-# Arc 计数自动增减
-# shared 离开作用域时，计数归零自动释放
+```
+1. &T / &mut T 只能作为函数参数出现
+2. 不能返回、不能存结构体、不能赋给局部变量、不能被闭包捕获后逃逸
+3. 调用侧无需标注 &，编译器根据方法签名自动选择借用或 Move
 ```
 
-**特点**：
-- 线程安全引用计数
-- 自动管理生命周期
-- 用户显式控制共享时机
-- 编译器检测**跨任务循环引用**
+**零标注。零生命周期。** 编译器只做一件事：保证借用不离开当前函数。这不需要跨函数分析——因为跨函数被"禁止"堵死了，不需要推导。
 
-#### 2.3 clone() = 显式复制
+#### 2.2 基本使用
 
 ```yaoxiang
-# === 规则：clone() = 显式值复制 ===
+# 方法端：声明 self 类型，决定借用方式
+Point.print: (self: &Point) -> Void = {
+    print(self.x)                  # 读字段
+    print(self.y)
+    # 函数结束，借用结束
+}
 
-p: Point = Point(1.0, 2.0)
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx           # 原地修改
+    self.y = self.y + dy
+}
 
-# 复制值
-p2 = p.clone()
+# 调用端：编译器自动选择借用或 Move
+p = Point(1.0, 2.0)
+p.print()                          # 编译器：&p，print 结束后借用自动释放
+p.shift(1.0, 1.0)                  # 编译器：&mut p，shift 结束后借用自动释放
+p.print()                          # OK，p 仍然有效
 
-# p 和 p2 都是独立所有者
-p.x = 0.0      # ✅
-p2.x = 0.0     # ✅ 互不影响
+# 自由函数同理
+distance: (a: &Point, b: &Point) -> Float = {
+    sqrt((a.x - b.x)**2 + (a.y - b.y)**2)  # 读两个参数
+}
+d = distance(p, p2)                     # 编译器：&p, &p2
 ```
 
-**何时使用**：
-- 需要保留原值
-- 不适合 Move 的场景
-
-#### 2.4 标准库：Rc / Arc / Weak
+#### 2.3 禁止的行为
 
 ```yaoxiang
-use std.rc.{Rc, Weak}
-use std.sync.Arc
+# ❌ 禁止：借用逃出函数
+get_x_ref: (p: &Point) -> &Float = { p.x }      # 返回借用 → 编译错误
+store_ref: (p: &Point) -> Wrapper = {             # 存进结构体 → 编译错误
+    Wrapper { ref: p }
+}
 
-# === Rc：非线程安全引用计数 ===
-node: Node = Node::new()
-rc: Rc[Node] = Rc::new(node)
-rc2 = rc.clone()              # Rc 克隆，非线程安全
+# ❌ 禁止：借用赋给局部变量
+bad_bind: (p: &Point) -> Void = {
+    q = p                         # &Point 赋给局部变量 → 编译错误
+}
 
-# === Arc：线程安全引用计数 ===
-node: Node = Node::new()
-arc: Arc[Node] = Arc::new(node)
-arc2 = arc.clone()            # Arc 克隆，原子操作
+# ❌ 禁止：穿过任务边界
+bad_task: (p: &Point) -> Void = {
+    spawn { print(p.x) }          # 借用逃逸到任务 → 编译错误
+}
 
-# === Weak：不增加计数，防止循环 ===
-arc: Arc[Node] = Arc::new(Node::new())
-weak: Weak[Node] = Weak::new(arc)
+# ❌ 禁止：借来的不能 Move
+bad_move: (p: &Point) -> Void = {
+    p2 = p                        # 不是你的，没资格转移 → 编译错误
+}
 
-# 使用前检查是否存在
-if Some(node) = weak.upgrade() {
-    use(node)
+# ❌ 禁止：借来的不能持久持有
+bad_ref: (p: &Point) -> Void = {
+    shared = ref p                # 借用不是所有权，不能 ref → 编译错误
 }
 ```
 
-| 类型 | 线程安全 | 用途 |
-|------|----------|------|
-| `Rc[T]` | ❌ | 单线程共享 |
-| `Arc[T]` | ✅ | 多线程共享 |
-| `Weak[T]` | ✅/❌ | 打破循环（不增加计数） |
-
-#### 2.5 unsafe + 裸指针（系统级）
+#### 2.4 &mut 的别名保护
 
 ```yaoxiang
-# === 规则：unsafe 块中可使用裸指针 ===
+# ✅ 允许：多个 &T 同时活跃
+read_both: (a: &Point, b: &Point) -> Float = { a.x + b.y }
 
+# ✅ 允许：&mut 结束后可以再次借用
+shift_and_read: (p: &mut Point) -> Void = {
+    shift(p, 1.0, 1.0)           # &mut p 的借用在此调用中
+    print_info(p)                 # 上一个借用已结束，可以再借 &
+}
+
+# ❌ 禁止：&mut 和 &T 同时活跃
+# 编译器在函数体范围内做流敏感分析，保证同一时刻只有一个 &mut
+```
+
+#### 2.5 自动借用选择规则
+
+调用端编译器按以下优先级自动选择：
+
+```
+1. 如果实参后续还有使用 → 优先借用（&T 或 &mut T，根据方法签名）
+2. 如果实参后续不再使用 → Move
+3. 优先匹配顺序：&T < &mut T < Move
+```
+
+```yaoxiang
+# 示例：自动选择
+p = Point(1.0, 2.0)
+p.print()        # print 声明 &self → &p，借用结束后 p 还能用
+p.shift(1.0, 1.0) # shift 声明 &mut self → &mut p
+p2 = p           # Move，p 不再使用
+```
+
+---
+
+### 3. ref 关键字（编译器自动优化）
+
+`ref` 是跨作用域共享的唯一方式。底层是 Rc 还是 Arc，用户不需要关心。
+
+#### 3.1 基本使用
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+shared = ref p                   # 共享，编译器自动选实现
+
+# 跨任务共享
+@block
+main: () -> Void = {
+    data = ref heavy_data
+    spawn { use(data) }           # 编译器：跨任务 → Arc
+    spawn { use(data) }           # 编译器：跨任务 → Arc
+}
+
+# 单任务共享
+@block
+main: () -> Void = {
+    data = ref heavy_data
+    use(data)                     # 编译器：不跨任务 → Rc
+}
+```
+
+**用户心智模型**：`ref` = 共享持有。够了。
+
+#### 3.2 编译器逃逸分析：Rc vs Arc
+
+```
+ref 的数据流分析：
+
+不逃逸到其他任务 → Rc（非原子引用计数，开销低）
+逃逸到其他任务   → Arc（原子引用计数，线程安全）
+```
+
+#### 3.3 环检测策略
+
+```
+任务内环 → 静默允许。
+  ├── 结构化并发保证任务结束时所有资源统一释放。
+  ├── ref 永远保活，语义不掺水。
+  └── 用户有权在任务内构建双向强引用（例如图计算中间态）。
+
+跨任务环 → lint（默认 warn，可配置）。
+  ├── 程序行为正确，不会真泄漏（父任务结束时子任务资源全释放）。
+  ├── 但跨任务强引用意味着所有权边界模糊，值得停下来重新思考。
+  ├── 默认 warn 级别，编译通过但有提示。
+  └── 团队可在项目配置中设为 deny，纳入 CI 质量门。
+```
+
+**Lint 级别**（类似 Rust clippy）：
+
+| 级别 | 行为 | 场景 |
+|------|------|------|
+| `allow` | 不检查 | 个人项目 |
+| `warn`（默认） | 编译通过，有提示 | 开发阶段 |
+| `deny` | 编译失败 | 团队 CI 质量门 |
+| `forbid` | 编译失败，不可覆盖 | 组织级强制规则 |
+
+```yaoxiang
+# 任务内环：静默允许，双向强引用
+build_graph: () -> Void = {
+    a = Node("a")
+    b = Node("b")
+    a.next = ref b
+    b.prev = ref a                # 环。任务结束时统一释放。
+}
+
+# 跨任务环：lint（默认 warn）
+@block
+parent_task: () -> Void = {
+    shared_a = ref a
+    shared_b = ref b
+    spawn {
+        shared_a.child = ref shared_b   # ⚠️ warn: 跨任务循环引用
+    }
+}
+```
+
+**项目配置示例**：
+
+```toml
+# yaoxiang.toml
+[lints]
+cross-task-cycle = "deny"    # 跨任务环在 CI 上直接拒绝
+```
+
+| 环类型 | 行为 | 原因 |
+|--------|------|------|
+| 任务内 ref 环 | 不做检查 | 用户的权限，任务结束统一释放 |
+| 跨任务 ref 环 | lint（默认 warn） | 提醒重新思考，可配置 deny |
+
+#### 3.4 Weak：标准库提供
+
+```yaoxiang
+use std.rc.Weak
+
+# 高级用户显式选择
+a.next = ref b
+b.prev = Weak.new(a.next)        # 用户显式控制哪个方向是弱的
+```
+
+**`Weak` 不是语言内置，是标准库类型。** 日常用 `ref` 就够了。需要精细控制内存的高级用户手动引入 `Weak`。
+
+#### 3.5 借用 vs ref
+
+| | `&T` / `&mut T` | `ref` |
+|------|------|------|
+| 做什么 | 看一眼/原地改 | 共享持有 |
+| 范围 | 函数参数，用完即还 | 跨作用域 |
+| 成本 | 零开销 | Rc 或 Arc（编译器选） |
+| 逃逸 | 禁止 | 本来就是用来逃逸的 |
+| 成环 | 不涉及 | 静默允许，跨任务 lint |
+
+---
+
+### 4. clone() —— 显式复制
+
+```yaoxiang
+p: Point = Point(1.0, 2.0)
+p2 = p.clone()                   # 深拷贝
+# p 和 p2 独立，互不影响
+```
+
+**何时使用**：需要保留原值且不适合 Move、不适合共享的场景。
+
+### 5. unsafe + 裸指针（系统级编程）
+
+```yaoxiang
 p: Point = Point(1.0, 2.0)
 
-# 系统级编程
 unsafe {
-    # 获取裸指针
-    ptr: *Point = &p
-
-    # 解引用（用户保证有效）
-    (*ptr).x = 0.0
-
-    # 指针运算
-    ptr2 = ptr + 1
+    ptr: *Point = &p              # 裸指针
+    (*ptr).x = 0.0                # 解引用（用户保证安全）
+    ptr2 = ptr + 1                # 指针运算
 }
 ```
 
 **限制**：
 - 只能在 `unsafe` 块中使用
 - 用户保证不悬空、不释放后使用
-- 用于系统级编程（FFI、内存操作等）
-- 可绕过循环引用检测（用户负责）
+- 用于 FFI、内存操作等系统级编程
 
 ---
 
-### 6. 空状态重用
+### 6. 所有权梯度总览
 
-#### 6.1 核心概念
-
-**空状态**：变量被 Move 后进入"空"状态，可重新赋值复用变量名。
-
-```yaoxiang
-# === 空状态重用示例 ===
-
-p: Point = Point(1.0, 2.0)
-p2 = p              # Move，p 进入空状态
-
-# 空状态的 p 可重新赋值
-p = Point(3.0, 4.0)  # ✅ p 被重新赋值，类型必须一致
-
-# 不可重新赋值为不同类型
-p = "hello"         # ❌ 编译错误：类型不匹配
 ```
-
-**规则**：
-- Move 后变量进入 `empty` 状态
-- `empty` 变量可重新赋值（类型必须一致）
-- 避免"移动后未使用"的警告和变量名污染
-
-#### 6.2 控制流中的空状态
-
-```yaoxiang
-# === if 分支中的空状态 ===
-
-p: Point = Point(1.0, 2.0)
-
-if condition {
-    p2 = p              # p 进入空状态
-    p = Point(3.0, 4.0) # ✅ 分支内重新赋值
-} else {
-    # p 仍然有效（未移动）
-    use(p)
-}
-
-# 后续使用 p
-p = Point(5.0, 6.0)    # ✅ 可重新赋值
-```
-
-**编译器追踪**：
-- 进入分支时记录变量状态
-- 每个分支出口必须验证变量状态一致性
-- 跨分支的状态合并分析
-
-#### 6.3 与传统语法的对比
-
-| 特性 | 传统 Rust | YaoXiang（空状态重用） |
-|------|----------|------------------------|
-| 移动后变量 | 必须重新声明 `let p = ...` | 自动重新赋值 `p = ...` |
-| 变量命名 | 需避免 `p1, p2, p3` | 可复用同一变量名 |
-| 代码示例 | `let p = Point::new(); let p2 = move_p(p); let p = Point::new();` | `p = Point::new(); p2 = move_p(p); p = Point::new();` |
-
----
-
-### 7. 所有权回流
-
-#### 7.1 核心概念
-
-**所有权回流**：函数参数被修改后返回，形成所有权闭环。
-
-```yaoxiang
-# === 所有权回流示例 ===
-
-p: Point = Point(1.0, 2.0)
-
-# p 被 process 修改后返回，所有权回流到 p
-p = p.process()        # ✅ p.process() 返回修改后的 p
-
-# 链式调用
-p = p.rotate(90).scale(2.0).translate(1.0, 1.0)
-```
-
-#### 7.2 回流推断规则
-
-编译器根据返回类型自动推断：
-
-```yaoxiang
-# === 回流 vs 消费 ===
-
-transform: (x: Point) -> Point {
-    # x 被修改后返回 → 推断为 Returns 模式
-    x.scale(2.0)
-    return x
-}
-
-consume: (x: Point) -> () {
-    # x 被消费，不返回 → 推断为 Consumes 模式
-    print(x)
-}
-
-# 使用
-p: Point = Point(1.0, 2.0)
-p = transform(p)       # ✅ 回流：p 被更新
-consume(p)             # ⚠️ 消费：p 变空，后续不可用
-```
-
-#### 7.3 显式回流标注
-
-```yaoxiang
-# === 显式标注参数所有权流向 ===
-
-# 消费参数（不返回）
-print_and_consume: (x: Point) -> () { ... }
-
-# 回流参数（返回）
-modify_and_return: (x: Point) -> Point { ... }
-```
-
-**注意**：YaoXiang 不提供 `&Point` 借用语法。如果需要共享，用 `ref` 关键字；如果只想读不消费原值，用 `clone()` 复制。
-
-#### 7.4 回流与链式调用
-
-```yaoxiang
-# === 流畅的链式调用 ===
-
-# 传统方式：每步都需要新变量
-p1 = Point(1.0, 2.0)
-p2 = p1.rotate(90)
-p3 = p2.scale(2.0)
-p4 = p3.translate(1.0, 1.0)
-
-# 回流方式：复用同一变量
-p = Point(1.0, 2.0)
-p = p.rotate(90)
-p = p.scale(2.0)
-p = p.translate(1.0, 1.0)
+  借用（零开销）         Move（零开销）      共享（按需付费）    复制
+   │                      │                  │                │
+  &T 看一眼            默认所有权转移     ref Rc/Arc       clone()
+  &mut T 原地改        链式消费回流       编译器自动选      显式深拷贝
+   │                      │                  │                │
+  函数参数               作用域内           跨作用域         任何时候
+  禁止逃逸               T -> T 回流        ref 跨任务 → Arc  独立副本
+  自动选择               T -> Void 消费     ref 不跨任务 → Rc
+                                            任务内环静默
+                                            跨任务环 lint
+                                            标准库 Weak 逃生
 ```
 
 ---
 
-### 8. 消费分析与逆函数生成
-
-#### 8.1 消费标记系统
-
-**核心规则**：赋值/传参/返回 = Move（消费），参数被消费后变空。
-
-每个参数在函数调用时标记其**消费行为**：
-
-| 标记 | 含义 | 示例 |
-|------|------|------|
-| **Consumes** | 参数被消费，不返回 | `consume(x)` 后 x 变空 |
-| **Returns** | 参数被修改后回流 | `x = modify(x)` |
-
-**没有 Borrows**：如果想读不消费原值，必须用 `clone()` 复制。
+## 综合示例
 
 ```yaoxiang
-# === 消费标记示例 ===
-
-# Consumes：完全消费（不返回）
-destroy: (config: Config) -> () {
-    # config 被消费，不返回
-}
-
-# Returns：修改后回流（返回）
-update: (config: Config) -> Config {
-    # config 被修改后返回
-}
-
-# 使用
-config = Config::load()
-destroy(config)              # config 变空
-config = Config::load()      # 重新赋值
-config = update(config)      # config 被更新
-
-# 想读不消费？用 clone()
-copy = config.clone()       # 复制一份
-print(copy.name)            # 读副本
-# config 仍然有效，因为是 copy 被消费了
-```
-
-#### 8.2 逆函数生成规则
-
-**核心原则**：逆函数必须**显式标注** `#[reversible]`，编译器不自动推断。
-
-```yaoxiang
-# === 必须显式标注 ===
-
-# ✅ 正确：显式标注 #[reversible]
-#[reversible]
-increment: (counter: Counter) -> Counter {
-    counter.value += 1
-    return counter
-}
-
-# 编译器生成逆函数
-undo_increment: (counter: Counter) -> Counter {
-    counter.value -= 1
-    return counter
-}
-
-# ❌ 错误：没有标注，不会生成逆函数
-double: (x: Int) -> Int {
-    return x * 2
-}
-
-# 使用
-c = Counter(0)
-c = increment(c)        # c.value = 1
-c = undo_increment(c)   # c.value = 0，回滚！
-```
-
-#### 8.3 撤销栈支持
-
-> **⚠️ 未来特性**：逆函数自动生成需要宏/代码生成支持，暂不实现。
->
-> 当前可手动实现撤销功能：
-
-```yaoxiang
-# === 撤销/重做支持（手动实现）===
-
-struct Editor {
-    history: List[State]    # 撤销栈
-    current: State
-}
-
-undo: (editor: Editor) -> Editor {
-    # 从历史栈弹出上一个状态
-    if let Some(previous) = editor.history.pop() {
-        editor.current = previous
-    }
-    return editor
-}
-
-# 使用
-editor = Editor::new()
-editor = editor.type_text("Hello")
-editor = editor.type_text(" World")
-editor = editor.undo()      # 回滚到 "Hello"
-```
-
-#### 8.4 部分消费
-
-```yaoxiang
-# === 部分消费结构体字段===
-
-struct Config {
-    timeout: Int
-    retries: Int
-    debug: Bool
-}
-
-# 只消费 timeout 部分
-set_timeout(config: Config, ms: Int) -> Config {
-    config.timeout = ms
-    return config
-}
-```
-
-#### 8.5 消费分析编译器实现
-
-```
-消费分析流程：
-
-1. 变量追踪
-   └── 每个变量标记：有效 / 空
-
-2. 流向分析
-   └── 函数调用时分析参数命运
-
-3. 模式推断
-   └── Consumes / Returns
-```
-
----
-
-### 10. 字段级不可变性设计
-
-#### 10.1 核心理念：统一语法中的字段级控制
-
-在 **`name: type = value`** 统一语法框架下，字段级可变性通过 `mut` 标记实现一致性控制。
-
-```yaoxiang
-# === 字段 mut 标记 ===
-
 Point: Type = {
-    x: Float,      # 不可变字段
-    mut y: Float,  # 可变字段
-}
-
-# 使用示例
-p: Point = Point(1.0, 2.0)
-
-mut p2: Point = Point(3.0, 4.0)
-p2.y = 5.0        # ✅ 允许：p2 是 mut 绑定，y 是 mut 字段
-# p2.x = 6.0      # ❌ 错误：x 是不可变字段
-
-# 非 mut 绑定不能修改任何字段
-# p.y = 5.0       # ❌ 错误：p 不是 mut 绑定
-```
-
-#### 10.2 三层次可变性模型
-
-##### 10.2.1 层次1：绑定可变性（变量级别）
-
-```yaoxiang
-# 语法：mut 标记绑定
-mut counter: Int = 0         # 可变绑定
-counter = 1                  # ✅ 允许重新赋值
-
-total: Int = 100            # 不可变绑定
-# total = 200               # ❌ 编译错误：不能修改不可变绑定
-```
-
-##### 10.2.2 层次2：字段可变性（结构体级别）
-
-```yaoxiang
-# 类型定义时标记字段可变性
-Account: Type = {
-    # 不可变字段：一旦设置永不改变
-    account_id: String,
-    created_at: Timestamp,
-
-    # 可变字段：可以修改
-    mut balance: Float,
-    mut last_login: Timestamp,
-
-    # 嵌套结构体：保持原有的可变性
-    mut settings: UserSettings,
-}
-
-# 使用示例
-mut acc: Account = Account(
-    "acc123",
-    now(),
-    1000.0,
-    now(),
-    default_settings()
-)
-
-# 可以修改：
-acc.balance = 1500.0          # ✅ balance 是 mut 字段
-acc.last_login = now()        # ✅ last_login 是 mut 字段
-acc.settings.theme = "dark"   # ✅ settings 是 mut 字段
-
-# 禁止修改：
-# acc.account_id = "acc456"   # ❌ account_id 不可变
-# acc.created_at = tomorrow() # ❌ created_at 不可变
-```
-
-##### 10.2.3 层次3：方法参数可变性（函数级别）
-
-```yaoxiang
-# 方法定义：mut self 表示可修改自身
-Account.deposit: (mut self: Account, amount: Float) -> Account = {
-    self.balance = self.balance + amount
-    self.last_login = now()
-    return self  # 所有权回流
-}
-
-# 调用
-mut acc: Account = Account(...)
-acc = acc.deposit(100.0)  # ✅ acc 是 mut 绑定，可以调用 mut 方法
-
-# 非 mut 绑定只能调用不可变方法
-Account.get_balance: (self: Account) -> Float = self.balance
-balance = acc.get_balance()  # ✅ 不需要 mut 绑定
-```
-
-#### 10.4 语法设计细节
-
-##### 10.4.1 统一语法中的字段 mut 标记
-
-```yaoxiang
-# 在类型定义中标记字段可变性
-User: Type = {
-    id: String,           # 不可变
-    name: String,         # 不可变
-    mut email: String,    # 可变
-    mut settings: {       # 嵌套结构体
-        theme: String,
-        mut notifications: Bool,
-    }
-}
-
-# 简洁写法：mut 块
-User: Type = {
-    id: String,
-    name: String,
-    mut {
-        email: String,
-        settings: {
-            theme: String,
-            mut notifications: Bool,
-        }
-    }
-}
-```
-
-##### 10.4.2 模式匹配中的字段可变性
-
-```yaoxiang
-# 模式匹配支持字段可变性
-match shape {
-    Point { x, mut y } => {
-        # 这里 y 是 mut 绑定，可以修改
-        y = y + 1.0
-        Point(x, y)
-    }
-    Circle { radius, mut center } => {
-        center = center.translate(1.0, 1.0)
-        Circle(radius, center)
-    }
-}
-
-# 注意：模式匹配提取的是新值，不影响原值
-# 需要 mut 绑定才能修改原结构体
-```
-
-##### 10.4.3 默认值与构造器
-
-```yaoxiang
-# 字段可以有默认值
-Config: Type = {
-    version: String = "1.0.0",      # 不可变，编译时常量
-    mut port: Int = 8080,           # 可变，运行时可以修改
-    mut debug: Bool = false,        # 可变
-}
-
-# 构造时可以省略有默认值的字段
-config: Config = Config()  # 使用所有默认值
-mut config2: Config = Config(port = 3000)  # 只指定 port
-```
-
-#### 10.6 与现有特性集成
-
-##### 10.6.1 与所有权回流集成
-
-```yaoxiang
-# 字段可变性 + 所有权回流 = 流畅的链式调用
-Transformable: Type = {
-    mut x: Float,
-    mut y: Float,
-
-    translate: (mut self: Transformable, dx: Float, dy: Float) -> Transformable = {
-        self.x = self.x + dx
-        self.y = self.y + dy
-        return self
-    }
-
-    scale: (mut self: Transformable, factor: Float) -> Transformable = {
-        self.x = self.x * factor
-        self.y = self.y * factor
-        return self
-    }
-}
-
-# 链式调用
-mut shape: Transformable = Transformable(1.0, 2.0)
-shape = shape.translate(10.0, 10.0).scale(2.0)
-```
-
-##### 10.6.2 与消费分析集成
-
-```yaoxiang
-# 消费分析考虑字段可变性
-# 不可变字段：总是返回原值（Returns）
-# 可变字段：可能被消费（Consumes）或返回（Returns）
-
-process_config: (config: Config) -> Config = {
-    # config.port 是 mut 字段，但这里没有修改
-    # 编译器推断：config 整体 Returns（因为返回了）
-    config
-}
-
-modify_config: (mut config: Config) -> Config = {
-    config.port = 3000  # 修改 mut 字段
-    config  # 返回修改后的 config
-}
-
-# 消费分析结果：
-# process_config: config → Returns
-# modify_config: config → Returns（但修改了 mut 字段）
-```
-
-##### 10.6.3 与接口系统集成
-
-```yaoxiang
-# 接口定义不关心字段可变性
-Drawable: Type = {
-    draw: (Surface) -> Void,
-}
-
-# 类型实现接口时可以有不同的字段可变性
-ImmutablePoint: Type = {
     x: Float,
     y: Float,
-    Drawable,
+
+    # &T：只读
+    print: (self: &Point) -> Void = {
+        print(self.x)
+        print(self.y)
+    }
+
+    # &mut T：原地修改
+    shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+        self.x = self.x + dx
+        self.y = self.y + dy
+    }
+
+    # Move → Move：消费回流
+    scale: (self: Point, f: Float) -> Point = {
+        self.x = self.x * f
+        self.y = self.y * f
+        self                            # 拿走，改，还给你
+    }
 }
 
-MutablePoint: Type = {
-    mut x: Float,
-    mut y: Float,
-    Drawable,
-}
+# 综合使用
+p = Point(1.0, 2.0)
+p.print()                           # &p，借用
+p.shift(1.0, 1.0)                   # &mut p，借用
+p = p.scale(2.0)                    # Move → 回流
+shared = ref p                      # ref 共享
+spawn { use(shared) }
 
-# 方法实现
-ImmutablePoint.draw: (self: ImmutablePoint, surface: Surface) -> Void = {
-    surface.plot(self.x, self.y)  # 只读访问
-}
+# clone 独立副本
+backup = p.clone()
 
-MutablePoint.draw: (self: MutablePoint, surface: Surface) -> Void = {
-    # 可以修改 self.x, self.y（因为字段是 mut）
-    # 但通常 draw 方法不应该修改位置
-    surface.plot(self.x, self.y)
-}
-```
+# 任务内环：静默允许
+a = Node("a")
+b = Node("b")
+a.next = ref b
+b.prev = ref a                      # 环，任务结束时统一释放
 
-#### 10.9 设计原则总结
-
-在 **`name: type = value`** 统一语法框架下，字段级可变性设计遵循以下原则：
-
-| 原则 | 说明 |
-|------|------|
-| **统一性** | `mut` 标记一致地用于变量、参数、字段 |
-| **显式性** | 必须显式标记才能修改 |
-| **安全性** | 编译器严格检查，防止意外修改 |
-| **可组合性** | 与所有权回流、接口系统、消费分析无缝集成 |
-| **零成本** | 编译时检查，无运行时开销 |
-
----
-
-### 9. 综合示例
-
-```yaoxiang
-# === 完整的所有权系统示例 ===
-
-use std::sync::Arc
-
-struct Point {
-    x: Float
-    y: Float
-}
-
-struct Shape {
-    points: List[Point]
-    color: Color
-}
-
-# 1. Move（默认）
-shape = Shape(Point(0.0, 0.0))
-shape2 = shape                      # Move，shape 变空
-
-# 2. ref = Arc（共享）
-shared_shape = ref shape            # Arc，线程安全
-spawn(() => print(shared_shape.color))
-
-# 3. 空状态重用
-shape = Shape(Point(1.0, 1.0))      # 重新赋值
-
-# 4. 所有权回流
-shape = shape.translate(10.0, 10.0)
-shape = shape.rotate(90)
-shape = shape.scale(2.0)
-
-# 5. 消费分析
-modify: (shape: Shape) -> Shape {
-    shape.color = Color::red()
-    return shape
-}
-shape = modify(shape)                # 回流，shape 被更新
-
-scale: (shape: Shape, factor: Float) -> Shape {
-    shape.scale(factor)
-    return shape
-}
-shape = scale(shape, 2.0)
-
-# 7. unsafe 系统级操作
+# unsafe 系统级
 unsafe {
-    ptr: *Point = &shape.points[0]
-    (*ptr).x = 0.0                  # 直接内存操作
+    ptr: *Point = &p
+    (*ptr).x = 0.0
 }
-
-# 8. 标准库 Rc/Arc/Weak
-arc_shape: Arc[Shape] = Arc.new(shape)
-arc2 = arc_shape.clone()            # Arc 克隆，原子操作
 ```
 
 ---
 
-### 3. 循环引用处理
+## 类型系统约束
 
-#### 3.1 核心洞察：任务边界 = 泄漏边界
-
-**结构化并发模型**（RFC-001）中，每个任务有明确的生命周期：
-- 任务开始 → 创建资源
-- 任务结束 → 所有资源一起释放
-
-```yaoxiang
-# 任务内循环引用：泄漏可控
-create_graph = {
-    a: Rc[RefCell[Node]] = Rc::new(RefCell::new(Node::new()))
-    b: Rc[RefCell[Node]] = Rc::new(RefCell::new(Node::new()))
-
-    a.borrow_mut().child = Some(b.clone())   # a → b
-    b.borrow_mut().child = Some(a.clone())   # b → a，循环！
-
-    # 任务结束后，a 和 b 一起释放，泄漏消失
-    Graph { a, b }
-}
-```
-
-**模块化内存管理**：泄漏被限制在单个任务生命周期内，任务结束后一切重来。
-
-#### 3.2 循环引用规则
-
-| 循环类型 | 检测位置 | 规则 | 处理 |
-|----------|----------|------|------|
-| **单函数内 ref 循环** | OwnershipChecker | 允许 | ✅ 泄漏可控 |
-| **spawn 内部 ref 循环** | OwnershipChecker | 允许 | ✅ 泄漏可控 |
-| **跨 spawn 参数/返回值 ref 循环** | CycleChecker | 禁止 | ❌ 检测并报错 |
-| **unsafe 绕过** | - | 允许 | ❌ 用户负责 |
-
-#### 3.2.1 检测边界说明
-
-```
-只追踪 spawn 的参数和返回值边界：
-
-spawn 参数 ────▶ spawn 内部
-                │
-                └──▶ spawn 返回值
-
-检测：参数和返回值之间的 ref 是否形成环
-```
-
-**不检测的情况**：
-- 单函数内循环（OwnershipChecker 处理）
-- spawn 内部循环（OwnershipChecker 处理）
-
-**检测的情况**：
-- 跨 spawn 循环（CycleChecker 处理）
-
-```yaoxiang
-# === 跨任务循环：编译器检测 ===
-parent_task = {
-    shared_a = ref a     # 任务内
-    shared_b = ref b     # 任务内
-
-    spawn(task_a)              # 子任务 A
-    spawn(task_b)              # 子任务 B
-
-    # 假设 task_a 和 task_b 互相 ref：
-    # ❌ 编译错误：跨任务循环引用
-}
-
-# === unsafe 逃生舱 ===
-unsafe {
-    a.child = ref b
-    b.child = ref a    # 允许，但用户负责
-}
-```
-
-#### 3.3 编译器检测策略（Task 5.6）
-
-**检测范围**：只追踪 spawn 边界
-- spawn 的参数（传入的 ref）
-- spawn 的返回值（传出的 ref）
-- 检测参数和返回值之间是否形成环
-
-**检测级别**：
-- ✅ **跨 spawn 循环**（参数/返回值之间）：编译报错
-- ❌ **单函数内循环**：不检测（泄漏可控）
-- ❌ **spawn 内部循环**：不检测（泄漏可控）
-
-**检测边界**：
-```yaoxiang
-# ✅ 可检测：同作用域内的直接 ref
-a = ref b
-b = ref a    # ❌ 编译错误：同作用域循环
-
-# ⚠️ 可能漏检：if 分支内的 ref
-if condition {
-    a.child = ref b
-} else {
-    a.child = ref c   # 编译器可能无法追踪所有分支
-}
-
-# ⚠️ 可能漏检：闭包内的 ref
-closure = () => {
-    a.child = ref b   # 闭包捕获的 ref，编译器难以追踪
-}
-```
-
-#### 3.4 ref 与 Arc::new() 的选择
-
-| 特性 | `ref` 关键字 | `Arc::new()` |
-|------|--------------|--------------|
-| 语法 | `shared = ref p` | `arc = Arc::new(p)` |
-| 类型推断 | ✅ 自动 | ❌ 需显式泛型 |
-| 跨任务循环检测 | ✅ 自动检测 | ❌ 用户保证 |
-| 适用场景 | 日常共享 | 完全控制/特殊需求 |
-
-```yaoxiang
-# 推荐：日常使用 ref
-shared = ref data
-spawn(() => use(shared))
-
-# 可选：需要完全控制时用 Arc
-arc: Arc[Data] = Arc::new(data)
-arc2 = arc.clone()
-```
-
-#### 3.5 与 RFC-001 注解的交互
-
-`ref` 的行为与 `@block` / `@eager` / `@auto` 注解无关：
-
-| 注解 | ref 行为 | 说明 |
-|------|----------|------|
-| `@block` | `ref` 仍为 Arc | 无并发，但共享语义不变 |
-| `@eager` | `ref` 仍为 Arc | 同步执行，共享语义不变 |
-| `@auto` | `ref` 仍为 Arc | 最大并行，共享语义不变 |
-
-```yaoxiang
-# 无论什么注解，ref 都是 Arc
-@block
-blocked = {
-    shared = ref data     # 仍是 Arc，只是不会并发执行
-    use(shared)
-}
-
-@eager
-eager = {
-    shared = ref data     # 仍是 Arc，只是会同步等待
-    use(shared)
-}
-```
-
-**注解控制的是调度策略，不是内存语义。**
-
----
-
-#### 3.6 任务树示例
-
-```yaoxiang
-# 任务树示例
-main
-├── task_a  ────────────┐
-│                       ├── 同辈，可检测
-└── task_b  ────────────┘
-
-# 检测：task_a 和 task_b 之间的 ref 边是否形成环
-# 报错位置：第二个 ref 语句
-```
-
----
-
-### 4. 并发场景
-
-```yaoxiang
-# === 并发共享：使用 ref ===
-
-p: Point = Point(1.0, 2.0)
-shared = ref p                      # Arc
-
-spawn(() => print(shared.x))        # ✅ 安全
-spawn(() => print(shared.y))        # ✅ 安全
-
-# === 避免共享：使用 clone() ===
-
-p: Point = Point(1.0, 2.0)
-p1 = p.clone()
-p2 = p.clone()
-
-spawn(() => print(p1.x))            # ✅ 独立副本
-spawn(() => print(p2.x))            # ✅ 独立副本
-
-# === 需要完全控制：使用 Rc/Arc/Weak ===
-use std.rc.{Rc, Weak}
-use std.sync.Arc
-
-# 单线程共享
-rc: Rc[Node] = Rc.new(data)
-rc2 = rc.clone()
-
-# 多线程共享
-arc: Arc[Node] = Arc.new(data)
-arc2 = arc.clone()
-
-# 打破循环
-weak: Weak[Node] = Weak.new(arc)
-```
-
----
-
-### 5. 类型系统约束
-
-#### Send / Sync
-
-```yaoxiang
-# 基本类型自动满足 Send + Sync
-# Int, Float, Bool, Point, ...
-
-# ref[T] 自动满足 Send + Sync（Arc 线程安全）
-p: Point = Point(1.0, 2.0)
-shared = ref p                       # Arc，线程安全
-
-spawn(() => print(shared.x))         # ✅
-
-# 裸指针 *T 不满足 Send + Sync
-unsafe {
-    ptr: *Point = &p                 # 只能在单线程使用
-}
-```
-
-#### 类型约束
+### Send / Sync
 
 | 类型 | Send | Sync | 说明 |
 |------|------|------|------|
-| 值类型 | ✅ | ✅ | Int, Float, struct... |
-| `ref T` | ✅ | ✅ | Arc，线程安全 |
-| `Rc[T]` | ❌ | ❌ | 非线程安全 |
-| `Arc[T]` | ✅ | ✅ | 线程安全 |
-| `Weak[T]` | ✅ | ✅ | 线程安全 |
-| `*T` | ❌ | ❌ | 裸指针 |
+| 值类型 | ✅ | ✅ | Int, Float, Point... |
+| `ref T` | ✅ | ✅ | 编译器自动选 Rc/Arc |
+| `&T` / `&mut T` | ❌ | ❌ | 借用不能跨线程（不允许逃逸） |
+| `*T` | ❌ | ❌ | 裸指针，单线程 |
 
 ---
 
 ## 性能分析
 
-### 性能保证
-
 | 操作 | 成本 | 说明 |
 |------|------|------|
 | Move | 零 | 指针移动 |
-| ref (Arc) | 中 | 原子操作 |
-| Rc | 低 | 非原子操作 |
-| clone() | 视类型 | 小对象快，大对象慢 |
-| unsafe + *T | 零 | 直接内存操作 |
+| `&T` / `&mut T` | 零 | 编译期检查，零运行时开销 |
+| `ref`（不跨任务）| 低 | 编译为 Rc，非原子操作 |
+| `ref`（跨任务）| 中 | 编译为 Arc，原子操作 |
+| `clone()` | 视类型 | 小对象快，大对象慢 |
+| `unsafe + *T` | 零 | 直接内存操作 |
 
 ### 对比
 
 | 语言 | 共享机制 | 内存管理 | 循环处理 | 复杂度 |
 |------|----------|----------|----------|--------|
-| Rust | Arc / Mutex | 编译期检查 | Weak | 高 |
+| Rust | Arc / Mutex + 借用检查 | 编译期检查 | 手动 Weak | 高 |
 | Go | chan / pointer | GC | GC | 低 |
 | C++ | shared_ptr | RAII | weak_ptr | 中 |
-| **YaoXiang** | **ref / Arc** | **RAII** | **任务边界** | **低** |
+| **YaoXiang** | **ref + 丐版借用** | **RAII** | **任务边界释放 / 跨任务 lint / 标准库 Weak** | **低** |
 
 ---
 
@@ -1130,18 +492,17 @@ unsafe {
 
 ### 优点
 
-1. **简单**：无生命周期，无借用检查器
-2. **安全**：ref = Arc 自动管理
-3. **高性能**：Move 零拷贝
-4. **灵活**：支持系统级编程和标准库 Rc/Arc/Weak
-5. **模块化泄漏控制**：任务内循环允许，跨任务循环检测
-6. **AI 友好**：规则明确
+1. **简单**：无生命周期，无全局借用检查器。`&T`/`&mut T` 三条规则
+2. **编译器智能**：ref 自动选 Rc/Arc，调用侧自动选择借用
+3. **确定性**：ref 就是保活，不会悄悄变弱引用
+4. **高性能**：Move 零拷贝，borrow 零开销
+5. **灵活**：`unsafe + *T` 支持系统级编程
 
 ### 缺点
 
-1. **ref 运行时开销**：原子操作（但这是安全的代价）
+1. **ref 运行时开销**：原子操作有成本（但这是共享的必然代价）
 2. **unsafe 风险**：用户必须保证正确性
-3. **任务内循环**：依赖用户自觉（但泄漏可控）
+3. **跨任务环是 lint 不是编译错误**：不像 Rust 那样编译报错，默认 warn，需要团队配置 deny 才能作为质量门
 
 ---
 
@@ -1150,61 +511,72 @@ unsafe {
 | 方案 | 为什么不选择 |
 |------|--------------|
 | GC | 有运行时开销，无法预测暂停 |
-| Rust 借用检查器 | 用户负担重，学习曲线陡 |
+| Rust 借用检查器 | 需生命周期 `'a`，学习曲线陡 |
 | 纯 Move | 无法处理并发共享 |
 | 无裸指针 | 无法系统级编程 |
-| 全程序循环检测 | 复杂度高，if/闭包场景无法准确检测 |
+| 暴露 Rc/Arc 给用户 | 把实现细节甩给用户，增加认知负担 |
 
 ---
 
-## 社区讨论
-
-### 设计决策记录
+## 设计决策记录
 
 | 决策 | 决定 | 原因 | 日期 |
 |------|------|------|------|
 | **默认值** | Move（零拷贝） | 高性能，零开销 | 2025-01-15 |
-| **共享机制** | `ref` 关键字 = Arc | 简单显式，编译器检测跨任务循环 | 2025-01-15 |
+| **共享机制** | `ref` 关键字，编译器自动优化 | 用户简单，编译器负责 | 2025-01-15 |
+| **借用** | `&T`/`&mut T`，只做参数，禁止逃逸 | 不需要生命周期，简单安全 | 2025-01-15 |
 | **复制** | `clone()` | 显式语义 | 2025-01-15 |
 | **系统级** | `*T` + `unsafe` | 支持系统编程 | 2025-01-15 |
-| **生命周期** | 不实现 | 无引用概念 | 2025-01-15 |
-| **借用检查器** | 不实现 | ref + Arc 替代 | 2025-01-15 |
-| **小对象优化** | 编译器自动 | 透明优化 | 2025-01-15 |
-| **动态类型** | 必须 Arc | 无法编译期判断 | 2025-01-15 |
-| **所有权绑定** | 支持 | 流畅 API | 2025-01-15 |
-| **RAII** | 自动释放 | 作用域绑定 | 2025-01-08 |
-| **循环引用** | 任务内允许，跨任务检测 | 模块化内存管理，泄漏可控 | 2025-01-16 |
-| **标准库** | Rc / Arc / Weak | 显式控制，用户负责 | 2025-01-16 |
-| **unsafe 逃生舱** | 允许绕过检测 | 灵活，用户负责 | 2025-01-16 |
-| **&Point 借用** | 不提供 | ref + clone() 替代，更简洁 | 2025-02-04 |
-| **消费分析** | 仅 Consumes/Returns | Move 默认，移除 Borrows | 2025-02-04 |
-| **逆函数生成** | **未来特性** | 需要宏/代码生成支持，暂不实现 | 2025-02-04 |
+| **生命周期** | 不实现 | 借用的简单规则不需要生命周期 | 2025-01-15 |
+| **Rc/Arc** | 编译器自动选择，用户不可见 | 降低认知负担 | 2025-01-15 |
+| **循环引用** | 任务内不做检查，跨任务 lint（默认 warn） | 结构化并发天然保证，lint 可配 deny | 2025-01-16 |
+| **Weak** | 标准库提供 | 高级用户显式选择 | 2025-01-16 |
+| **消费分析** | 删除 | 迷你借用检查器，不需要 | 2026-05-11 |
+| **所有权回流** | 删除 | `(T) -> T` 签名就是文档 | 2026-05-11 |
+| **空状态重用** | 删除（作为特性） | Move 后重新赋值是自然行为 | 2026-05-11 |
+| **逆函数/部分消费/字段三层可变性** | 删除 | 过度设计 | 2026-05-11 |
 
 ### 版本历史
 
 | 版本 | 主要变更 | 日期 |
 |------|----------|------|
 | v1 | 初稿：基于 Rust 所有权模型 | 2025-01-08 |
-| v2 | 引入 `ref` 关键字，删除借用检查器 | 2025-01-10 |
-| v3 | 增加生命周期自动推断方案 | 2025-01-12 |
-| v4 | 删除生命周期，简化设计 | 2025-01-13 |
-| v5 | 默认安全 + 编译器自动优化 | 2025-01-15 |
-| v6 | 默认 Move + 显式 ref = Arc | 2025-01-15 |
-| v7 | 结构化并发 + 循环引用处理 | 2025-01-16 |
-| **v7.1** | **修复问题 + 完善细节** | **2025-01-16** |
-| **v8.0** | **新增：空状态重用、所有权回流** | **2025-02-04** |
-| **v8.1** | **简化：消费分析移除 Borrows、逆函数作为未来特性** | **2025-02-04** |
-| **v8.2** | **新增：第10节字段级不可变性设计** | **2025-02-05** |
+| v4 | 默认 Move + 显式 ref | 2025-01-15 |
+| v5 | 结构化并发 + 循环引用处理 | 2025-01-16 |
+| v6 | 新增空状态重用、所有权回流 | 2025-02-04 |
+| v7 | 新增消费分析、逆函数、字段级可变性 | 2025-02-05 |
+| **v8** | **删除过度设计，新增丐版借用 &T/&mut T** | **2026-05-11** |
 
 ### 待决议题
 
 | 议题 | 说明 | 状态 |
 |------|------|------|
 | Drop 语法 | 是否需要显式 `drop()` 函数 | 待讨论 |
-| 逃逸分析 | 编译器优化策略 | 待讨论 |
-| 跨任务循环检测算法 | 具体实现方案 | 待讨论 |
-| 逆函数生成 | 需要宏/代码生成支持 | 未来特性 |
-| 字段级不可变性 | 见第10节完整设计 | 已设计，待实现 |
+| 逃逸分析算法 | ref 的跨任务检测实现 | 待讨论 |
+| 交叉借用检查 | 调用点就地检查 + 函数体流敏感，见下文 | ✅ 已解决 |
+
+### 交叉借用检查：调用点就地 + 流敏感
+
+**分析范围**：仅函数体内。因为 `&T`/`&mut T` 只能做参数，每条调用链在进入下一层函数时，上一层函数的借用随调用结束自动释放。不需要跨函数分析。
+
+**层 1：调用点检查**——每个实参不能同时出现在 `&mut` 位置和其他借用位置：
+
+```yaoxiang
+alias_bad: (a: &mut Point, b: &Point) -> Void = { ... }
+p = Point(1.0, 2.0)
+alias_bad(p, p)    # ❌ p 同时作为 &mut 和 &，编译器拒绝
+```
+
+**层 2：函数体流敏感**——`&mut` 传给调用后，调用返回即释放，后续可再借：
+
+```yaoxiang
+process_twice: (p: &mut Point) -> Void = {
+    shift(p, 1.0, 1.0)    # &mut 传给 shift，shift 返回后借用结束
+    print_info(p)          # 重新借 &p，不冲突
+}
+```
+
+**不需要的东西**：跨函数生命周期追踪、全局别名分析、借用图约束求解、NLL。因为借用不逃逸、不存变量、不返回——离开调用点即失效。
 
 ---
 
@@ -1222,10 +594,6 @@ unsafe {
 - [Rust 所有权模型](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
 - [C++ RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization)
 - [Erlang 消息传递](https://www.erlang.org/doc/getting_concurrency/getting_concurrency.html)
-- [Go 并发模型](https://golang.org/doc/effective_go#concurrency)
-- [MoonBit 结构化并发](https://www.moonbitlang.com/)
-- [Vale 世代引用](https://vale.dev/)
-- [Pony 参考能力](https://www.ponylang.io/learn/reference-capabilities/)
 
 ---
 

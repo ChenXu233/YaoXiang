@@ -31,6 +31,16 @@ pub static E6XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Runtime,
         message_template: "Assertion failed: {condition}",
     },
+    ErrorCodeDefinition {
+        code: "E6006",
+        category: ErrorCategory::Runtime,
+        message_template: "Function not found: '{func}'",
+    },
+    ErrorCodeDefinition {
+        code: "E6007",
+        category: ErrorCategory::Runtime,
+        message_template: "Runtime error: {message}",
+    },
 ];
 
 // E6xxx 快捷方法
@@ -68,5 +78,17 @@ impl ErrorCodeDefinition {
     pub fn assertion_failed(condition: &str) -> DiagnosticBuilder {
         let def = Self::find("E6005").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template).param("condition", condition)
+    }
+
+    /// E6006 函数未找到（运行时）
+    pub fn runtime_function_not_found(func: &str) -> DiagnosticBuilder {
+        let def = Self::find("E6006").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("func", func)
+    }
+
+    /// E6007 运行时错误（通用）
+    pub fn runtime_error(message: &str) -> DiagnosticBuilder {
+        let def = Self::find("E6007").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("message", message)
     }
 }
