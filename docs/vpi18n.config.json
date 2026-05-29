@@ -1,0 +1,5 @@
+{
+  "source": "src",
+  "target": "en,ja,ru",
+  "glossary": "glossary.json"
+}

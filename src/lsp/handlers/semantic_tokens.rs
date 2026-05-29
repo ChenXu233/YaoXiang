@@ -11,7 +11,8 @@ use lsp_types::{
     SemanticTokensFullDeltaResult, SemanticTokensParams, SemanticTokensResult,
 };
 
-use crate::frontend::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::typecheck::semantic_db::SemanticDB;
+use tracing::debug;
 
 // ============ 版本缓存 ============
 
@@ -82,11 +83,19 @@ impl SemanticTokensCache {
 pub fn handle_semantic_tokens_full(
     semantic_db: &SemanticDB,
     cache: &mut SemanticTokensCache,
+    document_text: Option<&str>,
     params: SemanticTokensParams,
 ) -> Option<SemanticTokensResult> {
     let uri = params.text_document.uri.as_str();
 
-    let db_tokens = semantic_db.get_tokens(uri)?;
+    let empty: &[crate::frontend::core::typecheck::semantic_db::SemanticToken] = &[];
+    let db_tokens = semantic_db.get_tokens(uri).unwrap_or(empty);
+
+    debug!(
+        "semanticTokens full: uri={}, tokens_count={}",
+        uri,
+        db_tokens.len()
+    );
 
     if db_tokens.is_empty() {
         let result_id = cache.store(uri, vec![]);
@@ -96,7 +105,7 @@ pub fn handle_semantic_tokens_full(
         }));
     }
 
-    let lsp_tokens = convert_to_lsp_tokens(db_tokens);
+    let lsp_tokens = convert_to_lsp_tokens(db_tokens, document_text);
     let result_id = cache.store(uri, lsp_tokens.clone());
 
     Some(SemanticTokensResult::Tokens(SemanticTokens {
@@ -114,6 +123,7 @@ pub fn handle_semantic_tokens_full(
 pub fn handle_semantic_tokens_full_delta(
     semantic_db: &SemanticDB,
     cache: &mut SemanticTokensCache,
+    document_text: Option<&str>,
     params: lsp_types::SemanticTokensDeltaParams,
 ) -> Option<SemanticTokensFullDeltaResult> {
     let uri = params.text_document.uri.as_str();
@@ -121,8 +131,15 @@ pub fn handle_semantic_tokens_full_delta(
 
     // 获取当前最新 tokens
     let db_tokens = semantic_db.get_tokens(uri);
+    let all_files = semantic_db.all_files();
+    debug!(
+        "semanticTokens delta: uri={}, db_tokens={:?}, all_files_in_db={:?}",
+        uri,
+        db_tokens.map(|t| t.len()),
+        all_files
+    );
     let new_tokens = match db_tokens {
-        Some(tokens) if !tokens.is_empty() => convert_to_lsp_tokens(tokens),
+        Some(tokens) if !tokens.is_empty() => convert_to_lsp_tokens(tokens, document_text),
         _ => vec![],
     };
 
@@ -156,8 +173,8 @@ pub fn handle_semantic_tokens_full_delta(
 // ============ 内部工具函数 ============
 
 /// 将 SemanticDB tokens 转换为 LSP delta 编码格式
-fn convert_to_lsp_tokens(
-    db_tokens: &[crate::frontend::typecheck::semantic_db::SemanticToken]
+fn convert_to_lsp_tokens_fallback(
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken]
 ) -> Vec<SemanticToken> {
     // 按行、列排序
     let mut sorted: Vec<_> = db_tokens.iter().collect();
@@ -178,11 +195,16 @@ fn convert_to_lsp_tokens(
         // SemanticDB 中的 line 是 1-indexed，LSP 是 0-indexed
         let line = token.span.start.line.saturating_sub(1) as u32;
         let start = token.span.start.column.saturating_sub(1) as u32;
-        let length = token.name.len() as u32;
+        // 使用 span 计算实际长度，而不是 token 名字长度
+        let length = token
+            .span
+            .end
+            .column
+            .saturating_sub(token.span.start.column) as u32;
 
-        let delta_line = line - prev_line;
+        let delta_line = line.saturating_sub(prev_line);
         let delta_start = if delta_line == 0 {
-            start - prev_start
+            start.saturating_sub(prev_start)
         } else {
             start
         };
@@ -209,6 +231,133 @@ fn convert_to_lsp_tokens(
 }
 
 /// 比较两个 SemanticToken 是否相等
+fn compute_line_starts(document_text: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    for (i, ch) in document_text.char_indices() {
+        if ch == '\n' {
+            starts.push(i + 1);
+        }
+    }
+    starts
+}
+
+fn utf16_col_in_line(
+    document_text: &str,
+    line_start: usize,
+    byte_offset: usize,
+) -> Option<u32> {
+    document_text
+        .get(line_start..byte_offset)
+        .map(|s| s.encode_utf16().count() as u32)
+}
+
+fn utf16_len_between_offsets(
+    document_text: &str,
+    start: usize,
+    end: usize,
+) -> Option<u32> {
+    document_text
+        .get(start..end)
+        .map(|s| s.encode_utf16().count() as u32)
+}
+
+fn convert_to_lsp_tokens(
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken],
+    document_text: Option<&str>,
+) -> Vec<SemanticToken> {
+    match document_text {
+        Some(text) => convert_to_lsp_tokens_utf16(db_tokens, text),
+        None => convert_to_lsp_tokens_fallback(db_tokens),
+    }
+}
+
+fn convert_to_lsp_tokens_utf16(
+    db_tokens: &[crate::frontend::core::typecheck::semantic_db::SemanticToken],
+    document_text: &str,
+) -> Vec<SemanticToken> {
+    if db_tokens.is_empty() || document_text.is_empty() {
+        return vec![];
+    }
+
+    let line_starts = compute_line_starts(document_text);
+
+    let mut computed = Vec::with_capacity(db_tokens.len());
+    for token in db_tokens {
+        let start = token.span.start.offset;
+        let end = token.span.end.offset;
+
+        if start >= end || start > document_text.len() {
+            continue;
+        }
+
+        let safe_end = end.min(document_text.len());
+
+        let line_index = line_starts
+            .partition_point(|&s| s <= start)
+            .saturating_sub(1);
+        let line_start = line_starts[line_index];
+        let line_end = line_starts
+            .get(line_index + 1)
+            .copied()
+            .unwrap_or(document_text.len());
+
+        let clamped_end = safe_end.min(line_end);
+        if clamped_end <= start {
+            continue;
+        }
+
+        let start_utf16 = match utf16_col_in_line(document_text, line_start, start) {
+            Some(v) => v,
+            None => continue,
+        };
+        let length_utf16 = match utf16_len_between_offsets(document_text, start, clamped_end) {
+            Some(v) if v > 0 => v,
+            _ => continue,
+        };
+
+        let modifier_bits: u32 = token
+            .modifiers
+            .iter()
+            .fold(0u32, |acc, m| acc | m.bit_flag());
+
+        computed.push((
+            line_index as u32,
+            start_utf16,
+            length_utf16,
+            token.token_type.index(),
+            modifier_bits,
+        ));
+    }
+
+    computed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+
+    let mut lsp_tokens = Vec::with_capacity(computed.len());
+    let mut prev_line: u32 = 0;
+    let mut prev_start: u32 = 0;
+
+    for (line, start, length, token_type, modifiers) in computed {
+        let delta_line = line.saturating_sub(prev_line);
+        let delta_start = if delta_line == 0 {
+            start.saturating_sub(prev_start)
+        } else {
+            start
+        };
+
+        lsp_tokens.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type,
+            token_modifiers_bitset: modifiers,
+        });
+
+        prev_line = line;
+        prev_start = start;
+    }
+
+    lsp_tokens
+}
+
 fn tokens_eq(
     a: &SemanticToken,
     b: &SemanticToken,
@@ -269,7 +418,7 @@ fn diff_semantic_tokens(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::typecheck::semantic_db::{
+    use crate::frontend::core::typecheck::semantic_db::{
         SemanticDB, SemanticToken as DbToken, SemanticTokenModifier, SemanticTokenType,
     };
     use crate::util::span::{Position, Span};
@@ -313,9 +462,14 @@ mod tests {
             partial_result_params: Default::default(),
         };
 
-        let result = handle_semantic_tokens_full(&db, &mut cache, params);
+        let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         // 文件不在 DB 中 → None
-        assert!(result.is_none());
+        if let SemanticTokensResult::Tokens(tokens) = result {
+            assert!(tokens.data.is_empty());
+            assert!(tokens.result_id.is_some());
+        } else {
+            panic!("Expected SemanticTokensResult::Tokens");
+        }
     }
 
     #[test]
@@ -358,7 +512,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
 
-        let result = handle_semantic_tokens_full(&db, &mut cache, params).unwrap();
+        let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         if let SemanticTokensResult::Tokens(tokens) = result {
             assert_eq!(tokens.data.len(), 3);
             assert!(tokens.result_id.is_some(), "应返回 result_id");
@@ -406,6 +560,81 @@ mod tests {
     // ============ Delta 测试 ============
 
     #[test]
+    fn test_utf16_offsets_for_semantic_tokens() {
+        let mut db = SemanticDB::new();
+        let mut cache = SemanticTokensCache::new();
+        let uri = "file:///utf16.yx";
+        let document_text = "变量 = 1\n";
+
+        db.add_token(
+            uri,
+            DbToken {
+                name: "变量".to_string(),
+                token_type: SemanticTokenType::Variable,
+                modifiers: vec![SemanticTokenModifier::Declaration],
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 1,
+                        offset: 0,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 3,
+                        offset: 6,
+                    },
+                },
+            },
+        );
+
+        db.add_token(
+            uri,
+            DbToken {
+                name: "1".to_string(),
+                token_type: SemanticTokenType::Number,
+                modifiers: vec![],
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 10,
+                        offset: 9,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 11,
+                        offset: 10,
+                    },
+                },
+            },
+        );
+
+        let params = SemanticTokensParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: lsp_types::Uri::from_str(uri).unwrap(),
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let result =
+            handle_semantic_tokens_full(&db, &mut cache, Some(document_text), params).unwrap();
+
+        let SemanticTokensResult::Tokens(tokens) = result else {
+            panic!("Expected Tokens variant");
+        };
+
+        assert_eq!(tokens.data.len(), 2);
+
+        assert_eq!(tokens.data[0].delta_line, 0);
+        assert_eq!(tokens.data[0].delta_start, 0);
+        assert_eq!(tokens.data[0].length, 2);
+
+        assert_eq!(tokens.data[1].delta_line, 0);
+        assert_eq!(tokens.data[1].delta_start, 5);
+        assert_eq!(tokens.data[1].length, 1);
+    }
+
+    #[test]
     fn test_delta_no_change() {
         let mut db = SemanticDB::new();
         let mut cache = SemanticTokensCache::new();
@@ -430,7 +659,7 @@ mod tests {
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
-        let full_result = handle_semantic_tokens_full(&db, &mut cache, params).unwrap();
+        let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         let result_id = match &full_result {
             SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
             _ => panic!("Expected Tokens"),
@@ -446,7 +675,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
         let delta_result =
-            handle_semantic_tokens_full_delta(&db, &mut cache, delta_params).unwrap();
+            handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
 
         match delta_result {
             SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -482,7 +711,7 @@ mod tests {
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
-        let full_result = handle_semantic_tokens_full(&db, &mut cache, params).unwrap();
+        let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         let result_id = match &full_result {
             SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
             _ => panic!("Expected Tokens"),
@@ -504,7 +733,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
         let delta_result =
-            handle_semantic_tokens_full_delta(&db, &mut cache, delta_params).unwrap();
+            handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
 
         match delta_result {
             SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -543,7 +772,7 @@ mod tests {
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
-        let full_result = handle_semantic_tokens_full(&db, &mut cache, params).unwrap();
+        let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         let result_id = match &full_result {
             SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
             _ => panic!("Expected Tokens"),
@@ -572,7 +801,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
         let delta_result =
-            handle_semantic_tokens_full_delta(&db, &mut cache, delta_params).unwrap();
+            handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
 
         match delta_result {
             SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -610,7 +839,7 @@ mod tests {
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
-        let full_result = handle_semantic_tokens_full(&db, &mut cache, params).unwrap();
+        let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
         let result_id = match &full_result {
             SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
             _ => panic!("Expected Tokens"),
@@ -639,7 +868,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
         let delta_result =
-            handle_semantic_tokens_full_delta(&db, &mut cache, delta_params).unwrap();
+            handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
 
         match delta_result {
             SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -676,7 +905,7 @@ mod tests {
             partial_result_params: Default::default(),
         };
         let delta_result =
-            handle_semantic_tokens_full_delta(&db, &mut cache, delta_params).unwrap();
+            handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
 
         match delta_result {
             SemanticTokensFullDeltaResult::Tokens(tokens) => {

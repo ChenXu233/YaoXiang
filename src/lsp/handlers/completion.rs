@@ -187,36 +187,40 @@ fn extract_symbols_from_module(module: &Module) -> Vec<CompletionItem> {
                     ..CompletionItem::default()
                 });
             }
-            StmtKind::Fn { name, params, .. } => {
-                items.push(CompletionItem {
-                    label: name.clone(),
-                    kind: Some(CompletionItemKind::FUNCTION),
-                    detail: Some(format!("函数 (参数: {})", params.len())),
-                    sort_text: Some(format!("4_{}", name)),
-                    ..CompletionItem::default()
-                });
-            }
-            StmtKind::TypeDef { name, .. } => {
-                items.push(CompletionItem {
-                    label: name.clone(),
-                    kind: Some(CompletionItemKind::CLASS),
-                    detail: Some("类型".to_string()),
-                    sort_text: Some(format!("4_{}", name)),
-                    ..CompletionItem::default()
-                });
-            }
-            StmtKind::MethodBind {
+            StmtKind::Binding {
+                name,
                 type_name,
-                method_name,
+                params,
                 ..
             } => {
-                items.push(CompletionItem {
-                    label: format!("{}.{}", type_name, method_name),
-                    kind: Some(CompletionItemKind::METHOD),
-                    detail: Some("方法绑定".to_string()),
-                    sort_text: Some(format!("4_{}.{}", type_name, method_name)),
-                    ..CompletionItem::default()
-                });
+                if let Some(type_name) = type_name {
+                    // 方法绑定
+                    items.push(CompletionItem {
+                        label: format!("{}.{}", type_name, name),
+                        kind: Some(CompletionItemKind::METHOD),
+                        detail: Some("方法绑定".to_string()),
+                        sort_text: Some(format!("4_{}.{}", type_name, name)),
+                        ..CompletionItem::default()
+                    });
+                } else if !params.is_empty() {
+                    // 函数定义
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some(format!("函数 (参数: {})", params.len())),
+                        sort_text: Some(format!("4_{}", name)),
+                        ..CompletionItem::default()
+                    });
+                } else {
+                    // 类型定义
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(CompletionItemKind::CLASS),
+                        detail: Some("类型".to_string()),
+                        sort_text: Some(format!("4_{}", name)),
+                        ..CompletionItem::default()
+                    });
+                }
             }
             _ => {}
         }

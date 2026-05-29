@@ -137,6 +137,9 @@ pub struct FmtConfig {
     /// Use single quotes
     #[serde(default)]
     pub single_quote: bool,
+    /// Sort import statements
+    #[serde(default = "default_sort_imports")]
+    pub sort_imports: bool,
 }
 
 fn default_line_width() -> usize {
@@ -147,6 +150,10 @@ fn default_indent_width() -> usize {
     4
 }
 
+fn default_sort_imports() -> bool {
+    true
+}
+
 impl Default for FmtConfig {
     fn default() -> Self {
         Self {
@@ -154,6 +161,7 @@ impl Default for FmtConfig {
             indent_width: 4,
             use_tabs: false,
             single_quote: false,
+            sort_imports: true,
         }
     }
 }

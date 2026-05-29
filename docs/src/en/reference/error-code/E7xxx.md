@@ -1,81 +1,43 @@
-﻿# E7xxx: I/O & System Errors
+# E7xxx: I/O and System Errors
 
-> File, network, and other system operation errors.
+> Auto-generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E7001: File not found
 
-Attempting to read a non-existent file.
+**Category**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("nonexistent.txt");
-}
-```
+**Message**: The specified file does not exist
 
-```
-error[E7001]: File not found: nonexistent.txt
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("nonexistent.txt");
-   |                          ^^^^^^^^^^^^^^^^^^^ file does not exist
-```
+**Help**: Check the file path and ensure the file exists
+
+---
 
 ## E7002: Permission denied
 
-Insufficient file permissions.
+**Category**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("/root/secret.txt");
-}
-```
+**Message**: Insufficient permissions to access the file
 
-```
-error[E7002]: Permission denied: /root/secret.txt
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("/root/secret.txt");
-   |                          ^^^^^^^^^^^^^^^^^^^^^^^ permission denied
-```
+**Help**: Check file permissions or run with appropriate privileges
+
+---
 
 ## E7003: I/O error
 
-Generic I/O error.
+**Category**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    content = read_file("/dev/full");
-}
-```
+**Message**: An unspecified I/O error occurred
 
-```
-error[E7003]: I/O error: device full
-  --> example.yx:2:26
-   |
- 2 |     content = read_file("/dev/full");
-   |                          ^^^^^^^^^^^^^^^ I/O error: device full
-```
+**Help**: Check the error details for more information
+
+---
 
 ## E7004: Network error
 
-Network operation failed.
+**Category**: I/O
 
-```yaoxiang
-main: () -> Void = {
-    response = HTTP.get("https://invalid.example.com");
-}
-```
+**Message**: A network error occurred
 
-```
-error[E7004]: Network error: connection refused
-  --> example.yx:2:31
-   |
- 2 |     response = HTTP.get("https://invalid.example.com");
-   |                                   ^^^^^^^^^^^^^^^^^^^^^^^^ network error
-```
-
-## Related
-
-- [E6xxx: Runtime Errors](./E6xxx.md)
-- [E8xxx: Internal Compiler Errors](./E8xxx.md)
-- [Error Code Index](./index.md)
+**Help**: Check network connectivity and try again

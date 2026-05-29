@@ -2,7 +2,7 @@
 //!
 //! 整合寄存器分配、标签生成、跳转表管理和符号表/作用域管理。
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use std::collections::{HashMap, HashSet};
 
 // ===== 跳转表和流程控制 =====

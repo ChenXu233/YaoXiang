@@ -95,7 +95,8 @@ pub fn parse_for_stmt(
     // Check for 'mut' keyword after 'for'
     let var_mut = state.skip(&TokenKind::KwMut);
 
-    // Parse loop variable
+    // Parse loop variable and record its span
+    let var_span = state.span();
     let var = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
@@ -137,6 +138,7 @@ pub fn parse_for_stmt(
     Some(Stmt {
         kind: StmtKind::For {
             var,
+            var_span,
             var_mut,
             iterable,
             body: Box::new(body),

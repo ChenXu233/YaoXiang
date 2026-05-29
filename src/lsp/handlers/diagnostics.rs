@@ -27,7 +27,7 @@ use tracing::{debug, warn};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parser_state::ParseError;
 use crate::frontend::core::parser::parse_with_recovery;
-use crate::frontend::typecheck::check_module_collect_all;
+use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::span::Span;
 

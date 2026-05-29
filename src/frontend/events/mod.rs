@@ -14,6 +14,9 @@ pub use progress::*;
 pub use diagnostic::*;
 pub use subscribe::*;
 
+#[cfg(test)]
+mod tests;
+
 /// 事件元数据
 #[derive(Debug, Clone)]
 pub struct EventMetadata {

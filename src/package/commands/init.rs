@@ -17,6 +17,12 @@ use crate::util::i18n::{t, current_lang, MSG};
 /// ├── yaoxiang.toml
 /// ├── yaoxiang.lock
 /// ├── .gitignore
+/// ├── .yaoxiang/
+/// │   └── std/           ← 标准库接口文件（LSP 跳转用）
+/// │       ├── io.yx
+/// │       ├── list.yx
+/// │       ├── math.yx
+/// │       └── ...
 /// └── src/
 ///     └── main.yx
 /// ```
@@ -50,6 +56,13 @@ pub fn exec_in(
     let gitignore_content = generate_gitignore();
     fs::write(project_dir.join(".gitignore"), gitignore_content)?;
 
+    // Generate standard library interface files for LSP
+    let std_dir = project_dir.join(".yaoxiang").join("std");
+    if let Err(e) = crate::std::gen_interfaces::write_interfaces_to_dir(&std_dir) {
+        // 接口文件生成失败不应阻止项目创建，仅输出警告
+        eprintln!("Warning: failed to generate std interface files: {}", e);
+    }
+
     let lang = current_lang();
     println!(
         "{}",
@@ -59,6 +72,7 @@ pub fn exec_in(
     println!("  {}/yaoxiang.lock", name);
     println!("  {}/src/main.yx", name);
     println!("  {}/.gitignore", name);
+    println!("  {}/.yaoxiang/std/", name);
 
     Ok(())
 }
@@ -83,6 +97,10 @@ mod tests {
         assert!(project_path.join("yaoxiang.lock").exists());
         assert!(project_path.join("src/main.yx").exists());
         assert!(project_path.join(".gitignore").exists());
+        // 标准库接口文件
+        assert!(project_path.join(".yaoxiang/std/io.yx").exists());
+        assert!(project_path.join(".yaoxiang/std/list.yx").exists());
+        assert!(project_path.join(".yaoxiang/std/math.yx").exists());
     }
 
     #[test]

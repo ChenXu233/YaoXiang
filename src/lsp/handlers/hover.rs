@@ -73,18 +73,18 @@ pub fn handle_hover(
             SymbolKind::GenericFunction => {
                 if let Some(arity) = sym.arity {
                     format!(
-                        "```yaoxiang\n(泛型函数) {}[T]({} 个参数)\n```",
+                        "```yaoxiang\n(泛型函数) {}(T: Type, ...{} 个参数)\n```",
                         sym.name, arity
                     )
                 } else {
-                    format!("```yaoxiang\n(泛型函数) {}[T]\n```", sym.name)
+                    format!("```yaoxiang\n(泛型函数) {}(T: Type)\n```", sym.name)
                 }
             }
             SymbolKind::Type => {
                 format!("```yaoxiang\n(类型) {}: Type\n```", sym.name)
             }
             SymbolKind::GenericType => {
-                format!("```yaoxiang\n(泛型类型) {}[T]: Type\n```", sym.name)
+                format!("```yaoxiang\n(泛型类型) {}(T): Type\n```", sym.name)
             }
             SymbolKind::TypeClass => {
                 format!("```yaoxiang\n(类型类) {}\n```", sym.name)
@@ -158,6 +158,18 @@ mod tests {
                 Stmt {
                     kind: StmtKind::Var {
                         name: "x".to_string(),
+                        name_span: Span {
+                            start: Position {
+                                line: 1,
+                                column: 1,
+                                offset: 0,
+                            },
+                            end: Position {
+                                line: 1,
+                                column: 2,
+                                offset: 1,
+                            },
+                        },
                         type_annotation: None,
                         initializer: None,
                         is_mut: false,
@@ -176,10 +188,13 @@ mod tests {
                     },
                 },
                 Stmt {
-                    kind: StmtKind::Fn {
+                    kind: StmtKind::Binding {
                         name: "add".to_string(),
+                        type_name: None,
+                        method_type: None,
                         generic_params: vec![],
                         type_annotation: None,
+                        eval: None,
                         params: vec![],
                         body: (vec![], None),
                         is_pub: false,
@@ -278,10 +293,16 @@ mod tests {
 
         let module = Module {
             items: vec![Stmt {
-                kind: StmtKind::TypeDef {
+                kind: StmtKind::Binding {
                     name: "Point".to_string(),
-                    definition: crate::frontend::core::parser::ast::Type::Void,
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
+                    type_annotation: Some(crate::frontend::core::parser::ast::Type::Void),
+                    eval: None,
+                    params: vec![],
+                    body: (vec![], None),
+                    is_pub: false,
                 },
                 span: Span {
                     start: Position {

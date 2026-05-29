@@ -728,7 +728,7 @@ fn operand_to_string(operand: &Operand) -> String {
 mod tests {
     use super::*;
     use crate::middle::core::ir::{BasicBlock, ConstValue, FunctionIR};
-    use crate::frontend::typecheck::MonoType;
+    use crate::frontend::core::typecheck::MonoType;
     use crate::util::span::Span;
 
     fn make_simple_function() -> FunctionIR {
@@ -883,6 +883,7 @@ mod tests {
                         dst: Some(Operand::Temp(0)),
                         func: Operand::Global(0), // 使用索引表示函数
                         args: vec![Operand::Arg(0)],
+                        span: Span::dummy(),
                     },
                     Instruction::Ret(Some(Operand::Temp(0))),
                 ],
@@ -962,7 +963,7 @@ mod tests {
 
         let lifecycles = tracker.get_all_lifecycles();
         // 应该包含参数
-        assert!(lifecycles.len() >= 1);
+        assert!(!lifecycles.is_empty());
     }
 
     #[test]

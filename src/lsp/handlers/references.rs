@@ -156,6 +156,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
@@ -218,10 +230,13 @@ mod tests {
 
         let module_a = Module {
             items: vec![Stmt {
-                kind: StmtKind::Fn {
+                kind: StmtKind::Binding {
                     name: "foo".to_string(),
+                    type_name: None,
+                    method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
+                    eval: None,
                     params: vec![],
                     body: (vec![], None),
                     is_pub: false,

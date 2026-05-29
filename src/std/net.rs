@@ -67,7 +67,7 @@ fn native_http_get(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "http_get expects 1 argument (url: String)".to_string(),
         ));
     }
@@ -75,7 +75,7 @@ fn native_http_get(
     let url = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "http_get expects String argument, got {:?}",
                 other
             )))
@@ -91,7 +91,7 @@ fn native_http_post(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "http_post expects 2 arguments (url: String, body: String)".to_string(),
         ));
     }
@@ -99,7 +99,7 @@ fn native_http_post(
     let url = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "http_post expects String argument for url, got {:?}",
                 other
             )))
@@ -109,7 +109,7 @@ fn native_http_post(
     let body = match &args[1] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "http_post expects String argument for body, got {:?}",
                 other
             )))
@@ -127,7 +127,7 @@ fn native_url_encode(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "url_encode expects 1 argument (s: String)".to_string(),
         ));
     }
@@ -135,7 +135,7 @@ fn native_url_encode(
     let s = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "url_encode expects String argument, got {:?}",
                 other
             )))
@@ -152,7 +152,7 @@ fn native_url_decode(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
-        return Err(ExecutorError::Runtime(
+        return Err(ExecutorError::runtime_only(
             "url_decode expects 1 argument (s: String)".to_string(),
         ));
     }
@@ -160,7 +160,7 @@ fn native_url_decode(
     let s = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
-            return Err(ExecutorError::Type(format!(
+            return Err(ExecutorError::type_only(format!(
                 "url_decode expects String argument, got {:?}",
                 other
             )))
@@ -169,6 +169,9 @@ fn native_url_decode(
 
     match urlencoding::decode(&s) {
         Ok(decoded) => Ok(RuntimeValue::String(decoded.to_string().into())),
-        Err(e) => Err(ExecutorError::Runtime(format!("url_decode failed: {}", e))),
+        Err(e) => Err(ExecutorError::runtime_only(format!(
+            "url_decode failed: {}",
+            e
+        ))),
     }
 }

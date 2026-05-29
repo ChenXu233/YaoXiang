@@ -1,256 +1,143 @@
-﻿# E1xxx: Type Checking
+# E1xxx: TypeCheck
 
-> Type system related errors.
+> Auto-generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E1001: Unknown variable
 
-Referenced variable is not defined.
+**Category**: TypeCheck
 
-```yaoxiang
-x = 10;
-print(y);  # y is not defined
-```
+**Message**: Referenced variable is not defined
 
-```
-error[E1001]: Unknown variable: y
-  --> example.yx:2:8
-   |
- 2 | print(y);
-   |        ^ not found in this scope
-```
+**Help**: Check if the variable name is spelled correctly, or define it first
 
-**Fix**: Check for typos or define the variable first.
+---
 
 ## E1002: Type mismatch
 
-Expected type does not match actual type.
+**Category**: TypeCheck
 
-```yaoxiang
-x: Int = "hello";
-```
+**Message**: Expected type does not match actual type
 
-```
-error[E1002]: Type mismatch: expected `Int`, found `String`
-  --> example.yx:1:12
-   |
- 1 | x: Int = "hello";
-   |            ^^^^^^^^ expected `Int`, found `String`
-```
+**Help**: Use the correct type or add a type conversion
 
-**Fix**: Use the correct type or add type conversion.
+---
 
 ## E1003: Unknown type
 
-Referenced type does not exist.
+**Category**: TypeCheck
 
-```yaoxiang
-x: MyType = 10;
-```
+**Message**: Referenced type does not exist
 
-```
-error[E1003]: Unknown type: MyType
-  --> example.yx:1:10
-   |
- 1 | x: MyType = 10;
-   |          ^^^^^^ not defined
-```
+**Help**: Check if the type name is spelled correctly
+
+---
 
 ## E1010: Parameter count mismatch
 
-Function call parameter count does not match definition.
+**Category**: TypeCheck
 
-```yaoxiang
-add: (a: Int, b: Int) -> Int = a + b;
-result = add(10);  # Only 1 argument passed
-```
+**Message**: Function call arguments do not match definition
 
-```
-error[E1010]: Parameter count mismatch: expected 2, found 1
-  --> example.yx:2:16
-   |
- 2 | result = add(10);
-   |                ^^^ expected 2 arguments
-```
+**Help**: Check the number of arguments in the function call
+
+---
 
 ## E1011: Parameter type mismatch
 
-Parameter type check failed.
+**Category**: TypeCheck
 
-```yaoxiang
-greet: (name: String) -> Void = print(name);
-greet(123);  # Passed Int instead of String
-```
+**Message**: Parameter type check failed
 
-```
-error[E1011]: Parameter type mismatch: expected `String`, found `Int`
-  --> example.yx:2:8
-   |
- 2 | greet(123);
-   |        ^^^ expected `String`, found `Int`
-```
+**Help**: Ensure the argument types match the function signature
+
+---
 
 ## E1012: Return type mismatch
 
-Function return value type error.
+**Category**: TypeCheck
 
-```yaoxiang
-getNumber: () -> Int = "hello";
-```
+**Message**: Function return type is incorrect
 
-```
-error[E1012]: Return type mismatch: expected `Int`, found `String`
-  --> example.yx:1:22
-   |
- 1 | getNumber: () -> Int = "hello";
-   |                      ^ expected `Int`, found `String`
-```
+**Help**: Ensure the return value matches the declared return type
+
+---
 
 ## E1013: Function not found
 
-Calling an undefined function.
+**Category**: TypeCheck
 
-```yaoxiang
-result = my_function(10);
-```
+**Message**: Calling an undefined function
 
-```
-error[E1013]: Function not found: my_function
-  --> example.yx:1:13
-   |
- 1 | result = my_function(10);
-   |              ^^^^^^^^^^^ not defined
-```
+**Help**: Check if the function name is spelled correctly
+
+---
 
 ## E1020: Cannot infer type
 
-Context cannot infer type.
+**Category**: TypeCheck
 
-```yaoxiang
-identity: [T](x: T) -> T = x;  # Generic function needs type parameter
-```
+**Message**: Context cannot infer the type
 
-```
-error[E1020]: Cannot infer type for parameter `x`
-  --> example.yx:1:13
-   |
- 1 | identity(x) = x;
-   |             ^ parameter must have type annotation
-```
+**Help**: Add a type annotation or explicit type arguments
+
+---
 
 ## E1021: Type inference conflict
 
-Multiple constraints lead to type contradiction.
+**Category**: TypeCheck
 
-```yaoxiang
-x = 10;
-y: String = x;  # Int cannot convert to String
-```
+**Message**: Multiple constraints lead to type contradiction
 
-```
-error[E1021]: Type inference conflict
-  --> example.yx:2:14
-   |
- 2 | y: String = x;
-   |              ^ cannot convert `Int` to `String`
-```
+**Help**: Check type annotations for consistency
+
+---
 
 ## E1030: Pattern non-exhaustive
 
-Match expression does not cover all cases.
+**Category**: TypeCheck
 
-```yaoxiang
-result: Result[Int, String] = ok(42);
-match result {
-    ok(value) => print(value),
-    # missing err arm
-};
-```
+**Message**: Match expression does not cover all cases
 
-```
-error[E1030]: Pattern non-exhaustive: missing `err` pattern
-  --> example.yx:3:1
-   |
- 3 | match result {
-   | ^ not all patterns are covered
-```
+**Help**: Add missing patterns to the match expression
+
+---
 
 ## E1031: Unreachable pattern
 
-Pattern that can never match.
+**Category**: TypeCheck
 
-```yaoxiang
-x: Int = 10;
-match x {
-    0 => print("zero"),
-    1 => print("one"),
-    10 => print("ten"),  # This arm can never be reached
-    _ => print("other"),
-};
-```
+**Message**: Pattern that can never match
 
-```
-warning[E1031]: Unreachable pattern
-  --> example.yx:4:5
-   |
- 4 |     10 => print("ten"),
-   |     ^^ pattern can never match
-```
+**Help**: Remove or modify the unreachable pattern
+
+---
 
 ## E1040: Operation not supported
 
-Type does not support the operation.
+**Category**: TypeCheck
 
-```yaoxiang
-a = "hello";
-b = "world";
-c = a * b;  # String does not support * operation
-```
+**Message**: Type does not support the operation
 
-```
-error[E1040]: Operation not supported: `String * String`
-  --> example.yx:3:13
-   |
- 3 | c = a * b;
-   |             ^ operator '*' is not defined for `String`
-```
+**Help**: Check the supported operations for this type
+
+---
 
 ## E1041: Index out of bounds
 
-Array/list index out of range.
+**Category**: TypeCheck
 
-```yaoxiang
-arr = [1, 2, 3];
-x = arr[10];  # Index exceeds array size
-```
+**Message**: Array/list index is out of range
 
-```
-error[E1041]: Index out of bounds: index 10, size 3
-  --> example.yx:2:13
-   |
- 2 | x = arr[10];
-   |             ^^ index 10 out of bounds for array of size 3
-```
+**Help**: Ensure the index is within the bounds of the collection
+
+---
 
 ## E1042: Field not found
 
-Accessing non-existent struct field.
+**Category**: TypeCheck
 
-```yaoxiang
-type Point = { x: Int, y: Int };
-p = Point(10, 20);  # Constructor syntax
-z = p.z;  # Point has no z field
-```
+**Message**: Accessing a non-existent struct field
 
-```
-error[E1042]: Field not found: `z` in `Point`
-  --> example.yx:3:11
-   |
- 3 | z = p.z;
-   |           ^ field `z` does not exist in `Point`
-```
-
-## Related
-
-- [E0xxx: Lexer & Parser](./E0xxx.md)
-- [E2xxx: Semantic Analysis](./E2xxx.md)
-- [Error Code Index](./index.md)
+**Help**: Check the available fields of the struct

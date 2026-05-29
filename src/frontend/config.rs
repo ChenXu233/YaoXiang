@@ -210,6 +210,20 @@ impl Default for IncrementalConfig {
     }
 }
 
+/// 死代码分析配置
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeadCodeConfig {
+    /// 是否启用死代码分析
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for DeadCodeConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// 编译配置
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CompileConfig {
@@ -232,6 +246,10 @@ pub struct CompileConfig {
     /// 增量编译配置
     #[serde(default)]
     pub incremental: IncrementalConfig,
+
+    /// 死代码分析配置
+    #[serde(default)]
+    pub dead_code: DeadCodeConfig,
 
     /// 是否启用详细日志
     #[serde(default)]
@@ -288,6 +306,16 @@ impl CompileConfig {
         strategy: ErrorRecoveryStrategy,
     ) -> Self {
         self.error_recovery = strategy;
+        self
+    }
+
+    /// 启用/禁用死代码分析
+    #[inline]
+    pub fn with_dead_code_enabled(
+        mut self,
+        enabled: bool,
+    ) -> Self {
+        self.dead_code.enabled = enabled;
         self
     }
 
@@ -411,6 +439,7 @@ impl ConfigAdapter for JsonConfig {
             features: self.features.clone(),
             error_recovery: self.error_recovery,
             incremental: self.incremental.clone(),
+            dead_code: DeadCodeConfig::default(),
             verbose: false,
             source_root: None,
             import_paths: self.import_paths.clone(),
@@ -423,5 +452,37 @@ impl ConfigAdapter for JsonConfig {
 impl From<JsonConfig> for CompileConfig {
     fn from(config: JsonConfig) -> Self {
         config.adapt()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dead_code_config_default() {
+        let config = DeadCodeConfig::default();
+        assert!(
+            config.enabled,
+            "Dead code analysis should be enabled by default"
+        );
+    }
+
+    #[test]
+    fn test_dead_code_config_disabled() {
+        let config = DeadCodeConfig { enabled: false };
+        assert!(!config.enabled, "Dead code analysis can be disabled");
+    }
+
+    #[test]
+    fn test_compile_config_with_dead_code_disabled() {
+        let config = CompileConfig::new().with_dead_code_enabled(false);
+        assert!(!config.dead_code.enabled);
+    }
+
+    #[test]
+    fn test_compile_config_with_dead_code_enabled() {
+        let config = CompileConfig::new().with_dead_code_enabled(true);
+        assert!(config.dead_code.enabled);
     }
 }

@@ -2,17 +2,26 @@
 
 > This document is under construction...
 
-YaoXiang is currently in the **experimental validation phase**, and the standard library and APIs are being gradually improved.
+YaoXiang is currently in the **experimental verification phase**, and the standard library and API are gradually being improved.
+
+## Language Specification
+
+- [Language Specification Overview](./language-spec/index.md)
+- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator precedence
+- [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
+- [Module System](./language-spec/modules.md) - Module definition, import/export, scope
+- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency primitives, memory model
+- [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
 ## Current Status
 
 | Module | Status | Description |
-|--------|--------|-------------|
-| `std.io` | 🔨 WIP | Input/Output |
-| `std.string` | 🔨 WIP | String operations |
-| `std.list` | 🔨 WIP | List operations |
+|------|------|------|
+| `std.io` | 🔨 In Progress | Input/Output |
+| `std.string` | 🔨 In Progress | String operations |
+| `std.list` | 🔨 In Progress | List operations |
 | `std.dict` | 📋 Planned | Dictionary operations |
-| `std.math` | 🔨 WIP | Math functions |
+| `std.math` | 🔨 In Progress | Math functions |
 | `std.net` | 📋 Planned | Network operations |
 | `std.concurrent` | 📋 Planned | Concurrency primitives |
 
@@ -21,34 +30,34 @@ YaoXiang is currently in the **experimental validation phase**, and the standard
 ### Primitive Types
 
 | Type | Description | Example |
-|------|-------------|---------|
-| `Void` | Empty value/no return | `()` |
+|------|------|------|
+| `Void` | void/null, no return value | `()` |
 | `Bool` | Boolean | `true`, `false` |
 | `Int` | Integer | `42`, `-10` |
-| `Float` | Floating point | `3.14`, `-0.5` |
+| `Float` | Floating-point number | `3.14`, `-0.5` |
 | `Char` | Character | `'a'`, `'中'` |
 | `String` | String | `"hello"` |
 
 ### Composite Types
 
 | Type | Description | Example |
-|------|-------------|---------|
-| `List[T]` | List of same-type elements | `[1, 2, 3]` |
-| `Tuple(T1, T2, ...)` | Tuple of different-type elements | `(1, "hello")` |
-| `Dict[K, V]` | Key-value mapping | `{"a": 1}` |
+|------|------|------|
+| `List[T]` | List of elements of the same type | `[1, 2, 3]` |
+| `Tuple(T1, T2, ...)` | Tuple of heterogeneous elements | `(1, "hello")` |
+| `Dict[K, V]` | Key-value map | `{"a": 1}` |
 | `Fn(Args) -> Ret` | Function type | `(Int) -> Int` |
 
 ### User-Defined Types
 
 ```yaoxiang
-# Record types (structs)
-type Point = { x: Float, y: Float }
+// Record type (struct)
+Point: Type = { x: Float, y: Float }
 
-# Enum types
-type Result[T, E] = ok(T) | err(E)
+// Enum type
+Result: Type[T, E] = { ok(T) | err(E) }
 
-# Interface types (all fields are functions)
-type Callable = { call: (String) -> Void }
+// Interface type (all fields are functions)
+Callable: Type = { call: (String) -> Void }
 ```
 
 ## Built-in Functions
@@ -56,71 +65,71 @@ type Callable = { call: (String) -> Void }
 ### Output
 
 ```yaoxiang
-print(value)           # Print, no newline
-println(value)         # Print, with newline
+print(value)           // Print without newline
+println(value)         // Print with newline
 ```
 
 ### Conversion
 
 ```yaoxiang
-to_string(value)       # Convert to string
-to_int(value)         # Convert to integer
-to_float(value)       # Convert to float
+to_string(value)       // Convert to string
+to_int(value)          // Convert to integer
+to_float(value)        // Convert to float
 ```
 
 ### Type Checking
 
 ```yaoxiang
-typeof(value)         # Returns type name
-is_type(value, type)  # Check type
+typeof(value)         // Return type name
+is_type(value, type)  // Check type
 ```
 
 ## Keywords
 
 | Keyword | Description |
-|---------|-------------|
-| `type` | Define types |
-| `spawn` | Mark bingzuo functions |
-| `spawn for` | Parallel loops |
-| `spawn {}` | Bingzuo blocks |
-| `if` / `elif` / `else` | Conditional branches |
+|--------|------|
+| `Type` | meta type |
+| `spawn` | Mark spawn function |
+| `spawn for` | Parallel loop |
+| `spawn {}` | Spawn block |
+| `if` / `elif` / `else` | Conditional branching |
 | `match` | Pattern matching |
-| `while` / `for` | Loops |
+| `while` / `for` | Loop |
 | `return` | Return value |
 | `ref` | Create reference |
-| `mut` | Mutability marker |
+| `mut` | Mutable marker |
 
-## Syntax Quick Reference
+## Quick Syntax Reference
 
-### Variable Declarations
+### Variable Declaration
 
 ```yaoxiang
-# Immutable variables (default)
+// Immutable variable (default)
 x: Int = 42
-y = 42                 # Type inference
+y = 42                 // Type inference
 
-# Mutable variables
+// Mutable variable
 mut count: Int = 0
 count = count + 1
 ```
 
-### Function Definitions
+### Function Definition
 
 ```yaoxiang
-# Regular functions
+// Regular function
 add: (a: Int, b: Int) -> Int = a + b
 
-# Bingzuo functions (automatic concurrency)
+// Spawn function (automatic concurrency)
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
-# Generic functions
+// Generic function
 identity: [T](x: T) -> T = x
 ```
 
 ### Control Flow
 
 ```yaoxiang
-# Conditionals
+// Conditional
 if x > 0 {
     println("positive")
 } elif x < 0 {
@@ -129,13 +138,13 @@ if x > 0 {
     println("zero")
 }
 
-# Pattern matching
+// Pattern matching
 match result {
     ok(value) => println("success: " + value),
     err(error) => println("error: " + error),
 }
 
-# Loops
+// Loop
 for i in 0..10 {
     print(i)
 }
@@ -144,20 +153,20 @@ for i in 0..10 {
 ### Error Handling
 
 ```yaoxiang
-# ? operator propagates errors
+// ? operator propagates error
 data = fetch_file(path)?
 ```
 
 ## Operator Precedence
 
-| Precedence | Operators |
-|------------|-----------|
+| Priority | Operators |
+|--------|--------|
 | Highest | `( )` Function call |
 | | `.` Field access |
 | | `[ ]` Index |
 | | `unary -` Unary minus |
-| | `* / %` Multiply/divide/modulo |
-| | `+ -` Add/subtract |
+| | `* / %` Multiplication, division, modulo |
+| | `+ -` Addition, subtraction |
 | | `== != < > <= >=` Comparison |
 | | `and or` Logical operations |
 | Lowest | `=` Assignment |
@@ -165,24 +174,24 @@ data = fetch_file(path)?
 ## Standard Library Usage Examples
 
 ```yaoxiang
-# Import standard library
-from std.io import print, println
+// Import standard library
+use std.io.{print, println}
 
-# List operations
-from std.list import list_push, list_pop, list_len
+// List operations
+use std.list.{list_push, list_pop, list_len}
 
-# Math functions
-from std.math import sqrt, sin, cos, PI
+// Math functions
+use std.math.{sqrt, sin, cos, PI}
 
-# Usage
+// Usage
 println("Hello, YaoXiang!")
-result = sqrt(16.0)  # 4.0
+result = sqrt(16.0)  // 4.0
 ```
 
 ## Command Line Tools
 
 ```bash
-# Run scripts
+# Run script
 yaoxiang run hello.yx
 
 # Build bytecode
@@ -198,14 +207,14 @@ yaoxiang --help
 ## Complete Example
 
 ```yaoxiang
-# Calculate Fibonacci sequence
+// Calculate Fibonacci sequence
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
     fib(n - 1) + fib(n - 2)
 }
 
-# Main function
+// Main function
 main: () -> Void = {
     println("Fibonacci(10) = " + fib(10).to_string())
 }
@@ -217,9 +226,9 @@ main: () -> Void = {
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
-## Contributing Guide
+## Contribution Guide
 
-The standard library is under construction. Contributions are welcome!
+The standard library is under construction, contributions are welcome!
 
 1. Choose a module (e.g., `std.io`, `std.net`)
 2. Implement functions in `src/std/`

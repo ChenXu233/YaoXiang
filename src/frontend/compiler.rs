@@ -155,8 +155,8 @@ impl Compiler {
     pub fn typecheck(
         &mut self,
         ast: &super::core::parser::Module,
-    ) -> Result<super::typecheck::TypeCheckResult, Vec<Diagnostic>> {
-        super::typecheck::check_module(ast, &mut None)
+    ) -> Result<super::core::typecheck::TypeCheckResult, Vec<Diagnostic>> {
+        super::core::typecheck::check_module(ast, &mut None)
     }
 
     /// 生成 IR
@@ -165,7 +165,7 @@ impl Compiler {
     pub fn generate_ir(
         &mut self,
         ast: &super::core::parser::Module,
-        type_result: &super::typecheck::TypeCheckResult,
+        type_result: &super::core::typecheck::TypeCheckResult,
     ) -> Result<middle::ModuleIR, Vec<Diagnostic>> {
         middle::generate_ir(ast, type_result)
     }

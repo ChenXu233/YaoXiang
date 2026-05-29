@@ -3,6 +3,33 @@
 pub use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
+#[derive(Debug, Clone)]
+pub struct SpannedIdent {
+    pub name: String,
+    pub span: Span,
+}
+
+/// Evaluation strategy annotation (RFC-001/008).
+///
+/// Used by `@block/@auto/@eager` on function signatures or blocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EvalMode {
+    Block,
+    Auto,
+    Eager,
+}
+
+/// Semantic category for unified binding statements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingSemanticKind {
+    /// `TypeName.method = ...`
+    Method,
+    /// Type definition / type constructor lowered form.
+    TypeConstructor,
+    /// Function-like binding (including block sugar and lambda forms).
+    Function,
+}
+
 /// Expression
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -107,6 +134,19 @@ pub enum Expr {
         body: Box<Block>,
         span: Span,
     },
+    /// Evaluation strategy annotation for a block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
+    Eval {
+        mode: EvalMode,
+        body: Box<Block>,
+        span: Span,
+    },
+    /// Spawn a concurrent block: `spawn { ... }`
+    ///
+    /// Only valid inside `@block` scope (enforced by type checker / compiler).
+    Spawn {
+        body: Box<Block>,
+        span: Span,
+    },
     /// Lambda expression: (params) => body
     /// Used for RFC-007 function syntax: name = (params) => body
     Lambda {
@@ -184,6 +224,9 @@ pub enum StmtKind {
     /// Variable declaration: [mut] name[: type] [= expr]
     Var {
         name: String,
+        /// 变量名的源码位置（用于代码染色等）
+        /// Span of the `Type` meta-keyword identifier.
+        name_span: Span,
         type_annotation: Option<Type>,
         initializer: Option<Box<Expr>>,
         is_mut: bool,
@@ -191,46 +234,44 @@ pub enum StmtKind {
     /// For loop: `for [mut] item in iterable { body }`
     For {
         var: String,
+        /// 变量名的源码位置（用于代码染色等）
+        var_span: Span,
         var_mut: bool, // 变量是否可变
         iterable: Box<Expr>,
         body: Box<Block>,
         label: Option<String>,
     },
-    /// Type definition: `RFC-010: `Name: Type = { ... }`
-    TypeDef {
+    /// Unified binding: combines Fn, TypeDef, and MethodBind
+    /// Used for RFC-022: Unified binding syntax
+    Binding {
+        /// Binding name (function name, type name, or method name)
         name: String,
-        definition: Type,
-        /// RFC-010: Generic type parameters from `Type[T]` or `Type[K, V]`
-        generic_params: Vec<String>,
+        /// Optional type name for method binding
+        type_name: Option<String>,
+        /// Method type (for method binding)
+        method_type: Option<Type>,
+        /// Generic type parameters
+        generic_params: Vec<GenericParam>,
+        /// Type annotation / return type
+        type_annotation: Option<Type>,
+        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
+        eval: Option<EvalMode>,
+        /// Parameters (for functions and methods)
+        params: Vec<Param>,
+        /// Body: (prelude statements, optional tail expression)
+        body: (Vec<Stmt>, Option<Box<Expr>>),
+        /// Whether this binding is public
+        is_pub: bool,
     },
     /// Use statement: `use module.path` or `use module.{a, b} as c, d`
     Use {
         path: String,
+        /// Module path span
+        path_span: Span,
+        /// Spans of each identifier in the module path (dot-separated)
+        path_parts: Vec<SpannedIdent>,
         items: Option<Vec<String>>,
         alias: Option<Vec<String>>,
-    },
-    /// Function definition: `name: Type = (params) => body`
-    /// With pub modifier: `pub name: Type = (params) => body` - auto-binds to first param type
-    Fn {
-        name: String,
-        generic_params: Vec<GenericParam>,
-        type_annotation: Option<Type>,
-        params: Vec<Param>,
-        body: (Vec<Stmt>, Option<Box<Expr>>),
-        is_pub: bool, // 是否公开导出并自动绑定到类型
-    },
-    /// Method binding: `Type.method: (Type, ...) -> ReturnType = (params) => body`
-    MethodBind {
-        /// 类型名称
-        type_name: String,
-        /// 方法名称
-        method_name: String,
-        /// 方法类型（包含 self 参数）
-        method_type: Type,
-        /// 方法参数（不包含 self）
-        params: Vec<Param>,
-        /// 方法体
-        body: (Vec<Stmt>, Option<Box<Expr>>),
     },
     /// If statement: `if condition { then_branch } elif branches else_branch`
     If {
@@ -258,6 +299,7 @@ pub enum StmtKind {
 #[derive(Debug, Clone)]
 pub struct VariantDef {
     pub name: String,
+    pub name_span: Span,
     pub params: Vec<(Option<String>, Type)>,
     pub span: Span,
 }
@@ -360,7 +402,10 @@ pub struct GenericParam {
 /// Type
 #[derive(Debug, Clone)]
 pub enum Type {
-    Name(String),
+    Name {
+        name: String,
+        span: Span,
+    },
     Int(usize),
     Float(usize),
     Char,
@@ -376,6 +421,7 @@ pub enum Type {
     },
     NamedStruct {
         name: String,
+        name_span: Span,
         fields: Vec<StructField>,
     },
     Union(Vec<(String, Option<Type>)>),
@@ -391,6 +437,7 @@ pub enum Type {
     Result(Box<Type>, Box<Type>),
     Generic {
         name: String,
+        name_span: Span,
         args: Vec<Type>,
     },
     /// 关联类型访问（如 T::Item）
@@ -399,6 +446,7 @@ pub enum Type {
         host_type: Box<Type>,
         /// 关联类型名称
         assoc_name: String,
+        assoc_name_span: Span,
         /// 关联类型参数（如果有关联类型也是泛型的）
         assoc_args: Vec<Type>,
     },
@@ -409,6 +457,7 @@ pub enum Type {
     Literal {
         /// The literal name (e.g., "5")
         name: String,
+        name_span: Span,
         /// The underlying type (e.g., Int)
         base_type: Box<Type>,
     },
@@ -420,6 +469,8 @@ pub enum Type {
     /// `Type` is the only meta-type keyword in the language
     /// Supports infinite universe levels: `Type[Type[T]]` → Type2, etc.
     MetaType {
+        /// `Type` 关键字的源码位置
+        name_span: Span,
         /// Generic type parameters (empty for plain `Type`)
         /// e.g., `Type[T]` has args = [T], `Type[K, V]` has args = [K, V]
         /// e.g., `Type[Type[T]]` has args = [MetaType { args: [T] }]
@@ -490,4 +541,47 @@ impl Default for Module {
             span: Span::dummy(),
         }
     }
+}
+
+/// Returns true if a type is the `Type` meta keyword form.
+pub fn is_meta_type(ty: &Type) -> bool {
+    matches!(ty, Type::MetaType { .. })
+}
+
+/// Returns true if a type annotation semantically returns `Type`.
+pub fn type_annotation_returns_meta_type(ty: &Type) -> bool {
+    match ty {
+        Type::MetaType { .. } => true,
+        Type::Fn { return_type, .. } => matches!(return_type.as_ref(), Type::MetaType { .. }),
+        _ => false,
+    }
+}
+
+/// Classify a unified binding into method/type-constructor/function semantics.
+///
+/// The parser lowers type constructors into bindings with empty params/body and
+/// concrete type annotations, so downstream phases can use one stable predicate.
+pub fn classify_binding_semantic_kind(
+    type_name: Option<&String>,
+    type_annotation: Option<&Type>,
+    params: &[Param],
+    body_stmts: &[Stmt],
+    body_expr: Option<&Expr>,
+) -> BindingSemanticKind {
+    if type_name.is_some() {
+        return BindingSemanticKind::Method;
+    }
+
+    // 解析器会把类型构造器降级为"空 params + 空 body + concrete type annotation"形态。
+    // 例如 `Id: (T: Type) -> Type = { x: T }` 在 AST 中 type_annotation 已是 Struct，
+    // 不再保留 `-> Type` 的函数签名，因此这里必须按降级后的形状判断。
+    if type_annotation.is_some()
+        && params.is_empty()
+        && body_stmts.is_empty()
+        && body_expr.is_none()
+    {
+        return BindingSemanticKind::TypeConstructor;
+    }
+
+    BindingSemanticKind::Function
 }

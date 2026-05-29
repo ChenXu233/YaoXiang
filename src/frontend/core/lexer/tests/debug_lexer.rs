@@ -6,10 +6,10 @@ mod debug_tests {
 
     #[test]
     fn test_simple_debug() {
-        let source = "List[T]";
+        let source = "List(T)";
         let tokens = tokenize(source).unwrap();
 
-        println!("=== DEBUG: Tokens for 'List[T]' ===");
+        println!("=== DEBUG: Tokens for 'List(T)' ===");
         for (i, token) in tokens.iter().enumerate() {
             println!("  {}: {:?}", i, token.kind);
         }

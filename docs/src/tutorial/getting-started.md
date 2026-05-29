@@ -205,21 +205,21 @@ d2 = p1.distance(p2)           # → distance(p1, p2)
 type Color = red | green | blue
 
 # 带数据的枚举
-type Result[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 
 # 使用泛型
-success: Result[Int, String] = ok(42)
-failure: Result[Int, String] = err("not found")
+success: Result(Int, String) = ok(42)
+failure: Result(Int, String) = err("not found")
 ```
 
 #### 泛型类型
 
 ```yaoxiang
 # 泛型类型定义
-type List[T] = {
-    data: Array[T],
+List: (T: Type) -> Type = {
+    data: Array(T),
     length: Int,
-    push: (List[T], T) -> Void
+    push: (List(T), T) -> Void
 }
 
 # 具体实例化
@@ -272,7 +272,7 @@ list.append(4)
 
 ```yaoxiang
 # match 表达式
-result: Result[Int, String] = ok(42)
+result: Result(Int, String) = ok(42)
 
 message = match result {
     ok(value) => "Success: " + value.to_string()
@@ -338,7 +338,7 @@ add = (a, b) => a + b
 
 ```yaoxiang
 # 使用 Result 类型
-type Result[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = ok(T) | err(E)
 
 # 模式匹配处理
 result = risky_operation()

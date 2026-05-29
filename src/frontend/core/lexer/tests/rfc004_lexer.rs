@@ -69,7 +69,7 @@ fn test_nested_binding_brackets() {
 #[test]
 fn test_binding_with_generic() {
     // RFC-004 + RFC-010: Binding with generic types
-    let source = "List[T][0, 1]";
+    let source = "List(T)[0, 1]";
     let tokens = tokenize(source).unwrap();
 
     // Should tokenize: List < T > [ 0 , 1 ]

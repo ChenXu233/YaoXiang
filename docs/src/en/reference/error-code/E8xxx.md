@@ -1,76 +1,33 @@
-﻿# E8xxx: Internal Compiler Errors
+# E8xxx: Internal Compiler Error
 
-> Compiler internal errors, usually bugs.
+> Auto-generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E8001: Internal compiler error
 
-Compiler internal error.
+**Category**: Internal
 
-```
-error[E8001]: Internal compiler error
-  --> example.yx:1:1
-   |
- 1 | [compiler internal error]
-   |
-   = note: This is a bug in the YaoXiang compiler
-   = please file an issue at https://github.com/yaoxiang-lang/yaoxiang/issues
-```
+**Message**: An internal error occurred in the compiler
 
-## E8002: Codegen error
+**Help**: Please report this bug at https://github.com/yaoxiang-lang/yaoxiang/issues
 
-IR/bytecode generation failed.
+---
 
-```
-error[E8002]: Codegen error
-  --> example.yx:5:1
-   |
- 5 | [code generation failed]
-   |
-   = note: Failed to generate bytecode for function
-```
+## E8002: Unexpected panic
 
-## E8003: Unimplemented feature
+**Category**: Internal
 
-Using an unimplemented feature.
+**Message**: The compiler encountered an unexpected panic
 
-```yaoxiang
-main: () -> Void = {
-    # Some not yet implemented feature
-}
-```
+**Help**: Please report this bug with the panic details
 
-```
-error[E8003]: Unimplemented feature
-  --> example.yx:2:5
-   |
- 2 |     [feature not yet implemented]
-   |
-   = note: This feature is not yet implemented
-```
+---
 
-## E8004: Optimization error
+## E8003: Compiler phase error
 
-Compiler optimization error.
+**Category**: Internal
 
-```
-error[E8004]: Optimization error
-  --> example.yx:1:1
-   |
- 1 | [compiler optimization failed]
-   |
-   = note: This is a bug in the compiler's optimizer
-```
+**Message**: An error occurred during a compiler phase
 
-## Reporting Internal Errors
-
-When encountering E8xxx errors:
-
-1. Verify the error is reproducible
-2. Collect a minimal reproduction case
-3. Report at [GitHub Issues](https://github.com/yaoxiang-lang/yaoxiang/issues)
-
-## Related
-
-- [E6xxx: Runtime Errors](./E6xxx.md)
-- [E7xxx: I/O & System Errors](./E7xxx.md)
-- [Error Code Index](./index.md)
+**Help**: This is likely a compiler bug, please report it

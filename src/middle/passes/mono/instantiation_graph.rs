@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::frontend::typecheck::MonoType;
+use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, Operand};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, GenericTypeId, TypeId};
 
@@ -333,7 +333,9 @@ impl InstantiationGraph {
         match inst {
             // ==================== 调用指令 ====================
             // 函数调用 (dst 是 Option<Operand>)
-            Instruction::Call { func, args, dst } => {
+            Instruction::Call {
+                func, args, dst, ..
+            } => {
                 self.extract_type_from_operand(func, params, locals, deps);
                 if let Some(d) = dst {
                     self.extract_type_from_operand(d, params, locals, deps);
@@ -343,7 +345,9 @@ impl InstantiationGraph {
                 }
             }
             // 动态调用 (dst 是 Option<Operand>)
-            Instruction::CallDyn { func, args, dst } => {
+            Instruction::CallDyn {
+                func, args, dst, ..
+            } => {
                 self.extract_type_from_operand(func, params, locals, deps);
                 if let Some(d) = dst {
                     self.extract_type_from_operand(d, params, locals, deps);
@@ -393,7 +397,9 @@ impl InstantiationGraph {
                 self.extract_type_from_operand(src, params, locals, deps);
             }
             // 加载索引
-            Instruction::LoadIndex { dst, src, index } => {
+            Instruction::LoadIndex {
+                dst, src, index, ..
+            } => {
                 self.extract_type_from_operand(dst, params, locals, deps);
                 self.extract_type_from_operand(src, params, locals, deps);
                 self.extract_type_from_operand(index, params, locals, deps);
@@ -471,8 +477,8 @@ impl InstantiationGraph {
             Instruction::Add { dst, lhs, rhs }
             | Instruction::Sub { dst, lhs, rhs }
             | Instruction::Mul { dst, lhs, rhs }
-            | Instruction::Div { dst, lhs, rhs }
-            | Instruction::Mod { dst, lhs, rhs }
+            | Instruction::Div { dst, lhs, rhs, .. }
+            | Instruction::Mod { dst, lhs, rhs, .. }
             | Instruction::And { dst, lhs, rhs }
             | Instruction::Or { dst, lhs, rhs }
             | Instruction::Xor { dst, lhs, rhs }
@@ -799,6 +805,16 @@ impl<'a> InstantiationGraphBuilder<'a> {
             // Weak 包装：提取内部类型参数
             MonoType::Weak(inner) => Self::extract_type_args_from_type(inner),
 
+            // Option：提取内部类型参数
+            MonoType::Option(inner) => Self::extract_type_args_from_type(inner),
+
+            // Result：提取 Ok/Err 的类型参数
+            MonoType::Result(ok, err) => {
+                let mut args = Self::extract_type_args_from_type(ok);
+                args.extend(Self::extract_type_args_from_type(err));
+                args
+            }
+
             // 关联类型：提取主机类型和关联类型的参数
             MonoType::AssocType {
                 host_type,
@@ -852,23 +868,23 @@ impl<'a> InstantiationGraphBuilder<'a> {
                 Some(InstanceNode::Type(node))
             }
 
-            // 泛型 Option (通过名称判断)
-            MonoType::Enum(e) if e.name == "Option" => {
+            // 泛型 Option
+            MonoType::Option(inner) => {
                 let node = TypeInstanceNode::new(
                     GenericTypeId::new("Option".to_string(), vec!["T".to_string()]),
-                    vec![],
+                    vec![*inner.clone()],
                 );
                 Some(InstanceNode::Type(node))
             }
 
-            // 泛型 Result (通过名称判断)
-            MonoType::Enum(e) if e.name == "Result" => {
+            // 泛型 Result
+            MonoType::Result(ok, err) => {
                 let node = TypeInstanceNode::new(
                     GenericTypeId::new(
                         "Result".to_string(),
                         vec!["T".to_string(), "E".to_string()],
                     ),
-                    vec![],
+                    vec![*ok.clone(), *err.clone()],
                 );
                 Some(InstanceNode::Type(node))
             }

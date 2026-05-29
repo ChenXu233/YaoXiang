@@ -1,18 +1,18 @@
-# YaoXiang Design Documents
+# YaoXiang Design Document
 
-> 「道生一，一生二，二生三，三生万物。」
+> The Tao gives birth to the One, the One gives birth to the Two, the Two gives birth to the Three, the Three gives birth to all things.
 
 This directory contains design decisions, proposals, and discussions for the YaoXiang programming language.
 
 ## Core Design Principles
 
 | Principle | Description |
-|-----------|-------------|
-| **Everything is a Type** | Values, functions, and modules are all types; types are first-class citizens |
-| **Natural Syntax** | Python-like readability, close to natural language |
-| **Ownership Model** | Zero-cost abstraction, no GC, high performance |
-| **Concurrency Model** | Synchronous syntax, asynchronous essence, automatic parallelism |
-| **AI-Friendly** | Strictly structured, clear AST |
+|------|------|
+| **Everything is a type** | Values, functions, and modules are all types; types are first-class citizens |
+| **Natural syntax** | Python-like readability, close to natural language |
+| **Ownership model** | Zero-cost abstraction, no GC, high performance |
+| **Spawn model** | Synchronous syntax, asynchronous nature, automatic parallelism |
+| **AI-friendly** | Strictly structured, clear AST |
 
 ## Design Document Structure
 
@@ -31,8 +31,8 @@ design/
 ## Accepted Design Proposals
 
 | Document | Status | Description |
-|----------|--------|-------------|
-| [008-Concurrency Model](./accepted/008-runtime-concurrency-model.md) | ✅ Stable | Concurrency model and task scheduler design |
+|------|------|------|
+| [008-Concurrency Model](./accepted/008-runtime-concurrency-model.md) | ✅ Official | Spawn model and task scheduler design |
 
 > See the [`accepted/`](./accepted/) directory for the complete list.
 
@@ -43,13 +43,13 @@ design/
 ### Active Proposals
 
 | ID | Title | Status |
-|----|-------|--------|
+|------|------|------|
 | RFC-003 | Version Planning | Pending Review |
 | RFC-005 | Automated CVE Scanning | Pending Review |
 | RFC-006 | Documentation Site Optimization | Pending Review |
 | RFC-012 | f-string Template Strings | Pending Review |
 
-### RFC Templates
+### RFC Template
 
 Before submitting a new proposal, please refer to:
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
@@ -64,7 +64,7 @@ Before submitting a new proposal, please refer to:
    → Place in rfc/ directory
 
 2. Community discussion
-   → Discuss in corresponding issue in rfc/REPO
+   → Discuss in the corresponding rfc/REPO issue
 
 3. Core team review
    → Accept → Move to accepted/
@@ -73,27 +73,27 @@ Before submitting a new proposal, please refer to:
 
 ### Design Principles
 
-- **Clear Boundaries**: Each design decision should have a clear scope of application
-- **Practicality First**: Solve real problems, not hypothetical threats
-- **Progressive Transparency**: Layered concurrency model design (L1-L3)
-- **User-Visible Behavior Invariant**: Never break userspace
+- **Clear boundaries**: Each design decision should have a clear scope of application
+- **Practicality first**: Solve real problems, not imagined threats
+- **Gradual transparency**: Layered design of concurrency model (L1-L3)
+- **User-visible behavior unchanged**: Never break userspace
 
 ## Code Examples
 
 ```yaoxiang
-# Type Definitions
-type Point = { x: Float, y: Float }
-type Result[T, E] = { ok(T) | err(E) }
+// Type definition
+Point: Type = { x: Float, y: Float }
+Result: Type[T, E] = { ok(T) | err(E) }
 
-# Function Definitions
+// Function definition
 add: (a: Int, b: Int) -> Int = a + b
 
-# Concurrent Functions (Automatic Concurrency)
+// Spawn function (automatic concurrency)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Main Function
+// Main function
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -103,27 +103,27 @@ main: () -> Void = {
 
 ### 1. Type System
 
-- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`, unify with `type`
-- **Constructors as Types**: Bridge the gap between "types" and "values"
-- **Generic Support**: Compile-time monomorphization, zero runtime overhead
+- **Unified type syntax**: Abolish `enum`, `struct`, `union`, unify using `Name: Type = {...}`
+- **Constructors are types**: Eliminate the gap between "type" and "value"
+- **Generics support**: Compile-time monomorphization, zero runtime overhead
 
-### 2. Concurrency Model
+### 2. Spawn Model
 
 ```yaoxiang
-# Three-layer concurrency abstraction
+// Three-layer concurrency abstraction
 
-# L1: @blocking sync (disable parallelism)
+// L1: @blocking synchronous (disable parallelism)
 fetch: (String) -> JSON @blocking = (url) => { ... }
 
-# L2: spawn explicit concurrency
+// L2: spawn explicit concurrency
 process: () -> Void spawn = () => {
     users = fetch_users()
-    posts = fetch_posts()  # Automatic parallelism
+    posts = fetch_posts()  // Automatic parallelism
 }
 
-# L3: Fully transparent (default)
+// L3: Fully transparent (default)
 compute: (Int) -> Int = (n) => {
-    a = heavy_calc(1)  # System automatically analyzes dependencies
+    a = heavy_calc(1)  // System automatically analyzes dependencies
     b = heavy_calc(2)
     c = heavy_calc(3)
     a + b + c
@@ -133,10 +133,10 @@ compute: (Int) -> Int = (n) => {
 ### 3. Error Handling
 
 ```yaoxiang
-type Result[T, E] = ok(T) | err(E)
+Result: Type[T, E] = { ok(T) | err(E) }
 
 process: () -> Result[Data, Error] = {
-    data = fetch_data()?      # ? operator transparently propagates
+    data = fetch_data()?      // ? operator transparent propagation
     transformed = transform(data)?
     save(transformed)?
 }
@@ -146,12 +146,13 @@ process: () -> Result[Data, Error] = {
 
 - [Tutorial](../tutorial/) - Learn to use YaoXiang
 - [Reference Documentation](../reference/) - API and standard library
+- [Language Specification](../reference/language-spec/index.md) - Complete language specification
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
 - [Contributing Guide](../tutorial/contributing.md)
 
-## Historical Archives
+## Historical Archive
 
 Historical documents from the design process have been moved to the [`docs/old/`](../../old/) directory, including:
-- Early architecture designs
-- Discarded proposals
+- Early architecture design
+- Abandoned proposals
 - Outdated implementation plans

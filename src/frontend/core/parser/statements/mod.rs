@@ -4,11 +4,18 @@
 pub mod bindings;
 pub mod control_flow;
 pub mod declarations;
+pub mod functions;
+pub mod imports;
 pub mod types;
+
+#[cfg(test)]
+mod tests;
 
 // Re-export commonly used items
 pub use types::*;
 pub use declarations::*;
+pub use functions::*;
+pub use imports::*;
 pub use control_flow::*;
 pub use bindings::*;
 
@@ -31,7 +38,7 @@ impl StatementParser for ParserState<'_> {
             // RFC-010: 'type' keyword removed
             // Type definitions use `Name: Type = { ... }` syntax (handled by parse_identifier_stmt)
             // use import
-            Some(TokenKind::KwUse) => declarations::parse_use_stmt(self, start_span),
+            Some(TokenKind::KwUse) => imports::parse_use_stmt(self, start_span),
             // return statement
             Some(TokenKind::KwReturn) => control_flow::parse_return_stmt(self, start_span),
             // break statement

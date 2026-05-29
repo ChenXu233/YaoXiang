@@ -1,595 +1,351 @@
 ---
-title: 'RFC-001: Concurrency Model and Error Handling System'
+title: 'RFC-001: Spawn Model and Error Handling System'
 ---
 
-# RFC-001: Concurrency Model and Error Handling System
+# RFC-001: Spawn Model and Error Handling System
 
 > **Status**: Accepted
-> **Author**: ChenXu
-> **Created Date**: 2025-01-05
-> **Last Updated**: 2026-02-12
+> **Author**: Chen Xu
+> **Created**: 2025-01-05
+> **Last Updated**: 2026-05-11 (pruning: removed @auto, L1 fallback heuristics, streamlined discussion log)
 
-## Design Source and Reference
+## Design Sources
 
-This document's design is based on the following documents and serves as the detailed design source for language-spec:
+| Document | Relationship |
+|----------|--------------|
+| [async-whitepaper](/src/archive/async-whitepaper) | Design origin, theoretical foundation |
+| [language-spec](/src/design/language-spec) | Specification target |
 
-| Document | Relationship | Description |
-|----------|--------------|-------------|
-| [async-whitepaper](../async-whitepaper.md) | **Design Source** | Theoretical foundation and core concepts of the concurrency model |
-| [language-spec](../language-spec.md) | **Specification Target** | This RFC's design will be integrated into the language specification |
+## Abstract
 
-> **Description**: This RFC is the concretization and standardization of the concurrency model proposed in [async-whitepaper](../async-whitepaper.md), transforming it into implementable language design.
+This RFC proposes YaoXiang's spawn model: describing logic in synchronous syntax while the runtime automatically executes concurrently. Core mechanism: three-layer concurrency architecture + DAG dependency analysis + Result type system.
 
-## Summary
-
-Proposing YaoXiang's concurrency model (three-layer concurrency architecture), side effect handling mechanism, DAG dependency analysis, Result type system, and error graph visualization. Core design philosophy originates from "All things grow together, and I observe their return" in the Book of Changes — describing logic with synchronous syntax, runtime automatically executes concurrently.
-
-## Quick Reference
+## Quick Selection
 
 | Scenario | Syntax | Description |
 |----------|--------|-------------|
-| Automatic Parallelism | No annotation | Default behavior, maximum parallelism |
-| Explicit Parallel Declaration | `@auto` | Same as default behavior, readability |
-| Synchronous Wait | `@eager` | Force wait for dependencies to complete |
-| Fully Sequential | `@block` | No concurrency, for debugging |
-| Local Concurrency | `spawn` | Concurrency within @block scope |
+| Automatic parallel | No annotation (default) | Maximizes parallelism |
+| Synchronous wait | `@eager` | Wait for dependencies to complete |
+| Fully sequential | `@block` | No concurrency, for debugging |
+| Local concurrency | `spawn` | Concurrency within @block scope |
 
 ## Motivation
 
-### Why is a concurrency model needed?
+Current mainstream languages' concurrency models have clear flaws:
 
-Current mainstream language concurrency models have obvious flaws:
-
-| Language | Concurrency Model | Problem |
-|----------|------------------|---------|
+| Language | Concurrency Model | Issues |
+|----------|-------------------|--------|
 | Rust | async/await + tokio | Async contagion, steep learning curve |
-| Go | goroutine | No type safety, difficult escape analysis |
-| Python | asyncio | GIL limitation, poor performance |
-| JavaScript | Promise/async | Callback hell somewhat mitigated but still complex |
+| Go | goroutine | No type safety |
+| Python | asyncio | GIL limitations |
+| JavaScript | Promise/async | Callback complexity |
 
-### Core Contradictions
+### Core Tensions
 
-1. **Transparency vs Controllability**: Completely transparent but uncontrollable vs completely controllable but opaque
-2. **Concurrency vs Debugging**: Concurrent programs are hard to debug vs debuggable programs are hard to concurrent
-3. **Safety vs Performance**: GC safety has overhead vs manual management is efficient but dangerous
+1. **Transparency vs. Controllability**: Fully transparent but uncontrollable vs. fully controllable but opaque
+2. **Concurrency vs. Debuggability**: Concurrent programs are hard to debug vs. debuggable programs are hard to parallelize
 
-### Concurrency Model Solution Approach
-
-```
-Traditional Dilemma ─────────── Concurrency Model ─────────── Solution
-Completely transparent but uncontrollable ───→ Three-layer model ───→ Progressive adoption from L1 to L3
-Concurrent programs hard to debug ───→ Graph debugging ───→ Error graph visualization
-GC safety but with overhead ───→ Ownership ───→ Rust-style compile-time checking
-```
+---
 
 ## Proposal
 
-### 1. Concurrency Model: Three-Layer Concurrency Architecture
+### 1. Spawn Model: Three-Layer Concurrency Architecture
 
-The concurrency model allows developers to describe logic in synchronous, sequential thinking, while the language runtime makes computational units automatically and efficiently execute concurrently like all things growing together.
+> **Note**: L1/L2/L3 are mental models to help users understand different scenarios. The actual implementation has only one mechanism: automatic DAG analysis + annotation control.
 
-#### Three-Layer Abstraction
+| Layer | Mental Model | Syntax | Execution | Parallelism |
+|-------|--------------|--------|-----------|-------------|
+| **L1** | Concurrency forbidden | `@block` | Pure sequential execution | ❌ None |
+| **L2** | Concurrency within @block | `spawn` | Controllable concurrency within @block scope | ⚠️ Partial |
+| **L3** | Full concurrency | Default (no annotation) | Automatic DAG analysis | ✅ Full |
 
-> **Description**: L1/L2/L3 are **mental models** to help users understand concurrency behavior in different scenarios. Actual implementation has only one mechanism: resource types + automatic DAG analysis + @block/@eager/@auto annotation control.
-
-| Level | Mental Model | Syntax | Execution Mode | Parallelism | Applicable Scenario |
-|-------|--------------|--------|---------------|-------------|-------------------|
-| **L1** | Disable Concurrency | `@block` | No DAG, pure sequential execution | ❌ None | Debugging, beginners, critical code sections |
-| **L2** | Partial Concurrency | `spawn` | Developer-controlled DAG | ⚠️ Partial | Intermediate users, need controlled concurrency |
-| **L3** | Full Concurrency | Default | Automatic DAG analysis | ✅ Full | Experts, automatic parallelism optimization |
-
-#### L1: `@block` Synchronous Mode
+#### L1: @block Synchronous Mode
 
 ```yaoxiang
-# L1: @block synchronous mode (no DAG, pure sequential execution)
-fetch_sync: (String) -> JSON @block = (url) => {
-    HTTP.get(url).json()
-}
-
-main: () -> Void @block = () => {
-    # Strictly sequential execution, no concurrency at all
-    data1 = fetch_sync("https://api.example.com/data1")
-    data2 = fetch_sync("https://api.example.com/data2")
-    process(data1, data2)
+main: () -> Void @block = {
+    data1 = fetch_sync("api1")
+    data2 = fetch_sync("api2")
+    process(data1, data2)    # Strict order, no concurrency
 }
 ```
 
-#### L2: Explicit spawn Concurrency
+#### L2: Controllable Concurrency within @block
 
 ```yaoxiang
-# L2: Explicit spawn concurrency
-fetch_data: (String) -> JSON spawn = (url) => {
-    HTTP.get(url).json()
-}
-
-process_users_and_posts: () -> Void spawn = () => {
-    users = fetch_data("https://api.example.com/users")
-    posts = fetch_data("https://api.example.com/posts")
-    # users and posts execute automatically in parallel
-    print("Users: " + users.length.to_string())
-    print("Posts: " + posts.length.to_string())
+# spawn can only be used inside @block functions
+main: () -> Void @block = {
+    spawn { data1 = fetch_data("api1") }
+    spawn { data2 = fetch_data("api2") }
+    # Wait for all spawns to complete (standard library controlled)
+    process(data1, data2)
 }
 ```
 
 #### L3: Fully Transparent (Default)
 
 ```yaoxiang
-# L3: Fully transparent (default mode)
-heavy_calc: (Int) -> Int = (n) => {
-    fibonacci(n)
-}
+# No annotations needed, compiler automatically analyzes DAG
+heavy_calc: (n: Int) -> Int = fibonacci(n)
 
-auto_parallel: (Int) -> Int = (n) => {
-    a = heavy_calc(1)
-    b = heavy_calc(2)
-    c = heavy_calc(3)
-    a + b + c  # Wait for all results here
+auto_parallel: (n: Int) -> Int = {
+    a = heavy_calc(1)    # Automatic parallel
+    b = heavy_calc(2)    # Automatic parallel
+    c = heavy_calc(3)    # Automatic parallel
+    a + b + c            # Wait for all results when values are needed
 }
 ```
 
-### 2. Three Annotations Complete Comparison
+### 2. Annotation Complete Comparison
 
-| Dimension | `@auto` (Default) | `@eager` | `@block` |
-|-----------|---------------------|----------|----------|
-| **spawn Execution** | Asynchronous, scheduler responds | Asynchronous + suspend and wait | Force synchronous execution |
-| **Normal Call** | Asynchronous | Synchronous | Synchronous |
-| **Parallelism** | ✅ Full | ⚠️ Partial | ❌ None |
-| **Scheduler Participation** | ✅ Full participation | ✅ Full participation | ❌ No participation |
-| **DAG Construction** | ✅ Construct | ✅ Construct | ❌ Not construct |
+| Dimension | Default (no annotation) | `@eager` | `@block` | `spawn` |
+|-----------|------------------------|----------|----------|---------|
+| **Execution** | Automatic DAG analysis | Synchronous wait for dependencies | Pure sequential | Concurrency within @block |
+| **Parallelism** | ✅ Full | ⚠️ In dependency order | ❌ None | ⚠️ Partial |
+| **DAG Construction** | ✅ | ✅ | ❌ | ✅ |
 
 **Selection Guide**:
-- Maximum concurrency optimization → `@auto` (default)
+- Maximum concurrency → No annotation (default)
 - Need ordered side effects → `@eager`
 - Debugging/beginners/critical code → `@block`
+- Need concurrency within @block → `spawn`
 
 ```yaoxiang
-# @auto (default): Maximum parallelism
-heavy_calc: (Int) -> Int = (n) => {
-    fibonacci(n)  # Default automatic parallelism
+# Default: maximize parallelism
+calc_all: () -> Int = {
+    a = heavy_calc(1)    # Automatic parallel
+    b = heavy_calc(2)    # Automatic parallel
+    a + b
+}
+
+# @eager: synchronous wait
+calc_seq: () -> Int @eager = {
+    a = heavy_calc(1)    # Synchronous execution
+    b = heavy_calc(2)    # Synchronous execution
+    a + b
+}
+
+# @block: pure sequential
+calc_simple: () -> Int @block = {
+    a = heavy_calc(1)    # Force synchronous
+    b = heavy_calc(2)    # Synchronous
+    a + b
+}
+
+# spawn: concurrency within @block
+calc_mixed: () -> Int @block = {
+    spawn { heavy_calc(1) }
+    spawn { heavy_calc(2) }
+    heavy_calc(3)        # Synchronous
 }
 ```
 
-> **Note**: The `@auto` annotation explicitly indicates automatic parallelism, making code intent clearer. Its behavior is identical to no annotation, only for readability improvement.
+### 3. DAG Dependency Analysis
 
-### 3. Error Handling: Result Type System
+#### 3.1 Core Principle: Bottom-Up Execution
 
-#### 3.1 Result Type Definition
+```
+User code (synchronous syntax):
+    a = fetch(url0)
+    b = fetch(url1)
+    print(a)
+
+Compile-time analysis (bottom-up):
+    print(a) needs a → depends on fetch(url0)
+    fetch(url1) nobody needs → isolated DAG
+
+Runtime scheduling (starting from leaves):
+    fetch(url0) → print(a)    ← dependency chain, in order
+    fetch(url1)                ← isolated, parallel independently
+```
+
+**Key Insight**: Not "top-down" generating Futures, but "bottom-up" reverse analysis of dependencies from results.
+
+#### 3.2 Isolated DAG: Independent Parallelism
+
+```
+Main flow: fetch(url0) → process → print
+Isolated:  fetch(url1)  ← nobody needs the result, parallel independently
+
+Scheduler: main flow executes by dependency chain, isolated uses another core in parallel
+```
+
+#### 3.3 Resource Types and Side Effects
+
+**Core Idea**: Resource operations are marked through types, DAG automatically constructs dependencies. Same resource operations are automatically serialized, different resources are automatically parallelized.
+
+**Resource Type Boundaries — Clear Definition**:
+
+Resource types are compiler-built-in marked types. The following types are recognized by the compiler as resources:
+
+| Resource Type | Description | Compiler Behavior |
+|---------------|-------------|-------------------|
+| `FilePath` | Filesystem path | Same-path operations auto-serialized |
+| `HttpUrl` | HTTP endpoint | Same URL operations auto-serialized |
+| `DBUrl` | Database connection | Same connection operations auto-serialized |
+| `Console` | Standard output | All Console operations auto-serialized |
+
+User-defined resource types require explicit marking:
+```yaoxiang
+Database: Resource              # Explicitly mark as resource type
+query: (Database, String) -> Result(Row, Error)
+# Parameter Database is Resource, automatically recognized as resource operation
+```
+
+Types not marked as Resource are not tracked by the compiler for resource dependencies.
+
+**Usage Rules**:
+- Pass resource handles through variables, DAG automatically manages order
+- Using literals directly with the same resource is a user design issue, not the language's responsibility
 
 ```yaoxiang
-# Standard Result type definition
-Result: Type[T, E] = {
-    ok: (T) -> Self,
-    err: (E) -> Self,
-    is_ok: (Self) -> Bool,
-    is_err: (Self) -> Bool,
-    unwrap: (Self) -> T,
-    unwrap_err: (Self) -> E,
-    map: [U]((T) -> U) -> Result[U, E],
-    map_err: [F]((E) -> F) -> Result[T, F],
-}
+# ✅ Correct: variable passing, DAG auto-serializes
+filename: String = "data.txt"
+File.write(filename, x)
+File.write(filename, y)    # DAG serializes
+
+# ⚠️ User responsibility: literals
+File.write("data.txt", x)
+File.write("data.txt", y)  # May be parallel, user is responsible
 ```
 
-#### 3.2 Error Propagation Operator `?`
+#### 3.4 Infinite Loop Handling
+
+```
+1 loop → Direct synchronous execution, zero scheduling overhead
+Multiple loops → Scheduler slices and switches, true concurrency
+```
+
+### 4. Result Type and Error Handling
 
 ```yaoxiang
-# Error propagation with ?
-process_data: (String) -> Result[Data, Error] = (input) => {
-    parsed = parse(input)?          # Automatically propagate if error
-    validated = validate(parsed)?   # Continue propagating if error
-    transform(validated)?           # Continue propagating if error
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }
+
+# ? operator transparently propagates
+process: () -> Result(Data, Error) = {
+    data = fetch_data()?
+    processed = transform(data)?
+    save(processed)?
 }
 ```
 
-#### 3.3 Pattern Matching Error Handling
+### 5. DAG Node Design
 
-```yaoxiang
-# Explicit error handling with match
-result: Result[Int, String] = divide(10, 2)
+```rust
+enum NodeKind {
+    Task,      // Task node
+    Value,     // Value node
+    Control,   // Control flow node
+}
 
-match result {
-    ok(value) => print("Success: " + value.to_string()),
-    err(error) => print("Error: " + error),
+struct Node {
+    id: NodeId,
+    kind: NodeKind,
+    inputs: Vec<ValueNodeId>,   // Input dependencies
+    outputs: Vec<ValueNodeId>,  // Output values
+    span: Span,                 // Source location
 }
 ```
 
-### 4. Side Effect Handling
+| Edge Type | Symbol | Semantics |
+|-----------|--------|-----------|
+| DataEdge | → | Data dependency (value flow) |
+| ControlEdge | ● | Control dependency (sequential execution) |
+| SpawnEdge | ◎ | Concurrency entry (parallelizable starting point) |
 
-#### 4.1 Side Effect Classification
-
-| Category | Example | Handling Strategy |
-|----------|---------|-------------------|
-| **Pure Computation** | `fibonacci(n)` | Fully parallelizable |
-| **IO Operations** | `HTTP.get(url)` | Spawn, DAG dependent |
-| **State Mutation** | `counter += 1` | Require Sync constraint |
-| **System Calls** | `file.write()` | Spawn, DAG dependent |
-
-#### 4.2 Side Effect Annotation
-
-```yaoxiang
-# Mark side effects explicitly
-@side_effect(io)
-fetch_user: (Int) -> User spawn = (id) => {
-    database.query("SELECT * FROM users WHERE id = " + id.to_string())
-}
-
-@side_effect(mutating)
-increment: (ref Int) -> Void = (counter) => {
-    counter.value = counter.value + 1
-}
-```
-
-### 5. Resource Type Design
-
-#### 5.1 Send Constraint
-
-Types that can safely be transferred across threads:
-
-```yaoxiang
-# Send constraint definition
-Send: Type = {
-    # Empty marker interface
-}
-
-# Derive Send automatically
-# All primitive types: Int, Float, Bool, String, etc.
-# Immutable structs where all fields are Send
-# Result[T, E] where T: Send and E: Send
-# Arc[T] where T: Send
-```
-
-#### 5.2 Sync Constraint
-
-Types that can be safely shared across threads through references:
-
-```yaoxiang
-# Sync constraint definition
-Sync: Type = {
-    # Empty marker interface
-}
-
-# Derive Sync automatically
-# Types where &T is Send
-# Immutable types are Sync by default
-# Mutex[T] provides interior mutability while remaining Sync
-```
-
-#### 5.3 Send + Sync Hierarchy
+### 6. Type System
 
 ```
-Send ──► Can safely transfer across threads
-  │
-  └──► Sync ──► Can safely share across threads
-       │
-       └──► Types satisfying Send + Sync can automatically be concurrent
+Send → Can safely transfer across threads
+Sync → Can safely share across threads
+Arc(T) implements Send + Sync (thread-safe reference counting)
 ```
-
-### 6. Concurrency Model and Ownership Integration
-
-#### 6.1 Ownership in Concurrent Context
-
-```yaoxiang
-# Default Move semantics
-process_data: (Data) -> Result[Output, Error] = (data) => {
-    # data ownership transferred in
-    # Original binding invalid after call
-}
-
-# Shared reference with Arc
-shared_data: ref Data = ref large_data
-spawn(() => process(shared_data))   # ✅ Safe: Arc is Send + Sync
-```
-
-#### 6.2 Data Race Prevention
-
-```yaoxiang
-# Send constraint prevents data races at compile time
-SafeCounter: Type = { value: Int }
-
-# Arc provides thread-safe shared ownership
-counter: ref SafeCounter = ref SafeCounter(Mutex.new(0))
-
-spawn(() => {
-    guard = counter.value.lock()
-    guard.value = guard.value + 1
-})
-```
-
-### 7. Concurrency Debugging: Error Graph Visualization
-
-#### 7.1 Error Graph Concept
-
-Error graph is a directed acyclic graph (DAG) representing task dependencies and error propagation paths.
-
-#### 7.2 Error Graph Generation
-
-```yaoxiang
-# Enable error graph generation
-@concurrency(debug: true)
-process: (String) -> Result[Output, Error] = (input) => {
-    # ... processing logic
-}
-```
-
-#### 7.3 Error Graph Visualization Output
-
-```
-Error Graph for process("input"):
-┌─────────────────────────────────────────────────────────────┐
-│ nodes:                                                     │
-│   [A] parse(input)                    → Result[Data, E1] │
-│   [B] validate(data)                   → Result[Data, E2] │
-│   [C] transform(validated)              → Result[Output, E3]│
-│                                                             │
-│ edges:                                                      │
-│   A ──► B (B depends on A result)                          │
-│   B ──► C (C depends on B result)                           │
-│                                                             │
-│ error_propagation:                                          │
-│   If A fails → B and C not executed                        │
-│   If B fails → C not executed, error contains A's error    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 8. Scheduler Design
-
-#### 8.1 Scheduler Responsibilities
-
-| Responsibility | Description |
-|---------------|-------------|
-| **Task Scheduling** | Manage ready queue, execute tasks |
-| **Work Stealing** | Idle threads steal tasks from busy threads |
-| **Dependency Resolution** | Build and manage DAG |
-| **Error Propagation** | Propagate errors through dependency chain |
-
-#### 8.2 Scheduler Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Scheduler Core                          │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ Work Queue  │  │ Wait Queue  │  │ Dependency Analyzer │ │
-│  │ (Per Thread)│  │ (Global)    │  │ (DAG Builder)      │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │ Work Stealer│  │ Error       │  │ Performance         │ │
-│  │ (Balancing) │  │ Handler     │  │ Profiler           │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 9. Runtime Design
-
-#### 9.1 Runtime Components
-
-| Component | Responsibility |
-|-----------|---------------|
-| **Task Descriptor** | Describe task metadata, dependencies |
-| **DAG Builder** | Build dependency graph at runtime |
-| **Scheduler** | Schedule and execute tasks |
-| **Work Stealing Queue** | Load balancing between threads |
-| **Error Propagation** | Propagate errors through DAG |
-| **Memory Allocator** | Support concurrent allocation |
-
-#### 9.2 Task Lifecycle
-
-```
-Created ──► Ready ──► Running ──► Waiting ──► Ready ──► Completed
-              │              │            │
-              │              ▼            │
-              │         Blocked          │
-              │              │            │
-              └──────────────┴────────────┘
-                        (by dependency)
-```
-
-### 10. Type System Integration
-
-#### 10.1 Async Function Type
-
-```yaoxiang
-# Async function type representation
-Async: Type[T] = {
-    # Opaque type representing ongoing computation
-    # Can be awaited when result needed
-}
-```
-
-#### 10.2 is_async Flag
-
-```yaoxiang
-# Type system tracks async capability
-Function: Type = {
-    params: TypeList,
-    return_type: Type,
-    is_async: Bool,    # Whether function can spawn
-    send_constraint: Bool,
-    sync_constraint: Bool,
-}
-```
-
-### 11. Exception Handling
-
-#### 11.1 Exception Types
-
-```yaoxiang
-# Exception hierarchy
-Exception: Type = {
-    RuntimeError,
-    TypeError,
-    ValueError,
-    IOError,
-    TimeoutError,
-}
-
-# Exception as error variant
-Result: Type[T, E] = {
-    ok: (T) -> Self,
-    err: (E) -> Self,    # E can be Exception or custom error
-}
-```
-
-#### 11.2 Exception Propagation
-
-```yaoxiang
-# Exceptions as special error values
-catch_exception: (() -> T) -> Result[T, Exception] = (f) => {
-    try {
-        ok(f())
-    } catch (e: Exception) {
-        err(e)
-    }
-}
-```
-
-### 12. Compiler Implementation Requirements
-
-#### 12.1 Lexer Additions
-
-| Token | Description |
-|-------|-------------|
-| `@block` | Synchronous execution annotation |
-| `@eager` | Eager evaluation annotation |
-| `@auto` | Auto parallelism annotation (default) |
-| `spawn` | Concurrent execution keyword |
-
-#### 12.2 Parser Additions
-
-| Grammar Rule | Description |
-|--------------|-------------|
-| `Annotation` | Parse annotation syntax |
-| `SpawnFn` | Parse spawn function definition |
-| `SpawnBlock` | Parse concurrent block |
-| `SpawnFor` | Parse concurrent for loop |
-
-#### 12.3 Type Checker Additions
-
-| Check | Description |
-|-------|-------------|
-| `send_check` | Verify Send constraint |
-| `sync_check` | Verify Sync constraint |
-| `async_signature` | Verify async function signatures |
-| `error_propagation` | Verify error propagation paths |
-
-#### 12.4 IR Additions
-
-| Instruction | Description |
-|-------------|-------------|
-| `CallAsync` | Async function call |
-| `Await` | Wait for async result |
-| `Spawn` | Create new task |
-| `Sync` | Synchronization barrier |
-
-#### 12.5 Code Generator Additions
-
-| Generation | Description |
-|------------|-------------|
-| `async_codegen` | Generate async function code |
-| `dag_builder_codegen` | Generate DAG building code |
-| `error_propagation_codegen` | Generate error propagation code |
-| `scheduler_codegen` | Generate scheduler interaction code |
-
-### 13. Implementation Phases
-
-#### Phase 1: Core Infrastructure (v0.3)
-
-| Component | Deliverables |
-|-----------|--------------|
-| Lexer/Parser | Support @block/@eager/@auto, spawn syntax |
-| Type System | Send/Sync constraint checking |
-| IR | CallAsync, Await instructions |
-| Code Generation | Basic async function calls |
-
-#### Phase 2: Scheduler and Runtime (v0.4)
-
-| Component | Deliverables |
-|-----------|--------------|
-| Scheduler | Work queue, basic scheduling |
-| Runtime | Task descriptor, DAG builder |
-| Memory | Concurrent memory allocator |
-| Integration | Scheduler integration |
-
-#### Phase 3: Advanced Features (v0.5)
-
-| Component | Deliverables |
-|-----------|--------------|
-| Work Stealing | Load balancing between threads |
-| Error Graph | Error propagation and visualization |
-| Profiling | Performance profiling tools |
-| Optimization | Advanced scheduling optimization |
-
-### 14. Backward Compatibility
-
-#### Compatibility Analysis
-
-| Feature | Backward Compatible | Migration Path |
-|---------|---------------------|----------------|
-| `@auto` (default) | ✅ Yes | No changes needed |
-| `@eager` | ✅ Yes | No changes needed |
-| `@block` | ✅ Yes | No changes needed |
-| `spawn` | ✅ Yes | No changes needed |
-| Result type | ✅ Yes | Optional use |
-| Error propagation | ✅ Yes | Optional use |
-
-### 15. Migration Strategy
-
-#### Gradual Adoption
-
-1. **v0.3**: Core infrastructure, opt-in usage
-2. **v0.4**: Scheduler complete, default for new code
-3. **v0.5**: Full optimization, complete migration
-
-#### Migration Guidelines
-
-```yaoxiang
-# Old synchronous code
-process: (String) -> JSON = (url) => {
-    HTTP.get(url).json()
-}
-
-# New concurrent code (gradual migration)
-process: (String) -> JSON @auto = (url) => {
-    HTTP.get(url).json()
-}
-```
-
-### 16. Known Limitations
-
-| Limitation | Description | Solution |
-|------------|-------------|----------|
-| Complex DAG Analysis | Deeply nested dependencies | Limit DAG depth |
-| Error Graph Overhead | Visualization has performance cost | Debug-only mode |
-| Scheduler Complexity | Full work stealing is complex | Simplified scheduling first |
-| FFI Integration | Foreign function interface | Future work |
-
-### 17. References
-
-- [async-whitepaper](../async-whitepaper.md) - Theoretical foundation
-- [language-spec](../language-spec.md) - Language specification
-- [Rust async book](https://rust-lang.github.io/async-book/) - Reference for async design
-- [Go scheduler](https://golang.org/src/runtime/proc.go) - Reference for work stealing
 
 ---
 
-## Appendix A: Design Decision Records
+## Tradeoffs
 
-| Decision | Decision | Date | Recorder |
-|----------|----------|------|----------|
-| Three-layer model | L1/L2/L3 mental model with unified mechanism | 2025-01-05 | ChenXu |
-| Annotation names | Use @block/@eager/@auto | 2025-01-05 | ChenXu |
-| Result type naming | Use ok/err variants | 2025-01-05 | ChenXu |
-| Error graph format | DAG with error propagation | 2025-01-06 | ChenXu |
+### Advantages
 
-## Appendix B: Glossary
+1. **Progressive Adoption**: Three-layer model adapts to different skill levels
+2. **Natural Syntax**: Synchronous code gains parallel performance
+3. **Compile-time Safety**: Send/Sync constraints eliminate data races
+4. **Debuggability**: Error graph provides clear view of error propagation
+
+### Disadvantages
+
+1. **Learning Curve**: Need to understand DAG dependency concepts
+2. **Compile Time**: Whole-program DAG analysis may be slow
+3. **Toolchain Complexity**: Need brand new debugging and visualization tools
+
+## Alternatives
+
+| Alternative | Why Not Chosen |
+|-------------|----------------|
+| Only explicit async/await | Cannot achieve transparent concurrency |
+| Only fully transparent concurrency | Users lose control |
+| Go-style goroutine | No type safety, no compile-time checking |
+| Only L1 mode | Abandon core value of spawn model |
+
+## Implementation Strategy
+
+### Phase Breakdown
+
+1. **Phase 1 (v0.1)**: @block synchronous mode, basic types
+2. **Phase 2 (v0.2)**: FlowScheduler scheduler
+3. **Phase 3 (v0.3)**: spawn block, explicit concurrency
+4. **Phase 4 (v0.5)**: L3 full transparency, automatic DAG analysis
+5. **Phase 5 (v0.6)**: Error graph, graph debugger
+6. **Phase 6 (v1.0)**: Production-ready optimization
+
+### Dependencies
+
+- RFC-001 has no external dependencies (base core)
+- RFC-008 (Runtime Concurrency Model) → Design complete
+- RFC-011 (Generics System) → Design complete
+
+### Risks
+
+1. **DAG Analysis Performance**: Whole-program analysis may be O(n²), needs optimization
+2. **Missing Toolchain**: Debugger needs to be developed from scratch
+3. **User Adoption**: Transparent concurrency needs good documentation
+
+---
+
+## Design Decision Log
+
+| Decision | Resolution | Date |
+|----------|------------|------|
+| Three-layer concurrency architecture | L1/L2/L3 progressive | 2025-01-05 |
+| @block annotation position | After return type | 2025-01-05 |
+| DAG error propagation | Propagate upstream along dependency edges | 2025-01-06 |
+| DAG performance optimization | Incremental construction + caching | 2025-01-06 |
+| Runtime selection | Generics + compile-time injection | 2025-01-06 |
+| Node interface | Generics + function injection (no trait) | 2025-01-06 |
+| Error graph memory | DAG only constructed within single function | 2025-01-06 |
+| Resource conflict detection | DAG data flow dependency, user variable passing | 2025-01-06 |
+| Resource type system | Resource marker + DAG auto-dependency | 2026-01-06 |
+| L1/L2/L3 mental model | Three-layer abstraction, not implementation mechanism | 2026-01-06 |
+| @auto annotation | Removed, duplicates default behavior | 2026-05-11 |
+| L1 auto-fallback | Removed, behavior unpredictable | 2026-05-11 |
+
+---
+
+## Appendix: Glossary
 
 | Term | Definition |
 |------|------------|
-| Concurrency Model | Programming paradigm where multiple computations execute simultaneously |
-| DAG | Directed Acyclic Graph, represents task dependencies |
-| Spawn | Create concurrent execution unit |
-| Send Constraint | Type can be safely transferred across threads |
-| Sync Constraint | Type can be safely shared across threads |
-| Work Stealing | Load balancing technique where idle threads steal work |
-| Error Graph | Visualization of error propagation paths |
-| Async Function | Function that can execute concurrently |
+| Spawn Model | YaoXiang's concurrency paradigm: synchronous syntax, async nature |
+| DAG | Directed Acyclic Graph, describes computation dependency relationships |
+| spawn | Controllable concurrency within @block scope |
+| @block | Synchronous annotation, disables concurrency optimization |
+| @eager | Eager evaluation, wait for dependencies to complete |
+| Resource | Resource type marker, operations auto-construct DAG dependencies |
+| Error Graph | Visualized error propagation path |
+
+## References
+
+- [Rust async book](https://rust-lang.github.io/async-book/)
+- [Go Concurrency Patterns](https://golang.org/doc/effective_go#concurrency)
+- [Work Stealing Scheduling](https://en.wikipedia.org/wiki/Work_stealing)
+- [Spawn Model Whitepaper](/src/archive/async-whitepaper)
+- [YaoXiang Language Specification](/src/design/language-spec)

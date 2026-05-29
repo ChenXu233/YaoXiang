@@ -1,5 +1,5 @@
 use std.io
 
 main = {
-    std.io.println("Hello via namespace!")
+    io.println("Hello via namespace!")
 }

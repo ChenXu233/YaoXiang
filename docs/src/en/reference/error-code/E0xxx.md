@@ -1,158 +1,95 @@
-﻿# E0xxx: Lexer & Parser
+# E0xxx: Lexical and Syntax Analysis
 
-> Errors occurring during lexical and parsing stages.
+> Automatically generated from `src/util/diagnostic/codes/`
+
+## Error List
 
 ## E0001: Invalid character
 
-Source code contains illegal characters.
+**Category**: Lexer
 
-```yaoxiang
-x = ¥100;  # ¥ is not a valid character
-```
+**Message**: Source contains illegal character
 
-```
-error[E0001]: Invalid character
-  --> example.yx:1:10
-   |
- 1 | x = ¥100;
-   |          ^ illegal character '¥'
-```
+**Help**: Remove the illegal character
+
+---
 
 ## E0002: Invalid number literal
 
-Number literal format is incorrect.
+**Category**: Lexer
 
-```yaoxiang
-x = 1_000_000_;  # Underscore in wrong position
-```
+**Message**: Number literal format is incorrect
 
-```
-error[E0002]: Invalid number literal
-  --> example.yx:1:10
-   |
- 1 | x = 1_000_000_;
-   |          ^ invalid digit '_' in numeric literal
-```
+**Help**: Check the format of the number literal
+
+---
 
 ## E0003: Unterminated string
 
-Multi-line string missing closing quote.
+**Category**: Lexer
 
-```yaoxiang
-greeting = "Hello, World;
-```
+**Message**: Multi-line string is missing closing quote
 
-```
-error[E0003]: Unterminated string
-  --> example.yx:1:18
-   |
- 1 | greeting = "Hello, World;
-   |                  ^ string never terminates
-```
+**Help**: Add the closing quote for the string
+
+---
 
 ## E0004: Invalid character literal
 
-Character literal is incorrect.
+**Category**: Lexer
 
-```yaoxiang
-c = 'ab';  # Character can only contain one character
-```
+**Message**: Character literal is incorrect
 
-```
-error[E0004]: Invalid character literal
-  --> example.yx:1:10
-   |
- 1 | c = 'ab';
-   |          ^^^ character literal must contain exactly one character
-```
+**Help**: Character literals must contain exactly one character
+
+---
 
 ## E0010: Expected token
 
-Parser expects a specific token.
+**Category**: Parser
 
-```yaoxiang
-add: (a: Int, b: Int)  Int = {  # Missing ->
-    a + b
-}
-```
+**Message**: Parser expected a specific token
 
-```
-error[E0010]: Expected token
-  --> example.yx:1:28
-   |
- 1 | add: (a: Int, b: Int)  Int = {
-   |                      ^^ expected '->'
-```
+**Help**: Check the syntax and add the expected token
+
+---
 
 ## E0011: Unexpected token
 
-Encountered an unexpected token.
+**Category**: Parser
 
-```yaoxiang
-x = 10;
-x +++;  # Unexpected ++
-```
+**Message**: Encountered an unexpected token
 
-```
-error[E0011]: Unexpected token
-  --> example.yx:2:3
-   |
- 2 | x +++;
-   |   ^^ unexpected token '++'
-```
+**Help**: Remove or replace the unexpected token
+
+---
 
 ## E0012: Invalid syntax
 
-Expression/statement syntax error.
+**Category**: Parser
 
-```yaoxiang
-if x > 0 {
-    print(x)  # Missing {}
-}
-```
+**Message**: Expression/statement has syntax error
 
-```
-error[E0012]: Invalid syntax
-  --> example.yx:2:5
-   |
- 2 |     print(x)
-   |     ^ expected '{' after if condition
-```
+**Help**: Check the syntax of the expression or statement
+
+---
 
 ## E0013: Mismatched brackets
 
-Parentheses, brackets, braces do not match.
+**Category**: Parser
 
-```yaoxiang
-result = (1 + 2 * 3;
-```
+**Message**: Parentheses, brackets, or braces are mismatched
 
-```
-error[E0013]: Mismatched brackets
-  --> example.yx:1:20
-   |
- 1 | result = (1 + 2 * 3;
-   |                    ^ unclosed '('
-```
+**Help**: Ensure all brackets are properly closed
+
+---
 
 ## E0014: Missing semicolon
 
-Statement missing semicolon (for old syntax requiring semicolons).
+**Category**: Parser
 
-```yaoxiang
-x = 10;
-y = 20;
-```
+**Message**: Statement is missing a semicolon
 
-```
-error[E0014]: Missing semicolon
-  --> example.yx:2:1
-   |
- 2 | y = 20
-   | ^ expected ';' after variable declaration
-```
+**Help**: Add a semicolon at the end of the statement
 
-## Related
-
-- [E1xxx: Type Checking](./E1xxx.md)
-- [Error Code Index](./index.md)
+---

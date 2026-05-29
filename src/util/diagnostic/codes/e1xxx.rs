@@ -125,6 +125,29 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::TypeCheck,
         message_template: "Unknown label: '{label}'",
     },
+    // === RFC-001/008: 并发语义约束 ===
+    ErrorCodeDefinition {
+        code: "E1080",
+        category: ErrorCategory::TypeCheck,
+        message_template: "`spawn` is only allowed inside @block scope (current: @{mode})",
+    },
+    // === RFC-001: Result/? 错误传播 ===
+    ErrorCodeDefinition {
+        code: "E1081",
+        category: ErrorCategory::TypeCheck,
+        message_template: "`?` is only allowed inside functions returning Result",
+    },
+    ErrorCodeDefinition {
+        code: "E1082",
+        category: ErrorCategory::TypeCheck,
+        message_template: "`?` requires a Result expression, found '{type}'",
+    },
+    ErrorCodeDefinition {
+        code: "E1083",
+        category: ErrorCategory::TypeCheck,
+        message_template:
+            "Result error type mismatch for `?`: expected '{expected}', found '{found}'",
+    },
     // === RFC-010: Type 元类型 ===
     // E1090: Type: Type = Type 彩蛋 (Note 级别)
     ErrorCodeDefinition {
@@ -325,6 +348,35 @@ impl ErrorCodeDefinition {
     pub fn unknown_label(label: &str) -> DiagnosticBuilder {
         let def = Self::find("E1070").unwrap();
         DiagnosticBuilder::new(def.code, def.message_template).param("label", label)
+    }
+
+    /// E1080 spawn 仅允许在 @block 作用域内使用
+    pub fn spawn_only_allowed_in_block(mode: &str) -> DiagnosticBuilder {
+        let def = Self::find("E1080").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("mode", mode)
+    }
+
+    /// E1081 `?` 仅允许在返回 Result 的函数内使用
+    pub fn try_only_allowed_in_result() -> DiagnosticBuilder {
+        let def = Self::find("E1081").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
+    }
+
+    /// E1082 `?` 只能用于 Result 表达式
+    pub fn try_requires_result(type_: &str) -> DiagnosticBuilder {
+        let def = Self::find("E1082").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template).param("type", type_)
+    }
+
+    /// E1083 `?` 的错误类型不匹配
+    pub fn try_error_type_mismatch(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
+        let def = Self::find("E1083").unwrap();
+        DiagnosticBuilder::new(def.code, def.message_template)
+            .param("expected", expected)
+            .param("found", found)
     }
 
     /// E1091 泛型元类型自指错误

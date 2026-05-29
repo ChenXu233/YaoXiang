@@ -16,12 +16,18 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Exit, Initialized,
     PublishDiagnostics,
 };
-use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shutdown};
+use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Rename, Shutdown};
 use lsp_types::request::HoverRequest;
 use lsp_types::request::SemanticTokensFullRequest;
 use lsp_types::request::SemanticTokensFullDeltaRequest;
+use lsp_types::request::SemanticTokensRefresh;
+use lsp_types::request::Formatting;
+use lsp_types::request::RangeFormatting;
+use lsp_types::request::InlayHintRequest;
 use lsp_types::InitializeParams;
 use tracing::{debug, info, warn};
+
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::lsp::handlers;
 use crate::lsp::protocol;
@@ -44,6 +50,11 @@ pub fn run_lsp_server() -> Result<()> {
     let mut session = Session::new();
     let mut world = World::new();
 
+    // 加载标准库符号到索引
+    world.load_std_library_symbols(None);
+    // 加载内置类型到索引
+    world.load_builtin_types();
+
     // 主消息循环
     main_loop(&connection, &mut session, &mut world)?;
 
@@ -55,6 +66,20 @@ pub fn run_lsp_server() -> Result<()> {
 }
 
 /// 主消息循环
+static OUTGOING_REQUEST_ID: AtomicI32 = AtomicI32::new(1);
+
+fn request_semantic_tokens_refresh(connection: &Connection) {
+    let id = OUTGOING_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    let req = lsp_server::Request {
+        id: id.into(),
+        method: <SemanticTokensRefresh as lsp_types::request::Request>::METHOD.to_string(),
+        params: serde_json::Value::Null,
+    };
+    if let Err(e) = connection.sender.send(Message::Request(req)) {
+        warn!("failed to request semanticTokens refresh: {}", e);
+    }
+}
+
 fn main_loop(
     connection: &Connection,
     session: &mut Session,
@@ -112,7 +137,7 @@ fn handle_request(
         m if m == <Initialize as lsp_types::request::Request>::METHOD => {
             let params: InitializeParams = serde_json::from_value(req.params).unwrap_or_default();
             Some(handlers::initialize::handle_initialize(
-                session, req.id, params,
+                session, world, req.id, params,
             ))
         }
 
@@ -123,7 +148,7 @@ fn handle_request(
 
         // textDocument/completion
         m if m == <Completion as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::CompletionParams>(req.params) {
                 Ok(params) => {
                     let result = handlers::completion::handle_completion(session, world, params);
                     Some(protocol::ok_response(req.id, result))
@@ -172,6 +197,47 @@ fn handle_request(
             }
         }
 
+        // textDocument/rename
+        m if m == <Rename as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::rename::handle_rename(session, world, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("重命名请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/codeAction
+        "textDocument/codeAction" => {
+            match serde_json::from_value::<lsp_types::CodeActionParams>(req.params) {
+                Ok(params) => {
+                    // 获取文档内容
+                    let uri = params.text_document.uri.as_str();
+                    let content = session
+                        .document_store()
+                        .get(uri)
+                        .map(|d| d.content())
+                        .unwrap_or_default();
+                    let result = handlers::code_action::handle_code_action(params, content);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("Code action 请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
         // textDocument/hover
         m if m == <HoverRequest as lsp_types::request::Request>::METHOD => {
             match serde_json::from_value(req.params) {
@@ -191,11 +257,17 @@ fn handle_request(
 
         // textDocument/semanticTokens/full
         m if m == <SemanticTokensFullRequest as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::SemanticTokensParams>(req.params) {
                 Ok(params) => {
+                    let uri = params.text_document.uri.as_str();
+                    let document_text = session.document_store().get(uri).map(|d| d.content());
                     let (db, cache) = world.semantic_db_and_cache();
-                    let result =
-                        handlers::semantic_tokens::handle_semantic_tokens_full(db, cache, params);
+                    let result = handlers::semantic_tokens::handle_semantic_tokens_full(
+                        db,
+                        cache,
+                        document_text,
+                        params,
+                    );
                     Some(protocol::ok_response(req.id, result))
                 }
                 Err(e) => {
@@ -210,11 +282,16 @@ fn handle_request(
 
         // textDocument/semanticTokens/full/delta
         m if m == <SemanticTokensFullDeltaRequest as lsp_types::request::Request>::METHOD => {
-            match serde_json::from_value(req.params) {
+            match serde_json::from_value::<lsp_types::SemanticTokensDeltaParams>(req.params) {
                 Ok(params) => {
+                    let uri = params.text_document.uri.as_str();
+                    let document_text = session.document_store().get(uri).map(|d| d.content());
                     let (db, cache) = world.semantic_db_and_cache();
                     let result = handlers::semantic_tokens::handle_semantic_tokens_full_delta(
-                        db, cache, params,
+                        db,
+                        cache,
+                        document_text,
+                        params,
                     );
                     Some(protocol::ok_response(req.id, result))
                 }
@@ -227,6 +304,72 @@ fn handle_request(
                 }
             }
         }
+
+        // textDocument/formatting
+        m if m == <Formatting as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::formatting::handle_formatting(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("格式化请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/rangeFormatting
+        m if m == <RangeFormatting as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::formatting::handle_range_formatting(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("范围格式化请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // textDocument/inlayHint
+        m if m == <InlayHintRequest as lsp_types::request::Request>::METHOD => {
+            match serde_json::from_value(req.params) {
+                Ok(params) => {
+                    let result = handlers::inlay_hint::handle_inlay_hint(session, params);
+                    Some(protocol::ok_response(req.id, result))
+                }
+                Err(e) => {
+                    warn!("InlayHint请求参数解析失败: {}", e);
+                    Some(protocol::internal_error(
+                        req.id,
+                        format!("参数解析失败: {}", e),
+                    ))
+                }
+            }
+        }
+
+        // workspace/symbol
+        "workspace/symbol" => match serde_json::from_value(req.params) {
+            Ok(params) => {
+                let result = handlers::workspace_symbol::handle_workspace_symbol(world, params);
+                Some(protocol::ok_response(req.id, result))
+            }
+            Err(e) => {
+                warn!("工作区符号搜索请求参数解析失败: {}", e);
+                Some(protocol::internal_error(
+                    req.id,
+                    format!("参数解析失败: {}", e),
+                ))
+            }
+        },
 
         // 未实现的方法
         _ => {
@@ -252,6 +395,7 @@ fn handle_notification(
         m if m == <Initialized as lsp_types::notification::Notification>::METHOD => {
             info!("← 通知: initialized");
             handlers::initialize::handle_initialized(session);
+            request_semantic_tokens_refresh(connection);
         }
 
         // exit
@@ -265,6 +409,7 @@ fn handle_notification(
             if let Ok(params) = serde_json::from_value(not.params) {
                 let uri = handlers::text_document::handle_did_open(session, params);
                 update_symbol_index(session, world, &uri);
+                request_semantic_tokens_refresh(connection);
                 publish_diagnostics_for_uri(connection, session, &uri);
             }
         }
@@ -274,6 +419,7 @@ fn handle_notification(
             if let Ok(params) = serde_json::from_value(not.params) {
                 if let Some(uri) = handlers::text_document::handle_did_change(session, params) {
                     update_symbol_index(session, world, &uri);
+                    request_semantic_tokens_refresh(connection);
                     publish_diagnostics_for_uri(connection, session, &uri);
                 }
             }
@@ -327,10 +473,15 @@ fn update_symbol_index(
         world.update_index_from_ast(uri, &parse_result.module);
 
         // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
-        let mut tc = crate::frontend::typecheck::TypeChecker::new(uri);
-        if let Ok(tc_result) = tc.check_module_collect_all(&parse_result.module) {
-            world.update_semantic_db(tc_result.semantic_db);
-        }
+        // 注意：成功路径下 check_module_collect_all 会把 semantic_db 放进 TypeCheckResult，
+        // 失败路径下 semantic_db 仍保留在 TypeChecker 内部。
+        // 因此这里必须分支提取，避免“无错误时 semantic_db 为空”的问题。
+        let mut tc = crate::frontend::core::typecheck::TypeChecker::new(uri);
+        let semantic_db = match tc.check_module_collect_all(&parse_result.module) {
+            Ok(result) => result.semantic_db,
+            Err(_) => tc.take_semantic_db(),
+        };
+        world.update_semantic_db(semantic_db);
 
         debug!(
             "已更新符号索引和语义数据库: {} ({} 个符号)",
@@ -674,6 +825,14 @@ mod tests {
             "应至少有 2 个符号，实际: {}",
             world.symbol_count()
         );
+
+        // 无语法错误时也应收集到 semantic tokens
+        let semantic_tokens = world
+            .semantic_db()
+            .get_tokens("file:///test/indexed.yx")
+            .map(|tokens| tokens.to_vec())
+            .unwrap_or_default();
+        assert!(!semantic_tokens.is_empty(), "无错误代码也应有语义 tokens");
     }
 
     #[test]
@@ -738,6 +897,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,
@@ -844,6 +1015,18 @@ mod tests {
             items: vec![Stmt {
                 kind: StmtKind::Var {
                     name: "x".to_string(),
+                    name_span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 1,
+                            offset: 0,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 2,
+                            offset: 1,
+                        },
+                    },
                     type_annotation: None,
                     initializer: None,
                     is_mut: false,

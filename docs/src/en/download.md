@@ -1,25 +1,26 @@
+```yaml
 ---
 layout: page
 is_download: true
 
 title: TYPE THE UNIVERSE
-description: "Select your platform to initiate sequence."
+description: "Choose your platform, start building the world."
 
 download:
-  latest_stable: "LATEST STABLE v{version}"
-  quick_install: "QUICK INSTALL"
-  copy: "COPY"
-  copied: "COPIED!"
-  supported: "Supported: Windows (PowerShell), macOS, Linux (x64/ARM64)"
-  download_btn: "DOWNLOAD"
-  coming_soon: "COMING SOON"
-  checksum: "checksum / signatures"
+  latest_stable: "Latest Stable v{version}"
+  quick_install: "Quick Install"
+  copy: "Copy"
+  copied: "Copied!"
+  supported: "Supported platforms: Windows (PowerShell), macOS, Linux (x64/ARM64)"
+  download_btn: "Download"
+  coming_soon: "Coming Soon"
+  checksum: "Checksum / Signature"
   build_from_source:
     title: "Build from Source"
-    description: "You can build YaoXiang from source using Cargo. Make sure you have Rust installed."
+    description: "Build YaoXiang from source using Cargo, make sure Rust is installed."
   nightly_builds:
     title: "Nightly Builds"
-    description: "Bleeding edge builds are available for testing. Not recommended for production."
+    description: "The latest cutting-edge version is available. Recommended for testing, use with caution in production."
   github_actions: "Go to GitHub Actions"
 
 versions:
@@ -52,3 +53,4 @@ versions:
 sidebar: false
 
 ---
+```
