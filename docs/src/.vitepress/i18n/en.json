@@ -68,7 +68,7 @@
             "link": "/en/tutorial/YaoXiang-book"
           },
           {
-            "text": "Getting Started from Scratch",
+            "text": "Beginner's Guide",
             "collapsed": true,
             "items": []
           }
@@ -96,7 +96,7 @@
             "link": "/en/design/manifesto-wtf"
           },
           {
-            "text": "Language Design Perspective of a 2006-born Person",
+            "text": "Language Design Perspective from Someone Born in 2006",
             "link": "/en/design/2006-born-language-design"
           }
         ]
@@ -113,7 +113,7 @@
             "link": "/en/design/rfc/RFC_TEMPLATE"
           },
           {
-            "text": "RFC Complete Template (Example)",
+            "text": "RFC Full Template (Example)",
             "link": "/en/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
@@ -175,12 +175,10 @@
       },
       {
         "text": "Error Codes",
-        "collapsed": true,
         "items": []
       },
       {
         "text": "Warning Codes",
-        "collapsed": true,
         "items": []
       },
       {
@@ -212,7 +210,7 @@
         ]
       },
       {
-        "text": "Plan",
+        "text": "Plans",
         "items": [
           {
             "text": "Plan Index",
@@ -235,7 +233,7 @@
             "link": "/en/guide/"
           },
           {
-            "text": "Package Management",
+            "text": "Package Management System",
             "link": "/en/guide/packaging"
           }
         ]
