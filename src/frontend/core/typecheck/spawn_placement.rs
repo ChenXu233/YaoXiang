@@ -258,6 +258,7 @@ impl SpawnPlacementChecker {
             }
 
             Expr::Error(_) => {}
+            Expr::Borrow { expr, .. } => self.check_expr(expr),
         }
     }
 }

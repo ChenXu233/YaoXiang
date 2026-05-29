@@ -1993,6 +1993,7 @@ impl AstToIrGenerator {
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
             ast::Expr::Error(span) => *span,
+            ast::Expr::Borrow { span, .. } => *span,
         }
     }
 

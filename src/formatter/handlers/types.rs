@@ -104,6 +104,13 @@ pub fn format_type(ty: &Type) -> String {
         Type::Literal {
             name, base_type: _, ..
         } => name.clone(),
+        Type::Ref { mutable, inner, .. } => {
+            if *mutable {
+                format!("&mut {}", format_type(inner))
+            } else {
+                format!("&{}", format_type(inner))
+            }
+        }
         Type::Ptr(inner) => format!("*{}", format_type(inner)),
         Type::MetaType { args, .. } => {
             if args.is_empty() {

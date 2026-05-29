@@ -72,6 +72,8 @@ pub enum TokenKind {
     And,
     Or,
     Not,
+    Ampersand,
+    MutRef,
     ColonColon,
     DotDotDot,
     DotDot,

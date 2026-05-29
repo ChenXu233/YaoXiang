@@ -223,6 +223,11 @@ fn type_name_hash<H: Hasher>(
             "weak".hash(state);
             type_name_hash(t, state);
         }
+        MonoType::Ref { mutable, inner } => {
+            "ref".hash(state);
+            mutable.hash(state);
+            type_name_hash(inner, state);
+        }
         MonoType::AssocType {
             host_type,
             assoc_name,

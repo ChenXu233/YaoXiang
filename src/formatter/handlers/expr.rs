@@ -165,6 +165,17 @@ pub fn format_expr(
             span: _,
         } => format_lambda(params, body, ctx),
         Expr::FString { segments, span: _ } => format_fstring(segments, ctx),
+        Expr::Borrow {
+            mutable,
+            expr: inner,
+            span: _,
+        } => {
+            if *mutable {
+                format!("&mut {}", format_expr(inner, ctx))
+            } else {
+                format!("&{}", format_expr(inner, ctx))
+            }
+        }
         Expr::Error(_span) => "/* error */".to_string(),
     }
 }

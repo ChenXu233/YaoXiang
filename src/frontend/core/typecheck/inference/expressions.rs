@@ -1090,6 +1090,20 @@ impl<'a> ExpressionInferrer<'a> {
                     .at(*span)
                     .build())
             }
+
+            // 借用表达式：&expr 或 &mut expr
+            // TODO: 详细类型检查将在后续任务中实现
+            crate::frontend::core::parser::ast::Expr::Borrow {
+                mutable,
+                expr: inner,
+                ..
+            } => {
+                let inner_ty = self.infer_expr(inner)?;
+                Ok(MonoType::Ref {
+                    mutable: *mutable,
+                    inner: Box::new(inner_ty),
+                })
+            }
         }
     }
 

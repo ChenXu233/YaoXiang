@@ -128,6 +128,13 @@ pub enum Expr {
         expr: Box<Expr>,
         span: Span,
     },
+    /// Borrow expression: `&expr` or `&mut expr`
+    /// Creates a borrow token
+    Borrow {
+        mutable: bool,
+        expr: Box<Expr>,
+        span: Span,
+    },
     /// unsafe 块：允许系统级操作
     /// `unsafe { *ptr = ... }`
     Unsafe {
@@ -464,6 +471,13 @@ pub enum Type {
     /// Raw pointer type: `*T`
     /// Only usable inside unsafe blocks
     Ptr(Box<Type>),
+    /// Reference type: `&T` (immutable) or `&mut T` (mutable)
+    /// Borrow token — zero-sized compile-time type
+    Ref {
+        mutable: bool,
+        inner: Box<Type>,
+        span: Span,
+    },
     /// Meta-type: `Type` or `Type[T]` or `Type[K, V]`
     /// RFC-010: Used in unified syntax `Name: Type = { ... }`
     /// `Type` is the only meta-type keyword in the language

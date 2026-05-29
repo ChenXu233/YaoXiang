@@ -239,6 +239,10 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             // 元类型：编译期概念，无运行时表示
             AstType::MetaType { .. } => MonoType::Void,
+            AstType::Ref { mutable, inner, .. } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(self.type_to_mono_type(inner)),
+            },
         }
     }
 
@@ -288,6 +292,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             } => Self::get_type_name(base_type) + "::" + name,
             AstType::Ptr(inner) => format!("*{}", Self::get_type_name(inner)),
             AstType::MetaType { .. } => "MetaType".to_string(),
+            AstType::Ref { inner, .. } => format!("&{}", Self::get_type_name(inner)),
         }
     }
 
@@ -338,6 +343,7 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Literal { .. } => false,
             AstType::Ptr(inner) => self.contains_type_var_type(inner),
+            AstType::Ref { inner, .. } => self.contains_type_var_type(inner),
             AstType::MetaType { .. } => false,
         }
     }
@@ -416,6 +422,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             AstType::Literal { .. } => {}
             AstType::Ptr(inner) => self.collect_type_vars_from_type(inner, type_params, seen),
+            AstType::Ref { inner, .. } => {
+                self.collect_type_vars_from_type(inner, type_params, seen)
+            }
             AstType::MetaType { .. } => {}
             AstType::Int(_)
             | AstType::Float(_)
@@ -754,6 +763,9 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             MonoType::Arc(inner) => self.collect_type_vars_from_mono_type(inner, type_params, seen),
             MonoType::Weak(inner) => {
+                self.collect_type_vars_from_mono_type(inner, type_params, seen)
+            }
+            MonoType::Ref { inner, .. } => {
                 self.collect_type_vars_from_mono_type(inner, type_params, seen)
             }
             MonoType::AssocType {

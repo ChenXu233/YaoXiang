@@ -204,6 +204,35 @@ pub enum OwnershipError {
         /// 发生位置
         location: (usize, usize),
     },
+    /// 可变借用冲突：同一来源同时存在活跃的借用
+    MutableBorrowConflict {
+        /// 借用来源
+        source: String,
+        /// 已存在的借用令牌
+        existing: String,
+        /// 新的借用令牌
+        new: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// 移动后借用：来源已被移动后尝试使用借用令牌
+    BorrowAfterMove {
+        /// 借用来源
+        source: String,
+        /// 尝试使用的令牌
+        token: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
+    /// 冻结时使用：令牌被冻结后仍尝试使用
+    UseWhileFrozen {
+        /// 借用来源
+        source: String,
+        /// 被冻结的令牌
+        token: String,
+        /// 发生位置
+        location: (usize, usize),
+    },
 }
 
 impl std::fmt::Display for OwnershipError {
@@ -345,6 +374,40 @@ impl std::fmt::Display for OwnershipError {
                     f,
                     "UnsafeDeref: cannot dereference raw pointer outside unsafe block: {} at {:?}",
                     instruction, location
+                )
+            }
+            OwnershipError::MutableBorrowConflict {
+                source,
+                existing,
+                new,
+                location,
+            } => {
+                write!(
+                    f,
+                    "MutableBorrowConflict: cannot create mutable borrow '{}' for '{}' while '{}' is still active at {:?}",
+                    new, source, existing, location
+                )
+            }
+            OwnershipError::BorrowAfterMove {
+                source,
+                token,
+                location,
+            } => {
+                write!(
+                    f,
+                    "BorrowAfterMove: cannot use borrow token '{}' because source '{}' has been moved at {:?}",
+                    token, source, location
+                )
+            }
+            OwnershipError::UseWhileFrozen {
+                source,
+                token,
+                location,
+            } => {
+                write!(
+                    f,
+                    "UseWhileFrozen: cannot use borrow token '{}' because source '{}' is frozen at {:?}",
+                    token, source, location
                 )
             }
         }
