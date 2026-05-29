@@ -4,7 +4,8 @@ on:
   push:
     paths:
       - 'docs/src/**/*.md'
-      - '!docs/src/en/**'
+      - 'docs/vpi18n.config.json'
+      - 'docs/glossary.json'
     branches:
       - main
 
@@ -18,51 +19,57 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Install dependencies
-        run: npm install vitepress-auto-translate
+        run: pnpm install
+        working-directory: docs
 
-      - name: Get changed files
-        id: changed-files
+      - name: Create .env for vpi
         run: |
-          # 获取本次提交变更的中文文档
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'docs/src/**/*.md' ':!docs/src/en/**' | tr '\n' ' ')
-          echo "files=$CHANGED_FILES" >> $GITHUB_OUTPUT
-          echo "Changed files: $CHANGED_FILES"
+          cat > .env << EOF
+          AI_API_KEY=${{ secrets.AI_API_KEY || '' }}
+          AI_MODEL=${{ secrets.AI_MODEL || '' }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL || '' }}
+          EOF
+        working-directory: docs
 
-      - name: Translate changed documents
-        if: steps.changed-files.outputs.files != ''
-        env:
-          API_KEY: ${{ secrets.LLM_API_KEY }}
+      - name: Set default env values
         run: |
-          # 创建临时目录存放待翻译文件
-          mkdir -p /tmp/to-translate
+          if [ -z "$AI_API_KEY" ]; then
+            echo "ERROR: AI_API_KEY secret is required but not set"
+            exit 1
+          fi
+          if [ -z "$AI_MODEL" ]; then echo "AI_MODEL=MiniMax-M2.7-highspeed" >> .env; fi
+          if [ -z "$AI_BASE_URL" ]; then echo "AI_BASE_URL=http://101.132.38.216:3000/v1" >> .env; fi
+        working-directory: docs
 
-          # 复制变更的文件到临时目录
-          for file in ${{ steps.changed-files.outputs.files }}; do
-            if [ -f "$file" ]; then
-              mkdir -p "/tmp/to-translate/$(dirname "$file")"
-              cp "$file" "/tmp/to-translate/$file"
-            fi
-          done
+      - name: Sync nav/sidebar
+        run: npx vpi sync
+        working-directory: docs
 
-          # 翻译临时目录中的文件
-          npx vitepress-auto-translate -s /tmp/to-translate/docs/src -l en
+      - name: Translate documents
+        run: npx vpi gen
+        working-directory: docs
 
-          # 将翻译结果复制回原目录
-          cp -r /tmp/to-translate/docs/src/en/* docs/src/en/ 2>/dev/null || true
+      - name: Clean up orphaned translations
+        run: node scripts/cleanup-translations.mjs
+        working-directory: docs
 
       - name: Commit translations
-        if: steps.changed-files.outputs.files != ''
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add docs/src/en/
+          git add docs/src/en/ docs/src/ja/ docs/src/ru/ docs/src/.i18n-cache.json docs/vpi18n.config.json
           git diff --staged --quiet || git commit -m "docs: auto-translate documentation"
           git push
