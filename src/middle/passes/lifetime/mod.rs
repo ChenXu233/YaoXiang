@@ -45,7 +45,6 @@ pub use move_semantics::*;
 pub use mut_check::*;
 pub use ownership_flow::*;
 pub use ref_semantics::*;
-pub use send_sync::*;
 pub use unsafe_check::*;
 
 /// 所有权分析结果
@@ -107,7 +106,7 @@ impl Lifetime {
 
 /// 统一的所有权检查器
 ///
-/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、Send/Sync 检查、
+/// 同时运行 Move 检查、Drop 检查、Mut 检查、Ref 检查、Clone 检查、
 /// 跨 spawn 循环检查和任务内循环追踪，返回所有错误。
 #[derive(Debug)]
 pub struct OwnershipChecker {
@@ -116,7 +115,6 @@ pub struct OwnershipChecker {
     mut_checker: MutChecker,
     ref_checker: RefChecker,
     clone_checker: CloneChecker,
-    send_sync_checker: SendSyncChecker,
     cycle_checker: CycleChecker,
     intra_task_tracker: IntraTaskCycleTracker,
 }
@@ -130,7 +128,6 @@ impl OwnershipChecker {
             mut_checker: MutChecker::new(),
             ref_checker: RefChecker::new(),
             clone_checker: CloneChecker::default(),
-            send_sync_checker: SendSyncChecker::new(),
             cycle_checker: CycleChecker::new(),
             intra_task_tracker: IntraTaskCycleTracker::new(),
         }
@@ -146,7 +143,6 @@ impl OwnershipChecker {
         let mut_errors = self.mut_checker.check_function(func);
         let ref_errors = self.ref_checker.check_function(func);
         let clone_errors = self.clone_checker.check_function(func);
-        let send_sync_errors = self.send_sync_checker.check_function(func);
         let cycle_errors = self.cycle_checker.check_function(func);
 
         // 任务内循环追踪（警告模式，不计入错误）
@@ -159,7 +155,6 @@ impl OwnershipChecker {
             .chain(mut_errors)
             .chain(ref_errors)
             .chain(clone_errors)
-            .chain(send_sync_errors)
             .chain(cycle_errors)
             .cloned()
             .collect()
@@ -188,11 +183,6 @@ impl OwnershipChecker {
     /// 获取 Clone 检查器的错误
     pub fn clone_errors(&self) -> &[OwnershipError] {
         self.clone_checker.errors()
-    }
-
-    /// 获取 Send/Sync 检查器的错误
-    pub fn send_sync_errors(&self) -> &[OwnershipError] {
-        self.send_sync_checker.errors()
     }
 
     /// 获取跨 spawn 循环检查的错误

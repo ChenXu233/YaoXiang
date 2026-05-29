@@ -50,6 +50,7 @@ fn make_trait_def(
         parent_traits: vec![],
         generic_params: vec![],
         span: None,
+        is_marker: false,
     }
 }
 

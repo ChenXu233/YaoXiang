@@ -27,6 +27,8 @@ pub struct TraitDefinition {
     pub generic_params: Vec<String>,
     /// Trait 定义的位置（用于错误信息）
     pub span: Option<crate::util::span::Span>,
+    /// 是否为标记 trait（无方法，仅作为类型级标记）
+    pub is_marker: bool,
 }
 
 /// Trait 边界（用于泛型约束）

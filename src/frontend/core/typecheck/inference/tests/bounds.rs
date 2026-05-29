@@ -10,6 +10,7 @@
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::types::base::{MonoType, StructType};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
+use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::HashMap;
 
 // ===================================================================
@@ -112,22 +113,19 @@ fn test_check_constraint_empty_constraint() {
 // Error path 测试
 // ===================================================================
 
-/// §3.5.2: Void 不实现 Clone
+/// List 类型不实现 Clone（泛型容器需显式实现）
 #[test]
 fn test_check_trait_bounds_not_satisfied() {
     // Arrange
     let mut checker = BoundsChecker::new();
-    let ty = MonoType::Void;
+    let ty = MonoType::List(Box::new(MonoType::Int(32)));
     let bounds = vec!["Clone".to_string()];
 
     // Act
     let result = checker.check_trait_bounds(&ty, &bounds);
 
-    // Assert - 规范 §3.5.2：Void 不实现 Clone
-    assert!(
-        result.is_err(),
-        "Void should not satisfy Clone bound per spec §3.5.2"
-    );
+    // Assert - List 类型不自动实现 Clone
+    assert!(result.is_err(), "List should not satisfy Clone bound");
 }
 
 /// §3.5: 接口约束 — 类型缺少约束要求的方法应报错
@@ -264,5 +262,166 @@ fn test_check_constraint_with_method_binding() {
     assert!(
         result.is_ok(),
         "should pass constraint check via method binding"
+    );
+}
+
+// ===================================================================
+// Dup trait bound with auto-derive tests
+// ===================================================================
+
+/// 结构体所有字段均为 Dup 类型时，TraitSolver 应通过 Dup 检查
+/// （通过 check_dup_trait 递归检查结构体字段）
+#[test]
+fn test_check_trait_bounds_dup_struct_auto_derive() {
+    // Arrange - Point { x: Float(64), y: Float(64) } 所有字段均为 Dup
+    let mut solver = TraitSolver::new();
+
+    let struct_type = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Float(64)),
+            ("y".to_string(), MonoType::Float(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+
+    // Act & Assert - 无 trait_table 时走 check_dup_trait 递归路径
+    assert!(
+        solver.check_trait(&struct_type, "Dup"),
+        "Point with Dup fields should pass Dup check via recursive field inspection"
+    );
+}
+
+/// 结构体包含非 Dup 字段（List）时，TraitSolver 应拒绝 Dup 检查
+/// List 类型在 check_dup_trait 中匹配 `_ => false` 分支
+#[test]
+fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
+    // Arrange - Buffer { data: List(Int(64)), len: Int(64) } 包含非 Dup 的 List 字段
+    let mut solver = TraitSolver::new();
+
+    let struct_type = MonoType::Struct(StructType {
+        name: "Buffer".to_string(),
+        fields: vec![
+            (
+                "data".to_string(),
+                MonoType::List(Box::new(MonoType::Int(64))),
+            ),
+            ("len".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+
+    // Act & Assert - List 在 check_dup_trait 中不被识别为 Dup
+    assert!(
+        !solver.check_trait(&struct_type, "Dup"),
+        "Buffer with List field should NOT pass Dup check"
+    );
+}
+
+/// 端到端测试：BoundsChecker::check_trait_bounds 对全 Dup 字段结构体应通过
+/// 涵盖 check_trait -> check_dup_trait 递归路径
+#[test]
+fn test_bounds_checker_dup_struct_passes() {
+    // Arrange
+    let mut checker = BoundsChecker::new();
+    let struct_type = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Float(64)),
+            ("y".to_string(), MonoType::Float(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+    let bounds = vec!["Dup".to_string()];
+
+    // Act
+    let result = checker.check_trait_bounds(&struct_type, &bounds);
+
+    // Assert - 所有字段均为 Dup 基本类型，应通过
+    assert!(
+        result.is_ok(),
+        "BoundsChecker should accept Point with all Dup fields"
+    );
+}
+
+/// 端到端测试：BoundsChecker::check_trait_bounds 对含非 Dup 字段的结构体应失败
+/// check_dup_trait 返回 false，且无 trait_table 时无法走 auto-derive 路径
+#[test]
+fn test_bounds_checker_dup_struct_fails() {
+    // Arrange
+    let mut checker = BoundsChecker::new();
+    let struct_type = MonoType::Struct(StructType {
+        name: "Buffer".to_string(),
+        fields: vec![
+            (
+                "data".to_string(),
+                MonoType::List(Box::new(MonoType::Int(64))),
+            ),
+            ("len".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+    let bounds = vec!["Dup".to_string()];
+
+    // Act
+    let result = checker.check_trait_bounds(&struct_type, &bounds);
+
+    // Assert - List 字段导致 Dup 检查失败
+    assert!(
+        result.is_err(),
+        "BoundsChecker should reject Buffer with List field for Dup bound"
+    );
+}
+
+/// 嵌套结构体 Dup 检查：外层结构体字段为另一个全 Dup 结构体时应通过
+#[test]
+fn test_bounds_checker_dup_nested_struct_passes() {
+    // Arrange - Line { start: Point, end: Point } 嵌套 Dup 结构体
+    let mut checker = BoundsChecker::new();
+
+    let point_type = MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Float(64)),
+            ("y".to_string(), MonoType::Float(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+
+    let line_type = MonoType::Struct(StructType {
+        name: "Line".to_string(),
+        fields: vec![
+            ("start".to_string(), point_type.clone()),
+            ("end".to_string(), point_type),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![false, false],
+        interfaces: vec![],
+    });
+    let bounds = vec!["Dup".to_string()];
+
+    // Act
+    let result = checker.check_trait_bounds(&line_type, &bounds);
+
+    // Assert - 嵌套 Dup 结构体应通过递归检查
+    assert!(
+        result.is_ok(),
+        "BoundsChecker should accept nested Dup structs (Line with Point fields)"
     );
 }

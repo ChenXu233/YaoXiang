@@ -204,19 +204,17 @@ impl ModuleLoader {
                     is_mut,
                     type_annotation,
                     ..
-                } => {
-                    if !is_mut {
-                        let signature = type_annotation
-                            .as_ref()
-                            .map(format_type)
-                            .unwrap_or_else(|| "Any".to_string());
-                        module.add_export(Export {
-                            name: name.clone(),
-                            full_path: format!("{}.{}", module_path, name),
-                            kind: ExportKind::Constant,
-                            signature,
-                        });
-                    }
+                } if !is_mut => {
+                    let signature = type_annotation
+                        .as_ref()
+                        .map(format_type)
+                        .unwrap_or_else(|| "Any".to_string());
+                    module.add_export(Export {
+                        name: name.clone(),
+                        full_path: format!("{}.{}", module_path, name),
+                        kind: ExportKind::Constant,
+                        signature,
+                    });
                 }
 
                 // use/方法绑定/其他语句不产生导出
