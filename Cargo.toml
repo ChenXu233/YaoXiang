@@ -46,7 +46,7 @@ atomic = "0.6"
 rand = "0.10.0"
 
 # 数据结构
-indexmap = "2.13.0"
+indexmap = "2.14.0"
 hashbrown = "0.16.1"
 smallvec = "1.15.1"
 
