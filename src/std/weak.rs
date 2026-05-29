@@ -3,7 +3,7 @@
 //! Weak references that don't prevent value drop.
 //! Used for caches, observer patterns, and breaking reference cycles.
 
-/// Weak[T] - A weak reference type that doesn't increase reference count.
+/// `Weak[T]` - A weak reference type that doesn't increase reference count.
 ///
 /// # Example
 /// ```yaoxiang

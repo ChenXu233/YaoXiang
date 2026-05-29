@@ -133,7 +133,7 @@ impl Nat {
     }
 }
 
-/// 条件类型 - IsTrue[C]
+/// 条件类型 - `IsTrue[C]`
 ///
 /// 检查类型 C 是否为 True
 ///
@@ -162,7 +162,7 @@ impl IsTrue {
     }
 }
 
-/// 条件类型 - IsFalse[C]
+/// 条件类型 - `IsFalse[C]`
 ///
 /// 检查类型 C 是否为 False
 ///
@@ -191,7 +191,7 @@ impl IsFalse {
     }
 }
 
-/// 条件类型 - IsZero[N]
+/// 条件类型 - `IsZero[N]`
 ///
 /// 检查自然数 N 是否为 Zero
 ///
