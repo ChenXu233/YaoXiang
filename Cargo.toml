@@ -46,25 +46,25 @@ atomic = "0.6"
 rand = "0.10.0"
 
 # 数据结构
-indexmap = "2.13.0"
+indexmap = "2.14.0"
 hashbrown = "0.16.1"
 smallvec = "1.15.1"
 
 # 字符串处理
 regex = "1"
-unicode-ident = "1.0.23"
+unicode-ident = "1.0.24"
 urlencoding = "2"
 
 # 文件系统
 walkdir = "2"
 tempfile = "3.25.0"
-notify = "7.0.0"
+notify = "8.2.0"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.149"
 ron = "0.12.0"
-toml = "0.9.8"
+toml = "1.1.2"
 
 # 错误处理
 anyhow = "1"
@@ -82,7 +82,7 @@ owo-colors = "4.0"
 rustyline = { version = "17.0.2", features = ["with-file-history", "with-dirs"] }
 
 # 异步运行时
-tokio = { version = "1.49.0", features = ["full"] }
+tokio = { version = "1.50.0", features = ["full"] }
 
 # LSP - 语言服务器协议
 lsp-types = "0.97"
