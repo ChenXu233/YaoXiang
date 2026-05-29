@@ -4,6 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
+use parking_lot::RwLock;
 
 /// 相似度阈值
 const SIMILARITY_THRESHOLD: f64 = 0.5;
@@ -41,7 +42,7 @@ pub struct SuggestionEngine {
     /// 已定义的名字（变量、函数等）- 存储Owned字符串
     defined_names: HashSet<String>,
     /// 相似度缓存
-    similarity_cache: HashMap<String, Vec<(String, f64)>>,
+    similarity_cache: RwLock<HashMap<String, Vec<(String, f64)>>>,
     /// 名称到类型的映射（用于更精确的建议）
     name_to_types: HashMap<String, String>,
 }
@@ -51,7 +52,7 @@ impl SuggestionEngine {
     pub fn new() -> Self {
         Self {
             defined_names: HashSet::new(),
-            similarity_cache: HashMap::new(),
+            similarity_cache: RwLock::new(HashMap::new()),
             name_to_types: HashMap::new(),
         }
     }
@@ -88,8 +89,11 @@ impl SuggestionEngine {
         name: &str,
     ) -> Vec<(String, f64)> {
         // 检查缓存
-        if let Some(cached) = self.similarity_cache.get(name) {
-            return cached.clone();
+        {
+            let cache = self.similarity_cache.read();
+            if let Some(cached) = cache.get(name) {
+                return cached.clone();
+            }
         }
 
         let mut suggestions: Vec<(String, f64)> = self
@@ -103,6 +107,8 @@ impl SuggestionEngine {
         suggestions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         suggestions.truncate(5); // 最多返回5个建议
 
+        // 写入缓存
+        self.similarity_cache.write().insert(name.to_string(), suggestions.clone());
         suggestions
     }
 
@@ -205,7 +211,7 @@ impl SuggestionEngine {
 
     /// 清空缓存
     pub fn clear_cache(&mut self) {
-        self.similarity_cache.clear();
+        self.similarity_cache.write().clear();
     }
 
     /// 获取定义的名字数量
@@ -289,5 +295,38 @@ mod tests {
         let engine = SuggestionEngine::from_scope(&["foo", "bar", "baz"]);
         assert_eq!(engine.len(), 3);
         assert!(!engine.is_empty());
+    }
+
+    #[test]
+    fn test_add_name_type() {
+        let mut engine = SuggestionEngine::new();
+        engine.add_name_type("foo", "Int -> Int");
+        assert_eq!(engine.name_to_types.get("foo"), Some(&"Int -> Int".to_string()));
+    }
+
+    #[test]
+    fn test_suggest_for_unknown_variable() {
+        let mut engine = SuggestionEngine::new();
+        engine.add_defined_name("variable");
+        engine.add_defined_name("variant");
+
+        let suggestion = engine.suggest_for_unknown_variable("varible");
+        assert!(suggestion.is_some());
+        match suggestion.unwrap() {
+            Suggestion::Variable { typo, suggestions } => {
+                assert_eq!(typo, "varible");
+                assert!(!suggestions.is_empty());
+            }
+            _ => panic!("Expected Variable suggestion"),
+        }
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        let mut engine = SuggestionEngine::new();
+        engine.add_defined_name("foo");
+        engine.find_similar("fuo"); // writes to cache
+        engine.clear_cache();
+        assert!(engine.similarity_cache.read().is_empty());
     }
 }
