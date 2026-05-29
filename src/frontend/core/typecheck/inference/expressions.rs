@@ -593,24 +593,14 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Call {
                 func, args, span, ..
             } => {
-                // 检查 Native("...") 表达式
-                if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
-                    if name == "Native" {
-                        if args.len() == 1 {
-                            if let crate::frontend::core::parser::ast::Expr::Lit(
-                                crate::frontend::core::lexer::tokens::Literal::String(native_name),
-                                _,
-                            ) = &args[0]
-                            {
-                                if let Some(sig) = self.native_signatures.get(native_name).cloned()
-                                {
-                                    return Ok(sig);
-                                }
-                                return Ok(self.solver.new_var());
-                            }
-                        }
-                        return Ok(self.solver.new_var());
+                // 检查 native("...") 表达式 — 通过 name resolution
+                if let Some(native_name) =
+                    crate::std::ffi::extract_native_binding_symbol(func, args)
+                {
+                    if let Some(sig) = self.native_signatures.get(&native_name).cloned() {
+                        return Ok(sig);
                     }
+                    return Ok(self.solver.new_var());
                 }
 
                 let func_ty = self.infer_expr(func)?;
