@@ -14,6 +14,42 @@ VALID_TYPES = {
     "perf", "test", "chore", "ci", "build",
 }
 
+# 合法的 emoji 代码（来自 docs/src/dev/commit-convention.md）
+VALID_EMOJIS = {
+    "art", "zap", "racehorse", "fire", "bug", "ambulance",
+    "sparkles", "memo", "rocket", "lipstick", "tada",
+    "white_check_mark", "lock", "apple", "penguin",
+    "checkered_flag", "robot", "green_apple", "bookmark",
+    "rotating_light", "construction", "green_heart",
+    "arrow_down", "arrow_up", "pushpin", "construction_worker",
+    "chart_with_upwards_trend", "recycle", "hammer",
+    "heavy_minus_sign", "whale", "heavy_plus_sign", "wrench",
+    "globe_with_meridians", "pencil2", "hankey", "rewind",
+    "twisted_rightwards_arrows", "package", "alien", "truck",
+    "page_facing_up", "boom", "bento", "ok_hand", "wheelchair",
+    "bulb", "beers", "speech_balloon", "card_file_box",
+    "loud_sound", "mute", "busts_in_silhouette",
+    "children_crossing", "building_construction", "iphone",
+    "clown_face", "egg", "see_no_evil", "camera_flash",
+}
+
+# 合法的 scope（来自 docs/src/dev/commit-convention.md）
+VALID_SCOPES = {
+    # 代码作用域
+    "frontend", "parser", "lexer", "typecheck", "middle",
+    "codegen", "monomorphize", "lifetime", "vm", "executor",
+    "frames", "instructions", "runtime", "memory", "scheduler",
+    "std", "concurrent", "io", "net", "util", "cache", "diagnostic",
+    # 文档作用域
+    "docs", "architecture", "design", "plan", "guides",
+    "tutorial", "examples",
+    # 其他作用域
+    "build", "ci", "test", "chore", "release", "meta",
+}
+
+EMOJI_PATTERN = "|".join(VALID_EMOJIS)
+SCOPE_PATTERN = "|".join(VALID_SCOPES)
+
 # 发版: :bookmark: V1.2.3: 标题
 RELEASE_PATTERN = re.compile(
     r"^:bookmark:\s+V\d+\.\d+\.\d+:\s+.+"
@@ -21,9 +57,9 @@ RELEASE_PATTERN = re.compile(
 
 # 常规: :emoji: type(scope): subject  (scope 必填)
 PATTERN = re.compile(
-    r"^:[a-z_]+:\s+"
+    r"^:(?P<emoji>" + EMOJI_PATTERN + r"):\s+"
     r"(?P<type>" + "|".join(VALID_TYPES) + r")"
-    r"\([a-zA-Z0-9_./*\-]+\)"
+    r"\((?P<scope>" + SCOPE_PATTERN + r")\)"
     r"!?:\s+.+"
 )
 
@@ -39,22 +75,26 @@ GUIDANCE = """
 
 期望格式:  :emoji: type(scope): subject
 
-  :emoji:  必须，GitHub 风格 shortcode
+  :emoji:  必须，GitHub 风格 shortcode，必须是合法的 gitmoji 代码
   type     必须: feat fix docs style refactor perf test chore ci build
-  scope    必须: (frontend) (parser) (lexer) (typecheck) (middle)
-                 (codegen) (vm) (runtime) (std) (util) (diagnostic)
-                 (docs) (build) (ci) (test) (chore) (release) (meta) 等
+  scope    必须: frontend parser lexer typecheck middle codegen
+                 monomorphize lifetime vm executor frames instructions
+                 runtime memory scheduler std concurrent io net util
+                 cache diagnostic docs architecture design plan guides
+                 tutorial examples build ci test chore release meta
   subject  中文，不超过 50 字符
 
 发版格式:  :bookmark: V<版本号>: <发版标题>
 
-示例:
+常用 emoji 示例:
   :sparkles: feat(parser): 添加闭包语法解析支持
   :bug: fix(vm): 修复栈帧溢出问题
   :memo: docs: 更新 README 安装说明
   :recycle: refactor(codesrc): 重构 IR 生成逻辑
   :wrench: chore(build): 更新 Cargo 依赖
   :bookmark: V0.8.0: 新增任务统计和数据分析功能
+
+完整 emoji 列表: docs/src/dev/commit-convention.md
 
 破坏性变更在 type 后加 !，并在 body 中写 BREAKING CHANGE:
 
