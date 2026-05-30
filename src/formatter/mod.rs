@@ -43,6 +43,17 @@ use anyhow::Result;
 /// 格式化源代码
 ///
 /// 这是格式化工具的主要入口函数。
+///
+/// # Example
+///
+/// ```
+/// use yaoxiang::formatter::{format_source, FormatOptions};
+///
+/// let source = "let x = 1";
+/// let options = FormatOptions::default();
+/// let formatted = format_source(source, &options).unwrap();
+/// assert_eq!(formatted, "let\nx = 1\n");
+/// ```
 pub fn format_source(
     source: &str,
     options: &FormatOptions,
