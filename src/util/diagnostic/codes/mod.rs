@@ -30,8 +30,8 @@ use crate::util::diagnostic::Diagnostic;
 /// 错误类别
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
-    Lexer,     // E0xxx: 词法和语法分析
-    Parser,    // E0xxx: Parser errors
+    Lexer,     // E0xxx: 词法分析
+    Parser,    // E0xxx: 语法分析
     TypeCheck, // E1xxx: 类型检查
     Semantic,  // E2xxx: 语义分析
     Generic,   // E4xxx: 泛型与特质
