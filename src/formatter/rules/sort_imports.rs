@@ -1,5 +1,7 @@
 //! 导入语句排序规则
 
+use std::collections::HashSet;
+
 use crate::frontend::core::parser::ast::*;
 
 /// 导入类型
@@ -87,8 +89,9 @@ pub fn sort_imports(stmts: &mut Vec<Stmt>) {
     }
 
     // 添加非导入语句
+    let use_indices_set: HashSet<usize> = use_indices.iter().copied().collect();
     let non_use_indices: Vec<usize> = (0..stmts.len())
-        .filter(|i| !use_indices.contains(i))
+        .filter(|i| !use_indices_set.contains(i))
         .collect();
 
     for idx in non_use_indices {
