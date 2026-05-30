@@ -128,28 +128,6 @@ impl ErrorCodeDefinition {
     }
 }
 
-/// 错误码注册表 - 合并所有错误码（运行时版本，用于测试）
-pub fn get_all_error_codes() -> Vec<&'static ErrorCodeDefinition> {
-    ERROR_CODES.iter().collect()
-}
-
-/// 快捷方法宏 - 为每个错误码生成便捷构建方法
-#[macro_export]
-macro_rules! impl_error_code_methods {
-    ($($code:ident => $method:ident: $desc:expr, $template:expr),*) => {
-        $(
-            impl ErrorCodeDefinition {
-                /// $desc
-                pub fn $method(name: &str) -> DiagnosticBuilder {
-                    let def = Self::find(stringify!($code)).unwrap();
-                    DiagnosticBuilder::new(def.code, def.message_template)
-                        .param("name", name)
-                }
-            }
-        )*
-    };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

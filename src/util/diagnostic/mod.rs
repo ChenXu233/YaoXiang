@@ -10,7 +10,6 @@
 //! - suggest - 智能建议引擎
 //! - collect - 错误收集器
 //! - result - 统一 Result 类型
-//! - conversion - 错误转换
 //!
 //! # 示例
 //!
@@ -25,7 +24,6 @@
 pub mod codes;
 pub mod collect;
 pub mod command;
-pub mod conversion;
 pub mod emitter;
 pub mod error;
 #[macro_use]
@@ -38,7 +36,6 @@ pub mod suggest;
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
 pub use command::{render_explain_output, run_check_command_once, run_check_watch_command};
-pub use conversion::ErrorConvert;
 pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
 pub use result::{Result, ResultExt};
