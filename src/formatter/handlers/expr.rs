@@ -181,7 +181,7 @@ pub fn format_expr(
 }
 
 /// 格式化字面量
-fn format_literal(lit: &Literal) -> String {
+pub(crate) fn format_literal(lit: &Literal) -> String {
     match lit {
         Literal::Int(n) => n.to_string(),
         Literal::Float(f) => {
@@ -200,7 +200,7 @@ fn format_literal(lit: &Literal) -> String {
 }
 
 /// 格式化二元运算
-fn format_binop(
+pub(crate) fn format_binop(
     op: &BinOp,
     left: &Expr,
     right: &Expr,
@@ -269,7 +269,7 @@ fn format_unop(
 }
 
 /// 格式化函数调用
-fn format_call(
+pub(crate) fn format_call(
     func: &Expr,
     args: &[Expr],
     named_args: &[(String, Expr)],
@@ -532,7 +532,7 @@ fn format_fstring(
 }
 
 /// 格式化列表，支持元素过多时换行
-fn format_list(
+pub(crate) fn format_list(
     exprs: &[Expr],
     ctx: &FormatContext,
 ) -> String {
@@ -563,7 +563,7 @@ fn format_list(
 }
 
 /// 格式化字典，支持元素过多时换行
-fn format_dict(
+pub(crate) fn format_dict(
     pairs: &[(Expr, Expr)],
     ctx: &FormatContext,
 ) -> String {
@@ -628,138 +628,3 @@ fn format_field_access(
     format!("{}{}", inner_str, field_str)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::formatter::FormatOptions;
-    use crate::util::span::Span;
-
-    fn default_ctx() -> FormatContext {
-        FormatContext::new(FormatOptions::default())
-    }
-
-    #[test]
-    fn test_format_literal_int() {
-        let lit = Literal::Int(42);
-        assert_eq!(format_literal(&lit), "42");
-    }
-
-    #[test]
-    fn test_format_literal_float() {
-        let lit = Literal::Float(3.14);
-        assert_eq!(format_literal(&lit), "3.14");
-    }
-
-    #[test]
-    fn test_format_literal_float_no_decimal() {
-        let lit = Literal::Float(42.0);
-        let result = format_literal(&lit);
-        assert!(
-            result.contains('.'),
-            "Float should have decimal point: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_format_literal_bool() {
-        assert_eq!(format_literal(&Literal::Bool(true)), "true");
-        assert_eq!(format_literal(&Literal::Bool(false)), "false");
-    }
-
-    #[test]
-    fn test_format_literal_string() {
-        let lit = Literal::String("hello".to_string());
-        assert_eq!(format_literal(&lit), "\"hello\"");
-    }
-
-    #[test]
-    fn test_format_binop_add() {
-        let ctx = default_ctx();
-        let left = Expr::Lit(Literal::Int(1), Span::dummy());
-        let right = Expr::Lit(Literal::Int(2), Span::dummy());
-        let result = format_binop(&BinOp::Add, &left, &right, &ctx);
-        assert_eq!(result, "1 + 2");
-    }
-
-    #[test]
-    fn test_format_binop_eq() {
-        let ctx = default_ctx();
-        let left = Expr::Var("x".to_string(), Span::dummy());
-        let right = Expr::Lit(Literal::Int(0), Span::dummy());
-        let result = format_binop(&BinOp::Eq, &left, &right, &ctx);
-        assert_eq!(result, "x == 0");
-    }
-
-    #[test]
-    fn test_format_call_no_args() {
-        let ctx = default_ctx();
-        let func = Expr::Var("foo".to_string(), Span::dummy());
-        let result = format_call(&func, &[], &[], &ctx);
-        assert_eq!(result, "foo()");
-    }
-
-    #[test]
-    fn test_format_call_with_args() {
-        let ctx = default_ctx();
-        let func = Expr::Var("add".to_string(), Span::dummy());
-        let arg1 = Expr::Lit(Literal::Int(1), Span::dummy());
-        let arg2 = Expr::Lit(Literal::Int(2), Span::dummy());
-        let result = format_call(&func, &[arg1, arg2], &[], &ctx);
-        assert_eq!(result, "add(1, 2)");
-    }
-
-    #[test]
-    fn test_format_list_empty() {
-        let ctx = default_ctx();
-        let result = format_list(&[], &ctx);
-        assert_eq!(result, "[]");
-    }
-
-    #[test]
-    fn test_format_list_single() {
-        let ctx = default_ctx();
-        let items = vec![Expr::Lit(Literal::Int(1), Span::dummy())];
-        let result = format_list(&items, &ctx);
-        assert_eq!(result, "[1]");
-    }
-
-    #[test]
-    fn test_format_dict_empty() {
-        let ctx = default_ctx();
-        let result = format_dict(&[], &ctx);
-        assert_eq!(result, "{}");
-    }
-
-    #[test]
-    fn test_format_return() {
-        let ctx = default_ctx();
-        let expr = Expr::Return(
-            Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-            Span::dummy(),
-        );
-        let result = format_expr(&expr, &ctx);
-        assert_eq!(result, "return 42");
-    }
-
-    #[test]
-    fn test_format_return_none() {
-        let ctx = default_ctx();
-        let expr = Expr::Return(None, Span::dummy());
-        let result = format_expr(&expr, &ctx);
-        assert_eq!(result, "return");
-    }
-
-    #[test]
-    fn test_format_cast() {
-        let ctx = default_ctx();
-        let inner = Expr::Var("x".to_string(), Span::dummy());
-        let expr = Expr::Cast {
-            expr: Box::new(inner),
-            target_type: Type::Int(64),
-            span: Span::dummy(),
-        };
-        let result = format_expr(&expr, &ctx);
-        assert_eq!(result, "x as i64");
-    }
-}
