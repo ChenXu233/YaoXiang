@@ -19,6 +19,8 @@ pub struct EmitterConfig {
     pub show_line_numbers: bool,
     /// 是否使用 Unicode 字符
     pub unicode: bool,
+    /// 是否使用符号模式
+    pub symbols: bool,
     /// 指示字符 (默认: "^")
     pub indicator: char,
     /// 最大显示行数
@@ -34,6 +36,7 @@ impl Default for EmitterConfig {
             show_related: true,
             show_line_numbers: true,
             unicode: true,
+            symbols: false,
             indicator: '^',
             max_lines: 6,
         }
@@ -204,9 +207,9 @@ impl TextEmitter {
             let line_num = start_line + i;
             if let Some(line) = Self::get_source_line(source_file, line_num) {
                 if self.config.show_line_numbers {
-                    output.push_str(&format!("{:>4} | ", line_num));
+                    output.push_str(&format!("{:>4} {} ", line_num, self.vbar()));
                 } else {
-                    output.push_str("     | ");
+                    output.push_str(&format!("     {} ", self.vbar()));
                 }
                 output.push_str(&line);
                 output.push('\n');
@@ -221,7 +224,7 @@ impl TextEmitter {
                     };
                     let indicators = self.config.indicator.to_string().repeat(indicator_len);
 
-                    output.push_str(&format!("     | {}{}\n", spaces, indicators));
+                    output.push_str(&format!("     {} {}{}\n", self.vbar(), spaces, indicators));
                 }
             }
         }
@@ -250,15 +253,19 @@ impl TextEmitter {
         if !self.config.use_colors {
             return text.to_string();
         }
+        crate::util::diagnostic::emitter::ansi::colorize(style, text)
+    }
 
-        match style {
-            "error" => format!("\x1b[31m{}\x1b[0m", text),
-            "warning" => format!("\x1b[33m{}\x1b[0m", text),
-            "info" => format!("\x1b[34m{}\x1b[0m", text),
-            "hint" => format!("\x1b[36m{}\x1b[0m", text),
-            "bold" => format!("\x1b[1m{}\x1b[0m", text),
-            _ => text.to_string(),
+    fn vbar(&self) -> &'static str {
+        if self.config.unicode {
+            "│"
+        } else {
+            "|"
         }
+    }
+
+    fn hint_prefix(&self) -> String {
+        self.color("hint", "hint: ")
     }
 }
 
@@ -276,12 +283,7 @@ mod tests {
 
     /// 移除 ANSI 转义序列
     fn strip_ansi(s: &str) -> String {
-        s.replace("\x1b[31m", "")
-            .replace("\x1b[33m", "")
-            .replace("\x1b[34m", "")
-            .replace("\x1b[36m", "")
-            .replace("\x1b[1m", "")
-            .replace("\x1b[0m", "")
+        crate::util::diagnostic::emitter::ansi::strip_ansi(s)
     }
 
     #[test]
