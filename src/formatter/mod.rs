@@ -28,7 +28,6 @@ pub mod handlers;
 pub mod options;
 pub mod rules;
 pub mod source_map;
-pub mod writers;
 
 // Re-exports
 pub use options::FormatOptions;
