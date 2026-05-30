@@ -375,7 +375,16 @@ fn main() -> Result<()> {
                 options.single_quote = true;
             }
 
-            let result = run_format_command(&file, &options, check, write)?;
+            let result = match run_format_command(&file, &options, check, write) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    if e.to_string().contains("No .yx files found") {
+                        ::std::process::exit(2);
+                    }
+                    return Err(e);
+                }
+            };
             if check && result.needs_formatting {
                 ::std::process::exit(1);
             }
