@@ -13,12 +13,29 @@ use std::path::PathBuf;
 // ============ 核心数据结构 ============
 
 /// 模块标识
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// 相等性基于 `name` 字段比较（模块名是唯一标识符）。
+/// `path` 仅用于文件定位，不影响模块身份。
+#[derive(Debug, Clone)]
 pub struct ModuleId {
     /// 模块名（如 "std.io" 或 "my_module"）
     pub name: String,
     /// 对应的文件路径（标准库模块可能无文件路径）
     pub path: Option<PathBuf>,
+}
+
+impl PartialEq for ModuleId {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for ModuleId {}
+
+impl std::hash::Hash for ModuleId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
 }
 
 impl ModuleId {

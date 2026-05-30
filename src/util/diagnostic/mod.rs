@@ -31,6 +31,7 @@ pub mod error;
 #[macro_use]
 pub mod error_macro;
 pub mod result;
+pub mod session;
 pub mod suggest;
 
 // 重新导出
@@ -41,6 +42,7 @@ pub use conversion::ErrorConvert;
 pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
 pub use result::{Result, ResultExt};
+pub use session::CheckSession;
 pub use suggest::SuggestionEngine;
 
 // 渲染器
@@ -452,9 +454,7 @@ fn check_single_module(
 /// 3. 检测循环依赖
 /// 4. 拓扑排序确定编译顺序
 /// 5. 按依赖顺序逐模块检查
-fn check_modules_with_shared_env(
-    files: &[std::path::PathBuf],
-) -> anyhow::Result<CheckResult> {
+fn check_modules_with_shared_env(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
     use crate::frontend::module::dep_graph::ModuleDependencyGraph;
 
     let parsed = parse_files_parallel(files)?;
@@ -716,5 +716,94 @@ main: () -> Void = {
         let result = check_files_with_diagnostics(&[file]).expect("run check");
         assert!(result.error_count > 0);
         assert!(!result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn test_cross_file_reference() {
+        // 注意：当前实现中 check_single_module 为每个文件创建独立的 Compiler，
+        // 跨文件符号解析尚未完全实现。此测试验证多文件流水线能正常运行，
+        // 并且依赖图的拓扑排序正确工作。
+        let dir = tempfile::tempdir().expect("create temp dir");
+
+        let file_a = dir.path().join("a.yx");
+        std::fs::write(
+            &file_a,
+            r#"use std.io
+
+pub greet: (name: String) -> Void = (name) => {
+    print(name)
+}
+"#,
+        )
+        .expect("write a.yx");
+
+        let file_b = dir.path().join("b.yx");
+        std::fs::write(
+            &file_b,
+            r#"use std.io
+
+main: () -> Void = {
+    print("hello")
+}
+"#,
+        )
+        .expect("write b.yx");
+
+        let result = check_files_with_diagnostics(&[file_a, file_b]).expect("run check");
+        assert_eq!(
+            result.error_count, 0,
+            "Independent multi-file check should pass without errors"
+        );
+    }
+
+    #[test]
+    fn test_cyclic_dependency_detection() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+
+        let file_a = dir.path().join("a.yx");
+        std::fs::write(
+            &file_a,
+            r#"use b
+x = 1
+"#,
+        )
+        .expect("write a.yx");
+
+        let file_b = dir.path().join("b.yx");
+        std::fs::write(
+            &file_b,
+            r#"use a
+y = 2
+"#,
+        )
+        .expect("write b.yx");
+
+        let result = check_files_with_diagnostics(&[file_a, file_b]);
+        assert!(result.is_err(), "Cyclic dependency should be detected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Cyclic"),
+            "Error should mention cyclic dependency, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_single_file_no_cycle() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let file = dir.path().join("main.yx");
+        std::fs::write(
+            &file,
+            r#"use std.io
+
+main: () -> Void = {
+    print("hello")
+}
+"#,
+        )
+        .expect("write file");
+
+        let result = check_files_with_diagnostics(&[file]).expect("run check");
+        assert_eq!(result.error_count, 0);
     }
 }
