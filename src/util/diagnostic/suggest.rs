@@ -42,9 +42,9 @@ pub struct SuggestionEngine {
     /// 已定义的名字（变量、函数等）- 存储Owned字符串
     defined_names: HashSet<String>,
     /// 相似度缓存
-    similarity_cache: RwLock<HashMap<String, Vec<(String, f64)>>>,
+    pub(crate) similarity_cache: RwLock<HashMap<String, Vec<(String, f64)>>>,
     /// 名称到类型的映射（用于更精确的建议）
-    name_to_types: HashMap<String, String>,
+    pub(crate) name_to_types: HashMap<String, String>,
 }
 
 impl SuggestionEngine {
@@ -115,7 +115,7 @@ impl SuggestionEngine {
     }
 
     /// 计算两个字符串的相似度
-    fn similarity(
+    pub(crate) fn similarity(
         &self,
         s1: &str,
         s2: &str,
@@ -148,7 +148,7 @@ impl SuggestionEngine {
     }
 
     /// Levenshtein 编辑距离
-    fn levenshtein_distance(
+    pub(crate) fn levenshtein_distance(
         &self,
         a: &str,
         b: &str,
@@ -238,100 +238,5 @@ impl crate::util::diagnostic::Diagnostic {
     /// 获取针对此错误的建议
     pub fn get_suggestions(&self) -> Option<Vec<Suggestion>> {
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_similarity_same() {
-        let engine = SuggestionEngine::new();
-        assert_eq!(engine.similarity("hello", "hello"), 1.0);
-    }
-
-    #[test]
-    fn test_similarity_different() {
-        let engine = SuggestionEngine::new();
-        let sim = engine.similarity("hello", "hallo");
-        assert!(sim > 0.7, "Expected similarity > 0.7, got {}", sim);
-    }
-
-    #[test]
-    fn test_similarity_completely_different() {
-        let engine = SuggestionEngine::new();
-        let sim = engine.similarity("abc", "xyz");
-        assert!(sim < 0.5, "Expected low similarity, got {}", sim);
-    }
-
-    #[test]
-    fn test_find_similar() {
-        let mut engine = SuggestionEngine::new();
-        engine.add_defined_name("variable");
-        engine.add_defined_name("variant");
-        engine.add_defined_name("value");
-        engine.add_defined_name("valley");
-
-        let similar = engine.find_similar("varible");
-        assert!(!similar.is_empty(), "Should find similar names");
-
-        // 应该有 "variable" 或 "variant"
-        let names: Vec<String> = similar.iter().map(|(n, _)| n.clone()).collect();
-        assert!(names.contains(&"variable".to_string()) || names.contains(&"variant".to_string()));
-    }
-
-    #[test]
-    fn test_levenshtein() {
-        let engine = SuggestionEngine::new();
-
-        assert_eq!(engine.levenshtein_distance("kitten", "sitting"), 3);
-        assert_eq!(engine.levenshtein_distance("", ""), 0);
-        assert_eq!(engine.levenshtein_distance("abc", ""), 3);
-        assert_eq!(engine.levenshtein_distance("", "abc"), 3);
-        assert_eq!(engine.levenshtein_distance("abc", "abc"), 0);
-    }
-
-    #[test]
-    fn test_from_scope() {
-        let engine = SuggestionEngine::from_scope(&["foo", "bar", "baz"]);
-        assert_eq!(engine.len(), 3);
-        assert!(!engine.is_empty());
-    }
-
-    #[test]
-    fn test_add_name_type() {
-        let mut engine = SuggestionEngine::new();
-        engine.add_name_type("foo", "Int -> Int");
-        assert_eq!(
-            engine.name_to_types.get("foo"),
-            Some(&"Int -> Int".to_string())
-        );
-    }
-
-    #[test]
-    fn test_suggest_for_unknown_variable() {
-        let mut engine = SuggestionEngine::new();
-        engine.add_defined_name("variable");
-        engine.add_defined_name("variant");
-
-        let suggestion = engine.suggest_for_unknown_variable("varible");
-        assert!(suggestion.is_some());
-        match suggestion.unwrap() {
-            Suggestion::Variable { typo, suggestions } => {
-                assert_eq!(typo, "varible");
-                assert!(!suggestions.is_empty());
-            }
-            _ => panic!("Expected Variable suggestion"),
-        }
-    }
-
-    #[test]
-    fn test_clear_cache() {
-        let mut engine = SuggestionEngine::new();
-        engine.add_defined_name("foo");
-        engine.find_similar("fuo"); // writes to cache
-        engine.clear_cache();
-        assert!(engine.similarity_cache.read().is_empty());
     }
 }
