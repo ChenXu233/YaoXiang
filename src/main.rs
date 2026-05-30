@@ -379,18 +379,21 @@ fn main() -> Result<()> {
             // 3. Start with user config as base
             let mut options = yaoxiang::formatter::FormatOptions::from(&user_config.fmt);
 
-            // 4. Override with project config
-            if project_config.line_width != 120 {
-                options.line_width = project_config.line_width;
+            // 4. Override with project config (only non-None values)
+            if let Some(lw) = project_config.line_width {
+                options.line_width = lw;
             }
-            if project_config.indent_width != 4 {
-                options.indent_width = project_config.indent_width;
+            if let Some(w) = project_config.indent_width {
+                options.indent_width = w;
             }
-            if project_config.use_tabs {
-                options.use_tabs = true;
+            if let Some(ut) = project_config.use_tabs {
+                options.use_tabs = ut;
             }
-            if project_config.single_quote {
-                options.single_quote = true;
+            if let Some(sq) = project_config.single_quote {
+                options.single_quote = sq;
+            }
+            if let Some(si) = project_config.sort_imports {
+                options.sort_imports = si;
             }
 
             // 5. Override with CLI args (highest priority)
