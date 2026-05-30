@@ -341,8 +341,8 @@ fn main() -> Result<()> {
                         }
                     }
                     Err(e) => {
+                        eprintln!("{}", e);
                         if e.to_string().contains("No .yx files found") {
-                            eprintln!("{}", e);
                             ::std::process::exit(2);
                         }
                         return Err(e);
