@@ -198,19 +198,6 @@ impl crate::util::span::SpannedError for Diagnostic {
     }
 }
 
-impl Default for Diagnostic {
-    fn default() -> Self {
-        Self {
-            severity: Severity::Error,
-            code: String::new(),
-            message: String::new(),
-            help: String::new(),
-            span: None,
-            related: Vec::new(),
-        }
-    }
-}
-
 impl std::fmt::Display for Diagnostic {
     fn fmt(
         &self,
