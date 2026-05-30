@@ -108,7 +108,9 @@ impl SuggestionEngine {
         suggestions.truncate(5); // 最多返回5个建议
 
         // 写入缓存
-        self.similarity_cache.write().insert(name.to_string(), suggestions.clone());
+        self.similarity_cache
+            .write()
+            .insert(name.to_string(), suggestions.clone());
         suggestions
     }
 
@@ -301,7 +303,10 @@ mod tests {
     fn test_add_name_type() {
         let mut engine = SuggestionEngine::new();
         engine.add_name_type("foo", "Int -> Int");
-        assert_eq!(engine.name_to_types.get("foo"), Some(&"Int -> Int".to_string()));
+        assert_eq!(
+            engine.name_to_types.get("foo"),
+            Some(&"Int -> Int".to_string())
+        );
     }
 
     #[test]
