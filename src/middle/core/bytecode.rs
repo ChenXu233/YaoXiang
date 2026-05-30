@@ -344,6 +344,20 @@ pub enum BytecodeInstr {
     },
 
     // =====================
+    // Borrow Token Operations
+    // =====================
+    /// Create borrow token (ZST, runtime ≈ Mov)
+    Borrow {
+        dst: Reg,
+        src: Reg,
+        mutable: bool,
+    },
+    /// Release borrow token (ZST, runtime ≈ Nop)
+    Release {
+        src: Reg,
+    },
+
+    // =====================
     // Function Call
     // =====================
     /// Static dispatch call
@@ -529,6 +543,8 @@ impl BytecodeInstr {
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
             BytecodeInstr::WeakNew { .. } => Opcode::WeakNew,
             BytecodeInstr::WeakUpgrade { .. } => Opcode::WeakUpgrade,
+            BytecodeInstr::Borrow { .. } => Opcode::Borrow,
+            BytecodeInstr::Release { .. } => Opcode::Release,
             BytecodeInstr::CallStatic { .. } => Opcode::CallStatic,
             BytecodeInstr::CallNative { .. } => Opcode::CallNative,
             BytecodeInstr::CallVirt { .. } => Opcode::CallVirt,
@@ -591,6 +607,8 @@ impl BytecodeInstr {
             BytecodeInstr::ArcDrop { .. } => 2,
             BytecodeInstr::WeakNew { .. } => 4,
             BytecodeInstr::WeakUpgrade { .. } => 4,
+            BytecodeInstr::Borrow { .. } => 5, // dst(2) + src(2) + mutable(1)
+            BytecodeInstr::Release { .. } => 2, // src(2)
             BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
             BytecodeInstr::CallNative {
                 args, func_name, ..
@@ -1364,6 +1382,34 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            Opcode::Borrow => {
+                                // Borrow: dst(2) + src(2) + mutable(1)
+                                if instr.operands.len() >= 5 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let src =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    let mutable = instr.operands[4] != 0;
+                                    decoded_instructions.push(BytecodeInstr::Borrow {
+                                        dst: Reg(dst),
+                                        src: Reg(src),
+                                        mutable,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::Release => {
+                                // Release: src(2)
+                                if instr.operands.len() >= 2 {
+                                    let src =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    decoded_instructions
+                                        .push(BytecodeInstr::Release { src: Reg(src) });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             _ => {
                                 // For other opcodes, we need to implement decoding
                                 // For now, just use Nop as placeholder
@@ -1414,12 +1460,44 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
     }
 }
 
-/// Convert MonoType to IrType
+/// Convert MonoType to IrType (ast::Type)
 impl From<crate::frontend::core::typecheck::MonoType> for IrType {
-    fn from(_mono: crate::frontend::core::typecheck::MonoType) -> Self {
-        // Simplified conversion - needs proper implementation
-        // For now, return Void type as placeholder
-        IrType::Void
+    fn from(ty: crate::frontend::core::typecheck::MonoType) -> Self {
+        use crate::frontend::core::typecheck::MonoType;
+        match ty {
+            MonoType::Int(w) => IrType::Int(w),
+            MonoType::Float(w) => IrType::Float(w),
+            MonoType::Bool => IrType::Bool,
+            MonoType::Char => IrType::Char,
+            MonoType::String => IrType::String,
+            MonoType::Bytes => IrType::Bytes,
+            MonoType::Void => IrType::Void,
+            MonoType::Tuple(types) => IrType::Tuple(types.into_iter().map(|t| t.into()).collect()),
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => IrType::Fn {
+                params: params.into_iter().map(|t| t.into()).collect(),
+                return_type: Box::new((*return_type).into()),
+            },
+            // List, Dict, Set, Option, Result, Range, Struct, Enum,
+            // Arc, Weak — no direct IR counterpart or different shape
+            MonoType::List(_)
+            | MonoType::Dict(_, _)
+            | MonoType::Set(_)
+            | MonoType::Option(_)
+            | MonoType::Result(_, _)
+            | MonoType::Range { .. }
+            | MonoType::Struct(_)
+            | MonoType::Enum(_)
+            | MonoType::Arc(_)
+            | MonoType::Weak(_) => IrType::Void,
+            // Ref is ZST, no runtime representation
+            MonoType::Ref { .. } => IrType::Void,
+            // TypeVar, TypeRef, Union, Intersection, AssocType — unresolved or no IR form
+            _ => IrType::Void,
+        }
     }
 }
 

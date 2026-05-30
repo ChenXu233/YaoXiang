@@ -1,6 +1,6 @@
 //! 自动派生测试 — 基于语言规范 §3.5.2 & §3.5.3 & RFC-011 §2
 //!
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync）
+//! §3.5.2: 标准库接口（Clone, Equal, Debug）
 //! §3.5.3: 自动派生机制
 //! RFC-011 §2: 类型约束系统
 
@@ -50,15 +50,6 @@ fn test_is_builtin_derive_clone() {
 }
 
 #[test]
-fn test_is_builtin_derive_send() {
-    // Arrange & Act
-    let result = is_builtin_derive("Send");
-
-    // Assert
-    assert!(result, "Send should be builtin derive (规范 §3.5.2)");
-}
-
-#[test]
 fn test_is_builtin_derive_debug() {
     // Arrange & Act
     let result = is_builtin_derive("Debug");
@@ -77,15 +68,6 @@ fn test_is_builtin_derive_equal() {
         result,
         "Equal should be builtin derive (规范 §3.5.2, 合并了 PartialEq + Eq)"
     );
-}
-
-#[test]
-fn test_is_builtin_derive_sync() {
-    // Arrange & Act
-    let result = is_builtin_derive("Sync");
-
-    // Assert
-    assert!(result, "Sync should be builtin derive (规范 §3.5.2)");
 }
 
 // ===================================================================
@@ -196,30 +178,6 @@ fn test_generate_auto_derive_clone_has_clone_method() {
 }
 
 #[test]
-fn test_generate_auto_derive_send_returns_some() {
-    // Arrange & Act
-    let result = generate_auto_derive("Int", "Send");
-
-    // Assert
-    assert!(
-        result.is_some(),
-        "Send derive should return Some (marker trait, 规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_send_has_no_methods() {
-    // Arrange
-    let result = generate_auto_derive("Int", "Send").unwrap();
-
-    // Assert
-    assert!(
-        result.methods.is_empty(),
-        "Send is a marker trait, should have no methods"
-    );
-}
-
-#[test]
 fn test_generate_auto_derive_debug_has_debug_method() {
     // Arrange
     let result = generate_auto_derive("Point", "Debug").unwrap();
@@ -240,30 +198,6 @@ fn test_generate_auto_derive_equal_has_equal_method() {
     assert!(
         result.methods.contains_key("equal"),
         "Equal derive should have 'equal' method (规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_sync_returns_some() {
-    // Arrange & Act
-    let result = generate_auto_derive("Int", "Sync");
-
-    // Assert
-    assert!(
-        result.is_some(),
-        "Sync derive should return Some (marker trait, 规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_sync_has_no_methods() {
-    // Arrange
-    let result = generate_auto_derive("Int", "Sync").unwrap();
-
-    // Assert
-    assert!(
-        result.methods.is_empty(),
-        "Sync is a marker trait, should have no methods"
     );
 }
 
@@ -532,14 +466,14 @@ fn test_builtin_derives_list_is_non_empty() {
 
 #[test]
 fn test_builtin_derives_contains_exactly_expected_traits() {
-    // Arrange - 规范 §3.5.2: 标准库接口为 Clone, Equal, Debug, Send, Sync
-    let expected = ["Clone", "Equal", "Debug", "Send", "Sync"];
+    // Arrange - 规范 §3.5.2: 标准库接口为 Clone, Equal, Debug
+    let expected = ["Clone", "Equal", "Debug"];
 
     // Act & Assert
     assert_eq!(
         BUILTIN_DERIVES.len(),
         expected.len(),
-        "BUILTIN_DERIVES should contain exactly 5 traits (规范 §3.5.2)"
+        "BUILTIN_DERIVES should contain exactly 3 traits (规范 §3.5.2)"
     );
     for name in &expected {
         assert!(

@@ -403,6 +403,10 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
             ops.extend(fields.iter().cloned());
             ops
         }
+
+        // 借用令牌指令
+        Instruction::Borrow { dst, src, .. } => vec![dst.clone(), src.clone()],
+        Instruction::Release(operand) => vec![operand.clone()],
     }
 }
 
