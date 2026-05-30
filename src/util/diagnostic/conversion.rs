@@ -22,3 +22,35 @@ impl<T> ErrorConvert<T> for Result<T, &str> {
         self.map_err(|msg| ErrorCodeDefinition::internal_error(msg).build())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_convert_string() {
+        let result: Result<i32, String> = Err("test error".to_string());
+        let converted: Result<i32, crate::util::diagnostic::Diagnostic> = result.convert();
+        assert!(converted.is_err());
+        let diag = converted.unwrap_err();
+        assert_eq!(diag.code, "E8001");
+        assert!(diag.message.contains("test error"));
+    }
+
+    #[test]
+    fn test_error_convert_str() {
+        let result: Result<i32, &str> = Err("test error");
+        let converted: Result<i32, crate::util::diagnostic::Diagnostic> = result.convert();
+        assert!(converted.is_err());
+        let diag = converted.unwrap_err();
+        assert_eq!(diag.code, "E8001");
+    }
+
+    #[test]
+    fn test_error_convert_ok() {
+        let result: Result<i32, String> = Ok(42);
+        let converted: Result<i32, crate::util::diagnostic::Diagnostic> = result.convert();
+        assert!(converted.is_ok());
+        assert_eq!(converted.unwrap(), 42);
+    }
+}

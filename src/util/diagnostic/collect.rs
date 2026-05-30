@@ -105,6 +105,42 @@ impl<E: SpannedError> ErrorCollector<E> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper: create a test Diagnostic via ErrorCodeDefinition
+    fn make_test_diagnostic() -> crate::util::diagnostic::Diagnostic {
+        crate::util::diagnostic::codes::ErrorCodeDefinition::invalid_character("@").build()
+    }
+
+    #[test]
+    fn test_extend_errors() {
+        let mut collector = ErrorCollector::<crate::util::diagnostic::Diagnostic>::new();
+        let errors = vec![make_test_diagnostic(), make_test_diagnostic()];
+        collector.extend_errors(errors);
+        assert_eq!(collector.error_count(), 2);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut collector = ErrorCollector::<crate::util::diagnostic::Diagnostic>::new();
+        collector.add_error(make_test_diagnostic());
+        assert!(collector.has_errors());
+        collector.clear();
+        assert_eq!(collector.error_count(), 0);
+        assert!(!collector.has_errors());
+    }
+
+    #[test]
+    fn test_warning_from_diagnostic() {
+        let diag = make_test_diagnostic();
+        let warning = Warning::from_diagnostic(diag.clone());
+        // Verify Display works
+        assert_eq!(warning.to_string(), diag.message);
+    }
+}
+
 /// 警告
 #[derive(Debug, Clone)]
 pub enum Warning {
