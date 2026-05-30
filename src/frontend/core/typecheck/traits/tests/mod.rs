@@ -20,6 +20,7 @@
 //! - specialization: 特化
 
 mod auto_derive;
+mod borrow_token;
 mod coherence;
 mod gat;
 mod impl_check;

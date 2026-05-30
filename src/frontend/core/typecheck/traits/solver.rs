@@ -175,6 +175,9 @@ impl TraitSolver {
             // Arc：引用计数，自动 Clone
             MonoType::Arc(_) => true,
 
+            // &T 是零大小令牌，Dup 蕴含 Clone（RFC-011 §2.4）
+            MonoType::Ref { mutable: false, .. } => true,
+
             // 元组：递归检查所有元素
             MonoType::Tuple(elems) => elems.iter().all(|t| self.check_clone_trait(t)),
 
