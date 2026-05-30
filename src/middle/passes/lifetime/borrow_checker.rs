@@ -342,6 +342,17 @@ impl BorrowChecker {
                     }
                 }
             }
+            // Borrow: 创建借用令牌
+            Instruction::Borrow { dst, src, mutable } => {
+                let token_name = operand_to_string(dst);
+                let source = operand_to_string(src);
+                self.create_borrow(&token_name, &source, *mutable);
+            }
+            // Release: 释放借用令牌
+            Instruction::Release(operand) => {
+                let name = operand_to_string(operand);
+                self.release_token(&name);
+            }
             // Drop: 令牌生命周期结束
             Instruction::Drop(operand) => {
                 let name = operand_to_string(operand);
@@ -492,147 +503,391 @@ fn operand_to_string(operand: &Operand) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! 借用检查器单元与端到端测试
+    //!
+    //! 参考规范：RFC-009 v9 §4.1 借用令牌冲突检测。
+    //! 覆盖不可变/可变借用冲突、冻结/解冻、移动后使用等场景。
+
     use super::*;
+    use crate::middle::core::ir::BasicBlock;
+    use crate::frontend::core::typecheck::MonoType;
+
+    /// 辅助函数：构建包含给定指令的 FunctionIR
+    fn make_func_ir(instructions: Vec<Instruction>) -> FunctionIR {
+        FunctionIR {
+            name: "test_fn".to_string(),
+            params: vec![],
+            return_type: MonoType::Void,
+            is_async: false,
+            locals: vec![],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions,
+                successors: vec![],
+            }],
+            entry: 0,
+        }
+    }
+
+    /// 辅助函数：创建新的借用检查器
+    fn make_checker() -> BorrowChecker {
+        BorrowChecker::new()
+    }
+
+    /// 辅助函数：对给定指令列表运行端到端借用检查
+    fn run_borrow_check(instructions: Vec<Instruction>) -> Vec<BorrowError> {
+        let func = make_func_ir(instructions);
+        let mut checker = BorrowChecker::new();
+        checker.check_function(&func).to_vec()
+    }
 
     #[test]
     fn test_multiple_immutable_borrows() {
-        let mut checker = BorrowChecker::new();
-        // 同一来源的多个不可变借用应该允许
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_b", "x", false);
-        assert!(checker.errors().is_empty());
+        // Assert
+        assert!(
+            checker.errors().is_empty(),
+            "同一来源的多个不可变借用应允许，但得到错误: {:?}",
+            checker.errors()
+        );
     }
 
     #[test]
     fn test_mutable_borrow_conflict_with_immutable() {
-        let mut checker = BorrowChecker::new();
-        // 先创建不可变借用，再创建可变借用应该报错
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_mut_b", "x", true);
-        assert_eq!(checker.errors().len(), 1);
-        assert!(matches!(
-            checker.errors()[0],
-            BorrowError::MutableBorrowConflict { .. }
-        ));
+        // Assert
+        assert_eq!(
+            checker.errors().len(),
+            1,
+            "不可变借用后创建可变借用应产生 1 个错误，但得到: {:?}",
+            checker.errors()
+        );
+        assert!(
+            matches!(
+                checker.errors()[0],
+                BorrowError::MutableBorrowConflict { .. }
+            ),
+            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
+            checker.errors()[0]
+        );
     }
 
     #[test]
     fn test_mutable_borrow_conflict_with_mutable() {
-        let mut checker = BorrowChecker::new();
-        // 先创建可变借用，再创建可变借用应该报错
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_mut_b", "x", true);
-        assert_eq!(checker.errors().len(), 1);
-        assert!(matches!(
-            checker.errors()[0],
-            BorrowError::MutableBorrowConflict { .. }
-        ));
+        // Assert
+        assert_eq!(
+            checker.errors().len(),
+            1,
+            "同一来源的两个可变借用应产生 1 个错误，但得到: {:?}",
+            checker.errors()
+        );
+        assert!(
+            matches!(
+                checker.errors()[0],
+                BorrowError::MutableBorrowConflict { .. }
+            ),
+            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
+            checker.errors()[0]
+        );
     }
 
     #[test]
     fn test_immutable_borrow_conflict_with_mutable() {
-        let mut checker = BorrowChecker::new();
-        // 先创建可变借用，再创建不可变借用应该报错
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_b", "x", false);
-        assert_eq!(checker.errors().len(), 1);
-        assert!(matches!(
-            checker.errors()[0],
-            BorrowError::MutableBorrowConflict { .. }
-        ));
+        // Assert
+        assert_eq!(
+            checker.errors().len(),
+            1,
+            "可变借用后创建不可变借用应产生 1 个错误，但得到: {:?}",
+            checker.errors()
+        );
+        assert!(
+            matches!(
+                checker.errors()[0],
+                BorrowError::MutableBorrowConflict { .. }
+            ),
+            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
+            checker.errors()[0]
+        );
     }
 
     #[test]
     fn test_use_active_token() {
-        let mut checker = BorrowChecker::new();
+        // Arrange
+        let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
+        // Act
         checker.use_token("ref_a");
-        assert!(checker.errors().is_empty());
+        // Assert
+        assert!(
+            checker.errors().is_empty(),
+            "使用活跃令牌不应产生错误，但得到: {:?}",
+            checker.errors()
+        );
     }
 
     #[test]
     fn test_use_frozen_token() {
-        let mut checker = BorrowChecker::new();
+        // Arrange
+        let mut checker = make_checker();
         checker.create_borrow("ref_mut_a", "x", true);
         checker.freeze("ref_mut_a", "ref_b");
+        // Act
         checker.use_token("ref_mut_a");
-        assert_eq!(checker.errors().len(), 1);
-        assert!(matches!(
-            checker.errors()[0],
-            BorrowError::UseWhileFrozen { .. }
-        ));
+        // Assert
+        assert_eq!(
+            checker.errors().len(),
+            1,
+            "使用冻结令牌应产生 1 个错误，但得到: {:?}",
+            checker.errors()
+        );
+        assert!(
+            matches!(checker.errors()[0], BorrowError::UseWhileFrozen { .. }),
+            "错误类型应为 UseWhileFrozen，但得到: {:?}",
+            checker.errors()[0]
+        );
     }
 
     #[test]
     fn test_use_moved_token() {
-        let mut checker = BorrowChecker::new();
+        // Arrange
+        let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
-        // 模拟移动
         if let Some(token) = checker.tokens.get_mut("ref_a") {
             token.state = TokenState::Moved;
         }
+        // Act
         checker.use_token("ref_a");
-        assert_eq!(checker.errors().len(), 1);
-        assert!(matches!(
-            checker.errors()[0],
-            BorrowError::BorrowAfterMove { .. }
-        ));
+        // Assert
+        assert_eq!(
+            checker.errors().len(),
+            1,
+            "使用已移动令牌应产生 1 个错误，但得到: {:?}",
+            checker.errors()
+        );
+        assert!(
+            matches!(checker.errors()[0], BorrowError::BorrowAfterMove { .. }),
+            "错误类型应为 BorrowAfterMove，但得到: {:?}",
+            checker.errors()[0]
+        );
     }
 
     #[test]
     fn test_freeze_and_unfreeze() {
-        let mut checker = BorrowChecker::new();
-        // 创建可变借用
+        // Arrange
+        let mut checker = make_checker();
         checker.create_borrow("ref_mut_a", "x", true);
-        // 冻结为不可变借用
+        // Act: 冻结为不可变借用
         checker.freeze("ref_mut_a", "ref_b");
-        // ref_mut_a 应该是 Frozen
+        // Assert: ref_mut_a 应该是 Frozen
         assert_eq!(
             checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Frozen
+            TokenState::Frozen,
+            "冻结后 ref_mut_a 应处于 Frozen 状态"
         );
-        // ref_b 应该是 Active
+        // Assert: ref_b 应该是 Active
         assert_eq!(
             checker.tokens.get("ref_b").unwrap().state,
-            TokenState::Active
+            TokenState::Active,
+            "新建的 ref_b 应处于 Active 状态"
         );
-        // 释放 ref_b，应该解冻 ref_mut_a
+        // Act: 释放 ref_b，应解冻 ref_mut_a
         checker.release_token("ref_b");
+        // Assert
         assert_eq!(
             checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Active
+            TokenState::Active,
+            "释放 ref_b 后 ref_mut_a 应恢复为 Active 状态"
         );
     }
 
     #[test]
     fn test_freeze_multiple_immutable() {
-        let mut checker = BorrowChecker::new();
+        // Arrange
+        let mut checker = make_checker();
         checker.create_borrow("ref_mut_a", "x", true);
         checker.freeze("ref_mut_a", "ref_b");
-        checker.freeze("ref_mut_a", "ref_c"); // 第二次冻结应该失败（已经 Frozen）
-                                              // ref_mut_a 应该仍然是 Frozen
+        // Act: 第二次冻结应失败（ref_mut_a 已经是 Frozen）
+        checker.freeze("ref_mut_a", "ref_c");
+        // Assert: ref_mut_a 仍应为 Frozen
         assert_eq!(
             checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Frozen
+            TokenState::Frozen,
+            "第二次冻结后 ref_mut_a 应仍为 Frozen"
         );
-        // ref_c 不应该被创建（因为 ref_mut_a 已经是 Frozen）
-        assert!(!checker.tokens.contains_key("ref_c"));
+        // Assert: ref_c 不应被创建
+        assert!(
+            !checker.tokens.contains_key("ref_c"),
+            "对已 Frozen 的令牌再次冻结不应创建新令牌 ref_c"
+        );
     }
 
     #[test]
     fn test_different_sources_no_conflict() {
-        let mut checker = BorrowChecker::new();
-        // 不同来源的借用不应该冲突
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.create_borrow("ref_a", "x", true);
         checker.create_borrow("ref_b", "y", true);
-        assert!(checker.errors().is_empty());
+        // Assert
+        assert!(
+            checker.errors().is_empty(),
+            "不同来源的借用不应冲突，但得到错误: {:?}",
+            checker.errors()
+        );
     }
 
     #[test]
     fn test_release_nonexistent_token() {
-        let mut checker = BorrowChecker::new();
-        // 释放不存在的令牌不应该 panic
+        // Arrange
+        let mut checker = make_checker();
+        // Act
         checker.release_token("nonexistent");
-        assert!(checker.errors().is_empty());
+        // Assert
+        assert!(
+            checker.errors().is_empty(),
+            "释放不存在的令牌不应产生错误，但得到: {:?}",
+            checker.errors()
+        );
+    }
+
+    // ===== 端到端测试：通过 check_function + Instruction::Borrow/Release =====
+
+    #[test]
+    fn test_e2e_single_immutable_borrow() {
+        // Arrange + Act
+        let errors = run_borrow_check(vec![Instruction::Borrow {
+            dst: Operand::Temp(0),
+            src: Operand::Local(0),
+            mutable: false,
+        }]);
+        // Assert
+        assert!(
+            errors.is_empty(),
+            "单个不可变借用不应产生错误，但得到: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_e2e_multiple_immutable_borrows() {
+        // Arrange + Act
+        let errors = run_borrow_check(vec![
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: false,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: false,
+            },
+        ]);
+        // Assert
+        assert!(
+            errors.is_empty(),
+            "多个不可变借用不应产生错误，但得到: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_e2e_mutable_then_immutable_conflict() {
+        // Arrange + Act
+        let errors = run_borrow_check(vec![
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: false,
+            },
+        ]);
+        // Assert
+        assert_eq!(
+            errors.len(),
+            1,
+            "可变借用后不可变借用应产生 1 个错误，但得到: {:?}",
+            errors
+        );
+        assert!(
+            matches!(errors[0], BorrowError::MutableBorrowConflict { .. }),
+            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
+            errors[0]
+        );
+    }
+
+    #[test]
+    fn test_e2e_mutable_then_mutable_conflict() {
+        // Arrange + Act
+        let errors = run_borrow_check(vec![
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+        ]);
+        // Assert
+        assert_eq!(
+            errors.len(),
+            1,
+            "两个可变借用应产生 1 个错误，但得到: {:?}",
+            errors
+        );
+        assert!(
+            matches!(errors[0], BorrowError::MutableBorrowConflict { .. }),
+            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
+            errors[0]
+        );
+    }
+
+    #[test]
+    fn test_e2e_mutable_release_reborrow() {
+        // Arrange + Act
+        let errors = run_borrow_check(vec![
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+            Instruction::Release(Operand::Temp(0)),
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+        ]);
+        // Assert
+        assert!(
+            errors.is_empty(),
+            "释放后重新借用不应产生错误，但得到: {:?}",
+            errors
+        );
     }
 }

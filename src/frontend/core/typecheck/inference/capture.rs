@@ -707,12 +707,37 @@ fn check_dup_trait(
 
 #[cfg(test)]
 mod tests {
+    //! 闭包捕获模式推断测试
+    //!
+    //! 对应规范:
+    //! - RFC-009 v9 (所有权模型): 捕获模式决策 (Copy / Borrow / BorrowMut / Move)
+    //! - RFC-023 (闭包捕获模型): 捕获变量的用途分析 (Read / Write) 与逃逸判定
+
     use super::*;
     use crate::frontend::core::parser::ast::BinOp;
     use crate::util::span::Span;
 
     fn dummy_span() -> Span {
         Span::dummy()
+    }
+
+    /// 构造一个包含 `Fn` 字段的非 Dup 结构体类型 (用于捕获模式测试)。
+    /// 对应 RFC-009: 不满足 `Dup` trait 的类型在不同场景下的捕获行为。
+    fn make_non_dup_struct_ty() -> MonoType {
+        use std::collections::HashMap;
+        let fn_ty = MonoType::Fn {
+            params: vec![MonoType::Int(64)],
+            return_type: Box::new(MonoType::Void),
+            is_async: false,
+        };
+        MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+            name: "MyStruct".to_string(),
+            fields: vec![("callback".to_string(), fn_ty)],
+            methods: HashMap::new(),
+            field_mutability: vec![],
+            field_has_default: vec![],
+            interfaces: vec![],
+        })
     }
 
     #[test]
@@ -733,14 +758,25 @@ mod tests {
         let outer: HashSet<String> = ["x", "y", "z"].iter().map(|s| s.to_string()).collect();
         let captures = analyze_captures(&block, &outer);
 
-        assert_eq!(captures.len(), 2);
+        assert_eq!(
+            captures.len(),
+            2,
+            "x and y should be captured, z should not"
+        );
         let names: HashSet<&str> = captures.iter().map(|c| c.name.as_str()).collect();
-        assert!(names.contains("x"));
-        assert!(names.contains("y"));
-        assert!(!names.contains("z"));
+        assert!(names.contains("x"), "x should be in captures");
+        assert!(names.contains("y"), "y should be in captures");
+        assert!(
+            !names.contains("z"),
+            "z should not be captured (not in outer scope)"
+        );
 
         for cap in &captures {
-            assert_eq!(cap.usage, CaptureUsage::Read);
+            assert_eq!(
+                cap.usage,
+                CaptureUsage::Read,
+                "all captures should be Read-only"
+            );
         }
     }
 
@@ -768,9 +804,13 @@ mod tests {
         let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
         let captures = analyze_captures(&block, &outer);
 
-        assert_eq!(captures.len(), 1);
-        assert_eq!(captures[0].name, "x");
-        assert_eq!(captures[0].usage, CaptureUsage::Write);
+        assert_eq!(captures.len(), 1, "only x should be captured");
+        assert_eq!(captures[0].name, "x", "captured variable should be x");
+        assert_eq!(
+            captures[0].usage,
+            CaptureUsage::Write,
+            "x is assigned, should be Write"
+        );
     }
 
     #[test]
@@ -799,7 +839,7 @@ mod tests {
         let captures = analyze_captures(&block, &outer);
 
         // z 是局部变量，不应被捕获
-        assert_eq!(captures.len(), 0);
+        assert_eq!(captures.len(), 0, "local variable z should not be captured");
     }
 
     #[test]
@@ -835,9 +875,17 @@ mod tests {
         let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
         let captures = analyze_captures(&block, &outer);
 
-        assert_eq!(captures.len(), 1);
-        assert_eq!(captures[0].name, "x");
-        assert_eq!(captures[0].usage, CaptureUsage::Read);
+        assert_eq!(
+            captures.len(),
+            1,
+            "only x from outer scope should be captured"
+        );
+        assert_eq!(captures[0].name, "x", "captured variable should be x");
+        assert_eq!(
+            captures[0].usage,
+            CaptureUsage::Read,
+            "x is only read in nested lambda"
+        );
     }
 
     #[test]
@@ -849,7 +897,11 @@ mod tests {
             &ClosureUsage::Inline,
             &solver,
         );
-        assert_eq!(mode, CaptureMode::Copy);
+        assert_eq!(
+            mode,
+            CaptureMode::Copy,
+            "Int is Dup, inline read should Copy"
+        );
     }
 
     #[test]
@@ -862,86 +914,58 @@ mod tests {
             &solver,
         );
         // Dup 类型即使逃逸也是 Copy
-        assert_eq!(mode, CaptureMode::Copy);
+        assert_eq!(
+            mode,
+            CaptureMode::Copy,
+            "Int is Dup, escaping should still Copy"
+        );
     }
 
     #[test]
     fn test_determine_capture_mode_non_dup_read_inline() {
-        use std::collections::HashMap;
         let solver = TraitSolver::new();
-        // Fn 类型不满足 Dup
-        let fn_ty = MonoType::Fn {
-            params: vec![MonoType::Int(64)],
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        };
-        let struct_ty = MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
-            name: "MyStruct".to_string(),
-            fields: vec![("callback".to_string(), fn_ty)],
-            methods: HashMap::new(),
-            field_mutability: vec![],
-            field_has_default: vec![],
-            interfaces: vec![],
-        });
+        let struct_ty = make_non_dup_struct_ty();
         let mode = determine_capture_mode(
             &CaptureUsage::Read,
             &struct_ty,
             &ClosureUsage::Inline,
             &solver,
         );
-        assert_eq!(mode, CaptureMode::Borrow);
+        assert_eq!(
+            mode,
+            CaptureMode::Borrow,
+            "non-Dup inline read should Borrow"
+        );
     }
 
     #[test]
     fn test_determine_capture_mode_non_dup_write_inline() {
-        use std::collections::HashMap;
         let solver = TraitSolver::new();
-        let fn_ty = MonoType::Fn {
-            params: vec![MonoType::Int(64)],
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        };
-        let struct_ty = MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
-            name: "MyStruct".to_string(),
-            fields: vec![("callback".to_string(), fn_ty)],
-            methods: HashMap::new(),
-            field_mutability: vec![],
-            field_has_default: vec![],
-            interfaces: vec![],
-        });
+        let struct_ty = make_non_dup_struct_ty();
         let mode = determine_capture_mode(
             &CaptureUsage::Write,
             &struct_ty,
             &ClosureUsage::Inline,
             &solver,
         );
-        assert_eq!(mode, CaptureMode::BorrowMut);
+        assert_eq!(
+            mode,
+            CaptureMode::BorrowMut,
+            "non-Dup inline write should BorrowMut"
+        );
     }
 
     #[test]
     fn test_determine_capture_mode_non_dup_escaping() {
-        use std::collections::HashMap;
         let solver = TraitSolver::new();
-        let fn_ty = MonoType::Fn {
-            params: vec![MonoType::Int(64)],
-            return_type: Box::new(MonoType::Void),
-            is_async: false,
-        };
-        let struct_ty = MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
-            name: "MyStruct".to_string(),
-            fields: vec![("callback".to_string(), fn_ty)],
-            methods: HashMap::new(),
-            field_mutability: vec![],
-            field_has_default: vec![],
-            interfaces: vec![],
-        });
+        let struct_ty = make_non_dup_struct_ty();
         let mode = determine_capture_mode(
             &CaptureUsage::Read,
             &struct_ty,
             &ClosureUsage::Escaping,
             &solver,
         );
-        assert_eq!(mode, CaptureMode::Move);
+        assert_eq!(mode, CaptureMode::Move, "non-Dup escaping should Move");
     }
 
     #[test]
@@ -956,7 +980,11 @@ mod tests {
             span: dummy_span(),
         };
         let usage = analyze_closure_usage(&lambda, None);
-        assert_eq!(usage, ClosureUsage::Inline);
+        assert_eq!(
+            usage,
+            ClosureUsage::Inline,
+            "lambda with no parent should be Inline"
+        );
     }
 
     #[test]
@@ -979,7 +1007,11 @@ mod tests {
             span: dummy_span(),
         };
         let usage = analyze_closure_usage(&lambda, Some(&parent));
-        assert_eq!(usage, ClosureUsage::Escaping);
+        assert_eq!(
+            usage,
+            ClosureUsage::Escaping,
+            "lambda inside spawn should be Escaping"
+        );
     }
 
     #[test]
@@ -998,7 +1030,11 @@ mod tests {
         let outer: HashSet<String> = ["x", "y"].iter().map(|s| s.to_string()).collect();
         let captures = analyze_captures(&block, &outer);
 
-        assert_eq!(captures.len(), 0);
+        assert_eq!(
+            captures.len(),
+            0,
+            "body referencing no outer variables should have no captures"
+        );
     }
 
     #[test]
@@ -1021,7 +1057,11 @@ mod tests {
         if let Expr::Return(Some(ret_expr), _) = &parent {
             let lambda_ref = ret_expr.as_ref();
             let usage = analyze_closure_usage(lambda_ref, Some(&parent));
-            assert_eq!(usage, ClosureUsage::Escaping);
+            assert_eq!(
+                usage,
+                ClosureUsage::Escaping,
+                "lambda inside return should be Escaping"
+            );
         } else {
             panic!("expected Return expression");
         }
@@ -1056,9 +1096,102 @@ mod tests {
         let outer: HashSet<String> = ["x"].iter().map(|s| s.to_string()).collect();
         let captures = analyze_captures(&block, &outer);
 
-        assert_eq!(captures.len(), 1);
-        assert_eq!(captures[0].name, "x");
+        assert_eq!(captures.len(), 1, "only x should be captured");
+        assert_eq!(captures[0].name, "x", "captured variable should be x");
         // Write 取优先（因为 written_vars 先处理）
-        assert_eq!(captures[0].usage, CaptureUsage::Write);
+        assert_eq!(
+            captures[0].usage,
+            CaptureUsage::Write,
+            "Write should take priority over Read"
+        );
+    }
+
+    // ========================================================================
+    // Ref 类型捕获模式测试
+    // ========================================================================
+
+    #[test]
+    fn test_capture_mode_for_immutable_ref() {
+        // &T 是 Dup → 应该 Copy
+        let solver = TraitSolver::new();
+        let ref_ty = MonoType::Ref {
+            mutable: false,
+            inner: Box::new(MonoType::Int(64)),
+        };
+        let mode =
+            determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
+        assert_eq!(mode, CaptureMode::Copy, "&T is Dup, should Copy");
+    }
+
+    #[test]
+    fn test_capture_mode_for_immutable_ref_escaping() {
+        // &T 是 Dup → 即使逃逸也是 Copy
+        let solver = TraitSolver::new();
+        let ref_ty = MonoType::Ref {
+            mutable: false,
+            inner: Box::new(MonoType::Int(64)),
+        };
+        let mode = determine_capture_mode(
+            &CaptureUsage::Read,
+            &ref_ty,
+            &ClosureUsage::Escaping,
+            &solver,
+        );
+        assert_eq!(
+            mode,
+            CaptureMode::Copy,
+            "&T is Dup, escaping should still Copy"
+        );
+    }
+
+    #[test]
+    fn test_capture_mode_for_mutable_ref_inline_read() {
+        // &mut T 不是 Dup，内联读取 → Borrow
+        let solver = TraitSolver::new();
+        let ref_ty = MonoType::Ref {
+            mutable: true,
+            inner: Box::new(MonoType::Int(64)),
+        };
+        let mode =
+            determine_capture_mode(&CaptureUsage::Read, &ref_ty, &ClosureUsage::Inline, &solver);
+        assert_eq!(mode, CaptureMode::Borrow, "&mut T inline read → Borrow");
+    }
+
+    #[test]
+    fn test_capture_mode_for_mutable_ref_inline_write() {
+        // &mut T 不是 Dup，内联写入 → BorrowMut
+        let solver = TraitSolver::new();
+        let ref_ty = MonoType::Ref {
+            mutable: true,
+            inner: Box::new(MonoType::Int(64)),
+        };
+        let mode = determine_capture_mode(
+            &CaptureUsage::Write,
+            &ref_ty,
+            &ClosureUsage::Inline,
+            &solver,
+        );
+        assert_eq!(
+            mode,
+            CaptureMode::BorrowMut,
+            "&mut T inline write → BorrowMut"
+        );
+    }
+
+    #[test]
+    fn test_capture_mode_for_mutable_ref_escaping() {
+        // &mut T 不是 Dup，逃逸 → Move
+        let solver = TraitSolver::new();
+        let ref_ty = MonoType::Ref {
+            mutable: true,
+            inner: Box::new(MonoType::Int(64)),
+        };
+        let mode = determine_capture_mode(
+            &CaptureUsage::Read,
+            &ref_ty,
+            &ClosureUsage::Escaping,
+            &solver,
+        );
+        assert_eq!(mode, CaptureMode::Move, "&mut T escaping → Move");
     }
 }
