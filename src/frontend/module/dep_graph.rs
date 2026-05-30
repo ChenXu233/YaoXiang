@@ -25,7 +25,10 @@ pub struct ModuleId {
 }
 
 impl PartialEq for ModuleId {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.name == other.name
     }
 }
@@ -33,7 +36,10 @@ impl PartialEq for ModuleId {
 impl Eq for ModuleId {}
 
 impl std::hash::Hash for ModuleId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.name.hash(state);
     }
 }
