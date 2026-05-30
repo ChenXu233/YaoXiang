@@ -30,6 +30,11 @@ name = "lib"
 path = "benches/lib.rs"
 harness = false
 
+[[bench]]
+name = "formatter"
+path = "benches/formatter.rs"
+harness = false
+
 [dependencies]
 # 日志 - tracing
 tracing = "0.1"
