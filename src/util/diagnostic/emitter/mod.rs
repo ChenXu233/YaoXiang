@@ -6,3 +6,6 @@ pub mod text;
 
 pub use text::{TextEmitter, EmitterConfig};
 pub use json::JsonEmitter;
+
+#[cfg(test)]
+mod tests;
