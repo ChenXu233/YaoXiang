@@ -94,12 +94,16 @@ mod tests {
     fn test_check_all_single_file() {
         let dir = tempfile::tempdir().expect("create temp dir");
         let file = dir.path().join("test.yx");
-        std::fs::write(&file, r#"use std.io
+        std::fs::write(
+            &file,
+            r#"use std.io
 
 main: () -> Void = {
     print("hello")
 }
-"#).expect("write file");
+"#,
+        )
+        .expect("write file");
 
         let mut session = CheckSession::new();
         let result = session.check_all(&[file]).expect("check all");
