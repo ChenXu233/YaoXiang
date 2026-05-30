@@ -38,7 +38,7 @@ pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuil
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
 pub use command::{render_explain_output, run_check_command_once, run_check_watch_command};
 pub use conversion::ErrorConvert;
-pub use emitter::{TextEmitter, JsonEmitter, RichEmitter, EmitterConfig, RichConfig};
+pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
 pub use result::{Result, ResultExt};
 pub use suggest::SuggestionEngine;

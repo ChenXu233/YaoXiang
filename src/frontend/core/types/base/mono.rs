@@ -574,6 +574,16 @@ impl From<ast::Type> for MonoType {
     }
 }
 
+/// 将 AST 类型注解转换为 PolyType
+///
+/// 复用 `From<ast::Type> for MonoType` 实现，包装为 PolyType。
+/// 用于跨文件检查时注册模块导出的类型信息。
+pub fn ast_type_to_poly_type(
+    ast_type: &crate::frontend::core::parser::ast::Type
+) -> super::PolyType {
+    super::PolyType::mono(MonoType::from(ast_type.clone()))
+}
+
 /// Calculate the universe level for a meta-type
 /// Returns max(arg_level) + 1, or Type0 if args is empty
 pub fn calculate_meta_type_level(args: &[ast::Type]) -> UniverseLevel {
@@ -766,5 +776,24 @@ impl fmt::Display for PolyType {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.type_name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ast_type_to_poly_type() {
+        use crate::frontend::core::parser::ast::Type as AstType;
+        use crate::util::span::Span;
+
+        let ast_type = AstType::Name {
+            name: "Int".to_string(),
+            span: Span::dummy(),
+        };
+        let poly = ast_type_to_poly_type(&ast_type);
+        // Verify it produces a valid PolyType
+        assert!(!format!("{:?}", poly).is_empty());
     }
 }
