@@ -27,7 +27,7 @@ pub fn format_stmt(
             iterable,
             body,
             label,
-        } => format_for_stmt(var, *var_mut, iterable, body, label, ctx),
+        } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx),
         StmtKind::Binding {
             name,
             type_name,
@@ -59,7 +59,7 @@ pub fn format_stmt(
             elif_branches,
             else_branch,
             span: _,
-        } => format_if_stmt(condition, then_branch, elif_branches, else_branch, ctx),
+        } => super::common::format_if(condition, then_branch, elif_branches, else_branch, ctx),
         StmtKind::ExternalBindingStmt {
             type_name,
             method_name,
@@ -96,31 +96,6 @@ fn format_var_decl(
     }
 
     result
-}
-
-/// 格式化 for 语句
-fn format_for_stmt(
-    var: &str,
-    var_mut: bool,
-    iterable: &Expr,
-    body: &Block,
-    label: &Option<String>,
-    ctx: &FormatContext,
-) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
-    let mut_str = if var_mut { "mut " } else { "" };
-    format!(
-        "{}for {}{} in {} {}",
-        label_str,
-        mut_str,
-        var,
-        format_expr(iterable, ctx),
-        format_block(body, ctx)
-    )
 }
 
 /// 格式化统一绑定语句 (函数/类型/方法)
@@ -261,35 +236,6 @@ fn format_use(
     if let Some(aliases) = alias {
         result.push_str(" as ");
         result.push_str(&aliases.join(", "));
-    }
-
-    result
-}
-
-/// 格式化 if 语句
-fn format_if_stmt(
-    condition: &Expr,
-    then_branch: &Block,
-    elif_branches: &[(Box<Expr>, Box<Block>)],
-    else_branch: &Option<Box<Block>>,
-    ctx: &FormatContext,
-) -> String {
-    let mut result = format!(
-        "if {} {}",
-        format_expr(condition, ctx),
-        format_block(then_branch, ctx)
-    );
-
-    for (elif_cond, elif_body) in elif_branches {
-        result.push_str(&format!(
-            " elif {} {}",
-            format_expr(elif_cond, ctx),
-            format_block(elif_body, ctx)
-        ));
-    }
-
-    if let Some(else_body) = else_branch {
-        result.push_str(&format!(" else {}", format_block(else_body, ctx)));
     }
 
     result

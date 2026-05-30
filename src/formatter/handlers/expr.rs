@@ -43,7 +43,7 @@ pub fn format_expr(
             elif_branches,
             else_branch,
             span: _,
-        } => format_if_expr(condition, then_branch, elif_branches, else_branch, ctx),
+        } => super::common::format_if(condition, then_branch, elif_branches, else_branch, ctx),
         Expr::Match {
             expr: match_expr,
             arms,
@@ -54,7 +54,7 @@ pub fn format_expr(
             body,
             label,
             span: _,
-        } => format_while(condition, body, label, ctx),
+        } => super::common::format_while_loop(condition, body, label, ctx),
         Expr::For {
             var,
             var_mut,
@@ -62,7 +62,7 @@ pub fn format_expr(
             body,
             label,
             span: _,
-        } => format_for(var, *var_mut, iterable, body, label, ctx),
+        } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx),
         Expr::Block(block) => format_block(block, ctx),
         Expr::Return(expr_opt, _span) => {
             if let Some(e) = expr_opt {
@@ -352,37 +352,6 @@ pub fn format_params(params: &[Param]) -> String {
     items.join(", ")
 }
 
-/// 格式化 if 表达式
-fn format_if_expr(
-    condition: &Expr,
-    then_branch: &Block,
-    elif_branches: &[(Box<Expr>, Box<Block>)],
-    else_branch: &Option<Box<Block>>,
-    ctx: &FormatContext,
-) -> String {
-    let indent = ctx.indent_str();
-    let mut result = format!(
-        "if {} {}",
-        format_expr(condition, ctx),
-        format_block(then_branch, ctx)
-    );
-
-    for (elif_cond, elif_body) in elif_branches {
-        result.push_str(&format!(
-            " elif {} {}",
-            format_expr(elif_cond, ctx),
-            format_block(elif_body, ctx)
-        ));
-    }
-
-    if let Some(else_body) = else_branch {
-        result.push_str(&format!(" else {}", format_block(else_body, ctx)));
-    }
-
-    let _ = indent;
-    result
-}
-
 /// 格式化 match 表达式
 fn format_match_expr(
     match_expr: &Expr,
@@ -475,51 +444,6 @@ pub fn format_pattern(pat: &Pattern) -> String {
             )
         }
     }
-}
-
-/// 格式化 while 循环
-fn format_while(
-    condition: &Expr,
-    body: &Block,
-    label: &Option<String>,
-    ctx: &FormatContext,
-) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
-    format!(
-        "{}while {} {}",
-        label_str,
-        format_expr(condition, ctx),
-        format_block(body, ctx)
-    )
-}
-
-/// 格式化 for 循环
-fn format_for(
-    var: &str,
-    var_mut: bool,
-    iterable: &Expr,
-    body: &Block,
-    label: &Option<String>,
-    ctx: &FormatContext,
-) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
-    let mut_str = if var_mut { "mut " } else { "" };
-    format!(
-        "{}for {}{} in {} {}",
-        label_str,
-        mut_str,
-        var,
-        format_expr(iterable, ctx),
-        format_block(body, ctx)
-    )
 }
 
 /// 格式化代码块
