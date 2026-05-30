@@ -151,49 +151,27 @@ mod tests {
 
         sort_imports(&mut stmts);
 
-        // 验证顺序：标准库 -> 外部 -> 相对路径
-        assert_eq!(stmts.len(), 8);
-
-        // 标准库
-        let std_count = stmts
+        // 提取所有导入路径，验证精确顺序
+        let paths: Vec<String> = stmts
             .iter()
-            .take_while(|s| {
+            .filter_map(|s| {
                 if let StmtKind::Use { path, .. } = &s.kind {
-                    classify_import(path) == ImportKind::Std
+                    Some(path.clone())
                 } else {
-                    false
+                    None
                 }
             })
-            .count();
-        assert!(std_count >= 2); // std, std::collections
+            .collect();
 
-        // 外部
-        let external_count = stmts
-            .iter()
-            .skip(std_count)
-            .take_while(|s| {
-                if let StmtKind::Use { path, .. } = &s.kind {
-                    classify_import(path) == ImportKind::External
-                } else {
-                    false
-                }
-            })
-            .count();
-        assert!(external_count >= 3); // a, b, c, z
-
-        // 相对路径
-        let relative_start = std_count + external_count;
-        let relative_count = stmts
-            .iter()
-            .skip(relative_start)
-            .take_while(|s| {
-                if let StmtKind::Use { path, .. } = &s.kind {
-                    classify_import(path) == ImportKind::Relative
-                } else {
-                    true
-                }
-            })
-            .count();
-        assert!(relative_count >= 2); // ./foo, ../bar
+        // 验证精确顺序：标准库 -> 外部 -> 相对路径
+        assert_eq!(paths.len(), 8);
+        assert_eq!(paths[0], "std");
+        assert_eq!(paths[1], "std::collections");
+        assert_eq!(paths[2], "a");
+        assert_eq!(paths[3], "b");
+        assert_eq!(paths[4], "c");
+        assert_eq!(paths[5], "z");
+        assert_eq!(paths[6], "../bar");
+        assert_eq!(paths[7], "./foo");
     }
 }
