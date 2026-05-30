@@ -225,6 +225,14 @@ pub struct InstallConfig {
     pub dir: Option<PathBuf>,
 }
 
+/// Project-level configuration (yaoxiang.toml)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProjectConfig {
+    /// Format configuration
+    #[serde(default)]
+    pub fmt: FmtConfig,
+}
+
 /// Get the user config directory
 pub fn get_config_dir() -> Option<PathBuf> {
     // Try XDG config directory on Unix

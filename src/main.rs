@@ -360,8 +360,40 @@ fn main() -> Result<()> {
             use_tabs,
             single_quote,
         } => {
-            // 构建格式化选项
-            let mut options = yaoxiang::formatter::FormatOptions::default();
+            // 1. Load user config
+            let user_config = yaoxiang::util::config::load_user_config().unwrap_or_default();
+
+            // 2. Load project config (current directory)
+            let project_config = {
+                let config_path = std::path::PathBuf::from("yaoxiang.toml");
+                if config_path.exists() {
+                    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+                    toml::from_str::<yaoxiang::util::config::ProjectConfig>(&content)
+                        .map(|c| c.fmt)
+                        .unwrap_or_default()
+                } else {
+                    yaoxiang::util::config::FmtConfig::default()
+                }
+            };
+
+            // 3. Start with user config as base
+            let mut options = yaoxiang::formatter::FormatOptions::from(&user_config.fmt);
+
+            // 4. Override with project config
+            if project_config.line_width != 120 {
+                options.line_width = project_config.line_width;
+            }
+            if project_config.indent_width != 4 {
+                options.indent_width = project_config.indent_width;
+            }
+            if project_config.use_tabs {
+                options.use_tabs = true;
+            }
+            if project_config.single_quote {
+                options.single_quote = true;
+            }
+
+            // 5. Override with CLI args (highest priority)
             if let Some(w) = indent {
                 options.indent_width = w;
             }
