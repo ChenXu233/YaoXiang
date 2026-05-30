@@ -323,7 +323,7 @@ fn format_fn_def(
         String::new()
     };
     format!(
-        "{}fn {}({}){}  {}",
+        "{}fn {}({}){} {}",
         async_prefix,
         name,
         params_str,

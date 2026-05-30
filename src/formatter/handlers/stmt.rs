@@ -228,7 +228,7 @@ fn format_binding(
     };
 
     format!(
-        "{}{}{}{}{}  = ({}) => {}",
+        "{}{}{}{}{} = ({}) => {}",
         pub_str,
         name,
         generics,
