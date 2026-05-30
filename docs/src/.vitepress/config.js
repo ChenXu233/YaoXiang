@@ -162,6 +162,15 @@ export default defineConfig({
                 },
               ]
             },
+            {
+              text: '工具设计',
+              items: [
+                { text: 'check 命令', link: '/design/check/' },
+                { text: '诊断系统', link: '/design/check/diagnostic-system' },
+                { text: '跨文件分析', link: '/design/check/cross-file-analysis' },
+                { text: '增量检查', link: '/design/check/incremental-checking' },
+              ],
+            },
           ],
 
           '/reference/': [
