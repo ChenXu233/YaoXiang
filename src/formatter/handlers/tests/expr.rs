@@ -138,3 +138,10 @@ fn test_format_cast() {
     let result = format_expr(&expr, &ctx);
     assert_eq!(result, "x as i64");
 }
+
+#[test]
+fn test_format_syntax_error_preserves_content() {
+    let source = "let x = ;";
+    let result = crate::formatter::format_source(source, &FormatOptions::default());
+    assert!(result.is_ok(), "Should not panic on syntax error");
+}
