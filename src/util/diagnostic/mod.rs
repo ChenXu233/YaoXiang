@@ -331,6 +331,34 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
     Ok(())
 }
 
+/// 并行解析多个文件
+///
+/// 使用 rayon 对文件列表进行并行词法分析和语法分析，返回每个文件的
+/// 路径、模块 ID 和 AST。用于多文件编译场景下的前置解析阶段。
+pub fn parse_files_parallel(
+    files: &[std::path::PathBuf],
+) -> anyhow::Result<Vec<(std::path::PathBuf, crate::frontend::module::dep_graph::ModuleId, crate::frontend::core::parser::ast::Module)>> {
+    use rayon::prelude::*;
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::module::dep_graph::ModuleId;
+
+    files.par_iter().map(|file| {
+        let source = std::fs::read_to_string(file)
+            .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
+        let tokens = tokenize(&source)
+            .map_err(|e| anyhow::anyhow!("Lexer error in {}: {}", file.display(), e))?;
+        let ast = parse(&tokens)
+            .map_err(|e| anyhow::anyhow!("Parser error in {}: {}", file.display(), e))?;
+        let module_name = file.file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let module_id = ModuleId::new(module_name, file.clone());
+        Ok((file.clone(), module_id, ast))
+    }).collect()
+}
+
 /// 对多个文件进行静态检查并聚合诊断信息
 ///
 /// 说明：当前编译管线会优先返回首个结构化诊断，因此每个失败文件

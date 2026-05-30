@@ -378,7 +378,10 @@ fn output_check_json(result: &CheckResult) -> Result<()> {
                 .unwrap_or((0, 0, 0, 0));
 
             let lsp: Value = serde_json::from_str(&JsonEmitter::render(&entry.diagnostic))
-                .unwrap_or_else(|_| serde_json::json!({}));
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Failed to serialize diagnostic to JSON: {}", e);
+                    serde_json::json!({})
+                });
 
             CheckJsonDiagnostic {
                 file: entry.file.clone(),
