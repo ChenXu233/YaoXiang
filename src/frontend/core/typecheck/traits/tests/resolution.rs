@@ -11,23 +11,6 @@ use crate::frontend::core::typecheck::traits::resolution::TraitResolutionError;
 // ===================================================================
 
 #[test]
-fn test_resolve_known_trait_clone() {
-    // Arrange
-    let resolver = TraitResolver::new();
-
-    // Act
-    let result = resolver.resolve("Clone");
-
-    // Assert
-    assert!(result.is_ok(), "应该成功解析已知的 Clone trait");
-    assert_eq!(
-        result.unwrap(),
-        "std:: Clone",
-        "Clone trait 的解析路径应匹配预期"
-    );
-}
-
-#[test]
 fn test_resolve_known_trait_debug() {
     // Arrange
     let resolver = TraitResolver::new();
@@ -45,36 +28,36 @@ fn test_resolve_known_trait_debug() {
 }
 
 #[test]
-fn test_resolve_known_trait_send() {
+fn test_resolve_known_trait_dup() {
     // Arrange
     let resolver = TraitResolver::new();
 
     // Act
-    let result = resolver.resolve("Send");
+    let result = resolver.resolve("Dup");
 
     // Assert
-    assert!(result.is_ok(), "应该成功解析已知的 Send trait");
+    assert!(result.is_ok(), "应该成功解析已知的 Dup trait");
     assert_eq!(
         result.unwrap(),
-        "std::marker::Send",
-        "Send trait 的解析路径应匹配预期"
+        "std::Dup",
+        "Dup trait 的解析路径应匹配预期"
     );
 }
 
 #[test]
-fn test_resolve_known_trait_sync() {
+fn test_resolve_known_trait_clone() {
     // Arrange
     let resolver = TraitResolver::new();
 
     // Act
-    let result = resolver.resolve("Sync");
+    let result = resolver.resolve("Clone");
 
     // Assert
-    assert!(result.is_ok(), "应该成功解析已知的 Sync trait");
+    assert!(result.is_ok(), "应该成功解析已知的 Clone trait");
     assert_eq!(
         result.unwrap(),
-        "std::marker::Sync",
-        "Sync trait 的解析路径应匹配预期"
+        "std:: Clone",
+        "Clone trait 的解析路径应匹配预期"
     );
 }
 
@@ -86,8 +69,7 @@ fn test_is_trait_defined_known_traits() {
     // Act & Assert
     assert!(resolver.is_trait_defined("Clone"), "Clone 应为已定义 trait");
     assert!(resolver.is_trait_defined("Debug"), "Debug 应为已定义 trait");
-    assert!(resolver.is_trait_defined("Send"), "Send 应为已定义 trait");
-    assert!(resolver.is_trait_defined("Sync"), "Sync 应为已定义 trait");
+    assert!(resolver.is_trait_defined("Dup"), "Dup 应为已定义 trait");
 }
 
 #[test]
@@ -113,13 +95,13 @@ fn test_resolve_trait_path_marker_path() {
     let resolver = TraitResolver::new();
 
     // Act
-    let result = resolver.resolve_trait_path("std::marker::Send");
+    let result = resolver.resolve_trait_path("std::marker::Dup");
 
     // Assert
     assert!(result.is_ok(), "应该成功解析 marker 模块下的 trait 路径");
     assert_eq!(
         result.unwrap(),
-        "std::marker::Send",
+        "std::Dup",
         "marker 路径解析后应返回正确结果"
     );
 }

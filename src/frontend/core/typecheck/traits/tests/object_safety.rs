@@ -53,34 +53,22 @@ fn test_check_debug_is_object_safe() {
 }
 
 #[test]
-fn test_check_send_is_object_safe() {
+fn test_check_dup_is_object_safe() {
     // Arrange
     let checker = ObjectSafetyChecker::new();
 
     // Act
-    let result = checker.check("Send");
+    let result = checker.check("Dup");
 
     // Assert
-    assert!(result.is_ok(), "Send should be object-safe");
-}
-
-#[test]
-fn test_check_sync_is_object_safe() {
-    // Arrange
-    let checker = ObjectSafetyChecker::new();
-
-    // Act
-    let result = checker.check("Sync");
-
-    // Assert
-    assert!(result.is_ok(), "Sync should be object-safe");
+    assert!(result.is_ok(), "Dup should be object-safe");
 }
 
 #[test]
 fn test_check_returns_ok_for_known_safe_traits() {
     // Arrange
     let checker = ObjectSafetyChecker::new();
-    let safe_traits = ["Clone", "Debug", "Send", "Sync"];
+    let safe_traits = ["Clone", "Debug", "Dup"];
 
     // Act & Assert
     for trait_name in &safe_traits {

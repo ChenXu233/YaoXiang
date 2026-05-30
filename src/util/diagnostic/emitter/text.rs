@@ -43,14 +43,6 @@ impl Default for EmitterConfig {
     }
 }
 
-/// 诊断渲染器 trait
-pub trait DiagnosticEmitter {
-    fn emit(
-        &self,
-        diagnostic: &Diagnostic,
-    ) -> String;
-}
-
 /// 文本诊断渲染器
 #[derive(Debug, Clone)]
 pub struct TextEmitter {
@@ -264,6 +256,7 @@ impl TextEmitter {
         }
     }
 
+    #[allow(dead_code)]
     fn hint_prefix(&self) -> String {
         self.color("hint", "hint: ")
     }

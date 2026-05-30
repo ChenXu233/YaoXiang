@@ -224,15 +224,11 @@ impl BorrowChecker {
         frozen_token_name: &str,
     ) {
         let source = match self.tokens.get_mut(mut_token_name) {
-            Some(token) => {
-                if token.state == TokenState::Active && token.mutable {
-                    token.state = TokenState::Frozen;
-                    token.source.clone()
-                } else {
-                    return;
-                }
+            Some(token) if token.state == TokenState::Active && token.mutable => {
+                token.state = TokenState::Frozen;
+                token.source.clone()
             }
-            None => return,
+            _ => return,
         };
 
         // 记录冻结关系，用于后续解冻
@@ -270,7 +266,7 @@ impl BorrowChecker {
                 if !has_other_active {
                     // 没有其他活跃的 &T 令牌，解冻 &mut 令牌
                     // 找到同一来源的 Frozen &mut 令牌
-                    for (_name, t) in &mut self.tokens {
+                    for t in self.tokens.values_mut() {
                         if t.source == *source && t.mutable && t.state == TokenState::Frozen {
                             t.state = TokenState::Active;
                             break;
