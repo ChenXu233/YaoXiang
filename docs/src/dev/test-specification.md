@@ -185,6 +185,41 @@ src/frontend/core/parser/
 
 关键判断标准：**`tests/` 放在哪个目录，哪个目录的 `mod.rs` 就必须用 `#[cfg(test)] mod tests;` 声明它。**
 
+**规则 1.1 补充：禁止向上聚合。** 子目录模块的测试必须放在该子目录自己的 `tests/` 中，不得聚合到父级 `tests/`。
+
+| 模块类型 | 测试位置 | 示例 |
+|----------|----------|------|
+| 目录模块（有 `mod.rs`） | 该目录下的 `tests/` | `emitter/tests/`、`codes/tests/` |
+| 单文件模块（只有 `.rs`） | 父级的 `tests/` | `session.rs` → `diagnostic/tests/session.rs` |
+
+```text
+# ✅ 正确：每个目录模块的测试各自独立
+src/util/diagnostic/
+├── codes/
+│   ├── mod.rs              # #[cfg(test)] mod tests;
+│   └── tests/              # ✅ codes 自己的测试
+│       ├── mod.rs
+│       └── codes.rs
+├── emitter/
+│   ├── mod.rs              # #[cfg(test)] mod tests;
+│   └── tests/              # ✅ emitter 自己的测试
+│       ├── mod.rs
+│       ├── text.rs
+│       └── ansi.rs
+└── tests/                  # ✅ diagnostic 级别（单文件模块）
+    ├── mod.rs
+    ├── session.rs
+    ├── suggest.rs
+    └── collect.rs
+
+# ❌ 错误：将 emitter 和 codes 的测试聚合到 diagnostic/tests/
+src/util/diagnostic/
+└── tests/
+    ├── mod.rs              # ❌ 被迫声明 mod emitter; mod codes;
+    ├── emitter/            # ❌ 应该在 emitter/tests/
+    └── codes/              # ❌ 应该在 codes/tests/
+```
+
 #### 单文件模块 vs 目录模块的测试放置规则
 
 **核心区别**：模块的组织形式决定了测试的放置位置。
