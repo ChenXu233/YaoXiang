@@ -29,6 +29,9 @@ pub mod options;
 pub mod rules;
 pub mod source_map;
 
+#[cfg(test)]
+mod tests;
+
 // Re-exports
 pub use options::FormatOptions;
 pub use command::{run_format_command, FormatRunResult};
