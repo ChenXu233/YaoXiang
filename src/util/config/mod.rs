@@ -123,47 +123,23 @@ impl Default for ReplConfig {
 }
 
 /// Format configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FmtConfig {
     /// Line width
-    #[serde(default = "default_line_width")]
-    pub line_width: usize,
+    #[serde(default)]
+    pub line_width: Option<usize>,
     /// Indent width
-    #[serde(default = "default_indent_width")]
-    pub indent_width: usize,
+    #[serde(default)]
+    pub indent_width: Option<usize>,
     /// Use tabs for indentation
     #[serde(default)]
-    pub use_tabs: bool,
+    pub use_tabs: Option<bool>,
     /// Use single quotes
     #[serde(default)]
-    pub single_quote: bool,
+    pub single_quote: Option<bool>,
     /// Sort import statements
-    #[serde(default = "default_sort_imports")]
-    pub sort_imports: bool,
-}
-
-fn default_line_width() -> usize {
-    120
-}
-
-fn default_indent_width() -> usize {
-    4
-}
-
-fn default_sort_imports() -> bool {
-    true
-}
-
-impl Default for FmtConfig {
-    fn default() -> Self {
-        Self {
-            line_width: 120,
-            indent_width: 4,
-            use_tabs: false,
-            single_quote: false,
-            sort_imports: true,
-        }
-    }
+    #[serde(default)]
+    pub sort_imports: Option<bool>,
 }
 
 /// Warning level for lints
