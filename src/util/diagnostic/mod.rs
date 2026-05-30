@@ -369,61 +369,153 @@ pub fn parse_files_parallel(
         .collect()
 }
 
-/// 对多个文件进行静态检查并聚合诊断信息
+/// 注册模块的导出符号到类型环境
 ///
-/// 说明：当前编译管线会优先返回首个结构化诊断，因此每个失败文件
-/// 通常会产生一个主诊断条目。
-pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
-    use crate::frontend::Compiler;
+/// 遍历 AST 中的 `pub` 绑定，将类型签名注册到环境的变量表，
+/// 同时将导出信息注册到模块注册表。
+fn register_module_exports(
+    env: &mut crate::frontend::core::typecheck::environment::TypeEnvironment,
+    module_id: &crate::frontend::module::dep_graph::ModuleId,
+    ast: &crate::frontend::core::parser::ast::Module,
+) {
+    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::frontend::core::types::base::ast_type_to_poly_type;
+    use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
-    let mut result = CheckResult::default();
+    let mut module_info = ModuleInfo::new(module_id.name.clone(), ModuleSource::User);
 
-    for file in files {
-        let source = match std::fs::read_to_string(file) {
-            Ok(s) => s,
-            Err(e) => {
-                let diagnostic = ErrorCodeDefinition::internal_error(&format!(
-                    "Failed to read file {}: {}",
-                    file.display(),
-                    e
-                ))
-                .build();
-                result.error_count += 1;
-                result.diagnostics.push(CheckDiagnostic {
-                    file: file.display().to_string(),
-                    diagnostic,
-                });
-                continue;
+    for stmt in &ast.items {
+        if let StmtKind::Binding {
+            name,
+            is_pub: true,
+            type_annotation,
+            ..
+        } = &stmt.kind
+        {
+            let qualified_name = format!("{}.{}", module_id.name, name);
+            if let Some(ty) = type_annotation {
+                let poly_type = ast_type_to_poly_type(ty);
+                env.vars.insert(qualified_name.clone(), poly_type);
             }
-        };
-
-        let source_name = file.display().to_string();
-        let source_file = SourceFile::new(source_name.clone(), source.clone());
-        result
-            .source_files
-            .insert(source_name.clone(), source_file.clone());
-
-        let mut compiler = Compiler::new();
-        if let Err(e) = compiler.compile(&source_name, &source) {
-            let diagnostic = e
-                .diagnostic()
-                .cloned()
-                .unwrap_or_else(|| parse_compile_error(e.message()));
-
-            if diagnostic.severity.is_error() {
-                result.error_count += 1;
-            } else {
-                result.warning_count += 1;
-            }
-
-            result.diagnostics.push(CheckDiagnostic {
-                file: source_name,
-                diagnostic,
+            module_info.add_export(Export {
+                name: name.clone(),
+                full_path: qualified_name,
+                kind: ExportKind::Function,
+                signature: type_annotation
+                    .as_ref()
+                    .map(|t| format!("{:?}", t))
+                    .unwrap_or_else(|| "Any".to_string()),
             });
         }
     }
 
+    env.module_registry.register(module_info);
+}
+
+/// 对单个模块进行类型检查
+///
+/// 创建独立的 `Compiler` 实例并编译源文件，将诊断信息追加到结果中。
+fn check_single_module(
+    path: &std::path::Path,
+    result: &mut CheckResult,
+) {
+    use crate::frontend::Compiler;
+
+    let source_name = path.display().to_string();
+    let source = std::fs::read_to_string(path).unwrap_or_default();
+
+    let mut compiler = Compiler::new();
+    if let Err(e) = compiler.compile(&source_name, &source) {
+        let diagnostic = e
+            .diagnostic()
+            .cloned()
+            .unwrap_or_else(|| parse_compile_error(e.message()));
+
+        if diagnostic.severity.is_error() {
+            result.error_count += 1;
+        } else {
+            result.warning_count += 1;
+        }
+
+        result.diagnostics.push(CheckDiagnostic {
+            file: source_name,
+            diagnostic,
+        });
+    }
+}
+
+/// 使用共享类型环境对多个文件进行跨文件分析
+///
+/// 核心流程：
+/// 1. 并行解析所有文件
+/// 2. 从 AST 构建模块依赖图
+/// 3. 检测循环依赖
+/// 4. 拓扑排序确定编译顺序
+/// 5. 按依赖顺序逐模块检查
+fn check_modules_with_shared_env(
+    files: &[std::path::PathBuf],
+) -> anyhow::Result<CheckResult> {
+    use crate::frontend::module::dep_graph::ModuleDependencyGraph;
+
+    let parsed = parse_files_parallel(files)?;
+
+    // 构建依赖图
+    let mut dep_graph = ModuleDependencyGraph::new();
+    for (_, module_id, ast) in &parsed {
+        dep_graph.build_from_ast(module_id, ast);
+    }
+
+    // 循环依赖检测
+    let cycles = dep_graph.detect_cycles();
+    if !cycles.is_empty() {
+        let cycle_str = cycles
+            .iter()
+            .map(|c| {
+                c.iter()
+                    .map(|m| m.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> ")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(anyhow::anyhow!("Cyclic dependency detected: {}", cycle_str));
+    }
+
+    // 拓扑排序
+    let order = dep_graph.topological_sort().map_err(|cycle| {
+        let names: Vec<&str> = cycle.iter().map(|m| m.name.as_str()).collect();
+        anyhow::anyhow!("Cyclic dependency: {}", names.join(" -> "))
+    })?;
+
+    let mut result = CheckResult::default();
+    let mut env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
+
+    // 按依赖顺序检查模块
+    for module_id in &order {
+        if let Some((path, _, ast)) = parsed.iter().find(|(_, id, _)| id == module_id) {
+            // 注册源文件
+            let source = std::fs::read_to_string(path).unwrap_or_default();
+            let source_file = SourceFile::new(path.display().to_string(), source);
+            result
+                .source_files
+                .insert(path.display().to_string(), source_file);
+
+            // 注册导出符号
+            register_module_exports(&mut env, module_id, ast);
+
+            // 类型检查
+            check_single_module(path, &mut result);
+        }
+    }
+
     Ok(result)
+}
+
+/// 对多个文件进行静态检查并聚合诊断信息
+///
+/// 使用依赖图进行拓扑排序，按依赖顺序检查，支持循环依赖检测。
+pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+    check_modules_with_shared_env(files)
 }
 
 #[cfg(test)]
