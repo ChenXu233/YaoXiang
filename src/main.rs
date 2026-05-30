@@ -334,10 +334,19 @@ fn main() -> Result<()> {
             if watch {
                 run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
             } else {
-                let error_count =
-                    run_check_command_once(&paths, &exclude, json, use_colors, no_progress)?;
-                if error_count > 0 {
-                    ::std::process::exit(1);
+                match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+                    Ok(error_count) => {
+                        if error_count > 0 {
+                            ::std::process::exit(1);
+                        }
+                    }
+                    Err(e) => {
+                        if e.to_string().contains("No .yx files found") {
+                            eprintln!("{}", e);
+                            ::std::process::exit(2);
+                        }
+                        return Err(e);
+                    }
                 }
             }
         }
