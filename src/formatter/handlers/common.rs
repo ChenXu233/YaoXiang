@@ -3,6 +3,7 @@
 use crate::frontend::core::parser::ast::*;
 use super::super::context::FormatContext;
 use super::expr::{format_expr, format_block};
+use super::types::format_type;
 
 /// 格式化 if-elif-else 结构
 pub fn format_if(
@@ -76,4 +77,21 @@ pub fn format_while_loop(
         format_expr(condition, ctx),
         format_block(body, ctx)
     )
+}
+
+/// 格式化泛型参数列表
+pub fn format_generic_params(generic_params: &[GenericParam]) -> String {
+    let items: Vec<String> = generic_params
+        .iter()
+        .map(|gp| {
+            let constraints = if gp.constraints.is_empty() {
+                String::new()
+            } else {
+                let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
+                format!(": {}", cs.join(" + "))
+            };
+            format!("{}{}", gp.name, constraints)
+        })
+        .collect();
+    format!("({})", items.join(", "))
 }

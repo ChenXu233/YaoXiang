@@ -138,19 +138,7 @@ fn format_binding(
             let generics = if generic_params.is_empty() {
                 String::new()
             } else {
-                let items: Vec<String> = generic_params
-                    .iter()
-                    .map(|gp| {
-                        let constraints = if gp.constraints.is_empty() {
-                            String::new()
-                        } else {
-                            let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
-                            format!(": {}", cs.join(" + "))
-                        };
-                        format!("{}{}", gp.name, constraints)
-                    })
-                    .collect();
-                format!("({})", items.join(", "))
+                super::common::format_generic_params(generic_params)
             };
             return format!("{}{}: Type = {}", name, generics, format_type(ty));
         }
@@ -161,19 +149,7 @@ fn format_binding(
     let generics = if generic_params.is_empty() {
         String::new()
     } else {
-        let items: Vec<String> = generic_params
-            .iter()
-            .map(|gp| {
-                let constraints = if gp.constraints.is_empty() {
-                    String::new()
-                } else {
-                    let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
-                    format!(": {}", cs.join(" + "))
-                };
-                format!("{}{}", gp.name, constraints)
-            })
-            .collect();
-        format!("({})", items.join(", "))
+        super::common::format_generic_params(generic_params)
     };
 
     let type_str = if let Some(ty) = type_annotation {
