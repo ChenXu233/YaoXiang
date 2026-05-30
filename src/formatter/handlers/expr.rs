@@ -250,8 +250,8 @@ fn format_binop(
         return format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str);
     }
 
-    // 高优先级运算符：保持原有格式或简单换行
-    format!("{} {} {}\n{}", left_str, op_str, right_str, inner_indent)
+    // 高优先级运算符：换行后运算符放行首
+    format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str)
 }
 
 /// 格式化一元运算
