@@ -28,8 +28,6 @@ pub const BUILTIN_DERIVES: &[&str] = &[
     "Clone", // 可克隆
     "Equal", // 可相等比较（合并了 PartialEq + Eq）
     "Debug", // 可调试打印
-    "Send",  // 可发送（跨线程）
-    "Sync",  // 可同步（跨线程共享）
 ];
 
 /// 检查某 trait 是否为内置可派生
@@ -247,9 +245,6 @@ pub fn generate_auto_derive(
                 is_async: false,
             };
             methods.insert("debug".to_string(), fn_type);
-        }
-        "Send" | "Sync" => {
-            // Send/Sync 是标记 trait，不需要方法
         }
         _ => return None,
     }

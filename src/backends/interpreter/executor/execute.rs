@@ -774,6 +774,20 @@ impl Executor for Interpreter {
                     }
                     frame.advance();
                 }
+                // Borrow token: ZST, runtime equivalent to Mov
+                BytecodeInstr::Borrow { dst, src, .. } => {
+                    let val = frame
+                        .registers
+                        .get(src.0 as usize)
+                        .cloned()
+                        .unwrap_or(RuntimeValue::Unit);
+                    frame.set_register(dst.0 as usize, val);
+                    frame.advance();
+                }
+                // Release borrow token: ZST, runtime equivalent to Nop
+                BytecodeInstr::Release { .. } => {
+                    frame.advance();
+                }
                 BytecodeInstr::MakeClosure {
                     dst,
                     func: func_ref,

@@ -3193,9 +3193,15 @@ impl AstToIrGenerator {
                 let mut env_vars = Vec::new();
                 for captured in &captured_vars {
                     if let Some(local_idx) = self.lookup_local(&captured.name) {
-                        // TODO: ZST 优化 — 如果被捕获的变量是 ZST（如 &T 令牌），
-                        // 应跳过它，因为它没有运行时表示。
-                        // 当前简化处理：所有被捕获的变量都加入 env。
+                        // ZST 优化：借用令牌是零大小类型，跳过 env
+                        if let Some(type_result) = &self.type_result {
+                            if let Some(mono_type) = type_result.local_var_types.get(&captured.name)
+                            {
+                                if matches!(mono_type, MonoType::Ref { .. }) {
+                                    continue;
+                                }
+                            }
+                        }
                         env_vars.push(Operand::Local(local_idx));
                     }
                 }
@@ -3241,6 +3247,24 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
                     env: env_vars,
+                });
+            }
+            Expr::Borrow {
+                mutable,
+                expr,
+                span: _,
+            } => {
+                // 1. 生成内部表达式的 IR
+                let inner_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+
+                // 2. 创建借用令牌指令
+                // 借用令牌是零大小类型，运行时等价于 Mov。
+                // 此指令的存在让借用检查器可以进行流敏感分析。
+                instructions.push(Instruction::Borrow {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(inner_reg),
+                    mutable: *mutable,
                 });
             }
             Expr::Match {

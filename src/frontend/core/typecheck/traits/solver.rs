@@ -139,8 +139,6 @@ impl TraitSolver {
                 "Dup" => self.check_dup_trait(ty),
                 "Equal" => self.check_equal_trait(ty),
                 "Debug" => self.check_debug_trait(ty),
-                "Send" => self.check_send_trait(ty),
-                "Sync" => self.check_sync_trait(ty),
                 _ => false,
             }
         } else {
@@ -215,6 +213,9 @@ impl TraitSolver {
             // Arc：引用计数，自动 Dup
             MonoType::Arc(_) => true,
 
+            // &T 是零大小令牌，可自由复制（Dup）；&mut T 不可
+            MonoType::Ref { mutable: false, .. } => true,
+
             // 元组：递归检查所有元素
             MonoType::Tuple(elems) => elems.iter().all(|t| self.check_dup_trait(t)),
 
@@ -256,38 +257,6 @@ impl TraitSolver {
         true
     }
 
-    /// 检查 Send 特质
-    fn check_send_trait(
-        &self,
-        ty: &MonoType,
-    ) -> bool {
-        matches!(
-            ty,
-            MonoType::Int(_)
-                | MonoType::Float(_)
-                | MonoType::Bool
-                | MonoType::Char
-                | MonoType::String
-                | MonoType::Void
-        )
-    }
-
-    /// 检查 Sync 特质
-    fn check_sync_trait(
-        &self,
-        ty: &MonoType,
-    ) -> bool {
-        matches!(
-            ty,
-            MonoType::Int(_)
-                | MonoType::Float(_)
-                | MonoType::Bool
-                | MonoType::Char
-                | MonoType::String
-                | MonoType::Void
-        )
-    }
-
     /// 检查特质是否满足（支持用户定义 Trait）
     pub fn check_trait(
         &mut self,
@@ -305,8 +274,6 @@ impl TraitSolver {
             "Dup" => self.check_dup_trait(ty),
             "Equal" => self.check_equal_trait(ty),
             "Debug" => self.check_debug_trait(ty),
-            "Send" => self.check_send_trait(ty),
-            "Sync" => self.check_sync_trait(ty),
             _ => false,
         }
     }
