@@ -16,8 +16,7 @@ pub fn run_format_command(
 ) -> Result<FormatRunResult> {
     let files = collect_yx_files(path)?;
     if files.is_empty() {
-        eprintln!("No .yx files found at: {}", path.display());
-        ::std::process::exit(2);
+        anyhow::bail!("No .yx files found at: {}", path.display());
     }
 
     let mut needs_formatting = false;
@@ -44,8 +43,7 @@ pub fn run_format_command(
                 }
             }
             Err(e) => {
-                eprintln!("Error formatting {}: {}", file.display(), e);
-                ::std::process::exit(2);
+                anyhow::bail!("Error formatting {}: {}", file.display(), e);
             }
         }
     }
