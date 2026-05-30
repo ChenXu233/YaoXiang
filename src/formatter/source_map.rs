@@ -207,6 +207,14 @@ impl SourceMap {
                             offset += chars[i].len_utf8();
                             column += 1;
                             i += 1;
+                            if depth == 0 {
+                                // Skip the closing '/'
+                                content.push(chars[i]);
+                                offset += chars[i].len_utf8();
+                                column += 1;
+                                i += 1;
+                                break;
+                            }
                         }
                         if chars[i] == '\n' {
                             line += 1;
