@@ -343,7 +343,7 @@ result = ffi.call_with_timeout("blocking_func", 5000)  # 5秒超时
 
 - **RFC-001**: FFI 调用作为外部函数，默认 `@block`（不参与 DAG 调度）
 - **RFC-008**: 调度器脱耦设计，FFI 调用作为独立任务
-- **RFC-020**: 动态模块与 FFI 集成设计
+- **RFC-020**: FFI 节点在 DAG 中的调度语义、Phi 节点、循环展开等调度层面的详细设计
 
 ## 开放问题
 
