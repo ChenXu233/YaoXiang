@@ -75,3 +75,17 @@ fn test_source_map_comment_in_block_body() {
     assert_eq!(sm.comments[0].content, "// loop comment");
     assert_eq!(sm.comments[0].span.start.line, 2);
 }
+
+#[test]
+fn test_source_map_char_literal_non_ascii() {
+    // 非 ASCII 字符字面量后的注释位置应正确
+    let source = "'你' // comment";
+    let sm = SourceMap::build(source);
+    let comments = sm.comments_between_lines(1, 2);
+    assert_eq!(
+        comments.len(),
+        1,
+        "Should find comment after non-ASCII char literal"
+    );
+    assert!(comments[0].content.contains("comment"));
+}
