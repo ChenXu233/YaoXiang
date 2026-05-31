@@ -3,6 +3,7 @@
 use crate::frontend::core::parser::ast::*;
 
 use super::super::context::FormatContext;
+use super::super::source_map::SourceMap;
 use super::expr::{format_block, format_expr, format_params};
 use super::types::format_type;
 
@@ -10,16 +11,17 @@ use super::types::format_type;
 pub fn format_stmt(
     kind: &StmtKind,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     match kind {
-        StmtKind::Expr(expr) => format_expr(expr, ctx),
+        StmtKind::Expr(expr) => format_expr(expr, ctx, source_map),
         StmtKind::Var {
             name,
             name_span: _,
             type_annotation,
             initializer,
             is_mut,
-        } => format_var_decl(name, type_annotation, initializer, *is_mut, ctx),
+        } => format_var_decl(name, type_annotation, initializer, *is_mut, ctx, source_map),
         StmtKind::For {
             var,
             var_span: _,
@@ -27,7 +29,7 @@ pub fn format_stmt(
             iterable,
             body,
             label,
-        } => format_for_stmt(var, *var_mut, iterable, body, label, ctx),
+        } => super::common::format_for_loop(var, *var_mut, iterable, body, label, ctx, source_map),
         StmtKind::Binding {
             name,
             type_name,
@@ -49,6 +51,7 @@ pub fn format_stmt(
             body,
             *is_pub,
             ctx,
+            source_map,
         ),
         StmtKind::Use {
             path, items, alias, ..
@@ -59,12 +62,19 @@ pub fn format_stmt(
             elif_branches,
             else_branch,
             span: _,
-        } => format_if_stmt(condition, then_branch, elif_branches, else_branch, ctx),
+        } => super::common::format_if(
+            condition,
+            then_branch,
+            elif_branches,
+            else_branch,
+            ctx,
+            source_map,
+        ),
         StmtKind::ExternalBindingStmt {
             type_name,
             method_name,
             binding,
-        } => format_external_binding(type_name, method_name, binding, ctx),
+        } => format_external_binding(type_name, method_name, binding, ctx, source_map),
         StmtKind::Error(_span) => "/* error */".to_string(),
     }
 }
@@ -76,6 +86,7 @@ fn format_var_decl(
     initializer: &Option<Box<Expr>>,
     is_mut: bool,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     let mut result = String::new();
 
@@ -87,40 +98,15 @@ fn format_var_decl(
 
     if let Some(ty) = type_annotation {
         result.push_str(": ");
-        result.push_str(&format_type(ty));
+        result.push_str(&format_type(ty, source_map));
     }
 
     if let Some(init) = initializer {
         result.push_str(" = ");
-        result.push_str(&format_expr(init, ctx));
+        result.push_str(&format_expr(init, ctx, source_map));
     }
 
     result
-}
-
-/// 格式化 for 语句
-fn format_for_stmt(
-    var: &str,
-    var_mut: bool,
-    iterable: &Expr,
-    body: &Block,
-    label: &Option<String>,
-    ctx: &FormatContext,
-) -> String {
-    let label_str = if let Some(l) = label {
-        format!("{}: ", l)
-    } else {
-        String::new()
-    };
-    let mut_str = if var_mut { "mut " } else { "" };
-    format!(
-        "{}for {}{} in {} {}",
-        label_str,
-        mut_str,
-        var,
-        format_expr(iterable, ctx),
-        format_block(body, ctx)
-    )
 }
 
 /// 格式化统一绑定语句 (函数/类型/方法)
@@ -136,11 +122,12 @@ fn format_binding(
     body: &(Vec<Stmt>, Option<Box<Expr>>),
     is_pub: bool,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     // 方法绑定: Type.method: (Type, ...) -> ReturnType = (params) => body
     if let Some(ty_name) = type_name {
         if let Some(mt) = method_type {
-            let params_str = format_params(params);
+            let params_str = format_params(params, source_map);
             let body_block = Block {
                 stmts: body.0.clone(),
                 expr: body.1.clone(),
@@ -150,9 +137,9 @@ fn format_binding(
                 "{}.{}: {} = ({}) => {}",
                 ty_name,
                 name,
-                format_type(mt),
+                format_type(mt, source_map),
                 params_str,
-                format_block(&body_block, ctx)
+                format_block(&body_block, ctx, source_map)
             );
         }
     }
@@ -163,21 +150,14 @@ fn format_binding(
             let generics = if generic_params.is_empty() {
                 String::new()
             } else {
-                let items: Vec<String> = generic_params
-                    .iter()
-                    .map(|gp| {
-                        let constraints = if gp.constraints.is_empty() {
-                            String::new()
-                        } else {
-                            let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
-                            format!(": {}", cs.join(" + "))
-                        };
-                        format!("{}{}", gp.name, constraints)
-                    })
-                    .collect();
-                format!("({})", items.join(", "))
+                super::common::format_generic_params(generic_params, source_map)
             };
-            return format!("{}{}: Type = {}", name, generics, format_type(ty));
+            return format!(
+                "{}{}: Type = {}",
+                name,
+                generics,
+                format_type(ty, source_map)
+            );
         }
     }
 
@@ -186,23 +166,11 @@ fn format_binding(
     let generics = if generic_params.is_empty() {
         String::new()
     } else {
-        let items: Vec<String> = generic_params
-            .iter()
-            .map(|gp| {
-                let constraints = if gp.constraints.is_empty() {
-                    String::new()
-                } else {
-                    let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
-                    format!(": {}", cs.join(" + "))
-                };
-                format!("{}{}", gp.name, constraints)
-            })
-            .collect();
-        format!("({})", items.join(", "))
+        super::common::format_generic_params(generic_params, source_map)
     };
 
     let type_str = if let Some(ty) = type_annotation {
-        format!(": {}", format_type(ty))
+        format!(": {}", format_type(ty, source_map))
     } else {
         String::new()
     };
@@ -219,7 +187,7 @@ fn format_binding(
         String::new()
     };
 
-    let params_str = format_params(params);
+    let params_str = format_params(params, source_map);
 
     let body_block = Block {
         stmts: body.0.clone(),
@@ -228,14 +196,14 @@ fn format_binding(
     };
 
     format!(
-        "{}{}{}{}{}  = ({}) => {}",
+        "{}{}{}{}{} = ({}) => {}",
         pub_str,
         name,
         generics,
         type_str,
         eval_str,
         params_str,
-        format_block(&body_block, ctx)
+        format_block(&body_block, ctx, source_map)
     )
 }
 
@@ -266,41 +234,13 @@ fn format_use(
     result
 }
 
-/// 格式化 if 语句
-fn format_if_stmt(
-    condition: &Expr,
-    then_branch: &Block,
-    elif_branches: &[(Box<Expr>, Box<Block>)],
-    else_branch: &Option<Box<Block>>,
-    ctx: &FormatContext,
-) -> String {
-    let mut result = format!(
-        "if {} {}",
-        format_expr(condition, ctx),
-        format_block(then_branch, ctx)
-    );
-
-    for (elif_cond, elif_body) in elif_branches {
-        result.push_str(&format!(
-            " elif {} {}",
-            format_expr(elif_cond, ctx),
-            format_block(elif_body, ctx)
-        ));
-    }
-
-    if let Some(else_body) = else_branch {
-        result.push_str(&format!(" else {}", format_block(else_body, ctx)));
-    }
-
-    result
-}
-
 /// 格式化外部绑定
 fn format_external_binding(
     type_name: &str,
     method_name: &str,
     binding: &BindingKind,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     match binding {
         BindingKind::External {
@@ -322,17 +262,17 @@ fn format_external_binding(
             positions,
             body,
         } => {
-            let params_str = format_params(params);
+            let params_str = format_params(params, source_map);
             let pos_strs: Vec<String> = positions.iter().map(|p| p.to_string()).collect();
             format!(
                 "{}.{}: (({}) -> {})[{}] = (({}) => {})",
                 type_name,
                 method_name,
                 params_str,
-                format_type(return_type),
+                format_type(return_type, source_map),
                 pos_strs.join(", "),
                 params_str,
-                format_expr(body, ctx)
+                format_expr(body, ctx, source_map)
             )
         }
         BindingKind::DefaultExternal { function } => {

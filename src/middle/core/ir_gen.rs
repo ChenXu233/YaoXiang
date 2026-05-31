@@ -1993,6 +1993,7 @@ impl AstToIrGenerator {
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
             ast::Expr::Error(span) => *span,
+            ast::Expr::Borrow { span, .. } => *span,
         }
     }
 
@@ -3173,12 +3174,44 @@ impl AstToIrGenerator {
                 // 3. 为闭包参数分配寄存器索引
                 let _param_regs: Vec<usize> = (0..params.len()).collect();
 
-                // 4. 生成闭包函数体 IR
+                // 4. 收集被捕获的外部变量（在进入闭包作用域之前）
+                // 构建当前作用域中所有变量名的集合
+                let outer_scope: std::collections::HashSet<String> = self
+                    .symbols
+                    .iter()
+                    .flat_map(|scope| scope.keys().cloned())
+                    .collect();
+
+                // 使用捕获分析模块扫描闭包体，找出引用的外部变量
+                let captured_vars =
+                    crate::frontend::core::typecheck::inference::capture::analyze_captures(
+                        body.as_ref(),
+                        &outer_scope,
+                    );
+
+                // 为每个被捕获的变量查找其在当前作用域中的 Operand
+                let mut env_vars = Vec::new();
+                for captured in &captured_vars {
+                    if let Some(local_idx) = self.lookup_local(&captured.name) {
+                        // ZST 优化：借用令牌是零大小类型，跳过 env
+                        if let Some(type_result) = &self.type_result {
+                            if let Some(mono_type) = type_result.local_var_types.get(&captured.name)
+                            {
+                                if matches!(mono_type, MonoType::Ref { .. }) {
+                                    continue;
+                                }
+                            }
+                        }
+                        env_vars.push(Operand::Local(local_idx));
+                    }
+                }
+
+                // 5. 生成闭包函数体 IR
                 // 类似于 generate_function_ir 的逻辑，但针对 Lambda
                 let closure_body =
                     self.generate_lambda_body_ir(params, body.as_ref(), constants)?;
 
-                // 5. 创建闭包函数 IR
+                // 6. 创建闭包函数 IR
                 let param_types: Vec<MonoType> = params
                     .iter()
                     .filter_map(|p| p.ty.clone())
@@ -3199,22 +3232,39 @@ impl AstToIrGenerator {
                     entry: 0,
                 };
 
-                // 6. 将闭包函数添加到嵌套函数列表
+                // 7. 将闭包函数添加到嵌套函数列表
                 self.nested_functions.push(closure_func);
 
-                // 7. 保存闭包函数的可变局部变量信息
+                // 8. 保存闭包函数的可变局部变量信息
                 if !closure_body.mut_locals.is_empty() {
                     self.module_mut_locals
                         .insert(closure_name.clone(), closure_body.mut_locals);
                 }
 
-                // 8. 创建 MakeClosure 指令
-                // env 为空，因为当前不处理捕获变量（后续可扩展）
-                // 使用闭包函数名而不是索引
+                // 9. 创建 MakeClosure 指令
+                // env 包含被捕获的外部变量的 Operand
                 instructions.push(Instruction::MakeClosure {
                     dst: Operand::Local(result_reg),
                     func: closure_name,
-                    env: Vec::new(),
+                    env: env_vars,
+                });
+            }
+            Expr::Borrow {
+                mutable,
+                expr,
+                span: _,
+            } => {
+                // 1. 生成内部表达式的 IR
+                let inner_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+
+                // 2. 创建借用令牌指令
+                // 借用令牌是零大小类型，运行时等价于 Mov。
+                // 此指令的存在让借用检查器可以进行流敏感分析。
+                instructions.push(Instruction::Borrow {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(inner_reg),
+                    mutable: *mutable,
                 });
             }
             Expr::Match {
@@ -3491,6 +3541,221 @@ fn convert_ir_gen_error(e: IrGenError) -> Diagnostic {
             ErrorCodeDefinition::unsupported_operation("iterate", &iter_type)
                 .at(span)
                 .build()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! IR 生成器借用表达式测试
+    //!
+    //! 验证 `Expr::Borrow` AST 节点到 IR 的正确转换。
+    //! 对应 RFC-009 v9 借用令牌系统：Borrow 指令是零大小类型，
+    //! 运行时等价于 Mov，其存在让借用检查器可以进行流敏感分析。
+    //!
+    //! - `Borrow { mutable: false }` 表示不可变借用 `&expr`
+    //! - `Borrow { mutable: true }` 表示可变借用 `&mut expr`
+
+    use super::*;
+
+    /// Helper: build `&expr` AST node (immutable borrow)
+    fn make_borrow_imm(inner: ast::Expr) -> ast::Expr {
+        ast::Expr::Borrow {
+            mutable: false,
+            expr: Box::new(inner),
+            span: Span::dummy(),
+        }
+    }
+
+    /// Helper: build `&mut expr` AST node (mutable borrow)
+    fn make_borrow_mut(inner: ast::Expr) -> ast::Expr {
+        ast::Expr::Borrow {
+            mutable: true,
+            expr: Box::new(inner),
+            span: Span::dummy(),
+        }
+    }
+
+    /// Helper: build an int literal expression
+    fn make_int_lit(n: i128) -> ast::Expr {
+        ast::Expr::Lit(Literal::Int(n), Span::dummy())
+    }
+
+    /// Helper (Rule 5.1): set up generator, create expr, and run `generate_expr_ir`.
+    /// Returns (instructions, constants) for downstream assertions.
+    fn generate_borrow_ir(
+        expr: &ast::Expr,
+        result_reg: usize,
+    ) -> (Vec<Instruction>, Vec<ConstValue>) {
+        let mut gen = AstToIrGenerator::new();
+        let mut instructions = Vec::new();
+        let mut constants = Vec::new();
+        gen.generate_expr_ir(expr, result_reg, &mut instructions, &mut constants)
+            .expect("generate_expr_ir should succeed for Borrow expression");
+        (instructions, constants)
+    }
+
+    /// 验证 `&42` 生成 `Borrow { mutable: false }` 指令
+    ///
+    /// 规格: RFC-009 v9 不可变借用令牌
+    #[test]
+    fn borrow_immutable_literal_produces_borrow_instruction_with_mutable_false() {
+        // Arrange
+        let expr = make_borrow_imm(make_int_lit(42));
+        let result_reg = 5; // 使用非零 result_reg 以便区分 dst 和 src
+
+        // Act
+        let (instructions, _constants) = generate_borrow_ir(&expr, result_reg);
+
+        // Assert: 内部表达式 (Lit) 生成一条 Load，然后 Borrow 生成一条 Borrow 指令
+        assert!(
+            instructions.len() >= 2,
+            "expected at least 2 instructions (Load + Borrow) for immutable borrow, got {}",
+            instructions.len()
+        );
+
+        // 最后一条指令必须是 Borrow
+        let last = instructions.last().unwrap();
+        match last {
+            Instruction::Borrow { dst, src, mutable } => {
+                assert_eq!(
+                    *dst,
+                    Operand::Local(result_reg),
+                    "Borrow dst should be result_reg={}, got {:?}",
+                    result_reg,
+                    dst
+                );
+                // src 是内部表达式的寄存器（next_temp_reg 从 0 开始分配）
+                assert_eq!(
+                    *src,
+                    Operand::Local(0),
+                    "Borrow src should be inner expression register (0), got {:?}",
+                    src
+                );
+                assert!(
+                    !mutable,
+                    "immutable borrow should have mutable=false, got true"
+                );
+            }
+            other => panic!(
+                "expected Instruction::Borrow as last instruction, got {:?}",
+                other
+            ),
+        }
+    }
+
+    /// 验证 `&mut 42` 生成 `Borrow { mutable: true }` 指令
+    ///
+    /// 规格: RFC-009 v9 可变借用令牌
+    #[test]
+    fn borrow_mutable_literal_produces_borrow_instruction_with_mutable_true() {
+        // Arrange
+        let expr = make_borrow_mut(make_int_lit(42));
+        let result_reg = 5;
+
+        // Act
+        let (instructions, _constants) = generate_borrow_ir(&expr, result_reg);
+
+        // Assert
+        assert!(
+            instructions.len() >= 2,
+            "expected at least 2 instructions (Load + Borrow) for mutable borrow, got {}",
+            instructions.len()
+        );
+
+        let last = instructions.last().unwrap();
+        match last {
+            Instruction::Borrow { dst, src, mutable } => {
+                assert_eq!(
+                    *dst,
+                    Operand::Local(result_reg),
+                    "Borrow dst should be result_reg={}, got {:?}",
+                    result_reg,
+                    dst
+                );
+                assert_eq!(
+                    *src,
+                    Operand::Local(0),
+                    "Borrow src should be inner expression register (0), got {:?}",
+                    src
+                );
+                assert!(
+                    *mutable,
+                    "mutable borrow should have mutable=true, got false"
+                );
+            }
+            other => panic!(
+                "expected Instruction::Borrow as last instruction, got {:?}",
+                other
+            ),
+        }
+    }
+
+    /// 验证内部表达式先被求值（Borrow 的 src 使用 inner_reg）
+    ///
+    /// 规格: RFC-009 v9 借用令牌的内部表达式求值顺序
+    #[test]
+    fn borrow_inner_expression_is_evaluated_before_borrow_token_is_created() {
+        // Arrange: 使用变量引用作为内部表达式，先注册局部变量 "x" 到 local 1
+        let mut gen = AstToIrGenerator::new();
+        gen.register_local("x", 1);
+        let inner = ast::Expr::Var("x".to_string(), Span::dummy());
+        let expr = make_borrow_imm(inner);
+        let result_reg = 5;
+        let mut instructions = Vec::new();
+        let mut constants = Vec::new();
+
+        // Act
+        gen.generate_expr_ir(&expr, result_reg, &mut instructions, &mut constants)
+            .expect("generate_expr_ir should succeed for Borrow with variable inner expression");
+
+        // Assert: 内部表达式 Var("x") 生成 Load { dst: inner_reg, src: Local(1) }
+        //         然后 Borrow { dst: result_reg, src: inner_reg }
+        assert!(
+            instructions.len() >= 2,
+            "expected at least 2 instructions for borrow with variable, got {}",
+            instructions.len()
+        );
+
+        // 第一条指令：加载变量 x 到 inner_reg (0)
+        match &instructions[0] {
+            Instruction::Load { dst, src } => {
+                assert_eq!(
+                    *dst,
+                    Operand::Local(0),
+                    "inner expr result should go to reg 0, got {:?}",
+                    dst
+                );
+                assert_eq!(
+                    *src,
+                    Operand::Local(1),
+                    "should load from local 1 (x), got {:?}",
+                    src
+                );
+            }
+            other => panic!(
+                "expected Load as first instruction for inner variable, got {:?}",
+                other
+            ),
+        }
+
+        // 最后一条指令：Borrow，src 指向 inner_reg
+        match instructions.last().unwrap() {
+            Instruction::Borrow { dst, src, .. } => {
+                assert_eq!(
+                    *dst,
+                    Operand::Local(result_reg),
+                    "Borrow dst should be result_reg={}",
+                    result_reg
+                );
+                assert_eq!(
+                    *src,
+                    Operand::Local(0),
+                    "Borrow src should reference the inner expression's register (0), got {:?}",
+                    src
+                );
+            }
+            other => panic!("expected Borrow as last instruction, got {:?}", other),
         }
     }
 }

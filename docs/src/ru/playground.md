@@ -1,14 +1,14 @@
 ---
 layout: page
 sidebar: false
-title: Playground
+title: "Playground"
 permalink: /playground/
 
 ---
 
 <div style="min-height: calc(100vh - 200px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
 
-<h1 style="font-size: 2.5rem; font-weight: 700; color: #1f2937; margin-bottom: 1rem;">YaoXiang Полигон</h1>
+<h1 style="font-size: 2.5rem; font-weight: 700; color: #1f2937; margin-bottom: 1rem;">YaoXiang Playground</h1>
 
 <div style="display: flex; gap: 1.5rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center;">
 

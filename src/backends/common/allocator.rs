@@ -43,7 +43,7 @@ impl MemoryLayout {
         if align == 0 || !align.is_power_of_two() {
             return None;
         }
-        let aligned_size = if size % align == 0 {
+        let aligned_size = if size.is_multiple_of(align) {
             size
         } else {
             (size + align - 1) & !(align - 1)

@@ -30,8 +30,8 @@ use crate::util::diagnostic::Diagnostic;
 /// 错误类别
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
-    Lexer,     // E0xxx: 词法和语法分析
-    Parser,    // E0xxx: Parser errors
+    Lexer,     // E0xxx: 词法分析
+    Parser,    // E0xxx: 语法分析
     TypeCheck, // E1xxx: 类型检查
     Semantic,  // E2xxx: 语义分析
     Generic,   // E4xxx: 泛型与特质
@@ -128,90 +128,5 @@ impl ErrorCodeDefinition {
     }
 }
 
-/// 错误码注册表 - 合并所有错误码（运行时版本，用于测试）
-pub fn get_all_error_codes() -> Vec<&'static ErrorCodeDefinition> {
-    ERROR_CODES.iter().collect()
-}
-
-/// 快捷方法宏 - 为每个错误码生成便捷构建方法
-#[macro_export]
-macro_rules! impl_error_code_methods {
-    ($($code:ident => $method:ident: $desc:expr, $template:expr),*) => {
-        $(
-            impl ErrorCodeDefinition {
-                /// $desc
-                pub fn $method(name: &str) -> DiagnosticBuilder {
-                    let def = Self::find(stringify!($code)).unwrap();
-                    DiagnosticBuilder::new(def.code, def.message_template)
-                        .param("name", name)
-                }
-            }
-        )*
-    };
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::span::Span;
-
-    #[test]
-    fn test_find_error_code() {
-        let code = ErrorCodeDefinition::find("E0001");
-        assert!(code.is_some());
-        assert_eq!(code.unwrap().code, "E0001");
-    }
-
-    #[test]
-    fn test_find_unknown_code() {
-        let code = ErrorCodeDefinition::find("E9999");
-        assert!(code.is_none());
-    }
-
-    #[test]
-    fn test_get_all_codes() {
-        let all = ErrorCodeDefinition::all();
-        assert!(
-            all.len() > 30,
-            "Expected more than 30 error codes, got {}",
-            all.len()
-        );
-    }
-
-    #[test]
-    fn test_i18n_registry() {
-        let en = I18nRegistry::en();
-        let zh = I18nRegistry::zh();
-
-        // 英文测试
-        assert_eq!(en.get_title("E0001"), "Invalid character");
-        assert!(!en.get_help("E0001").is_empty());
-
-        // 中文测试
-        assert_eq!(zh.get_title("E0001"), "无效字符");
-        assert!(!zh.get_help("E0001").is_empty());
-    }
-
-    #[test]
-    fn test_template_render() {
-        let en = I18nRegistry::en();
-        let template = "Unknown variable: '{name}'";
-        let params = vec![("name", "x".to_string())];
-        let rendered = en.render(template, &params);
-        assert_eq!(rendered, "Unknown variable: 'x'");
-    }
-
-    #[test]
-    fn test_diagnostic_builder() {
-        let code = ErrorCodeDefinition::find("E0001").unwrap();
-
-        let diagnostic = code
-            .builder()
-            .param("char", "@")
-            .at(Span::default())
-            .build();
-
-        assert_eq!(diagnostic.code, "E0001");
-        assert!(diagnostic.message.contains("@"));
-    }
-}
+mod tests;

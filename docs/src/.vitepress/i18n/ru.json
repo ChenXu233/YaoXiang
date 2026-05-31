@@ -9,11 +9,11 @@
       "link": "/ru/download"
     },
     {
-      "text": "Руководство",
+      "text": "Уроки",
       "link": "/ru/tutorial/"
     },
     {
-      "text": "Гайды",
+      "text": "Руководство",
       "link": "/ru/guide/"
     },
     {
@@ -48,15 +48,18 @@
           "link": "/ru/blog/"
         }
       ]
+    },
+    {
+      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
     "/tutorial/": [
       {
-        "text": "Документация руководства",
+        "text": "Документация уроков",
         "items": [
           {
-            "text": "Главная страница руководства",
+            "text": "Главная уроков",
             "link": "/ru/tutorial/"
           },
           {
@@ -64,7 +67,7 @@
             "link": "/ru/tutorial/getting-started"
           },
           {
-            "text": "Справочник по YaoXiang",
+            "text": "Руководство по YaoXiang",
             "link": "/ru/tutorial/YaoXiang-book"
           },
           {
@@ -77,10 +80,10 @@
     ],
     "/design/": [
       {
-        "text": "Документация по дизайну",
+        "text": "Документация дизайна",
         "items": [
           {
-            "text": "Содержание дизайна",
+            "text": "Каталог дизайна",
             "link": "/ru/design"
           },
           {
@@ -92,20 +95,20 @@
             "link": "/ru/design/manifesto"
           },
           {
-            "text": "Манифест YaoXiang WTF версия",
+            "text": "Манифест YaoXiang WTF",
             "link": "/ru/design/manifesto-wtf"
           },
           {
-            "text": "Взгляд на дизайн языка от человека, родившегося в 2006",
+            "text": "Взгляд на дизайн языка от человека 2006 г.р.",
             "link": "/ru/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "RFC документация",
+        "text": "Документация RFC",
         "items": [
           {
-            "text": "Содержание RFC",
+            "text": "Каталог RFC",
             "link": "/ru/design/rfc"
           },
           {
@@ -117,22 +120,22 @@
             "link": "/ru/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
-            "text": "Принято",
+            "text": "Принятые",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "В процессе",
+            "text": "На рассмотрении",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "Черновик",
+            "text": "Черновики",
             "collapsed": true,
             "items": []
           },
           {
-            "text": "Отклонено",
+            "text": "Отклонённые",
             "collapsed": true,
             "items": []
           }
@@ -144,7 +147,7 @@
         "text": "Справочная документация",
         "items": [
           {
-            "text": "Содержание справочника",
+            "text": "Каталог справочника",
             "link": "/ru/reference"
           },
           {
@@ -189,14 +192,14 @@
     ],
     "/dev/": [
       {
-        "text": "Документация по разработке",
+        "text": "Документация разработки",
         "items": [
           {
-            "text": "Содержание разработки",
+            "text": "Каталог разработки",
             "link": "/ru/dev/"
           },
           {
-            "text": "Руководство по участию",
+            "text": "Руководство по вкладу",
             "link": "/ru/dev/contributing"
           },
           {
@@ -213,16 +216,11 @@
         "text": "Планы",
         "items": [
           {
-            "text": "Содержание планов",
+            "text": "Каталог планов",
             "link": "/ru/dev/plan"
           },
           {
-            "text": "В обработке",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "Завершено",
+            "text": "В процессе",
             "collapsed": true,
             "items": []
           }
@@ -231,10 +229,10 @@
     ],
     "/guide/": [
       {
-        "text": "Документация-гайды",
+        "text": "Документация руководства",
         "items": [
           {
-            "text": "Содержание гайдов",
+            "text": "Каталог руководства",
             "link": "/ru/guide/"
           },
           {
@@ -246,14 +244,14 @@
     ],
     "/": [
       {
-        "text": "Документация на китайском",
+        "text": "Китайская документация",
         "items": [
           {
             "text": "Быстрый старт",
             "link": "/ru/getting-started"
           },
           {
-            "text": "Руководство",
+            "text": "Уроки",
             "link": "/ru/tutorial/"
           }
         ]

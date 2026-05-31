@@ -98,8 +98,8 @@ pub fn default_std_interface_dir() -> Option<std::path::PathBuf> {
 /// 查找标准库接口文件
 ///
 /// 按优先级查找：
-/// 1. 项目目录/.yaoxiang/vendor/std/<name>.yx
-/// 2. ~/.yaoxiang/std/<name>.yx
+/// 1. 项目目录/.yaoxiang/vendor/std/`<name>`.yx
+/// 2. ~/.yaoxiang/std/`<name>`.yx
 pub fn find_std_interface_file(
     project_dir: Option<&std::path::Path>,
     module_name: &str,

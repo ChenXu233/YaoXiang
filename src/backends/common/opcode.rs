@@ -79,6 +79,12 @@ pub enum Opcode {
     /// Load function argument
     LoadArg = 0x14,
 
+    /// Borrow token (ZST, runtime ~ Mov)
+    Borrow = 0x15,
+
+    /// Release borrow token (ZST, runtime ~ Nop)
+    Release = 0x16,
+
     // =====================
     // Integer Operations (0x20-0x3F)
     // =====================
@@ -303,6 +309,8 @@ impl Opcode {
             Opcode::LoadLocal => "LoadLocal",
             Opcode::StoreLocal => "StoreLocal",
             Opcode::LoadArg => "LoadArg",
+            Opcode::Borrow => "Borrow",
+            Opcode::Release => "Release",
             Opcode::I64Add => "I64Add",
             Opcode::I64Sub => "I64Sub",
             Opcode::I64Mul => "I64Mul",
@@ -511,7 +519,8 @@ impl Opcode {
             | Opcode::StackAlloc
             | Opcode::ArcDrop
             | Opcode::TryBegin
-            | Opcode::TypeOf => 1,
+            | Opcode::TypeOf
+            | Opcode::Release => 1,
 
             // 2 operands
             Opcode::JmpIf
@@ -539,7 +548,8 @@ impl Opcode {
             | Opcode::StringFromFloat
             | Opcode::Cast
             | Opcode::LoadUpvalue
-            | Opcode::StoreUpvalue => 2,
+            | Opcode::StoreUpvalue
+            | Opcode::Borrow => 2,
 
             // 3 operands
             Opcode::Switch
@@ -655,6 +665,8 @@ impl TryFrom<u8> for Opcode {
             0x12 => Ok(Opcode::LoadLocal),
             0x13 => Ok(Opcode::StoreLocal),
             0x14 => Ok(Opcode::LoadArg),
+            0x15 => Ok(Opcode::Borrow),
+            0x16 => Ok(Opcode::Release),
             0x20..=0x2B => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
             0x30..=0x3B => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),
             0x40..=0x46 => Ok(unsafe { std::mem::transmute::<u8, Opcode>(value) }),

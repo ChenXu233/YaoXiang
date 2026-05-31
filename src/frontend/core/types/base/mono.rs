@@ -165,7 +165,7 @@ pub enum MonoType {
         /// 是否异步
         is_async: bool,
     },
-    /// Option[T]（RFC-001）
+    /// `Option[T]`（RFC-001）
     Option(Box<MonoType>),
     /// Result[T, E]（RFC-001）
     Result(Box<MonoType>, Box<MonoType>),
@@ -186,6 +186,14 @@ pub enum MonoType {
     Arc(Box<MonoType>),
     /// Weak 类型（不增加引用计数）
     Weak(Box<MonoType>),
+    /// 借用引用类型：`&T`（不可变）或 `&mut T`（可变）
+    /// 编译期零大小类型 — 无运行时表示
+    Ref {
+        /// 是否可变引用
+        mutable: bool,
+        /// 被引用的内部类型
+        inner: Box<MonoType>,
+    },
     /// 关联类型访问（如 T::Item）
     AssocType {
         /// 宿主类型
@@ -198,12 +206,12 @@ pub enum MonoType {
     /// RFC-010: 元类型 `Type`
     /// 表示一个值是类型本身
     /// universe_level 表示类型宇宙层级（用户不可见，编译器自动管理）
-    /// 支持无限层级：Type[Type[T]] → Type2, Type[Type[Type[T]]] → Type3, etc.
+    /// 支持无限层级：`Type[Type[T]]` → Type2, `Type[Type[Type[T]]]` → Type3, etc.
     MetaType {
         /// 类型宇宙层级
         universe_level: UniverseLevel,
-        /// 泛型参数（Type[T] 中的 T，可以是嵌套的 MetaType）
-        /// e.g., Type[Type[T]] 的 type_params = [MetaType { type_params: [T] }]
+        /// 泛型参数（`Type[T]` 中的 T，可以是嵌套的 MetaType）
+        /// e.g., `Type[Type[T]]` 的 type_params = `MetaType { type_params: T }`
         type_params: Vec<MonoType>,
     },
     /// 字面量类型（编译期常量值作为类型）
@@ -331,6 +339,13 @@ impl MonoType {
             }
             MonoType::Arc(t) => format!("Arc({})", t.type_name()),
             MonoType::Weak(t) => format!("Weak({})", t.type_name()),
+            MonoType::Ref { mutable, inner } => {
+                if *mutable {
+                    format!("&mut {}", inner.type_name())
+                } else {
+                    format!("&{}", inner.type_name())
+                }
+            }
             MonoType::AssocType {
                 host_type,
                 assoc_name,
@@ -538,6 +553,10 @@ impl From<ast::Type> for MonoType {
                 // Raw pointer type: *T
                 MonoType::TypeRef(format!("*{}", MonoType::from(*inner).type_name()))
             }
+            ast::Type::Ref { mutable, inner, .. } => MonoType::Ref {
+                mutable,
+                inner: Box::new(MonoType::from(*inner)),
+            },
             ast::Type::MetaType { args, .. } => {
                 // RFC-010: Meta-type `Type` or `Type[T]` or `Type[Type[T]]`
                 // Determine universe level recursively:
@@ -553,6 +572,16 @@ impl From<ast::Type> for MonoType {
             }
         }
     }
+}
+
+/// 将 AST 类型注解转换为 PolyType
+///
+/// 复用 `From<ast::Type> for MonoType` 实现，包装为 PolyType。
+/// 用于跨文件检查时注册模块导出的类型信息。
+pub fn ast_type_to_poly_type(
+    ast_type: &crate::frontend::core::parser::ast::Type
+) -> super::PolyType {
+    super::PolyType::mono(MonoType::from(ast_type.clone()))
 }
 
 /// Calculate the universe level for a meta-type
@@ -747,5 +776,24 @@ impl fmt::Display for PolyType {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.type_name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ast_type_to_poly_type() {
+        use crate::frontend::core::parser::ast::Type as AstType;
+        use crate::util::span::Span;
+
+        let ast_type = AstType::Name {
+            name: "Int".to_string(),
+            span: Span::dummy(),
+        };
+        let poly = ast_type_to_poly_type(&ast_type);
+        // Verify it produces a valid PolyType
+        assert!(!format!("{:?}", poly).is_empty());
     }
 }

@@ -41,3 +41,10 @@ repos:
         entry: cargo audit
         language: system
         pass_filenames: false
+
+      - id: check-commit-msg
+        name: check commit message format
+        entry: python scripts/check-commit-msg.py
+        language: system
+        stages: [commit-msg]
+        always_run: true

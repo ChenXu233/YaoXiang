@@ -53,7 +53,7 @@ impl ObjectSafetyChecker {
     ) -> bool {
         // 简化实现：假设一些基本特质是对象安全的
         match trait_name {
-            "Clone" | "Equal" | "Debug" | "Send" | "Sync" => true,
+            "Clone" | "Equal" | "Debug" | "Dup" => true,
             _ => false, // 其他特质需要进一步检查
         }
     }

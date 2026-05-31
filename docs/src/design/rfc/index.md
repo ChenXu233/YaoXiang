@@ -1,5 +1,5 @@
 ---
-title: RFC 索引
+title: "RFC 索引"
 ---
 
 # YaoXiang RFC（请求评议）索引
@@ -62,6 +62,7 @@ title: RFC 索引
 | RFC-014 | [包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-015 | [YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-017 | [语言服务器协议（LSP）支持设计](./review/017-lsp-support.md) | 晨煦 | 2026-02-15 | 已接受 |
+| RFC-023 | [闭包捕获模型](./accepted/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已接受 |
 
 
 ---

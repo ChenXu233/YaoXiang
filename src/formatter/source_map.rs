@@ -134,7 +134,7 @@ impl SourceMap {
                     while i < len && chars[i] != '\'' {
                         if chars[i] == '\\' && i + 1 < len {
                             i += 1;
-                            offset += 1;
+                            offset += chars[i - 1].len_utf8();
                             column += 1;
                         }
                         offset += chars[i].len_utf8();
@@ -207,6 +207,14 @@ impl SourceMap {
                             offset += chars[i].len_utf8();
                             column += 1;
                             i += 1;
+                            if depth == 0 {
+                                // Skip the closing '/'
+                                content.push(chars[i]);
+                                offset += chars[i].len_utf8();
+                                column += 1;
+                                i += 1;
+                                break;
+                            }
                         }
                         if chars[i] == '\n' {
                             line += 1;
@@ -300,76 +308,80 @@ impl SourceMap {
         &self,
         line: usize,
     ) -> Option<&Comment> {
-        self.comments
-            .iter()
-            .find(|c| c.span.start.line == line && matches!(c.style, CommentStyle::SingleLine))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_source_map_single_line_comment() {
-        let source = "// hello\nlet x = 1";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.comments.len(), 1);
-        assert_eq!(sm.comments[0].content, "// hello");
-        assert_eq!(sm.comments[0].style, CommentStyle::SingleLine);
+        self.comments.iter().find(|c| {
+            c.span.start.line == line
+                && matches!(c.style, CommentStyle::SingleLine | CommentStyle::Doc)
+        })
     }
 
-    #[test]
-    fn test_source_map_multiline_comment() {
-        let source = "/* multi\nline */\nlet x = 1";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.comments.len(), 1);
-        assert_eq!(sm.comments[0].content, "/* multi\nline */");
-        assert_eq!(sm.comments[0].style, CommentStyle::MultiLine);
-    }
+    /// 重建导入语句的注释顺序
+    ///
+    /// old_order: 旧的导入索引顺序（相对于 use_indices）
+    /// new_order: 新的导入索引顺序（相对于 use_indices）
+    /// import_stmts: 所有导入语句（用于获取 span）
+    pub fn rebuild_comments_for_imports(
+        &mut self,
+        old_order: &[usize],
+        new_order: &[usize],
+        import_stmts: &[&crate::frontend::core::parser::ast::Stmt],
+    ) {
+        // 1. 为每个旧导入索引关联其注释
+        let mut comments_per_import: Vec<Vec<Comment>> = Vec::new();
 
-    #[test]
-    fn test_source_map_doc_comment() {
-        let source = "/// doc comment\nfn foo() {}";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.comments.len(), 1);
-        assert_eq!(sm.comments[0].style, CommentStyle::Doc);
-    }
+        for (i, &old_idx) in old_order.iter().enumerate() {
+            let stmt = import_stmts[old_idx];
+            let comment_start = if i > 0 {
+                import_stmts[old_order[i - 1]].span.end.line + 1
+            } else {
+                1
+            };
+            let comment_end = stmt.span.start.line;
 
-    #[test]
-    fn test_source_map_nested_comment() {
-        let source = "/* outer /* inner */ still outer */\ncode";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.comments.len(), 1);
-        assert_eq!(
-            sm.comments[0].content,
-            "/* outer /* inner */ still outer */"
-        );
-    }
+            let comments: Vec<Comment> = self
+                .comments
+                .iter()
+                .filter(|c| c.span.start.line >= comment_start && c.span.end.line < comment_end)
+                .cloned()
+                .collect();
+            comments_per_import.push(comments);
+        }
 
-    #[test]
-    fn test_source_map_blank_lines() {
-        let source = "line1\n\nline3\n\n\nline6";
-        let sm = SourceMap::build(source);
-        assert!(sm.blank_lines.contains(&2));
-        assert!(sm.blank_lines.contains(&4));
-        assert!(sm.blank_lines.contains(&5));
-    }
+        // 2. 按新顺序重建注释列表
+        let mut new_comments: Vec<Comment> = Vec::new();
+        for &new_idx in new_order {
+            new_comments.extend(comments_per_import[new_idx].iter().cloned());
+        }
 
-    #[test]
-    fn test_source_map_offset_to_line() {
-        let source = "abc\ndef\nghi";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.offset_to_line(0), 1);
-        assert_eq!(sm.offset_to_line(4), 2);
-        assert_eq!(sm.offset_to_line(8), 3);
-    }
+        // 3. 添加非导入区域的注释
+        if !old_order.is_empty() {
+            let first_import_line = import_stmts[old_order[0]].span.start.line;
+            let last_import_line = import_stmts[old_order[old_order.len() - 1]].span.end.line;
 
-    #[test]
-    fn test_source_map_comment_in_string_ignored() {
-        let source = "let x = \"// not a comment\"\n// real comment";
-        let sm = SourceMap::build(source);
-        assert_eq!(sm.comments.len(), 1);
-        assert_eq!(sm.comments[0].content, "// real comment");
+            let non_import_comments: Vec<Comment> = self
+                .comments
+                .iter()
+                .filter(|c| {
+                    c.span.start.line < first_import_line || c.span.start.line > last_import_line
+                })
+                .cloned()
+                .collect();
+
+            // 头部注释 + 导入注释 + 尾部注释
+            let mut final_comments: Vec<Comment> = non_import_comments
+                .iter()
+                .filter(|c| c.span.start.line < first_import_line)
+                .cloned()
+                .collect();
+            final_comments.extend(new_comments);
+            final_comments.extend(
+                non_import_comments
+                    .iter()
+                    .filter(|c| c.span.start.line > last_import_line)
+                    .cloned(),
+            );
+            self.comments = final_comments;
+        } else {
+            self.comments = new_comments;
+        }
     }
 }

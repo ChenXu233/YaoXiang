@@ -1,7 +1,7 @@
 {
   "nav": [
     {
-      "text": "ホームページ",
+      "text": "ホーム",
       "link": "/ja/"
     },
     {
@@ -48,18 +48,15 @@
           "link": "/ja/blog/"
         }
       ]
-    },
-    {
-      "component": "VersionSwitcher"
     }
   ],
   "sidebar": {
     "/tutorial/": [
       {
-        "text": "チュートリアルドキュメント",
+        "text": "チュートリアル",
         "items": [
           {
-            "text": "チュートリアルホーム",
+            "text": "チュートリアルTOP",
             "link": "/ja/tutorial/"
           },
           {
@@ -67,11 +64,11 @@
             "link": "/ja/tutorial/getting-started"
           },
           {
-            "text": "爻象マニュアル",
+            "text": "爻象手册",
             "link": "/ja/tutorial/YaoXiang-book"
           },
           {
-            "text": "初心者向け入門",
+            "text": "ゼロからの入門",
             "collapsed": true,
             "items": []
           }
@@ -80,10 +77,10 @@
     ],
     "/design/": [
       {
-        "text": "デザインドキュメント",
+        "text": "デザイン",
         "items": [
           {
-            "text": "デザイン目次",
+            "text": "デザインTOP",
             "link": "/ja/design"
           },
           {
@@ -99,24 +96,24 @@
             "link": "/ja/design/manifesto-wtf"
           },
           {
-            "text": "2006年生まれの人の言語設計観",
+            "text": "2006年生まれ者の言語設計観",
             "link": "/ja/design/2006-born-language-design"
           }
         ]
       },
       {
-        "text": "RFCドキュメント",
+        "text": "RFC",
         "items": [
           {
-            "text": "RFC目次",
+            "text": "RFC TOP",
             "link": "/ja/design/rfc"
           },
           {
-            "text": "RFCテンプレート",
+            "text": "RFC テンプレート",
             "link": "/ja/design/rfc/RFC_TEMPLATE"
           },
           {
-            "text": "RFC完全テンプレート（例）",
+            "text": "RFC 完全テンプレート（例）",
             "link": "/ja/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
@@ -125,7 +122,7 @@
             "items": []
           },
           {
-            "text": "進行中",
+            "text": "レビュー中",
             "collapsed": true,
             "items": []
           },
@@ -135,7 +132,7 @@
             "items": []
           },
           {
-            "text": "却下済み",
+            "text": "拒否済み",
             "collapsed": true,
             "items": []
           }
@@ -144,10 +141,10 @@
     ],
     "/reference/": [
       {
-        "text": "リファレンシードキュメント",
+        "text": "リファレンス",
         "items": [
           {
-            "text": "リファレンス目次",
+            "text": "リファレンスTOP",
             "link": "/ja/reference"
           },
           {
@@ -178,36 +175,38 @@
       },
       {
         "text": "エラーコード",
+        "collapsed": true,
         "items": []
       },
       {
         "text": "警告コード",
+        "collapsed": true,
         "items": []
       },
       {
-        "text": "パッケージ管理系统",
+        "text": "パッケージ管理",
         "collapsed": true,
         "items": []
       }
     ],
     "/dev/": [
       {
-        "text": "開発ドキュメント",
+        "text": "開発",
         "items": [
           {
-            "text": "開発目次",
+            "text": "開発TOP",
             "link": "/ja/dev/"
           },
           {
-            "text": "貢献ガイド",
+            "text": "貢献ガイドライン",
             "link": "/ja/dev/contributing"
           },
           {
-            "text": "コミットガイド",
+            "text": "コミットガイドライン",
             "link": "/ja/dev/commit-convention"
           },
           {
-            "text": "ブランチメンテナンスガイド",
+            "text": "ブランチガイドライン",
             "link": "/ja/dev/branch-maintenance-guide"
           }
         ]
@@ -216,16 +215,11 @@
         "text": "計画",
         "items": [
           {
-            "text": "計画目次",
+            "text": "計画TOP",
             "link": "/ja/dev/plan"
           },
           {
             "text": "進行中",
-            "collapsed": true,
-            "items": []
-          },
-          {
-            "text": "完了済み",
             "collapsed": true,
             "items": []
           }
@@ -234,10 +228,10 @@
     ],
     "/guide/": [
       {
-        "text": "ガイドドキュメント",
+        "text": "ガイド",
         "items": [
           {
-            "text": "ガイド目次",
+            "text": "ガイドTOP",
             "link": "/ja/guide/"
           },
           {
@@ -249,7 +243,7 @@
     ],
     "/": [
       {
-        "text": "日本語ドキュメント",
+        "text": "ドキュメント",
         "items": [
           {
             "text": "クイックスタート",

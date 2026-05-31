@@ -1,6 +1,6 @@
 //! 注释格式化处理器
 
-use super::super::source_map::{CommentStyle, SourceMap};
+use super::super::source_map::SourceMap;
 
 /// 格式化两个行号之间的注释
 pub fn format_comments_between(
@@ -12,28 +12,11 @@ pub fn format_comments_between(
     let mut result = String::new();
 
     for comment in comments {
-        match &comment.style {
-            CommentStyle::SingleLine | CommentStyle::Doc => {
-                result.push_str(&comment.content);
-                result.push('\n');
-            }
-            CommentStyle::MultiLine => {
-                result.push_str(&comment.content);
-                result.push('\n');
-            }
+        result.push_str(&comment.content);
+        if !comment.content.ends_with('\n') {
+            result.push('\n');
         }
     }
 
     result
-}
-
-/// 格式化单行注释（确保 `// ` 后有空格）
-pub fn normalize_single_line_comment(content: &str) -> String {
-    if content.starts_with("// ") || content.starts_with("///") {
-        content.to_string()
-    } else if let Some(stripped) = content.strip_prefix("//") {
-        format!("// {}", stripped)
-    } else {
-        content.to_string()
-    }
 }

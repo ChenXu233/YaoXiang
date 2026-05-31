@@ -1,31 +1,29 @@
-```yaml
 ---
-title: エラーコード
-description: パッケージマネージャーのエラーコードと処理方法
+title: "エラーコード"
+description: YaoXiang パッケージマネージャのエラーコードと処理方法
 ---
-```
 
 # エラーコード
 
-本文書は YaoXiang パッケージマネージャーが返す可能性のあるエラーとその処理方法を一覧で示します。
+このドキュメントでは、YaoXiang パッケージマネージャが返す可能性のあるエラーとその処理方法を列出します。
 
 ## エラー一覧
 
-### E0100: プロジェクトは既に存在します
+### E0100: プロジェクトが既に存在
 
 ```
 Error: Project already exists: <path>
 ```
 
-**原因**：作成しようとしたプロジェクトディレクトリが既に存在します。
+**原因**：作成しようとしたプロジェクトディレクトリが既に存在しています。
 
 **処理方法**：
 1. 別のプロジェクト名を選択する
-2. 既に存在するディレクトリを削除または移動する
+2. 既存のディレクトリを削除または移動する
 
 ---
 
-### E0101: 無効なプロジェクト
+### E0101: 有効なプロジェクトではない
 
 ```
 Error: Not a YaoXiang project: yaoxiang.toml not found
@@ -39,7 +37,7 @@ Error: Not a YaoXiang project: yaoxiang.toml not found
 
 ---
 
-### E0102: 依存関係が存在しません
+### E0102: 依存関係が存在しない
 
 ```
 Error: Dependency not found: <name>
@@ -48,12 +46,12 @@ Error: Dependency not found: <name>
 **原因**：存在しない依存関係を操作しようとしました。
 
 **処理方法**：
-1. 依存関係の名前が正しく綴られているか確認する
+1. 依存関係の名前スペルが正しいか確認する
 2. `yaoxiang list` を使用して既存の依存関係を確認する
 
 ---
 
-### E0103: 依存関係は既に存在します
+### E0103: 依存関係が既に存在
 
 ```
 Error: Dependency already exists: <name>
@@ -63,11 +61,11 @@ Error: Dependency already exists: <name>
 
 **処理方法**：
 1. バージョンの更新が必要な場合は、まず `yaoxiang rm` で削除する
-2. または、既存の依存関係を直接使用する
+2. または既存の依存関係を直接使用する
 
 ---
 
-### E0104: 無効な manifest 形式
+### E0104: manifest 形式が無効
 
 ```
 Error: Invalid yaoxiang.toml format: <details>
@@ -77,8 +75,8 @@ Error: Invalid yaoxiang.toml format: <details>
 
 **処理方法**：
 1. TOML 構文が正しいか確認する
-2. すべての必須フィールドが存在することを確認する
-3. 構文エラー（引用符やかっこの欠落など）がないか確認する
+2. 必須フィールドがすべて存在することを確認する
+3. 構文エラー（引用符やカンマの欠落など）がないか確認する
 
 ---
 
@@ -88,12 +86,12 @@ Error: Invalid yaoxiang.toml format: <details>
 Error: IO error: <details>
 ```
 
-**原因**：ファイルの読み書き操作に失敗しました。
+**原因**：ファイル読み書き操作が失敗しました。
 
-**一般的な原因**：
+**原因**：
 - ディスク容量不足
 - 権限不足
-- ファイルが他のプログラムによって使用中
+- ファイルが他のプログラムに使用中
 
 **処理方法**：
 1. ディスク容量を確認する
@@ -108,7 +106,7 @@ Error: IO error: <details>
 Error: TOML parse error: <details>
 ```
 
-**原因**：TOML ファイルの形式が正しくありません。
+**原因**：TOML ファイル形式が正しくありません。
 
 **処理方法**：
 1. TOML 構文を検証する
@@ -124,10 +122,10 @@ Error: TOML parse error: <details>
 2. 依存関係の名前とバージョンが正しいことを確認する
 3. `yaoxiang update` を使用して更新を試みる
 
-### Q: バージョンの競合が発生した場合は？
+### Q: バージョン競合が発生した場合は？
 
-`yaoxiang.toml` に互換性のない依存関係のバージョン要件がないか確認します。
+`yaoxiang.toml` に互換性のない依存関係バージョン要件があるかどうか確認してください。
 
 ### Q: vendor ディレクトリが破損した場合は？
 
-`vendor` ディレクトリを削除してから `yaoxiang install` を再実行します。
+`vendor` ディレクトリを削除してから、`yaoxiang install` を再実行してください。

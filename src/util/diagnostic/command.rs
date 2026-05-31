@@ -3,6 +3,21 @@ use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+/// Safely canonicalize a path, falling back to an absolute path derived
+/// from the current directory when `canonicalize` fails (e.g. path does
+/// not yet exist on disk).
+fn safe_canonicalize(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| {
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(path)
+        }
+    })
+}
+
 use super::{
     check_files_with_diagnostics, CheckResult, EmitterConfig, ErrorCodeDefinition, ErrorInfo,
     I18nRegistry, JsonEmitter, TextEmitter,
@@ -18,8 +33,7 @@ pub fn run_check_command_once(
     let paths = normalize_check_paths(paths)?;
     let files = collect_yx_files_from_paths(&paths, excludes)?;
     if files.is_empty() {
-        eprintln!("No .yx files found in provided paths");
-        ::std::process::exit(2);
+        return Err(anyhow::anyhow!("No .yx files found in provided paths"));
     }
 
     if !json && !no_progress {
@@ -209,7 +223,7 @@ fn collect_yx_files_from_paths(
 
         if path.is_file() {
             if path.extension().map(|e| e == "yx").unwrap_or(false) {
-                files.push(path.canonicalize().unwrap_or_else(|_| path.clone()));
+                files.push(safe_canonicalize(path));
             }
         } else if path.is_dir() {
             collect_yx_files_recursive_with_excludes(path, &excludes, &mut files)?;
@@ -243,7 +257,7 @@ fn collect_yx_files_recursive_with_excludes(
         if path.is_dir() {
             collect_yx_files_recursive_with_excludes(&path, excludes, files)?;
         } else if path.extension().map(|e| e == "yx").unwrap_or(false) {
-            files.push(path.canonicalize().unwrap_or(path));
+            files.push(safe_canonicalize(&path));
         }
     }
 
@@ -309,15 +323,7 @@ fn should_exclude_path(
         return true;
     }
 
-    let absolute = path.canonicalize().unwrap_or_else(|_| {
-        if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(path)
-        }
-    });
+    let absolute = safe_canonicalize(path);
 
     excludes
         .iter()
@@ -372,7 +378,10 @@ fn output_check_json(result: &CheckResult) -> Result<()> {
                 .unwrap_or((0, 0, 0, 0));
 
             let lsp: Value = serde_json::from_str(&JsonEmitter::render(&entry.diagnostic))
-                .unwrap_or_else(|_| serde_json::json!({}));
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Failed to serialize diagnostic to JSON: {}", e);
+                    serde_json::json!({})
+                });
 
             CheckJsonDiagnostic {
                 file: entry.file.clone(),

@@ -1,5 +1,5 @@
 ---
-title: yaoxiang.toml 格式
+title: "yaoxiang.toml 格式"
 description: 项目配置文件格式说明
 ---
 

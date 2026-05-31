@@ -129,16 +129,15 @@ impl CycleChecker {
                         in_unsafe = true;
                         unsafe_start = Some(instr_idx);
                     }
-                    Instruction::UnsafeBlockEnd => {
+                    Instruction::UnsafeBlockEnd
                         // 结束 unsafe 块
-                        if in_unsafe {
+                        if in_unsafe => {
                             if let Some(start) = unsafe_start {
                                 self.unsafe_ranges.push((block_idx, start, instr_idx));
                             }
                             in_unsafe = false;
                             unsafe_start = None;
                         }
-                    }
                     _ => {}
                 }
             }

@@ -1,4 +1,4 @@
-# E1xxx: TypeCheck
+# E1xxx: Type Check
 
 > Auto-generated from `src/util/diagnostic/codes/`
 

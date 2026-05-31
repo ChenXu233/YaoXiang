@@ -8,10 +8,10 @@ This document defines the module system specification for the YaoXiang programmi
 
 ### 1.1 Module Basics
 
-Modules use files as boundaries. Each `.yx` file is a module.
+Modules are bounded by files. Each `.yx` file is a module.
 
 ```
-// The filename is the module name
+// File name is the module name
 // Math.yx
 pub pi: Float = 3.14159
 pub sqrt(Float) -> Float = (x) => { ... }
@@ -19,7 +19,7 @@ pub sqrt(Float) -> Float = (x) => { ... }
 
 ### 1.2 Module Naming Rules
 
-- The module name is determined by the filename
+- Module names are determined by file names
 - The file extension `.yx` is not part of the module name
 - Module names use PascalCase naming convention
 
@@ -37,14 +37,14 @@ ImportItems  ::= Identifier (',' Identifier)* ','?
 AliasList    ::= Identifier (',' Identifier)*
 ```
 
-### 2.2 Import Styles
+### 2.2 Import Methods
 
-| Syntax | Description | Example | |
-|--------|-------------|---------|--|
-| `use path;` | Import the module, access via the last segment | `use std.io;` -> `io.print` | |
-| `use path.{a, b};` | Import specified items | `use std.io.{print};` -> `print` | |
-| `use path as alias;` | Import and rename | `use std.io as io;` -> `io.print` | |
-| `use path.{i1, i2} as a, b;` | Import specified items and rename | `use std.io.{print, read} as p, r;` -> `p`, `r` | |
+| Syntax | Description | Example |
+|--------|-------------|---------|
+| `use path;` | Import module, access via last part | `use std.io;` -> `io.print` |
+| `use path.{a, b};` | Import specified items | `use std.io.{print};` -> `print` |
+| `use path as alias;` | Import and rename | `use std.io as io;` -> `io.print` |
+| `use path.{i1, i2} as a, b;` | Import specified items and rename | `use std.io.{print, read} as p, r;` -> `p`, `r` |
 
 ### 2.3 Import Examples
 
@@ -70,7 +70,7 @@ p("Hello")
 
 ## Chapter 3: Module Export
 
-### 3.1 The pub Keyword
+### 3.1 The `pub` Keyword
 
 Use the `pub` keyword to declare exported items:
 
@@ -89,24 +89,24 @@ internal_value: Int = 42
 - Items declared with `pub` can be accessed by other modules
 - Private items can only be accessed within the current module
 
-### 3.3 pub Automatic Binding
+### 3.3 `pub` Automatic Binding
 
-For functions declared with `pub`, the compiler automatically binds them to types defined in the same file:
+When a function is declared with `pub`, the compiler automatically binds it to types defined in the same file:
 
 ```yaoxiang
-// Declared with pub, compiler auto-binds
+// Using pub declaration, compiler binds automatically
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-// Compiler auto-infers:
-// 1. Point is defined in the current file
+// Compiler infers automatically:
+// 1. Point is defined in current file
 // 2. Function parameters include Point
-// 3. Executes Point.distance = distance[0]
+// 3. Execute Point.distance = distance[0]
 
-// Invocations
+// Call
 d = distance(p1, p2)           // Functional style
 d2 = p1.distance(p2)           // OOP syntax sugar
 ```
@@ -117,7 +117,7 @@ d2 = p1.distance(p2)           // OOP syntax sugar
 
 ### 4.1 Module Scope
 
-Each module has its own scope. Items within a module are not visible externally by default.
+Each module has its own scope; items within a module are not visible externally by default.
 
 ### 4.2 Nested Scopes
 
@@ -125,7 +125,7 @@ Each module has its own scope. Items within a module are not visible externally 
 // Block scope
 {
     x = 10
-    // x is visible within this scope
+    // x is visible in this scope
 }
 // x is not visible outside this scope
 
@@ -184,7 +184,7 @@ pub Vector = vector.Vector
 pub Matrix = matrix.Matrix
 ```
 
-### 5.3 Relative Import
+### 5.3 Relative Imports
 
 ```yaoxiang
 // In math/vector.yx
@@ -196,10 +196,10 @@ use .matrix      // Relative import (same directory)
 
 ## Appendix: Module Syntax Quick Reference
 
-### A.1 Module is File
+### A.1 Modules Are Files
 
 ```
-// filename.yx is the module name
+// FileName.yx is the module name
 Import ::= 'use' ModuleRef
 ```
 

@@ -334,10 +334,19 @@ fn main() -> Result<()> {
             if watch {
                 run_check_watch_command(paths, exclude, json, use_colors, no_progress)?;
             } else {
-                let error_count =
-                    run_check_command_once(&paths, &exclude, json, use_colors, no_progress)?;
-                if error_count > 0 {
-                    ::std::process::exit(1);
+                match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+                    Ok(error_count) => {
+                        if error_count > 0 {
+                            ::std::process::exit(1);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        if e.to_string().contains("No .yx files found") {
+                            ::std::process::exit(2);
+                        }
+                        return Err(e);
+                    }
                 }
             }
         }
@@ -351,8 +360,43 @@ fn main() -> Result<()> {
             use_tabs,
             single_quote,
         } => {
-            // 构建格式化选项
-            let mut options = yaoxiang::formatter::FormatOptions::default();
+            // 1. Load user config
+            let user_config = yaoxiang::util::config::load_user_config().unwrap_or_default();
+
+            // 2. Load project config (current directory)
+            let project_config = {
+                let config_path = std::path::PathBuf::from("yaoxiang.toml");
+                if config_path.exists() {
+                    let content = std::fs::read_to_string(&config_path).unwrap_or_default();
+                    toml::from_str::<yaoxiang::util::config::ProjectConfig>(&content)
+                        .map(|c| c.fmt)
+                        .unwrap_or_default()
+                } else {
+                    yaoxiang::util::config::FmtConfig::default()
+                }
+            };
+
+            // 3. Start with user config as base
+            let mut options = yaoxiang::formatter::FormatOptions::from(&user_config.fmt);
+
+            // 4. Override with project config (only non-None values)
+            if let Some(lw) = project_config.line_width {
+                options.line_width = lw;
+            }
+            if let Some(w) = project_config.indent_width {
+                options.indent_width = w;
+            }
+            if let Some(ut) = project_config.use_tabs {
+                options.use_tabs = ut;
+            }
+            if let Some(sq) = project_config.single_quote {
+                options.single_quote = sq;
+            }
+            if let Some(si) = project_config.sort_imports {
+                options.sort_imports = si;
+            }
+
+            // 5. Override with CLI args (highest priority)
             if let Some(w) = indent {
                 options.indent_width = w;
             }
@@ -366,7 +410,16 @@ fn main() -> Result<()> {
                 options.single_quote = true;
             }
 
-            let result = run_format_command(&file, &options, check, write)?;
+            let result = match run_format_command(&file, &options, check, write) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    if e.to_string().contains("No .yx files found") {
+                        ::std::process::exit(2);
+                    }
+                    return Err(e);
+                }
+            };
             if check && result.needs_formatting {
                 ::std::process::exit(1);
             }

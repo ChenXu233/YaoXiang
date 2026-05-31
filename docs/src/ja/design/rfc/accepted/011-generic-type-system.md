@@ -1,101 +1,101 @@
-```markdown
+```yaml
 ---
-title: RFC-011：泛型システム設計
+title: "RFC-011：ジェネリクスシステム設計"
 ---
 
-# RFC-011: 泛型システム設計 - ゼロコスト抽象化とマクロ代替
+# RFC-011: ジェネリクスシステム設計 - ゼロコスト抽象とマクロ代替
 
-> **状態**: 受理済み
-> **作者**: 晨煦
+> **状態**: 承認済み
+> **著者**: 晨煦
 > **作成日**: 2025-01-25
-> **最終更新**: 2026-04-22（Type 自己記述機構に更新、泛型呼び出し構文を統一）
+> **最終更新**: 2026-04-22（Type自己記述機構に更新、ジェネリック呼び出し構文を統一）
 
 ## 概要
 
-本文書はYaoXiang言語の**泛型システム設計**を定義し、強力な泛型機能を通じてゼロコスト抽象化を実現し、コンパイル時最適化によりマクロへの依存を軽減し、デッドコード消除メカニズムを提供する。
+本ドキュメントはYaoXiang言語の**ジェネリクスシステム設計**を定義し、強力なジェネリクス機能によりゼロコスト抽象を実現し、コンパイル時最適化によりマクロへの依存を軽減し、デッドコード消除機構を提供します。
 
-**コア設計**:
-- **統一シグネチャ構文**: `(T: Type, R: Type) -> ...` 泛型パラメータと通常パラメータを統一
-- **Type 自己記述機構**: `Type` は言語レベルの特殊存在であり、シグネチャ中の `Type` 位置は自動的に推論・填充可能
-- **型制約**: `T: Clone + Add` 複数制約、関数型制約
+**コア設計**：
+- **統一シグネチャ構文**: `(T: Type, R: Type) -> ...` ジェネリックパラメータと通常パラメータを統一
+- **Type自己記述機構**: `Type`は言語レベルで特別な存在であり、シグネチャ中の`Type`位置は自動的に推論・充填される
+- **型制約**: `T: Dup + Add` 複数の制約、関数型制約
 - **関連型**: `Iterator: (Item: Type) -> Type = { next: () -> Option(Item), has_next: () -> Bool }`
-- **コンパイル時泛型**: `N: Int` 泛型値パラメータ、コンパイル時定数インスタンス化
+- **コンパイル時ジェネリクス**: `N: Int` ジェネリック値パラメータ、コンパイル時定数インスタンス化
 - **条件型**: `If: (C: Bool, T: Type, E: Type) -> Type` 型レベル計算、型族
 
-**価値**:
-- ゼロコスト抽象化: コンパイル時単態化、ランタイムオーバーヘッドなし
-- デッドコード消除: インスタンス化グラフ分析 + LLVM最適化
-- マクロ代替: 泛型でマクロ使用シナリオの90%を代替
-- 型安全性: コンパイル時チェック、IDE友好
-- **明示的优于隠蔽**: `Type` 自己記述、コンパイラが自動推論
+**価値**：
+- ゼロコスト抽象：コンパイル時単態化、ランタイムオーバーヘッドなし
+- デッドコード消除：インスタンス化グラフ分析 + LLVM最適化
+- マクロ代替：ジェネリクスでマクロ使用シナリオの90%を代替
+- 型安全性：コンパイル時チェック、IDEフレンドリ
+- **明示的优于隐式**: `Type`自己記述、コンパイラが自動的に推論
 
-## 参考文書
+## 参照ドキュメント
 
-本文書の設計は以下の文書に基づいている:
+本ドキュメントの設計は以下のドキュメントに基づいています：
 
-| 文書 | 関係 | 説明 |
+| ドキュメント | 関係 | 説明 |
 |------|------|------|
-| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **構文基盤** | 泛型構文と統一 `name: type = value` モデルの統合 |
-| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **呼び出し構文** | 第6節：泛型呼び出し構文——統一 `()` 適用、`[]` を完全撤去 |
-| [RFC-009: 所有権モデル](./accepted/009-ownership-model.md) | **型システム** | Moveセマンティクスと泛型の自然な組み合わせ |
-| [RFC-001: 並作モデル](./accepted/001-concurrent-model-error-handling.md) | **実行モデル** | DAG分析と泛型型チェック |
-| [RFC-008: ランタイムモデル](./accepted/008-runtime-concurrency-model.md) | **コンパイラアーキテクチャ** | 泛型単態化とコンパイル時最適化戦略 |
-| [型宇宙思想](../reference/plan/ongoing/型宇宙思想.md) | **理論コア** | 型宇宙階層モデルと値依存型設計 |
-| [RFC-022: ホーア論理静的検証](./draft/022-hol-logic-verification.md) | **終了チェック** | decreases規約とコンパイル時評価安全保障 |
+| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **構文基盤** | ジェネリック構文と統一 `name: type = value` モデルの統合 |
+| [RFC-010: 統一型構文](./010-unified-type-syntax.md) | **呼び出し構文** | 第6節：ジェネリック呼び出し構文——統一 `()` 適用、`[]` の完全撤去 |
+| [RFC-009: 所有権モデル](./accepted/009-ownership-model.md) | **型システム** | Moveセマンティクスとジェネリクスの自然な結合 |
+| [RFC-001: 並作モデル](./accepted/001-concurrent-model-error-handling.md) | **実行モデル** | DAG分析とジェネリック型チェック |
+| [RFC-008: ランタイムモデル](./accepted/008-runtime-concurrency-model.md) | **コンパイラアーキテクチャ** | ジェネリック単態化とコンパイル時最適化戦略 |
+| [型宇宙思想](../reference/plan/ongoing/タイプ宇宙思想.md) | **理論コア** | 型宇宙階層モデルと値依存型設計 |
+| [RFC-022: ホーア論理静的検証](./draft/022-hol-logic-verification.md) | **終了チェック** | decreases契約とコンパイル時評価安全保障 |
 
 ## 型宇宙思想と値依存型
 
-YaoXiang の泛型システムは**型宇宙思想**の上に構築されており、このメンタルモデルは言語内のすべての概念を階層構造に統一し、コアイノベーションは**値依存型**をType2層の第一級市民として昇格させた点にある。
+YaoXiangのジェネリクスシステムは**型宇宙思想**に基づいており、このメンタルモデルは言語内のすべての概念を階層構造に統一し、核心的な革新は**値依存型**をType2層の一級市民として昇格させた点です。
 
 ### 値依存型とは？
 
-**値依存型**とは、1つまたは複数の**値**に依存する型である（他の型だけでなく）。これらの値はコンパイル時に評価可能であり、コンパイル段階で型安全保証を提供する。
+**値依存型**とは、1つ以上の**値**（他の型だけでなく）に依存する型のことです。これらの値はコンパイル時に評価可能であり、compile-timeに型安全性の保証を提供します。
 
 ```yaoxiang
-# 従来の泛型：型パラメータ
+# 従来のジェネリクス：型パラメータ
 List: (T: Type) -> Type
 
 # 値依存型：値パラメータ
-Vec: (n: Int) -> Type  # ベクトル型は長さ値 n に依存
+Vec: (n: Int) -> Type  # ベクトル型は長さの値 n に依存
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # 行列型は行数と列数に依存
 ```
 
-### 値依存型のコア優勢
+### 値依存型のコア優位性
 
-従来の泛型と比較して、YaoXiang の値依存型は以下のコア優勢を持つ:
+従来のジェネリクス相比、YaoXiangの値依存型は以下のコア優位性を持ちます：
 
-| 特性 | 従来の泛型 (C++/Rust) | YaoXiang 値依存型 |
+| 特性 | 従来のジェネリクス (C++/Rust) | YaoXiang 値依存型 |
 |------|-------------------|---------------------|
 | 型が依存する値 | 型パラメータのみに依存 | 関数呼び出し結果を含む任意の値に依存可能 |
-| コンパイル時評価 | C++テンプレート手動特殊化、Rustは無 | 自動コンパイル時評価、終了を保証 |
+| コンパイル時評価 | C++テンプレート手動特殊化、Rustなし | 自動コンパイル時評価、終了を保証 |
 | 型レベル計算 | テンプレートメタプログラミング（複雑/危険） | 統一された型レベル計算エンジン |
-| 型安全性 | C++は無、Rustは制限的 | 完全な型安全性、コンパイル時チェック |
+| 型安全性 | C++なし、Rust制限付き | 完全な型安全性、コンパイル時チェック |
 | 次元検証 | ランタイムチェックまたは手動特殊化 | コンパイル時次元検証、ランタイムオーバーヘッドなし |
 
 ### 型宇宙階層と値依存型
 
-型宇宙思想は言語概念をセマンティックロールに応じて異なる階層に划分し、値依存型は **Type2 層**に位置する:
+型宇宙思想は言語概念をセマンティック役割ごとに異なる階層に分類し、値依存型は **Type2層** に位置します：
 
-| 階層 | ロール | 例 |
+| 階層 | 役割 | 例 |
 |------|------|------|
 | Type-1 | 値 | `42`, `factorial(5)`, 関数自体 |
 | Type0 | メタ型キーワード | `Type` |
 | Type1 | 具象型 | `Int`, `String`, `Vec(3)` |
 | **Type2** | **関数/型構築子/値依存型** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
 
-**重要設計**: Type2 層の関数、型構築子、値依存型は**統一構文**であり、すべて `(params) -> result` の形式:
-- 通常関数: `(Int, Int) -> Int` → 戻り値は値
-- 型構築子: `(T: Type) -> Type` → 戻り値は型
-- 値依存型: `(n: Int) -> Type` → 戻り値は型だが、値パラメータに依存
+**鍵設計**: Type2層の関数、型構築子、値依存型は**統一構文**であり、いずれも `(params) -> result` の形式です：
+- 通常関数：`(Int, Int) -> Int` → 戻り値は値
+- 型構築子：`(T: Type) -> Type` → 戻り値は型
+- 値依存型：`(n: Int) -> Type` → 戻り値は型だが、値パラメータに依存
 
-> **Curry-Howard 同形**: この統一は偶然ではない。Curry-Howard 同形は「型は命題、プログラムは証明」を指摘する——関数型 `A → B` は論理包含「AならばB」に対応し、泛型 `(T: Type) -> Type` は全称量化「すべての型 T に対して」に対応し、値依存型 `(n: Int) -> Type` は「各整数 n に対して型が存在する」に対応する。YaoXiang は関数、型構築子、値依存型をType2層に統一することで、本質的に「証明」と「計算」を同一概念——**構成的証明**——に統一している。これは Curry-Howard 同形の言語設計への直接的な反映である：1つの形式 `((params) -> result)` が論理命題と計算過程を同時に担う。
+> **Curry-Howard同型**: この統一は偶然ではありません。Curry-Howard同型は「型は命題、プログラムは証明」であることを指摘します——関数型 `A → B` は論理包含「AならばB」に対応し、ジェネリック `(T: Type) -> Type` は全称量化「すべての型Tについて」に対応し、値依存型 `(n: Int) -> Type` は「各整数nに対して型が存在する」に対応します。YaoXiangは関数、型構築子、値依存型をType2層に統一しますが、これは本質的に「証明」と「計算」を同一概念——**構成的証明**——に統一することです。これはCurry-Howard同型が言語設計において直接具現化されたものです：1つの形式（`(params) -> result`）が論理命題と計算過程を同時に担います。
 
-### コンパイル時決定性保証
+### コンパイル時確定性保証
 
-YaoXiang の型宇宙思想は要求する: **Type 階層はすべてコンパイル時に決定される**。
+YaoXiangの型宇宙思想は要求します：**Type階層はすべてcompile-timeに確定する必要があります**。
 
 ```yaoxiang
-# コンパイル時次元検証例
+# コンパイル時次元検証の例
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
     # コンパイル時チェック：次元は正でなければならない
@@ -103,19 +103,19 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     _assert: Assert[Cols > 0],
 }
 
-# 3x3単位行列の作成 - コンパイル時に完了
+# 3x3単位行列を作成 - コンパイル時に完了
 identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     matrix = Matrix(T, N, N)()
     # ...
 }
 
-# コンパイル時計算：factorial(3) = 6、ベクトルサイズはコンパイル時に決定
+# コンパイル時計算：factorial(3) = 6、ベクトルサイズはコンパイル時に確定
 vec: Vec(factorial(3)) = Vec(6)()
 ```
 
-コンパイラは自動的に:
-1. 型位置上での関数呼び出しを検出
-2. 関数が `decreases` 規約でマークされているか検証（以下参照）
+コンパイラは自動的に以下を実行します：
+1. 型位置での関数呼び出しを検出
+2. 関数が `decreases` 契約をマークしているかを検証（以下終了チェック機構参照）
 3. コンパイル時に評価を実行
 4. 結果を生成された型に埋め込み
 
@@ -125,7 +125,7 @@ vec: Vec(factorial(3)) = Vec(6)()
 ```yaoxiang
 # 行列乗算：コンパイル時に次元一致を検証
 multiply: (T: Add + Multiply + Zero,
-           Rows: Int, Cols: Int, M: Int) -> (((
+           Rows: Int, Cols: Int, M: Int) -> ((
     a: Matrix(T, Rows, Cols),
     b: Matrix(T, Cols, M)
 ) -> Matrix(T, Rows, M)) = {
@@ -134,8 +134,8 @@ multiply: (T: Add + Multiply + Zero,
     # ...
 }
 
-# エラーはコンパイル時に捕捉:
-# multiply(matrix_2x3, matrix_4x2)  # コンパイルエラー: 2 != 4
+# エラーはコンパイル時に捕捉：
+# multiply(matrix_2x3, matrix_4x2)  # コンパイルエラー：2 != 4
 ```
 
 #### 型安全な配列サイズ
@@ -168,9 +168,9 @@ AsString: (T: Type) -> Type = match T {
 }
 ```
 
-#### 泛型関数
+#### ジェネリック関数
 ```yaoxiang
-# map: 泛型関数、型パラメータ T, R はコンパイル時に決定
+# map: ジェネリック関数、型パラメータ T, R はコンパイル時に確定
 map: (T: Type, R: Type) -> (
     (list: List(T), f: (x: T) -> R) -> List(R)
 ) = (list, f) => {
@@ -181,35 +181,35 @@ map: (T: Type, R: Type) -> (
     result
 }
 
-# 使用時は完全に透過的、型は自動推論
+# 使用時は完全に透過的、型は自動的に推論
 numbers = List(1, 2, 3)
-doubled = map(numbers, (x) => x * 2)  # map[Int, Int] に推論
+doubled = map(numbers, (x) => x * 2)  # map[Int, Int]として推論
 ```
 
 ### 他言語との比較
 
-| 特性 | C++テンプレート | Rust泛型 | Haskell GADT | **YaoXiang** |
+| 特性 | C++テンプレート | Rustジェネリクス | Haskell GADT | **YaoXiang** |
 |------|---------|----------|--------------|--------------|
 | 型パラメータ | ✅ | ✅ | ✅ | ✅ |
 | 値依存型 | ❌ | ❌ | ✅ | ✅ |
 | コンパイル時評価 | テンプレートインスタンス化 | ❌ | ✅ | ✅ |
-| 終了保証 | ❌ | ❌ | ❌（危険） | ✅（decreases規約） |
+| 終了保証 | ❌ | ❌ | ❌（危険） | ✅（decreases契約） |
 | 型安全性 | ❌（マクロ展開） | ✅ | ✅ | ✅ |
 | 統一構文 | ❌ | ❌ | ❌ | ✅ |
 | コンパイル時次元検証 | 手動特殊化 | ランタイムチェック | 型族 | コンパイル時自動検証 |
-| decreases規約 | ❌ | ❌ | ❌ | ✅ |
+| decreases契約 | ❌ | ❌ | ❌ | ✅ |
 
-### 終了チェックメカニズム（RFC-022との統合）
+### 終了チェック機構（RFC-022との統合）
 
-値依存型のコンパイル時評価は**終了を保証**しなければならない，否则は型システムが無限ループに陥る。YaoXiang は **decreases 規約**を通じてこれを保証し、RFC-022とシームレスに統合する。
+値依存型のコンパイル時評価は**終了を保証**する必要があります，否则は型システムが無限ループに陥ります。YaoXiangは **decreases契約** を通じてこれを確保し、RFC-022とシームレスに統合します。
 
-#### 再帰関数の終了規約
+#### 再帰関数の終了契約
 ```yaoxiang
-# コンパイル時階乗：終了を証明しなければならない
+# コンパイル時階乗：終了を証明する必要がある
 factorial: (n: Int) -> Int = {
     //! requires: n >= 0
     //! ensures: result == n!
-    //! decreases: n    # 毎回再帰 n は厳密に減少
+    //! decreases: n    # 每次再帰で n は厳密に減少
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
@@ -218,7 +218,7 @@ factorial: (n: Int) -> Int = {
 vec: Vec(factorial(5)) = Vec(120)()  # コンパイル時に factorial(5) = 120 を評価
 ```
 
-#### ループの終了規約
+#### ループの終了契約
 ```yaoxiang
 sum: (arr: Array(Int, n)) -> Int = {
     s = 0; i = 0
@@ -235,93 +235,93 @@ sum: (arr: Array(Int, n)) -> Int = {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  型チェック段階                                              │
-│  型位置上での関数呼び出しに遭遇（例: Vec(factorial(5))）     │
+│  型チェックフェーズ                                         │
+│  型位置での関数呼び出しを検出（例：Vec(factorial(5))）       │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  1. decreases 規約をチェック                                  │
-│     - decreases あり: すべての再帰パスで递减条件が成立するか検証 │
-│     - decreases なしでも明らかに終了: 直接評価                  │
-│     - decreases なしで終了しない可能性: コンパイルエラー        │
+│  1. decreases契約をチェック                                  │
+│     - decreasesあり: 递减条件がすべての再帰パスで成立するか検証 │
+│     - decreasesなしだが終了明白: 直接評価                      │
+│     - decreasesなしかつ終了不明: コンパイルエラー             │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  2. コンパイル時評価（組み込みインタープリタが実行）           │
-│     - 純粋関数: 直接評価                                       │
-│     - 副作用あり: コンパイルエラー（型位置は副作用禁止）        │
+│  2. コンパイル時評価（組込みインタープリタが実行）             │
+│     - 純関数：直接評価                                       │
+│     - 副作用あり：コンパイルエラー（型位置は副作用禁止）        │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  3. 結果を型に埋め込み                                         │
-│     - Vec(factorial(5)) → Vec(120)                           │
-│     - Matrix(Float, 3, 3) → 具象型                          │
+│  3. 結果を型に埋め込み                                        │
+│     - Vec(factorial(5)) → Vec(120)                          │
+│     - Matrix(Float, 3, 3) → 具象型                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### 優勢
+#### 優位性
 
-- **安全性**: コンパイル時評価が必ず終了することを保証し、型システムが無限ループに陥るのを防止
-- **統一性**: 終了チェックと部分的正当性検証は同じ規約メカニズムを共有
-- **漸進的強化**: ランタイムチェックから完全に静的証明へと段階的に移行可能
+- **安全性**: コンパイル時評価が必ず終了し、型システムが無限ループに陥ることを防止
+- **統一性**: 終了チェックと部分正当性検証が同一の契約メカニズムを共有
+- **漸進的強化**: ランタイムチェックから完全静的証明へ徐々に移行可能
 
 ## 動機
 
-### なぜ強力な泛型システムが必要か？
+### なぜ強力なジェネリクスシステムが必要なのか？
 
-現在主流の言語の泛型には限界がある:
+現在の主流言語のジェネリクスには限界があります：
 
-| 言語 | 泛型能力 | 問題 |
+| 言語 | ジェネリクス機能 | 問題点 |
 |------|----------|------|
-| Java | 境界型 | コンパイル時単態化、泛型特殊化なし |
-| C# | 泛型制約 | ランタイム型チェック、パフォーマンスオーバーヘッドあり |
-| Rust | 泛型 + Trait | Traitシステムが複雑、学習カーブが急 |
-| C++ | テンプレート | テンプレート特殊化が複雑、コンパイルエラーメッセージが悪い |
+| Java | 境界型 | コンパイル時単態化、ジェネリクス特殊化なし |
+| C# | ジェネリック制約 | ランタイム型チェック、パフォーマンスオーバーヘッド |
+| Rust | ジェネリクス + Trait | Traitシステム複雑、学習コストが高い |
+| C++ | テンプレート | テンプレート特殊化複雑、コンパイルエラー情報が悪い |
 | **YaoXiang** | **値依存型** | **型は値に依存可能、コンパイル時次元検証、終了保証** |
 
-### コア矛盾
+### コアな矛盾
 
 1. **パフォーマンス vs 柔軟性**: ランタイム柔軟性 vs コンパイル時最適化
-2. **複雑 vs 簡潔**: 強力な型システム vs 使いやすさ
-3. **マクロ vs 泛型**: マクロコード生成 vs 泛型型安全性
-4. **値依存 vs 型安全性**: 従来の泛型ではコンパイル時に次元を検証できない
+2. **複雑さ vs シンプルさ**: 強力な型システム vs 使いやすさ
+3. **マクロ vs ジェネリクス**: マクロコード生成 vs ジェネリック型安全性
+4. **値依存 vs 型安全性**: 従来のジェネリクスはコンパイル時に次元を検証できない
 
-### 値依存型のコア優勢
+### 値依存型のコア優位性
 
-YaoXiang の**値依存型**は従来の泛型に対するコア優勢である:
+YaoXiangの**値依存型**は従来のジェネリクスに対するコア優位性です：
 
-| 優勢 | 説明 |
+| 優位性 | 説明 |
 |------|------|
-| **型が値に依存** | `Vec: (n: Int) -> Type` で型を具体的な値に依存させる |
-| **コンパイル時評価** | 型位置での関数呼び出しをコンパイル時に評価し、結果を型に直接埋め込み |
+| **型が値に依存** | `Vec: (n: Int) -> Type` で型が具体的な値に依存可能 |
+| **コンパイル時評価** | 型位置の関数呼び出しはコンパイル時に評価され、結果を型に直接埋め込み |
 | **次元検証** | `Matrix(Float, 3, 3)` はコンパイル時に行列次元を検証 |
 | **型レベル計算** | `If`, `Match` などの条件型が型レベル計算をサポート |
-| **終了保証** | decreases 規約がコンパイル時評価の終了を保証 |
+| **終了保証** | decreases契約でコンパイル時評価が必ず終了することを確保 |
 
 ```yaoxiang
-# C++/Rust では不可能なコンパイル時検証
+# C++/Rust では做不到なコンパイル時検証
 matrix: Matrix(Float, factorial(3), factorial(2)) = ...
 # コンパイル時に計算：factorial(3) = 6, factorial(2) = 2
 # 型は Matrix(Float, 6, 2)
 
 # 次元不一致はコンパイル時に捕捉
 identity: Matrix(Float, 3, 3) = ...
-# multiply(matrix_2x3, identity_3x3)  # コンパイルエラー: 2 != 3
+# multiply(matrix_2x3, identity_3x3)  # コンパイルエラー：2 != 3
 ```
 
-### 泛型システムの価値
+### ジェネリクスシステムの価値
 
 ```yaoxiang
-# 例: 統一API設計
+# 例：統一API設計
 # 異なるコンテナ型のmap操作
 
-# 従来の方案: 各型ごとに個別実装
+# 従来の方案：各型ごとに個別実装
 map_int_array: (array: Array(Int), f: Fn(Int) -> Int) -> Array(Int) = ...
 map_string_array: (array: Array(String), f: Fn(String) -> String) -> Array(String) = ...
 map_int_list: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_string_list: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 
-# 泛型方案: 1つの泛型関数ですべての型をカバー
+# ジェネリック方案：1つのジェネリック関数で全型をカバー
 map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) = {
     for item in container {
         result.push(f(item))
@@ -334,38 +334,38 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 
 ### コア目標
 
-1. **ゼロコスト抽象化** - 泛型呼び出しは具象型呼び出しと等価
-2. **デッドコード消除** - コンパイル時分析、使用される泛型のみをインスタンス化
-3. **マクロ代替** - 泛型でマクロ使用シナリオの90%を代替
+1. **ゼロコスト抽象** - ジェネリック呼び出しは具象型呼び出しと同等
+2. **デッドコード消除** - コンパイル時分析、使用されているジェネリックのみをインスタンス化
+3. **マクロ代替** - ジェネリクスでマクロ使用シナリオの90%を代替
 4. **型安全性** - コンパイル時チェック、ランタイム型オーバーヘッドなし
-5. **IDE友好** - Intelligent補完、明確なエラーメッセージ
+5. **IDEフレンドリ** - インテリジェントなヒント、明確なエラー情報
 6. **値依存型** - 型は値に依存可能、コンパイル時次元検証をサポート
-7. **コンパイル時評価安全** - decreases 規約 통해コンパイル時評価の終了を保証
+7. **コンパイル時評価安全保障** - decreases契約を介してコンパイル時評価の終了を保証
 
 ### 設計原則
 
-- **コンパイル時決定**: 泛型パラメータはコンパイル時に決定
+- **コンパイル時確定**: ジェネリックパラメータはコンパイル時に確定
 - **単態化優先**: 具象コードを生成、仮想関数呼び出しを回避
 - **制約駆動**: 型制約がインスタンス化を指導
-- **プラットフォーム最適化**: 特殊化がプラットフォーム固有最適化をサポート
+- **プラットフォーム最適化**: 特化がプラットフォーム固有最適化をサポート
 - **型宇宙統一**: 関数/型構築子/値依存型をType2層に統一
-- **終了保証**: 型位置での関数呼び出しは終了を証明しなければならない
+- **終了保証**: 型位置の関数呼び出しは終了を証明する必要がある
 
 ## 提案
 
-### 1. 基礎泛型
+### 1. 基礎ジェネリクス
 
-#### 1.1 泛型型パラメータ
+#### 1.1 ジェネリック型パラメータ
 
-> **重要規則**: 泛型型定義は**`: Type`を明示的にマークしなければならない**，否则はHM推論により関数として扱われる。
+> **重要ルール**: ジェネリック型定義は**必ず `: Type` を明示的にマーク**。否则はHM推論により関数とみなされます。
 >
 > | 書き方 | 意味 |
 > |------|------|
 > | `List: (T: Type) -> Type = {...}` | ✅ 型構築子 |
-> | `List = {...}` | ❌ HM推論により関数、型ではない |
+> | `List = {...}` | ❌ HM推論により関数と判定、型ではない |
 
 ```yaoxiang
-# 泛型型定義（: Type が必要）
+# ジェネリック型定義（: Type が必要）
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -383,7 +383,7 @@ List: (T: Type) -> Type = {
     get: (self: List(T), index: Int) -> Option(T),
 }
 
-# 泛型関数（: Type なし、HMが関数と推論）
+# ジェネリック関数（: Type なし、HM推論により関数）
 map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     return match opt {
         some => Option.some(f(some)),
@@ -391,40 +391,40 @@ map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     }
 }
 
-# 泛型制約（直接式、1行は return を省略可能）
+# ジェネリック制約（直接式、1行はreturnを省略可能）
 clone: (T: Clone)(value: T) -> T = value.clone()
 
 # 複数型パラメータ
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-### 泛型関数呼び出し構文
+### ジェネリック関数呼び出し構文
 
 #### 1.1 統一シグネチャ構文
 
 ```yaoxiang
-# 泛型関数は統一した (T: Type, R: Type) シグネチャ構文を使用
+# ジェネリック関数は統一された (T: Type, R: Type) シグネチャ構文を使用
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
 
 # 複数型パラメータ
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-#### 1.2 Type 自己記述機構
+#### 1.2 Type自己記述機構
 
-`Type` は言語レベルの特殊存在であり、コンパイラはシグネチャ中の `Type` 位置を自然に認識し、実際の引数型から自動推論・填充する。
+`Type`は言語レベルで特別な存在であり、コンパイラはシグネチャ中の`Type`位置を本能的に認識し、实际引数の型から自動的に推論して充填します。
 
 ```yaoxiang
-# コンパイラが自動推論する泛型パラメータ
+# コンパイラがジェネリックパラメータを自動的に推論
 numbers: List(Int) = List(Int)
 #         ^^^^^^^^   ^^^^^^
-#         型宣言   構築呼び出し: Int が T を填充
+#         型宣言     構築呼び出し：Int が T を充填
 
 # 関数呼び出しの推論
 numbers: List(Int) = List(Int)
 f: (x: Int) -> String = (x) => x.to_string()
 strings: List(String) = map(numbers, f)
-# コンパイラが推論: T=Int, R=String
+# コンパイラが推論：T=Int, R=String
 ```
 
 #### 1.3 単態化
@@ -441,10 +441,10 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
 
 # 使用箇所
 int_list: List(Int) = List(Int)
-doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # map[Int, Int] をインスタンス化
+doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # map[Int, Int]をインスタンス化
 
 string_list: List(String) = List(String)
-uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # map[String, String] をインスタンス化
+uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # map[String, String]をインスタンス化
 
 # コンパイル後（等価コード）
 map_Int_Int: (list: List(Int), f: (Int) -> Int) -> List(Int) = {
@@ -464,22 +464,22 @@ map_String_String: (list: List(String), f: (String) -> String) -> List(String) =
 }
 ```
 
-#### 1.4 明示的填充（推論失敗時）
+#### 1.4 明示的充填（推論に失敗した場合）
 
 ```yaoxiang
 # 推論可能な場合は Type パラメータを省略
 numbers: List(Int) = List(Int)
 strings: List(String) = map(numbers, (x: Int) => x.to_string())
 
-# 推論不可能な場合は明示的に填充
-# map(numbers, (x) => x)  # ❌ エラー: R を推論できない
+# 推論不可能な場合は明示的に充填する必要がある
+# map(numbers, (x) => x)  # ❌ Error: Cannot infer R
 
 ### 2. 型制約システム
 
 #### 2.1 単一制約
 
 ```yaoxiang
-# 基本trait定義（インターフェース型）
+# 基本trait定義（interface type）
 Clone: Type = {
     clone: (Self) -> Self,
 }
@@ -510,9 +510,9 @@ combine: (T: Clone + Add)(a: T, b: T) -> T = {
     a.clone() + b
 }
 
-# 泛型コンテナのソート
+# ジェネリックコンテナのソート
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
-    # ソートアルゴリズムを実装
+    # ソートアルゴリズムの実装
     result: List(T) = list.clone()
     quicksort(&mut result)
     return result
@@ -550,6 +550,62 @@ composed: String = compose(
 )  # composed = "HELLO WORLD"
 ```
 
+#### 2.4 組込みマーカートライト：Dup と Clone
+
+**2種類の複製セマンティクス**：
+
+| 属性 | 意味 | トリガー方式 | コスト |
+|------|------|----------|------|
+| **Dup** | 暗黙的シャローコピー | 代入/引数渡しが自動 | ゼロ（ビット複製またはゼロサイズ型） |
+| **Clone** | 明示的ディープコピー | `value.clone()` | 型による |
+
+**Dup のセマンティクス**: Dup を実装した型は、代入/引数渡しの際に所有権を转移しません——コンパイラが自動的にコピーを生成します。これはRFC-009所有権モデルのMoveデフォルトセマンティクスの相補です。
+
+**ルール**：
+
+```
+1. Dup → Clone     すべての Dup 型は自動的に Clone を実装（フィールドごとにclone）
+2. Clone ↛ Dup     Clone があっても Dup があるとは限らない
+3. デフォルト Move       Dup を実装していない型はデフォルト Move セマンティクスを維持
+```
+
+**哪些类型是 Dup**：
+
+| 型 | Dup | 理由 |
+|------|-----|------|
+| Int, Float, Bool, Char | ✅ | primitive type、コンパイラが組込み |
+| String, Bytes | ✅ | 内部参照カウント、シャローコピーが安全 |
+| `&T`（借用トークン） | ✅ | ゼロサイズコンパイル時証明、コピー無副作用 |
+| `&mut T`（可变トークン） | ❌ | 線形独占、コピー不可 |
+| struct | 推論 | すべてのフィールド Dup → struct Dup |
+| enum | 推論 | すべてのvariantのすべてのフィールド Dup → enum Dup |
+| tuple | 推論 | すべての要素 Dup → tuple Dup |
+| Fn（クロージャ） | ❌ | キャプチャ環境にDupがない可能性 |
+| Arc(T) | ✅ | Arc 自体はシャローコピー可能 |
+
+**Dup と Clone はどちらもマーカートライトです**——メソッドのないtrait。primitive type上ではコンパイラが自動的にimplを登録します。struct/enum/tupleに対しては、コンパイラはすべてのフィールド/要素を再帰的にチェックします：すべて Dup/Clone を実装している場合、自動的にimplを生成（auto-derive）。
+
+```yaoxiang
+# Dup：暗黙的シャローコピー
+x: Int = 42
+y = x          # Int: Dup → 複製
+print(x)       # ✅
+
+# Clone：明示的ディープコピー
+backup = big_struct.clone()  # 明示的呼び出し
+
+# ジェネリック制約
+dup_use: (x: T: Dup) -> T = x         # T: Dup → 暗黙的に複製可能
+clone_use: (x: T: Clone) -> T = x.clone()  # T: Clone → 明示的ディープコピー
+
+# Dup トークン——ゼロコスト伝播
+view: &Point = &point
+view2 = view    # ✅ &T: Dup
+print(view.x)   # ✅ ゼロコスト——ゼロサイズトークン
+```
+
+> **注意**: `Send`/`Sync` はユーザー可視traitではありません。タスク間安全保障は `ref` キーワードとコンパイラの全自动処理により確保されます——`ref` は自動的に Rc または Arc を選択し、ユーザーは Send/Sync を理解する必要がありません。
+
 ### 3. 関連型
 
 #### 3.1 関連型定義
@@ -574,7 +630,7 @@ collect_all: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
 }
 
 # ArrayのIterator実装
-# メソッド構文糖衣：Array.Item, Array.next, Array.has_next
+# メソッド構文糖衣を使用：Array.Item, Array.next, Array.has_next
 Array.has_next: (T: Type)(self: Array(T)) -> Bool = {
     return self.index < self.length
 }
@@ -594,7 +650,7 @@ Array.Item: (T: Type)(arr: Array(T)) -> T = {
 }
 ```
 
-#### 3.2 泛型関連型（GAT）
+#### 3.2 ジェネリック関連型（GAT）
 
 ```yaoxiang
 # より複雑な関連型
@@ -603,10 +659,10 @@ Producer: (Item: Type) -> Type = {
     produce: (Self) -> Option(Item),
 }
 
-# 関連型は泛型にできる
+# 関連型はジェネリックにできる
 Container: (Item: Type) -> Type = {
     Item: T,
-    IteratorType: Iterator(Item),  # 関連型も泛型
+    IteratorType: Iterator(Item),  # 関連型もジェネリック
     iter: (Self) -> IteratorType,
 }
 
@@ -616,18 +672,18 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 }
 ```
 
-### 4. コンパイル時泛型
+### 4. コンパイル時ジェネリクス
 
 #### 4.1 コンパイル時定数パラメータ
 
-**コア設計**: 泛型シグネチャ内の `Type` はコンパイル時型パラメータをマークし、`Int` などの値パラメータは泛型コンテキストではデフォルトでコンパイル時に確定可能。`const` キーワードは不要。
+**コア設計**: ジェネリックシグネチャの `Type` はコンパイル時型パラメータをマークし、`Int` などの値パラメータはジェネリックコンテキストではデフォルトでコンパイル時に確定可能です。`const` キーワードは不要です。
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# コンパイル時定数パラメータ：泛型内の Int はデフォルトでコンパイル時に確定
+# コンパイル時定数パラメータ：ジェネリック内の Int はデフォルトでcompile-timeに確定
 # ════════════════════════════════════════════════════════
 
-# コンパイル時階乗：N はコンパイル時に既知のリテラルでなければならない
+# コンパイル時階乗：N はコンパイル時に既知のリテラルである必要がある
 factorial: (N: Int) -> (n: N) -> Int = {
     match n {
         0 => 1,
@@ -647,17 +703,17 @@ StaticArray: (T: Type, N: Int) -> Type = {
 }
 
 # 使用方法
-arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)、コンパイラがコンパイル時に計算
+arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)、コンパイラがcompile-timeに計算
 ```
 
 #### 4.2 コンパイル時計算
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# コンパイル時計算例
+# コンパイル時計算の例
 # ════════════════════════════════════════════════════════
 
-# コンパイラはコンパイル時にリテラル型の関数呼び出しを計算
+# コンパイラはリテラル型の関数呼び出しをcompile-timeに計算
 SIZE: Int = factorial(5)  # コンパイル時は 120
 
 # 行列型を使用
@@ -680,7 +736,7 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
     matrix
 }
 
-# 使用：コンパイル時に計算、Matrix(Float, 3, 3) を生成
+# 使用：コンパイル時に計算し、Matrix(Float, 3, 3) を生成
 identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 ```
 
@@ -692,17 +748,17 @@ identity_3x3: Matrix(Float, 3, 3) = identity_matrix(Float, 3)(3)
 # ════════════════════════════════════════════════════════
 
 # 標準ライブラリ定義：Assert[C] は型である
-# - C が True の場合、Void を導出
-# - C が False の場合、compile_error("Assertion failed") を導出
+# - C が True の場合、Void に推論
+# - C が False の場合、compile_error("Assertion failed") に推論
 Assert: (C: Type) -> Type = match C {
     True => Void,
     False => compile_error("Assertion failed"),
 }
 
-# 使用方法1：型定義内で制約として
+# 使用方法1：型定義内で制約として使用
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
-    # コンパイル時チェック：N は 0 より大きくなければならない（Assert は型位置）
+    # コンパイル時チェック：N は 0 より大きい必要がある（Assert は型位置）
     length: Assert(N > 0),
 }
 
@@ -712,10 +768,10 @@ IntArray: (N: Int) -> Type = StaticArray(Int, N)
 Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```
 
-#### 4.4 コンパイル時泛型特殊化
+#### 4.4 コンパイル時ジェネリック特殊化
 
 ```yaoxiang
-# 小配列最適化：関数オーバーロードを使用してコンパイル時泛型特殊化を実装
+# 小配列最適化：関数オーバーロードを使用してコンパイル時ジェネリック特殊化を実現
 
 # 汎用実装
 sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
@@ -741,7 +797,7 @@ sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
 
 ### 5. 条件型
 
-> **Curry-Howard 同形**: 条件型は Curry-Howard 視点から見ると論理における **case 分析** である。`Bool` 型は2つの可能な値を持つ命題（True/False）に対応し、`If` はその命題の真偽に応じて異なる結果を選択する——これは論理における case 選言に他ならない。`match C { True => T, False => E }` は実際には「命題 C が True のとき結論は T、C が False のとき結論は E」を表現している。
+> **Curry-Howard同型**: 条件型はCurry-Howardの観点からは論理における **case分析** です。`Bool` 型は2つの可能な値を持つ命題（True/False）に対応し、`If` はその命題の真偽に応じて異なる結果を選びます——これは論理におけるcase選言そのものです。`match C { True => T, False => E }` は实际上、「命題 C が True の場合は結論は T、C が False の場合は結論は E」を表現しています。
 
 #### 5.1 If条件型
 
@@ -770,7 +826,7 @@ Assert: (C: Bool) -> Type = match C {
 
 #### 5.2 型族
 
-> **Curry-Howard 同形**: 型族は「命題即型」最も直接的な体現である。`Add: (A: Type, B: Type) -> Type` は「型レベルで加算関数を記述した」ではなく、**自然数加算に関する命題を構成している**。`(Zero, B) => B` は「命題 Add(Zero, B) は B と同値である」を言い、`(Succ(A'), B) => Succ(Add(A', B))` は「Add(A', B) が成立するなら、Add(Succ(A'), B) も成立する」を言う。これは Peano 公理における加算の定義そのものである。型チェッカーがこの match 式を検証を通じて、これが定義の論理的整合性を検証することと同値である。
+> **Curry-Howard同型**: 型族は「命題即ち型」を最も直接的に体現しています。`Add: (A: Type, B: Type) -> Type` は「型レベルで加算関数を書いた」のではなく、**自然数加算に関する命題を構成している**のです。`(Zero, B) => B` は「命題 Add(Zero, B) は B と同値である」と言い、`(Succ(A'), B) => Succ(Add(A', B))` は「Add(A', B) が成立すれば Add(Succ(A'), B) も成立する」と言っています。これはPeano公理における加算の定義そのものです。型チェッカーがこのmatch式を検証することは、この定義の論理的整合性を検証することと同値です。
 
 ```yaoxiang
 # コンパイル時型変換
@@ -789,13 +845,13 @@ Length: (T: Type) -> Type = match T.length {
     _ => TooLong,
 }
 
-# 型レベル加算（Curry-Howard：これは自然数加算の帰納定義でもある）
+# 型レベル加算（Curry-Howard：これは自然数加算の帰納的定義）
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Zero, B) => B,
     (Succ(A'), B) => Succ(Add(A', B)),
 }
 
-# 例：コンパイル時に 2 + 3 を計算
+# 例：compile-timeに 2 + 3 を計算
 Two: Type = Succ(Succ(Zero))
 Three: Type = Succ(Succ(Succ(Zero)))
 Five: Type = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
@@ -830,7 +886,7 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 #### 6.2 条件特殊化
 
 ```yaoxiang
-# RFC-010構文に完全に準拠した特殊化方法：関数オーバーロード
+# RFC-010構文に完全に準拠した特殊化方式：関数オーバーロード
 
 # 具象型特殊化
 sum: (arr: Array(Int)) -> Int = {
@@ -841,7 +897,7 @@ sum: (arr: Array(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
-# 泛型実装（コンパイラが自動で最も優れたものを選択）
+# ジェネリック実装（コンパイラが自動的に最適を選択）
 sum: (T: Type) -> ((arr: Array(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
@@ -854,14 +910,14 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 int_arr = Array(Int)(1, 2, 3)
 float_arr = Array(Float)(1.0, 2.0, 3.0)
 
-# コンパイラが自動で最も優れた特殊化を選択
+# コンパイラが自動的に最適特殊化を選択
 sum(int_arr)     # sum: (Array(Int)) -> Int を選択
 sum(float_arr)    # sum: (Array(Float)) -> Float を選択
 ```
 
-#### 6.3 関数オーバーロードとインライン展開の完璧な組み合わせ
+#### 6.3 関数オーバーロードとインライン最適化の完璧な結合
 
-**重要特性**: 関数オーバーロードとインライン最適化は自然に組み合わせ、ゼロコスト抽象化を実現する。
+**鍵特性**: 関数オーバーロードとインライン最適化は自然に結合し、ゼロコスト抽象を実現します。
 
 ```yaoxiang
 # ======== ソースコード ========
@@ -886,39 +942,39 @@ int_arr = Array(Int)(1, 2, 3, 4, 5)
 result = sum(int_arr)
 
 # ======== コンパイル後（等価コード）=======
-# コンパイラが自動で最も優れた特殊化を選択し、次にインライン展開
+# コンパイラが自動的に最適特殊化を選択し、その後インライン展開
 result = native_sum_int(int_arr.data, int_arr.length)
 
-# 手書き最適化コードと完全に等価！関数呼び出しオーバーヘッドなし！
+# 手書きの最適化コードと完全に等価、関数呼び出しオーバーヘッドなし！
 ```
 
-**コア優勢**:
+**コア優位性**：
 
-1. **コンパイラ知的選択**
+1. **コンパイラのインテリジェント選択**
    ```yaoxiang
-   sum(int_arr)      # 自動選択 sum: (Array(Int)) -> Int
-   sum(float_arr)    # 自動選択 sum: (Array(Float)) -> Float
-   sum(custom_arr)  # 自動選択 sum: (T: Type) -> ((arr: Array(T)) -> T)
+   sum(int_arr)      # sum: (Array(Int)) -> Int を自動選択
+   sum(float_arr)    # sum: (Array(Float)) -> Float を自動選択
+   sum(custom_arr)  # sum: (T: Type) -> ((arr: Array(T)) -> T) を自動選択
    ```
 
 2. **インライン最適化**
    - 小関数は自動的に呼び出し点にインライン展開
    - ゼロ関数呼び出しオーバーヘッド
-   - 手書き最適化コードと完全に等価
+   - 手書きの最適化コードと完全に等価
 
 3. **型安全性**
-   - コンパイル時型チェック
-   - ランタイムオーバーヘッドゼロ
+   - コンパイル時の型チェック
+   - ランタイムオーバーヘッドなし
    - 仮想関数テーブル不要
 
-4. **RFC-010との完璧な整合**
+4. **RFC-010との完璧な一致**
    ```yaoxiang
    # 統一構文を完全に使用
    name: type = value
-   # impl, where などの新キーワード不要
+   # impl、whereなどの新キーワード不要
    ```
 
-**実際の応用例**:
+**実際の応用例**：
 
 ```yaoxiang
 # パフォーマンス重視の数値計算
@@ -933,18 +989,18 @@ fibonacci: (n: Float) -> Float = {
     return (phi.pow(n) - (-phi).pow(-n)) / 5.0.sqrt()
 }
 
-# コンパイラが自動選択してインライン展開
+# コンパイラが自動的に選択してインライン展開
 fibonacci(10)      # Intバージョンを選択、完全インライン展開
 fibonacci(10.5)    # Floatバージョンを選択、Binet公式を使用
 ```
 
 **これは何を意味するのか？**
 
-- ✅ **泛型特殊化** → 関数オーバーロードで自然に解決
+- ✅ **ジェネリック特殊化** → 関数オーバーロードで自然に解決
 - ✅ **パフォーマンス最適化** → インライン展開が自動完了
 - ✅ **コード再利用** → 1つの関数名、複数の実装
-- ✅ **ゼロコスト抽象化** → コンパイル時多态、ランタイムオーバーヘッドゼロ
-- ✅ **新キーワード不要** → RFC-010統一構文に完璧に準拠
+- ✅ **ゼロコスト抽象** → コンパイル時多态、ランタイムオーバーヘッドなし
+- ✅ **新キーワード不要** → RFC-010統一構文と完璧に一致
 ```
 
 ### 7. デッドコード消除メカニズム
@@ -952,9 +1008,9 @@ fibonacci(10.5)    # Floatバージョンを選択、Binet公式を使用
 #### 7.1 インスタンス化グラフ分析
 
 ```rust
-// コンパイラ内部：泛型インスタンス化依存グラフを構築
+// コンパイラ内部：ジェネリックインスタンス化依存グラフを構築
 struct InstantiationGraph {
-    // ノード：泛型インスタンス化
+    // ノード：ジェネリックインスタンス化
     nodes: HashMap<InstanceKey, InstanceNode>,
 
     // エッジ：使用関係
@@ -962,9 +1018,9 @@ struct InstantiationGraph {
 }
 
 struct InstanceKey {
-    generic: FunctionId,  // 泛型関数ID
-    type_args: Vec<TypeId>,  // 型パラメータ
-    const_args: Vec<ConstId>,  // Constパラメータ
+    generic: FunctionId,  // ジェネリック関数ID
+    type_args: Vec<TypeId>,  // 型引数
+    const_args: Vec<ConstId>,  // Const引数
 }
 
 // アルゴリズム：到達可能性分析
@@ -986,32 +1042,32 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
 }
 ```
 
-#### 7.2 使用箇所分析
+#### 7.2 使用点分析
 
 ```yaoxiang
 # ソースコード分析
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
-# 使用箇所1: map(Int, Int) をインスタンス化
+# 使用点1：map(Int, Int) をインスタンス化
 int_list = List(1, 2, 3)
-doubled = map(int_list, (x) => x * 2)  # map[Int, Int] が必要
+doubled = map(int_list, (x) => x * 2)  # map[Int, Int]が必要
 
-# 使用箇所2: map(String, String) をインスタンス化
+# 使用点2：map(String, String) をインスタンス化
 string_list = List("a", "b", "c")
-uppercased = map(string_list, (s) => s.to_uppercase())  # map[String, String] が必要
+uppercased = map(string_list, (s) => s.to_uppercase())  # map[String, String]が必要
 
-# 未使用: map[Float, Float] など
-# これらの泛型インスタンスは生成されない
+# 未使用：map[Float, Float] など
+# これらのジェネリックインスタンスは生成されない
 
 # コンパイル後は使用されたインスタンスのみを含む
 map_Int_Int: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_String_String: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 ```
 
-#### 7.3 コンパイル時泛型DCE
+#### 7.3 コンパイル時ジェネリックDCE
 
 ```yaoxiang
-# コンパイル時分析：コンパイル時泛型使用状況
+# コンパイル時分析：compile-timeジェネリクスの使用状況
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
 }
@@ -1028,7 +1084,7 @@ Array_Int_100: (Array(Int, 100)) = ...
 # Array(Int, 50) は生成されない
 ```
 
-#### 7.4 跨モジュールDCE
+#### 7.4 クロスモジュールDCE
 
 ```yaoxiang
 # モジュールA
@@ -1047,9 +1103,9 @@ use A.{map}
 string_list = List("a", "b", "c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # map(String, String) をインスタンス化
 
-# コンパイル分析:
-# - モジュールBが使用: map[Int, Int]
-# - モジュールCが使用: map[String, String]
+# コンパイル分析：
+# - モジュールBは map[Int, Int] を使用
+# - モジュールCは map[String, String] を使用
 # - コンパイル後のバイナリはこの2つのインスタンスのみを含む
 ```
 
@@ -1097,8 +1153,8 @@ macro_rules! impl_debug {
     };
 }
 
-# ✅ 泛型方案：自動導出
-# 関数オーバーロード方式で自動導出
+# ✅ ジェネリック方案：自動導出
+# 関数オーバーロード方式で自動導出を使用
 debug_fmt: (T: fields...) -> ((self: Point(T)) -> String) = {
     return "Point { x: " + self.x.to_string() + ", y: " + self.y.to_string() + " }"
 }
@@ -1123,7 +1179,7 @@ html! {
     </div>
 }
 
-# ✅ 泛型方案：型安全ビルダー
+# ✅ ジェネリック方案：型安全ビルダー
 Element: Type = {
     tag: String,
     attrs: HashMap(String, String),
@@ -1166,7 +1222,7 @@ macro_rules! add_types {
     };
 }
 
-# ✅ 泛型方案：条件型
+# ✅ ジェネリック方案：条件型
 Add: (A: Type, B: Type) -> Type = match (A, B) {
     (Int, Int) => Int,
     (Float, Float) => Float,
@@ -1184,10 +1240,10 @@ result_type = Add[Int, Float]  # Float に推論
 
 ### 9. 例
 
-#### 9.1 完全泛型コンテナ例
+#### 9.1 完全ジェネリックコンテナ例
 
 ```yaoxiang
-# ======== 1. 泛型コンテナを定義 ========
+# ======== 1. ジェネリックコンテナを定義 ========
 # (T: Type) -> Type 構文を使用
 Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Self,
@@ -1203,7 +1259,7 @@ List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
 
-    # 泛型メソッド（T は外側の List(T) から自動的にスコープに導入）
+    # ジェネリックメソッド（T は外側の List(T) から自動的にスコープに入る）
     push: (self: List(T), item: T) -> Void,
     pop: (self: List(T)) -> Option(T),
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
@@ -1211,12 +1267,12 @@ List: (T: Type) -> Type = {
     fold: (U: Type) -> ((self: List(T), initial: U, f: (U, T) -> U) -> U),
 }
 
-# ======== 2. 泛型メソッドを実装 ========
-# Type.method 構文糖衣を使用：List 型に自動関連付け
+# ======== 2. ジェネリックメソッドを実装 ========
+# Type.method 構文糖衣を使用：List 型に自動的に関連付け
 
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {
-        # 拡張
+        # 扩容
         new_data = Array(T)(self.data.length * 2)
         for i in 0..self.length {
             new_data[i] = self.data[i]
@@ -1263,7 +1319,7 @@ List.fold: (T: Type, U: Type) -> ((self: List(T), initial: U, f: (U, T) -> U) ->
 }
 
 # ======== 3. 型制約を使用 ========
-# List に Clone を実装
+# List の Clone を実装
 List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
     result = List(T)()
     for i in 0..self.length {
@@ -1273,35 +1329,35 @@ List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
 }
 
 # ======== 4. 使用例 ========
-# 泛型Listを作成
+# ジェネリックListを作成
 numbers = List(Int)()
 numbers.push(1)
 numbers.push(2)
 numbers.push(3)
 
-# 泛型メソッドを使用
+# ジェネリックメソッドを使用
 doubled = numbers.map((x) => x * 2)
 evens = numbers.filter((x) => x % 2 == 0)
 
 # foldを使用して計算
 sum = numbers.fold(0, (acc, x) => acc + x)  # sum = 6
 
-# 泛型組み合わせ
+# ジェネリック合成
 sum_of_evens = numbers
     .filter((x) => x % 2 == 0)
     .map((x) => x * 2)
     .fold(0, (acc, x) => acc + x)  # sum_of_evens = 8
 ```
 
-#### 9.2 泛型アルゴリズム例
+#### 9.2 ジェネリックアルゴリズム例
 
 ```yaoxiang
-# ======== 1. 泛型ソートアルゴリズム ========
+# ======== 1. ジェネリックソートアルゴリズム ========
 Comparator: (T: Type) -> Type = {
     compare: (T, T) -> Int,  # -1 if a < b, 0 if a == b, 1 if a > b
 }
 
-# 泛型quicksort
+# ジェネリックquicksort
 quicksort: (T: Clone) -> ((array: Array(T), cmp: Comparator(T)) -> Array(T)) = {
     if array.length <= 1 {
         return array.clone()
@@ -1355,7 +1411,7 @@ strings = Array(String)("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator(String)())
 ```
 
-#### 9.3 コンパイル時泛型例
+#### 9.3 コンパイル時ジェネリック例
 
 ```yaoxiang
 # ======== 1. コンパイル時行列型 ========
@@ -1420,52 +1476,52 @@ matrix_3x2.data[2][1] = 12.0
 # 行列乗算：2x3 * 3x2 = 2x2
 result = matrix_2x3.multiply(matrix_3x2)
 
-# コンパイル時検証：result型は Matrix(Float, 2, 2)
+# コンパイル時検証：result の型は Matrix(Float, 2, 2)
 # 2x2 単位行列
 identity_3x3 = identity(Float, 3)()
 
 # 次元不一致：コンパイルエラー
-# bad_multiply = matrix_2x3.multiply(identity_3x3)  # コンパイルエラー: 3x3 != 2x3
+# bad_multiply = matrix_2x3.multiply(identity_3x3)  # コンパイルエラー：3x3 != 2x3
 ```
 
 ## トレードオフ
 
-### メリット
+### 優位性
 
-1. **ゼロコスト抽象化**
+1. **ゼロコスト抽象**
    - コンパイル時単態化、ランタイムオーバーヘッドなし
-   - 仮想関数不要、RTTI不要
+   - 仮想関数不要、RTTIなし
 
 2. **デッドコード消除**
-   - コンパイル時分析、使用される泛型のみをインスタンス化
-   - コード膨胀は制御可能
+   - コンパイル時分析、使用されているジェネリクスのみをインスタンス化
+   - コード膨張が制御可能
 
 3. **マクロ代替**
    - 型安全なコード生成
-   - IDE友好、エラーメッセージが明確
+   - IDEフレンドリ、エラー情報が明確
 
 4. **コンパイル時計算**
-   - コンパイル時泛型がコンパイル時計算をサポート
+   - compile-timeジェネリクスがcompile-time計算をサポート
    - 次元検証などの特性
    - `const` キーワード不要、純粋な型制約
 
-### デメリット
+### 欠点
 
 1. **コンパイル時間**
-   - 泛型インスタンス化が増加したコンパイル時間
-   - 制約解決が低速になる可能性
+   - ジェネリックインスタンス化が増加
+   - 制約解決が遅い可能性
 
 2. **メモリ使用量**
-   - コンパイラメモリ使用量が増加
+   - コンパイラのメモリ使用量が増加
    - キャッシュメカニズムにメモリが必要
 
-3. **実装複雑度**
-   - 制約解決器が複雑
+3. **実装複雑さ**
+   - 制約解決ソルバーが複雑
    - 型レベル計算エンジンが複雑
 
 4. **エラー診断**
-   - 泛型エラーが複雑になる可能性
-   - 明確なエラー提示が必要
+   - ジェネリクスエラーが複雑になる可能性
+   - 明確なエラーを提示する必要がある
 
 ### 緩和措施
 
@@ -1473,45 +1529,45 @@ identity_3x3 = identity(Float, 3)()
    - インスタンス化結果をキャッシュ
    - LRUキャッシュでメモリを制限
 
-2. **増分コンパイル**
+2. **インクリメンタルコンパイル**
    - コンパイル結果をキャッシュ
    - 増分インスタンス化
 
 3. **エラー提示**
-   - 明確なエラーメッセージ
-   - 泛型パラメータ推論ヒント
+   - 明確なエラー情報
+   - ジェネリックパラメータ推論のヒント
 
 4. **並列コンパイル**
-   - 泛型を並列インスタンス化
+   - ジェネリクスを並列インスタンス化
    - マルチスレッド制約解決
 
 ## 代替方案
 
-| 方案 | なぜ選択しないか |
+| 方案 | 为什么不選択 |
 |------|--------------|
-| 基礎泛型のみ | 複雑なマクロを代替できない |
-| マクロのみ | 型安全性がなく、エラーメッセージが悪い |
-| 制約のみ頼り | 柔軟性が不足 |
-| ランタイム泛型 | パフォーマンスオーバーヘッドあり |
+| 基本ジェネリスのみ | 複雑なマクロを代替できない |
+| 純粋マクロシステム | 型安全性がなく、エラー情報が悪い |
+| 制約のみ依存 | 柔軟性が不足 |
+| ランタイムジェネリクス | パフォーマンスオーバーヘッドあり |
 
 ### リスク
 
-| リスク | 影響 | 緩和措施 |
+| リスク | 影响 | 缓和措施 |
 |------|------|----------|
-| 制約解決複雑度 | コンパイル時間が过长 | 増分解決 + キャッシュ |
-| コード膨胀 | バイナリファイル过大 | DCE + 閾値制御 |
-| 実装複雑度 | 開発期間が延长 | 段階的実装 |
-| エラー診断 | ユーザー体験が悪い | 詳細なエラーメッセージ |
+| 制約解決複雑さ | コンパイル時間が長すぎる | 増分解決 + キャッシュ |
+| コード膨張 | バイナリファイルが大きすぎる | DCE + 閾値制御 |
+| 実装複雑さ | 開発周期が延長 | 段階的実装 |
+| エラー診断 | ユーザー体験が悪い | 詳細なエラー情報 |
 
 ## 開放問題
 
-### 審議待ち問題
+### 审议中の問題
 
-| 論点 | 説明 | 状態 |
+| 議題 | 説明 | 状態 |
 |------|------|------|
-| インスタンス化戦略 | Eager vs Lazy vs Threshold | 審議待ち |
-| キャッシュサイズ | LRUキャッシュ容量設定 | 審議待ち |
-| エラー診断 | 泛型エラーメッセージの詳細度 | 審議待ち |
+| インスタンス化戦略 | Eager vs Lazy vs Threshold | 审议中 |
+| キャッシュサイズ | LRUキャッシュ容量設定 | 审议中 |
+| エラー診断 | ジェネリクスエラー情報の詳細度 | 审议中 |
 
 ### 今後の最適化
 
@@ -1519,17 +1575,17 @@ identity_3x3 = identity(Float, 3)()
 |--------|------|----------|
 | インスタンス化グラフ分析 | 高 | 中 |
 | 型レベルプログラミングDSL | 中 | 高 |
-| 泛型パフォーマンスベンチマーク | 中 | 低 |
+| ジェネリックパフォーマンスベンチマーク | 中 | 低 |
 
 ## 付録
 
 ### 構文BNF
 
 ```bnf
-# 泛型パラメータは統一した () 構文を使用、関数型の一部として
-# 例: map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
+# ジェネリックパラメータは統一 () 構文を使用し、関数型の一部として
+# 例：map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R))
 
-# 型制約（泛型パラメータ内）
+# 型制約（ジェネリックパラメータ内）
 type_bound ::= identifier
              | identifier '+' identifier ('+' identifier)*
 
@@ -1539,18 +1595,18 @@ parameter ::= identifier ':' type
 parameters ::= parameter (',' parameter)*
 
 # 関数宣言：name: type = expression
-# 泛型パラメータは関数型の最初の引数グループ: (T: Type) -> ((params) -> return)
+# ジェネリックパラメータは関数型の最初の引数グループ：(T: Type) -> ((params) -> return)
 function ::= identifier ':' type '=' (expression | block)
 
 # メソッド宣言：Type.method: type = expression
 method ::= identifier '.' identifier ':' type '=' (expression | block)
 
 # 型定義（統一 Binding 構文）
-# 泛型型例: List: (T: Type) -> Type = { ... }
+# ジェネリック型 例：List: (T: Type) -> Type = { ... }
 generic_type ::= identifier ':' type '=' type_expression
 
-# 泛型パラメータ内の Type はコンパイラが実引数型から自動填充
-# 例: map(numbers, f)、T は numbers: List(Int) から抽出、R は f: (Int) -> String から抽出
+# ジェネリックパラメータ内の Type はコンパイラが実引数の型から自動的に充填
+# 例：map(numbers, f)、T は numbers: List(Int) から、R は f: (Int) -> String から抽出
 ```
 
 ## ライフサイクルと归宿
@@ -1562,19 +1618,19 @@ generic_type ::= identifier ':' type '=' type_expression
        │
        ▼
 ┌─────────────┐
-│  審査中     │  ← コミュニティ討論とフィードバックを募集中
+│  審査中     │  ← コミュニティの議論とフィードバックを募集中
 └──────┬──────┘
        │
        ├──────────────────┐
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│  受理済み     │    │  拒否済み     │
+│  承認済み   │    │  拒否済み   │
 └──────┬──────┘    └──────┬──────┘
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│ (正式設計)  │    │ (元の位置に保留) │
+│ (正式設計)  │    │ (元の位置を保持) │
 └─────────────┘    └─────────────┘
 ```
 
@@ -1582,7 +1638,7 @@ generic_type ::= identifier ':' type '=' type_expression
 
 ## 参考文献
 
-### YaoXiang公式文書
+### YaoXiang公式ドキュメント
 
 - [RFC-010: 統一型構文](./010-unified-type-syntax.md)
 - [RFC-009: 所有権モデル](./accepted/009-ownership-model.md)
@@ -1593,10 +1649,10 @@ generic_type ::= identifier ':' type '=' type_expression
 
 ### 外部参照
 
-- [Rust泛型システム](https://doc.rust-lang.org/book/ch10-01-syntax.html)
+- [Rustジェネリクスシステム](https://doc.rust-lang.org/book/ch10-01-syntax.html)
 - [C++テンプレート特殊化](https://en.cppreference.com/w/cpp/language/template_specialization)
 - [Haskell型クラス](https://www.haskell.org/tutorial/classes.html)
-- [Swift泛型](https://docs.swift.org/swift-book/LanguageGuide/Generics.html)
+- [Swiftジェネリクス](https://docs.swift.org/swift-book/LanguageGuide/Generics.html)
 - [単態化最適化](https://llvm.org/docs/Monomorphization.html)
 - [デッドコード消除](https://en.wikipedia.org/wiki/Dead_code_elimination)
 ```

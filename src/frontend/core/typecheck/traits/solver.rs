@@ -53,6 +53,11 @@ impl TraitSolver {
         self.trait_table = Some(table);
     }
 
+    /// 获取 Trait 表引用
+    pub fn trait_table(&self) -> Option<&TraitTable> {
+        self.trait_table.as_ref()
+    }
+
     /// 求解特质约束
     pub fn solve(
         &mut self,
@@ -131,10 +136,9 @@ impl TraitSolver {
         if let Some(ty) = constraint.args.first() {
             match constraint.name.as_str() {
                 "Clone" => self.check_clone_trait(ty),
+                "Dup" => self.check_dup_trait(ty),
                 "Equal" => self.check_equal_trait(ty),
                 "Debug" => self.check_debug_trait(ty),
-                "Send" => self.check_send_trait(ty),
-                "Sync" => self.check_sync_trait(ty),
                 _ => false,
             }
         } else {
@@ -142,19 +146,94 @@ impl TraitSolver {
         }
     }
 
-    /// 检查 Clone 特质
+    /// 检查 Clone 特质（递归检查结构体字段、枚举变体、元组元素）
+    ///
+    /// 首先检查 TraitTable 是否有已注册的 Clone 实现，
+    /// 然后对结构体字段、元组元素进行递归检查。
+    /// 枚举变体仅包含名称（无关联数据），自动视为 Clone。
     fn check_clone_trait(
         &self,
         ty: &MonoType,
     ) -> bool {
-        matches!(
-            ty,
+        // 检查 TraitTable 是否有已注册的 Clone 实现
+        if let Some(ref table) = self.trait_table {
+            if table.has_trait("Clone") && table.has_impl("Clone", &ty.type_name()) {
+                return true;
+            }
+        }
+
+        match ty {
+            // 基本类型：自动 Clone
             MonoType::Int(_)
-                | MonoType::Float(_)
-                | MonoType::Bool
-                | MonoType::Char
-                | MonoType::String
-        )
+            | MonoType::Float(_)
+            | MonoType::Bool
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Bytes
+            | MonoType::Void => true,
+
+            // Arc：引用计数，自动 Clone
+            MonoType::Arc(_) => true,
+
+            // &T 是零大小令牌，Dup 蕴含 Clone（RFC-011 §2.4）
+            MonoType::Ref { mutable: false, .. } => true,
+
+            // 元组：递归检查所有元素
+            MonoType::Tuple(elems) => elems.iter().all(|t| self.check_clone_trait(t)),
+
+            // 结构体：递归检查所有字段
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .all(|(_, field_ty)| self.check_clone_trait(field_ty)),
+
+            // 枚举：变体仅包含名称（无关联数据），自动视为 Clone
+            MonoType::Enum(_) => true,
+
+            // 其他类型（Fn、Weak 等）：不满足 Clone
+            _ => false,
+        }
+    }
+
+    /// 检查 Dup 特质（递归检查结构体字段、枚举变体、元组元素）
+    ///
+    /// Dup 表示类型可以被简单复制（类似 Copy trait）。
+    /// 与 Clone 不同，Dup 不需要显式实现，仅依赖结构递归。
+    fn check_dup_trait(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        match ty {
+            // 基本类型：自动 Dup
+            MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Bool
+            | MonoType::Char
+            | MonoType::String
+            | MonoType::Bytes
+            | MonoType::Void => true,
+
+            // Arc：引用计数，自动 Dup
+            MonoType::Arc(_) => true,
+
+            // &T 是零大小令牌，可自由复制（Dup）；&mut T 不可
+            MonoType::Ref { mutable: false, .. } => true,
+
+            // 元组：递归检查所有元素
+            MonoType::Tuple(elems) => elems.iter().all(|t| self.check_dup_trait(t)),
+
+            // 结构体：递归检查所有字段
+            MonoType::Struct(s) => s
+                .fields
+                .iter()
+                .all(|(_, field_ty)| self.check_dup_trait(field_ty)),
+
+            // 枚举：变体仅包含名称（无关联数据），自动视为 Dup
+            MonoType::Enum(_) => true,
+
+            // 其他类型（Fn、Weak、&mut T 等）：不满足 Dup
+            _ => false,
+        }
     }
 
     /// 检查 Equal 特质
@@ -181,38 +260,6 @@ impl TraitSolver {
         true
     }
 
-    /// 检查 Send 特质
-    fn check_send_trait(
-        &self,
-        ty: &MonoType,
-    ) -> bool {
-        matches!(
-            ty,
-            MonoType::Int(_)
-                | MonoType::Float(_)
-                | MonoType::Bool
-                | MonoType::Char
-                | MonoType::String
-                | MonoType::Void
-        )
-    }
-
-    /// 检查 Sync 特质
-    fn check_sync_trait(
-        &self,
-        ty: &MonoType,
-    ) -> bool {
-        matches!(
-            ty,
-            MonoType::Int(_)
-                | MonoType::Float(_)
-                | MonoType::Bool
-                | MonoType::Char
-                | MonoType::String
-                | MonoType::Void
-        )
-    }
-
     /// 检查特质是否满足（支持用户定义 Trait）
     pub fn check_trait(
         &mut self,
@@ -227,10 +274,9 @@ impl TraitSolver {
 
         match trait_name {
             "Clone" => self.check_clone_trait(ty),
+            "Dup" => self.check_dup_trait(ty),
             "Equal" => self.check_equal_trait(ty),
             "Debug" => self.check_debug_trait(ty),
-            "Send" => self.check_send_trait(ty),
-            "Sync" => self.check_sync_trait(ty),
             _ => false,
         }
     }

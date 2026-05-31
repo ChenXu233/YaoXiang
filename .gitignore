@@ -41,3 +41,5 @@ superpowers/
 
 .env
 docs/.env
+.codegraph
+.crush

@@ -1,5 +1,5 @@
 ---
-title: RFC-012：F-String 模板字符串
+title: "RFC-012：F-String 模板字符串"
 ---
 
 # RFC 012: F-String 模板字符串

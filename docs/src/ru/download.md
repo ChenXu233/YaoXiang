@@ -3,8 +3,8 @@
 layout: page
 is_download: true
 
-title: TYPE THE UNIVERSE
-description: "Выберите вашу платформу, начните строить мир."
+title: "TYPE THE UNIVERSE"
+description: "Выберите вашу платформу и начните создавать мир."
 
 download:
   latest_stable: "Последняя стабильная версия v{version}"
@@ -16,11 +16,11 @@ download:
   coming_soon: "Скоро"
   checksum: "Контрольная сумма / Подпись"
   build_from_source:
-    title: "Сборка из исходников"
-    description: "Сборка YaoXiang из исходников с помощью Cargo, требуется установленный Rust."
+    title: "Сборка из исходного кода"
+    description: "Сборка YaoXiang из исходного кода с помощью Cargo. Убедитесь, что установлен Rust."
   nightly_builds:
     title: "Ночные сборки"
-    description: "Доступны последние передовые версии. Рекомендуется для тестирования, используйте осторожно в производственной среде."
+    description: "Доступны последние передовые версии. Рекомендуется для тестирования, в продакшене используйте с осторожностью."
   github_actions: "Перейти к GitHub Actions"
 
 versions:

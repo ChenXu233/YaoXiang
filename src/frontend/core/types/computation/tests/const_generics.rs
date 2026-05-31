@@ -56,7 +56,7 @@ fn test_eval_bool_literal() {
 #[test]
 fn test_eval_float_literal() {
     let e = ConstGenericEval::new();
-    assert!(e.eval(&ConstExpr::Float(3.14)).is_ok());
+    assert!(e.eval(&ConstExpr::Float(std::f32::consts::PI)).is_ok());
     assert!(e.eval(&ConstExpr::Float(std::f32::consts::PI)).is_ok());
     assert!(e.eval(&ConstExpr::Float(0.0)).is_ok());
     assert!(e.eval(&ConstExpr::Float(-1.5)).is_ok());

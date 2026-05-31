@@ -8,12 +8,21 @@ use super::Diagnostic;
 /// 错误收集器
 ///
 /// 收集多个错误，支持批量报告
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ErrorCollector<E: SpannedError> {
     /// 错误列表
     errors: Vec<E>,
     /// 警告列表
     warnings: Vec<Warning>,
+}
+
+impl<E: SpannedError> Default for ErrorCollector<E> {
+    fn default() -> Self {
+        Self {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
 }
 
 impl<E: SpannedError> ErrorCollector<E> {

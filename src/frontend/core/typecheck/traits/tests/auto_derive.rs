@@ -1,11 +1,12 @@
 //! 自动派生测试 — 基于语言规范 §3.5.2 & §3.5.3 & RFC-011 §2
 //!
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync）
+//! §3.5.2: 标准库接口（Clone, Equal, Debug）
 //! §3.5.3: 自动派生机制
 //! RFC-011 §2: 类型约束系统
 
 use crate::frontend::core::typecheck::traits::auto_derive::{
-    is_builtin_derive, is_primitive_type, can_auto_derive, generate_auto_derive, BUILTIN_DERIVES,
+    is_builtin_derive, is_primitive_type, can_auto_derive, generate_auto_derive,
+    field_type_satisfies, BUILTIN_DERIVES,
 };
 use crate::frontend::core::types::base::{TraitTable, TraitImplementation, MonoType};
 use crate::frontend::core::parser::ast::{Type, StructField};
@@ -49,15 +50,6 @@ fn test_is_builtin_derive_clone() {
 }
 
 #[test]
-fn test_is_builtin_derive_send() {
-    // Arrange & Act
-    let result = is_builtin_derive("Send");
-
-    // Assert
-    assert!(result, "Send should be builtin derive (规范 §3.5.2)");
-}
-
-#[test]
 fn test_is_builtin_derive_debug() {
     // Arrange & Act
     let result = is_builtin_derive("Debug");
@@ -76,15 +68,6 @@ fn test_is_builtin_derive_equal() {
         result,
         "Equal should be builtin derive (规范 §3.5.2, 合并了 PartialEq + Eq)"
     );
-}
-
-#[test]
-fn test_is_builtin_derive_sync() {
-    // Arrange & Act
-    let result = is_builtin_derive("Sync");
-
-    // Assert
-    assert!(result, "Sync should be builtin derive (规范 §3.5.2)");
 }
 
 // ===================================================================
@@ -195,30 +178,6 @@ fn test_generate_auto_derive_clone_has_clone_method() {
 }
 
 #[test]
-fn test_generate_auto_derive_send_returns_some() {
-    // Arrange & Act
-    let result = generate_auto_derive("Int", "Send");
-
-    // Assert
-    assert!(
-        result.is_some(),
-        "Send derive should return Some (marker trait, 规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_send_has_no_methods() {
-    // Arrange
-    let result = generate_auto_derive("Int", "Send").unwrap();
-
-    // Assert
-    assert!(
-        result.methods.is_empty(),
-        "Send is a marker trait, should have no methods"
-    );
-}
-
-#[test]
 fn test_generate_auto_derive_debug_has_debug_method() {
     // Arrange
     let result = generate_auto_derive("Point", "Debug").unwrap();
@@ -239,30 +198,6 @@ fn test_generate_auto_derive_equal_has_equal_method() {
     assert!(
         result.methods.contains_key("equal"),
         "Equal derive should have 'equal' method (规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_sync_returns_some() {
-    // Arrange & Act
-    let result = generate_auto_derive("Int", "Sync");
-
-    // Assert
-    assert!(
-        result.is_some(),
-        "Sync derive should return Some (marker trait, 规范 §3.5.2)"
-    );
-}
-
-#[test]
-fn test_generate_auto_derive_sync_has_no_methods() {
-    // Arrange
-    let result = generate_auto_derive("Int", "Sync").unwrap();
-
-    // Assert
-    assert!(
-        result.methods.is_empty(),
-        "Sync is a marker trait, should have no methods"
     );
 }
 
@@ -531,14 +466,14 @@ fn test_builtin_derives_list_is_non_empty() {
 
 #[test]
 fn test_builtin_derives_contains_exactly_expected_traits() {
-    // Arrange - 规范 §3.5.2: 标准库接口为 Clone, Equal, Debug, Send, Sync
-    let expected = ["Clone", "Equal", "Debug", "Send", "Sync"];
+    // Arrange - 规范 §3.5.2: 标准库接口为 Clone, Equal, Debug
+    let expected = ["Clone", "Equal", "Debug"];
 
     // Act & Assert
     assert_eq!(
         BUILTIN_DERIVES.len(),
         expected.len(),
-        "BUILTIN_DERIVES should contain exactly 5 traits (规范 §3.5.2)"
+        "BUILTIN_DERIVES should contain exactly 3 traits (规范 §3.5.2)"
     );
     for name in &expected {
         assert!(
@@ -642,5 +577,210 @@ fn test_can_auto_derive_with_primitive_fields_registered() {
     assert!(
         result,
         "Empty fields with builtin trait should allow auto-derive"
+    );
+}
+
+// ===================================================================
+// field_type_satisfies 测试
+// ===================================================================
+
+#[test]
+fn test_field_type_satisfies_name() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Name {
+        name: "Int".to_string(),
+        span: dummy_span(),
+    };
+    assert!(
+        field_type_satisfies(&table, "Dup", &ty),
+        "Int should satisfy Dup"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_name_fails() {
+    let table = TraitTable::new();
+    let ty = Type::Name {
+        name: "Int".to_string(),
+        span: dummy_span(),
+    };
+    assert!(
+        !field_type_satisfies(&table, "Dup", &ty),
+        "Int without impl should not satisfy Dup"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_generic() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "List".to_string(),
+        methods: Default::default(),
+    });
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Generic {
+        name: "List".to_string(),
+        name_span: dummy_span(),
+        args: vec![Type::Name {
+            name: "Int".to_string(),
+            span: dummy_span(),
+        }],
+    };
+    assert!(
+        field_type_satisfies(&table, "Dup", &ty),
+        "List(Int) should satisfy Dup when both satisfy"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_generic_container_fails() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Generic {
+        name: "List".to_string(),
+        name_span: dummy_span(),
+        args: vec![Type::Name {
+            name: "Int".to_string(),
+            span: dummy_span(),
+        }],
+    };
+    assert!(
+        !field_type_satisfies(&table, "Dup", &ty),
+        "List(Int) should fail when List doesn't satisfy"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_generic_arg_fails() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "List".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Generic {
+        name: "List".to_string(),
+        name_span: dummy_span(),
+        args: vec![Type::Name {
+            name: "Buffer".to_string(),
+            span: dummy_span(),
+        }],
+    };
+    assert!(
+        !field_type_satisfies(&table, "Dup", &ty),
+        "List(Buffer) should fail when Buffer doesn't satisfy"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_tuple() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Float".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Tuple(vec![
+        Type::Name {
+            name: "Int".to_string(),
+            span: dummy_span(),
+        },
+        Type::Name {
+            name: "Float".to_string(),
+            span: dummy_span(),
+        },
+    ]);
+    assert!(
+        field_type_satisfies(&table, "Dup", &ty),
+        "Tuple of Dup types should satisfy"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_tuple_fails() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Tuple(vec![
+        Type::Name {
+            name: "Int".to_string(),
+            span: dummy_span(),
+        },
+        Type::Name {
+            name: "Buffer".to_string(),
+            span: dummy_span(),
+        },
+    ]);
+    assert!(
+        !field_type_satisfies(&table, "Dup", &ty),
+        "Tuple with non-Dup element should fail"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_fn_returns_false() {
+    let table = TraitTable::new();
+    let ty = Type::Fn {
+        params: vec![],
+        return_type: Box::new(Type::Name {
+            name: "Void".to_string(),
+            span: dummy_span(),
+        }),
+    };
+    assert!(
+        !field_type_satisfies(&table, "Dup", &ty),
+        "Fn types should not satisfy Dup"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_builtin_int() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Int".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Int(64);
+    assert!(
+        field_type_satisfies(&table, "Dup", &ty),
+        "Int(64) should satisfy Dup via builtin mapping"
+    );
+}
+
+#[test]
+fn test_field_type_satisfies_builtin_bool() {
+    let mut table = TraitTable::new();
+    table.add_impl(TraitImplementation {
+        trait_name: "Dup".to_string(),
+        for_type_name: "Bool".to_string(),
+        methods: Default::default(),
+    });
+    let ty = Type::Bool;
+    assert!(
+        field_type_satisfies(&table, "Dup", &ty),
+        "Bool should satisfy Dup via builtin mapping"
     );
 }

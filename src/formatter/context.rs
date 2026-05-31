@@ -11,8 +11,6 @@ pub struct FormatContext {
     pub indent_level: usize,
     /// 格式化选项
     pub options: FormatOptions,
-    /// 当前行的字符数（用于判断是否需要换行）
-    pub current_line_width: usize,
 }
 
 impl FormatContext {
@@ -21,7 +19,6 @@ impl FormatContext {
         Self {
             indent_level: 0,
             options,
-            current_line_width: 0,
         }
     }
 
@@ -49,18 +46,5 @@ impl FormatContext {
     /// 获取缩进宽度（字符数）
     pub fn indent_width(&self) -> usize {
         self.indent_level * self.options.indent_width
-    }
-
-    /// 检查当前行是否超过行宽
-    pub fn exceeds_line_width(&self) -> bool {
-        self.current_line_width > self.options.line_width
-    }
-
-    /// 检查添加指定长度内容后是否超过行宽
-    pub fn should_break(
-        &self,
-        additional_len: usize,
-    ) -> bool {
-        self.current_line_width + additional_len > self.options.line_width
     }
 }

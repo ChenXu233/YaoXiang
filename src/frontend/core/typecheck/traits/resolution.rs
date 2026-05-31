@@ -50,8 +50,7 @@ impl TraitResolver {
         match name {
             "Clone" => Some("std:: Clone".to_string()),
             "Debug" => Some("std::fmt::Debug".to_string()),
-            "Send" => Some("std::marker::Send".to_string()),
-            "Sync" => Some("std::marker::Sync".to_string()),
+            "Dup" => Some("std::Dup".to_string()),
             _ => None,
         }
     }

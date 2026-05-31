@@ -1,12 +1,12 @@
 //! 标准库 trait 测试 — 基于语言规范 §3.5.2 & RFC-011 §2
 //!
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync, Iterator）
+//! §3.5.2: 标准库接口（Clone, Dup, Equal, Debug, Iterator）
 //! RFC-011 §2: 标准库 trait 定义
 //!
 //! 规范 v1.9.0 原类型实现表：
-//! - Int, Float, Bool, Char, String: Clone, Equal, Debug, Send, Sync
-//! - Void: Equal, Debug, Send, Sync（不实现 Clone）
-//! - Bytes: Debug, Send, Sync（不实现 Clone, Equal）
+//! - Int, Float, Bool, Char, String: Clone, Dup, Equal, Debug
+//! - Bytes: Clone, Dup, Debug（不实现 Equal）
+//! - Void: Equal, Debug（不实现 Clone, Dup）
 
 use crate::frontend::core::typecheck::traits::std_traits::{
     init_std_traits, init_primitive_impls, is_primitive_type, std_trait_names, STD_TRAITS,
@@ -78,8 +78,8 @@ fn test_init_std_traits_registers_debug() {
 }
 
 #[test]
-fn test_init_std_traits_registers_send() {
-    // Arrange - 规范 §3.5.2: Send 是标记接口，无方法
+fn test_init_std_traits_registers_dup() {
+    // Arrange - RFC-011: Dup 是标记接口，隐含 Clone
     let mut trait_table = TraitTable::default();
 
     // Act
@@ -87,28 +87,15 @@ fn test_init_std_traits_registers_send() {
 
     // Assert
     assert!(
-        trait_table.has_trait("Send"),
-        "Send trait 应在标准库初始化后存在（规范 §3.5.2）"
+        trait_table.has_trait("Dup"),
+        "Dup trait 应在标准库初始化后存在（RFC-011）"
     );
-    let send = trait_table.get_trait("Send").unwrap();
-    assert!(send.methods.is_empty(), "Send 是标记接口，不应包含任何方法");
-}
-
-#[test]
-fn test_init_std_traits_registers_sync() {
-    // Arrange - 规范 §3.5.2: Sync 是标记接口，无方法
-    let mut trait_table = TraitTable::default();
-
-    // Act
-    init_std_traits(&mut trait_table);
-
-    // Assert
+    let dup = trait_table.get_trait("Dup").unwrap();
+    assert!(dup.methods.is_empty(), "Dup 是标记接口，不应包含任何方法");
     assert!(
-        trait_table.has_trait("Sync"),
-        "Sync trait 应在标准库初始化后存在（规范 §3.5.2）"
+        dup.parent_traits.contains(&"Clone".to_string()),
+        "Dup 应隐含 Clone 约束"
     );
-    let sync = trait_table.get_trait("Sync").unwrap();
-    assert!(sync.methods.is_empty(), "Sync 是标记接口，不应包含任何方法");
 }
 
 #[test]
@@ -180,8 +167,8 @@ fn test_init_primitive_impls_int_debug() {
 }
 
 #[test]
-fn test_init_primitive_impls_int_send() {
-    // Arrange - 规范 §3.5.2: 所有原类型自动实现 Send + Sync
+fn test_init_primitive_impls_int_dup() {
+    // Arrange - RFC-011: 所有原类型自动实现 Dup
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
@@ -190,24 +177,8 @@ fn test_init_primitive_impls_int_send() {
 
     // Assert
     assert!(
-        trait_table.has_impl("Send", "Int"),
-        "Int 应实现 Send trait（规范 §3.5.2）"
-    );
-}
-
-#[test]
-fn test_init_primitive_impls_int_sync() {
-    // Arrange - 规范 §3.5.2: 所有原类型自动实现 Send + Sync
-    let mut trait_table = TraitTable::default();
-    init_std_traits(&mut trait_table);
-
-    // Act
-    init_primitive_impls(&mut trait_table);
-
-    // Assert
-    assert!(
-        trait_table.has_impl("Sync", "Int"),
-        "Int 应实现 Sync trait（规范 §3.5.2）"
+        trait_table.has_impl("Dup", "Int"),
+        "Int 应实现 Dup trait（RFC-011）"
     );
 }
 
@@ -222,10 +193,9 @@ fn test_init_primitive_impls_float_traits() {
 
     // Assert
     assert!(trait_table.has_impl("Clone", "Float"), "Float 应实现 Clone");
+    assert!(trait_table.has_impl("Dup", "Float"), "Float 应实现 Dup");
     assert!(trait_table.has_impl("Equal", "Float"), "Float 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Float"), "Float 应实现 Debug");
-    assert!(trait_table.has_impl("Send", "Float"), "Float 应实现 Send");
-    assert!(trait_table.has_impl("Sync", "Float"), "Float 应实现 Sync");
 }
 
 #[test]
@@ -239,10 +209,9 @@ fn test_init_primitive_impls_bool_traits() {
 
     // Assert
     assert!(trait_table.has_impl("Clone", "Bool"), "Bool 应实现 Clone");
+    assert!(trait_table.has_impl("Dup", "Bool"), "Bool 应实现 Dup");
     assert!(trait_table.has_impl("Equal", "Bool"), "Bool 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Bool"), "Bool 应实现 Debug");
-    assert!(trait_table.has_impl("Send", "Bool"), "Bool 应实现 Send");
-    assert!(trait_table.has_impl("Sync", "Bool"), "Bool 应实现 Sync");
 }
 
 #[test]
@@ -259,6 +228,7 @@ fn test_init_primitive_impls_string_traits() {
         trait_table.has_impl("Clone", "String"),
         "String 应实现 Clone"
     );
+    assert!(trait_table.has_impl("Dup", "String"), "String 应实现 Dup");
     assert!(
         trait_table.has_impl("Equal", "String"),
         "String 应实现 Equal"
@@ -267,13 +237,11 @@ fn test_init_primitive_impls_string_traits() {
         trait_table.has_impl("Debug", "String"),
         "String 应实现 Debug"
     );
-    assert!(trait_table.has_impl("Send", "String"), "String 应实现 Send");
-    assert!(trait_table.has_impl("Sync", "String"), "String 应实现 Sync");
 }
 
 #[test]
 fn test_init_primitive_impls_void_traits() {
-    // Arrange - 规范 §3.5.2: Void 实现 Equal, Debug, Send, Sync（不实现 Clone）
+    // Arrange - RFC-011: Void 实现 Equal, Debug（不实现 Clone, Dup）
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
@@ -285,15 +253,14 @@ fn test_init_primitive_impls_void_traits() {
         !trait_table.has_impl("Clone", "Void"),
         "Void 不应实现 Clone"
     );
+    assert!(!trait_table.has_impl("Dup", "Void"), "Void 不应实现 Dup");
     assert!(trait_table.has_impl("Equal", "Void"), "Void 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Void"), "Void 应实现 Debug");
-    assert!(trait_table.has_impl("Send", "Void"), "Void 应实现 Send");
-    assert!(trait_table.has_impl("Sync", "Void"), "Void 应实现 Sync");
 }
 
 #[test]
 fn test_init_primitive_impls_bytes_traits() {
-    // Arrange - 规范 §3.5.2: Bytes 实现 Debug, Send, Sync（不实现 Clone, Equal）
+    // Arrange - RFC-011: Bytes 实现 Clone, Dup, Debug（不实现 Equal）
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
@@ -301,17 +268,13 @@ fn test_init_primitive_impls_bytes_traits() {
     init_primitive_impls(&mut trait_table);
 
     // Assert
-    assert!(
-        !trait_table.has_impl("Clone", "Bytes"),
-        "Bytes 不应实现 Clone"
-    );
+    assert!(trait_table.has_impl("Clone", "Bytes"), "Bytes 应实现 Clone");
+    assert!(trait_table.has_impl("Dup", "Bytes"), "Bytes 应实现 Dup");
     assert!(
         !trait_table.has_impl("Equal", "Bytes"),
         "Bytes 不应实现 Equal"
     );
     assert!(trait_table.has_impl("Debug", "Bytes"), "Bytes 应实现 Debug");
-    assert!(trait_table.has_impl("Send", "Bytes"), "Bytes 应实现 Send");
-    assert!(trait_table.has_impl("Sync", "Bytes"), "Bytes 应实现 Sync");
 }
 
 #[test]
@@ -327,16 +290,15 @@ fn test_is_primitive_type_all_primitives() {
 
 #[test]
 fn test_std_trait_names_contains_all_traits() {
-    // Arrange & Act - 规范 §3.5.2: 标准库接口为 Clone, Equal, Debug, Send, Sync, Iterator
+    // Arrange & Act - RFC-011: 标准库接口为 Clone, Dup, Equal, Debug, Iterator
     let names = std_trait_names();
 
     // Assert
-    assert_eq!(names.len(), 6, "应有 6 个标准库 trait（规范 §3.5.2）");
+    assert_eq!(names.len(), 5, "应有 5 个标准库 trait（RFC-011）");
     assert!(names.contains(&"Clone"), "应包含 Clone");
+    assert!(names.contains(&"Dup"), "应包含 Dup");
     assert!(names.contains(&"Equal"), "应包含 Equal");
     assert!(names.contains(&"Debug"), "应包含 Debug");
-    assert!(names.contains(&"Send"), "应包含 Send");
-    assert!(names.contains(&"Sync"), "应包含 Sync");
     assert!(names.contains(&"Iterator"), "应包含 Iterator");
 }
 
@@ -503,19 +465,19 @@ fn test_int_equal_impl_method() {
 }
 
 #[test]
-fn test_send_impl_has_no_methods() {
-    // Arrange - 规范 §3.5.2: Send 是标记接口，无方法
+fn test_dup_impl_has_no_methods() {
+    // Arrange - RFC-011: Dup 是标记接口，无方法
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
     init_primitive_impls(&mut trait_table);
 
     // Act
-    let impl_ = trait_table.get_impl("Send", "Int").unwrap();
+    let impl_ = trait_table.get_impl("Dup", "Int").unwrap();
 
     // Assert
     assert!(
         impl_.methods.is_empty(),
-        "Send 是标记接口，Int 的实现不应包含任何方法"
+        "Dup 是标记接口，Int 的实现不应包含任何方法"
     );
 }
 
@@ -542,19 +504,15 @@ fn test_primitive_type_empty_string() {
 
 #[test]
 fn test_has_impl_for_unimplemented_trait() {
-    // Arrange - 规范 §3.5.2: Bytes 不实现 Clone 和 Equal
+    // Arrange - RFC-011: Bytes 不实现 Equal
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
     init_primitive_impls(&mut trait_table);
 
     // Act & Assert
     assert!(
-        !trait_table.has_impl("Clone", "Bytes"),
-        "Bytes 不应实现 Clone trait（规范 §3.5.2）"
-    );
-    assert!(
         !trait_table.has_impl("Equal", "Bytes"),
-        "Bytes 不应实现 Equal trait（规范 §3.5.2）"
+        "Bytes 不应实现 Equal trait（RFC-011）"
     );
 }
 
@@ -604,9 +562,9 @@ fn test_init_std_traits_idempotent() {
         trait_table.has_trait("Clone"),
         "多次初始化后 Clone 仍应存在"
     );
-    // 规范 §3.5.2: 应有 6 个标准库 trait
+    // RFC-011: 应有 5 个标准库 trait
     let trait_count = trait_table.trait_names().count();
-    assert_eq!(trait_count, 6, "多次初始化后仍应只有 6 个 trait，不应重复");
+    assert_eq!(trait_count, 5, "多次初始化后仍应只有 5 个 trait，不应重复");
 }
 
 #[test]
@@ -627,22 +585,29 @@ fn test_init_primitive_impls_idempotent() {
 }
 
 #[test]
-fn test_all_std_traits_have_no_parent() {
-    // Arrange - 规范 §3.5.2: 所有标准库接口都是独立的，无继承关系
+fn test_all_std_traits_have_no_parent_except_dup() {
+    // Arrange - RFC-011: 大多数标准库接口都是独立的，但 Dup 隐含 Clone
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
     // Act & Assert
-    let trait_names = ["Clone", "Equal", "Debug", "Send", "Sync", "Iterator"];
-    for name in &trait_names {
+    let no_parent_traits = ["Clone", "Equal", "Debug", "Iterator"];
+    for name in &no_parent_traits {
         let def = trait_table.get_trait(name).unwrap();
         assert!(
             def.parent_traits.is_empty(),
-            "{} 不应有父 trait（规范 §3.5.2），但实际有 {:?}",
+            "{} 不应有父 trait（RFC-011），但实际有 {:?}",
             name,
             def.parent_traits
         );
     }
+
+    // Dup 有 Clone 作为父 trait
+    let dup = trait_table.get_trait("Dup").unwrap();
+    assert!(
+        dup.parent_traits.contains(&"Clone".to_string()),
+        "Dup 应有 Clone 作为父 trait"
+    );
 }
 
 #[test]
@@ -660,19 +625,15 @@ fn test_void_does_not_implement_clone() {
 }
 
 #[test]
-fn test_bytes_does_not_implement_clone_or_equal() {
-    // Arrange - 规范 §3.5.2: Bytes 不实现 Clone 和 Equal（原始字节无法比较）
+fn test_bytes_does_not_implement_equal() {
+    // Arrange - RFC-011: Bytes 不实现 Equal（原始字节无法比较）
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
     init_primitive_impls(&mut trait_table);
 
     // Act & Assert
     assert!(
-        !trait_table.has_impl("Clone", "Bytes"),
-        "Bytes 不应实现 Clone trait（规范 §3.5.2）"
-    );
-    assert!(
         !trait_table.has_impl("Equal", "Bytes"),
-        "Bytes 不应实现 Equal trait（规范 §3.5.2）"
+        "Bytes 不应实现 Equal trait（RFC-011）"
     );
 }

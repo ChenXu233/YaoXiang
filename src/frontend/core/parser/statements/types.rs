@@ -70,6 +70,28 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
             let inner_type = Box::new(parse_type_annotation(state)?);
             Some(Type::Ptr(inner_type))
         }
+        Some(TokenKind::Ampersand) => {
+            // &T — immutable reference type
+            state.bump(); // consume &
+            let inner = parse_type_annotation(state)?;
+            let span = state.span();
+            Some(Type::Ref {
+                mutable: false,
+                inner: Box::new(inner),
+                span,
+            })
+        }
+        Some(TokenKind::MutRef) => {
+            // &mut T — mutable reference type
+            state.bump(); // consume &mut
+            let inner = parse_type_annotation(state)?;
+            let span = state.span();
+            Some(Type::Ref {
+                mutable: true,
+                inner: Box::new(inner),
+                span,
+            })
+        }
         Some(TokenKind::Identifier(name)) => {
             let name = name.clone();
             let name_span = state.span();

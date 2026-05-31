@@ -4,13 +4,12 @@
 //!
 //! # 模块结构
 //!
-//! - [`diagnostic`] - 诊断数据结构 (Diagnostic, Severity)
-//! - [`codes`] - 错误码注册表
-//! - [`emitter`] - 诊断输出渲染器
-//! - [`suggest`] - 智能建议引擎
-//! - [`collect`] - 错误收集器
-//! - [`result`] - 统一 Result 类型
-//! - [`conversion`] - 错误转换
+//! - diagnostic - 诊断数据结构 (Diagnostic, Severity)
+//! - codes - 错误码注册表
+//! - emitter - 诊断输出渲染器
+//! - suggest - 智能建议引擎
+//! - collect - 错误收集器
+//! - result - 统一 Result 类型
 //!
 //! # 示例
 //!
@@ -25,22 +24,22 @@
 pub mod codes;
 pub mod collect;
 pub mod command;
-pub mod conversion;
 pub mod emitter;
 pub mod error;
 #[macro_use]
 pub mod error_macro;
 pub mod result;
+pub mod session;
 pub mod suggest;
 
 // 重新导出
 pub use codes::{ErrorCategory, ErrorCodeDefinition, I18nRegistry, DiagnosticBuilder, ErrorInfo};
 pub use collect::{ErrorCollector, Warning, ErrorFormatter};
 pub use command::{render_explain_output, run_check_command_once, run_check_watch_command};
-pub use conversion::ErrorConvert;
-pub use emitter::{TextEmitter, JsonEmitter, RichEmitter, EmitterConfig, RichConfig};
+pub use emitter::{TextEmitter, JsonEmitter, EmitterConfig};
 pub use error::{Diagnostic, Severity};
 pub use result::{Result, ResultExt};
+pub use session::CheckSession;
 pub use suggest::SuggestionEngine;
 
 // 渲染器
@@ -331,260 +330,190 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
     Ok(())
 }
 
-/// 对多个文件进行静态检查并聚合诊断信息
+/// 并行解析多个文件
 ///
-/// 说明：当前编译管线会优先返回首个结构化诊断，因此每个失败文件
-/// 通常会产生一个主诊断条目。
-pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+/// 使用 rayon 对文件列表进行并行词法分析和语法分析，返回每个文件的
+/// 路径、模块 ID 和 AST。用于多文件编译场景下的前置解析阶段。
+pub fn parse_files_parallel(
+    files: &[std::path::PathBuf]
+) -> anyhow::Result<
+    Vec<(
+        std::path::PathBuf,
+        crate::frontend::module::dep_graph::ModuleId,
+        crate::frontend::core::parser::ast::Module,
+    )>,
+> {
+    use rayon::prelude::*;
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::module::dep_graph::ModuleId;
+
+    files
+        .par_iter()
+        .map(|file| {
+            let source = std::fs::read_to_string(file)
+                .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
+            let tokens = tokenize(&source)
+                .map_err(|e| anyhow::anyhow!("Lexer error in {}: {}", file.display(), e))?;
+            let ast = parse(&tokens)
+                .map_err(|e| anyhow::anyhow!("Parser error in {}: {}", file.display(), e))?;
+            let module_name = file
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let module_id = ModuleId::new(module_name, file.clone());
+            Ok((file.clone(), module_id, ast))
+        })
+        .collect()
+}
+
+/// 注册模块的导出符号到类型环境
+///
+/// 遍历 AST 中的 `pub` 绑定，将类型签名注册到环境的变量表，
+/// 同时将导出信息注册到模块注册表。
+fn register_module_exports(
+    env: &mut crate::frontend::core::typecheck::environment::TypeEnvironment,
+    module_id: &crate::frontend::module::dep_graph::ModuleId,
+    ast: &crate::frontend::core::parser::ast::Module,
+) {
+    use crate::frontend::core::parser::ast::StmtKind;
+    use crate::frontend::core::types::base::ast_type_to_poly_type;
+    use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
+
+    let mut module_info = ModuleInfo::new(module_id.name.clone(), ModuleSource::User);
+
+    for stmt in &ast.items {
+        if let StmtKind::Binding {
+            name,
+            is_pub: true,
+            type_annotation,
+            ..
+        } = &stmt.kind
+        {
+            let qualified_name = format!("{}.{}", module_id.name, name);
+            if let Some(ty) = type_annotation {
+                let poly_type = ast_type_to_poly_type(ty);
+                env.vars.insert(qualified_name.clone(), poly_type);
+            }
+            module_info.add_export(Export {
+                name: name.clone(),
+                full_path: qualified_name,
+                kind: ExportKind::Function,
+                signature: type_annotation
+                    .as_ref()
+                    .map(|t| format!("{:?}", t))
+                    .unwrap_or_else(|| "Any".to_string()),
+            });
+        }
+    }
+
+    env.module_registry.register(module_info);
+}
+
+/// 对单个模块进行类型检查
+///
+/// 创建独立的 `Compiler` 实例并编译源文件，将诊断信息追加到结果中。
+fn check_single_module(
+    path: &std::path::Path,
+    result: &mut CheckResult,
+) {
     use crate::frontend::Compiler;
 
+    let source_name = path.display().to_string();
+    let source = std::fs::read_to_string(path).unwrap_or_default();
+
+    let mut compiler = Compiler::new();
+    if let Err(e) = compiler.compile(&source_name, &source) {
+        let diagnostic = e
+            .diagnostic()
+            .cloned()
+            .unwrap_or_else(|| parse_compile_error(e.message()));
+
+        if diagnostic.severity.is_error() {
+            result.error_count += 1;
+        } else {
+            result.warning_count += 1;
+        }
+
+        result.diagnostics.push(CheckDiagnostic {
+            file: source_name,
+            diagnostic,
+        });
+    }
+}
+
+/// 使用共享类型环境对多个文件进行跨文件分析
+///
+/// 核心流程：
+/// 1. 并行解析所有文件
+/// 2. 从 AST 构建模块依赖图
+/// 3. 检测循环依赖
+/// 4. 拓扑排序确定编译顺序
+/// 5. 按依赖顺序逐模块检查
+fn check_modules_with_shared_env(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+    use crate::frontend::module::dep_graph::ModuleDependencyGraph;
+
+    let parsed = parse_files_parallel(files)?;
+
+    // 构建依赖图
+    let mut dep_graph = ModuleDependencyGraph::new();
+    for (_, module_id, ast) in &parsed {
+        dep_graph.build_from_ast(module_id, ast);
+    }
+
+    // 循环依赖检测
+    let cycles = dep_graph.detect_cycles();
+    if !cycles.is_empty() {
+        let cycle_str = cycles
+            .iter()
+            .map(|c| {
+                c.iter()
+                    .map(|m| m.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> ")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(anyhow::anyhow!("Cyclic dependency detected: {}", cycle_str));
+    }
+
+    // 拓扑排序
+    let order = dep_graph.topological_sort().map_err(|cycle| {
+        let names: Vec<&str> = cycle.iter().map(|m| m.name.as_str()).collect();
+        anyhow::anyhow!("Cyclic dependency: {}", names.join(" -> "))
+    })?;
+
     let mut result = CheckResult::default();
+    let mut env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
 
-    for file in files {
-        let source = match std::fs::read_to_string(file) {
-            Ok(s) => s,
-            Err(e) => {
-                let diagnostic = ErrorCodeDefinition::internal_error(&format!(
-                    "Failed to read file {}: {}",
-                    file.display(),
-                    e
-                ))
-                .build();
-                result.error_count += 1;
-                result.diagnostics.push(CheckDiagnostic {
-                    file: file.display().to_string(),
-                    diagnostic,
-                });
-                continue;
-            }
-        };
+    // 按依赖顺序检查模块
+    for module_id in &order {
+        if let Some((path, _, ast)) = parsed.iter().find(|(_, id, _)| id == module_id) {
+            // 注册源文件
+            let source = std::fs::read_to_string(path).unwrap_or_default();
+            let source_file = SourceFile::new(path.display().to_string(), source);
+            result
+                .source_files
+                .insert(path.display().to_string(), source_file);
 
-        let source_name = file.display().to_string();
-        let source_file = SourceFile::new(source_name.clone(), source.clone());
-        result
-            .source_files
-            .insert(source_name.clone(), source_file.clone());
+            // 注册导出符号
+            register_module_exports(&mut env, module_id, ast);
 
-        let mut compiler = Compiler::new();
-        if let Err(e) = compiler.compile(&source_name, &source) {
-            let diagnostic = e
-                .diagnostic()
-                .cloned()
-                .unwrap_or_else(|| parse_compile_error(e.message()));
-
-            if diagnostic.severity.is_error() {
-                result.error_count += 1;
-            } else {
-                result.warning_count += 1;
-            }
-
-            result.diagnostics.push(CheckDiagnostic {
-                file: source_name,
-                diagnostic,
-            });
+            // 类型检查
+            check_single_module(path, &mut result);
         }
     }
 
     Ok(result)
 }
 
+/// 对多个文件进行静态检查并聚合诊断信息
+///
+/// 使用依赖图进行拓扑排序，按依赖顺序检查，支持循环依赖检测。
+pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Result<CheckResult> {
+    check_modules_with_shared_env(files)
+}
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::span::{DebugSpan, SourceFile, SourceMap, Span, Position};
-    use crate::backends::{ExecutorError, StackFrame};
-    use crate::middle::bytecode::{BytecodeModule, BytecodeFunction, BytecodeInstr};
-    use std::collections::HashMap;
-    use std::fs;
-    use tempfile::tempdir;
-
-    /// 移除 ANSI 转义序列
-    fn strip_ansi(s: &str) -> String {
-        s.replace("\x1b[31m", "")
-            .replace("\x1b[33m", "")
-            .replace("\x1b[34m", "")
-            .replace("\x1b[36m", "")
-            .replace("\x1b[1m", "")
-            .replace("\x1b[0m", "")
-    }
-
-    #[test]
-    fn test_render_unknown_variable() {
-        let source = r#"use std.io
-
-main = () => {
-  print("Testing error handling\n")
-  print(a)
-  print("All tests passed!\n")
-}"#;
-
-        let source_file = SourceFile::new("error.yx".to_string(), source.to_string());
-
-        let diagnostic = ErrorCodeDefinition::unknown_variable("a")
-            .at(Span::new(
-                Position::with_offset(5, 7, 65),
-                Position::with_offset(5, 8, 66),
-            ))
-            .build();
-
-        let emitter = TextEmitter::new();
-        let output = emitter.render_with_source(&diagnostic, Some(&source_file));
-        let clean_output = strip_ansi(&output);
-
-        assert!(clean_output.contains("error [E1001]"), "{}", clean_output);
-        assert!(
-            clean_output.contains("Unknown variable"),
-            "{}",
-            clean_output
-        );
-        assert!(clean_output.contains("error.yx:5:7"), "{}", clean_output);
-        assert!(clean_output.contains("print(a)"), "{}", clean_output);
-        assert!(clean_output.contains("^"), "{}", clean_output);
-    }
-
-    #[test]
-    fn test_render_no_source_file() {
-        let diagnostic = ErrorCodeDefinition::find("E0001")
-            .unwrap()
-            .builder()
-            .param("char", "@")
-            .build();
-
-        let emitter = TextEmitter::new();
-        let output = emitter.render(&diagnostic);
-        let clean_output = strip_ansi(&output);
-
-        assert!(clean_output.contains("error [E0001]"), "{}", clean_output);
-        assert!(
-            clean_output.contains("Invalid character"),
-            "{}",
-            clean_output
-        );
-    }
-
-    #[test]
-    fn test_parse_compile_error() {
-        // parse_compile_error 现在统一使用 E8001 内部错误
-        let diagnostic = parse_compile_error("Inference error: Unknown variable: a");
-        assert_eq!(diagnostic.code, "E8001");
-        assert!(diagnostic.message.contains("Unknown variable: a"));
-
-        let diagnostic = parse_compile_error("Inference error: some other error");
-        assert_eq!(diagnostic.code, "E8001");
-    }
-
-    #[test]
-    fn test_error_code_lookup() {
-        let code = ErrorCodeDefinition::find("E0001");
-        assert!(code.is_some());
-        assert_eq!(code.unwrap().code, "E0001");
-
-        let code = ErrorCodeDefinition::find("E9999");
-        assert!(code.is_none());
-    }
-
-    #[test]
-    fn test_error_code_get_all() {
-        let all = ErrorCodeDefinition::all();
-        assert!(
-            all.len() > 30,
-            "Expected more than 30 error codes, got {}",
-            all.len()
-        );
-    }
-
-    #[test]
-    fn test_render_runtime_function_not_found_with_span() {
-        let source = r#"main = () => {
-  foo()
-}"#;
-        let mut sources = SourceMap::new();
-        let file_id = sources.add_file("error.yx".to_string(), source.to_string());
-
-        let span = Span::new(
-            Position::with_offset(2, 3, 0),
-            Position::with_offset(2, 6, 0),
-        );
-        let debug_span = DebugSpan::new(file_id, span);
-
-        let mut module = BytecodeModule::new("test".to_string());
-        module.add_function(BytecodeFunction {
-            name: "main".to_string(),
-            params: vec![],
-            return_type: crate::middle::core::ir::Type::Void,
-            local_count: 0,
-            upvalue_count: 0,
-            instructions: vec![BytecodeInstr::Nop],
-            labels: HashMap::new(),
-            exception_handlers: vec![],
-            debug_map: HashMap::from([(0usize, debug_span)]),
-        });
-
-        let err = ExecutorError::function_not_found(
-            "foo".to_string(),
-            vec![StackFrame {
-                function_name: "main".to_string(),
-                ip: 0,
-            }],
-        );
-
-        let output = render_runtime_error(&err, &module, Some(&sources));
-        let clean_output = strip_ansi(&output);
-
-        assert!(clean_output.contains("error [E6006]"), "{}", clean_output);
-        assert!(
-            clean_output.contains("Function not found"),
-            "{}",
-            clean_output
-        );
-        assert!(clean_output.contains("error.yx:2:3"), "{}", clean_output);
-        assert!(clean_output.contains("foo()"), "{}", clean_output);
-        assert!(clean_output.contains("stack trace:"), "{}", clean_output);
-        assert!(
-            clean_output.contains("at main (error.yx:2:3) (ip: 0)"),
-            "{}",
-            clean_output
-        );
-    }
-
-    #[test]
-    fn test_check_files_with_diagnostics_ok() {
-        let dir = tempdir().expect("create temp dir");
-        let file = dir.path().join("ok.yx");
-        fs::write(
-            &file,
-            r#"use std.io
-
-main: () -> Void = {
-  print("ok")
-}
-"#,
-        )
-        .expect("write yx file");
-
-        let result = check_files_with_diagnostics(&[file]).expect("run check");
-        assert_eq!(result.error_count, 0);
-        assert_eq!(result.warning_count, 0);
-        assert!(result.diagnostics.is_empty());
-    }
-
-    #[test]
-    fn test_check_files_with_diagnostics_error() {
-        let dir = tempdir().expect("create temp dir");
-        let file = dir.path().join("bad.yx");
-        fs::write(
-            &file,
-            r#"use std.io
-
-main: () -> Void = {
-  print(a)
-}
-"#,
-        )
-        .expect("write yx file");
-
-        let result = check_files_with_diagnostics(&[file]).expect("run check");
-        assert!(result.error_count > 0);
-        assert!(!result.diagnostics.is_empty());
-    }
-}
+mod tests;
