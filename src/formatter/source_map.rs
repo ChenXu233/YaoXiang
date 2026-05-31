@@ -134,7 +134,7 @@ impl SourceMap {
                     while i < len && chars[i] != '\'' {
                         if chars[i] == '\\' && i + 1 < len {
                             i += 1;
-                            offset += 1;
+                            offset += chars[i - 1].len_utf8();
                             column += 1;
                         }
                         offset += chars[i].len_utf8();
