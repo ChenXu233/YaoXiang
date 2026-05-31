@@ -834,6 +834,14 @@ impl<'a> InstantiationGraphBuilder<'a> {
 
             // 元类型：没有类型参数
             MonoType::MetaType { .. } => vec![],
+            // 泛型实例化：递归提取参数中的类型参数
+            MonoType::Generic { args, .. } => {
+                let mut result = Vec::new();
+                for arg in args {
+                    result.extend(Self::extract_type_args_from_type(arg));
+                }
+                result
+            }
         }
     }
 

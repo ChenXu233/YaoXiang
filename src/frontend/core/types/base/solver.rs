@@ -242,6 +242,10 @@ impl TypeConstraintSolver {
                 base_type: Box::new(self.expand_type(base_type)),
                 value: value.clone(),
             },
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args.iter().map(|t| self.expand_type(t)).collect(),
+            },
             _ => ty.clone(),
         }
     }
@@ -976,6 +980,11 @@ impl TypeConstraintSolver {
             | MonoType::Char
             | MonoType::String
             | MonoType::Bytes => {}
+            MonoType::Generic { args, .. } => {
+                for a in args {
+                    self.collect_generalizable_vars(a, seen, out);
+                }
+            }
         }
     }
 }

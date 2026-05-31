@@ -178,6 +178,14 @@ pub enum MonoType {
     TypeVar(TypeVar),
     /// 类型引用（如自定义类型名）
     TypeRef(String),
+    /// 泛型实例化类型，如 Option(Int), List(String)
+    /// 与 TypeRef 的区别：TypeRef 是未解析的名称，Generic 携带结构化的类型参数
+    Generic {
+        /// 泛型类型名（如 "Option", "List"）
+        name: String,
+        /// 类型参数（如 [Int(64)] 对应 Option(Int)）
+        args: Vec<MonoType>,
+    },
     /// 联合类型 `T1 | T2`
     Union(Vec<MonoType>),
     /// 交集类型 `T1 & T2`
@@ -253,6 +261,8 @@ impl MonoType {
             // TypeRef 指向的可能是约束类型（需要结合类型环境判断）
             // 这里返回 false，具体判断在类型检查时结合环境确定
             MonoType::TypeRef(_) => false,
+            // Generic 携带类型参数，不是约束类型
+            MonoType::Generic { .. } => false,
             _ => false,
         }
     }
@@ -316,6 +326,16 @@ impl MonoType {
             }
             MonoType::TypeVar(v) => format!("{}", v),
             MonoType::TypeRef(name) => name.clone(),
+            MonoType::Generic { name, args } => {
+                format!(
+                    "{}({})",
+                    name,
+                    args.iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             MonoType::Range { elem_type } => format!("Range({})", elem_type.type_name()),
             MonoType::Union(types) => {
                 format!(
@@ -488,15 +508,11 @@ impl From<ast::Type> for MonoType {
                 if name == "Set" && args.len() == 1 {
                     return MonoType::Set(Box::new(MonoType::from(args[0].clone())));
                 }
-                // 泛型类型，如 List(T)
-                MonoType::TypeRef(format!(
-                    "{}({})",
+                // 泛型类型，如 Option(T), List(Int)
+                MonoType::Generic {
                     name,
-                    args.iter()
-                        .map(|t| MonoType::from(t.clone()).type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
+                    args: args.into_iter().map(MonoType::from).collect(),
+                }
             }
             ast::Type::AssocType {
                 host_type,
