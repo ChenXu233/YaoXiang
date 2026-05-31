@@ -1,9 +1,13 @@
 //! 类型格式化处理器
 
 use crate::frontend::core::parser::ast::*;
+use super::super::source_map::SourceMap;
 
 /// 格式化类型
-pub fn format_type(ty: &Type) -> String {
+pub fn format_type(
+    ty: &Type,
+    source_map: &SourceMap,
+) -> String {
     match ty {
         Type::Name { name, .. } => name.clone(),
         Type::Int(size) => format!("i{}", size),
@@ -17,9 +21,9 @@ pub fn format_type(ty: &Type) -> String {
             fields,
             bindings,
             interfaces,
-        } => format_struct_type(fields, bindings, interfaces),
+        } => format_struct_type(fields, bindings, interfaces, source_map),
         Type::NamedStruct { name, fields, .. } => {
-            let fields_str = format_struct_fields(fields);
+            let fields_str = format_struct_fields(fields, source_map);
             format!("{} {{ {} }}", name, fields_str)
         }
         Type::Union(variants) => {
@@ -27,7 +31,7 @@ pub fn format_type(ty: &Type) -> String {
                 .iter()
                 .map(|(name, ty)| {
                     if let Some(t) = ty {
-                        format!("{}({})", name, format_type(t))
+                        format!("{}({})", name, format_type(t, source_map))
                     } else {
                         name.clone()
                     }
@@ -48,9 +52,9 @@ pub fn format_type(ty: &Type) -> String {
                             .iter()
                             .map(|(name, ty)| {
                                 if let Some(n) = name {
-                                    format!("{}: {}", n, format_type(ty))
+                                    format!("{}: {}", n, format_type(ty, source_map))
                                 } else {
-                                    format_type(ty)
+                                    format_type(ty, source_map)
                                 }
                             })
                             .collect();
@@ -61,26 +65,31 @@ pub fn format_type(ty: &Type) -> String {
             items.join(" | ")
         }
         Type::Tuple(types) => {
-            let items: Vec<String> = types.iter().map(format_type).collect();
+            let items: Vec<String> = types.iter().map(|t| format_type(t, source_map)).collect();
             format!("({})", items.join(", "))
         }
         Type::Fn {
             params,
             return_type,
         } => {
-            let params_str: Vec<String> = params.iter().map(format_type).collect();
+            let params_str: Vec<String> =
+                params.iter().map(|t| format_type(t, source_map)).collect();
             format!(
                 "({}) -> {}",
                 params_str.join(", "),
-                format_type(return_type)
+                format_type(return_type, source_map)
             )
         }
-        Type::Option(inner) => format!("{}?", format_type(inner)),
+        Type::Option(inner) => format!("{}?", format_type(inner, source_map)),
         Type::Result(ok, err) => {
-            format!("Result({}, {})", format_type(ok), format_type(err))
+            format!(
+                "Result({}, {})",
+                format_type(ok, source_map),
+                format_type(err, source_map)
+            )
         }
         Type::Generic { name, args, .. } => {
-            let args_str: Vec<String> = args.iter().map(format_type).collect();
+            let args_str: Vec<String> = args.iter().map(|t| format_type(t, source_map)).collect();
             format!("{}({})", name, args_str.join(", "))
         }
         Type::AssocType {
@@ -89,16 +98,19 @@ pub fn format_type(ty: &Type) -> String {
             assoc_args,
             ..
         } => {
-            let base = format!("{}::{}", format_type(host_type), assoc_name);
+            let base = format!("{}::{}", format_type(host_type, source_map), assoc_name);
             if assoc_args.is_empty() {
                 base
             } else {
-                let args_str: Vec<String> = assoc_args.iter().map(format_type).collect();
+                let args_str: Vec<String> = assoc_args
+                    .iter()
+                    .map(|t| format_type(t, source_map))
+                    .collect();
                 format!("{}({})", base, args_str.join(", "))
             }
         }
         Type::Sum(types) => {
-            let items: Vec<String> = types.iter().map(format_type).collect();
+            let items: Vec<String> = types.iter().map(|t| format_type(t, source_map)).collect();
             items.join(" + ")
         }
         Type::Literal {
@@ -106,17 +118,18 @@ pub fn format_type(ty: &Type) -> String {
         } => name.clone(),
         Type::Ref { mutable, inner, .. } => {
             if *mutable {
-                format!("&mut {}", format_type(inner))
+                format!("&mut {}", format_type(inner, source_map))
             } else {
-                format!("&{}", format_type(inner))
+                format!("&{}", format_type(inner, source_map))
             }
         }
-        Type::Ptr(inner) => format!("*{}", format_type(inner)),
+        Type::Ptr(inner) => format!("*{}", format_type(inner, source_map)),
         Type::MetaType { args, .. } => {
             if args.is_empty() {
                 "Type".to_string()
             } else {
-                let args_str: Vec<String> = args.iter().map(format_type).collect();
+                let args_str: Vec<String> =
+                    args.iter().map(|t| format_type(t, source_map)).collect();
                 format!("Type({})", args_str.join(", "))
             }
         }
@@ -128,6 +141,7 @@ fn format_struct_type(
     fields: &[StructField],
     bindings: &[TypeBodyBinding],
     interfaces: &[String],
+    source_map: &SourceMap,
 ) -> String {
     let mut parts = Vec::new();
 
@@ -135,7 +149,7 @@ fn format_struct_type(
         parts.push(format!("impl {}", interfaces.join(", ")));
     }
 
-    let fields_str = format_struct_fields(fields);
+    let fields_str = format_struct_fields(fields, source_map);
     if !fields_str.is_empty() {
         parts.push(fields_str);
     }
@@ -148,7 +162,10 @@ fn format_struct_type(
 }
 
 /// 格式化结构体字段列表
-fn format_struct_fields(fields: &[StructField]) -> String {
+fn format_struct_fields(
+    fields: &[StructField],
+    source_map: &SourceMap,
+) -> String {
     let items: Vec<String> = fields
         .iter()
         .map(|f| {
@@ -158,12 +175,15 @@ fn format_struct_fields(fields: &[StructField]) -> String {
             }
             s.push_str(&f.name);
             s.push_str(": ");
-            s.push_str(&format_type(&f.ty));
+            s.push_str(&format_type(&f.ty, source_map));
             if let Some(default) = &f.default {
                 let ctx = super::super::context::FormatContext::new(
                     super::super::options::FormatOptions::default(),
                 );
-                s.push_str(&format!(" = {}", super::expr::format_expr(default, &ctx)));
+                s.push_str(&format!(
+                    " = {}",
+                    super::expr::format_expr(default, &ctx, source_map)
+                ));
             }
             s
         })

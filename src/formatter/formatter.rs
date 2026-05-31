@@ -37,12 +37,12 @@ impl Formatter {
         &self,
         module: &Module,
     ) -> String {
-        // 如果启用排序导入，先对模块进行排序
         let mut sorted_module = module.clone();
+        let mut source_map = self.source_map.clone();
         if self.ctx.options.sort_imports {
-            sort_imports(&mut sorted_module.items);
+            sort_imports(&mut sorted_module.items, &mut source_map);
         }
-        super::handlers::module::format_module(&sorted_module, &self.ctx, &self.source_map)
+        super::handlers::module::format_module(&sorted_module, &self.ctx, &source_map)
     }
 
     /// 格式化单个表达式（用于测试）
@@ -50,7 +50,7 @@ impl Formatter {
         &self,
         expr: &crate::frontend::core::parser::ast::Expr,
     ) -> String {
-        super::handlers::expr::format_expr(expr, &self.ctx)
+        super::handlers::expr::format_expr(expr, &self.ctx, &self.source_map)
     }
 
     /// 格式化单个语句（用于测试）
@@ -58,6 +58,6 @@ impl Formatter {
         &self,
         stmt: &crate::frontend::core::parser::ast::StmtKind,
     ) -> String {
-        super::handlers::stmt::format_stmt(stmt, &self.ctx)
+        super::handlers::stmt::format_stmt(stmt, &self.ctx, &self.source_map)
     }
 }

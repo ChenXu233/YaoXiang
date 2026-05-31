@@ -3,8 +3,13 @@
 //! 对应 formatter 规范 §14 (imports)
 
 use crate::formatter::rules::sort_imports::{classify_import, sort_imports, ImportKind};
+use crate::formatter::source_map::SourceMap;
 use crate::frontend::core::parser::ast::*;
 use crate::util::span::Span;
+
+fn default_source_map() -> SourceMap {
+    SourceMap::build("")
+}
 
 fn make_use_stmt(path: &str) -> Stmt {
     Stmt {
@@ -49,7 +54,7 @@ fn test_sort_imports() {
         make_use_stmt("../bar"),
     ];
 
-    sort_imports(&mut stmts);
+    sort_imports(&mut stmts, &mut default_source_map());
 
     // 提取所有导入路径，验证精确顺序
     let paths: Vec<String> = stmts
