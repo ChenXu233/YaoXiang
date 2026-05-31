@@ -267,27 +267,14 @@ pub(crate) fn format_binop(
     // 计算完整表达式的预估长度
     let total_len = left_str.len() + op_str.len() + right_str.len() + ctx.indent_width();
 
-    // 低优先级运算符（需要更多换行）
-    let is_low_priority = matches!(
-        op,
-        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::And | BinOp::Assign
-    );
-
     // 如果不超过行宽，使用单行格式
     if total_len <= ctx.options.line_width {
         return format!("{} {} {}", left_str, op_str, right_str);
     }
 
-    // 需要换行时，根据优先级决定策略
+    // 需要换行时，运算符放行首
     let indent = ctx.indent_str();
     let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
-
-    // 低优先级运算符：运算符放行首，保持对齐
-    if is_low_priority {
-        return format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str);
-    }
-
-    // 高优先级运算符：换行后运算符放行首
     format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str)
 }
 
