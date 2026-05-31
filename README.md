@@ -4,260 +4,173 @@
 >
 > 基于《并作模型：万物并作，吾以观复》
 
-> An experimental general-purpose programming language that integrates the power of type theory, ownership model, and natural syntax.
->
-> Based on "Concurrent Model: All Things Work Together, and We Observe the Return"
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v0.5.6--experimental-blue.svg)]()
-[![Status](https://img.shields.io/badge/Status-Experiment--Validation-yellow.svg)]()
+[![Version](https://img.shields.io/badge/Version-v0.7.0--experimental-blue.svg)]()
 
-<!-- language-nav-start -->
-🌐 **Language / 语言** | [English](#english) | [中文](#中文)
-<!-- language-nav-end -->
+> 🌐 **Language** | [English](docs/gh/README.en.md)
 
+---
 
-<!-- bilingual-section-start -->
-## <a name="english"></a>📖 Introduction
-
-YaoXiang (爻象) is an **experimental programming language under active development**, designed to explore the fusion of type theory, ownership models, and natural syntax.
-
-> **⚠️ Project Status: Experimental Validation**
-> This is a research project for learning compiler development. The implementation is incomplete and not production-ready.
-
-### Core Design Goals
-
-**⚠️ Warning: This is for experimental/educational use only**
-
-#### Installation & Building
-
-```bash
-# Clone and build (development build)
-git clone https://github.com/ChenXu233/YaoXiang.git
-cd YaoXiang
-cargo build
-
-# Run tests to see current status
-cargo test
-
-# Try the examples (some may not work)
-cargo run --example hello
-```
-
-#### Current Working Features
-
-```bash
-# Basic tokenization and parsing only
-echo 'main: () -> Void = { print("Hello") }' | cargo run -- eval
-
-# Build bytecode (partial implementation)
-cargo run -- build docs/examples/hello.yx -o hello.42
-
-# Dump bytecode for debugging
-cargo run -- dump docs/examples/hello.yx
-```
-
-**Development hooks (pre-commit)**
-
-We use `pre-commit` to run project checks before commits (cross-platform). The repository includes a `.pre-commit-config.yaml` that runs `cargo fmt` and `cargo clippy`.
-
-Recommended installation (uses `pipx` to avoid polluting global site-packages):
-
-```bash
-python3 -m pip install --user pipx
-python3 -m pipx ensurepath
-pipx install pre-commit
-pre-commit install
-```
-
-Quick install without `pipx`:
-
-```bash
-python -m pip install --user pre-commit
-pre-commit install
-```
-
-Run checks locally:
-
-```bash
-pre-commit run --all-files
-```
-
-Notes:
-- `pre-commit` requires Python 3.7+. On Windows ensure `pre-commit` is in your PATH (restart shell after `pipx ensurepath`).
-- If you prefer not to install Python tooling locally, CI can run `pre-commit` to enforce checks centrally.
-- The previous `xtasks` tooling has been removed in favor of the cross-platform `pre-commit` workflow.
-
-### Code Example
-
-```yaoxiang
-# === Type Definitions ===
-
-# Record types (curly braces)
-Point: Type = { x: Float, y: Float }
-Result: Type[T, E] = { ok(T) | err(E) }
-Color: Type = { red | green | blue }
-
-# Interface types (all fields are function types)
-Serializable: Type = { serialize: () -> String }
-
-# Value construction
-p = Point(3.0, 4.0)
-r = ok("success")
-
-# === Functions ===
-add: (a: Int, b: Int) -> Int = a + b
-
-# === Entry Point ===
-main: () -> Void = {
-    print("Hello, YaoXiang!")
-}
-```
-
-For more examples, see [docs/examples/](docs/examples/).
-
-### Project Structure
-
-```
-yaoxiang/
-├── Cargo.toml              # Project configuration
-├── README.md               # This file
-├── LICENSE                 # MIT License
-├── src/                    # Source code
-│   ├── main.rs             # CLI entry point
-│   └── lib.rs              # Library entry point
-├── docs/                   # Documentation
-│   ├── design/             # Design discussion area
-│   │   ├── accepted/              # Accepted design proposals
-│   │   ├── rfc/                   # Design proposal drafts
-│   │   ├── discussion/            # Design discussion area
-│   │   ├── manifesto.md           # Design manifesto
-│   │   ├── manifesto-wtf.md       # Design manifesto (satirical)
-│   │   ├── language-spec.md       # Language specification
-│   │   └── async-whitepaper.md    # Async whitepaper
-│   ├── guides/             # User guides
-│   │   ├── getting-started.md     # Quick start
-│   │   ├── getting-started.en.md  # Quick Start (English)
-│   │   ├── YaoXiang-book.md       # Language guide
-│   │   ├── YaoXiang-book.en.md    # Language Guide (English)
-│   │   └── dev/                   # Developer guides
-│   ├── tutorial/           # Tutorials
-│   │   ├── zh/                    # Chinese tutorials
-│   │   │   ├── README.md          # Tutorial index
-│   │   │   ├── basics.md          # Basics
-│   │   │   ├── types.md           # Type system
-│   │   │   └── functions.md       # Functions and closures
-│   │   └── en/                    # English tutorials
-│   │       ├── README.md          # Tutorial index
-│   │       ├── basics.md          # Quick Start
-│   │       ├── types.md           # Type system
-│   │       └── functions.md       # Functions and closures
-│   ├── architecture/       # Architecture documents
-│   ├── plans/              # Implementation plans
-│   ├── implementation/     # Implementation tracking
-│   ├── examples/           # Example code
-│   └── maintenance/        # Maintenance specifications
-└── tests/                  # Tests
-```
-
-### Design Philosophy
-
-YaoXiang's design philosophy can be summarized in five principles:
-
-```
-Everything is Type → Unified Abstraction → Type as Data → Runtime Available
-Ownership Model → Zero-Cost Abstraction → No GC → High Performance
-Python Syntax → Natural Language → Readability → Beginner-Friendly
-Concurrent Model → Lazy Evaluation → Auto Parallel → Seamless Concurrency
-Send/Sync → Compile-Time Check → Data Race → Thread Safety
-```
-
-### Comparison with Existing Languages
-
-| Feature | YaoXiang | Rust | Python | TypeScript | Go |
-|---------|----------|------|--------|------------|-----|
-| Everything is Type | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Auto Type Inference | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Default Immutable | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Ownership Model | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Concurrent Model | ✅ | ❌ | ❌ | ❌ | ⚠️ |
-| Zero-Cost Abstraction | ✅ | ✅ | ❌ | ❌ | ❌ |
-| No GC | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Compile-Time Thread Safety | ✅ | ✅ | ❌ | ❌ | ❌ |
-| AI-Friendly Syntax | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Keyword Count | 17 | 51+ | 35 | 64+ | 25 |
-
-> **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Auto Parallel + Seamless Async
-
-### Roadmap
-
-For detailed implementation status and future plans, see [Implementation Roadmap](docs/plan/IMPLEMENTATION-ROADMAP.md).
-
-### Contributing
-
-Contributions are welcome! Please read the [Contribution Guide](CONTRIBUTING.md).
-
-### Community
-
-- GitHub Issues: Feature suggestions, bug reports
-- Discussions: Discussion and exchange
-
-### License
-
-This project uses the MIT License. See [LICENSE](LICENSE) for details.
-
-### Acknowledgments
-
-YaoXiang's design is inspired by the following projects and languages:
-
-- **Rust** - Ownership model, zero-cost abstraction
-- **Python** - Syntax style, readability
-- **Idris/Agda** - Dependent types, type-driven development
-- **TypeScript** - Type annotations, runtime types
-- **MoonBit** - AI-friendly design
-
-
-### Yes, It's Still an Experimental Project
-
-Before you criticize, check this out:
-
-- [YaoXiang Design Manifesto (Satirical Version)](docs/design/manifesto-wtf.md) - DeepSeek's Review
-
-
-> "道生一，一生二，二生三，三生万物。"
-> —— 《道德经》
->
-> "The One generates two, two generates three, three generates all things."
-> — Tao Te Ching
->
-> Types are like the Way, all things are born from them.
-
-
-## <a name="中文"></a>📖 简介
+## 简介
 
 YaoXiang（爻象）是**一门正在积极开发中的实验性编程语言**，旨在探索类型论、所有权模型和自然语法的融合。
 
-> **⚠️ 项目状态：实验验证阶段**
+> **项目状态：实验验证阶段**
 > 这是一个用于学习编译器开发的研究项目。实现不完整且不适用于生产环境。
 
 ### 核心设计目标
 
 | 目标 | 描述 |
-|------|-------------|
+|------|------|
 | **一切皆类型** | 值、函数、模块、泛型都是类型；类型是一等公民 |
-| **统一抽象** | 基于类型论的数学抽象框架 |
+| **统一语法** | 一切皆 `name: type = value`——一个规则覆盖所有声明 |
 | **自然语法** | Python 般的可读性，接近自然语言 |
-| **并发模型设计** | 同步语法，异步本质（设计阶段，未实现） |
-| **AI 友好设计** | 严格结构化，清晰的 AST（设计目标） |
+| **所有权模型** | Move 语义 + 借用令牌 + ref 共享——无 GC，无生命周期标注 |
+| **并发模型** | 同步语法，异步本质（设计阶段，未实现） |
+| **值依赖类型** | 类型可依赖值，支持编译期维度验证 |
 
-**⚠️ 警告：仅用于实验/教育目的**
+---
 
-#### 安装与构建
+## 代码示例
+
+```yaoxiang
+# ═══════════ 类型定义（统一语法：name: type = value）═══════════
+
+# 记录类型
+Point: Type = {
+    x: Float,
+    y: Float,
+}
+
+# 泛型类型
+Option: (T: Type) -> Type = {
+    some: (T) -> Self,
+    none: () -> Self,
+}
+
+# 接口（字段全为函数类型的记录）
+Drawable: Type = {
+    draw: (Surface) -> Void,
+}
+
+# ═══════════ 函数 ═══════════
+
+add: (a: Int, b: Int) -> Int = a + b
+
+# 泛型函数
+map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
+
+# ═══════════ 所有权模型 ═══════════
+
+# Move（默认）：零拷贝所有权转移
+p1 = Point(1.0, 2.0)
+p2 = p1              # Move，p1 不可再读
+
+# &T / &mut T 借用令牌：零成本编译期访问权限
+p2.print()           # 编译器自动创建 &Point 令牌
+p2.shift(1.0, 1.0)  # 编译器自动创建 &mut Point 令牌
+
+# ref：共享持有（编译器自动选 Rc 或 Arc）
+shared = ref p2      # 跨作用域共享
+
+# clone()：显式深拷贝
+backup = p2.clone()
+
+# ═══════════ 方法定义 ═══════════
+
+Point.draw: (self: &Point, surface: Surface) -> Void = {
+    surface.plot(self.x, self.y)
+}
+
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+# ═══════════ 入口点 ═══════════
+
+main: () -> Void = {
+    print("Hello, YaoXiang!")
+}
+```
+
+---
+
+## 所有权模型
+
+YaoXiang 采用五级所有权梯度——无 GC，无生命周期标注：
+
+```
+&T / &mut T       Move            ref            clone()         unsafe
+    |                |               |               |               |
+借用令牌          默认            共享持有         深拷贝          裸指针
+零成本            零拷贝          自动Rc/Arc      显式调用        系统级
+```
+
+| 操作 | 成本 | 使用场景 |
+|------|------|----------|
+| `&T` / `&mut T` | 零（编译期令牌，编译后消失） | 只读访问 / 独占可变访问 |
+| Move | 零（指针移动） | 默认——赋值、传参、返回 |
+| `ref` | 低（Rc）/ 中（Arc） | 跨作用域共享持有 |
+| `clone()` | 视类型而定 | 需要独立副本 |
+| `unsafe` + `*T` | 零（直接内存操作） | FFI、系统级编程 |
+
+**核心设计决策：**
+- **无生命周期标注**（`'a`）——令牌是值，由 RAII 统一管理生命周期
+- **无借用检查器**——类型属性（Dup/Linear）自然推导权限
+- **无 GC**——确定性资源管理
+- **编译器自动选择 Rc/Arc**——`ref` 不跨任务用 Rc，跨任务用 Arc
+
+详见 [RFC-009：所有权模型设计](docs/src/design/rfc/accepted/009-ownership-model.md)。
+
+---
+
+## 类型系统
+
+### 统一语法模型
+
+YaoXiang 只有一种声明形式：**`identifier : type = expression`**
+
+| 概念 | 写法 |
+|------|------|
+| 变量 | `x: Int = 42` |
+| 函数 | `add: (a: Int, b: Int) -> Int = a + b` |
+| 记录类型 | `Point: Type = { x: Float, y: Float }` |
+| 接口 | `Drawable: Type = { draw: (Surface) -> Void }` |
+| 泛型类型 | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
+| 方法 | `Point.draw: (self: &Point, s: Surface) -> Void = ...` |
+
+**没有 `fn`、`struct`、`trait`、`impl` 关键字。** `Type` 是语言中唯一的元类型关键字。
+
+详见 [RFC-010：统一类型语法](docs/src/design/rfc/accepted/010-unified-type-syntax.md)。
+
+### 泛型与值依赖类型
+
+YaoXiang 的泛型系统支持**类型依赖值**，允许在编译期进行维度验证：
+
+```yaoxiang
+# 矩阵类型：维度在编译期确定
+Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
+    data: Array(Array(T, Cols), Rows),
+}
+
+# 编译期计算：factorial(3) = 6
+vec: Vec(factorial(3)) = Vec(6)()
+
+# 编译期维度验证：维度不匹配在编译期捕获
+# multiply(matrix_2x3, matrix_4x2)  # 编译错误：3 != 4
+```
+
+详见 [RFC-011：泛型系统设计](docs/src/design/rfc/accepted/011-generic-type-system.md)。
+
+---
+
+## 安装与构建
 
 ```bash
 # 克隆并构建（开发版本）
-git clone https://github.com/ChenXu233/YaoXiang.git
-cd YaoXiang
+git clone https://github.com/yaoxiang-lang/yaoxiang.git
+cd yaoxiang
 cargo build
 
 # 运行测试查看当前状态
@@ -267,108 +180,66 @@ cargo test
 cargo run --example hello
 ```
 
-### 代码示例
+### 开发环境配置
 
-```yaoxiang
-# === 类型定义 ===
+我们使用 `pre-commit` 在提交前运行项目检查（跨平台）。仓库包含 `.pre-commit-config.yaml`，运行 `cargo fmt` 和 `cargo clippy`。
 
-# 记录类型（花括号）
-Point: Type = { x: Float, y: Float }
-Result: Type[T, E] = { ok(T) | err(E) }
-Color: Type = { red | green | blue }
+推荐安装方式（使用 `pipx`，避免污染全局 site-packages）：
 
-# 接口类型（字段全为函数类型）
-Serializable: Type = { serialize: () -> String }
-
-# 值构造
-p = Point(3.0, 4.0)
-r = ok("success")
-
-# === 函数 ===
-add: (a: Int, b: Int) -> Int = a + b
-
-# === 入口点 ===
-main: () -> Void = {
-    print("Hello, YaoXiang!")
-}
-
-# === 并作模型：同步语法，异步本质 ===
-
-# 使用 spawn 标记异步函数
-fetch_data: (url: String) -> JSON spawn = {
-    return HTTP.get(url).json()
-}
-
-# 自动并行：多个 spawn 调用自动并行执行
-process_users_and_posts: () -> Void spawn = {
-    users = fetch_data("https://api.example.com/users")
-    posts = fetch_data("https://api.example.com/posts")
-
-    # 自动并行执行，无需 await
-    print(users.length.to_string())
-    print(posts.length.to_string())
-}
-
-# 并发构造块：显式并行
-compute_all: () -> (Int, Int, Int) spawn = {
-    (a, b, c) = spawn {
-        heavy_calc(1),
-        heavy_calc(2),
-        heavy_calc(3)
-    }
-    return (a, b, c)
-}
-
-# === 泛型 ===
-
-identity: (T: Type) -> ((x: T) -> T) = x
+```bash
+python3 -m pip install --user pipx
+python3 -m pipx ensurepath
+pipx install pre-commit
+pre-commit install
 ```
 
-### 项目结构
+快速安装（不使用 `pipx`）：
+
+```bash
+python -m pip install --user pre-commit
+pre-commit install
+```
+
+本地运行检查：
+
+```bash
+pre-commit run --all-files
+```
+
+---
+
+## 项目结构
 
 ```
 yaoxiang/
-├── Cargo.toml              # 项目配置
-├── README.md               # 本文件
-├── LICENSE                 # MIT 许可证
-├── src/                    # 源代码
-│   ├── main.rs             # CLI 入口
-│   └── lib.rs              # 库入口
-├── docs/                   # 文档
-│   ├── design/             # 设计讨论区
-│   │   ├── accepted/              # 已接受的设计提案
-│   │   ├── rfc/                   # 设计提案草案
-│   │   ├── discussion/            # 设计讨论区
-│   │   ├── manifesto.md           # 设计宣言
-│   │   ├── manifesto-wtf.md       # 设计宣言WTF版
-│   │   ├── language-spec.md       # 语言规范
-│   │   └── async-whitepaper.md    # 异步白皮书
-│   ├── guides/             # 使用指南
-│   │   ├── getting-started.md     # 快速入门
-│   │   ├── getting-started.en.md  # Quick Start (English)
-│   │   ├── YaoXiang-book.md       # 语言指南
-│   │   ├── YaoXiang-book.en.md    # Language Guide (English)
-│   │   └── dev/                   # 开发者指南
-│   ├── tutorial/           # 教程
-│   │   ├── zh/                    # 中文教程
-│   │   │   ├── README.md          # 教程索引
-│   │   │   ├── basics.md          # 基础教程
-│   │   │   ├── types.md           # 类型系统
-│   │   │   └── functions.md       # 函数与闭包
-│   │   └── en/                    # English tutorials
-│   │       ├── README.md          # Tutorial index
-│   │       ├── basics.md          # Quick Start
-│   │       ├── types.md           # Type system
-│   │       └── functions.md       # Functions and closures
-│   ├── architecture/       # 架构文档
-│   ├── plans/              # 实施计划
-│   ├── implementation/     # 实现追踪
-│   ├── examples/           # 示例代码
-│   └── maintenance/        # 维护规范
-└── tests/                  # 测试
+├── Cargo.toml                  # 项目配置
+├── README.md                   # 本文件
+├── LICENSE                     # MIT 许可证
+├── src/                        # 源代码
+│   ├── main.rs                 # CLI 入口
+│   └── lib.rs                  # 库入口
+├── docs/                       # 文档
+│   ├── src/
+│   │   ├── design/             # 设计文档
+│   │   │   ├── rfc/            # RFC 提案
+│   │   │   │   ├── accepted/   # 已接受的 RFC
+│   │   │   │   └── draft/      # RFC 草案
+│   │   │   └── manifesto.md    # 设计宣言
+│   │   ├── reference/          # 语言参考
+│   │   │   └── language-spec/  # 语言规范
+│   │   ├── guide/              # 用户指南
+│   │   │   └── YaoXiang-book.md
+│   │   ├── tutorial/           # 教程（zh/en）
+│   │   ├── blog/               # 博客
+│   │   └── dev/                # 开发者文档
+│   ├── examples/               # 示例代码
+│   └── gh/                     # GitHub 文档（英文 README 等）
+└── tests/                      # 测试
 ```
 
-### 设计理念
+---
+
+## 设计理念
 
 YaoXiang 的设计哲学可以用五句话概括：
 
@@ -377,12 +248,14 @@ YaoXiang 的设计哲学可以用五句话概括：
 所有权模型 → 零成本抽象 → 无GC → 高性能
 Python语法 → 自然语言感 → 可读性 → 新手友好
 并作模型 → 惰性求值 → 自动并行 → 无感并发
-Send/Sync → 编译时检查 → 数据竞争 → 线程安全
+类型安全 → 编译时检查 → 数据竞争 → 线程安全
 ```
 
-### 与现有语言的对比
+---
 
-| 特性 | 设计目标 | Rust | Python | TypeScript | Go |
+## 与现有语言的对比
+
+| 特性 | YaoXiang | Rust | Python | TypeScript | Go |
 |------|----------|------|--------|------------|-----|
 | 一切皆类型 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 自动类型推断 | ✅ | ✅ | ✅ | ✅ | ❌ |
@@ -390,47 +263,73 @@ Send/Sync → 编译时检查 → 数据竞争 → 线程安全
 | 所有权模型 | ✅ | ✅ | ❌ | ❌ | ❌ |
 | 并作模型 | ✅ | ❌ | ❌ | ❌ | ⚠️ |
 | 零成本抽象 | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 无GC | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 无GC | ✅ | ✅ | ❌ | ❌ | ✅ |
 | 编译时线程安全 | ✅ | ✅ | ❌ | ❌ | ❌ |
-| AI友好语法 | ✅ | ❌ | ✅ | ❌ | ❌ |
+| 值依赖类型 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 关键字数量 | 17 | 51+ | 35 | 64+ | 25 |
 
 > **并作模型** = 同步语法 + 惰性求值 + 自动并行 + 无感异步
 
-### 路线图
+---
+
+## 核心 RFC
+
+| RFC | 标题 | 描述 |
+|-----|------|------|
+| [RFC-009](docs/src/design/rfc/accepted/009-ownership-model.md) | 所有权模型 | Move + 借用令牌 + ref——无 GC，无生命周期 |
+| [RFC-010](docs/src/design/rfc/accepted/010-unified-type-syntax.md) | 统一类型语法 | 一切皆 `name: type = value` |
+| [RFC-011](docs/src/design/rfc/accepted/011-generic-type-system.md) | 泛型系统 | 值依赖类型，零成本抽象 |
+
+---
+
+## 路线图
 
 详细实现状态和未来计划，请查看 [实现路线图](docs/plan/IMPLEMENTATION-ROADMAP.md)。
 
-### 贡献
+---
+
+## 贡献
 
 欢迎贡献！请阅读 [贡献指南](CONTRIBUTING.md)。
 
-### 社区
+---
 
-- GitHub Issues: 功能建议、问题报告
-- Discussions: 讨论交流
+## 社区
 
-### 许可
+- GitHub Issues：功能建议、问题报告
+- Discussions：讨论交流
+
+---
+
+## 许可
 
 本项目采用 MIT 许可证，详见 [LICENSE](LICENSE)。
 
-### 致谢
+---
+
+## 致谢
 
 YaoXiang 的设计灵感来自以下项目和语言：
 
-- **Rust** - 所有权模型、零成本抽象
-- **Python** - 语法风格、可读性
-- **Idris/Agda** - 依赖类型、类型驱动开发
-- **TypeScript** - 类型注解、运行时类型
-- **MoonBit** - AI 友好设计
+- **Rust** — 所有权模型、零成本抽象
+- **Python** — 语法风格、可读性
+- **Idris/Agda** — 依赖类型、类型驱动开发
+- **TypeScript** — 类型注解、运行时类型
+- **MoonBit** — AI 友好设计
 
-### 没错，目前还是个实验性项目，相当画饼，想喷之前可以看看这个玩意：
+---
 
-- [爻象设计宣言WTF版](docs/src/design/manifesto-wtf.md) - DeepSeek锐评
+## 没错，目前还是个实验性项目
+
+想喷之前，可以先看看这个：
+
+- [爻象设计宣言 WTF 版](docs/src/design/manifesto-wtf.md) — DeepSeek 锐评
 
 > 「道生一，一生二，二生三，三生万物。」
-> —— 《道德经》
+> ——《道德经》
 >
 > 类型如道，万物皆由此生。
-<!-- separator-end -->
-<!-- bilingual-section-end -->
+
+---
+
+> 🌐 **English version**: [README.en.md](docs/gh/README.en.md)
