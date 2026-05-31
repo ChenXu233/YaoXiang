@@ -43,7 +43,7 @@ impl TypeConstraint {
 /// - 值类型默认 Send + Sync
 /// - ref T (Arc) 默认 Send + Sync
 /// - *T (裸指针) 既不是 Send 也不是 Sync
-/// - Rc[T] 既不是 Send 也不是 Sync
+/// - `Rc[T]` 既不是 Send 也不是 Sync
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct SendSyncConstraint {
     /// 是否必须 Send

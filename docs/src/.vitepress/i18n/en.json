@@ -51,7 +51,7 @@
     }
   ],
   "sidebar": {
-    "/en/tutorial/": [
+    "/tutorial/": [
       {
         "text": "Tutorial Documentation",
         "items": [
@@ -75,7 +75,7 @@
         ]
       }
     ],
-    "/en/design/": [
+    "/design/": [
       {
         "text": "Design Documentation",
         "items": [
@@ -96,7 +96,7 @@
             "link": "/en/design/manifesto-wtf"
           },
           {
-            "text": "Language Design Views from a 2006-born Developer",
+            "text": "Language Design Perspective from Someone Born in 2006",
             "link": "/en/design/2006-born-language-design"
           }
         ]
@@ -113,7 +113,7 @@
             "link": "/en/design/rfc/RFC_TEMPLATE"
           },
           {
-            "text": "Full RFC Template (Example)",
+            "text": "RFC Full Template (Example)",
             "link": "/en/design/rfc/EXAMPLE_full_feature_proposal"
           },
           {
@@ -139,7 +139,7 @@
         ]
       }
     ],
-    "/en/reference/": [
+    "/reference/": [
       {
         "text": "Reference Documentation",
         "items": [
@@ -187,7 +187,7 @@
         "items": []
       }
     ],
-    "/en/dev/": [
+    "/dev/": [
       {
         "text": "Development Documentation",
         "items": [
@@ -196,15 +196,15 @@
             "link": "/en/dev/"
           },
           {
-            "text": "Contributing Guide",
+            "text": "Contribution Guide",
             "link": "/en/dev/contributing"
           },
           {
-            "text": "Commit Convention",
+            "text": "Commit Guide",
             "link": "/en/dev/commit-convention"
           },
           {
-            "text": "Branch Maintenance Guide",
+            "text": "Branch Guide",
             "link": "/en/dev/branch-maintenance-guide"
           }
         ]
@@ -220,16 +220,11 @@
             "text": "In Progress",
             "collapsed": true,
             "items": []
-          },
-          {
-            "text": "Completed",
-            "collapsed": true,
-            "items": []
           }
         ]
       }
     ],
-    "/en/guide/": [
+    "/guide/": [
       {
         "text": "Guide Documentation",
         "items": [
@@ -244,9 +239,9 @@
         ]
       }
     ],
-    "/en/": [
+    "/": [
       {
-        "text": "Documentation",
+        "text": "Chinese Documentation",
         "items": [
           {
             "text": "Quick Start",

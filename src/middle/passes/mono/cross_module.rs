@@ -530,6 +530,10 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             // 元类型：编译期概念，无需特殊处理
             MonoType::Void
         }
+        Type::Ref { mutable, inner, .. } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(ast_type_to_mono_type(inner)),
+        },
     }
 }
 

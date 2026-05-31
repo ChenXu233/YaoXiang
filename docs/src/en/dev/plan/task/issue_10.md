@@ -1,63 +1,63 @@
-# Task: Developing Small Applications to Verify Language Features and Build Ecosystem
+# Task: Developing Small Applications to Validate Language Features and Accumulate Ecosystem
 
 ## Overview
 
-The frontend, middle-end, and interpreter backend of YaoXiang have been completed, and the compiler backend is under development. To test the practicality of the language, discover hidden bugs, accumulate example code, and attract early users, a series of small applications need to be developed. These applications should run smoothly on the interpreter, not relying on the high-performance optimizations of the compiler backend, while fully demonstrating core design features such as YaoXiang's unified syntax, ownership model, and field-level mutability.
+The front-end, middle-end, and interpreter back-end of YaoXiang have been completed, and the compiler back-end is under development. To test the practicality of the language, discover hidden bugs, accumulate sample code, and attract early users, a series of small applications need to be developed. These applications should run smoothly on the interpreter without relying on the compiler back-end's high-performance optimizations, while fully demonstrating YaoXiang's core design features such as unified syntax, ownership model, and field-level mutability.
 
 ## Goals
 
-- Develop at least 3 small applications across different domains, covering scenarios such as scripting tools, algorithm implementations, and configuration parsing.
+Develop at least 3 small applications across different domains, covering scenarios such as scripting tools, algorithm implementations, and configuration parsing.
 
-- Each application should include complete source code, test cases, and brief documentation.
+Each application should include complete source code, test cases, and brief documentation.
 
-- Through the development process, provide feedback on language design issues and improve the standard library and toolchain.
+Through the development process, provide feedback on language design issues and improve the standard library and toolchain.
 
-## Suggested Application Directions (Optional or Self-Designed)
+## Suggested Application Directions (optional or self-designed)
 
-### Batch File Renaming Tool
+### File Batch Rename Tool
 
-**Functionality**: Traverse a specified directory, match filenames according to regular expressions, and perform renaming (replacement, adding prefix/suffix, etc.).
+Functionality: Traverse a specified directory, match filenames according to regular expressions, and perform renaming (replacement, adding prefixes/suffixes, etc.).
 
-**Involved Features**: File system operations (requires FFI or standard library), string processing, ownership management (preventing resource leaks).
+Involved features: File system operations (requires FFI or standard library), string processing, ownership management (preventing resource leaks).
 
-**Output**: Executable script with command-line argument support.
+Output: Executable script with command-line argument support.
 
-### Quick Sort Algorithm Demo
+### QuickSort Algorithm Demo
 
-**Functionality**: Implement the classic quick sort algorithm, supporting sorting of integer arrays.
+Functionality: Implement the classic quicksort algorithm, supporting sorting of integer arrays.
 
-**Involved Features**: Recursion, array/list operations, generics (if supported), ownership flow (array element movement).
+Involved features: Recursion, array/list operations, generics (if supported), ownership flow (array element movement).
 
-**Output**: Function library + test program demonstrating algorithm correctness.
+Output: Function library + test program demonstrating algorithm correctness.
 
 ### TOML Configuration Parser Prototype
 
-**Functionality**: Parse simple TOML configuration files (only basic types and tables), mapping to YaoXiang record types.
+Functionality: Parse simple TOML configuration files (only basic types and tables), mapping to YaoXiang record types.
 
-**Involved Features**: String parsing, record types, error handling.
+Involved features: String parsing, record types, error handling.
 
-**Output**: Parser function + example configuration file and usage code.
+Output: Parser function + example configuration file and usage code.
 
 ### Terminal Tic-Tac-Toe Game
 
-**Functionality**: Two-player tic-tac-toe game in the terminal, supporting board display, move placement, and win/loss determination.
+Functionality: Two-player tic-tac-toe in the terminal, supporting board display, move placement, and win/loss determination.
 
-**Involved Features**: State management (field mutability), input/output, loop control.
+Involved features: State management (field mutability), input/output, loop control.
 
-**Output**: Runnable game program.
+Output: Runnable game program.
 
 ## Acceptance Criteria
 
-- Applications run as expected and pass all manual tests.
+Applications run as expected and pass all manual tests.
 
-- Code follows YaoXiang style conventions (if any).
+Code follows YaoXiang style guidelines (if any).
 
-- No memory safety errors (guaranteed by ownership rules).
+No memory safety errors (guaranteed by ownership rules).
 
-- Any language bugs or missing standard library features discovered during development are recorded as separate issues.
+Any language bugs or standard library deficiencies discovered during development have been recorded as separate issues.
 
 ## Dependencies
 
-- Interpreter backend must be stable and usable.
+The interpreter back-end must be stable and usable.
 
-- May require file I/O, string manipulation modules from the standard library.
+May require file I/O, string manipulation modules from the standard library.

@@ -227,13 +227,11 @@ impl REPL {
                         parens += 1;
                     }
                 }
-                ')' => {
-                    if !in_string {
-                        if parens == 0 {
-                            return true;
-                        }
-                        parens -= 1;
+                ')' if !in_string => {
+                    if parens == 0 {
+                        return true;
                     }
+                    parens -= 1;
                 }
                 _ => {}
             }

@@ -16,15 +16,20 @@ pub fn run_format_command(
 ) -> Result<FormatRunResult> {
     let files = collect_yx_files(path)?;
     if files.is_empty() {
-        eprintln!("No .yx files found at: {}", path.display());
-        ::std::process::exit(2);
+        anyhow::bail!("No .yx files found at: {}", path.display());
     }
 
     let mut needs_formatting = false;
+    let mut errors: Vec<String> = Vec::new();
 
     for file in &files {
-        let source = std::fs::read_to_string(file)
-            .with_context(|| format!("Failed to read: {}", file.display()))?;
+        let source = match std::fs::read_to_string(file) {
+            Ok(s) => s,
+            Err(e) => {
+                errors.push(format!("Failed to read {}: {}", file.display(), e));
+                continue;
+            }
+        };
 
         match format_source(&source, options) {
             Ok(formatted) => {
@@ -35,19 +40,27 @@ pub fn run_format_command(
                     }
                 } else if write {
                     if formatted != source {
-                        std::fs::write(file, &formatted)
-                            .with_context(|| format!("Failed to write: {}", file.display()))?;
-                        eprintln!("Formatted: {}", file.display());
+                        if let Err(e) = std::fs::write(file, &formatted) {
+                            errors.push(format!("Failed to write {}: {}", file.display(), e));
+                        } else {
+                            eprintln!("Formatted: {}", file.display());
+                        }
                     }
                 } else {
                     print!("{}", formatted);
                 }
             }
             Err(e) => {
-                eprintln!("Error formatting {}: {}", file.display(), e);
-                ::std::process::exit(2);
+                errors.push(format!("Error formatting {}: {}", file.display(), e));
             }
         }
+    }
+
+    if !errors.is_empty() {
+        for err in &errors {
+            eprintln!("error: {}", err);
+        }
+        anyhow::bail!("{} error(s) occurred during formatting", errors.len());
     }
 
     Ok(FormatRunResult { needs_formatting })

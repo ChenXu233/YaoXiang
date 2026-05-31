@@ -8,10 +8,14 @@ on:
       - 'docs/glossary.json'
     branches:
       - main
+      - dev
 
 jobs:
   translate:
     runs-on: ubuntu-latest
+    concurrency:
+      group: auto-translate-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write
 
@@ -58,10 +62,6 @@ jobs:
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
 
-      - name: Sync nav/sidebar
-        run: npx vpi sync
-        working-directory: docs
-
       - name: Translate documents
         run: npx vpi gen
         working-directory: docs
@@ -75,5 +75,6 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add docs/src/en/ docs/src/ja/ docs/src/ru/ docs/src/.i18n-cache.json docs/vpi18n.config.json
-          git diff --staged --quiet || git commit -m "docs: auto-translate documentation"
+          git diff --staged --quiet || git commit -m ":pencil: docs: auto-translate documentation"
+          git pull --rebase origin dev
           git push

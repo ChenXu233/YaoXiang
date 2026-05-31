@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! 统一 Result 类型
 //!
 //! 为编译器模块提供统一的错误处理

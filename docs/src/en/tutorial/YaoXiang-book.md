@@ -2,9 +2,9 @@
 
 > Version: v1.2.0
 > Status: Draft
-> Author: Chen Xu
+> Author: 晨煦 (Chen Xu)
 > Date: 2024-12-31
-> Update: 2025-01-20 - Position indices start from 0 (RFC-004); Unified type syntax (RFC-010)
+> Updated: 2025-01-20 - Position indices start from 0 (RFC-004); Unified type syntax (RFC-010)
 
 ---
 
@@ -14,17 +14,17 @@
 2. [Core Features](#2-core-features)
 3. [Type System](#3-type-system)
 4. [Memory Management](#4-memory-management)
-5. [Asynchronous Programming and Concurrency](#5-asynchronous-programming-and-concurrency)
+5. [Async Programming and Concurrency](#5-async-programming-and-concurrency)
 6. [Module System](#6-module-system)
 7. [Method Binding and Currying](#7-method-binding-and-currying)
 8. [AI-Friendly Design](#8-ai-friendly-design)
-9. [Centralized Type Convention (Core Design Philosophy)](#9-type-convention-centralized-type-notation-core-design-philosophy)
+9. [Type-Centralized Convention (Core Design Philosophy)](#9-type-centralized-convention-core-design-philosophy)
 10. [Quick Start](#10-quick-start)
 
 ---
 
 **Extended Documentation**:
-- [Advanced Binding Features and Compiler Implementation](../works/plans/bind/YaoXiang-bind-advanced.md) - In-depth binding mechanism, advanced features, compiler implementation, and edge case handling
+- [Advanced Binding Features and Compiler Implementation](../works/plans/bind/YaoXiang-bind-advanced.md) - In-depth binding mechanisms, advanced features, compiler implementation, and edge case handling
 
 ---
 
@@ -32,37 +32,37 @@
 
 ### 1.1 What is YaoXiang?
 
-YaoXiang is an experimental general-purpose programming language whose design philosophy stems from the core concepts of "Yao" and "Xiang" in the I Ching (Book of Changes). "Yao" is the fundamental symbol that forms hexagrams, symbolizing the transformation of yin and yang; "Xiang" is the external manifestation of the essence of things, representing all phenomena in the universe.
+YaoXiang is an experimental general-purpose programming language whose design philosophy stems from the core concepts of "爻" (Yao) and "象" (Xiang) in the I Ching (Book of Changes). "爻" is the fundamental symbol that constitutes hexagrams, symbolizing the transformation of yin and yang; "象" is the external manifestation of the essence of things, representing all phenomena.
 
-YaoXiang integrates this philosophical thinking into the type system of a programming language, proposing the core idea that **"everything is a type"**. In YaoXiang's worldview:
+YaoXiang integrates this philosophical thinking into the type system of a programming language, proposing the core concept that **"everything is a type"**. In YaoXiang's worldview:
 
 - **Values** are instances of types
 - **Types** themselves are also instances of types (meta types)
 - **Functions** are mappings from input types to output types
-- **Modules** are combinations of type namespaces
+- **Modules** are namespace combinations of types
 
 ### 1.2 Design Goals
 
-YaoXiang's design goals can be summarized as follows:
+The design goals of YaoXiang can be summarized as follows:
 
-| Goal | Description | |
-|------|------|------|
-| **Unified type abstraction** | Types are the highest-level abstraction unit, simplifying language semantics | |
-| **Natural programming experience** | Python-style syntax, emphasizing readability | |
-| **Safe memory management** | Rust-style ownership model, no GC | |
-| **Seamless async programming** | Automatic async management, no explicit await | |
-| **Complete type reflection** | Runtime type information fully available | |
-| **AI-friendly syntax** | Strictly structured, easy for AI to process | |
+| Goal | Description |
+|------|-------------|
+| **Unified type abstraction** | Types are the highest-level abstraction unit, simplifying language semantics |
+| **Natural programming experience** | Python-style syntax, emphasizing readability |
+| **Safe memory management** | Rust-style ownership model, no GC |
+| **Seamless async programming** | Automatic async management, no explicit await |
+| **Complete type reflection** | Runtime type information fully available |
+| **AI-friendly syntax** | Strictly structured, easy for AI to process |
 
 ### 1.3 Language Positioning
 
-| Dimension | Positioning | |
-|------|------|------|
-| Paradigm | Multi-paradigm (functional + imperative + object-oriented) | |
-| Type system | Dependent types + parametric polymorphism | |
-| Memory management | Ownership + RAII (no GC) | |
-| Compilation model | AOT compilation (optional JIT) | |
-| Target scenarios | Systems programming, application development, AI-assisted programming | |
+| Dimension | Positioning |
+|-----------|-------------|
+| Paradigm | Multi-paradigm (functional + imperative + object-oriented) |
+| Type system | Dependent types + parametric polymorphism |
+| Memory management | Ownership + RAII (no GC) |
+| Compilation model | AOT compilation (optional JIT) |
+| Target scenarios | Systems programming, application development, AI-assisted programming |
 
 ### 1.4 Code Examples
 
@@ -72,7 +72,7 @@ x: Int = 42                           # Explicit type
 y = 42                                # Inferred as Int
 name = "YaoXiang"                     # Inferred as String
 
-# Default immutable
+# Immutable by default
 x: Int = 10
 x = 20                                # ❌ Compile error! Immutable
 
@@ -80,7 +80,7 @@ x = 20                                # ❌ Compile error! Immutable
 add: (a: Int, b: Int) -> Int = a + b  # Function declaration
 inc: (x: Int) -> Int = x + 1               # Single parameter function
 
-# Unified type syntax: constructor is type
+# Unified type syntax: constructors are types
 type Point = { x: Float, y: Float }
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
@@ -95,14 +95,14 @@ main: () -> Void = {
     r = ok("success")
 
     data = fetch_data("https://api.example.com")
-    # Automatic wait, no await needed
+    # Automatic waiting, no await needed
     print(data.name)
 }
 
-# Generic function
+# Generic functions
 identity: (T: Type) -> ((x: T) -> T) = x
 
-# Higher-order function
+# Higher-order functions
 apply: (f: (Int) -> Int, x: Int) -> Int = f(x)
 
 # Currying
@@ -132,7 +132,7 @@ MyList: type = List(Int)
 # Functions are mappings between types
 add: (a: Int, b: Int) -> Int = a + b
 
-# Modules are combinations of types (files as modules)
+# Modules are combinations of types (using files as modules)
 # Math.yx
 pi: Float = 3.14159
 sqrt: (x: Float) -> Float = { ... }
@@ -143,11 +143,11 @@ sqrt: (x: Float) -> Float = { ... }
 YaoXiang's type system is based on type theory and category theory, providing:
 
 - **Dependent types**: Types can depend on values
-- **Generic programming**: Parametric types
+- **Generic programming**: Parameterized types
 - **Type composition**: Union types, intersection types
 
 ```yaoxiang
-# Dependent type: fixed-length vector
+# Dependent types: fixed-length vectors
 Vector: (T: Type, n: Int) -> Type = vector(T, n)
 
 # Type union
@@ -159,13 +159,13 @@ type Serializable = serializable(fn() -> String)
 type Versatile = Printable & Serializable
 ```
 
-### 2.3 Zero-Cost Abstraction
+### 2.3 Zero-Cost Abstractions
 
-YaoXiang guarantees zero-cost abstraction: high-level abstractions do not introduce runtime performance overhead:
+YaoXiang guarantees zero-cost abstractions, meaning high-level abstractions do not incur runtime performance overhead:
 
 - **Monomorphization**: Generic functions are expanded to concrete versions at compile time
-- **Inlining optimization**: Simple functions are automatically inlined
-- **Stack allocation**: Small objects are stack-allocated by default
+- **Inline optimization**: Simple functions are automatically inlined
+- **Stack allocation**: Small objects are allocated on the stack by default
 
 ```yaoxiang
 # Generic expansion (monomorphization)
@@ -180,14 +180,14 @@ str_val = identity("hello") # Expanded to identity(String) -> String
 
 ### 2.4 Natural Syntax
 
-YaoXiang uses Python-style syntax, pursuing readability and natural language feel:
+YaoXiang adopts Python-style syntax, pursuing readability and natural language feel:
 
 ```yaoxiang
 # Automatic type inference
 x = 42
 name = "YaoXiang"
 
-# Concise function definition
+# Concise function definitions
 greet: (name: String) -> String = "Hello, " + name
 
 # Pattern matching
@@ -203,47 +203,47 @@ classify: (n: Int) -> String = {
 
 ### 2.5 Complete Syntax Specification
 
-YaoXiang uses unified declaration syntax: **identifier: type = expression**. Backward-compatible old syntax is also provided.
+YaoXiang adopts a unified declaration syntax: **identifier: type = expression**. It also provides backward-compatible legacy syntax.
 
-#### 2.5.1 Dual Syntax Strategy and Centralized Type Convention
+#### 2.5.1 Dual Syntax Strategy and Type-Centralized Convention
 
-To balance innovation and compatibility, YaoXiang supports two syntax forms, but uses unified **centralized type notation convention**.
+To balance innovation and compatibility, YaoXiang supports two syntax forms but adopts a unified **type-centralized annotation convention**.
 
-**Syntax form comparison:**
+**Syntax Form Comparison:**
 
-| Syntax type | Format | Status | Description | |
-|---------|------|------|------|------|
-| **New syntax (standard)** | `name: Type = Lambda` | ✅ Recommended | Official standard, all new code should use this form | |
-| **Old syntax (compatibility)** | `name(Types) -> Ret = Lambda` | ⚠️ Compatibility only | Reserved for historical code, not recommended for new projects | |
+| Syntax Type | Format | Status | Description |
+|-------------|--------|--------|-------------|
+| **New syntax (standard)** | `name: Type = Lambda` | ✅ Recommended | Official standard, all new code should use this form |
+| **Old syntax (compat)** | `name(Types) -> Ret = Lambda` | ⚠️ Compat only | Reserved for historical code, not recommended for new projects |
 
-**Core convention: Centralized Type Notation**
+**Core Convention: Type-Centralized Annotation**
 
-YaoXiang adopts a **"declaration first, centralized type notation"** design convention:
+YaoXiang adopts a **"declaration-first, type-centralized"** design convention:
 
 ```yaoxiang
-# ✅ Correct: Type information unified in the declaration line
+# ✅ Correct: Type information unified on the declaration line
 add: (a: Int, b: Int) -> Int = a + b
 #   └─────────────────┘   └─────────────┘
 #       Complete type signature         Implementation logic
 
-# ❌ Avoid: Type information scattered in implementation
+# ❌ Avoid: Type information scattered in the implementation
 add: (a: Int, b: Int) -> Int = a + b
 #     └───────────────┘
-#     Type mixed in the implementation body
+#     Types mixed in the implementation body
 ```
 
-**Benefits of the convention:**
+**Benefits of the Convention:**
 
 1. **Syntax consistency**: All declarations follow `identifier: type = expression`
-2. **Separation of declaration and implementation**: Type information at a glance, implementation body focuses on logic
-3. **AI-friendly**: AI only needs to read the declaration line to understand the complete function signature
-4. **Safer modifications**: Modifying types only requires changing the declaration, without affecting the implementation body
+2. **Separation of declaration and implementation**: Type information at a glance, implementation body focused on logic
+3. **AI friendliness**: AI only needs to read the declaration line to understand the complete function signature
+4. **Safer modifications**: Modifying types only requires changing the declaration, not the implementation body
 5. **Currying-friendly**: Supports clear curried type signatures
 
-**Selection recommendations**:
-- **New projects**: Must use new syntax + centralized type convention
-- **Migration projects**: Gradually migrate to new syntax and centralized type convention
-- **Maintaining legacy code**: Can continue using old syntax, but recommended to adopt centralized type convention
+**Selection Advice**:
+- **New projects**: Must use new syntax + type-centralized convention
+- **Migration projects**: Gradually migrate to new syntax and type-centralized convention
+- **Maintaining old code**: Can continue using old syntax, but recommended to adopt type-centralized convention
 
 #### 2.5.2 Basic Declaration Syntax
 
@@ -262,7 +262,7 @@ inc: (x: Int) -> Int = x + 1
 getAnswer: () -> Int = 42
 log: (msg: String) -> Void = print(msg)
 
-# === Old syntax (compatibility) ===
+# === Old syntax (compat) ===
 # Only for functions, format: name(Types) -> Ret = Lambda
 add(Int, Int) -> Int = (a, b) => a + b
 square(Int) -> Int = (x) => x * x
@@ -273,114 +273,114 @@ getRandom() -> Int = () => 42
 #### 2.5.3 Function Type Syntax
 
 ```
-Function type ::= '(' parameter type list ')' '->' return type
-                | parameter type '->' return type              # Single parameter shorthand
+FunctionType ::= '(' ParameterTypeList ')' '->' ReturnType
+               | ParameterType '->' ReturnType              # Single parameter shorthand
 
-Parameter type list ::= [type (',' type)*]
-Return type ::= type | function type | 'Void'
+ParameterTypeList ::= [Type (',' Type)*]
+ReturnType ::= Type | FunctionType | 'Void'
 
-# Function types are first-class, can be nested
-# Higher-order function type ::= '(' function type ')' '->' return type
+# Function types are first-class citizens, can be nested
+# HigherOrderFunctionType ::= '(' FunctionType ')' '->' ReturnType
 ```
 
-| Example | Meaning | |
-|------|------|------|
-| `Int -> Int` | Single parameter function type | |
-| `(Int, Int) -> Int` | Two parameter function type | |
-| `() -> Void` | No-parameter function type | |
-| `(Int -> Int) -> Int` | Higher-order function: accepts function, returns Int | |
-| `Int -> Int -> Int` | Curried function (right-associative) | |
+| Example | Meaning |
+|---------|---------|
+| `Int -> Int` | Single parameter function type |
+| `(Int, Int) -> Int` | Two parameter function type |
+| `() -> Void` | No-parameter function type |
+| `(Int -> Int) -> Int` | Higher-order function: takes a function, returns Int |
+| `Int -> Int -> Int` | Curried function (right-associative) |
 
-#### 2.5.4 Generics Syntax (for type parameters only)
+#### 2.5.4 Generic Syntax (for type parameters only)
 
 ```yaoxiang
-# Generic function: <type parameter> prefix
+# Generic functions: <type parameters> prefix
 identity: (T: Type) -> ((x: T) -> T) = x
 map: (A: Type, B: Type) -> ((f: (A) -> B, xs: List(A)) -> List(B)) = case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
-# Generic type
+# Generic types
 List: (T: Type) -> Type
 ```
 
 #### 2.5.5 Lambda Expression Syntax
 
 ```
-Lambda ::= '(' parameter list ')' '=>' expression
-         | parameter '=>' expression              # Single parameter shorthand
+Lambda ::= '(' ParameterList ')' '=>' Expression
+         | Parameter '=>' Expression              # Single parameter shorthand
 
-Parameter list ::= [parameter (',' parameter)*]
-parameter ::= identifier [':' type]               # Optional type annotation
+ParameterList ::= [Parameter (',' Parameter)*]
+Parameter ::= Identifier [':' Type]               # Optional type annotation
 ```
 
-| Example | Meaning | Description | |
-|------|------|------|------|
-| `(a, b) => a + b` | Multi-parameter Lambda | Used with declaration:<br>`add: (Int, Int) = (a, b) => a + b` | |
-| `x => x + 1` | Single parameter shorthand | Used with declaration:<br>`inc: Int = x => x + 1` | |
-| `(x: Int) => x + 1` | With type annotation | Only for temporary needs inside Lambda | |
-| `() => 42` | No-parameter Lambda | Used with declaration:<br>`get: () = () => 42` | |
+| Example | Meaning | Description |
+|---------|---------|-------------|
+| `(a, b) => a + b` | Multi-parameter Lambda | Used with declaration: <br>`add: (Int, Int) = (a, b) => a + b` |
+| `x => x + 1` | Single parameter shorthand | Used with declaration: <br>`inc: Int = x => x + 1` |
+| `(x: Int) => x + 1` | With type annotation | Only for temporary needs inside Lambda |
+| `() => 42` | No-parameter Lambda | Used with declaration: <br>`get: () = () => 42` |
 
 **Note**: Type annotations in Lambda expressions `(x: Int) => ...` are **temporary and local**, mainly used for:
-- When type information is needed inside Lambda
-- When used with declaration syntax (type given in declaration)
-- Should not be used as the main type declaration method
+- When type information is needed inside the Lambda
+- When used with declaration syntax (types given in the declaration)
+- Should not be used as the primary type declaration method
 
 #### 2.5.6 Complete Examples
 
 ```yaoxiang
 # === Basic Function Declarations ===
 
-# Basic function (new syntax)
+# Basic functions (new syntax)
 add: (a: Int, b: Int) -> Int = a + b
 
-# Single parameter function (two forms)
+# Single parameter functions (two forms)
 inc: (x: Int) -> Int = x + 1
 inc2: (x: Int) -> Int = x + 1
 
-# No-parameter function
+# No-parameter functions
 getAnswer: () -> Int = 42
 
-# Void-returning function
+# Functions with no return value
 log: (msg: String) -> Void = print(msg)
 
 # === Recursive Functions ===
-# Recursion naturally supported in lambda
+# Recursion is naturally supported in lambda
 fact: (n: Int) -> Int =
   if n <= 1 then 1 else n * fact(n - 1)
 
-# === Higher-Order Functions and Function Type Assignment ===
+# === Higher-Order Functions and Function Type Assignments ===
 
-# Function type as first-class citizen
+# Function types as first-class citizens
 IntToInt: Type = (Int) -> Int
 IntBinaryOp: Type = (Int, Int) -> Int
 
-# Higher-order function declaration
+# Higher-order function declarations
 applyTwice: (f: IntToInt, x: Int) -> Int = f(f(x))
 
-# Curried function
+# Curried functions
 addCurried: (a: Int) -> (b: Int) -> Int = a + b
 
 # Function composition
 compose: (f: Int -> Int, g: Int -> Int) -> (x: Int) -> Int =
   f(g(x))
 
-# Function returning function
+# Functions that return functions
 makeAdder: (x: Int) -> (y: Int) -> Int =
   x + y
 
 # === Generic Functions ===
 
-# Generic function
+# Generic functions
 identity: (T: Type) -> ((x: T) -> T) = x
 
-# Generic higher-order function
+# Generic higher-order functions
 map: (A: Type, B: Type) -> ((f: (A) -> B, xs: List(A)) -> List(B)) =
   case xs of
     [] => []
     (x :: rest) => f(x) :: map(f, rest)
 
-# Generic function type
+# Generic function types
 Transformer: Type = (A: Type, B: Type) -> ((A) -> B)
 
 # Using generic types
@@ -389,23 +389,23 @@ applyTransformer: (A: Type, B: Type) -> ((f: Transformer(A, B), x: A) -> B) =
 
 # === Complex Type Examples ===
 
-# Nested function type
+# Nested function types
 higherOrder: (A: Type) -> ((f: (A) -> Int) -> (A) -> Int) =
   f => x => f(x) + 1
 
-# Multi-parameter higher-order function
+# Multi-parameter higher-order functions
 zipWith: (A: Type, B: Type, C: Type) -> ((f: (A, B) -> C, xs: List(A), ys: List(B)) -> List(C)) =
   case (xs, ys) of
     ([], _) => []
     (_, []) => []
     (x::xs', y::ys') => f(x, y) :: zipWith(f, xs', ys')
 
-# Function type alias
+# Function type aliases
 Predicate: (T: Type) -> Type = { apply: (T) -> Bool }
 Mapper: Type = (A: Type, B: Type) -> ((A) -> B)
 Reducer: Type = (A: Type, B: Type) -> ((B, A) -> B)
 
-# === Old Syntax Examples (backward compatibility only) ===
+# === Old Syntax Examples (backward compat only) ===
 # Not recommended for new code
 
 mul(Int, Int) -> Int = (a, b) => a * b    # Multi-parameter
@@ -422,16 +422,16 @@ get_random: () -> Int = 42
 
 #### 2.5.7 Syntax Parsing Rules
 
-**Type parsing precedence:**
+**Type Parsing Precedence:**
 
-| Precedence | Type | Description | |
-|--------|------|------|------|
-| 1 (highest) | Generic application `List(T)` | Left-associative | |
-| 2 | Parentheses `(T)` | Changes associativity | |
-| 3 | Function type `->` | Right-associative | |
-| 4 (lowest) | Base type `Int, String` | Atomic types | |
+| Priority | Type | Description |
+|----------|------|-------------|
+| 1 (highest) | Generic application `List(T)` | Left-associative |
+| 2 | Parentheses `(T)` | Changes associativity |
+| 3 | Function type `->` | Right-associative |
+| 4 (lowest) | Base types `Int, String` | Atomic types |
 
-**Type parsing examples:**
+**Type Parsing Examples:**
 
 ```yaoxiang
 # (A -> B) -> C -> D
@@ -441,77 +441,77 @@ get_random: () -> Int = 42
 # Parsed as: (A -> (B -> C))  # Right-associative
 
 # (Int -> Int) -> Int
-# Parsed as: accepts function, returns Int -> Int
+# Parsed as: Takes a function, returns Int -> Int
 
 # List<Int -> Int>
 # Parsed as: List's element type is Int -> Int
 ```
 
-**Lambda parsing examples:**
+**Lambda Parsing Examples:**
 
 ```yaoxiang
 # a => b => a + b
 # Parsed as: a => (b => (a + b))  # Right-associative, curried
 
 # (a, b) => a + b
-# Parsed as: accepts two parameters, returns a + b
+# Parsed as: Takes two parameters, returns a + b
 ```
 
 #### 2.5.8 Type Inference Rules
 
-YaoXiang adopts a **two-layer processing** strategy: parsing layer is loose, type checking layer is strict.
+YaoXiang adopts a **two-layer processing** strategy: the parsing layer is lenient, the type checking layer is strict.
 
-**Parsing layer rules:**
-- Parser only validates syntax structure, does not perform type inference
-- Declarations missing type annotations have `None` in the type annotation field
+**Parsing Layer Rules:**
+- The parser only validates syntax structure, does not perform type inference
+- Declarations missing type annotations have `None` for the type annotation field
 - All declarations conforming to basic syntax structure pass parsing
 - **Key point**: `add: (a: Int, b: Int) -> Int = a + b` is **legal** at the parsing layer
 
-**Type checking layer rules:**
-- Validates semantic correctness, including type completeness
+**Type Checking Layer Rules:**
+- Validate semantic correctness, including type completeness
 - **Parameters must have type annotations**: This is a mandatory requirement
 - Return types can be inferred, but parameter types must be explicitly declared
 
-**Complete type inference rules:**
+**Complete Type Inference Rules:**
 
-| Scenario | Parameter inference | Return inference | Parsing result | Type checking result | Recommendation | |
-|------|---------|---------|----------|-------------|---------| |
-| **Standard function** | Use annotated type | Use annotated type | ✅ | ✅ | ⭐⭐⭐⭐⭐ | |
-| `add: (a: Int, b: Int) -> Int = a + b` | | | | | | |
-| **Partial inference** | Use annotated type | Inferred from expression | ✅ | ✅ | ⭐⭐⭐⭐ | |
-| `add: (Int, Int) = (a, b) => a + b` | | | | | | |
-| `inc: (x: Int) -> Int = x + 1` | | | | | | |
-| `get: () = () => 42` | | | | | | |
-| **Old syntax partial inference** | Use annotated type | Inferred from expression | ✅ | ✅ | ⭐⭐⭐ (compatibility) | |
-| `add(Int, Int) = (a, b) => a + b` | | | | | | |
-| `square(Int) = (x) => x * x` | | | | | | |
-| **Parameters without annotation** | **Cannot infer** | - | ✅ | ❌ Error | ❌ Forbidden | |
-| `add: (a: Int, b: Int) -> Int = a + b` | | | | | | |
-| `identity: (T: Type) -> ((x: T) -> T) = x` | | | | | | |
-| **Block without return annotation** | - | Inferred from block content | ✅ | ✅ | ⭐⭐⭐⭐ | |
-| `main = () => {}` | | | | | | |
-| `get = () => { return 42; }` | | | | | | |
-| **Block without return annotation (no explicit return)** | - | Inferred as `Void` | ✅ | ✅ Not recommended | ⚠️ Avoid | |
-| `bad = (x: Int) => { x }` | | | | | | |
+| Scenario | Parameter Inference | Return Inference | Parsing Result | Type Check Result | Recommended Level |
+|----------|-------------------|-----------------|----------------|-------------------|-------------------|
+| **Standard function** | Use annotated type | Use annotated type | ✅ | ✅ | ⭐⭐⭐⭐⭐ |
+| `add: (a: Int, b: Int) -> Int = a + b` | | | | | |
+| **Partial inference** | Use annotated type | Inferred from expression | ✅ | ✅ | ⭐⭐⭐⭐ |
+| `add: (Int, Int) = (a, b) => a + b` | | | | | |
+| `inc: (x: Int) -> Int = x + 1` | | | | | |
+| `get: () = () => 42` | | | | | |
+| **Old syntax partial inference** | Use annotated type | Inferred from expression | ✅ | ✅ | ⭐⭐⭐ (compat) |
+| `add(Int, Int) = (a, b) => a + b` | | | | | |
+| `square(Int) = (x) => x * x` | | | | | |
+| **Parameters without annotation** | **Cannot infer** | - | ✅ | ❌ Error | ❌ Forbidden |
+| `add: (a: Int, b: Int) -> Int = a + b` | | | | | |
+| `identity: (T: Type) -> ((x: T) -> T) = x` | | | | | |
+| **Block without return annotation** | - | Inferred from block content | ✅ | ✅ | ⭐⭐⭐⭐ |
+| `main = () => {}` | | | | | |
+| `get = () => { return 42; }` | | | | | |
+| **Block without return annotation (no explicit return)** | - | Inferred as `Void` | ✅ | ✅ Not recommended | ⚠️ Avoid |
+| `bad = (x: Int) => { x }` | | | | | |
 
-**Detailed inference rules:**
+**Detailed Inference Rules:**
 
 ```
-Parsing layer: only looks at syntax structure
+Parsing layer: only checks syntax structure
 ├── Structure correct → Pass
-└── Structure error → Error
+└── Structure incorrect → Error
 
-Type checking layer: validates semantics
+Type checking layer: validate semantics
 ├── Parameter type inference
 │   ├── Parameter has type annotation → Use annotated type ✅
 │   ├── Parameter without type annotation → Reject ❌
-│   └── Lambda parameters must have annotations → Mandatory requirement
+│   └── Lambda parameters must be annotated → Mandatory requirement
 │
 ├── Return type inference
 │   ├── Has return expr → Inferred from expr ✅
 │   ├── No return, has expression → Inferred from expression ✅
 │   ├── No return, has block `{ ... }`
-│   │   ├── Block empty `{}` → Void ✅
+│   │   ├── Block is empty `{}` → Void ✅
 │   │   ├── Block has return → Inferred from return ✅
 │   │   └── Block has no return and no explicit return → Inferred as Void ✅ (but not recommended)
 │   └── Cannot infer → Reject ❌
@@ -521,13 +521,13 @@ Type checking layer: validates semantics
 
 **Note**: The form `bad = (x: Int) => { x }` can infer the return type as `Void`, but it is highly not recommended because:
 - Code intent is unclear
-- Easy to cause misunderstandings
-- Does not conform to functional programming's expression style
+- Easy to cause misunderstanding
+- Does not conform to functional programming expression style
 
-**Inference examples:**
+**Inference Examples:**
 
 ```yaoxiang
-# === Successful inference ===
+# === Inference Success ===
 
 # Standard form
 main: () -> Void = () => {}                    # Complete annotation
@@ -539,7 +539,7 @@ add: (Int, Int) = (a, b) => a + b              # Parameters annotated, return in
 square: (x: Int) -> Int = x * x                # Parameters annotated, return inferred
 get_answer: () = () => 42                      # Parameters annotated (empty), return inferred
 
-# Partial inference (old syntax, compatibility)
+# Partial inference (old syntax, compat)
 add2(Int, Int) = (a, b) => a + b               # Parameters annotated, return inferred
 square2(Int) = (x) => x * x                    # Parameters annotated, return inferred
 
@@ -549,40 +549,40 @@ fact: Int -> Int = (n) => {
     return n * fact(n - 1)
 }
 
-# === Failed inference ===
+# === Inference Failure ===
 
 # Parameters cannot be inferred (passes parsing, fails type checking)
 add: (a: Int, b: Int) -> Int = a + b                          # ✗ Parameters without type
 identity: (T: Type) -> ((x: T) -> T) = x                              # ✗ Parameters without type
 
-# Block without explicit return
+# Blocks without explicit return
 no_return = (x: Int) => { x }                  # ✗ Block has no return, cannot infer implicit return
 
-# Completely cannot infer
-bad_fn: (T: Type) -> ((x: T) -> T) = x                                # ✗ Cannot infer parameters or return
+# Complete inference failure
+bad_fn: (T: Type) -> ((x: T) -> T) = x                                # ✗ Cannot infer both parameters and return
 ```
 
 #### 2.5.9 Old Syntax (Backward Compatibility)
 
-YaoXiang provides old syntax support for compatibility with historical code, **not recommended for new code**.
+YaoXiang provides old syntax support for compatibility with historical code, **not recommended for use in new code**.
 
 ```
-Old syntax ::= identifier '(' [parameter type list] ')' '->' return type '=' Lambda
+OldSyntax ::= Identifier '(' [ParameterTypeList] ')' '->' ReturnType '=' Lambda
 ```
 
-| Feature | Standard syntax | Old syntax | |
-|------|---------|--------| |
-| Declaration format | `name: Type = ...` | `name(Types) -> Type = ...` | |
-| Parameter type location | In type annotation | After function name in parentheses | |
-| Empty parameters | Must write `()` | Can omit `()` | |
-| **Recommendation** | ✅ **Official recommendation** | ⚠️ **Backward compatibility only** | |
-| **Use case** | All new code | Legacy code maintenance | |
+| Feature | Standard Syntax | Old Syntax |
+|---------|-----------------|------------|
+| Declaration format | `name: Type = ...` | `name(Types) -> Type = ...` |
+| Parameter type location | In type annotation | After function name in parentheses |
+| Empty parameters | Must write `()` | Can omit `()` |
+| **Recommended level** | ✅ **Official recommendation** | ⚠️ **Backward compat only** |
+| **Use case** | All new code | Historical code maintenance |
 
 **Reasons for not recommending:**
 1. **Learning cost**: Inconsistent with standard syntax, increases language complexity
-2. **Consistency**: Parameter type location is not uniform (one in type annotation, one after function name)
-3. **Maintenance cost**: Parser needs additional handling for both forms
-4. **AI-friendly**: Increases difficulty for AI to understand and generate code
+2. **Consistency**: Parameter type locations are not unified (one in type annotation, one after function name)
+3. **Maintenance cost**: Parser needs to handle both forms
+4. **AI friendliness**: Increases difficulty for AI to understand and generate code
 
 **Migration suggestions:**
 ```yaoxiang
@@ -612,17 +612,17 @@ YaoXiang's type system is hierarchical:
 │                                                              │
 │  type (meta type)                                           │
 │    │                                                        │
-│    ├── Primitive Types                                     │
+│    ├── Primitive Types                                      │
 │    │   ├── Void, Bool                                       │
 │    │   ├── Int, Uint, Float                                 │
 │    │   ├── Char, String, Bytes                              │
 │    │                                                        │
 │    ├── Constructor Types                                    │
-│    │   ├── Name(args)              # Single constructor (struct)      │
-│    │   ├── A(T) | B(U)             # Multiple constructors (union/enum)   │
-│    │   ├── A | B | C               # Zero-parameter constructors (enum)      │
+│    │   ├── Name(args)              # Single constructor (struct) │
+│    │   ├── A(T) | B(U)             # Multiple constructors (union/enum) │
+│    │   ├── A | B | C               # Zero-parameter constructors (enum) │
 │    │   ├── tuple (T1, T2, ...)                            │
-│    │   ├── list(T), dict(K, V)                           │
+│    │   ├── list(T), dict(K, V)                            │
 │    │                                                        │
 │    ├── Function Types                                       │
 │    │   fn (T1, T2, ...) -> R                               │
@@ -633,25 +633,25 @@ YaoXiang's type system is hierarchical:
 │    ├── Dependent Types                                      │
 │    │   (n: Int) -> Type                               │
 │    │                                                        │
-│    └── Module Types                                         │
-│        Files as modules                                      │
+│    └── Module Types                                          │
+│        Files as modules                                     │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Type Definition
+### 3.2 Type Definitions
 
 ```yaoxiang
 # Unified type syntax: only constructors, no enum/struct/union keywords
-# Rule: anything separated by | is a constructor, constructor name(args) is the type
+# Rule: everything separated by | are constructors, constructor name(args) is the type
 
-# === Zero-parameter constructor (enum style) ===
+# === Zero-parameter constructors (enum style) ===
 type Color = { red | green | blue }              # Equivalent to red() | green() | blue()
 
-# === Multi-parameter constructor (struct style) ===
+# === Multi-parameter constructors (struct style) ===
 type Point = { x: Float, y: Float }       # Constructor is the type
 
-# === Generic constructor ===
+# === Generic constructors ===
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }           # Generic union
 
 # === Mixed constructors ===
@@ -663,7 +663,7 @@ p: Point = Point(1.0, 2.0)
 r: Result(Int, String) = ok(42)
 s: Shape = circle(5.0)
 
-# === Interface definition (record type with all fields as functions) ===
+# === Interface definition (record type with all function fields) ===
 type Drawable = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -673,7 +673,7 @@ type Serializable = {
     serialize: () -> String
 }
 
-# === Interface implementation (list interface names at the end of the type) ===
+# === Interface implementation (list interface names at the end of type) ===
 type Point = {
     x: Float,
     y: Float,
@@ -702,7 +702,7 @@ describe_type: (type) -> String = (t) => {
 
 ### 3.4 Type Inference
 
-YaoXiang has powerful type inference:
+YaoXiang has powerful type inference capabilities:
 
 ```yaoxiang
 # Basic inference
@@ -710,7 +710,7 @@ x = 42                    # Inferred as Int
 y = 3.14                  # Inferred as Float
 z = "hello"               # Inferred as String
 
-# Function return value inference
+# Function return type inference
 add: (a: Int, b: Int) -> Int = a + b
 
 # Generic inference
@@ -725,7 +725,7 @@ first: (T: Type) -> ((list: List(T)) -> Option(T)) = (list) => {
 
 ### 4.1 Ownership Model
 
-YaoXiang uses the **ownership model** to manage memory, where each value has a single owner:
+YaoXiang uses the **ownership model** to manage memory, each value has a unique owner:
 
 ```yaoxiang
 # === Default Move (zero-copy) ===
@@ -748,7 +748,7 @@ p3 = p.clone()      # p and p3 are independent
 p: Point = Point(1.0, 2.0)
 p2 = p              # Move, p invalidated
 
-# Function parameter passing = Move
+# Function argument passing = Move
 process: (p: Point) -> Void = {
     # Ownership of p transferred in
 }
@@ -770,7 +770,7 @@ shared = ref p      # Arc, thread-safe
 spawn(() => print(shared.x))   # ✅ Safe
 
 # Arc automatically manages lifecycle
-# When shared goes out of scope, count drops to zero and it's automatically freed
+# When shared goes out of scope, count reaches zero and is automatically freed
 ```
 
 ### 4.4 clone() Explicit Copy
@@ -784,7 +784,7 @@ p.x = 0.0        # ✅
 p2.x = 0.0       # ✅ Independent of each other
 ```
 
-### 4.5 unsafe Code Block (System-level)
+### 4.5 unsafe Code Blocks (System-Level)
 
 ```yaoxiang
 # Raw pointers can only be used in unsafe blocks
@@ -801,7 +801,7 @@ unsafe {
 ```yaoxiang
 # RAII automatic cleanup
 with_file: (path: String) -> String = {
-    file = File.open(path)  # Automatic open
+    file = File.open(path)  # Automatically opened
     content = file.read_all()
     # Function ends, file automatically closed
     content
@@ -810,10 +810,10 @@ with_file: (path: String) -> String = {
 
 ### 4.7 Send / Sync Constraints
 
-| Constraint | Semantics | Description | |
-|------|------|------|------|
-| **Send** | Can be safely transferred across threads | Value can be moved to another thread | |
-| **Sync** | Can be safely shared across threads | Immutable references can be shared to another thread | |
+| Constraint | Semantics | Description |
+|------------|-----------|-------------|
+| **Send** | Can be safely transferred across threads | Value can be moved to another thread |
+| **Sync** | Can be safely shared across threads | Immutable references can be shared to another thread |
 
 ```yaoxiang
 # ref T automatically satisfies Send + Sync (Arc is thread-safe)
@@ -822,7 +822,7 @@ shared = ref p
 
 spawn(() => print(shared.x))   # ✅ Arc is thread-safe
 
-# Raw pointer *T does not satisfy Send/Sync
+# Raw pointers *T do not satisfy Send/Sync
 unsafe {
     ptr: *Point = &p         # Can only be used in single thread
 }
@@ -830,30 +830,30 @@ unsafe {
 
 ### 4.9 Not Implemented
 
-| Feature | Reason | |
-|------|------|------|
-| Lifetime `'a` | No reference concept, no need for lifetimes | |
-| Borrow checker | ref = Arc as replacement | |
-| `&T` borrow syntax | Uses Move semantics instead | |
+| Feature | Reason |
+|---------|--------|
+| Lifetime `'a` | No reference concept, no need for lifetimes |
+| Borrow checker | ref = Arc instead |
+| `&T` borrow syntax | Uses Move semantics |
 
 ---
 
-## 5. Asynchronous Programming and Concurrency
+## 5. Async Programming and Concurrency
 
-> "All things act together; I observe their return." — *I Ching · Hexagram Fu*
+> "万物并作，吾以观复。" ———《易·复卦》 (All things arise together; I observe their return.)
 >
-> YaoXiang adopts the **spawn model**, a seamless async concurrency paradigm based on **lazy evaluation**. Its core design philosophy is: **let developers describe logic in a synchronous, sequential manner, while the language runtime automatically and efficiently executes the computational units in parallel like all things acting together, ultimately unifying and coordinating them**.
+> YaoXiang adopts the **spawn model**, a seamless async concurrency paradigm based on **lazy evaluation**. Its core design philosophy is: **Let developers describe logic in a synchronous, sequential manner, while the language runtime causes the computation units within to automatically and efficiently execute concurrently like all things arising together, and finally unify and coordinate at the end**.
 
-> See [Spawn Model Whitepaper](YaoXiang-async-whitepaper.md) and [Async Implementation Plan](YaoXiang-async-implementation.md) for details.
+> See [《Spawn Model Whitepaper》](YaoXiang-async-whitepaper.md) and [Async Implementation Plan](YaoXiang-async-implementation.md).
 
 ### 5.1 Core Concepts of the Spawn Model
 
-#### 5.1.1 Spawn Graph: The Stage for All Things Acting Together
+#### 5.1.1 Spawn Graph: The Stage for All Things Arising Together
 
-All programs are transformed at compile time into a **Directed Acyclic Computation Graph (DAG)**, called the **spawn graph**. Nodes represent expression computations, edges represent data dependencies. This graph is lazy, meaning nodes are only evaluated when their output is **truly needed**.
+All programs are transformed into a **directed acyclic computation graph (DAG)** at compile time, called the **spawn graph**. Nodes represent expression computations, edges represent data dependencies. This graph is lazy, meaning nodes are only evaluated when their output is **truly needed**.
 
 ```yaoxiang
-# Compiler automatically builds spawn graph
+# Compiler automatically constructs spawn graph
 fetch_user: spawn () -> User = (id) => { ... }
 fetch_posts: spawn (User) -> Posts = (user) => { ... }
 
@@ -862,18 +862,18 @@ main:() -> Void = () => {
     posts = fetch_posts(user) # Node B (Async(Posts)), depends on A
 
     # Node C needs results from A and B
-    print(posts.title)       # Automatically waits: first ensures A and B complete
+    print(posts.title)       # Auto-wait: first ensure A and B complete
 }
 ```
 
-#### 5.1.2 Spawn Value: Async(T)
+#### 5.1.2 Spawn Values: Async(T)
 
-Any function call marked as `spawn fn` immediately returns a value of type `Async(T)`, called a **spawn value**. This is a lightweight proxy that is not the actual result, but represents a **future value currently being spawned**.
+Any function call marked as `spawn fn` immediately returns a value of type `Async(T)`, called a **spawn value**. This is a lightweight proxy that represents not the actual result, but a **future value being processed concurrently**.
 
-**Core characteristics**:
-- **Type-transparent**: `Async(T)` is a subtype of `T` in the type system, can be used in any context expecting `T`
-- **Automatic waiting**: When program execution reaches an operation that must use the concrete value of type `T`, the runtime automatically suspends the current task and waits for the computation to complete
-- **Zero contagion**: Async code and sync code have no differences in syntax and type signatures
+**Core Features**:
+- **Type transparent**: `Async(T)` is a subtype of `T` in the type system, can be used in any context expecting `T`
+- **Automatic waiting**: When program execution reaches an operation that must use a concrete value of type `T`, the runtime automatically suspends the current task and waits for the computation to complete
+- **Zero contamination**: Async code and sync code have no syntactic or type signature differences
 
 ```yaoxiang
 # Spawn value usage example
@@ -883,25 +883,25 @@ main: () -> Void = () => {
     data = fetch_data("url")  # Async(JSON)
 
     # Async(JSON) can be used directly as JSON
-    # Automatic wait occurs at field access
+    # Auto-wait happens at field access
     print(data.name)          # Equivalent to data.await().name
 }
 ```
 
 ### 5.2 Spawn Syntax System
 
-The `spawn` keyword has triple semantics, the sole bridge connecting synchronous thinking with async implementation:
+The `spawn` keyword has triple semantics, the only bridge connecting synchronous thinking with async implementation:
 
-| Official term | Syntax form | Semantics | Runtime behavior | |
-|----------|----------|------|------------| |
-| **Spawn function** | `spawn fn` | Defines computational unit that can participate in spawn execution | Its call returns `Async(T)` | |
-| **Spawn block** | `spawn { a(), b() }` | Explicitly declared concurrency scope | Tasks inside block forced to execute in parallel | |
-| **Spawn loop** | `spawn for x in xs { ... }` | Data parallelism paradigm | Loop body executes in parallel on all elements | |
+| Official Term | Syntax Form | Semantics | Runtime Behavior |
+|--------------|-------------|-----------|------------------|
+| **Spawn function** | `spawn fn` | Define computation units that can participate in spawn execution | Its call returns `Async(T)` |
+| **Spawn block** | `spawn { a(), b() }` | Explicitly declared concurrent scope | Tasks inside block execute in parallel |
+| **Spawn loop** | `spawn for x in xs { ... }` | Data parallelism paradigm | Loop body executes concurrently on all elements |
 
-#### 5.2.1 Spawn Function
+#### 5.2.1 Spawn Functions
 
 ```yaoxiang
-# Use spawn to mark spawn function
+# Use spawn to mark spawn functions
 # Syntax is identical to regular functions, no extra burden
 
 fetch_api: spawn (String) -> JSON = (url) => {
@@ -917,14 +917,14 @@ process_user: (Int) -> Report = (user_id) => {
 }
 ```
 
-#### 5.2.2 Spawn Block
+#### 5.2.2 Spawn Blocks
 
 ```yaoxiang
 # spawn { } - Explicit parallel construct
-# All expressions inside block execute concurrently as independent tasks
+# All expressions inside block execute as independent tasks concurrently
 
 compute_all: (Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
-    # Three independent calculations execute in parallel
+    # Three independent computations execute in parallel
     (x, y, z) = spawn {
         heavy_calc(a),        # Task 1
         heavy_calc(b),        # Task 2
@@ -934,7 +934,7 @@ compute_all: (Int, Int) -> (Int, Int, Int) spawn = (a, b) => {
 }
 ```
 
-#### 5.2.3 Spawn Loop
+#### 5.2.3 Spawn Loops
 
 ```yaoxiang
 # spawn for - Data parallel loop
@@ -948,7 +948,7 @@ parallel_sum: (Int) -> Int spawn = (n) => {
 }
 ```
 
-#### 5.2.4 Data Parallel Loop
+#### 5.2.4 Data Parallel Loops
 
 ```yaoxiang
 # spawn for - Data parallel loop
@@ -973,13 +973,13 @@ matmul: spawn [[A: Matrix], [B: Matrix]] -> Matrix = (A, B) => {
 }
 ```
 
-### 5.3 Automatic Wait Mechanism
+### 5.3 Automatic Waiting Mechanism
 
 ```yaoxiang
 # No explicit await needed, compiler automatically inserts wait points
 
 main: () -> Void = () => {
-    # Automatic parallelization: two independent requests execute in parallel
+    # Auto-parallel: two independent requests execute in parallel
     users = fetch_users()      # Async(List(User))
     posts = fetch_posts()      # Async(List(Post))
 
@@ -991,7 +991,7 @@ main: () -> Void = () => {
     print(first_user.name)
 }
 
-# Wait in conditional branches
+# Waiting in conditional branches
 process_data: spawn () -> Void = () => {
     data = fetch_data()        # Async(Data)
 
@@ -1013,12 +1013,12 @@ await_all: (T: Type) -> ((tasks: List(Async(T))) -> List(T)) = {
 
 # Wait for any one to complete
 await_any: (T: Type) -> ((tasks: List(Async(T))) -> T) = {
-    # Returns first completed result
+    # Return first completed result
 }
 
 # Timeout control
 with_timeout: (T: Type) -> ((task: Async(T), timeout: Duration) -> Option(T)) = {
-    # Returns None on timeout
+    # Return None on timeout
 }
 ```
 
@@ -1028,7 +1028,7 @@ YaoXiang uses **Send/Sync type constraints** similar to Rust to guarantee thread
 
 #### 5.5.1 Send Constraint
 
-**Send**: A type can be safely **transferred ownership** across threads.
+**Send**: A type can safely **transfer ownership** across threads.
 
 ```yaoxiang
 # Basic types automatically satisfy Send
@@ -1040,12 +1040,12 @@ type Point = { x: Int, y: Float }
 
 # Types containing non-Send fields are not Send
 type NonSend = NonSend(data: Rc(Int))
-# Rc is not Send (reference counting is not atomic), so NonSend is not Send
+# Rc is not Send (reference counting non-atomic), so NonSend is not Send
 ```
 
 #### 5.5.2 Sync Constraint
 
-**Sync**: A type can be safely **shared by reference** across threads.
+**Sync**: A type can safely **share references** across threads.
 
 ```yaoxiang
 # Basic types are all Sync
@@ -1060,7 +1060,7 @@ type Counter = Counter(value: Int, mutex: Mutex(Int))
 #### 5.5.3 spawn and Thread Safety
 
 ```yaoxiang
-# spawn requires parameters and return value to satisfy Send
+# spawn requires parameters and return values to satisfy Send
 
 # Valid: Data is Send
 type Data = Data(value: Int)
@@ -1068,7 +1068,7 @@ task = spawn(|| => Data(42))
 
 # Invalid: Rc is not Send
 type SharedData = SharedData(rc: Rc(Int))
-# task = spawn(|| => SharedData(Rc.new(42))  # Compile error!
+# task = spawn(|| => SharedData(Rc.new(42)))  # Compile error!
 
 # Solution: Use Arc (atomic reference counting)
 type SafeData = SafeData(value: Arc(Int))
@@ -1078,7 +1078,7 @@ task = spawn(|| => SafeData(Arc.new(42)))  # Arc is Send + Sync
 #### 5.5.4 Thread Safety Type Derivation Rules
 
 ```yaoxiang
-# Struct type
+# Struct types
 type Struct(T1, T2) = Struct(f1: T1, f2: T2)
 
 # Send derivation
@@ -1087,7 +1087,7 @@ Struct(T1, T2): Send ⇐ T1: Send 且 T2: Send
 # Sync derivation
 Struct(T1, T2): Sync ⇐ T1: Sync 且 T2: Sync
 
-# Union type
+# Union types
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
 # Send derivation
@@ -1096,16 +1096,15 @@ Result(T, E): Send ⇐ T: Send 且 E: Send
 
 #### 5.5.5 Standard Library Thread Safety Implementation
 
-| Type | Send | Sync | Description | |
-|------|:----:|:----:|------| |
-| `Int`, `Float`, `Bool` | ✅ | ✅ | Primitive types | |
-| `Arc(T)` | ✅ | ✅ | T: Send + Sync | |
-| `Mutex(T)` | ✅ | ✅ | T: Send | |
-| `RwLock(T)` | ✅ | ✅ | T: Send | |
-| `Channel(T)` | ✅ | ❌ | Only sender end is Send | |
-| `Rc(T)` | ❌ | ❌ | Non-atomic reference counting | |
-| `RefCell(T)` | ❌ | ❌ | Runtime borrow checking | |
-
+| Type | Send | Sync | Description |
+|------|:----:|:----:|-------------|
+| `Int`, `Float`, `Bool` | ✅ | ✅ | Primitive types |
+| `Arc(T)` | ✅ | ✅ | T: Send + Sync |
+| `Mutex(T)` | ✅ | ✅ | T: Send |
+| `RwLock(T)` | ✅ | ✅ | T: Send |
+| `Channel(T)` | ✅ | ❌ | Only sender end is Send |
+| `Rc(T)` | ❌ | ❌ | Non-atomic reference counting |
+| `RefCell(T)` | ❌ | ❌ | Runtime borrow checking |
 
 ```yaoxiang
 # Thread-safe counter example
@@ -1131,7 +1130,7 @@ main: () -> Void = () => {
 
 ```yaoxiang
 # Use @block annotation to mark operations that block OS threads
-# Runtime will assign them to a dedicated blocking thread pool
+# Runtime assigns them to a dedicated blocking thread pool
 
 @block
 read_large_file: (path: String) -> String = {
@@ -1146,7 +1145,7 @@ read_large_file: (path: String) -> String = {
 
 ## 6. Module System
 
-### 6.1 Module Definition
+### 6.1 Module Definitions
 
 ```yaoxiang
 # Modules use files as boundaries
@@ -1155,7 +1154,7 @@ pub pi: Float = 3.14159
 pub sqrt: (x: Float) -> Float = { ... }
 ```
 
-### 6.2 Module Import
+### 6.2 Module Imports
 
 ```yaoxiang
 # Import entire module
@@ -1172,19 +1171,19 @@ use std.io.{ read_file, write_file }
 
 ## 7. Method Binding and Currying
 
-YaoXiang adopts a **pure functional design**, achieving seamless method calls and currying through an advanced binding mechanism, without introducing keywords like `struct` or `class`.
+YaoXiang adopts a **pure functional design**, achieving seamless method calls and currying through advanced binding mechanisms, without introducing keywords like `struct`, `class`, etc.
 
-### 7.1 Core Function Definition
+### 7.1 Core Function Definitions
 
 All operations are implemented through ordinary functions, with the first parameter conventionally being the subject of the operation:
 
 ```yaoxiang
 # === Point.yx (module) ===
 
-# Unified syntax: constructor is type
+# Unified syntax: constructors are types
 type Point = { x: Float, y: Float }
 
-# Core function: first parameter is the subject
+# Core functions: first parameter is the subject
 distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1199,7 +1198,7 @@ scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
-# More complex function
+# More complex functions
 distance_with_scale: (s: Float, p1: Point, p2: Point) -> Float = {
     dx = (p1.x - p2.x) * s
     dy = (p1.y - p2.y) * s
@@ -1209,16 +1208,16 @@ distance_with_scale: (s: Float, p1: Point, p2: Point) -> Float = {
 
 ### 7.2 Basic Method Binding
 
-#### 7.2.1 Automatic Binding (MoonBit style)
+#### 7.2.1 Automatic Binding (MoonBit Style)
 
-YaoXiang supports automatic binding based on namespaces, **without any additional declarations**:
+YaoXiang supports automatic binding based on namespaces, **without any extra declarations**:
 
 ```yaoxiang
 # === Point.yx ===
 
 type Point = { x: Float, y: Float }
 
-# Core function
+# Core functions
 distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1238,12 +1237,12 @@ main: () -> Void = {
 }
 ```
 
-**Automatic binding rules**:
+**Automatic Binding Rules**:
 - Functions defined within a module
 - If the first parameter type matches the module name
-- Then automatically supports method call syntax
+- Then automatically support method call syntax
 
-#### 7.2.2 No Binding Option (Default Behavior)
+#### 7.2.2 No-Binding Option (Default Behavior)
 
 ```yaoxiang
 # === Vector.yx ===
@@ -1266,13 +1265,13 @@ main: () -> Void = {
     # ❌ Cannot bind: non-pub functions don't auto-bind
     # v1.dot_product_internal(v2)  # Compile error!
 
-    # ✅ Must call directly (not visible outside module)
+    # ✅ Must call directly (invisible outside module)
 }
 ```
 
 ### 7.3 Position-Based Binding Syntax
 
-YaoXiang provides the **most elegant binding syntax**, using position markers `[n]` for precise control over binding positions:
+YaoXiang provides the **most elegant binding syntax**, using position markers `[n]` to precisely control binding positions:
 
 #### 7.3.1 Basic Syntax
 
@@ -1281,7 +1280,7 @@ YaoXiang provides the **most elegant binding syntax**, using position markers `[
 
 type Point = { x: Float, y: Float }
 
-# Core function
+# Core functions
 distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1302,10 +1301,11 @@ Point.add = add[0]                 # Bind to 1st parameter
 Point.scale = scale[0]             # Bind to 1st parameter
 ```
 
-**Semantic parsing**:
-- `distance` function has two parameters: `distance(Point, Point)`
-- `[0]` means the caller is bound to the 1st parameter
-- Usage: `p1.distance(p2)` → `distance(p1, p2)`
+**Semantic Analysis**:
+- `Point.distance = distance[0]`
+  - `distance` function has two parameters: `distance(Point, Point)`
+  - `[0]` means caller binds to 1st parameter
+  - Usage: `p1.distance(p2)` → `distance(p1, p2)`
 
 #### 7.3.2 Multi-Position Combined Binding
 
@@ -1331,17 +1331,17 @@ use Point
 p1 = Point(3.0, 4.0)
 p2 = Point(1.0, 2.0)
 
-# 1. Binding[1,2] - remaining 3,4,5
+# 1. Bind[1,2] - remaining 3,4,5
 f1 = p1.calc1(2.0)  # Bind scale=2.0, point1=p1
 # f1 now needs p2, x, y
 result1 = f1(p2, 10.0, 20.0)  # calculate(2.0, p1, p2, 10.0, 20.0)
 
-# 2. Binding[1,3] - remaining 2,4,5
+# 2. Bind[1,3] - remaining 2,4,5
 f2 = p2.calc2(2.0)  # Bind scale=2.0, point2=p2
 # f2 now needs point1, x, y
 result2 = f2(p1, 10.0, 20.0)  # calculate(2.0, p1, p2, 10.0, 20.0)
 
-# 3. Binding[2,3] - remaining 1,4,5
+# 3. Bind[2,3] - remaining 1,4,5
 f3 = p1.calc3(p2)  # Bind point1=p1, point2=p2
 # f3 now needs scale, x, y
 result3 = f3(2.0, 10.0, 20.0)  # calculate(2.0, p1, p2, 10.0, 20.0)
@@ -1349,7 +1349,7 @@ result3 = f3(2.0, 10.0, 20.0)  # calculate(2.0, p1, p2, 10.0, 20.0)
 
 #### 7.3.3 Remaining Parameter Fill Order
 
-**Core rule**: After binding, remaining parameters are filled in **the original function's order**, skipping bound positions.
+**Core Rule**: After binding, remaining parameters are filled in **the original function's order**, skipping already bound positions.
 
 ```yaoxiang
 # Assume function: func(p1, p2, p3, p4, p5)
@@ -1357,10 +1357,10 @@ result3 = f3(2.0, 10.0, 20.0)  # calculate(2.0, p1, p2, 10.0, 20.0)
 # Bind 1st and 3rd parameters
 Type.method = func[1, 3]
 
-# At call site:
+# When calling:
 method(p2_value, p4_value, p5_value)
 
-# Maps to:
+# Mapped to:
 func(p1_bound, p2_value, p3_bound, p4_value, p5_value)
 # Remaining parameters: 2,4,5 filled in original order
 ```
@@ -1368,14 +1368,14 @@ func(p1_bound, p2_value, p3_bound, p4_value, p5_value)
 #### 7.3.4 Type Checking Advantages
 
 ```yaoxiang
-# ✅ Valid binding
+# ✅ Legal binding
 Point.distance = distance[0]          # distance(Point, Point)
 Point.calc = calculate[1, 2]          # calculate(scale, Point, Point, ...)
 
-# ❌ Invalid binding (compiler error)
+# ❌ Illegal binding (compiler error)
 Point.wrong = distance[5]             # 5th parameter doesn't exist
 Point.wrong = distance[0]             # Parameters start from 1
-Point.wrong = distance[1, 2, 3, 4]    # Exceeds number of function parameters
+Point.wrong = distance[1, 2, 3, 4]    # Exceeds function parameter count
 ```
 
 ### 7.4 Fine-Grained Control of Curried Binding
@@ -1389,7 +1389,7 @@ distance_with_scale: (scale: Float, a: Point, b: Point) -> Float = { ... }
 
 type Point = { x: Float, y: Float }
 
-# Binding strategy: flexible control over each position
+# Binding strategy: flexibly control each position
 Point.distance = distance[0]                    # Basic binding
 Point.distance_scaled = distance_with_scale[2]  # Bind to 2nd parameter
 
@@ -1401,11 +1401,11 @@ use Math
 p1 = Point(3.0, 4.0)
 p2 = Point(1.0, 2.0)
 
-# 1. Basic automatic binding
+# 1. Basic auto-binding
 d1 = p1.distance(p2)  # distance(p1, p2)
 
 # 2. Bind to different positions
-f = p1.distance_scaled(2.0)  # Bind 2nd parameter, remaining 1st, 3rd
+f = p1.distance_scaled(2.0)  # Bind 2nd parameter, remaining 1st,3rd
 result = f(p2)               # distance_with_scale(2.0, p1, p2)
 
 # 3. Chained binding
@@ -1419,7 +1419,7 @@ d2 = p1.distance(p2).distance_scaled(2.0)  # Chained calls
 
 type Point = { x: Float, y: Float }
 
-# Core function
+# Core functions
 distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1432,14 +1432,14 @@ scale: (p: Point, s: Float) -> Point = {
     Point(p.x * s, p.y * s)
 }
 
-# Automatic binding (core)
+# Auto-binding (core)
 Point.distance = distance[0]
 Point.add = add[0]
 Point.scale = scale[0]
 
 # === Math.yx ===
 
-# Global function
+# Global functions
 multiply_by_scale: (scale: Float, a: Point, b: Point) -> Float = { ... }
 
 # === main.yx ===
@@ -1469,14 +1469,14 @@ m = p1.multiply(2.0, p2)     # multiply_by_scale(2.0, p1, p2)
 
 type Point = { x: Float, y: Float }
 
-# Non-pub function
+# Non-pub functions
 internal_distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# pub function
+# pub functions
 pub distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
@@ -1487,21 +1487,21 @@ pub distance: (a: Point, b: Point) -> Float = {
 
 use Point
 
-# Automatic binding only works for pub functions
+# Auto-binding only works for pub functions
 p1.distance(p2)      # ✅ distance is pub, can auto-bind
 # p1.internal_distance(p2)  # ❌ Not pub, cannot bind
 ```
 
-#### 7.6.2 pub Automatic Binding Mechanism
+#### 7.6.2 pub Auto-Binding Mechanism
 
-Functions declared with `pub`, the compiler automatically binds them to types defined in the same file:
+For functions declared with `pub`, the compiler automatically binds them to types defined in the same file:
 
 ```yaoxiang
 # === Point.yx ===
 
 type Point = { x: Float, y: Float }
 
-# Using pub declaration, compiler auto-binds
+# Declare with pub, compiler automatically binds
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -1512,7 +1512,7 @@ pub translate: (self: Point, dx: Float, dy: Float) -> Point = {
     Point(self.x + dx, self.y + dy)
 }
 
-# Compiler automatically infers and executes binding:
+# Compiler automatically infers and executes bindings:
 # Point.distance = distance[0]
 # Point.translate = translate[0]
 
@@ -1526,12 +1526,12 @@ p2 = Point(1.0, 2.0)
 # ✅ Functional call
 d = distance(p1, p2)
 
-# ✅ OOP syntax sugar (automatic binding)
+# ✅ OOP syntax sugar (auto-binding)
 d2 = p1.distance(p2)
 p3 = p1.translate(1.0, 1.0)
 ```
 
-**Automatic binding rules**:
+**Auto-Binding Rules**:
 1. Function is defined in the module file (same file as type)
 2. Function parameters contain that type
 3. Exported with `pub`
@@ -1539,10 +1539,10 @@ p3 = p1.translate(1.0, 1.0)
 
 **Benefits**:
 - No need to manually write binding declarations
-- More concise code
+- Code is cleaner
 - Avoids binding omissions or errors
 
-#### 7.6.3 Module-Level Binding
+#### 7.6.3 Binding Within Modules
 
 ```yaoxiang
 # === Point.yx ===
@@ -1556,34 +1556,34 @@ distance: (a: Point, b: Point) -> Float = {
 }
 
 # Inside module, all functions are visible
-# But automatic binding only works externally for pub-exported functions
+# But auto-binding only applies to pub-exported functions outside
 
-pub distance  # Export, available externally with auto-binding
+pub distance  # Export, usable with auto-binding outside
 ```
 
 ### 7.7 Design Advantages Summary
 
-| Feature | Description | |
-|------|------|------|
-| **Zero syntax burden** | Automatic binding requires no declarations | |
-| **Precise position control** | `[n]` precisely specifies binding position | |
-| **Multi-position combined** | Supports `[1, 2, 3]` multi-parameter binding | |
-| **Type-safe** | Compiler validates binding position validity | |
-| **No keywords** | No `bind` or other keywords needed | |
-| **Flexible currying** | Supports arbitrary position parameter binding | |
-| **pub control** | Only pub functions can bind externally | |
+| Feature | Description |
+|---------|-------------|
+| **Zero syntax burden** | Auto-binding without any declarations |
+| **Precise position control** | `[n]` precisely specifies binding position |
+| **Multi-position combination** | Supports `[1, 2, 3]` multi-parameter binding |
+| **Type safety** | Compiler validates binding position validity |
+| **No keywords** | No `bind` or other keywords needed |
+| **Flexible currying** | Supports arbitrary position parameter binding |
+| **pub control** | Only pub functions can be bound externally |
 
 ### 7.8 Difference from Traditional Method Binding
 
-| Traditional language | YaoXiang | |
-|---------|----------|------|
-| `obj.method(arg)` | `obj.method(arg)` | |
-| Needs class/method definition | Only function + binding declaration needed | |
-| Syntax `class { method() {} }` | Syntax `Type.method = func[n]` | |
-| Inheritance, polymorphism | Pure functional, no inheritance | |
-| Method table lookup | Compile-time binding, no runtime overhead | |
+| Traditional Language | YaoXiang |
+|---------------------|----------|
+| `obj.method(arg)` | `obj.method(arg)` |
+| Need class/method definition | Only function + binding declaration needed |
+| Syntax `class { method() {} }` | Syntax `Type.method = func[n]` |
+| Inheritance, polymorphism | Pure functional, no inheritance |
+| Method table lookup | Compile-time binding, no runtime overhead |
 
-**Core advantage**: YaoXiang's binding is a **compile-time mechanism**, zero runtime cost, while maintaining the purity and flexibility of functional programming.
+**Core Advantage**: YaoXiang's binding is a **compile-time mechanism**, zero runtime cost, while maintaining the purity and flexibility of functional programming.
 
 ---
 
@@ -1609,50 +1609,50 @@ YaoXiang's syntax design specifically considers the needs of AI code generation 
 ```yaoxiang
 # === AI Code Generation Best Practices ===
 
-# ✅ Recommended: Use complete new syntax declaration + centralized type convention
-# AI can accurately understand intent, generates complete type information
+# ✅ Recommended: Use complete new syntax declaration + type-centralized convention
+# AI can accurately understand intent, generate complete type information
 
 add: (a: Int, b: Int) -> Int = a + b
 inc: (x: Int) -> Int = x + 1
 empty: () -> Void = {}
 
-# ❌ Avoid: Omitting type annotations or scattering types
+# ❌ Avoid: Omit type annotations or scatter types
 # AI cannot determine parameter types, may generate incorrect code
 add: (a: Int, b: Int) -> Int = a + b          # Parameters without type
 identity: (T: Type) -> ((x: T) -> T) = x              # Parameters without type
 add2: (a: Int, b: Int) -> Int = a + b  # Types scattered in implementation
 
-# ⚠️ Compatibility: Old syntax only for maintenance
-# AI should prioritize generating new syntax + centralized type convention
+# ⚠️ Compat: Old syntax only for maintenance
+# AI should prioritize generating new syntax + type-centralized convention
 mul(Int, Int) -> Int = (a, b) => a * b  # Not recommended for new code
 ```
 
-**AI advantages of centralized type convention:**
+**AI Advantages of Type-Centralized Convention:**
 
-1. **Signature at a glance**: AI only needs to read the declaration line to understand the complete function signature
-2. **Safer modifications**: Modifying types only requires changing the declaration, without affecting the implementation body
+1. **Signatures at a glance**: AI only needs to read the declaration line to understand the complete function signature
+2. **Safer modifications**: Modifying types only requires changing the declaration, not the implementation body
 3. **Simpler generation**: AI can first generate declarations, then fill in implementations
-4. **Currying-friendly**: Clear curried type signatures are easy for AI to handle
+4. **Currying-friendly**: Clear curried type signatures are easy for AI to process
 
 ```yaoxiang
 # AI processing example
-# Input: implementation body (a, b) => a + b
+# Input: Implementation body (a, b) => a + b
 # AI sees declaration: add: (Int, Int) -> Int
-# Conclusion: parameter types are Int, Int, return type is Int
+# Conclusion: Parameter types are Int, Int, return type is Int
 
-# Comparison: scattered types
-# Input: implementation body (a: Int, b: Int) => a + b
-# AI needs: analyze implementation body to extract type information
-# Result: more complex processing logic, error-prone
+# Contrast: scattered type method
+# Input: Implementation body (a: Int, b: Int) => a + b
+# AI needs: Analyze implementation body to extract type information
+# Result: More complex processing logic, error-prone
 ```
 
 #### 8.2.2 Dual Syntax Strategy and AI
 
-| Syntax type | AI generation strategy | Use case | |
-|---------|-----------|---------| |
-| **New syntax** | ✅ Prioritize generation, complete type information | All new code generation | |
-| **Old syntax** | ⚠️ Only when maintaining old code | Historical code modification | |
-| **No annotation** | ❌ Avoid generating | Any situation should not generate | |
+| Syntax Type | AI Generation Strategy | Use Case |
+|-------------|------------------------|----------|
+| **New syntax** | ✅ Generate preferentially, complete type information | All new code generation |
+| **Old syntax** | ⚠️ Only when maintaining old code | Historical code modification |
+| **No annotation** | ❌ Avoid generating | Any situation should not generate |
 
 #### 8.2.3 Clear Syntax Boundaries
 
@@ -1669,12 +1669,12 @@ function_name: (Type1, Type2) -> ReturnType = (param1, param2) => {
     }
 }
 
-# ✅ Condition statements must have braces
+# ✅ Conditional statements must have braces
 if condition {
-    # Condition body
+    # Conditional body
 }
 
-# ✅ Type definitions are explicit
+# ✅ Clear type definitions
 type MyType = Type1 | Type2
 
 # ❌ Ambiguous写法 avoided
@@ -1694,12 +1694,12 @@ my_list = [1, 2, 3]
 
 # ❌ Wrong (forbidden)
 foo T { T }             # Parameters must have parentheses
-my_list = [1 2 3]       # List must have commas
+my_list = [1 2 3]       # Lists must have commas
 
-# 2. Return type or inferrable form must be explicit
+# 2. Must be explicit return type or inferrable form
 # ✅ Correct
 get_num: () -> Int = 42
-get_num2: () = 42          # Return type can be inferred
+get_num2: () = 42          # Return type inferrable
 
 # ❌ Wrong
 get_bad = () => { 42 }           # Block has no return, cannot infer
@@ -1725,7 +1725,7 @@ function_name: (param1: ParamType1, param2: ParamType2, ...) -> ReturnType = {
     return expression
 }
 
-# Pattern 2: Return type inferred
+# Pattern 2: Return type inference
 function_name: (param1: ParamType1, param2: ParamType2) = {
     # Function body
     return expression
@@ -1741,7 +1741,7 @@ function_name: () -> ReturnType = expression
 function_name: () -> Void = {}
 ```
 
-### 8.3 AI-Friendly Error Messages
+### 8.3 AI Friendliness of Error Messages
 
 ```yaoxiang
 # Error messages should provide clear correction suggestions
@@ -1757,17 +1757,17 @@ function_name: () -> Void = {}
 
 ---
 
-## 9. Centralized Type Convention (Core Design Philosophy)
+## 9. Type-Centralized Convention (Core Design Philosophy)
 
 ### 9.1 Convention Overview
 
-YaoXiang's core design convention is **"declaration first, centralized type notation"**. This convention is the foundation of the language's AI-friendliness and development efficiency.
+The core design convention of YaoXiang is **"declaration-first, type-centralized"**. This convention is the cornerstone of the language's AI friendliness and development efficiency.
 
 ```yaoxiang
-# ✅ Core convention: Type information unified in the declaration line
+# ✅ Core convention: Type information unified on the declaration line
 add: (a: Int, b: Int) -> Int = a + b
 
-# ❌ Avoid: Type information scattered in implementation
+# ❌ Avoid: Type information scattered in the implementation
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
@@ -1791,36 +1791,36 @@ add: (a: Int, b: Int) -> Int = a + b
 #   Complete function signature
 
 # Implementation body focuses on business logic
-# (a, b) => a + b  No need to care about types, just implement functionality
+# (a, b) => a + b  No need to worry about types, only implement functionality
 ```
 
 #### 3. AI Friendliness
 ```yaoxiang
 # AI processing flow:
 # 1. Read declaration line → Completely understand function signature
-# 2. Generate implementation → No need to analyze type inference
+# 2. Generate implementation → No need for type inference analysis
 # 3. Modify types → Only change declaration line, no impact on implementation
 
-# Comparison: scattered type approach
+# Contrast: scattered type method
 add: (a: Int, b: Int) -> Int = a + b
-# AI needs: analyze implementation body to extract type information → More complex, error-prone
+# AI needs: Analyze implementation body to extract type information → More complex, error-prone
 ```
 
 #### 4. Safer Modifications
 ```yaoxiang
-# Modify parameter types
+# Modifying parameter types
 # Original: add: (a: Int, b: Int) -> Int = a + b
 # Modified: add: (Float, Float) -> Float = (a, b) => a + b
-# Implementation body: (a, b) => a + b  No modification needed!
+# Implementation: (a, b) => a + b  No modification needed!
 
 # If types are scattered:
 # Original: add: (a: Int, b: Int) -> Int = a + b
-# Modified: add: (a: Float, b: Float) -> Float = a + b  # Need to change in two places
+# Modified: add: (a: Float, b: Float) -> Float = a + b  # Need to change two places
 ```
 
-#### 5. Currying Friendly
+#### 5. Currying-Friendly
 ```yaoxiang
-# Curried type is clear at a glance
+# Curried types at a glance
 add_curried: (a: Int) -> (b: Int) -> Int = a + b
 #              └─────────────┘
 #              Curried signature
@@ -1831,7 +1831,7 @@ compose: (Int -> Int, Int -> Int) -> Int -> Int = (f, g) => x => f(g(x))
 
 ### 9.3 Convention Implementation Rules
 
-#### Rule 1: Parameters must specify types in the declaration
+#### Rule 1: Parameters must have types specified in the declaration
 ```yaoxiang
 # ✅ Correct
 add: (a: Int, b: Int) -> Int = a + b
@@ -1853,22 +1853,22 @@ get_num: () = () => 42
 empty: () = () => {}
 ```
 
-#### Rule 3: Type annotations inside Lambda are temporary
+#### Rule 3: Lambda internal type annotations are temporary
 ```yaoxiang
 # ✅ Correct: Rely on types in declaration
 add: (a: Int, b: Int) -> Int = a + b
 
-# ⚠️ Can but not recommended: Repeat annotation in Lambda
+# ⚠️ Acceptable but not recommended: Repeat annotation in Lambda
 add: (Int, Int) -> Int = (a: Int, b: Int) => a + b
 
 # ❌ Wrong: Missing declaration annotation
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
-#### Rule 4: Old syntax follows the same principle
+#### Rule 4: Old syntax follows the same philosophy
 ```yaoxiang
-# Old syntax should also provide type information in declaration position as much as possible
-# Although format is different, principle is consistent:
+# Old syntax should also provide type information at declaration position as much as possible
+# Although format differs, philosophy is consistent:
 # - Declaration line contains main type information
 # - Implementation body is relatively concise
 add(Int, Int) -> Int = (a, b) => a + b
@@ -1877,7 +1877,7 @@ add(Int, Int) -> Int = (a, b) => a + b
 ### 9.4 Relationship Between Convention and Type Inference
 
 ```yaoxiang
-# Convention does not prevent type inference, but guides inference direction
+# Convention doesn't prevent type inference, it guides inference direction
 
 # 1. Complete annotation (no inference)
 add: (a: Int, b: Int) -> Int = a + b
@@ -1889,9 +1889,9 @@ add: (Int, Int) = (a, b) => a + b  # Return type inferred
 empty: () = () => {}  # Inferred as () -> Void
 ```
 
-### 9.5 AI Implementation Advantages of the Convention
+### 9.5 Convention's AI Implementation Advantages
 
-**AI code generation flow:**
+**AI Code Generation Flow:**
 
 1. **Read requirements** → Generate declaration
    ```
@@ -1910,10 +1910,10 @@ empty: () = () => {}  # Inferred as () -> Void
    Implementation: (a, b) => a + b  Remains unchanged
    ```
 
-**Comparison: AI processing without convention:**
+**Contrast AI processing without convention:**
 ```
 Requirement: addition function
-AI needs to:
+AI needs:
   1. Infer parameter types
   2. Infer return type
   3. Generate implementation body
@@ -1927,34 +1927,34 @@ Result: More complex, more error-prone
 
 This convention embodies YaoXiang's core philosophy:
 
-- **Declaration as documentation**: Declaration line is the complete function documentation
-- **Type as contract**: Type information is the contract between caller and implementer
-- **Logic as implementation**: Implementation body only focuses on "what to do", not "what type"
-- **Tool as assistance**: Type system, AI tools can all work based on clear declarations
+- **Declaration is documentation**: Declaration line is the complete function documentation
+- **Type is contract**: Type information is the contract between caller and implementer
+- **Logic is implementation**: Implementation body only focuses on "what to do", not "what type"
+- **Tools are aids**: Type system, AI tools can all work based on clear declarations
 
 ### 9.7 Practical Application Comparison
 
-#### Complete example: Calculator module
+#### Complete Example: Calculator Module
 
 ```yaoxiang
-# === Recommended approach: Centralized type convention ===
+# === Recommended approach: Type-centralized convention ===
 
 # Module declarations
 pub add: (a: Int, b: Int) -> Int = a + b
 pub multiply: (a: Int, b: Int) -> Int = a * b
 
-# Higher-order function
+# Higher-order functions
 pub apply_twice: (f: Int -> Int, x: Int) -> Int = f(f(x))
 
-# Curried function
+# Curried functions
 pub make_adder: (x: Int) -> (Int) -> Int = y => x + y
 
-# Generic function
+# Generic functions
 pub map: (A: Type, B: Type) -> ((f: (A) -> B, xs: List(A)) -> List(B)) = case xs of
   [] => []
   (x :: rest) => f(x) :: map(f, rest)
 
-# Type definition
+# Type definitions
 type Point = { x: Float, y: Float }
 pub distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
@@ -1971,7 +1971,7 @@ multiply = (a: Int, b: Int) => a * b
 # Higher-order function types scattered
 apply_twice = (f: (Int) -> Int, x: Int) => f(f(x))
 
-# Curried function types scattered
+# Curried types scattered
 make_adder = (x: Int) => (y: Int) => x + y
 
 # Generic types scattered
@@ -1985,11 +1985,11 @@ map: (A: Type, B: Type) -> ((f: (A) -> B, xs: List(A)) -> List(B)) = case xs of
 ```yaoxiang
 # Requirement: Change add from Int to Float
 
-# === Recommended approach: Only need to change declaration line ===
+# === Recommended approach: Only change declaration line ===
 # Original
 add: (a: Int, b: Int) -> Int = a + b
 
-# After modification
+# Modified
 add: (a: Float, b: Float) -> Float = a + b
 #              ↑↑↑↑↑↑↑↑↑          ↑↑↑↑↑↑↑
 #              Declaration modified          Implementation unchanged
@@ -1998,7 +1998,7 @@ add: (a: Float, b: Float) -> Float = a + b
 # Original
 add: (a: Int, b: Int) -> Int = a + b
 
-# After modification
+# Modified
 add: (a: Float, b: Float) -> Float = a + b
 #     ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 #     All parameter types need modification
@@ -2007,9 +2007,9 @@ add: (a: Float, b: Float) -> Float = a + b
 #### AI-Assisted Programming Comparison
 
 ```yaoxiang
-# AI requirement: Implement a function calculating Manhattan distance between two points
+# AI requirement: Implement a function to calculate Manhattan distance between two points
 
-# === AI sees recommended style ===
+# === When AI sees recommended写法 ===
 type Point = { x: Float, y: Float }
 pub manhattan: (a: Point, b: Point) -> Float = ???  # AI directly knows complete signature
 
@@ -2018,7 +2018,7 @@ pub manhattan: (a: Point, b: Point) -> Float = {
     (a.x - b.x).abs() + (a.y - b.y).abs()
 }
 
-# === AI sees not recommended style ===
+# === When AI sees not recommended写法 ===
 type Point = { x: Float, y: Float }
 pub manhattan = ???  # AI needs to infer: parameter types? return type?
 
@@ -2033,13 +2033,13 @@ pub manhattan = (a: Point, b: Point) => Float => {
 
 When writing YaoXiang code, you can use the following checklist:
 
-- [ ] All function declarations have complete type annotations in the declaration line
-- [ ] Parameter types specified in declaration, not in Lambda
-- [ ] Return types annotated in declaration as much as possible
+- [ ] All function declarations have complete type annotations on the declaration line
+- [ ] Parameter types are specified in the declaration, not in Lambda
+- [ ] Return types are annotated in the declaration as much as possible
 - [ ] Variable declarations use `name: Type = value` format
-- [ ] Lambda bodies are concise, without repeating type information
-- [ ] Using new syntax rather than old syntax
-- [ ] Complex types use type definitions, keeping declarations clear
+- [ ] Lambda body is concise, not duplicating type information
+- [ ] Use new syntax instead of old syntax
+- [ ] Complex types use type definitions, keep declarations clear
 
 ---
 
@@ -2067,14 +2067,14 @@ Hello, YaoXiang!
 
 ```yaoxiang
 # Variables and types
-x = 42                    # Automatically inferred as Int
-name = "YaoXiang"         # Automatically inferred as String
-pi = 3.14159              # Automatically inferred as Float
+x = 42                    # Auto-inferred as Int
+name = "YaoXiang"         # Auto-inferred as String
+pi = 3.14159              # Auto-inferred as Float
 
-# Function (using new syntax)
+# Functions (using new syntax)
 add: (a: Int, b: Int) -> Int = a + b
 
-# Condition
+# Conditionals
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -2083,7 +2083,7 @@ if x > 0 {
     "negative"
 }
 
-# Loop
+# Loops
 for i in 0..10 {
     print(i)
 }
@@ -2096,14 +2096,14 @@ for i in 0..10 {
 
 type Point = { x: Float, y: Float }
 
-# Core function
+# Core functions
 distance: (a: Point, b: Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
     (dx * dx + dy * dy).sqrt()
 }
 
-# Automatic binding
+# Auto-binding
 Point.distance = distance[0]
 
 # === main.yx ===
@@ -2154,9 +2154,9 @@ result2 = p1.distance_scaled(2.0, p2)
 
 ### 10.5 Next Steps
 
-- Read the [Language Specification](./YaoXiang-language-specification.md) for complete syntax
-- Check out [Example Code](./examples/) to learn common patterns
-- Reference the [Implementation Plan](./YaoXiang-implementation.md) for technical details
+- Read [Language Specification](./YaoXiang-language-specification.md) for complete syntax
+- Check [Example Code](./examples/) to learn common patterns
+- Reference [Implementation Plan](./YaoXiang-implementation.md) for technical details
 
 ---
 
@@ -2164,31 +2164,31 @@ result2 = p1.distance_scaled(2.0, p2)
 
 ### A. Keywords and Annotations
 
-| Keyword | Function | |
-|--------|------|------|
-| `type` | Type definition | |
-| `pub` | Public export | |
-| `use` | Import module | |
-| `spawn` | Async marker (function/block/loop) | |
-| `ref` | Immutable reference | |
-| `mut` | Mutable reference | |
-| `if/elif/else` | Conditional branch | |
-| `match` | Pattern matching | |
-| `while/for` | Loop | |
-| `return/break/continue` | Control flow | |
-| `as` | Type casting | |
-| `in` | Member access | |
+| Keyword | Purpose |
+|---------|---------|
+| `type` | Type definition |
+| `pub` | Public export |
+| `use` | Import module |
+| `spawn` | Async marker (function/block/loop) |
+| `ref` | Immutable reference |
+| `mut` | Mutable reference |
+| `if/elif/else` | Conditional branches |
+| `match` | Pattern matching |
+| `while/for` | Loops |
+| `return/break/continue` | Control flow |
+| `as` | Type casting |
+| `in` | Member access |
 
-| Annotation | Function | |
-|------|------|------|
-| `@block` | Mark as fully synchronous code | |
-| `@eager` | Mark expression that needs eager evaluation | |
-| `@Send` | Explicitly declare satisfying Send constraint | |
-| `@Sync` | Explicitly declare satisfying Sync constraint | |
+| Annotation | Purpose |
+|------------|---------|
+| `@block` | Mark as fully synchronous code |
+| `@eager` | Mark expressions that need eager evaluation |
+| `@Send` | Explicitly declare satisfying Send constraint |
+| `@Sync` | Explicitly declare satisfying Sync constraint |
 
-### B. Design Inspirations
+### B. Design Inspiration
 
-- **Rust**: Ownership model, zero-cost abstraction
+- **Rust**: Ownership model, zero-cost abstractions
 - **Python**: Syntax style, readability
 - **Idris/Agda**: Dependent types, type-driven development
 - **TypeScript**: Type annotations, runtime types
@@ -2197,16 +2197,15 @@ result2 = p1.distance_scaled(2.0, p2)
 
 ## Version History
 
-| Version | Date | Author | Change Description | |
-|------|------|------|---------| |
-| v1.0.0 | 2024-12-31 | Chen Xu | Initial version | |
-| v1.1.0 | 2025-01-04 | Mo Yu Jiang | Fixed generics syntax to `[T]` (not `<T>`); Removed `fn` keyword; Updated function definition examples | |
-| v1.2.0 | 2025-01-06 | Chen Xu | Unified to new syntax format: name: type -> type = lambda | |
-| v1.3.0 | 2025-01-20 | Chen Xu | Added unified type syntax (RFC-010): interface definition using braces `{ serialize: () -> String }`; List interface names at type end to implement interfaces; `pub` automatic binding mechanism | |
+| Version | Date | Author | Change Description |
+|---------|------|--------|-------------------|
+| v1.0.0 | 2024-12-31 | 晨煦 (Chen Xu) | Initial version |
+| v1.1.0 | 2025-01-04 | 沫郁酱 (Mo Yu Jiang) | Fixed generic syntax to `[T]` (instead of `<T>`); Removed `fn` keyword; Updated function definition examples |
+| v1.2.0 | 2025-01-06 | 晨煦 (Chen Xu) | Unified to new syntax format: name: type -> type = lambda |
+| v1.3.0 | 2025-01-20 | 晨煦 (Chen Xu) | Added unified type syntax (RFC-010): interface definitions use braces `{ serialize: () -> String }`; list interface names at the end of type to implement interfaces; `pub` auto-binding mechanism |
 
 ---
 
-> "The Tao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to all things."
-> — *Tao Te Ching*
+> "道生一，一生二，二生三，三生万物。" ———《道德经》 (The Tao gives birth to the One, the One gives birth to the Two, the Two gives birth to the Three, the Three gives birth to the ten thousand things.)
 >
 > Types are like the Tao, from which all things are born.

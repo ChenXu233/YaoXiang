@@ -1,18 +1,18 @@
 ---
-title: Package Manager
+title: "Package Manager"
 description: YaoXiang Official Package Manager Tutorial
 ---
 
 # Package Manager
 
-YaoXiang's built-in package manager providing complete dependency management functionality.
+The built-in package manager in YaoXiang, providing complete dependency management functionality.
 
 ## Overview
 
 YaoXiang Package Manager (YPM) uses declarative dependency management:
 
 - Declare project dependencies in `yaoxiang.toml`
-- `yaoxiang.lock` locks exact versions to ensure reproducible builds
+- `yaoxiang.lock` locks exact versions, ensuring reproducible builds
 - Dependencies are downloaded to the `vendor` directory
 
 ## Quick Start
@@ -56,15 +56,15 @@ Initialize a new project.
 yaoxiang init <name>
 ```
 
-### Parameters
+### Arguments
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Argument | Type | Description |
+|----------|------|-------------|
 | `name` | string | Project name |
 
 ### Description
 
-Creates a new YaoXiang project in the current directory or at the specified path.
+Create a new YaoXiang project in the current directory or at the specified path.
 
 ### Created Files
 
@@ -73,7 +73,7 @@ Creates a new YaoXiang project in the current directory or at the specified path
 - `src/main.yx` - Entry file
 - `.gitignore` - Git ignore configuration
 
-### Examples
+### Example
 
 ```bash
 # Create project in current directory
@@ -91,7 +91,7 @@ yaoxiang init my-project
 
 ## add
 
-Add dependencies to the project.
+Add a dependency to the project.
 
 ### Usage
 
@@ -100,24 +100,24 @@ yaoxiang add <name> [version]
 yaoxiang add <name> --dev
 ```
 
-### Parameters
+### Arguments
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Argument | Type | Description |
+|----------|------|-------------|
 | `name` | string | Package name |
-| `version` | string | Version number (optional, default `*`) |
+| `version` | string | Version (optional, default `*`) |
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--dev`, `-D` | Add as dev dependency |
+| `--dev`, `-D` | Add as a dev dependency |
 
 ### Description
 
-Adds the dependency to the project's `yaoxiang.toml` file and updates `yaoxiang.lock`.
+Add a dependency to the project's `yaoxiang.toml` file and update `yaoxiang.lock`.
 
-### Version Specifications
+### Version Specifiers
 
 | Specifier | Description | Example |
 |-----------|-------------|---------|
@@ -139,14 +139,14 @@ yaoxiang add http 1.0.0
 #### Git Repository
 
 ```bash
-# This generates the following configuration in the manifest
+# This will generate the following config in the manifest
 # http = { version = "1.0.0", git = "https://github.com/example/http" }
 ```
 
 #### Local Path
 
 ```bash
-# This generates the following configuration in the manifest
+# This will generate the following config in the manifest
 # mylib = { version = "0.1.0", path = "./mylib" }
 ```
 
@@ -171,7 +171,7 @@ yaoxiang add benchmark -D
 
 ## rm
 
-Remove dependencies from the project.
+Remove a dependency from the project.
 
 ### Usage
 
@@ -180,21 +180,21 @@ yaoxiang rm <name>
 yaoxiang rm <name> --dev
 ```
 
-### Parameters
+### Arguments
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Argument | Type | Description |
+|----------|------|-------------|
 | `name` | string | Package name |
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `--dev`, `-D` | Remove dev dependency |
+| `--dev`, `-D` | Remove a dev dependency |
 
 ### Description
 
-Removes the specified dependency from the project's `yaoxiang.toml` and updates `yaoxiang.lock`.
+Remove the specified dependency from the project's `yaoxiang.toml` and update `yaoxiang.lock`.
 
 ### Examples
 
@@ -220,7 +220,7 @@ yaoxiang install
 
 ### Description
 
-Reads dependency declarations from `yaoxiang.toml` and performs the following:
+Read dependency declarations from `yaoxiang.toml` and perform the following:
 
 1. Resolve dependency versions
 2. Detect version conflicts
@@ -229,11 +229,11 @@ Reads dependency declarations from `yaoxiang.toml` and performs the following:
 
 ### Behavior
 
-- If there are no dependencies, displays a notification and exits
-- If the `vendor` directory already exists, checks and reuses cached dependencies
-- If version conflicts are detected, displays an error message and exits
+- If there are no dependencies, display a notice and exit
+- If the `vendor` directory already exists, check and reuse cached dependencies
+- If version conflicts are detected, display error information and exit
 
-### Examples
+### Example
 
 ```bash
 # Install all dependencies
@@ -277,30 +277,30 @@ yaoxiang update
 yaoxiang update <name>
 ```
 
-### Parameters
+### Arguments
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Argument | Type | Description |
+|----------|------|-------------|
 | `name` | string | Package name (optional) |
 
 ### Description
 
 ### Full Update
 
-When called without arguments, updates all dependencies:
+When called without arguments, update all dependencies:
 
-1. Clears currently locked versions
-2. Cleans old versions from the `vendor` directory
-3. Re-downloads all dependencies
-4. Updates `yaoxiang.lock`
+1. Clear currently locked versions
+2. Clean old versions from `vendor` directory
+3. Re-download all dependencies
+4. Update `yaoxiang.lock`
 
 ### Single Update
 
-When called with an argument, only updates the specified dependency:
+When called with an argument, only update the specified dependency:
 
-1. Removes the old version from `vendor`
-2. Re-downloads the new version
-3. Updates the corresponding entry in `yaoxiang.lock`
+1. Remove old version from `vendor`
+2. Re-download new version
+3. Update the corresponding entry in `yaoxiang.lock`
 4. Other dependencies are unaffected
 
 ### Examples
@@ -336,13 +336,13 @@ yaoxiang list
 
 ### Description
 
-Displays all dependencies in the project, including:
+Display all dependencies in the project, including:
 
 - Runtime dependencies (from `[dependencies]`)
 - Dev dependencies (from `[dev-dependencies]`)
 - Version and source for each dependency
 
-### Examples
+### Example
 
 ```bash
 yaoxiang list
@@ -350,11 +350,11 @@ yaoxiang list
 # Output
 # 📦 Project Dependencies
 #
-# Runtime Dependencies:
+# Runtime dependencies:
 #   http        1.0.0    registry
 #   json        2.0.0    registry
 #
-# Dev Dependencies:
+# Dev dependencies:
 #   test-utils  0.5.0    registry
 ```
 
@@ -364,7 +364,7 @@ yaoxiang list
 
 ### yaoxiang.toml
 
-Project manifest file that declares project metadata and dependencies.
+Project manifest file, declaring project metadata and dependencies.
 
 ```toml
 [package]
@@ -387,7 +387,7 @@ test-utils = "0.5.0"
 Dependency lock file, automatically generated by the package manager.
 
 ```toml
-# Auto-generated by YaoXiang Package Manager
+# Automatically generated by YaoXiang Package Manager
 
 [package]
 version = 1
@@ -403,13 +403,13 @@ source = "registry"
 
 ### Runtime Dependencies vs Dev Dependencies
 
-- **Runtime dependencies** (`[dependencies]`): Packages required for the project to run
-- **Dev dependencies** (`[dev-dependencies]`): Packages only needed during development and testing
+- **Runtime dependencies** (`[dependencies]`): Packages required for project runtime
+- **Dev dependencies** (`[dev-dependencies]`): Packages only needed for development and testing
 
 ### Dependency Sources
 
-| Type | Configuration Example | Description |
-|------|----------------------|-------------|
+| Type | Config Example | Description |
+|------|----------------|-------------|
 | Registry | `http = "1.0.0"` | Fetched from remote package registry |
 | Git | `{ version = "1.0.0", git = "https://..." }` | Fetched from Git repository |
 | Path | `{ version = "0.1.0", path = "./lib" }` | Fetched from local path |
@@ -424,11 +424,11 @@ source = "registry"
 
 ### vendor Directory
 
-Dependencies are stored in the `vendor` directory after downloading:
+Dependencies are stored in the `vendor` directory after download:
 
 - Automatically managed by `yaoxiang install` and `yaoxiang update`
 - Can be deleted and rebuilt by running `install` again
-- Recommended to add to `.gitignore` so team members manage independently
+- Recommended to add to `.gitignore`; managed independently by different team members
 
 ---
 
@@ -439,7 +439,7 @@ Dependencies are stored in the `vendor` directory after downloading:
 YPM detects dependency version conflicts and reports errors. Solutions:
 
 1. Adjust dependency version requirements
-2. Wait for the dependency author to fix it
+2. Wait for the dependency author to fix the issue
 3. Consider removing the conflicting dependency
 
 ### Q: How to use private packages?

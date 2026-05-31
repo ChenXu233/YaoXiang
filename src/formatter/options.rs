@@ -33,12 +33,13 @@ impl Default for FormatOptions {
 
 impl From<&FmtConfig> for FormatOptions {
     fn from(config: &FmtConfig) -> Self {
+        let default = FormatOptions::default();
         Self {
-            line_width: config.line_width,
-            indent_width: config.indent_width,
-            use_tabs: config.use_tabs,
-            single_quote: config.single_quote,
-            sort_imports: config.sort_imports,
+            line_width: config.line_width.unwrap_or(default.line_width),
+            indent_width: config.indent_width.unwrap_or(default.indent_width),
+            use_tabs: config.use_tabs.unwrap_or(default.use_tabs),
+            single_quote: config.single_quote.unwrap_or(default.single_quote),
+            sort_imports: config.sort_imports.unwrap_or(default.sort_imports),
         }
     }
 }

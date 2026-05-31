@@ -805,6 +805,9 @@ impl<'a> InstantiationGraphBuilder<'a> {
             // Weak 包装：提取内部类型参数
             MonoType::Weak(inner) => Self::extract_type_args_from_type(inner),
 
+            // Ref 包装：提取内部类型参数
+            MonoType::Ref { inner, .. } => Self::extract_type_args_from_type(inner),
+
             // Option：提取内部类型参数
             MonoType::Option(inner) => Self::extract_type_args_from_type(inner),
 

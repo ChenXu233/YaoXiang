@@ -68,7 +68,7 @@ fn test_infer_generic_instantiation_single_arg() {
 
     // Act
     let result = inferrer
-        .infer_generic_instantiation("List", &[int_type.clone()])
+        .infer_generic_instantiation("List", std::slice::from_ref(&int_type))
         .expect("单参数实例化应成功");
 
     // Assert

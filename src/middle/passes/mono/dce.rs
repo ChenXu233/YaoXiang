@@ -728,6 +728,9 @@ impl DcePass {
             // Arc 和 Weak：提取内部类型参数
             MonoType::Arc(t) | MonoType::Weak(t) => self.extract_type_args(t),
 
+            // Ref：提取内部类型参数
+            MonoType::Ref { inner, .. } => self.extract_type_args(inner),
+
             // Option：提取内部类型参数
             MonoType::Option(t) => self.extract_type_args(t),
 

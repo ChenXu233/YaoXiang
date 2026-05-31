@@ -1,63 +1,62 @@
-```markdown
 ---
-title: 'RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design'
+title: "RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design"
 ---
 
 # RFC-018: LLVM AOT Compiler and L3 Transparent Concurrency Design
 
 > **Status**: Draft
-> **Author**: Chen Xu
+> **Author**: Chen Xu (晨煦)
 > **Created**: 2026-02-15
 > **Last Updated**: 2026-03-10
 
 > **References**:
-> - [RFC-001: Concurrent Model and Error Handling System](./accepted/001-concurrent-model-error-handling.md)
+> - [RFC-001: Spawn Model and Error Handling System](./accepted/001-concurrent-model-error-handling.md)
 > - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md)
 > - [RFC-009: Ownership Model Design](./accepted/009-ownership-model.md)
 
 ## Abstract
 
-This document designs the LLVM AOT compiler for YaoXiang language, aiming to generate machine code + DAG metadata through ahead-of-time compilation, executed by the runtime **global DAG scheduler** based on **bottom-up** dependency analysis.
+This document designs the LLVM AOT compiler for YaoXiang language, targeting pre-compilation to generate machine code + DAG metadata, executed by a runtime **global DAG scheduler** based on **bottom-up** dependency analysis.
 
 **Core Innovations**:
-- Not "generating a Future when encountering a function call", but **reverse analyzing dependencies from "where the result is needed"**
-- **Leaf nodes execute in parallel first**, dependency chains traversed sequentially upward
-- **Isolated DAGs execute independently in parallel**: nodes without consumers do not block the main flow
-- **Infinite loops as background DAGs**: scheduler slices execution, will not deadlock
+- Not "generate a Future when encountering a function call", but **reverse-analyze dependencies from "where results are needed"**
+- **Leaf nodes execute in parallel first**, dependency chain traversed upward in order
+- **Isolated island DAGs execute independently in parallel**: nodes without consumers don't block the main flow
+- **Infinite loops as background DAGs**: scheduler slices execution, won't deadlock
 
 This design is fundamentally different from the Rust async/await + tokio runtime model:
-- Rust: User writes `async fn`, compiler generates state machine
+- Rust: User writes `async fn`, compiler generates a state machine
 - YaoXiang: User writes ordinary functions, **compiler automatically analyzes DAG**, scheduler executes bottom-up
 
-Follows RFC-001's L3 transparent concurrency design: default @auto (automatic parallelism), @block sync is a special case, solving the colored functions problem.
+Follows RFC-001's L3 transparent concurrency design: default @auto (automatic parallelization), @block synchronous is the exception, solves the "colored functions" problem.
 
 ## Motivation
 
-### Why Do We Need an LLVM AOT Compiler?
+### Why is an LLVM AOT Compiler Needed?
 
 Currently YaoXiang only has an interpreter as the execution backend, with the following issues:
 
 | Issue | Impact |
 |-------|--------|
-| Performance bottleneck | Interpreted execution is 10-100x slower than machine code |
+| Performance bottleneck | Interpretive execution is 10-100x slower than machine code |
 | Complex deployment | Need to carry interpreter and runtime |
 | Colored functions problem | Synchronous functions cannot call concurrent functions |
 
-### The Colored Functions Problem and L3 Transparent Concurrency
+### Colored Functions Problem and L3 Transparent Concurrency
 
 **Traditional design (current)**:
 - Synchronous functions (blue) → cannot call → concurrent functions (red)
-- Sync is default, concurrency requires `spawn` marker
-- Color "infects": once concurrency is used, the entire call chain becomes concurrent
+- Synchronous is default, concurrency requires `spawn` marking
+- Colors "spread": once concurrency is used, the entire call chain is concurrent
 
 **RFC-001 L3 Transparent Concurrency (target)**:
 - L3: Default transparent concurrency (@auto)
 - L2: Explicit spawn concurrency
 - L1: @block synchronous mode
 
-**Flipped design (RFC-018)**:
-- Default L3 transparent concurrency, compiler automatically analyzes DAG dependencies
-- Solves the colored functions problem: synchronous functions can directly call code with "default concurrency"
+**Inverted design (RFC-018)**:
+- Default L3 transparent concurrency, compiler automatically analyzes DAG dependencies at compile time
+- Solves colored functions problem: synchronous functions can directly call "default concurrent" code
 - @block only as a special case to force serial execution
 
 ### Core Innovation: Bottom-Up Execution + Global DAG
@@ -69,49 +68,49 @@ Traditional call (top-down):
   call fetch(url) → execute → return result
 
 Bottom-up execution:
-  print(a) ← start from "where the result is needed"
+  print(a) ← start from "where results are needed"
        ↑
-  fetch(url0) ← analyze dependencies, search backward
+  fetch(url0) ← analyze dependencies, reverse lookup
 
-  fetch(url1) ← isolated, executes independently in parallel
+  fetch(url1) ← isolated island, independent parallel execution
 ```
 
 **Key differences**:
-- Not "generating a Future when encountering a function call"
-- But reverse analyzing dependencies from "the final result needed"
-- Nodes without consumers (isolated) are not executed or execute independently in parallel
+- Not "generate a Future when encountering a function call"
+- But reverse-analyze dependencies from "where the final result is needed"
+- Nodes without consumers (islands) don't execute or execute independently in parallel
 - Infinite loops as background DAGs, scheduler slices execution
 
 ### Comparison with Rust async
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Rust async Model                           │
+│                      Rust async mode                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  Compile time: Generate state machine + machine code           │
+│  Compile-time: Generate state machine + machine code           │
 │  Runtime: tokio scheduler schedules based on state machine     │
-│  Characteristics: await points determined at compile time,      │
-│                   state machine manages execution               │
-│  Granularity: Function level                                    │
-│  User experience: Need to write async/await keywords            │
+│  Features: await points determined at compile time, state       │
+│            machine manages execution                           │
+│  Granularity: Function level                                   │
+│  User experience: Need to write async/await keywords           │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                      YaoXiang LLVM AOT Model                   │
+│                      YaoXiang LLVM AOT mode                    │
 ├─────────────────────────────────────────────────────────────────┤
-│  Compile time: Generate machine code + DAG metadata            │
+│  Compile-time: Generate machine code + DAG metadata            │
 │  Runtime: Global DAG scheduler, bottom-up execution            │
-│  Characteristics: Reverse analyze dependencies from "where the  │
-│                   result is needed", leaf nodes in parallel     │
+│  Features: Reverse dependency analysis from "where results     │
+│            are needed", leaf nodes execute in parallel         │
 │  Granularity: DAG within function blocks + cross-function DAG  │
-│  User experience: Ordinary functions, automatic parallelism    │
+│  User experience: Ordinary functions, automatic parallelization │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Global DAG Scheduler
 
 ```
-Global DAG view of the entire program:
+DAG view of the entire program:
 
         print(result) ─────────────────────────┐
            │                                    │
@@ -119,10 +118,10 @@ Global DAG view of the entire program:
     │             │                             │
 process(a)   process(b)                        │
     │             │                             │
-compute(x)   compute(y)  ←── isolated DAG ─────┤
+compute(x)   compute(y)  ←── Island DAG ────────┤
     │                                           │
 fetch(url0)  fetch(url1)  fetch(url2)          │
-    (executed)                                   │
+    (executed)                                    │
 
 There's also a background DAG (while True):
     ┌─────────────────────────────────────────┐ │
@@ -134,7 +133,7 @@ There's also a background DAG (while True):
 
 **How the scheduler works**:
 ```
-1. Reverse analyze from "final result":
+1. Reverse-analyze from "final result":
    print(result) → depends on process → depends on fetch
 
 2. Build global DAG:
@@ -142,14 +141,14 @@ There's also a background DAG (while True):
    - Internal nodes: process, compute
    - Root node: print
 
-3. Execute:
+3. Execution:
    - fetch executes in parallel
    - process waits for fetch to complete
    - print waits for process to complete
-   - isolated compute runs independently in parallel
+   - isolated compute executes independently in parallel
 
 4. Skip already executed:
-   - If a node has already been executed, subsequent nodes depending on it can reuse the result
+   - If a node has been executed, subsequent nodes depending on it can reuse the result
 ```
 
 ### Infinite Loop Handling
@@ -164,25 +163,25 @@ main: () -> () = {
     }
 }
 → Only one infinite loop
-→ Direct synchronous execution, same as ordinary code
+→ Execute synchronously directly, no different from ordinary code
 
 Scenario 2: Multiple whiles (automatic slicing)
 ──────────────────────────────────────────────
 main: () -> () = {
-    while True { update_ui() }      # Background task 1
-    while True { network_poll() }  # Background task 2
-    server_loop()                   # Main task
+    while True { update_ui() }      # background task 1
+    while True { network_poll() }  # background task 2
+    server_loop()                   # main task
 }
 → 3 independent tasks
 → Scheduler slices and switches
 → True concurrency
 
-Scheduler self-adaptation:
+Scheduler adaptation:
 ──────────────────────────────────────────────
 if task_count == 1:
-    Execute directly (sync)
+    execute directly (synchronous)
 else:
-    Slice scheduling (concurrent)
+    slice scheduling (concurrent)
 ```
 
 **Background DAG handling**:
@@ -194,9 +193,9 @@ Background DAG (infinite loop):
     while True → update_ui → fetch_new → process → back to start
 
 Scheduler:
-    - Main DAG ends when done
+    - Main DAG ends after execution completes
     - Background DAG runs forever, but scheduler executes in "slices"
-    - Won't deadlock in the loop
+    - Won't get stuck in the loop
 ```
 
 ## Proposal
@@ -205,21 +204,21 @@ Scheduler:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Compile Time                                       │
+│  Compile-time                                        │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│  │ Parser  │→│DAG Analysis│→│LLVM Codegen│→ Machine Code │
+│  │ Parser  │→│DAG Analysis│→│LLVM Codegen│→ machine code│
 │  └─────────┘  └─────────┘  └─────────┘           │
 │                      ↓                           │
-│              Generate: DAG metadata                │
+│              Generate: DAG metadata                  │
 └─────────────────────────────────────────────────────┘
                       ↓
 ┌─────────────────────────────────────────────────────┐
-│  Runtime                                            │
+│  Runtime                                             │
 │  ┌─────────────────────────────────────────────┐ │
-│  │  DAG Scheduler Library                       │ │
+│  │  DAG Scheduler Library                        │ │
 │  │  • Load machine code                         │ │
 │  │  • Read DAG metadata                          │ │
-│  │  • Lazy scheduling: suspend calls, execute   │ │
+│  │  • Lazy scheduling: suspend calls, execute    │ │
 │  │    on demand                                  │ │
 │  │  • Support parallel/serial execution          │ │
 │  └─────────────────────────────────────────────┘ │
@@ -236,9 +235,9 @@ User code:
         save_results(results)
     }
 
-Phase 1: Bottom-up analysis (compile time)
+Phase 1: Bottom-up analysis (compile-time)
 ─────────────────────────────────────────
-Start from save_results(results):
+Starting from save_results(results):
     "need results" → depends on parse_page(results)
     "need page0" → depends on fetch(url0)
     "need page1" → depends on fetch(url1)
@@ -251,7 +250,7 @@ Build global DAG:
            ↓
     save_results                          ← root node
 
-Phase 2: Execute leaf nodes in parallel (runtime)
+Phase 2: Parallel execution of leaves (runtime)
 ─────────────────────────────────────────
 Scheduler finds all leaf nodes:
     - fetch(url0), fetch(url1), fetch(url2) have no dependencies → execute in parallel
@@ -264,10 +263,10 @@ When parse_page needs page0:
     - Ready → execute parse_page
     - Not ready → wait, continue after completion
 
-Phase 4: Isolated independent parallelism
+Phase 4: Islands execute independently in parallel
 ─────────────────────────────────────────
-If a fetch result is not needed by anyone:
-    - Execute as "isolated DAG" independently
+If a fetch has no one wanting the result:
+    - Execute as "island DAG" independently
     - Can use another core, doesn't affect main flow
 ```
 
@@ -276,7 +275,7 @@ If a fetch result is not needed by anyone:
 ```rust
 /// Compiled artifact: machine code + DAG metadata
 pub struct CompiledArtifact {
-    /// Machine code compiled by LLVM (ELF/Mach-O/COFF)
+    /// LLVM compiled machine code (ELF/Mach-O/COFF)
     machine_code: Vec<u8>,
 
     /// DAG metadata: describes function dependencies
@@ -293,7 +292,7 @@ pub struct CompiledArtifact {
 pub struct DAGMetadata {
     /// Nodes: function calls
     nodes: Vec<DAGNode>,
-    /// Edges: dependencies (from, to)
+    /// Edges: dependency relationships (from, to)
     edges: Vec<(usize, usize)>,
 }
 
@@ -301,9 +300,9 @@ pub struct DAGMetadata {
 pub struct DAGNode {
     /// Function ID
     pub function_id: usize,
-    /// Dependent node IDs
+    /// Node IDs this depends on
     pub deps: Vec<usize>,
-    /// Effect tag (@IO / @Pure)
+    /// Side effect tag (@IO / @Pure)
     pub effect: EffectTag,
 }
 ```
@@ -343,9 +342,9 @@ impl DefaultDAGScheduler {
 impl DAGScheduler for DefaultDAGScheduler {
     fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue {
         // 1. Traverse function body, suspend all calls
-        // 2. Build task list to execute
-        // 3. Schedule execution by dependency order (control concurrency)
-        // 4. Trigger execution when value is needed
+        // 2. Build list of tasks to execute
+        // 3. Schedule execution in dependency order (control concurrency)
+        // 4. Trigger execution when values are needed
         // 5. Return result
     }
 }
@@ -369,16 +368,15 @@ main function DAG:
 
 Node descriptions:
 ┌──────────────────┬────────────┬────────────────────────────┐
-│ Node             │ Effect     │ Description                │
+│ Node              │ Side effect│ Description                │
 ├──────────────────┼────────────┼────────────────────────────┤
-│ fetch(url0)      │ @IO        │ Concurrent download        │
-│ fetch(url1)      │ @IO        │ Concurrent download        │
-│ fetch(url2)      │ @IO        │ Concurrent download        │
-│ parse_page       │ @Pure      │ Parallel parsing           │
-│ filter_links     │ @Pure      │ Parallel filtering         │
-│ save_result      │ @IO        │ Sequential save (I/O       │
-│                  │            │ guarantees order)          │
-│ print            │ @IO        │ Execute last               │
+│ fetch(url0)      │ @IO       │ Concurrent download         │
+│ fetch(url1)      │ @IO       │ Concurrent download         │
+│ fetch(url2)      │ @IO       │ Concurrent download         │
+│ parse_page       │ @Pure     │ Parallel parsing            │
+│ filter_links     │ @Pure     │ Parallel filtering          │
+│ save_result      │ @IO       │ Sequential save (I/O order) │
+│ print            │ @IO       │ Execute last                │
 └──────────────────┴────────────┴────────────────────────────┘
 ```
 
@@ -387,31 +385,31 @@ Node descriptions:
 ```
 Phase 1: Concurrent downloads
 ─────────────────────────────────────────
-Thread 1: fetch(url0) ──────────┐
-Thread 2: fetch(url1) ─────────┼──→ 3 concurrent tasks (limit max concurrency)
-Thread 3: fetch(url2) ──────────┘
+Thread1: fetch(url0) ──────────┐
+Thread2: fetch(url1) ─────────┼──→ 3 concurrent tasks (max concurrency limit)
+Thread3: fetch(url2) ──────────┘
 
 Phase 2: Concurrent parsing
 ─────────────────────────────────────────
-Thread 1: parse_page(page0) ──┐
-Thread 2: parse_page(page1) ──┼──→ 3 concurrent tasks
-Thread 3: parse_page(page2) ──┘
+Thread1: parse_page(page0) ──┐
+Thread2: parse_page(page1) ──┼──→ 3 concurrent tasks
+Thread3: parse_page(page2) ──┘
 
 Phase 3: Concurrent filtering
 ─────────────────────────────────────────
-Thread 1: filter_links(result0) ──┐
-Thread 2: filter_links(result1) ──┼──→ 3 concurrent tasks
-Thread 3: filter_links(result2) ──┘
+Thread1: filter_links(result0) ──┐
+Thread2: filter_links(result1) ──┼──→ 3 concurrent tasks
+Thread3: filter_links(result2) ──┘
 
-Phase 4: Sequential save
+Phase 4: Sequential saving
 ─────────────────────────────────────────
-Thread 1: save_result(result0) → wait for completion
-Thread 1: save_result(result1) → wait for completion
-Thread 1: save_result(result2) → wait for completion
+Thread1: save_result(result0) → wait for completion
+Thread1: save_result(result1) → wait for completion
+Thread1: save_result(result2) → wait for completion
 
 Phase 5: Output
 ─────────────────────────────────────────
-Thread 1: print("Fetched 3 pages")
+Thread1: print("Fetched 3 pages")
 ```
 
 ## Detailed Design
@@ -420,20 +418,20 @@ Thread 1: print("Fetched 3 pages")
 
 ```
 src/backends/llvm/
-├── mod.rs           # Module entry + Executor implementation
+├── mod.rs           # Module entry + Executor impl
 ├── context.rs       # LLVM context management
 ├── types.rs         # Type mapping (YaoXiang → LLVM)
-├── values.rs        # Value mapping (registers → LLVM Value)
+├── values.rs        # Value mapping (register → LLVM Value)
 ├── codegen.rs       # Core code generation
 ├── dag.rs           # DAG analysis and generation
-├── scheduler.rs     # Runtime scheduler
+├── scheduler.rs      # Runtime scheduler
 └── tests.rs         # Tests
 ```
 
 ### Type Mapping
 
-| YaoXiang Type | LLVM Type |
-|---------------|-----------|
+| YaoXiang type | LLVM type |
+|---------------|----------|
 | `Int` | `i64` |
 | `Float` | `f64` |
 | `Bool` | `i1` |
@@ -445,7 +443,7 @@ src/backends/llvm/
 
 ### Instruction Translation
 
-Each `BytecodeInstr` translates directly to corresponding LLVM IR instructions:
+Each `BytecodeInstr` translates directly to the corresponding LLVM IR instruction:
 
 | BytecodeInstr | LLVM IR |
 |---------------|---------|
@@ -473,17 +471,17 @@ extern "C" {
 }
 ```
 
-### Scheduling Strategies
+### Scheduling Strategy
 
-| Annotation | Scenario | Scheduling Strategy |
-|------------|----------|---------------------|
-| `@auto` (default, L3) | Transparent concurrency | DAG lazy scheduling, execute in parallel when no dependencies |
-| `@block` (L1) | Force sync | No DAG, purely serial execution |
+| Annotation | Scenario | Scheduling strategy |
+|------|------|----------|
+| `@auto` (default, L3) | Transparent concurrency | DAG lazy scheduling, no-dependency parallel execution |
+| `@block` (L1) | Force synchronous | No DAG, pure serial execution |
 | Circular dependency | Runtime detection | Report error |
 
 ### Side Effect Handling: Implicit Effect System
 
-Side effects are invisible to users, automatically inferred by the compiler:
+Users have no perception of side effect handling; compiler infers automatically:
 
 ```
 User code:
@@ -497,7 +495,7 @@ Compiler inference:
   compute → @Pure (pure function)
 
 Scheduler execution:
-  print("a") ──→ sequential (all @IO)
+  print("a") ──→ sequential (both @IO)
   print("b") ──→ sequential
   compute(1) ─┬─→ parallel (DAG scheduling)
   compute(2) ─┘
@@ -505,13 +503,13 @@ Scheduler execution:
 
 ### Relationship with Three-Tier Runtime
 
-RFC-008 defines the Embedded / Standard / Full three-tier runtime architecture. The correspondence between the LLVM AOT compiler and the three-tier runtime:
+RFC-008 defines the Embedded / Standard / Full three-tier runtime architecture. The correspondence between the LLVM AOT compiler and three-tier runtime:
 
-| Runtime | LLVM AOT Behavior |
-|---------|-------------------|
-| **Embedded** | No DAG scheduling, directly generate sequential machine code |
+| Runtime | LLVM AOT behavior |
+|--------|---------------|
+| **Embedded** | No DAG scheduling, generate sequential machine code directly |
 | **Standard** | DAG + single-threaded scheduling (num_workers=1) |
-| **Full** | DAG + multi-threaded scheduling (num_workers>1), supports WorkStealing |
+| **Full** | DAG + multi-threaded scheduling (num_workers>1), support WorkStealing |
 
 ### Scheduler Interface Design
 
@@ -522,7 +520,7 @@ pub enum ScheduleStrategy {
     Serial,
     /// @eager: Eager evaluation, wait for dependencies to complete
     Eager,
-    /// @auto (default): Lazy scheduling, DAG auto-scheduling
+    /// @auto (default): Lazy scheduling, DAG automatic scheduling
     Lazy,
 }
 
@@ -548,73 +546,73 @@ pub trait DAGScheduler: Send + Sync {
 
 ### Advantages
 
-1. **Performance improvement**: AOT compilation is 10-100x faster than interpreted execution
-2. **Solves colored functions**: Default concurrency, sync is the special case
+1. **Performance improvement**: AOT compilation is 10-100x faster than interpretive execution
+2. **Solves colored functions**: Default concurrent, synchronous is the exception
 3. **Unified runtime**: Interpreter and LLVM share the same scheduler
-5. **Implicit side effects**: Invisible to users, automatically handled by compiler
-6. **Ownership safety**: Depends on Rust-style ownership model, no data races
+5. **Implicit side effects**: User has no perception, compiler handles automatically
+6. **Ownership safety**: Relies on Rust-style ownership model, no data races
 
 ### Disadvantages
 
 1. **Implementation complexity**: Requires LLVM integration experience
-2. **Compilation time**: AOT compilation is slower than interpreter
-3. **Difficult debugging**: AOT code debugging is more complex than interpreter
+2. **Compile time**: AOT compilation is slower than interpreter
+3. **Debugging difficulty**: AOT code debugging is more complex than interpreter
 
 ### Consistency with RFC Design
 
 | RFC | Consistency |
-|-----|-------------|
-| RFC-001 Concurrent Model | ✅ DAG dependency analysis is core |
-| RFC-008 Runtime Architecture | ✅ Runtime scheduler design is consistent |
-| RFC-009 Ownership Model | ✅ ARC runtime correctly implemented |
+|-----|--------|
+| RFC-001 Spawn model | ✅ DAG dependency analysis is core |
+| RFC-008 Runtime architecture | ✅ Runtime scheduler design consistent |
+| RFC-009 Ownership model | ✅ ARC runtime correctly implemented |
 
 ## Alternative Solutions
 
-| Solution | Description | Why Not Chosen |
-|----------|-------------|----------------|
+| Solution | Description | Why not chosen |
+|------|------|-----------|
 | Interpreter only | No AOT needed | Insufficient performance, colored functions problem |
 | Pure static compilation | No runtime scheduling | Lazy scheduling needs runtime |
-| Link external LLVM runtime | Use LLVM's runtime | Requires additional dependencies |
+| Link external LLVM runtime | Use LLVM's runtime | Needs additional dependencies |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-#### Phase 1: Basic Framework (1-2 days)
+#### Phase 1: Basic framework (1-2 days)
 
 - [ ] Add inkwell dependency to `Cargo.toml`
 - [ ] Create `src/backends/llvm/` module
 - [ ] Implement LLVM context initialization
 
-#### Phase 2: Type Mapping (2-3 days)
+#### Phase 2: Type mapping (2-3 days)
 
 - [ ] Implement `TypeMap`: YaoXiang types → LLVM types
-- [ ] Basic types: i32, i64, f32, f64, bool
+- [ ] Primitive types: i32, i64, f32, f64, bool
 - [ ] Composite types: struct, array, tuple
 - [ ] Special types: Arc, ref, Option
 
-#### Phase 3: Instruction Translation (3-5 days)
+#### Phase 3: Instruction translation (3-5 days)
 
 - [ ] Implement `codegen_instruction()`
 - [ ] Arithmetic instructions: add, sub, mul, div
 - [ ] Control flow: jmp, jmp_if, ret
 - [ ] Function calls: call, call_virt, call_dyn
 
-#### Phase 4: DAG Collection (2-3 days)
+#### Phase 4: DAG collection (2-3 days)
 
 - [ ] Collect DAG information during code generation
-- [ ] Record function dependencies
+- [ ] Record function dependency relationships
 - [ ] Side effect inference (@IO / @Pure)
 - [ ] Generate DAG metadata
 
-#### Phase 5: Runtime Library (3-5 days)
+#### Phase 5: Runtime library (3-5 days)
 
 - [ ] Implement lazy scheduling
 - [ ] Implement DAG scheduler
 - [ ] Implement granularity control
 - [ ] Implement ARC runtime
 
-#### Phase 6: Integration and Testing (2-3 days)
+#### Phase 6: Integration and testing (2-3 days)
 
 - [ ] Link runtime library
 - [ ] End-to-end testing
@@ -622,14 +620,14 @@ pub trait DAGScheduler: Send + Sync {
 
 ### Dependencies
 
-- RFC-001: Concurrent Model (accepted)
-- RFC-008: Runtime Concurrency Model (accepted)
-- RFC-009: Ownership Model (accepted)
+- RFC-001: Spawn model (accepted)
+- RFC-008: Runtime concurrency model (accepted)
+- RFC-009: Ownership model (accepted)
 
 ### Risks
 
-1. **LLVM integration complexity**: Requires deep understanding of inkwell API
-2. **Scheduler and AOT code integration**: Carefully designed interfaces needed
+1. **LLVM integration complexity**: Need deep understanding of inkwell API
+2. **Scheduler and AOT code integration**: Need careful interface design
 3. **ABI compatibility**: Need to ensure ABI compatibility with interpreter runtime
 
 ## Related Work
@@ -637,29 +635,29 @@ pub trait DAGScheduler: Send + Sync {
 ### Lazy Task Creation (1990)[^1]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | MIT |
 | Authors | James R. Larus, Robert H. Halstead Jr. |
-| Core | Lazily create subtasks, create on demand |
+| Core | Lazy creation of subtasks, created on demand |
 | Reference value | Technical foundation, origin of lazy scheduling concept |
 
-**Core idea**: Instead of immediately creating tasks, create them lazily. Only create a child task when the parent task needs its value. This solves the performance overhead problem of fine-grained parallel tasks[^1].
+**Core idea**: Don't create tasks immediately, but delay creation. Only create subtasks when the parent task needs the subtask's value. This solves the performance overhead problem of fine-grained parallel tasks[^1].
 
 ### Lazy Scheduling (2014)[^2]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | University of Maryland |
 | Authors | Tzannes, Caragea |
 | Core | Runtime adaptive scheduling, no extra state |
 | Reference value | Scheduler design, adaptive granularity control |
 
-**Core idea**: Automatically control granularity through "lazy execution", no need to maintain complex state. Tasks automatically merge when system is busy, split when idle[^2].
+**Core idea**: Automatically control granularity through "lazy execution", no need to maintain complex state. Tasks automatically merge when the system is busy, and automatically split when idle[^2].
 
 ### SISAL Language[^3]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | Lawrence Livermore National Laboratory (LLNL) |
 | Core | Single-assignment language, Dataflow graph, implicit parallelism |
 | Reference value | Feasibility proof, performance close to Fortran |
@@ -669,10 +667,10 @@ pub trait DAGScheduler: Send + Sync {
 ### Mul-T Parallel Scheme[^4]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | MIT |
 | Core | Future construct, Lazy Task Creation implementation |
-| Reference value | Concrete implementation reference |
+| Reference value | Specific implementation reference |
 
 **Core mechanism**:
 ```scheme
@@ -684,17 +682,17 @@ pub trait DAGScheduler: Send + Sync {
 
 ### Comparison Summary
 
-| Technology | Lazy Creation | DAG Analysis | Side Effect Handling | Ownership |
-|------------|---------------|--------------|----------------------|-----------|
+| Technology | Lazy creation | DAG analysis | Side effect handling | Ownership |
+|------|----------|----------|------------|--------|
 | Lazy Task Creation[^1] | ✅ | ❌ | ❌ | N/A |
 | Lazy Scheduling[^2] | ✅ | ❌ | ❌ | N/A |
 | SISAL[^3] | ✅ | ✅ (global) | N/A (single-assignment) | N/A |
 | Mul-T[^4] | ✅ | ❌ | ❌ | N/A |
 | **YaoXiang** | ✅ | ✅ (within functions) | ✅ (implicit) | ✅ (ARC) |
 
-**YaoXiang's innovation**: Simplify traditional design with modern language features (ownership + implicit side effects), reduce complexity by keeping DAG constraints within function blocks.
+**YaoXiang's innovation**: Simplify traditional design with modern language features (ownership + implicit side effects), reduce complexity by confining DAG constraints within function blocks.
 
-## Comparison with Traditional Automatic Parallelism Methods
+## Comparison with Traditional Automatic Parallelization Methods
 
 ### Traditional Compilers: Loop-Level Parallelization
 
@@ -702,7 +700,7 @@ Commercial compilers (Intel Fortran, Oracle Fortran) use **loop-level automatic 
 
 **Core flow**:
 ```
-1. Identify loops that can be parallelized
+1. Identify parallelizable loops
 2. Perform dependency analysis on array accesses within loops
 3. Determine if there are dependencies between loop iterations
 4. If no dependencies, generate multi-threaded code
@@ -711,8 +709,8 @@ Commercial compilers (Intel Fortran, Oracle Fortran) use **loop-level automatic 
 **Dependency analysis techniques**:
 
 | Technique | Description |
-|-----------|-------------|
-| **Data dependency** | Whether two accesses refer to the same memory location |
+|------|------|
+| **Data dependency** | Whether two accesses touch the same memory location |
 | **Use-Def** | Variable definition and use relationships |
 | **Alias analysis** | Whether pointers point to the same memory |
 
@@ -731,11 +729,11 @@ END DO
 
 ### Haskell: Spark Mechanism
 
-GHC (Glasgow Haskell Compiler) uses the **Spark mechanism** for pure function parallelism[^6]:
+GHC (Glasgow Haskell Compiler) uses the **Spark mechanism** for pure function parallelization[^6]:
 
 ```haskell
--- rpar: Execute in parallel, create spark
--- rseq: Execute serially, wait for completion
+-- rpar: execute in parallel, create spark
+-- rseq: execute serially, wait for completion
 
 example = do
   a <- rpar (f x)   -- Create spark, execute f x in parallel
@@ -746,8 +744,8 @@ example = do
 ```
 
 **Spark pool mechanism**:
-- Take sparks from pool, assign to idle processing cores
-- If a spark is not used (no one waits for the result), it gets garbage collected
+- Take spark from pool and assign to idle processing cores
+- If a spark is not used (no one is waiting for the result), it gets garbage collected
 - This solves the granularity problem: too-small sparks are discarded
 
 ### Clean Language: Uniqueness Types
@@ -759,11 +757,11 @@ The Clean language achieves parallel safety through **Uniqueness Types**[^7]:
 modify :: *Array Int -> *Array Int
 ```
 
-**Core idea**: If a value has a unique reference, it can be safely modified in a parallel environment because no other references will see the intermediate state.
+**Core idea**: If a value has a single reference, it can be safely modified in a parallel environment because no other references will see the intermediate state.
 
 ### Program Slicing and Dependency Graphs
 
-**Program Dependency Graph (PDG)** is the foundation of parallelism detection:
+**Program Dependence Graph (PDG)** is the foundation of parallelism detection:
 
 ```
 Nodes: statements
@@ -775,31 +773,31 @@ Parallelism detection:
 
 ### Comprehensive Comparison
 
-| Method | Dependency Analysis | Granularity | Side Effect Handling | Typical Scenario |
-|--------|---------------------|-------------|----------------------|------------------|
+| Method | Dependency analysis | Granularity | Side effect handling | Typical scenario |
+|------|----------|------|------------|----------|
 | Intel/Oracle Fortran[^5] | Complex array analysis | Loop iteration | N/A | Scientific computing |
 | GHC Spark[^6] | Pure function assumption | Expression | N/A | Functional programming |
 | Clean[^7] | Uniqueness types | Graph rewriting | N/A | Functional programming |
-| **YaoXiang** | Ownership guarantees | Function calls | Implicit inference | General purpose |
+| **YaoXiang** | Ownership guarantees | Function call | Implicit inference | General purpose |
 
 ---
 
-## Appendix
+## Appendices
 
 ### Appendix A: Detailed Comparison with Rust async
 
 | Feature | Rust async | YaoXiang LLVM AOT |
-|---------|------------|-------------------|
-| Compiled output | State machine + machine code | Machine code + DAG |
+|------|-----------|-------------------|
+| Compiled artifact | State machine + machine code | Machine code + DAG |
 | Runtime | tokio | DAG Scheduler |
-| Scheduling time | Compile-time determined await points | Runtime on-demand scheduling |
+| Scheduling timing | Await points determined at compile time | Runtime on-demand scheduling |
 | Concurrency control | State machine states | DAG dependency edges |
-| Colored functions | async infection | **L3 transparent concurrency, @block is special case** |
+| Colored functions | async spreads | **L3 transparent concurrency, @block is exception** |
 | Annotations | async/await | @auto/@eager/@block |
 
 ### Appendix B: Scheduler Optimization Examples
 
-**Scenario 1: Scheduler detects opportunities for merged execution**
+**Scenario 1: Scheduler detects that execution can be merged**
 
 ```
 Original DAG:
@@ -814,23 +812,23 @@ After scheduler optimization:
 **Scenario 2: Dependency not used**
 
 ```
-let a = expensive_compute(); // Computed
-let b = other_thing();       // Doesn't need a
-print(b);                    // Return b directly, skip a
+let a = expensive_compute(); // computed
+let b = other_thing();       // doesn't need a
+print(b);                    // return b directly, skip a
 ```
 
-### Appendix C: Design Discussion Record
+### Appendix C: Design Discussion Records
 
-| Decision | Decision Made | Date |
-|----------|---------------|------|
+| Decision | Decision made | Date |
+|------|------|------|
 | Adopt LLVM AOT | Direct Codegen, no excessive abstraction | 2026-02-15 |
 | DAG scope | Within function blocks, not cross-function | 2026-02-15 |
 
-| Execution model | **Bottom-up**: Reverse analyze dependencies from result, leaf nodes in parallel | 2026-03-10 |
-| Isolated DAGs | Nodes without consumers execute independently in parallel | 2026-03-10 |
+| Execution model | **Bottom-up**: reverse analyze dependencies from results, leaf nodes parallel | 2026-03-10 |
+| Island DAGs | Nodes without consumers execute independently in parallel | 2026-03-10 |
 | Infinite loops | Background DAG, scheduler slices execution | 2026-03-10 |
-| Side effect handling | Implicit Effect System, invisible to users | 2026-02-15 |
-| Granularity control | Concurrency limits + self-adaptation | 2026-02-16 |
+| Side effect handling | Implicit Effect System, transparent to users | 2026-02-15 |
+| Granularity control | Concurrency limit + adaptive | 2026-02-16 |
 | Paper citations | Added Lazy Task Creation, etc. | 2026-02-16 |
 
 ---
@@ -854,9 +852,9 @@ print(b);                    // Return b directly, skip a
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [inkwell LLVM bindings](https://cranelift.dev/)
 - [tokio runtime design](https://tokio.rs/)
-- [RFC-001: Concurrent Model](./accepted/001-concurrent-model-error-handling.md)
-- [RFC-008: Runtime Concurrency Model](./accepted/008-runtime-concurrency-model.md)
-- [RFC-009: Ownership Model](./accepted/009-ownership-model.md)
+- [RFC-001: Spawn model](./accepted/001-concurrent-model-error-handling.md)
+- [RFC-008: Runtime concurrency model](./accepted/008-runtime-concurrency-model.md)
+- [RFC-009: Ownership model](./accepted/009-ownership-model.md)
 - [Implicit Parallelism - Wikipedia](https://en.wikipedia.org/wiki/Implicit_parallelism)
 
 ---
@@ -864,9 +862,8 @@ print(b);                    // Return b directly, skip a
 ## Lifecycle and Disposition
 
 | Status | Location | Description |
-|--------|----------|-------------|
+|------|------|------|
 | **Draft** | `docs/design/rfc/` | Author draft, awaiting review submission |
-| **Under Review** | `docs/design/rfc/` | Open for community discussion and feedback |
-| **Accepted** | `docs/design/accepted/` | Becomes official design document |
+| **Under review** | `docs/design/rfc/` | Open for community discussion and feedback |
+| **Accepted** | `docs/design/accepted/` | Becomes formal design document |
 | **Rejected** | `docs/design/rfc/` | Retained in RFC directory |
-```

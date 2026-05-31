@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['*']
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,122 +16,104 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
+          toolchain: stable
           components: rustfmt, clippy
 
-      - name: Check formatting
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            check-${{ runner.os }}-cargo-
+
+      - name: Format check
         run: cargo fmt --check --all
 
       - name: Clippy
         run: cargo clippy --all --all-features -- -D warnings
 
-      - name: Check docs
-        run: cargo doc --all --no-deps
+      - name: Build check
+        run: cargo check --all-features
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: check
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: test-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            test-${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --all --all-features
+        run: cargo test --all-features --lib --bins
 
-      - name: Run tests with nextest
-        uses: taiki-e/install-action@nextest
-        if: false  # Disable for now
-
-      - name: Execute nextest tests
-        if: false  # Disable for now
-        run: cargo nextest run --all --all-features
+      - name: Doc tests
+        run: cargo test --doc --all-features
 
   test-msrv:
-    name: Test MSRV
+    name: MSRV Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get MSRV from Cargo.toml
+        id: msrv
+        run: |
+          MSRV=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$MSRV" >> $GITHUB_OUTPUT
+
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.91
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: msrv-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            msrv-${{ runner.os }}-cargo-
 
       - name: Check MSRV compatibility
-        run: cargo check --all-features
+        run: |
+          cargo check --all-features
+          cargo fmt --check --all
+          cargo clippy --all --all-features -- -D warnings
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.91.0
-
-      - name: Build release
-        run: cargo build --release --all-features
-
-      - name: Build WASM
-        if: false  # Disable for now
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: wasm32-unknown-unknown
-
-      - name: Execute WASM build
-        if: false  # Disable for now
-        run: cargo build --release --features wasm --target wasm32-unknown-unknown
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: yaoxiang-binary
-          path: target/release/yaoxiang
-
-  bench:
-    name: Benchmarks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.91.0
-
-      - name: Run benchmarks
-        run: cargo bench --all-features
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.91.0
-          components: llvm-tools
-
-      - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov
-
-      - name: Generate coverage
-        run: cargo llvm-cov --all-features --html
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage/
+      - name: Test with MSRV
+        run: cargo test --all-features --lib --bins

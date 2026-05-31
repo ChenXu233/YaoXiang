@@ -1,45 +1,43 @@
-# E4xxx：泛型と特质
+# E4xxx：泛型とtrait
 
 > `src/util/diagnostic/codes/` から自動生成
 
 ## エラー一覧
 
-## E4001：泛型制約違反
+## E4001：Generic constraint violated
 
-**カテゴリー**: 泛型
+**カテゴリー**: Generic
 
-**メッセージ**: 型は泛型制約を満たしていません
+**メッセージ**: Type does not satisfy the generic constraint
 
-**ヘルプ**: 型がすべての必須trait境界を満たすことを確認してください
-
----
-
-## E4002：特质未找到
-
-**カテゴリー**: 泛型
-
-**メッセージ**: 参照された特质が存在しません
-
-**ヘルプ**: 特质名を確認するか、正しい特质をインポートしてください
+**ヘルプ**: Ensure the type satisfies all required trait bounds
 
 ---
 
-## E4003：特质実装が欠落しています
+## E4002：Trait not found
 
-**カテゴリー**: 泛型
+**カテゴリー**: Generic
 
-**メッセージ**: 型は必要な特质を実装していません
+**メッセージ**: Referenced trait does not exist
 
-**ヘルプ**: この型に特质実装を追加してください
+**ヘルプ**: Check the trait name or import the correct trait
+
+---
+
+## E4003：Trait implementation missing
+
+**カテゴリー**: Generic
+
+**メッセージ**: Type does not implement the required trait
+
+**ヘルプ**: Add a trait implementation for this type
 
 ---
 
-## E4004：競合する特质実装
+## E4004：Conflicting trait implementations
 
-**カテゴリー**: 泛型
+**カテゴリー**: Generic
 
-**メッセージ**: 複数の特质実装が競合しています
+**メッセージ**: Multiple trait implementations conflict
 
-**ヘルプ**: 競合する実装を解決してください
-
----
+**ヘルプ**: Resolve the conflicting implementations

@@ -1,4 +1,6 @@
 # YaoXiang Clippy Configuration
+# Diagnostic struct is large (~160 bytes), raise threshold to avoid result_large_err false positives
+large-error-threshold = 256
 # 保持默认配置，不添加特殊规则
 # NOTE: `unused-imports` is not a valid field for `clippy.toml`.
 # Clippy configuration only accepts specific keys; see `rustc` or

@@ -1,0 +1,69 @@
+/// ANSI 颜色样式
+pub fn colorize(
+    style: &str,
+    text: &str,
+) -> String {
+    match style {
+        "error" => format!("\x1b[31m{}\x1b[0m", text),
+        "warning" => format!("\x1b[33m{}\x1b[0m", text),
+        "info" => format!("\x1b[34m{}\x1b[0m", text),
+        "hint" => format!("\x1b[36m{}\x1b[0m", text),
+        "bold" => format!("\x1b[1m{}\x1b[0m", text),
+        "muted" => format!("\x1b[90m{}\x1b[0m", text),
+        _ => text.to_string(),
+    }
+}
+
+/// 移除所有 ANSI 转义序列
+///
+/// 处理 CSI 序列（`ESC [` ... 终止字节）和 OSC 序列（`ESC ]` ... `BEL` 或 `ESC \`）。
+/// 对于本诊断系统生成的 SGR 颜色码（`ESC [ ... m`），此实现完全足够。
+pub fn strip_ansi(s: &str) -> String {
+    // 快速路径：无 ESC 字节则直接返回
+    if !s.contains('\x1b') {
+        return s.to_string();
+    }
+
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            match chars.peek() {
+                Some(&'[') => {
+                    // CSI 序列：ESC [ <params> <final byte>
+                    chars.next();
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        // 终止字节：0x40-0x7E（@ 到 ~）
+                        if (0x40..=0x7E).contains(&(next as u32)) {
+                            break;
+                        }
+                    }
+                }
+                Some(&']') => {
+                    // OSC 序列：ESC ] ... BEL(0x07) 或 ESC \
+                    chars.next();
+                    loop {
+                        match chars.next() {
+                            Some('\x07') => break, // BEL 终止
+                            Some('\x1b') if chars.peek() == Some(&'\\') => {
+                                chars.next();
+                                break; // ESC \ 终止
+                            }
+                            None => break,
+                            _ => {}
+                        }
+                    }
+                }
+                Some(_) => {
+                    // 其他两字节序列（如 ESC D, ESC M）：跳过 ESC + 下一字节
+                    chars.next();
+                }
+                None => {} // 孤立 ESC，跳过
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}

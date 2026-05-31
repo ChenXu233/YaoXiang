@@ -1,6 +1,6 @@
 ---
-title: Command Line Interface
-description: Detailed documentation for all package manager commands
+title: "Command Line Interface"
+description: "Detailed description of all package manager commands"
 ---
 
 # Command Line Interface
@@ -65,21 +65,21 @@ yaoxiang add <package-name> --dev
 
 | Option | Description |
 |--------|-------------|
-| `--dev`, `-D` | Add as a development dependency |
+| `--dev`, `-D` | Add as a dev dependency |
 
 ### Examples
 
 ```bash
-# Add latest version
+# Add the latest version
 yaoxiang add http
 
-# Add specific version
+# Add a specific version
 yaoxiang add http 1.0.0
 
-# Add version range
+# Add a version range
 yaoxiang add json ">=2.0.0"
 
-# Add development dependency
+# Add dev dependencies
 yaoxiang add test-utils --dev
 yaoxiang add benchmark -D
 ```
@@ -107,15 +107,15 @@ yaoxiang rm <package-name> --dev
 
 | Option | Description |
 |--------|-------------|
-| `--dev`, `-D` | Remove development dependency |
+| `--dev`, `-D` | Remove a dev dependency |
 
 ### Examples
 
 ```bash
-# Remove regular dependency
+# Remove a regular dependency
 yaoxiang rm http
 
-# Remove development dependency
+# Remove a dev dependency
 yaoxiang rm test-utils --dev
 ```
 
@@ -135,7 +135,7 @@ yaoxiang install
 
 - Reads dependency declarations from `yaoxiang.toml`
 - Downloads all dependencies to the `vendor` directory
-- Generates/updates `yaoxiang.lock` with locked versions
+- Generates/updates `yaoxiang.lock` to lock versions
 - Detects dependency version conflicts
 
 ### Examples
@@ -173,7 +173,7 @@ yaoxiang update <package-name>
 ### Description
 
 - Without arguments: updates all dependencies
-- With arguments: updates only the specified dependency
+- With arguments: only updates the specified dependency
 
 ### Examples
 
@@ -184,7 +184,7 @@ yaoxiang update
 # Example output:
 # 📦 Updating dependencies...
 #   http (0 → 1.1.0)
-# ✅ 1 dependency updated, lock file updated
+# ✅ Updated 1 dependency, lock file updated
 
 # Update a single dependency
 yaoxiang update http
@@ -204,7 +204,7 @@ yaoxiang list
 
 ### Description
 
-Displays all runtime dependencies and development dependencies, along with their versions and sources.
+Displays all runtime dependencies and dev dependencies, along with their versions and sources.
 
 ### Examples
 
@@ -215,10 +215,10 @@ yaoxiang list
 # Example output:
 # 📦 Project Dependencies
 #
-# Runtime Dependencies:
+# Runtime dependencies:
 #   http        1.0.0    registry
 #   json        2.0.0    registry
 #
-# Development Dependencies:
+# Dev dependencies:
 #   test-utils  0.5.0    registry
 ```

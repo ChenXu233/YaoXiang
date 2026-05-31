@@ -13,7 +13,7 @@ export default defineConfig({
 
   // 排除有问题文件的目录
   srcExclude: [
-    'archived/**',
+    'archive/**',
     'old/**',
     '**/*.backup.md',
   ],
@@ -162,6 +162,38 @@ export default defineConfig({
                 },
               ]
             },
+            {
+              text: '工具设计',
+              items: [
+                { text: 'check 命令', link: '/design/check/' },
+                { text: '诊断系统', link: '/design/check/diagnostic-system' },
+                { text: '跨文件分析', link: '/design/check/cross-file-analysis' },
+                { text: '增量检查', link: '/design/check/incremental-checking' },
+              ],
+            },
+            {
+              text: '格式化规范',
+              items: [
+                { text: '规范总览', link: '/design/formatter/' },
+                {
+                  text: '格式化规则',
+                  collapsed: true,
+                  items: [
+                    { text: '规则总览', link: '/design/formatter/formatting-rules/' },
+                    { text: '基础格式', link: '/design/formatter/formatting-rules/basic' },
+                    { text: '函数和调用', link: '/design/formatter/formatting-rules/functions' },
+                    { text: '类型系统', link: '/design/formatter/formatting-rules/types' },
+                    { text: '数据结构', link: '/design/formatter/formatting-rules/data-structures' },
+                    { text: '控制流', link: '/design/formatter/formatting-rules/control-flow' },
+                    { text: '特殊语法', link: '/design/formatter/formatting-rules/special-syntax' },
+                  ],
+                },
+                { text: '配置规范', link: '/design/formatter/configuration' },
+                { text: '注释规范', link: '/design/formatter/comments' },
+                { text: '错误处理', link: '/design/formatter/error-handling' },
+                { text: 'CLI 规范', link: '/design/formatter/cli' },
+              ],
+            },
           ],
 
           '/reference/': [
@@ -233,16 +265,6 @@ export default defineConfig({
                     hyphenToSpace: true,
                   }),
                 },
-                {
-                  text: '已完成',
-                  collapsed: true,
-                  items: generateSidebar({
-                    scanStartPath: '/dev/plan/completed',
-                    useTitleFromFrontmatter: true,
-                    collapsed: true,
-                    hyphenToSpace: true,
-                  }),
-                 },
               ],
             },
           ],

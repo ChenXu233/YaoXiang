@@ -23,7 +23,7 @@ pub use var::{TypeVar, ConstVar};
 pub use const_data::{ConstValue, ConstExpr, ConstKind, ConstVarDef, BinOp, UnOp};
 pub use mono::{
     TypeBinding, MonoType, StructType, EnumType, PolyType, UniverseLevel,
-    get_ast_type_universe_level, calculate_meta_type_level,
+    get_ast_type_universe_level, calculate_meta_type_level, ast_type_to_poly_type,
 };
 pub use substitute::{Substitution, Substituter};
 pub use constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};

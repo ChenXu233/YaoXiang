@@ -1,4 +1,4 @@
-# E5xxx: Modules and Imports
+# E5xxx: Module and Import
 
 > Auto-generated from `src/util/diagnostic/codes/`
 
@@ -41,5 +41,3 @@
 **Message**: Modules have circular dependencies
 
 **Help**: Refactor to remove the circular dependency
-
----

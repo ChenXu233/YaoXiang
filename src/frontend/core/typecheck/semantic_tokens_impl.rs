@@ -284,6 +284,7 @@ impl TypeChecker {
             | Type::Bool
             | Type::Void
             | Type::Enum(_) => {}
+            Type::Ref { inner, .. } => self.collect_type_tokens(file_path, inner),
         }
     }
 

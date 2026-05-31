@@ -19,6 +19,8 @@ pub struct EmitterConfig {
     pub show_line_numbers: bool,
     /// 是否使用 Unicode 字符
     pub unicode: bool,
+    /// 是否使用符号模式
+    pub symbols: bool,
     /// 指示字符 (默认: "^")
     pub indicator: char,
     /// 最大显示行数
@@ -34,18 +36,11 @@ impl Default for EmitterConfig {
             show_related: true,
             show_line_numbers: true,
             unicode: true,
+            symbols: false,
             indicator: '^',
             max_lines: 6,
         }
     }
-}
-
-/// 诊断渲染器 trait
-pub trait DiagnosticEmitter {
-    fn emit(
-        &self,
-        diagnostic: &Diagnostic,
-    ) -> String;
 }
 
 /// 文本诊断渲染器
@@ -204,9 +199,9 @@ impl TextEmitter {
             let line_num = start_line + i;
             if let Some(line) = Self::get_source_line(source_file, line_num) {
                 if self.config.show_line_numbers {
-                    output.push_str(&format!("{:>4} | ", line_num));
+                    output.push_str(&format!("{:>4} {} ", line_num, self.vbar()));
                 } else {
-                    output.push_str("     | ");
+                    output.push_str(&format!("     {} ", self.vbar()));
                 }
                 output.push_str(&line);
                 output.push('\n');
@@ -221,7 +216,7 @@ impl TextEmitter {
                     };
                     let indicators = self.config.indicator.to_string().repeat(indicator_len);
 
-                    output.push_str(&format!("     | {}{}\n", spaces, indicators));
+                    output.push_str(&format!("     {} {}{}\n", self.vbar(), spaces, indicators));
                 }
             }
         }
@@ -250,80 +245,25 @@ impl TextEmitter {
         if !self.config.use_colors {
             return text.to_string();
         }
+        crate::util::diagnostic::emitter::ansi::colorize(style, text)
+    }
 
-        match style {
-            "error" => format!("\x1b[31m{}\x1b[0m", text),
-            "warning" => format!("\x1b[33m{}\x1b[0m", text),
-            "info" => format!("\x1b[34m{}\x1b[0m", text),
-            "hint" => format!("\x1b[36m{}\x1b[0m", text),
-            "bold" => format!("\x1b[1m{}\x1b[0m", text),
-            _ => text.to_string(),
+    fn vbar(&self) -> &'static str {
+        if self.config.unicode {
+            "│"
+        } else {
+            "|"
         }
+    }
+
+    #[allow(dead_code)]
+    fn hint_prefix(&self) -> String {
+        self.color("hint", "hint: ")
     }
 }
 
 impl Default for TextEmitter {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::util::diagnostic::codes::ErrorCodeDefinition;
-    use crate::util::span::Span;
-
-    /// 移除 ANSI 转义序列
-    fn strip_ansi(s: &str) -> String {
-        s.replace("\x1b[31m", "")
-            .replace("\x1b[33m", "")
-            .replace("\x1b[34m", "")
-            .replace("\x1b[36m", "")
-            .replace("\x1b[1m", "")
-            .replace("\x1b[0m", "")
-    }
-
-    #[test]
-    fn test_render_basic_error() {
-        let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
-
-        let emitter = TextEmitter::new();
-        let output = emitter.render(&diagnostic);
-        let clean_output = strip_ansi(&output);
-
-        // 输出格式为 "error [E0001]" (带空格)
-        assert!(clean_output.contains("error [E0001]"), "{}", clean_output);
-        assert!(clean_output.contains("Invalid character"));
-    }
-
-    #[test]
-    fn test_render_error_with_span() {
-        let diagnostic = ErrorCodeDefinition::type_mismatch("Int", "String")
-            .at(Span::dummy())
-            .build();
-
-        let emitter = TextEmitter::new();
-        let output = emitter.render(&diagnostic);
-        let clean_output = strip_ansi(&output);
-
-        assert!(clean_output.contains("error [E1002]"), "{}", clean_output);
-    }
-
-    #[test]
-    fn test_config_options() {
-        let config = EmitterConfig {
-            use_colors: false,
-            show_help: true,
-            ..Default::default()
-        };
-
-        let diagnostic = ErrorCodeDefinition::invalid_character("@").build();
-
-        let emitter = TextEmitter::with_config(config);
-        let output = emitter.render(&diagnostic);
-
-        // 验证颜色被禁用
-        assert!(!output.contains("\x1b[31m"));
     }
 }

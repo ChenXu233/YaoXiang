@@ -55,7 +55,7 @@ pub enum ValueType {
     Float(FloatWidth),
     /// Character (Unicode code point)
     Char,
-    /// String (reference, Arc<str>)
+    /// String (reference, `Arc<str>`)
     String,
     /// Byte array
     Bytes,
@@ -153,7 +153,7 @@ pub enum RuntimeValue {
     /// Character (Unicode code point)
     Char(u32),
 
-    /// String (shared string, Arc<str>)
+    /// String (shared string, `Arc<str>`)
     String(Arc<str>),
 
     /// Byte array

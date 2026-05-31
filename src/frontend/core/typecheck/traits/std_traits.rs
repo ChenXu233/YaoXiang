@@ -2,10 +2,9 @@
 //!
 //! 定义 YaoXiang 语言的标准库 traits（接口类型）：
 //! - Clone: 可克隆
+//! - Dup: 可复制（标记 trait，隐含 Clone）
 //! - Equal: 可相等比较（合并了 PartialEq + Eq）
 //! - Debug: 可调试打印
-//! - Send: 可发送（跨线程）
-//! - Sync: 可同步（跨线程共享）
 //! - Iterator: 迭代器
 //!
 //! RFC-010 风格示例：
@@ -29,10 +28,9 @@ use crate::frontend::core::types::base::{TraitDefinition, TraitTable, TraitImple
 /// RFC-011 定义的标准库 trait 列表
 pub const STD_TRAITS: &[&str] = &[
     "Clone",    // 可克隆
+    "Dup",      // 可复制（标记 trait，隐含 Clone）
     "Equal",    // 可相等比较（合并了 PartialEq + Eq）
     "Debug",    // 可调试打印
-    "Send",     // 可发送（跨线程）
-    "Sync",     // 可同步（跨线程共享）
     "Iterator", // 迭代器
 ];
 
@@ -41,17 +39,14 @@ pub fn init_std_traits(trait_table: &mut TraitTable) {
     // 添加 Clone trait 定义
     add_clone_trait(trait_table);
 
+    // 添加 Dup trait 定义（标记 trait，隐含 Clone）
+    add_dup_trait(trait_table);
+
     // 添加 Equal trait 定义（合并了 PartialEq + Eq）
     add_equal_trait(trait_table);
 
     // 添加 Debug trait 定义
     add_debug_trait(trait_table);
-
-    // 添加 Send trait 定义（标记 trait）
-    add_send_trait(trait_table);
-
-    // 添加 Sync trait 定义（标记 trait）
-    add_sync_trait(trait_table);
 
     // 添加 Iterator trait 定义
     add_iterator_trait(trait_table);
@@ -76,6 +71,7 @@ fn add_clone_trait(trait_table: &mut TraitTable) {
         parent_traits: Vec::new(),
         generic_params: Vec::new(),
         span: None,
+        is_marker: false,
     };
 
     trait_table.add_trait(clone_def);
@@ -103,39 +99,24 @@ fn add_equal_trait(trait_table: &mut TraitTable) {
         parent_traits: Vec::new(),
         generic_params: Vec::new(),
         span: None,
+        is_marker: false,
     };
 
     trait_table.add_trait(equal_def);
 }
 
-/// 添加 Send trait 定义（标记 trait）
-fn add_send_trait(trait_table: &mut TraitTable) {
-    // Send 是标记 trait，语义由编译器处理
-    // 不需要显式方法
-    let send_def = TraitDefinition {
-        name: "Send".to_string(),
+/// 添加 Dup trait 定义（标记 trait，隐含 Clone）
+fn add_dup_trait(trait_table: &mut TraitTable) {
+    // Dup 是标记 trait，表示类型可以被隐式复制
+    // 语义：隐含 Clone 约束，由编译器自动处理
+    trait_table.add_trait(TraitDefinition {
+        name: "Dup".to_string(),
         methods: HashMap::new(),
-        parent_traits: Vec::new(),
-        generic_params: Vec::new(),
+        parent_traits: vec!["Clone".to_string()],
+        generic_params: vec![],
         span: None,
-    };
-
-    trait_table.add_trait(send_def);
-}
-
-/// 添加 Sync trait 定义（标记 trait）
-fn add_sync_trait(trait_table: &mut TraitTable) {
-    // Sync 是标记 trait，语义由编译器处理
-    // 不需要显式方法
-    let sync_def = TraitDefinition {
-        name: "Sync".to_string(),
-        methods: HashMap::new(),
-        parent_traits: Vec::new(),
-        generic_params: Vec::new(),
-        span: None,
-    };
-
-    trait_table.add_trait(sync_def);
+        is_marker: true,
+    });
 }
 
 /// 添加 Debug trait 定义
@@ -160,6 +141,7 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
         parent_traits: Vec::new(),
         generic_params: Vec::new(),
         span: None,
+        is_marker: false,
     };
 
     trait_table.add_trait(debug_def);
@@ -167,51 +149,44 @@ fn add_debug_trait(trait_table: &mut TraitTable) {
 
 /// 为 primitive 类型添加标准库 trait 实现
 pub fn init_primitive_impls(trait_table: &mut TraitTable) {
-    // 为 Int 添加 Clone, Equal, Debug, Send, Sync 实现
+    // 为 Int 添加 Clone, Dup, Equal, Debug 实现
     add_primitive_impl(trait_table, "Int", "Clone");
+    add_primitive_impl(trait_table, "Int", "Dup");
     add_primitive_impl(trait_table, "Int", "Equal");
     add_primitive_impl(trait_table, "Int", "Debug");
-    add_primitive_impl(trait_table, "Int", "Send");
-    add_primitive_impl(trait_table, "Int", "Sync");
 
-    // 为 Float 添加 Clone, Equal, Debug, Send, Sync 实现
+    // 为 Float 添加 Clone, Dup, Equal, Debug 实现
     add_primitive_impl(trait_table, "Float", "Clone");
+    add_primitive_impl(trait_table, "Float", "Dup");
     add_primitive_impl(trait_table, "Float", "Equal");
     add_primitive_impl(trait_table, "Float", "Debug");
-    add_primitive_impl(trait_table, "Float", "Send");
-    add_primitive_impl(trait_table, "Float", "Sync");
 
-    // 为 Bool 添加 Clone, Equal, Debug, Send, Sync 实现
+    // 为 Bool 添加 Clone, Dup, Equal, Debug 实现
     add_primitive_impl(trait_table, "Bool", "Clone");
+    add_primitive_impl(trait_table, "Bool", "Dup");
     add_primitive_impl(trait_table, "Bool", "Equal");
     add_primitive_impl(trait_table, "Bool", "Debug");
-    add_primitive_impl(trait_table, "Bool", "Send");
-    add_primitive_impl(trait_table, "Bool", "Sync");
 
-    // 为 String 添加 Clone, Equal, Debug, Send, Sync 实现
-    add_primitive_impl(trait_table, "String", "Clone");
-    add_primitive_impl(trait_table, "String", "Equal");
-    add_primitive_impl(trait_table, "String", "Debug");
-    add_primitive_impl(trait_table, "String", "Send");
-    add_primitive_impl(trait_table, "String", "Sync");
-
-    // 为 Void 添加 Equal, Debug, Send, Sync 实现（不实现 Clone）
-    add_primitive_impl(trait_table, "Void", "Equal");
-    add_primitive_impl(trait_table, "Void", "Debug");
-    add_primitive_impl(trait_table, "Void", "Send");
-    add_primitive_impl(trait_table, "Void", "Sync");
-
-    // 为 Char 添加 Clone, Equal, Debug, Send, Sync 实现
+    // 为 Char 添加 Clone, Dup, Equal, Debug 实现
     add_primitive_impl(trait_table, "Char", "Clone");
+    add_primitive_impl(trait_table, "Char", "Dup");
     add_primitive_impl(trait_table, "Char", "Equal");
     add_primitive_impl(trait_table, "Char", "Debug");
-    add_primitive_impl(trait_table, "Char", "Send");
-    add_primitive_impl(trait_table, "Char", "Sync");
 
-    // 为 Bytes 添加 Debug, Send, Sync 实现（不实现 Clone, Equal）
+    // 为 String 添加 Clone, Dup, Equal, Debug 实现
+    add_primitive_impl(trait_table, "String", "Clone");
+    add_primitive_impl(trait_table, "String", "Dup");
+    add_primitive_impl(trait_table, "String", "Equal");
+    add_primitive_impl(trait_table, "String", "Debug");
+
+    // 为 Bytes 添加 Clone, Dup, Debug 实现（不实现 Equal）
+    add_primitive_impl(trait_table, "Bytes", "Clone");
+    add_primitive_impl(trait_table, "Bytes", "Dup");
     add_primitive_impl(trait_table, "Bytes", "Debug");
-    add_primitive_impl(trait_table, "Bytes", "Send");
-    add_primitive_impl(trait_table, "Bytes", "Sync");
+
+    // 为 Void 添加 Equal, Debug 实现（不实现 Clone, Dup）
+    add_primitive_impl(trait_table, "Void", "Equal");
+    add_primitive_impl(trait_table, "Void", "Debug");
 }
 
 /// 为 primitive 类型添加 trait 实现
@@ -231,6 +206,9 @@ fn add_primitive_impl(
                 is_async: false,
             };
             methods.insert("clone".to_string(), fn_type);
+        }
+        "Dup" => {
+            // Dup 是标记 trait，不需要方法（隐含 Clone）
         }
         "Equal" => {
             // equal 方法: 比较两个值
@@ -255,9 +233,6 @@ fn add_primitive_impl(
                 is_async: false,
             };
             methods.insert("debug".to_string(), fn_type);
-        }
-        "Send" | "Sync" => {
-            // Send/Sync 是标记 trait，不需要方法
         }
         _ => {}
     }
@@ -308,6 +283,7 @@ fn add_iterator_trait(trait_table: &mut TraitTable) {
         parent_traits: Vec::new(),
         generic_params: vec!["T".to_string()], // 元素类型参数
         span: None,
+        is_marker: false,
     };
 
     trait_table.add_trait(iterator_def);

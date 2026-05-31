@@ -393,6 +393,13 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         crate::frontend::core::typecheck::MonoType::Weak(inner) => {
             format!("Weak({})", dump_type_detail(inner))
         }
+        crate::frontend::core::typecheck::MonoType::Ref { mutable, inner } => {
+            if *mutable {
+                format!("&mut {}", dump_type_detail(inner))
+            } else {
+                format!("&{}", dump_type_detail(inner))
+            }
+        }
         crate::frontend::core::typecheck::MonoType::AssocType {
             host_type,
             assoc_name,

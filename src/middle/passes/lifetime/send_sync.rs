@@ -9,179 +9,30 @@
 //! 2. 基本类型自动满足 Send + Sync
 //! 3. Arc 自动满足 Send + Sync
 //! 4. Rc 既不是 Send 也不是 Sync
+//!
+//! 注意：此模块不再被 OwnershipChecker 使用，
+//! 但保留给 mono/constraint.rs 的约束传播使用。
 
-use super::error::OwnershipError;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use std::collections::HashMap;
 
 /// Send/Sync 检查器
 ///
-/// 检测以下错误：
-/// - NotSend: 非 Send 类型用于跨线程操作
-/// - NotSync: 非 Sync 类型用于跨线程共享
+/// 检测类型是否满足 Send/Sync 约束。
+/// 主要用于约束传播阶段的类型检查。
 #[derive(Debug)]
 pub struct SendSyncChecker {
-    /// 收集的错误
-    errors: Vec<OwnershipError>,
-    /// 当前位置 (block_idx, instr_idx)
-    location: (usize, usize),
-    /// 闭包定义映射: closure_operand -> (func_name, env)
-    closures: HashMap<Operand, (String, Vec<Operand>)>,
+    // 闭包定义映射保留用于未来扩展
 }
 
 impl SendSyncChecker {
     /// 创建新的 Send/Sync 检查器
     pub fn new() -> Self {
-        Self {
-            errors: Vec::new(),
-            location: (0, 0),
-            closures: HashMap::new(),
-        }
-    }
-
-    /// 检查函数的所有权语义
-    pub fn check_function(
-        &mut self,
-        func: &FunctionIR,
-    ) -> &[OwnershipError] {
-        self.clear();
-        self.build_closure_map(func);
-
-        for (block_idx, block) in func.blocks.iter().enumerate() {
-            for (instr_idx, instr) in block.instructions.iter().enumerate() {
-                self.location = (block_idx, instr_idx);
-                self.check_instruction(instr, func);
-            }
-        }
-
-        &self.errors
-    }
-
-    /// 获取收集的错误
-    pub fn errors(&self) -> &[OwnershipError] {
-        &self.errors
-    }
-
-    /// 清除状态
-    pub fn clear(&mut self) {
-        self.errors.clear();
-        self.closures.clear();
-    }
-
-    /// 构建闭包映射
-    fn build_closure_map(
-        &mut self,
-        func: &FunctionIR,
-    ) {
-        self.closures.clear();
-        for block in func.blocks.iter() {
-            for instr in block.instructions.iter() {
-                if let Instruction::MakeClosure {
-                    dst,
-                    func: func_name,
-                    env,
-                } = instr
-                {
-                    self.closures
-                        .insert(dst.clone(), (func_name.clone(), env.clone()));
-                }
-            }
-        }
-    }
-
-    /// 检查指令
-    fn check_instruction(
-        &mut self,
-        instr: &Instruction,
-        func: &FunctionIR,
-    ) {
-        match instr {
-            // Spawn 检查：闭包捕获的变量必须是 Send
-            Instruction::Spawn {
-                func: closure_op, ..
-            } => {
-                self.check_spawn(closure_op, func);
-            }
-            // ArcNew: Arc 总是 Send + Sync
-            Instruction::ArcNew { .. } => {
-                // Arc 本身是 Send+Sync，不检查底层类型
-                // 但 src 必须在这个上下文中有效（所有权检查已覆盖）
-            }
-            // ArcClone: 克隆 Arc，不改变 Send/Sync 属性
-            Instruction::ArcClone { .. } => {
-                // Arc 总是 Send+Sync
-            }
-            // ShareRef: 检查被共享的类型是否是 Sync
-            Instruction::ShareRef { src, .. } => {
-                if let Some(ty) = self.get_operand_type(src, func) {
-                    if !self.is_sync(&ty) {
-                        self.report_not_sync(src, &ty, "cannot share non-Sync type across threads");
-                    }
-                }
-            }
-            // 跨线程函数调用检查（如果将来实现）
-            _ => {}
-        }
-    }
-
-    /// 检查 spawn 操作的 Send 约束
-    fn check_spawn(
-        &mut self,
-        closure_op: &Operand,
-        func: &FunctionIR,
-    ) {
-        // 如果闭包是 Local，检查其环境变量
-        // 注意：需要先 clone env 避免借用冲突
-        if let Some((_, env)) = self.closures.get(closure_op) {
-            let env: Vec<Operand> = env.clone();
-            for captured in env {
-                if let Some(ty) = self.get_operand_type(&captured, func) {
-                    if !self.is_send(&ty) {
-                        self.report_not_send(&captured, &ty, "closure captures non-Send type");
-                    }
-                }
-            }
-        }
-    }
-
-    /// 获取操作数的类型
-    fn get_operand_type(
-        &self,
-        operand: &Operand,
-        func: &FunctionIR,
-    ) -> Option<MonoType> {
-        match operand {
-            Operand::Const(c) => Some(self.const_type(c)),
-            Operand::Arg(idx) => func.params.get(*idx).cloned(),
-            Operand::Local(idx) => func.locals.get(*idx).cloned(),
-            Operand::Temp(_) => None,   // 临时变量类型需要额外追踪
-            Operand::Global(_) => None, // 全局变量类型需要额外信息
-            Operand::Label(_) => None,
-            Operand::Register(_) => None,
-        }
-    }
-
-    /// 常量类型
-    fn const_type(
-        &self,
-        c: &crate::middle::core::ir::ConstValue,
-    ) -> MonoType {
-        use crate::middle::core::ir::ConstValue;
-        match c {
-            ConstValue::Void => MonoType::Void,
-            ConstValue::Bool(_) => MonoType::Bool,
-            ConstValue::Int(_) => MonoType::Int(64),
-            ConstValue::Float(_) => MonoType::Float(64),
-            ConstValue::Char(_) => MonoType::Char,
-            ConstValue::String(_) => MonoType::String,
-            ConstValue::Bytes(_) => MonoType::Bytes,
-        }
+        Self {}
     }
 
     /// 检查类型是否 Send
     #[allow(clippy::only_used_in_recursion)]
-    pub(crate) fn is_send(
+    pub fn is_send(
         &self,
         ty: &MonoType,
     ) -> bool {
@@ -244,12 +95,14 @@ impl SendSyncChecker {
             MonoType::Literal { base_type, .. } => self.is_send(base_type),
             // 元类型：编译期概念，总是 Send
             MonoType::MetaType { .. } => true,
+            // 借用引用：检查内部类型
+            MonoType::Ref { inner, .. } => self.is_send(inner),
         }
     }
 
     /// 检查类型是否 Sync
     #[allow(clippy::only_used_in_recursion)]
-    pub(crate) fn is_sync(
+    pub fn is_sync(
         &self,
         ty: &MonoType,
     ) -> bool {
@@ -312,59 +165,9 @@ impl SendSyncChecker {
             MonoType::Literal { base_type, .. } => self.is_sync(base_type),
             // 元类型：编译期概念，总是 Sync
             MonoType::MetaType { .. } => true,
+            // 借用引用：检查内部类型
+            MonoType::Ref { inner, .. } => self.is_sync(inner),
         }
-    }
-
-    /// 报告 NotSend 错误
-    fn report_not_send(
-        &mut self,
-        operand: &Operand,
-        ty: &MonoType,
-        reason: &str,
-    ) {
-        self.errors.push(OwnershipError::NotSend {
-            value: self.operand_to_string(operand),
-            reason: format!("{} (type: {})", reason, self.type_to_string(ty)),
-            location: self.location,
-        });
-    }
-
-    /// 报告 NotSync 错误
-    fn report_not_sync(
-        &mut self,
-        operand: &Operand,
-        ty: &MonoType,
-        reason: &str,
-    ) {
-        self.errors.push(OwnershipError::NotSync {
-            value: self.operand_to_string(operand),
-            reason: format!("{} (type: {})", reason, self.type_to_string(ty)),
-            location: self.location,
-        });
-    }
-
-    /// 操作数转字符串
-    fn operand_to_string(
-        &self,
-        operand: &Operand,
-    ) -> String {
-        match operand {
-            Operand::Const(c) => format!("const_{:?}", c),
-            Operand::Local(idx) => format!("local_{}", idx),
-            Operand::Arg(idx) => format!("arg_{}", idx),
-            Operand::Temp(idx) => format!("temp_{}", idx),
-            Operand::Global(idx) => format!("global_{}", idx),
-            Operand::Label(idx) => format!("label_{}", idx),
-            Operand::Register(idx) => format!("reg_{}", idx),
-        }
-    }
-
-    /// 类型转字符串
-    fn type_to_string(
-        &self,
-        ty: &MonoType,
-    ) -> String {
-        ty.type_name()
     }
 }
 
@@ -491,9 +294,9 @@ impl SendSyncPropagator {
     /// 传播约束到类型参数
     ///
     /// 约束传播规则：
-    /// - Vec[T] 约束 Send → T 约束 Send
-    /// - (T, U) 约束 Send → T 和 U 都约束 Send
-    /// - fn(T) -> U 约束 Send → T 和 U 都约束 Send
+    /// - `Vec[T]` 约束 Send → T 约束 Send
+    /// - `(T, U)` 约束 Send → T 和 U 都约束 Send
+    /// - `fn(T) -> U` 约束 Send → T 和 U 都约束 Send
     pub fn propagate(&self) -> Vec<(MonoType, SendSyncConstraint)> {
         let mut propagated = Vec::new();
         let mut visited = std::collections::HashSet::new();

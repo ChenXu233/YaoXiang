@@ -86,15 +86,14 @@ impl IntraTaskCycleTracker {
                         self.value_defs.insert(dst.clone(), src.clone());
                     }
                     // StoreField：追踪字段赋值（可能形成循环）
-                    Instruction::StoreField { dst, src, .. } => {
+                    Instruction::StoreField { dst, src, .. }
                         // dst.field = src，如果 src 是 ref，可能形成循环
-                        if self.arc_new_locations.contains_key(src) {
+                        if self.arc_new_locations.contains_key(src) => {
                             self.ref_edges.push(RefEdge {
                                 from: dst.clone(),
                                 to: src.clone(),
                             });
                         }
-                    }
                     _ => {}
                 }
             }
