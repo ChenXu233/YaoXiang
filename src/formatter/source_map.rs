@@ -308,8 +308,9 @@ impl SourceMap {
         &self,
         line: usize,
     ) -> Option<&Comment> {
-        self.comments
-            .iter()
-            .find(|c| c.span.start.line == line && matches!(c.style, CommentStyle::SingleLine))
+        self.comments.iter().find(|c| {
+            c.span.start.line == line
+                && matches!(c.style, CommentStyle::SingleLine | CommentStyle::Doc)
+        })
     }
 }
