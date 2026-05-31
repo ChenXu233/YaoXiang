@@ -170,4 +170,3 @@ fn format_struct_fields(fields: &[StructField]) -> String {
         .collect();
     items.join(", ")
 }
-

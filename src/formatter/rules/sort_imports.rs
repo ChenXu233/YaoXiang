@@ -100,4 +100,3 @@ pub fn sort_imports(stmts: &mut Vec<Stmt>) {
 
     *stmts = sorted_stmts;
 }
-

@@ -15,11 +15,15 @@ pub fn format_comments_between(
         match &comment.style {
             CommentStyle::SingleLine | CommentStyle::Doc => {
                 result.push_str(&comment.content);
-                result.push('\n');
+                if !comment.content.ends_with('\n') {
+                    result.push('\n');
+                }
             }
             CommentStyle::MultiLine => {
                 result.push_str(&comment.content);
-                result.push('\n');
+                if !comment.content.ends_with('\n') {
+                    result.push('\n');
+                }
             }
         }
     }
