@@ -309,30 +309,7 @@ pub(crate) fn format_call(
     for (name, expr) in named_args {
         all_args.push(format!("{}={}", name, format_expr(expr, ctx, source_map)));
     }
-
-    if all_args.is_empty() {
-        return format!("{}()", func_str);
-    }
-
-    let single_line = format!("{}({})", func_str, all_args.join(", "));
-
-    // 如果单行不超过行宽，使用单行格式
-    if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
-        single_line
-    } else {
-        // 多行格式：尾随逗号风格，参数与开括号对齐
-        let indent = ctx.indent_str();
-        let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
-        let mut result = format!("{}(\n", func_str);
-        for arg in all_args.iter() {
-            result.push_str(&inner_indent);
-            result.push_str(arg);
-            result.push_str(",\n");
-        }
-        result.push_str(&indent);
-        result.push(')');
-        result
-    }
+    super::delimited::format_delimited_list("(", ")", &all_args, Some(&func_str), ctx)
 }
 
 /// 格式化函数定义（表达式形式）
@@ -621,33 +598,11 @@ pub(crate) fn format_list(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    if exprs.is_empty() {
-        return "[]".to_string();
-    }
-
     let items: Vec<String> = exprs
         .iter()
         .map(|e| format_expr(e, ctx, source_map))
         .collect();
-    let single_line = format!("[{}]", items.join(", "));
-
-    // 如果单行不超过行宽，使用单行格式
-    if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
-        single_line
-    } else {
-        // 多行格式：每个元素一行，保持对齐
-        let indent = ctx.indent_str();
-        let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
-        let mut result = "[\n".to_string();
-        for item in items.iter() {
-            result.push_str(&inner_indent);
-            result.push_str(item);
-            result.push_str(",\n");
-        }
-        result.push_str(&indent);
-        result.push(']');
-        result
-    }
+    super::delimited::format_delimited_list("[", "]", &items, None, ctx)
 }
 
 /// 格式化字典，支持元素过多时换行
@@ -656,10 +611,6 @@ pub(crate) fn format_dict(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    if pairs.is_empty() {
-        return "{}".to_string();
-    }
-
     let items: Vec<String> = pairs
         .iter()
         .map(|(k, v)| {
@@ -670,26 +621,7 @@ pub(crate) fn format_dict(
             )
         })
         .collect();
-
-    let single_line = format!("{{{}}}", items.join(", "));
-
-    // 如果单行不超过行宽，使用单行格式
-    if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
-        single_line
-    } else {
-        // 多行格式：每个键值对一行，保持对齐
-        let indent = ctx.indent_str();
-        let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
-        let mut result = "{\n".to_string();
-        for item in items.iter() {
-            result.push_str(&inner_indent);
-            result.push_str(item);
-            result.push_str(",\n");
-        }
-        result.push_str(&indent);
-        result.push('}');
-        result
-    }
+    super::delimited::format_delimited_list("{", "}", &items, None, ctx)
 }
 
 /// 格式化字段访问，处理链式调用换行

@@ -2,6 +2,7 @@
 
 pub mod comment;
 pub mod common;
+pub mod delimited;
 pub mod expr;
 pub mod module;
 pub mod stmt;
