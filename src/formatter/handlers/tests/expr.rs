@@ -150,3 +150,21 @@ fn test_format_syntax_error_preserves_content() {
     let result = crate::formatter::format_source(source, &FormatOptions::default());
     assert!(result.is_ok(), "Should not panic on syntax error");
 }
+
+#[test]
+fn test_format_literal_string_escapes_quotes() {
+    let lit = Literal::String("say \"hello\"".to_string());
+    assert_eq!(format_literal(&lit), r#""say \"hello\"""#);
+}
+
+#[test]
+fn test_format_literal_string_escapes_backslash() {
+    let lit = Literal::String("path\\to\\file".to_string());
+    assert_eq!(format_literal(&lit), r#""path\\to\\file""#);
+}
+
+#[test]
+fn test_format_literal_char_escapes() {
+    let lit = Literal::Char('\'');
+    assert_eq!(format_literal(&lit), r#"'\''"#);
+}

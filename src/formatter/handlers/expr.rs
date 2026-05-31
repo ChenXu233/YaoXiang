@@ -210,8 +210,28 @@ pub(crate) fn format_literal(lit: &Literal) -> String {
             }
         }
         Literal::Bool(b) => b.to_string(),
-        Literal::Char(c) => format!("'{}'", c),
-        Literal::String(s) => format!("\"{}\"", s),
+        Literal::Char(c) => {
+            let escaped = match c {
+                '\'' => "\\'".to_string(),
+                '\\' => "\\\\".to_string(),
+                '\n' => "\\n".to_string(),
+                '\r' => "\\r".to_string(),
+                '\t' => "\\t".to_string(),
+                '\0' => "\\0".to_string(),
+                _ => c.to_string(),
+            };
+            format!("'{}'", escaped)
+        }
+        Literal::String(s) => {
+            let escaped = s
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\r', "\\r")
+                .replace('\t', "\\t")
+                .replace('\0', "\\0");
+            format!("\"{}\"", escaped)
+        }
     }
 }
 
