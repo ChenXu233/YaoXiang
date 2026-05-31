@@ -1,6 +1,6 @@
 //! 表达式格式化处理器测试
 //!
-//! 对应 formatter 规范 §3, §7, §8, §10, §12
+//! 对应 formatter 规范 §3, §7, §8, §10, §11, §12, §13, §17, §18
 
 use crate::formatter::handlers::expr::{
     format_binop, format_call, format_dict, format_expr, format_list, format_literal,
@@ -167,4 +167,116 @@ fn test_format_literal_string_escapes_backslash() {
 fn test_format_literal_char_escapes() {
     let lit = Literal::Char('\'');
     assert_eq!(format_literal(&lit), r#"'\''"#);
+}
+
+// === §11 Match 表达式 ===
+
+#[test]
+fn test_format_match_basic() {
+    let match_expr = Expr::Match {
+        expr: Box::new(Expr::Var("x".to_string(), Span::dummy())),
+        arms: vec![
+            MatchArm {
+                pattern: Pattern::Literal(Literal::Int(1)),
+                body: Block {
+                    stmts: vec![],
+                    expr: Some(Box::new(Expr::Lit(
+                        Literal::String("one".to_string()),
+                        Span::dummy(),
+                    ))),
+                    span: Span::dummy(),
+                },
+                span: Span::dummy(),
+            },
+            MatchArm {
+                pattern: Pattern::Wildcard,
+                body: Block {
+                    stmts: vec![],
+                    expr: Some(Box::new(Expr::Lit(
+                        Literal::String("other".to_string()),
+                        Span::dummy(),
+                    ))),
+                    span: Span::dummy(),
+                },
+                span: Span::dummy(),
+            },
+        ],
+        span: Span::dummy(),
+    };
+    let result = format_expr(&match_expr, &default_ctx(), &default_source_map());
+    assert!(
+        result.contains("match x {"),
+        "Expected match format: {}",
+        result
+    );
+    assert!(result.contains("1 =>"), "Expected arm pattern: {}", result);
+    assert!(result.contains("_ =>"), "Expected wildcard arm: {}", result);
+}
+
+// === §13 F-String ===
+
+#[test]
+fn test_format_fstring_simple() {
+    let expr = Expr::FString {
+        segments: vec![
+            FStringSegment::Text("Hello, ".to_string()),
+            FStringSegment::Interpolation {
+                expr: Box::new(Expr::Var("name".to_string(), Span::dummy())),
+                format_spec: None,
+            },
+        ],
+        span: Span::dummy(),
+    };
+    let result = format_expr(&expr, &default_ctx(), &default_source_map());
+    assert_eq!(result, r#"f"Hello, {name}""#);
+}
+
+#[test]
+fn test_format_fstring_with_spec() {
+    let expr = Expr::FString {
+        segments: vec![FStringSegment::Interpolation {
+            expr: Box::new(Expr::Var("value".to_string(), Span::dummy())),
+            format_spec: Some(".2f".to_string()),
+        }],
+        span: Span::dummy(),
+    };
+    let result = format_expr(&expr, &default_ctx(), &default_source_map());
+    assert_eq!(result, r#"f"{value:.2f}""#);
+}
+
+// === §17 Try 操作符 ===
+
+#[test]
+fn test_format_try_operator() {
+    let expr = Expr::Try {
+        expr: Box::new(Expr::Call {
+            func: Box::new(Expr::Var("foo".to_string(), Span::dummy())),
+            args: vec![],
+            named_args: vec![],
+            span: Span::dummy(),
+        }),
+        span: Span::dummy(),
+    };
+    let result = format_expr(&expr, &default_ctx(), &default_source_map());
+    assert_eq!(result, "foo()?");
+}
+
+// === §18 Unsafe 块 ===
+
+#[test]
+fn test_format_unsafe_block() {
+    let expr = Expr::Unsafe {
+        body: Box::new(Block {
+            stmts: vec![],
+            expr: Some(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
+            span: Span::dummy(),
+        }),
+        span: Span::dummy(),
+    };
+    let result = format_expr(&expr, &default_ctx(), &default_source_map());
+    assert!(
+        result.starts_with("unsafe {"),
+        "Expected unsafe block: {}",
+        result
+    );
 }

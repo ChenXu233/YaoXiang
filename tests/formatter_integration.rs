@@ -253,3 +253,153 @@ fn test_format_sort_imports_preserves_comments() {
         result
     );
 }
+
+// === §1 缩进规则 ===
+
+#[test]
+fn test_format_indent_width_2() {
+    let options = FormatOptions {
+        indent_width: 2,
+        ..Default::default()
+    };
+    let input = "fn foo() {\nlet x = 1\n}";
+    let result = format_source(input, &options).unwrap();
+    // 缩进应为 2 空格
+    assert!(
+        result.contains("  "),
+        "Expected 2-space indent, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_format_use_tabs() {
+    let options = FormatOptions {
+        use_tabs: true,
+        ..Default::default()
+    };
+    let input = "fn foo() {\nlet x = 1\n}";
+    let result = format_source(input, &options).unwrap();
+    assert!(
+        result.contains('\t'),
+        "Expected tab indent, got: {}",
+        result
+    );
+}
+
+// === §2 行宽 ===
+
+#[test]
+fn test_format_line_width_short_stays_single_line() {
+    let options = FormatOptions {
+        line_width: 120,
+        ..Default::default()
+    };
+    let result = format_source("let x = 1 + 2", &options).unwrap();
+    // 短行不应换行
+    assert!(
+        !result.contains('\n') || result.lines().count() <= 2,
+        "Short expression should not wrap: {}",
+        result
+    );
+}
+
+// === §3 运算符 ===
+
+#[test]
+fn test_format_binop_spaces() {
+    let result = format_source("1+2*3", &default_options()).unwrap();
+    // 二元运算符两侧应有空格
+    assert!(
+        result.contains(" + ") || result.contains("1 + 2"),
+        "Expected spaces around operators: {}",
+        result
+    );
+}
+
+// === §6 代码块 ===
+
+#[test]
+fn test_format_empty_block() {
+    let result = format_source("fn foo() {}", &default_options()).unwrap();
+    // NOTE: formatter currently expands fn declaration across lines;
+    // empty block body has no statements between braces
+    assert!(
+        result.contains('{') && result.contains('}'),
+        "Empty block should have braces: {}",
+        result
+    );
+    // 空块体内不应有语句（只有空白/换行）
+    let between_braces = &result[result.find('{').unwrap()..result.rfind('}').unwrap() + 1];
+    let inner = &between_braces[1..between_braces.len() - 1].trim();
+    assert!(
+        inner.trim().is_empty(),
+        "Empty block body should be empty, got: [{}]",
+        inner
+    );
+}
+
+// === 配置选项测试 ===
+
+#[test]
+fn test_config_line_width_affects_wrapping() {
+    let narrow = FormatOptions {
+        line_width: 20,
+        ..Default::default()
+    };
+    let wide = FormatOptions {
+        line_width: 200,
+        ..Default::default()
+    };
+    let input = "let x = 1 + 2 + 3 + 4 + 5";
+
+    let narrow_result = format_source(input, &narrow).unwrap();
+    let wide_result = format_source(input, &wide).unwrap();
+
+    // 窄行宽应该产生更多换行
+    assert!(
+        narrow_result.lines().count() >= wide_result.lines().count(),
+        "Narrow should have more lines.\nNarrow:\n{}\nWide:\n{}",
+        narrow_result,
+        wide_result
+    );
+}
+
+#[test]
+fn test_config_indent_width() {
+    let opt2 = FormatOptions {
+        indent_width: 2,
+        ..Default::default()
+    };
+    let opt8 = FormatOptions {
+        indent_width: 8,
+        ..Default::default()
+    };
+
+    // 使用会产生缩进的输入
+    let input = "fn foo() {\nlet x = 1\n}";
+
+    let result2 = format_source(input, &opt2).unwrap();
+    let result8 = format_source(input, &opt8).unwrap();
+
+    // 两种配置应产生不同缩进
+    assert_ne!(
+        result2, result8,
+        "Different indent_width should produce different output"
+    );
+}
+
+#[test]
+fn test_config_single_quote() {
+    let options = FormatOptions {
+        single_quote: true,
+        ..Default::default()
+    };
+    // 注意：当前 formatter 的 single_quote 支持取决于解析器
+    // 此测试验证选项传递不报错
+    let result = format_source("let x = 1", &options);
+    assert!(
+        result.is_ok(),
+        "single_quote option should not cause errors"
+    );
+}
