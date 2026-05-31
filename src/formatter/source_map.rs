@@ -313,4 +313,75 @@ impl SourceMap {
                 && matches!(c.style, CommentStyle::SingleLine | CommentStyle::Doc)
         })
     }
+
+    /// 重建导入语句的注释顺序
+    ///
+    /// old_order: 旧的导入索引顺序（相对于 use_indices）
+    /// new_order: 新的导入索引顺序（相对于 use_indices）
+    /// import_stmts: 所有导入语句（用于获取 span）
+    pub fn rebuild_comments_for_imports(
+        &mut self,
+        old_order: &[usize],
+        new_order: &[usize],
+        import_stmts: &[&crate::frontend::core::parser::ast::Stmt],
+    ) {
+        // 1. 为每个旧导入索引关联其注释
+        let mut comments_per_import: Vec<Vec<Comment>> = Vec::new();
+
+        for (i, &old_idx) in old_order.iter().enumerate() {
+            let stmt = import_stmts[old_idx];
+            let comment_start = if i > 0 {
+                import_stmts[old_order[i - 1]].span.end.line + 1
+            } else {
+                1
+            };
+            let comment_end = stmt.span.start.line;
+
+            let comments: Vec<Comment> = self
+                .comments
+                .iter()
+                .filter(|c| c.span.start.line >= comment_start && c.span.end.line < comment_end)
+                .cloned()
+                .collect();
+            comments_per_import.push(comments);
+        }
+
+        // 2. 按新顺序重建注释列表
+        let mut new_comments: Vec<Comment> = Vec::new();
+        for &new_idx in new_order {
+            new_comments.extend(comments_per_import[new_idx].iter().cloned());
+        }
+
+        // 3. 添加非导入区域的注释
+        if !old_order.is_empty() {
+            let first_import_line = import_stmts[old_order[0]].span.start.line;
+            let last_import_line = import_stmts[old_order[old_order.len() - 1]].span.end.line;
+
+            let non_import_comments: Vec<Comment> = self
+                .comments
+                .iter()
+                .filter(|c| {
+                    c.span.start.line < first_import_line || c.span.start.line > last_import_line
+                })
+                .cloned()
+                .collect();
+
+            // 头部注释 + 导入注释 + 尾部注释
+            let mut final_comments: Vec<Comment> = non_import_comments
+                .iter()
+                .filter(|c| c.span.start.line < first_import_line)
+                .cloned()
+                .collect();
+            final_comments.extend(new_comments);
+            final_comments.extend(
+                non_import_comments
+                    .iter()
+                    .filter(|c| c.span.start.line > last_import_line)
+                    .cloned(),
+            );
+            self.comments = final_comments;
+        } else {
+            self.comments = new_comments;
+        }
+    }
 }

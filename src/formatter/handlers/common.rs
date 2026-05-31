@@ -2,6 +2,7 @@
 
 use crate::frontend::core::parser::ast::*;
 use super::super::context::FormatContext;
+use super::super::source_map::SourceMap;
 use super::expr::{format_expr, format_block};
 use super::types::format_type;
 
@@ -12,23 +13,27 @@ pub fn format_if(
     elif_branches: &[(Box<Expr>, Box<Block>)],
     else_branch: &Option<Box<Block>>,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     let mut result = format!(
         "if {} {}",
-        format_expr(condition, ctx),
-        format_block(then_branch, ctx)
+        format_expr(condition, ctx, source_map),
+        format_block(then_branch, ctx, source_map)
     );
 
     for (elif_cond, elif_body) in elif_branches {
         result.push_str(&format!(
             " elif {} {}",
-            format_expr(elif_cond, ctx),
-            format_block(elif_body, ctx)
+            format_expr(elif_cond, ctx, source_map),
+            format_block(elif_body, ctx, source_map)
         ));
     }
 
     if let Some(else_body) = else_branch {
-        result.push_str(&format!(" else {}", format_block(else_body, ctx)));
+        result.push_str(&format!(
+            " else {}",
+            format_block(else_body, ctx, source_map)
+        ));
     }
 
     result
@@ -42,6 +47,7 @@ pub fn format_for_loop(
     body: &Block,
     label: &Option<String>,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     let label_str = if let Some(l) = label {
         format!("{}: ", l)
@@ -54,8 +60,8 @@ pub fn format_for_loop(
         label_str,
         mut_str,
         var,
-        format_expr(iterable, ctx),
-        format_block(body, ctx)
+        format_expr(iterable, ctx, source_map),
+        format_block(body, ctx, source_map)
     )
 }
 
@@ -65,6 +71,7 @@ pub fn format_while_loop(
     body: &Block,
     label: &Option<String>,
     ctx: &FormatContext,
+    source_map: &SourceMap,
 ) -> String {
     let label_str = if let Some(l) = label {
         format!("{}: ", l)
@@ -74,20 +81,27 @@ pub fn format_while_loop(
     format!(
         "{}while {} {}",
         label_str,
-        format_expr(condition, ctx),
-        format_block(body, ctx)
+        format_expr(condition, ctx, source_map),
+        format_block(body, ctx, source_map)
     )
 }
 
 /// 格式化泛型参数列表
-pub fn format_generic_params(generic_params: &[GenericParam]) -> String {
+pub fn format_generic_params(
+    generic_params: &[GenericParam],
+    source_map: &SourceMap,
+) -> String {
     let items: Vec<String> = generic_params
         .iter()
         .map(|gp| {
             let constraints = if gp.constraints.is_empty() {
                 String::new()
             } else {
-                let cs: Vec<String> = gp.constraints.iter().map(format_type).collect();
+                let cs: Vec<String> = gp
+                    .constraints
+                    .iter()
+                    .map(|c| format_type(c, source_map))
+                    .collect();
                 format!(": {}", cs.join(" + "))
             };
             format!("{}{}", gp.name, constraints)

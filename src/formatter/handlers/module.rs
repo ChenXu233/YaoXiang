@@ -62,7 +62,7 @@ pub fn format_module(
         }
 
         // 格式化语句
-        let stmt_str = format_stmt(&stmt.kind, ctx);
+        let stmt_str = format_stmt(&stmt.kind, ctx, source_map);
         result.push_str(&stmt_str);
         result.push('\n');
 

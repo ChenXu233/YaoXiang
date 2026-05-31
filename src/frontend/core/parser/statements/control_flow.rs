@@ -272,6 +272,7 @@ pub fn parse_block_stmt(
 pub fn parse_block_expression(
     state: &mut crate::frontend::core::parser::ParserState<'_>
 ) -> Option<Block> {
+    let block_start = state.span();
     if !state.expect(&TokenKind::LBrace) {
         return None;
     }
@@ -285,7 +286,7 @@ pub fn parse_block_expression(
     Some(Block {
         stmts,
         expr,
-        span: state.span(),
+        span: block_start,
     })
 }
 

@@ -6,12 +6,17 @@ use crate::formatter::handlers::expr::{
     format_binop, format_call, format_dict, format_expr, format_list, format_literal,
 };
 use crate::formatter::context::FormatContext;
+use crate::formatter::source_map::SourceMap;
 use crate::formatter::FormatOptions;
 use crate::frontend::core::parser::ast::*;
 use crate::util::span::Span;
 
 fn default_ctx() -> FormatContext {
     FormatContext::new(FormatOptions::default())
+}
+
+fn default_source_map() -> SourceMap {
+    SourceMap::build("")
 }
 
 #[test]
@@ -54,7 +59,7 @@ fn test_format_binop_add() {
     let ctx = default_ctx();
     let left = Expr::Lit(Literal::Int(1), Span::dummy());
     let right = Expr::Lit(Literal::Int(2), Span::dummy());
-    let result = format_binop(&BinOp::Add, &left, &right, &ctx);
+    let result = format_binop(&BinOp::Add, &left, &right, &ctx, &default_source_map());
     assert_eq!(result, "1 + 2");
 }
 
@@ -63,7 +68,7 @@ fn test_format_binop_eq() {
     let ctx = default_ctx();
     let left = Expr::Var("x".to_string(), Span::dummy());
     let right = Expr::Lit(Literal::Int(0), Span::dummy());
-    let result = format_binop(&BinOp::Eq, &left, &right, &ctx);
+    let result = format_binop(&BinOp::Eq, &left, &right, &ctx, &default_source_map());
     assert_eq!(result, "x == 0");
 }
 
@@ -71,7 +76,7 @@ fn test_format_binop_eq() {
 fn test_format_call_no_args() {
     let ctx = default_ctx();
     let func = Expr::Var("foo".to_string(), Span::dummy());
-    let result = format_call(&func, &[], &[], &ctx);
+    let result = format_call(&func, &[], &[], &ctx, &default_source_map());
     assert_eq!(result, "foo()");
 }
 
@@ -81,14 +86,14 @@ fn test_format_call_with_args() {
     let func = Expr::Var("add".to_string(), Span::dummy());
     let arg1 = Expr::Lit(Literal::Int(1), Span::dummy());
     let arg2 = Expr::Lit(Literal::Int(2), Span::dummy());
-    let result = format_call(&func, &[arg1, arg2], &[], &ctx);
+    let result = format_call(&func, &[arg1, arg2], &[], &ctx, &default_source_map());
     assert_eq!(result, "add(1, 2)");
 }
 
 #[test]
 fn test_format_list_empty() {
     let ctx = default_ctx();
-    let result = format_list(&[], &ctx);
+    let result = format_list(&[], &ctx, &default_source_map());
     assert_eq!(result, "[]");
 }
 
@@ -96,14 +101,14 @@ fn test_format_list_empty() {
 fn test_format_list_single() {
     let ctx = default_ctx();
     let items = vec![Expr::Lit(Literal::Int(1), Span::dummy())];
-    let result = format_list(&items, &ctx);
+    let result = format_list(&items, &ctx, &default_source_map());
     assert_eq!(result, "[1]");
 }
 
 #[test]
 fn test_format_dict_empty() {
     let ctx = default_ctx();
-    let result = format_dict(&[], &ctx);
+    let result = format_dict(&[], &ctx, &default_source_map());
     assert_eq!(result, "{}");
 }
 
@@ -114,7 +119,7 @@ fn test_format_return() {
         Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
         Span::dummy(),
     );
-    let result = format_expr(&expr, &ctx);
+    let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "return 42");
 }
 
@@ -122,7 +127,7 @@ fn test_format_return() {
 fn test_format_return_none() {
     let ctx = default_ctx();
     let expr = Expr::Return(None, Span::dummy());
-    let result = format_expr(&expr, &ctx);
+    let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "return");
 }
 
@@ -135,7 +140,7 @@ fn test_format_cast() {
         target_type: Type::Int(64),
         span: Span::dummy(),
     };
-    let result = format_expr(&expr, &ctx);
+    let result = format_expr(&expr, &ctx, &default_source_map());
     assert_eq!(result, "x as i64");
 }
 

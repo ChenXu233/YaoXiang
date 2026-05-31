@@ -66,3 +66,12 @@ fn test_source_map_comment_in_string_ignored() {
     assert_eq!(sm.comments.len(), 1);
     assert_eq!(sm.comments[0].content, "// real comment");
 }
+
+#[test]
+fn test_source_map_comment_in_block_body() {
+    let source = "for x in [1, 2, 3] {\n    // loop comment\n    let y = x\n}\n";
+    let sm = SourceMap::build(source);
+    assert_eq!(sm.comments.len(), 1);
+    assert_eq!(sm.comments[0].content, "// loop comment");
+    assert_eq!(sm.comments[0].span.start.line, 2);
+}
