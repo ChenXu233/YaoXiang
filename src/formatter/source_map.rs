@@ -313,4 +313,3 @@ impl SourceMap {
             .find(|c| c.span.start.line == line && matches!(c.style, CommentStyle::SingleLine))
     }
 }
-

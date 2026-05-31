@@ -627,4 +627,3 @@ fn format_field_access(
     // 普通字段访问
     format!("{}{}", inner_str, field_str)
 }
-

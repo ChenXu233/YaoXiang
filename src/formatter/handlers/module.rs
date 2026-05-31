@@ -16,11 +16,18 @@ pub fn format_module(
     let mut result = String::new();
 
     // 输出文件头注释（在第一个语句之前的注释）
-    let first_stmt_line = module.items.first().map(|s| s.span.start.line).unwrap_or(1);
-    let header_comments = source_map.comments_between_lines(1, first_stmt_line.saturating_sub(1));
+    let header_comments = if module.items.is_empty() {
+        // 空模块：获取所有注释
+        source_map.comments_between_lines(1, usize::MAX)
+    } else {
+        let first_stmt_line = module.items.first().map(|s| s.span.start.line).unwrap_or(1);
+        source_map.comments_between_lines(1, first_stmt_line.saturating_sub(1))
+    };
     for comment in &header_comments {
         result.push_str(&comment.content);
-        result.push('\n');
+        if !comment.content.ends_with('\n') {
+            result.push('\n');
+        }
     }
 
     // 添加头部注释和第一个语句之间的空行
