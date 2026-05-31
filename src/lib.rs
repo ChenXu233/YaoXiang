@@ -442,10 +442,13 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 format!("Type{}({})", universe_level, params_str.join(", "))
             }
         }
+        crate::frontend::core::typecheck::MonoType::Generic { name, args } => {
+            let args_str: Vec<String> = args.iter().map(dump_type_detail).collect();
+            format!("{}({})", name, args_str.join(", "))
+        }
     }
 }
 
-/// Dump constant information in detail
 fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static str {
     match constant {
         crate::middle::core::ir::ConstValue::Void => "void",

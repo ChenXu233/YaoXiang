@@ -271,6 +271,13 @@ fn type_name_hash<H: Hasher>(
                 p.hash(state);
             }
         }
+        MonoType::Generic { name, args } => {
+            "generic".hash(state);
+            name.hash(state);
+            for arg in args {
+                type_name_hash(arg, state);
+            }
+        }
     }
 }
 

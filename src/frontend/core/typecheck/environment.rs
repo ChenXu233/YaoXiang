@@ -320,6 +320,19 @@ impl TypeEnvironment {
                     elem_type: Box::new(new_elem),
                 }
             }
+            MonoType::Generic {
+                name,
+                args: generic_args,
+            } => {
+                let new_args = generic_args
+                    .iter()
+                    .map(|a| Self::replace_type_params(a, param_names, args))
+                    .collect();
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: new_args,
+                }
+            }
             _ => ty.clone(),
         }
     }
