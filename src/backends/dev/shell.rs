@@ -147,22 +147,18 @@ impl DevShell {
             }
             ":cd" | "cd" => {
                 if parts.len() > 1 {
-                    if let Ok(path) = std::env::current_dir() {
-                        if let Ok(new_cwd) = path.join(parts[1]).canonicalize() {
-                            if new_cwd.is_dir() {
-                                self.cwd = new_cwd;
-                                std::env::set_current_dir(&self.cwd).ok();
-                            } else {
-                                return ShellResult::Error(format!(
-                                    "Not a directory: {}",
-                                    parts[1]
-                                ));
-                            }
+                    if let Ok(new_cwd) = self.cwd.join(parts[1]).canonicalize() {
+                        if new_cwd.is_dir() {
+                            self.cwd = new_cwd;
+                            std::env::set_current_dir(&self.cwd).ok();
                         } else {
-                            return ShellResult::Error(format!("Invalid path: {}", parts[1]));
+                            return ShellResult::Error(format!(
+                                "Not a directory: {}",
+                                parts[1]
+                            ));
                         }
                     } else {
-                        return ShellResult::Error("Failed to get current directory".to_string());
+                        return ShellResult::Error(format!("Invalid path: {}", parts[1]));
                     }
                 } else {
                     tlog!(info, MSG::ShellPwdCommand, &self.cwd.display().to_string());
@@ -266,16 +262,16 @@ impl DevShell {
         &mut self,
         code: &str,
     ) -> ShellResult {
-        // Wrap in a simple expression
-        let wrapped = code.to_string();
-
-        let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile_with_source("<shell>", &wrapped) {
-            Ok(_module) => {
-                // In a full implementation, we'd execute
-                ShellResult::Success
+        let eval_result = self.repl.backend_mut().evaluate(code);
+        match eval_result {
+            crate::backends::dev::repl::EvalResult::Value(v) => {
+                ShellResult::Value(v)
             }
-            Err(e) => ShellResult::Error(format!("{}", e)),
+            crate::backends::dev::repl::EvalResult::Ok => ShellResult::Success,
+            crate::backends::dev::repl::EvalResult::Error(e) => ShellResult::Error(e),
+            crate::backends::dev::repl::EvalResult::Incomplete => {
+                ShellResult::Error("Incomplete expression".to_string())
+            }
         }
     }
 

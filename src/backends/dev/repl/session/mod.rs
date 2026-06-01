@@ -36,11 +36,15 @@ pub struct SessionREPLConfig {
 
 impl Default for SessionREPLConfig {
     fn default() -> Self {
+        let history_file = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .ok()
+            .map(|home| std::path::PathBuf::from(home).join(".yaoxiang_history"));
         Self {
             prompt: ">> ".into(),
             continuation_prompt: ".. ".into(),
             vi_mode: false,
-            history_file: None,
+            history_file,
             history_size: 1000,
         }
     }
