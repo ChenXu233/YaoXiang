@@ -3,7 +3,7 @@
 //! Provides a feature-rich REPL using rustyline for editing and history.
 
 use std::io::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rustyline::config::Config;
 use rustyline::error::ReadlineError;
@@ -18,7 +18,7 @@ pub use completer::REPLCompleter;
 
 /// Line REPL configuration
 #[derive(Debug, Clone)]
-pub struct LineREPLConfig {
+pub struct SessionREPLConfig {
     /// Prompt to display
     pub prompt: String,
     /// Multi-line prompt
@@ -31,7 +31,7 @@ pub struct LineREPLConfig {
     pub history_size: usize,
 }
 
-impl Default for LineREPLConfig {
+impl Default for SessionREPLConfig {
     fn default() -> Self {
         Self {
             prompt: ">> ".into(),
@@ -47,25 +47,25 @@ impl Default for LineREPLConfig {
 ///
 /// A line-based REPL with rustyline support for editing and history.
 #[derive(Debug)]
-pub struct LineREPL<B: REPLBackend> {
+pub struct SessionREPL<B: REPLBackend> {
     /// Configuration
-    config: LineREPLConfig,
+    config: SessionREPLConfig,
     /// rustyline editor
     editor: Editor<(), rustyline::history::FileHistory>,
     /// Backend for evaluation
     backend: B,
 }
 
-impl<B: REPLBackend + 'static> LineREPL<B> {
+impl<B: REPLBackend + 'static> SessionREPL<B> {
     /// Create a new line REPL
     pub fn new(backend: B) -> Result<Self> {
-        Self::with_config(backend, LineREPLConfig::default())
+        Self::with_config(backend, SessionREPLConfig::default())
     }
 
     /// Create with custom config
     pub fn with_config(
         backend: B,
-        config: LineREPLConfig,
+        config: SessionREPLConfig,
     ) -> Result<Self> {
         use std::io;
 
@@ -187,7 +187,22 @@ impl<B: REPLBackend + 'static> LineREPL<B> {
     }
 }
 
-impl<B: REPLBackend> LineREPL<B> {
+impl<B: REPLBackend + 'static> SessionREPL<B> {
+    /// Load and execute a file
+    pub fn load_file(&mut self, path: &Path) -> io::Result<()> {
+        let source = std::fs::read_to_string(path)?;
+        let eval_result = self.backend.eval(&source);
+        match eval_result {
+            EvalResult::Error(e) => {
+                eprintln!("Error: {}", e);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+impl<B: REPLBackend> SessionREPL<B> {
     /// Get the backend reference
     pub fn backend(&self) -> &B {
         &self.backend
