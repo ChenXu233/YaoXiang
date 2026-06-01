@@ -137,57 +137,63 @@
 
 ## 作用域
 
-根据项目结构，推荐使用以下作用域：
+作用域基于项目 `src/` 目录结构，**必须使用以下已定义的 scope**：
 
-### 代码作用域
+### 顶层模块
 
-| 作用域 | 说明 |
-|--------|------|
-| `frontend` | 前端模块：词法分析、语法解析、类型检查 |
-| `parser` | 语法解析器 |
-| `lexer` | 词法分析器 |
-| `typecheck` | 类型检查 |
-| `middle` | 中间层：IR、优化器 |
-| `codegen` | 代码生成器 |
-| `monomorphize` | 单态化处理 |
-| `lifetime` | 生命周期分析 |
-| `vm` | 虚拟机：指令执行、栈帧、操作码 |
-| `executor` | 执行器 |
-| `frames` | 栈帧管理 |
-| `instructions` | 指令集 |
-| `runtime` | 运行时：内存管理、调度器 |
-| `memory` | 内存管理 |
-| `scheduler` | 任务调度 |
-| `std` | 标准库 |
-| `concurrent` | 并发库 |
-| `io` | IO 库 |
-| `net` | 网络库 |
-| `util` | 工具库：诊断、缓存、Span |
-| `cache` | 缓存管理 |
-| `diagnostic` | 诊断信息 |
+| 作用域 | 对应目录 | 说明 |
+|--------|----------|------|
+| `frontend` | `src/frontend/` | 前端：词法分析、语法解析、类型检查 |
+| `middle` | `src/middle/` | 中间层：IR、优化、单态化 |
+| `backends` | `src/backends/` | 后端：解释器、运行时、REPL |
+| `std` | `src/std/` | 标准库 |
+| `formatter` | `src/formatter/` | 代码格式化器 |
+| `lsp` | `src/lsp/` | 语言服务器协议 |
+| `package` | `src/package/` | 包管理器 |
+| `util` | `src/util/` | 工具库：诊断、缓存、i18n |
+
+### 前端子模块
+
+| 作用域 | 对应目录 | 说明 |
+|--------|----------|------|
+| `parser` | `src/frontend/core/parser/` | 语法解析器 |
+| `lexer` | `src/frontend/core/lexer/` | 词法分析器 |
+| `typecheck` | `src/frontend/core/typecheck/` | 类型检查 |
+| `types` | `src/frontend/core/types/` | 类型系统定义 |
+
+### 中间层子模块
+
+| 作用域 | 对应目录 | 说明 |
+|--------|----------|------|
+| `codegen` | `src/middle/passes/codegen/` | 代码生成（字节码） |
+| `monomorphize` | `src/middle/passes/monomorphize/` | 单态化处理 |
+| `lifetime` | `src/middle/passes/lifetime/` | 生命周期分析 |
+
+### 后端子模块
+
+| 作用域 | 对应目录 | 说明 |
+|--------|----------|------|
+| `repl` | `src/backends/dev/repl/` | REPL 交互式命令行 |
+| `shell` | `src/backends/dev/shell.rs` | Shell 命令处理 |
+| `runtime` | `src/backends/runtime/` | 运行时执行引擎 |
 
 ### 文档作用域
 
 | 作用域 | 说明 |
 |--------|------|
 | `docs` | 通用文档更新 |
-| `architecture` | 架构设计文档 |
-| `design` | 语言设计规范 |
+| `design` | 语言设计规范（RFC） |
 | `plan` | 实现计划文档 |
-| `guides` | 指南文档 |
-| `tutorial` | 教程文档 |
-| `examples` | 示例代码 |
 
 ### 其他作用域
 
 | 作用域 | 说明 |
 |--------|------|
-| `build` | 构建系统、依赖管理 |
-| `ci` | CI/CD 配置 |
+| `build` | 构建系统、Cargo 配置 |
+| `ci` | CI/CD 配置（GitHub Actions） |
 | `test` | 测试相关 |
-| `chore` | 杂项任务 |
 | `release` | 发版相关 |
-| `meta` | 项目元配置（如 .claude, cargo 配置）|
+| `meta` | 项目元配置（.claude, .gitignore 等） |
 
 ---
 
@@ -195,46 +201,54 @@
 
 ### 版本管理
 
-**每次提交前必须先 bump 版本号**：
+版本号定义在项目根目录 `Cargo.toml` 的 `version` 字段：
 
-| 版本类型 | 更新位置 | 说明 |
-|----------|----------|------|
-| **major** | `pubspec.yaml` (version) + `release_v*.md` | 重大更新，不兼容的 API 变更 |
-| **minor** | `pubspec.yaml` (version) | 新功能，向后兼容 |
-| **patch** | `pubspec.yaml` (version) | 修复 bug，向后兼容 |
-
-### 版本号格式
+```toml
+[package]
+version = "0.7.2"
+```
 
 采用语义化版本 `MAJOR.MINOR.PATCH`：
 
+| 版本类型 | 说明 | 示例 |
+|----------|------|------|
+| **major** | 重大更新，不兼容的 API 变更 | 0.7.2 → 1.0.0 |
+| **minor** | 新功能，向后兼容 | 0.7.2 → 0.8.0 |
+| **patch** | 修复 bug，向后兼容 | 0.7.2 → 0.7.3 |
+
+> ⚠️ 发版时 **在 dev 分支更新 `Cargo.toml` 版本号**，通过 PR 合并到 main 后由 CI 自动创建 tag 和 Release。**不要手动推 tag**，否则 CI 会跳过 release 流程。
+
+---
+
+## CI 发版流程
+
+发版由 GitHub Actions (`release.yml`) 自动完成，流程如下：
+
 ```
-# 重大版本 (breaking changes)
-1.0.0 -> 2.0.0
-
-# 次要版本 (new features)
-1.0.0 -> 1.1.0
-
-# 补丁版本 (bug fixes)
-1.0.0 -> 1.0.1
+1. 在 dev 分支上更新 Cargo.toml 的 version 字段
+2. cargo build 更新 Cargo.lock
+3. 按发版格式 commit（见下方 🔖 发版提交）
+   - commit message 必须包含自上次发版以来的所有变更（即 PR 的完整内容）
+4. 从 dev 创建 PR 到 main
+5. 合并 PR 到 main
+6. CI 自动检测：
+   - 读取 Cargo.toml 版本号 → "v{version}"
+   - 检查该 tag 是否已存在
+   - 不存在 → 触发完整 release 流程
+   - 已存在 → 跳过（不会重复发布）
+7. CI 自动执行：
+   - 并行：跨平台构建 (Linux/Windows/macOS) + 安全审计 + 测试
+   - 全部通过后：创建 tag、打包产物、发布 GitHub Release
 ```
 
-### 提交流程
+### 关键规则
 
-```bash
-# 1. 修改代码后，先 bump 版本
-# 使用 semantic_release 工具自动管理版本和 Changelog
-npx semantic-release
-
-# 或手动更新版本
-# 编辑 pubspec.yaml 中的 version 字段
-
-# 2. 提交代码（版本变更会在下一次 release 时自动生成）
-git add .
-git commit -m ":tada: Release v1.0.0"
-git push
-```
-
-> 💡 版本 bump 和 Changelog 生成由 CI 自动完成，提交时只需确保代码变更已包含版本更新。
+| 规则 | 说明 |
+|------|------|
+| **不要手动推 tag** | CI 根据 tag 是否存在决定是否发布，手动推 tag 会导致 CI 跳过 |
+| **版本在 dev 上 bump** | 发版 commit 在 dev 上完成，通过 PR 合并到 main |
+| **发版 commit 包含完整 changelog** | commit message 需包含本次发版的所有变更内容，因为它是 PR 的描述来源 |
+| **不要合并 main 回 dev** | PR 合并后 dev 会自动同步，无需反向合并 |
 
 ---
 
@@ -272,12 +286,12 @@ git push
 ### ✨ feat - 新功能
 
 ```
-:sparkles: feat(db): 添加批量删除待办功能
+:sparkles: feat(parser): 添加闭包语法解析支持
 
-实现批量删除待办事项功能：
-- 在 TodoRepository 中添加 batchDelete 方法
-- 添加删除确认对话框
-- 更新 UI 支持多选操作
+实现闭包表达式解析：
+- 支持 |args| body 简写语法
+- 支持 move 语义捕获
+- 添加闭包类型推断
 
 关闭 #42
 ```
@@ -285,10 +299,10 @@ git push
 ### 🐛 fix - 修复 bug
 
 ```
-:bug: fix(provider): 修复番茄钟计时器在后台无法恢复的问题
+:bug: fix(repl): 修复多行输入时补全器失效的问题
 
-当应用从后台恢复时，番茄钟计时器无法继续计时。
-在 initState 中添加了状态恢复逻辑。
+SessionREPL 在多行模式下未正确注册补全器，
+导致 Tab 补全无法触发。
 
 修复 #128
 ```
@@ -296,72 +310,63 @@ git push
 ### 📝 docs - 文档更新
 
 ```
-:memo: docs: 更新 README 新功能说明
+:memo: docs(design): 更新所有权模型与类型系统规范
 
-新增以下章节：
-- 专注模式
-- 数据统计
-- 背景音乐
+同步 RFC-009 和 RFC-011 的最新设计变更。
 ```
 
 ### ♻️ refactor - 重构
 
 ```
-:recycle: refactor(ui): 提取公共玻璃态容器组件
+:recycle: refactor(typecheck): 分离原语值类型与 Dup 浅拷贝语义
 
-创建可复用的 GlassContainer 组件，
-减少多个屏幕间的代码重复。
+将 MonoType 中的值类型和拷贝语义解耦，
+消除 match 分支中的特殊情况。
 ```
 
 ### ⚡️ perf - 性能优化
 
 ```
-:zap: perf(db): 优化已完成待办查询性能
+:zap: perf(types): 优化 const generic 求值性能
 
-在 completed_at 字段添加索引，
-使用 WHERE 子句过滤已完成待办而非在内存中过滤。
-
-优化前：45ms
-优化后：12ms
+为递归求值添加深度限制（默认 128），
+避免恶意构造的类型表达式导致栈溢出。
 ```
 
 ### ✅ test - 测试
 
 ```
-:white_check_mark: test(provider): 添加 TodoProvider 单元测试
+:white_check_mark: test(typecheck): 补充 scope VarInfo 可变性测试
 
 覆盖场景：
-- 添加待办
-- 切换完成状态
-- 删除待办
+- 不可变绑定的只读访问
+- mut 绑定的可变性追踪
+- 跨作用域的可变性传播
 ```
 
 ### 🔧 chore - 杂项
 
 ```
-:wrench: chore: 更新 Flutter 版本至 3.19.0
+:wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap
 
-提高最小 Flutter 版本要求并更新兼容依赖。
+升级 6 个生产依赖至最新稳定版本。
 ```
 
 ### 🚀 ci - CI 配置
 
 ```
-:rocket: ci: 添加 GitHub Actions 测试工作流
+:rocket: ci: 修复 nightly 构建 Rust 版本过低的问题
 
-创建包含以下步骤的工作流：
-- 单元测试
-- 集成测试
-- 代码覆盖率
+将 RUST_TOOLCHAIN 从 1.91.0 更新至 1.96.0，
+匹配 Cargo.toml 中的 rust-version 要求。
 ```
 
 ### 💄 style - 格式调整
 
 ```
-:lipstick: style(todo_item): 使用 dart fix 格式化代码
+:lipstick: style(frontend): 应用 cargo fmt 格式化
 
-应用自动格式化修复，
-保持代码风格一致性。
+统一函数签名的换行风格。
 ```
 
 ---
@@ -435,51 +440,50 @@ git push
 ### 发版示例
 
 ```
-:bookmark: V0.8.0: 新增任务统计和数据分析功能
+:bookmark: V0.7.2: REPL 重写与类型系统改进
 
 ## 📦 版本信息
 
-**发布日期:** 2025-01-15
+**发布日期:** 2026-06-01
 
-**版本号:** 0.7.0 → 0.8.0
+**版本号:** 0.7.1 → 0.7.2
 
 ---
 
 ## ✨ 新功能
 
-### 统计功能
-- :sparkles: feat(statistics): 新增专注时长统计页面
-- :sparkles: feat(statistics): 添加每日/每周数据可视化图表
-
-### 待办增强
-- :sparkles: feat(todo): 添加任务优先级筛选功能
+- :sparkles: feat(typecheck): 实现泛型类型参数自动推断
+- :sparkles: feat(typecheck): 添加 MonoType::Generic 结构化泛型表示
+- feat: 接入 CLI REPL 命令到 SessionREPL
 
 ---
 
 ## ♻️ 重构优化
 
-- :recycle: refactor(db): 优化数据库查询性能
-- :recycle: refactor(provider): 重构状态管理逻辑
+- :recycle: refactor(backends): 移除 tui_repl 模块，重写为 SessionREPL
+- :recycle: refactor(typecheck): scope 变量存储引入 VarInfo 追踪可变性
+- :recycle: refactor(typecheck): 分离原语值类型与 Dup 浅拷贝语义
 
 ---
 
 ## 🐛 Bug 修复
 
-- :bug: fix(todo): 修复任务列表滑动卡顿问题
+- :bug: fix(repl): 配置默认 REPL 历史记录，修复 shell evaluate_code
+- :bug: fix(repl): 注册补全器并修复多行输入
+- :bug: fix(repl): 移除 wrap_code 中多余的分号以保留表达式值
+
+---
+
+## ⚡ 性能优化
+
+- :zap: perf(types): 为 const generic 求值添加递归深度限制
 
 ---
 
 ## 🔧 其他变更
 
-- :wrench: chore: 更新依赖版本到最新稳定版
-- :memo: docs: 更新 README 安装说明
-
----
-
-## 📦 新增文件
-
-- `lib/screens/statistics/statistics.dart` - 统计页面
-- `lib/widgets/chart/data_chart.dart` - 图表组件
+- :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap, owo-colors
+- :white_check_mark: test(typecheck): 补充 scope VarInfo 可变性测试
 
 ---
 
@@ -487,11 +491,14 @@ git push
 
 | 提交 | 描述 |
 |:---:|------|
-| `abc1234` | :bookmark: V0.8.0 |
-| `def5678` | :sparkles: feat(statistics): 新增专注时长统计 |
-| `ghi9012` | :sparkles: feat(todo): 添加优先级筛选 |
-| `jkl3456` | :recycle: refactor(db): 优化查询 |
-| `mno7890` | :bug: fix(todo): 修复滑动卡顿 |
+| `f438aab` | :sparkles: feat(typecheck): 实现泛型类型参数自动推断 |
+| `bf0c121` | :zap: perf(types): 递归深度限制 |
+| `6edac15` | feat: 接入 CLI REPL 到 SessionREPL |
+| `02cf54f` | :sparkles: feat(typecheck): MonoType::Generic |
+| `3160a28` | :recycle: refactor(typecheck): VarInfo 追踪可变性 |
+| `f00a2a4` | :recycle: refactor(backends): 移除 tui_repl 模块 |
+| `afe3e0c` | :bug: fix(repl): REPL 历史记录和 shell 修复 |
+| `c4d2242` | :wrench: chore(build): 依赖 bump |
 ```
 
 ### 如何获取提交记录
@@ -529,7 +536,10 @@ git config commit.template .gitmessage.txt
 # 页脚（可选）
 #
 # Types: ✨feat, 🐛fix, 📝docs, 💄style, ♻️refactor, ⚡️perf, ✅test, 🔧chore, 🚀ci, 🔖release
-# Scopes: core, db, ui, screen, widget, provider, repo, i18n, router, dep
+# Scopes: frontend, parser, lexer, typecheck, types, middle, codegen,
+#         monomorphize, lifetime, backends, repl, shell, runtime,
+#         std, formatter, lsp, package, util, docs, design, plan,
+#         build, ci, test, release, meta
 #
 # 示例:
 # ✨ feat(db): 添加批量删除待办功能
