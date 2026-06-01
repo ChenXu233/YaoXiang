@@ -153,8 +153,9 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         name: String,
         poly: PolyType,
+        is_mut: bool,
     ) {
-        self.scope.add_var(name, poly);
+        self.scope.add_var(name, poly, is_mut);
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -165,19 +166,16 @@ impl<'a> ExpressionInferrer<'a> {
         self.scope.var_in_any_scope(name)
     }
 
-    /// 尝试添加变量到当前作用域（带遮蔽检查）
+    /// 尝试添加变量到当前作用域
     pub fn try_add_var(
         &mut self,
         name: String,
         poly: PolyType,
         span: crate::util::span::Span,
+        is_mut: bool,
     ) -> Result<()> {
-        if self.scope.var_in_any_scope(&name) {
-            return Err(ErrorCodeDefinition::variable_shadowing(&name)
-                .at(span)
-                .build());
-        }
-        self.scope.add_var(name, poly);
+        let _ = span;
+        self.scope.add_var(name, poly, is_mut);
         Ok(())
     }
 
@@ -225,16 +223,14 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 解决循环退出后变量丢失的问题，确保 IR 生成阶段能获取变量类型。
     fn promote_loop_vars_to_parent_scope(&mut self) {
-        // 获取当前 scope（循环内部）的所有变量
-        let current_scope_vars = self.scope.vars();
+        let current_scope_vars = self.scope.current_scope_vars();
 
         // 退出当前 scope
         self.scope.exit_scope();
 
-        // 将循环内声明的变量添加到外层 scope
-        // 无论外层是否有同名变量，都需要更新（因为类型可能已改变）
-        for (name, poly) in current_scope_vars {
-            self.scope.add_var(name, poly);
+        // 将循环内声明的变量添加到外层 scope，保留可变性
+        for (name, info) in current_scope_vars {
+            self.scope.add_var(name, info.poly, info.is_mut);
         }
     }
 
@@ -768,7 +764,7 @@ impl<'a> ExpressionInferrer<'a> {
             // For 循环
             crate::frontend::core::parser::ast::Expr::For {
                 var,
-                var_mut: _,
+                var_mut,
                 iterable,
                 body,
                 label,
@@ -791,7 +787,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.scope.enter_scope();
                 let result = self
-                    .try_add_var(var.clone(), PolyType::mono(element_type), *span)
+                    .try_add_var(var.clone(), PolyType::mono(element_type), *span, *var_mut)
                     .and_then(|_| self.infer_block(body, true, None));
 
                 // 退出循环作用域时，将内部变量提升到外层，避免变量丢失
@@ -869,8 +865,11 @@ impl<'a> ExpressionInferrer<'a> {
                 let result: Result<()> = (|| {
                     for param in params {
                         let param_ty = self.solver.new_var();
-                        self.scope
-                            .add_var(param.name.clone(), PolyType::mono(param_ty));
+                        self.scope.add_var(
+                            param.name.clone(),
+                            PolyType::mono(param_ty),
+                            param.is_mut,
+                        );
                     }
 
                     let ret_mono: MonoType =
@@ -921,7 +920,7 @@ impl<'a> ExpressionInferrer<'a> {
                     is_async: false,
                 };
                 self.scope
-                    .add_var(name.clone(), PolyType::mono(fn_type.clone()));
+                    .add_var(name.clone(), PolyType::mono(fn_type.clone()), false);
 
                 Ok(fn_type)
             }
@@ -938,7 +937,7 @@ impl<'a> ExpressionInferrer<'a> {
                 for param in params {
                     let param_ty = self.solver.new_var();
                     self.scope
-                        .add_var(param.name.clone(), PolyType::mono(param_ty));
+                        .add_var(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
                 }
 
                 // Lambda is a function boundary: it must not inherit outer `Result` context.
@@ -1053,7 +1052,7 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.scope.enter_scope();
                 self.scope
-                    .add_var(var.clone(), PolyType::mono(MonoType::Char));
+                    .add_var(var.clone(), PolyType::mono(MonoType::Char), false);
 
                 let elem_ty = if let Some(cond) = condition {
                     let _cond_ty = self.infer_expr(cond)?;
@@ -1139,6 +1138,7 @@ impl<'a> ExpressionInferrer<'a> {
                 name,
                 type_annotation,
                 initializer,
+                is_mut,
                 ..
             } => {
                 let init_ty = if let Some(expr) = initializer {
@@ -1149,9 +1149,25 @@ impl<'a> ExpressionInferrer<'a> {
                         .map_or_else(|| self.solver.new_var(), |t| t.clone().into())
                 };
 
-                if !self.scope.var_in_any_scope(name) {
-                    self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span)?;
+                if self.scope.var_in_any_scope(name) {
+                    if self.scope.var_in_current_scope(name) {
+                        return Err(ErrorCodeDefinition::duplicate_definition(name)
+                            .at(stmt.span)
+                            .build());
+                    }
+                    if !*is_mut {
+                        // 非 mut 的 Var 在外部作用域存在同名变量时，是赋值操作
+                        // 需要检查外层变量是否可变
+                        if !self.scope.var_is_mutable(name).unwrap_or(false) {
+                            return Err(ErrorCodeDefinition::immutable_assignment(name)
+                                .at(stmt.span)
+                                .build());
+                        }
+                        return Ok(());
+                    }
+                    // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）
                 }
+                self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span, *is_mut)?;
                 Ok(())
             }
             crate::frontend::core::parser::ast::StmtKind::Binding {
@@ -1174,13 +1190,17 @@ impl<'a> ExpressionInferrer<'a> {
                     is_async: false,
                 };
 
-                self.scope.add_var(name.clone(), PolyType::mono(fn_type));
+                self.scope
+                    .add_var(name.clone(), PolyType::mono(fn_type), false);
 
                 self.scope.enter_scope();
                 let result: Result<()> = (|| {
                     for (param, param_ty) in params.iter().zip(param_types.iter()) {
-                        self.scope
-                            .add_var(param.name.clone(), PolyType::mono(param_ty.clone()));
+                        self.scope.add_var(
+                            param.name.clone(),
+                            PolyType::mono(param_ty.clone()),
+                            param.is_mut,
+                        );
                     }
 
                     let block = crate::frontend::core::parser::ast::Block {

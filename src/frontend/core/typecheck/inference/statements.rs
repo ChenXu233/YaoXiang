@@ -291,7 +291,7 @@ impl StatementChecker {
     ) {
         let ty = self.export_type(export);
         self.scope
-            .add_var(binding_name.to_string(), PolyType::mono(ty));
+            .add_var(binding_name.to_string(), PolyType::mono(ty), false);
     }
 
     fn process_use_stmt(
@@ -318,14 +318,14 @@ impl StatementChecker {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope
-                    .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+                    .add_var(module_alias.to_string(), PolyType::mono(module_ty), false);
             }
             // use path as alias
             (None, Some(aliases)) if aliases.len() == 1 => {
                 let module_alias = &aliases[0];
                 let module_ty = self.module_as_struct_type(&module, module_alias);
                 self.scope
-                    .add_var(module_alias.to_string(), PolyType::mono(module_ty));
+                    .add_var(module_alias.to_string(), PolyType::mono(module_ty), false);
             }
             // use path.{a, b}
             (Some(item_names), None) => {
@@ -369,8 +369,9 @@ impl StatementChecker {
         &mut self,
         name: String,
         poly: PolyType,
+        is_mut: bool,
     ) {
-        self.scope.add_var(name, poly);
+        self.scope.add_var(name, poly, is_mut);
     }
 
     /// 获取变量（从最内层作用域开始查找）
@@ -468,7 +469,7 @@ impl StatementChecker {
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
             self.scope
-                .add_var(param.name.clone(), PolyType::mono(param_ty));
+                .add_var(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
         }
 
         if self.collect_all_errors {
@@ -597,6 +598,7 @@ impl StatementChecker {
                 name,
                 type_annotation,
                 initializer,
+                is_mut,
                 ..
             } => self.check_var_stmt(
                 name,
@@ -604,6 +606,7 @@ impl StatementChecker {
                 None,
                 &[],
                 initializer.as_deref(),
+                *is_mut,
             ),
             crate::frontend::core::parser::ast::StmtKind::For {
                 var,
@@ -674,7 +677,7 @@ impl StatementChecker {
                         // 新变量：创建类型变量并统一
                         let ty = self.solver.new_var();
                         let _ = self.solver.unify(&ty, &right_ty);
-                        self.scope.add_var(name.clone(), PolyType::mono(ty));
+                        self.scope.add_var(name.clone(), PolyType::mono(ty), false);
                     }
                 }
                 Ok(())
@@ -762,7 +765,7 @@ impl StatementChecker {
                     is_async: false,
                 };
                 self.scope
-                    .add_var(name.to_string(), PolyType::mono(fn_type));
+                    .add_var(name.to_string(), PolyType::mono(fn_type), false);
             }
         } else {
             let param_types: Vec<MonoType> = params
@@ -780,7 +783,7 @@ impl StatementChecker {
                 is_async: false,
             };
             self.scope
-                .add_var(name.to_string(), PolyType::mono(fn_type));
+                .add_var(name.to_string(), PolyType::mono(fn_type), false);
         }
 
         // 进入函数 Result 上下文（用于 `?` 运算符检查）
@@ -952,6 +955,7 @@ impl StatementChecker {
         eval: Option<crate::frontend::core::parser::ast::EvalMode>,
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
+        is_mut: bool,
     ) -> Result<(), Box<Diagnostic>> {
         // 处理 prelude 语句（编译期求值部分）
         for stmt in prelude_stmts {
@@ -1053,7 +1057,8 @@ impl StatementChecker {
             return Ok(());
         }
 
-        self.scope.add_var(name.to_string(), PolyType::mono(ty));
+        self.scope
+            .add_var(name.to_string(), PolyType::mono(ty), is_mut);
         Ok(())
     }
 
@@ -1087,9 +1092,8 @@ impl StatementChecker {
             ));
         }
 
-        self.scope.add_var(var.to_string(), PolyType::mono(elem_ty));
-
-        let _ = var_mut;
+        self.scope
+            .add_var(var.to_string(), PolyType::mono(elem_ty), var_mut);
 
         if self.collect_all_errors {
             let mut first_err = None;
