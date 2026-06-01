@@ -87,21 +87,21 @@ fn test_dup_ref_to_arc_is_dup() {
 
 #[test]
 fn test_dup_tuple_with_ref_is_dup() {
-    // Arrange
+    // Arrange - 所有元素都是 Dup 类型：&T + String
     let mut solver = make_solver();
     let tuple_ty = MonoType::Tuple(vec![
         MonoType::Ref {
             mutable: false,
             inner: Box::new(MonoType::Int(64)),
         },
-        MonoType::Int(32),
+        MonoType::String,
     ]);
 
     // Act
     let result = solver.check_trait(&tuple_ty, "Dup");
 
     // Assert
-    assert!(result, "(&T, Int) 应满足 Dup");
+    assert!(result, "(&T, String) 应满足 Dup");
 }
 
 // ===================================================================

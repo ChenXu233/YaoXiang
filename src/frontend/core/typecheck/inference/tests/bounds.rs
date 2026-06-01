@@ -273,14 +273,20 @@ fn test_check_constraint_with_method_binding() {
 /// （通过 check_dup_trait 递归检查结构体字段）
 #[test]
 fn test_check_trait_bounds_dup_struct_auto_derive() {
-    // Arrange - Point { x: Float(64), y: Float(64) } 所有字段均为 Dup
+    // Arrange - View { name: String, ref_field: &Int } 所有字段均为 Dup
     let mut solver = TraitSolver::new();
 
     let struct_type = MonoType::Struct(StructType {
-        name: "Point".to_string(),
+        name: "View".to_string(),
         fields: vec![
-            ("x".to_string(), MonoType::Float(64)),
-            ("y".to_string(), MonoType::Float(64)),
+            ("name".to_string(), MonoType::String),
+            (
+                "ref_field".to_string(),
+                MonoType::Ref {
+                    mutable: false,
+                    inner: Box::new(MonoType::Int(64)),
+                },
+            ),
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
@@ -291,7 +297,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
     // Act & Assert - 无 trait_table 时走 check_dup_trait 递归路径
     assert!(
         solver.check_trait(&struct_type, "Dup"),
-        "Point with Dup fields should pass Dup check via recursive field inspection"
+        "View with all-Dup fields (String + &T) should pass Dup check"
     );
 }
 
@@ -331,10 +337,16 @@ fn test_bounds_checker_dup_struct_passes() {
     // Arrange
     let mut checker = BoundsChecker::new();
     let struct_type = MonoType::Struct(StructType {
-        name: "Point".to_string(),
+        name: "View".to_string(),
         fields: vec![
-            ("x".to_string(), MonoType::Float(64)),
-            ("y".to_string(), MonoType::Float(64)),
+            ("name".to_string(), MonoType::String),
+            (
+                "ref_field".to_string(),
+                MonoType::Ref {
+                    mutable: false,
+                    inner: Box::new(MonoType::Int(64)),
+                },
+            ),
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
@@ -346,10 +358,10 @@ fn test_bounds_checker_dup_struct_passes() {
     // Act
     let result = checker.check_trait_bounds(&struct_type, &bounds);
 
-    // Assert - 所有字段均为 Dup 基本类型，应通过
+    // Assert - 所有字段均为 Dup 类型（String + &T），应通过
     assert!(
         result.is_ok(),
-        "BoundsChecker should accept Point with all Dup fields"
+        "BoundsChecker should accept struct with all Dup fields"
     );
 }
 
@@ -388,14 +400,20 @@ fn test_bounds_checker_dup_struct_fails() {
 /// 嵌套结构体 Dup 检查：外层结构体字段为另一个全 Dup 结构体时应通过
 #[test]
 fn test_bounds_checker_dup_nested_struct_passes() {
-    // Arrange - Line { start: Point, end: Point } 嵌套 Dup 结构体
+    // Arrange - Connection { from: View, to: View } 嵌套 Dup 结构体
     let mut checker = BoundsChecker::new();
 
-    let point_type = MonoType::Struct(StructType {
-        name: "Point".to_string(),
+    let view_type = MonoType::Struct(StructType {
+        name: "View".to_string(),
         fields: vec![
-            ("x".to_string(), MonoType::Float(64)),
-            ("y".to_string(), MonoType::Float(64)),
+            ("name".to_string(), MonoType::String),
+            (
+                "ref_field".to_string(),
+                MonoType::Ref {
+                    mutable: false,
+                    inner: Box::new(MonoType::Int(64)),
+                },
+            ),
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
@@ -403,11 +421,11 @@ fn test_bounds_checker_dup_nested_struct_passes() {
         interfaces: vec![],
     });
 
-    let line_type = MonoType::Struct(StructType {
-        name: "Line".to_string(),
+    let conn_type = MonoType::Struct(StructType {
+        name: "Connection".to_string(),
         fields: vec![
-            ("start".to_string(), point_type.clone()),
-            ("end".to_string(), point_type),
+            ("from".to_string(), view_type.clone()),
+            ("to".to_string(), view_type),
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
@@ -417,11 +435,11 @@ fn test_bounds_checker_dup_nested_struct_passes() {
     let bounds = vec!["Dup".to_string()];
 
     // Act
-    let result = checker.check_trait_bounds(&line_type, &bounds);
+    let result = checker.check_trait_bounds(&conn_type, &bounds);
 
     // Assert - 嵌套 Dup 结构体应通过递归检查
     assert!(
         result.is_ok(),
-        "BoundsChecker should accept nested Dup structs (Line with Point fields)"
+        "BoundsChecker should accept nested Dup structs"
     );
 }
