@@ -167,29 +167,35 @@ impl Evaluator {
     }
 
     /// Wrap code for REPL evaluation
-    fn wrap_code(
-        &self,
-        code: &str,
-    ) -> String {
+    fn wrap_code(&self, code: &str) -> String {
         let trimmed = code.trim();
 
-        // Check if it's an expression (not a statement)
-        if self.is_expression(trimmed) {
-            format!("main() -> _ = () => {{ {}; }}", code)
-        } else {
+        // Check if it's a statement (not an expression)
+        if self.is_statement(trimmed) {
             format!("main() -> () = () => {{ {} }}", code)
+        } else {
+            format!("main() -> _ = () => {{ {}; }}", code)
         }
     }
 
     /// Check if code is an expression
-    fn is_expression(
-        &self,
-        code: &str,
-    ) -> bool {
+    fn is_statement(&self, code: &str) -> bool {
         let first_word = code.split_whitespace().next();
         matches!(
             first_word,
-            Some("let") | Some("if") | Some("match") | Some("for")
+            Some("let")
+                | Some("if")
+                | Some("match")
+                | Some("for")
+                | Some("while")
+                | Some("fn")
+                | Some("struct")
+                | Some("enum")
+                | Some("trait")
+                | Some("impl")
+                | Some("return")
+                | Some("break")
+                | Some("continue")
         )
     }
 
