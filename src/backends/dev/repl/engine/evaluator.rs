@@ -174,7 +174,7 @@ impl Evaluator {
         if self.is_statement(trimmed) {
             format!("main() -> () = () => {{ {} }}", code)
         } else {
-            format!("main() -> _ = () => {{ {}; }}", code)
+            format!("main() -> _ = () => {{ {} }}", code)
         }
     }
 
