@@ -455,12 +455,13 @@ fn main() -> Result<()> {
         }
         Commands::Repl { tui } => {
             if tui {
-                tracing::error!("TUI REPL mode is not available. Use 'yaoxiang repl' for the standard REPL.");
+                tracing::error!(
+                    "TUI REPL mode is not available. Use 'yaoxiang repl' for the standard REPL."
+                );
                 std::process::exit(1);
             }
             let evaluator = Evaluator::new();
-            let mut repl = SessionREPL::new(evaluator)
-                .context("Failed to initialize REPL")?;
+            let mut repl = SessionREPL::new(evaluator).context("Failed to initialize REPL")?;
             repl.run().context("REPL exited with error")?;
         }
         Commands::Init { name } => {

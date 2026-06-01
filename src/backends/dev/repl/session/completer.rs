@@ -24,7 +24,10 @@ pub struct REPLCompleter<B: REPLBackend> {
 }
 
 impl<B: REPLBackend> fmt::Debug for REPLCompleter<B> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         f.debug_struct("REPLCompleter")
             .field("keywords", &self.keywords)
             .finish()

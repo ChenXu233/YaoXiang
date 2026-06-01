@@ -152,10 +152,7 @@ impl DevShell {
                             self.cwd = new_cwd;
                             std::env::set_current_dir(&self.cwd).ok();
                         } else {
-                            return ShellResult::Error(format!(
-                                "Not a directory: {}",
-                                parts[1]
-                            ));
+                            return ShellResult::Error(format!("Not a directory: {}", parts[1]));
                         }
                     } else {
                         return ShellResult::Error(format!("Invalid path: {}", parts[1]));
@@ -264,9 +261,7 @@ impl DevShell {
     ) -> ShellResult {
         let eval_result = self.repl.backend_mut().evaluate(code);
         match eval_result {
-            crate::backends::dev::repl::EvalResult::Value(v) => {
-                ShellResult::Value(v)
-            }
+            crate::backends::dev::repl::EvalResult::Value(v) => ShellResult::Value(v),
             crate::backends::dev::repl::EvalResult::Ok => ShellResult::Success,
             crate::backends::dev::repl::EvalResult::Error(e) => ShellResult::Error(e),
             crate::backends::dev::repl::EvalResult::Incomplete => {
