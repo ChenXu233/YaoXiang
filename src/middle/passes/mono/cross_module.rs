@@ -487,12 +487,32 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
             Box::new(ast_type_to_mono_type(err)),
         ),
         Type::Generic { name, args, .. } => {
-            let args_str = args
-                .iter()
-                .map(|t| ast_type_to_mono_type(t).type_name())
-                .collect::<Vec<_>>()
-                .join(",");
-            MonoType::TypeRef(format!("{}({})", name, args_str))
+            // 内置泛型类型特殊处理
+            if name == "Option" && args.len() == 1 {
+                return MonoType::Option(Box::new(ast_type_to_mono_type(&args[0])));
+            }
+            if name == "Result" && args.len() == 2 {
+                return MonoType::Result(
+                    Box::new(ast_type_to_mono_type(&args[0])),
+                    Box::new(ast_type_to_mono_type(&args[1])),
+                );
+            }
+            if name == "List" && args.len() == 1 {
+                return MonoType::List(Box::new(ast_type_to_mono_type(&args[0])));
+            }
+            if name == "Dict" && args.len() == 2 {
+                return MonoType::Dict(
+                    Box::new(ast_type_to_mono_type(&args[0])),
+                    Box::new(ast_type_to_mono_type(&args[1])),
+                );
+            }
+            if name == "Set" && args.len() == 1 {
+                return MonoType::Set(Box::new(ast_type_to_mono_type(&args[0])));
+            }
+            MonoType::Generic {
+                name: name.clone(),
+                args: args.iter().map(ast_type_to_mono_type).collect(),
+            }
         }
         Type::Sum(types) => MonoType::Union(types.iter().map(ast_type_to_mono_type).collect()),
         Type::AssocType {
@@ -661,6 +681,13 @@ fn substitute_single_type(
                 MonoType::Intersection(substituted)
             }
         }
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| substitute_single_type(a, type_map))
+                .collect(),
+        },
         _ => ty.clone(),
     }
 }
@@ -733,6 +760,13 @@ fn substitute_type_with_map(
                 MonoType::Intersection(substituted)
             }
         }
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|a| substitute_type_with_map(a, type_map))
+                .collect(),
+        },
         _ => ty.clone(),
     }
 }

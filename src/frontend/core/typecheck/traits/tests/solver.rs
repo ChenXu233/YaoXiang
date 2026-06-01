@@ -164,8 +164,8 @@ fn test_solve_dup_for_int() {
     let table = TraitTable::new();
     solver.set_trait_table(table);
     assert!(
-        solver.check_trait(&MonoType::Int(64), "Dup"),
-        "Int should satisfy Dup"
+        !solver.check_trait(&MonoType::Int(64), "Dup"),
+        "Int is a primitive value type, NOT Dup"
     );
 }
 
@@ -175,8 +175,8 @@ fn test_solve_dup_for_float() {
     let table = TraitTable::new();
     solver.set_trait_table(table);
     assert!(
-        solver.check_trait(&MonoType::Float(64), "Dup"),
-        "Float should satisfy Dup"
+        !solver.check_trait(&MonoType::Float(64), "Dup"),
+        "Float is a primitive value type, NOT Dup"
     );
 }
 
@@ -186,8 +186,8 @@ fn test_solve_dup_for_bool() {
     let table = TraitTable::new();
     solver.set_trait_table(table);
     assert!(
-        solver.check_trait(&MonoType::Bool, "Dup"),
-        "Bool should satisfy Dup"
+        !solver.check_trait(&MonoType::Bool, "Dup"),
+        "Bool is a primitive value type, NOT Dup"
     );
 }
 
@@ -197,8 +197,8 @@ fn test_solve_dup_for_char() {
     let table = TraitTable::new();
     solver.set_trait_table(table);
     assert!(
-        solver.check_trait(&MonoType::Char, "Dup"),
-        "Char should satisfy Dup"
+        !solver.check_trait(&MonoType::Char, "Dup"),
+        "Char is a primitive value type, NOT Dup"
     );
 }
 
@@ -939,11 +939,18 @@ fn test_solve_clone_for_result_fails() {
 #[test]
 fn test_solve_dup_for_struct_succeeds() {
     let mut solver = TraitSolver::new();
+    // 所有字段都是 Dup 类型（String + &T 令牌），结构体应满足 Dup
     let struct_ty = MonoType::Struct(crate::frontend::core::types::base::StructType {
-        name: "Point".to_string(),
+        name: "View".to_string(),
         fields: vec![
-            ("x".to_string(), MonoType::Float(64)),
-            ("y".to_string(), MonoType::Float(64)),
+            ("name".to_string(), MonoType::String),
+            (
+                "ref_field".to_string(),
+                MonoType::Ref {
+                    mutable: false,
+                    inner: Box::new(MonoType::Int(64)),
+                },
+            ),
         ],
         methods: HashMap::new(),
         field_mutability: vec![false, false],
@@ -952,7 +959,7 @@ fn test_solve_dup_for_struct_succeeds() {
     });
     assert!(
         solver.check_trait(&struct_ty, "Dup"),
-        "Point with Dup fields should satisfy Dup"
+        "Struct with all-Dup fields (String + &T) should satisfy Dup"
     );
 }
 
@@ -979,7 +986,15 @@ fn test_solve_dup_for_struct_fails() {
 #[test]
 fn test_solve_dup_for_tuple_succeeds() {
     let mut solver = TraitSolver::new();
-    let tuple_ty = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool, MonoType::String]);
+    // 所有元素都是 Dup 类型（String + Bytes + &T）
+    let tuple_ty = MonoType::Tuple(vec![
+        MonoType::String,
+        MonoType::Bytes,
+        MonoType::Ref {
+            mutable: false,
+            inner: Box::new(MonoType::Bool),
+        },
+    ]);
     assert!(
         solver.check_trait(&tuple_ty, "Dup"),
         "Tuple with all Dup elements should satisfy Dup"

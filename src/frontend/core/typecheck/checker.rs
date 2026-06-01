@@ -264,7 +264,7 @@ impl TypeChecker {
 
         // 将环境中的变量同步到 body_checker
         for (name, poly) in self.env.vars.clone() {
-            self.body_checker_mut().add_var(name, poly);
+            self.body_checker_mut().add_var(name, poly, false);
         }
 
         // 第三遍：检查所有语句（包括函数体）

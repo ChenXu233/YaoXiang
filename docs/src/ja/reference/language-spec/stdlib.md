@@ -12,74 +12,74 @@
 
 | 型 | モジュール | 説明 |
 |------|------|------|
-| `Option[T]` | `std.option` | 値変体（オプショナル）型 |
-| `Result[T, E]` | `std.result` | エラー処理型 |
-| `List[T]` | `std.collection` | 動的配列 |
-| `Map[K, V]` | `std.collection` | ハッシュマップ |
+| `Option(T)` | `std.option` | オプション値型 |
+| `Result(T, E)` | `std.result` | エラー処理型 |
+| `List(T)` | `std.collection` | 動的配列 |
+| `Map(K, V)` | `std.collection` | ハッシュマップ |
 | `String` | `std.string` | 文字列型 |
-| `Array[T, N]` | `std.array` | 固定長配列 |
+| `Array(T, N)` | `std.array` | 固定長配列 |
 
 ### 1.2 Option 型
 
 ```
-Option: Type[T] = some(T) | none
+Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 ```
 
 **値変体構築**：
 
 | 値変体 | 構文 | 説明 |
 |------|------|------|
-| `some(T)` | `some(value)` | 値あり |
-| `none` | `none` | 値なし |
+| `Option.some` | `Option.some(value)` | 値あり |
+| `Option.none` | `Option.none()` | 値なし |
 
-**主要メソッド**：
+**常用メソッド**：
 
 ```yaoxiang
 // 値の有無を確認
-is_some: (self: Option[T]) -> Bool
-is_none: (self: Option[T]) -> Bool
+is_some: (self: Option(T)) -> Bool
+is_none: (self: Option(T)) -> Bool
 
 // 値を取得（panic の可能性あり）
-unwrap: (self: Option[T]) -> T
+unwrap: (self: Option(T)) -> T
 
 // 値またはデフォルト値を取得
-unwrap_or: (self: Option[T], default: T) -> T
+unwrap_or: (self: Option(T), default: T) -> T
 
-// 値のマップ
-map: [R](self: Option[T], f: Fn(T) -> R) -> Option[R]
+// 値をマップ
+map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
 ```
 
 ### 1.3 Result 型
 
 ```
-Result: Type[T, E] = ok(T) | err(E)
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 ```
 
 **値変体構築**：
 
 | 値変体 | 構文 | 説明 |
 |------|------|------|
-| `ok(T)` | `ok(value)` | 成功値 |
-| `err(E)` | `err(error)` | エラー値 |
+| `Result.ok` | `Result.ok(value)` | 成功値 |
+| `Result.err` | `Result.err(error)` | エラー値 |
 
-**主要メソッド**：
+**常用メソッド**：
 
 ```yaoxiang
 // 成功かどうかを確認
-is_ok: (self: Result[T, E]) -> Bool
-is_err: (self: Result[T, E]) -> Bool
+is_ok: (self: Result(T, E)) -> Bool
+is_err: (self: Result(T, E)) -> Bool
 
 // 値を取得（panic の可能性あり）
-unwrap: (self: Result[T, E]) -> T
+unwrap: (self: Result(T, E)) -> T
 
 // 値またはデフォルト値を取得
-unwrap_or: (self: Result[T, E], default: T) -> T
+unwrap_or: (self: Result(T, E), default: T) -> T
 
-// 成功値のマップ
-map: [R](self: Result[T, E], f: Fn(T) -> R) -> Result[R, E]
+// 成功値をマップ
+map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
 
-// エラー値のマップ
-map_err: [F](self: Result[T, E], f: Fn(E) -> F) -> Result[T, F]
+// エラー値をマップ
+map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
 ```
 
 ### 1.4 エラー伝播
@@ -123,16 +123,16 @@ read_char: () -> Char
 // ファイル型
 File: Type = {
     path: String,
-    read: (self: File) -> Result[String, Error],
-    write: (self: File, content: String) -> Result[Void, Error],
-    append: (self: File, content: String) -> Result[Void, Error],
+    read: (self: File) -> Result(String, Error),
+    write: (self: File, content: String) -> Result(Void, Error),
+    append: (self: File, content: String) -> Result(Void, Error),
     close: (self: File) -> Void
 }
 
 // ファイル操作
-open: (path: String) -> Result[File, Error]
-create: (path: String) -> Result[File, Error]
-delete: (path: String) -> Result[Void, Error]
+open: (path: String) -> Result(File, Error)
+create: (path: String) -> Result(File, Error)
+delete: (path: String) -> Result(Void, Error)
 ```
 
 ### 2.3 ディレクトリ操作
@@ -141,35 +141,35 @@ delete: (path: String) -> Result[Void, Error]
 // ディレクトリ型
 Dir: Type = {
     path: String,
-    entries: (self: Dir) -> Result[List[String], Error],
-    create: (self: Dir) -> Result[Void, Error],
-    delete: (self: Dir) -> Result[Void, Error]
+    entries: (self: Dir) -> Result(List(String), Error),
+    create: (self: Dir) -> Result(Void, Error),
+    delete: (self: Dir) -> Result(Void, Error)
 }
 
 // ディレクトリ操作
-read_dir: (path: String) -> Result[Dir, Error]
-create_dir: (path: String) -> Result[Void, Error]
-delete_dir: (path: String) -> Result[Void, Error]
+read_dir: (path: String) -> Result(Dir, Error)
+create_dir: (path: String) -> Result(Void, Error)
+delete_dir: (path: String) -> Result(Void, Error)
 ```
 
 ---
 
 ## 第3章：数学ライブラリ
 
-### 3.1 基礎数学関数
+### 3.1 基本数学関数
 
 ```yaoxiang
 // 絶対値
 abs: (x: Int) -> Int
 abs: (x: Float) -> Float
 
-// 最大最小値
+// 最大値・最小値
 max: (a: Int, b: Int) -> Int
 min: (a: Int, b: Int) -> Int
 max: (a: Float, b: Float) -> Float
 min: (a: Float, b: Float) -> Float
 
-// 冪乗演算
+// べき乗演算
 pow: (base: Float, exp: Float) -> Float
 sqrt: (x: Float) -> Float
 
@@ -216,10 +216,10 @@ length: (s: String) -> Int
 concat: (a: String, b: String) -> String
 
 // 文字列分割
-split: (s: String, delimiter: String) -> List[String]
+split: (s: String, delimiter: String) -> List(String)
 
 // 文字列検索
-find: (s: String, pattern: String) -> Option[Int]
+find: (s: String, pattern: String) -> Option(Int)
 contains: (s: String, pattern: String) -> Bool
 
 // 文字列置換
@@ -240,8 +240,8 @@ to_string: (x: Float) -> String
 to_string: (x: Bool) -> String
 
 // パース
-parse_int: (s: String) -> Result[Int, Error]
-parse_float: (s: String) -> Result[Float, Error]
+parse_int: (s: String) -> Result(Int, Error)
+parse_float: (s: String) -> Result(Float, Error)
 ```
 
 ---
@@ -252,22 +252,22 @@ parse_float: (s: String) -> Result[Float, Error]
 
 ```yaoxiang
 // List 型
-List: Type[T] = {
-    data: Array[T],
+List: (T: Type) -> Type = {
+    data: Array(T),
     length: Int,
-    push: [T](self: List[T], item: T) -> Void,
-    pop: [T](self: List[T]) -> Option[T],
-    get: [T](self: List[T], index: Int) -> Option[T],
-    set: [T](self: List[T], index: Int, value: T) -> Void,
-    insert: [T](self: List[T], index: Int, item: T) -> Void,
-    remove: [T](self: List[T], index: Int) -> Option[T],
-    clear: [T](self: List[T]) -> Void,
-    contains: [T](self: List[T], item: T) -> Bool,
-    sort: [T](self: List[T]) -> List[T],
-    reverse: [T](self: List[T]) -> List[T],
-    map: [T, R](self: List[T], f: Fn(T) -> R) -> List[R],
-    filter: [T](self: List[T], predicate: Fn(T) -> Bool) -> List[T],
-    reduce: [T, R](self: List[T], initial: R, f: Fn(R, T) -> R) -> R
+    push: (T: Type) -> ((self: List(T), item: T) -> Void),
+    pop: (T: Type) -> ((self: List(T)) -> Option(T)),
+    get: (T: Type) -> ((self: List(T), index: Int) -> Option(T)),
+    set: (T: Type) -> ((self: List(T), index: Int, value: T) -> Void),
+    insert: (T: Type) -> ((self: List(T), index: Int, item: T) -> Void),
+    remove: (T: Type) -> ((self: List(T), index: Int) -> Option(T)),
+    clear: (T: Type) -> ((self: List(T)) -> Void),
+    contains: (T: Type) -> ((self: List(T), item: T) -> Bool),
+    sort: (T: Type) -> ((self: List(T)) -> List(T)),
+    reverse: (T: Type) -> ((self: List(T)) -> List(T)),
+    map: (T: Type, R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
+    filter: (T: Type) -> ((self: List(T), predicate: (T) -> Bool) -> List(T)),
+    reduce: (T: Type, R: Type) -> ((self: List(T), initial: R, f: (R, T) -> R) -> R)
 }
 ```
 
@@ -275,16 +275,16 @@ List: Type[T] = {
 
 ```yaoxiang
 // Map 型
-Map: Type[K, V] = {
-    data: Array[(K, V)],
+Map: (K: Type, V: Type) -> Type = {
+    data: Array((K, V)),
     length: Int,
-    insert: [K, V](self: Map[K, V], key: K, value: V) -> Void,
-    get: [K, V](self: Map[K, V], key: K) -> Option[V],
-    remove: [K, V](self: Map[K, V], key: K) -> Option[V],
-    contains_key: [K, V](self: Map[K, V], key: K) -> Bool,
-    keys: [K, V](self: Map[K, V]) -> List[K],
-    values: [K, V](self: Map[K, V]) -> List[V],
-    clear: [K, V](self: Map[K, V]) -> Void
+    insert: (K: Type, V: Type) -> ((self: Map(K, V), key: K, value: V) -> Void),
+    get: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Option(V)),
+    remove: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Option(V)),
+    contains_key: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Bool),
+    keys: (K: Type, V: Type) -> ((self: Map(K, V)) -> List(K)),
+    values: (K: Type, V: Type) -> ((self: Map(K, V)) -> List(V)),
+    clear: (K: Type, V: Type) -> ((self: Map(K, V)) -> Void)
 }
 ```
 
@@ -296,27 +296,27 @@ Map: Type[K, V] = {
 
 ```yaoxiang
 // Iterator trait
-Iterator: Type[T] = {
+Iterator: (T: Type) -> Type = {
     Item: T,
-    next: (self: Self) -> Option[T],
-    has_next: (self: Self) -> Bool,
-    map: [R](self: Self, f: Fn(T) -> R) -> Iterator[R],
-    filter: (self: Self, predicate: Fn(T) -> Bool) -> Iterator[T],
-    collect: (self: Self) -> List[T],
-    reduce: [R](self: Self, initial: R, f: Fn(R, T) -> R) -> R,
-    for_each: (self: Self, f: Fn(T) -> Void) -> Void
+    next: () -> Option(T),
+    has_next: () -> Bool,
+    map: (R: Type) -> ((f: (T) -> R) -> Iterator(R)),
+    filter: (predicate: (T) -> Bool) -> Iterator(T),
+    collect: () -> List(T),
+    reduce: (R: Type) -> ((initial: R, f: (R, T) -> R) -> R),
+    for_each: (f: (T) -> Void) -> Void
 }
 ```
 
 ### 6.2 イテレータアダプタ
 
 ```yaoxiang
-// レンジイテレータ
+// 範囲イテレータ
 Range: Type = {
     start: Int,
     end: Int,
     step: Int,
-    Iterator[Int]
+    Iterator(Int)
 }
 
 // 使用例
@@ -331,7 +331,7 @@ for i in 0..10 step 2 {
 
 ---
 
-## 付録：標準ライブラリモジュール索引
+## 付録：標準ライブラリモジュールインデックス
 
 ### A.1 コアモジュール
 

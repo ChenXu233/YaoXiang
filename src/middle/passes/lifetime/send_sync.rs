@@ -97,6 +97,8 @@ impl SendSyncChecker {
             MonoType::MetaType { .. } => true,
             // 借用引用：检查内部类型
             MonoType::Ref { inner, .. } => self.is_send(inner),
+            // 泛型实例化：所有类型参数必须 Send
+            MonoType::Generic { args, .. } => args.iter().all(|a| self.is_send(a)),
         }
     }
 
@@ -167,6 +169,8 @@ impl SendSyncChecker {
             MonoType::MetaType { .. } => true,
             // 借用引用：检查内部类型
             MonoType::Ref { inner, .. } => self.is_sync(inner),
+            // 泛型实例化：所有类型参数必须 Sync
+            MonoType::Generic { args, .. } => args.iter().all(|a| self.is_sync(a)),
         }
     }
 }

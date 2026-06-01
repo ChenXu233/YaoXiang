@@ -551,56 +551,65 @@ composed: String = compose(
 
 #### 2.4 内置 marker trait：Dup 与 Clone
 
-**两类复制语义**：
+**三类复制语义**：
 
-| 属性 | 含义 | 触发方式 | 成本 |
-|------|------|----------|------|
-| **Dup** | 隐式浅复制 | 赋值/传参自动 | 零（比特复制或零大小类型） |
-| **Clone** | 显式深拷贝 | `value.clone()` | 视类型而定 |
+| 类型 | 含义 | 触发方式 | 适用场景 |
+|------|------|----------|----------|
+| **原语值复制** | 赋值时自动值复制，两个值完全独立 | 赋值/传参自动 | Int, Float, Bool, Char |
+| **Dup** | 浅拷贝：复制句柄/令牌，底层数据共享 | 赋值/传参自动 | `&T` 令牌、`ref T`、String/Bytes |
+| **Clone** | 深拷贝：创建完整独立副本 | `value.clone()` | 任何实现 Clone 的类型 |
 
-**Dup 的语义**：实现了 Dup 的类型在赋值/传参时不转移所有权——编译器自动复制一份。这是 RFC-009 所有权模型中 Move 默认语义的互补。
+**Dup 的语义**：实现了 Dup 的类型在赋值/传参时不转移所有权——编译器复制句柄/令牌，多个持有者指向同一底层数据。这是 RFC-009 所有权模型中 Move 默认语义的互补。
+
+**Dup 与 Clone 是正交的概念**：
+
+```
+Dup = 复制句柄，共享数据（修改互相影响）
+Clone = 复制数据，副本独立（修改互不影响）
+```
 
 **规则**：
 
 ```
-1. Dup → Clone     所有 Dup 类型自动实现 Clone（字段逐一 clone）
-2. Clone ↛ Dup     有 Clone 不一定有 Dup
-3. 默认 Move       不实现 Dup 的类型保持默认 Move 语义
+1. 原语值类型（Int, Float, Bool, Char） — 编译器内置值复制，不属于 Dup
+2. Dup  — 只适用于引用/令牌类型和内部引用计数的类型
+3. Clone — 显式深拷贝，任何类型可实现
+4. 默认 Move — 其他类型保持默认 Move 语义
 ```
 
 **哪些类型是 Dup**：
 
 | 类型 | Dup | 原因 |
 |------|-----|------|
-| Int, Float, Bool, Char | ✅ | 原语，编译器内置 |
-| String, Bytes | ✅ | 内部引用计数，浅复制安全 |
-| `&T`（借用令牌） | ✅ | 零大小编译期证明，复制无副作用 |
+| `&T`（借用令牌） | ✅ | 零大小令牌，复制令牌 = 多个视角指向同一数据 |
+| `ref T` | ✅ | Rc/Arc 复制 = 引用计数+1，共享堆数据 |
+| String, Bytes | ✅ | 内部引用计数，复制句柄共享底层 buffer |
 | `&mut T`（可变令牌） | ❌ | 线性独占，不能复制 |
-| struct | 推导 | 所有字段 Dup → struct Dup |
-| enum | 推导 | 所有 variant 的所有字段 Dup → enum Dup |
-| tuple | 推导 | 所有元素 Dup → tuple Dup |
+| struct | 派生 | 所有字段 Dup → struct Dup |
+| enum | 派生 | 所有 variant 的所有字段 Dup → enum Dup |
+| tuple | 派生 | 所有元素 Dup → tuple Dup |
 | Fn（闭包） | ❌ | 捕获环境可能非 Dup |
-| Arc(T) | ✅ | Arc 本身可浅复制 |
+| `*T`（裸指针） | ❌ | unsafe，不参与所有权系统 |
 
-**Dup 和 Clone 都是 marker trait**——无方法的 trait。在原语上由编译器自动注册 impl。对 struct/enum/tuple，编译器递归检查所有字段/元素：若全部实现 Dup/Clone，则自动生成 impl（auto-derive）。
+**Int/Float/Bool/Char 不是 Dup**——它们是值类型，赋值时编译器自动值复制（两个值完全独立）。这不是"浅拷贝"，是编译器对原语的内置处理，不需要也不应该通过 Dup 类型属性来表达。
 
 ```yaoxiang
-# Dup：隐式浅复制
+# 原语值类型：编译器自动值复制（不是 Dup）
 x: Int = 42
-y = x          # Int: Dup → 复制
+y = x          # 值复制，x 和 y 完全独立
 print(x)       # ✅
 
-# Clone：显式深拷贝
+# Dup：浅拷贝，复制句柄共享数据
+view: &Point = &point
+view2 = view    # ✅ Dup：复制令牌，两者指向同一个 point
+print(view.x)   # ✅
+
+# Clone：显式深拷贝，创建独立副本
 backup = big_struct.clone()  # 显式调用
 
 # 泛型约束
-dup_use: (x: T: Dup) -> T = x         # T: Dup → 可以隐式复制
-clone_use: (x: T: Clone) -> T = x.clone()  # T: Clone → 显式深拷贝
-
-# Dup 令牌——零成本传播
-view: &Point = &point
-view2 = view    # ✅ &T: Dup
-print(view.x)   # ✅ 零成本——零大小令牌
+dup_use: (T: Dup) -> T = x         # T: Dup → 可以浅拷贝
+clone_use: (T: Clone) -> T = x.clone()  # T: Clone → 可以深拷贝
 ```
 
 > **注意**：`Send`/`Sync` 不作为用户可见 trait。跨任务安全保障由 `ref` 关键字和编译器全自动处理——`ref` 自动选择 Rc 或 Arc，用户不需要理解 Send/Sync。

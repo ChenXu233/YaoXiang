@@ -20,8 +20,8 @@ title: "RFC Index"
 
 | File | Description |
 |------|-------------|
-| [RFC_TEMPLATE.md](RFC_TEMPLATE.md) | RFC Standard Template |
-| [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) | Full Example (Pattern Matching Enhancement) |
+| [RFC_TEMPLATE.md](RFC_TEMPLATE.md) | RFC standard template |
+| [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) | Full example (Pattern Matching Enhancement) |
 
 ---
 
@@ -30,11 +30,8 @@ title: "RFC Index"
 | Number | Title | Author | Created | Status |
 |--------|-------|--------|---------|--------|
 | RFC-016 | [Quantum-Native Support and Multi-Backend Integration](./draft/016-quantum-native-support.md) | Chenxu | 2026-02-12 | Draft |
-| RFC-018 | [LLVM AOT Compiler and Runtime Scheduler Integration Design](./draft/018-llvm-aot-compiler.md) | Chenxu | 2026-02-15 | Draft |
-| RFC-019 | [Typed Homoiconicity](./draft/019-typed-homoiconicity.md) | Chenxu | 2026-02-20 | Permanent Draft ⚠️ |
+| RFC-019 | [Type-Level YaoXiang (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | Chenxu | 2026-02-20 | Permanent Draft ⚠️ |
 | RFC-020 | [Dynamic Modules, FFI Integration, and Context-Aware Scheduling Enhancements](./draft/020-dynamic-modules-ffi.md) | Chenxu | 2026-02-25 | Draft |
-| RFC-021 | [Library-Driven FFI Extension and Cross-Language Call Support](./draft/021-library-driven-ffi-extension.md) | Chenxu | 2026-03-14 | Draft |
-| RFC-022 | [Optional Hoare Logic Static Verification (Specification Comments and Specification Types)](./draft/022-hoare-logic-static-verification.md) | Chenxu | 2026-03-16 | Draft |
 
 ---
 
@@ -43,6 +40,9 @@ title: "RFC Index"
 | Number | Title | Author | Created | Status |
 |--------|-------|--------|---------|--------|
 | RFC-003 | [Version Planning and Implementation Suggestions](./review/003-version-planning.md) | Chenxu | 2025-01-05 | Under Review |
+| RFC-018 | [LLVM AOT Compiler and Runtime Scheduler Integration Design](./review/018-llvm-aot-compiler.md) | Chenxu | 2026-02-15 | Under Review |
+| RFC-021 | [Library-Driven FFI Extension and Cross-Language Call Support](./review/021-library-driven-ffi-extension.md) | Chenxu | 2026-03-14 | Under Review |
+| RFC-022 | [Optional Hoare Logic Static Verification (Specification Comments and Specification Types)](./review/022-hoare-logic-static-verification.md) | Chenxu | 2026-03-16 | Under Review |
 
 ---
 
@@ -50,13 +50,13 @@ title: "RFC Index"
 
 | Number | Title | Author | Created | Status |
 |--------|-------|--------|---------|--------|
-| RFC-001 | [Concurrency Model and Error Handling System](./accepted/001-concurrent-model-error-handling.md) | Chenxu | 2025-01-05 | Accepted |
+| RFC-001 | [Concurrent Model and Error Handling System](./accepted/001-concurrent-model-error-handling.md) | Chenxu | 2025-01-05 | Accepted |
 | RFC-004 | [Multi-Position Union Binding Design for Curried Methods](./accepted/004-curry-multi-position-binding.md) | Chenxu | 2025-01-05 | Accepted |
 | RFC-006 | [Documentation Site Construction and Optimization Plan](./accepted/006-documentation-site-optimization.md) | Chenxu | 2025-01-05 | Accepted |
-| RFC-007 | [Function Definition Syntax Unification Plan](./accepted/007-function-syntax-unification.md) | Chenxu | 2025-01-05 | Accepted |
+| RFC-007 | [Function Definition Syntax Unification](./accepted/007-function-syntax-unification.md) | Chenxu | 2025-01-05 | Accepted |
 | RFC-008 | [Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md) | Chenxu | 2025-01-05 | Accepted |
 | RFC-009 | [Ownership Model v7](./accepted/009-ownership-model.md) | Chenxu | 2025-01-05 | Accepted |
-| RFC-011 | [Generic Type System Design - Zero-Cost Abstraction and Macro Substitution](./accepted/011-generic-type-system.md) | Chenxu | 2025-01-25 | Accepted |
+| RFC-011 | [Generics System Design - Zero-Cost Abstraction and Macro Replacement](./accepted/011-generic-type-system.md) | Chenxu | 2025-01-25 | Accepted |
 | RFC-012 | [F-String Template Strings](./accepted/012-f-string-template-strings.md) | Chenxu | 2025-01-27 | Accepted |
 | RFC-013 | [Error Code Specification Design](./accepted/013-error-code-specification.md) | Chenxu | 2025-01-30 | Accepted |
 | RFC-014 | [Package Management System Design](./accepted/014-package-manager.md) | Chenxu | 2026-02-12 | Accepted |
@@ -85,7 +85,7 @@ title: "RFC Index"
        │
        ▼
 ┌─────────────┐
-│ Under Review│  ← Open to community discussion and feedback
+│ Under Review│  ← Open for community discussion and feedback
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -97,18 +97,18 @@ title: "RFC Index"
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │  accepted/  │    │  rejected/  │
-│  (Official │    │ (Rejected)  │
+│ (Official   │    │  (Rejected) │
 │   Design)   │    │             │
 └─────────────┘    └─────────────┘
 ```
 
-### Status Description
+### Status Descriptions
 
 | Status | Location | Description |
 |--------|----------|-------------|
-| **Draft** | `docs/reference/rfc/draft/` | Author's draft, awaiting submission for review |
-| **Under Review** | `docs/reference/rfc/review/` | Open to community discussion and feedback |
-| **Accepted** | `docs/reference/rfc/accepted/` | Becomes an official design document, entering implementation phase |
+| **Draft** | `docs/reference/rfc/draft/` | Author's draft, awaiting review submission |
+| **Under Review** | `docs/reference/rfc/review/` | Open for community discussion and feedback |
+| **Accepted** | `docs/reference/rfc/accepted/` | Becomes official design document, enters implementation phase |
 | **Rejected** | `docs/reference/rfc/rejected/` | Rejected RFC documents |
 
 ---
@@ -116,8 +116,8 @@ title: "RFC Index"
 ## Submitting an RFC
 
 1. Read [RFC_TEMPLATE.md](RFC_TEMPLATE.md) to understand format requirements
-2. Reference [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) for writing examples
-3. Create a new file named `number-descriptive-title.md`
+2. Reference [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) for writing guidance
+3. Create a new file, naming it `number-descriptive-title.md`
 4. Place the file in the `docs/reference/rfc/draft/` directory
 5. Update this index file to add the new RFC entry
 6. Submit a PR to enter the review process

@@ -198,12 +198,32 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 Box::new(self.type_to_mono_type(err)),
             ),
             AstType::Generic { name, args, .. } => {
-                let args_str = args
-                    .iter()
-                    .map(|t| self.type_to_mono_type(t).type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                MonoType::TypeRef(format!("{}({})", name, args_str))
+                // 内置泛型类型特殊处理
+                if name == "Option" && args.len() == 1 {
+                    return MonoType::Option(Box::new(self.type_to_mono_type(&args[0])));
+                }
+                if name == "Result" && args.len() == 2 {
+                    return MonoType::Result(
+                        Box::new(self.type_to_mono_type(&args[0])),
+                        Box::new(self.type_to_mono_type(&args[1])),
+                    );
+                }
+                if name == "List" && args.len() == 1 {
+                    return MonoType::List(Box::new(self.type_to_mono_type(&args[0])));
+                }
+                if name == "Dict" && args.len() == 2 {
+                    return MonoType::Dict(
+                        Box::new(self.type_to_mono_type(&args[0])),
+                        Box::new(self.type_to_mono_type(&args[1])),
+                    );
+                }
+                if name == "Set" && args.len() == 1 {
+                    return MonoType::Set(Box::new(self.type_to_mono_type(&args[0])));
+                }
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: args.iter().map(|t| self.type_to_mono_type(t)).collect(),
+                }
             }
             AstType::Sum(types) => {
                 MonoType::Union(types.iter().map(|t| self.type_to_mono_type(t)).collect())
@@ -644,6 +664,13 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     MonoType::Intersection(substituted)
                 }
             }
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|a| self.substitute_type_args(a, type_args, type_params))
+                    .collect(),
+            },
             _ => ty.clone(),
         }
     }
@@ -783,6 +810,12 @@ impl TypeMonomorphizer for super::Monomorphizer {
             }
             // 元类型：无类型变量
             MonoType::MetaType { .. } => {}
+            // 泛型实例化：递归收集参数中的类型变量
+            MonoType::Generic { args, .. } => {
+                for arg in args {
+                    self.collect_type_vars_from_mono_type(arg, type_params, seen);
+                }
+            }
         }
     }
 

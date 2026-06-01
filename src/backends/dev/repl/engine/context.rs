@@ -28,10 +28,6 @@ pub struct REPLContext {
     functions: HashMap<String, FunctionInfo>,
     /// Execution statistics
     stats: ExecutionStats,
-    /// Eval count for this session
-    eval_count: usize,
-    /// Total execution time
-    total_time: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -154,26 +150,19 @@ impl REPLContext {
         &mut self,
         duration: Duration,
     ) {
-        self.eval_count += 1;
-        self.total_time += duration;
-        self.stats.eval_count = self.eval_count;
-        self.stats.total_time = self.total_time;
+        self.stats.eval_count += 1;
+        self.stats.total_time += duration;
     }
 
     /// Clear all state
     pub fn clear(&mut self) {
         self.variables.clear();
         self.functions.clear();
-        self.eval_count = 0;
-        self.total_time = Duration::ZERO;
         self.stats = ExecutionStats::default();
     }
 
     /// Get statistics
     pub fn stats(&self) -> ExecutionStats {
-        ExecutionStats {
-            eval_count: self.eval_count,
-            total_time: self.total_time,
-        }
+        self.stats.clone()
     }
 }
