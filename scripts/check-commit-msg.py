@@ -35,16 +35,19 @@ VALID_EMOJIS = {
 
 # 合法的 scope（来自 docs/src/dev/commit-convention.md）
 VALID_SCOPES = {
-    # 代码作用域
-    "frontend", "parser", "lexer", "typecheck", "middle",
-    "codegen", "monomorphize", "lifetime", "vm", "executor",
-    "frames", "instructions", "runtime", "memory", "scheduler",
-    "std", "concurrent", "io", "net", "util", "cache", "diagnostic",
+    # 顶层模块
+    "frontend", "middle", "backends", "std", "formatter",
+    "lsp", "package", "util",
+    # 前端子模块
+    "parser", "lexer", "typecheck", "types",
+    # 中间层子模块
+    "codegen", "monomorphize", "lifetime",
+    # 后端子模块
+    "repl", "shell", "runtime",
     # 文档作用域
-    "docs", "architecture", "design", "plan", "guides",
-    "tutorial", "examples",
+    "docs", "design", "plan",
     # 其他作用域
-    "build", "ci", "test", "chore", "release", "meta",
+    "build", "ci", "test", "release", "meta",
 }
 
 EMOJI_PATTERN = "|".join(VALID_EMOJIS)
@@ -77,22 +80,22 @@ GUIDANCE = """
 
   :emoji:  必须，GitHub 风格 shortcode，必须是合法的 gitmoji 代码
   type     必须: feat fix docs style refactor perf test chore ci build
-  scope    必须: frontend parser lexer typecheck middle codegen
-                 monomorphize lifetime vm executor frames instructions
-                 runtime memory scheduler std concurrent io net util
-                 cache diagnostic docs architecture design plan guides
-                 tutorial examples build ci test chore release meta
+  scope    必须（基于 src/ 目录结构）:
+           frontend parser lexer typecheck types middle codegen
+           monomorphize lifetime backends repl shell runtime
+           std formatter lsp package util docs design plan
+           build ci test release meta
   subject  中文，不超过 50 字符
 
 发版格式:  :bookmark: V<版本号>: <发版标题>
 
 常用 emoji 示例:
   :sparkles: feat(parser): 添加闭包语法解析支持
-  :bug: fix(vm): 修复栈帧溢出问题
-  :memo: docs: 更新 README 安装说明
-  :recycle: refactor(codesrc): 重构 IR 生成逻辑
+  :bug: fix(repl): 修复多行输入时补全器失效
+  :memo: docs(design): 更新所有权模型规范
+  :recycle: refactor(typecheck): 分离原语值类型与 Dup 浅拷贝语义
   :wrench: chore(build): 更新 Cargo 依赖
-  :bookmark: V0.8.0: 新增任务统计和数据分析功能
+  :bookmark: V0.7.2: REPL 重写与类型系统改进
 
 完整 emoji 列表: docs/src/dev/commit-convention.md
 
