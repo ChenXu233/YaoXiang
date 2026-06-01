@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::io::IsTerminal;
 use std::path::PathBuf;
 use tracing::info;
+use yaoxiang::backends::dev::{SessionREPL, Evaluator};
 use yaoxiang::formatter::run_format_command;
 use yaoxiang::{dump_bytecode, run, NAME, VERSION};
 use yaoxiang::util::diagnostic::{
@@ -454,16 +455,13 @@ fn main() -> Result<()> {
         }
         Commands::Repl { tui } => {
             if tui {
-                // TUI REPL mode explicitly requested but not available
-                tracing::error!("TUI REPL mode (`--tui`) is not implemented in this build.");
-                tracing::info!("You can run non-interactive programs with 'yaoxiang run <file>'.");
-            } else {
-                // Non-TUI REPL mode not available
-                tracing::error!("REPL mode is currently not available in this build.");
-                tracing::info!("Use 'yaoxiang run <file>' to execute a YaoXiang source file.");
+                tracing::error!("TUI REPL mode is not available. Use 'yaoxiang repl' for the standard REPL.");
+                std::process::exit(1);
             }
-            // Exit with a non-zero status so callers know the command failed.
-            std::process::exit(1);
+            let evaluator = Evaluator::new();
+            let mut repl = SessionREPL::new(evaluator)
+                .context("Failed to initialize REPL")?;
+            repl.run().context("REPL exited with error")?;
         }
         Commands::Init { name } => {
             package::commands::init::exec(&name).context("Failed to initialize project")?;
