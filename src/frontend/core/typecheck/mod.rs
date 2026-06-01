@@ -141,7 +141,7 @@ pub fn infer_expression(
     // 创建共享 ScopeManager 并添加环境变量
     let mut scope = inference::ScopeManager::new();
     for (name, poly) in env.vars.clone() {
-        scope.add_var(name, poly);
+        scope.add_var(name, poly, false);
     }
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();

@@ -23,7 +23,7 @@ fn test_scope_manager_add_var() {
     let mut scope = ScopeManager::new();
 
     // Act
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)));
+    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
 
     // Assert
     let var = scope.get_var("x");
@@ -34,7 +34,7 @@ fn test_scope_manager_add_var() {
 fn test_scope_manager_get_var() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)));
+    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
 
     // Act
     let var = scope.get_var("x");
@@ -71,7 +71,11 @@ fn test_scope_manager_with_many_vars() {
 
     // Act
     for i in 0..1000 {
-        scope.add_var(format!("var_{}", i), PolyType::mono(MonoType::Int(32)));
+        scope.add_var(
+            format!("var_{}", i),
+            PolyType::mono(MonoType::Int(32)),
+            false,
+        );
     }
 
     // Assert
