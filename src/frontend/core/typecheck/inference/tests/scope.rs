@@ -152,7 +152,11 @@ fn test_var_is_mutable_searches_inner_to_outer() {
 fn test_current_scope_vars_only_returns_innermost() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("outer".to_string(), PolyType::mono(MonoType::Int(32)), false);
+    scope.add_var(
+        "outer".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        false,
+    );
     scope.enter_scope();
     scope.add_var("inner".to_string(), PolyType::mono(MonoType::Bool), true);
 
@@ -165,10 +169,7 @@ fn test_current_scope_vars_only_returns_innermost() {
         1,
         "current_scope_vars should only return innermost scope"
     );
-    assert!(
-        vars.contains_key("inner"),
-        "should contain inner variable"
-    );
+    assert!(vars.contains_key("inner"), "should contain inner variable");
     assert!(
         vars["inner"].is_mut,
         "inner variable should preserve is_mut"
@@ -204,6 +205,12 @@ fn test_vars_with_mut_preserves_correct_info() {
     let vars = scope.vars_with_mut();
 
     // Assert
-    assert!(vars["a"].is_mut, "mutable variable should be marked as mutable");
-    assert!(!vars["b"].is_mut, "immutable variable should be marked as not mutable");
+    assert!(
+        vars["a"].is_mut,
+        "mutable variable should be marked as mutable"
+    );
+    assert!(
+        !vars["b"].is_mut,
+        "immutable variable should be marked as not mutable"
+    );
 }

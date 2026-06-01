@@ -167,7 +167,10 @@ impl Evaluator {
     }
 
     /// Wrap code for REPL evaluation
-    fn wrap_code(&self, code: &str) -> String {
+    fn wrap_code(
+        &self,
+        code: &str,
+    ) -> String {
         let trimmed = code.trim();
 
         // Check if it's a statement (not an expression)
@@ -179,7 +182,10 @@ impl Evaluator {
     }
 
     /// Check if code is an expression
-    fn is_statement(&self, code: &str) -> bool {
+    fn is_statement(
+        &self,
+        code: &str,
+    ) -> bool {
         let first_word = code.split_whitespace().next();
         matches!(
             first_word,

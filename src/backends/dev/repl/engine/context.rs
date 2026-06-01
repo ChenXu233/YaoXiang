@@ -146,7 +146,10 @@ impl REPLContext {
     }
 
     /// Increment eval count
-    pub fn increment_eval(&mut self, duration: Duration) {
+    pub fn increment_eval(
+        &mut self,
+        duration: Duration,
+    ) {
         self.stats.eval_count += 1;
         self.stats.total_time += duration;
     }
