@@ -338,7 +338,10 @@ impl ConstGenericEval {
     }
 
     /// 设置最大递归深度
-    pub fn set_max_depth(&mut self, max_depth: usize) {
+    pub fn set_max_depth(
+        &mut self,
+        max_depth: usize,
+    ) {
         self.max_depth = max_depth;
     }
 
