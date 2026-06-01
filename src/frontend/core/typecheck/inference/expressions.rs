@@ -664,12 +664,11 @@ impl<'a> ExpressionInferrer<'a> {
                             {
                                 continue;
                             }
-                            // 跳过未完全解析的类型（TypeRef 或 TypeVar）
-                            if matches!(param_ty, MonoType::TypeRef(_))
-                                || matches!(param_ty, MonoType::TypeVar(_))
-                            {
+                            // TypeRef 未完全解析时跳过（如用户自定义类型名）
+                            if matches!(param_ty, MonoType::TypeRef(_)) {
                                 continue;
                             }
+                            // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
                             if self.solver.unify(arg_ty, param_ty).is_err() {
                                 return Err(ErrorCodeDefinition::type_mismatch(
                                     &format!("{}", param_ty),
@@ -680,7 +679,9 @@ impl<'a> ExpressionInferrer<'a> {
                             }
                         }
                     }
-                    return Ok(*return_type);
+                    // 展开返回类型中被绑定的类型变量（Type 自描述推断）
+                    let resolved_ret = self.solver.expand_type_shallow(&return_type);
+                    return Ok(resolved_ret);
                 }
                 Ok(self.solver.new_var())
             }
