@@ -51,7 +51,7 @@ pub struct CapturedVar {
 /// 编译器选择的捕获模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureMode {
-    /// Dup 类型 — 浅拷贝
+    /// 原语值类型或 Dup 类型 — 隐式复制
     Copy,
     /// &T 令牌 — 不可变借用
     Borrow,
@@ -176,10 +176,10 @@ pub fn analyze_captures(
 /// 根据使用方式、类型和闭包逃逸状态确定捕获模式
 ///
 /// 决策逻辑：
-/// 1. 如果类型满足 Dup 特质 → Copy（浅拷贝）
-/// 2. 如果闭包逃逸：
-///    - 非 Dup 类型 → Move（所有权转移）
-/// 3. 如果闭包内联：
+/// 1. 原语值类型（Int, Float, Bool, Char）→ Copy（编译器内置值复制）
+/// 2. Dup 类型（&T, ref T, String, Bytes 等）→ Copy（浅拷贝，复制句柄共享数据）
+/// 3. 闭包逃逸 + 非 Dup → Move（所有权转移）
+/// 4. 闭包内联：
 ///    - Read → Borrow（不可变借用）
 ///    - Write → BorrowMut（可变借用）
 ///    - Move → Move（所有权转移）
@@ -189,10 +189,15 @@ pub fn determine_capture_mode(
     closure_usage: &ClosureUsage,
     trait_solver: &TraitSolver,
 ) -> CaptureMode {
+    // 原语值类型：编译器自动值复制
+    if TraitSolver::is_primitive_value_type(ty) {
+        return CaptureMode::Copy;
+    }
+
     let is_dup = check_dup_trait(ty, trait_solver);
 
     match (is_dup, closure_usage) {
-        // Dup 类型总是拷贝
+        // Dup 类型总是拷贝（浅拷贝共享数据）
         (true, _) => CaptureMode::Copy,
         // 逃逸的非 Dup 类型必须 move
         (false, ClosureUsage::Escaping) => CaptureMode::Move,
@@ -685,10 +690,10 @@ fn extract_written_vars_from_expr(
 // 内部辅助：Dup 特质检查
 // ============================================================================
 
-/// 检查类型是否满足 Dup 特质
+/// 检查类型是否满足 Dup 特质（浅拷贝：复制句柄，共享底层数据）
 ///
-/// Dup 表示类型可以被简单复制（类似 Rust 的 Copy trait）。
-/// 与 Clone 不同，Dup 不需要显式实现，仅依赖结构递归。
+/// Dup 适用于引用/令牌类型和内部引用计数的类型。
+/// 原语值类型（Int, Float, Bool, Char）不是 Dup——使用 is_primitive_value_type 检查。
 fn check_dup_trait(
     ty: &MonoType,
     trait_solver: &TraitSolver,

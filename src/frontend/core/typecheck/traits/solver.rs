@@ -175,7 +175,7 @@ impl TraitSolver {
             // Arc：引用计数，自动 Clone
             MonoType::Arc(_) => true,
 
-            // &T 是零大小令牌，Dup 蕴含 Clone（RFC-011 §2.4）
+            // &T 是零大小令牌，可自由复制
             MonoType::Ref { mutable: false, .. } => true,
 
             // 元组：递归检查所有元素
@@ -195,25 +195,22 @@ impl TraitSolver {
         }
     }
 
-    /// 检查 Dup 特质（递归检查结构体字段、枚举变体、元组元素）
+    /// 检查 Dup 特质（浅拷贝：复制句柄/令牌，共享底层数据）
     ///
-    /// Dup 表示类型可以被简单复制（类似 Copy trait）。
-    /// 与 Clone 不同，Dup 不需要显式实现，仅依赖结构递归。
+    /// Dup 适用于引用/令牌类型和内部引用计数的类型。
+    /// 原语值类型（Int, Float, Bool, Char）不是 Dup——它们是编译器内置值复制。
     fn check_dup_trait(
         &self,
         ty: &MonoType,
     ) -> bool {
         match ty {
-            // 基本类型：自动 Dup
-            MonoType::Int(_)
-            | MonoType::Float(_)
-            | MonoType::Bool
-            | MonoType::Char
-            | MonoType::String
-            | MonoType::Bytes
-            | MonoType::Void => true,
+            // String/Bytes：内部引用计数，复制句柄共享底层 buffer
+            MonoType::String | MonoType::Bytes => true,
 
-            // Arc：引用计数，自动 Dup
+            // Void：零大小类型
+            MonoType::Void => true,
+
+            // Arc：引用计数，浅拷贝 = 引用计数+1
             MonoType::Arc(_) => true,
 
             // &T 是零大小令牌，可自由复制（Dup）；&mut T 不可
@@ -234,6 +231,17 @@ impl TraitSolver {
             // 其他类型（Fn、Weak、&mut T 等）：不满足 Dup
             _ => false,
         }
+    }
+
+    /// 检查类型是否为原语值类型（编译器内置值复制，不需要 Dup）
+    ///
+    /// 原语值类型在赋值时自动值复制，两个值完全独立。
+    /// 这是编译器原生行为，不属于 Dup（浅拷贝）类型属性。
+    pub fn is_primitive_value_type(ty: &MonoType) -> bool {
+        matches!(
+            ty,
+            MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char
+        )
     }
 
     /// 检查 Equal 特质
