@@ -5,7 +5,7 @@
 
 use std::path::Path;
 use std::io::{self, Write};
-use crate::backends::dev::{Debugger, REPL};
+use crate::backends::dev::{Debugger, SessionREPL, Evaluator};
 use crate::backends::common::RuntimeValue;
 use crate::tlog;
 use crate::util::i18n::MSG;
@@ -56,7 +56,7 @@ pub struct DevShell {
     /// Shell configuration
     config: ShellConfig,
     /// REPL for evaluation
-    repl: REPL,
+    repl: SessionREPL<Evaluator>,
     /// Debugger for debugging
     debugger: Debugger,
     /// Current working directory
@@ -76,7 +76,7 @@ impl DevShell {
     pub fn new() -> Self {
         Self {
             config: ShellConfig::default(),
-            repl: REPL::new(),
+            repl: SessionREPL::new(Evaluator::new()).expect("Failed to create REPL"),
             debugger: Debugger::new(),
             cwd: std::env::current_dir().unwrap_or_default(),
             history: Vec::new(),
@@ -336,7 +336,7 @@ impl DevShell {
     }
 
     /// Get the REPL
-    pub fn repl(&mut self) -> &mut REPL {
+    pub fn repl(&mut self) -> &mut SessionREPL<Evaluator> {
         &mut self.repl
     }
 
