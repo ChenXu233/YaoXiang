@@ -389,6 +389,15 @@ impl OverloadResolver {
                     .product::<f64>()
                     * self.type_match_score(pr, ar)
             }
+            // 泛型实例化：名称相同且参数逐一匹配
+            (
+                MonoType::Generic { name: pn, args: pa },
+                MonoType::Generic { name: an, args: aa },
+            ) if pn == an && pa.len() == aa.len() => pa
+                .iter()
+                .zip(aa.iter())
+                .map(|(p, a)| self.type_match_score(p, a))
+                .product::<f64>(),
             _ => -1.0,
         }
     }
@@ -708,6 +717,13 @@ fn substitute_return_type(
             host_type: Box::new(substitute_return_type(host_type, substitutions)),
             assoc_name: assoc_name.clone(),
             assoc_args: assoc_args
+                .iter()
+                .map(|a| substitute_return_type(a, substitutions))
+                .collect(),
+        },
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args
                 .iter()
                 .map(|a| substitute_return_type(a, substitutions))
                 .collect(),

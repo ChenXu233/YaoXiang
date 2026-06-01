@@ -128,6 +128,34 @@ fn test_rfc011_generic_function_inference() {
     assert!(result.is_ok(), "generic function inference should pass");
 }
 
+/// 验证 Type 自描述推断：返回类型被正确解析为具体类型
+///
+/// id(42) 应推断返回 Int，而非未解析的 TypeVar
+#[test]
+fn test_rfc011_type_description_resolves_return_type() {
+    // Arrange
+    let source = r#"
+        id: (T: Type) -> ((x: T) -> T) = (x) => x
+        result = id(42)
+    "#;
+
+    // Act
+    let check_result = check_source(source).expect("type check should pass");
+
+    // Assert - result 的类型应被推断为 Int
+    let result_ty = check_result
+        .bindings
+        .get("result")
+        .expect("result binding should exist");
+    let mono = result_ty.body.clone();
+    // 展开后应为 Int(64)，而非 TypeVar
+    assert!(
+        matches!(mono, crate::frontend::core::types::base::MonoType::Int(_)),
+        "id(42) should infer as Int, got: {:?}",
+        mono
+    );
+}
+
 /// 规范：无法推断时必须显式填充
 ///
 /// `strings = map(numbers, numbers)` — numbers 不是函数类型，无法匹配 f 参数

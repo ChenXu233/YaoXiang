@@ -79,7 +79,7 @@ fn test_init_std_traits_registers_debug() {
 
 #[test]
 fn test_init_std_traits_registers_dup() {
-    // Arrange - RFC-011: Dup 是标记接口，隐含 Clone
+    // Arrange - Dup 是标记接口（浅拷贝），与 Clone 正交
     let mut trait_table = TraitTable::default();
 
     // Act
@@ -88,13 +88,13 @@ fn test_init_std_traits_registers_dup() {
     // Assert
     assert!(
         trait_table.has_trait("Dup"),
-        "Dup trait 应在标准库初始化后存在（RFC-011）"
+        "Dup trait 应在标准库初始化后存在"
     );
     let dup = trait_table.get_trait("Dup").unwrap();
     assert!(dup.methods.is_empty(), "Dup 是标记接口，不应包含任何方法");
     assert!(
-        dup.parent_traits.contains(&"Clone".to_string()),
-        "Dup 应隐含 Clone 约束"
+        dup.parent_traits.is_empty(),
+        "Dup 与 Clone 正交，不应有父 trait"
     );
 }
 
@@ -168,7 +168,7 @@ fn test_init_primitive_impls_int_debug() {
 
 #[test]
 fn test_init_primitive_impls_int_dup() {
-    // Arrange - RFC-011: 所有原类型自动实现 Dup
+    // Int 是原语值类型，不是 Dup
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
@@ -177,8 +177,8 @@ fn test_init_primitive_impls_int_dup() {
 
     // Assert
     assert!(
-        trait_table.has_impl("Dup", "Int"),
-        "Int 应实现 Dup trait（RFC-011）"
+        !trait_table.has_impl("Dup", "Int"),
+        "Int 是原语值类型，不应实现 Dup"
     );
 }
 
@@ -193,7 +193,10 @@ fn test_init_primitive_impls_float_traits() {
 
     // Assert
     assert!(trait_table.has_impl("Clone", "Float"), "Float 应实现 Clone");
-    assert!(trait_table.has_impl("Dup", "Float"), "Float 应实现 Dup");
+    assert!(
+        !trait_table.has_impl("Dup", "Float"),
+        "Float 是原语值类型，不应实现 Dup"
+    );
     assert!(trait_table.has_impl("Equal", "Float"), "Float 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Float"), "Float 应实现 Debug");
 }
@@ -209,7 +212,10 @@ fn test_init_primitive_impls_bool_traits() {
 
     // Assert
     assert!(trait_table.has_impl("Clone", "Bool"), "Bool 应实现 Clone");
-    assert!(trait_table.has_impl("Dup", "Bool"), "Bool 应实现 Dup");
+    assert!(
+        !trait_table.has_impl("Dup", "Bool"),
+        "Bool 是原语值类型，不应实现 Dup"
+    );
     assert!(trait_table.has_impl("Equal", "Bool"), "Bool 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Bool"), "Bool 应实现 Debug");
 }
@@ -253,7 +259,10 @@ fn test_init_primitive_impls_void_traits() {
         !trait_table.has_impl("Clone", "Void"),
         "Void 不应实现 Clone"
     );
-    assert!(!trait_table.has_impl("Dup", "Void"), "Void 不应实现 Dup");
+    assert!(
+        trait_table.has_impl("Dup", "Void"),
+        "Void 是零大小类型，应实现 Dup"
+    );
     assert!(trait_table.has_impl("Equal", "Void"), "Void 应实现 Equal");
     assert!(trait_table.has_impl("Debug", "Void"), "Void 应实现 Debug");
 }
@@ -471,8 +480,8 @@ fn test_dup_impl_has_no_methods() {
     init_std_traits(&mut trait_table);
     init_primitive_impls(&mut trait_table);
 
-    // Act
-    let impl_ = trait_table.get_impl("Dup", "Int").unwrap();
+    // Act - 使用 String（内部引用计数，是 Dup 类型）
+    let impl_ = trait_table.get_impl("Dup", "String").unwrap();
 
     // Assert
     assert!(
@@ -585,29 +594,21 @@ fn test_init_primitive_impls_idempotent() {
 }
 
 #[test]
-fn test_all_std_traits_have_no_parent_except_dup() {
-    // Arrange - RFC-011: 大多数标准库接口都是独立的，但 Dup 隐含 Clone
+fn test_all_std_traits_have_no_parent() {
+    // 所有标准库 trait 都是独立的，没有父 trait（Dup 与 Clone 正交）
     let mut trait_table = TraitTable::default();
     init_std_traits(&mut trait_table);
 
     // Act & Assert
-    let no_parent_traits = ["Clone", "Equal", "Debug", "Iterator"];
-    for name in &no_parent_traits {
+    for name in STD_TRAITS {
         let def = trait_table.get_trait(name).unwrap();
         assert!(
             def.parent_traits.is_empty(),
-            "{} 不应有父 trait（RFC-011），但实际有 {:?}",
+            "{} 不应有父 trait，但实际有 {:?}",
             name,
             def.parent_traits
         );
     }
-
-    // Dup 有 Clone 作为父 trait
-    let dup = trait_table.get_trait("Dup").unwrap();
-    assert!(
-        dup.parent_traits.contains(&"Clone".to_string()),
-        "Dup 应有 Clone 作为父 trait"
-    );
 }
 
 #[test]

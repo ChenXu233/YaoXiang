@@ -576,6 +576,13 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 return_type: Box::new(self.substitute_single_type(return_type, type_map)),
                 is_async: *is_async,
             },
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|a| self.substitute_single_type(a, type_map))
+                    .collect(),
+            },
             _ => ty.clone(),
         }
     }

@@ -283,14 +283,29 @@ pub enum ConstUnOp {
     Not,
 }
 
+/// 默认最大递归深度
+const DEFAULT_MAX_CONST_EVAL_DEPTH: usize = 256;
+
 /// Const泛型求值器
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ConstGenericEval {
     /// 函数定义
     functions: HashMap<String, ConstFunction>,
 
     /// 变量绑定
     bindings: HashMap<String, ConstValue>,
+
+    /// 当前递归深度
+    current_depth: usize,
+
+    /// 最大递归深度
+    max_depth: usize,
+}
+
+impl Default for ConstGenericEval {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConstGenericEval {
@@ -299,6 +314,8 @@ impl ConstGenericEval {
         Self {
             functions: HashMap::new(),
             bindings: HashMap::new(),
+            current_depth: 0,
+            max_depth: DEFAULT_MAX_CONST_EVAL_DEPTH,
         }
     }
 
@@ -318,6 +335,14 @@ impl ConstGenericEval {
         value: ConstValue,
     ) {
         self.bindings.insert(name, value);
+    }
+
+    /// 设置最大递归深度
+    pub fn set_max_depth(
+        &mut self,
+        max_depth: usize,
+    ) {
+        self.max_depth = max_depth;
     }
 
     /// 求值Const表达式
@@ -567,8 +592,18 @@ impl ConstGenericEval {
             )));
         }
 
-        // 创建新的作用域
+        if self.current_depth >= self.max_depth {
+            return Err(ConstGenericError::EvalFailed(format!(
+                "Const evaluation exceeded maximum recursion depth ({}). \
+                 Function '{}' likely has no termination guarantee. \
+                 Add a 'decreases' annotation or simplify the const expression.",
+                self.max_depth, func.name
+            )));
+        }
+
+        // 创建新的作用域，递归深度 +1
         let mut eval = self.clone();
+        eval.current_depth += 1;
         for (param, arg) in func.params.iter().zip(args.iter()) {
             let value = eval.eval(arg)?;
             eval.bind_var(param.clone(), value);

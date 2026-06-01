@@ -36,7 +36,7 @@ pub use thiserror::Error;
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
 pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
 pub use backends::interpreter::Interpreter;
-pub use backends::dev::{DevShell, Debugger, REPL, TuiREPL};
+pub use backends::dev::{DevShell, Debugger, SessionREPL};
 
 // Logging
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
@@ -442,10 +442,13 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 format!("Type{}({})", universe_level, params_str.join(", "))
             }
         }
+        crate::frontend::core::typecheck::MonoType::Generic { name, args } => {
+            let args_str: Vec<String> = args.iter().map(dump_type_detail).collect();
+            format!("{}({})", name, args_str.join(", "))
+        }
     }
 }
 
-/// Dump constant information in detail
 fn dump_const_detail(constant: &crate::middle::core::ir::ConstValue) -> &'static str {
     match constant {
         crate::middle::core::ir::ConstValue::Void => "void",

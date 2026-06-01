@@ -5,7 +5,7 @@
 
 use std::path::Path;
 use std::io::{self, Write};
-use crate::backends::dev::{Debugger, REPL};
+use crate::backends::dev::{Debugger, SessionREPL, Evaluator};
 use crate::backends::common::RuntimeValue;
 use crate::tlog;
 use crate::util::i18n::MSG;
@@ -56,7 +56,7 @@ pub struct DevShell {
     /// Shell configuration
     config: ShellConfig,
     /// REPL for evaluation
-    repl: REPL,
+    repl: SessionREPL<Evaluator>,
     /// Debugger for debugging
     debugger: Debugger,
     /// Current working directory
@@ -76,7 +76,7 @@ impl DevShell {
     pub fn new() -> Self {
         Self {
             config: ShellConfig::default(),
-            repl: REPL::new(),
+            repl: SessionREPL::new(Evaluator::new()).expect("Failed to create REPL"),
             debugger: Debugger::new(),
             cwd: std::env::current_dir().unwrap_or_default(),
             history: Vec::new(),
@@ -147,22 +147,15 @@ impl DevShell {
             }
             ":cd" | "cd" => {
                 if parts.len() > 1 {
-                    if let Ok(path) = std::env::current_dir() {
-                        if let Ok(new_cwd) = path.join(parts[1]).canonicalize() {
-                            if new_cwd.is_dir() {
-                                self.cwd = new_cwd;
-                                std::env::set_current_dir(&self.cwd).ok();
-                            } else {
-                                return ShellResult::Error(format!(
-                                    "Not a directory: {}",
-                                    parts[1]
-                                ));
-                            }
+                    if let Ok(new_cwd) = self.cwd.join(parts[1]).canonicalize() {
+                        if new_cwd.is_dir() {
+                            self.cwd = new_cwd;
+                            std::env::set_current_dir(&self.cwd).ok();
                         } else {
-                            return ShellResult::Error(format!("Invalid path: {}", parts[1]));
+                            return ShellResult::Error(format!("Not a directory: {}", parts[1]));
                         }
                     } else {
-                        return ShellResult::Error("Failed to get current directory".to_string());
+                        return ShellResult::Error(format!("Invalid path: {}", parts[1]));
                     }
                 } else {
                     tlog!(info, MSG::ShellPwdCommand, &self.cwd.display().to_string());
@@ -266,16 +259,14 @@ impl DevShell {
         &mut self,
         code: &str,
     ) -> ShellResult {
-        // Wrap in a simple expression
-        let wrapped = code.to_string();
-
-        let mut compiler = crate::frontend::Compiler::new();
-        match compiler.compile_with_source("<shell>", &wrapped) {
-            Ok(_module) => {
-                // In a full implementation, we'd execute
-                ShellResult::Success
+        let eval_result = self.repl.backend_mut().evaluate(code);
+        match eval_result {
+            crate::backends::dev::repl::EvalResult::Value(v) => ShellResult::Value(v),
+            crate::backends::dev::repl::EvalResult::Ok => ShellResult::Success,
+            crate::backends::dev::repl::EvalResult::Error(e) => ShellResult::Error(e),
+            crate::backends::dev::repl::EvalResult::Incomplete => {
+                ShellResult::Error("Incomplete expression".to_string())
             }
-            Err(e) => ShellResult::Error(format!("{}", e)),
         }
     }
 
@@ -336,7 +327,7 @@ impl DevShell {
     }
 
     /// Get the REPL
-    pub fn repl(&mut self) -> &mut REPL {
+    pub fn repl(&mut self) -> &mut SessionREPL<Evaluator> {
         &mut self.repl
     }
 

@@ -414,6 +414,7 @@ impl MonoTypeExt for MonoType {
             MonoType::AssocType { .. } => 47, // 使用新的类型ID
             MonoType::Literal { .. } => 48,   // 字面量类型
             MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
+            MonoType::Generic { .. } => 47,   // 泛型实例化，使用结构体类型ID
         }
     }
 }

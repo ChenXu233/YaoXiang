@@ -2,14 +2,15 @@
 
 ## Supported Versions / 支持的版本
 
-Only the latest version receives security updates.
+> **This project is currently in active development and has no stable release yet.**
+> All versions should be considered experimental and may contain security issues.
+
+> **本项目目前处于积极开发阶段，尚无稳定版本。**
+> 所有版本均应视为实验性，可能存在安全问题。
 
 | Version | Supported          |
-|---------|-------------------|
-| 0.3.x   | ✅ Supported      |
-| < 0.3   | ❌ Not supported  |
-
-**仅最新版本接收安全更新。**
+|---------|--------------------|
+| 0.x.x   | ⚠️ Best-effort     |
 
 ## Reporting a Vulnerability / 漏洞报告
 

@@ -48,8 +48,7 @@ Curry-Howard 同构在 YaoXiang 中的具体体现：
 
 ```
 TypeExpr    ::= PrimitiveType
-              | StructType
-              | EnumType
+              | RecordType
               | InterfaceType
               | TupleType
               | FnType
@@ -57,8 +56,6 @@ TypeExpr    ::= PrimitiveType
               | TypeRef
               | TypeUnion
               | TypeIntersection
-              | ConstrainedType
-              | AssociatedType
 ```
 
 ---
@@ -180,30 +177,7 @@ Point: Type = {
 // 调用：p1.distance(p2) -> distance(p1, p2)
 ```
 
-### 3.2 枚举类型（变体类型）
-
-```
-EnumType    ::= '{' Variant ('|' Variant)* '}'
-Variant     ::= Identifier (':' TypeExpr)?
-```
-
-**语法**：`Name: Type = { Variant1 | Variant2(params) | ... }`
-
-```yaoxiang
-// 无参变体
-Color: Type = { red | green | blue }
-
-// 有参变体
-Option: (T: Type) -> Type = { some(T) | none }
-
-// 混合
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
-
-// 无参变体等价于无参构造器
-Bool: Type = { true | false }
-```
-
-### 3.3 接口类型
+### 3.2 接口类型
 
 ```
 InterfaceType ::= '{' FnField (',' FnField)* ','?
@@ -283,13 +257,26 @@ ParamList   ::= TypeExpr (',' TypeExpr)*
 
 ### 4.1 泛型参数语法
 
+泛型参数是函数类型的一部分，与普通参数统一使用 `()` 语法：
+
 ```
-GenericType     ::= Identifier '[' TypeArgList ']'
+GenericType     ::= Identifier '(' TypeArgList ')'
 TypeArgList     ::= TypeExpr (',' TypeExpr)* ','?
-GenericParams   ::= '[' Identifier (',' Identifier)* ']'
-                 |  '[' Identifier ':' TypeBound (',' Identifier ':' TypeBound)* ']'
 TypeBound       ::= Identifier
                  |  Identifier '+' Identifier ('+' Identifier)*
+```
+
+泛型类型定义中，`(T: Type)` 是类型构造器的参数签名，`-> Type` 表示返回类型：
+
+```yaoxiang
+List: (T: Type) -> Type = { ... }
+Map: (K: Type, V: Type) -> Type = { ... }
+```
+
+泛型函数中，类型参数同样在签名中声明，编译器自动从实参推断：
+
+```yaoxiang
+map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = ...
 ```
 
 ### 4.2 泛型类型定义
@@ -297,13 +284,13 @@ TypeBound       ::= Identifier
 ```yaoxiang
 // 基础泛型类型
 Option: (T: Type) -> Type = {
-    some: (T) -> Self,
-    none: () -> Self
+    some: (T) -> Option(T),
+    none: () -> Option(T)
 }
 
 Result: (T: Type, E: Type) -> Type = {
-    ok: (T) -> Self,
-    err: (E) -> Self
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E)
 }
 
 List: (T: Type) -> Type = {
@@ -328,13 +315,13 @@ numbers: List(Int) = List(1, 2, 3)  // 编译器推导 List(Int)
 ### 5.1 单一约束
 
 ```
-ConstrainedType ::= '[' Identifier ':' TypeBound ']' TypeExpr
+ConstrainedType ::= '(' Identifier ':' TypeBound ')' TypeExpr
 ```
 
 ```yaoxiang
 // 接口类型定义（作为约束）
 Clone: Type = {
-    clone: (Self) -> Self
+    clone: () -> Clone
 }
 
 // 使用约束
@@ -361,9 +348,9 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
 
 ```yaoxiang
 // 高阶函数约束
-call_twice: (T: Type, F: Fn() -> T)(f: F) -> (T, T) = (f(), f())
+call_twice: (T: Type, F: () -> T)(f: F) -> (T, T) = (f(), f())
 
-compose: (A: Type, B: Type, C: Type, F: Fn(A) -> B, G: Fn(B) -> C)(a: A, f: F, g: G) -> C = g(f(a))
+compose: (A: Type, B: Type, C: Type, F: (A) -> B, G: (B) -> C)(a: A, f: F, g: G) -> C = g(f(a))
 ```
 
 ---
@@ -380,8 +367,8 @@ AssociatedType ::= Identifier ':' TypeExpr
 // Iterator trait（使用记录类型语法）
 Iterator: (T: Type) -> Type = {
     Item: T,                    // 关联类型
-    next: (Self) -> Option(T),
-    has_next: (Self) -> Bool
+    next: () -> Option(T),
+    has_next: () -> Bool
 }
 
 // 使用关联类型
@@ -403,7 +390,7 @@ collect: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
 Container: (T: Type) -> Type = {
     Item: T,
     IteratorType: Iterator(T),  // 关联类型也是泛型的
-    iter: (Self) -> IteratorType
+    iter: () -> IteratorType
 }
 ```
 
@@ -411,11 +398,11 @@ Container: (T: Type) -> Type = {
 
 ## 第七章：编译期泛型
 
-### 7.1 字面量类型约束
+### 7.1 编译期常量参数
 
 ```
 LiteralType   ::= Identifier ':' Int          // 编译期常量
-CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
+CompileTimeFn ::= '(' Identifier ':' Int ')' '(' Identifier ')' '->' TypeExpr
 ```
 
 **核心设计**：用 `(n: Int)` 泛型参数 + `(n: n)` 值参数，区分编译期常量与运行时值。
@@ -460,7 +447,7 @@ identity_matrix: (T: Add + Zero + One, N: Int)(size: N) -> Matrix(T, N, N) = {
 ### 8.1 If 条件类型
 
 ```
-IfType        ::= 'If' '[' BoolExpr ',' TypeExpr ',' TypeExpr ']'
+IfType        ::= 'If' '(' BoolExpr ',' TypeExpr ',' TypeExpr ')'
 ```
 
 ```yaoxiang
@@ -567,55 +554,50 @@ sum: (P: AArch64)(arr: Array(Float)) -> Float = {
 
 ## 第十一章：类型属性
 
-YaoXiang 通过类型属性（type properties）标记类型的复制和并发语义。类型属性由编译器自动推导，用户不直接标注。
+YaoXiang 只有一种类型属性需要区分：线性 vs 可复制。由编译器自动推导。
 
-### 11.1 Dup（隐式浅复制）
+### 11.1 Move（默认所有权转移）
 
-**Dup**（Duplicable）是隐式浅复制标记。实现 Dup 的类型，赋值和传参时自动进行浅复制（bitwise copy），原值和新值完全独立。
-
-**Dup 类型**：
-| 类型 | 说明 |
-|------|------|
-| `Int`, `Int8`..`Int128` | 所有整数 |
-| `Float`, `Float32`, `Float64` | 所有浮点 |
-| `Bool` | 布尔值 |
-| `Char` | Unicode 字符 |
-| `String` | UTF-8 字符串（浅复制） |
-| `Bytes` | 原始字节（浅复制） |
-| `&T` | 读取令牌（见第十二章） |
-
-**非 Dup 类型**（默认 Move）：
-| 类型 | 说明 |
-|------|------|
-| `&mut T` | 写入令牌，线性类型 |
-| 大多数 struct | 默认 Move，除非所有字段都是 Dup |
-| enum（有参变体） | 若承载的数据非 Dup，则整个变体非 Dup |
+所有类型默认遵循 Move 语义。赋值、传参、返回 = 所有权转移。
 
 ```yaoxiang
-// Dup 类型：自由复制
-a: Int = 42
-b = a           // 浅复制，a 仍然可用
-c = a           // 可多次复制
-
-// 非 Dup 类型（Move 默认）
 p: Point = Point(1.0, 2.0)
 q = p           // Move，p 不可再读
-// r = p        // ❌ 编译错误：p 已被移动
 ```
 
-**Dup 的自动推导**：
-- 基本类型（Int, Float, Bool, Char, String, Bytes）自动实现 Dup
-- 结构体：当且仅当所有字段类型都是 Dup 时，自动实现 Dup
-- 枚举变体：当且仅当所有变体承载的类型都是 Dup 时，自动实现 Dup
+### 11.2 Dup（浅拷贝：复制句柄，共享数据）
 
-### 11.2 Clone（显式深复制）
+**Dup 属性用于引用/令牌类型**。Dup 类型的赋值 = 浅拷贝——复制句柄/令牌，底层数据共享。多个持有者指向同一块数据。
+
+| 类型 | 属性 | 说明 |
+|------|------|------|
+| `&T` | Dup | 零大小读取令牌，复制令牌 = 多个视角指向同一数据 |
+| `ref T` | Dup | Rc/Arc 复制 = 引用计数+1，共享堆数据 |
+| `&mut T` | Linear | 零大小写入令牌，独占，不可复制 |
+| 其他所有类型 | Move | 默认所有权转移 |
+
+**原语值类型**（Int, Float, Bool, Char）是编译器内置的特殊处理：赋值时自动值复制，两个值完全独立。这是编译器的原生行为，不属于 Dup 类型属性。
+
+```yaoxiang
+// &T: Dup，可自由别名
+view: &Point = &p
+view2 = view     // Dup：复制令牌，两者均有效
+print(view.x)    // 可用
+print(view2.x)   // 可用
+
+// &mut T: Linear，不可复制
+mut_ref: &mut Point = &mut p
+// r2 = mut_ref  // ❌ &mut T 不是 Dup，不能复制
+```
+
+### 11.3 Clone（显式深复制）与 Dup 的关系
 
 **Clone** 是显式深复制接口。所有类型都可以实现 Clone，提供 `.clone()` 方法。
 
 ```yaoxiang
 // Clone 接口定义（标准库）
 Clone: Type = {
-    clone: (Self) -> Self
+    clone: () -> Clone
 }
 
 // 使用
@@ -624,68 +606,41 @@ backup = p.clone()    // 深复制，p 仍然可用
 p2 = p.clone()        // 可多次克隆
 ```
 
-### 11.3 Dup 与 Clone 的关系
+**Dup 与 Clone 的区别**：
 
-**Dup 蕴含 Clone，但 Clone 不蕴含 Dup**：
+| | Dup | Clone |
+|---|---|---|
+| **语义** | 浅拷贝：复制句柄/令牌，底层数据共享 | 深拷贝：创建完整独立副本 |
+| **调用方式** | 隐式（赋值/传参自动） | 显式（`.clone()`） |
+| **修改影响** | 互相影响（共享底层数据） | 互不影响（独立副本） |
+| **适用类型** | `&T` 令牌、`ref T` | 任何实现 Clone 接口的类型 |
+| **成本** | 零开销（令牌是零大小类型） | 视类型而定 |
 
-```
-Dup ⇒ Clone（字段逐位复制即可实现 .clone()）
-Clone ⇏ Dup（显式深复制不妨碍默认 Move 语义）
-```
+**Dup 不蕴含 Clone，Clone 不蕴含 Dup**——它们是两个正交的概念：
 
 ```yaoxiang
-// Dup ⇒ Clone：Int 既是 Dup 也是 Clone
-x: Int = 42
-y = x              // Dup：隐式浅复制
-z = x.clone()      // Clone：显式深复制（效果相同）
+// Dup 类型：复制令牌，底层数据共享
+view: &Point = &p
+view2 = view        // Dup：复制令牌，两者指向同一个 p
+print(view.x)       // 可用
+print(view2.x)      // 可用，看到的是同一份数据
 
-// Clone ⇏ Dup：Point 可以 Clone，但默认 Move
+// 原语值类型：编译器自动值复制（不是 Dup）
+x: Int = 42
+y = x               // 值复制，x 和 y 完全独立
+print(x)            // 可用
+
+// Clone：显式深拷贝，创建独立副本
 p: Point = Point(1.0, 2.0)
-q = p.clone()      // Clone：显式深复制，p 仍然可用
-r = p              // Move：所有权转移，因为 Point 不是 Dup
+q = p.clone()       // Clone：深复制，p 仍然可用
+r = p               // Move：所有权转移，因为 Point 不是 Dup 也不是原语值类型
 ```
 
 **设计意图**：
-- Dup 是"这个类型复制起来很便宜/自然"的承诺
-- Clone 是"我可以给你一个独立的副本"的能力
-- 大多数 struct 不自动实现 Dup，保持 Move 默认——零拷贝高性能
-
-### 11.4 Send / Sync（非用户可见）
-
-**Send** 和 **Sync** 不是用户可见的类型属性，由编译器和 `ref` 关键字自动处理。
-
-| 属性 | 含义 | 用户如何触发 |
-|------|------|-------------|
-| **Send** | 可安全跨任务传递 | `ref` 跨任务时编译器自动选 Arc |
-| **Sync** | 可安全跨任务共享 | `ref` 跨任务时编译器自动选 Arc |
-
-**自动推导规则（编译器内部）**：
-
-| 类型 | Send | Sync | 说明 |
-|------|------|------|------|
-| 值类型（Int, Float, Point...） | 是 | 是 | 值传递天然安全 |
-| `ref T` | 是 | 是 | 编译器自动选 Rc（单任务）/ Arc（跨任务） |
-| `&T` / `&mut T` | 否 | 否 | 令牌不能跨任务边界 |
-| `*T` | 否 | 否 | 裸指针单线程 |
-
-```yaoxiang
-// 跨任务共享：ref 自动处理 Send/Sync
-@block
-main: () -> Void = {
-    data = ref heavy_data
-    spawn { use(data) }    // 编译器：跨任务 → Arc（Send + Sync）
-    spawn { use(data) }    // 编译器：跨任务 → Arc（Send + Sync）
-}
-
-// 令牌不能跨任务（非 Send）
-bad_task: (p: &Point) -> Void = {
-    spawn { print(p.x) }   // ❌ 编译错误：&T 未实现 Send
-}
-```
-
-**用户不需要关心 Send/Sync**：`ref` 关键字封装了所有并发安全逻辑。
-
----
+- Dup 用于令牌/引用类型，解决"多个视角看同一份数据"的问题
+- Clone 用于需要独立副本的场景，显式调用让成本可见
+- 原语值类型（Int/Float/Bool/Char）的复制是编译器内置行为，不属于 Dup
+- 大多数自定义类型默认 Move，零拷贝高性能
 
 ## 第十二章：借用令牌类型
 
@@ -879,12 +834,11 @@ alias_bad(p, p)                  // ❌ p 同时派生 &mut 和 & 令牌
 ```
 // === 记录类型（花括号） ===
 
-// 结构体
+// 记录类型
 Point: Type = { x: Float, y: Float }
 
-// 枚举（变体类型）
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
-Status: Type = { pending | processing | completed }
+// 带变体的记录类型（使用函数字段）
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // === 接口类型（花括号，字段全为函数） ===
 
@@ -908,10 +862,10 @@ Adder: Type = (Int, Int) -> Int
 ```
 // 泛型类型
 List: (T: Type) -> Type = { data: Array(T), length: Int }
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 泛型函数
-map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = { ... }
+map: (T: Type, R: Type)(list: List(T), f: (T) -> R) -> List(R) = { ... }
 
 // 类型约束
 clone: (T: Clone)(value: T) -> T = value.clone()
@@ -922,7 +876,7 @@ Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
 // 编译期泛型
 factorial: (n: Int)(n: n) -> Int = { ... }
-StaticArray: (T: Type, N: Int) -> Type = { data: T(N), length: N }
+StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 // 条件类型
 If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }
@@ -935,26 +889,22 @@ sum: (arr: Array(Float)) -> Float = { ... }
 ### A.3 类型属性速查
 
 ```
-// === Dup（隐式浅复制）===
-// 基本类型自动 Dup
-Int, Float, Bool, Char, String, Bytes   // Dup
-&T                                      // Dup（共享读取令牌）
+// === Move（默认） ===
+// 所有类型默认 Move。赋值、传参、返回 = 所有权转移
 
-// 非 Dup（默认 Move）
-&mut T                                  // Linear（独占写入令牌）
-大多数 struct                            // Move 默认
+// === 原语值类型（编译器内置） ===
+Int, Float,     // 赋值时自动值复制，两个值完全独立
+Bool, Char      // 不是 Dup，是编译器对原语的内置处理
 
-// Dup 蕴含 Clone（字段逐位复制），但 Clone 不蕴含 Dup
+// === Dup（浅拷贝：复制句柄，共享底层数据） ===
+&T              // 零大小读取令牌，复制令牌 = 多个视角指向同一数据
+ref T           // Rc/Arc 复制 = 引用计数+1，共享堆数据
 
-// === Clone（显式深复制）===
-value.clone()                           // 显式深复制
+// === Linear ===
+&mut T          // 零大小写入令牌，Linear（独占，不可复制）
 
-// === Send / Sync（非用户可见）===
-// 由 ref 关键字和编译器自动处理
-// 值类型：Send + Sync
-// ref T：Send + Sync（编译器自动选 Rc/Arc）
-// &T / &mut T：非 Send（不能跨任务）
-// *T：非 Send（裸指针单线程）
+// === Clone（显式深复制） ===
+value.clone()   // 创建独立副本，修改不影响原值
 ```
 
 ### A.4 借用令牌速查
