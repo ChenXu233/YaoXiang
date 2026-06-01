@@ -63,7 +63,10 @@ pub struct SessionREPL<B: REPLBackend + 'static> {
 }
 
 impl<B: REPLBackend + 'static> fmt::Debug for SessionREPL<B> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         f.debug_struct("SessionREPL")
             .field("config", &self.config)
             .finish()
@@ -77,7 +80,10 @@ impl<B: REPLBackend + 'static> SessionREPL<B> {
     }
 
     /// Create with custom config
-    pub fn with_config(backend: B, config: SessionREPLConfig) -> io::Result<Self> {
+    pub fn with_config(
+        backend: B,
+        config: SessionREPLConfig,
+    ) -> io::Result<Self> {
         let rl_config = Config::builder()
             .history_ignore_space(true)
             .completion_type(CompletionType::List)
@@ -203,14 +209,14 @@ impl<B: REPLBackend + 'static> SessionREPL<B> {
     }
 
     /// Load and execute a file
-    pub fn load_file(&mut self, path: &Path) -> io::Result<()> {
+    pub fn load_file(
+        &mut self,
+        path: &Path,
+    ) -> io::Result<()> {
         let source = std::fs::read_to_string(path)?;
         let eval_result = self.backend.borrow_mut().eval(&source);
-        match eval_result {
-            EvalResult::Error(e) => {
-                eprintln!("Error: {}", e);
-            }
-            _ => {}
+        if let EvalResult::Error(e) = eval_result {
+            eprintln!("Error: {}", e);
         }
         Ok(())
     }
