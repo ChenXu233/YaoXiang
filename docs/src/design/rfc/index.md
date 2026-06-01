@@ -39,7 +39,6 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-003 | [版本规划与实现建议](./review/003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
 | RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./review/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./review/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 审核中 |
 | RFC-022 | [可选的霍尔逻辑静态验证（规约注释与规约类型）](./review/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 审核中 |
@@ -72,6 +71,7 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-002 | [跨平台I/O与libuv集成](./rejected/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 已拒绝 |
+| RFC-003 | [版本规划与实现建议](./review/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝（非RFC文档类型） |
 | RFC-005 | [自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 
 ---
