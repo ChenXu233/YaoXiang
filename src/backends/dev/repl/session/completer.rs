@@ -2,7 +2,14 @@
 //!
 //! Provides completion candidates for rustyline based on REPL context.
 
+use std::cell::RefCell;
+use std::fmt;
+use std::rc::Rc;
+
 use rustyline::completion::{Completer, Pair};
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::Validator;
 
 use crate::backends::dev::repl::backend_trait::REPLBackend;
 
@@ -11,14 +18,22 @@ use crate::backends::dev::repl::backend_trait::REPLBackend;
 /// Completes identifiers based on defined symbols in the REPL context.
 pub struct REPLCompleter<B: REPLBackend> {
     /// Backend to get symbols from
-    backend: B,
+    backend: Rc<RefCell<B>>,
     /// Keywords for YaoXiang
     keywords: Vec<&'static str>,
 }
 
+impl<B: REPLBackend> fmt::Debug for REPLCompleter<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("REPLCompleter")
+            .field("keywords", &self.keywords)
+            .finish()
+    }
+}
+
 impl<B: REPLBackend> REPLCompleter<B> {
     /// Create a new completer
-    pub fn new(backend: B) -> Self {
+    pub fn new(backend: Rc<RefCell<B>>) -> Self {
         Self {
             backend,
             keywords: Self::yaoxiang_keywords(),
@@ -56,9 +71,10 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
         }
 
         let mut candidates = Vec::new();
+        let backend = self.backend.borrow();
 
         // Add symbol completions from backend
-        for sym in self.backend.get_symbols() {
+        for sym in backend.get_symbols() {
             if sym.name.starts_with(word) {
                 candidates.push(Pair {
                     display: format!("{}: {}", sym.name, sym.type_signature),
@@ -95,3 +111,13 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
         Ok((start, candidates))
     }
 }
+
+impl<B: REPLBackend> Hinter for REPLCompleter<B> {
+    type Hint = String;
+}
+
+impl<B: REPLBackend> Highlighter for REPLCompleter<B> {}
+
+impl<B: REPLBackend> Validator for REPLCompleter<B> {}
+
+impl<B: REPLBackend + 'static> rustyline::Helper for REPLCompleter<B> {}
