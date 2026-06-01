@@ -250,6 +250,17 @@ impl TypeConstraintSolver {
         }
     }
 
+    /// 展开类型变量，获取具体类型（公开版本）
+    ///
+    /// 将 TypeVar 替换为其绑定的类型，将 TypeRef 替换为内置类型。
+    /// 用于泛型函数调用后的返回类型解析。
+    pub fn expand_type_shallow(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
+        self.expand_type(ty)
+    }
+
     /// 添加类型约束
     pub fn add_constraint(
         &mut self,
