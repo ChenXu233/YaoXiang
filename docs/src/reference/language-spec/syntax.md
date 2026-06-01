@@ -126,6 +126,9 @@ Expr        ::= Literal
               | UnaryOp
               | BinaryOp
               | TypeCast
+              | RangeExpr
+              | ErrorPropagate
+              | RefExpr
               | IfExpr
               | MatchExpr
               | Block
@@ -136,17 +139,18 @@ Expr        ::= Literal
 
 | 优先级 | 运算符 | 结合性 |
 |--------|--------|--------|
-| 1 | `()` `[]` `.` | 左到右 |
+| 1 | `()` `[]` `.` `?` | 左到右 |
 | 2 | `as` | 左到右 |
 | 3 | `*` `/` `%` | 左到右 |
 | 4 | `+` `-` | 左到右 |
-| 5 | `<<` `>>` | 左到右 |
-| 6 | `&` `\|` `^` | 左到右 |
-| 7 | `==` `!=` `<` `>` `<=` `>=` | 左到右 |
-| 8 | `not` | 右到左 |
-| 9 | `and` `or` | 左到右 |
-| 10 | `if...else` | 右到左 |
-| 11 | `=` `+=` `-=` `*=` `/=` | 右到左 |
+| 5 | `..` | 左到右 |
+| 6 | `<<` `>>` | 左到右 |
+| 7 | `&` `\|` `^` | 左到右 |
+| 8 | `==` `!=` `<` `>` `<=` `>=` | 左到右 |
+| 9 | `not` | 右到左 |
+| 10 | `and` `or` | 左到右 |
+| 11 | `if...else` | 右到左 |
+| 12 | `=` `+=` `-=` `*=` `/=` | 右到左 |
 
 ### 2.3 函数调用
 
@@ -207,6 +211,49 @@ Lambda      ::= '(' ParamList? ')' '=>' Expr
             |  '(' ParamList? ')' '=>' Block
 ```
 
+### 2.11 错误传播运算符
+
+```
+ErrorPropagate ::= Expr '?'
+```
+
+`?` 运算符是后缀运算符，优先级与 `.` 同级。对 `Result(T, E)` 类型：
+- `Ok(v)` 时提取值 `v` 继续执行
+- `Err(e)` 时将错误向上传播（`return Err(e)`）
+
+```yaoxiang
+process: (data: Data) -> Result(Data, Error) = {
+    validated = validate(data)?     // 成功时提取值，失败时向上传播
+    transform(validated)
+}
+```
+
+### 2.12 范围表达式
+
+```
+RangeExpr   ::= Expr '..' Expr
+```
+
+`..` 创建范围类型，用于 `for` 循环和切片。
+
+```yaoxiang
+for i in 0..10 { print(i) }
+slice = array[0..5]
+```
+
+### 2.13 ref 表达式
+
+```
+RefExpr     ::= 'ref' Expr
+```
+
+`ref` 创建共享持有。编译器自动选择 Rc（单任务）或 Arc（跨任务），用户不需要关心实现细节。
+
+```yaoxiang
+data = ref heavy_data
+spawn { use(data) }   // 跨任务：编译器自动选 Arc
+```
+
 ---
 
 ## 第三章：语句
@@ -221,9 +268,9 @@ Stmt        ::= LetStmt
               | ContinueStmt
               | IfStmt
               | MatchStmt
-              | LoopStmt
               | WhileStmt
               | ForStmt
+              | SpawnStmt
 ```
 
 ### 3.2 变量声明
@@ -323,7 +370,7 @@ for mut i in 1..5 {
 
 #### 3.9.3 遮蔽检查
 
-for 循环变量不能遮蔽外层作用域中已存在的变量：
+YaoXiang 禁止变量遮蔽。for 循环变量不能与外层作用域中的变量同名：
 
 ```yaoxiang
 // 错误：i 已经在外部声明
@@ -339,7 +386,7 @@ for j in 1..5 {
 }
 ```
 
-错误代码：`E2013 - Cannot shadow existing variable`
+此规则适用于所有代码块，详见 [4.3 遮蔽规则](./modules.md#43-遮蔽规则)。
 
 #### 3.9.4 与其他语言的对比
 
@@ -351,9 +398,40 @@ for j in 1..5 {
 | C/C++ | 修改同一个变量（需要指针或引用） |
 
 **设计理由**：YaoXiang 采用绑定语义是因为：
-1. 每次迭代结束后循环体内的变量会销毁
-2. 下一次迭代是一个全新的绑定
-3. 这样更安全，不需要考虑迭代之间的状态
+
+1. **更符合自然语义**
+   在自然语言中，"对于集合中的每个元素 x" 意味着每个 x 是独立的个体。YaoXiang 的 `for i in 1..5` 读作"对于 1 到 5 中的每个 i"，每次迭代的 i 是一个全新的绑定，这与人类的直觉理解一致。
+
+2. **避免意外修改**
+   默认不可变的绑定语义意味着循环体内无法意外修改循环变量。不需要担心在复杂循环体中某个地方不小心写了 `i = ...` 导致难以追踪的 bug。
+
+3. **高性能方案触手可及**
+   当确实需要在迭代间复用变量时（例如累加器、缓存），使用 `for mut` 声明即可切换到可变绑定模式。这比隐式共享状态更清晰——意图通过语法显式表达，而不是藏在运行时行为里。
+
+### 3.10 spawn 语句
+
+```
+SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' Expr (',' Expr)* '}'
+SpawnFor    ::= Identifier '=' 'spawn' 'for' 'mut'? Identifier 'in' Expr '{' Expr '}'
+SpawnStmt   ::= SpawnBlock | SpawnFor
+```
+
+**spawn 块**：显式声明并发疆域，块内表达式并发执行。
+
+```yaoxiang
+(result_a, result_b) = spawn {
+    parse(fetch("url1")),
+    parse(fetch("url2"))
+}
+```
+
+**spawn 循环**：数据并行循环。
+
+```yaoxiang
+results = spawn for item in items {
+    process(item)
+}
+```
 
 ---
 
@@ -364,11 +442,17 @@ for j in 1..5 {
 ```
 if Expr Block (elif Expr Block)* (else Block)?
 match Expr { MatchArm+ }
-while Identifier in Expr Block Expr Block
-for
+while Expr Block
+for 'mut'? Identifier 'in' Expr Block
 ```
 
-### A.2 match 语法
+### A.2 错误处理
+
+```
+Expr '?'              // 错误传播（Result 类型）
+```
+
+### A.3 match 语法
 
 ```
 match value {
