@@ -177,7 +177,7 @@ map: (T: Type, R: Type) -> (
     for x in list {
         result.push(f(x))
     }
-    result
+    return result
 }
 
 # 使用时完全透明，类型自动推导
@@ -693,7 +693,7 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 # 编译期阶乘：N 必须是编译期已知的字面量
 factorial: (N: Int) -> (n: N) -> Int = {
-    match n {
+    return match n {
         0 => 1,
         _ => n * factorial(n - 1)
     }
