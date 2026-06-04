@@ -183,18 +183,20 @@ fn test_format_literal_char_escapes() {
 #[test]
 fn test_format_literal_string_single_quote() {
     let lit = Literal::String("hello".to_string());
-    let mut opts = FormatOptions::default();
-    opts.single_quote = true;
-    let ctx = FormatContext::new(opts);
+    let ctx = FormatContext::new(FormatOptions {
+        single_quote: true,
+        ..Default::default()
+    });
     assert_eq!(format_literal(&lit, &ctx), "'hello'");
 }
 
 #[test]
 fn test_format_literal_string_single_quote_with_escapes() {
     let lit = Literal::String("say 'hello'".to_string());
-    let mut opts = FormatOptions::default();
-    opts.single_quote = true;
-    let ctx = FormatContext::new(opts);
+    let ctx = FormatContext::new(FormatOptions {
+        single_quote: true,
+        ..Default::default()
+    });
     assert_eq!(format_literal(&lit, &ctx), r#"'say \'hello\''"#);
 }
 
@@ -231,9 +233,10 @@ fn test_format_single_stmt_block_inline() {
 
 #[test]
 fn test_format_single_stmt_block_multiline_when_long() {
-    let mut opts = FormatOptions::default();
-    opts.line_width = 20; // 很小的行宽
-    let ctx = FormatContext::new(opts);
+    let ctx = FormatContext::new(FormatOptions {
+        line_width: 20, // 很小的行宽
+        ..Default::default()
+    });
     let long_name = "very_long_variable_name_that_exceeds_line_width";
     let block = Block {
         stmts: vec![Stmt {
@@ -277,9 +280,10 @@ fn test_format_params_short() {
 
 #[test]
 fn test_format_params_long_wraps() {
-    let mut opts = FormatOptions::default();
-    opts.line_width = 30; // 很小的行宽
-    let ctx = FormatContext::new(opts);
+    let ctx = FormatContext::new(FormatOptions {
+        line_width: 30, // 很小的行宽
+        ..Default::default()
+    });
     let params = vec![
         Param {
             name: "very_long_param_name".to_string(),

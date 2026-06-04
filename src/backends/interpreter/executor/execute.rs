@@ -335,11 +335,27 @@ impl Executor for Interpreter {
                     self.exec_compare(*dst, *lhs, *rhs, *cmp, &mut frame)?;
                     frame.advance();
                 }
-                BytecodeInstr::UnaryOp { dst, src, op: _ } => {
+                BytecodeInstr::UnaryOp { dst, src, op } => {
                     let dst = *dst;
                     let src = *src;
-                    let val = self.force_register(&mut frame, src)?.to_int().unwrap_or(0);
-                    frame.set_register(dst.0 as usize, RuntimeValue::Int(-val));
+                    let op = *op;
+                    let val = self.force_register(&mut frame, src)?;
+                    let result = match (op, val) {
+                        (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Int(n)) => {
+                            RuntimeValue::Int(-n)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Float(f)) => {
+                            RuntimeValue::Float(-f)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Int(n)) => {
+                            RuntimeValue::Int(!n)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Bool(b)) => {
+                            RuntimeValue::Bool(!b)
+                        }
+                        _ => RuntimeValue::Unit,
+                    };
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::CallStatic {
@@ -843,25 +859,52 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::TypeOf { dst, src } => {
-                    let _val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let type_id = self.type_table.len() as u32;
-                    // Simplified: just push a placeholder
-                    frame.set_register(dst.0 as usize, RuntimeValue::Int(type_id as i64));
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self.force_register(&mut frame, src)?;
+                    let type_name: &str = match &val {
+                        RuntimeValue::Unit => "Void",
+                        RuntimeValue::Bool(_) => "Bool",
+                        RuntimeValue::Int(_) => "Int",
+                        RuntimeValue::Float(_) => "Float",
+                        RuntimeValue::Char(_) => "Char",
+                        RuntimeValue::String(_) => "String",
+                        RuntimeValue::Bytes(_) => "Bytes",
+                        RuntimeValue::Tuple(_) => "Tuple",
+                        RuntimeValue::Array(_) => "Array",
+                        RuntimeValue::List(_) => "List",
+                        RuntimeValue::Dict(_) => "Dict",
+                        RuntimeValue::Struct { .. } => "Struct",
+                        RuntimeValue::Enum { .. } => "Enum",
+                        RuntimeValue::Function(_) => "Function",
+                        RuntimeValue::Arc(_) => "Arc",
+                        RuntimeValue::Weak(_) => "Weak",
+                        RuntimeValue::Async(_) => "Async",
+                        RuntimeValue::Ptr { .. } => "Ptr",
+                        _ => "Unknown",
+                    };
+                    let result = RuntimeValue::String(Arc::from(type_name));
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::Cast {
                     dst,
                     src,
-                    target_type_id: _,
+                    target_type_id,
                 } => {
                     let dst = *dst;
                     let src = *src;
+                    let type_id = *target_type_id;
                     let val = self.force_register(&mut frame, src)?;
-                    frame.set_register(dst.0 as usize, val);
+                    // 基本类型转换：Int↔Float, 其他透传
+                    let result = match (val, type_id) {
+                        (RuntimeValue::Int(n), 1) => RuntimeValue::Float(n as f64), // Int → Float
+                        (RuntimeValue::Float(f), 0) => RuntimeValue::Int(f as i64), // Float → Int
+                        (RuntimeValue::Int(n), 2) => RuntimeValue::Bool(n != 0),    // Int → Bool
+                        (RuntimeValue::Bool(b), 0) => RuntimeValue::Int(if b { 1 } else { 0 }), // Bool → Int
+                        (v, _) => v, // 未知类型，透传
+                    };
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::StringFromInt { dst, src } => {
@@ -896,15 +939,57 @@ impl Executor for Interpreter {
                         stack,
                     ));
                 }
-                BytecodeInstr::BoundsCheck { array: _, index: _ } => {
-                    // In debug mode, this would check bounds
+                BytecodeInstr::BoundsCheck { array, index } => {
+                    let array = *array;
+                    let index = *index;
+                    let arr = self.force_register(&mut frame, array)?;
+                    let idx = self
+                        .force_register(&mut frame, index)?
+                        .to_int()
+                        .unwrap_or(-1);
+                    let len = match &arr {
+                        RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
+                            match self.heap.get(*h) {
+                                Some(HeapValue::List(list)) => list.len() as i64,
+                                Some(HeapValue::Tuple(t)) => t.len() as i64,
+                                _ => -1,
+                            }
+                        }
+                        _ => -1,
+                    };
+                    if idx < 0 || idx >= len {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
+                            format!("Index {} out of bounds for length {}", idx, len),
+                            stack,
+                        ));
+                    }
                     frame.advance();
                 }
-                BytecodeInstr::TypeCheck {
-                    value: _,
-                    type_id: _,
-                } => {
-                    // In debug mode, this would check types
+                BytecodeInstr::TypeCheck { value, type_id } => {
+                    let value = *value;
+                    let type_id = *type_id;
+                    let val = self.force_register(&mut frame, value)?;
+                    // 基本类型 ID 映射：0=Int, 1=Float, 2=Bool, 3=String, 4=Char
+                    let actual_id: u16 = match val {
+                        RuntimeValue::Int(_) => 0,
+                        RuntimeValue::Float(_) => 1,
+                        RuntimeValue::Bool(_) => 2,
+                        RuntimeValue::String(_) => 3,
+                        RuntimeValue::Char(_) => 4,
+                        RuntimeValue::Unit => 5,
+                        _ => u16::MAX,
+                    };
+                    if actual_id != type_id && type_id != u16::MAX {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
+                            format!(
+                                "Type mismatch: expected type_id {}, got {}",
+                                type_id, actual_id
+                            ),
+                            stack,
+                        ));
+                    }
                     frame.advance();
                 }
                 BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
@@ -930,12 +1015,55 @@ impl Executor for Interpreter {
                 BytecodeInstr::CloseUpvalue { src: _ } => {
                     frame.advance();
                 }
-                BytecodeInstr::Switch {
-                    value: _,
-                    targets: _,
-                } => {
-                    // Simplified switch implementation
-                    frame.advance();
+                BytecodeInstr::Switch { value, targets } => {
+                    let value = *value;
+                    let targets = targets.clone();
+                    let val = self.force_register(&mut frame, value)?;
+                    let mut jumped = false;
+                    for (case_val, target) in &targets {
+                        if let Some(case_label) = case_val {
+                            // case 值编码为 Label，解码为 i32 常量
+                            let case_offset = i32::from_le_bytes([
+                                case_label.0 as u8,
+                                (case_label.0 >> 8) as u8,
+                                (case_label.0 >> 16) as u8,
+                                (case_label.0 >> 24) as u8,
+                            ]);
+                            let matches = match &val {
+                                RuntimeValue::Int(n) => *n == case_offset as i64,
+                                RuntimeValue::Bool(b) => *b == (case_offset != 0),
+                                _ => false,
+                            };
+                            if matches {
+                                let target_offset = i32::from_le_bytes([
+                                    target.0 as u8,
+                                    (target.0 >> 8) as u8,
+                                    (target.0 >> 16) as u8,
+                                    (target.0 >> 24) as u8,
+                                ]);
+                                let target_ip = ((frame.ip as i32) + target_offset) as usize;
+                                frame.ip = target_ip;
+                                jumped = true;
+                                break;
+                            }
+                        }
+                    }
+                    // 没有匹配的 case，跳转到 default（targets 最后一个 None 入口）
+                    if !jumped {
+                        if let Some((None, default_target)) = targets.last() {
+                            let offset = i32::from_le_bytes([
+                                default_target.0 as u8,
+                                (default_target.0 >> 8) as u8,
+                                (default_target.0 >> 16) as u8,
+                                (default_target.0 >> 24) as u8,
+                            ]);
+                            let target_ip = ((frame.ip as i32) + offset) as usize;
+                            frame.ip = target_ip;
+                        } else {
+                            frame.advance();
+                        }
+                    }
+                    continue;
                 }
                 BytecodeInstr::StackAlloc { dst: _, size: _ } => {
                     frame.advance();
@@ -959,21 +1087,21 @@ impl Executor for Interpreter {
                     );
                     frame.advance();
                 }
-                BytecodeInstr::StringGetChar { dst, src, index: _ } => {
+                BytecodeInstr::StringGetChar { dst, src, index } => {
                     let dst = *dst;
                     let src = *src;
+                    let idx = index.0 as usize;
                     let s: String = match self.force_register(&mut frame, src)? {
                         RuntimeValue::String(s) => s.as_ref().to_string(),
                         _ => String::new(),
                     };
 
-                    frame.set_register(
-                        dst.0 as usize,
-                        s.chars()
-                            .next()
-                            .map(|c| RuntimeValue::Char(c as u32))
-                            .unwrap_or(RuntimeValue::Unit),
-                    );
+                    let result = s
+                        .chars()
+                        .nth(idx)
+                        .map(|c| RuntimeValue::Char(c as u32))
+                        .unwrap_or(RuntimeValue::Unit);
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::CallVirt {
