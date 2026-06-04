@@ -51,10 +51,8 @@ fn test_format_function_no_args() {
 
 #[test]
 fn test_format_if_else_branches() {
-    assert_format_eq(
-        "if true { 1 } else { 2 }",
-        "if true {\n    1\n} else {\n    2\n}\n",
-    );
+    // §6.2: 单语句代码块且不超过行宽时使用单行格式
+    assert_format_eq("if true { 1 } else { 2 }", "if true { 1 } else { 2 }\n");
 }
 
 #[test]

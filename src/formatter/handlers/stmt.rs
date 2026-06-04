@@ -127,14 +127,14 @@ fn format_binding(
     // 方法绑定: Type.method: (Type, ...) -> ReturnType = (params) => body
     if let Some(ty_name) = type_name {
         if let Some(mt) = method_type {
-            let params_str = format_params(params, source_map);
+            let params_str = format_params(params, ctx, source_map);
             let body_block = Block {
                 stmts: body.0.clone(),
                 expr: body.1.clone(),
                 span: crate::util::span::Span::dummy(),
             };
             return format!(
-                "{}.{}: {} = ({}) => {}",
+                "{}.{}: {} = {} => {}",
                 ty_name,
                 name,
                 format_type(mt, source_map),
@@ -187,7 +187,7 @@ fn format_binding(
         String::new()
     };
 
-    let params_str = format_params(params, source_map);
+    let params_str = format_params(params, ctx, source_map);
 
     let body_block = Block {
         stmts: body.0.clone(),
@@ -196,7 +196,7 @@ fn format_binding(
     };
 
     format!(
-        "{}{}{}{}{} = ({}) => {}",
+        "{}{}{}{}{} = {} => {}",
         pub_str,
         name,
         generics,
@@ -262,10 +262,10 @@ fn format_external_binding(
             positions,
             body,
         } => {
-            let params_str = format_params(params, source_map);
+            let params_str = format_params(params, ctx, source_map);
             let pos_strs: Vec<String> = positions.iter().map(|p| p.to_string()).collect();
             format!(
-                "{}.{}: (({}) -> {})[{}] = (({}) => {})",
+                "{}.{}: ({} -> {})[{}] = ({} => {})",
                 type_name,
                 method_name,
                 params_str,
