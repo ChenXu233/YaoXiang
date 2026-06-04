@@ -204,6 +204,8 @@ Pattern     ::= Literal
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
+**语义**：代码块内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值。
+
 ### 2.10 Lambda 表达式
 
 ```
@@ -284,6 +286,8 @@ LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ```
 ReturnStmt  ::= 'return' Expr?
 ```
+
+**语义**：`return` 用于从代码块中返回值。若无 `return`，代码块默认返回 `Void`。
 
 ### 3.4 break 语句
 

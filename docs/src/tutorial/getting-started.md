@@ -42,7 +42,8 @@ cargo test
 # hello.yx
 use std.io
 
-# 函数定义: name: (param: Type, ...) -> return_type = { ... }
+# 函数定义: name: (param: Type, ...) -> return_type = { return ... }  # 代码块必须显式 return
+# 表达式形式: name: (param: Type, ...) -> return_type = expr           # 表达式直接返回值
 main: () -> Void = {
     println("Hello, YaoXiang!")
 }
@@ -89,12 +90,16 @@ counter = counter + 1     # ✅ OK
 
 ```yaoxiang
 # 函数定义语法
+# 表达式形式：直接返回值，不需要 return
 add: (a: Int, b: Int) -> Int = a + b
+
+# 代码块形式：必须使用 return 返回值
+# add: (a: Int, b: Int) -> Int = { return a + b }
 
 # 调用
 result = add(1, 2)        # result = 3
 
-# 单参数函数
+# 单参数函数（表达式形式）
 inc: (x: Int) -> Int = x + 1
 ```
 
