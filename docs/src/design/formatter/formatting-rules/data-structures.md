@@ -119,3 +119,72 @@ match x {
     _ => default_case(),
 }
 ```
+
+---
+
+## §11.4 元组
+
+**§11.4.1 元组格式。** 元组使用 `()` 包围，元素之间用逗号分隔。
+
+```
+// ✅ 正确
+let t = (1, "hello", true);
+let t = (1,);  // 单元素元组
+
+// ❌ 错误
+let t = (1, "hello", true);  // 逗号后缺少空格
+let t = (1,"hello",true);  // 逗号后缺少空格
+```
+
+**§11.4.2 空元组。** 空元组使用 `()` 表示。
+
+```
+// ✅ 正确
+let t = ();
+```
+
+---
+
+## §11.5 索引访问
+
+**§11.5.1 索引格式。** 索引使用 `expr[index]` 格式。
+
+```
+// ✅ 正确
+let x = arr[0];
+let y = matrix[i][j];
+
+// ❌ 错误
+let x = arr [0];  // 多余空格
+let y = matrix[ i ][ j ];  // 多余空格
+```
+
+---
+
+## §11.6 字段访问
+
+**§11.6.1 字段访问格式。** 字段访问使用 `expr.field` 格式。
+
+```
+// ✅ 正确
+let x = obj.field;
+let y = obj.method();
+
+// ❌ 错误
+let x = obj . field;  // 多余空格
+let y = obj. field;  // 多余空格
+```
+
+**§11.6.2 链式字段访问。** 链式字段访问超过行宽时，每行一个方法调用。
+
+```
+// 超过行宽时
+let result = object.method1().method2().method3().method4();
+
+// 格式化后
+let result = object
+    .method1()
+    .method2()
+    .method3()
+    .method4();
+```

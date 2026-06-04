@@ -115,6 +115,22 @@ let result = first_value
 
 ---
 
+## §3.5 变量引用
+
+**§3.5.1 变量名。** 变量引用直接输出变量名，不添加额外空格。
+
+```
+// ✅ 正确
+let x = my_variable;
+let y = camelCaseName;
+
+// ❌ 错误
+let x = my_variable ;  // 多余空格
+let y = "camelCaseName";  // 不应加引号
+```
+
+---
+
 ## §6 代码块
 
 **§6.1 代码块格式。** 代码块使用花括号 `{}` 包围，开括号前有一个空格。
