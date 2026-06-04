@@ -162,13 +162,13 @@ type Nat = { n: Int }
 # 函数调用时，编译器自动检测异步依赖
 # 并插入适当的同步屏障
 
-fetch_user(Int) -> User spawn = (id) => {
-    database.query("SELECT * FROM users WHERE id = ?", id)
+fetch_user: (Int) -> User spawn = (id) => {
+    return database.query("SELECT * FROM users WHERE id = ?", id)
 }
 
-display_user(Int) -> String = (id) => {
+display_user: (Int) -> String = (id) => {
     user = fetch_user(id)  # 自动等待结果
-    "User: " + user.name   # 确保user已就绪
+    return "User: " + user.name   # 确保user已就绪
 }
 ```
 
@@ -426,18 +426,18 @@ unsafe_example() -> Void = () => {
 
 ```yaoxiang
 # 使用 spawn 标记异步函数
-fetch_api(String) -> JSON spawn = (url) => {
+fetch_api: (String) -> JSON spawn = (url) => {
     response = HTTP.get(url)
-    JSON.parse(response.body)
+    return JSON.parse(response.body)
 }
 
-calculate_heavy(Int) -> Int spawn = (n) => {
+calculate_heavy: (Int) -> Int spawn = (n) => {
     # 耗时计算
-    result = 0
+    mut result = 0
     for i in 0..n {
         result += i
     }
-    result
+    return result
 }
 ```
 
@@ -599,27 +599,27 @@ modifier = mut mutable  # 可变引用
 ### 6.3 函数定义
 
 ```yaoxiang
-# 基本函数
-greet(String) -> String = (name) => "Hello, " + name
+# 基本函数（表达式形式 → 直接返回值）
+greet: (String) -> String = (name) => "Hello, " + name
 
-# 返回类型推断
-add(Int, Int) -> Int = (a, b) => a + 1  # 最后表达式作为返回值
+# 返回类型推断（表达式形式 → 直接返回值）
+add: (Int, Int) -> Int = (a, b) => a + 1
 
 # 多返回值
-divmod(Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)
+divmod: (Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)
 
 # 泛型函数
-identity<T>(T) -> T = (x) => x
+identity: <T>(T) -> T = (x) => x
 
 # 高阶函数
-apply<T, U>((T) -> U, T) -> U = (f, value) => f(value)
+apply: <T, U>((T) -> U, T) -> U = (f, value) => f(value)
 
 # 闭包
-create_counter() -> () -> Int = () => {
+create_counter: () -> () -> Int = () => {
     mut count = 0
-    () => {
+    return () => {
         count += 1
-        count
+        return count
     }
 }
 ```
@@ -852,17 +852,17 @@ str_val = identity("hello") # 展开为 identity(String) -> String
 
 ```yaoxiang
 # RAII 自动释放
-with_file(String) -> String = (path) => {
+with_file: (String) -> String = (path) => {
     file = File.open(path)  # 自动打开
     # 使用 file
     content = file.read_all()
     # 函数结束，file 自动关闭
-    content
+    return content
 }
 
 # 所有权转移释放
-create_resource() -> Resource = () => {
-    Resource.new()  # 创建
+create_resource: () -> Resource = () => {
+    return Resource.new()  # 创建
 }  # 返回时转移所有权
 
 use_resource(Resource) -> Void = (res) => {
@@ -874,13 +874,13 @@ use_resource(Resource) -> Void = (res) => {
 
 ```yaoxiang
 # 内联优化
-inline add(Int, Int) -> Int = (a, b) => a + b
+inline add: (Int, Int) -> Int = (a, b) => a + b
 
 # 循环展开
 # 编译器自动优化简单循环
 
 # 逃逸分析
-create_large_object() -> List[Int] = () => {
+create_large_object: () -> List[Int] = () => {
     large_data = [0; 1000000]  # 大数组
     if need_return(large_data) {
         return large_data  # 堆分配

@@ -428,7 +428,7 @@ clone: [T: Clone](value: T) -> T = value.clone()
 ```yaoxiang
 // 多重约束语法
 combine: [T: Clone + Add](a: T, b: T) -> T = {
-    a.clone() + b
+    return a.clone() + b
 }
 
 // 泛型容器的排序
@@ -501,7 +501,7 @@ CompileTimeFn ::= '[' Identifier ':' Int ']' '(' Identifier ')' '->' TypeExpr
 ```yaoxiang
 // 编译期阶乘：参数必须是编译期已知的字面量
 factorial: [n: Int](n: n) -> Int = {
-    match n {
+    return match n {
         0 => 1,
         _ => n * factorial(n - 1)
     }
@@ -1040,7 +1040,7 @@ p.draw(screen)           # 语法糖 → Point.draw(p, screen)
 distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 ```
 
@@ -1073,7 +1073,7 @@ Point.calc = func[0, _, 2]
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
+    return (dx * dx + dy * dy).sqrt()
 }
 
 // 编译器自动推断：
@@ -1188,7 +1188,7 @@ ErrorPropagate ::= Expr '?'
 ```
 process: (p: Point) -> Result[Data, Error] = {
     data = fetch_data()?      # 自动传播错误
-    transform(data)?
+    return transform(data)?
 }
 ```
 
