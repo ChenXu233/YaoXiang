@@ -61,3 +61,62 @@ while(condition) { ... }
 'outer:for i in range(10) { ... }
 'outer : for i in range(10) { ... }
 ```
+
+---
+
+## §5.6 Return 语句
+
+**§5.6.1 Return 格式。** `return` 关键字与表达式之间用空格分隔。
+
+```
+// ✅ 正确
+return 42;
+return x + y;
+
+// ❌ 错误
+return(42);  // 缺少空格
+return  42;  // 多余空格
+```
+
+**§5.6.2 空 Return。** 空 return 直接使用 `return` 关键字。
+
+```
+// ✅ 正确
+return;
+
+// ❌ 错误
+return ;  // 多余空格
+return void;  // 不需要 void
+```
+
+---
+
+## §5.7 Break 语句
+
+**§5.7.1 Break 格式。** `break` 关键字与标签之间用空格分隔。
+
+```
+// ✅ 正确
+break;
+break 'outer;
+
+// ❌ 错误
+break(outer);  // 错误语法
+break  'outer;  // 多余空格
+```
+
+---
+
+## §5.8 Continue 语句
+
+**§5.8.1 Continue 格式。** `continue` 关键字与标签之间用空格分隔。
+
+```
+// ✅ 正确
+continue;
+continue 'outer;
+
+// ❌ 错误
+continue(outer);  // 错误语法
+continue  'outer;  // 多余空格
+```
