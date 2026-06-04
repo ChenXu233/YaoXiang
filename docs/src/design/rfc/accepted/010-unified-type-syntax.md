@@ -263,7 +263,7 @@ calc2: (x: Float, y: Float) -> Float = {
 
 #### 返回规则
 
-所有函数必须显式使用 `return` 关键字返回值（除返回 `()` 的函数外）：
+代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值：
 
 ```yaoxiang
 // 非 Void 返回类型 - 必须使用 return
