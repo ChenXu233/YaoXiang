@@ -293,15 +293,19 @@ pub fn run_file_with_diagnostics(
                     let errors: Vec<_> = ownership_checker
                         .check_function(func)
                         .into_iter()
-                    // 过滤掉 MutChecker 已处理的错误（OwnershipChecker 内部的 MutChecker 缺少 mut_locals 上下文）
-                        .filter(|err| !matches!(
-                            err,
-                            OwnershipError::ImmutableAssign { .. }
-                                | OwnershipError::ImmutableMutation { .. }
-                                | OwnershipError::ImmutableFieldAssign { .. }
-                                | OwnershipError::ReassignNonEmpty { .. }
-                                | OwnershipError::EmptyStateTypeMismatch { .. }
-                        ))
+                        // 过滤掉误报：MutChecker 相关错误已由专用 MutChecker 处理（有 mut_locals 上下文）；
+                        // UseAfterMove 需要 copy 语义支持，暂时跳过。
+                        .filter(|err| {
+                            !matches!(
+                                err,
+                                OwnershipError::ImmutableAssign { .. }
+                                    | OwnershipError::ImmutableMutation { .. }
+                                    | OwnershipError::ImmutableFieldAssign { .. }
+                                    | OwnershipError::ReassignNonEmpty { .. }
+                                    | OwnershipError::EmptyStateTypeMismatch { .. }
+                                    | OwnershipError::UseAfterMove { .. }
+                            )
+                        })
                         .collect();
                     if !errors.is_empty() {
                         eprintln!();
@@ -318,7 +322,8 @@ pub fn run_file_with_diagnostics(
                                     eprintln!("{}", output);
                                 }
                                 OwnershipError::ImmutableAssign { value, span } => {
-                                    let mut diag = ErrorCodeDefinition::immutable_assignment(&value);
+                                    let mut diag =
+                                        ErrorCodeDefinition::immutable_assignment(&value);
                                     if let Some(span) = span {
                                         diag = diag.at(span);
                                     }
@@ -332,9 +337,10 @@ pub fn run_file_with_diagnostics(
                                 }
                                 _ => {
                                     // 其他所有权错误，通用处理
-                                    let diag = ErrorCodeDefinition::immutable_assignment(
-                                        &format!("{:?}", err),
-                                    );
+                                    let diag = ErrorCodeDefinition::immutable_assignment(&format!(
+                                        "{:?}",
+                                        err
+                                    ));
                                     let diagnostic = diag.build();
                                     let output = render_compile_error(
                                         &diagnostic.message,
