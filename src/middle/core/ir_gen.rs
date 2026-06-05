@@ -833,16 +833,15 @@ impl AstToIrGenerator {
         }
 
         // 阶段3修复：简化返回值处理逻辑，明确表达式vs语句语义
-        // 表达式函数：直接返回表达式的值
-        // 语句函数：隐式返回Void或显式return
+        // 表达式形式 (a, b) => body：直接返回 body 的值
+        // 代码块形式 { ... }：必须显式 return，否则默认返回 Void
         if let Some(e) = expr {
             let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            // 隐式返回：函数体末尾表达式即返回值。
-            // 若表达式内包含显式 return，此 Ret 不可达但无害。
+            // 表达式形式：直接返回表达式的值
             instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
         } else {
-            // 纯语句块：隐式返回Void
+            // 代码块形式：隐式返回 Void（无 return 时）
             instructions.push(Instruction::Ret(None));
         }
 
