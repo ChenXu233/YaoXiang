@@ -3,10 +3,14 @@
 //! RFC-024 核心：spawn 块的直接子表达式创建并行任务。
 //! 编译器在编译期分析这些子表达式的读写依赖，通过拓扑排序
 //! 将无依赖的任务分组，生成 ExecutionPlan。
+//!
+//! RFC-024 扩展：Resource 类型感知。
+//! 当两个任务操作同一个 Resource 类型的变量时，自动添加串行依赖。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{BinOp, Expr, Stmt, StmtKind};
+use crate::frontend::core::types::base::{MonoType, TraitTable};
 use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
 
 /// spawn 块分析结果
@@ -30,22 +34,59 @@ pub fn is_direct_child(stmt: &Stmt) -> bool {
     matches!(stmt.kind, StmtKind::Expr(_))
 }
 
-/// 分析表达式的变量读写集
-pub fn analyze_reads_writes(expr: &Expr) -> (HashSet<String>, HashSet<String>) {
+/// 分析表达式的变量读写集和 Resource 变量集
+///
+/// 返回 (reads, writes, resource_vars)：
+/// - reads: 表达式读取的变量名
+/// - writes: 表达式写入的变量名
+/// - resource_vars: 表达式使用的 Resource 类型变量名
+pub fn analyze_reads_writes(
+    expr: &Expr,
+    trait_table: &TraitTable,
+    local_var_types: &HashMap<String, MonoType>,
+) -> (HashSet<String>, HashSet<String>, HashSet<String>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
-    collect_reads_writes(expr, &mut reads, &mut writes);
-    (reads, writes)
+    let mut resource_vars = HashSet::new();
+    collect_reads_writes(
+        expr,
+        &mut reads,
+        &mut writes,
+        &mut resource_vars,
+        trait_table,
+        local_var_types,
+    );
+    (reads, writes, resource_vars)
+}
+
+/// 检查变量类型是否实现了 Resource trait
+fn is_resource_type(
+    var_name: &str,
+    trait_table: &TraitTable,
+    local_var_types: &HashMap<String, MonoType>,
+) -> bool {
+    if let Some(mono_type) = local_var_types.get(var_name) {
+        let type_name = mono_type.type_name();
+        trait_table.has_impl("Resource", &type_name)
+    } else {
+        false
+    }
 }
 
 fn collect_reads_writes(
     expr: &Expr,
     reads: &mut HashSet<String>,
     writes: &mut HashSet<String>,
+    resource_vars: &mut HashSet<String>,
+    trait_table: &TraitTable,
+    local_var_types: &HashMap<String, MonoType>,
 ) {
     match expr {
         Expr::Var(name, _) => {
             reads.insert(name.clone());
+            if is_resource_type(name, trait_table, local_var_types) {
+                resource_vars.insert(name.clone());
+            }
         }
         Expr::BinOp {
             op: BinOp::Assign,
@@ -55,32 +96,90 @@ fn collect_reads_writes(
         } => {
             if let Expr::Var(name, _) = left.as_ref() {
                 writes.insert(name.clone());
+                if is_resource_type(name, trait_table, local_var_types) {
+                    resource_vars.insert(name.clone());
+                }
             }
-            collect_reads_writes(right, reads, writes);
+            collect_reads_writes(
+                right,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
         }
         Expr::Call { func, args, .. } => {
-            collect_reads_writes(func, reads, writes);
+            collect_reads_writes(
+                func,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
             for arg in args {
-                collect_reads_writes(arg, reads, writes);
+                collect_reads_writes(
+                    arg,
+                    reads,
+                    writes,
+                    resource_vars,
+                    trait_table,
+                    local_var_types,
+                );
             }
         }
         Expr::FieldAccess { expr, .. } => {
-            collect_reads_writes(expr, reads, writes);
+            collect_reads_writes(
+                expr,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
         }
         Expr::BinOp { left, right, .. } => {
-            collect_reads_writes(left, reads, writes);
-            collect_reads_writes(right, reads, writes);
+            collect_reads_writes(
+                left,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
+            collect_reads_writes(
+                right,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
         }
         Expr::UnOp { expr, .. } => {
-            collect_reads_writes(expr, reads, writes);
+            collect_reads_writes(
+                expr,
+                reads,
+                writes,
+                resource_vars,
+                trait_table,
+                local_var_types,
+            );
         }
         _ => {}
     }
 }
 
 /// 构建依赖 DAG，拓扑排序生成执行计划
+///
+/// 规则：
+/// 1. 写后读：任务 i 读取任务 j 写入的变量 → i 依赖 j
+/// 2. 写后写：任务 i 写入任务 j 写入的变量 → i 依赖 j
+/// 3. 资源冲突：任务 i 和 j 使用同一 Resource 变量 → i 依赖 j（串行）
 pub fn build_execution_plan(
-    read_write_sets: &[(HashSet<String>, HashSet<String>)]
+    read_write_sets: &[(HashSet<String>, HashSet<String>)],
+    resource_var_sets: &[HashSet<String>],
 ) -> ExecutionPlan {
     let n = read_write_sets.len();
     if n == 0 {
@@ -91,15 +190,19 @@ pub fn build_execution_plan(
     let mut deps: Vec<Vec<usize>> = vec![vec![]; n];
     for i in 0..n {
         for j in 0..i {
-            // 任务 i 读取了任务 j 写入的变量 → i 依赖 j（写后读）
+            // 规则 1：任务 i 读取了任务 j 写入的变量 → i 依赖 j（写后读）
             let reads_i = &read_write_sets[i].0;
             let writes_j = &read_write_sets[j].1;
             if !reads_i.is_disjoint(writes_j) {
                 deps[i].push(j);
             }
-            // 任务 i 写入了任务 j 写入的变量 → i 依赖 j（写后写）
+            // 规则 2：任务 i 写入了任务 j 写入的变量 → i 依赖 j（写后写）
             let writes_i = &read_write_sets[i].1;
             if !writes_i.is_disjoint(writes_j) && !deps[i].contains(&j) {
+                deps[i].push(j);
+            }
+            // 规则 3：两个任务使用同一 Resource 变量 → 串行
+            if !resource_var_sets[i].is_disjoint(&resource_var_sets[j]) && !deps[i].contains(&j) {
                 deps[i].push(j);
             }
         }
@@ -140,7 +243,11 @@ pub fn build_execution_plan(
 }
 
 /// 分析 spawn 块，生成执行计划
-pub fn analyze_spawn_body(body: &crate::frontend::core::parser::ast::Block) -> SpawnAnalysis {
+pub fn analyze_spawn_body(
+    body: &crate::frontend::core::parser::ast::Block,
+    trait_table: &TraitTable,
+    local_var_types: &HashMap<String, MonoType>,
+) -> SpawnAnalysis {
     let mut task_exprs = Vec::new();
     let mut task_targets = Vec::new();
 
@@ -172,22 +279,32 @@ pub fn analyze_spawn_body(body: &crate::frontend::core::parser::ast::Block) -> S
         }
     }
 
-    // 分析读写依赖（对赋值表达式使用完整表达式以捕获写入目标）
-    let read_write_sets: Vec<(HashSet<String>, HashSet<String>)> = body
-        .stmts
+    // 分析读写依赖和 Resource 变量
+    let read_write_and_resource_sets: Vec<(HashSet<String>, HashSet<String>, HashSet<String>)> =
+        body.stmts
+            .iter()
+            .filter(|stmt| is_direct_child(stmt))
+            .filter_map(|stmt| {
+                if let StmtKind::Expr(expr) = &stmt.kind {
+                    Some(analyze_reads_writes(expr, trait_table, local_var_types))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+    // 分离读写集和资源变量集
+    let read_write_sets: Vec<(HashSet<String>, HashSet<String>)> = read_write_and_resource_sets
         .iter()
-        .filter(|stmt| is_direct_child(stmt))
-        .filter_map(|stmt| {
-            if let StmtKind::Expr(expr) = &stmt.kind {
-                Some(analyze_reads_writes(expr))
-            } else {
-                None
-            }
-        })
+        .map(|(r, w, _)| (r.clone(), w.clone()))
+        .collect();
+    let resource_var_sets: Vec<HashSet<String>> = read_write_and_resource_sets
+        .iter()
+        .map(|(_, _, rv)| rv.clone())
         .collect();
 
     // 构建依赖 DAG 并拓扑排序
-    let plan = build_execution_plan(&read_write_sets);
+    let plan = build_execution_plan(&read_write_sets, &resource_var_sets);
 
     SpawnAnalysis {
         task_exprs,
@@ -204,6 +321,14 @@ mod tests {
 
     fn dummy_span() -> Span {
         Span::dummy()
+    }
+
+    fn empty_trait_table() -> TraitTable {
+        TraitTable::default()
+    }
+
+    fn empty_var_types() -> HashMap<String, MonoType> {
+        HashMap::new()
     }
 
     #[test]
@@ -240,7 +365,8 @@ mod tests {
     #[test]
     fn test_var_read() {
         let expr = var_expr("x");
-        let (reads, writes) = analyze_reads_writes(&expr);
+        let (reads, writes, _) =
+            analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
         assert!(reads.contains("x"));
         assert!(writes.is_empty());
     }
@@ -259,7 +385,8 @@ mod tests {
             }),
             span: dummy_span(),
         };
-        let (reads, writes) = analyze_reads_writes(&expr);
+        let (reads, writes, _) =
+            analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
         assert!(writes.contains("t1"));
         assert!(reads.contains("fetch"));
         assert!(reads.contains("a"));
@@ -273,7 +400,7 @@ mod tests {
             named_args: vec![],
             span: dummy_span(),
         };
-        let (reads, _) = analyze_reads_writes(&expr);
+        let (reads, _, _) = analyze_reads_writes(&expr, &empty_trait_table(), &empty_var_types());
         assert!(reads.contains("process"));
         assert!(reads.contains("x"));
         assert!(reads.contains("y"));
@@ -286,7 +413,8 @@ mod tests {
             (HashSet::from(["a".into()]), HashSet::from(["t1".into()])),
             (HashSet::from(["b".into()]), HashSet::from(["t2".into()])),
         ];
-        let plan = build_execution_plan(&sets);
+        let resource_sets: Vec<HashSet<String>> = vec![HashSet::new(), HashSet::new()];
+        let plan = build_execution_plan(&sets, &resource_sets);
         assert_eq!(plan.groups.len(), 1);
         assert_eq!(plan.groups[0].task_indices.len(), 2);
     }
@@ -298,7 +426,8 @@ mod tests {
             (HashSet::new(), HashSet::from(["t1".into()])),
             (HashSet::from(["t1".into()]), HashSet::from(["t2".into()])),
         ];
-        let plan = build_execution_plan(&sets);
+        let resource_sets: Vec<HashSet<String>> = vec![HashSet::new(), HashSet::new()];
+        let plan = build_execution_plan(&sets, &resource_sets);
         assert_eq!(plan.groups.len(), 2);
         assert_eq!(plan.groups[0].task_indices, vec![0]);
         assert_eq!(plan.groups[1].task_indices, vec![1]);
@@ -315,7 +444,9 @@ mod tests {
                 HashSet::from(["z".into()]),
             ),
         ];
-        let plan = build_execution_plan(&sets);
+        let resource_sets: Vec<HashSet<String>> =
+            vec![HashSet::new(), HashSet::new(), HashSet::new()];
+        let plan = build_execution_plan(&sets, &resource_sets);
         assert_eq!(plan.groups.len(), 2);
         assert_eq!(plan.groups[0].task_indices.len(), 2);
         assert_eq!(plan.groups[1].task_indices, vec![2]);
@@ -324,7 +455,8 @@ mod tests {
     #[test]
     fn test_empty_input() {
         let sets: Vec<(HashSet<String>, HashSet<String>)> = vec![];
-        let plan = build_execution_plan(&sets);
+        let resource_sets: Vec<HashSet<String>> = vec![];
+        let plan = build_execution_plan(&sets, &resource_sets);
         assert_eq!(plan.groups.len(), 0);
     }
 
@@ -335,8 +467,38 @@ mod tests {
             (HashSet::new(), HashSet::from(["x".into()])),
             (HashSet::new(), HashSet::from(["x".into()])),
         ];
-        let plan = build_execution_plan(&sets);
+        let resource_sets: Vec<HashSet<String>> = vec![HashSet::new(), HashSet::new()];
+        let plan = build_execution_plan(&sets, &resource_sets);
         assert_eq!(plan.groups.len(), 2);
+    }
+
+    #[test]
+    fn test_resource_var_creates_dependency() {
+        // 两个任务使用同一 Resource 变量 → 串行
+        let sets: Vec<(HashSet<String>, HashSet<String>)> = vec![
+            (HashSet::from(["file".into()]), HashSet::from(["a".into()])),
+            (HashSet::from(["file".into()]), HashSet::from(["b".into()])),
+        ];
+        let resource_sets: Vec<HashSet<String>> = vec![
+            HashSet::from(["file".into()]),
+            HashSet::from(["file".into()]),
+        ];
+        let plan = build_execution_plan(&sets, &resource_sets);
+        // 两个任务都用了 Resource 变量 file → 必须串行
+        assert_eq!(plan.groups.len(), 2);
+    }
+
+    #[test]
+    fn test_non_resource_var_no_extra_dependency() {
+        // 两个任务都读取同一非 Resource 变量 → 可以并行
+        let sets: Vec<(HashSet<String>, HashSet<String>)> = vec![
+            (HashSet::from(["x".into()]), HashSet::from(["a".into()])),
+            (HashSet::from(["x".into()]), HashSet::from(["b".into()])),
+        ];
+        let resource_sets: Vec<HashSet<String>> = vec![HashSet::new(), HashSet::new()];
+        let plan = build_execution_plan(&sets, &resource_sets);
+        // 非 Resource 变量，读-读不冲突 → 一个并行组
+        assert_eq!(plan.groups.len(), 1);
     }
 
     #[test]
@@ -376,7 +538,7 @@ mod tests {
             expr: None,
             span: dummy_span(),
         };
-        let analysis = analyze_spawn_body(&body);
+        let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
         assert_eq!(analysis.task_exprs.len(), 2);
         assert_eq!(
             analysis.task_targets,
@@ -425,9 +587,73 @@ mod tests {
             expr: None,
             span: dummy_span(),
         };
-        let analysis = analyze_spawn_body(&body);
+        let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
         assert_eq!(analysis.plan.groups.len(), 2);
         assert_eq!(analysis.plan.groups[0].task_indices, vec![0]);
         assert_eq!(analysis.plan.groups[1].task_indices, vec![1]);
+    }
+
+    #[test]
+    fn test_resource_aware_spawn_analysis() {
+        // file 是 FilePath 类型（Resource），两个任务都使用 file → 串行
+        let mut trait_table = TraitTable::default();
+        use crate::frontend::core::types::base::{TraitDefinition, TraitImplementation};
+        trait_table.add_trait(TraitDefinition {
+            name: "Resource".to_string(),
+            methods: std::collections::HashMap::new(),
+            parent_traits: Vec::new(),
+            generic_params: vec![],
+            span: None,
+            is_marker: true,
+        });
+        trait_table.add_impl(TraitImplementation {
+            trait_name: "Resource".to_string(),
+            for_type_name: "FilePath".to_string(),
+            methods: std::collections::HashMap::new(),
+        });
+
+        let mut local_var_types = HashMap::new();
+        local_var_types.insert(
+            "file".to_string(),
+            MonoType::TypeRef("FilePath".to_string()),
+        );
+
+        let body = crate::frontend::core::parser::ast::Block {
+            stmts: vec![
+                Stmt {
+                    kind: StmtKind::Expr(Box::new(Expr::BinOp {
+                        op: BinOp::Assign,
+                        left: Box::new(Expr::Var("a".into(), dummy_span())),
+                        right: Box::new(Expr::Call {
+                            func: Box::new(Expr::Var("read_file".into(), dummy_span())),
+                            args: vec![var_expr("file")],
+                            named_args: vec![],
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    })),
+                    span: dummy_span(),
+                },
+                Stmt {
+                    kind: StmtKind::Expr(Box::new(Expr::BinOp {
+                        op: BinOp::Assign,
+                        left: Box::new(Expr::Var("b".into(), dummy_span())),
+                        right: Box::new(Expr::Call {
+                            func: Box::new(Expr::Var("stat_file".into(), dummy_span())),
+                            args: vec![var_expr("file")],
+                            named_args: vec![],
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    })),
+                    span: dummy_span(),
+                },
+            ],
+            expr: None,
+            span: dummy_span(),
+        };
+        let analysis = analyze_spawn_body(&body, &trait_table, &local_var_types);
+        // 两个任务都使用了 Resource 变量 file → 必须串行 → 2 个 group
+        assert_eq!(analysis.plan.groups.len(), 2);
     }
 }

@@ -344,6 +344,7 @@ impl TypeChecker {
             bindings,
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
+            trait_table: self.env.trait_table.clone(),
         };
 
         Ok(result)
