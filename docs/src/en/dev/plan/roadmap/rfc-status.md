@@ -4,7 +4,7 @@ title: "RFC Implementation Status"
 
 # RFC Implementation Status
 
-> **Last Updated**: 2026-06-04
+> **Last Updated**: 2026-06-05
 > **Scope of Analysis**: 14 Accepted RFCs
 
 ---
@@ -13,40 +13,41 @@ title: "RFC Implementation Status"
 
 | RFC | Title | Status | Remaining Key Steps |
 |-----|-------|--------|---------------------|
-| RFC-001 | Spawn Model and Error Handling | In Progress | DAG Dependency Analyzer, @block/@eager Full Execution, Resource Type System, Error Graph Visualization |
-| RFC-004 | Multi-Position Union Binding for Curried Methods | In Progress | [positions] Syntax, Multi-Position Union Binding, Auto-Currying, Default Binding |
-| RFC-006 | Documentation Site Construction | Near Completion | Version Switcher Menu |
-| RFC-007 | Unified Function Definition Syntax | Near Completion | yaoxiang-migrate Migration Tool |
-| RFC-008 | Runtime Concurrency Model and Scheduler Decoupling | Not Started | LLVM AOT Backend, Generic Scheduler Interface, Scheduler Static Library |
-| RFC-009 | Ownership Model | Near Completion | Branding Mechanism, ref Escape Analysis |
-| RFC-010 | Unified Type Syntax | Near Completion | Duck Typing Support, Interface Composition (Intersection Types) |
-| RFC-011 | Generics System Design | In Progress | Value-Dependent Types, Compile-Time Evaluation Engine, decreases Clauses, Conditional Types, Type Families |
-| RFC-012 | F-String Template Strings | Near Completion | Format Specifiers (`:.2f`, etc.) |
-| RFC-013 | Error Code Standard Design | Near Completion | yaoxiang explain CLI Command |
-| RFC-014 | Package Management System Design | Near Completion | Registry Source, Workspace Support, Dependency Overrides |
-| RFC-015 | Configuration System Design | In Progress | User-Level Config, Config Merging, yaoxiang config CLI, CLI/Environment Variable Overrides |
-| RFC-017 | LSP Language Server Support | Near Completion | Incremental Sync, TCP/Unix Socket, DAP Debug Adapter |
-| RFC-023 | Closure Capture Model | Near Completion | Full Escape Analysis |
+| RFC-001 | Concurrency Model and Error Handling | Abandoned | Superseded by RFC-024 |
+| RFC-004 | Multi-Position Union Binding for Curried Methods | In Progress | [positions] syntax, multi-position union binding, auto-currying, default binding |
+| RFC-006 | Documentation Site Construction | Near Completion | Version switcher menu |
+| RFC-007 | Function Definition Syntax Unification | Near Completion | yaoxiang-migrate migration tool |
+| RFC-008 | Runtime Concurrency Model Decoupled from Scheduler | Phase A Complete | Compile-time DAG analysis (covered by RFC-024), LLVM AOT backend |
+| RFC-009 | Ownership Model | Near Completion | Brand mechanism, ref escape analysis |
+| RFC-010 | Unified Type Syntax | Near Completion | Duck typing support, interface composition (intersection types) |
+| RFC-011 | Generics System Design | In Progress | Value-dependent types, compile-time evaluation engine, decreases clause, conditional types, type families |
+| RFC-012 | F-String Template Strings | Near Completion | Format specifiers (`:.2f`, etc.) |
+| RFC-013 | Error Code Specification Design | Near Completion | yaoxiang explain CLI command |
+| RFC-014 | Package Management System Design | Near Completion | Registry source, workspace support, dependency overrides |
+| RFC-015 | Configuration System Design | In Progress | User-level config, config merging, yaoxiang config CLI, CLI/env var overrides |
+| RFC-017 | LSP Language Server Support | Near Completion | Incremental sync, TCP/Unix Socket, DAP debugger adapter |
+| RFC-023 | Closure Capture Model | Near Completion | Complete escape analysis |
+| RFC-024 | Concurrency Model Based on spawn Blocks | In Progress | Old model cleanup, compile-time DAG analysis, runtime integration, spawn for |
 
 ---
 
 ## Near-Completion RFCs (8)
 
-Minimal remaining work; each RFC only lacks 1-2 features.
+Light remaining workload, each RFC only missing 1-2 features.
 
-### RFC-006: Documentation Site
+### RFC-006: Documentation Site Construction
 
 **Completed**: VitePress site, multi-language support (zh, en, ja, ru), CI/CD auto-deployment, sidebar/navbar configuration, search functionality
 
 **Remaining**:
-- ❌ Version switcher menu (`/v0.5/zh/` format)
+- ❌ Version switcher menu (/v0.5/zh/ format)
 
-### RFC-007: Unified Function Definition Syntax
+### RFC-007: Function Definition Syntax Unification
 
-**Completed**: `name: (params) -> Return = body` syntax parsing, lambda expression syntax, HM type inference, unified function definition syntax
+**Completed**: `name: (params) -> Return = body` syntax parsing, lambda expression syntax, HM type inference, function definition syntax unification
 
 **Remaining**:
-- ❌ `yaoxiang-migrate` migration tool
+- ❌ yaoxiang-migrate migration tool
 
 ### RFC-012: F-String Template Strings
 
@@ -55,31 +56,31 @@ Minimal remaining work; each RFC only lacks 1-2 features.
 **Remaining**:
 - ❌ Full support for format specifiers (`:.2f`, etc.)
 
-### RFC-013: Error Code Standard Design
+### RFC-013: Error Code Specification Design
 
-**Completed**: Four-digit number scheme `Exxxx`, multi-language resource files (JSON i18n), `DiagnosticBuilder` generic builder, `error!` macro
+**Completed**: Four-digit numbering `Exxxx`, multi-language resource files (JSON i18n), `DiagnosticBuilder` generic builder, `error!` macro
 
 **Remaining**:
-- ⚠️ `yaoxiang explain` CLI command pending confirmation
+- ⚠️ yaoxiang explain CLI command pending confirmation
 
 ### RFC-023: Closure Capture Model
 
-**Completed**: Compiler automatic analysis of external variables referenced in closure body, Dup type direct copy, zero annotation
+**Completed**: Compiler auto-analysis of external variables referenced in closure bodies, Dup type direct copy, zero annotations
 
 **Remaining**:
-- ⚠️ Full escape analysis to be refined
+- ⚠️ Complete escape analysis pending refinement
 
 ### RFC-009: Ownership Model
 
 **Completed**: Move semantics (default), &T/&mut T borrow tokens, clone() explicit deep copy, unsafe + *T, cross-task cycle detection, Send/Sync constraints, freeze mechanism, token conflict detection
 
 **Remaining**:
-- ❌ Branding mechanism (compiler-internal token unique identification)
-- ❌ ref automatic Rc/Arc selection escape analysis
+- ❌ Brand mechanism (compiler-internal unique token identifiers)
+- ❌ ref auto-selection of Rc/Arc escape analysis
 
 ### RFC-010: Unified Type Syntax
 
-**Completed**: Unified declaration syntax `name: type = value`, record type definition, interface definition and implementation checking, method definition syntax (Type.method), generic call `()` syntax, structural subtyping check
+**Completed**: Unified declaration syntax `name: type = value`, record type definitions, interface definition and implementation checking, method definition syntax (Type.method), generic call `()` syntax, structural subtyping check
 
 **Remaining**:
 - ❌ Full duck typing support
@@ -87,30 +88,23 @@ Minimal remaining work; each RFC only lacks 1-2 features.
 
 ### RFC-017: LSP Language Server Support
 
-**Completed**: Standalone LSP server process, JSON-RPC communication, code completion/jump to definition/diagnostics/reference search/hover info, ghost text (Inlay Hints), semantic tokens, rename, code actions
+**Completed**: Standalone LSP server process, JSON-RPC communication, code completion/definition goto/diagnostics/reference search/hover, ghost text (Inlay Hints), semantic tokens, rename, code actions
 
 **Remaining**:
 - ❌ Incremental sync
 - ❌ TCP/Unix Socket remote communication
-- ❌ DAP debug adapter
+- ❌ DAP debugger adapter
 - ❌ Ownership semantics visualization
 
 ---
 
 ## In-Progress RFCs (4)
 
-Core functionality has been started, but a significant amount of work remains.
+Core functionality started, but still significant unfinished work.
 
-### RFC-001: Spawn Model and Error Handling
+### RFC-001: Concurrency Model and Error Handling (Abandoned)
 
-**Completed**: spawn check (spawn_placement.rs), basic concurrent executor, runtime engine/task system, Result type exists in standard library
-
-**Remaining**:
-- ❌ DAG dependency analyzer
-- ❌ Full parsing and execution of `@block`, `@eager` annotations
-- ❌ Resource type system (FilePath, HttpUrl, DBUrl, etc.)
-- ❌ Isolated DAG independent parallelism
-- ❌ Error graph visualization
+**Superseded by RFC-024**. Old `@block`/`@eager`/`@auto` annotations, `Send`/`Sync` trait, whole-program DAG analysis scheme are abandoned. New concurrency model see RFC-024.
 
 ### RFC-004: Multi-Position Union Binding for Curried Methods
 
@@ -124,12 +118,12 @@ Core functionality has been started, but a significant amount of work remains.
 
 ### RFC-011: Generics System Design
 
-**Completed**: Unified signature syntax `(T: Type, R: Type) -> ...`, Type self-describing mechanism, type constraints `T: Dup + Add`, associated types (GAT), function overload specialization, monomorphization, dead code elimination
+**Completed**: Unified signature syntax `(T: Type, R: Type) -> ...`, Type self-describing mechanism, type constraints `T: Dup + Add`, associated types (GAT), function overloading specialization, monomorphization, dead code elimination
 
 **Remaining**:
 - ❌ Value-dependent types (`Vec: (n: Int) -> Type`)
-- ❌ Compile-time evaluation engine (compile-time evaluation of functions in type positions)
-- ❌ decreases clauses (termination checking)
+- ❌ Compile-time evaluation engine (type-position function call compile-time evaluation)
+- ❌ decreases clause (termination check)
 - ❌ Conditional types `If: (C: Bool, T: Type, E: Type) -> Type`
 - ❌ Type families
 
@@ -139,61 +133,61 @@ Core functionality has been started, but a significant amount of work remains.
 
 **Remaining**:
 - ❌ User-level config `~/.config/yaoxiang/config.toml`
-- ❌ Config merging logic
+- ❌ Configuration merging logic
 - ❌ `yaoxiang config` CLI command
-- ❌ CLI/environment variable overrides
+- ❌ CLI/env var overrides
 - ❌ `[tool.*]` extensions
 - ❌ `platform` platform constraints
 
 ---
 
-## Not-Started RFCs (1)
+## Not Started RFCs (1)
 
-### RFC-008: Runtime Concurrency Model and Scheduler Decoupling
+### RFC-008: Runtime Concurrency Model Decoupled from Scheduler (Phase A Complete)
 
-**Completed**: Basic interpreter/VM backend, basic runtime engine (engine.rs, task.rs)
+**Completed**: Embedded / Standard / Full three-tier runtime, DAG scheduler, cooperative time slicing, resource serialization, failure/cancel propagation
 
 **Remaining**:
-- ❌ Embedded Runtime (immediate executor)
-- ❌ Standard Runtime (DAG scheduler)
-- ❌ Full Runtime (work stealing)
+- ❌ Compile-time DAG analysis (covered by RFC-024)
 - ❌ LLVM AOT backend
 - ❌ Generic scheduler interface
 - ❌ Scheduler static library linking
 
 ---
 
-## Unimplemented Checklist (By Priority)
+## Implementation Checklist (by Priority)
 
 ### High Priority (Core Language Features)
 
-1. **DAG Dependency Analyzer** (RFC-001) — Core of spawn model
-2. **Value-Dependent Types** (RFC-011) — `Vec: (n: Int) -> Type`
-3. **decreases Clauses/Termination Checking** (RFC-011) — Compile-time evaluation safety guarantee
-4. **Conditional Types** (RFC-011) — `If: (C: Bool, T: Type, E: Type) -> Type`
-5. **`[positions]` Position Index Binding Syntax** (RFC-004)
-6. **`@block`, `@eager` Annotations** (RFC-001)
-7. **LLVM AOT Backend** (RFC-008)
-8. **Generic Scheduler Interface** (RFC-008)
+1. **Old concurrency model cleanup** (RFC-024) — Remove `@block`/`@eager`/`@auto`, `EvalMode`, `Send`/`Sync`
+2. **Compile-time DAG analysis** (RFC-024) — spawn block dependency analysis, topological sort, execution plan generation
+3. **Runtime integration** (RFC-024) — Interpreter grouped parallel execution per execution plan
+4. **Value-dependent types** (RFC-011) — `Vec: (n: Int) -> Type`
+5. **decreases clause/termination check** (RFC-011) — Compile-time evaluation safety guarantee
+6. **Conditional types** (RFC-011) — `If: (C: Bool, T: Type, E: Type) -> Type`
+7. **`[positions]` position index binding syntax** (RFC-004)
+8. **LLVM AOT backend** (RFC-008)
+9. **Generic scheduler interface** (RFC-008)
 
-### Medium Priority (Tooling)
+### Medium Priority (Toolchain)
 
-9. **User-Level Config** (RFC-015) — `~/.config/yaoxiang/config.toml`
-10. **Config Merging Logic** (RFC-015)
-11. **`yaoxiang config` CLI Command** (RFC-015)
-12. **`yaoxiang explain` CLI Command** (RFC-013)
-13. **`yaoxiang-migrate` Migration Tool** (RFC-007)
-14. **Registry Source** (RFC-014)
-15. **Integrity Verification** (RFC-014)
+9. **User-level config** (RFC-015) — `~/.config/yaoxiang/config.toml`
+10. **Configuration merging logic** (RFC-015)
+11. **`yaoxiang config` CLI command** (RFC-015)
+12. **`yaoxiang explain` CLI command** (RFC-013)
+13. **`yaoxiang-migrate` migration tool** (RFC-007)
+14. **Registry source** (RFC-014)
+15. **Integrity verification** (RFC-014)
 
 ### Low Priority (Enhancement Features)
 
-16. **Format Specifiers** (RFC-012) — `f"Pi: {pi:.2f}"`
-17. **Version Switcher Menu** (RFC-006)
-18. **Interface Composition** (RFC-010) — `Drawable & Serializable`
-19. **TCP/Unix Socket Remote Communication** (RFC-017)
-20. **DAP Debug Adapter** (RFC-017)
-21. **Ownership Semantics Visualization** (RFC-017)
-22. **Resource Type System** (RFC-001)
-23. **`[tool.*]` Third-Party Tool Config Extensions** (RFC-015)
-24. **`platform` Platform Constraints** (RFC-015)
+16. **Format specifiers** (RFC-012) — `f"Pi: {pi:.2f}"`
+17. **Version switcher menu** (RFC-006)
+18. **Interface composition** (RFC-010) — `Drawable & Serializable`
+19. **TCP/Unix Socket remote communication** (RFC-017)
+20. **DAP debugger adapter** (RFC-017)
+21. **Ownership semantics visualization** (RFC-017)
+22. **spawn for data-parallel loop** (RFC-024)
+23. **Resource type system** (RFC-024)
+24. **`[tool.*]` third-party tool config extensions** (RFC-015)
+25. **`platform` platform constraints** (RFC-015)
