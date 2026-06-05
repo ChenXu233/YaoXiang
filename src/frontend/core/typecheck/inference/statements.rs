@@ -240,7 +240,6 @@ impl StatementChecker {
         MonoType::Fn {
             params: vec![self.solver.new_var()],
             return_type: Box::new(self.solver.new_var()),
-            is_async: false,
         }
     }
 
@@ -760,7 +759,6 @@ impl StatementChecker {
                 let fn_type = MonoType::Fn {
                     params: final_params,
                     return_type: Box::new(final_ret),
-                    is_async: false,
                 };
                 self.scope
                     .add_var(name.to_string(), PolyType::mono(fn_type), false);
@@ -778,7 +776,6 @@ impl StatementChecker {
             let fn_type = MonoType::Fn {
                 params: param_types,
                 return_type: Box::new(self.solver.new_var()),
-                is_async: false,
             };
             self.scope
                 .add_var(name.to_string(), PolyType::mono(fn_type), false);
@@ -904,14 +901,12 @@ impl StatementChecker {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .into_iter()
                     .map(|p| Self::substitute_type_refs(p, subst))
                     .collect(),
                 return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
-                is_async,
             },
             MonoType::List(inner) => {
                 MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))

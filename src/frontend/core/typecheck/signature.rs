@@ -38,7 +38,6 @@ pub fn parse_signature(
                 return MonoType::Fn {
                     params: vec![env.solver().new_var()],
                     return_type: Box::new(MonoType::Void),
-                    is_async: false,
                 };
             }
         }
@@ -51,7 +50,6 @@ pub fn parse_signature(
         return MonoType::Fn {
             params: vec![env.solver().new_var()],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         };
     }
 
@@ -63,7 +61,6 @@ pub fn parse_signature(
         return MonoType::Fn {
             params: vec![env.solver().new_var()],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         };
     };
 
@@ -77,7 +74,6 @@ pub fn parse_signature(
         return MonoType::Fn {
             params: vec![env.solver().new_var()],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         };
     }
 
@@ -96,7 +92,6 @@ pub fn parse_signature(
                 return MonoType::Fn {
                     params: vec![env.solver().new_var()],
                     return_type: Box::new(MonoType::Void),
-                    is_async: false,
                 };
             }
         }
@@ -110,7 +105,6 @@ pub fn parse_signature(
             return MonoType::Fn {
                 params: vec![env.solver().new_var()],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             };
         }
     }
@@ -121,7 +115,6 @@ pub fn parse_signature(
     MonoType::Fn {
         params,
         return_type,
-        is_async: false,
     }
 }
 
@@ -278,7 +271,6 @@ fn parse_type_str_with_generics(
                 return MonoType::Fn {
                     params: fn_params,
                     return_type: Box::new(fn_return),
-                    is_async: false,
                 };
             } else if after.is_empty() {
                 // 没有 ->，是元组类型: (String, Int)

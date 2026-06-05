@@ -52,7 +52,6 @@ pub fn substitute_types_in_function(
         name: generate_specialized_name(&generic_func.name, &type_args),
         params: new_params,
         return_type: new_return_type,
-        is_async: generic_func.is_async,
         locals: new_locals,
         blocks: new_blocks,
         entry: generic_func.entry,
@@ -88,14 +87,12 @@ pub fn substitute_single_type(
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => MonoType::Fn {
             params: params
                 .iter()
                 .map(|t| substitute_single_type(t, type_map))
                 .collect(),
             return_type: Box::new(substitute_single_type(return_type, type_map)),
-            is_async: *is_async,
         },
         MonoType::Arc(inner) => MonoType::Arc(Box::new(substitute_single_type(inner, type_map))),
         MonoType::Range { elem_type } => MonoType::Range {

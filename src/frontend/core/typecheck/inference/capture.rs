@@ -727,7 +727,6 @@ mod tests {
         let fn_ty = MonoType::Fn {
             params: vec![MonoType::Int(64)],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         };
         MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
             name: "MyStruct".to_string(),

@@ -48,7 +48,6 @@ pub enum Expr {
         params: Vec<Param>,
         return_type: Option<Type>,
         body: Box<Block>,
-        is_async: bool,
         span: Span,
     },
     If {

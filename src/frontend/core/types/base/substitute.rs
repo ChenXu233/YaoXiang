@@ -180,7 +180,6 @@ impl Substituter {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => {
                 let new_params = params
                     .iter()
@@ -190,7 +189,6 @@ impl Substituter {
                 MonoType::Fn {
                     params: new_params,
                     return_type: new_return_type,
-                    is_async: *is_async,
                 }
             }
             MonoType::Struct(struct_type) => {
@@ -311,7 +309,6 @@ mod tests {
         let fn_type = MonoType::Fn {
             params: vec![MonoType::TypeVar(tv1), MonoType::TypeVar(tv2)],
             return_type: Box::new(MonoType::TypeVar(tv1)),
-            is_async: false,
         };
 
         let args = vec![MonoType::Int(32), MonoType::String];

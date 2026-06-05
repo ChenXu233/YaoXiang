@@ -395,7 +395,6 @@ mod tests {
             name: "returns_param".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -429,7 +428,6 @@ mod tests {
             name: "consumes_param".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -455,7 +453,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -486,7 +483,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -525,7 +521,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -555,7 +550,6 @@ mod tests {
             name: "multi_param".to_string(),
             params: vec![MonoType::Int(0), MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,

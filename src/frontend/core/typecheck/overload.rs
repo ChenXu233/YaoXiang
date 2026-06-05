@@ -667,14 +667,12 @@ fn substitute_return_type(
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => MonoType::Fn {
             params: params
                 .iter()
                 .map(|p| substitute_return_type(p, substitutions))
                 .collect(),
             return_type: Box::new(substitute_return_type(return_type, substitutions)),
-            is_async: *is_async,
         },
         MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::base::StructType {
             name: s.name.clone(),

@@ -530,7 +530,6 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             name: func_id.name().to_string(),
             params: new_params,
             return_type: new_return_type,
-            is_async: generic_func.is_async,
             locals: new_locals,
             blocks: new_blocks,
             entry: generic_func.entry,
@@ -567,14 +566,12 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .iter()
                     .map(|t| self.substitute_single_type(t, type_map))
                     .collect(),
                 return_type: Box::new(self.substitute_single_type(return_type, type_map)),
-                is_async: *is_async,
             },
             MonoType::Generic { name, args } => MonoType::Generic {
                 name: name.clone(),

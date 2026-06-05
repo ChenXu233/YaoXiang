@@ -925,7 +925,6 @@ fn test_expr_fndef() {
             expr: None,
             span: Span::dummy(),
         }),
-        is_async: false,
         span: Span::dummy(),
     };
     if let Expr::FnDef { name, .. } = &expr {

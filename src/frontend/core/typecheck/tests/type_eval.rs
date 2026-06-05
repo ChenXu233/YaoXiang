@@ -40,7 +40,6 @@ fn test_type_evaluator_eval_fn_type() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Float(64)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act
@@ -171,10 +170,8 @@ fn test_type_evaluator_eval_max_depth_exceeded() {
         params: vec![MonoType::Fn {
             params: vec![MonoType::Int(32)],
             return_type: Box::new(MonoType::Float(64)),
-            is_async: false,
         }],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act
@@ -218,11 +215,9 @@ fn test_type_evaluator_eval_nested_type() {
             MonoType::Fn {
                 params: vec![MonoType::Bool],
                 return_type: Box::new(MonoType::String),
-                is_async: true,
             },
         ])],
         return_type: Box::new(MonoType::List(Box::new(MonoType::Float(64)))),
-        is_async: false,
     };
 
     // Act

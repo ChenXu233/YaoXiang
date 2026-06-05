@@ -479,7 +479,6 @@ fn ast_type_to_mono_type(ty: &Type) -> MonoType {
         } => MonoType::Fn {
             params: params.iter().map(ast_type_to_mono_type).collect(),
             return_type: Box::new(ast_type_to_mono_type(return_type)),
-            is_async: false,
         },
         Type::Option(inner) => MonoType::Option(Box::new(ast_type_to_mono_type(inner))),
         Type::Result(ok, err) => MonoType::Result(
@@ -600,7 +599,6 @@ fn substitute_types_in_function(
         name: generate_specialized_name(&generic_func.name, &type_args),
         params: new_params,
         return_type: new_return_type,
-        is_async: generic_func.is_async,
         locals: new_locals,
         blocks: new_blocks,
         entry: generic_func.entry,
@@ -657,14 +655,12 @@ fn substitute_single_type(
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => MonoType::Fn {
             params: params
                 .iter()
                 .map(|t| substitute_single_type(t, type_map))
                 .collect(),
             return_type: Box::new(substitute_single_type(return_type, type_map)),
-            is_async: *is_async,
         },
         MonoType::Arc(inner) => MonoType::Arc(Box::new(substitute_single_type(inner, type_map))),
         MonoType::Range { elem_type } => MonoType::Range {
@@ -736,14 +732,12 @@ fn substitute_type_with_map(
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => MonoType::Fn {
             params: params
                 .iter()
                 .map(|t| substitute_type_with_map(t, type_map))
                 .collect(),
             return_type: Box::new(substitute_type_with_map(return_type, type_map)),
-            is_async: *is_async,
         },
         MonoType::Arc(inner) => MonoType::Arc(Box::new(substitute_type_with_map(inner, type_map))),
         MonoType::Range { elem_type } => MonoType::Range {

@@ -399,9 +399,7 @@ pub mod functions {
                 return_type: Box::new(MonoType::Fn {
                     params: vec![MonoType::TypeVar(TypeVar::new(1))],
                     return_type: Box::new(MonoType::TypeVar(TypeVar::new(2))),
-                    is_async: false,
                 }),
-                is_async: false,
             },
         )
     }

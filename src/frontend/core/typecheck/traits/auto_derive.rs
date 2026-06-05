@@ -218,7 +218,6 @@ pub fn generate_auto_derive(
             let fn_type = MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef(type_name.to_string())),
-                is_async: false,
             };
             methods.insert("clone".to_string(), fn_type);
         }
@@ -230,7 +229,6 @@ pub fn generate_auto_derive(
                     MonoType::TypeRef("Self".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
-                is_async: false,
             };
             methods.insert("equal".to_string(), fn_type);
         }
@@ -242,7 +240,6 @@ pub fn generate_auto_derive(
                     MonoType::TypeRef("Formatter".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Void".to_string())),
-                is_async: false,
             };
             methods.insert("debug".to_string(), fn_type);
         }

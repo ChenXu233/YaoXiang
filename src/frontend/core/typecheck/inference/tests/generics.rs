@@ -126,7 +126,6 @@ fn test_check_type_constraint_violation() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -177,7 +176,6 @@ fn test_check_type_constraint_satisfied() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -194,7 +192,6 @@ fn test_check_type_constraint_satisfied() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),

@@ -358,7 +358,6 @@ pub struct FunctionIR {
     pub name: String,
     pub params: Vec<MonoType>,
     pub return_type: MonoType,
-    pub is_async: bool,
     pub locals: Vec<MonoType>,
     pub blocks: Vec<BasicBlock>,
     pub entry: usize,

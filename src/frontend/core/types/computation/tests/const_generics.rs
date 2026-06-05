@@ -487,7 +487,6 @@ fn test_generic_size_fn_pointer() {
         gs.size_of(&MonoType::Fn {
             params: vec![],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         }),
         Ok(8)
     );
