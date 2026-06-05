@@ -229,132 +229,52 @@ pub fn run_file_with_diagnostics(
     let mut compiler = Compiler::new();
     match compiler.compile(&source_file.name, &source_file.content) {
         Ok(module) => {
-            // 可变性检查：在代码生成之前检查不可变变量的重复赋值
+            // 统一所有权检查：MutChecker + OwnershipChecker
             {
-                use crate::middle::passes::lifetime::{MutChecker, OwnershipError};
-                let mut mut_checker = MutChecker::new();
-                let empty_set = std::collections::HashSet::new();
-                for func in &module.functions {
-                    let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
-                    let loop_binding_locals = module.loop_binding_locals.get(&func.name);
-                    let local_names = module.local_names.get(&func.name);
-                    let errors = mut_checker.check_function_with_mut_locals(
-                        func,
-                        mut_locals,
-                        loop_binding_locals,
-                        local_names,
-                    );
-                    if !errors.is_empty() {
-                        eprintln!();
-                        for err in &errors {
-                            match err {
-                                OwnershipError::ImmutableAssign { value, span } => {
-                                    // 变量名已经是正确的（从 local_names 获取）
-                                    let mut diag = ErrorCodeDefinition::immutable_assignment(value);
-
-                                    // 如果有 span，使用它
-                                    if let Some(span) = span {
-                                        diag = diag.at(*span);
-                                    }
-
-                                    let diagnostic = diag.build();
-                                    let output = render_compile_error(
-                                        &diagnostic.message,
-                                        source_file,
-                                        Some(&diagnostic),
-                                    );
-                                    eprintln!("{}", output);
+                use crate::middle::passes::lifetime::{OwnershipError, OwnershipPass};
+                let errors = OwnershipPass::check_module(&module);
+                if !errors.is_empty() {
+                    eprintln!();
+                    for err in &errors {
+                        match err {
+                            OwnershipError::ImmutableAssign { value, span } => {
+                                let mut diag = ErrorCodeDefinition::immutable_assignment(value);
+                                if let Some(span) = span {
+                                    diag = diag.at(*span);
                                 }
-                                _ => {
-                                    // 其他错误类型，使用原来的方式
-                                    let diag =
-                                        ErrorCodeDefinition::immutable_assignment(&err.to_string())
-                                            .build();
-                                    let output = render_compile_error(
-                                        &diag.message,
-                                        source_file,
-                                        Some(&diag),
-                                    );
-                                    eprintln!("{}", output);
-                                }
+                                let diagnostic = diag.build();
+                                let output = render_compile_error(
+                                    &diagnostic.message,
+                                    source_file,
+                                    Some(&diagnostic),
+                                );
+                                eprintln!("{}", output);
+                            }
+                            OwnershipError::UseAfterMove { value, .. } => {
+                                let diag = ErrorCodeDefinition::use_after_move(value);
+                                let diagnostic = diag.build();
+                                let output = render_compile_error(
+                                    &diagnostic.message,
+                                    source_file,
+                                    Some(&diagnostic),
+                                );
+                                eprintln!("{}", output);
+                            }
+                            _ => {
+                                let diag = ErrorCodeDefinition::immutable_assignment(&format!(
+                                    "{:?}",
+                                    err
+                                ));
+                                let diagnostic = diag.build();
+                                let output = render_compile_error(
+                                    &diagnostic.message,
+                                    source_file,
+                                    Some(&diagnostic),
+                                );
+                                eprintln!("{}", output);
                             }
                         }
-                        return Err(anyhow::anyhow!("Mutability check failed"));
                     }
-                }
-            }
-
-            // 所有权检查：Move/Drop/Ref/Clone 等
-            {
-                use crate::middle::passes::lifetime::{OwnershipChecker, OwnershipError};
-                let mut ownership_checker = OwnershipChecker::new();
-                let mut has_errors = false;
-                for func in &module.functions {
-                    let errors: Vec<_> = ownership_checker
-                        .check_function(func)
-                        .into_iter()
-                        // 过滤掉误报：MutChecker 相关错误已由专用 MutChecker 处理（有 mut_locals 上下文）；
-                        // UseAfterMove 需要 copy 语义支持，暂时跳过。
-                        .filter(|err| {
-                            !matches!(
-                                err,
-                                OwnershipError::ImmutableAssign { .. }
-                                    | OwnershipError::ImmutableMutation { .. }
-                                    | OwnershipError::ImmutableFieldAssign { .. }
-                                    | OwnershipError::ReassignNonEmpty { .. }
-                                    | OwnershipError::EmptyStateTypeMismatch { .. }
-                                    | OwnershipError::UseAfterMove { .. }
-                            )
-                        })
-                        .collect();
-                    if !errors.is_empty() {
-                        eprintln!();
-                        for err in errors {
-                            match err {
-                                OwnershipError::UseAfterMove { value, .. } => {
-                                    let diag = ErrorCodeDefinition::use_after_move(&value);
-                                    let diagnostic = diag.build();
-                                    let output = render_compile_error(
-                                        &diagnostic.message,
-                                        source_file,
-                                        Some(&diagnostic),
-                                    );
-                                    eprintln!("{}", output);
-                                }
-                                OwnershipError::ImmutableAssign { value, span } => {
-                                    let mut diag =
-                                        ErrorCodeDefinition::immutable_assignment(&value);
-                                    if let Some(span) = span {
-                                        diag = diag.at(span);
-                                    }
-                                    let diagnostic = diag.build();
-                                    let output = render_compile_error(
-                                        &diagnostic.message,
-                                        source_file,
-                                        Some(&diagnostic),
-                                    );
-                                    eprintln!("{}", output);
-                                }
-                                _ => {
-                                    // 其他所有权错误，通用处理
-                                    let diag = ErrorCodeDefinition::immutable_assignment(&format!(
-                                        "{:?}",
-                                        err
-                                    ));
-                                    let diagnostic = diag.build();
-                                    let output = render_compile_error(
-                                        &diagnostic.message,
-                                        source_file,
-                                        Some(&diagnostic),
-                                    );
-                                    eprintln!("{}", output);
-                                }
-                            }
-                        }
-                        has_errors = true;
-                    }
-                }
-                if has_errors {
                     return Err(anyhow::anyhow!("Ownership check failed"));
                 }
             }

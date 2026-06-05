@@ -215,6 +215,57 @@ impl Default for OwnershipChecker {
     }
 }
 
+/// 统一所有权检查 Pass
+///
+/// 将 MutChecker（需要 mut_locals 上下文）和 OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
+/// 统一为单次调用，避免 diagnostic 层分别调用两个检查器并手动过滤重复错误。
+pub struct OwnershipPass;
+
+impl OwnershipPass {
+    /// 对整个模块执行所有权检查，返回所有错误
+    pub fn check_module(module: &crate::middle::core::ir::ModuleIR) -> Vec<OwnershipError> {
+        let mut all_errors = Vec::new();
+        let empty_set = HashSet::new();
+
+        for func in &module.functions {
+            // MutChecker（需要 mut_locals / loop_binding_locals / local_names 上下文）
+            let mut mut_checker = MutChecker::new();
+            let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
+            let loop_binding_locals = module.loop_binding_locals.get(&func.name);
+            let local_names = module.local_names.get(&func.name);
+            let mut_errors = mut_checker.check_function_with_mut_locals(
+                func,
+                mut_locals,
+                loop_binding_locals,
+                local_names,
+            );
+            all_errors.extend(mut_errors);
+
+            // OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
+            // 过滤掉 MutChecker 已覆盖的错误类别，避免重复报告
+            let mut ownership_checker = OwnershipChecker::new();
+            let ownership_errors: Vec<OwnershipError> = ownership_checker
+                .check_function(func)
+                .into_iter()
+                .filter(|err| {
+                    !matches!(
+                        err,
+                        OwnershipError::ImmutableAssign { .. }
+                            | OwnershipError::ImmutableMutation { .. }
+                            | OwnershipError::ImmutableFieldAssign { .. }
+                            | OwnershipError::ReassignNonEmpty { .. }
+                            | OwnershipError::EmptyStateTypeMismatch { .. }
+                            | OwnershipError::UseAfterMove { .. }
+                    )
+                })
+                .collect();
+            all_errors.extend(ownership_errors);
+        }
+
+        all_errors
+    }
+}
+
 /// 所有权分析器（保留原有实现，用于引用计数插入）
 #[derive(Debug)]
 pub struct OwnershipAnalyzer {
