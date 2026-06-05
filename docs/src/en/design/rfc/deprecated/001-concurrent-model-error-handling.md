@@ -1,13 +1,9 @@
----
-title: "RFC-001: Spawn Model and Error Handling System"
----
+# RFC-001: Concurrency Model and Error Handling System
 
-# RFC-001: Spawn Model and Error Handling System
-
-> **Status**: Accepted
+> **Status**: Deprecated (superseded by RFC-024)
 > **Author**: Chen Xu
 > **Created**: 2025-01-05
-> **Last Updated**: 2026-05-11 (Pruning: Removed @auto, L1 fallback heuristics, streamlined discussion log)
+> **Last Updated**: 2026-05-11 (pruned: removed @auto, L1 fallback heuristics,精简 discussion records)
 
 ## Design Sources
 
@@ -16,22 +12,22 @@ title: "RFC-001: Spawn Model and Error Handling System"
 | [async-whitepaper](/src/archive/async-whitepaper) | Design origin, theoretical foundation |
 | [language-spec](/src/design/language-spec) | Specification target |
 
-## Abstract
+## Summary
 
-Proposes YaoXiang's spawn model: describe logic with synchronous syntax, runtime automatically executes concurrently. Core mechanisms: three-tier concurrency architecture + DAG dependency analysis + Result type system.
+This RFC proposes YaoXiang's concurrency model: describing logic in synchronous syntax while the runtime automatically executes concurrently. Core mechanism: three-layer concurrency architecture + DAG dependency analysis + Result type system.
 
 ## Quick Reference
 
 | Scenario | Syntax | Description |
 |----------|--------|-------------|
-| Auto-parallel | No annotation (default) | Maximize parallelism |
+| Automatic parallelism | No annotation (default) | Maximize parallelism |
 | Synchronous wait | `@eager` | Wait for dependencies to complete |
 | Fully sequential | `@block` | No concurrency, for debugging |
 | Local concurrency | `spawn` | Concurrency within @block scope |
 
 ## Motivation
 
-Current mainstream language concurrency models have significant flaws:
+Current mainstream language concurrency models have clear deficiencies:
 
 | Language | Concurrency Model | Issues |
 |----------|-------------------|--------|
@@ -42,22 +38,22 @@ Current mainstream language concurrency models have significant flaws:
 
 ### Core Conflicts
 
-1. **Transparency vs. Controllability**: Fully transparent but uncontrollable vs. fully controllable but opaque
-2. **Concurrency vs. Debuggability**: Concurrent programs are hard to debug vs. debuggable programs are hard to parallelize
+1. **Transparency vs. Control**: Fully transparent but uncontrollable vs. fully controllable but opaque
+2. **Concurrency vs. Debuggability**: Concurrent programs are hard to debug vs. debuggable programs are hard to make concurrent
 
 ---
 
 ## Proposal
 
-### 1. Spawn Model: Three-Tier Concurrency Architecture
+### 1. Concurrency Model: Three-Layer Concurrency Architecture
 
-> **Note**: L1/L2/L3 are mental models to help users understand different scenarios. The actual implementation has only one mechanism: automatic DAG analysis + annotation control.
+> **Note**: L1/L2/L3 are mental models that help users understand different scenarios. The actual implementation uses only one mechanism: automatic DAG analysis + annotation control.
 
-| Level | Mental Model | Syntax | Execution Mode | Parallelism |
+| Layer | Mental Model | Syntax | Execution Mode | Parallelism |
 |-------|--------------|--------|----------------|-------------|
 | **L1** | Concurrency forbidden | `@block` | Pure sequential execution | ❌ None |
 | **L2** | Concurrency within @block | `spawn` | Controllable concurrency within @block scope | ⚠️ Partial |
-| **L3** | Full concurrency | Default (no annotation) | Automatic DAG analysis | ✅ Full |
+| **L3** | Fully transparent | Default (no annotation) | Automatic DAG analysis | ✅ Full |
 
 #### L1: @block Synchronous Mode
 
@@ -65,7 +61,7 @@ Current mainstream language concurrency models have significant flaws:
 main: () -> Void @block = {
     data1 = fetch_sync("api1")
     data2 = fetch_sync("api2")
-    process(data1, data2)    # Strict order, no concurrency
+    process(data1, data2)    # Strictly sequential, no concurrency
 }
 ```
 
@@ -76,7 +72,7 @@ main: () -> Void @block = {
 main: () -> Void @block = {
     spawn { data1 = fetch_data("api1") }
     spawn { data2 = fetch_data("api2") }
-    # Wait for all spawns to complete (stdlib controlled)
+    # Wait for all spawns to complete (controlled by standard library)
     process(data1, data2)
 }
 ```
@@ -88,19 +84,19 @@ main: () -> Void @block = {
 heavy_calc: (n: Int) -> Int = fibonacci(n)
 
 auto_parallel: (n: Int) -> Int = {
-    a = heavy_calc(1)    # Auto-parallel
-    b = heavy_calc(2)    # Auto-parallel
-    c = heavy_calc(3)    # Auto-parallel
+    a = heavy_calc(1)    # Automatically parallel
+    b = heavy_calc(2)    # Automatically parallel
+    c = heavy_calc(3)    # Automatically parallel
     a + b + c            # Wait for all results when values are needed
 }
 ```
 
-### 2. Annotation Complete Comparison
+### 2. Annotation Comparison
 
 | Dimension | Default (no annotation) | `@eager` | `@block` | `spawn` |
 |-----------|------------------------|----------|----------|---------|
 | **Execution Mode** | Automatic DAG analysis | Synchronous wait for dependencies | Pure sequential | Concurrency within @block |
-| **Parallelism** | ✅ Full | ⚠️ Dependency-ordered | ❌ None | ⚠️ Partial |
+| **Parallelism** | ✅ Full | ⚠️ In dependency order | ❌ None | ⚠️ Partial |
 | **DAG Construction** | ✅ | ✅ | ❌ | ✅ |
 
 **Selection Guide**:
@@ -112,8 +108,8 @@ auto_parallel: (n: Int) -> Int = {
 ```yaoxiang
 # Default: maximize parallelism
 calc_all: () -> Int = {
-    a = heavy_calc(1)    # Auto-parallel
-    b = heavy_calc(2)    # Auto-parallel
+    a = heavy_calc(1)    # Automatically parallel
+    b = heavy_calc(2)    # Automatically parallel
     a + b
 }
 
@@ -126,7 +122,7 @@ calc_seq: () -> Int @eager = {
 
 # @block: pure sequential
 calc_simple: () -> Int @block = {
-    a = heavy_calc(1)    # Forced synchronous
+    a = heavy_calc(1)    # Force synchronous
     b = heavy_calc(2)    # Synchronous
     a + b
 }
@@ -151,61 +147,61 @@ User code (synchronous syntax):
 
 Compile-time analysis (bottom-up):
     print(a) needs a → depends on fetch(url0)
-    fetch(url1) no one needs → isolated DAG
+    fetch(url1) no one needs → isolated island DAG
 
-Runtime scheduling (from leaves):
+Runtime scheduling (starting from leaves):
     fetch(url0) → print(a)    ← dependency chain, in order
-    fetch(url1)                ← isolated, independent parallel
+    fetch(url1)                ← isolated island, independently parallel
 ```
 
-**Key Insight**: Not "top-down" Future generation, but "bottom-up" reverse analysis of dependencies from results.
+**Key Insight**: Not "top-down" generating Futures, but "bottom-up" reverse analyzing dependencies from results.
 
-#### 3.2 Isolated DAG: Independent Parallelism
+#### 3.2 Isolated Island DAG: Independent Parallelism
 
 ```
 Main flow: fetch(url0) → process → print
-Isolated:  fetch(url1)  ← no one needs result, independent parallel
+Island:    fetch(url1)  ← no one needs the result, independently parallel
 
-Scheduler: main flow executes by dependency chain, isolated uses another core in parallel
+Scheduler: Main flow executes along dependency chain, island runs in parallel on another core
 ```
 
 #### 3.3 Resource Types and Side Effects
 
-**Core Idea**: Resource operations are marked via types, DAG automatically constructs dependencies. Same resource automatically serializes, different resources automatically parallelize.
+**Core Idea**: Resource operations are marked through types, and DAG automatically constructs dependencies. Same resource operations are automatically serialized, different resource operations are automatically parallelized.
 
 **Resource Type Boundaries—Clear Definition**:
 
-Resource types are compiler-built-in marked types. The following types are recognized as resources by the compiler:
+Resource types are compiler-built-in marked types. The following types are recognized by the compiler as resources:
 
 | Resource Type | Description | Compiler Behavior |
-|---------------|-------------|------------------|
-| `FilePath` | File system path | Same path operations auto-serialize |
-| `HttpUrl` | HTTP endpoint | Same URL operations auto-serialize |
-| `DBUrl` | Database connection | Same connection operations auto-serialize |
-| `Console` | Standard output | All Console operations auto-serialize |
+|---------------|-------------|-------------------|
+| `FilePath` | File system path | Operations on same path automatically serialized |
+| `HttpUrl` | HTTP endpoint | Operations on same URL automatically serialized |
+| `DBUrl` | Database connection | Operations on same connection automatically serialized |
+| `Console` | Standard output | All Console operations automatically serialized |
 
 User-defined resource types require explicit marking:
 ```yaoxiang
 Database: Resource              # Explicitly marked as resource type
 query: (Database, String) -> Result(Row, Error)
-# Parameter Database is Resource, auto-recognized as resource operation
+# Parameter Database is a Resource, automatically recognized as resource operation
 ```
 
 Types not marked as Resource are not tracked by the compiler for resource dependencies.
 
 **Usage Rules**:
-- Pass resource handles via variables, DAG auto-manages ordering
-- literal direct usage of same resource is user design issue, not language responsibility
+- Pass resource handles through variables, DAG automatically manages order
+- Literal direct use of same resource is a user design issue, not language responsibility
 
 ```yaoxiang
-# ✅ Correct: variable passing, DAG auto-serializes
+# ✅ Correct: variable passing, DAG automatically serializes
 filename: String = "data.txt"
 File.write(filename, x)
 File.write(filename, y)    # DAG serializes
 
-# ⚠️ User responsibility: literal
+# ⚠️ User responsibility: literals
 File.write("data.txt", x)
-File.write("data.txt", y)  # May parallelize, user's own responsibility
+File.write("data.txt", y)  # May parallelize, user is responsible
 ```
 
 #### 3.4 Infinite Loop Handling
@@ -220,7 +216,7 @@ Multiple loops → Scheduler slices and switches, true concurrency
 ```yaoxiang
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }
 
-# ? operator transparently propagates
+# ? operator transparently propagates errors
 process: () -> Result(Data, Error) = {
     data = fetch_data()?
     processed = transform(data)?
@@ -250,83 +246,83 @@ struct Node {
 |-----------|--------|-----------|
 | DataEdge | → | Data dependency (value flow) |
 | ControlEdge | ● | Control dependency (sequential execution) |
-| SpawnEdge | ◎ | Concurrency entry (parallelizable starting point) |
+| SpawnEdge | ◎ | Concurrency entry (parallel starting point) |
 
 ### 6. Type System
 
 ```
-Send → Can safely transfer across threads
-Sync → Can safely share across threads
+Send → Safe to transfer across threads
+Sync → Safe to share across threads
 Arc(T) implements Send + Sync (thread-safe reference counting)
 ```
 
 ---
 
-## Trade-offs
+## Tradeoffs
 
 ### Advantages
 
-1. **Gradual Adoption**: Three-tier model adapts to different skill levels
+1. **Progressive Adoption**: Three-layer model accommodates different skill levels
 2. **Natural Syntax**: Synchronous code gains parallel performance
-3. **Compile-Time Safety**: Send/Sync constraints eliminate data races
-4. **Debuggable**: Error graph provides clear view of error propagation
+3. **Compile-time Safety**: Send/Sync constraints eliminate data races
+4. **Debuggability**: Error graph provides clear error propagation view
 
 ### Disadvantages
 
 1. **Learning Curve**: Need to understand DAG dependency concept
-2. **Compile Time**: Full-program DAG analysis may be slow
-3. **Toolchain Complexity**: Need brand new debugging and visualization tools
+2. **Compile Time**: Whole-program DAG analysis may be slow
+3. **Toolchain Complexity**: Need entirely new debugging and visualization tools
 
-## Alternative Approaches
+## Alternatives
 
-| Approach | Why Not Chosen |
-|----------|----------------|
+| Alternative | Why Not Chosen |
+|-------------|----------------|
 | Explicit async/await only | Cannot achieve transparent concurrency |
 | Fully transparent concurrency only | Users lose control |
-| Go-style goroutine | No type safety, no compile-time checking |
-| L1 mode only | Abandons core value of spawn model |
+| Go-style goroutines | No type safety, no compile-time checking |
+| L1 mode only | Abandons core value of concurrency model |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
 1. **Phase 1 (v0.1)**: @block synchronous mode, basic types
-2. **Phase 2 (v0.2)**: FlowScheduler dispatcher
-3. **Phase 3 (v0.3)**: spawn block, explicit concurrency
-4. **Phase 4 (v0.5)**: L3 full transparency, automatic DAG analysis
+2. **Phase 2 (v0.2)**: FlowScheduler runtime
+3. **Phase 3 (v0.3)**: spawn blocks, explicit concurrency
+4. **Phase 4 (v0.5)**: L3 fully transparent, automatic DAG analysis
 5. **Phase 5 (v0.6)**: Error graph, graph debugger
-6. **Phase 6 (v1.0)**: Production-ready optimization
+6. **Phase 6 (v1.0)**: Production-ready optimizations
 
 ### Dependencies
 
-- RFC-001 has no external dependencies (core foundation)
+- RFC-001 has no external dependencies (basic core)
 - RFC-008 (Runtime Concurrency Model) → Design complete
 - RFC-011 (Generics System) → Design complete
 
 ### Risks
 
-1. **DAG Analysis Performance**: Full-program analysis may be O(n²), needs optimization
-2. **Toolchain Absence**: Debugger needs to be developed from scratch
+1. **DAG Analysis Performance**: Whole-program analysis may be O(n²), needs optimization
+2. **Toolchain Gap**: Debugger needs to be developed from scratch
 3. **User Adoption**: Transparent concurrency needs good documentation
 
 ---
 
-## Design Decision Log
+## Design Decision Records
 
-| Decision | Decision Made | Date |
-|----------|---------------|------|
-| Three-tier concurrency architecture | L1/L2/L3 progressive | 2025-01-05 |
+| Decision | Resolution | Date |
+|----------|------------|------|
+| Three-layer concurrency architecture | L1/L2/L3 progressive model | 2025-01-05 |
 | @block annotation position | After return type | 2025-01-05 |
-| DAG error propagation | Propagate along dependency edges upstream | 2025-01-06 |
+| DAG error propagation | Propagate upstream along dependency edges | 2025-01-06 |
 | DAG performance optimization | Incremental construction + caching | 2025-01-06 |
 | Runtime selection | Generics + compile-time injection | 2025-01-06 |
 | Node interface | Generics + function injection (no trait) | 2025-01-06 |
-| Error graph memory | DAG only constructed within single function | 2025-01-06 |
+| Error graph memory | DAG constructed only within single function | 2025-01-06 |
 | Resource conflict detection | DAG data flow dependency, user variable passing | 2025-01-06 |
-| Resource type system | Resource marking + DAG auto-dependency | 2026-01-06 |
-| L1/L2/L3 mental model | Three-tier abstraction, not implementation mechanism | 2026-01-06 |
+| Resource type system | Resource marker + DAG automatic dependency | 2026-01-06 |
+| L1/L2/L3 mental model | Three-layer abstraction, not implementation mechanism | 2026-01-06 |
 | @auto annotation | Removed, duplicates default behavior | 2026-05-11 |
-| L1 auto-fallback | Removed, behavior unpredictable | 2026-05-11 |
+| L1 automatic fallback | Removed, behavior unpredictable | 2026-05-11 |
 
 ---
 
@@ -334,12 +330,12 @@ Arc(T) implements Send + Sync (thread-safe reference counting)
 
 | Term | Definition |
 |------|------------|
-| Spawn Model | YaoXiang's concurrency paradigm: synchronous syntax, asynchronous nature |
+| Concurrency Model | YaoXiang's concurrency paradigm: synchronous syntax, asynchronous nature |
 | DAG | Directed Acyclic Graph, describes computational dependency relationships |
 | spawn | Controllable concurrency within @block scope |
 | @block | Synchronous annotation, disables concurrency optimization |
-| @eager | Eager evaluation, wait for dependencies to complete |
-| Resource | Resource type marker, operations auto-construct DAG dependencies |
+| @eager | Eager evaluation, waits for dependencies to complete |
+| Resource | Resource type marker, operations automatically construct DAG dependencies |
 | Error Graph | Visualized error propagation path |
 
 ## References
@@ -347,5 +343,5 @@ Arc(T) implements Send + Sync (thread-safe reference counting)
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go Concurrency Patterns](https://golang.org/doc/effective_go#concurrency)
 - [Work Stealing Scheduling](https://en.wikipedia.org/wiki/Work_stealing)
-- [Spawn Model Whitepaper](/src/archive/async-whitepaper)
+- [Concurrency Model Whitepaper](/src/archive/async-whitepaper)
 - [YaoXiang Language Specification](/src/design/language-spec)
