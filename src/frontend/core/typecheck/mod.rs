@@ -168,6 +168,14 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
+
+    // RFC-024: 内置资源类型
+    for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
+        env.types.insert(
+            resource_type.to_string(),
+            PolyType::mono(MonoType::TypeRef(resource_type.to_string())),
+        );
+    }
 }
 
 /// 注册标准库 native 函数类型签名到类型环境

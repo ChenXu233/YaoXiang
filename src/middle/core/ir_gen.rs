@@ -3081,7 +3081,29 @@ impl AstToIrGenerator {
                 // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
 
                 // 1. DAG 分析：识别直接子表达式，生成执行计划
-                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(body);
+                let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result
+                {
+                    (&type_result.trait_table, &type_result.local_var_types)
+                } else {
+                    // 无类型信息时使用空表（向后兼容）
+                    static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+                        crate::frontend::core::types::base::TraitTable,
+                    > = once_cell::sync::Lazy::new(
+                        crate::frontend::core::types::base::TraitTable::default,
+                    );
+                    static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+                        std::collections::HashMap<
+                            String,
+                            crate::frontend::core::types::base::MonoType,
+                        >,
+                    > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+                    (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+                };
+                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(
+                    body,
+                    trait_table,
+                    local_var_types,
+                );
 
                 // 2. 进入 spawn 作用域
                 self.enter_scope();

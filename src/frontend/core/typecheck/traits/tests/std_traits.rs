@@ -303,12 +303,13 @@ fn test_std_trait_names_contains_all_traits() {
     let names = std_trait_names();
 
     // Assert
-    assert_eq!(names.len(), 5, "应有 5 个标准库 trait（RFC-011）");
+    assert_eq!(names.len(), 6, "应有 6 个标准库 trait（RFC-011 + RFC-024）");
     assert!(names.contains(&"Clone"), "应包含 Clone");
     assert!(names.contains(&"Dup"), "应包含 Dup");
     assert!(names.contains(&"Equal"), "应包含 Equal");
     assert!(names.contains(&"Debug"), "应包含 Debug");
     assert!(names.contains(&"Iterator"), "应包含 Iterator");
+    assert!(names.contains(&"Resource"), "应包含 Resource");
 }
 
 #[test]
@@ -567,9 +568,9 @@ fn test_init_std_traits_idempotent() {
         trait_table.has_trait("Clone"),
         "多次初始化后 Clone 仍应存在"
     );
-    // RFC-011: 应有 5 个标准库 trait
+    // RFC-011 + RFC-024: 应有 6 个标准库 trait
     let trait_count = trait_table.trait_names().count();
-    assert_eq!(trait_count, 5, "多次初始化后仍应只有 5 个 trait，不应重复");
+    assert_eq!(trait_count, 6, "多次初始化后仍应只有 6 个 trait，不应重复");
 }
 
 #[test]
