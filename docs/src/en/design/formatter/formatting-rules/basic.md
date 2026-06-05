@@ -1,6 +1,6 @@
 ---
 title: "Basic Formatting Rules"
-description: "Formatting rules for indentation, line width, operators, and code blocks"
+description: Formatting rules for indentation, line width, operators, and code blocks
 ---
 
 # Basic Formatting Rules
@@ -9,7 +9,7 @@ description: "Formatting rules for indentation, line width, operators, and code 
 
 ## §1 Indentation
 
-**§1.1 Indentation width.** Default uses 4 spaces for indentation. Can be modified via the `indent_width` configuration option.
+**§1.1 Indentation Width.** Use 4 spaces for indentation by default. Can be modified via the `indent_width` configuration option.
 
 ```
 // Default indentation (4 spaces)
@@ -20,7 +20,7 @@ fn foo() {
     }
 }
 
-// 2-space indentation (indent_width = 2)
+// 2 space indentation (indent_width = 2)
 fn foo() {
   let x = 1;
   if x > 0 {
@@ -29,27 +29,27 @@ fn foo() {
 }
 ```
 
-**§1.2 Tab indentation.** When `use_tabs = true`, use tab characters for indentation. Defaults to `false`.
+**§1.2 Tab Indentation.** When `use_tabs = true`, use tab characters for indentation. Defaults to `false`.
 
-**§1.3 Indentation consistency.** Tabs and spaces must not be mixed within the same file.
+**§1.3 Indentation Consistency.** Do not mix tabs and spaces within the same file.
 
 ---
 
 ## §2 Line Width
 
-**§2.1 Maximum line width.** Default maximum line width is 120 characters. Can be modified via the `line_width` configuration option.
+**§2.1 Maximum Line Width.** Default maximum line width is 120 characters. Can be modified via the `line_width` configuration option.
 
-**§2.2 Line break strategy.** When a line exceeds the maximum line width, it must be broken at an appropriate position. Priority for line break locations:
+**§2.2 Line Breaking Strategy.** When a line exceeds the maximum line width, it must be broken at an appropriate location. Priority of line break positions:
 
-1. After low-precedence operators (`+`, `-`, `||`, `&&`, `=`)
+1. After low-priority operators (`+`, `-`, `||`, `&&`, `=`)
 2. Function parameter lists
 3. List/dictionary elements
-4. After high-precedence operators (`*`, `/`, `%`, `==`, `!=`)
+4. After high-priority operators (`*`, `/`, `%`, `==`, `!=`)
 
-**§2.3 Line break indentation.** Content after a line break must be indented one additional level.
+**§2.3 Line Break Indentation.** Content after a line break must be indented one level.
 
 ```
-// Line break when exceeding line width
+// When exceeding line width
 let result = very_long_variable_name + another_long_name + yet_another_long_name;
 
 // After formatting
@@ -62,7 +62,7 @@ let result = very_long_variable_name
 
 ## §3 Operators
 
-**§3.1 Operator spacing.** Binary operators must have spaces on both sides.
+**§3.1 Operator Spacing.** Binary operators must have spaces on both sides.
 
 ```
 // ✅ Correct
@@ -74,7 +74,7 @@ let x = 1+2;
 let y = a==b;
 ```
 
-**§3.2 Unary operators.** No space between unary operators and operands.
+**§3.2 Unary Operators.** No space between unary operators and their operands.
 
 ```
 // ✅ Correct
@@ -87,7 +87,7 @@ let x = - 1;
 let y = ! flag;
 ```
 
-**§3.3 Low-precedence operator line breaks.** When an expression exceeds the line width, place low-precedence operators at the beginning of the new line.
+**§3.3 Line Breaking with Low-Priority Operators.** When an expression exceeds the line width, low-priority operators go at the beginning of the new line.
 
 ```
 // When exceeding line width
@@ -100,7 +100,7 @@ let result = first_value
     + fourth_value;
 ```
 
-**§3.4 High-precedence operator line breaks.** Place high-precedence operators at the beginning of the new line.
+**§3.4 Line Breaking with High-Priority Operators.** High-priority operators go at the beginning of the new line.
 
 ```
 // When exceeding line width
@@ -115,9 +115,25 @@ let result = first_value
 
 ---
 
+## §3.5 Variable References
+
+**§3.5.1 Variable Names.** Variable references output the variable name directly, without adding extra spaces.
+
+```
+// ✅ Correct
+let x = my_variable;
+let y = camelCaseName;
+
+// ❌ Incorrect
+let x = my_variable ;  // Extra space
+let y = "camelCaseName";  // Should not have quotes
+```
+
+---
+
 ## §6 Code Blocks
 
-**§6.1 Code block format.** Code blocks are enclosed with curly braces `{}`, with a space before the opening brace.
+**§6.1 Code Block Format.** Code blocks are enclosed in curly braces `{}`, with a space before the opening brace.
 
 ```
 // ✅ Correct
@@ -135,7 +151,7 @@ fn foo()
 }
 ```
 
-**§6.2 Single-line code blocks.** When a code block contains only one statement and the total length does not exceed the line width, the single-line format may be used.
+**§6.2 Single-line Code Blocks.** When a code block is only one line and the total length does not exceed the line width, single-line format may be used.
 
 ```
 // ✅ Single-line format
@@ -149,7 +165,7 @@ fn foo() {
 }
 ```
 
-**§6.3 Empty code blocks.** Empty code blocks are represented with `{}`.
+**§6.3 Empty Code Blocks.** Empty code blocks are represented as `{}`.
 
 ```
 // ✅ Correct

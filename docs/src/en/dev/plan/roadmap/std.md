@@ -1,10 +1,11 @@
+```markdown
 ---
 title: "Standard Library Status"
 ---
 
 # Standard Library (Std)
 
-> **Module Status**: Mostly Complete (13/14 modules available, net is stub)
+> **Module Status**: Has gaps (4 items to improve)
 > **Location**: `src/std/`
 > **Last Updated**: 2026-06-01
 
@@ -12,9 +13,9 @@ title: "Standard Library Status"
 
 ## Module Overview
 
-The standard library provides core functional modules for YaoXiang language. Includes IO, mathematics, strings, lists, dictionaries, file system, network, concurrency, and other modules.
+The standard library provides core functional modules for the YaoXiang language. Includes IO, math, strings, lists, dictionaries, file system, network, concurrency, and other modules.
 
-**Lines of Code**: 5,071 lines (14 sub-modules)
+**Code Volume**: 5,071 lines (14 sub-modules)
 
 ---
 
@@ -39,7 +40,7 @@ The standard library provides core functional modules for YaoXiang language. Inc
 | `abs` | `(n: Int) -> Int` | ✅ |
 | `max/min` | `(a: Int, b: Int) -> Int` | ✅ |
 | `clamp` | `(value: Int, min: Int, max: Int) -> Int` | ✅ |
-| `fabs/fmax/fmin` | Float versions | ✅ |
+| `fabs/fmax/fmin` | Float version | ✅ |
 | `pow` | `(base: Float, exp: Float) -> Float` | ✅ |
 | `sqrt` | `(n: Float) -> Float` | ✅ |
 | `floor/ceil/round` | `(n: Float) -> Float` | ✅ |
@@ -66,7 +67,7 @@ The standard library provides core functional modules for YaoXiang language. Inc
 
 | Function | Signature | Status |
 |----------|-----------|--------|
-| `push/pop/append/prepend` | List modifications | ✅ |
+| `push/pop/append/prepend` | List modification | ✅ |
 | `remove_at` | `(list: List, index: Int) -> Any` | ✅ |
 | `reverse/concat` | List operations | ✅ |
 | `map/filter/reduce` | Higher-order functions | ✅ |
@@ -74,24 +75,24 @@ The standard library provides core functional modules for YaoXiang language. Inc
 | `get/set` | Index access | ✅ |
 | `first/last` | Boundary elements | ✅ |
 | `slice` | `(list: List, start: Int, end: Int) -> List` | ✅ |
-| `contains/find_index` | Search | ✅ |
+| `contains/find_index` | Lookup | ✅ |
 | `iter/next/has_next` | Iterator protocol | ✅ |
 
 ### std.dict (335 lines) - ✅ Complete
 
 | Function | Signature | Status |
 |----------|-----------|--------|
-| `get/set` | Dictionary access | ✅ |
+| `get/set` | Dict access | ✅ |
 | `has` | `(dict: Dict, key: Any) -> Bool` | ✅ |
 | `keys/values/entries` | Get collections | ✅ |
 | `delete` | `(dict: Dict, key: Any) -> Dict` | ✅ |
-| `len/is_empty` | Dictionary information | ✅ |
+| `len/is_empty` | Dict information | ✅ |
 | `merge` | `(a: Dict, b: Dict) -> Dict` | ✅ |
 
 ### std.convert (149 lines) - ✅ Complete
 
-- ✅ `to_string` — General type conversion to string
-- ✅ Various type `to_string` methods: int, float, bool, char, string, list, dict, tuple, set, range
+- ✅ `to_string` — Universal type conversion to string
+- ✅ Type-specific `to_string` methods: int, float, bool, char, string, list, dict, tuple, set, range
 
 ### std.os (1,023 lines) - ✅ Complete
 
@@ -113,8 +114,8 @@ The standard library provides core functional modules for YaoXiang language. Inc
 
 | Function | Signature | Status |
 |----------|-----------|--------|
-| `http_get` | `(url: String) -> String` | ⚠️ Stub - Returns `"GET: {url}"` |
-| `http_post` | `(url: String, body: String) -> String` | ⚠️ Stub - Returns `"POST {url}: {body}"` |
+| `http_get` | `(url: String) -> String` | ⚠️ Stub - returns `"GET: {url}"` |
+| `http_post` | `(url: String, body: String) -> String` | ⚠️ Stub - returns `"POST {url}: {body}"` |
 | `url_encode` | `(s: String) -> String` | ✅ |
 | `url_decode` | `(s: String) -> String` | ✅ |
 
@@ -132,12 +133,12 @@ The standard library provides core functional modules for YaoXiang language. Inc
 
 - ✅ `weak_new` — `(arc) -> Weak`
 - ✅ `weak_upgrade` — `(weak) -> Option`
-- ⚠️ Missing `StdModule` trait impl, cannot be imported via `use std.weak`
+- ⚠️ Missing `StdModule` trait implementation, cannot be imported via `use std.weak`
 
 ### gen_interfaces (208 lines) - ✅ Complete
 
-- ✅ Auto-generates `.yx` interface files
-- ✅ Supports write directory, lookup interface files
+- ✅ Auto-generate `.yx` interface files
+- ✅ Supports writing to directories, finding interface files
 
 ---
 
@@ -160,7 +161,7 @@ The standard library provides core functional modules for YaoXiang language. Inc
 | ffi | 2 | ✅ Basic coverage |
 | gen_interfaces | 6 | ✅ Good coverage |
 
-**Indirect Test Coverage**:
+**Indirect test coverage**:
 - `tests/yx_runner.rs` covers some functionality via E2E tests
 - `tests/integration/execution.rs` has basic integration tests
 
@@ -168,10 +169,10 @@ The standard library provides core functional modules for YaoXiang language. Inc
 
 ## Issues Found
 
-1. **net module is stub implementation**: `http_get` and `http_post` return mock strings
-2. **weak module is incomplete**: Missing `StdModule` trait impl, cannot be imported via `use std.weak`
+1. **net module is a stub implementation**: `http_get` and `http_post` return mock strings
+2. **weak module is incomplete**: Missing `StdModule` trait implementation, cannot be imported via `use std.weak`
 3. **os.chdir does not actually switch directories**: Only checks if directory exists, does not call `std::env::set_current_dir()`
-4. **string.len returns byte count**: `native_len` uses `s.len()` returning byte count instead of character count
+4. **string.len returns byte count**: `native_len` uses `s.len()` which returns byte count instead of character count
 
 ---
 
@@ -179,16 +180,17 @@ The standard library provides core functional modules for YaoXiang language. Inc
 
 | Dimension | Score | Description |
 |-----------|-------|-------------|
-| Feature Completion | 85% | Core features complete, advanced features (HTTP) not implemented |
-| Test Coverage | Severely insufficient | Only 8 unit tests |
-| Documentation Quality | Good | Each module has module-level `//!` documentation comments |
-| Code Architecture | Good | Clear module separation |
+| Incomplete items | 4 | Add tests, fix bugs, weak module, HTTP stubs |
+| Test coverage | Severely insufficient | Only 8 unit tests |
+| Documentation quality | Good | Each module has module-level `//!` documentation comments |
+| Code architecture | Good | Clear module division |
 
 ---
 
-## Areas for Improvement
+## Items to Improve
 
 1. **Add unit tests for each module** (highest priority)
 2. **Fix issues with `os.chdir` and `string.len`**
-3. **Complete `StdModule` impl for the `weak` module**
-4. **Implement real HTTP functionality or explicitly mark as stub**
+3. **Complete the `StdModule` implementation for the `weak` module**
+4. **Implement real HTTP functionality or explicitly mark as stubs**
+```

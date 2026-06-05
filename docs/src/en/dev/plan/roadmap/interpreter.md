@@ -4,7 +4,7 @@ title: "Interpreter Status"
 
 # Interpreter
 
-> **Module Status**: Completed
+> **Module Status**: Stable (5 items pending improvement)
 > **Location**: `src/backends/interpreter/`
 > **Last Updated**: 2026-06-01
 
@@ -12,13 +12,13 @@ title: "Interpreter Status"
 
 ## Module Overview
 
-The interpreter is responsible for executing bytecode. It adopts a register-based virtual machine architecture and supports all 39 bytecode instructions, fully aligned with RFC-008 (Concurrency Model) and RFC-009 (Ownership Model).
+The interpreter is responsible for executing bytecode. It uses a register-based virtual machine architecture and supports all 39 bytecode instructions, fully aligned with RFC-008 (Concurrency Model) and RFC-009 (Ownership Model).
 
 **Code Size**: 3,768 lines (9 source files)
 
 ---
 
-## Feature Checklist
+## Feature List
 
 ### Core Execution Engine (execute.rs - 1,308 lines)
 
@@ -32,7 +32,7 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 - ✅ Add/Sub/Mul/Div/Rem/And/Or/Xor/Shl/Sar/Shr, both Int and Float supported
 - ⚠️ UnaryOp only implements Int negation
 
-**Comparison (6 CompareOp types)**:
+**Comparisons (6 CompareOp types)**:
 - ✅ Eq/Ne/Lt/Le/Gt/Ge, both Int and String supported
 
 **Memory Operations (9 types)**:
@@ -59,13 +59,13 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 ### Core Architecture Capabilities
 
 - ✅ **Heap**: Dynamic allocation of List/Tuple/Array/Dict/Struct
-- ✅ **Call Stack (Frame)**: Register file + local variables + upvalues + eval stack + spawn group
-- ✅ **Constant Pool**: Shared across modules
-- ✅ **Function Table**: By name (HashMap) and by index (Vec), supports closure by ID invocation
+- ✅ **Call Stack (Frame)**: Register file + local variables + upvalue + eval stack + spawn group
+- ✅ **Constant Pool**: Cross-module shared
+- ✅ **Function Table**: By name (HashMap) and by index (Vec) dual tables, supports closure calls by ID
 - ✅ **FFI Registry**: Preloads `std.io.*` series functions, extensible for custom native functions
 - ✅ **DAG Task Scheduling (LocalRuntime)**: Lazy/concurrent evaluation based on RFC-008
 - ✅ **Three Evaluation Strategies**: Block (synchronous), Auto (lazy/concurrent), Eager (eager)
-- ✅ **Structured Concurrency**: Spawn group tracking, waiting for all tasks to complete on scope exit, dependency failure cascading cancellation
+- ✅ **Structured Concurrency**: Spawn group tracking, wait for all tasks on scope exit, dependency failure cascading cancellation
 
 ---
 
@@ -75,8 +75,8 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 
 | Test Type | Count | Coverage Scope |
 |-----------|-------|----------------|
-| Unit Tests (within module) | ~35 | registers, ffi, frames, tests, debug, execute |
-| Integration Tests | 25 | Full compilation pipeline: hello world, variable declaration, arithmetic, comparison, lambda, function definition, if/elif/else, while, for, match, List/Tuple/Dict, list comprehension, closure higher-order functions, module import, f-string |
+| Unit tests (within module) | ~35 | registers, ffi, frames, tests, debug, execute |
+| Integration tests | 25 | Full compilation pipeline: hello world, variable declaration, arithmetic, comparison, lambda, function definition, if/elif/else, while, for, match, List/Tuple/Dict, list comprehension, closure higher-order functions, module import, f-string |
 
 ---
 
@@ -85,22 +85,22 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 ### RFC-008 (Runtime Concurrency Model)
 
 | Design Requirement | Implementation Status | Notes |
-|--------------------|----------------------|-------|
+|--------------------|-----------------------|-------|
 | Three-layer runtime: Embedded / Standard / Full | ✅ Implemented | Configured via `RuntimeMode` |
 | Three evaluation strategies: Block / Auto / Eager | ✅ Implemented | |
 | DAG task scheduling (`LocalRuntime`) | ✅ Implemented | |
 | Task dependency tracking, cancellation propagation, structured concurrency | ✅ Implemented | |
-| Synchronous = special case of scheduling (Embedded mode) | ✅ Implemented | |
+| Sync = special case of scheduling (Embedded mode) | ✅ Implemented | |
 
 ### RFC-009 (Ownership Model)
 
 | Design Requirement | Implementation Status | Notes |
-|--------------------|----------------------|-------|
+|--------------------|-----------------------|-------|
 | Borrow/Release as zero-size tokens (ZST) | ✅ Implemented | Runtime equivalent to Mov/Nop |
 | ArcNew/ArcClone/ArcDrop implement `ref` keyword semantics | ✅ Implemented | |
 | WeakNew/WeakUpgrade implement weak references | ✅ Implemented | |
 | Move semantics (default behavior) | ✅ Implemented | |
-| `clone()` handled by compile layer | ✅ Implemented | No special runtime instructions needed |
+| `clone()` handled at compile layer | ✅ Implemented | No special instructions needed at runtime |
 
 ---
 
@@ -108,11 +108,11 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 
 | Instruction | Current Behavior | Design Intent |
 |-------------|------------------|---------------|
-| Switch | Direct IP advance | Should dispatch jumps by value |
-| TypeOf | Returns type_table length placeholder | Should return runtime type information |
-| Cast | Passes through value (no actual conversion) | Should convert by target type |
+| Switch | Directly advance IP | Should dispatch jumps by value |
+| TypeOf | Returns type_table length as placeholder | Should return runtime type information |
+| Cast | Passes through value (no actual conversion) | Should convert to target type |
 | BoundsCheck / TypeCheck | No-op | Debug mode should perform runtime checks |
-| StringGetChar | Takes only first character, ignores index argument | Should take character by index |
+| StringGetChar | Takes first character only, ignores index argument | Should take character by index |
 | UnaryOp | Int negation only, ignores op type | Should support more unary operations |
 | step/step_over/step_out/run | `todo!()` | Debugger stepping functionality not implemented |
 
@@ -120,20 +120,20 @@ The interpreter is responsible for executing bytecode. It adopts a register-base
 
 ## Code Quality Assessment
 
-| Dimension | Score | Notes |
-|-----------|-------|-------|
-| Feature Completeness | 100% | Core execution engine is robust, covering all 39 bytecode instructions |
-| Test Coverage | Good | ~60 tests, covering major functional paths |
-| Documentation Quality | Good | Every source file has module-level doc comments, referencing RFC numbers |
-| Code Architecture | Excellent | Clear layering: executor/frames/registers/ffi/runtime |
-| RFC Compliance | Fully Aligned | RFC-008 and RFC-009 designs fully aligned |
+| Dimension | Rating | Notes |
+|-----------|--------|-------|
+| Outstanding items | 5 | Switch instruction, debugger stepping, instruction completion, debug checks, test coverage |
+| Test coverage | Good | Approximately 60 tests, covering main functional paths |
+| Documentation quality | Good | Every source file has module-level doc comments, referencing RFC numbers |
+| Code architecture | Excellent | Clear layering: executor/frames/registers/ffi/runtime |
+| RFC compliance | Fully aligned | RFC-008 and RFC-009 design fully aligned |
 
 ---
 
-## Items for Improvement
+## Pending Improvements
 
 1. **Implement real dispatch for Switch instruction**
 2. **Implement debugger stepping functionality** (step/step_over/step_out/run)
 3. **Complete StringGetChar/UnaryOp and other instructions**
-4. **Implement BoundsCheck/TypeCheck for debug mode checks**
-5. **Add boundary condition and error path tests**
+4. **Implement BoundsCheck/TypeCheck debug mode checks**
+5. **Add boundary conditions and error path tests**
