@@ -16,6 +16,21 @@ pub enum Operand {
     Register(u8), // Added for codegen
 }
 
+/// 任务组：组内任务可并行执行，组间串行
+#[derive(Debug, Clone)]
+pub struct TaskGroup {
+    /// 本组内任务在 closures 列表中的索引
+    pub task_indices: Vec<usize>,
+}
+
+/// spawn 块的编译期执行计划
+#[derive(Debug, Clone)]
+pub struct ExecutionPlan {
+    /// 任务组列表，按拓扑排序顺序排列
+    /// 第一组无依赖可立即并行，后续组等待前置组完成
+    pub groups: Vec<TaskGroup>,
+}
+
 /// Instruction
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -224,8 +239,11 @@ pub enum Instruction {
     TypeTest(Operand, Type),
     /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
-        func: Operand,
-        args: Vec<Operand>,
+        /// 每个直接子表达式对应一个闭包
+        closures: Vec<Operand>,
+        /// 编译期生成的执行计划
+        plan: ExecutionPlan,
+        /// spawn 块返回值寄存器
         result: Operand,
     },
     Yield,

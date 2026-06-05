@@ -539,7 +539,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => Some(MonoType::Fn {
                 params: params
                     .iter()
@@ -630,7 +629,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .iter()

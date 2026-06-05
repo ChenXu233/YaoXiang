@@ -26,7 +26,7 @@ pub use mono::{
     get_ast_type_universe_level, calculate_meta_type_level, ast_type_to_poly_type,
 };
 pub use substitute::{Substitution, Substituter};
-pub use constraint::{TypeConstraint, SendSyncConstraint, SendSyncSolver};
+pub use constraint::TypeConstraint;
 pub use solver::TypeConstraintSolver;
 pub use error::{TypeMismatch, TypeConstraintError, ConstEvalError};
 pub use trait_data::{

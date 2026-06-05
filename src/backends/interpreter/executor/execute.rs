@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
-use crate::backends::common::{RuntimeValue, Heap, HeapValue};
+use crate::backends::common::{RuntimeValue, Heap, HeapValue, value::TaskId};
 use crate::middle::bytecode::{
-    BytecodeModule, BytecodeFunction, BytecodeInstr, FunctionRef, ConstValue,
+    BytecodeModule, BytecodeFunction, BytecodeInstr, FunctionRef, ConstValue, Reg,
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
@@ -127,41 +127,95 @@ impl Executor for Interpreter {
                     self.pop_frame();
                     return Ok(result);
                 }
-                BytecodeInstr::Spawn { dst, func, args } => {
-                    // Spawn a dynamic call as a runtime task.
-                    let dst = *dst;
-                    let func = *func;
-                    let args = args.clone();
+                BytecodeInstr::Spawn {
+                    dst: _,
+                    closures,
+                    group_count,
+                } => {
+                    // Spawn: 按编译期执行计划分组执行闭包
+                    // - group_count[i] 表示第 i 组有多少个闭包
+                    // - closures 按组顺序排列
+                    // - 组内并行（或串行），组间串行
+                    // 注意：dst (result_reg) 已由 trailing expression 在 Spawn 之前设置，
+                    // 此处不覆盖。若无 trailing expression，dst 保持默认 Unit。
+                    let closures = closures.clone();
+                    let group_count = group_count.clone();
 
-                    let closure_val = self.force_register(&mut frame, func)?;
-                    let RuntimeValue::Function(func_value) = closure_val else {
-                        let stack = self.capture_stack();
-                        return Err(ExecutorError::type_error(
-                            "spawn expects a function value".to_string(),
-                            stack,
-                        ));
-                    };
+                    let runtime = self.runtime_config.runtime;
+                    let mut closure_idx: usize = 0;
 
-                    let mut call_args = Vec::with_capacity(args.len());
-                    for r in &args {
-                        call_args.push(self.force_register(&mut frame, *r)?);
+                    for &group_size in &group_count {
+                        let group_end = closure_idx + group_size as usize;
+
+                        if matches!(runtime, RuntimeMode::Embedded) {
+                            // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let func_reg = closures[closure_idx];
+                                let closure_val = self.force_register(&mut frame, func_reg)?;
+                                let RuntimeValue::Function(func_value) = closure_val else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn expects a function value".to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                // 闭包无参，环境变量作为参数传入
+                                let result =
+                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+
+                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                                frame.set_register(func_reg.0 as usize, result);
+
+                                closure_idx += 1;
+                            }
+                        } else {
+                            // Standard/Full 模式：使用 DAG 调度器并行执行
+                            let mut group_tasks: Vec<(Reg, TaskId)> = Vec::new();
+
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let func_reg = closures[closure_idx];
+                                let closure_val = self.force_register(&mut frame, func_reg)?;
+                                let RuntimeValue::Function(func_value) = closure_val else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn expects a function value".to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                // 闭包无参，环境变量作为参数传入
+                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                                let deps = self.deps_from_args(&call_args);
+                                let task_id = self.schedule_task(
+                                    InterpreterTask::Dyn {
+                                        func: func_value.clone(),
+                                        args: call_args,
+                                    },
+                                    TaskMeta {
+                                        deps,
+                                        label: Some(Arc::<str>::from("spawn")),
+                                        ..TaskMeta::default()
+                                    },
+                                )?;
+
+                                frame.record_spawned_task(task_id);
+                                group_tasks.push((func_reg, task_id));
+
+                                closure_idx += 1;
+                            }
+
+                            // 等待本组所有任务完成，收集结果
+                            for (func_reg, task_id) in &group_tasks {
+                                let mut v = self.make_async_pending(*task_id);
+                                self.force_value_in_place(&mut v)?;
+
+                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                                frame.set_register(func_reg.0 as usize, v);
+                            }
+                        }
                     }
 
-                    let deps = self.deps_from_args(&call_args);
-                    let task_id = self.schedule_task(
-                        InterpreterTask::Dyn {
-                            func: func_value.clone(),
-                            args: call_args,
-                        },
-                        TaskMeta {
-                            deps,
-                            label: Some(Arc::<str>::from("spawn")),
-                            ..TaskMeta::default()
-                        },
-                    )?;
-
-                    frame.record_spawned_task(task_id);
-                    frame.set_register(dst.0 as usize, self.make_async_pending(task_id));
                     frame.advance();
                 }
                 BytecodeInstr::Jmp { target } => {
@@ -804,7 +858,6 @@ impl Executor for Interpreter {
                         RuntimeValue::Weak(_) => "Weak",
                         RuntimeValue::Async(_) => "Async",
                         RuntimeValue::Ptr { .. } => "Ptr",
-                        _ => "Unknown",
                     };
                     let result = RuntimeValue::String(Arc::from(type_name));
                     frame.set_register(dst.0 as usize, result);

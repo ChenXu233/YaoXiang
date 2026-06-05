@@ -156,8 +156,8 @@ impl CycleChecker {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
                 match instr {
                     Instruction::Spawn {
-                        func: _,
-                        args: _,
+                        closures: _,
+                        plan: _,
                         result,
                     } => {
                         self.spawn_results
@@ -192,13 +192,13 @@ impl CycleChecker {
                 }
 
                 if let Instruction::Spawn {
-                    func: _,
-                    args,
+                    closures,
+                    plan: _,
                     result,
                 } = instr
                 {
                     // 参数边：arg 来自另一个 spawn 的结果（深度 = 1，只检测直接来源）
-                    for arg in args {
+                    for arg in closures {
                         if let Some(producer) = self.find_spawn_result_direct(arg) {
                             self.spawn_param_edges.push(SpawnParamEdge {
                                 consumer_spawn: result.clone(),
@@ -423,7 +423,7 @@ impl super::error::OwnershipCheck for CycleChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::middle::core::ir::BasicBlock;
+    use crate::middle::core::ir::{BasicBlock, ExecutionPlan};
     use crate::frontend::core::typecheck::MonoType;
 
     /// 创建测试用的 FunctionIR
@@ -458,8 +458,8 @@ mod tests {
     fn test_single_spawn_no_cycle() {
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![Instruction::Spawn {
-            func: Operand::Global(0),
-            args: vec![Operand::Local(0)],
+            closures: vec![Operand::Global(0)],
+            plan: ExecutionPlan { groups: vec![] },
             result: Operand::Temp(0),
         }]);
 
@@ -472,13 +472,13 @@ mod tests {
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![
             Instruction::Spawn {
-                func: Operand::Global(0),
-                args: vec![Operand::Local(0)],
+                closures: vec![Operand::Global(0)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(0),
             },
             Instruction::Spawn {
-                func: Operand::Global(1),
-                args: vec![Operand::Local(1)],
+                closures: vec![Operand::Global(1)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(1),
             },
         ]);
@@ -493,13 +493,13 @@ mod tests {
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![
             Instruction::Spawn {
-                func: Operand::Global(0),
-                args: vec![Operand::Local(0)],
+                closures: vec![Operand::Global(0)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(0),
             },
             Instruction::Spawn {
-                func: Operand::Global(1),
-                args: vec![Operand::Temp(0)], // 使用前一个 spawn 的结果
+                closures: vec![Operand::Global(1)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(1),
             },
         ]);
@@ -514,8 +514,8 @@ mod tests {
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![
             Instruction::Spawn {
-                func: Operand::Global(0),
-                args: vec![],
+                closures: vec![Operand::Global(0)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(0),
             },
             Instruction::Move {
@@ -527,8 +527,8 @@ mod tests {
                 src: Operand::Temp(1), // 间接引用（深度 > 1）
             },
             Instruction::Spawn {
-                func: Operand::Global(1),
-                args: vec![Operand::Temp(2)], // 使用间接引用
+                closures: vec![Operand::Global(1)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(3),
             },
         ]);
@@ -544,8 +544,8 @@ mod tests {
 
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![Instruction::Spawn {
-            func: Operand::Global(0),
-            args: vec![],
+            closures: vec![Operand::Global(0)],
+            plan: ExecutionPlan { groups: vec![] },
             result: Operand::Temp(0),
         }]);
 
@@ -565,8 +565,8 @@ mod tests {
         // 当前 Phase 6，unsafe 检测尚未实现，应返回空
         let mut checker = CycleChecker::new();
         let func = create_test_function(vec![Instruction::Spawn {
-            func: Operand::Global(0),
-            args: vec![],
+            closures: vec![Operand::Global(0)],
+            plan: ExecutionPlan { groups: vec![] },
             result: Operand::Temp(0),
         }]);
 
@@ -585,13 +585,13 @@ mod tests {
         // 构造循环：spawn A 使用 spawn B 结果，spawn B 使用 spawn A 结果
         let func = create_test_function(vec![
             Instruction::Spawn {
-                func: Operand::Global(0),
-                args: vec![],
+                closures: vec![Operand::Global(0)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(0),
             },
             Instruction::Spawn {
-                func: Operand::Global(1),
-                args: vec![Operand::Temp(0)],
+                closures: vec![Operand::Global(1)],
+                plan: ExecutionPlan { groups: vec![] },
                 result: Operand::Temp(1),
             },
             Instruction::Move {

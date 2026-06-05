@@ -284,6 +284,75 @@ pub fn run_file_with_diagnostics(
                 }
             }
 
+            // 所有权检查：Move/Drop/Ref/Clone 等
+            {
+                use crate::middle::passes::lifetime::{OwnershipChecker, OwnershipError};
+                let mut ownership_checker = OwnershipChecker::new();
+                let mut has_errors = false;
+                for func in &module.functions {
+                    let errors: Vec<_> = ownership_checker
+                        .check_function(func)
+                        .into_iter()
+                    // 过滤掉 MutChecker 已处理的错误（OwnershipChecker 内部的 MutChecker 缺少 mut_locals 上下文）
+                        .filter(|err| !matches!(
+                            err,
+                            OwnershipError::ImmutableAssign { .. }
+                                | OwnershipError::ImmutableMutation { .. }
+                                | OwnershipError::ImmutableFieldAssign { .. }
+                                | OwnershipError::ReassignNonEmpty { .. }
+                                | OwnershipError::EmptyStateTypeMismatch { .. }
+                        ))
+                        .collect();
+                    if !errors.is_empty() {
+                        eprintln!();
+                        for err in errors {
+                            match err {
+                                OwnershipError::UseAfterMove { value, .. } => {
+                                    let diag = ErrorCodeDefinition::use_after_move(&value);
+                                    let diagnostic = diag.build();
+                                    let output = render_compile_error(
+                                        &diagnostic.message,
+                                        source_file,
+                                        Some(&diagnostic),
+                                    );
+                                    eprintln!("{}", output);
+                                }
+                                OwnershipError::ImmutableAssign { value, span } => {
+                                    let mut diag = ErrorCodeDefinition::immutable_assignment(&value);
+                                    if let Some(span) = span {
+                                        diag = diag.at(span);
+                                    }
+                                    let diagnostic = diag.build();
+                                    let output = render_compile_error(
+                                        &diagnostic.message,
+                                        source_file,
+                                        Some(&diagnostic),
+                                    );
+                                    eprintln!("{}", output);
+                                }
+                                _ => {
+                                    // 其他所有权错误，通用处理
+                                    let diag = ErrorCodeDefinition::immutable_assignment(
+                                        &format!("{:?}", err),
+                                    );
+                                    let diagnostic = diag.build();
+                                    let output = render_compile_error(
+                                        &diagnostic.message,
+                                        source_file,
+                                        Some(&diagnostic),
+                                    );
+                                    eprintln!("{}", output);
+                                }
+                            }
+                        }
+                        has_errors = true;
+                    }
+                }
+                if has_errors {
+                    return Err(anyhow::anyhow!("Ownership check failed"));
+                }
+            }
+
             // Generate bytecode
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(debug_info);

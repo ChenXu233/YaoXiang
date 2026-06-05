@@ -31,7 +31,6 @@ pub mod move_semantics;
 pub mod mut_check;
 pub mod ownership_flow;
 pub mod ref_semantics;
-pub mod send_sync;
 pub mod unsafe_check;
 
 pub use borrow_checker::*;
@@ -330,9 +329,11 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         }
 
         //：result = spawn Spawn func(args...)
-        Instruction::Spawn { func, args, result } => {
-            let mut ops = vec![func.clone(), result.clone()];
-            ops.extend(args.iter().cloned());
+        Instruction::Spawn {
+            closures, result, ..
+        } => {
+            let mut ops = vec![result.clone()];
+            ops.extend(closures.iter().cloned());
             ops
         }
 

@@ -3,6 +3,7 @@
 //! 包含中间层的各个编译阶段。
 
 pub mod codegen;
+pub mod dag_analysis;
 pub mod lifetime;
 pub mod module;
 pub mod mono;
