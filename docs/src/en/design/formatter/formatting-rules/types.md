@@ -1,6 +1,6 @@
 ---
 title: "Type System Formatting Rules"
-description: Formatting rules for type annotations, references and borrowing, and type conversions
+description: Formatting rules for type annotations, references and borrowing, type conversion
 ---
 
 # Type System Formatting Rules
@@ -9,7 +9,7 @@ description: Formatting rules for type annotations, references and borrowing, an
 
 ## §9 Type Annotations
 
-**§9.1 Variable type annotations.** Type annotations use the `: Type` format, with a space after the colon.
+**§9.1 Variable type annotations.** Type annotations use the `: Type` format, with one space after the colon.
 
 ```
 // ✅ Correct
@@ -20,7 +20,7 @@ let x:Int = 1;
 let x : Int = 1;
 ```
 
-**§9.2 Function parameter types.** Parameter names are connected to types via `: `.
+**§9.2 Function parameter types.** Parameter names and types are connected using `: `.
 
 ```
 // ✅ Correct
@@ -75,9 +75,9 @@ fn bar(x: &mut Int) { ... }
 
 ---
 
-## §16 Type Conversions
+## §16 Type Conversion
 
-**§16.1 as conversions.** Use the `expr as Type` format.
+**§16.1 as conversion.** Use the `expr as Type` format.
 
 ```
 // ✅ Correct
@@ -86,4 +86,27 @@ let x = value as Int;
 // ❌ Incorrect
 let x = value as Int;
 let x = value  as  Int;
+```
+
+---
+
+## §17 The ref Keyword
+
+**§17.1 ref format.** The `ref` keyword is separated from the expression by a space.
+
+```
+// ✅ Correct
+let x = ref value;
+let y = ref obj;
+
+// ❌ Incorrect
+let x = refvalue;  // Missing space
+let y = ref  value;  // Extra space
+```
+
+**§17.2 ref semantics.** `ref` creates an Arc (atomic reference counting) copy.
+
+```
+// Create a shared reference
+let shared = ref original;
 ```

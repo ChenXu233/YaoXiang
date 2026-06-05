@@ -2,7 +2,7 @@
 
 > This guide helps you get started with the YaoXiang programming language.
 >
-> **Note**: The code examples in this document are written based on the YaoXiang language specification. If you encounter syntax differences during actual execution, please refer to the [Language Specification](../design/language-spec.md).
+> **Note**: The code examples in this document are based on the YaoXiang language specification. If you encounter syntax differences when actually running the code, please refer to the [Language Specification](../design/language-spec.md).
 
 ## Installation
 
@@ -42,7 +42,8 @@ Create a file `hello.yx`:
 # hello.yx
 use std.io
 
-# Function definition: name: (param: Type, ...) -> return_type = { ... }
+# Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code block must explicitly return
+# Expression form: name: (param: Type, ...) -> return_type = expr                 # Expression directly returns value
 main: () -> Void = {
     println("Hello, YaoXiang!")
 }
@@ -52,7 +53,7 @@ Run it:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# or using the release version
+# or use the release version
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -89,12 +90,16 @@ counter = counter + 1     # ✅ OK
 
 ```yaoxiang
 # Function definition syntax
+# Expression form: directly returns value, no return needed
 add: (a: Int, b: Int) -> Int = a + b
+
+# Code block form: must use return to return value
+# add: (a: Int, b: Int) -> Int = { return a + b }
 
 # Call
 result = add(1, 2)        # result = 3
 
-# Single parameter function
+# Single parameter function (expression form)
 inc: (x: Int) -> Int = x + 1
 ```
 
@@ -152,7 +157,7 @@ type EmptyInterface = {}
 
 #### Type Methods
 
-Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
+Define type methods using `Type.method: (Type, ...) -> Return = ...` syntax:
 
 ```yaoxiang
 # Type definition
@@ -180,7 +185,7 @@ Functions declared with the `pub` keyword are automatically bound to types defin
 ```yaoxiang
 type Point = { x: Float, y: Float }
 
-# pub declaration auto-binds to Point
+# pub declaration automatically binds to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -194,7 +199,7 @@ p2 = Point(x: 1.0, y: 2.0)
 # Functional call
 d = distance(p1, p2)           # 3.606...
 
-# OOP syntactic sugar (auto-bound to Point.distance)
+# OOP syntax sugar (automatically bound to Point.distance)
 d2 = p1.distance(p2)           # → distance(p1, p2)
 ```
 
@@ -285,18 +290,18 @@ message = match result {
 YaoXiang's unique feature: functions marked with `spawn` automatically gain async capabilities.
 
 ```yaoxiang
-# Define a spawn function (automatically async)
+# Define spawn function (automatically async execution)
 fetch_data: (url: String) -> JSON spawn = {
     HTTP.get(url).json()
 }
 
-# Calling spawn functions (auto-parallel, no await needed)
+# Call spawn function (automatically parallel, no await needed)
 main: () -> Void = {
-    # Two calls execute in parallel automatically
-    user = fetch_user(1)     # Auto-parallel
-    posts = fetch_posts()    # Auto-parallel
+    # Two calls automatically execute in parallel
+    user = fetch_user(1)     # Automatically parallel
+    posts = fetch_posts()    # Automatically parallel
 
-    # Automatically waits when results are needed
+    # Automatically wait when results are needed
     print(user.name)
     print(posts.length)
 }
@@ -314,12 +319,12 @@ result = math.sqrt(16)      # 4.0
 println("Hello!")
 ```
 
-## Frequently Asked Questions
+## FAQ
 
-### Q: Variables are immutable by default, how do I modify them?
+### Q: Variables are immutable by default, how do I modify a variable?
 
 ```yaoxiang
-# Use the mut keyword to declare mutable variables
+# Use the mut keyword to declare a mutable variable
 mut x = 10
 x = 20                       # ✅ OK
 ```
@@ -352,8 +357,8 @@ match result {
 
 - 📖 Read the [YaoXiang Guide](../YaoXiang-book.md) to learn about core features
 - 📚 Check the [Language Specification](../YaoXiang-language-specification.md) for complete syntax
-- 🏗️ Browse the [Architecture Docs](../architecture/) to understand implementation details
-- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to learn about core principles
+- 🏗️ Browse the [Architecture Documentation](../architecture/) to understand implementation details
+- 💡 Read the [Design Manifesto](../YaoXiang-design-manifesto.md) to understand core philosophy
 
 ## Related Resources
 
