@@ -36,7 +36,6 @@ pub fn format_stmt(
             method_type,
             generic_params,
             type_annotation,
-            eval,
             params,
             body,
             is_pub,
@@ -46,7 +45,6 @@ pub fn format_stmt(
             method_type.as_ref(),
             generic_params,
             type_annotation.as_ref(),
-            eval,
             params,
             body,
             *is_pub,
@@ -117,7 +115,6 @@ fn format_binding(
     method_type: Option<&Type>,
     generic_params: &[GenericParam],
     type_annotation: Option<&Type>,
-    eval: &Option<EvalMode>,
     params: &[Param],
     body: &(Vec<Stmt>, Option<Box<Expr>>),
     is_pub: bool,
@@ -175,18 +172,6 @@ fn format_binding(
         String::new()
     };
 
-    let eval_str = if type_annotation.is_some() {
-        match eval {
-            Some(EvalMode::Block) => " @block",
-            Some(EvalMode::Auto) => " @auto",
-            Some(EvalMode::Eager) => " @eager",
-            None => "",
-        }
-        .to_string()
-    } else {
-        String::new()
-    };
-
     let params_str = format_params(params, ctx, source_map);
 
     let body_block = Block {
@@ -196,12 +181,11 @@ fn format_binding(
     };
 
     format!(
-        "{}{}{}{}{} = {} => {}",
+        "{}{}{}{} = {} => {}",
         pub_str,
         name,
         generics,
         type_str,
-        eval_str,
         params_str,
         format_block(&body_block, ctx, source_map)
     )

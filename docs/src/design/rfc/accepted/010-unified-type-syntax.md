@@ -327,6 +327,37 @@ result = spawn {
 
 > **详细定义**：`spawn` 的完整语义、任务创建规则和阻塞模型详见 `008-runtime-concurrency-model.md`。
 
+#### `unsafe` 块
+
+`unsafe { ... }` 用于定义不透明类型和操作裸指针。它利用 `{}` 的 return 语义将类型定义返回给上一作用域：
+
+**核心规则**：
+- `unsafe {}` 中可以定义类型和操作裸指针
+- 使用 `return` 将类型定义返回给上一作用域
+- 返回的类型在 `unsafe {}` 外可用
+- 类型的字段访问需要 unsafe 权限
+
+```yaoxiang
+# 在 unsafe 块中定义不透明类型
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void  # 裸指针
+    }
+    return SqliteDb
+}
+
+# SqliteDb 在 unsafe 块外可用
+db = sqlite3_open("test.db")
+
+# ❌ 编译错误：handle 字段需要 unsafe 权限
+handle = db.handle
+
+# ✅ 通过方法调用
+db.close()
+```
+
+> **详细定义**：`unsafe` 的完整语义、FFI 类型定义和方法绑定详见 `ffi.md`。
+
 #### 3. 类型定义
 
 类型定义是 YaoXiang 统一语法的核心，包含字段、默认值、绑定方法、接口实现：

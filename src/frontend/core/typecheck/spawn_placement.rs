@@ -1,11 +1,9 @@
-//! `spawn` placement / evaluation-mode scope checker.
+//! `spawn` placement checker.
 //!
-//! RFC-001/008: `spawn { ... }` is only valid inside `@block` scopes.
+//! Recursively walks the AST to find `spawn` expressions and report diagnostics.
 
-use crate::frontend::core::parser::ast::{
-    Block, EvalMode, Expr, FStringSegment, Module, Stmt, StmtKind,
-};
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::frontend::core::parser::ast::{Block, Expr, FStringSegment, Module, Stmt, StmtKind};
+use crate::util::diagnostic::Diagnostic;
 
 pub fn check_spawn_placement(module: &Module) -> Vec<Diagnostic> {
     let mut checker = SpawnPlacementChecker::new();
@@ -16,51 +14,11 @@ pub fn check_spawn_placement(module: &Module) -> Vec<Diagnostic> {
 #[derive(Debug, Default)]
 struct SpawnPlacementChecker {
     errors: Vec<Diagnostic>,
-    eval_stack: Vec<EvalMode>,
 }
 
 impl SpawnPlacementChecker {
     fn new() -> Self {
         Self::default()
-    }
-
-    fn current_eval(&self) -> EvalMode {
-        self.eval_stack.last().copied().unwrap_or(EvalMode::Auto)
-    }
-
-    fn eval_name(mode: EvalMode) -> &'static str {
-        match mode {
-            EvalMode::Block => "block",
-            EvalMode::Auto => "auto",
-            EvalMode::Eager => "eager",
-        }
-    }
-
-    fn with_eval_override<F>(
-        &mut self,
-        mode: EvalMode,
-        f: F,
-    ) where
-        F: FnOnce(&mut Self),
-    {
-        self.eval_stack.push(mode);
-        f(self);
-        let _ = self.eval_stack.pop();
-    }
-
-    fn with_function_boundary<F>(
-        &mut self,
-        eval: Option<EvalMode>,
-        f: F,
-    ) where
-        F: FnOnce(&mut Self),
-    {
-        let saved = std::mem::take(&mut self.eval_stack);
-        if let Some(mode) = eval {
-            self.eval_stack.push(mode);
-        }
-        f(self);
-        self.eval_stack = saved;
     }
 
     fn check_module(
@@ -116,15 +74,13 @@ impl SpawnPlacementChecker {
                     self.check_block(else_body);
                 }
             }
-            StmtKind::Binding { eval, body, .. } => {
-                self.with_function_boundary(*eval, |this| {
-                    for s in &body.0 {
-                        this.check_stmt(s);
-                    }
-                    if let Some(expr) = &body.1 {
-                        this.check_expr(expr);
-                    }
-                });
+            StmtKind::Binding { body, .. } => {
+                for s in &body.0 {
+                    self.check_stmt(s);
+                }
+                if let Some(expr) = &body.1 {
+                    self.check_expr(expr);
+                }
             }
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
         }
@@ -156,12 +112,8 @@ impl SpawnPlacementChecker {
                     self.check_expr(val);
                 }
             }
-            Expr::FnDef { body, .. } => {
-                self.with_function_boundary(None, |this| this.check_block(body));
-            }
-            Expr::Lambda { body, .. } => {
-                self.with_function_boundary(None, |this| this.check_block(body));
-            }
+            Expr::FnDef { body, .. } => self.check_block(body),
+            Expr::Lambda { body, .. } => self.check_block(body),
             Expr::If {
                 condition,
                 then_branch,
@@ -234,18 +186,7 @@ impl SpawnPlacementChecker {
             Expr::Ref { expr, .. } => self.check_expr(expr),
             Expr::Unsafe { body, .. } => self.check_block(body),
 
-            Expr::Eval { mode, body, .. } => {
-                self.with_eval_override(*mode, |this| this.check_block(body));
-            }
-            Expr::Spawn { body, span } => {
-                let current = self.current_eval();
-                if current != EvalMode::Block {
-                    self.errors.push(
-                        ErrorCodeDefinition::spawn_only_allowed_in_block(Self::eval_name(current))
-                            .at(*span)
-                            .build(),
-                    );
-                }
+            Expr::Spawn { body, .. } => {
                 self.check_block(body);
             }
 

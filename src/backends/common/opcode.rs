@@ -52,12 +52,6 @@ pub enum Opcode {
     /// Label definition
     Label = 0x0B,
 
-    /// Push evaluation strategy for the current scope/frame
-    EvalPush = 0x0C,
-
-    /// Pop evaluation strategy for the current scope/frame
-    EvalPop = 0x0D,
-
     /// Spawn a new concurrent task (dynamic call)
     Spawn = 0x0E,
 
@@ -301,8 +295,6 @@ impl Opcode {
             Opcode::TailCall => "TailCall",
             Opcode::Yield => "Yield",
             Opcode::Label => "Label",
-            Opcode::EvalPush => "EvalPush",
-            Opcode::EvalPop => "EvalPop",
             Opcode::Spawn => "Spawn",
             Opcode::Mov => "Mov",
             Opcode::LoadConst => "LoadConst",
@@ -504,12 +496,11 @@ impl Opcode {
     pub fn operand_count(&self) -> u8 {
         match self {
             // 0 operands
-            Opcode::Nop | Opcode::Return | Opcode::Yield | Opcode::EvalPop | Opcode::Invalid => 0,
+            Opcode::Nop | Opcode::Return | Opcode::Yield | Opcode::Invalid => 0,
 
             // 1 operand
             Opcode::ReturnValue
             | Opcode::Label
-            | Opcode::EvalPush
             | Opcode::Drop
             | Opcode::CloseUpvalue
             | Opcode::Throw
@@ -657,8 +648,6 @@ impl TryFrom<u8> for Opcode {
             0x09 => Ok(Opcode::TailCall),
             0x0A => Ok(Opcode::Yield),
             0x0B => Ok(Opcode::Label),
-            0x0C => Ok(Opcode::EvalPush),
-            0x0D => Ok(Opcode::EvalPop),
             0x0E => Ok(Opcode::Spawn),
             0x10 => Ok(Opcode::Mov),
             0x11 => Ok(Opcode::LoadConst),

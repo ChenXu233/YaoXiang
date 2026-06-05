@@ -15,4 +15,4 @@ mod tests;
 pub use executor::Interpreter;
 pub use registers::RegisterFile;
 pub use frames::Frame;
-pub use runtime::{EvalStrategy, InterpreterRuntimeConfig};
+pub use runtime::InterpreterRuntimeConfig;

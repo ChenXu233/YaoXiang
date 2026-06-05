@@ -10,7 +10,6 @@ use crate::middle::bytecode::{
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
-use crate::backends::interpreter::EvalStrategy;
 use crate::backends::runtime::RuntimeMode;
 use crate::backends::runtime::engine::{LocalRuntime, ResourceKey, TaskMeta};
 use crate::util::i18n::MSG;
@@ -105,32 +104,6 @@ impl Executor for Interpreter {
                     // Reserved for cooperative scheduling; currently a no-op in the interpreter VM.
                     frame.advance();
                 }
-                BytecodeInstr::EvalPush { mode } => {
-                    // Dynamic scope override for evaluation strategy.
-                    let strategy = match mode {
-                        crate::frontend::core::parser::ast::EvalMode::Block => EvalStrategy::Block,
-                        crate::frontend::core::parser::ast::EvalMode::Auto => EvalStrategy::Auto,
-                        crate::frontend::core::parser::ast::EvalMode::Eager => EvalStrategy::Eager,
-                    };
-                    if matches!(strategy, EvalStrategy::Block) {
-                        frame.push_spawn_group();
-                    }
-                    frame.push_eval(strategy);
-                    frame.advance();
-                }
-                BytecodeInstr::EvalPop => {
-                    // Restore previous evaluation strategy.
-                    let popped = frame.pop_eval();
-                    if matches!(popped, Some(EvalStrategy::Block)) {
-                        if let Some(group) = frame.pop_spawn_group() {
-                            for task_id in group {
-                                let mut v = self.make_async_pending(task_id);
-                                self.force_value_in_place(&mut v)?;
-                            }
-                        }
-                    }
-                    frame.advance();
-                }
                 BytecodeInstr::Return => {
                     // Structured-concurrency safety net: ensure all spawned tasks complete.
                     for task_id in frame.take_all_spawned_tasks() {
@@ -155,19 +128,10 @@ impl Executor for Interpreter {
                     return Ok(result);
                 }
                 BytecodeInstr::Spawn { dst, func, args } => {
-                    // Spawn a dynamic call as a runtime task; only valid in @block scopes.
+                    // Spawn a dynamic call as a runtime task.
                     let dst = *dst;
                     let func = *func;
                     let args = args.clone();
-
-                    let eval = frame.current_eval(self.runtime_config.eval);
-                    if !matches!(eval, EvalStrategy::Block) {
-                        let stack = self.capture_stack();
-                        return Err(ExecutorError::runtime(
-                            "`spawn` is only allowed inside @block scope".to_string(),
-                            stack,
-                        ));
-                    }
 
                     let closure_val = self.force_register(&mut frame, func)?;
                     let RuntimeValue::Function(func_value) = closure_val else {
@@ -392,12 +356,9 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
-                    if matches!(eval, EvalStrategy::Block)
-                        || matches!(runtime, RuntimeMode::Embedded)
-                    {
+                    if matches!(runtime, RuntimeMode::Embedded) {
                         let result = self.call_static_by_name(&func_name, &call_args)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
@@ -433,33 +394,11 @@ impl Executor for Interpreter {
                         },
                     )?;
 
-                    match eval {
-                        EvalStrategy::Auto => {
-                            if is_ffi {
-                                self.drive_dag_until(Some(task_id))?;
-                                let mut v = self.make_async_pending(task_id);
-                                self.force_value_in_place(&mut v)?;
-                                if let Some(dst_reg) = dst {
-                                    frame.set_register(dst_reg.index() as usize, v);
-                                }
-                            } else if let Some(dst_reg) = dst {
-                                frame.set_register(
-                                    dst_reg.index() as usize,
-                                    self.make_async_pending(task_id),
-                                );
-                            } else {
-                                self.drive_dag_until(Some(task_id))?;
-                            }
-                        }
-                        EvalStrategy::Eager => {
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Block => {}
+                    self.drive_dag_until(Some(task_id))?;
+                    let mut v = self.make_async_pending(task_id);
+                    self.force_value_in_place(&mut v)?;
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, v);
                     }
 
                     frame.advance();
@@ -485,12 +424,9 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
-                    if matches!(eval, EvalStrategy::Block)
-                        || matches!(runtime, RuntimeMode::Embedded)
-                    {
+                    if matches!(runtime, RuntimeMode::Embedded) {
                         let result = self.call_native_by_name(&func_name, &call_args)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
@@ -512,25 +448,12 @@ impl Executor for Interpreter {
                         },
                     )?;
 
-                    match eval {
-                        EvalStrategy::Eager => {
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Auto => {
-                            // Native calls are treated as eager to preserve side effects.
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Block => {}
+                    // Native calls are always forced eagerly to preserve side effects.
+                    self.drive_dag_until(Some(task_id))?;
+                    let mut v = self.make_async_pending(task_id);
+                    self.force_value_in_place(&mut v)?;
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, v);
                     }
 
                     frame.advance();

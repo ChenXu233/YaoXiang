@@ -164,7 +164,7 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
                         params: vec![AstType::Int(32)],
                         return_type: Box::new(AstType::Int(32)),
                     }),
-                    eval: None,
+
                     params: vec![crate::frontend::core::parser::ast::Param {
                         name: "x".to_string(),
                         ty: Some(AstType::Int(32)),
@@ -255,7 +255,7 @@ fn test_type_checker_with_multiple_function_definitions() {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
                 }),
-                eval: None,
+
                 params: vec![crate::frontend::core::parser::ast::Param {
                     name: "x".to_string(),
                     ty: Some(AstType::Int(32)),
@@ -322,7 +322,7 @@ fn test_type_checker_with_nested_function_definition() {
                     params: vec![AstType::Int(32)],
                     return_type: Box::new(AstType::Int(32)),
                 }),
-                eval: None,
+
                 params: vec![crate::frontend::core::parser::ast::Param {
                     name: "x".to_string(),
                     ty: Some(AstType::Int(32)),
@@ -385,7 +385,7 @@ fn test_type_checker_with_generic_type_binding() {
                         bindings: vec![],
                         interfaces: vec![],
                     }),
-                    eval: None,
+
                     params: vec![],
                     body: (vec![], None),
                     is_pub: false,

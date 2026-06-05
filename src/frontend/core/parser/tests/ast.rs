@@ -2,10 +2,10 @@
 
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
-    self, BindingKind, BindingSemanticKind, BinOp, Block, EvalMode, Expr, FStringSegment,
-    GenericParam, GenericParamKind, MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind,
-    StructField, Type, TypeBodyBinding, UnOp, VariantDef, classify_binding_semantic_kind,
-    is_meta_type, type_annotation_returns_meta_type,
+    self, BindingKind, BindingSemanticKind, BinOp, Block, Expr, FStringSegment, GenericParam,
+    GenericParamKind, MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type,
+    TypeBodyBinding, UnOp, VariantDef, classify_binding_semantic_kind, is_meta_type,
+    type_annotation_returns_meta_type,
 };
 use crate::util::span::Span;
 
@@ -338,7 +338,7 @@ fn test_stmtkind_binding() {
             method_type: None,
             generic_params: vec![],
             type_annotation: None,
-            eval: None,
+
             params: vec![],
             body: (vec![], None),
             is_pub: false,
@@ -706,17 +706,6 @@ fn test_fstring_segment_interpolation() {
 }
 
 // ============================================================================
-// EvalMode
-// ============================================================================
-
-#[test]
-fn test_eval_mode_all() {
-    assert!(matches!(EvalMode::Block, EvalMode::Block));
-    assert!(matches!(EvalMode::Auto, EvalMode::Auto));
-    assert!(matches!(EvalMode::Eager, EvalMode::Eager));
-}
-
-// ============================================================================
 // BindingKind
 // ============================================================================
 
@@ -941,22 +930,5 @@ fn test_expr_fndef() {
     };
     if let Expr::FnDef { name, .. } = &expr {
         assert_eq!(name, "add");
-    }
-}
-
-#[test]
-fn test_expr_eval_modes() {
-    let body = Box::new(Block {
-        stmts: vec![],
-        expr: None,
-        span: Span::dummy(),
-    });
-    for mode in [EvalMode::Block, EvalMode::Auto, EvalMode::Eager] {
-        let expr = Expr::Eval {
-            mode,
-            body: body.clone(),
-            span: Span::dummy(),
-        };
-        assert!(matches!(expr, Expr::Eval { .. }));
     }
 }

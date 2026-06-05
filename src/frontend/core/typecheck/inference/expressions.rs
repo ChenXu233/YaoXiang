@@ -1031,11 +1031,6 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
 
-            // Eval 模式块：@block/@auto/@eager { ... }
-            crate::frontend::core::parser::ast::Expr::Eval { body, .. } => {
-                self.infer_block(body, true, None)
-            }
-
             // spawn 块：spawn { ... }
             crate::frontend::core::parser::ast::Expr::Spawn { body, .. } => {
                 self.infer_block(body, true, None)

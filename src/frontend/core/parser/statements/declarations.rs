@@ -432,7 +432,7 @@ pub fn parse_method_bind_stmt(
             method_type: Some(method_type),
             generic_params: Vec::new(),
             type_annotation: None,
-            eval: None,
+
             params,
             body: (body_stmts, body_expr),
             is_pub: false,
@@ -673,33 +673,6 @@ fn parse_var_stmt_with_pub(
         }
     }
 
-    // Optional function eval annotation: `@block/@auto/@eager`
-    // Only allowed on function definitions (RFC-001/008).
-    let fn_eval = if state.at(&TokenKind::At) {
-        if fn_params.is_none() {
-            state.error(ParseError::Message(
-                "Eval annotation is only allowed on function definitions".to_string(),
-            ));
-            return None;
-        }
-        state.bump(); // consume '@'
-        let mode = match state.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(name)) if name == "block" => EvalMode::Block,
-            Some(TokenKind::Identifier(name)) if name == "auto" => EvalMode::Auto,
-            Some(TokenKind::Identifier(name)) if name == "eager" => EvalMode::Eager,
-            _ => {
-                state.error(ParseError::Message(
-                    "Expected eval annotation name after '@' (block/auto/eager)".to_string(),
-                ));
-                return None;
-            }
-        };
-        state.bump(); // consume annotation name
-        Some(mode)
-    } else {
-        None
-    };
-
     // Optional initializer
     if state.skip(&TokenKind::Eq) {
         // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body
@@ -728,7 +701,7 @@ fn parse_var_stmt_with_pub(
                         method_type: None,
                         generic_params: generic_params_for_type,
                         type_annotation: Some(definition),
-                        eval: None,
+
                         params: Vec::new(),
                         body: (Vec::new(), None),
                         is_pub: final_is_pub,
@@ -817,7 +790,6 @@ fn parse_var_stmt_with_pub(
                             method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
-                            eval: fn_eval,
                             params: merged,
                             body: (body.stmts.clone(), body.expr.clone()),
                             is_pub: final_is_pub,
@@ -844,7 +816,6 @@ fn parse_var_stmt_with_pub(
                             method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
-                            eval: fn_eval,
                             params: extracted_params.clone(),
                             body,
                             is_pub: final_is_pub,
@@ -898,7 +869,7 @@ fn parse_var_stmt_with_pub(
                                     name_span: Span::dummy(),
                                     args: Vec::new(),
                                 }),
-                                eval: None,
+
                                 params: Vec::new(),
                                 body: (Vec::new(), None),
                                 is_pub: false,
@@ -930,7 +901,7 @@ fn parse_var_stmt_with_pub(
                     method_type: None,
                     generic_params: generic_params_for_type,
                     type_annotation: Some(definition),
-                    eval: None,
+
                     params: Vec::new(),
                     body: (Vec::new(), None),
                     is_pub: false,
@@ -965,7 +936,7 @@ fn parse_var_stmt_with_pub(
                         generic_params: Vec::new(),
                         // 保留变量的显式类型注解，供后续类型检查做 Void/Int 等一致性校验。
                         type_annotation: type_annotation.clone(),
-                        eval: None,
+
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub: final_is_pub,
@@ -1125,7 +1096,7 @@ pub fn parse_identifier_stmt(
                         method_type: None,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
-                        eval: None,
+
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub,

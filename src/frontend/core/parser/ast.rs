@@ -9,16 +9,6 @@ pub struct SpannedIdent {
     pub span: Span,
 }
 
-/// Evaluation strategy annotation (RFC-001/008).
-///
-/// Used by `@block/@auto/@eager` on function signatures or blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EvalMode {
-    Block,
-    Auto,
-    Eager,
-}
-
 /// Semantic category for unified binding statements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindingSemanticKind {
@@ -141,12 +131,6 @@ pub enum Expr {
         body: Box<Block>,
         span: Span,
     },
-    /// Evaluation strategy annotation for a block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
-    Eval {
-        mode: EvalMode,
-        body: Box<Block>,
-        span: Span,
-    },
     /// Spawn a concurrent block: `spawn { ... }`
     ///
     /// Only valid inside `@block` scope (enforced by type checker / compiler).
@@ -261,8 +245,6 @@ pub enum StmtKind {
         generic_params: Vec<GenericParam>,
         /// Type annotation / return type
         type_annotation: Option<Type>,
-        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
-        eval: Option<EvalMode>,
         /// Parameters (for functions and methods)
         params: Vec<Param>,
         /// Body: (prelude statements, optional tail expression)

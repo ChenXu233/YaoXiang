@@ -63,7 +63,6 @@ pub fn parse_method_bind(
             method_type: Some(method_type),
             generic_params: Vec::new(),
             type_annotation: None,
-            eval: None,
             params,
             body: (stmts, expr),
             is_pub: false,

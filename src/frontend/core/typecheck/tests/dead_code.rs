@@ -40,7 +40,6 @@ fn make_binding(
             body: (body_stmts, body_expr),
             generic_params: vec![],
             type_annotation: None,
-            eval: None,
         },
         span: Span::dummy(),
     }
@@ -62,7 +61,6 @@ fn make_type_constructor(name: &str) -> Stmt {
                 name: name.to_string(),
                 span: Span::dummy(),
             }),
-            eval: None,
         },
         span: Span::dummy(),
     }
