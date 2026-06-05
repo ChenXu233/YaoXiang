@@ -1,6 +1,6 @@
 # Syntax Specification
 
-This document defines the syntax specification of the YaoXiang programming language, including lexical structure, syntax rules, and operator precedence.
+This document defines the syntax specification of the YaoXiang programming language, including lexical structure, grammar rules, and operator precedence.
 
 ---
 
@@ -10,12 +10,12 @@ This document defines the syntax specification of the YaoXiang programming langu
 
 YaoXiang source files must use UTF-8 encoding. Source files typically use the `.yx` extension.
 
-### 1.2 Token Classification
+### 1.2 Token Categories
 
-| Category | Description | Example |
-|------|------|------|
-| Identifiers | Starting with letter or underscore | `x`, `_private`, `my_var` |
-| Keywords | Language-defined reserved words | `Type`, `pub`, `use` |
+| Category | Description | Examples |
+|----------|-------------|----------|
+| Identifiers | Start with a letter or underscore | `x`, `_private`, `my_var` |
+| Keywords | Language-predefined reserved words | `Type`, `pub`, `use` |
 | Literals | Fixed values | `42`, `"hello"`, `true` |
 | Operators | Operation symbols | `+`, `-`, `*`, `/` |
 | Delimiters | Syntax separators | `(`, `)`, `{`, `}`, `,` |
@@ -36,11 +36,11 @@ These keywords have special meaning in any context and cannot be used as identif
 ### 1.4 Reserved Words
 
 | Reserved Word | Type | Description |
-|--------|------|------|
+|---------------|------|-------------|
 | `Type` | Type | Meta type |
-| `true` | Bool | Boolean true |
-| `false` | Bool | Boolean false |
-| `void` | Void | Void |
+| `true` | Bool | Boolean true value |
+| `false` | Bool | Boolean false value |
+| `void` | Void | Empty value |
 | `some(T)` | Option | Option value variant |
 | `ok(T)` | Result | Result success variant |
 | `err(E)` | Result | Result error variant |
@@ -50,7 +50,7 @@ These keywords have special meaning in any context and cannot be used as identif
 Identifiers start with a letter or underscore, and subsequent characters can be letters, digits, or underscores. Identifiers are case-sensitive.
 
 Special identifiers:
-- `_` is used as a placeholder to ignore a value
+- `_` is used as a placeholder, indicating ignoring a value
 - Identifiers starting with an underscore denote private members
 
 ### 1.6 Literals
@@ -92,7 +92,7 @@ Set         ::= '{' Expr (',' Expr)* '}'
 ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 ```
 
-#### 1.6.6 Membership Tests
+#### 1.6.6 Membership Test
 
 ```
 Membership  ::= Expr 'in' Expr
@@ -109,11 +109,11 @@ Membership  ::= Expr 'in' Expr
 
 ### 1.8 Indentation Rules
 
-Code must use 4 spaces for indentation. Tab characters are prohibited. This is a mandatory syntax rule.
+Code must use 4 spaces for indentation; Tab characters are prohibited. This is a mandatory syntax rule.
 
 ---
 
-## Chapter 2: Syntax Rules
+## Chapter 2: Grammar Rules
 
 ### 2.1 Expression Classification
 
@@ -138,19 +138,19 @@ Expr        ::= Literal
 ### 2.2 Operator Precedence
 
 | Precedence | Operators | Associativity |
-|--------|--------|--------|
-| 1 | `()` `[]` `.` `?` | Left to Right |
-| 2 | `as` | Left to Right |
-| 3 | `*` `/` `%` | Left to Right |
-| 4 | `+` `-` | Left to Right |
-| 5 | `..` | Left to Right |
-| 6 | `<<` `>>` | Left to Right |
-| 7 | `&` `\|` `^` | Left to Right |
-| 8 | `==` `!=` `<` `>` `<=` `>=` | Left to Right |
-| 9 | `not` | Right to Left |
-| 10 | `and` `or` | Left to Right |
-| 11 | `if...else` | Right to Left |
-| 12 | `=` `+=` `-=` `*=` `/=` | Right to Left |
+|------------|-----------|---------------|
+| 1 | `()` `[]` `.` `?` | Left to right |
+| 2 | `as` | Left to right |
+| 3 | `*` `/` `%` | Left to right |
+| 4 | `+` `-` | Left to right |
+| 5 | `..` | Left to right |
+| 6 | `<<` `>>` | Left to right |
+| 7 | `&` `\|` `^` | Left to right |
+| 8 | `==` `!=` `<` `>` `<=` `>=` | Left to right |
+| 9 | `not` | Right to left |
+| 10 | `and` `or` | Left to right |
+| 11 | `if...else` | Right to left |
+| 12 | `=` `+=` `-=` `*=` `/=` | Right to left |
 
 ### 2.3 Function Calls
 
@@ -172,7 +172,7 @@ MemberAccess::= Expr '.' Identifier
 IndexAccess ::= Expr '[' Expr ']'
 ```
 
-### 2.6 Type Casting
+### 2.6 Type Cast
 
 ```
 TypeCast    ::= Expr 'as' TypeExpr
@@ -204,6 +204,8 @@ Pattern     ::= Literal
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
+**Semantics**: Code blocks must use `return` to return values; without `return`, the default return value is `Void`. The expression form `= expr` returns a value directly.
+
 ### 2.10 Lambda Expressions
 
 ```
@@ -217,13 +219,13 @@ Lambda      ::= '(' ParamList? ')' '=>' Expr
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator is a postfix operator with the same precedence as `.`. For `Result(T, E)` type:
-- On `Ok(v)`: extracts value `v` and continues execution
-- On `Err(e)`: propagates the error upward (`return Err(e)`)
+The `?` operator is a postfix operator with the same precedence as `.`. For `Result(T, E)` types:
+- `Ok(v)`: Extracts value `v` and continues execution
+- `Err(e)`: Propagates the error upward (`return Err(e)`)
 
 ```yaoxiang
 process: (data: Data) -> Result(Data, Error) = {
-    validated = validate(data)?     // On success: extract value; on failure: propagate
+    validated = validate(data)?     // Extract value on success, propagate on failure
     transform(validated)
 }
 ```
@@ -247,7 +249,7 @@ slice = array[0..5]
 RefExpr     ::= 'ref' Expr
 ```
 
-`ref` creates a shared reference. The compiler automatically chooses Rc (single-task) or Arc (cross-task), and users don't need to worry about implementation details.
+`ref` creates a shared reference. The compiler automatically chooses Rc (single-task) or Arc (cross-task); users don't need to worry about implementation details.
 
 ```yaoxiang
 data = ref heavy_data
@@ -285,6 +287,8 @@ LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ReturnStmt  ::= 'return' Expr?
 ```
 
+**Semantics**: `return` is used to return values from code blocks. Without `return`, code blocks default to returning `Void`.
+
 ### 3.4 break Statements
 
 ```
@@ -321,9 +325,9 @@ WhileStmt   ::= 'while' Expr Block
 ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
 
-#### 3.9.1 Semantics: Each Iteration Creates a New Binding
+#### 3.9.1 Semantics: Each Iteration Binds a New Value
 
-The YaoXiang for loop semantics differ from traditional languages: **each iteration creates a new binding, rather than modifying the same variable**.
+The for loop semantics in YaoXiang differs from traditional languages: **Each iteration binds a new value, rather than modifying the same variable**.
 
 ```yaoxiang
 // Example: for i in 1..5
@@ -334,65 +338,65 @@ for i in 1..5 {
 
 **Execution Process**:
 
-| Iteration | Loop Variable Behavior |
-|------|----------------|
-| 1st | Create new binding `i = 1`, execute loop body, print 1 |
-| 2nd | Create new binding `i = 2` (previous binding destroyed), execute loop body, print 2 |
-| 3rd | Create new binding `i = 3`, execute loop body, print 3 |
-| 4th | Create new binding `i = 4`, execute loop body, print 4 |
+| Iteration | Behavior of Loop Variable |
+|-----------|---------------------------|
+| 1st | Creates new binding `i = 1`, loop body executes, prints 1 |
+| 2nd | Creates new binding `i = 2` (previous binding destroyed), loop body executes, prints 2 |
+| 3rd | Creates new binding `i = 3`, loop body executes, prints 3 |
+| 4th | Creates new binding `i = 4`, loop body executes, prints 4 |
 | End | Loop body ends, binding destroyed |
 
-**Key Point**: After each iteration ends, the binding created during that iteration is destroyed. The next iteration is a completely new binding with no relationship to the previous iteration's binding.
+**Key Point**: At the end of each iteration, the binding created during that iteration is destroyed. The next iteration is a completely new binding with no relationship to the previous iteration's binding.
 
 #### 3.9.2 Difference Between for and for mut
 
 | Syntax | Loop Variable Mutability | Description |
-|------|----------------|------|
+|--------|-------------------------|-------------|
 | `for i in 1..5` | Immutable | Cannot modify binding in loop body |
 | `for mut i in 1..5` | Mutable | Can modify binding in loop body |
 
 ```yaoxiang
-// Valid: each iteration creates a new binding, no need to modify
+// Valid: Each iteration binds a new value, no need to modify
 for i in 1..5 {
     print(i)  // Read value of i
 }
 
-// Invalid: immutable binding, cannot modify
+// Error: Immutable binding, cannot modify
 for i in 1..5 {
     i = i + 1  // Error: cannot modify immutable binding
 }
 
-// Valid: using for mut allows modification
+// Valid: Using for mut allows modification
 for mut i in 1..5 {
-    i = i + 1  // Allowed
+    i = i + 1  // Allowed to modify
 }
 ```
 
 #### 3.9.3 Shadowing Check
 
-YaoXiang prohibits variable shadowing. For loop variables cannot have the same name as variables in the outer scope:
+YaoXiang prohibits variable shadowing. Loop variables cannot have the same name as variables in outer scopes:
 
 ```yaoxiang
-// Invalid: i already declared externally
+// Error: i already declared outside
 i = 10
 for i in 1..5 {
     print(i)
 }
 
-// Correct: use a different variable name
+// Correct: Use a different variable name
 i = 10
 for j in 1..5 {
     print(j)
 }
 ```
 
-This rule applies to all code blocks. See [4.3 Shadowing Rules](./modules.md#43-shadowing-rules) for details.
+This rule applies to all code blocks. See [4.3 Shadowing Rules](./modules.md#43-shadowing-rules).
 
 #### 3.9.4 Comparison with Other Languages
 
 | Language | for Loop Variable Semantics |
-|------|------------------|
-| YaoXiang | Each iteration creates a new binding |
+|----------|----------------------------|
+| YaoXiang | Each iteration binds a new value |
 | Rust | Modifies the same variable (requires mut) |
 | Python | Modifies the same variable (no mut needed) |
 | C/C++ | Modifies the same variable (requires pointer or reference) |
@@ -400,13 +404,13 @@ This rule applies to all code blocks. See [4.3 Shadowing Rules](./modules.md#43-
 **Design Rationale**: YaoXiang adopts binding semantics because:
 
 1. **More aligned with natural semantics**
-   In natural language, "for each element x in a collection" implies each x is an independent individual. YaoXiang's `for i in 1..5` reads as "for each i in 1 to 5", and the i in each iteration is a brand new binding. This is consistent with human intuition.
+   In natural language, "for each element x in a set" means each x is an independent entity. YaoXiang's `for i in 1..5` reads as "for each i in 1 to 5", and each iteration's i is a completely new binding. This aligns with human intuition.
 
-2. **Avoids accidental modifications**
-   The default immutable binding semantics mean the loop body cannot accidentally modify the loop variable. There's no need to worry about accidentally writing `i = ...` somewhere in a complex loop body causing hard-to-track bugs.
+2. **Prevents accidental modification**
+   The default immutable binding semantics means the loop body cannot accidentally modify the loop variable. You don't need to worry about accidentally writing `i = ...` somewhere in a complex loop body, causing hard-to-trace bugs.
 
-3. **High-performance solutions are readily accessible**
-   When you genuinely need to reuse a variable between iterations (e.g., accumulator, cache), you can simply use `for mut` to switch to mutable binding mode. This is clearer than implicit shared state—the intent is expressed explicitly through syntax rather than hidden in runtime behavior.
+3. **High-performance solutions are readily available**
+   When you genuinely need to reuse a variable between iterations (e.g., accumulator, cache), you can simply switch to mutable binding mode with `for mut`. This is clearer than implicit shared state—intent is expressed explicitly through syntax rather than hidden in runtime behavior.
 
 ### 3.10 spawn Statements
 
@@ -416,7 +420,7 @@ SpawnFor    ::= Identifier '=' 'spawn' 'for' 'mut'? Identifier 'in' Expr '{' Exp
 SpawnStmt   ::= SpawnBlock | SpawnFor
 ```
 
-**spawn block**: Explicitly declares concurrency scope, expressions inside the block execute concurrently.
+**spawn blocks**: Explicitly declare concurrency scope; expressions inside the block execute concurrently.
 
 ```yaoxiang
 (result_a, result_b) = spawn {
@@ -425,7 +429,7 @@ SpawnStmt   ::= SpawnBlock | SpawnFor
 }
 ```
 
-**spawn loop**: Data-parallel loop.
+**spawn loops**: Data-parallel loops.
 
 ```yaoxiang
 results = spawn for item in items {
