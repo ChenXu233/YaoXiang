@@ -19,11 +19,16 @@
 ```
 design/
 ├── index.md              # 本索引
-├── accepted/             # 已接受的设计提案
+├── deprecated/           # 已废弃（被新设计取代）
 │   └── *.md
-├── rfc/                  # RFC 提案（待审议）
-│   ├── *.md
-│   └── RFC_TEMPLATE.md
+├── rejected/             # 已拒绝
+│   └── *.md
+├── rfc/
+│   ├── draft/            # 草案（工作进行中）
+│   ├── review/           # 审核中（开放讨论）
+│   ├── accepted/         # 已接受（设计通过）
+│   ├── deprecated/       # 已废弃（被取代）
+│   └── rejected/         # 已拒绝（不通过）
 └── discussion/           # 设计讨论区（开放讨论）
     └── *.md
 ```
@@ -32,9 +37,13 @@ design/
 
 | 文档 | 状态 | 描述 |
 |------|------|------|
-| [008-并发模型](./accepted/008-runtime-concurrency-model.md) | ✅ 正式 | 并作模型与任务调度器设计 |
+| [RFC-001 并发模型错误处理](./rfc/accepted/001-concurrent-model-error-handling.md) | ✅ 已接受 | 并发模型中的错误处理设计 |
+| [RFC-008 运行时并发模型](./rfc/accepted/008-runtime-concurrency-model.md) | ✅ 已接受 | 并作模型与任务调度器设计 |
+| [RFC-009 所有权模型](./rfc/accepted/009-ownership-model.md) | ✅ 已接受 | 所有权与借用系统设计 |
+| [RFC-010 统一类型语法](./rfc/accepted/010-unified-type-syntax.md) | ✅ 已接受 | 统一类型定义语法 |
+| [RFC-011 泛型类型系统](./rfc/accepted/011-generic-type-system.md) | ✅ 已接受 | 泛型类型系统设计 |
 
-> 查看 [`accepted/`](./accepted/) 目录获取完整列表。
+> 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表。
 
 ## RFC 提案
 
@@ -44,10 +53,39 @@ design/
 
 | 编号 | 标题 | 状态 |
 |------|------|------|
-| RFC-003 | 版本规划 | 待审议 |
-| RFC-005 | 自动化 CVE 扫描 | 待审议 |
-| RFC-006 | 文档站点优化 | 待审议 |
-| RFC-012 | f-string 模板字符串 | 待审议 |
+| RFC-003 | 版本规划 | 审核中 |
+| RFC-016 | 量子原生支持 | 草案 |
+| RFC-018 | LLVM AOT 编译器 | 审核中 |
+| RFC-019 | 类型化同像性 | 草案 |
+| RFC-020 | 动态模块 FFI | 草案 |
+| RFC-021 | 库驱动 FFI 扩展 | 审核中 |
+| RFC-022 | Hoare 逻辑静态验证 | 审核中 |
+
+### 已接受提案
+
+| 编号 | 标题 | 状态 |
+|------|------|------|
+| RFC-001 | 并发模型错误处理 | 已接受 |
+| RFC-004 | 柯里化多位置绑定 | 已接受 |
+| RFC-006 | 文档站点优化 | 已接受 |
+| RFC-007 | 函数语法统一 | 已接受 |
+| RFC-008 | 运行时并发模型 | 已接受 |
+| RFC-009 | 所有权模型 | 已接受 |
+| RFC-010 | 统一类型语法 | 已接受 |
+| RFC-011 | 泛型类型系统 | 已接受 |
+| RFC-012 | f-string 模板字符串 | 已接受 |
+| RFC-013 | 错误码规范 | 已接受 |
+| RFC-014 | 包管理器 | 已接受 |
+| RFC-015 | 配置系统 | 已接受 |
+| RFC-017 | LSP 支持 | 已接受 |
+| RFC-023 | 闭包捕获模型 | 已接受 |
+
+### 已拒绝提案
+
+| 编号 | 标题 | 状态 |
+|------|------|------|
+| RFC-002 | 跨平台 IO (libuv) | 已拒绝 |
+| RFC-005 | 自动化 CVE 扫描 | 已拒绝 |
 
 ### RFC 模板
 
@@ -57,25 +95,46 @@ design/
 
 ## 参与设计讨论
 
+### RFC 生命周期
+
+RFC 提案有 5 个状态：
+
+| 状态 | 含义 |
+|------|------|
+| 草案 | 工作进行中 |
+| 审核中 | 开放讨论 |
+| 已接受 | 设计通过 |
+| 已废弃 | 曾被接受，被新设计取代 |
+| 已拒绝 | 不通过 |
+
+完整生命周期：
+```
+草案 → 审核中 → 已接受 → 已废弃（被取代）
+                  ↓
+               已拒绝（不通过）
+```
+
 ### 提案流程
 
 ```
 1. 起草提案（使用 RFC 模板）
-   → 放入 rfc/ 目录
+   → 放入 rfc/draft/
 
-2. 社区讨论
-   → 在 rfc/REPO 对应 issue 中讨论
+2. 提交审核
+   → 移入 rfc/review/，开放社区讨论
 
 3. 核心团队评审
-   → 接受 → 移入 accepted/
-   → 拒绝 → 移入 archived/ 或删除
+   → 接受 → 移入 rfc/accepted/
+   → 拒绝 → 移入 rfc/rejected/
+
+4. 后续维护
+   → 被取代 → 移入 rfc/deprecated/
 ```
 
 ### 设计原则
 
 - **明确边界**：每个设计决策应该有清晰的适用范围
 - **实用优先**：解决实际问题，而不是假想威胁
-- **渐进透明**：并发模型的分层设计（L1-L3）
 - **用户可见行为不变**：Never break userspace
 
 ## 代码示例
@@ -83,15 +142,10 @@ design/
 ```yaoxiang
 // 类型定义
 Point: Type = { x: Float, y: Float }
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: Type(T, E) = { ok(T) | err(E) }
 
 // 函数定义
 add: (a: Int, b: Int) -> Int = a + b
-
-// 并作函数（自动并发）
-fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
-}
 
 // 主函数
 main: () -> Void = {
@@ -110,32 +164,33 @@ main: () -> Void = {
 ### 2. 并作模型
 
 ```yaoxiang
-// 三层并发抽象
+// 并作模型：默认顺序执行，spawn 引入数据流并行
 
-// L1: @blocking 同步（禁用并行）
-fetch: (String) -> JSON @blocking = (url) => { ... }
-
-// L2: spawn 显式并发
-process: () -> Void spawn = () => {
-    users = fetch_users()
-    posts = fetch_posts()  // 自动并行
+// 默认顺序执行
+compute: (Int) -> Int = (n) => {
+    a = heavy_calc(1)
+    b = heavy_calc(2)  // 顺序执行，等 a 完成
+    c = heavy_calc(3)  // 顺序执行，等 b 完成
+    a + b + c
 }
 
-// L3: 完全透明（默认）
-compute: (Int) -> Int = (n) => {
-    a = heavy_calc(1)  // 系统自动分析依赖
-    b = heavy_calc(2)
-    c = heavy_calc(3)
-    a + b + c
+// spawn 块引入数据流并行
+process: () -> Void = () => {
+    spawn {
+        users = fetch_users()   // 并行
+        posts = fetch_posts()   // 并行
+    }
+    // 调用方同步阻塞等待结果
+    render(users, posts)
 }
 ```
 
 ### 3. 错误处理
 
 ```yaoxiang
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: Type(T, E) = { ok(T) | err(E) }
 
-process: () -> Result[Data, Error] = {
+process: () -> Result(Data, Error) = {
     data = fetch_data()?      // ? 运算符透明传播
     transformed = transform(data)?
     save(transformed)?

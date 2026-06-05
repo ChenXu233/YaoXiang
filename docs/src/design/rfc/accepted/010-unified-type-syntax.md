@@ -10,7 +10,7 @@ title: "RFC-010：统一类型语法"
 >
 > **创建日期**: 2025-01-20
 >
-> **最后更新**: 2026-03-21（完成阶段1-4实现，统一 Fn/TypeDef/MethodBind 为 Binding）
+> **最后更新**: 2026-06-05（更新返回规则和 {} 语义）
 
 ## 摘要
 
@@ -233,17 +233,18 @@ y = 100  // 推断为 Int
 #### 2. 函数定义
 
 ```yaoxiang
-// 完整语法（参数名在签名中声明）
-add: (a: Int, b: Int) -> Int = {
-    return a + b
+// 单表达式形式（直接返回值，无需 return）
+add: (a: Int, b: Int) -> Int = a + b
+greet: (name: String) -> String = "Hello, ${name}!"
+
+// 代码块形式（必须用 return 返回值）
+process: (x: Int) -> Int = {
+    a = x * 2
+    b = a + 1
+    return b
 }
 
-// 带参数名
-greet: (name: String) -> String = {
-    return "Hello, ${name}!"
-}
-
-// 多参数
+// 多行代码块
 calc: (x: Float, y: Float, op: String) -> Float = {
     return match op {
         "+" -> x + y,
@@ -252,42 +253,79 @@ calc: (x: Float, y: Float, op: String) -> Float = {
     }
 }
 
-// 多行函数体
-calc2: (x: Float, y: Float) -> Float = {
-    if x > y {
-        return x
-    }
-    return y
+// Void 函数（代码块内不需要 return）
+print: (msg: String) -> Void = {
+    console.write(msg)
 }
 ```
 
 #### 返回规则
 
-代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值：
+返回值取决于 `=` 右侧的形式：
+
+| 写法 | 返回值 |
+|------|--------|
+| `= expr`（无花括号） | 直接返回 `expr` |
+| `= { ... }`（有花括号） | 必须用 `return`，否则返回 `Void` |
 
 ```yaoxiang
-// 非 Void 返回类型 - 必须使用 return
-add: (a: Int, b: Int) -> Int = {
-    return a + b
+# 单表达式：直接返回值，不需要 return
+add: (a: Int, b: Int) -> Int = a + b
+
+# 代码块：必须用 return 返回值
+process: (x: Int) -> Int = {
+    a = x * 2
+    b = a + 1
+    return b
 }
 
-// Void 返回类型 - 可选使用 return（通常省略）
+# Void 函数：不需要 return
 print: (msg: String) -> Void = {
-    // 不需要 return
-}
-
-// 单行表达式（直接返回值，无需 return）
-greet: (name: String) -> String = "Hello, ${name}!"
-
-// 多行函数体 - 必须使用 return
-max: (a: Int, b: Int) -> Int = {
-    if a > b {
-        return a
-    } else {
-        return b
-    }
+    console.write(msg)
 }
 ```
+
+> **设计理由**：`{ ... }` 是依赖驱动计算单元（见下文），其返回语义与单表达式不同。花括号引入了多语句上下文，因此需要显式 `return` 来消除"最后一个表达式是否是返回值"的歧义。
+
+#### `{}` 语义：依赖驱动计算单元
+
+`{ ... }` 在 YaoXiang 中不仅仅是代码块——它是**依赖驱动计算单元**。这个语义在函数体、变量初始化和 `spawn` 中保持一致：
+
+**核心规则**：
+- `{}` 内的赋值语句按依赖关系自动排序，而非书写顺序
+- 依赖齐备则立即执行，缺失则阻塞等待
+- 使用 `return` 显式返回值（见返回规则）
+
+```yaoxiang
+# 依赖驱动：b 依赖 a，编译器自动排序
+result: Int = {
+    b = a + 1      # 依赖 a → 自动排在 a 之后
+    a = 10         # 无依赖 → 可以先执行
+    return b       # 返回 11
+}
+```
+
+> **与单表达式的区别**：`= expr`（无花括号）是直接返回值的简单绑定；`= { ... }`（有花括号）引入依赖驱动计算上下文，允许多语句和显式 `return`。
+
+#### `spawn` 块
+
+`spawn { ... }` 是 YaoXiang 的唯一并行原语。它利用 `{}` 的依赖驱动语义实现自动并行化：
+
+- `spawn { ... }` 内的直接子赋值自动创建并行任务
+- 依赖齐备的任务立即并发执行
+- 调用方阻塞等待所有子任务完成
+
+```yaoxiang
+result = spawn {
+    a = fetch_data("url1")    # 任务 1
+    b = fetch_data("url2")    # 任务 2（与 a 无依赖，并行执行）
+    c = process(a, b)         # 依赖 a, b → 等待两者完成后执行
+    return c
+}
+// 调用方在此阻塞，直到 spawn 块内所有任务完成
+```
+
+> **详细定义**：`spawn` 的完整语义、任务创建规则和阻塞模型详见 `008-runtime-concurrency-model.md`。
 
 #### 3. 类型定义
 
