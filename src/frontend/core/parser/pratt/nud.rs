@@ -704,24 +704,14 @@ impl<'a> ParserState<'a> {
 
         self.expect(&TokenKind::RBrace);
 
-        // Check if block ends with an expression (without semicolon)
-        let expr = if stmts
-            .last()
-            .is_some_and(|s| matches!(s.kind, StmtKind::Expr(_)))
-        {
-            // Last statement is an expression, extract it
-            stmts.pop().and_then(|stmt| {
-                if let StmtKind::Expr(expr) = stmt.kind {
-                    Some(expr)
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        };
-
-        Some(Expr::Block(Block { stmts, expr, span }))
+        // 不再自动剥离末尾表达式
+        // 代码块形式必须显式使用 return 返回值
+        // 否则默认返回 Void
+        Some(Expr::Block(Block {
+            stmts,
+            expr: None,
+            span,
+        }))
     }
 
     /// Parse if expression: `if cond { then } else { else }`
