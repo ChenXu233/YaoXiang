@@ -1,13 +1,12 @@
 ---
 title: "RFC-018：LLVM AOT 编译器设计"
+status: "审核中"
+author: "晨煦"
+created: "2026-02-15"
+updated: "2026-06-05"
 ---
 
 # RFC-018：LLVM AOT 编译器设计
-
-> **状态**: 审核中
-> **作者**: 晨煦
-> **创建日期**: 2026-02-15
-> **最后更新**: 2026-06-05
 
 > **参考**:
 > - [RFC-024: 基于 spawn 块的并发模型](./accepted/024-concurrency-model.md)

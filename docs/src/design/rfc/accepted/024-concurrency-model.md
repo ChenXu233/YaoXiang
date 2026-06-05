@@ -1,13 +1,12 @@
 ---
 title: "RFC-024：基于 spawn 块的并发模型"
+status: "已接受"
+author: "晨煦"
+created: "2026-06-05"
+updated: "2026-06-05"
 ---
 
 # RFC-024：基于 spawn 块的并发模型
-
-> **状态**: 已接受
-> **作者**: 晨煦
-> **创建日期**: 2026-06-05
-> **最后更新**: 2026-06-05
 
 > **参考**:
 > - [并发模型规范](/reference/language-spec/concurrency.md)

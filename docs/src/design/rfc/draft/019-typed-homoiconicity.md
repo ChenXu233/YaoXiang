@@ -1,14 +1,17 @@
 ---
-title: "RFC-019：类型级同像性 (Typed Homoiconicity)"
+title: "RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型"
+status: "草案"
+author: "晨煦"
+created: "2026-02-20"
+updated: "YYYY-MM-DD"
 ---
 
 # RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型
 
-> **状态**: 草案
 >
-> **作者**: 晨煦
+
 >
-> **创建日期**: 2026-02-20
+
 >
 > **⚠️ 永久实验性声明**: 这是一个**探索性实验**，用于验证"语法即类型"这一语言设计理念的可行性。**本 RFC 永不合并**，无论结果如何都不会进入 dev/main 分支。实验分支将在完成后被废弃或归档。
 >
