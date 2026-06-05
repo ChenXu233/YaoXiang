@@ -3,7 +3,7 @@
 > Version: v0.1.0-draft
 > Author: Chen Xu
 > Date: 2024-12-31
-> Status: [Archived] This document represents early concept design and has been superseded by official documentation
+> Status: [Archived] This document captures early conceptual design and has been superseded by official documentation
 
 ---
 
@@ -11,7 +11,7 @@
 > - [YaoXiang-book.md](../YaoXiang-book.md) - Language Guide
 > - [YaoXiang-design-manifesto.md](../YaoXiang-design-manifesto.md) - Design Manifesto
 >
-> Preserved only as historical reference.
+> Retained for historical reference only.
 
 ---
 
@@ -21,7 +21,7 @@
 2. [Core Concept Verification](#2-core-concept-verification)
 3. [Type System Design](#3-type-system-design)
 4. [Ownership and Memory Model](#4-ownership-and-memory-model)
-5. [Seamless Asynchronous Mechanism](#5-seamless-asynchronous-mechanism)
+5. [Seamless Async Mechanism](#5-seamless-async-mechanism)
 6. [Syntax Design](#6-syntax-design)
 7. [AI-Friendly Design](#7-ai-friendly-design)
 8. [Performance and Implementation Considerations](#8-performance-and-implementation-considerations)
@@ -35,28 +35,32 @@
 
 ### 1.1 Design Goals
 
-YaoXiang is an experimental general-purpose programming language that aims to fuse the following characteristics:
+YaoXiang is an experimental general-purpose programming language that aims to integrate the following characteristics:
 
-- **Types are Everything**: Values, functions, modules, and generics are all types; types are first-class citizens
-- **Mathematical Abstraction**: Unified abstraction framework based on type theory
-- **Zero-Cost Abstraction**: High performance, no GC, ownership model ensures memory safety
-- **Natural Syntax**: Python-like readability, close to natural language
-- **Seamless Asynchronous**: No explicit await needed, the compiler handles it automatically
-- **AI-Friendly**: Strictly structured, clear AST, easy to parse and modify
+- **Types are everything**: Values, functions, modules, and generics are all types; types are first-class citizens
+- **Mathematical abstraction**: Unified abstraction framework based on type theory
+- **Zero-cost abstraction**: High performance, no GC, ownership model ensures memory safety
+- **Natural syntax**: Python-like readability, close to natural language
+- **Seamless async**: No explicit await required, compiler handles automatically
+- **AI-friendly**: Strictly structured, clear AST, easy to parse and modify
 
 ### 1.2 Core Design Philosophy
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    YaoXiang Design Philosophy               │
+│                   YaoXiang Design Philosophy                │
 ├─────────────────────────────────────────────────────────────┤
-│  Everything is a type → Unified abstraction → Types as data→ Runtime available │
+│  Everything is type → Unified abstraction → Types as data  │
+│  → Available at runtime                                     │
 │                                                              │
-│  Ownership model → Zero-cost abstraction → No GC → High performance │
+│  Ownership model → Zero-cost abstraction → No GC →          │
+│  High performance                                           │
 │                                                              │
-│  Python syntax → Natural language feel → Readability → Beginner friendly │
+│  Python syntax → Natural language feel → Readability →     │
+│  Beginner-friendly                                          │
 │                                                              │
-│  Automatic inference → Minimal keywords → Concise expression → AI-friendly │
+│  Automatic inference → Minimal keywords → Concise →        │
+│  AI-friendly                                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +69,7 @@ YaoXiang is an experimental general-purpose programming language that aims to fu
 | Dimension | Positioning |
 |-----------|-------------|
 | Paradigm | Multi-paradigm (functional + imperative + object-oriented) |
-| Type system | Dependently typed + parametric polymorphism |
+| Type system | Dependant types + parametric polymorphism |
 | Memory management | Ownership + RAII (no GC) |
 | Compilation model | AOT compilation (optional JIT) |
 | Target scenarios | Systems programming, application development, AI-assisted programming |
@@ -76,9 +80,9 @@ YaoXiang is an experimental general-purpose programming language that aims to fu
 
 ### 2.1 Feasibility of "Everything is a Type"
 
-#### Theoretical Foundation
+#### Theoretical Basis
 
-In type theory, types can be viewed as propositions and values as proofs. This Curry-Howard isomorphism reveals the deep connection between types and values. YaoXiang extends this idea to the extreme:
+In type theory, types can be viewed as propositions, and values can be viewed as proofs. This Curry-Howard isomorphism reveals the deep connection between types and values. YaoXiang takes this idea to the extreme:
 
 ```
 Values are instances of types
@@ -112,17 +116,17 @@ sqrt(Float) -> Float = (x) => { ... }
 
 #### Verification Conclusion
 
-✅ **Feasible** - Everything is a type has a solid mathematical foundation (type theory, category theory) and can be implemented through unified type representation in practice.
+✅ **Feasible** - Everything is a type has solid mathematical foundations (type theory, category theory) and can be implemented through unified type representation in practice.
 
-### 2.2 High-Performance Guarantee with Dependent Types
+### 2.2 High-Performance Guarantees with Dependent Types
 
 #### Challenges
 
-Dependent type languages (such as Agda, Idris) typically have lower performance because:
+Languages with dependent types (such as Agda, Idris) typically have lower performance because:
 
 1. Complex type checking
 2. Runtime type representation
-3. Exhaustive checking of pattern matching
+3. Exhaustive pattern matching checks
 
 #### YaoXiang's Solution
 
@@ -143,17 +147,17 @@ type Nat = { n: Int }
 
 | Mechanism | Description |
 |-----------|-------------|
-| Monomorphization | Generic functions are expanded to concrete versions at compile time |
-| Inlining optimization | Simple functions are automatically inlined |
-| Stack allocation | Small objects default to stack allocation |
-| Escape analysis | Large objects are heap allocated |
+| Monomorphization | Generic functions expanded to concrete versions at compile time |
+| Inlining optimization | Simple functions automatically inlined |
+| Stack allocation | Small objects allocated on stack by default |
+| Escape analysis | Large objects allocated on heap only |
 | Conditional type erasure | Optional runtime type information |
 
 #### Verification Conclusion
 
 ✅ **Feasible** - Through carefully designed compilation strategies, high performance can be achieved while maintaining dependent type capabilities.
 
-### 2.3 Feasibility of Seamless Asynchronous
+### 2.3 Feasibility of Seamless Async
 
 #### Core Idea
 
@@ -162,32 +166,32 @@ type Nat = { n: Int }
 # When a function is called, the compiler automatically detects async dependencies
 # and inserts appropriate synchronization barriers
 
-fetch_user(Int) -> User spawn = (id) => {
-    database.query("SELECT * FROM users WHERE id = ?", id)
+fetch_user: (Int) -> User spawn = (id) => {
+    return database.query("SELECT * FROM users WHERE id = ?", id)
 }
 
-display_user(Int) -> String = (id) => {
+display_user: (Int) -> String = (id) => {
     user = fetch_user(id)  # Automatically waits for result
-    "User: " + user.name   # Ensures user is ready
+    return "User: " + user.name   # Ensures user is ready
 }
 ```
 
 #### Compiler Automatic Processing Flow
 
 ```
-Source Code
+Source code
    ↓
-Type Checking + Async Dependency Analysis
+Type checking + Async dependency analysis
    ↓
 Identify spawn calls
    ↓
-Generate State Machine
+Generate state machine
    ↓
-Automatically Insert await Points
+Automatically insert await points
    ↓
-Optimize Synchronization Barriers
+Optimize synchronization barriers
    ↓
-Target Code
+Target code
 ```
 
 #### Verification Conclusion
@@ -202,14 +206,14 @@ Target Code
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    YaoXiang Type Hierarchy                 │
+│                   YaoXiang Type Hierarchy                  │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  type (meta type)                                           │
 │    │                                                        │
 │    ├── Primitive Types                                     │
-│    │   ├── Void                                             │
-│    │   ├── Bool                                             │
+│    │   ├── Void                                            │
+│    │   ├── Bool                                            │
 │    │   ├── Int (8/16/32/64/128)                            │
 │    │   ├── Uint (8/16/32/64/128)                           │
 │    │   ├── Float (32/64)                                   │
@@ -235,7 +239,7 @@ Target Code
 │    │   Vec[n: Nat, T]                                      │
 │    │                                                        │
 │    └── Module Types                                        │
-│        mod { exports }                                      │
+│        mod { exports }                                     │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -301,7 +305,7 @@ type Printable = { to_string: fn() -> String }
 type Serializable = { to_json: fn() -> String }
 type Versatile = Printable & Serializable
 
-# Type conditional
+# Type conditionals
 type Conditional[T] = if T == Int {
     Int64
 } else {
@@ -335,7 +339,7 @@ if value has_type Int {
     print("It's an integer")
 }
 
-# Type casting
+# Type conversion
 fn safe_cast[T, U](value: T, target: type) -> option[U] {
     if value has_type target {
         some(value as U)
@@ -365,13 +369,13 @@ modify(mut Data) -> Void = (data) => {
     # Cannot have other active references
 }
 
-# Transfer ownership
+# Ownership transfer
 consume(Data) -> Void = (data) => {
     # Ownership of data is transferred in
-    # data is destroyed after function ends
+    # data is destroyed when the function ends
 }
 
-# Borrow return
+# Borrowing return
 borrow_field(ref Data) -> ref Field = (data) => ref data.field
 ```
 
@@ -390,16 +394,16 @@ first<T>(ref List[T]) -> ref T = (list) => ref list[0]
 ### 4.3 Smart Pointers
 
 ```yaoxiang
-# Box - heap allocation
+# Box - Heap allocation
 heap_data: Box[List[Int]] = Box.new([1, 2, 3])
 
-# Rc - reference counting
+# Rc - Reference counting
 shared: Rc[Data] = Rc.new(data)
 
-# Arc - atomic reference counting (thread-safe)
+# Arc - Atomic reference counting (thread-safe)
 thread_safe: Arc[Data] = Arc.new(data)
 
-# RefCell - interior mutability
+# RefCell - Interior mutability
 internal_mut: RefCell[Data] = RefCell.new(data)
 ```
 
@@ -420,33 +424,33 @@ unsafe_example() -> Void = () => {
 
 ---
 
-## 5. Seamless Asynchronous Mechanism
+## 5. Seamless Async Mechanism
 
-### 5.1 spawn Marked Functions
+### 5.1 Spawn Marked Functions
 
 ```yaoxiang
 # Use spawn to mark async functions
-fetch_api(String) -> JSON spawn = (url) => {
+fetch_api: (String) -> JSON spawn = (url) => {
     response = HTTP.get(url)
-    JSON.parse(response.body)
+    return JSON.parse(response.body)
 }
 
-calculate_heavy(Int) -> Int spawn = (n) => {
+calculate_heavy: (Int) -> Int spawn = (n) => {
     # Time-consuming calculation
-    result = 0
+    mut result = 0
     for i in 0..n {
         result += i
     }
-    result
+    return result
 }
 ```
 
-### 5.2 Automatic Await
+### 5.2 Automatic Waiting
 
 ```yaoxiang
-# Code calling spawn functions automatically awaits
+# Code calling spawn functions automatically waits
 main() -> Void = () => {
-    # fetch_api is async, but automatically awaits when called
+    # fetch_api is async, but automatically waits when called
     data = fetch_api("https://api.example.com/data")
     # data is ready here
 
@@ -457,7 +461,7 @@ main() -> Void = () => {
     users = fetch_api("https://api.example.com/users")
     posts = fetch_api("https://api.example.com/posts")
 
-    # Automatically awaits on assignment
+    # Automatically waits on assignment
     # users and posts may execute in parallel
     print(users.length + posts.length)
 }
@@ -470,7 +474,7 @@ main() -> Void = () => {
 # Source code:
 #   result = async_func()
 
-# After compilation (pseudo-code):
+# After compilation (pseudocode):
 #   if result.is_pending() {
 #       yield_to_scheduler()
 #   }
@@ -494,7 +498,7 @@ parallel_example() -> Void = () => {
     # Or wait for all to complete
     all_results = await_all(tasks)
 
-    # Or any one completing is enough
+    # Or wait for any one to complete
     first_result = await_any(tasks)
 }
 ```
@@ -524,10 +528,10 @@ YaoXiang defines 17 keywords total. These keywords are reserved and cannot be us
 | 13 | `return` | Return value | `return result` |
 | 14 | `break` | Exit loop | `break` |
 | 15 | `continue` | Continue loop | `continue` |
-| 16 | `as` | Type casting | `x as Float` |
+| 16 | `as` | Type cast | `x as Float` |
 | 17 | `in` | Membership test/list comprehension | `x in [1, 2, 3]`, `[x * 2 for x in list]` |
 
-**Alternative for infinite loops:**
+**Infinite loop alternative:**
 
 ```yaoxiang
 # Use while True instead of loop keyword
@@ -542,17 +546,17 @@ while True {
 
 ### 6.2 Reserved Words
 
-Reserved words are special values predefined by the language that cannot be used as identifiers, but they are not keywords (cannot be used for syntactic constructs).
+Reserved words are language-defined special values that cannot be used as identifiers, but they are not keywords (they cannot be used in syntax structures).
 
 | Reserved Word | Type | Description |
 |---------------|------|-------------|
 | `true` | Bool | Boolean true |
 | `false` | Bool | Boolean false |
-| `null` | Void | Null value |
+| `null` | void | Null value |
 | `none` | Option | None variant of Option type |
-| `some(T)` | Option | Some variant of Option type (function) |
-| `ok(T)` | Result | Ok variant of Result type (function) |
-| `err(E)` | Result | Err variant of Result type (function) |
+| `some(T)` | Option | Value variant of Option type (function) |
+| `ok(T)` | Result | Success variant of Result type (function) |
+| `err(E)` | Result | Error variant of Result type (function) |
 
 ```yaoxiang
 # Boolean values
@@ -596,30 +600,30 @@ mutable = mut 42
 modifier = mut mutable  # Mutable reference
 ```
 
-### 6.3 Function Definition
+### 6.3 Function Definitions
 
 ```yaoxiang
-# Basic function
-greet(String) -> String = (name) => "Hello, " + name
+# Basic function (expression form → return value directly)
+greet: (String) -> String = (name) => "Hello, " + name
 
-# Return type inference
-add(Int, Int) -> Int = (a, b) => a + 1  # Last expression as return value
+# Return type inference (expression form → return value directly)
+add: (Int, Int) -> Int = (a, b) => a + 1
 
 # Multiple return values
-divmod(Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)
+divmod: (Int, Int) -> (Int, Int) = (a, b) => (a / b, a % b)
 
 # Generic function
-identity<T>(T) -> T = (x) => x
+identity: <T>(T) -> T = (x) => x
 
 # Higher-order function
-apply<T, U>((T) -> U, T) -> U = (f, value) => f(value)
+apply: <T, U>((T) -> U, T) -> U = (f, value) => f(value)
 
 # Closure
-create_counter() -> () -> Int = () => {
+create_counter: () -> () -> Int = () => {
     mut count = 0
-    () => {
+    return () => {
         count += 1
-        count
+        return count
     }
 }
 ```
@@ -627,7 +631,7 @@ create_counter() -> () -> Int = () => {
 ### 6.4 Control Flow
 
 ```yaoxiang
-# Conditionals
+# Conditional
 if x > 0 {
     "positive"
 } elif x == 0 {
@@ -647,7 +651,7 @@ classify(Int) -> String = (n) => {
     }
 }
 
-# Loops
+# Loop
 mut i = 0
 while i < 10 {
     print(i)
@@ -678,7 +682,7 @@ pub pi: Float = 3.14159
 pub sqrt(Float) -> Float = (x) => { ... }
 internal_helper() -> Void = () => { ... }  # Private
 
-# Import modules
+# Import module
 use std.io
 use std.list as ListLib
 
@@ -699,7 +703,7 @@ result = M.sqrt(4.0)
 ```yaoxiang
 # AI-friendly design goals:
 # 1. Strictly structured, unambiguous syntax
-# 2. Clear AST, easy location
+# 2. Clear AST, easy positioning
 # 3. Explicit semantics, no hidden behavior
 # 4. Clear code block boundaries
 # 5. Complete type information
@@ -709,7 +713,7 @@ result = M.sqrt(4.0)
 
 ```yaoxiang
 # Must use 4 spaces for indentation
-# Tab characters are prohibited
+# Tab characters prohibited
 
 # Correct example
 example() -> Void = () => {
@@ -731,17 +735,17 @@ do_something()  # Insufficient indentation
 ### 7.3 Explicit Code Block Boundaries
 
 ```yaoxiang
-# Function definition - explicit start and end
+# Function definition - clear start and end
 function_name(Params) -> ReturnType = (params) => {
     # Function body
 }
 
-# Conditional statements - braces required
+# Conditional statement - braces required
 if condition {
     # Conditional body
 }
 
-# Loop statements - braces required
+# Loop statement - braces required
 for item in items {
     # Loop body
 }
@@ -756,17 +760,17 @@ type MyType = {
 ### 7.4 Unambiguous Syntax
 
 ```yaoxiang
-# Parentheses cannot be omitted
+# Prohibited: omitting parentheses
 # Correct
 foo(T) -> T = (x) => x
 my_list = [1, 2, 3]
 
 # Incorrect (prohibited)
-foo T { x }             # Function parameters require parentheses
-my_list = [1 2 3]       # List elements require commas
+foo T { x }             # Function parameters must have parentheses
+my_list = [1 2 3]       # List elements must have commas
 
-# No special meaning for trailing colons
-# Colons are only for type annotations and dictionaries
+# Prohibited: special meaning at end of line
+# Colon only used for type annotations and dicts
 my_dict = { "key": "value" }
 foo() -> Int = () => 42
 ```
@@ -776,9 +780,9 @@ foo() -> Int = () => 42
 ```yaoxiang
 # AI can easily obtain:
 # 1. Inferred type of variables
-# 2. Parameter and return types of functions
+# 2. Function parameter and return types
 # 3. Complete structure of types
-# 4. Export interface of modules
+# 4. Module export interface
 
 # Type annotations provide complete information
 complex_function(ref List[Int], mut Config, (Result) -> Void) -> Result[Data] = (
@@ -801,8 +805,8 @@ type APIResponse = {
 ### 7.6 Easy-to-Locate Key Positions
 
 ```yaoxiang
-# 1. Type definition location is explicit
-# Starts with type keyword
+# 1. Type definition position is clear
+# type keyword starts
 
 type User = {
     id: Int
@@ -810,25 +814,25 @@ type User = {
 }
 # ↑ Type definition starts here
 
-# 2. Function definition location is explicit
-# Starts with function name
+# 2. Function definition position is clear
+# Function name starts
 
 pub process_user(ref User) -> Result = (user) => {
     # ↑ Function starts here
 }
 
-# 3. Module boundaries are explicit
+# 3. Module boundaries are clear
 # File is module, filename is module name
 
 # Database.yx
 # ↑ Module starts here
 
-# 4. Import statement location is explicit
-# Starts with use keyword
+# 4. Import statements position is clear
+# use keyword starts
 
 use std.io
 use std.database
-# ↑ Import statements are concentrated here
+# ↑ Import statements集中在此
 ```
 
 ---
@@ -848,21 +852,21 @@ str_val = identity("hello") # Expanded to identity(String) -> String
 # No extra overhead after compilation
 ```
 
-### 8.2 Non-GC Memory Management
+### 8.2 No-GC Memory Management
 
 ```yaoxiang
-# RAII automatic release
-with_file(String) -> String = (path) => {
-    file = File.open(path)  # Automatic open
+# RAII automatic cleanup
+with_file: (String) -> String = (path) => {
+    file = File.open(path)  # Automatically opened
     # Use file
     content = file.read_all()
     # Function ends, file automatically closed
-    content
+    return content
 }
 
-# Ownership transfer release
-create_resource() -> Resource = () => {
-    Resource.new()  # Create
+# Ownership transfer cleanup
+create_resource: () -> Resource = () => {
+    return Resource.new()  # Create
 }  # Ownership transferred on return
 
 use_resource(Resource) -> Void = (res) => {
@@ -874,13 +878,13 @@ use_resource(Resource) -> Void = (res) => {
 
 ```yaoxiang
 # Inlining optimization
-inline add(Int, Int) -> Int = (a, b) => a + b
+inline add: (Int, Int) -> Int = (a, b) => a + b
 
 # Loop unrolling
 # Compiler automatically optimizes simple loops
 
 # Escape analysis
-create_large_object() -> List[Int] = () => {
+create_large_object: () -> List[Int] = () => {
     large_data = [0; 1000000]  # Large array
     if need_return(large_data) {
         return large_data  # Heap allocation
@@ -896,7 +900,7 @@ create_large_object() -> List[Int] = () => {
 # Lightweight threads, high concurrency
 
 main() -> Void = () => {
-    # Launch 10,000 concurrent tasks
+    # Start 10,000 concurrent tasks
     for i in 0..10000 {
         spawn process_item(i)
     }
@@ -910,8 +914,8 @@ main() -> Void = () => {
 ### 9.1 Comparison Matrix
 
 | Feature | YaoXiang | Rust | Python | TypeScript | Idris |
-|---------|----------|------|--------|------------|-------|
-| Everything is a type | ✅ | ❌ | ❌ | ❌ | ✅ |
+|---------|-----------|------|--------|------------|-------|
+| Everything is type | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Automatic type inference | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Immutable by default | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Ownership model | ✅ | ✅ | ❌ | ❌ | ❌ |
@@ -921,7 +925,7 @@ main() -> Void = () => {
 | Zero-cost abstraction | ✅ | ✅ | ❌ | ❌ | ❌ |
 | No GC | ✅ | ✅ | ❌ | ❌ | ✅ |
 | AI-friendly syntax | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Keyword count | 16 | 51+ | 35 | 64+ | 30+ |
+| Number of keywords | 16 | 51+ | 35 | 64+ | 30+ |
 
 ### 9.2 Detailed Comparison
 
@@ -930,7 +934,7 @@ main() -> Void = () => {
 | Dimension | YaoXiang | Rust |
 |-----------|----------|------|
 | Syntax complexity | Simple (Python style) | Complex (steep learning curve) |
-| async/await | Automatic, no marking needed | Must mark explicitly |
+| async/await | Automatic, no markers needed | Requires explicit markers |
 | Error handling | `?` operator or Result | Result / Option |
 | Lifetimes | Optional annotations | Must annotate |
 
@@ -938,10 +942,10 @@ main() -> Void = () => {
 
 | Dimension | YaoXiang | Python |
 |-----------|----------|--------|
-| Type safety | Compile-time checking | Dynamic typing |
+| Type safety | Compile-time checks | Dynamic typing |
 | Performance | High (compiled) | Low (interpreted) |
 | Memory management | Ownership, no GC | GC |
-| Concurrency | High-performance green threads | GIL limitations |
+| Concurrency | High-performance green threads | GIL limited |
 
 #### vs TypeScript
 
@@ -960,7 +964,7 @@ main() -> Void = () => {
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Dependent type compilation too slow | Medium | High | Incremental compilation, caching |
+| Dependent type compilation time too long | Medium | High | Incremental compilation, caching |
 | Automatic await semantics complex | Medium | Medium | Incremental implementation |
 | Ownership model learning curve | Low | Medium | Compiler-friendly hints |
 | Type system too complex | Medium | High | Simplified subset first |
@@ -969,7 +973,7 @@ main() -> Void = () => {
 
 ```yaoxiang
 # Challenge 1: Completeness of type inference
-# Need to implement extension of Hindley-Milner type system
+# Need to implement Hindley-Milner type system extensions
 
 # Challenge 2: Dependent type checking
 # Need to implement decision procedures from type theory
@@ -983,10 +987,10 @@ main() -> Void = () => {
 
 ### 10.3 Language Design Risks
 
-- **Risk**: Type system too powerful may lead to long compilation times
+- **Risk**: Type system too powerful may lead to excessive compilation time
 - **Mitigation**: Provide type checking mode options
 - **Risk**: Syntax restrictions may affect flexibility
-- **Mitigation**: Keep core simple, optional extensions
+- **Mitigation**: Keep core simple, extensions optional
 
 ---
 
@@ -999,7 +1003,7 @@ main() -> Void = () => {
 - [ ] Implement simple type checker
 - [ ] Verify automatic await mechanism
 
-### 11.2 Mid-term Plan (3-6 months)
+### 11.2 Medium-term Plan (3-6 months)
 
 - [ ] Implement complete type system
 - [ ] Implement ownership checking
@@ -1015,7 +1019,7 @@ main() -> Void = () => {
 
 ---
 
-## Appendix
+## Appendices
 
 ### A. Design Inspiration Sources
 
@@ -1034,7 +1038,7 @@ main() -> Void = () => {
 
 ---
 
-> "The Tao gives birth to the One, the One gives birth to the Two, the Two gives birth to the Three, the Three gives birth to all things."
+> "The Tao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to all things."
 > — *Tao Te Ching*
 >
 > Types are like the Tao; all things are born from them.
