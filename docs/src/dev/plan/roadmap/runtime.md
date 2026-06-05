@@ -6,7 +6,7 @@ title: "运行时状态"
 
 > **模块状态**：有缺口（4 项待改进，阶段 B 未开始）
 > **位置**：`src/backends/runtime/`
-> **最后更新**：2026-06-01
+> **最后更新**：2026-06-05
 
 ---
 
@@ -63,9 +63,9 @@ title: "运行时状态"
 
 ---
 
-## RFC 对比（RFC-008）
+## RFC 对比（RFC-008 / RFC-024）
 
-| RFC-008 要求 | 实现状态 | 说明 |
+| RFC 要求 | 实现状态 | 说明 |
 |-------------|---------|------|
 | 三层架构 Embedded/Standard/Full | ✅ 已实现 | facade.rs 三种 RuntimeInner |
 | 调度器脱耦（泛型 + 注入） | ⚠️ 部分实现 | task.rs 有 Scheduler trait，但 facade.rs 直接用 enum |
@@ -74,7 +74,8 @@ title: "运行时状态"
 | 自底向上执行模型 | ✅ 已实现 | drive_until / next_ready_for 优先目标依赖链 |
 | 孤岛 DAG 独立并行不阻塞 | ✅ 已实现 | 有专门测试 |
 | WorkStealer | ⚠️ 声明支持但实际未独立实现 | FullRuntime 用 crossbeam channel，无真正 work-stealing 队列 |
-| 编译期 DAG 分析 | ❌ 未实现（阶段 B） | 当前 DAG 在运行时构建 |
+| 编译期 DAG 分析 | ❌ 未实现（RFC-024 阶段 B） | 当前 DAG 在运行时构建，RFC-024 计划移至编译期 |
+| spawn 块直接子表达式并行 | ❌ 未实现（RFC-024） | 当前 spawn 整体包装为单个闭包 |
 | 调度器静态库（200-500KB） | ❌ 未实现（阶段 B） | 属于 LLVM AOT 编译器范畴 |
 | 反射元数据按需加载 | ❌ 未实现（阶段 B） | 属于后续规划 |
 
@@ -85,6 +86,7 @@ title: "运行时状态"
 1. **task.rs 中 Scheduler trait 与 facade.rs 的实际调度是分离的**：task.rs 定义了 Scheduler trait，但 facade.rs 并未使用这个 trait，而是直接用 enum 分发
 2. **task.rs 有重复类型定义**：SyncValue、TaskResult、RuntimeError、SchedulerStats 在 engine.rs 和 task.rs 中各定义了一份
 3. **WorkStealing 未真正实现**：RuntimeConfig 有 work_stealing 字段，但 FullRuntime 实际是简单的线程池 + channel 模型
+4. **RFC-024 将改变 spawn 的执行模型**：当前 spawn 整体包装为单个闭包由运行时 DAG 调度；RFC-024 计划在编译期分析 spawn 块内直接子表达式的依赖关系，生成执行计划，运行时按计划分组并行执行
 
 ---
 
@@ -105,4 +107,8 @@ title: "运行时状态"
 1. **实现真正的 WorkStealing 队列**
 2. **消除 task.rs 中的重复类型定义**
 3. **统一 Scheduler trait 与 facade.rs 的调度实现**
-4. **开始阶段 B：编译器接入**
+4. **RFC-024 阶段 B：编译器接入**
+   - 清理旧模型（删除 `@block`/`@eager`/`@auto`、`EvalMode`、`EvalStrategy`）
+   - 新增编译期 DAG 分析 pass
+   - 修改 `Instruction::Spawn` 支持多闭包 + 执行计划
+   - 运行时按编译期执行计划分组并行执行

@@ -30,9 +30,9 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-016 | [量子原生支持与多重后端集成](./draft/016-quantum-native-support.md) | 晨煦 | 2026-02-12 | 草案 |
 | RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 永久草案 ⚠️ |
 | RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020-dynamic-modules-ffi.md) | 晨煦 | 2026-02-25 | 草案 |
+| RFC-025 | [可扩展原语类型机制](./draft/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 草案 |
 
 ---
 
@@ -40,7 +40,6 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-003 | [版本规划与实现建议](./review/003-version-planning.md) | 晨煦 | 2025-01-05 | 审核中 |
 | RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./review/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./review/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 审核中 |
 | RFC-022 | [可选的霍尔逻辑静态验证（规约注释与规约类型）](./review/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 审核中 |
@@ -65,6 +64,7 @@ title: "RFC 索引"
 | RFC-015 | [YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-017 | [语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 已接受 |
 | RFC-023 | [闭包捕获模型](./accepted/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已接受 |
+| RFC-024 | [基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
 
 
 ---
@@ -82,7 +82,9 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-002 | [跨平台I/O与libuv集成](./rejected/002-cross-platform-io-libuv.md) | 晨煦 | 2025-01-05 | 已拒绝 |
+| RFC-003 | [版本规划与实现建议](./rejected/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-005 | [自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
+| RFC-016 | [量子原生支持与多重后端集成](./rejected/016-quantum-native-support.md) | 晨煦 | 2026-02-13 | 已拒绝 |
 
 ---
 
