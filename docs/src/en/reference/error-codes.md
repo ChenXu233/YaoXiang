@@ -69,7 +69,7 @@ Errors produced during semantic analysis, covering scope, variable lifetime, own
 | E2011 | `Use of uninitialized variable '{name}'` | Use of uninitialized variable |
 | E2012 | `Mutability conflict: cannot use mutable reference in immutable context` | Mutability conflict |
 | E2013 | `Cannot shadow existing variable '{name}'` | Variable shadowing |
-| E2014 | `Function calls are not allowed in top-level variable initializers` | Top-level variable function calls not supported |
+| E2014 | `'{name}' has been moved and cannot be used` | Use after move |
 | E2090 | `Invalid signature: {reason}` | Invalid signature |
 | E2091 | `Invalid signature: unknown type '{type_name}'` | Signature unknown type |
 | E2092 | `Invalid signature: missing '->'` | Signature missing arrow |

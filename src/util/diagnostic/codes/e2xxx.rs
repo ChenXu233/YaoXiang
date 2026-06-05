@@ -41,11 +41,11 @@ pub static E2XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::Semantic,
         message_template: "Cannot shadow existing variable '{name}'",
     },
-    // E2014: 顶层变量错误
+    // E2014: 使用已移动的变量
     ErrorCodeDefinition {
         code: "E2014",
         category: ErrorCategory::Semantic,
-        message_template: "Function calls are not allowed in top-level variable initializers",
+        message_template: "'{name}' has been moved and cannot be used",
     },
     // E209x: 函数签名解析错误
     ErrorCodeDefinition {
@@ -124,10 +124,10 @@ impl ErrorCodeDefinition {
         DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
-    /// E2014 顶层变量不支持函数调用
-    pub fn top_level_function_call() -> DiagnosticBuilder {
+    /// E2014 使用已移动的变量
+    pub fn use_after_move(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2014").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
+        DiagnosticBuilder::new(def.code, def.message_template).param("name", name)
     }
 
     /// E2090 签名解析失败（通用）

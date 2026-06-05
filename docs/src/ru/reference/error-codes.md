@@ -69,7 +69,7 @@
 | E2011 | `Use of uninitialized variable '{name}'` | Использование неинициализированной переменной |
 | E2012 | `Mutability conflict: cannot use mutable reference in immutable context` | Конфликт изменчивости |
 | E2013 | `Cannot shadow existing variable '{name}'` | Затенение переменной |
-| E2014 | `Function calls are not allowed in top-level variable initializers` | Вызовы функций не поддерживаются в инициализаторах переменных верхнего уровня |
+| E2014 | `'{name}' has been moved and cannot be used` | Использование перемещённой переменной |
 | E2090 | `Invalid signature: {reason}` | Недопустимая сигнатура |
 | E2091 | `Invalid signature: unknown type '{type_name}'` | Неизвестный тип в сигнатуре |
 | E2092 | `Invalid signature: missing '->'` | В сигнатуре отсутствует стрелка |
