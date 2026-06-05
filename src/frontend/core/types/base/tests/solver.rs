@@ -231,20 +231,6 @@ fn test_unify_fn_params() {
 }
 
 #[test]
-fn test_unify_fn_async_mismatch() {
-    let mut solver = s();
-    let f1 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Void),
-    };
-    let f2 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Void),
-    };
-    assert!(solver.unify(&f1, &f2).is_err());
-}
-
-#[test]
 fn test_unify_fn_return_mismatch() {
     let mut solver = s();
     let f1 = MonoType::Fn {

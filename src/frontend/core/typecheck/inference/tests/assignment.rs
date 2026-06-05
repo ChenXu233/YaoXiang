@@ -309,27 +309,6 @@ fn test_assignment_fn_type_compatibility() {
 }
 
 #[test]
-fn test_assignment_fn_type_incompatible_async() {
-    // Arrange — async 属性不同，函数类型不兼容
-    let mut checker = AssignmentChecker::new();
-    let lhs = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-    };
-    let rhs = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-    };
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&lhs, &rhs, span, None);
-
-    // Assert
-    assert!(result.is_err(), "async 与非 async 函数之间不应兼容");
-}
-
-#[test]
 fn test_assignment_destructuring() {
     // Arrange
     let checker = AssignmentChecker::new();

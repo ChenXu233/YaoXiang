@@ -52,8 +52,8 @@ mod tests;
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
 pub use crate::frontend::core::types::base::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
-    TypeConstraintSolver, SendSyncConstraint, SendSyncSolver, TypeMismatch, TypeConstraintError,
-    ConstValue, ConstExpr, ConstKind, ConstVarDef, UniverseLevel,
+    TypeConstraintSolver, TypeMismatch, TypeConstraintError, ConstValue, ConstExpr, ConstKind,
+    ConstVarDef, UniverseLevel,
 };
 
 // 重新导出子模块

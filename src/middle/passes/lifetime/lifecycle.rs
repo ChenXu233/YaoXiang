@@ -375,8 +375,8 @@ impl LifecycleTracker {
             }
 
             // Spawn: 参数被消费
-            Instruction::Spawn { args, .. } => {
-                for arg in args {
+            Instruction::Spawn { closures, .. } => {
+                for arg in closures {
                     self.record_consume(arg, ConsumeType::CallArg, location);
                 }
             }

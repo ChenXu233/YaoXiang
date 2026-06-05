@@ -3078,19 +3078,64 @@ impl AstToIrGenerator {
             }
             Expr::Spawn { body, span } => {
                 // Spawn block: spawn { ... }
-                // Lower to: spawn ((...) => { ... }) with no params for now.
-                let closure_reg = self.next_temp_reg();
-                let lambda = ast::Expr::Lambda {
-                    params: Vec::new(),
-                    body: body.clone(),
-                    span: *span,
-                };
-                self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
+
+                // 1. DAG 分析：识别直接子表达式，生成执行计划
+                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(body);
+
+                // 2. 进入 spawn 作用域
+                self.enter_scope();
+
+                // 3. 为每个直接子表达式生成闭包
+                let mut closure_regs = Vec::new();
+                for (i, task_expr) in analysis.task_exprs.iter().enumerate() {
+                    // 如果是赋值，注册目标变量到 spawn 作用域
+                    if let Some(target) = &analysis.task_targets[i] {
+                        if self.lookup_local(target).is_none() {
+                            let reg = self.next_temp_reg();
+                            self.register_local(target, reg);
+                        }
+                    }
+
+                    // 将 RHS 包装为无参闭包：() => { rhs }
+                    let closure_reg = self.next_temp_reg();
+                    let lambda = ast::Expr::Lambda {
+                        params: Vec::new(),
+                        body: Box::new(ast::Block {
+                            stmts: Vec::new(),
+                            expr: Some(Box::new(task_expr.clone())),
+                            span: *span,
+                        }),
+                        span: *span,
+                    };
+                    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                    closure_regs.push(Operand::Local(closure_reg));
+                }
+
+                // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
+                for stmt in &body.stmts {
+                    if !crate::middle::passes::dag_analysis::is_direct_child(stmt) {
+                        self.generate_local_stmt_ir(stmt, instructions, constants)?;
+                    }
+                }
+                if let Some(trailing_expr) = &body.expr {
+                    let trailing_reg = self.next_temp_reg();
+                    self.generate_expr_ir(trailing_expr, trailing_reg, instructions, constants)?;
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(trailing_reg),
+                    });
+                }
+
+                // 5. 生成 Spawn 指令（多闭包 + 执行计划）
                 instructions.push(Instruction::Spawn {
-                    func: Operand::Local(closure_reg),
-                    args: Vec::new(),
+                    closures: closure_regs,
+                    plan: analysis.plan,
                     result: Operand::Local(result_reg),
                 });
+
+                // 6. 退出 spawn 作用域
+                self.exit_scope();
             }
             Expr::UnOp { op, expr, span: _ } => {
                 // 一元运算符

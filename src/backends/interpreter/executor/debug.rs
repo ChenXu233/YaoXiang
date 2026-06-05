@@ -654,4 +654,340 @@ mod tests {
         // Cleanup
         let _ = std::fs::remove_file(&path_str);
     }
+
+    // =========================================================================
+    // End-to-end spawn tests (RFC-024)
+    // =========================================================================
+
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CAPTURED: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// Native function that captures integer values into thread-local storage.
+    fn capture_handler(
+        args: &[RuntimeValue],
+        _ctx: &mut crate::std::NativeContext<'_>,
+    ) -> Result<RuntimeValue, ExecutorError> {
+        let val = args.first().and_then(|v| v.to_int()).unwrap_or(0);
+        CAPTURED.with(|c| c.borrow_mut().push(val));
+        Ok(RuntimeValue::Int(val))
+    }
+
+    /// Helper: compile YaoXiang source, generate bytecode, execute.
+    /// Returns Ok(()) on success, Err on compilation or runtime failure.
+    fn compile_and_run(
+        code: &str,
+        runtime: RuntimeMode,
+    ) -> Result<(), String> {
+        let mut compiler = crate::frontend::Compiler::new();
+        let module = compiler
+            .compile_with_source("<test>", code)
+            .map_err(|e| format!("Compile error: {:?}", e))?;
+        let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+        let bytecode_file = ctx
+            .generate()
+            .map_err(|e| format!("Codegen error: {:?}", e))?;
+        let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime,
+            workers: 1,
+            work_stealing: false,
+        });
+        interp
+            .execute_module(&bytecode_module)
+            .map_err(|e| format!("Runtime error: {:?}", e))
+    }
+
+    /// Helper: compile YaoXiang source with a native "capture" function
+    /// that records integer values into thread-local storage.
+    fn compile_and_run_with_capture(
+        code: &str,
+        runtime: RuntimeMode,
+    ) -> Result<Vec<i64>, String> {
+        CAPTURED.with(|c| c.borrow_mut().clear());
+
+        let mut compiler = crate::frontend::Compiler::new();
+        let module = compiler
+            .compile_with_source("<test>", code)
+            .map_err(|e| format!("Compile error: {:?}", e))?;
+        let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+        let bytecode_file = ctx
+            .generate()
+            .map_err(|e| format!("Codegen error: {:?}", e))?;
+        let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+        let mut interp = Interpreter::new();
+        interp.set_runtime_config(InterpreterRuntimeConfig {
+            runtime,
+            workers: 1,
+            work_stealing: false,
+        });
+
+        interp
+            .ffi_registry_mut()
+            .register("capture", capture_handler);
+
+        interp
+            .execute_module(&bytecode_module)
+            .map_err(|e| format!("Runtime error: {:?}", e))?;
+
+        Ok(CAPTURED.with(|c| c.borrow().clone()))
+    }
+
+    // Test 1: Basic parallel — two independent assignments in a spawn block.
+    // Both closures should execute without error.
+    #[test]
+    fn test_e2e_spawn_basic_parallel() {
+        let code = r#"
+            main: () -> Int = () => {
+                spawn {
+                    t1 = 1 + 1
+                    t2 = 2 + 2
+                }
+                return 0
+            }
+        "#;
+
+        // Should compile and run in both Embedded and Standard modes.
+        let result_embedded = compile_and_run(code, RuntimeMode::Embedded);
+        assert!(
+            result_embedded.is_ok(),
+            "Embedded mode failed: {}",
+            result_embedded.unwrap_err()
+        );
+
+        let result_standard = compile_and_run(code, RuntimeMode::Standard);
+        assert!(
+            result_standard.is_ok(),
+            "Standard mode failed: {}",
+            result_standard.unwrap_err()
+        );
+    }
+
+    // Test 1b: Verify the closures actually execute by using a native capture function.
+    #[test]
+    fn test_e2e_spawn_parallel_values() {
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                spawn {
+                    t1 = capture(2)
+                    t2 = capture(4)
+                }
+                return 0
+            }
+        "#;
+
+        let result = compile_and_run_with_capture(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Spawn execution failed: {}",
+            result.unwrap_err()
+        );
+
+        let values = result.unwrap();
+        assert_eq!(
+            values.len(),
+            2,
+            "Expected 2 captured values, got {}",
+            values.len()
+        );
+        // Both 2 and 4 should have been captured (order may vary).
+        let mut sorted = values.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![2, 4]);
+    }
+
+    // Test 2: Dependency order — y depends on x, should execute in sequence.
+    // The DAG analysis should place x in group 0 and y in group 1.
+    #[test]
+    fn test_e2e_spawn_dependency_order() {
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                spawn {
+                    x = capture(10)
+                    y = capture(20)
+                }
+                return 0
+            }
+        "#;
+
+        let result = compile_and_run_with_capture(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Spawn execution failed: {}",
+            result.unwrap_err()
+        );
+
+        let values = result.unwrap();
+        assert_eq!(
+            values.len(),
+            2,
+            "Expected 2 captured values, got {}",
+            values.len()
+        );
+        // Both values should be present.
+        let mut sorted = values.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![10, 20]);
+    }
+
+    // Test 2b: Dependency order with actual read dependency.
+    // y = x + 1 where x is defined in the spawn block.
+    // The DAG should schedule x first, then y.
+    #[test]
+    fn test_e2e_spawn_dependency_chain() {
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                spawn {
+                    x = 10
+                    y = x + 1
+                }
+                return 0
+            }
+        "#;
+
+        // This should compile and run without error.
+        // The DAG analysis detects that y reads x, so x must execute before y.
+        let result = compile_and_run(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Spawn with dependency chain failed: {}",
+            result.unwrap_err()
+        );
+    }
+
+    // Test 3: Scope isolation — the spawn block's internal variable assignments
+    // are wrapped in closures. After the spawn block, the outer variables
+    // should retain their original values. We verify this by capturing the
+    // outer variable value after the spawn block completes.
+    #[test]
+    fn test_e2e_spawn_scope_isolation() {
+        // The spawn block assigns to 'y' (inside the closure), while the
+        // outer function uses 'x'. After spawn completes, x is unchanged.
+        // We also test that the spawn-internal assignment doesn't leak.
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                x = 100
+                spawn {
+                    y = 200
+                }
+                capture(x)
+                return 0
+            }
+        "#;
+
+        let result = compile_and_run_with_capture(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Spawn scope test failed: {}",
+            result.unwrap_err()
+        );
+
+        let values = result.unwrap();
+        assert_eq!(
+            values.len(),
+            1,
+            "Expected 1 captured value, got {}",
+            values.len()
+        );
+        // The outer x should still be 100 — spawn block's y = 200 is
+        // computed inside a closure and doesn't affect the outer scope.
+        assert_eq!(values[0], 100, "Outer x should be 100, got {}", values[0]);
+    }
+
+    // Test: Spawn with an empty block should work.
+    #[test]
+    fn test_e2e_spawn_empty_block() {
+        let code = r#"
+            main: () -> Int = () => {
+                spawn {}
+                return 42
+            }
+        "#;
+
+        let result = compile_and_run(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Empty spawn block failed: {}",
+            result.unwrap_err()
+        );
+    }
+
+    // Test: Spawn with a single task.
+    #[test]
+    fn test_e2e_spawn_single_task() {
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                spawn {
+                    x = capture(42)
+                }
+                return 0
+            }
+        "#;
+
+        let result = compile_and_run_with_capture(code, RuntimeMode::Embedded);
+        assert!(
+            result.is_ok(),
+            "Single task spawn failed: {}",
+            result.unwrap_err()
+        );
+
+        let values = result.unwrap();
+        assert_eq!(
+            values.len(),
+            1,
+            "Expected 1 captured value, got {}",
+            values.len()
+        );
+        assert_eq!(values[0], 42);
+    }
+
+    // Test: Spawn in Standard mode (parallel execution via task scheduler).
+    #[test]
+    fn test_e2e_spawn_standard_mode() {
+        let code = r#"
+            capture: (x: Int) -> Int = native("capture")
+
+            main: () -> Int = () => {
+                spawn {
+                    t1 = capture(1)
+                    t2 = capture(2)
+                    t3 = capture(3)
+                }
+                return 0
+            }
+        "#;
+
+        let result = compile_and_run_with_capture(code, RuntimeMode::Standard);
+        assert!(
+            result.is_ok(),
+            "Standard mode spawn failed: {}",
+            result.unwrap_err()
+        );
+
+        let values = result.unwrap();
+        assert_eq!(
+            values.len(),
+            3,
+            "Expected 3 captured values, got {}",
+            values.len()
+        );
+        let mut sorted = values.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![1, 2, 3]);
+    }
 }

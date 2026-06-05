@@ -427,10 +427,8 @@ fn test_int_clone_impl_method() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert_eq!(params.len(), 1, "clone 应有 1 个参数");
-            assert!(!is_async, "clone 不应是 async");
             match return_type.as_ref() {
                 MonoType::TypeRef(name) => assert_eq!(name, "Self", "返回类型应为 Self"),
                 other => panic!("返回类型应为 TypeRef，实际: {:?}", other),
@@ -460,10 +458,8 @@ fn test_int_equal_impl_method() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert_eq!(params.len(), 2, "equal 应有 2 个参数");
-            assert!(!is_async, "equal 不应是 async");
             match return_type.as_ref() {
                 MonoType::TypeRef(name) => assert_eq!(name, "Bool", "返回类型应为 Bool"),
                 other => panic!("返回类型应为 TypeRef，实际: {:?}", other),

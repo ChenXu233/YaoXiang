@@ -338,7 +338,11 @@ impl Translator {
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
 
-            Spawn { func, args, result } => self.translate_spawn(func, args, result),
+            Spawn {
+                closures,
+                plan,
+                result,
+            } => self.translate_spawn_multi(closures, plan, result),
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
@@ -594,19 +598,46 @@ impl Translator {
         Ok(BytecodeInstruction::new(opcode, operands))
     }
 
-    fn translate_spawn(
+    fn translate_spawn_multi(
         &mut self,
-        func: &Operand,
-        args: &[Operand],
+        closures: &[Operand],
+        plan: &crate::middle::core::ir::ExecutionPlan,
         result: &Operand,
     ) -> Result<BytecodeInstruction, CodegenError> {
         let dst_reg = self.operand_resolver.to_reg(result)?;
-        let func_reg = self.operand_resolver.to_reg(func)?;
 
-        let mut operands = vec![dst_reg, func_reg, args.len() as u8];
-        for arg in args {
-            let arg_reg = self.operand_resolver.to_reg(arg)?;
-            operands.push(arg_reg);
+        // 编码 closures
+        let closure_regs: Vec<u8> = closures
+            .iter()
+            .map(|c| self.operand_resolver.to_reg(c))
+            .collect::<Result<Vec<u8>, _>>()?;
+
+        // 编码 group_count
+        let group_count: Vec<u32> = plan
+            .groups
+            .iter()
+            .map(|g| g.task_indices.len() as u32)
+            .collect();
+
+        let mut operands = Vec::new();
+
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+
+        // closures.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(closure_regs.len() as u32).to_le_bytes());
+
+        // each closure register (2 bytes LE each)
+        for reg in &closure_regs {
+            operands.extend_from_slice(&(*reg as u16).to_le_bytes());
+        }
+
+        // group_count.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(group_count.len() as u32).to_le_bytes());
+
+        // each group's task count (4 bytes LE each)
+        for count in &group_count {
+            operands.extend_from_slice(&count.to_le_bytes());
         }
 
         Ok(BytecodeInstruction::new(Opcode::Spawn, operands))
