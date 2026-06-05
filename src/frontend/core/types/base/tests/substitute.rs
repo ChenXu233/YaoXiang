@@ -144,7 +144,6 @@ fn test_substitute_through_fn() {
     let ty = MonoType::Fn {
         params: vec![tv(0)],
         return_type: Box::new(tv(0)),
-        is_async: false,
     };
     let result = subber.substitute(&ty, &sub);
     match result {

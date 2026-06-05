@@ -518,7 +518,6 @@ mod tests {
             name: "test_fn".to_string(),
             params: vec![],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,

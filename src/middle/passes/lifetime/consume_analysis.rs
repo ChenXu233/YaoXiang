@@ -158,7 +158,6 @@ mod tests {
             name: "test_func".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -227,7 +226,6 @@ mod tests {
             name: "partial_return".to_string(),
             params: vec![MonoType::Int(0), MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -252,7 +250,6 @@ mod tests {
             name: "all_consumed".to_string(),
             params: vec![MonoType::Int(0), MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -277,7 +274,6 @@ mod tests {
             name: "void_func".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -301,7 +297,6 @@ mod tests {
             name: "via_temp".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,

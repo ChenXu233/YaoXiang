@@ -190,7 +190,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
             } => MonoType::Fn {
                 params: params.iter().map(|t| self.type_to_mono_type(t)).collect(),
                 return_type: Box::new(self.type_to_mono_type(return_type)),
-                is_async: false,
             },
             AstType::Option(inner) => MonoType::Option(Box::new(self.type_to_mono_type(inner))),
             AstType::Result(ok, err) => MonoType::Result(
@@ -551,7 +550,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     type_args,
                     &type_params,
                 )),
-                is_async: *is_async,
             }),
             MonoType::Arc(inner) => Some(MonoType::Arc(Box::new(self.substitute_type_args(
                 inner,
@@ -643,7 +641,6 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     type_args,
                     type_params,
                 )),
-                is_async: *is_async,
             },
             MonoType::Arc(inner) => MonoType::Arc(Box::new(self.substitute_type_args(
                 inner,

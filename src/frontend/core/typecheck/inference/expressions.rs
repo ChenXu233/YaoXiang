@@ -560,7 +560,6 @@ impl<'a> ExpressionInferrer<'a> {
                         let fn_ty = MonoType::Fn {
                             params: vec![self.solver.new_var()],
                             return_type: Box::new(MonoType::Void),
-                            is_async: false,
                         };
                         return Ok(fn_ty);
                     }
@@ -918,7 +917,6 @@ impl<'a> ExpressionInferrer<'a> {
                 let fn_type = MonoType::Fn {
                     params: param_types,
                     return_type: return_type_box,
-                    is_async: false,
                 };
                 self.scope
                     .add_var(name.clone(), PolyType::mono(fn_type.clone()), false);
@@ -973,7 +971,6 @@ impl<'a> ExpressionInferrer<'a> {
                 Ok(MonoType::Fn {
                     params: param_types,
                     return_type: Box::new(body_ty),
-                    is_async: false,
                 })
             }
 
@@ -1183,7 +1180,6 @@ impl<'a> ExpressionInferrer<'a> {
                 let fn_type = MonoType::Fn {
                     params: param_types.clone(),
                     return_type: Box::new(return_type.clone()),
-                    is_async: false,
                 };
 
                 self.scope

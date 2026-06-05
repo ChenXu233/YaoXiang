@@ -44,7 +44,6 @@ fn make_drawable_interface() -> MonoType {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Surface".to_string())],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -65,7 +64,6 @@ fn make_circle_implementing_drawable() -> MonoType {
                 MonoType::Fn {
                     params: vec![MonoType::TypeRef("Surface".to_string())],
                     return_type: Box::new(MonoType::Void),
-                    is_async: false,
                 },
             ),
         ],
@@ -168,7 +166,6 @@ fn test_assignment_constraint_dynamic() {
         MonoType::Fn {
             params: vec![MonoType::TypeRef("Surface".to_string())],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         },
     );
 
@@ -299,7 +296,6 @@ fn test_assignment_fn_type_compatibility() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let lhs = fn_type.clone();
     let rhs = fn_type.clone();
@@ -319,12 +315,10 @@ fn test_assignment_fn_type_incompatible_async() {
     let lhs = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Void),
-        is_async: true,
     };
     let rhs = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     let span = dummy_span();
 

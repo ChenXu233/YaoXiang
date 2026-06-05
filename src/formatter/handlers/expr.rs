@@ -36,9 +36,8 @@ pub fn format_expr(
             params,
             return_type,
             body,
-            is_async,
             span: _,
-        } => format_fn_def(name, params, return_type, body, *is_async, ctx, source_map),
+        } => format_fn_def(name, params, return_type, body, ctx, source_map),
         Expr::If {
             condition,
             then_branch,
@@ -336,11 +335,9 @@ fn format_fn_def(
     params: &[Param],
     return_type: &Option<Type>,
     body: &Block,
-    is_async: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let async_prefix = if is_async { "async " } else { "" };
     let params_str = format_params(params, ctx, source_map);
     let ret_str = if let Some(ty) = return_type {
         format!(" -> {}", super::types::format_type(ty, source_map))
@@ -348,8 +345,7 @@ fn format_fn_def(
         String::new()
     };
     format!(
-        "{}fn {}{}{} {}",
-        async_prefix,
+        "fn {}{}{} {}",
         name,
         params_str,
         ret_str,

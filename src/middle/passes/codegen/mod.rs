@@ -271,7 +271,6 @@ impl CodegenContext {
             } => MonoType::Fn {
                 params: params.iter().map(|t| self.type_from_ast(t)).collect(),
                 return_type: Box::new(self.type_from_ast(return_type)),
-                is_async: false,
             },
             Type::Option(inner) => MonoType::Option(Box::new(self.type_from_ast(inner))),
             Type::Result(ok, err) => MonoType::Result(

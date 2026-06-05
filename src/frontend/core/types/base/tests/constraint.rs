@@ -252,13 +252,11 @@ fn test_fn_send_propagation() {
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
     assert!(solver.is_send(&f));
     let f2 = MonoType::Fn {
         params: vec![new_var(0)],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
     assert!(!solver.is_send(&f2));
 }
@@ -367,7 +365,6 @@ fn test_constraint_propagation_through_fn() {
     solver.add_send_constraint(&MonoType::Fn {
         params: vec![p.clone()],
         return_type: Box::new(r.clone()),
-        is_async: false,
     });
     assert!(solver.is_send(&p));
     assert!(solver.is_send(&r));

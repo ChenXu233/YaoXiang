@@ -200,7 +200,6 @@ fn add_primitive_impl(
             let fn_type = MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             };
             methods.insert("clone".to_string(), fn_type);
         }
@@ -215,7 +214,6 @@ fn add_primitive_impl(
                     MonoType::TypeRef("Self".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
-                is_async: false,
             };
             methods.insert("equal".to_string(), fn_type);
         }
@@ -227,7 +225,6 @@ fn add_primitive_impl(
                     MonoType::TypeRef("Formatter".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Void".to_string())),
-                is_async: false,
             };
             methods.insert("debug".to_string(), fn_type);
         }

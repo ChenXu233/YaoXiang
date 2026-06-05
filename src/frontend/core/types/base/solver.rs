@@ -207,11 +207,9 @@ impl TypeConstraintSolver {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params.iter().map(|t| self.expand_type(t)).collect(),
                 return_type: Box::new(self.expand_type(return_type)),
-                is_async: *is_async,
             },
             MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type(inner))),
             MonoType::Result(ok, err) => MonoType::Result(
@@ -376,11 +374,9 @@ impl TypeConstraintSolver {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params.iter().map(|t| self.expand_type_mut(t)).collect(),
                 return_type: Box::new(self.expand_type_mut(return_type)),
-                is_async: *is_async,
             },
             MonoType::Option(inner) => MonoType::Option(Box::new(self.expand_type_mut(inner))),
             MonoType::Result(ok, err) => MonoType::Result(
@@ -459,15 +455,13 @@ impl TypeConstraintSolver {
                 MonoType::Fn {
                     params: p1,
                     return_type: r1,
-                    is_async: a1,
                 },
                 MonoType::Fn {
                     params: p2,
                     return_type: r2,
-                    is_async: a2,
                 },
             ) => {
-                if p1.len() != p2.len() || a1 != a2 {
+                if p1.len() != p2.len() {
                     return Err(TypeMismatch {
                         left: t1,
                         right: t2,
@@ -692,14 +686,12 @@ impl TypeConstraintSolver {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .iter()
                     .map(|t| self.substitute_type(t, substitution))
                     .collect(),
                 return_type: Box::new(self.substitute_type(return_type, substitution)),
-                is_async: *is_async,
             },
             MonoType::Option(inner) => {
                 MonoType::Option(Box::new(self.substitute_type(inner, substitution)))

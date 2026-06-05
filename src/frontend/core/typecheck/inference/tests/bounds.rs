@@ -148,7 +148,6 @@ fn test_check_constraint_missing_method() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Surface".to_string())],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -176,7 +175,6 @@ fn test_check_constraint_signature_mismatch() {
             MonoType::Fn {
                 params: vec![MonoType::Int(32)],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -191,7 +189,6 @@ fn test_check_constraint_signature_mismatch() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Surface".to_string())],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -227,7 +224,6 @@ fn test_check_constraint_with_method_binding() {
                 MonoType::TypeRef("Surface".to_string()),
             ],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         },
     );
 
@@ -246,7 +242,6 @@ fn test_check_constraint_with_method_binding() {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Surface".to_string())],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),

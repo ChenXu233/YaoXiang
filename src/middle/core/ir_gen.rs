@@ -702,7 +702,6 @@ impl AstToIrGenerator {
             name: func_name.clone(),
             params: param_types.clone(),
             return_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -877,7 +876,6 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -996,7 +994,6 @@ impl AstToIrGenerator {
             name: name.to_string(),
             params: Vec::new(),
             return_type: var_type,
-            is_async: false,
             locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1148,7 +1145,6 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type: ret_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1268,7 +1264,6 @@ impl AstToIrGenerator {
             name: struct_name.to_string(),
             params: param_types,
             return_type: MonoType::TypeRef(struct_name.to_string()),
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -3204,7 +3199,6 @@ impl AstToIrGenerator {
                     name: closure_name.clone(),
                     params: param_types,
                     return_type,
-                    is_async: false,
                     locals: closure_body.locals.clone(),
                     blocks: vec![BasicBlock {
                         label: 0,

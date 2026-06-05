@@ -308,7 +308,6 @@ fn test_type_checker_with_nested_function_definition() {
             expr: Some(Box::new(Expr::Var("y".to_string(), Span::dummy()))),
             span: Span::dummy(),
         }),
-        is_async: false,
         span: Span::dummy(),
     };
     let module = Module {

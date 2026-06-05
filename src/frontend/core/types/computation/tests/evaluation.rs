@@ -74,7 +74,6 @@ fn test_normalizer_normalize_composite() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
     assert_eq!(n.normalize(&fn_type), NormalForm::Normalized);
 }
@@ -461,7 +460,6 @@ fn test_normalization_context_apply_through_fn() {
         return_type: Box::new(MonoType::TypeVar(
             crate::frontend::core::types::base::TypeVar::new(0),
         )),
-        is_async: false,
     };
     let result = ctx.apply_substitution(&f);
     match result {
@@ -592,7 +590,6 @@ fn test_normalizer_normalize_fn_params() {
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert_eq!(n.normalize(&f), NormalForm::Normalized);
 }
@@ -640,7 +637,6 @@ fn test_reducer_reduce_function_type() {
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let result = r.reduce(&f);
     // Function types should be Stuck (no eta reduction implemented)
@@ -653,7 +649,6 @@ fn test_reducer_reduce_empty_function() {
     let f = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     let result = r.reduce(&f);
     assert!(matches!(result, ReductionResult::Stuck));
@@ -758,12 +753,10 @@ fn test_unifier_unify_fns_same() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Success(_)));
 }
@@ -774,12 +767,10 @@ fn test_unifier_unify_fns_different_arity() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Failure(_)));
 }
@@ -790,12 +781,10 @@ fn test_unifier_unify_fns_different_return() {
     let f1 = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Int(32)),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Failure(_)));
 }
@@ -1066,12 +1055,10 @@ fn test_unifier_unify_fn_with_var() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::TypeVar(tv)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(matches!(u.unify(&f1, &f2), UnificationResult::Success(_)));
 }
@@ -1237,7 +1224,6 @@ fn test_type_computer_compute_fn() {
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let result = c.compute(&f);
     let _ = result;
