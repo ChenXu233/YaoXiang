@@ -61,6 +61,15 @@ impl StatementParser for ParserState<'_> {
             }
             // Eof - no statement to parse
             Some(TokenKind::Eof) | None => None,
+            // Phase 1: @ 不再是有效的语句起始（eval block 已移除）
+            Some(TokenKind::At) => {
+                self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
+                    found: TokenKind::At,
+                    span: start_span,
+                });
+                // 不 bump — 由主循环负责跳过
+                None
+            }
             // expression statement
             Some(_) => declarations::parse_expr_stmt(self, start_span),
         }

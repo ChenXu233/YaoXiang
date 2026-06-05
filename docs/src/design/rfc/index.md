@@ -31,7 +31,6 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-019 | [类型级同像性 (Typed Homoiconicity)](./draft/019-typed-homoiconicity.md) | 晨煦 | 2026-02-20 | 永久草案 ⚠️ |
-| RFC-020 | [动态模块、FFI 集成与上下文感知调度增强](./draft/020-dynamic-modules-ffi.md) | 晨煦 | 2026-02-25 | 草案 |
 | RFC-025 | [可扩展原语类型机制](./draft/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 草案 |
 
 ---
@@ -41,8 +40,8 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-018 | [LLVM AOT 编译器与运行时调度器集成设计](./review/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 审核中 |
-| RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./review/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 审核中 |
 | RFC-022 | [可选的霍尔逻辑静态验证（规约注释与规约类型）](./review/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 审核中 |
+| RFC-026 | [FFI 核心机制](./review/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 审核中 |
 
 ---
 
@@ -50,7 +49,6 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| RFC-001 | [并作模型与错误处理系统](./accepted/001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-004 | [柯里化方法的多位置联合绑定设计](./accepted/004-curry-multi-position-binding.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-006 | [文档站点建设与优化方案](./accepted/006-documentation-site-optimization.md) | 晨煦 | 2025-01-05 | 已接受 |
 | RFC-007 | [函数定义语法统一方案](./accepted/007-function-syntax-unification.md) | 晨煦 | 2025-01-05 | 已接受 |
@@ -73,7 +71,9 @@ title: "RFC 索引"
 
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
-| （暂无） | | | | |
+| RFC-001 | [并作模型与错误处理系统](./deprecated/001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 已废弃（被 RFC-024 取代） |
+| RFC-020 | [动态模块与 FFI 集成](./deprecated/020-dynamic-modules-ffi.md) | 晨煦 | 2026-03-14 | 已废弃（合并到 RFC-026） |
+| RFC-021 | [库驱动 FFI 扩展与跨语言调用支持](./deprecated/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 已废弃（合并到 RFC-026） |
 
 ---
 

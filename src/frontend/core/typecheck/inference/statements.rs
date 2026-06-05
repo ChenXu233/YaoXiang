@@ -554,7 +554,6 @@ impl StatementChecker {
                 type_name,
                 generic_params,
                 type_annotation,
-                eval: _,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -603,7 +602,6 @@ impl StatementChecker {
             } => self.check_var_stmt(
                 name,
                 type_annotation.as_ref(),
-                None,
                 &[],
                 initializer.as_deref(),
                 *is_mut,
@@ -947,12 +945,11 @@ impl StatementChecker {
 
     /// 检查变量语句
     ///
-    /// 处理 Binding 类型的变量声明，支持编译期求值标记（eval）。
+    /// 处理 Binding 类型的变量声明。
     fn check_var_stmt(
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
-        eval: Option<crate::frontend::core::parser::ast::EvalMode>,
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
@@ -1041,10 +1038,6 @@ impl StatementChecker {
                 .unwrap_or_else(|| MonoType::from(type_ann.clone())),
             (None, None) => self.solver.new_var(),
         };
-
-        // 编译期求值标记：Eager 模式立即求值，Block 模式延迟，Auto 根据上下文推断
-        // 目前 eval 字段主要用于语义高亮和 IDE 支持，求值逻辑在 IR 生成阶段处理
-        let _ = eval;
 
         if self.scope.var_in_current_scope(name) {
             // 统一变量类型并写回 scope，确保后续类型推断正确

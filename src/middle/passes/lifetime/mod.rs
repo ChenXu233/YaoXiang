@@ -363,11 +363,7 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::Push(v) | Instruction::Pop(v) => vec![v.clone()],
 
         // 无操作数的指令
-        Instruction::Dup
-        | Instruction::Swap
-        | Instruction::Yield
-        | Instruction::EvalPush(_)
-        | Instruction::EvalPop => Vec::new(),
+        Instruction::Dup | Instruction::Swap | Instruction::Yield => Vec::new(),
 
         // 简单的跳转
         Instruction::Jmp(_) => Vec::new(),

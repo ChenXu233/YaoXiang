@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use crate::tlog;
 use crate::util::i18n::MSG;
 use crate::backends::common::Opcode;
-use crate::frontend::core::parser::ast::EvalMode;
 
 // Re-export types for conversion
 pub use crate::middle::core::ir::{Type as IrType, ConstValue};
@@ -158,14 +157,6 @@ pub enum BytecodeInstr {
 
     /// Yield execution (cooperative scheduling)
     Yield,
-
-    /// Push evaluation strategy (`@block/@auto/@eager`) for current frame/scope.
-    EvalPush {
-        mode: EvalMode,
-    },
-
-    /// Pop evaluation strategy.
-    EvalPop,
 
     /// Spawn a new concurrent task (dynamic call).
     Spawn {
@@ -495,8 +486,6 @@ impl BytecodeInstr {
             BytecodeInstr::Return => Opcode::Return,
             BytecodeInstr::ReturnValue { .. } => Opcode::ReturnValue,
             BytecodeInstr::Yield => Opcode::Yield,
-            BytecodeInstr::EvalPush { .. } => Opcode::EvalPush,
-            BytecodeInstr::EvalPop => Opcode::EvalPop,
             BytecodeInstr::Spawn { .. } => Opcode::Spawn,
             BytecodeInstr::Jmp { .. } => Opcode::Jmp,
             BytecodeInstr::JmpIf { .. } => Opcode::JmpIf,
@@ -576,8 +565,6 @@ impl BytecodeInstr {
             BytecodeInstr::Return => 0,
             BytecodeInstr::ReturnValue { .. } => 2,
             BytecodeInstr::Yield => 0,
-            BytecodeInstr::EvalPush { .. } => 1,
-            BytecodeInstr::EvalPop => 0,
             BytecodeInstr::Spawn { args, .. } => 3 + args.len(),
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
@@ -1145,22 +1132,6 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             }
                             Opcode::Yield => {
                                 decoded_instructions.push(BytecodeInstr::Yield);
-                            }
-                            Opcode::EvalPush => {
-                                if let Some(mode_byte) = instr.operands.first().copied() {
-                                    let mode = match mode_byte {
-                                        0 => EvalMode::Block,
-                                        1 => EvalMode::Auto,
-                                        2 => EvalMode::Eager,
-                                        _ => EvalMode::Auto,
-                                    };
-                                    decoded_instructions.push(BytecodeInstr::EvalPush { mode });
-                                } else {
-                                    decoded_instructions.push(BytecodeInstr::Nop);
-                                }
-                            }
-                            Opcode::EvalPop => {
-                                decoded_instructions.push(BytecodeInstr::EvalPop);
                             }
                             Opcode::Spawn => {
                                 // Spawn: dst(1) + func(1) + argc(1) + args(argc)

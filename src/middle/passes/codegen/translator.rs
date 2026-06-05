@@ -339,11 +339,6 @@ impl Translator {
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
 
             Spawn { func, args, result } => self.translate_spawn(func, args, result),
-            EvalPush(mode) => Ok(BytecodeInstruction::new(
-                Opcode::EvalPush,
-                vec![*mode as u8],
-            )),
-            EvalPop => Ok(BytecodeInstruction::new(Opcode::EvalPop, vec![])),
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),

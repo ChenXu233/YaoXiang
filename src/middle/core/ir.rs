@@ -1,7 +1,6 @@
 //! Intermediate Representation
 
 pub use crate::frontend::core::parser::ast::Type;
-use crate::frontend::core::parser::ast::EvalMode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::util::span::Span;
 
@@ -229,10 +228,6 @@ pub enum Instruction {
         args: Vec<Operand>,
         result: Operand,
     },
-    /// Push an evaluation strategy for the current frame/scope.
-    EvalPush(EvalMode),
-    /// Pop the current evaluation strategy.
-    EvalPop,
     Yield,
     // Phase 5 additions
     HeapAlloc {

@@ -66,7 +66,7 @@ fn make_method_bind_stmt(
         method_type: None,
         generic_params: vec![],
         type_annotation: None,
-        eval: None,
+
         params,
         body: (vec![], None),
         is_pub: false,
@@ -231,7 +231,7 @@ fn test_check_method_bind_no_type_name_returns_error() {
         method_type: None,
         generic_params: vec![],
         type_annotation: None,
-        eval: None,
+
         params: vec![],
         body: (vec![], None),
         is_pub: false,

@@ -557,7 +557,6 @@ impl AstToIrGenerator {
                 method_type,
                 generic_params: _,
                 type_annotation,
-                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -588,7 +587,6 @@ impl AstToIrGenerator {
                     self.generate_function_ir(
                         name,
                         type_annotation.as_ref(),
-                        *eval,
                         params,
                         stmts,
                         expr,
@@ -742,7 +740,6 @@ impl AstToIrGenerator {
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
-        eval: Option<ast::EvalMode>,
         params: &[ast::Param],
         stmts: &[ast::Stmt],
         expr: &Option<Box<ast::Expr>>,
@@ -785,11 +782,6 @@ impl AstToIrGenerator {
 
         // 生成函数体指令
         let mut instructions = Vec::new();
-
-        // Apply function-level eval strategy annotation (RFC-001/008).
-        if let Some(mode) = eval {
-            instructions.push(Instruction::EvalPush(mode));
-        }
 
         // 进入函数体作用域
         self.enter_scope();
@@ -1374,7 +1366,6 @@ impl AstToIrGenerator {
                 method_type: _,
                 generic_params: _,
                 type_annotation,
-                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -1383,7 +1374,6 @@ impl AstToIrGenerator {
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),
-                    *eval,
                     params,
                     stmts,
                     expr,
@@ -1987,7 +1977,6 @@ impl AstToIrGenerator {
             ast::Expr::Try { span, .. } => *span,
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
-            ast::Expr::Eval { span, .. } => *span,
             ast::Expr::Spawn { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
@@ -3091,12 +3080,6 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(ConstValue::Int(0)),
                 });
-            }
-            Expr::Eval { mode, body, .. } => {
-                // Eval-annotated block: @block/@auto/@eager { ... }
-                instructions.push(Instruction::EvalPush(*mode));
-                self.generate_block_expr_ir(body, result_reg, instructions, constants)?;
-                instructions.push(Instruction::EvalPop);
             }
             Expr::Spawn { body, span } => {
                 // Spawn block: spawn { ... }

@@ -67,7 +67,6 @@ mod tests {
     use crate::middle::bytecode::{
         BytecodeModule, BytecodeFunction, BytecodeInstr, Reg, BinaryOp, FunctionRef, ConstValue,
     };
-    use crate::backends::interpreter::EvalStrategy;
     use crate::backends::interpreter::runtime::InterpreterRuntimeConfig;
     use crate::backends::runtime::RuntimeMode;
     use super::Interpreter;
@@ -115,7 +114,6 @@ mod tests {
         let mut interp = Interpreter::new();
         interp.set_runtime_config(InterpreterRuntimeConfig {
             runtime: RuntimeMode::Standard,
-            eval: EvalStrategy::Auto,
             workers: 1,
             work_stealing: false,
         });
@@ -205,7 +203,6 @@ mod tests {
         let mut interp = Interpreter::new();
         interp.set_runtime_config(InterpreterRuntimeConfig {
             runtime: RuntimeMode::Standard,
-            eval: EvalStrategy::Eager,
             workers: 1,
             work_stealing: false,
         });
@@ -317,7 +314,6 @@ mod tests {
         let mut interp = Interpreter::new();
         interp.set_runtime_config(InterpreterRuntimeConfig {
             runtime: RuntimeMode::Standard,
-            eval: EvalStrategy::Auto,
             workers: 1,
             work_stealing: false,
         });
@@ -341,7 +337,6 @@ mod tests {
         let mut interp = Interpreter::new();
         interp.set_runtime_config(InterpreterRuntimeConfig {
             runtime: RuntimeMode::Standard,
-            eval: EvalStrategy::Auto,
             workers: 1,
             work_stealing: false,
         });

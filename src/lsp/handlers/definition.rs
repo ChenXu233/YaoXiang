@@ -277,7 +277,7 @@ mod tests {
                         method_type: None,
                         generic_params: vec![],
                         type_annotation: None,
-                        eval: None,
+
                         params: vec![],
                         body: (vec![], None),
                         is_pub: false,
@@ -367,7 +367,7 @@ mod tests {
                     method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
-                    eval: None,
+
                     params: vec![],
                     body: (vec![], None),
                     is_pub: false,
@@ -424,7 +424,7 @@ mod tests {
                     method_type: None,
                     generic_params: vec![],
                     type_annotation: None,
-                    eval: None,
+
                     params: vec![],
                     body: (vec![], None),
                     is_pub: false,

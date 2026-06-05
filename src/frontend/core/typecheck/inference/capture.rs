@@ -513,9 +513,6 @@ fn extract_read_vars_from_expr(
         Expr::Unsafe { body, .. } => {
             extract_read_vars_from_block(body, vars);
         }
-        Expr::Eval { body, .. } => {
-            extract_read_vars_from_block(body, vars);
-        }
         Expr::Spawn { body, .. } => {
             extract_read_vars_from_block(body, vars);
         }
@@ -676,9 +673,6 @@ fn extract_written_vars_from_expr(
             extract_written_vars_from_block(body, vars);
         }
         Expr::Unsafe { body, .. } => {
-            extract_written_vars_from_block(body, vars);
-        }
-        Expr::Eval { body, .. } => {
             extract_written_vars_from_block(body, vars);
         }
         // 其他表达式类型不直接写入变量
