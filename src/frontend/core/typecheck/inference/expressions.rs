@@ -1144,21 +1144,34 @@ impl<'a> ExpressionInferrer<'a> {
 
                 if self.scope.var_in_any_scope(name) {
                     if self.scope.var_in_current_scope(name) {
-                        return Err(ErrorCodeDefinition::duplicate_definition(name)
-                            .at(stmt.span)
-                            .build());
-                    }
-                    if !*is_mut {
-                        // 非 mut 的 Var 在外部作用域存在同名变量时，是赋值操作
-                        // 需要检查外层变量是否可变
-                        if !self.scope.var_is_mutable(name).unwrap_or(false) {
-                            return Err(ErrorCodeDefinition::immutable_assignment(name)
+                        // 当前作用域已有此变量
+                        if self.scope.var_is_moved(name).unwrap_or(false) {
+                            // 已 moved 的变量：视为"未找到"，重新声明
+                            // 先移除旧的 moved 绑定，再添加新绑定
+                            self.scope.remove_var(name);
+                            // 继续到下面的 try_add_var
+                        } else {
+                            return Err(ErrorCodeDefinition::duplicate_definition(name)
                                 .at(stmt.span)
                                 .build());
                         }
-                        return Ok(());
+                    } else {
+                        // 外层作用域有此变量
+                        if self.scope.var_is_moved(name).unwrap_or(false) {
+                            // 外层变量已 moved：在当前作用域重新声明
+                            // 继续到下面的 try_add_var
+                        } else if !*is_mut {
+                            // 非 mut 的 Var 在外部作用域存在同名变量时，是赋值操作
+                            // 需要检查外层变量是否可变
+                            if !self.scope.var_is_mutable(name).unwrap_or(false) {
+                                return Err(ErrorCodeDefinition::immutable_assignment(name)
+                                    .at(stmt.span)
+                                    .build());
+                            }
+                            return Ok(());
+                        }
+                        // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）
                     }
-                    // mut 声明允许遮蔽外层变量（与 StatementChecker.check_var_stmt 行为一致）
                 }
                 self.try_add_var(name.clone(), PolyType::mono(init_ty), stmt.span, *is_mut)?;
                 Ok(())
