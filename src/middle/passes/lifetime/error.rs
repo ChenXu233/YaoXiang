@@ -113,11 +113,17 @@ pub mod codes {
         ErrorCodeDefinition::immutable_assign(value).build()
     }
 
-    pub fn immutable_mutation(value: &str, method: &str) -> Diagnostic {
+    pub fn immutable_mutation(
+        value: &str,
+        method: &str,
+    ) -> Diagnostic {
         ErrorCodeDefinition::immutable_mutation(value, method).build()
     }
 
-    pub fn immutable_field_assign(struct_name: &str, field: &str) -> Diagnostic {
+    pub fn immutable_field_assign(
+        struct_name: &str,
+        field: &str,
+    ) -> Diagnostic {
         ErrorCodeDefinition::immutable_field_assign(struct_name, field).build()
     }
 

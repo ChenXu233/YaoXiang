@@ -46,14 +46,16 @@ impl CloneChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(codes::clone_moved_value(&operand_to_string(operand)));
+        self.errors
+            .push(codes::clone_moved_value(&operand_to_string(operand)));
     }
 
     fn error_clone_dropped(
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(codes::use_after_drop(&operand_to_string(operand)));
+        self.errors
+            .push(codes::use_after_drop(&operand_to_string(operand)));
     }
 
     fn set_owned(

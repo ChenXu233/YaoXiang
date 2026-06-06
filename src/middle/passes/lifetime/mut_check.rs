@@ -183,7 +183,8 @@ impl MutChecker {
                         let field = field_name
                             .clone()
                             .unwrap_or_else(|| format!("field_{}", field_index));
-                        self.errors.push(codes::immutable_field_assign(&struct_name, &field));
+                        self.errors
+                            .push(codes::immutable_field_assign(&struct_name, &field));
                     }
 
                     // 字段可变，允许
@@ -207,7 +208,10 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
-        self.errors.push(codes::immutable_mutation(&operand_to_string(target), method));
+        self.errors.push(codes::immutable_mutation(
+            &operand_to_string(target),
+            method,
+        ));
     }
 
     /// 检查变量是否可变（通用逻辑）

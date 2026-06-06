@@ -450,16 +450,14 @@ impl BorrowChecker {
     }
 
     /// 将 BorrowError 转换为 Diagnostic
-    pub fn to_diagnostics(
-        &self
-    ) -> Vec<crate::util::diagnostic::Diagnostic> {
+    pub fn to_diagnostics(&self) -> Vec<crate::util::diagnostic::Diagnostic> {
         use crate::middle::passes::lifetime::error::codes;
         self.errors
             .iter()
             .map(|e| match e {
-                BorrowError::MutableBorrowConflict {
-                    source, ..
-                } => codes::mutable_borrow_conflict(source),
+                BorrowError::MutableBorrowConflict { source, .. } => {
+                    codes::mutable_borrow_conflict(source)
+                }
                 BorrowError::BorrowAfterMove { source, .. } => codes::borrow_after_move(source),
                 BorrowError::UseWhileFrozen { source, .. } => codes::use_while_frozen(source),
             })

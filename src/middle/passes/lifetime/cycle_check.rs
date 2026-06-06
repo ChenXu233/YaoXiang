@@ -184,7 +184,8 @@ impl CycleChecker {
                             "spawn {} in unsafe block, cycle detection bypassed",
                             self.operand_to_string(result)
                         );
-                        self.unsafe_bypasses.push(codes::unsafe_bypass_cycle(&details));
+                        self.unsafe_bypasses
+                            .push(codes::unsafe_bypass_cycle(&details));
                     }
                     continue;
                 }
@@ -320,7 +321,9 @@ impl CycleChecker {
                     }
                 } else if recursion_stack.contains(neighbor) {
                     // 找到环！path 中从 neighbor 到末尾就是环
-                    self.errors.push(codes::cross_spawn_cycle(&self.format_cycle_path(path, neighbor)));
+                    self.errors.push(codes::cross_spawn_cycle(
+                        &self.format_cycle_path(path, neighbor),
+                    ));
                     return true;
                 }
             }

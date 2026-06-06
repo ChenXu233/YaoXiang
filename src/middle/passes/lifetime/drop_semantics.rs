@@ -58,10 +58,12 @@ impl DropChecker {
     ) {
         match self.state.get(value) {
             Some(ValueState::Moved) => {
-                self.errors.push(codes::drop_moved_value(&operand_to_string(value)));
+                self.errors
+                    .push(codes::drop_moved_value(&operand_to_string(value)));
             }
             Some(ValueState::Dropped) => {
-                self.errors.push(codes::double_drop(&operand_to_string(value)));
+                self.errors
+                    .push(codes::double_drop(&operand_to_string(value)));
             }
             Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
@@ -93,7 +95,8 @@ impl DropChecker {
         operand: &Operand,
     ) {
         if let Some(ValueState::Dropped) = self.state.get(operand) {
-            self.errors.push(codes::use_after_drop(&operand_to_string(operand)));
+            self.errors
+                .push(codes::use_after_drop(&operand_to_string(operand)));
         }
     }
 }
