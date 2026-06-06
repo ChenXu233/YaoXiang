@@ -1,33 +1,32 @@
 ---
-title: "RFC-013: Error Code Specification"
+title: "RFC 013: Error Code Specification"
+status: "Accepted"
+author: "晨煦"
+created: "2026-02-02"
+updated: "2026-02-12"
 ---
 
 # RFC 013: Error Code Specification
 
-> **Status**: Accepted
-> **Author**: Chen Xu
-> **Created**: 2026-02-02
-> **Last Updated**: 2026-02-12
+## Summary
 
-## Abstract
-
-This RFC proposes an error code classification specification for the YaoXiang compiler, using a single-level numbering system similar to Rust, with JSON resource files for multilingual support, and providing error explanation functionality through the `yaoxiang explain` command.
+This RFC proposes a classification specification for YaoXiang compiler error codes, adopting a single-level numbering system similar to Rust, with JSON resource files for multilingual support, and providing error explanation functionality through the `yaoxiang explain` command.
 
 ## Motivation
 
-### Why Do We Need Standardized Error Codes?
+### Why do we need standardized error codes?
 
-1. **User Experience**: Users can quickly determine the error type and severity by looking at the error code
-2. **Documentation Organization**: Grouping by category makes it easier to write and maintain error reference documentation
-3. **Tool Integration**: IDE/LSP can provide quick-fix suggestions and documentation links based on error codes
-4. **Internationalization Support**: Separation of error messages from codes facilitates multilingual translations
+1. **User experience**: Users can quickly determine error type and severity by looking at error codes
+2. **Documentation organization**: Categorical grouping facilitates writing and maintaining error reference documentation
+3. **Tool integration**: IDE/LSP can provide quick-fix suggestions and documentation links based on error codes
+4. **Internationalization support**: Error messages separated from codes, facilitating multilingual translations
 
 ### Design Goals
 
-- **Concise**: Single-level numbering, no need for users to remember complex classification rules
-- **Friendly**: Rust-like error message format with help information and examples
+- **Concise**: Single-level numbering, users don't need to remember complex classification rules
+- **Friendly**: Error message format similar to Rust, with help information and examples
 - **Extensible**: Resource file-driven, easy to add new errors and new languages
-- **Tool-friendly**: explain command + JSON output, supports IDE/LSP integration
+- **Tool-friendly**: explain command + JSON output, supporting IDE/LSP integration
 
 ---
 
@@ -35,7 +34,7 @@ This RFC proposes an error code classification specification for the YaoXiang co
 
 ### Core Design: Single-Level Numbering System
 
-Uses a four-digit numbering scheme, grouped by compilation phase:
+Uses a four-digit code number, grouped by compilation phase:
 
 ```
 Exxxx
@@ -49,7 +48,7 @@ Exxxx
 
 | Phase | Range | Description |
 |-------|-------|-------------|
-| **0** | E0xxx | Lexical and syntax analysis |
+| **0** | E0xxx | Lexical and syntactic analysis |
 | **1** | E1xxx | Type checking |
 | **2** | E2xxx | Semantic analysis |
 | **3** | E3xxx | Code generation |
@@ -66,7 +65,7 @@ Exxxx
 /// Error category
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
-    Lexer,      // E0xxx: Lexical and syntax analysis
+    Lexer,      // E0xxx: Lexical and syntactic analysis
     Parser,     // E0xxx: Parser errors
     TypeCheck,  // E1xxx: Type checking
     Semantic,   // E2xxx: Semantic analysis
@@ -80,7 +79,7 @@ pub enum ErrorCategory {
 
 ### Error Code Definition and Generic Builder
 
-**Core Principle**: Separate error code definitions from display text
+**Core principle**: Error code definition separated from display text
 
 - `ErrorCodeDefinition`: Error code metadata (code, category, template), without display text
 - `i18n/*.json`: Display text for each language (title, message, help)
@@ -132,7 +131,7 @@ impl DiagnosticBuilder {
         self
     }
 
-    /// Build Diagnostic (template rendering at compile time)
+    /// Build Diagnostic (template rendering done at compile time)
     pub fn build(&self, i18n: &I18nRegistry) -> Diagnostic {
         // Check that all {key} in template have corresponding parameters
         self.validate_params();
@@ -182,12 +181,12 @@ impl ErrorCodeDefinition {
 
 use crate::util::diagnostic::codes::{ErrorCodeDefinition, E1001};
 
-// Simplified approach
+// Simplified way
 return Err(E1001::unknown_variable(&var_name)
     .at(span)
     .build(&i18n_registry));
 
-// Manual approach
+// Manual way
 return Err(ErrorCodeDefinition::find("E1001")
     .builder()
     .param("name", var_name)
@@ -211,7 +210,7 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
         category: ErrorCategory::TypeCheck,
         message_template: "Expected type '{expected}', found type '{found}'",
     },
-    // ... Other error codes
+    // ... other error codes
 ];
 ```
 
@@ -220,19 +219,19 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 | Feature | Description |
 |---------|-------------|
 | **Single Builder** | One `DiagnosticBuilder` works for all error codes |
-| **Type Safety** | Convenience methods ensure parameter correctness |
-| **Self-Documenting** | `E1001::unknown_variable(name)` is self-explanatory |
-| **Template Separation** | Message templates separated from code, easy to i18n |
-| **Zero Runtime Overhead** | Compile-time rendering, AOT binary with no lookup tables |
+| **Type safety** | Convenience methods ensure parameter correctness |
+| **Self-documenting** | `E1001::unknown_variable(name)` is self-explanatory |
+| **Template separation** | Message templates separated from code, easy i18n |
+| **Zero runtime overhead** | Compile-time rendering, AOT binary no lookup |
 
 ---
 
-### Simplified error! Macro
+### Error Macro Simplification
 
-#### error! Macro (Auto-Inject Context)
+#### error! Macro (Automatic Context Injection)
 
 ```rust
-/// Macro that auto-injects span and i18n config at compile time
+/// Macro that automatically gets span and i18n config at compile time
 macro_rules! error {
     ($code:ident, $($key:ident = $value:expr),* $(,)?) => {
         $code()
@@ -242,7 +241,7 @@ macro_rules! error {
     };
 }
 
-/// Usage: only pass parameters, span and i18n are auto-injected
+/// Usage: only pass parameters, span and i18n automatically injected
 return Err(error!(E1001, name = var_name));
 return Err(error!(E1002, expected = "bool", found = cond_ty));
 ```
@@ -262,19 +261,19 @@ E1001::unknown_variable(&var_name)
 
 ### Error Code List
 
-#### E0xxx: Lexical and Syntax Analysis
+#### E0xxx: Lexical and Syntactic Analysis
 
 | Code | Error Type | Description |
 |------|------------|-------------|
-| E0001 | Invalid character | Source code contains illegal character |
+| E0001 | Invalid character | Source code contains illegal characters |
 | E0002 | Invalid number literal | Number literal format is incorrect |
 | E0003 | Unterminated string | Multi-line string missing closing quote |
 | E0004 | Invalid character literal | Character literal is incorrect |
-| E0010 | Expected token | Syntax analysis expected a specific token |
+| E0010 | Expected token | Parser expected a specific token |
 | E0011 | Unexpected token | Encountered unexpected token |
 | E0012 | Invalid syntax | Expression/statement syntax error |
-| E0013 | Mismatched brackets | Round, square, or curly brackets don't match |
-| E0014 | Missing semicolon | Missing semicolon at end of statement |
+| E0013 | Mismatched brackets | Parentheses, brackets, or braces don't match |
+| E0014 | Missing semicolon | Statement missing semicolon at end |
 
 #### E1xxx: Type Checking
 
@@ -282,10 +281,10 @@ E1001::unknown_variable(&var_name)
 |------|------------|-------------|
 | E1001 | Unknown variable | Referenced variable is not defined |
 | E1002 | Type mismatch | Expected type doesn't match actual type |
-| E1003 | Unknown type | Referenced type doesn't exist |
+| E1003 | Unknown type | Referenced type does not exist |
 | E1010 | Parameter count mismatch | Function call parameter count doesn't match definition |
-| E1011 | Parameter type mismatch | Parameter type check failed |
-| E1012 | Return type mismatch | Function return value type incorrect |
+| E1011 | Parameter type mismatch | Parameter type checking failed |
+| E1012 | Return type mismatch | Function return value type error |
 | E1013 | Function not found | Calling undefined function |
 | E1020 | Cannot infer type | Context cannot infer type |
 | E1021 | Type inference conflict | Multiple constraints lead to type contradiction |
@@ -300,7 +299,7 @@ E1001::unknown_variable(&var_name)
 | Code | Error Type | Description |
 |------|------------|-------------|
 | E2001 | Scope error | Variable not in current scope |
-| E2002 | Duplicate definition | Duplicate definition in same scope |
+| E2002 | Duplicate definition | Duplicate definition within same scope |
 | E2003 | Lifetime error | Lifetime constraint not satisfied |
 | E2010 | Immutable assignment | Attempting to modify immutable variable |
 | E2011 | Uninitialized use | Using uninitialized variable |
@@ -314,7 +313,7 @@ E1001::unknown_variable(&var_name)
 | E4002 | Trait bound violated | Trait constraint not satisfied |
 | E4003 | Associated type error | Associated type definition/usage error |
 | E4004 | Duplicate trait implementation | Duplicate implementation of same trait |
-| E4005 | Trait not found | Cannot find required trait |
+| E4005 | Trait not found | Required trait not found |
 | E4006 | Sized bound violated | Sized constraint not satisfied |
 
 #### E5xxx: Modules and Imports
@@ -389,20 +388,20 @@ E1001::unknown_variable(&var_name)
 // diagnostic/codes/i18n/zh.json
 {
   "E1001": {
-    "title": "Unknown variable",
-    "message": "Referenced variable is not defined",
-    "template": "Unknown variable: '{name}'",
-    "help": "Check if the variable name is spelled correctly, or define it first",
+    "title": "未知变量",
+    "message": "引用的变量未定义",
+    "template": "未知变量：'{name}'",
+    "help": "检查变量名是否拼写正确，或先定义它",
     "example": "x = 100;",
-    "error_output": "error[E1001]: Unknown variable: 'x'\n  --> example.yx:1:1\n   |\n 1 | print(x)\n   | ^ unknown variable 'x'"
+    "error_output": "error[E1001]: 未知变量：'x'\n  --> example.yx:1:1\n   |\n 1 | print(x)\n   | ^ 未知变量 'x'"
   },
   "E1002": {
-    "title": "Type mismatch",
-    "message": "Expected type does not match actual type",
-    "template": "Expected type '{expected}', found type '{found}'",
-    "help": "Use the correct type or add a type conversion",
+    "title": "类型不匹配",
+    "message": "期望类型与实际类型不匹配",
+    "template": "期望类型 '{expected}'，实际类型 '{found}'",
+    "help": "使用正确的类型或添加类型转换",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: Type mismatch\n  --> example.yx:1:12\n   |\n 1 | x: Int = \"hello\";\n   |            ^ expected 'Int', found 'String'"
+    "error_output": "error[E1002]: 类型不匹配\n  --> example.yx:1:12\n   |\n 1 | x: Int = \"hello\";\n   |            ^ 期望 'Int'，找到 'String'"
   }
 }
 ```
@@ -418,7 +417,7 @@ pub struct I18nRegistry {
     titles: HashMap<&'static str, &'static str>,
     /// Descriptions
     messages: HashMap<&'static str, &'static str>,
-    /// Help information
+    /// Help messages
     helps: HashMap<&'static str, &'static str>,
     /// Example code
     examples: HashMap<&'static str, &'static str>,
@@ -426,7 +425,7 @@ pub struct I18nRegistry {
     error_outputs: HashMap<&'static str, &'static str>,
 }
 
-/// Error code information
+/// Single error code information
 #[derive(Clone, Copy)]
 pub struct ErrorInfo<'a> {
     pub title: &'a str,
@@ -456,7 +455,7 @@ impl I18nRegistry {
         })
     }
 
-    /// Render template (compile time, zero runtime overhead)
+    /// Render template (done at compile time, zero runtime overhead)
     pub fn render(&self, template: &'static str, params: &[(&str, String)]) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
@@ -492,7 +491,7 @@ impl I18nRegistry {
 
 | Placeholder | Purpose | Example |
 |-------------|---------|---------|
-| `{name}` | Variable name/type name/trait name and other identifiers | `Unknown variable: '{name}'` |
+| `{name}` | Variable name/type name/trait name identifier | `Unknown variable: '{name}'` |
 | `{expected}` | Expected type | `Expected type '{expected}'` |
 | `{found}` | Actual/found type | `, found type '{found}'` |
 | `{method}` | Method name | `Method {method} is not a function` |
@@ -501,7 +500,7 @@ impl I18nRegistry {
 | `{ty}` | Type expression | `Invalid type: {ty}` |
 | `{message}` | Internal error message | `Internal error: {message}` |
 
-##### Support for Arbitrary Keys
+##### Arbitrary Key Support
 
 **params supports arbitrary keys, not limited to predefined ones**. Callers can pass any `key`:
 
@@ -517,7 +516,7 @@ E1001::unknown_variable(&var_name)
 "Unknown variable: '{name}' at {location}. {hint}"
 ```
 
-> **Note**: Not all error codes use placeholders. Some error codes (like E0001) are static messages that don't need parameters.
+> **Note**: Not all error codes use placeholders. Some error codes (like E0001) are static messages without parameters.
 
 #### Language Priority
 
@@ -529,7 +528,7 @@ E1001::unknown_variable(&var_name)
 
 ### yaoxiang.toml Configuration
 
-#### Project-Level Configuration
+#### Project-level Configuration
 
 ```toml
 # yaoxiang.toml
@@ -542,7 +541,7 @@ version = "0.1.0"
 default = "zh"
 ```
 
-#### User-Level Configuration
+#### User-level Configuration
 
 ```toml
 # ~/.yaoxiang/yaoxiang.toml
@@ -550,14 +549,14 @@ default = "zh"
 default = "zh"
 ```
 
-#### Compile-Time Language Selection
+#### Compile-time Language Selection
 
 ```
 1. Read language.default from project-level yaoxiang.toml
 2. If not configured, read from user-level ~/.yaoxiang/yaoxiang.toml
 3. If neither is configured, default to "en"
 4. Compiler creates I18nRegistry based on selected language (once)
-5. All errors use that I18nRegistry to render messages
+5. All errors use this I18nRegistry for message rendering
 ```
 
 #### Key to Zero Lookup Overhead
@@ -566,38 +565,38 @@ default = "zh"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 1: Rust compiling YaoXiang compiler                              │
+│  Stage 1: Rust compiles YaoXiang compiler                               │
 │                                                                           │
-│  JSON packed into compiler binary                                        │
+│  JSON bundled into compiler binary                                       │
 │  Purpose: explain command can directly read i18n data                   │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 2: YaoXiang compiling user project (rendering happens here)      │
+│  Stage 2: YaoXiang compiles user project (rendering happens here)       │
 │                                                                           │
 │  When error! macro is called:                                            │
 │  1. Read yaoxiang.toml to get language preference                        │
-│  2. Load corresponding language's i18n JSON from compiler binary         │
-│  3. Template + params → render() → "Unknown variable: 'x'"               │
-│  4. Diagnostic.message = already rendered string                         │
+│  2. Load corresponding language's i18n JSON from compiler binary        │
+│  3. Template + params → render() → "Unknown variable: 'x'"              │
+│  4. Diagnostic.message = rendered string                                 │
 │                                                                           │
-│  AOT binary directly stores final string, no template, no lookup        │
+│  AOT binary directly stores final strings, no templates, no lookup      │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 3: User program runtime                                           │
+│  Stage 3: User program runtime                                          │
 │                                                                           │
-│  println!("{}", diagnostic.message)                                      │
-│  // Directly output final string, no lookup whatsoever                  │
+│  println!("{}", diagnostic.message)                                     │
+│  // Directly outputs final string, no lookup at all                     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Component | Responsibility | Render Timing |
-|-----------|----------------|---------------|
+| Component | Responsibility | Rendering Timing |
+|-----------|---------------|------------------|
 | `I18nRegistry` | Provides templates and display text | When compiling user project |
 | `DiagnosticBuilder.render()` | Template + params → final string | When compiling user project |
-| `Diagnostic.message` | Already rendered string | Stores final result |
-| AOT binary | Contains final string | Used directly at runtime |
+| `Diagnostic.message` | Rendered string | Stores final result |
+| AOT binary | Contains final strings | Used directly at runtime |
 
 ---
 
@@ -607,7 +606,7 @@ Error messages use the following format:
 
 ```
 error[E####]: <short description>
-  --> <file>:<line>:<column>
+  --> <file>:<line>:<col>
    <line> | <code snippet>
           ^^^<highlight>
 ```
@@ -631,8 +630,8 @@ Error severity is managed through the `DiagnosticLevel` enum, decoupled from err
 ```rust
 pub enum DiagnosticLevel {
     Error,    // Causes compilation failure
-    Warning,  // Doesn't affect compilation, but should be fixed
-    Note,     // Supplementary information
+    Warning,  // Doesn't affect compilation, but fixing is recommended
+    Note,     // Additional information
     Help,     // Fix suggestion
 }
 ```
@@ -641,7 +640,7 @@ pub enum DiagnosticLevel {
 |-------|--------|-------------|
 | Error | `error[E####]:` | Causes compilation failure |
 | Warning | `warning[E####]:` | Doesn't affect compilation |
-| Note | `note[E####]:` | Supplementary information |
+| Note | `note[E####]:` | Additional information |
 | Help | `help[E####]:` | Fix suggestion |
 
 ---
@@ -659,9 +658,9 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 | Option | Description |
 |--------|-------------|
 | `--lang <code>` | Specify language (en-US, zh-CN, default en-US) |
-| `--json` | JSON format output (for IDE/LSP usage) |
+| `--json` | JSON format output (for IDE/LSP use) |
 | `--json-pretty` | Formatted JSON output |
-| `--examples` | Show example code only |
+| `--examples` | Show only example code |
 | `--help` | Show help information |
 
 #### Usage Examples
@@ -716,7 +715,7 @@ $ yaoxiang explain E1001 --json
 
 ### Backward Compatibility
 
-Since this RFC designs the error code system from scratch, there are no backward compatibility issues.
+Since this RFC designs the error code system from scratch, there is no backward compatibility issue.
 
 **Future Migration Strategy** (for reference by subsequent versions):
 
@@ -728,28 +727,28 @@ Since this RFC designs the error code system from scratch, there are no backward
 
 ## Implementation Strategy
 
-### Phase 1: Error Code Infrastructure
+### Phase One: Error Code Infrastructure
 
 1. Create `src/diagnostics/` directory structure
 2. Implement `ErrorCode` enum
 3. Implement `Diagnostic` and `DiagnosticLevel`
 4. Create resource file directory and sample JSON
 
-### Phase 2: explain Command
+### Phase Two: explain Command
 
 1. Implement `yaoxiang explain` CLI command
 2. Support `--lang` and `--json` options
 3. Integrate resource file loading
 4. Implement parameter template rendering
 
-### Phase 3: Compile-Time Integration
+### Phase Three: Compile-time Integration
 
 1. Update all error reporting points to use new system
 2. Implement message template parameter injection
 3. Add language priority logic
 4. Unit test coverage
 
-### Phase 4: IDE/LSP Integration
+### Phase Four: IDE/LSP Integration
 
 1. LSP server integrates explain JSON output
 2. Display error code links in IDE
@@ -764,7 +763,7 @@ Since this RFC designs the error code system from scratch, there are no backward
 
 | Range | Category |
 |-------|----------|
-| E0xxx | Lexical and syntax analysis |
+| E0xxx | Lexical and syntactic analysis |
 | E1xxx | Type checking |
 | E2xxx | Semantic analysis |
 | E3xxx | Code generation |
@@ -778,7 +777,7 @@ Since this RFC designs the error code system from scratch, there are no backward
 ### Supported Languages
 
 | Code | Language | Status |
-|------|----------|---------|
+|------|----------|--------|
 | en-US | English (US) | Default |
 | zh-CN | Simplified Chinese | Planned |
 
@@ -797,12 +796,12 @@ error[E1001]: 未知变量: x
   --> src/main.yx:5:12
    5 |   print(x)
           ^
-          help: 你是否想要定义它？
+          帮助: 你是否想要定义它？
 ```
 
 ## References
 
 - [Rust Compiler Error Index](https://doc.rust-lang.org/error_codes/error-index.html)
 - [GCC Error Message Format](https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html)
-- [Clang Diagnostics Format](https://clang.llvm.org/diagnostics.html)
+- [Clang Diagnostic Format](https://clang.llvm.org/diagnostics.html)
 - [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
