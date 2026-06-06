@@ -130,7 +130,10 @@ impl ErrorCodeDefinition {
     }
 
     /// E3014 寄存器溢出
-    pub fn register_overflow(id: &str, limit: &str) -> DiagnosticBuilder {
+    pub fn register_overflow(
+        id: &str,
+        limit: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E3014").unwrap();
         def.builder().param("id", id).param("limit", limit)
     }
@@ -142,9 +145,14 @@ impl ErrorCodeDefinition {
     }
 
     /// E3016 类型不匹配（代码生成）
-    pub fn codegen_type_mismatch(expected: &str, found: &str) -> DiagnosticBuilder {
+    pub fn codegen_type_mismatch(
+        expected: &str,
+        found: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E3016").unwrap();
-        def.builder().param("expected", expected).param("found", found)
+        def.builder()
+            .param("expected", expected)
+            .param("found", found)
     }
 
     /// E3017 无效操作数（代码生成）

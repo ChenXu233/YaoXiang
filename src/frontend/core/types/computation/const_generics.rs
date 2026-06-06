@@ -344,7 +344,8 @@ impl ConstGenericEval {
             ConstExpr::Float(f) => Ok(ConstValue::Float(*f)),
             ConstExpr::Bool(b) => Ok(ConstValue::Bool(*b)),
             ConstExpr::Var(name) => self.bindings.get(name).cloned().ok_or_else(|| {
-                ErrorCodeDefinition::const_eval_failed(&format!("Undefined variable: {}", name)).build()
+                ErrorCodeDefinition::const_eval_failed(&format!("Undefined variable: {}", name))
+                    .build()
             }),
             ConstExpr::BinOp { op, lhs, rhs } => self.eval_binop(op, lhs, rhs),
             ConstExpr::UnOp { op, expr } => self.eval_unop(op, expr),
@@ -455,7 +456,8 @@ impl ConstGenericEval {
             _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported operation: {:?} for {:?} and {:?}",
                 op, left, right
-            )).build()),
+            ))
+            .build()),
         }
     }
 
@@ -473,7 +475,8 @@ impl ConstGenericEval {
             _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported unary operation: {:?} for {:?}",
                 op, value
-            )).build()),
+            ))
+            .build()),
         }
     }
 
@@ -493,10 +496,10 @@ impl ConstGenericEval {
             return self.eval_function_call(func, args);
         }
 
-        Err(ErrorCodeDefinition::const_eval_failed(&format!(
-            "Undefined function: {}",
-            name
-        )).build())
+        Err(
+            ErrorCodeDefinition::const_eval_failed(&format!("Undefined function: {}", name))
+                .build(),
+        )
     }
 
     /// 求值内置函数
@@ -532,7 +535,8 @@ impl ConstGenericEval {
                     _ => {
                         return Some(Err(ErrorCodeDefinition::const_eval_failed(
                             "sizeof expects a type name",
-                        ).build()))
+                        )
+                        .build()))
                     }
                 };
 
@@ -546,7 +550,8 @@ impl ConstGenericEval {
                         return Some(Err(ErrorCodeDefinition::const_eval_failed(&format!(
                             "Unknown type: {}",
                             type_name
-                        )).build()))
+                        ))
+                        .build()))
                     }
                 };
                 Some(Ok(ConstValue::Int(size as i128)))
@@ -572,7 +577,8 @@ impl ConstGenericEval {
                 func.name,
                 func.params.len(),
                 args.len()
-            )).build());
+            ))
+            .build());
         }
 
         if self.current_depth >= self.max_depth {
@@ -600,9 +606,7 @@ impl ConstGenericEval {
         match self.eval(condition)? {
             ConstValue::Bool(true) => self.eval(true_branch),
             ConstValue::Bool(false) => self.eval(false_branch),
-            _ => Err(ErrorCodeDefinition::const_eval_failed(
-                "Condition must be a boolean",
-            ).build()),
+            _ => Err(ErrorCodeDefinition::const_eval_failed("Condition must be a boolean").build()),
         }
     }
 }

@@ -228,9 +228,7 @@ impl ErrorCodeDefinition {
         type_: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E1040").unwrap();
-        def.builder()
-            .param("op", op)
-            .param("type", type_)
+        def.builder().param("op", op).param("type", type_)
     }
 
     /// E1041 数组越界
@@ -250,9 +248,7 @@ impl ErrorCodeDefinition {
         struct_: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E1042").unwrap();
-        def.builder()
-            .param("field", field)
-            .param("struct", struct_)
+        def.builder().param("field", field).param("struct", struct_)
     }
 
     /// E1050 逻辑运算需要布尔操作数
@@ -261,9 +257,7 @@ impl ErrorCodeDefinition {
         right: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E1050").unwrap();
-        def.builder()
-            .param("left", left)
-            .param("right", right)
+        def.builder().param("left", left).param("right", right)
     }
 
     /// E1051 逻辑 NOT 需要布尔操作数

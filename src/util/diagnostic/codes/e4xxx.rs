@@ -57,9 +57,7 @@ impl ErrorCodeDefinition {
         trait_: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E4001").unwrap();
-        def.builder()
-            .param("type", type_)
-            .param("trait", trait_)
+        def.builder().param("type", type_).param("trait", trait_)
     }
 
     /// E4002 特质未找到
@@ -74,9 +72,7 @@ impl ErrorCodeDefinition {
         type_: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E4003").unwrap();
-        def.builder()
-            .param("trait", trait_)
-            .param("type", type_)
+        def.builder().param("trait", trait_).param("type", type_)
     }
 
     /// E4004 特质实现冲突
@@ -113,21 +109,18 @@ impl ErrorCodeDefinition {
     /// E4012 常量递归过深
     pub fn const_recursion_too_deep(limit: usize) -> DiagnosticBuilder {
         let def = Self::find("E4012").unwrap();
-        def.builder()
-            .param("limit", limit.to_string())
+        def.builder().param("limit", limit.to_string())
     }
 
     /// E4013 非常量函数
     pub fn const_non_const_function(func: &str) -> DiagnosticBuilder {
         let def = Self::find("E4013").unwrap();
-        def.builder()
-            .param("func", func)
+        def.builder().param("func", func)
     }
 
     /// E4014 常量求值失败
     pub fn const_eval_failed(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E4014").unwrap();
-        def.builder()
-            .param("reason", reason)
+        def.builder().param("reason", reason)
     }
 }

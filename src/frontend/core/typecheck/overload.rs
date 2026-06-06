@@ -98,7 +98,6 @@ impl fmt::Display for OverloadResolution {
     }
 }
 
-
 /// 重载解析器
 #[derive(Debug, Default)]
 pub struct OverloadResolver {
@@ -164,11 +163,14 @@ impl OverloadResolver {
         let candidate_indices = match self.candidate_map.get(name) {
             Some(indices) => indices,
             None => {
-                return Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
-                    name,
-                    0,
-                    arg_types.len(),
-                ).build());
+                return Err(
+                    crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                        name,
+                        0,
+                        arg_types.len(),
+                    )
+                    .build(),
+                );
             }
         };
 
@@ -185,11 +187,14 @@ impl OverloadResolver {
                 .first()
                 .map(|idx| self.candidates[*idx].param_types.len())
                 .unwrap_or(0);
-            return Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
-                name,
-                expected,
-                arg_types.len(),
-            ).build());
+            return Err(
+                crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                    name,
+                    expected,
+                    arg_types.len(),
+                )
+                .build(),
+            );
         }
 
         // 评估类型匹配
@@ -202,8 +207,16 @@ impl OverloadResolver {
         if scored.is_empty() {
             return Err(crate::util::diagnostic::ErrorCodeDefinition::type_mismatch(
                 &format!("compatible overload for '{}'", name),
-                &format!("({})", arg_types.iter().map(|t| t.type_name()).collect::<Vec<_>>().join(", ")),
-            ).build());
+                &format!(
+                    "({})",
+                    arg_types
+                        .iter()
+                        .map(|t| t.type_name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+            .build());
         }
 
         // 找出最高分
@@ -221,7 +234,8 @@ impl OverloadResolver {
             Err(crate::util::diagnostic::ErrorCodeDefinition::type_mismatch(
                 &format!("unambiguous overload for '{}'", name),
                 &format!("{} candidates with equal score", best.len()),
-            ).build())
+            )
+            .build())
         }
     }
 
@@ -442,20 +456,26 @@ pub fn resolve_overload_from_env<'a>(
                     }
                 }
                 // 如果找不到，返回第一个匹配的（保守处理）
-                Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
-                    func_name,
-                    0,
-                    arg_types.len(),
-                ).build())
+                Err(
+                    crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                        func_name,
+                        0,
+                        arg_types.len(),
+                    )
+                    .build(),
+                )
             }
             Err(e) => Err(e),
         }
     } else {
-        Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
-            func_name,
-            0,
-            arg_types.len(),
-        ).build())
+        Err(
+            crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                func_name,
+                0,
+                arg_types.len(),
+            )
+            .build(),
+        )
     }
 }
 
