@@ -38,18 +38,9 @@
 /// - `name = "value"`: 模板参数
 /// - `span = span_expr`: 可选，源码位置
 /// - `related = vec![...]`: 可选，相关诊断列表
-/// - `lang = "zh"`: 可选，语言（默认英文）
 #[macro_export]
 macro_rules! error {
     ($code:ident, $($arg:tt)*) => {
-        $crate::util::diagnostic::error_internal!($code, (), $($arg)*)
-    };
-}
-
-/// 内部宏：处理 span 参数
-#[macro_export]
-macro_rules! error_internal {
-    ($code:ident, (), $($arg:tt)*) => {
         $crate::__error_impl!($code, (), (), $($arg)*)
     };
 }
@@ -57,34 +48,14 @@ macro_rules! error_internal {
 /// 错误实现宏
 #[macro_export]
 macro_rules! __error_impl {
-    // 匹配 span = expr 参数（必须在通用匹配之前）
+    // 匹配 span = expr 参数
     ($code:ident, ($($params:tt)*), (), span = $span:expr, $($rest:tt)*) => {
-        $crate::__error_impl!(
-            $code,
-            ($($params)*),
-            (span = $span),
-            $($rest)*
-        )
+        $crate::__error_impl!($code, ($($params)*), (span = $span), $($rest)*)
     };
 
-    // 匹配 related = vec![] 参数（必须在通用匹配之前）
+    // 匹配 related = vec![] 参数
     ($code:ident, ($($params:tt)*), (), related = $related:expr, $($rest:tt)*) => {
-        $crate::__error_impl!(
-            $code,
-            ($($params)*),
-            (related = $related),
-            $($rest)*
-        )
-    };
-
-    // 匹配 lang = "zh" 参数（必须在通用匹配之前）
-    ($code:ident, ($($params:tt)*), (), lang = $lang:expr, $($rest:tt)*) => {
-        $crate::__error_impl!(
-            $code,
-            ($($params)*),
-            (lang = $lang),
-            $($rest)*
-        )
+        $crate::__error_impl!($code, ($($params)*), (related = $related), $($rest)*)
     };
 
     // 通用参数匹配 - 匹配任意 identifier = expr
@@ -97,96 +68,42 @@ macro_rules! __error_impl {
         )
     };
 
-    // 没有更多参数，生成构建器
-    ($code:ident, ($($params:tt)*), (span = $span:expr), lang = $lang:expr) => {
-        {
-            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
-                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::new($lang);
-            let mut builder = code_def.builder();
-            $(
-                builder = builder.param($params.0, $params.1);
-            )*
-            builder.at($span).build(&i18n)
-        }
-    };
-
-    ($code:ident, ($($params:tt)*), (span = $span:expr)) => {
-        {
-            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
-                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::en();
-            let mut builder = code_def.builder();
-            $(
-                builder = builder.param($params.0, $params.1);
-            )*
-            builder.at($span).build(&i18n)
-        }
-    };
-
-    ($code:ident, ($($params:tt)*), (related = $related:expr), lang = $lang:expr) => {
-        {
-            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
-                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::new($lang);
-            let mut builder = code_def.builder();
-            $(
-                builder = builder.param($params.0, $params.1);
-            )*
-            builder.with_related($related).build(&i18n)
-        }
-    };
-
-    ($code:ident, ($($params:tt)*), (related = $related:expr)) => {
-        {
-            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
-                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::en();
-            let mut builder = code_def.builder();
-            $(
-                builder = builder.param($params.0, $params.1);
-            )*
-            builder.with_related($related).build(&i18n)
-        }
-    };
-
-    ($code:ident, ($($params:tt)*), (span = $span:expr, related = $related:expr), lang = $lang:expr) => {
-        {
-            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
-                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::new($lang);
-            let mut builder = code_def.builder();
-            $(
-                builder = builder.param($params.0, $params.1);
-            )*
-            builder.at($span).with_related($related).build(&i18n)
-        }
-    };
-
+    // 没有更多参数，生成构建器 - 带 span + related
     ($code:ident, ($($params:tt)*), (span = $span:expr, related = $related:expr)) => {
         {
             let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
                 .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::en();
             let mut builder = code_def.builder();
             $(
                 builder = builder.param($params.0, $params.1);
             )*
-            builder.at($span).with_related($related).build(&i18n)
+            builder.at($span).with_related($related).build()
         }
     };
 
-    // 只有 lang
-    ($code:ident, ($($params:tt)*), (), lang = $lang:expr) => {
+    // 只有 span
+    ($code:ident, ($($params:tt)*), (span = $span:expr)) => {
         {
             let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
                 .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::new($lang);
             let mut builder = code_def.builder();
             $(
                 builder = builder.param($params.0, $params.1);
             )*
-            builder.build(&i18n)
+            builder.at($span).build()
+        }
+    };
+
+    // 只有 related
+    ($code:ident, ($($params:tt)*), (related = $related:expr)) => {
+        {
+            let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
+                .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
+            let mut builder = code_def.builder();
+            $(
+                builder = builder.param($params.0, $params.1);
+            )*
+            builder.with_related($related).build()
         }
     };
 
@@ -195,12 +112,11 @@ macro_rules! __error_impl {
         {
             let code_def = $crate::util::diagnostic::ErrorCodeDefinition::find(stringify!($code))
                 .unwrap_or_else(|| panic!("Unknown error code: {}", stringify!($code)));
-            let i18n = $crate::util::diagnostic::I18nRegistry::en();
             let mut builder = code_def.builder();
             $(
                 builder = builder.param($params.0, $params.1);
             )*
-            builder.build(&i18n)
+            builder.build()
         }
     };
 }

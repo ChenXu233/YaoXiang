@@ -9,17 +9,14 @@ pub static E8XXX: &[ErrorCodeDefinition] = &[
     ErrorCodeDefinition {
         code: "E8001",
         category: ErrorCategory::Internal,
-        message_template: "Internal compiler error: {message}",
     },
     ErrorCodeDefinition {
         code: "E8002",
         category: ErrorCategory::Internal,
-        message_template: "Unexpected compiler panic: {reason}",
     },
     ErrorCodeDefinition {
         code: "E8003",
         category: ErrorCategory::Internal,
-        message_template: "Compiler phase error: {phase} - {message}",
     },
 ];
 
@@ -28,13 +25,13 @@ impl ErrorCodeDefinition {
     /// E8001 内部编译器错误
     pub fn internal_error(message: &str) -> DiagnosticBuilder {
         let def = Self::find("E8001").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template).param("message", message)
+        def.builder().param("message", message)
     }
 
     /// E8002 意外 panic
     pub fn unexpected_panic(reason: &str) -> DiagnosticBuilder {
         let def = Self::find("E8002").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template).param("reason", reason)
+        def.builder().param("reason", reason)
     }
 
     /// E8003 编译器阶段错误
@@ -43,7 +40,7 @@ impl ErrorCodeDefinition {
         message: &str,
     ) -> DiagnosticBuilder {
         let def = Self::find("E8003").unwrap();
-        DiagnosticBuilder::new(def.code, def.message_template)
+        def.builder()
             .param("phase", phase)
             .param("message", message)
     }

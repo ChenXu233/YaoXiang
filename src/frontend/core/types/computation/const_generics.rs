@@ -16,19 +16,8 @@
 
 // 重新导出主要类型
 use crate::frontend::core::types::base::ConstValue;
-
-/// Const泛型错误
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-pub enum ConstGenericError {
-    #[error("Const evaluation failed: {0}")]
-    EvalFailed(String),
-
-    #[error("Const not supported for type: {0}")]
-    NotSupported(String),
-
-    #[error("Const dimension mismatch: {0}")]
-    DimensionMismatch(String),
-}
+use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::codes::ErrorCodeDefinition;
 
 /// Const泛型求值结果
 #[derive(Debug, Clone, PartialEq)]
@@ -349,13 +338,13 @@ impl ConstGenericEval {
     pub fn eval(
         &self,
         expr: &ConstExpr,
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         match expr {
             ConstExpr::Int(n) => Ok(ConstValue::Int(*n)),
             ConstExpr::Float(f) => Ok(ConstValue::Float(*f)),
             ConstExpr::Bool(b) => Ok(ConstValue::Bool(*b)),
             ConstExpr::Var(name) => self.bindings.get(name).cloned().ok_or_else(|| {
-                ConstGenericError::EvalFailed(format!("Undefined variable: {}", name))
+                ErrorCodeDefinition::const_eval_failed(&format!("Undefined variable: {}", name)).build()
             }),
             ConstExpr::BinOp { op, lhs, rhs } => self.eval_binop(op, lhs, rhs),
             ConstExpr::UnOp { op, expr } => self.eval_unop(op, expr),
@@ -374,7 +363,7 @@ impl ConstGenericEval {
         op: &ConstBinOp,
         lhs: &ConstExpr,
         rhs: &ConstExpr,
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         let left = self.eval(lhs)?;
         let right = self.eval(rhs)?;
 
@@ -391,16 +380,14 @@ impl ConstGenericEval {
             }
             (ConstBinOp::Div, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b == 0 {
-                    Err(ConstGenericError::EvalFailed(
-                        "Division by zero".to_string(),
-                    ))
+                    Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
                     Ok(ConstValue::Int(a.saturating_div(*b)))
                 }
             }
             (ConstBinOp::Mod, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b == 0 {
-                    Err(ConstGenericError::EvalFailed("Modulo by zero".to_string()))
+                    Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
                     Ok(ConstValue::Int(a % b))
                 }
@@ -427,18 +414,14 @@ impl ConstGenericEval {
             (ConstBinOp::Shl, ConstValue::Int(a), ConstValue::Int(b)) => {
                 // 检查移位是否超出范围
                 if *b < 0 || *b >= 128 {
-                    Err(ConstGenericError::EvalFailed(
-                        "Shift amount out of range".to_string(),
-                    ))
+                    Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
                     Ok(ConstValue::Int(a.checked_shl(*b as u32).unwrap_or(0)))
                 }
             }
             (ConstBinOp::Shr, ConstValue::Int(a), ConstValue::Int(b)) => {
                 if *b < 0 || *b >= 128 {
-                    Err(ConstGenericError::EvalFailed(
-                        "Shift amount out of range".to_string(),
-                    ))
+                    Err(ErrorCodeDefinition::const_overflow().build())
                 } else {
                     Ok(ConstValue::Int(a.checked_shr(*b as u32).unwrap_or(0)))
                 }
@@ -469,10 +452,10 @@ impl ConstGenericEval {
                 Ok(ConstValue::Bool(a >= b))
             }
 
-            _ => Err(ConstGenericError::EvalFailed(format!(
+            _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported operation: {:?} for {:?} and {:?}",
                 op, left, right
-            ))),
+            )).build()),
         }
     }
 
@@ -481,16 +464,16 @@ impl ConstGenericEval {
         &self,
         op: &ConstUnOp,
         expr: &ConstExpr,
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         let value = self.eval(expr)?;
 
         match (op, &value) {
             (ConstUnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
             (ConstUnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
-            _ => Err(ConstGenericError::EvalFailed(format!(
+            _ => Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Unsupported unary operation: {:?} for {:?}",
                 op, value
-            ))),
+            )).build()),
         }
     }
 
@@ -499,7 +482,7 @@ impl ConstGenericEval {
         &self,
         name: &str,
         args: &[ConstExpr],
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         // 查找内置函数
         if let Some(result) = self.eval_builtin(name, args) {
             return result;
@@ -510,10 +493,10 @@ impl ConstGenericEval {
             return self.eval_function_call(func, args);
         }
 
-        Err(ConstGenericError::EvalFailed(format!(
+        Err(ErrorCodeDefinition::const_eval_failed(&format!(
             "Undefined function: {}",
             name
-        )))
+        )).build())
     }
 
     /// 求值内置函数
@@ -521,7 +504,7 @@ impl ConstGenericEval {
         &self,
         name: &str,
         args: &[ConstExpr],
-    ) -> Option<Result<ConstValue, ConstGenericError>> {
+    ) -> Option<Result<ConstValue, Diagnostic>> {
         match name {
             "abs" => {
                 if let Ok(ConstValue::Int(n)) = self.eval(&args[0]) {
@@ -547,9 +530,9 @@ impl ConstGenericEval {
                 let type_name = match args.first() {
                     Some(ConstExpr::Var(name)) => name.as_str(),
                     _ => {
-                        return Some(Err(ConstGenericError::EvalFailed(
-                            "sizeof expects a type name".to_string(),
-                        )))
+                        return Some(Err(ErrorCodeDefinition::const_eval_failed(
+                            "sizeof expects a type name",
+                        ).build()))
                     }
                 };
 
@@ -560,10 +543,10 @@ impl ConstGenericEval {
                     "Char" => 4,
                     "Int" | "Uint" | "Float" | "String" => 8,
                     _ => {
-                        return Some(Err(ConstGenericError::EvalFailed(format!(
+                        return Some(Err(ErrorCodeDefinition::const_eval_failed(&format!(
                             "Unknown type: {}",
                             type_name
-                        ))))
+                        )).build()))
                     }
                 };
                 Some(Ok(ConstValue::Int(size as i128)))
@@ -582,23 +565,18 @@ impl ConstGenericEval {
         &self,
         func: &ConstFunction,
         args: &[ConstExpr],
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         if args.len() != func.params.len() {
-            return Err(ConstGenericError::EvalFailed(format!(
+            return Err(ErrorCodeDefinition::const_eval_failed(&format!(
                 "Function {} expects {} arguments, got {}",
                 func.name,
                 func.params.len(),
                 args.len()
-            )));
+            )).build());
         }
 
         if self.current_depth >= self.max_depth {
-            return Err(ConstGenericError::EvalFailed(format!(
-                "Const evaluation exceeded maximum recursion depth ({}). \
-                 Function '{}' likely has no termination guarantee. \
-                 Add a 'decreases' annotation or simplify the const expression.",
-                self.max_depth, func.name
-            )));
+            return Err(ErrorCodeDefinition::const_recursion_too_deep(self.max_depth).build());
         }
 
         // 创建新的作用域，递归深度 +1
@@ -618,13 +596,13 @@ impl ConstGenericEval {
         condition: &ConstExpr,
         true_branch: &ConstExpr,
         false_branch: &ConstExpr,
-    ) -> Result<ConstValue, ConstGenericError> {
+    ) -> Result<ConstValue, Diagnostic> {
         match self.eval(condition)? {
             ConstValue::Bool(true) => self.eval(true_branch),
             ConstValue::Bool(false) => self.eval(false_branch),
-            _ => Err(ConstGenericError::EvalFailed(
-                "Condition must be a boolean".to_string(),
-            )),
+            _ => Err(ErrorCodeDefinition::const_eval_failed(
+                "Condition must be a boolean",
+            ).build()),
         }
     }
 }

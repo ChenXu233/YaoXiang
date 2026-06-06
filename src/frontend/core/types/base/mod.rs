@@ -28,7 +28,7 @@ pub use mono::{
 pub use substitute::{Substitution, Substituter};
 pub use constraint::TypeConstraint;
 pub use solver::TypeConstraintSolver;
-pub use error::{TypeMismatch, TypeConstraintError, ConstEvalError};
+pub use error::{TypeMismatch, TypeConstraintError};
 pub use trait_data::{
     TraitMethodSignature, TraitDefinition, TraitBound, TraitBounds, TraitImplementation, TraitTable,
 };

@@ -98,84 +98,6 @@ impl fmt::Display for OverloadResolution {
     }
 }
 
-/// 重载解析错误
-#[derive(Debug, Clone)]
-pub enum OverloadError {
-    /// 无匹配的定义
-    NoMatchingDefinition {
-        func_name: String,
-        arg_types: Vec<MonoType>,
-    },
-    /// 多个匹配（歧义）
-    AmbiguousCall {
-        func_name: String,
-        arg_types: Vec<MonoType>,
-        candidates: Vec<MonoType>,
-    },
-    /// 参数数量不匹配
-    ArgCountMismatch {
-        func_name: String,
-        expected: usize,
-        actual: usize,
-    },
-}
-
-impl fmt::Display for OverloadError {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        match self {
-            OverloadError::NoMatchingDefinition {
-                func_name,
-                arg_types,
-            } => {
-                write!(
-                    f,
-                    "No matching definition for '{}' with arguments of types ({})",
-                    func_name,
-                    arg_types
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            OverloadError::AmbiguousCall {
-                func_name,
-                arg_types,
-                candidates,
-            } => {
-                write!(
-                    f,
-                    "Ambiguous call to '{}' with arguments of types ({}). Possible matches: ({})",
-                    func_name,
-                    arg_types
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    candidates
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            OverloadError::ArgCountMismatch {
-                func_name,
-                expected,
-                actual,
-            } => {
-                write!(
-                    f,
-                    "Argument count mismatch for '{}': expected {}, got {}",
-                    func_name, expected, actual
-                )
-            }
-        }
-    }
-}
 
 /// 重载解析器
 #[derive(Debug, Default)]
@@ -238,14 +160,15 @@ impl OverloadResolver {
         &self,
         name: &str,
         arg_types: &[MonoType],
-    ) -> Result<&OverloadCandidate, OverloadError> {
+    ) -> Result<&OverloadCandidate, crate::util::diagnostic::Diagnostic> {
         let candidate_indices = match self.candidate_map.get(name) {
             Some(indices) => indices,
             None => {
-                return Err(OverloadError::NoMatchingDefinition {
-                    func_name: name.to_string(),
-                    arg_types: arg_types.to_vec(),
-                });
+                return Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                    name,
+                    0,
+                    arg_types.len(),
+                ).build());
             }
         };
 
@@ -262,11 +185,11 @@ impl OverloadResolver {
                 .first()
                 .map(|idx| self.candidates[*idx].param_types.len())
                 .unwrap_or(0);
-            return Err(OverloadError::ArgCountMismatch {
-                func_name: name.to_string(),
+            return Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                name,
                 expected,
-                actual: arg_types.len(),
-            });
+                arg_types.len(),
+            ).build());
         }
 
         // 评估类型匹配
@@ -277,10 +200,10 @@ impl OverloadResolver {
             .collect();
 
         if scored.is_empty() {
-            return Err(OverloadError::NoMatchingDefinition {
-                func_name: name.to_string(),
-                arg_types: arg_types.to_vec(),
-            });
+            return Err(crate::util::diagnostic::ErrorCodeDefinition::type_mismatch(
+                &format!("compatible overload for '{}'", name),
+                &format!("({})", arg_types.iter().map(|t| t.type_name()).collect::<Vec<_>>().join(", ")),
+            ).build());
         }
 
         // 找出最高分
@@ -295,11 +218,10 @@ impl OverloadResolver {
             Ok(best[0])
         } else {
             // 歧义：多个候选有相同分数
-            Err(OverloadError::AmbiguousCall {
-                func_name: name.to_string(),
-                arg_types: arg_types.to_vec(),
-                candidates: best.iter().map(|c| c.return_type.clone()).collect(),
-            })
+            Err(crate::util::diagnostic::ErrorCodeDefinition::type_mismatch(
+                &format!("unambiguous overload for '{}'", name),
+                &format!("{} candidates with equal score", best.len()),
+            ).build())
         }
     }
 
@@ -469,7 +391,7 @@ impl OverloadManager {
         module_name: Option<&str>,
         name: &str,
         arg_types: &[MonoType],
-    ) -> Result<&OverloadCandidate, OverloadError> {
+    ) -> Result<&OverloadCandidate, crate::util::diagnostic::Diagnostic> {
         // 先尝试模块级解析器
         if let Some(mod_name) = module_name {
             if let Some(resolver) = self.module_resolvers.get(mod_name) {
@@ -500,7 +422,7 @@ pub fn resolve_overload_from_env<'a>(
     overload_candidates: &'a HashMap<String, Vec<OverloadCandidate>>,
     func_name: &str,
     arg_types: &[MonoType],
-) -> Result<&'a OverloadCandidate, OverloadError> {
+) -> Result<&'a OverloadCandidate, crate::util::diagnostic::Diagnostic> {
     // 尝试从本地重载候选解析
     if let Some(candidates) = overload_candidates.get(func_name) {
         let mut resolver = OverloadResolver::new();
@@ -520,18 +442,20 @@ pub fn resolve_overload_from_env<'a>(
                     }
                 }
                 // 如果找不到，返回第一个匹配的（保守处理）
-                Err(OverloadError::NoMatchingDefinition {
-                    func_name: func_name.to_string(),
-                    arg_types: arg_types.to_vec(),
-                })
+                Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+                    func_name,
+                    0,
+                    arg_types.len(),
+                ).build())
             }
             Err(e) => Err(e),
         }
     } else {
-        Err(OverloadError::NoMatchingDefinition {
-            func_name: func_name.to_string(),
-            arg_types: arg_types.to_vec(),
-        })
+        Err(crate::util::diagnostic::ErrorCodeDefinition::argument_count_mismatch(
+            func_name,
+            0,
+            arg_types.len(),
+        ).build())
     }
 }
 
@@ -835,10 +759,7 @@ mod tests {
         // 使用不兼容的类型
         let result = resolver.resolve("add", &[string_type(), int_type()]);
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            OverloadError::NoMatchingDefinition { .. }
-        ));
+        assert!(result.unwrap_err().code.starts_with("E10"));
     }
 
     #[test]
