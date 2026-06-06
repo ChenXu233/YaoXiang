@@ -34,10 +34,7 @@ fn test_type_constraint_error_display() {
         span: Span::dummy(),
     };
     let msg = format!("{}", err);
-    assert!(
-        msg.contains("bool"),
-        "display should contain 'bool'"
-    );
+    assert!(msg.contains("bool"), "display should contain 'bool'");
 }
 
 #[test]

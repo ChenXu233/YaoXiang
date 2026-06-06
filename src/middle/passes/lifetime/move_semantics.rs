@@ -177,7 +177,8 @@ impl MoveChecker {
             match state {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
-                    self.errors.push(codes::reassign_non_empty(&operand_to_string(dst)));
+                    self.errors
+                        .push(codes::reassign_non_empty(&operand_to_string(dst)));
                     return;
                 }
                 ValueState::Moved => {
@@ -189,7 +190,8 @@ impl MoveChecker {
                     if let Some(expected_type) = self.type_map.get(dst) {
                         if let Some(actual_type) = &src_type {
                             if expected_type != actual_type {
-                                self.errors.push(codes::immutable_assign(&operand_to_string(dst)));
+                                self.errors
+                                    .push(codes::immutable_assign(&operand_to_string(dst)));
                                 return;
                             }
                         }
@@ -323,7 +325,8 @@ impl MoveChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(codes::use_after_move(&operand_to_string(operand)));
+        self.errors
+            .push(codes::use_after_move(&operand_to_string(operand)));
     }
 }
 
@@ -496,9 +499,7 @@ mod tests {
         let errors = checker.check_function(&func);
 
         // 应该有 UseAfterMove 错误
-        let has_use_after_move = errors
-            .iter()
-            .any(|e| e.code == "E2014");
+        let has_use_after_move = errors.iter().any(|e| e.code == "E2014");
         assert!(has_use_after_move);
     }
 

@@ -650,9 +650,11 @@ impl AstToIrGenerator {
             (**return_type).clone().into()
         } else {
             // 非函数类型，报错
-            return Err(ErrorCodeDefinition::ir_internal_error(
-                &format!("Method {} is not a function type", method_name),
-            ).build());
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "Method {} is not a function type",
+                method_name
+            ))
+            .build());
         };
 
         // 进入新作用域
@@ -854,12 +856,11 @@ impl AstToIrGenerator {
         let total_locals = self.next_temp;
         const MAX_LOCALS: usize = 65_535;
         if total_locals > MAX_LOCALS {
-            return Err(ErrorCodeDefinition::ir_internal_error(
-                &format!(
-                    "too many locals allocated in function '{}': {}",
-                    name, total_locals
-                ),
-            ).build());
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "too many locals allocated in function '{}': {}",
+                name, total_locals
+            ))
+            .build());
         }
         let locals_types: Vec<MonoType> = (0..total_locals)
             .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
@@ -1842,12 +1843,16 @@ impl AstToIrGenerator {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
-            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type).at(span).build())
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
         } else {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
-            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type).at(span).build())
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
         }
     }
 
@@ -3138,23 +3143,37 @@ impl AstToIrGenerator {
                         self.generate_local_stmt_ir(stmt, instructions, constants)?;
                     }
                 }
-                if let Some(trailing_expr) = &body.expr {
-                    let trailing_reg = self.next_temp_reg();
-                    self.generate_expr_ir(trailing_expr, trailing_reg, instructions, constants)?;
-                    instructions.push(Instruction::Move {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(trailing_reg),
-                    });
-                }
 
                 // 5. 生成 Spawn 指令（多闭包 + 执行计划）
+                // Spawn 指令会等待所有闭包完成，之后 t1/t2 等变量才可用
                 instructions.push(Instruction::Spawn {
                     closures: closure_regs,
                     plan: analysis.plan,
                     result: Operand::Local(result_reg),
                 });
 
-                // 6. 退出 spawn 作用域
+                // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
+                // 必须在 Spawn 之后生成，因为 return 表达式可能引用闭包的结果变量
+                let mut has_return = false;
+                for stmt in &body.stmts {
+                    if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
+                        if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
+                            let ret_reg = self.next_temp_reg();
+                            self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
+                            instructions.push(Instruction::Move {
+                                dst: Operand::Local(result_reg),
+                                src: Operand::Local(ret_reg),
+                            });
+                            has_return = true;
+                            break;
+                        }
+                    }
+                }
+                if !has_return {
+                    // 无 return 语句，块值为 Void（result_reg 保持默认 0）
+                }
+
+                // 7. 退出 spawn 作用域
                 self.exit_scope();
             }
             Expr::UnOp { op, expr, span: _ } => {

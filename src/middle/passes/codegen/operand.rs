@@ -30,28 +30,25 @@ impl OperandResolver {
         match operand {
             Operand::Local(id) => {
                 if *id > 255 {
-                    return Err(ErrorCodeDefinition::register_overflow(
-                        &id.to_string(),
-                        "255",
-                    ).build());
+                    return Err(
+                        ErrorCodeDefinition::register_overflow(&id.to_string(), "255").build(),
+                    );
                 }
                 Ok(*id as u8)
             }
             Operand::Temp(id) => {
                 if *id > 255 {
-                    return Err(ErrorCodeDefinition::register_overflow(
-                        &id.to_string(),
-                        "255",
-                    ).build());
+                    return Err(
+                        ErrorCodeDefinition::register_overflow(&id.to_string(), "255").build(),
+                    );
                 }
                 Ok(*id as u8)
             }
             Operand::Arg(id) => {
                 if *id > 255 {
-                    return Err(ErrorCodeDefinition::register_overflow(
-                        &id.to_string(),
-                        "255",
-                    ).build());
+                    return Err(
+                        ErrorCodeDefinition::register_overflow(&id.to_string(), "255").build(),
+                    );
                 }
                 Ok(*id as u8)
             }

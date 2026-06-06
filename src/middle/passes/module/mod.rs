@@ -288,7 +288,8 @@ impl ModuleGraph {
             return Err(ErrorCodeDefinition::import_error(
                 &from.to_string(),
                 "cannot depend on itself",
-            ).build());
+            )
+            .build());
         }
 
         // 添加边

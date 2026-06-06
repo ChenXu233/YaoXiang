@@ -229,15 +229,23 @@ impl ErrorCodeDefinition {
     }
 
     /// E2022 不可变变异
-    pub fn immutable_mutation(name: &str, method: &str) -> DiagnosticBuilder {
+    pub fn immutable_mutation(
+        name: &str,
+        method: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E2022").unwrap();
         def.builder().param("name", name).param("method", method)
     }
 
     /// E2023 不可变字段赋值
-    pub fn immutable_field_assign(struct_name: &str, field: &str) -> DiagnosticBuilder {
+    pub fn immutable_field_assign(
+        struct_name: &str,
+        field: &str,
+    ) -> DiagnosticBuilder {
         let def = Self::find("E2023").unwrap();
-        def.builder().param("struct_name", struct_name).param("field", field)
+        def.builder()
+            .param("struct_name", struct_name)
+            .param("field", field)
     }
 
     /// E2024 引用非所有者

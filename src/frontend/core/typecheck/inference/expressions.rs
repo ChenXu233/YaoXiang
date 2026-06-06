@@ -1100,20 +1100,49 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断代码块的类型
+    ///
+    /// 语义（RFC-010）：
+    /// - `{}` 块的值 = 块内 `return expr` 的 `expr` 的值
+    /// - 没有 `return` = Void
+    /// - 尾随表达式不影响块的返回类型
     pub fn infer_block(
         &mut self,
         block: &crate::frontend::core::parser::ast::Block,
         _allow_unit: bool,
         _expected_type: Option<&MonoType>,
     ) -> Result<MonoType> {
+        let mut return_type: Option<MonoType> = None;
+
         for stmt in &block.stmts {
+            // 检查语句是否包含 return 表达式
+            if let crate::frontend::core::parser::ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
+                if let Some(ty) = self.collect_return_type(expr_stmt)? {
+                    return_type = Some(ty);
+                }
+            }
             self.infer_stmt(stmt)?;
         }
 
-        if let Some(expr) = &block.expr {
-            self.infer_expr(expr)
-        } else {
-            Ok(MonoType::Void)
+        // 块的类型 = return 的类型，没有 return 则 Void
+        Ok(return_type.unwrap_or(MonoType::Void))
+    }
+
+    /// 递归收集表达式中的 return 类型
+    /// 如果表达式是 `return expr`，返回 expr 的类型
+    /// 如果表达式包含子块（if/for/spawn 等），递归收集子块中的 return 类型
+    fn collect_return_type(
+        &mut self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+    ) -> Result<Option<MonoType>> {
+        match expr {
+            crate::frontend::core::parser::ast::Expr::Return(Some(ret_expr), _) => {
+                let ty = self.infer_expr(ret_expr)?;
+                Ok(Some(ty))
+            }
+            crate::frontend::core::parser::ast::Expr::Return(None, _) => {
+                Ok(Some(MonoType::Void))
+            }
+            _ => Ok(None),
         }
     }
 

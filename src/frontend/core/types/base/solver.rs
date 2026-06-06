@@ -117,7 +117,8 @@ impl TypeConstraintSolver {
             return Err(ErrorCodeDefinition::type_mismatch(
                 &MonoType::TypeVar(resolved_var).type_name(),
                 &ty.type_name(),
-            ).build());
+            )
+            .build());
         }
 
         // 绑定
@@ -135,7 +136,8 @@ impl TypeConstraintSolver {
                         Err(ErrorCodeDefinition::type_mismatch(
                             &existing.type_name(),
                             &ty.type_name(),
-                        ).build())
+                        )
+                        .build())
                     }
                 }
                 TypeBinding::Link(_) => {
@@ -464,7 +466,8 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 // unify 参数和返回类型
                 for (p1, p2) in p1.iter().zip(p2.iter()) {
@@ -493,14 +496,16 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 for ((n1, f1), (n2, f2)) in s1.fields.iter().zip(s2.fields.iter()) {
                     if n1 != n2 {
                         return Err(ErrorCodeDefinition::type_mismatch(
                             &t1.type_name(),
                             &t2.type_name(),
-                        ).build());
+                        )
+                        .build());
                     }
                     self.unify(f1, f2)?;
                 }
@@ -513,7 +518,8 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 Ok(())
             }
@@ -524,7 +530,8 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 for (t1, t2) in ts1.iter().zip(ts2.iter()) {
                     self.unify(t1, t2)?;
@@ -555,7 +562,8 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 Ok(())
             }
@@ -568,10 +576,7 @@ impl TypeConstraintSolver {
                     }
                     self.bindings = snapshot.clone();
                 }
-                Err(ErrorCodeDefinition::type_mismatch(
-                    &t1.type_name(),
-                    &t2.type_name(),
-                ).build())
+                Err(ErrorCodeDefinition::type_mismatch(&t1.type_name(), &t2.type_name()).build())
             }
 
             // 交集类型 unify：T1 & T2 == T3 分解为 (T1 == T3) & (T2 == T3)
@@ -581,7 +586,8 @@ impl TypeConstraintSolver {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),
                         &t2.type_name(),
-                    ).build());
+                    )
+                    .build());
                 }
                 Ok(())
             }
@@ -599,18 +605,15 @@ impl TypeConstraintSolver {
                 if s.interfaces.contains(name) || s.name == *name {
                     Ok(())
                 } else {
-                    Err(ErrorCodeDefinition::type_mismatch(
-                        &t1.type_name(),
-                        &t2.type_name(),
-                    ).build())
+                    Err(
+                        ErrorCodeDefinition::type_mismatch(&t1.type_name(), &t2.type_name())
+                            .build(),
+                    )
                 }
             }
 
             // 不兼容类型
-            _ => Err(ErrorCodeDefinition::type_mismatch(
-                &t1.type_name(),
-                &t2.type_name(),
-            ).build()),
+            _ => Err(ErrorCodeDefinition::type_mismatch(&t1.type_name(), &t2.type_name()).build()),
         }
     }
 
