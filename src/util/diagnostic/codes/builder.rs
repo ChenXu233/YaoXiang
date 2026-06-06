@@ -11,7 +11,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct DiagnosticBuilder {
     code: &'static str,
-    message_template: &'static str,
     params: Vec<(&'static str, String)>,
     span: Option<Span>,
     related: Vec<Diagnostic>,
@@ -20,13 +19,9 @@ pub struct DiagnosticBuilder {
 
 impl DiagnosticBuilder {
     /// 创建新的诊断构建器
-    pub fn new(
-        code: &'static str,
-        template: &'static str,
-    ) -> Self {
+    pub fn new(code: &'static str) -> Self {
         Self {
             code,
-            message_template: template,
             params: Vec::new(),
             span: None,
             related: Vec::new(),
@@ -77,42 +72,24 @@ impl DiagnosticBuilder {
     /// 使用 error_lang() 自动获取语言构建 Diagnostic
     pub fn build(&self) -> Diagnostic {
         let i18n = I18nRegistry::new(error_lang());
+        let template = i18n
+            .get_template(self.code)
+            .unwrap_or("Internal error: missing i18n template");
 
         // 在 debug 模式下保持原有行为（会 panic）
         if cfg!(debug_assertions) {
-            self.validate_params();
+            self.validate_params(template);
         } else {
             // release 下回落：检查缺失参数并返回 E8001 (避免进程崩溃)
-            let param_keys: std::collections::HashSet<&'static str> =
-                self.params.iter().map(|(k, _)| *k).collect();
-
-            let mut chars = self.message_template.chars().peekable();
-            let mut missing = Vec::new();
-            while let Some(c) = chars.next() {
-                if c == '{' {
-                    let mut key = String::new();
-                    while let Some(&c) = chars.peek() {
-                        if c == '}' {
-                            chars.next();
-                            if !key.is_empty() && !param_keys.contains(key.as_str()) {
-                                missing.push(key.clone());
-                            }
-                            break;
-                        }
-                        key.push(c);
-                        chars.next();
-                    }
-                }
-            }
-
+            let missing = self.find_missing_params(template);
             if !missing.is_empty() {
                 let message = format!(
                     "Internal diagnostic error: missing template parameter(s) for '{}'. template='{}', missing={:?}",
-                    self.code, self.message_template, missing
+                    self.code, template, missing
                 );
                 let help = format!(
                     "Please report this issue. Available params: {:?}",
-                    param_keys.iter().copied().collect::<Vec<_>>()
+                    self.params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
                 );
 
                 let mut diagnostic =
@@ -127,12 +104,12 @@ impl DiagnosticBuilder {
         }
 
         // 正常路径：渲染并返回 Diagnostic
-        let message = if self.message_template.is_empty() {
+        let message = if template.is_empty() {
             // 对于 E1090 等特殊错误码，从 zen_message 获取消息
             i18n.get_zen_message(self.code)
-                .unwrap_or_else(|| i18n.render(self.message_template, &self.params))
+                .unwrap_or_else(|| i18n.render(template, &self.params))
         } else {
-            i18n.render(self.message_template, &self.params)
+            i18n.render(template, &self.params)
         };
         let help = i18n.render_help(self.code, &self.params);
 
@@ -159,26 +136,21 @@ impl DiagnosticBuilder {
         diagnostic
     }
 
-    /// 验证所有占位符都有对应参数
-    fn validate_params(&self) {
+    /// 查找模板中缺失的参数
+    fn find_missing_params(&self, template: &str) -> Vec<String> {
         let param_keys: std::collections::HashSet<&'static str> =
             self.params.iter().map(|(k, _)| *k).collect();
 
-        let mut chars = self.message_template.chars().peekable();
+        let mut chars = template.chars().peekable();
+        let mut missing = Vec::new();
         while let Some(c) = chars.next() {
             if c == '{' {
                 let mut key = String::new();
                 while let Some(&c) = chars.peek() {
                     if c == '}' {
                         chars.next();
-                        let key_str: &str = &key;
-                        if !param_keys.contains(key_str) && !key.is_empty() {
-                            panic!(
-                                "Missing parameter '{}' for error code '{}'. Available: {:?}",
-                                key,
-                                self.code,
-                                param_keys.iter().copied().collect::<Vec<_>>()
-                            );
+                        if !key.is_empty() && !param_keys.contains(key.as_str()) {
+                            missing.push(key.clone());
                         }
                         break;
                     }
@@ -186,6 +158,20 @@ impl DiagnosticBuilder {
                     chars.next();
                 }
             }
+        }
+        missing
+    }
+
+    /// 验证所有占位符都有对应参数（debug 模式下 panic）
+    fn validate_params(&self, template: &str) {
+        let missing = self.find_missing_params(template);
+        if !missing.is_empty() {
+            panic!(
+                "Missing parameter(s) {:?} for error code '{}'. Available: {:?}",
+                missing,
+                self.code,
+                self.params.iter().map(|(k, _)| *k).collect::<Vec<_>>()
+            );
         }
     }
 }
@@ -202,6 +188,8 @@ pub struct ErrorInfo<'a> {
 /// i18n 展示文案注册表（编译期从 JSON 加载，运行时零查表）
 #[derive(Debug, Clone)]
 pub struct I18nRegistry {
+    /// 消息模板（含 {param} 占位符）
+    templates: HashMap<&'static str, &'static str>,
     /// 标题
     titles: HashMap<&'static str, &'static str>,
     /// 帮助信息
@@ -218,6 +206,8 @@ pub struct I18nRegistry {
 #[derive(serde::Deserialize)]
 struct ErrorInfoJson {
     title: String,
+    #[serde(default)]
+    template: Option<String>,
     help: String,
     example: Option<String>,
     error_output: Option<String>,
@@ -234,6 +224,7 @@ fn to_static_string(s: String) -> &'static str {
 fn load_i18n_data(json: &str) -> I18nRegistry {
     let data: HashMap<String, ErrorInfoJson> = serde_json::from_str(json).unwrap();
 
+    let mut templates = HashMap::new();
     let mut titles = HashMap::new();
     let mut helps = HashMap::new();
     let mut examples = HashMap::new();
@@ -242,6 +233,9 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
 
     for (code, info) in data {
         let code_static: &'static str = to_static_string(code);
+        if let Some(tmpl) = info.template {
+            templates.insert(code_static, to_static_string(tmpl));
+        }
         titles.insert(code_static, to_static_string(info.title));
         helps.insert(code_static, to_static_string(info.help));
 
@@ -257,6 +251,7 @@ fn load_i18n_data(json: &str) -> I18nRegistry {
     }
 
     I18nRegistry {
+        templates,
         titles,
         helps,
         examples,
@@ -299,6 +294,14 @@ impl I18nRegistry {
             example: self.examples.get(code).copied(),
             error_output: self.error_outputs.get(code).copied(),
         })
+    }
+
+    /// 获取消息模板（含 {param} 占位符）
+    pub fn get_template(
+        &self,
+        code: &str,
+    ) -> Option<&'static str> {
+        self.templates.get(code).copied()
     }
 
     /// 获取标题
