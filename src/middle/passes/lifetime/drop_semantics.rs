@@ -2,8 +2,9 @@
 //!
 //! 检查 Drop 相关错误：UseAfterDrop、DropMovedValue、DoubleDrop。
 
-use super::error::{OwnershipCheck, OwnershipError, ValueState, operand_to_string};
+use super::error::{OwnershipCheck, ValueState, codes, operand_to_string};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// Drop 检查器
@@ -15,7 +16,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct DropChecker {
     pub state: HashMap<Operand, ValueState>,
-    pub errors: Vec<OwnershipError>,
+    pub errors: Vec<Diagnostic>,
     pub location: (usize, usize),
 }
 
@@ -57,14 +58,10 @@ impl DropChecker {
     ) {
         match self.state.get(value) {
             Some(ValueState::Moved) => {
-                self.errors.push(OwnershipError::DropMovedValue {
-                    value: operand_to_string(value),
-                });
+                self.errors.push(codes::drop_moved_value(&operand_to_string(value)));
             }
             Some(ValueState::Dropped) => {
-                self.errors.push(OwnershipError::DoubleDrop {
-                    value: operand_to_string(value),
-                });
+                self.errors.push(codes::double_drop(&operand_to_string(value)));
             }
             Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
@@ -96,10 +93,7 @@ impl DropChecker {
         operand: &Operand,
     ) {
         if let Some(ValueState::Dropped) = self.state.get(operand) {
-            self.errors.push(OwnershipError::UseAfterDrop {
-                value: operand_to_string(operand),
-                location: self.location,
-            });
+            self.errors.push(codes::use_after_drop(&operand_to_string(operand)));
         }
     }
 }
@@ -108,7 +102,7 @@ impl OwnershipCheck for DropChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -121,7 +115,7 @@ impl OwnershipCheck for DropChecker {
         &self.errors
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 

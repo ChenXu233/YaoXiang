@@ -124,7 +124,7 @@ impl CrossModuleMonomorphizer {
         from: ModuleId,
         to: ModuleId,
         is_public: bool,
-    ) -> Result<(), crate::middle::passes::module::ModuleGraphError> {
+    ) -> Result<(), crate::util::diagnostic::Diagnostic> {
         self.module_graph.add_dependency(from, to, is_public)
     }
 

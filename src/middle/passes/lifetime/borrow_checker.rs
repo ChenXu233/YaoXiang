@@ -449,34 +449,19 @@ impl BorrowChecker {
         }
     }
 
-    /// 将 BorrowError 转换为 OwnershipError
-    pub fn to_ownership_errors(
+    /// 将 BorrowError 转换为 Diagnostic
+    pub fn to_diagnostics(
         &self
-    ) -> Vec<crate::middle::passes::lifetime::error::OwnershipError> {
-        use crate::middle::passes::lifetime::error::OwnershipError;
+    ) -> Vec<crate::util::diagnostic::Diagnostic> {
+        use crate::middle::passes::lifetime::error::codes;
         self.errors
             .iter()
             .map(|e| match e {
                 BorrowError::MutableBorrowConflict {
-                    source,
-                    existing,
-                    new,
-                } => OwnershipError::MutableBorrowConflict {
-                    source: source.clone(),
-                    existing: existing.clone(),
-                    new: new.clone(),
-                    location: self.location,
-                },
-                BorrowError::BorrowAfterMove { source, token } => OwnershipError::BorrowAfterMove {
-                    source: source.clone(),
-                    token: token.clone(),
-                    location: self.location,
-                },
-                BorrowError::UseWhileFrozen { source, token } => OwnershipError::UseWhileFrozen {
-                    source: source.clone(),
-                    token: token.clone(),
-                    location: self.location,
-                },
+                    source, ..
+                } => codes::mutable_borrow_conflict(source),
+                BorrowError::BorrowAfterMove { source, .. } => codes::borrow_after_move(source),
+                BorrowError::UseWhileFrozen { source, .. } => codes::use_while_frozen(source),
             })
             .collect()
     }

@@ -6,7 +6,7 @@
 //! 3. 引用（&T）不会触发 move
 
 use yaoxiang::frontend::Compiler;
-use yaoxiang::middle::passes::lifetime::{OwnershipChecker, OwnershipError};
+use yaoxiang::middle::passes::lifetime::OwnershipChecker;
 
 /// 辅助函数：编译源代码并返回 ModuleIR
 fn compile(source: &str) -> yaoxiang::middle::ModuleIR {
@@ -32,8 +32,8 @@ fn check_use_after_move(source: &str) -> Vec<String> {
     for func in &module.functions {
         let errors = checker.check_function(func);
         for err in errors {
-            if let OwnershipError::UseAfterMove { value, .. } = err {
-                moved_values.push(value.clone());
+            if err.code == "E2014" {
+                moved_values.push(err.message.clone());
             }
         }
     }
@@ -152,12 +152,12 @@ fn test_use_after_move_reports_error() {
     for func in &module.functions {
         let errors = checker.check_function(func);
         for err in errors {
-            if let OwnershipError::UseAfterMove { value, .. } = err {
+            if err.code == "E2014" {
                 has_use_after_move = true;
                 // 验证错误信息包含变量名
                 assert!(
-                    !value.is_empty(),
-                    "UseAfterMove error should have a non-empty value name"
+                    !err.message.is_empty(),
+                    "UseAfterMove error should have a non-empty message"
                 );
             }
         }

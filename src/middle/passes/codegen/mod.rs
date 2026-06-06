@@ -26,6 +26,7 @@ use crate::middle::passes::codegen::translator::Translator;
 use crate::middle::passes::codegen::flow::{FlowManager, SymbolScopeManager};
 use crate::middle::passes::codegen::operand::OperandResolver;
 use crate::util::i18n::{t, t_simple, MSG};
+use crate::util::diagnostic::Diagnostic;
 use crate::util::logger::get_lang;
 use tracing::debug;
 
@@ -56,51 +57,6 @@ pub struct CodegenContext {
 struct CodegenConfig {
     generate_debug_info: bool,
 }
-
-/// 代码生成错误
-#[derive(Debug, Clone)]
-pub enum CodegenError {
-    UnimplementedExpr { expr_type: String },
-    UnimplementedStmt { stmt_type: String },
-    UnimplementedCall,
-    InvalidAssignmentTarget,
-    SymbolNotFound { name: String },
-    TypeMismatch { expected: String, found: String },
-    OutOfRegisters,
-    InvalidOperand,
-    RegisterOverflow { id: usize, limit: u8 },
-    TranslationError(String),
-}
-
-impl std::fmt::Display for CodegenError {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            CodegenError::UnimplementedExpr { expr_type } => {
-                write!(f, "未实现的表达式类型: {}", expr_type)
-            }
-            CodegenError::UnimplementedStmt { stmt_type } => {
-                write!(f, "未实现的语句类型: {}", stmt_type)
-            }
-            CodegenError::UnimplementedCall => write!(f, "未实现的函数调用"),
-            CodegenError::InvalidAssignmentTarget => write!(f, "无效的赋值目标"),
-            CodegenError::SymbolNotFound { name } => write!(f, "符号未找到: {}", name),
-            CodegenError::TypeMismatch { expected, found } => {
-                write!(f, "类型不匹配: 期望 {}, 实际 {}", expected, found)
-            }
-            CodegenError::OutOfRegisters => write!(f, "寄存器不足"),
-            CodegenError::InvalidOperand => write!(f, "无效的操作数"),
-            CodegenError::RegisterOverflow { id, limit } => {
-                write!(f, "寄存器编号 {} 超过最大限制 ({})", id, limit)
-            }
-            CodegenError::TranslationError(msg) => write!(f, "翻译错误: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for CodegenError {}
 
 impl CodegenContext {
     /// 创建新的代码生成上下文
@@ -165,7 +121,7 @@ impl CodegenContext {
     pub fn test_operand_to_reg(
         &self,
         operand: &Operand,
-    ) -> Result<u8, CodegenError> {
+    ) -> Result<u8, Diagnostic> {
         let resolver = OperandResolver::new();
         resolver.to_reg(operand)
     }
@@ -176,7 +132,7 @@ impl CodegenContext {
     }
 
     /// 生成字节码
-    pub fn generate(&mut self) -> Result<BytecodeFile, CodegenError> {
+    pub fn generate(&mut self) -> Result<BytecodeFile, Diagnostic> {
         let lang = get_lang();
         let func_count = self.module.functions.len();
         debug!("{}", t(MSG::CodegenFunctions, lang, Some(&[&func_count])));

@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use thiserror::Error;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
 /// 方法绑定信息
 #[derive(Debug, Clone)]
@@ -196,25 +196,6 @@ impl ModuleNode {
     }
 }
 
-/// 模块图错误
-#[derive(Debug, Error, PartialEq)]
-pub enum ModuleGraphError {
-    #[error("模块不存在: {0:?}")]
-    ModuleNotFound(ModuleId),
-
-    #[error("循环依赖检测到")]
-    CycleDetected,
-
-    #[error("模块路径重复: {0:?}")]
-    DuplicatePath(PathBuf),
-
-    #[error("无效的模块依赖: 从 {from:?} 到 {to:?}")]
-    InvalidDependency { from: ModuleId, to: ModuleId },
-
-    #[error("拓扑排序失败: 存在循环依赖")]
-    TopologySortFailed,
-}
-
 /// 模块依赖图
 ///
 /// 管理所有模块及其依赖关系，支持拓扑排序
@@ -293,18 +274,21 @@ impl ModuleGraph {
         from: ModuleId,
         to: ModuleId,
         is_public: bool,
-    ) -> Result<(), ModuleGraphError> {
+    ) -> Result<(), Diagnostic> {
         // 检查模块是否存在
         if !self.nodes.contains_key(&from) {
-            return Err(ModuleGraphError::ModuleNotFound(from));
+            return Err(ErrorCodeDefinition::module_not_found(&from.to_string()).build());
         }
         if !self.nodes.contains_key(&to) {
-            return Err(ModuleGraphError::ModuleNotFound(to));
+            return Err(ErrorCodeDefinition::module_not_found(&to.to_string()).build());
         }
 
         // 不能依赖自己
         if from == to {
-            return Err(ModuleGraphError::InvalidDependency { from, to });
+            return Err(ErrorCodeDefinition::import_error(
+                &from.to_string(),
+                "cannot depend on itself",
+            ).build());
         }
 
         // 添加边
@@ -326,22 +310,22 @@ impl ModuleGraph {
     pub fn get_dependencies(
         &self,
         module: ModuleId,
-    ) -> Result<Vec<ModuleId>, ModuleGraphError> {
+    ) -> Result<Vec<ModuleId>, Diagnostic> {
         self.nodes
             .get(&module)
             .map(|node| node.dependencies.clone())
-            .ok_or(ModuleGraphError::ModuleNotFound(module))
+            .ok_or_else(|| ErrorCodeDefinition::module_not_found(&module.to_string()).build())
     }
 
     /// 获取依赖该模块的所有模块
     pub fn get_dependents(
         &self,
         module: ModuleId,
-    ) -> Result<Vec<ModuleId>, ModuleGraphError> {
+    ) -> Result<Vec<ModuleId>, Diagnostic> {
         self.nodes
             .get(&module)
             .map(|node| node.dependents.clone())
-            .ok_or(ModuleGraphError::ModuleNotFound(module))
+            .ok_or_else(|| ErrorCodeDefinition::module_not_found(&module.to_string()).build())
     }
 
     /// 获取模块的名称
@@ -472,7 +456,7 @@ impl ModuleGraph {
     /// 拓扑排序
     ///
     /// 返回模块ID的有序列表，确保依赖出现在被依赖之前
-    pub fn topological_sort(&self) -> Result<Vec<ModuleId>, ModuleGraphError> {
+    pub fn topological_sort(&self) -> Result<Vec<ModuleId>, Diagnostic> {
         // 计算入度
         let mut in_degree: HashMap<ModuleId, usize> =
             self.nodes.keys().map(|&id| (id, 0)).collect();
@@ -511,7 +495,7 @@ impl ModuleGraph {
 
         // 检查是否有循环依赖
         if result.len() != self.nodes.len() {
-            return Err(ModuleGraphError::TopologySortFailed);
+            return Err(ErrorCodeDefinition::circular_dependency("module graph").build());
         }
 
         // 反转结果，使得依赖项在前，被依赖项在后
@@ -579,7 +563,7 @@ impl ModuleGraph {
     pub fn get_public_dependencies(
         &self,
         module: ModuleId,
-    ) -> Result<Vec<ModuleId>, ModuleGraphError> {
+    ) -> Result<Vec<ModuleId>, Diagnostic> {
         self.nodes
             .get(&module)
             .map(|_node| {
@@ -589,7 +573,7 @@ impl ModuleGraph {
                     .map(|e| e.to)
                     .collect()
             })
-            .ok_or(ModuleGraphError::ModuleNotFound(module))
+            .ok_or_else(|| ErrorCodeDefinition::module_not_found(&module.to_string()).build())
     }
 
     /// 导出该模块的公开依赖（传递性闭包）
@@ -598,7 +582,7 @@ impl ModuleGraph {
     pub fn get_public_dependency_closure(
         &self,
         module: ModuleId,
-    ) -> Result<HashSet<ModuleId>, ModuleGraphError> {
+    ) -> Result<HashSet<ModuleId>, Diagnostic> {
         let mut closure: HashSet<ModuleId> = HashSet::new();
         let mut to_visit: VecDeque<ModuleId> = VecDeque::new();
 

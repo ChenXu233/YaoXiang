@@ -5,7 +5,8 @@
 
 use super::mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
 use super::constraint::TypeConstraint;
-use super::error::{TypeMismatch, TypeConstraintError};
+use super::error::TypeConstraintError;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
 
@@ -105,7 +106,7 @@ impl TypeConstraintSolver {
         &mut self,
         var: super::var::TypeVar,
         ty: &MonoType,
-    ) -> Result<(), TypeMismatch> {
+    ) -> Result<(), Diagnostic> {
         let resolved_var = self.find(var);
 
         // 展开类型变量链
@@ -113,11 +114,10 @@ impl TypeConstraintSolver {
 
         // 完整 occurs check：禁止无限类型（包括嵌套出现）
         if self.contains_var(&ty, resolved_var) {
-            return Err(TypeMismatch {
-                left: MonoType::TypeVar(resolved_var),
-                right: ty,
-                span: Span::default(),
-            });
+            return Err(ErrorCodeDefinition::type_mismatch(
+                &MonoType::TypeVar(resolved_var).type_name(),
+                &ty.type_name(),
+            ).build());
         }
 
         // 绑定
@@ -132,11 +132,10 @@ impl TypeConstraintSolver {
                     if existing == &ty {
                         Ok(())
                     } else {
-                        Err(TypeMismatch {
-                            left: (*existing).clone(),
-                            right: ty,
-                            span: Span::default(),
-                        })
+                        Err(ErrorCodeDefinition::type_mismatch(
+                            &existing.type_name(),
+                            &ty.type_name(),
+                        ).build())
                     }
                 }
                 TypeBinding::Link(_) => {
@@ -420,7 +419,7 @@ impl TypeConstraintSolver {
         &mut self,
         t1: &MonoType,
         t2: &MonoType,
-    ) -> Result<(), TypeMismatch> {
+    ) -> Result<(), Diagnostic> {
         // eprintln!("DEBUG unify: t1={:?}, t2={:?}", t1, t2);
         let t1 = self.expand_type(t1);
         let t2 = self.expand_type(t2);
@@ -462,11 +461,10 @@ impl TypeConstraintSolver {
                 },
             ) => {
                 if p1.len() != p2.len() {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 // unify 参数和返回类型
                 for (p1, p2) in p1.iter().zip(p2.iter()) {
@@ -492,19 +490,17 @@ impl TypeConstraintSolver {
                     || s1.fields.len() != s2.fields.len()
                     || s1.field_mutability != s2.field_mutability
                 {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 for ((n1, f1), (n2, f2)) in s1.fields.iter().zip(s2.fields.iter()) {
                     if n1 != n2 {
-                        return Err(TypeMismatch {
-                            left: t1,
-                            right: t2,
-                            span: Span::default(),
-                        });
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            &t1.type_name(),
+                            &t2.type_name(),
+                        ).build());
                     }
                     self.unify(f1, f2)?;
                 }
@@ -514,11 +510,10 @@ impl TypeConstraintSolver {
             // 枚举类型 unify
             (MonoType::Enum(e1), MonoType::Enum(e2)) => {
                 if e1.name != e2.name || e1.variants != e2.variants {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 Ok(())
             }
@@ -526,11 +521,10 @@ impl TypeConstraintSolver {
             // 元组类型 unify
             (MonoType::Tuple(ts1), MonoType::Tuple(ts2)) => {
                 if ts1.len() != ts2.len() {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 for (t1, t2) in ts1.iter().zip(ts2.iter()) {
                     self.unify(t1, t2)?;
@@ -558,11 +552,10 @@ impl TypeConstraintSolver {
             // 即：检查 T3 是否是联合类型的超类型，或者 T3 是否兼容联合的每个成员
             (MonoType::Union(types1), MonoType::Union(types2)) => {
                 if !self.unify_unordered(types1, types2) {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 Ok(())
             }
@@ -575,22 +568,20 @@ impl TypeConstraintSolver {
                     }
                     self.bindings = snapshot.clone();
                 }
-                Err(TypeMismatch {
-                    left: t1,
-                    right: t2,
-                    span: Span::default(),
-                })
+                Err(ErrorCodeDefinition::type_mismatch(
+                    &t1.type_name(),
+                    &t2.type_name(),
+                ).build())
             }
 
             // 交集类型 unify：T1 & T2 == T3 分解为 (T1 == T3) & (T2 == T3)
             // 即：检查 T3 是否同时满足 T1 和 T2 的约束
             (MonoType::Intersection(types1), MonoType::Intersection(types2)) => {
                 if !self.unify_unordered(types1, types2) {
-                    return Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    });
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build());
                 }
                 Ok(())
             }
@@ -608,20 +599,18 @@ impl TypeConstraintSolver {
                 if s.interfaces.contains(name) || s.name == *name {
                     Ok(())
                 } else {
-                    Err(TypeMismatch {
-                        left: t1,
-                        right: t2,
-                        span: Span::default(),
-                    })
+                    Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    ).build())
                 }
             }
 
             // 不兼容类型
-            _ => Err(TypeMismatch {
-                left: t1,
-                right: t2,
-                span: Span::default(),
-            }),
+            _ => Err(ErrorCodeDefinition::type_mismatch(
+                &t1.type_name(),
+                &t2.type_name(),
+            ).build()),
         }
     }
 

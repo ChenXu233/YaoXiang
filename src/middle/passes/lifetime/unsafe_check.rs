@@ -6,13 +6,14 @@
 //! 3. Send/Sync 安全 trait 检查
 
 use crate::middle::core::ir::{FunctionIR, Instruction};
-use crate::middle::passes::lifetime::error::OwnershipError;
+use crate::middle::passes::lifetime::error::codes;
+use crate::util::diagnostic::Diagnostic;
 
 /// unsafe 语义检查器
 #[derive(Debug)]
 pub struct UnsafeChecker {
     /// 错误列表
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     /// 当前是否在 unsafe 块内
     in_unsafe: bool,
     /// unsafe 块嵌套深度
@@ -33,7 +34,7 @@ impl UnsafeChecker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> Vec<OwnershipError> {
+    ) -> Vec<Diagnostic> {
         self.errors.clear();
         self.in_unsafe = false;
         self.unsafe_depth = 0;
@@ -71,8 +72,8 @@ impl UnsafeChecker {
     fn check_pointer_operation(
         &mut self,
         instr: &Instruction,
-        block_idx: usize,
-        instr_idx: usize,
+        _block_idx: usize,
+        _instr_idx: usize,
         in_unsafe: bool,
     ) {
         // 检查是否是 unsafe 操作
@@ -85,15 +86,12 @@ impl UnsafeChecker {
         );
 
         if is_unsafe_op && !in_unsafe {
-            self.errors.push(OwnershipError::UnsafeDeref {
-                instruction: format!("{:?}", instr),
-                location: (block_idx, instr_idx),
-            });
+            self.errors.push(codes::unsafe_deref());
         }
     }
 
     /// 获取错误列表
-    pub fn errors(&self) -> &[OwnershipError] {
+    pub fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 

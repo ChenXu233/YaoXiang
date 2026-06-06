@@ -4,8 +4,9 @@
 //! - clone() 只能用于有效状态的值（Owned，不能是 Moved 或 Dropped）
 //! - clone() 后原值仍保持 Owned 状态
 
-use super::error::{OwnershipCheck, OwnershipError, ValueState, operand_to_string};
+use super::error::{OwnershipCheck, ValueState, codes, operand_to_string};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// Clone 检查器
@@ -16,7 +17,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct CloneChecker {
     state: HashMap<Operand, ValueState>,
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     location: (usize, usize),
 }
 
@@ -45,20 +46,14 @@ impl CloneChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(OwnershipError::CloneMovedValue {
-            value: operand_to_string(operand),
-            location: self.location,
-        });
+        self.errors.push(codes::clone_moved_value(&operand_to_string(operand)));
     }
 
     fn error_clone_dropped(
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(OwnershipError::CloneDroppedValue {
-            value: operand_to_string(operand),
-            location: self.location,
-        });
+        self.errors.push(codes::use_after_drop(&operand_to_string(operand)));
     }
 
     fn set_owned(
@@ -146,7 +141,7 @@ impl OwnershipCheck for CloneChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
@@ -157,7 +152,7 @@ impl OwnershipCheck for CloneChecker {
         &self.errors
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 

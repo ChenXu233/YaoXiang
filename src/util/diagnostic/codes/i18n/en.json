@@ -634,6 +634,46 @@
         "template": "'{name}' used after being dropped",
         "help": "Use the value before it is dropped, or restructure the code."
     },
+    "E2021": {
+        "title": "Drop moved value",
+        "template": "cannot drop '{name}': value has been moved",
+        "help": "The value was already moved and cannot be dropped."
+    },
+    "E2022": {
+        "title": "Immutable mutation",
+        "template": "cannot mutate immutable '{name}' via method '{method}'",
+        "help": "Declare the variable with `mut` to allow mutation."
+    },
+    "E2023": {
+        "title": "Immutable field assignment",
+        "template": "cannot assign to immutable field '{field}' of '{struct_name}'",
+        "help": "Declare the field with `mut` to allow assignment."
+    },
+    "E2024": {
+        "title": "Ref non-owner",
+        "template": "cannot create reference to '{name}': value is not owned",
+        "help": "The value has been moved or dropped. Ensure the value is still owned."
+    },
+    "E2025": {
+        "title": "Reassign non-empty",
+        "template": "cannot reassign '{name}': variable has not been moved",
+        "help": "Only moved variables can be reassigned."
+    },
+    "E2026": {
+        "title": "Consumed not returned",
+        "template": "parameter '{name}' is consumed but not returned",
+        "help": "Either return the consumed value or use a reference."
+    },
+    "E2027": {
+        "title": "Unsafe deref",
+        "template": "cannot dereference raw pointer outside unsafe block",
+        "help": "Wrap the dereference in an `unsafe` block."
+    },
+    "E2028": {
+        "title": "Clone moved value",
+        "template": "cannot clone '{name}': value has been moved",
+        "help": "The value was already moved. Clone before moving if needed."
+    },
     "E3001": {
         "title": "Unimplemented expression (IR)",
         "template": "unimplemented expression type: {expr_type}",

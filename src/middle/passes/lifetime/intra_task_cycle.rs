@@ -9,8 +9,9 @@
 //! - 与 CycleChecker（跨任务检测）协同工作
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
-use super::error::OwnershipError;
+use super::error::codes;
 
 /// 任务内循环追踪器
 #[derive(Debug, Default)]
@@ -18,7 +19,7 @@ pub struct IntraTaskCycleTracker {
     /// 任务内 ref 边
     ref_edges: Vec<RefEdge>,
     /// 检测到的循环（警告）
-    warnings: Vec<OwnershipError>,
+    warnings: Vec<Diagnostic>,
     /// ArcNew 指令位置追踪
     arc_new_locations: HashMap<Operand, (usize, usize)>,
     /// 值定义追踪（预留，用于更复杂的数据流分析）
@@ -45,7 +46,7 @@ impl IntraTaskCycleTracker {
     pub fn track_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         // 1. 收集 ArcNew 和值定义
@@ -152,11 +153,8 @@ impl IntraTaskCycleTracker {
                 } else if recursion_stack.contains(neighbor) {
                     // 找到任务内循环，记录警告
                     let cycle_path = self.format_cycle_path(path, neighbor);
-                    let span = self.find_cycle_span(neighbor);
-                    self.warnings.push(OwnershipError::IntraTaskCycle {
-                        details: cycle_path,
-                        span,
-                    });
+                    let _span = self.find_cycle_span(neighbor);
+                    self.warnings.push(codes::intra_task_cycle(&cycle_path));
                     // 继续检测其他循环，不立即返回
                 }
             }
@@ -217,7 +215,7 @@ impl IntraTaskCycleTracker {
     }
 
     /// 获取警告列表
-    pub fn warnings(&self) -> &[OwnershipError] {
+    pub fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
     }
 
@@ -294,7 +292,7 @@ mod tests {
         let warnings = tracker.track_function(&func);
         // 检测到任务内循环（警告，不报错）
         assert!(!warnings.is_empty(), "应检测到任务内循环");
-        assert!(matches!(warnings[0], OwnershipError::IntraTaskCycle { .. }));
+        assert!(warnings[0].code == "E2003");
     }
 
     #[test]
@@ -397,8 +395,8 @@ mod tests {
         }]);
 
         let warnings = tracker.track_function(&func);
-        if let Some(OwnershipError::IntraTaskCycle { span, .. }) = warnings.first() {
-            assert_eq!(*span, (0, 0), "位置应为 (0, 0)");
+        if let Some(first) = warnings.first() {
+            assert_eq!(first.code, "E2003", "应为 E2003 错误码");
         }
     }
 }

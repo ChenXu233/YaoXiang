@@ -1,9 +1,10 @@
 //! 所有权分析错误类型
 //!
 //! 定义所有权的语义错误，包括 UseAfterMove、UseAfterDrop 等。
+//! 统一使用 Diagnostic 错误码系统。
 
 use crate::middle::core::ir::{FunctionIR, Operand};
-use crate::util::span::Span;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use std::collections::HashMap;
 
 /// 所有权状态（Move/Drop 检查器共用）
@@ -61,357 +62,16 @@ pub trait OwnershipCheck {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError];
+    ) -> &[Diagnostic];
 
     /// 获取收集的错误
-    fn errors(&self) -> &[OwnershipError];
+    fn errors(&self) -> &[Diagnostic];
 
     /// 获取状态
     fn state(&self) -> &HashMap<Operand, ValueState>;
 
     /// 清除状态
     fn clear(&mut self);
-}
-/// 所有权检查错误类型
-///
-/// 包含 Move/Drop/Mut 三种检查的错误。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OwnershipError {
-    /// 使用已移动的值
-    UseAfterMove {
-        /// 值标识
-        value: String,
-        /// 发生位置 (block_idx, instr_idx)
-        location: (usize, usize),
-    },
-    /// 使用已释放的值
-    UseAfterDrop {
-        /// 值标识
-        value: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 释放已移动的值
-    DropMovedValue {
-        /// 值标识
-        value: String,
-    },
-    /// 双重释放
-    DoubleDrop {
-        /// 值标识
-        value: String,
-    },
-    /// 不可变赋值：对不可变变量进行赋值
-    ImmutableAssign {
-        /// 值标识
-        value: String,
-        /// 源文件位置
-        span: Option<Span>,
-    },
-    /// 不可变变异：调用不可变对象上的变异方法
-    ImmutableMutation {
-        /// 值标识
-        value: String,
-        /// 变异方法名
-        method: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 不可变字段赋值：对不可变字段进行赋值
-    ImmutableFieldAssign {
-        /// 结构体类型名
-        struct_name: String,
-        /// 字段名
-        field: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// ref 应用于非所有者（已移动或已释放的值）
-    RefNonOwner {
-        /// ref 表达式位置
-        ref_span: (usize, usize),
-        /// 目标值位置
-        target_span: (usize, usize),
-        /// 目标值标识
-        target_value: String,
-    },
-    /// clone 已移动的值
-    CloneMovedValue {
-        /// 值标识
-        value: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// clone 已释放的值
-    CloneDroppedValue {
-        /// 值标识
-        value: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 跨 spawn 循环引用（Task 5.6）
-    CrossSpawnCycle {
-        /// 详细信息
-        details: String,
-        /// 发生位置
-        span: (usize, usize),
-    },
-    /// 空状态重赋值类型不匹配
-    EmptyStateTypeMismatch {
-        /// 变量标识
-        value: String,
-        /// 期望类型
-        expected_type: String,
-        /// 实际类型
-        actual_type: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 重新赋值时值非空状态（变量尚未被 Move）
-    ReassignNonEmpty {
-        /// 变量标识
-        value: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 参数被消费但未返回（所有权回流错误）
-    ConsumedNotReturned {
-        /// 参数标识
-        param: String,
-        /// 函数名
-        function: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 任务内循环引用（警告，不阻断编译）
-    IntraTaskCycle {
-        /// 详细信息
-        details: String,
-        /// 发生位置
-        span: (usize, usize),
-    },
-    /// unsafe 块绕过循环检测（信息记录）
-    UnsafeBypassCycle {
-        /// 详细信息
-        details: String,
-        /// 发生位置
-        span: (usize, usize),
-    },
-    /// unsafe 块外解引用裸指针
-    UnsafeDeref {
-        /// 指令描述
-        instruction: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 可变借用冲突：同一来源同时存在活跃的借用
-    MutableBorrowConflict {
-        /// 借用来源
-        source: String,
-        /// 已存在的借用令牌
-        existing: String,
-        /// 新的借用令牌
-        new: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 移动后借用：来源已被移动后尝试使用借用令牌
-    BorrowAfterMove {
-        /// 借用来源
-        source: String,
-        /// 尝试使用的令牌
-        token: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-    /// 冻结时使用：令牌被冻结后仍尝试使用
-    UseWhileFrozen {
-        /// 借用来源
-        source: String,
-        /// 被冻结的令牌
-        token: String,
-        /// 发生位置
-        location: (usize, usize),
-    },
-}
-
-impl std::fmt::Display for OwnershipError {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            OwnershipError::UseAfterMove { value, location } => {
-                write!(
-                    f,
-                    "UseAfterMove: value '{}' used after move at {:?}",
-                    value, location
-                )
-            }
-            OwnershipError::UseAfterDrop { value, location } => {
-                write!(
-                    f,
-                    "UseAfterDrop: value '{}' used after drop at {:?}",
-                    value, location
-                )
-            }
-            OwnershipError::DropMovedValue { value } => {
-                write!(
-                    f,
-                    "DropMovedValue: cannot drop value '{}' that has been moved",
-                    value
-                )
-            }
-            OwnershipError::DoubleDrop { value } => {
-                write!(f, "DoubleDrop: value '{}' dropped twice", value)
-            }
-            OwnershipError::ImmutableAssign { value, span } => {
-                write!(
-                    f,
-                    "ImmutableAssign: cannot assign to immutable value '{}' at {:?}",
-                    value, span
-                )
-            }
-            OwnershipError::ImmutableMutation {
-                value,
-                method,
-                location,
-            } => {
-                write!(
-                    f,
-                    "ImmutableMutation: cannot mutate '{}' via method '{}' at {:?}",
-                    value, method, location
-                )
-            }
-            OwnershipError::ImmutableFieldAssign {
-                struct_name,
-                field,
-                location,
-            } => {
-                write!(
-                    f,
-                    "ImmutableFieldAssign: cannot assign to immutable field '{}.{}' at {:?}",
-                    struct_name, field, location
-                )
-            }
-            OwnershipError::RefNonOwner {
-                ref_span,
-                target_span,
-                target_value,
-            } => {
-                write!(
-                    f,
-                    "RefNonOwner: cannot create ref for value '{}' at {:?} (target defined at {:?})",
-                    target_value, ref_span, target_span
-                )
-            }
-            OwnershipError::CloneMovedValue { value, location } => {
-                write!(
-                    f,
-                    "CloneMovedValue: cannot clone value '{}' that has been moved at {:?}",
-                    value, location
-                )
-            }
-            OwnershipError::CloneDroppedValue { value, location } => {
-                write!(
-                    f,
-                    "CloneDroppedValue: cannot clone value '{}' that has been dropped at {:?}",
-                    value, location
-                )
-            }
-            OwnershipError::CrossSpawnCycle { details, span } => {
-                write!(f, "CrossSpawnCycle: {} at {:?}", details, span)
-            }
-            OwnershipError::EmptyStateTypeMismatch {
-                value,
-                expected_type,
-                actual_type,
-                location,
-            } => {
-                write!(
-                    f,
-                    "EmptyStateTypeMismatch: cannot reassign '{}' in empty state: expected '{}', found '{}' at {:?}",
-                    value, expected_type, actual_type, location
-                )
-            }
-            OwnershipError::ReassignNonEmpty { value, location } => {
-                write!(
-                    f,
-                    "ReassignNonEmpty: cannot reassign '{}' which is not in empty state at {:?}",
-                    value, location
-                )
-            }
-            OwnershipError::ConsumedNotReturned {
-                param,
-                function,
-                location,
-            } => {
-                write!(
-                    f,
-                    "ConsumedNotReturned: parameter '{}' of function '{}' is consumed but not returned at {:?}",
-                    param, function, location
-                )
-            }
-            OwnershipError::IntraTaskCycle { details, span } => {
-                write!(
-                    f,
-                    "IntraTaskCycle (warning): {} at {:?}. Note: intra-task cycles are allowed but may cause memory leaks until task ends.",
-                    details, span
-                )
-            }
-            OwnershipError::UnsafeBypassCycle { details, span } => {
-                write!(
-                    f,
-                    "UnsafeBypassCycle (info): {} at {:?}. Cycle detection bypassed in unsafe block.",
-                    details, span
-                )
-            }
-            OwnershipError::UnsafeDeref {
-                instruction,
-                location,
-            } => {
-                write!(
-                    f,
-                    "UnsafeDeref: cannot dereference raw pointer outside unsafe block: {} at {:?}",
-                    instruction, location
-                )
-            }
-            OwnershipError::MutableBorrowConflict {
-                source,
-                existing,
-                new,
-                location,
-            } => {
-                write!(
-                    f,
-                    "MutableBorrowConflict: cannot create mutable borrow '{}' for '{}' while '{}' is still active at {:?}",
-                    new, source, existing, location
-                )
-            }
-            OwnershipError::BorrowAfterMove {
-                source,
-                token,
-                location,
-            } => {
-                write!(
-                    f,
-                    "BorrowAfterMove: cannot use borrow token '{}' because source '{}' has been moved at {:?}",
-                    token, source, location
-                )
-            }
-            OwnershipError::UseWhileFrozen {
-                source,
-                token,
-                location,
-            } => {
-                write!(
-                    f,
-                    "UseWhileFrozen: cannot use borrow token '{}' because source '{}' is frozen at {:?}",
-                    token, source, location
-                )
-            }
-        }
-    }
 }
 
 /// 将 Operand 转换为字符串标识
@@ -424,5 +84,84 @@ pub fn operand_to_string(operand: &Operand) -> String {
         Operand::Const(c) => format!("const_{:?}", c),
         Operand::Label(idx) => format!("label_{}", idx),
         Operand::Register(idx) => format!("reg_{}", idx),
+    }
+}
+
+/// OwnershipError 变体到错误码的映射辅助函数
+///
+/// 用于将旧的 OwnershipError 语义转换为统一的 Diagnostic 错误码。
+pub mod codes {
+    use super::*;
+
+    pub fn use_after_move(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::use_after_move(value).build()
+    }
+
+    pub fn use_after_drop(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::use_after_drop(value).build()
+    }
+
+    pub fn drop_moved_value(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::drop_moved_value(value).build()
+    }
+
+    pub fn double_drop(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::double_drop(value).build()
+    }
+
+    pub fn immutable_assign(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::immutable_assign(value).build()
+    }
+
+    pub fn immutable_mutation(value: &str, method: &str) -> Diagnostic {
+        ErrorCodeDefinition::immutable_mutation(value, method).build()
+    }
+
+    pub fn immutable_field_assign(struct_name: &str, field: &str) -> Diagnostic {
+        ErrorCodeDefinition::immutable_field_assign(struct_name, field).build()
+    }
+
+    pub fn ref_non_owner(target_value: &str) -> Diagnostic {
+        ErrorCodeDefinition::ref_non_owner(target_value).build()
+    }
+
+    pub fn clone_moved_value(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::clone_moved_value(value).build()
+    }
+
+    pub fn cross_spawn_cycle(details: &str) -> Diagnostic {
+        ErrorCodeDefinition::ownership_violation(details).build()
+    }
+
+    pub fn reassign_non_empty(value: &str) -> Diagnostic {
+        ErrorCodeDefinition::reassign_non_empty(value).build()
+    }
+
+    pub fn consumed_not_returned(param: &str) -> Diagnostic {
+        ErrorCodeDefinition::consumed_not_returned(param).build()
+    }
+
+    pub fn intra_task_cycle(details: &str) -> Diagnostic {
+        ErrorCodeDefinition::ownership_violation(details).build()
+    }
+
+    pub fn unsafe_bypass_cycle(details: &str) -> Diagnostic {
+        ErrorCodeDefinition::ownership_violation(details).build()
+    }
+
+    pub fn unsafe_deref() -> Diagnostic {
+        ErrorCodeDefinition::unsafe_deref().build()
+    }
+
+    pub fn mutable_borrow_conflict(source: &str) -> Diagnostic {
+        ErrorCodeDefinition::mutable_borrow_conflict(source).build()
+    }
+
+    pub fn borrow_after_move(source: &str) -> Diagnostic {
+        ErrorCodeDefinition::borrow_after_move(source).build()
+    }
+
+    pub fn use_while_frozen(source: &str) -> Diagnostic {
+        ErrorCodeDefinition::mutable_immutable_borrow_conflict(source).build()
     }
 }
