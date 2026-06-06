@@ -1,51 +1,50 @@
-```yaml
+```markdown
 ---
 title: "RFC-007: Unified Function Definition Syntax"
+status: "Accepted"
+author: "Moyujiang"
+created: "2025-01-05"
+updated: "2026-03-21 (aligned with type constructor rules and code block return semantics)"
 ---
 
 # RFC-007: Unified Function Definition Syntax
 
-> **Status**: Accepted
-> **Author**: Mo Yu Jiang
-> **Created**: 2025-01-05
-> **Last Updated**: 2026-03-21 (Align with type constructor rules and code block return semantics)
+## Summary
 
-## Abstract
+This RFC establishes the final scheme for **function definition syntax** in YaoXiang language. Using the unified syntax `name: (params) -> Return = body`, which is fully consistent with the `name: type = value` model from RFC-010.
 
-This RFC establishes the final scheme for **function definition syntax** in the YaoXiang language. It adopts a unified syntax `name: (params) -> Return = body`, fully consistent with the `name: type = value` model from RFC-010.
+To avoid ambiguity: when a function has input parameters, the parameter types must be explicitly annotated in either the "signature" or the "lambda head" (at least one); omitting both will be rejected.
 
-To avoid ambiguity: when a function has input parameters, the parameter types must be explicitly annotated in either the "signature" or the "lambda head" (at least one); omitting both is rejected.
-
-Code blocks `{ ... }` must use `return` to return values; without `return`, the default return is `Void`. The expression form `= expr` returns the value directly.
+Code blocks `{ ... }` must use `return` to return a value; without `return`, they default to returning `Void`. The expression form `= expr` returns a value directly.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-1. **Syntax Consistency**: Eliminates legacy baggage of the old syntax, unifying the style
-2. **Brevity**: HM algorithm automatically infers types, reducing boilerplate
-3. **Type Safety**: HM algorithm guarantees type safety; explicit annotations only when inference fails
-4. **Language Maturity**: HM algorithm is a mature solution in modern functional languages
+1. **Syntax consistency**: Eliminates legacy baggage from the old syntax, unified style
+2. **Conciseness**: HM algorithm automatically infers types, reducing boilerplate
+3. **Type safety**: HM algorithm ensures type safety; explicit annotation only when inference is impossible
+4. **Language maturity**: HM algorithm is a mature solution in modern functional languages
 
 ### Unified Syntax Model
 
-**Core Principle**: `name: Signature = LambdaBody`
+**Core principle**: `name: Signature = LambdaBody`
 
-- **Complete Form**: Signature (parameter names + types + `->` + return type) + Lambda head (parameter names)
-- **Abbreviation Rules**: Omit where possible without introducing ambiguity
-  - `->` cannot be omitted (it's the marker for function type, otherwise parsed as tuple)
-  - **When there are input parameters**, parameter types must appear explicitly in either the signature or lambda head
-  - Lambda head can be omitted → if the signature already declares parameter names and types
+- **Complete form**: Signature (with parameter names + types + `->` + return type) + Lambda head (with parameter names)
+- **Shorthand rules**: Omit where possible without introducing ambiguity
+  - `->` cannot be omitted (it marks function type, otherwise parsed as tuple)
+  - **When there are input parameters**, parameter types must appear explicitly in either the signature or the lambda head (at least one)
+  - Lambda head can be omitted → if signature already declares parameter names and types
   - Return type can be explicitly annotated, or omitted when inferrable
 
 ```yaoxiang
 # Complete form (complete signature + complete lambda head)
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
 
-# Abbreviated: omit lambda head (signature already declares parameters)
+# Shorthand: omit lambda head (signature already declares parameters)
 add: (a: Int, b: Int) -> Int = a + b
 
-# Abbreviated: omit signature (lambda head annotates parameter types)
+# Shorthand: omit signature (lambda head annotates parameter types)
 add = (a: Int, b: Int) => a + b
 
 # ❌ Error: parameter types not annotated on either side
@@ -58,14 +57,14 @@ add = (a: Int, b: Int) => a + b
 # === Complete Form ===
 add: (a: Int, b: Int) -> Int = (a, b) => { a + b }
 
-# === Abbreviated Forms ===
+# === Shorthand Forms ===
 add: (a: Int, b: Int) -> Int = a + b                 # omit lambda head
 add = (a: Int, b: Int) => a + b                      # omit signature
 
-# === Zero-Parameter Functions ===
+# === No-Parameter Functions ===
 main: () -> Void = () => { println("Hello") }          # complete form
 main: () -> Void = { println("Hello") }                # omit lambda head
-main = { println("Hello") }                            # most minimal (infer to () -> Void)
+main = { println("Hello") }                            # minimal form (inferred as () -> Void)
 
 # === Generic Functions (using RFC-010 unified syntax) ===
 identity: (T: Type) -> ((x: T) -> T) = (x) => x         # complete form
@@ -82,23 +81,23 @@ factorial: (n: Int) -> Int = (n) => {
 
 | Scenario | Syntax | Description |
 |----------|--------|-------------|
-| **Complete Form** | `name: (a: Type, b) -> Ret = (a, b) => { return ... }` | Complete signature + complete lambda head |
-| **Omit Lambda Head** | `name: (a: Type, b: Type) -> Ret = { ... }` | Signature already declares parameters |
-| **Omit Signature** | `name = (a: Type, b: Type) => { ... }` | Lambda head provides parameter types |
-| **Zero-Param Complete** | `name: () -> Void = () => { return ... }` | Zero-parameter function complete |
-| **Zero-Param Abbreviated** | `name: () -> Void = { return ... }` | Omit lambda head |
-| **Zero-Param Minimal** | `name = { return ... }` | No params, no return, most minimal |
+| **Complete form** | `name: (a: Type, b) -> Ret = (a, b) => { return ... }` | Signature + complete lambda head |
+| **Omit lambda head** | `name: (a: Type, b: Type) -> Ret = { ... }` | Signature declares parameters |
+| **Omit signature** | `name = (a: Type, b: Type) => { ... }` | Lambda head provides parameter types |
+| **No-param complete** | `name: () -> Void = () => { return ... }` | No-param function complete |
+| **No-param shorthand** | `name: () -> Void = { return ... }` | Omit lambda head |
+| **No-param minimal** | `name = { return ... }` | No-param, no-return minimal |
 
-**Note**: Code blocks `{ ... }` must use `return` to return values; without `return`, the default return is `Void`. Expression form `= expr` returns the value directly.
+**Note**: Code blocks `{ ... }` must use `return` to return a value; without `return`, they default to returning `Void`. The expression form `= expr` returns a value directly.
 
-**Note**: `->` is the marker for function type and cannot be omitted (otherwise parsed as tuple).
+**Note**: `->` is the marker for function type and cannot be omitted (otherwise it will be parsed as a tuple).
 
-**Important**: `if` expressions use curly braces `{}` to wrap branches and do not support `then/else` keywords:
+**Important**: `if` expressions use curly braces `{}` to wrap branches, and do not support `then/else` keywords:
 ```yaoxiang
-# Correct: use curly braces
+# Correct: using curly braces
 if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 
-# Incorrect: then/else keywords not supported
+# Error: then/else keywords not supported
 # if n <= 1 then return 1 else return n * factorial(n - 1)
 ```
 
@@ -106,16 +105,16 @@ if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 
 ### HM Algorithm and Higher-Rank Polymorphism Support
 
-**Core Feature**: HM algorithm supports higher-rank polymorphism through generic type annotations.
+**Core feature**: HM algorithm supports higher-rank polymorphism through generic type annotations
 
-**Design Principles**:
-- **Higher-order functions**: When functions are passed as arguments, generic constraints are needed on their function types
+**Design principle**:
+- **Higher-order functions**: When functions are passed as arguments, they need generic constraints on their function types
 - **Type annotation form**: `(T: Type) -> ((f: (T) -> T, x: T) -> T)` - generic parameters constrain function types
-- **HM workflow**: Infer function types through generic parameters, enabling polymorphic function composition
+- **HM workflow**: Infer function types through generic parameter instantiation, enabling polymorphic function composition
 
-**Example Explanation**:
+**Example explanation**:
 ```yaoxiang
-# ✅ Higher-rank polymorphism supported: generic constraints on function type parameters
+# ✅ Supports higher-rank polymorphism: generic constrains function type parameters
 call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = {
     return f(f(x))
 }
@@ -126,24 +125,24 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 }
 # Usage: compose((x) => x * 2, (x) => x + 1, 5)  # infers A=Int, B=Int, C=Int
 
-# ❌ Not supported: higher-order functions without generic constraints
+# ❌ Not supported: higher-order function without generic constraint
 # bad_hof: (f, x) => f(f(x))  # HM cannot infer, missing generic parameters
 ```
 
-**HM Inference Process**:
+**HM inference process**:
 1. Identify higher-order function parameters: `f: (T) -> T`
-2. Create generic constraints: `(T: Type)`
+2. Create generic constraint: `(T: Type)`
 3. Infer concrete types through generic instantiation
 4. Enable polymorphic function composition
 
 ### Lambda Expression Syntax Rules
 
-**Important Rule**: Code blocks `{ ... }` must use `return` to return values; without `return`, the default return is `Void`. Expression form `= expr` returns the value directly.
+**Important rule**: Code blocks `{ ... }` must use `return` to return a value; without `return`, they default to returning `Void`. The expression form `= expr` returns a value directly.
 
-| Syntax Form | Syntax | Return Method |
+| Syntax form | Syntax | Return method |
 |-------------|--------|---------------|
-| **Code Block Form** | `{ statements }` | Must use `return`; without `return`, defaults to `Void` |
-| **Expression Form** | `expression` | Returns expression value directly |
+| **Code block form** | `{ statements }` | Must use `return` to return value; defaults to `Void` without `return` |
+| **Expression form** | `expression` | Directly returns expression value |
 
 **Examples**:
 ```yaoxiang
@@ -162,15 +161,15 @@ add: (a: Int, b: Int) -> Int = a + b            # correct: expression form
 main: () -> Void = println("Hello")               # correct: expression form
 ```
 
-**Core Ideas**:
-1. Function definitions use HM algorithm for type inference; infer where possible, error explicitly when not
-2. **How HM algorithm works**: Automatically infers types through operator type constraints, function call relationships, and other context
-3. **Generic support**: Polymorphic functions use generic syntax `(T: Type)` to explicitly constrain type parameters (RFC-010/011)
-4. **Inference boundaries**: Return types and local variables can be inferred; parameter types of functions with parameters need explicit annotation (in either signature or lambda head)
-5. Zero-parameter, no-return functions use `name: () -> Void = { ... }`, unified with RFC-010
-6. Old syntax deprecated, migration tools provided
+**Core ideas**:
+1. Function definitions use HM algorithm for type inference, inferring where possible, explicitly erroring when inference is impossible
+2. **How HM algorithm works**: automatically infers types through contextual information like operator type constraints and function call relationships
+3. **Generics support**: polymorphic functions use generic syntax `(T: Type)` to explicitly constrain type parameters (RFC-010/011)
+4. **Inference boundaries**: return types and local variables can be inferred; parameter types for functions with parameters must be explicitly annotated (in signature or lambda head)
+5. No-parameter, no-return functions use `name: () -> Void = { ... }`, unified with RFC-010
+6. Retire old syntax, provide migration tools
 
-**Type Inference Examples**:
+**Type inference examples**:
 ```yaoxiang
 # Generic functions: explicit type parameters (using RFC-010 unified syntax)
 identity: (T: Type) -> ((x: T) -> T) = x
@@ -184,7 +183,7 @@ map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
 add: (T: Add) -> ((a: T, b: T) -> T) = a + b
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # inferred as (Int, Int) -> Void
 
-# Higher-rank polymorphism: achieved through generic type annotations for HM support
+# Higher-rank polymorphism: HM supports higher-rank polymorphism via generic type annotations
 call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = { return f(f(x)) }
 compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) = { return f(g(x)) }
 ```
@@ -192,11 +191,11 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 ```yaoxiang
 # === Function Definition: HM Algorithm Type Inference ===
 
-# Standard functions: HM algorithm infers return type (parameter types need explicit)
+# Standard functions: HM algorithm infers return type (parameter types must be explicit)
 add = (a: Int, b: Int) => a + b            # inferred as (a: Int, b: Int) -> Int
 main = { println("Hello") }                # inferred as () -> Void
 
-# Partial explicit parameters: HM algorithm infers remaining parts
+# Partially explicit parameters: HM algorithm infers the rest
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # inferred as (Int, Int) -> Void
 greet: (name: String) -> Void = { println("Hello " + name) }  # inferred as (String) -> Void
 
@@ -227,32 +226,32 @@ name = "YaoXiang"                    # inferred as String
 pi = 3.14159                         # inferred as Float
 ```
 
-**HM Type Inference Rules**:
+**HM type inference rules**:
 
-| Scenario | Syntax | Omittable Parts | Example |
+| Scenario | Syntax | Omissible parts | Example |
 |----------|--------|-----------------|---------|
-| **Complete Form** | `name: (a: Type, b: Type) -> Ret = (a, b) => ...` | None | Complete signature + complete lambda head |
-| **Omit Lambda Head** | `name: (a: Type, b: Type) -> Ret = ...` | Lambda head | Signature already declares parameters |
-| **Omit Signature** | `name = (a: Type, b: Type) => ...` | Signature | Lambda head provides parameter types |
-| **Omit Return Ret** | `name: (a: Type, b: Type) -> = ...` | Return type | HM infers return type |
-| **Zero-Param Complete** | `name: () -> Void = () => { ... }` | None | Zero-parameter function complete |
-| **Zero-Param Abbreviated** | `name: () -> Void = { ... }` | Lambda head | Omit `() =>` |
-| **Zero-Param Minimal** | `name = { ... }` | All | No params, no return, most minimal |
-| **Variable Assignment** | `name = value` | Type | HM infers type |
-| **Explicit Variable** | `name: Type = value` | None | Explicit type annotation |
+| **Complete form** | `name: (a: Type, b: Type) -> Ret = (a, b) => ...` | None | Signature + complete lambda head |
+| **Omit lambda head** | `name: (a: Type, b: Type) -> Ret = ...` | Lambda head | Signature declares parameters |
+| **Omit signature** | `name = (a: Type, b: Type) => ...` | Signature | Lambda head provides parameter types |
+| **Omit return Ret** | `name: (a: Type, b: Type) -> = ...` | Return type | HM infers return type |
+| **No-param complete** | `name: () -> Void = () => { ... }` | None | No-param function complete |
+| **No-param shorthand** | `name: () -> Void = { ... }` | Lambda head | Omit `() =>` |
+| **No-param minimal** | `name = { ... }` | All | No-param, no-return minimal |
+| **Variable assignment** | `name = value` | Type | HM infers type |
+| **Explicit variable** | `name: Type = value` | None | Explicit type annotation |
 
-**Core Principles**:
-- `->` is the marker for function type and cannot be omitted (otherwise parsed as tuple)
-- Return type `Ret` can be omitted, inferred by HM from the function body
-- When there are input parameters, parameter types must appear explicitly (in either signature or lambda head)
-- Other parts can be omitted when inferable without ambiguity
-- No implicit type conversions, avoiding JavaScript-like chaos
+**Core principles**:
+- `->` is the marker for function type and cannot be omitted (otherwise it will be parsed as a tuple)
+- Return type `Ret` can be omitted, inferred by HM from function body
+- When input parameters exist, parameter types must appear explicitly (in either signature or lambda head)
+- Other parts can be omitted when inferrable and without introducing ambiguity
+- No implicit type conversions, avoiding JavaScript-style chaos
 
 ## Detailed Design
 
 ### Syntax Sugar Expansion
 
-Regardless of abbreviation, everything normalizes to a unified intermediate representation:
+Whether omitted or not, everything is normalized to a unified intermediate representation:
 
 ```rust
 // Complete form
@@ -266,7 +265,7 @@ let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
 // Omit lambda head
 add: (a: Int, b: Int) -> Int = a + b
 
-// Expanded IR (same as complete form)
+// Expanded IR (identical to complete form)
 let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
     return a + b
 };
@@ -285,7 +284,7 @@ let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
 ```bnf
 function_def ::= identifier ':' type_expr '=' expression
                | identifier '=' expression
-               | identifier '=' block                    # most minimal form: no params, no return
+               | identifier '=' block                    # minimal form: no-param, no-return
 
 identifier ::= [a-zA-Z_][a-zA-Z0-9_]*
 
@@ -310,15 +309,15 @@ statement ::= identifier ':' expression  # assignment statement
            | expression                  # expression statement (executes but doesn't return)
            | 'return' expression         # return statement (returns specified value)
 
-# Note: code blocks must use return to return values; without return, defaults to Void
-# e.g.: { return 1 + 1 } returns Int; { println("Hello") } returns Void
+# Note: code blocks must use return to return a value; without return, defaults to Void
+# Example: { return 1 + 1 } returns Int; { println("Hello") } returns Void
 # Note: generic parameters use (T: Type) syntax, as part of function type, no separate BNF rule needed
 ```
 
 ### Error Handling
 
 ```yaoxiang
-# === Compile Error Examples ===
+# === Compilation Error Examples ===
 
 # Error 1: code block return type mismatch
 add: (a: Int, b: Int) -> Int = { println(a + b) }
@@ -328,13 +327,13 @@ add: (a: Int, b: Int) -> Int = { println(a + b) }
 
 # Error 2: using undeclared type parameter
 identity: (x: T) -> T = x
-// Error: T undeclared; explicit generic parameter needed (RFC-010)
+// Error: T not declared; explicit generic parameter needed (RFC-010)
 // Correct: identity: (T: Type) -> ((x: T) -> T) = x
 
 # Correct: HM algorithm infers return type
 double = (x: Int) => x + x
 
-# Complete form (progressive abbreviation)
+# Complete form (gradual shorthand)
 double: (x: Int) -> Int = (x) => x + x                # complete
 double: (x: Int) -> Int = x + x                       # omit lambda head
 double = (x: Int) => x + x                            # omit return type (HM infers return)
@@ -345,39 +344,39 @@ double = (x: Int) => x + x                            # omit return type (HM inf
 
 ### Advantages
 
-- **Syntax Unification**: `name: Signature = LambdaBody` model covers all scenarios
-- **Flexible Abbreviation**: Any part can be omitted when HM can infer it
-- **Type Safety**: HM algorithm guarantees type safety, avoids implicit type conversions
-- **Recursion Support**: HM algorithm and recursion constraints automatically infer types
-- **Zero Burden**: Smooth transition from complete to most minimal
+- **Syntax unification**: `name: Signature = LambdaBody` model covers all scenarios
+- **Flexible shorthand**: any part can be omitted when HM can infer it
+- **Type safety**: HM algorithm ensures type safety, avoiding implicit type conversions
+- **Recursion support**: HM algorithm and recursion constraints automatically infer types
+- **Zero burden**: smooth transition from complete to minimal form
 
 ### Disadvantages
 
-- **Migration Cost**: Old code requires migration tools for conversion
-- **Learning Curve**: Need to understand "complete form + arbitrary abbreviation" model
+- **Migration cost**: old code needs migration tools to convert
+- **Learning curve**: need to understand the "complete form + arbitrary shorthand" model
 
-## Alternative Solutions
+## Alternative Approaches
 
-| Solution | Description | Why Not Chosen |
+| Approach | Description | Why not chosen |
 |----------|-------------|----------------|
-| HM Algorithm Type Inference | Use Hindley-Milner algorithm to infer types | ✅ **Adopted**, standard in modern functional languages |
-| Explicit Type Declaration | All types must be explicitly written | Violates syntax simplification principle, increases boilerplate |
-| Keep Old Syntax | Support both old and new syntax | Syntax fragmentation, high maintenance cost |
-| fn Keyword | Introduce fn to distinguish functions and variables | Violates "functions are lambdas" design |
+| HM algorithm type inference | Use Hindley-Milner algorithm for type inference | ✅ **Adopted**, standard for modern functional languages |
+| Explicit type declaration | All types must be explicitly written | Violates simplified syntax principle, increases boilerplate |
+| Keep old syntax | Support both old and new syntax | Syntax fragmentation, high maintenance cost |
+| fn keyword | Introduce fn to distinguish functions from variables | Violates "functions are just lambdas" design |
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phases
 
-1. **Phase 1: Syntax Parsing and HM Algorithm** (v0.3)
+1. **Phase 1: Syntax parsing and HM algorithm** (v0.3)
    - Implement new syntax `name = lambda` + HM algorithm type inference
-   - Implement default filling for zero-parameter, no-return functions
+   - Implement default filling for no-param, no-return functions
 
-2. **Phase 2: Migration Tool** (v0.3)
+2. **Phase 2: Migration tool** (v0.3)
    - Develop `yaoxiang-migrate --old-to-new` tool
    - Automatically convert old syntax code
 
-3. **Phase 3: Verification and Documentation** (v0.3)
+3. **Phase 3: Verification and documentation** (v0.3)
    - Verify old code migration completion
    - Update documentation
 
@@ -390,7 +389,7 @@ yaoxiang-migrate --old-to-new src/main.yaoxiang
 # Migrate entire project
 yaoxiang-migrate --old-to-new --recursive src/
 
-# Preview migration (don't modify files)
+# Preview migration (without modifying files)
 yaoxiang-migrate --old-to-new --dry-run src/main.yaoxiang
 ```
 
@@ -401,19 +400,19 @@ add(Int, Int) -> Int = (a, b) => { a + b }
 main() -> Int = { println("Hello"); 0 }
 main() = { println("Hello") }
 
-# === New syntax: complete form (complete signature + complete lambda head)===
+# === New syntax: complete form (complete signature + complete lambda head) ===
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
 main: () -> Void = () => { println("Hello") }
 
-# === Abbreviated: omit lambda head ===
+# === Shorthand: omit lambda head ===
 add: (a: Int, b: Int) -> Int = a + b
 main: () -> Void = { println("Hello") }
 
-# === Abbreviated: HM inference ===
+# === Shorthand: HM inference ===
 add = (a: Int, b: Int) => a + b              # inferred as (a: Int, b: Int) -> Int
 main = { println("Hello") }                  # inferred as () -> Void
 
-# === Most minimal form ===
+# === Minimal form ===
 main = {                                      # equivalent to main: () -> Void = { ... }
     println("Hello")
 }
@@ -428,19 +427,19 @@ main = {                                      # equivalent to main: () -> Void =
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Migration omissions | Old code fails to compile | Provide migration tool, covering all old syntax patterns |
+| Migration omission | Old code fails to compile | Provide migration tool covering all old syntax patterns |
 | Parser errors | Unstable syntax parsing | Sufficient test coverage |
 
-## Open Questions
+## Open Issues
 
 > The following issues have been resolved in the design and are recorded in Appendix A.
 
-- ~~Q1: Should we keep the ultra-minimal `main() = body` syntax?~~ → Resolved: Kept as `main = { ... }`
-- ~~Q2: Should the `:` after function names be kept?~~ → Resolved: Optional to keep; but functions with parameters still need parameter types annotated in either signature or lambda head
-- ~~Q3: Does HM algorithm support parameter type inference?~~ → Resolved: Return values/local variables can be inferred; parameter types of functions with parameters need explicit annotation
-- ~~Q4: Should we introduce the `fn` keyword?~~ → Resolved: Not introduced, functions are lambdas
-- ~~Q5: What is the migration strategy for old code?~~ → Resolved: Provide `yaoxiang-migrate` tool
-- ~~Q6: How to use generic functions?~~ → Resolved: Use RFC-010 unified syntax `(T: Type)`
+- ~~Q1: Should we keep `main() = body` minimal form?~~ → Resolved: kept as `main = { ... }`
+- ~~Q2: Should we keep the `:` after function names?~~ → Resolved: optional to keep; but functions with parameters still need parameter types annotated in signature or lambda head
+- ~~Q3: Does HM algorithm support parameter type inference?~~ → Resolved: return type/local variables can be inferred; parameter types for functions with parameters must be explicitly annotated
+- ~~Q4: Should we introduce `fn` keyword?~~ → Resolved: not introduced, functions are just lambdas
+- ~~Q5: What is the migration strategy for old code?~~ → Resolved: provide `yaoxiang-migrate` tool
+- ~~Q6: How to use generic functions?~~ → Resolved: use RFC-010 unified syntax `(T: Type)`
 
 ---
 
@@ -448,38 +447,38 @@ main = {                                      # equivalent to main: () -> Void =
 
 ### Appendix A: Function Definition Syntax Reference for Various Languages
 
-| Language | Syntax Style | Characteristics |
-|----------|-------------|-----------------|
+| Language | Syntax style | Characteristics |
+|----------|--------------|-----------------|
 | Rust | `fn add(a: i32, b: i32) -> i32 { ... }` | Keyword + type annotation |
-| Haskell | `add a b = ...` / `add :: Int -> Int -> Int` | Type signature separate |
+| Haskell | `add a b = ...` / `add :: Int -> Int -> Int` | Type signature separated |
 | OCaml | `let add a b = ...` | Parameter types can be omitted |
 | MoonBit | `fn add(a: Int, b: Int): Int { ... }` | Concise type annotation |
 | TypeScript | `const add = (a: number, b: number): number => ...` | Lambda style |
 | Scala | `def add(a: Int, b: Int): Int = { ... }` | def keyword |
 | **YaoXiang** | `name = (a: Int, b: Int) => a + b` | **Function = lambda, HM infers return value** |
 
-### Appendix B: Design Decision Log
+### Appendix B: Design Decision Records
 
-| Decision | Resolution | Date | Recorded By |
-|----------|-----------|------|-------------|
-| Syntax style | New syntax `name: (params) -> Return = body` + HM inference | 2026-02-03 | @Mo Yu Jiang |
-| Parameter position | Parameter names declared in signature, unified with RFC-010 | 2026-02-03 | @Mo Yu Jiang |
-| Default filling | Zero-parameter functions can omit signature, empty block `{}` infers to `Void` | 2026-02-03 | @Mo Yu Jiang |
-| Type inference | HM algorithm automatically infers, explicit when not inferable | 2026-01-06 | @Mo Yu Jiang |
-| Old syntax | Deprecated, migration tool provided | 2026-01-06 | @Mo Yu Jiang |
-| fn keyword | Not introduced | 2026-01-06 | @Mo Yu Jiang |
-| Recursive declaration | HM algorithm and recursion constraints automatically infer | 2026-01-06 | @Mo Yu Jiang |
+| Decision | Resolution | Date | Recorder |
+|----------|-----------|------|----------|
+| Syntax style | New syntax `name: (params) -> Return = body` + HM inference | 2026-02-03 | @Moyujiang |
+| Parameter position | Parameter names declared in signature, unified with RFC-010 | 2026-02-03 | @Moyujiang |
+| Default filling | No-param functions can omit signature, empty block `{}` inferred as `Void` | 2026-02-03 | @Moyujiang |
+| Type inference | HM algorithm automatically infers, explicit when inference impossible | 2026-01-06 | @Moyujiang |
+| Old syntax | Retired, migration tool provided | 2026-01-06 | @Moyujiang |
+| fn keyword | Not introduced | 2026-01-06 | @Moyujiang |
+| Recursive declaration | HM algorithm and recursion constraints automatically infer | 2026-01-06 | @Moyujiang |
 
 ### Appendix C: Glossary
 
 | Term | Definition |
 |------|------------|
-| HM Algorithm | Hindley-Milner type inference algorithm, automatically infers function and variable types |
+| HM algorithm | Hindley-Milner type inference algorithm, automatically infers function and variable types |
 | Generics | Using type parameters `(T: Type)` to constrain polymorphic functions, e.g., `identity: (T: Type) -> ((x: T) -> T) = x` (RFC-010) |
-| Default Type Filling | Zero-parameter, no-return functions omit `-> Void`, compiler fills automatically |
-| Syntax Sugar | Syntactic simplifications that make code more readable |
-| Normalization | Converting syntax forms to unified internal representation |
-| Functions are Lambdas | Functions are essentially lambda variables, types automatically inferred through HM algorithm |
+| Default type filling | No-param, no-return functions omit `-> Void`, compiler automatically fills |
+| Syntax sugar | Simplified syntax that makes code more readable |
+| Normalization | Converting syntactic forms into unified internal representation |
+| Functions are lambdas | Functions are essentially lambda variables, types automatically inferred through HM algorithm |
 
 ---
 

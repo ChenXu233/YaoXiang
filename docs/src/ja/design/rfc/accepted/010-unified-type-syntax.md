@@ -1,47 +1,43 @@
-```yaml
+```markdown
 ---
-title: "RFC-010：統一タイプ構文"
+title: "RFC-010: 統一型構文 - name: type = value モデル"
+status: "承認済み"
+author: "晨煦"
+created: "2025-01-20"
+updated: "2026-06-05（返り値ルールと {} 意味の更新）"
 ---
-```
 
-# RFC-010: 統一タイプ構文 - name: type = value モデル
+# RFC-010: 統一型構文 - name: type = value モデル
 
-> **ステータス**: 承認済み
->
-> **著者**: 晨煦
->
-> **作成日**: 2025-01-20
->
-> **最終更新**: 2026-06-05（返り値ルールと {} 意味の更新）
 
-## 摘要
+## 概要
 
-本 RFC は、超簡潔な統一タイプ構文モデルを提案する：**すべてが `name: type = value`** である。
+本 RFC は、超最小限の統一型構文モデルを提案する：**すべてが `name: type = value`**。
 
-YaoXiang には1種類の宣言形式しかない：
+YaoXiang には1種類の宣言形式のみが存在する：
 
 ```
 identifier : type = expression
 ```
 
 ここで `type` は任意の型式、`expression` は任意の値式である。
-**`fn`、`struct`、`trait`、`impl` はなく、小文字の `type` キーワードもない（ただし `Type` はメタ型キーワードとして存在する）**。
+**`fn`、`struct`、`trait`、`impl` は存在しない。小文字の `type` キーワードも存在しない（ただし `Type` としてメタ型キーワードは存在する）**。
 
-> **コア設計**：`Type` 自体がジェネリック型である。`(T: Type) -> Type` は「型パラメータ T を受け取る型」を意味する。
+> **コア設計**：`Type` 本身就是泛型类型。`(T: Type) -> Type` は「型パラメータ T を受け取る型」を表す。
 
-| 概念 | コード記述 |  |
-|------------|-----------------------------------------------|------|
-| 変数 | `x: Int = 42` |  |
-| 関数 | `add: (a: Int, b: Int) -> Int = a + b` |  |
-| 記録型 | `Point: Type = { x: Float, y: Float }` |  |
-| インターフェース | `Drawable: Type = { draw: (Surface) -> Void }` |  |
-| ジェネリック型 | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |  |
-| ジェネリック型 | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }` |  |
-| メソッド | `Point.draw: (self: Point, s: Surface) -> Void = ...` |  |
-| ジェネリック関数 | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))` |  |
+| 概念       | コード記述                                      |
+|------------|-----------------------------------------------|
+| 変数       | `x: Int = 42`                                |
+| 関数       | `add: (a: Int, b: Int) -> Int = a + b`       |
+| 記録型   | `Point: Type = { x: Float, y: Float }`       |
+| インターフェース       | `Drawable: Type = { draw: (Surface) -> Void }` |
+| ジェネリック型   | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
+| ジェネリック型   | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }` |
+| メソッド       | `Point.draw: (self: Point, s: Surface) -> Void = ...` |
+| ジェネリック関数   | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))` |
 
-**`Type` は言語内で唯一のメタ型キーワード**。
-これは型階層をアノテートするために使用され、コンパイラが Type0、Type1、Type2... の区別を自動的に処理し、ユーザーに透過的である。
+**`Type` は言語内で唯一のメタ型キーワードである**。
+型レベルにラベルを付けるために使用され、コンパイラは Type0、Type1、Type2... の区別を自動的に処理し、ユーザーに透過的である。
 
 ```yaoxiang
 // コア構文：統一 + 区別
@@ -93,7 +89,7 @@ Map: (K: Type, V: Type) -> Type = {
 // 使用例
 p: Point = Point(1.0, 2.0)
 p.draw(screen)           // 糖衣構文 → Point.draw(p, screen)
-s: Drawable = p           // 構造的下位型：Point は Drawable を実装
+s: Drawable = p           // 構造的サブタイピング：Point は Drawable を実装
 drawables: List(Drawable) = [p, r]
 process_all(drawables)
 ```
@@ -109,22 +105,22 @@ process_all(drawables)
 - インターフェース定義構文
 - メソッドバインディング構文
 
-これらの概念間に統一性がなく、構文が断片化しており、学習コストが高い。
+これらの概念間に統一性がなく、構文が断片化し、学習コストが高い。
 
 ### 設計目標
 
-1. **究極的统一**：1つの構文ルールで全てをカバー
-2. **簡潔で优雅**：`name: type = value` の対称的な美しさ
+1. **究極的统一**：1つの構文ルールで全ケースをカバー
+2. **簡潔で优雅**：对称美学的な `name: type = value`
 3. **新しいキーワード不要**：既存の構文要素を再利用
 4. **理論的に优雅**：型自体が Type 型の値
-5. **ジェネリック対応**：ジェネリックシステム（RFC-011）とシームレス統合
+5. **ジェネリックに優しい**：ジェネリックシステム（RFC-011）とシームレスに統合
 
 ### ジェネリックシステムとの統合
 
-RFC-010 の統一構文モデルは RFC-011 のジェネリックシステム設計と**自然に整合**しており、ジェネリックパラメータが統一モデルにシームレスに組み込まれる：
+RFC-010の統一構文モデルは RFC-011 のジェネリックシステム設計と**自然に整合**しており、ジェネリックパラメータが統一モデルにシームレスに組み込まれる：
 
 ```yaoxiang
-// 基本的なジェネリック（RFC-011 Phase 1）
+// 基本ジェネリック（RFC-011 Phase 1）
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 
 // ジェネリック関数（RFC-023 構文：シグネチャ内の Type 位置は省略可能、呼び出し時に自動推論）
@@ -133,44 +129,44 @@ map: (: Type, R: Type) -> (( list: List(T), f: (T) -> R) -> List(R)) = ...
 // 型制約（RFC-011 Phase 2）
 clone: (value: T) -> T = value.clone()  // T: Clone 制約はパラメータ型によって携带
 
-// Const ジェネリック（RFC-011 Phase 4）
+// Constジェネリック（RFC-011 Phase 4）
 Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 ```
 
 **依存関係**：
-- RFC-011 Phase 1（基本的なジェネリック）は RFC-010 の**強い依存**
-- 基本的なジェネリックがなければ、RFC-010 のジェネリック例はコンパイルできない
+- RFC-011 Phase 1（基本ジェネリック）は RFC-010 の**強い依存**
+- 基本ジェネリックなしでは、RFC-010 のジェネリック例はコンパイルできない
 - 推奨：RFC-011 Phase 1 と RFC-010 を同時に実装
 
 ## 提案
 
-### コア原則：型構築子 vs 関数/変数
+### コア原則：型コンストラクタ vs 関数/変数
 
-**これは構文の曖昧さ除去ルールを決定する重要な設計選択である：**
+**これは構文のアンビギュイティ解消ルールを決定する重要な設計選択である：**
 
 | 記述 | 意味 | ルール |
 |------|------|------|
-| **`x: Type = ...`** | 型構築子 | `: Type` が明示的に宣言 → 型として強制 |
-| **`f = ...`** | 関数または変数 | `: Type` なし → HM が関数/変数として能動的に推論 |
+| **`x: Type = ...`** | 型コンストラクタ | `: Type` が明示的に宣言 → 型として強制 |
+| **`f = ...`** | 関数または変数 | `: Type` なし → HM が関数/変数として推論 |
 
 **なぜこの設計なのか？**
 
 `{ ... }` 構文自体に曖昧さがある：
-- `{ x: Float, y: Float }` は**型リテラル**（記録型）かもしれない
-- `{ a = 1 + 1 }` は**コードブロック**（文を実行し、Void を返す）かもしれない
+- `{ x: Float, y: Float }` は**型リテラル**（記録型）でもあり得る
+- `{ a = 1 + 1 }` は**コードブロック**（文を実行し、Void を返す）でもあり得る
 
-**曖昧さ除去ルール**：
-- **ある** `: Type` → 型構築子として強制解釈、`{ ... }` は型リテラル
-- **ない** `: Type` → HM が `{ ... }` をコードブロックとして能動的に解釈し、関数型として推論
+**アンビギュイティ解消ルール**：
+- **`: Type` あり** → 型コンストラクタとして強制解決、`{ ... }` は型リテラル
+- **`: Type` なし** → HM が `{ ... }` をコードブロックとして解決し、関数型として推論
 
 ```yaoxiang
-# ✅ 型構築子：: Type あり
+# ✅ 型コンストラクタ：: Type あり
 Point: Type = { x: Float, y: Float }
 
 # ✅ 関数：: Type なし、HM が () -> Void と推論
 main = { println("Hello") }
 
-# ❌ エラー：: Type なし、コンパイラは { ... } を型として解釈できない
+# ❌ エラー：: Type なし、コンパイラは { ... } を型として解決できない
 Point = { x: Float, y: Float }  // HM は関数として推論し、型ではない！
 ```
 
@@ -183,40 +179,40 @@ Point = { x: Float, y: Float }  // HM は関数として推論し、型ではな
 │   └── x: Int = 42
 │
 ├── 関数
-│   └── add: (a: Int, b: Int) -> Int = a + b  # : Type なし、HM が関数として推論
+│   └── add: (a: Int, b: Int) -> Int = a + b  # : Type なし、HM が関数と推論
 │
 ├── 記録型
-│   └── Point: Type = { x: Float, y: Float }  # 返り値が必要： Type
+│   └── Point: Type = { x: Float, y: Float }  # 必ず返り値： Type
 │
 ├── インターフェース
-│   └── Drawable: Type = { draw: (Surface) -> Void }  # 返り値が必要： Type
+│   └── Drawable: Type = { draw: (Surface) -> Void }  # 必ず返り値： Type
 │
 ├── ジェネリック型
-│   └── List: (T: Type) -> Type = { data: Array(T), length: Int }  # 返り値が必要： Type
+│   └── List: (T: Type) -> Type = { data: Array(T), length: Int }  # 必ず返り値： Type
 │
 ├── ジェネリック型（複数パラメータ）
-│   └── Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }  # 返り値が必要： Type
+│   └── Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }  # 必ず返り値： Type
 │
 ├── メソッド
 │   └── Point.draw: (self: Point, surface: Surface) -> Void = ...
 │
 └── ジェネリック関数
-    └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # Type を返さない、HM が関数として推論
+    └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # Type を返さない、HM が関数と推論
 ```
 
-### メタ型階層（コンパイラ内部）
+### メタ型レベル（コンパイラ内部）
 
-**コンパイラ内部**では宇宙階層 `level: selfpointnum`（文字列で保存、理論上は無限に拡張可能）を維持する。
+**コンパイラ内部**では宇宙レベル `level: selfpointnum` を維持する（文字列で保存、理論的には無限に延伸可能）。
 
 | Level | 説明 |
 |-------|------|
 | `Type0` | 日常的な型（`Int`、`Float`、`Point`） |
-| `Type1` | 型構築子（`List`、`Maybe`） |
-| `Type2+` | 高階構築子 |
+| `Type1` | 型コンストラクタ（`List`、`Maybe`） |
+| `Type2+` | 高階コンストラクタ |
 
-**ユーザーはこれらの数字を見ない**、単に `: Type` を見るだけである。
+**ユーザーはこれらの数字を見ることはない**。見るのは `: Type` のみである。
 
-> **Curry-Howard 同形**：宇宙階層の存在は実装の詳細ではなく、論理的整合性の必要条件である。Curry-Howard 同形は型を命題と同一視し、`Type: Type`（「型の型も型である」）を許可すると「私は嘘をついている」という「嘘つきのパラドックス」に类似した Russell パラドックスが生じる——型システムでは Girard パラドックスとして現れる。YaoXiang の `Type0 / Type1 / Type2…` 分層（Martin-Löf 型理論の累積宇宙）は、各型が某一階層にのみ属し、`Typeₙ : Typeₙ₊₁` が決して閉じない上昇チェーンを形成することを保証し、根本的にパラドックスを避ける。这意味着、YaoXiang の型システムは Curry-Howard の意味において **論理的に一貫している**。
+> **Curry-Howard 同形**：宇宙レベルの存在はエンジニアリング実装の詳細ではなく、論理的整合性の必要条件である。Curry-Howard 同形は型を命題と同等にする。もし `Type: Type`（「型の型も型である」）を許可すると、「この文は偽である」に類似した Russell 逆理が生じ——型システムでは Girard 逆理として出現する。YaoXiang の `Type0 / Type1 / Type2…` 分層（Martin-Löf 型理論の累積宇宙）は、各型が特定のレベルにのみ属することを保証し、`Typeₙ : Typeₙ₊₁` は決して閉じない上昇チェーンを形成し、根本的に逆理を回避する。これは、YaoXiang の型システムが Curry-Howard の意味において **論理的に一貫している** ことを意味する。
 
 ### 構文定義
 
@@ -255,7 +251,7 @@ calc: (x: Float, y: Float, op: String) -> Float = {
     }
 }
 
-// Void 関数（コードブロック内に return は不要）
+// Void 関数（コードブロック内で return は不要）
 print: (msg: String) -> Void = {
     console.write(msg)
 }
@@ -268,7 +264,7 @@ print: (msg: String) -> Void = {
 | 記述 | 返り値 |
 |------|--------|
 | `= expr`（波括弧なし） | `expr` を直接返す |
-| `= { ... }`（波括弧あり） | `return` を使用する必要があります。そうでなければ `Void` を返す |
+| `= { ... }`（波括弧あり） | `return` が必要，否则は `Void` を返す |
 
 ```yaoxiang
 # 単一式：直接値を返す、return 不要
@@ -287,21 +283,21 @@ print: (msg: String) -> Void = {
 }
 ```
 
-> **設計理由**：`{ ... }` は依存駆動計算ユニットである（下記参照）。その返り値セマンティクスは単一式とは異なる。波括弧は複数文のコンテキストを導入するため、最後の式が返り値かどうかの曖昧さを解消するために明示的な `return` が必要である。
+> **設計理由**：`{ ... }` は依存駆動計算ユニットである（以下参照）。その返り値セマンティクスは単一式と異なる。波括弧は複数文のコンテキストを導入するため、「最後の式が返り値かどうか」の曖昧さを解消するために明示的な `return` が必要である。
 
 #### `{}` セマンティクス：依存駆動計算ユニット
 
-`{ ... }` は YaoXiang では単なるコードブロックではない——それは**依存駆動計算ユニット**である。このセマンティクスは関数本体、変数初期化、`spawn` で一貫している：
+`{ ... }` は YaoXiang では単なるコードブロックではない——它是**依存駆動計算ユニット**である。このセマンティクスは関数ボディ、変数初期化、`spawn` で一貫している：
 
 **コアルール**：
-- `{}` 内の代入文は記述順序ではなく依存関係に基づいて自動ソート
-- 依存が揃えば即時実行、欠落があればブロックして待機
-- `return` で明示的に返り値を返す（返り値ルールを参照）
+- `{}` 内の代入文は記述順序ではなく依存関係で自動ソートされる
+- 依存が揃えば即座に実行され、欠落があればブロックして待機
+- `return` で明示的に値を返す（返り値ルール参照）
 
 ```yaoxiang
 # 依存駆動：b は a に依存、コンパイラが自動ソート
 result: Int = {
-    b = a + 1      # a に依存 → 自動的に a の後に配置
+    b = a + 1      # a に依存 → a の後に自動配置
     a = 10         # 依存なし → 先に実行可能
     return b       # 11 を返す
 }
@@ -311,11 +307,11 @@ result: Int = {
 
 #### `spawn` ブロック
 
-`spawn { ... }` は YaoXiang の唯一の並列プリミティブである。これは `{}` の依存駆動セマンティクスを利用して自動並列化を実現する：
+`spawn { ... }` は YaoXiang の唯一の並列プリミティブである。それは `{}` の依存駆動セマンティクスを利用して自動並列化を実現する：
 
-- `spawn { ... }` 内の直接の子代入は自動的に並列タスクを生成
-- 依存が揃ったタスクは即時並行実行
-- 呼び出し元はすべての子タスクの完了をブロックして待機
+- `spawn { ... }` 内の直接子の代入は自動的に並列タスクを生成
+- 依存が揃ったタスクは即座に並行実行
+- 呼び出し元は全サブタスクの完了をブロックして待機
 
 ```yaoxiang
 result = spawn {
@@ -324,19 +320,49 @@ result = spawn {
     c = process(a, b)         # a, b に依存 → 両方の完了後に実行
     return c
 }
-// 呼び出し元は spawn ブロック内のすべてのタスクが完了するまでここでブロック
+// 呼び出し元はここでブロック、spawn ブロック内の全タスク完了まで待機
 ```
 
 > **詳細定義**：`spawn` の完全なセマンティクス、タスク生成ルール、ブロッキングモデルについては `008-runtime-concurrency-model.md` を参照。
 
+#### `unsafe` ブロック
+
+`unsafe { ... }` は不透明型和裸ポインタの操作を定義するために使用する。それは `{}` の return セマンティクスを使用して型定義を上位スコープに返す：
+
+**コアルール**：
+- `unsafe {}` 内で型と裸ポインタを操作できる
+- `return` で型定義を上位スコープに返す
+- 返された型は `unsafe {}` の外で使用可能
+- 型のフィールドアクセスには unsafe 権限が必要
+
+```yaoxiang
+# unsafe ブロック内で不透明型を定義
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void  # 裸ポインタ
+    }
+    return SqliteDb
+}
+
+# SqliteDb は unsafe ブロック外で使用可能
+db = sqlite3_open("test.db")
+
+# ❌ コンパイルエラー：handle フィールドには unsafe 権限が必要
+handle = db.handle
+
+# ✅ メソッド呼び出し経由で
+db.close()
+```
+
+> **詳細定義**：`unsafe` の完全なセマンティクス、FFI 型定義、メソッドバインディングについては `ffi.md` を参照。
+
 #### 3. 型定義
 
-型定義は YaoXiang 統一構文のコアであり、フィールド、デフォルト値、バインディングメソッド、インターフェース実装を含む：
-
+型定義は YaoXiang 統一構文の中核であり、フィールド、デフォルト値、バインディングメソッド、インターフェース実装を含む：
 
 ##### 基本型
 
-**記録型**：フィールドリスト、フィールド型は任意の型式可以是任意型表达式。
+**記録型**：フィールドリスト、フィールド型は任意の型式でよい。
 
 ```yaoxiang
 Point: Type = {
@@ -345,7 +371,7 @@ Point: Type = {
 }
 ```
 
-**デフォルト値付きフィールド**：フィールドにはデフォルト値を可以是任意有默认值，構築时可以省略。
+**デフォルト値付きフィールド**：フィールドにはデフォルト値を持たせられ、構築時に省略可能。
 
 ```yaoxiang
 Point: Type = {
@@ -362,7 +388,7 @@ Point(x=1) → Point(x=1, y=0)
 Point(x=1, y=2) → Point(x=1, y=2)
 ```
 
-**デフォルト値なしフィールド**：構築時に提供必须是必须。
+**デフォルト値なしフィールド**：構築時に必ず指定する必要がある。
 
 ```yaoxiang
 Point2: Type = {
@@ -387,7 +413,7 @@ distance: (a: Point, b: Point) -> Float = { ... }
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
-    distance = distance[0]           # 位置0にバインディング、カリー化後で method: (b: Point) -> Float
+    distance = distance[0]           // 位置0にバインディング、適用後 method: (b: Point) -> Float
 }
 // 呼び出し：p1.distance(p2) → distance(p1, p2)
 ```
@@ -410,7 +436,7 @@ Point: Type = {
 
 ##### インターフェース実装
 
-**インターフェース名は型本体内記述、コンパイラが自動的に実装を検査**
+**インターフェース名は型体内記述、コンパイラが自動的に実装をチェック**
 
 ```yaoxiang
 Drawable: Type = {
@@ -425,14 +451,14 @@ Serializable: Type = {
 Point: Type = {
     x: Float,
     y: Float,
-    Drawable,          # Drawable インターフェースを実装
-    Serializable      # Serializable インターフェースを実装
+    Drawable,          // Drawable インターフェースを実装
+    Serializable      // Serializable インターフェースを実装
 }
 ```
 
 ##### インターフェース定義
 
-**インターフェース = フィールドがすべて関数の記録型**
+**インターフェース = 全フィールドが関数の記録型**
 
 ```yaoxiang
 Drawable: Type = {
@@ -451,7 +477,7 @@ Empty: Type = {}
 
 ##### メソッド定義（外部）
 
-**型メソッド**：特定の型に関連（Type.method 構文を使用）
+**型メソッド**：特定の型に関連付け（Type.method 構文を使用）
 
 ```yaoxiang
 Point.draw: (self: Point, surface: Surface) -> Void = {
@@ -474,7 +500,7 @@ Point.serialize: (self: Point) -> String = {
 Point.distance = distance[0]
 
 // バインディング位置を指定
-Point.transform = transform[1]  // this を第1引数にバインディング
+Point.transform = transform[1]  // this を第 1 引数にバインディング
 ```
 
 **複数位置バインディング**：
@@ -485,7 +511,7 @@ Point.transform = transform_points[0, 1]
 // 呼び出し：p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
 ```
 
-**リバースバインディング**（型メソッドから通常関数へ）：
+**逆バインディング**（型メソッドから通常関数へ）：
 
 ```yaoxiang
 // 型メソッドから通常関数へ
@@ -508,7 +534,7 @@ process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) 
 #### 5. ジェネリック型
 
 ```yaoxiang
-// 基本的なジェネリック（RFC-011 Phase 1）
+// 基本ジェネリック（RFC-011 Phase 1）
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -516,7 +542,7 @@ List: (T: Type) -> Type = {
     get: (T:Type)->((self: List(T), index: Int) -> Maybe(T))
 }
 
-// 具体的なインスタンス化（RFC-023 構文）
+// 具体的インスタンス化（RFC-023 構文）
 IntList: Type = List(Int)
 
 IntList.push = {
@@ -554,24 +580,24 @@ List.get: (self: List(T), index: Int) -> Maybe(T) = {
 
 **コアルール**：
 
-1. **`()` がすべてを適用**：型適用、関数呼び出し、値構築はすべて `()` を使用
+1. **`()` ですべてを適用**：型適用、関数呼び出し、値構築はすべて `()` を使用
 
 ```yaoxiang
 # 型注釈
 numbers: List(Int) = List(1, 2, 3)
 
-# 空コンテナ：T は左側から取得
+# 空コンテナ：T は左側から来る
 empty: List(Int) = List()
 
-# ジェネリック関数呼び出し——型はパラメータから自動的にフロー
+# ジェネリック関数呼び出し——型はパラメータから自動的に流れる
 strings = map(numbers, f)
 // T=Int は numbers: List(Int) から
 // R=String は f: (Int) -> String から
 ```
 
-2. **Type は左、値は右**：`name: type = value`——Type パラメータは左側で宣言、右側は常に具体値。空コンテナ `List()` の `T` は左側の型注釈から取得する必要がある。
+2. **Type は左、値は右**：`name: type = value`——Type パラメータは左側で宣言、右側は常に具体的値。空コンテナ `List()` の `T` は左側の型注釈から取得する必要がある。
 
-3. **型情報は1回だけ記述**——パラメータ宣言時に、コンパイラがそれをフローさせる：
+3. **型情報は1回だけ記述すればよい**——パラメータ宣言時に書けば、コンパイラが流動させる：
 
 ```yaoxiang
 numbers: List(Int) = List(1, 2, 3)  // Int は左側で1回だけ記述
@@ -585,7 +611,7 @@ strings = map(numbers, f)   // T=Int, R=String は numbers と f の型から自
 x = List(1, 2, 3)       // List(Int) と推論
 y = List("a", "b")      // List(String) と推論
 z = List()              // ❌ コンパイルエラー：T を推論できない
-z: List(Int) = List()   // ✅ T=Int は左側の注釈から取得
+z: List(Int) = List()   // ✅ T=Int は左側注釈から取得
 ```
 
 5. **型エイリアス**：
@@ -597,7 +623,7 @@ Matrix3x3: Type = Matrix(Float, 3, 3)
 ```
 
 > **旧構文との比較**：`List[Int]` → `List(Int)`、`List[Int]()` → `List()`、`List[Int](1,2,3)` → `List(1,2,3)`。
-> 古い `[]` ジェネリック構文は完全に削除された。`[]` は配列/リストリテラルとインデックスアクセスのみに使用される。
+> 旧式の `[]` ジェネリック構文は完全に削除された。`[]` は配列/リストリテラルとインデックスアクセスのみ使用。
 
 ### 例
 
@@ -691,9 +717,9 @@ scale: (self: Rect, factor: Float) -> Rect = {
 
 // ======== 4. メソッドバインディング ========
 
-Point.distance = distance[0]  // 位置0にバインディング、カリー化後で method: (p2: Point) -> Float
-Point.transform = transform[1]  // 位置1にバインディング、カリー化後で method: (dx: Float, dy: Float) -> Point
-Rect.transform = transform[1]  // 位置1にバインディング、カリー化後で method: (dx: Float, dy: Float) -> Rect
+Point.distance = distance[0]  // 位置0にバインディング、適用後 method: (p2: Point) -> Float
+Point.transform = transform[1]  // 位置1にバインディング、適用後 method: (dx: Float, dy: Float) -> Point
+Rect.transform = transform[1]  // 位置1にバインディング、適用後 method: (dx: Float, dy: Float) -> Rect
 
 // ...同様に他のメソッドもバインディング...
 
@@ -731,21 +757,21 @@ process_all([p, r])
 
 ## 詳細設計
 
-### インターフェース検査アルゴリズム
+### インターフェースチェックアルゴリズム
 
 ```rust
 fn check_type_implements_interface(
     typ: &Type,
     iface: &Type
 ) -> Result<(), TypeError> {
-    // インターフェースの各フィールド（関数フィールド）に対して
+    // インターフェースの各フィールド（関数フィールド）について
     for (field_name, iface_field) in &iface.fields {
-        // 型が同名のメソッドを持つか検査
+        // 型が同名のメソッドを持つかチェック
         if let Some(method) = typ.methods.get(field_name) {
-            // メソッドシグネチャが互換か検査
+            // メソッドシグネチャが互換するかチェック
             // インターフェースフィールド: (Surface) -> Void
             // メソッドシグネチャ: (Point, Surface) -> Void
-            // 比較：self パラメータを除いた後、一致する必要がある
+            // 比較：self パラメータを除いた後一致する必要がある
             if !method_signature_matches(method, iface_field.type_) {
                 return Err(TypeError::MethodSignatureMismatch {
                     type_name: typ.name,
@@ -770,18 +796,18 @@ fn check_type_implements_interface(
 インターフェース型は直接代入をサポートし、コンパイラは代入の右辺型に基づいて自動的に最適な呼び出し戦略を選択する：
 
 ```yaoxiang
-// 具体的な型を直接代入 → コンパイル時に具体型を特定可能、ゼロオーバーヘッド呼び出し
+// 具体的型を直接代入 → コンパイル時に具体的型を特定可能、ゼロオーバーヘッド呼び出し
 d: Drawable = Circle(1)
 d.draw(screen)  // コンパイル後：circle_draw(screen) を直接呼び出し、vtable なし
 
-// 関数返り値 → コンパイル時に具体型を特定不可、vtable を使用
+// 関数返り値 → コンパイル時に具体的型を特定不可、vtable を使用
 d: Drawable = get_shape()
-d.draw(screen)  // vtable を使用してメソッドを検索
+d.draw(screen)  // vtable 経由でメソッドを検索
 
 // 異種混合コレクション → vtable を使用
 shapes: List(Drawable) = [Circle(1), Rect(2, 3)]
 for s in shapes {
-    s.draw(screen)  // vtable を使用してメソッドを検索
+    s.draw(screen)  // vtable 経由でメソッドを検索
 }
 ```
 
@@ -789,13 +815,13 @@ for s in shapes {
 
 | シナリオ | 推論結果 | 呼び出し方式 |
 |------|----------|----------|
-| `d: Drawable = Circle(1)` | 具体型 Circle | 直接呼び出し（ゼロオーバーヘッド） |
+| `d: Drawable = Circle(1)` | 具体的型 Circle | 直接呼び出し（ゼロオーバーヘッド） |
 | `d: Drawable = get_shape()` | 不明 | vtable |
 | `shapes: List(Drawable) = [...]` | 異種混合 | vtable |
 
 **ルール**：
-1. 右辺が具体的な型構築子でコンパイル時に特定可能な場合、直接呼び出し IR を生成
-2. 右辺の型がコンパイル時に特定できない場合、vtable 機構にバックオフ
+1. 右辺が具体的型コンストラクタでコンパイル時に特定できる場合、直接呼び出し IR を生成
+2. 右辺型がコンパイル時に特定できない場合、vtable メカニズムにフォールバック
 3. vtable が実行時多態の正確性を保証
 
 ### ダックタイピングサポート
@@ -821,18 +847,18 @@ custom: CustomPoint = CustomPoint(
 |------|------|
 | `type Point = Point(x: Float, y: Float)` | `type Point = { x: Float, y: Float }` |
 | `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }` |
-| `impl` キーワードが必要 | キーワード不要、インターフェース名は型本体内に記述 |
+| `impl` キーワードが必要 | キーワード不要、インターフェース名は型体の後に記述 |
 
 ## 構文設計説明：名前付き関数は本質的に Lambda の糖衣構文
 
 ### コア理解
 
-**名前付き関数と Lambda 式は同じものである！** 唯一の違いは：名前付き関数は Lambda に名前をつけただけである。
+**名前付き関数と Lambda 式は同じものである！** 唯一のの違いは、名前付き関数が Lambda に名前を付けたものである。
 
 ```yaoxiang
 // この2つは本質的に同一
 add: (a: Int, b: Int) -> Int = a + b           // 名前付き関数（推奨）
-add: (a: Int, b: Int) -> Int = (a, b) => a + b        // Lambda 形式（完全に同等）
+add: (a: Int, b: Int) -> Int = (a, b) => a + b        // Lambda 形式（完全等同）
 ```
 
 ### 糖衣構文モデル
@@ -845,51 +871,51 @@ name: (Params) -> ReturnType = body
 name: (Params) -> ReturnType = (params) => body
 ```
 
-**要点**：シグネチャがパラメータ型を完全に宣言している場合、Lambda ヘッダーのパラメータ名は冗長になり、省略可能である。
+**要点**：シグネチャがパラメータ型を完全に宣言している場合、Lambda ヘッダのパラメータ名は冗長になり、省略可能。
 
 ### パラメータスコープルール
 
-**パラメータは外層変数をオーバーライド**：シグネチャ内のパラメータスコープが関数本体をオーバーライドし、内部スコープの優先度が高い。
+**パラメータは外層変数をオーバーライド**：シグネチャ内のパラメータスコープは関数ボディをオーバーライドし、内部スコープの方が高優先度。
 
 ```yaoxiang
 x = 10  // 外層変数
 
-double: (x: Int) -> Int = x * 2  // ✅ パラメータ x が外層の x をオーバーライド、結果は 20
+double: (x: Int) -> Int = x * 2  // ✅ パラメータ x が外層 x をオーバーライド、結果は 20
 ```
 
 ### 注釈位置は柔軟
 
-型注釈は以下のいずれかの位置に可以是任意に配置でき、**少なくとも1箇所に注釈があればよい**：
+型注釈は以下のいずれかの位置に記述でき、**少なくとも1箇所に記述すればよい**：
 
 | 注釈位置 | 形式 | 説明 |
 |----------|------|------|
 | シグネチャのみ | `double: (x: Int) -> Int = x * 2` | ✅ 推奨 |
-| Lambda ヘッダーのみ | `double = (x: Int) => x * 2` | ✅ 合法 |
-| 両方に注釈 | `double: (x: Int) -> Int = (x) => x * 2` | ✅ 冗長だが許可 |
+| Lambda ヘッダのみ | `double = (x: Int) => x * 2` | ✅ 有効 |
+| 両方に記述 | `double: (x: Int) -> Int = (x) => x * 2` | ✅ 冗長だが許容 |
 
 ### 完全な例
 
 ```yaoxiang
-// ✅ 推奨：シグネチャは完全、Lambda ヘッダーは省略
+// ✅ 推奨：シグネチャ完全、Lambda ヘッダ省略
 add: (a: Int, b: Int) -> Int = a + b
 inc: (x: Int) -> Int = x + 1
 main: () -> Void = { print("hi") }
 
-// ✅ 合法：Lambda ヘッダーで型を注釈
+// ✅ 有効：Lambda ヘッダ内で型を注釈
 double = (x: Int) => x * 2
 
-// ✅ 合法：両方に注釈
+// ✅ 有効：両方に記述
 double: (x: Int) -> Int = (x) => x * 2
 ```
 
-### 設計上の利点
+### 設計上の優位性
 
-| 特性 | 利点 |
+| 特性 | 優位性 |
 |------|------|
-| **簡潔** | シグネチャが完全ならパラメータ名を繰り返し書く必要はない |
-| **柔軟** | Lambda 形式を保持、好みに応じて選択可能 |
-| **一貫性** | 変数宣言 `x: Int = 42` と統一パターンを維持 |
-| **直感的** | `name: Type = body` は直接「name という名前、Type という型、body という値」に対応 |
+| **簡潔** | シグネチャが完全ならパラメータ名を繰り返し書く必要がない |
+| **柔軟** | Lambda 形式を保持、好みのものを使用可能 |
+| **一貫** | 変数宣言 `x: Int = 42` と統一パターンを維持 |
+| **直感的** | `name: Type = body` は直接的に「name という名前、Type 型、body 値」に対応する |
 
 ## トレードオフ
 
@@ -897,11 +923,11 @@ double: (x: Int) -> Int = (x) => x * 2
 
 | 利点 | 説明 |
 |------|------|
-| 究極の統一 | 1つの構文ルールで全てをカバー |
-| 理論的に优雅 | 完璧に対称な `name: type = value` |
+| 究極的统一 | 1つの構文ルールで全ケースをカバー |
+| 理論的に优雅 | 対称的な `name: type = value` |
 | 新しいキーワード不要 | 既存の構文要素を再利用 |
 | 実装が容易 | コンパイラは1種類の宣言形式のみを処理すればよい |
-| 学習が容易 | 1つのパターンを覚えればすべてのコードを書ける |
+| 学習が容易 | 1つのパターンを覚えれば全コードが書ける |
 | 拡張が容易 | 新機能は自然にこのモデルに組み込める |
 
 ### 欠点
@@ -909,10 +935,10 @@ double: (x: Int) -> Int = (x) => x * 2
 | 欠点 | 説明 |
 |------|------|
 | 命名規則 | メソッドは `Type.method` 命名に従う必要がある |
-| 冗長 | 完全な構文は簡略構文より長いが、推論可能 |
+| 冗長 | 完全構文は簡略構文より長いが、推論可能 |
 | 学習曲線 | 統一モデルを理解する必要がある |
 
-### 緩和措施
+### 缓解措施
 
 ```yaoxiang
 // 1. 明確なエラーメッセージ
@@ -926,29 +952,28 @@ double: (x: Int) -> Int = (x) => x * 2
 Point.draw = (self: Point, surface: Surface) => surface.plot(self.x, self.y)
 
 // 3. IDE ヒント
-// IDE が不足しているメソッドを自動的にヒント
+// IDE が不足メソッドを自動的にヒント表示
 ```
-
 
 ### リスク
 
-| リスク | 影響 | 緩和措施 |
+| リスク | 影響 | 缓解措施 |
 |------|------|----------|
-| 解析複雑度 | 統一構文は解析複雑度を上げる可能性がある | 再帰下降解析器を使用 |
-| パフォーマンスオーバーヘッド | vtable 検索に追加オーバーヘッドが発生する場合がある | コンパイル時単形化最適化 |
+| 解析复杂度 | 統一構文は解析复杂度を高める可能性がある | 再帰下降パーサーを使用 |
+| 性能オーバーヘッド | vtable 検索に追加オーバーヘッドの可能性 | コンパイル時単相化最適化 |
 
 ---
 
-## 隠し要素 🎮：言語の源
+## 隠し要素 🎮：言語之源
 
 > ✨ **Type: Type = Type** ✨
 
 ```yaoxiang
-// 型の型を定義试着...
+// 型の型を定義してみる...
 Type: Type = Type
 ```
 
-**警告**：これは**名状しがたい**ものである！
+**警告**：これは**名状し難い**ものである！
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -965,7 +990,7 @@ Type: Type = Type
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-> **注**：コンパイラは `Type: Type = Type` を正しく処理できない（Type0/Type1 宇宙パラドックスが発生する）が、この「隠し要素」を意図的に保持している——コンパイルしようとすると、言語創業者からの禅的メッセージが表示される。これは単なる技術的境界ではなく、YaoXiang が型哲学に敬意を表するものである。
+> **注**：コンパイラは `Type: Type = Type` を正しく処理できない（Type0/Type1 宇宙逆理が発生）が、この「隠し要素」を意図的に保持している——コンパイルしようとすると、言語創設者からの禅的なメッセージが届く。これは技術的な境界であるだけでなく、YaoXiang の型哲学への敬意である。
 
 ---
 
@@ -991,13 +1016,13 @@ type_expr ::= identifier
 type_field ::= identifier ':' type_expr
              | identifier                           # インターフェース制約
 
-# ジェネリックパラメータ：関数型の一部として、例：(T: Type, R: Type) -> (...)
+# ジェネリックパラメータ：関数型の一部として例えば (T: Type, R: Type) -> (...)
 # 独立した BNF ルールは不要——: Type パラメータは通常の関数パラメータ
 
 # 式
 expression ::= literal
               | identifier
-              | identifier '(' expression (',' expression)* ')'  # 関数呼び出し / 構築子呼び出し
+              | identifier '(' expression (',' expression)* ')'  # 関数呼び出し / コンストラクタ呼び出し
               | '(' expression (',' expression)* ')'              # タプル
               | expression '.' identifier '(' arguments? ')'    # メソッド呼び出し
               | lambda
@@ -1016,15 +1041,15 @@ block ::= expression | '{' expression* '}'
 |------|------|
 | 宣言 | `name: type = value` 形式の代入文 |
 | 記録型 | 名前付きフィールドを含む `{ ... }` 型 |
-| インターフェース | フィールドがすべて関数型の記録型 |
-| ジェネリック型 | `Name: (T: Type) -> Type = { ... }` として定義された型、型パラメータを受け取る |
-| 型メソッド | `Type.method` 形式のメソッド、特定の型に関連 |
-| ジェネリック関数 | `(T: Type)` 構文を使用する関数、型パラメータが最初のパラメータグループ |
-| メタ型 | `Type`、言語内で唯一の型階層マーカー |
+| インターフェース | 全フィールドが関数型の記録型 |
+| ジェネリック型 | `Name: (T: Type) -> Type = { ... }` として定義された型で、型パラメータを受け取る |
+| 型メソッド | `Type.method` 形式のメソッドで、特定の型に関連付け |
+| ジェネリック関数 | `(T: Type)` 構文を使用した関数で、型パラメータが最初のパラメータグループ |
+| メタ型 | `Type`、言語内で唯一の型レベルラベル |
 
 ---
 
-## ライフサイクルと行き先
+## ライフサイクルと帰趨
 
 ```
 ┌─────────────┐
