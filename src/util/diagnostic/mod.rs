@@ -231,49 +231,17 @@ pub fn run_file_with_diagnostics(
         Ok(module) => {
             // 统一所有权检查：MutChecker + OwnershipChecker
             {
-                use crate::middle::passes::lifetime::{OwnershipError, OwnershipPass};
+                use crate::middle::passes::lifetime::OwnershipPass;
                 let errors = OwnershipPass::check_module(&module);
                 if !errors.is_empty() {
                     eprintln!();
-                    for err in &errors {
-                        match err {
-                            OwnershipError::ImmutableAssign { value, span } => {
-                                let mut diag = ErrorCodeDefinition::immutable_assignment(value);
-                                if let Some(span) = span {
-                                    diag = diag.at(*span);
-                                }
-                                let diagnostic = diag.build();
-                                let output = render_compile_error(
-                                    &diagnostic.message,
-                                    source_file,
-                                    Some(&diagnostic),
-                                );
-                                eprintln!("{}", output);
-                            }
-                            OwnershipError::UseAfterMove { value, .. } => {
-                                let diag = ErrorCodeDefinition::use_after_move(value);
-                                let diagnostic = diag.build();
-                                let output = render_compile_error(
-                                    &diagnostic.message,
-                                    source_file,
-                                    Some(&diagnostic),
-                                );
-                                eprintln!("{}", output);
-                            }
-                            _ => {
-                                let diag = ErrorCodeDefinition::immutable_assignment(&format!(
-                                    "{:?}",
-                                    err
-                                ));
-                                let diagnostic = diag.build();
-                                let output = render_compile_error(
-                                    &diagnostic.message,
-                                    source_file,
-                                    Some(&diagnostic),
-                                );
-                                eprintln!("{}", output);
-                            }
-                        }
+                    for diagnostic in &errors {
+                        let output = render_compile_error(
+                            &diagnostic.message,
+                            source_file,
+                            Some(diagnostic),
+                        );
+                        eprintln!("{}", output);
                     }
                     return Err(anyhow::anyhow!("Ownership check failed"));
                 }

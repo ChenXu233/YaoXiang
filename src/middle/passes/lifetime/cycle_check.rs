@@ -13,8 +13,9 @@
 //! 单函数内循环和 spawn 内部循环由 IntraTaskCycleTracker 处理（警告模式）。
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
-use super::error::OwnershipError;
+use super::error::codes;
 
 /// 检测深度限制：只检测直接边界，不递归进入嵌套 spawn
 /// 用于文档说明，实际通过 `find_spawn_result_direct` 实现深度限制
@@ -29,7 +30,7 @@ pub struct CycleChecker {
     /// 跨 spawn 参数边：spawn 参数来自另一个 spawn 返回值
     spawn_param_edges: Vec<SpawnParamEdge>,
     /// 错误
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     /// spawn 返回值 → 所在基本块/指令位置
     spawn_results: HashMap<Operand, (usize, usize)>,
     /// 值定义追踪（用于追踪 ref 的来源）
@@ -37,7 +38,7 @@ pub struct CycleChecker {
     /// unsafe 块范围：(block_idx, start_instr, end_instr)
     pub(crate) unsafe_ranges: Vec<(usize, usize, usize)>,
     /// unsafe 绕过记录（信息级别）
-    unsafe_bypasses: Vec<OwnershipError>,
+    unsafe_bypasses: Vec<Diagnostic>,
 }
 
 impl CycleChecker {
@@ -58,7 +59,7 @@ impl CycleChecker {
     }
 
     /// 获取 unsafe 绕过记录
-    pub fn unsafe_bypasses(&self) -> &[OwnershipError] {
+    pub fn unsafe_bypasses(&self) -> &[Diagnostic] {
         &self.unsafe_bypasses
     }
 }
@@ -86,7 +87,7 @@ impl CycleChecker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.errors.clear();
         self.spawn_ref_edges.clear();
         self.spawn_param_edges.clear();
@@ -179,14 +180,11 @@ impl CycleChecker {
                 if self.is_in_unsafe(block_idx, instr_idx) {
                     // 记录 unsafe 绕过信息
                     if let Instruction::Spawn { result, .. } = instr {
-                        self.unsafe_bypasses
-                            .push(OwnershipError::UnsafeBypassCycle {
-                                details: format!(
-                                    "spawn {} in unsafe block, cycle detection bypassed",
-                                    self.operand_to_string(result)
-                                ),
-                                span: (block_idx, instr_idx),
-                            });
+                        let details = format!(
+                            "spawn {} in unsafe block, cycle detection bypassed",
+                            self.operand_to_string(result)
+                        );
+                        self.unsafe_bypasses.push(codes::unsafe_bypass_cycle(&details));
                     }
                     continue;
                 }
@@ -322,10 +320,7 @@ impl CycleChecker {
                     }
                 } else if recursion_stack.contains(neighbor) {
                     // 找到环！path 中从 neighbor 到末尾就是环
-                    self.errors.push(OwnershipError::CrossSpawnCycle {
-                        details: self.format_cycle_path(path, neighbor),
-                        span: self.find_cycle_span(graph, neighbor),
-                    });
+                    self.errors.push(codes::cross_spawn_cycle(&self.format_cycle_path(path, neighbor)));
                     return true;
                 }
             }
@@ -377,19 +372,6 @@ impl CycleChecker {
             Operand::Register(idx) => format!("reg_{}", idx),
         }
     }
-
-    /// 找到环的位置（使用 cycle_start 作为参考点）
-    fn find_cycle_span(
-        &self,
-        _graph: &HashMap<Operand, HashSet<Operand>>,
-        cycle_start: &Operand,
-    ) -> (usize, usize) {
-        // 返回环起始点的位置
-        if let Some(span) = self.spawn_results.get(cycle_start) {
-            return *span;
-        }
-        (0, 0)
-    }
 }
 
 /// 为 CycleChecker 实现 OwnershipCheck trait
@@ -397,11 +379,11 @@ impl super::error::OwnershipCheck for CycleChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.check_function(func)
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 
@@ -603,9 +585,9 @@ mod tests {
         let errors = checker.check_function(&func);
         // 如果检测到循环，消息应包含建议
         for error in errors {
-            if let OwnershipError::CrossSpawnCycle { details, .. } = error {
+            if error.code == "E2003" {
                 assert!(
-                    details.contains("Weak") || details.contains("unsafe"),
+                    error.message.contains("Weak") || error.message.contains("unsafe"),
                     "错误消息应包含解决建议"
                 );
             }

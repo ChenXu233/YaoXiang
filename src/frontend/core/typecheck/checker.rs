@@ -285,14 +285,9 @@ impl TypeChecker {
         let solve_result = self.env.solver().solve();
         if let Err(constraint_errors) = solve_result {
             for e in constraint_errors {
-                self.add_error(
-                    ErrorCodeDefinition::type_mismatch(
-                        &format!("{}", e.error.left),
-                        &format!("{}", e.error.right),
-                    )
-                    .at(e.span)
-                    .build(),
-                );
+                let mut diag = e.error;
+                diag.span = Some(e.span);
+                self.add_error(diag);
             }
         }
 

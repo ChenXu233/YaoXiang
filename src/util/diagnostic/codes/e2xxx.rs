@@ -39,6 +39,76 @@ pub static E2XXX: &[ErrorCodeDefinition] = &[
         code: "E2014",
         category: ErrorCategory::Semantic,
     },
+    // E2015: 移动后借用
+    ErrorCodeDefinition {
+        code: "E2015",
+        category: ErrorCategory::Semantic,
+    },
+    // E2016: 不可变赋值
+    ErrorCodeDefinition {
+        code: "E2016",
+        category: ErrorCategory::Semantic,
+    },
+    // E2017: 多重可变借用
+    ErrorCodeDefinition {
+        code: "E2017",
+        category: ErrorCategory::Semantic,
+    },
+    // E2018: 可变/不可变借用冲突
+    ErrorCodeDefinition {
+        code: "E2018",
+        category: ErrorCategory::Semantic,
+    },
+    // E2019: 双重释放
+    ErrorCodeDefinition {
+        code: "E2019",
+        category: ErrorCategory::Semantic,
+    },
+    // E2020: 释放后使用
+    ErrorCodeDefinition {
+        code: "E2020",
+        category: ErrorCategory::Semantic,
+    },
+    // E2021: 释放已移动的值
+    ErrorCodeDefinition {
+        code: "E2021",
+        category: ErrorCategory::Semantic,
+    },
+    // E2022: 不可变变异
+    ErrorCodeDefinition {
+        code: "E2022",
+        category: ErrorCategory::Semantic,
+    },
+    // E2023: 不可变字段赋值
+    ErrorCodeDefinition {
+        code: "E2023",
+        category: ErrorCategory::Semantic,
+    },
+    // E2024: 引用非所有者
+    ErrorCodeDefinition {
+        code: "E2024",
+        category: ErrorCategory::Semantic,
+    },
+    // E2025: 重赋值非空变量
+    ErrorCodeDefinition {
+        code: "E2025",
+        category: ErrorCategory::Semantic,
+    },
+    // E2026: 消费未返回
+    ErrorCodeDefinition {
+        code: "E2026",
+        category: ErrorCategory::Semantic,
+    },
+    // E2027: unsafe 解引用
+    ErrorCodeDefinition {
+        code: "E2027",
+        category: ErrorCategory::Semantic,
+    },
+    // E2028: 克隆已移动的值
+    ErrorCodeDefinition {
+        code: "E2028",
+        category: ErrorCategory::Semantic,
+    },
     // E209x: 函数签名解析错误
     ErrorCodeDefinition {
         code: "E2090",
@@ -113,6 +183,90 @@ impl ErrorCodeDefinition {
     /// E2014 使用已移动的变量
     pub fn use_after_move(name: &str) -> DiagnosticBuilder {
         let def = Self::find("E2014").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2015 移动后借用
+    pub fn borrow_after_move(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2015").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2016 不可变赋值（所有权检查器用）
+    pub fn immutable_assign(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2016").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2017 多重可变借用
+    pub fn mutable_borrow_conflict(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2017").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2018 可变/不可变借用冲突
+    pub fn mutable_immutable_borrow_conflict(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2018").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2019 双重释放
+    pub fn double_drop(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2019").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2020 释放后使用
+    pub fn use_after_drop(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2020").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2021 释放已移动的值
+    pub fn drop_moved_value(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2021").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2022 不可变变异
+    pub fn immutable_mutation(name: &str, method: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2022").unwrap();
+        def.builder().param("name", name).param("method", method)
+    }
+
+    /// E2023 不可变字段赋值
+    pub fn immutable_field_assign(struct_name: &str, field: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2023").unwrap();
+        def.builder().param("struct_name", struct_name).param("field", field)
+    }
+
+    /// E2024 引用非所有者
+    pub fn ref_non_owner(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2024").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2025 重赋值非空变量
+    pub fn reassign_non_empty(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2025").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2026 消费未返回
+    pub fn consumed_not_returned(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2026").unwrap();
+        def.builder().param("name", name)
+    }
+
+    /// E2027 unsafe 解引用
+    pub fn unsafe_deref() -> DiagnosticBuilder {
+        let def = Self::find("E2027").unwrap();
+        def.builder()
+    }
+
+    /// E2028 克隆已移动的值
+    pub fn clone_moved_value(name: &str) -> DiagnosticBuilder {
+        let def = Self::find("E2028").unwrap();
         def.builder().param("name", name)
     }
 

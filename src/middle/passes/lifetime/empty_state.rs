@@ -19,8 +19,9 @@
 //! | Empty | 空状态，可重新赋值 | Store（检查类型后覆盖） |
 //! | Dropped | 值已被释放 | 同 Moved |
 
-use super::error::{OwnershipError, TypeId, ValueState};
+use super::error::{TypeId, ValueState, codes};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// 空状态追踪器
@@ -44,7 +45,7 @@ pub struct EmptyStateTracker {
     /// 类型表：变量 -> 类型ID（用于重赋值检查）
     type_map: HashMap<Operand, TypeId>,
     /// 错误列表
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     /// 当前检查位置
     location: (usize, usize),
     /// 函数类型表：类型名 -> 类型ID（外部传入）
@@ -83,7 +84,7 @@ impl EmptyStateTracker {
     }
 
     /// 获取错误列表
-    pub fn errors(&self) -> &[OwnershipError] {
+    pub fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 
@@ -99,7 +100,7 @@ impl EmptyStateTracker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -241,10 +242,7 @@ impl EmptyStateTracker {
             match state {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
-                    self.errors.push(OwnershipError::ReassignNonEmpty {
-                        value: operand_to_string(dst),
-                        location: self.location,
-                    });
+                    self.errors.push(codes::reassign_non_empty(&operand_to_string(dst)));
                     return;
                 }
                 ValueState::Moved => {
@@ -258,12 +256,7 @@ impl EmptyStateTracker {
                     if let Some(expected_type) = self.type_map.get(dst) {
                         if let Some(actual_type) = &src_type {
                             if expected_type != actual_type {
-                                self.errors.push(OwnershipError::EmptyStateTypeMismatch {
-                                    value: operand_to_string(dst),
-                                    expected_type: expected_type.0.clone(),
-                                    actual_type: actual_type.0.clone(),
-                                    location: self.location,
-                                });
+                                self.errors.push(codes::immutable_assign(&operand_to_string(dst)));
                                 return;
                             }
                         }
@@ -361,10 +354,7 @@ impl EmptyStateTracker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(OwnershipError::UseAfterMove {
-            value: operand_to_string(operand),
-            location: self.location,
-        });
+        self.errors.push(codes::use_after_move(&operand_to_string(operand)));
     }
 
     /// 手动设置变量为空状态

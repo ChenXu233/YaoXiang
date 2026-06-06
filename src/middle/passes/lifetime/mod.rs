@@ -14,6 +14,7 @@
 //! - `clone.rs`: Clone 语义检查（CloneMovedValue、CloneDroppedValue 检测）
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -140,7 +141,7 @@ impl OwnershipChecker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> Vec<OwnershipError> {
+    ) -> Vec<Diagnostic> {
         let move_errors = self.move_checker.check_function(func);
         let drop_errors = self.drop_checker.check_function(func);
         let mut_errors = self.mut_checker.check_function(func);
@@ -150,7 +151,7 @@ impl OwnershipChecker {
 
         // 借用检查
         let _borrow_errors = self.borrow_checker.check_function(func);
-        let borrow_ownership_errors = self.borrow_checker.to_ownership_errors();
+        let borrow_diagnostics = self.borrow_checker.to_diagnostics();
 
         // 任务内循环追踪（警告模式，不计入错误）
         let _intra_task_warnings = self.intra_task_tracker.track_function(func);
@@ -164,47 +165,47 @@ impl OwnershipChecker {
             .chain(clone_errors)
             .chain(cycle_errors)
             .cloned()
-            .chain(borrow_ownership_errors)
+            .chain(borrow_diagnostics)
             .collect()
     }
 
     /// 获取 Move 检查器的错误
-    pub fn move_errors(&self) -> &[OwnershipError] {
+    pub fn move_errors(&self) -> &[Diagnostic] {
         &self.move_checker.errors
     }
 
     /// 获取 Drop 检查器的错误
-    pub fn drop_errors(&self) -> &[OwnershipError] {
+    pub fn drop_errors(&self) -> &[Diagnostic] {
         &self.drop_checker.errors
     }
 
     /// 获取 Mut 检查器的错误
-    pub fn mut_errors(&self) -> &[OwnershipError] {
+    pub fn mut_errors(&self) -> &[Diagnostic] {
         self.mut_checker.errors()
     }
 
     /// 获取 Ref 检查器的错误
-    pub fn ref_errors(&self) -> &[OwnershipError] {
+    pub fn ref_errors(&self) -> &[Diagnostic] {
         self.ref_checker.errors()
     }
 
     /// 获取 Clone 检查器的错误
-    pub fn clone_errors(&self) -> &[OwnershipError] {
+    pub fn clone_errors(&self) -> &[Diagnostic] {
         self.clone_checker.errors()
     }
 
     /// 获取跨 spawn 循环检查的错误
-    pub fn cycle_errors(&self) -> &[OwnershipError] {
+    pub fn cycle_errors(&self) -> &[Diagnostic] {
         self.cycle_checker.errors()
     }
 
     /// 获取任务内循环警告（不阻断编译）
-    pub fn intra_task_warnings(&self) -> &[OwnershipError] {
+    pub fn intra_task_warnings(&self) -> &[Diagnostic] {
         self.intra_task_tracker.warnings()
     }
 
     /// 获取 unsafe 绕过记录
-    pub fn unsafe_bypasses(&self) -> &[OwnershipError] {
+    pub fn unsafe_bypasses(&self) -> &[Diagnostic] {
         self.cycle_checker.unsafe_bypasses()
     }
 }
@@ -223,7 +224,7 @@ pub struct OwnershipPass;
 
 impl OwnershipPass {
     /// 对整个模块执行所有权检查，返回所有错误
-    pub fn check_module(module: &crate::middle::core::ir::ModuleIR) -> Vec<OwnershipError> {
+    pub fn check_module(module: &crate::middle::core::ir::ModuleIR) -> Vec<Diagnostic> {
         let mut all_errors = Vec::new();
         let empty_set = HashSet::new();
 
@@ -244,18 +245,16 @@ impl OwnershipPass {
             // OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
             // 过滤掉 MutChecker 已覆盖的错误类别，避免重复报告
             let mut ownership_checker = OwnershipChecker::new();
-            let ownership_errors: Vec<OwnershipError> = ownership_checker
+            let ownership_errors: Vec<Diagnostic> = ownership_checker
                 .check_function(func)
                 .into_iter()
                 .filter(|err| {
+                    // E2016=不可变赋值, E2022=不可变变异, E2023=不可变字段赋值
+                    // E2025=重赋值非空, E2014=使用已移动的值
+                    // 这些已由 MutChecker 处理
                     !matches!(
-                        err,
-                        OwnershipError::ImmutableAssign { .. }
-                            | OwnershipError::ImmutableMutation { .. }
-                            | OwnershipError::ImmutableFieldAssign { .. }
-                            | OwnershipError::ReassignNonEmpty { .. }
-                            | OwnershipError::EmptyStateTypeMismatch { .. }
-                            | OwnershipError::UseAfterMove { .. }
+                        err.code.as_str(),
+                        "E2014" | "E2016" | "E2022" | "E2023" | "E2025"
                     )
                 })
                 .collect();
