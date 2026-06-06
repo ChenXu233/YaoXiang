@@ -228,7 +228,11 @@ fn test_resolve_no_matching_candidate() {
     // Assert: 应返回 NoMatchingDefinition 错误
     assert!(result.is_err(), "不兼容类型调用应返回错误");
     let err = result.unwrap_err();
-    assert!(err.code.starts_with("E10"), "error code should be E1xxx, got: {}", err.code);
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]
@@ -248,7 +252,11 @@ fn test_resolve_unknown_function() {
     // Assert: 应返回 NoMatchingDefinition（函数名不存在）
     assert!(result.is_err(), "查询不存在的函数名应返回错误");
     let err = result.unwrap_err();
-    assert!(err.code.starts_with("E10"), "error code should be E1xxx, got: {}", err.code);
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]
@@ -305,7 +313,11 @@ fn test_resolve_empty_resolver() {
     // Assert: 空解析器应返回 NoMatchingDefinition
     assert!(result.is_err(), "空解析器调用 resolve 应返回错误");
     let err = result.unwrap_err();
-    assert!(err.code.starts_with("E10"), "error code should be E1xxx, got: {}", err.code);
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 // ===================================================================
@@ -371,7 +383,11 @@ fn test_resolve_ambiguous_same_score() {
     // Assert: 同优先级候选应产生歧义错误（规范 §3.15.1: 多个同优先级候选且无法区分 → 编译错误）
     assert!(result.is_err(), "两个同优先级的候选应产生歧义错误");
     let err = result.unwrap_err();
-    assert!(err.code.starts_with("E10"), "error code should be E1xxx, got: {}", err.code);
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]

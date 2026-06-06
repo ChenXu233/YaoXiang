@@ -110,59 +110,23 @@ fn test_eval_division_by_zero() {
 #[test]
 fn test_eval_comparison_ops() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Eq, 5, 5)),
-        ConstValue::Bool(true),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Eq, 5, 6)),
-        ConstValue::Bool(false),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Neq, 5, 6)),
-        ConstValue::Bool(true),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Lt, 3, 5)),
-        ConstValue::Bool(true),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Gt, 5, 3)),
-        ConstValue::Bool(true),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Lte, 5, 5)),
-        ConstValue::Bool(true),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Gte, 5, 5)),
-        ConstValue::Bool(true),
-    );
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Eq, 5, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Eq, 5, 6)), ConstValue::Bool(false));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Neq, 5, 6)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Lt, 3, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Gt, 5, 3)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Lte, 5, 5)), ConstValue::Bool(true));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Gte, 5, 5)), ConstValue::Bool(true));
 }
 
 #[test]
 fn test_eval_bitwise_ops() {
     let e = ConstGenericEval::new();
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::BitAnd, 6, 3)),
-        ConstValue::Int(2),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::BitOr, 6, 3)),
-        ConstValue::Int(7),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::BitXor, 6, 3)),
-        ConstValue::Int(5),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Shl, 1, 8)),
-        ConstValue::Int(256),
-    );
-    assert_eval_eq(
-        e.eval(&bin(ConstBinOp::Shr, 256, 8)),
-        ConstValue::Int(1),
-    );
+    assert_eval_eq(e.eval(&bin(ConstBinOp::BitAnd, 6, 3)), ConstValue::Int(2));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::BitOr, 6, 3)), ConstValue::Int(7));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::BitXor, 6, 3)), ConstValue::Int(5));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Shl, 1, 8)), ConstValue::Int(256));
+    assert_eval_eq(e.eval(&bin(ConstBinOp::Shr, 256, 8)), ConstValue::Int(1));
 }
 
 #[test]
@@ -620,7 +584,7 @@ fn test_eval_neg_zero() {
     assert_eval_eq(
         e.eval(&ConstExpr::UnOp {
             op: ConstUnOp::Neg,
-            expr: Box::new(ConstExpr::Int(0))
+            expr: Box::new(ConstExpr::Int(0)),
         }),
         ConstValue::Int(0),
     );

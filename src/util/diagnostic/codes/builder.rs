@@ -137,7 +137,10 @@ impl DiagnosticBuilder {
     }
 
     /// 查找模板中缺失的参数
-    fn find_missing_params(&self, template: &str) -> Vec<String> {
+    fn find_missing_params(
+        &self,
+        template: &str,
+    ) -> Vec<String> {
         let param_keys: std::collections::HashSet<&'static str> =
             self.params.iter().map(|(k, _)| *k).collect();
 
@@ -163,7 +166,10 @@ impl DiagnosticBuilder {
     }
 
     /// 验证所有占位符都有对应参数（debug 模式下 panic）
-    fn validate_params(&self, template: &str) {
+    fn validate_params(
+        &self,
+        template: &str,
+    ) {
         let missing = self.find_missing_params(template);
         if !missing.is_empty() {
             panic!(
