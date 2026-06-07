@@ -731,7 +731,7 @@ impl TypeChecker {
                         );
                     }
                 }
-                StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
+                StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } | StmtKind::DestructureAssign { .. } => {
                 }
             }
         }

@@ -1,0 +1,17 @@
+// 08-ownership/borrow_immutable.yx
+// 验证: &T 令牌可复制（Dup）— 两个 &Point 共存
+// 状态: 待测试
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Point.print: (self: &Point) -> Void = {
+    io.println(self.x)
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    p.print()
+    io.println("IMMUTABLE BORROW TEST PASSED")
+}

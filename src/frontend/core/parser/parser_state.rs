@@ -237,6 +237,8 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwMut) => parse_var_stmt(self, start_span),
             Some(TokenKind::KwPub) => parse_identifier_stmt(self, start_span), // pub 声明由 parse_identifier_stmt 处理
             Some(TokenKind::Identifier(_)) => parse_identifier_stmt(self, start_span),
+            // tuple destructuring with parens: (a, b) = expr
+            Some(TokenKind::LParen) => parse_paren_destructure_stmt(self, start_span),
             Some(TokenKind::Eof) | None => None,
             // Phase 1: @ 不再是有效的语句起始（eval block 已移除）
             Some(TokenKind::At) => {

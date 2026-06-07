@@ -275,6 +275,12 @@ pub enum StmtKind {
         method_name: String,
         binding: BindingKind,
     },
+    /// 元组解构赋值: `a, b = (1, 2)` 或 `(a, b) = (1, 2)`
+    DestructureAssign {
+        names: Vec<String>,
+        rhs: Box<Expr>,
+        span: Span,
+    },
     /// 错误恢复占位符：表示解析失败的语句
     ///
     /// 当解析器遇到无法解析的语句时，插入此占位符而非 panic。

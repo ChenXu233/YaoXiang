@@ -82,6 +82,9 @@ impl SpawnPlacementChecker {
                     self.check_expr(expr);
                 }
             }
+            StmtKind::DestructureAssign { rhs, .. } => {
+                self.check_expr(rhs);
+            }
             StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
         }
     }
