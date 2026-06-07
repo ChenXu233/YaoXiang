@@ -10,3 +10,5 @@ mod execution;
 mod fstring;
 #[path = "integration/interpreter.rs"]
 mod interpreter;
+#[path = "integration/token_system.rs"]
+mod token_system;
