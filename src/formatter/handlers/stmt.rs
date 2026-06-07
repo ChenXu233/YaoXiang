@@ -77,7 +77,11 @@ pub fn format_stmt(
         StmtKind::DestructureAssign { names, rhs, .. } => {
             format!(
                 "{} = {}",
-                names.join(", "),
+                names
+                    .iter()
+                    .map(|n| n.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 format_expr(rhs, ctx, source_map)
             )
         }

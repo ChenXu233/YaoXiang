@@ -1132,13 +1132,17 @@ pub fn parse_identifier_stmt(
         let saved = state.save_position();
         let err_count = state.error_count();
 
-        let first_name = match state.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(n)) => n.clone(),
-            _ => {
-                state.restore_position(saved);
-                state.truncate_errors(err_count);
-                return parse_expr_stmt(state, span);
-            }
+        let first_token = state.current().unwrap();
+        let first_name = SpannedIdent {
+            name: match &first_token.kind {
+                TokenKind::Identifier(n) => n.clone(),
+                _ => {
+                    state.restore_position(saved);
+                    state.truncate_errors(err_count);
+                    return parse_expr_stmt(state, span);
+                }
+            },
+            span: first_token.span,
         };
         state.bump(); // consume first identifier
 
@@ -1146,15 +1150,21 @@ pub fn parse_identifier_stmt(
 
         // Collect comma-separated identifiers
         while state.skip(&TokenKind::Comma) {
-            let name = match state.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => n.clone(),
+            let tok = match state.current() {
+                Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
                 _ => {
                     state.restore_position(saved);
                     state.truncate_errors(err_count);
                     return parse_expr_stmt(state, span);
                 }
             };
-            names.push(name);
+            names.push(SpannedIdent {
+                name: match tok.kind {
+                    TokenKind::Identifier(n) => n,
+                    _ => unreachable!(),
+                },
+                span: tok.span,
+            });
             state.bump(); // consume identifier
         }
 
@@ -1302,14 +1312,21 @@ pub fn parse_paren_destructure_stmt(
     state.bump(); // consume `(`
 
     // Check if next token is an identifier (first name in destructuring)
-    let first_name = match state.current().map(|t| &t.kind) {
-        Some(TokenKind::Identifier(n)) => n.clone(),
+    let first_token = match state.current() {
+        Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
         _ => {
             // Not a destructuring pattern, fall back to expression
             state.restore_position(saved);
             state.truncate_errors(err_count);
             return parse_expr_stmt(state, span);
         }
+    };
+    let first_name = SpannedIdent {
+        name: match &first_token.kind {
+            TokenKind::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        },
+        span: first_token.span,
     };
     state.bump(); // consume first identifier
 
@@ -1318,8 +1335,8 @@ pub fn parse_paren_destructure_stmt(
     // Collect remaining comma-separated identifiers
     while state.at(&TokenKind::Comma) {
         state.bump(); // consume `,`
-        let name = match state.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(n)) => n.clone(),
+        let tok = match state.current() {
+            Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
             _ => {
                 // Not a destructuring pattern after comma
                 state.restore_position(saved);
@@ -1327,7 +1344,13 @@ pub fn parse_paren_destructure_stmt(
                 return parse_expr_stmt(state, span);
             }
         };
-        names.push(name);
+        names.push(SpannedIdent {
+            name: match tok.kind {
+                TokenKind::Identifier(n) => n,
+                _ => unreachable!(),
+            },
+            span: tok.span,
+        });
         state.bump(); // consume identifier
     }
 
