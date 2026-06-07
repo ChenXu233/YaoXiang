@@ -1,0 +1,12 @@
+// 测试: spawn 块 return 语义（无闭包）
+use std.io
+
+main = {
+    result = spawn {
+        x = 10
+        y = 20
+        return x + y
+    }
+    io.println(result)
+    io.println("SPAWN RETURN TEST PASSED")
+}

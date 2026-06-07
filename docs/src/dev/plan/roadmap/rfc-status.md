@@ -72,7 +72,7 @@ title: "RFC 实现状态"
 
 ### RFC-009：所有权模型
 
-**已完成**：Move 语义（默认）、&T/&mut T 借用令牌、clone() 显式深拷贝、unsafe + *T、跨任务循环检测、Send/Sync 约束、freeze 机制、令牌冲突检测
+**已完成**：Move 语义（默认）、&T/&mut T 借用令牌、clone() 显式深拷贝、unsafe + *T、跨任务循环检测、Send/Sync 约束、令牌冲突检测
 
 **剩余**：
 - ❌ 品牌机制（编译器内部令牌唯一标识）

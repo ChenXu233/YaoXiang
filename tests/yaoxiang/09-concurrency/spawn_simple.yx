@@ -1,0 +1,13 @@
+// 09-concurrency/spawn_simple.yx
+// 验证: spawn {} 简单返回值
+
+use std.io
+
+main = {
+    result = spawn {
+        x = 42
+        return x
+    }
+    io.println(result)
+    io.println("SPAWN SIMPLE TEST PASSED")
+}
