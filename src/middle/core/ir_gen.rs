@@ -1176,7 +1176,8 @@ impl AstToIrGenerator {
     ) {
         use ast::BindingKind;
 
-        let mut binding_map = HashMap::new();
+        // 合并到已有的绑定映射中，而非覆盖
+        let mut binding_map = self.type_bindings.remove(type_name).unwrap_or_default();
 
         for binding in bindings {
             match &binding.kind {
