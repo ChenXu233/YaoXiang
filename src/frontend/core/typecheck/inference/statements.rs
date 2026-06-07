@@ -659,7 +659,7 @@ impl StatementChecker {
                         }
                         for (name, elem_ty) in names.iter().zip(elem_types.iter()) {
                             self.scope.add_var(
-                                name.clone(),
+                                name.name.clone(),
                                 PolyType::mono(elem_ty.clone()),
                                 false,
                             );
@@ -670,7 +670,8 @@ impl StatementChecker {
                         // RHS 不是元组类型，为每个名称创建新类型变量
                         for name in names {
                             let ty = self.solver.new_var();
-                            self.scope.add_var(name.clone(), PolyType::mono(ty), false);
+                            self.scope
+                                .add_var(name.name.clone(), PolyType::mono(ty), false);
                         }
                         Ok(())
                     }

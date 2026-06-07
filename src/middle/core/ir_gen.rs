@@ -1432,7 +1432,7 @@ impl AstToIrGenerator {
                 if let ast::Expr::Tuple(elems, _) = rhs.as_ref() {
                     for (i, name) in names.iter().enumerate() {
                         let var_idx = self.next_temp_reg();
-                        self.register_local(name, var_idx);
+                        self.register_local(&name.name, var_idx);
 
                         if let Some(elem) = elems.get(i) {
                             self.generate_expr_ir(elem, var_idx, instructions, constants)?;
@@ -1451,7 +1451,7 @@ impl AstToIrGenerator {
 
                     for (i, name) in names.iter().enumerate() {
                         let var_idx = self.next_temp_reg();
-                        self.register_local(name, var_idx);
+                        self.register_local(&name.name, var_idx);
 
                         let index_reg = self.next_temp_reg();
                         instructions.push(Instruction::Load {

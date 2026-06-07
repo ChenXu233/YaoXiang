@@ -277,7 +277,7 @@ pub enum StmtKind {
     },
     /// 元组解构赋值: `a, b = (1, 2)` 或 `(a, b) = (1, 2)`
     DestructureAssign {
-        names: Vec<String>,
+        names: Vec<SpannedIdent>,
         rhs: Box<Expr>,
         span: Span,
     },
