@@ -1,17 +1,27 @@
 ---
 title: "RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型）"
-status: "审核中"
+status: "已废弃（被 RFC-027 取代）"
 author: "晨煦"
 created: "2026-03-16"
-updated: "2026-03-16"
+updated: "2026-06-07（废弃：被编译期求值类型体系取代）"
 ---
 
-# RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型）
+> **⚠️ 已废弃 (DEPRECATED)**
+>
+> 本 RFC 已被 **[RFC-027：编译期求值类型与统一静态验证](../review/027-compile-time-evaluation-types.md)** 取代。
+>
+> **废弃原因**：022 将规约设计为 `//!` 注释形式的外挂语法，这与 Curry-Howard 同构的根本原则相悖——"没有 `//! ` 注释。没有独立的规约语言。一切都在类型系统内。"新设计将编译期求值类型作为一等公民，通过统一的编译期 Bool 求值管道替代了注释式规约。Debug/Release 的分裂验证模式也被统一的 True/False/Unknown 三级返回值模型取代。
+>
+> 本文档仅作历史参考保留。
+
+---
+
+# RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型）[已废弃]
 
 > **参考**:
-> - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
-> - [RFC-011: 泛型系统设计](./011-generic-type-system.md)
-> - [RFC-009: 所有权模型](./009-ownership-model.md)
+> - [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
+> - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
+> - [RFC-009: 所有权模型](../accepted/009-ownership-model.md)
 
 ## 摘要
 

@@ -1,0 +1,17 @@
+// 11-language-completeness/generic_constructor.yx
+// 验证: 泛型类型构造器单态化
+// 状态: 待测试
+
+use std.io
+
+List: (T: Type) -> Type = {
+    data: Array(T),
+    length: Int
+}
+
+main = {
+    // 泛型构造器：List(1, 2, 3) 应自动推导 T=Int
+    numbers: List(Int) = List(1, 2, 3)
+    io.println(numbers)
+    io.println("GENERIC CONSTRUCTOR TEST PASSED")
+}
