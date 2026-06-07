@@ -579,6 +579,53 @@ impl StatementChecker {
                         stmt.span,
                     )
                 } else {
+                    // 类型定义：当 type_annotation 是 Struct 类型时，
+                    // body 是结构体字段定义，不是函数体
+                    // 例如：Point: Type = { x: Float, y: Float }
+                    // Parser 把 Type = { ... } 整体解析为 Type::Struct
+                    let is_type_def = type_annotation
+                        .as_ref()
+                        .map(|t| {
+                            matches!(t,
+                                crate::frontend::core::parser::ast::Type::Struct { .. }
+                                | crate::frontend::core::parser::ast::Type::MetaType { .. }
+                            )
+                        })
+                        .unwrap_or(false);
+
+                    if is_type_def {
+                        // 从 type_annotation 提取结构体字段
+                        let mut fields = Vec::new();
+                        let mut interfaces = Vec::new();
+                        if let Some(crate::frontend::core::parser::ast::Type::Struct {
+                            fields: ast_fields,
+                            interfaces: ast_interfaces,
+                            ..
+                        }) = type_annotation
+                        {
+                            for field in ast_fields {
+                                let field_ty = MonoType::from(field.ty.clone());
+                                fields.push((field.name.clone(), field_ty));
+                            }
+                            interfaces = ast_interfaces.clone();
+                        }
+                        let field_count = fields.len();
+                        let struct_ty = MonoType::Struct(
+                            crate::frontend::core::types::base::StructType {
+                                name: name.to_string(),
+                                fields,
+                                methods: HashMap::new(),
+                                field_mutability: vec![false; field_count],
+                                field_has_default: vec![false; field_count],
+                                interfaces,
+                            },
+                        );
+                        self.type_defs.insert(name.to_string(), struct_ty.clone());
+                        self.scope
+                            .add_var(name.to_string(), PolyType::mono(struct_ty), false);
+                        return Ok(());
+                    }
+
                     // 函数绑定（包括空参数的函数）
                     // 使用 type_annotation 作为签名
                     self.check_fn_stmt(
@@ -1107,7 +1154,15 @@ impl StatementChecker {
                         }
                     }
                 }
-                ann_ty
+                // 类型构造器：当 type_ann 是 Type(MetaType) 且 init_ty 是 Struct 时，
+                // 存 Struct 类型而不是 MetaType，使 Point(1.0, 2.0) 自然工作
+                if matches!(ann_ty, MonoType::MetaType { .. })
+                    && matches!(resolved_init, MonoType::Struct(_))
+                {
+                    resolved_init
+                } else {
+                    ann_ty
+                }
             }
             (Some(init_expr), None) => self.check_expr(init_expr)?,
             (None, Some(type_ann)) => self
