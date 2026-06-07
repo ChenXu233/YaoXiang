@@ -76,7 +76,6 @@ title: "借用检查器状态"
 | &T/&mut T 借用令牌 | ✅ 已实现 | BorrowChecker 实现令牌冲突检测 |
 | &T 可复制（Dup） | ✅ 已实现 | 多个 &T 令牌可同时存在 |
 | &mut T 线性 | ✅ 已实现 | 同一来源 &mut T 只能有一个活跃 |
-| 冻结机制 | ✅ 已实现 | freeze() 将 &mut T 冻结为 &T |
 | 令牌冲突检测（流敏感活性分析） | ✅ 已实现 | 函数体内追踪令牌状态 |
 | ref 关键字（Rc/Arc 自动选择） | ⚠️ 部分实现 | ref 语义检查器存在 |
 | clone() 显式深拷贝 | ✅ 已实现 | CloneChecker 检测 clone 移动/释放的值 |
@@ -92,7 +91,7 @@ title: "借用检查器状态"
 
 | 维度 | 评分 | 说明 |
 |------|------|------|
-| 未完成事项 | 4 | 补充测试、control_flow 逻辑、freeze 机制、ref 逃逸分析 |
+| 未完成事项 | 3 | 补充测试、control_flow 逻辑、ref 逃逸分析 |
 | 测试覆盖 | 良好 | 83 个测试，borrow_checker/chain_calls/consume_analysis 测试充分 |
 | 文档质量 | 良好 | 模块/结构体/方法级别均有文档注释 |
 | 代码架构 | 优秀 | OwnershipChecker 统一编排，职责分离清晰 |
@@ -104,5 +103,4 @@ title: "借用检查器状态"
 
 1. **补充 5 个子模块的单元测试**：drop_semantics, clone, mut_check, ref_semantics, unsafe_check
 2. **实现 control_flow 分析器的核心逻辑**（当前为空骨架）
-3. **完善 freeze 机制**（&mut T 临时冻结为 &T）
-4. **完善 ref 自动选择 Rc/Arc 的逃逸分析**
+3. **完善 ref 自动选择 Rc/Arc 的逃逸分析**

@@ -6,7 +6,7 @@
 //! 使用统一的 ScopeManager 管理变量作用域。
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::parser::ast::{BinOp, UnOp};
+use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
 use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::overload;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
@@ -724,6 +724,19 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                     // 展开返回类型中被绑定的类型变量（Type 自描述推断）
                     let resolved_ret = self.solver.expand_type_shallow(&return_type);
+
+                    // 结构体构造器：当 return_type 仍是 TypeVar 时，
+                    // 检查 func 是否是类型名（如 Point(1.0, 2.0)）
+                    if matches!(resolved_ret, MonoType::TypeVar(_)) {
+                        if let Expr::Var(name, _) = func.as_ref() {
+                            if let Some(def_ty) = self.type_defs.get(name) {
+                                let def_resolved = self.solver.resolve_type(def_ty);
+                                if matches!(def_resolved, MonoType::Struct(_)) {
+                                    return Ok(def_resolved);
+                                }
+                            }
+                        }
+                    }
                     return Ok(resolved_ret);
                 }
                 Ok(self.solver.new_var())

@@ -627,7 +627,7 @@ impl AstToIrGenerator {
     #[allow(clippy::too_many_arguments)]
     fn generate_method_ir(
         &mut self,
-        _type_name: &str,
+        type_name: &str,
         method_name: &str,
         method_type: &ast::Type,
         params: &[ast::Param],
@@ -640,10 +640,19 @@ impl AstToIrGenerator {
         // 重置当前函数的局部变量名列表
         self.current_local_names.clear();
 
-        // 命名空间机制：方法函数名就是方法名，无复杂前缀
-        // 例如：Point.get_x 生成函数名 "get_x"
-        // 调用时：p.get_x() -> get_x(p)
-        let func_name = method_name.to_string();
+        // 命名空间机制：方法函数名 = Type.method
+        // 例如：Point.get_x 生成函数名 "Point.get_x"
+        // 调用时：p.get_x() -> Point.get_x(p)
+        let func_name = format!("{}.{}", type_name, method_name);
+
+        // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
+        let binding_entry = ast::TypeBodyBinding {
+            name: method_name.to_string(),
+            kind: ast::BindingKind::DefaultExternal {
+                function: func_name.clone(),
+            },
+        };
+        self.register_type_bindings(type_name, &[binding_entry]);
 
         // 解析返回类型
         let return_type = if let ast::Type::Fn { return_type, .. } = method_type {
