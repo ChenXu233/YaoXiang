@@ -637,6 +637,45 @@ impl StatementChecker {
                 self.process_use_stmt(path, items, alias);
                 Ok(())
             }
+            // 元组解构赋值
+            crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
+                names,
+                rhs,
+                span,
+            } => {
+                let rhs_ty = self.check_expr(rhs)?;
+                let resolved_ty = self.solver.resolve_type(&rhs_ty);
+                match &resolved_ty {
+                    MonoType::Tuple(elem_types) => {
+                        if elem_types.len() != names.len() {
+                            return Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("Tuple({})", names.len()),
+                                    &format!("Tuple({})", elem_types.len()),
+                                )
+                                .at(*span)
+                                .build(),
+                            ));
+                        }
+                        for (name, elem_ty) in names.iter().zip(elem_types.iter()) {
+                            self.scope.add_var(
+                                name.clone(),
+                                PolyType::mono(elem_ty.clone()),
+                                false,
+                            );
+                        }
+                        Ok(())
+                    }
+                    _ => {
+                        // RHS 不是元组类型，为每个名称创建新类型变量
+                        for name in names {
+                            let ty = self.solver.new_var();
+                            self.scope.add_var(name.clone(), PolyType::mono(ty), false);
+                        }
+                        Ok(())
+                    }
+                }
+            }
             // 错误恢复占位符：报告错误但不 panic
             crate::frontend::core::parser::ast::StmtKind::Error(span) => Err(Box::new(
                 ErrorCodeDefinition::invalid_syntax("缺失语句")
@@ -848,6 +887,48 @@ impl StatementChecker {
             })
         };
         self.expected_return_type = fn_expected_ret;
+
+        // 当 body 的参数缺少类型标注时，从函数签名中补全
+        // 例如: Point.getX: (self: &Point) -> Float = (self) => { ... }
+        // 此时 body 的 params 为 [Param { name: "self", ty: None }]
+        // 需要从 type_annotation 的 Fn params 中获取类型
+        let owned_merged_params: Vec<Param>;
+        let params = if let Some(crate::frontend::core::parser::ast::Type::Fn {
+            params: sig_param_types,
+            ..
+        }) = type_annotation
+        {
+            let needs_merge = params.iter().any(|p| p.ty.is_none())
+                && !params.is_empty()
+                && sig_param_types.len() >= params.len();
+            if needs_merge {
+                owned_merged_params = params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        if p.ty.is_none() {
+                            if let Some(sig_ty) = sig_param_types.get(i) {
+                                Param {
+                                    name: p.name.clone(),
+                                    ty: Some(sig_ty.clone()),
+                                    is_mut: p.is_mut,
+                                    span: p.span,
+                                }
+                            } else {
+                                p.clone()
+                            }
+                        } else {
+                            p.clone()
+                        }
+                    })
+                    .collect();
+                &owned_merged_params
+            } else {
+                params
+            }
+        } else {
+            params
+        };
 
         // 对于泛型函数，将类型级参数（MetaType 类型）替换为新的类型变量
         // 这些参数是泛型类型参数声明合并到值级参数的结果
@@ -1329,6 +1410,7 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
+                        inferrer.set_type_defs(&self.type_defs);
                         inferrer.infer_expr(expr).map_err(Box::new)
                     }
                 }
@@ -1345,6 +1427,7 @@ impl StatementChecker {
                     self.expected_return_type.clone(),
                     &self.method_bindings,
                 );
+                inferrer.set_type_defs(&self.type_defs);
                 inferrer.infer_expr(expr).map_err(Box::new)
             }
         }

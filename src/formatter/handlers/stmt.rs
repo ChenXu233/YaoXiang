@@ -74,6 +74,13 @@ pub fn format_stmt(
             binding,
         } => format_external_binding(type_name, method_name, binding, ctx, source_map),
         StmtKind::Error(_span) => "/* error */".to_string(),
+        StmtKind::DestructureAssign { names, rhs, .. } => {
+            format!(
+                "{} = {}",
+                names.join(", "),
+                format_expr(rhs, ctx, source_map)
+            )
+        }
     }
 }
 

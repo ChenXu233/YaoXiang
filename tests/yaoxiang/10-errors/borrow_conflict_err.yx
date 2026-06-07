@@ -1,0 +1,18 @@
+// 10-errors/borrow_conflict_err.yx
+// 验证: &mut T 和 &T 不能同时活跃 — 应产生编译错误
+// 状态: 待测试
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+bad_alias: (p: &mut Point) -> Void = {
+    view: &Point = freeze(p)
+    p.x = 10.0
+    io.println(view.x)
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    bad_alias(p)
+}

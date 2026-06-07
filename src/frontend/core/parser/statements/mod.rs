@@ -59,6 +59,8 @@ impl StatementParser for ParserState<'_> {
                 // Identifier 语句解析
                 declarations::parse_identifier_stmt(self, start_span)
             }
+            // tuple destructuring with parens: (a, b) = expr
+            Some(TokenKind::LParen) => declarations::parse_paren_destructure_stmt(self, start_span),
             // Eof - no statement to parse
             Some(TokenKind::Eof) | None => None,
             // Phase 1: @ 不再是有效的语句起始（eval block 已移除）

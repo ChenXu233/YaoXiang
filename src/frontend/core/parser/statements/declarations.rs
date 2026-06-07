@@ -176,10 +176,10 @@ fn skip_old_function_syntax(_state: &mut ParserState<'_>) {
 fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
-    // 检查是否是 Identifier (类型名)
+    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
     let has_type_name = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(_))
+        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
     );
 
     if has_type_name {
@@ -216,9 +216,10 @@ fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
 fn is_external_binding_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
+    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
     let has_type_name = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(_))
+        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
     );
 
     if has_type_name {
@@ -1124,6 +1125,70 @@ pub fn parse_identifier_stmt(
         return parse_expr_stmt(state, span);
     }
 
+    // Check for tuple destructuring: identifier, identifier, ... = expr
+    // This must be checked BEFORE the `:` check since `,` comes first
+    if matches!(next.map(|t| &t.kind), Some(TokenKind::Comma)) {
+        // Save position in case this turns out to not be destructuring
+        let saved = state.save_position();
+        let err_count = state.error_count();
+
+        let first_name = match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                state.restore_position(saved);
+                state.truncate_errors(err_count);
+                return parse_expr_stmt(state, span);
+            }
+        };
+        state.bump(); // consume first identifier
+
+        let mut names = vec![first_name];
+
+        // Collect comma-separated identifiers
+        while state.skip(&TokenKind::Comma) {
+            let name = match state.current().map(|t| &t.kind) {
+                Some(TokenKind::Identifier(n)) => n.clone(),
+                _ => {
+                    state.restore_position(saved);
+                    state.truncate_errors(err_count);
+                    return parse_expr_stmt(state, span);
+                }
+            };
+            names.push(name);
+            state.bump(); // consume identifier
+        }
+
+        // Expect `=`
+        if !state.at(&TokenKind::Eq) {
+            state.restore_position(saved);
+            state.truncate_errors(err_count);
+            return parse_expr_stmt(state, span);
+        }
+        state.bump(); // consume `=`
+
+        // Parse RHS expression
+        let rhs = match state.parse_expression(BP_LOWEST) {
+            Some(expr) => expr,
+            None => {
+                state.error(ParseError::Message(
+                    "Expected expression after '=' in tuple destructuring".to_string(),
+                ));
+                return None;
+            }
+        };
+
+        state.skip(&TokenKind::Semicolon);
+
+        return Some(Stmt {
+            kind: StmtKind::DestructureAssign {
+                names,
+                rhs: Box::new(rhs),
+                span,
+            },
+            span,
+        });
+    }
+
     // Check for variable declaration: identifier followed by :
     if matches!(next.map(|t| &t.kind), Some(TokenKind::Colon)) {
         // 传递已检测到的 is_pub 给 parse_var_stmt
@@ -1222,6 +1287,87 @@ fn parse_constructor_params(state: &mut ParserState<'_>) -> Option<Vec<(Option<S
     }
 
     Some(params)
+}
+
+/// Parse parenthesized tuple destructuring: `(a, b) = expr`
+/// Called when the current token is `(`.
+/// Falls back to expression statement if this is not a destructuring pattern.
+pub fn parse_paren_destructure_stmt(
+    state: &mut ParserState<'_>,
+    span: Span,
+) -> Option<Stmt> {
+    let saved = state.save_position();
+    let err_count = state.error_count();
+
+    state.bump(); // consume `(`
+
+    // Check if next token is an identifier (first name in destructuring)
+    let first_name = match state.current().map(|t| &t.kind) {
+        Some(TokenKind::Identifier(n)) => n.clone(),
+        _ => {
+            // Not a destructuring pattern, fall back to expression
+            state.restore_position(saved);
+            state.truncate_errors(err_count);
+            return parse_expr_stmt(state, span);
+        }
+    };
+    state.bump(); // consume first identifier
+
+    let mut names = vec![first_name];
+
+    // Collect remaining comma-separated identifiers
+    while state.at(&TokenKind::Comma) {
+        state.bump(); // consume `,`
+        let name = match state.current().map(|t| &t.kind) {
+            Some(TokenKind::Identifier(n)) => n.clone(),
+            _ => {
+                // Not a destructuring pattern after comma
+                state.restore_position(saved);
+                state.truncate_errors(err_count);
+                return parse_expr_stmt(state, span);
+            }
+        };
+        names.push(name);
+        state.bump(); // consume identifier
+    }
+
+    // Expect `)`
+    if !state.at(&TokenKind::RParen) {
+        state.restore_position(saved);
+        state.truncate_errors(err_count);
+        return parse_expr_stmt(state, span);
+    }
+    state.bump(); // consume `)`
+
+    // Expect `=`
+    if !state.at(&TokenKind::Eq) {
+        state.restore_position(saved);
+        state.truncate_errors(err_count);
+        return parse_expr_stmt(state, span);
+    }
+    state.bump(); // consume `=`
+
+    // Parse RHS expression
+    let rhs = match state.parse_expression(BP_LOWEST) {
+        Some(expr) => expr,
+        None => {
+            state.error(ParseError::Message(
+                "Expected expression after '=' in tuple destructuring".to_string(),
+            ));
+            return None;
+        }
+    };
+
+    state.skip(&TokenKind::Semicolon);
+
+    Some(Stmt {
+        kind: StmtKind::DestructureAssign {
+            names,
+            rhs: Box::new(rhs),
+            span,
+        },
+        span,
+    })
 }
 
 /// Parse expression statement

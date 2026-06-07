@@ -44,6 +44,9 @@ pub struct ExpressionInferrer<'a> {
     /// 闭包捕获分析结果: Span -> CaptureInfo
     /// 用于 IR 生成阶段确定闭包的捕获模式
     capture_infos: HashMap<crate::util::span::Span, CaptureInfo>,
+    /// 类型定义表: type_name -> MonoType(Struct)
+    /// 用于 TypeRef → Struct 解析（字段访问等）
+    type_defs: &'a HashMap<String, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -63,6 +66,7 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
+            type_defs: &EMPTY_SIGNATURES,
         }
     }
 
@@ -83,6 +87,7 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
+            type_defs: &EMPTY_SIGNATURES,
         }
     }
 
@@ -104,6 +109,7 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
+            type_defs: &EMPTY_SIGNATURES,
         }
     }
 
@@ -127,6 +133,7 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type,
             method_bindings,
             capture_infos: HashMap::new(),
+            type_defs: &EMPTY_SIGNATURES,
         }
     }
 
@@ -146,6 +153,14 @@ impl<'a> ExpressionInferrer<'a> {
         bindings: &'a HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// 设置类型定义表
+    pub fn set_type_defs(
+        &mut self,
+        defs: &'a HashMap<String, MonoType>,
+    ) {
+        self.type_defs = defs;
     }
 
     /// 添加变量到当前作用域
@@ -546,6 +561,14 @@ impl<'a> ExpressionInferrer<'a> {
                 let obj_ty = self.infer_expr(obj)?;
                 let obj_ty = self.solver.resolve_type(&obj_ty);
 
+                // 解包所有 Ref 层，用于字段/方法查找
+                // 例如 &Point -> Point, &&Point -> Point
+                let mut resolved = obj_ty.clone();
+                while let MonoType::Ref { inner, .. } = resolved {
+                    resolved = *inner;
+                }
+                let resolved = self.solver.resolve_type(&resolved);
+
                 let namespace_path = extract_namespace_path(obj);
                 if let Some(ns_path) = namespace_path {
                     let full_path = format!("{}.{}", ns_path, field);
@@ -565,7 +588,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 }
 
-                match obj_ty {
+                match resolved {
                     MonoType::Struct(struct_type) => {
                         for (field_name, field_ty) in &struct_type.fields {
                             if field_name == field {
@@ -580,6 +603,27 @@ impl<'a> ExpressionInferrer<'a> {
                         Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
                     }
                     MonoType::TypeRef(ref type_name) => {
+                        // Try to resolve TypeRef → Struct via type_defs for field lookup
+                        if let Some(def_ty) = self.type_defs.get(type_name) {
+                            let def_ty = self.solver.resolve_type(def_ty);
+                            if let MonoType::Struct(ref struct_type) = def_ty {
+                                for (field_name, field_ty) in &struct_type.fields {
+                                    if field_name == field {
+                                        return Ok(field_ty.clone());
+                                    }
+                                }
+                                // Field not found in resolved struct — try method lookup
+                                let method_key = format!("{}.{}", struct_type.name, field);
+                                if let Some(method_ty) = self.method_bindings.get(&method_key) {
+                                    return Ok(method_ty.clone());
+                                }
+                                return Err(ErrorCodeDefinition::field_not_found(
+                                    field,
+                                    &struct_type.name,
+                                )
+                                .build());
+                            }
+                        }
                         // Try method lookup on TypeRef (generic type or forward reference)
                         let method_key = format!("{}.{}", type_name, field);
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
@@ -1139,9 +1183,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let ty = self.infer_expr(ret_expr)?;
                 Ok(Some(ty))
             }
-            crate::frontend::core::parser::ast::Expr::Return(None, _) => {
-                Ok(Some(MonoType::Void))
-            }
+            crate::frontend::core::parser::ast::Expr::Return(None, _) => Ok(Some(MonoType::Void)),
             _ => Ok(None),
         }
     }

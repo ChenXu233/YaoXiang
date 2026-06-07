@@ -339,6 +339,9 @@ fn extract_read_vars_from_stmt(
             }
             vars.extend(body_vars);
         }
+        StmtKind::DestructureAssign { rhs, .. } => {
+            extract_read_vars_from_expr(rhs, vars);
+        }
         StmtKind::Use { .. } => {
             // use 语句不产生变量读取
         }
@@ -613,6 +616,9 @@ fn extract_written_vars_from_stmt(
                 body_vars.remove(pn);
             }
             vars.extend(body_vars);
+        }
+        StmtKind::DestructureAssign { .. } => {
+            // 解构赋值中声明的变量是局部的，不在此收集
         }
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
     }

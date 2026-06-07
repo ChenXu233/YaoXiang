@@ -1417,6 +1417,54 @@ impl AstToIrGenerator {
                     constants,
                 )?;
             }
+            ast::StmtKind::DestructureAssign { names, rhs, span } => {
+                // 优化：如果 RHS 是元组字面量 (1, 2)，直接提取每个元素赋值
+                // 否则通过 LoadIndex 索引
+                if let ast::Expr::Tuple(elems, _) = rhs.as_ref() {
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(name, var_idx);
+
+                        if let Some(elem) = elems.get(i) {
+                            self.generate_expr_ir(elem, var_idx, instructions, constants)?;
+                        }
+
+                        instructions.push(Instruction::Store {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(var_idx),
+                            span: *span,
+                        });
+                    }
+                } else {
+                    // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
+                    let rhs_reg = self.next_temp_reg();
+                    self.generate_expr_ir(rhs, rhs_reg, instructions, constants)?;
+
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(name, var_idx);
+
+                        let index_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(index_reg),
+                            src: Operand::Const(ConstValue::Int(i as i128)),
+                        });
+
+                        instructions.push(Instruction::LoadIndex {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(rhs_reg),
+                            index: Operand::Local(index_reg),
+                            span: *span,
+                        });
+
+                        instructions.push(Instruction::Store {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(var_idx),
+                            span: *span,
+                        });
+                    }
+                }
+            }
             // 处理其他语句类型
             _ => {}
         }

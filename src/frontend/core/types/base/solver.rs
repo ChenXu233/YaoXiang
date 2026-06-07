@@ -245,6 +245,10 @@ impl TypeConstraintSolver {
                 name: name.clone(),
                 args: args.iter().map(|t| self.expand_type(t)).collect(),
             },
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(self.expand_type(inner)),
+            },
             _ => ty.clone(),
         }
     }
@@ -408,6 +412,10 @@ impl TypeConstraintSolver {
                 name: name.clone(),
                 base_type: Box::new(self.expand_type_mut(base_type)),
                 value: value.clone(),
+            },
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(self.expand_type_mut(inner)),
             },
             _ => ty.clone(),
         }
