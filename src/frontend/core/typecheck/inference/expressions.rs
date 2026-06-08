@@ -653,7 +653,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                 })
                 .collect();
-            let resolved_return = self.solver.resolve_type(&return_type);
+            let resolved_return = self.solver.resolve_type(return_type);
 
             // 如果返回类型是 MetaType，尝试从 generic_type_defs 中获取具体的类型
             if matches!(resolved_return, MonoType::MetaType { .. }) {
@@ -667,10 +667,10 @@ impl<'a> ExpressionInferrer<'a> {
                 };
             }
 
-            return MonoType::Fn {
+            MonoType::Fn {
                 params: new_params,
                 return_type: Box::new(resolved_return),
-            };
+            }
         }
     }
 
