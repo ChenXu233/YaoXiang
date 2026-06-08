@@ -14,6 +14,8 @@ use super::semantic_db;
 #[derive(Debug, Clone, Default)]
 pub struct TypeCheckResult {
     pub module_name: String,
+    /// 诊断信息（空 = 无错误）
+    pub diagnostics: Vec<crate::util::diagnostic::Diagnostic>,
     pub bindings: HashMap<String, PolyType>,
     /// 局部变量的类型信息（用于 IR 生成器显示错误消息）
     /// Key 是变量名，Value 是推断出的具体类型

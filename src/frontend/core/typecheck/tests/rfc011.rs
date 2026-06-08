@@ -16,10 +16,7 @@ use crate::frontend::core::parser::parse;
 /// 辅助函数：解析源代码并类型检查
 fn check_source(
     source: &str
-) -> Result<
-    crate::frontend::core::typecheck::types::TypeCheckResult,
-    Vec<crate::util::diagnostic::Diagnostic>,
-> {
+) -> crate::frontend::core::typecheck::types::TypeCheckResult {
     let tokens = tokenize(source).expect("tokenize failed");
     let module = parse(&tokens).expect("parse failed");
     let mut checker = TypeChecker::new("test");
@@ -51,7 +48,7 @@ fn test_rfc011_generic_type_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Option generic type definition should pass");
+    assert!(result.diagnostics.is_empty(), "Option generic type definition should pass");
 }
 
 /// 规范：泛型参数推导
@@ -76,7 +73,7 @@ fn test_rfc011_generic_type_inference() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "generic type inference should pass");
+    assert!(result.diagnostics.is_empty(), "generic type inference should pass");
 }
 
 /// 规范：泛型函数定义
@@ -100,7 +97,7 @@ fn test_rfc011_generic_function_definition() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "generic function definition should pass");
+    assert!(result.diagnostics.is_empty(), "generic function definition should pass");
 }
 
 /// 规范：泛型函数调用时自动推导
@@ -125,7 +122,7 @@ fn test_rfc011_generic_function_inference() {
     let result = check_source(source);
 
     // Assert - 泛型函数调用应成功（T 从参数推导为 Int）
-    assert!(result.is_ok(), "generic function inference should pass");
+    assert!(result.diagnostics.is_empty(), "generic function inference should pass");
 }
 
 /// 验证 Type 自描述推断：返回类型被正确解析为具体类型
@@ -140,7 +137,8 @@ fn test_rfc011_type_description_resolves_return_type() {
     "#;
 
     // Act
-    let check_result = check_source(source).expect("type check should pass");
+    let check_result = check_source(source);
+    assert!(check_result.diagnostics.is_empty(), "type check should pass, got: {:?}", check_result.diagnostics);
 
     // Assert - result 的类型应被推断为 Int
     let result_ty = check_result
@@ -188,7 +186,7 @@ fn test_rfc011_generic_explicit_fill_required() {
 
     // Assert
     assert!(
-        result.is_err(),
+        !result.diagnostics.is_empty(),
         "should fail when argument type does not match parameter"
     );
 }
@@ -221,7 +219,7 @@ fn test_rfc011_single_constraint() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "single constraint should pass");
+    assert!(result.diagnostics.is_empty(), "single constraint should pass");
 }
 
 /// 规范：多重约束
@@ -246,7 +244,7 @@ fn test_rfc011_multiple_constraints() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "multiple constraints should pass");
+    assert!(result.diagnostics.is_empty(), "multiple constraints should pass");
 }
 
 /// 规范：约束不满足应该报错
@@ -267,7 +265,7 @@ fn test_rfc011_constraint_not_satisfied() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_err(), "should fail when constraint not satisfied");
+    assert!(!result.diagnostics.is_empty(), "should fail when constraint not satisfied");
 }
 
 /// 规范：函数类型约束
@@ -287,7 +285,7 @@ fn test_rfc011_function_type_constraint() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "function type constraint should pass");
+    assert!(result.diagnostics.is_empty(), "function type constraint should pass");
 }
 
 // ===================================================================
@@ -316,7 +314,7 @@ fn test_rfc011_associated_type() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "associated type should pass");
+    assert!(result.diagnostics.is_empty(), "associated type should pass");
 }
 
 /// 规范：泛型关联类型（GAT）
@@ -344,7 +342,7 @@ fn test_rfc011_generic_associated_type() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "GAT should pass");
+    assert!(result.diagnostics.is_empty(), "GAT should pass");
 }
 
 // ===================================================================
@@ -372,7 +370,7 @@ fn test_rfc011_const_generic_parameter() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "const generic parameter should pass");
+    assert!(result.diagnostics.is_empty(), "const generic parameter should pass");
 }
 
 /// 规范：编译期计算
@@ -403,7 +401,7 @@ fn test_rfc011_compile_time_evaluation() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "compile time evaluation should pass");
+    assert!(result.diagnostics.is_empty(), "compile time evaluation should pass");
 }
 
 /// 规范：编译期维度验证
@@ -438,7 +436,7 @@ fn test_rfc011_compile_time_dimension_validation() {
 
     // Assert
     assert!(
-        result.is_err(),
+        !result.diagnostics.is_empty(),
         "dimension mismatch should fail at compile time"
     );
 }
@@ -478,7 +476,7 @@ fn test_rfc011_function_specialization() {
 
     // Assert - 同名函数重载定义应通过语法解析
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "function specialization (overloading) should pass"
     );
 }
@@ -515,7 +513,7 @@ fn test_rfc011_platform_specialization() {
 
     // Assert - 带平台参数的同名函数重载定义应通过语法解析
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "platform specialization definition should pass"
     );
 }
@@ -540,7 +538,7 @@ fn test_rfc011_int_subtype_of_float() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_ok(), "Int should be subtype of Float");
+    assert!(result.diagnostics.is_empty(), "Int should be subtype of Float");
 }
 
 /// 规范：Float 不是 Int 的子类型
@@ -558,5 +556,5 @@ fn test_rfc011_float_not_subtype_of_int() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.is_err(), "Float should not be subtype of Int");
+    assert!(!result.diagnostics.is_empty(), "Float should not be subtype of Int");
 }

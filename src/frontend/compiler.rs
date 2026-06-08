@@ -155,7 +155,7 @@ impl Compiler {
     pub fn typecheck(
         &mut self,
         ast: &super::core::parser::Module,
-    ) -> Result<super::core::typecheck::TypeCheckResult, Vec<Diagnostic>> {
+    ) -> super::core::typecheck::TypeCheckResult {
         super::core::typecheck::check_module(ast, &mut None)
     }
 
