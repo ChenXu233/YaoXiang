@@ -44,7 +44,6 @@ fn make_drawable_interface() -> MonoType {
             MonoType::Fn {
                 params: vec![MonoType::TypeRef("Surface".to_string())],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -65,7 +64,6 @@ fn make_circle_implementing_drawable() -> MonoType {
                 MonoType::Fn {
                     params: vec![MonoType::TypeRef("Surface".to_string())],
                     return_type: Box::new(MonoType::Void),
-                    is_async: false,
                 },
             ),
         ],
@@ -168,7 +166,6 @@ fn test_assignment_constraint_dynamic() {
         MonoType::Fn {
             params: vec![MonoType::TypeRef("Surface".to_string())],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         },
     );
 
@@ -299,7 +296,6 @@ fn test_assignment_fn_type_compatibility() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let lhs = fn_type.clone();
     let rhs = fn_type.clone();
@@ -310,29 +306,6 @@ fn test_assignment_fn_type_compatibility() {
 
     // Assert
     assert!(result.is_ok(), "相同签名的函数类型赋值应成功");
-}
-
-#[test]
-fn test_assignment_fn_type_incompatible_async() {
-    // Arrange — async 属性不同，函数类型不兼容
-    let mut checker = AssignmentChecker::new();
-    let lhs = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-        is_async: true,
-    };
-    let rhs = MonoType::Fn {
-        params: vec![MonoType::Int(32)],
-        return_type: Box::new(MonoType::Void),
-        is_async: false,
-    };
-    let span = dummy_span();
-
-    // Act
-    let result = checker.check_assignment(&lhs, &rhs, span, None);
-
-    // Assert
-    assert!(result.is_err(), "async 与非 async 函数之间不应兼容");
 }
 
 #[test]

@@ -1,20 +1,20 @@
 # Error Code Reference
 
-YaoXiang compiler uses error codes to identify different types of diagnostic messages. Error codes are grouped by number range, and each error code corresponds to a specific error scenario.
+The YaoXiang compiler uses error codes to identify different types of diagnostic information. Error codes are grouped by number range, with each error code corresponding to a specific error scenario.
 
 ---
 
 ## E0xxx -- Lexical and Syntax Analysis
 
-Errors produced during the Lexer and Parser stages.
+Errors produced during the lexical analyzer (Lexer) and parser (Parser) stages.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E0001 | `Invalid character: '{char}'` | Invalid character |
 | E0002 | `Invalid number literal: '{literal}'` | Invalid numeric literal |
 | E0003 | `Unterminated string starting at line {line}` | Unterminated string |
 | E0004 | `Invalid character literal: '{literal}'` | Invalid character literal |
-| E0010 | `Expected {expected}, found {found}` | Unexpected token |
+| E0010 | `Expected {expected}, found {found}` | Expected token |
 | E0011 | `Unexpected token: '{token}'` | Unexpected token |
 | E0012 | `Invalid syntax: {reason}` | Invalid syntax |
 | E0013 | `Mismatched {bracket_type}: opened at line {open_line}, column {open_col}, not closed` | Mismatched brackets |
@@ -25,7 +25,7 @@ Errors produced during the Lexer and Parser stages.
 Errors produced during type checking, covering variable types, function calls, pattern matching, generic instantiation, concurrency semantics, and error propagation.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E1001 | `Unknown variable: '{name}'` | Unknown variable |
 | E1002 | `Expected type '{expected}', found type '{found}'` | Type mismatch |
 | E1003 | `Unknown type: '{type}'` | Unknown type |
@@ -58,10 +58,10 @@ Errors produced during type checking, covering variable types, function calls, p
 
 ## E2xxx -- Semantic Analysis
 
-Errors produced during semantic analysis, covering scope, variable lifetime, ownership, and function signature parsing.
+Errors produced during semantic analysis, covering scope, variable lifetime, ownership, and function signature resolution.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E2001 | `Variable '{name}' is not in scope` | Scope error |
 | E2002 | `Duplicate definition: '{name}' is already defined in this scope` | Duplicate definition |
 | E2003 | `Ownership constraint violated: {reason}` | Ownership error |
@@ -69,10 +69,10 @@ Errors produced during semantic analysis, covering scope, variable lifetime, own
 | E2011 | `Use of uninitialized variable '{name}'` | Use of uninitialized variable |
 | E2012 | `Mutability conflict: cannot use mutable reference in immutable context` | Mutability conflict |
 | E2013 | `Cannot shadow existing variable '{name}'` | Variable shadowing |
-| E2014 | `Function calls are not allowed in top-level variable initializers` | Top-level variable function calls not supported |
+| E2014 | `'{name}' has been moved and cannot be used` | Use of moved variable |
 | E2090 | `Invalid signature: {reason}` | Invalid signature |
-| E2091 | `Invalid signature: unknown type '{type_name}'` | Signature unknown type |
-| E2092 | `Invalid signature: missing '->'` | Signature missing arrow |
+| E2091 | `Invalid signature: unknown type '{type_name}'` | Unknown type in signature |
+| E2092 | `Invalid signature: missing '->'` | Missing arrow in signature |
 | E2093 | `Invalid signature: duplicate parameter '{name}'` | Duplicate parameter name |
 | E2094 | `Invalid signature: generic '{name}' shadows outer generic` | Generic parameter shadowing |
 | E2095 | `Invalid signature: parameter '{name}' shadows generic` | Parameter name shadows generic |
@@ -82,19 +82,19 @@ Errors produced during semantic analysis, covering scope, variable lifetime, own
 Errors related to generic constraints and trait system.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E4001 | `Type '{type}' does not satisfy the trait bound '{trait}'` | Generic constraint violation |
 | E4002 | `Trait '{trait}' not found` | Trait not found |
-| E4003 | `Missing implementation for trait '{trait}' for type '{type}'` | Missing trait impl |
-| E4004 | `Conflicting trait implementations for '{trait}'` | Trait impl conflict |
+| E4003 | `Missing implementation for trait '{trait}' for type '{type}'` | Missing trait implementation |
+| E4004 | `Conflicting trait implementations for '{trait}'` | Trait implementation conflict |
 | E4005 | `Associated type '{assoc_type}' not found in '{container}'` | Associated type not found |
 
 ## E5xxx -- Modules and Imports
 
-Module system and import-related errors.
+Errors related to module system and imports.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E5001 | `Module '{module}' not found` | Module not found |
 | E5002 | `Failed to import module '{module}': {reason}` | Import error |
 | E5003 | `Export '{export}' not found in module '{module}'` | Export not found |
@@ -108,7 +108,7 @@ Module system and import-related errors.
 Errors produced during runtime.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E6001 | `Division by zero in expression: {expr}` | Division by zero |
 | E6002 | `Null pointer dereference at {location}` | Null pointer dereference |
 | E6003 | `Array index out of bounds: valid range is 0..{max}, found {index}` | Array index out of bounds |
@@ -122,7 +122,7 @@ Errors produced during runtime.
 I/O operations and system-level errors.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E7001 | `File not found: '{path}'` | File not found |
 | E7002 | `Permission denied: '{path}'` | Permission denied |
 | E7003 | `I/O error: {reason}` | I/O error |
@@ -130,20 +130,20 @@ I/O operations and system-level errors.
 
 ## E8xxx -- Internal Compiler Errors
 
-Internal compiler errors, usually indicating a compiler bug. Please report such errors at [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
+Internal compiler errors, usually indicating a bug in the compiler itself. Please report such errors at [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | E8001 | `Internal compiler error: {message}` | Internal compiler error |
 | E8002 | `Unexpected compiler panic: {reason}` | Unexpected panic |
 | E8003 | `Compiler phase error: {phase} - {message}` | Compiler phase error |
 
 ## W1xxx -- Warnings
 
-Dead code detection warnings. Warnings do not stop compilation but indicate potential issues in the code.
+Warnings related to dead code detection. Warnings do not prevent compilation but indicate possible issues in the code.
 
 | Error Code | Template | Description |
-|--------|------|------|
+|------------|----------|-------------|
 | W1001 | `Unused exported function: '{name}'` | Unused exported function |
 | W1002 | `Unused exported type: '{name}'` | Unused exported type |
 | W1003 | `Unused import: '{name}'` | Unused import |
@@ -152,4 +152,4 @@ Dead code detection warnings. Warnings do not stop compilation but indicate pote
 
 ---
 
-**Total: 83 diagnostic codes (78 error codes + 5 warning codes).**
+Total: **83** diagnostic codes (78 error codes + 5 warning codes).

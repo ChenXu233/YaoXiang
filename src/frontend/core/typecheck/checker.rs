@@ -285,14 +285,9 @@ impl TypeChecker {
         let solve_result = self.env.solver().solve();
         if let Err(constraint_errors) = solve_result {
             for e in constraint_errors {
-                self.add_error(
-                    ErrorCodeDefinition::type_mismatch(
-                        &format!("{}", e.error.left),
-                        &format!("{}", e.error.right),
-                    )
-                    .at(e.span)
-                    .build(),
-                );
+                let mut diag = e.error;
+                diag.span = Some(e.span);
+                self.add_error(diag);
             }
         }
 
@@ -344,6 +339,7 @@ impl TypeChecker {
             bindings,
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
+            trait_table: self.env.trait_table.clone(),
         };
 
         Ok(result)
@@ -374,7 +370,6 @@ impl TypeChecker {
                     name,
                     params,
                     return_type,
-                    is_async,
                     ..
                 } = expr.as_ref()
                 {
@@ -393,7 +388,6 @@ impl TypeChecker {
                                 .map(|t| MonoType::from(t.clone()))
                                 .unwrap_or_else(|| self.env.solver().new_var()),
                         ),
-                        is_async: *is_async,
                     };
                     self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                 }
@@ -419,7 +413,6 @@ impl TypeChecker {
                                     })
                                     .collect(),
                                 return_type: Box::new(self.env.solver().new_var()),
-                                is_async: false,
                             };
                             self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                         }
@@ -563,7 +556,6 @@ impl TypeChecker {
                 let fn_ty = MonoType::Fn {
                     params: final_param_types.clone(),
                     return_type: Box::new(final_return_type),
-                    is_async: false,
                 };
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
@@ -679,7 +671,6 @@ impl TypeChecker {
                             MonoType::Fn {
                                 params,
                                 return_type,
-                                is_async,
                             } => {
                                 let mut new_params: Vec<MonoType> = Vec::new();
                                 for (i, p) in params.iter().enumerate() {
@@ -690,7 +681,6 @@ impl TypeChecker {
                                 MonoType::Fn {
                                     params: new_params,
                                     return_type: return_type.clone(),
-                                    is_async: *is_async,
                                 }
                             }
                             other => other.clone(),
@@ -716,7 +706,6 @@ impl TypeChecker {
             let field_ty = MonoType::Fn {
                 params: vec![self.env.solver().new_var()],
                 return_type: Box::new(MonoType::Void),
-                is_async: false,
             };
             fields.push((field_name.clone(), field_ty));
         }
@@ -756,7 +745,6 @@ impl TypeChecker {
                         let field_ty = MonoType::Fn {
                             params: vec![self.env.solver().new_var()],
                             return_type: Box::new(MonoType::Void),
-                            is_async: false,
                         };
                         fields.push((field_name.clone(), field_ty));
                     }
@@ -780,7 +768,6 @@ impl TypeChecker {
                 let fn_ty = MonoType::Fn {
                     params: vec![self.env.solver().new_var()],
                     return_type: Box::new(MonoType::Void),
-                    is_async: false,
                 };
                 self.env.add_var(register_name, PolyType::mono(fn_ty));
             }
@@ -854,11 +841,12 @@ impl TypeChecker {
             }
             _ => poly.body.clone(),
         });
-        self.env.add_type(name.to_string(), poly);
+        self.env.add_type(name.to_string(), poly.clone());
 
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
-            let template = MonoType::from(definition.clone());
+            // 使用已注入名称的 poly 作为模板，确保实例化后的类型名称正确
+            let template = poly.body;
             self.env
                 .add_generic_type_def(name.to_string(), generic_params.to_vec(), template);
         }
@@ -1073,14 +1061,12 @@ impl TypeChecker {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .into_iter()
                     .map(|p| Self::substitute_type_refs(p, subst))
                     .collect(),
                 return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
-                is_async,
             },
             MonoType::List(inner) => {
                 MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))

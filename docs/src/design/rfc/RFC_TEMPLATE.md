@@ -1,13 +1,12 @@
 ---
-title: "RFC 模板"
+title: "RFC [编号]: [提案标题]"
+status: "草案"
+author: "[作者名]"
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
 ---
 
 # RFC [编号]: [提案标题]
-
-> **状态**: [草案 | 审核中 | 已接受 | 已拒绝]
-> **作者**: [作者名]
-> **创建日期**: [YYYY-MM-DD]
-> **最后更新**: 2026-02-12
 
 > **参考**: 查看 [完整示例](EXAMPLE_full_feature_proposal.md) 了解如何编写 RFC。
 

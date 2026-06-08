@@ -1,0 +1,18 @@
+// 09-concurrency/spawn_ref.yx
+// 验证: spawn {} + ref — 跨任务共享数据
+// 状态: 待测试
+
+use std.io
+
+main = {
+    data = 42
+    shared = ref data       // 编译器自动选 Rc 或 Arc
+
+    result = spawn {
+        a = shared          // 共享引用
+        b = shared          // 共享引用（ref 是 Dup）
+        return (a, b)
+    }
+    io.println(result)
+    io.println("ALL TESTS PASSED")
+}

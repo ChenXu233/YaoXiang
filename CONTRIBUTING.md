@@ -182,6 +182,24 @@ See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 ---
 
+## Contributor License Agreement / 贡献者许可协议
+
+Before your first Pull Request can be merged, you must sign our [Contributor License Agreement (CLA)](CLA.md).
+在你的第一个 Pull Request 被合并之前，你需要签署我们的[贡献者许可协议 (CLA)](CLA.md)。
+
+The CLA Assistant bot will automatically comment on your PR with instructions.
+CLA Assistant bot 会自动在你的 PR 下留言，引导你完成签署。
+
+**What the CLA covers / 协议内容**：
+
+| English | 中文 |
+|---------|------|
+| Copyright license to use your contributions | 授权项目使用你的贡献 |
+| Patent license for any patents your contribution may cover | 授权项目使用你的贡献涉及的专利 |
+| Confirmation that your work is original and does not infringe third-party rights | 确认你的贡献是原创且不侵犯第三方权利 |
+
+---
+
 ## Code Review / 代码审查
 
 ### Review Checklist / 审查要点

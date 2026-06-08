@@ -419,7 +419,6 @@ fn test_is_constraint_and_constraint_fields() {
             MonoType::Fn {
                 params: vec![],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             },
         )],
         methods: HashMap::new(),
@@ -510,7 +509,6 @@ fn test_type_name_fn_with_async() {
     let f = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::Void),
-        is_async: true,
     };
     assert!(f.type_name().contains("fn("));
 }
@@ -575,12 +573,10 @@ fn test_mono_type_fn_async_flag() {
     let f_sync = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     let f_async = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Void),
-        is_async: true,
     };
     // Fn type_name doesn't include async flag - both produce "fn() -> void"
     assert!(

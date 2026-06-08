@@ -1,13 +1,12 @@
 ---
-title: "RFC-012：F-String 模板字符串"
+title: "RFC 012: F-String 模板字符串"
+status: "已接受"
+author: "Chen Xu"
+created: "2025-01-27"
+updated: "2026-02-12"
 ---
 
 # RFC 012: F-String 模板字符串
-
-> **状态**: 已接受
-> **作者**: Chen Xu
-> **创建日期**: 2025-01-27
-> **最后更新**: 2026-02-12
 
 ## 摘要
 

@@ -92,7 +92,6 @@ fn test_subtype_with_complex_types() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act

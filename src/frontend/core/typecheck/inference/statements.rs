@@ -240,7 +240,6 @@ impl StatementChecker {
         MonoType::Fn {
             params: vec![self.solver.new_var()],
             return_type: Box::new(self.solver.new_var()),
-            is_async: false,
         }
     }
 
@@ -554,7 +553,6 @@ impl StatementChecker {
                 type_name,
                 generic_params,
                 type_annotation,
-                eval: _,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -581,6 +579,114 @@ impl StatementChecker {
                         stmt.span,
                     )
                 } else {
+                    // 类型定义：当 type_annotation 是 Struct 类型时，
+                    // body 是结构体字段定义，不是函数体
+                    // 例如：Point: Type = { x: Float, y: Float }
+                    // Parser 把 Type = { ... } 整体解析为 Type::Struct
+                    //
+                    // 同时支持类型级函数定义：
+                    // List: (T: Type) -> Type = { data: Array(T), length: Int }
+                    // 当 type_annotation 是 Type::Fn { return_type: MetaType } 时
+                    let is_type_def = type_annotation
+                        .as_ref()
+                        .map(|t| {
+                            use crate::frontend::core::parser::ast::Type;
+                            let result = match t {
+                                Type::Struct { .. } | Type::MetaType { .. } => true,
+                                Type::Fn { return_type, .. } => {
+                                    matches!(return_type.as_ref(), Type::MetaType { .. })
+                                }
+                                _ => false,
+                            };
+                            result
+                        })
+                        .unwrap_or(false);
+
+                    if is_type_def {
+                        // 从 type_annotation 或 body 提取结构体字段
+                        let mut fields = Vec::new();
+                        let mut interfaces = Vec::new();
+
+                        // 情况 1：type_annotation 是 Type::Struct（直接结构体定义）
+                        if let Some(crate::frontend::core::parser::ast::Type::Struct {
+                            fields: ast_fields,
+                            interfaces: ast_interfaces,
+                            ..
+                        }) = type_annotation
+                        {
+                            for field in ast_fields {
+                                let field_ty = MonoType::from(field.ty.clone());
+                                fields.push((field.name.clone(), field_ty));
+                            }
+                            interfaces = ast_interfaces.clone();
+                        } else {
+                            // 情况 2：type_annotation 是 Type::Fn（类型级函数）
+                            // 从 body 的语句中提取字段
+                            for stmt in stmts {
+                                if let crate::frontend::core::parser::ast::StmtKind::Var {
+                                    name: field_name,
+                                    type_annotation: field_type,
+                                    ..
+                                } = &stmt.kind
+                                {
+                                    let field_ty = field_type
+                                        .as_ref()
+                                        .map(|t| MonoType::from(t.clone()))
+                                        .unwrap_or_else(|| self.solver.new_var());
+                                    fields.push((field_name.clone(), field_ty));
+                                }
+                            }
+                        }
+                        let field_count = fields.len();
+                        let struct_ty =
+                            MonoType::Struct(crate::frontend::core::types::base::StructType {
+                                name: name.to_string(),
+                                fields,
+                                methods: HashMap::new(),
+                                field_mutability: vec![false; field_count],
+                                field_has_default: vec![false; field_count],
+                                interfaces,
+                            });
+                        self.type_defs.insert(name.to_string(), struct_ty.clone());
+                        self.scope.add_var(
+                            name.to_string(),
+                            PolyType::mono(struct_ty.clone()),
+                            false,
+                        );
+
+                        // 类型级函数：注册到 generic_type_defs 用于泛型实例化
+                        // 当 generic_params 非空时（如 List: (T: Type) -> Type），
+                        // parser 已将 type_annotation 从 Type::Fn 改为 Type::Struct，
+                        // 所以检查 generic_params 而不是 type_annotation
+                        if !generic_params.is_empty() {
+                            let param_names: Vec<String> = generic_params
+                                .iter()
+                                .filter_map(|p| {
+                                    if matches!(
+                                        p.kind,
+                                        crate::frontend::core::parser::ast::GenericParamKind::Type
+                                    ) {
+                                        Some(p.name.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            if !param_names.is_empty() {
+                                use crate::frontend::core::typecheck::environment::GenericTypeDef;
+                                self.generic_type_defs.insert(
+                                    name.to_string(),
+                                    GenericTypeDef {
+                                        param_names,
+                                        template: struct_ty,
+                                    },
+                                );
+                            }
+                        }
+
+                        return Ok(());
+                    }
+
                     // 函数绑定（包括空参数的函数）
                     // 使用 type_annotation 作为签名
                     self.check_fn_stmt(
@@ -603,7 +709,6 @@ impl StatementChecker {
             } => self.check_var_stmt(
                 name,
                 type_annotation.as_ref(),
-                None,
                 &[],
                 initializer.as_deref(),
                 *is_mut,
@@ -639,6 +744,46 @@ impl StatementChecker {
             } => {
                 self.process_use_stmt(path, items, alias);
                 Ok(())
+            }
+            // 元组解构赋值
+            crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
+                names,
+                rhs,
+                span,
+            } => {
+                let rhs_ty = self.check_expr(rhs)?;
+                let resolved_ty = self.solver.resolve_type(&rhs_ty);
+                match &resolved_ty {
+                    MonoType::Tuple(elem_types) => {
+                        if elem_types.len() != names.len() {
+                            return Err(Box::new(
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("Tuple({})", names.len()),
+                                    &format!("Tuple({})", elem_types.len()),
+                                )
+                                .at(*span)
+                                .build(),
+                            ));
+                        }
+                        for (name, elem_ty) in names.iter().zip(elem_types.iter()) {
+                            self.scope.add_var(
+                                name.name.clone(),
+                                PolyType::mono(elem_ty.clone()),
+                                false,
+                            );
+                        }
+                        Ok(())
+                    }
+                    _ => {
+                        // RHS 不是元组类型，为每个名称创建新类型变量
+                        for name in names {
+                            let ty = self.solver.new_var();
+                            self.scope
+                                .add_var(name.name.clone(), PolyType::mono(ty), false);
+                        }
+                        Ok(())
+                    }
+                }
             }
             // 错误恢复占位符：报告错误但不 panic
             crate::frontend::core::parser::ast::StmtKind::Error(span) => Err(Box::new(
@@ -762,7 +907,6 @@ impl StatementChecker {
                 let fn_type = MonoType::Fn {
                     params: final_params,
                     return_type: Box::new(final_ret),
-                    is_async: false,
                 };
                 self.scope
                     .add_var(name.to_string(), PolyType::mono(fn_type), false);
@@ -780,7 +924,6 @@ impl StatementChecker {
             let fn_type = MonoType::Fn {
                 params: param_types,
                 return_type: Box::new(self.solver.new_var()),
-                is_async: false,
             };
             self.scope
                 .add_var(name.to_string(), PolyType::mono(fn_type), false);
@@ -854,6 +997,48 @@ impl StatementChecker {
         };
         self.expected_return_type = fn_expected_ret;
 
+        // 当 body 的参数缺少类型标注时，从函数签名中补全
+        // 例如: Point.getX: (self: &Point) -> Float = (self) => { ... }
+        // 此时 body 的 params 为 [Param { name: "self", ty: None }]
+        // 需要从 type_annotation 的 Fn params 中获取类型
+        let owned_merged_params: Vec<Param>;
+        let params = if let Some(crate::frontend::core::parser::ast::Type::Fn {
+            params: sig_param_types,
+            ..
+        }) = type_annotation
+        {
+            let needs_merge = params.iter().any(|p| p.ty.is_none())
+                && !params.is_empty()
+                && sig_param_types.len() >= params.len();
+            if needs_merge {
+                owned_merged_params = params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        if p.ty.is_none() {
+                            if let Some(sig_ty) = sig_param_types.get(i) {
+                                Param {
+                                    name: p.name.clone(),
+                                    ty: Some(sig_ty.clone()),
+                                    is_mut: p.is_mut,
+                                    span: p.span,
+                                }
+                            } else {
+                                p.clone()
+                            }
+                        } else {
+                            p.clone()
+                        }
+                    })
+                    .collect();
+                &owned_merged_params
+            } else {
+                params
+            }
+        } else {
+            params
+        };
+
         // 对于泛型函数，将类型级参数（MetaType 类型）替换为新的类型变量
         // 这些参数是泛型类型参数声明合并到值级参数的结果
         let owned_value_params: Vec<Param>;
@@ -906,14 +1091,12 @@ impl StatementChecker {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params
                     .into_iter()
                     .map(|p| Self::substitute_type_refs(p, subst))
                     .collect(),
                 return_type: Box::new(Self::substitute_type_refs(*return_type, subst)),
-                is_async,
             },
             MonoType::List(inner) => {
                 MonoType::List(Box::new(Self::substitute_type_refs(*inner, subst)))
@@ -947,12 +1130,11 @@ impl StatementChecker {
 
     /// 检查变量语句
     ///
-    /// 处理 Binding 类型的变量声明，支持编译期求值标记（eval）。
+    /// 处理 Binding 类型的变量声明。
     fn check_var_stmt(
         &mut self,
         name: &str,
         type_annotation: Option<&crate::frontend::core::parser::ast::Type>,
-        eval: Option<crate::frontend::core::parser::ast::EvalMode>,
         prelude_stmts: &[Stmt],
         initializer: Option<&Expr>,
         is_mut: bool,
@@ -1022,7 +1204,16 @@ impl StatementChecker {
                             (&resolved_init, &resolved_ann),
                             (MonoType::Struct(s), MonoType::TypeRef(iface)) if s.interfaces.contains(iface)
                         );
-                        if !is_structural_subtype {
+                        // 泛型类型构造：当 init 是泛型结构体（含 TypeRef 字段）且
+                        // annotation 是实例化后的结构体时，跳过 unify 直接使用 annotation 类型
+                        let is_generic_constructor = match (&resolved_init, &resolved_ann) {
+                            (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
+                                s_init.name == s_ann.name
+                                    && self.generic_type_defs.contains_key(&s_init.name)
+                            }
+                            _ => false,
+                        };
+                        if !is_structural_subtype && !is_generic_constructor {
                             return Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
                                     &format!("{}", ann_ty),
@@ -1033,7 +1224,15 @@ impl StatementChecker {
                         }
                     }
                 }
-                ann_ty
+                // 类型构造器：当 type_ann 是 Type(MetaType) 且 init_ty 是 Struct 时，
+                // 存 Struct 类型而不是 MetaType，使 Point(1.0, 2.0) 自然工作
+                if matches!(ann_ty, MonoType::MetaType { .. })
+                    && matches!(resolved_init, MonoType::Struct(_))
+                {
+                    resolved_init
+                } else {
+                    ann_ty
+                }
             }
             (Some(init_expr), None) => self.check_expr(init_expr)?,
             (None, Some(type_ann)) => self
@@ -1041,10 +1240,6 @@ impl StatementChecker {
                 .unwrap_or_else(|| MonoType::from(type_ann.clone())),
             (None, None) => self.solver.new_var(),
         };
-
-        // 编译期求值标记：Eager 模式立即求值，Block 模式延迟，Auto 根据上下文推断
-        // 目前 eval 字段主要用于语义高亮和 IDE 支持，求值逻辑在 IR 生成阶段处理
-        let _ = eval;
 
         if self.scope.var_in_current_scope(name) {
             // 统一变量类型并写回 scope，确保后续类型推断正确
@@ -1341,6 +1536,8 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
+                        inferrer.set_type_defs(&self.type_defs);
+                        inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.infer_expr(expr).map_err(Box::new)
                     }
                 }
@@ -1357,6 +1554,8 @@ impl StatementChecker {
                     self.expected_return_type.clone(),
                     &self.method_bindings,
                 );
+                inferrer.set_type_defs(&self.type_defs);
+                inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.infer_expr(expr).map_err(Box::new)
             }
         }

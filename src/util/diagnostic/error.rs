@@ -88,7 +88,7 @@ impl std::fmt::Display for Severity {
 ///
 /// **不可直接构造**。必须通过 `DiagnosticBuilder::build()` 创建，
 /// 确保所有错误码都经过注册表验证。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     /// 严重级别
     pub severity: Severity,

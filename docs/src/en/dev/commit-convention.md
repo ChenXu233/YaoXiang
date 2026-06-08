@@ -1,6 +1,6 @@
 # Commit Submission Guidelines
 
-This document defines the Git commit specification for the YaoXiang project, aiming to keep the commit history clear, readable, and easy to understand.
+This document defines the Git commit conventions for the YaoXiang project, aiming to keep the commit history clear, readable, and easy to understand.
 
 ---
 
@@ -11,8 +11,8 @@ This document defines the Git commit specification for the YaoXiang project, aim
 - [Complete Emoji Reference](#complete-emoji-reference)
 - [Scopes](#scopes)
 - [Version Management](#version-management)
-- [Message Guidelines](#message-guidelines)
-- [Language Guidelines](#language-guidelines)
+- [Message Conventions](#message-conventions)
+- [Language Conventions](#language-conventions)
 - [🔖 Release Commits](#-release-commits)
 - [Examples](#examples)
 - [Using Commit Template](#using-commit-template)
@@ -22,26 +22,26 @@ This document defines the Git commit specification for the YaoXiang project, aim
 
 ## Commit Format
 
-**Very important!!!! Do not forget!!!!**
+**Very important!!!!!!!! Don't forget!!!!!!**
 All commit messages follow this format:
 
 ```
-:emoji code: type(scope): subject (Chinese)
+:emoji: type(scope): subject (Chinese)
 
-[optional body]
+[Optional body]
 
-[optional footer]
+[Optional footer]
 ```
 
-> ⚠️ **Important**: Must use **emoji codes** (e.g., `:sparkles:`) instead of directly entering emoji characters.
+> ⚠️ **Important**: Must use **emoji codes** (e.g., `:sparkles:`) instead of directly typing emoji characters.
 >
-> **Chinese commit messages are recommended** to maintain consistency in team communication.
+> **It is recommended to use Chinese for commit messages** to maintain consistency in team communication.
 
 ### Components
 
 | Part | Description | Required |
 |------|-------------|----------|
-| emoji code | Emoji symbol identifying commit type | ✅ |
+| emoji | Emoji code marking commit type | ✅ |
 | type | Commit type | ✅ |
 | scope | Affected scope | ✅ |
 | subject | Brief description (Chinese, no more than 50 characters) | ✅ |
@@ -52,16 +52,16 @@ All commit messages follow this format:
 
 ## Commit Types
 
-| emoji code | type | Description |
-|------------|------|-------------|
+| emoji | type | Description |
+|-------|------|-------------|
 | :sparkles: | feat | New feature |
 | :bug: | fix | Bug fix |
 | :memo: | docs | Documentation changes only |
-| :lipstick: | style | Code formatting (no functional impact) |
+| :lipstick: | style | Code formatting (no functional change) |
 | :recycle: | refactor | Code refactoring |
 | :zap: | perf | Performance optimization |
 | :white_check_mark: | test | Add or modify tests |
-| :wrench: | chore | Build tool, auxiliary tool changes |
+| :wrench: | chore | Build tools, auxiliary tool changes |
 | :building_construction: | build | Build system changes |
 | :rocket: | ci | CI configuration changes |
 
@@ -73,41 +73,41 @@ The following is a complete emoji list consistent with the gitmoji project. Sele
 
 | emoji | emoji code | commit description |
 | :---- | :---------------------------- | :--------------------------- |
-| 🎨 | `:art:` | Improve code structure/code formatting |
+| 🎨 | `:art:` | Improve code structure/formatting |
 | ⚡️ | `:zap:` / `:racehorse:` | Improve performance |
 | 🔥 | `:fire:` | Remove code or files |
 | 🐛 | `:bug:` | Fix a bug |
-| 🚑 | `:ambulance:` | Important patch |
+| 🚑 | `:ambulance:` | Critical patch |
 | ✨ | `:sparkles:` | Introduce new features |
-| 📝 | `:memo:` | Write documentation |
-| 🚀 | `:rocket:` | Deploy features |
+| 📝 | `:memo:` | Write docs |
+| 🚀 | `:rocket:` | Deploy stuff |
 | 💄 | `:lipstick:` | Update UI and style files |
-| 🎉 | `:tada:` | Initial commit |
+| 🎉 | `:tada:` | Begin a project |
 | ✅ | `:white_check_mark:` | Add tests |
 | 🔒 | `:lock:` | Fix security issues |
-| 🍎 | `:apple:` | Fix macOS-related issues |
-| 🐧 | `:penguin:` | Fix Linux-related issues |
-| 🏁 | `:checkered_flag:` | Fix Windows-related issues |
-| 🤖 | `:robot:` | Fix Android-related issues |
-| 🍏 | `:green_apple:` | Fix iOS-related issues |
-| 🔖 | `:bookmark:` | Release/version tags |
+| 🍎 | `:apple:` | Fix something on macOS |
+| 🐧 | `:penguin:` | Fix something on Linux |
+| 🏁 | `:checkered_flag:` | Fix something on Windows |
+| 🤖 | `:robot:` | Fix something on Android |
+| 🍏 | `:green_apple:` | Fix something on iOS |
+| 🔖 | `:bookmark:` | Release/Version tag |
 | 🚨 | `:rotating_light:` | Remove linter warnings |
 | 🚧 | `:construction:` | Work in progress |
 | 💚 | `:green_heart:` | Fix CI build |
 | ⬇️ | `:arrow_down:` | Downgrade dependencies |
 | ⬆️ | `:arrow_up:` | Upgrade dependencies |
 | 📌 | `:pushpin:` | Pin dependencies to specific versions |
-| 👷 | `:construction_worker:` | Add CI build system |
+| 👷 | `:construction_worker:` | Add or update CI build system |
 | 📈 | `:chart_with_upwards_trend:` | Add analytics or tracking code |
 | ♻️ | `:recycle:` | Refactor code |
 | 🔨 | `:hammer:` | Major refactoring |
 | ➖ | `:heavy_minus_sign:` | Remove a dependency |
-| 🐳 | `:whale:` | Docker-related work |
+| 🐳 | `:whale:` | Docker related work |
 | ➕ | `:heavy_plus_sign:` | Add a dependency |
 | 🔧 | `:wrench:` | Modify configuration files |
 | 🌐 | `:globe_with_meridians:` | Internationalization and localization |
 | ✏️ | `:pencil2:` | Fix typos |
-| 💩 | `:hankey:` | Write code that needs improvement |
+| 💩 | `:hankey:` | Write bad code that needs to be improved |
 | ⏪️ | `:rewind:` | Revert changes |
 | 🔀 | `:twisted_rightwards_arrows:` | Merge branches |
 | 📦 | `:package:` | Update compiled files or packages |
@@ -119,151 +119,165 @@ The following is a complete emoji list consistent with the gitmoji project. Sele
 | 👌 | `:ok_hand:` | Update code due to code review changes |
 | ♿️ | `:wheelchair:` | Improve accessibility |
 | 💡 | `:bulb:` | Document source code |
-| 🍻 | `:beers:` | Write code while having fun |
+| 🍻 | `:beers:` | Write code drunkenly |
 | 💬 | `:speech_balloon:` | Update text and literals |
-| 🗃️ | `:card_file_box:` | Perform database-related changes |
-| 🔊 | `:loud_sound:` | Add logs |
-| 🔇 | `:mute:` | Remove logs |
+| 🗃️ | `:card_file_box:` | Perform database related changes |
+| 🔊 | `:loud_sound:` | Add logging |
+| 🔇 | `:mute:` | Remove logging |
 | 👥 | `:busts_in_silhouette:` | Add contributors |
 | 🚸 | `:children_crossing:` | Improve user experience/usability |
 | 🏗️ | `:building_construction:` | Make architectural changes |
 | 📱 | `:iphone:` | Work on responsive design |
 | 🤡 | `:clown_face:` | Mock things |
 | 🥚 | `:egg:` | Add an easter egg |
-| 🙈 | `:see_no_evil:` | Add or update .gitignore file |
+| 🙈 | `:see_no_evil:` | Add or update .gitignore files |
 | 📸 | `:camera_flash:` | Add or update snapshots |
 
 ---
 
 ## Scopes
 
-Based on the project structure, the following scopes are recommended:
+Scopes are based on the project `src/` directory structure. **You must use the following defined scopes**:
 
-### Code Scopes
+### Top-level Modules
 
-| Scope | Description |
-|-------|-------------|
-| `frontend` | Frontend module: lexical analysis, syntax parsing, type checking |
-| `parser` | Syntax parser |
-| `lexer` | Lexical analyzer |
-| `typecheck` | Type checking |
-| `middle` | Middle layer: IR, optimizer |
-| `codegen` | Code generator |
-| `monomorphize` | Monomorphization handling |
-| `lifetime` | Lifetime analysis |
-| `vm` | Virtual machine: instruction execution, stack frames, opcodes |
-| `executor` | Executor |
-| `frames` | Stack frame management |
-| `instructions` | Instruction set |
-| `runtime` | Runtime: memory management, scheduler |
-| `memory` | Memory management |
-| `scheduler` | Task scheduling |
-| `std` | Standard library |
-| `concurrent` | Concurrent library |
-| `io` | IO library |
-| `net` | Network library |
-| `util` | Utility library: diagnostics, cache, Span |
-| `cache` | Cache management |
-| `diagnostic` | Diagnostic information |
+| Scope | Corresponding Directory | Description |
+|-------|-------------------------|-------------|
+| `frontend` | `src/frontend/` | Frontend: lexer, parser, type checker |
+| `middle` | `src/middle/` | Middle layer: IR, optimization, monomorphization |
+| `backends` | `src/backends/` | Backends: interpreter, runtime, REPL |
+| `std` | `src/std/` | Standard library |
+| `formatter` | `src/formatter/` | Code formatter |
+| `lsp` | `src/lsp/` | Language Server Protocol |
+| `package` | `src/package/` | Package manager |
+| `util` | `src/util/` | Utilities: diagnostics, caching, i18n |
+
+### Frontend Submodules
+
+| Scope | Corresponding Directory | Description |
+|-------|-------------------------|-------------|
+| `parser` | `src/frontend/core/parser/` | Parser |
+| `lexer` | `src/frontend/core/lexer/` | Lexer |
+| `typecheck` | `src/frontend/core/typecheck/` | Type checking |
+| `types` | `src/frontend/core/types/` | Type system definitions |
+
+### Middle Layer Submodules
+
+| Scope | Corresponding Directory | Description |
+|-------|-------------------------|-------------|
+| `codegen` | `src/middle/passes/codegen/` | Code generation (bytecode) |
+| `monomorphize` | `src/middle/passes/monomorphize/` | Monomorphization |
+| `lifetime` | `src/middle/passes/lifetime/` | Lifetime analysis |
+
+### Backend Submodules
+
+| Scope | Corresponding Directory | Description |
+|-------|-------------------------|-------------|
+| `repl` | `src/backends/dev/repl/` | REPL interactive command line |
+| `shell` | `src/backends/dev/shell.rs` | Shell command handling |
+| `runtime` | `src/backends/runtime/` | Runtime execution engine |
 
 ### Documentation Scopes
 
 | Scope | Description |
 |-------|-------------|
 | `docs` | General documentation updates |
-| `architecture` | Architecture design documentation |
-| `design` | Language design specification |
-| `plan` | Implementation plan documentation |
-| `guides` | Guide documentation |
-| `tutorial` | Tutorial documentation |
-| `examples` | Example code |
+| `design` | Language design specifications (RFC) |
+| `plan` | Implementation plan documents |
 
 ### Other Scopes
 
 | Scope | Description |
 |-------|-------------|
-| `build` | Build system, dependency management |
-| `ci` | CI/CD configuration |
-| `test` | Test-related |
-| `chore` | Miscellaneous tasks |
-| `release` | Release-related |
-| `meta` | Project meta configuration (e.g., .claude, cargo config) |
+| `build` | Build system, Cargo configuration |
+| `ci` | CI/CD configuration (GitHub Actions) |
+| `test` | Test related |
+| `release` | Release related |
+| `meta` | Project meta configuration (.claude, .gitignore, etc.) |
 
 ---
 
-## Message Guidelines
+## Message Conventions
 
 ### Version Management
 
-**You must bump the version number before each commit**:
+Version numbers are defined in the `version` field of `Cargo.toml` in the project root:
 
-| Version Type | Update Location | Description |
-|--------------|-----------------|-------------|
-| **major** | `pubspec.yaml` (version) + `release_v*.md` | Major update, breaking API changes |
-| **minor** | `pubspec.yaml` (version) | New features, backward compatible |
-| **patch** | `pubspec.yaml` (version) | Bug fixes, backward compatible |
-
-### Version Number Format
+```toml
+[package]
+version = "0.7.2"
+```
 
 Semantic versioning `MAJOR.MINOR.PATCH` is used:
 
-```
-# Major version (breaking changes)
-1.0.0 -> 2.0.0
+| Version Type | Description | Example |
+|--------------|-------------|---------|
+| **major** | Major update, breaking API changes | 0.7.2 → 1.0.0 |
+| **minor** | New features, backward compatible | 0.7.2 → 0.8.0 |
+| **patch** | Bug fixes, backward compatible | 0.7.2 → 0.7.3 |
 
-# Minor version (new features)
-1.0.0 -> 1.1.0
-
-# Patch version (bug fixes)
-1.0.0 -> 1.0.1
-```
-
-### Commit Flow
-
-```bash
-# 1. After modifying code, bump the version first
-# Use semantic_release tool to automatically manage versions and Changelog
-npx semantic-release
-
-# Or manually update the version
-# Edit the version field in pubspec.yaml
-
-# 2. Commit code (version changes will be automatically generated on next release)
-git add .
-git commit -m ":tada: Release v1.0.0"
-git push
-```
-
-> 💡 Version bump and Changelog generation are done automatically by CI. Just ensure the code changes include version updates when committing.
+> ⚠️ When releasing, **update the `Cargo.toml` version number on the dev branch**. After merging the PR to main, CI will automatically create the tag and Release. **Do not manually push tags**, otherwise CI will skip the release process.
 
 ---
 
-## Message Guidelines
+## CI Release Process
 
-### Language Guidelines
+Releases are automatically handled by GitHub Actions (`release.yml`) with the following flow:
 
-**Chinese commit messages are recommended** to maintain consistency in team communication.
+```
+1. Update the version field in Cargo.toml on the dev branch
+2. cargo build to update Cargo.lock
+3. Commit following the release format (see 🔖 Release Commits below)
+   - Commit message must include all changes since the last release (i.e., full PR content)
+4. Create a PR from dev to main
+5. Merge PR to main
+6. CI automatically detects:
+   - Read version from Cargo.toml → "v{version}"
+   - Check if the tag already exists
+   - Does not exist → trigger full release process
+   - Already exists → skip (no duplicate release)
+7. CI automatically executes:
+   - Parallel: cross-platform builds (Linux/Windows/macOS) + security audit + tests
+   - After all pass: create tag, package artifacts, publish GitHub Release
+```
 
-- Subject uses Chinese, concise and clear
-- Body can use Chinese for detailed explanation
-- Special technical terms can remain in English
+### Key Rules
+
+| Rule | Description |
+|------|-------------|
+| **Do not manually push tags** | CI decides whether to release based on tag existence; manual tag push will cause CI to skip |
+| **Bump version on dev** | Release commit is done on dev, merged to main via PR |
+| **Release commit contains full changelog** | Commit message must include all changes for this release, as it serves as the PR description source |
+| **Do not merge main back to dev** | After PR merges, dev will sync automatically; no reverse merge needed |
+
+---
+
+## Message Conventions
+
+### Language Conventions
+
+**It is recommended to use Chinese for commit messages** to maintain consistency in team communication.
+
+- Subject in Chinese, concise and clear
+- Body can be in Chinese with detailed explanation
+- Technical terms may be kept in English if necessary
 
 ### Subject
 
-- Use Chinese, concise and clear
-- Length does not exceed 50 characters
+- In Chinese, concise and clear
+- No more than 50 characters
 - No period at the end
 
 ### Body
 
-- Explain the reason and method of changes in detail
-- Each line does not exceed 72 characters
-- Use - or * to list key points
+- Detailed explanation of why and how changes were made
+- Each line no more than 72 characters
+- Use - or * for bullet points
 
 ### Footer
 
-- **Breaking Changes**: Start with `BREAKING CHANGE:`
-- **Closing Issues**: Use `关闭 #123` or `修复 #456`
+- **Breaking changes**: Start with `BREAKING CHANGE:`
+- **Closing issues**: Use `关闭 #123` or `修复 #456`
 
 ---
 
@@ -272,96 +286,87 @@ git push
 ### ✨ feat - New Feature
 
 ```
-:sparkles: feat(db): 添加批量删除待办功能 (Add batch delete todo feature)
+:sparkles: feat(parser): Add closure syntax parsing support
 
-实现批量删除待办事项功能： (Implement batch delete todo items feature:)
-- 在 TodoRepository 中添加 batchDelete 方法 (Add batchDelete method in TodoRepository)
-- 添加删除确认对话框 (Add delete confirmation dialog)
-- 更新 UI 支持多选操作 (Update UI to support multi-select operations)
+Implement closure expression parsing:
+- Support |args| body shorthand syntax
+- Support move semantic capture
+- Add closure type inference
 
-关闭 #42 (Close #42)
+Closes #42
 ```
 
 ### 🐛 fix - Bug Fix
 
 ```
-:bug: fix(provider): 修复番茄钟计时器在后台无法恢复的问题 (Fix Pomodoro timer not recovering from background)
+:bug: fix(repl): Fix completer failure on multi-line input
 
-当应用从后台恢复时，番茄钟计时器无法继续计时。 (When app recovers from background, Pomodoro timer cannot continue timing.)
-在 initState 中添加了状态恢复逻辑。 (Added state recovery logic in initState.)
+SessionREPL does not correctly register the completer
+in multi-line mode, causing Tab completion to fail.
 
-修复 #128 (Fix #128)
+Fixes #128
 ```
 
 ### 📝 docs - Documentation Update
 
 ```
-:memo: docs: 更新 README 新功能说明 (Update README new feature description)
+:memo: docs(design): Update ownership model and type system specification
 
-新增以下章节： (Added the following sections:)
-- 专注模式 (Focus mode)
-- 数据统计 (Data statistics)
-- 背景音乐 (Background music)
+Synchronize latest design changes from RFC-009 and RFC-011.
 ```
 
 ### ♻️ refactor - Refactoring
 
 ```
-:recycle: refactor(ui): 提取公共玻璃态容器组件 (Extract common glass container component)
+:recycle: refactor(typecheck): Separate primitive value types from Dup shallow copy semantics
 
-创建可复用的 GlassContainer 组件， (Create reusable GlassContainer component,)
-减少多个屏幕间的代码重复。 (reducing code duplication between multiple screens.)
+Decouple value types and copy semantics in MonoType,
+eliminating special cases in match branches.
 ```
 
 ### ⚡️ perf - Performance Optimization
 
 ```
-:zap: perf(db): 优化已完成待办查询性能 (Optimize completed todo query performance)
+:zap: perf(types): Optimize const generic evaluation performance
 
-在 completed_at 字段添加索引， (Add index on completed_at field,)
-使用 WHERE 子句过滤已完成待办而非在内存中过滤。 (use WHERE clause to filter completed todos instead of filtering in memory.)
-
-优化前：45ms (Before: 45ms)
-优化后：12ms (After: 12ms)
+Add depth limit (default 128) for recursive evaluation,
+preventing stack overflow from maliciously constructed type expressions.
 ```
 
-### ✅ test - Test
+### ✅ test - Testing
 
 ```
-:white_check_mark: test(provider): 添加 TodoProvider 单元测试 (Add TodoProvider unit tests)
+:white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
-覆盖场景： (Covered scenarios:)
-- 添加待办 (Add todo)
-- 切换完成状态 (Toggle completion status)
-- 删除待办 (Delete todo)
+Cover scenarios:
+- Read-only access to immutable bindings
+- Mutability tracking for mut bindings
+- Mutability propagation across scopes
 ```
 
-### 🔧 chore - Miscellaneous
+### 🔧 chore - Chores
 
 ```
-:wrench: chore: 更新 Flutter 版本至 3.19.0 (Update Flutter version to 3.19.0)
+:wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap
 
-提高最小 Flutter 版本要求并更新兼容依赖。 (Increase minimum Flutter version requirement and update compatible dependencies.)
+Upgrade 6 production dependencies to latest stable versions.
 ```
 
 ### 🚀 ci - CI Configuration
 
 ```
-:rocket: ci: 添加 GitHub Actions 测试工作流 (Add GitHub Actions test workflow)
+:rocket: ci: Fix nightly build Rust version too low
 
-创建包含以下步骤的工作流： (Create workflow with the following steps:)
-- 单元测试 (Unit tests)
-- 集成测试 (Integration tests)
-- 代码覆盖率 (Code coverage)
+Update RUST_TOOLCHAIN from 1.91.0 to 1.96.0,
+matching the rust-version requirement in Cargo.toml.
 ```
 
-### 💄 style - Format Adjustment
+### 💄 style - Formatting
 
 ```
-:lipstick: style(todo_item): 使用 dart fix 格式化代码 (Format code with dart fix)
+:lipstick: style(frontend): Apply cargo fmt formatting
 
-应用自动格式化修复， (Apply automatic formatting fixes,)
-保持代码风格一致性。 (maintaining code style consistency.)
+Unify function signature line-breaking style.
 ```
 
 ---
@@ -370,14 +375,14 @@ git push
 
 ## 🔖 Release Commits
 
-When the current commit is a **Release**, the following specifications must be followed:
+When the commit is a **Release**, it must follow these conventions:
 
 ### Release Commit Format
 
 ```
 :bookmark: V<version>: <release title>
 
-## 📦 Version Information
+## 📦 Version Info
 
 **Release Date:** YYYY-MM-DD
 
@@ -387,12 +392,12 @@ When the current commit is a **Release**, the following specifications must be f
 
 ## ✨ New Features
 
-### <Feature Module>
+### <feature module>
 - :sparkles: feat(<scope>): <feature description>
 
 ---
 
-## ♻️ Refactoring and Optimization
+## ♻️ Refactoring & Optimization
 
 - :recycle: refactor(<scope>): <refactoring description>
 
@@ -426,60 +431,59 @@ When the current commit is a **Release**, the following specifications must be f
 
 ### Release Requirements
 
-1. **Header**: Must use `:bookmark:` + `V<version>` format
-2. **Version Number**: Follow semantic versioning specification
-3. **Content Completeness**: Must include **all commits** since the last release
-4. **Categorization by Type**: Organize by `feat`, `fix`, `refactor`, `chore`, etc.
-5. **Commit History**: List all related commit hashes and descriptions
+1. **Message header**: Must use `:bookmark:` + `V<version>` format
+2. **Version number**: Follow semantic versioning
+3. **Content completeness**: Must include **all commit** content introductions since the last release
+4. **Categorized by type**: Organize by `feat`, `fix`, `refactor`, `chore`, etc.
+5. **Commit history**: List hashes and descriptions of all related commits
 
 ### Release Example
 
 ```
-:bookmark: V0.8.0: 新增任务统计和数据分析功能 (Add task statistics and data analysis features)
+:bookmark: V0.7.2: REPL rewrite and type system improvements
 
-## 📦 Version Information
+## 📦 Version Info
 
-**Release Date:** 2025-01-15
+**Release Date:** 2026-06-01
 
-**Version:** 0.7.0 → 0.8.0
+**Version:** 0.7.1 → 0.7.2
 
 ---
 
 ## ✨ New Features
 
-### Statistics Features
-- :sparkles: feat(statistics): 新增专注时长统计页面 (Add focus duration statistics page)
-- :sparkles: feat(statistics): 添加每日/每周数据可视化图表 (Add daily/weekly data visualization charts)
-
-### Todo Enhancements
-- :sparkles: feat(todo): 添加任务优先级筛选功能 (Add task priority filtering)
+- :sparkles: feat(typecheck): Implement automatic generic type parameter inference
+- :sparkles: feat(typecheck): Add MonoType::Generic structured generic representation
+- :sparkles: feat(repl): Integrate CLI REPL commands into SessionREPL
 
 ---
 
-## ♻️ Refactoring and Optimization
+## ♻️ Refactoring & Optimization
 
-- :recycle: refactor(db): 优化数据库查询性能 (Optimize database query performance)
-- :recycle: refactor(provider): 重构状态管理逻辑 (Refactor state management logic)
+- :recycle: refactor(backends): Remove tui_repl module, rewrite as SessionREPL
+- :recycle: refactor(typecheck): Introduce VarInfo tracking for scope variable mutability
+- :recycle: refactor(typecheck): Separate primitive value types from Dup shallow copy semantics
 
 ---
 
 ## 🐛 Bug Fixes
 
-- :bug: fix(todo): 修复任务列表滑动卡顿问题 (Fix task list scrolling lag)
+- :bug: fix(repl): Configure default REPL history, fix shell evaluate_code
+- :bug: fix(repl): Register completer and fix multi-line input
+- :bug: fix(repl): Remove extra semicolon in wrap_code to preserve expression value
+
+---
+
+## ⚡ Performance Optimization
+
+- :zap: perf(types): Add recursive depth limit for const generic evaluation
 
 ---
 
 ## 🔧 Other Changes
 
-- :wrench: chore: 更新依赖版本到最新稳定版 (Update dependency versions to latest stable)
-- :memo: docs: 更新 README 安装说明 (Update README installation instructions)
-
----
-
-## 📦 New Files
-
-- `lib/screens/statistics/statistics.dart` - Statistics page
-- `lib/widgets/chart/data_chart.dart` - Chart component
+- :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap, owo-colors
+- :white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
 ---
 
@@ -487,11 +491,14 @@ When the current commit is a **Release**, the following specifications must be f
 
 | Commit | Description |
 |:---:|------|
-| `abc1234` | :bookmark: V0.8.0 |
-| `def5678` | :sparkles: feat(statistics): 新增专注时长统计 (Add focus duration statistics) |
-| `ghi9012` | :sparkles: feat(todo): 添加优先级筛选 (Add priority filtering) |
-| `jkl3456` | :recycle: refactor(db): 优化查询 (Optimize queries) |
-| `mno7890` | :bug: fix(todo): 修复滑动卡顿 (Fix scrolling lag) |
+| `f438aab` | :sparkles: feat(typecheck): Implement automatic generic type parameter inference |
+| `bf0c121` | :zap: perf(types): Recursive depth limit |
+| `6edac15` | :sparkles: feat(repl): Integrate CLI REPL into SessionREPL |
+| `02cf54f` | :sparkles: feat(typecheck): MonoType::Generic |
+| `3160a28` | :recycle: refactor(typecheck): VarInfo tracking for mutability |
+| `f00a2a4` | :recycle: refactor(backends): Remove tui_repl module |
+| `afe3e0c` | :bug: fix(repl): REPL history and shell fixes |
+| `c4d2242` | :wrench: chore(build): Dependency bump |
 ```
 
 ### How to Get Commit History
@@ -500,42 +507,47 @@ When the current commit is a **Release**, the following specifications must be f
 # View all commits since last release
 git log --oneline <last release commit>..HEAD
 
-# Or view last N commits
+# Or view the last N commits
 git log --oneline -20
 ```
 
 ### Reference Template
 
-For release documentation, please refer to the [`release.md`](release.md) template format for composition.
+For release documentation, please refer to the [`release.md`](release.md) template format.
 
 ---
 
-### 1. Setting Commit Template
+## Using Commit Template
+
+### 1. Set Commit Template
 
 ```bash
-# Execute in project root directory
+# Execute in project root
 git config commit.template .gitmessage.txt
 ```
 
 ### 2. Template File
 
-The `.gitmessage.txt` file in the project root directory has the following format:
+The format of the `.gitmessage.txt` file in the project root:
 
 ```
-# emoji code type(scope): subject (Chinese)
+# :emoji: type(scope): subject (Chinese)
 #
-# Body content (optional)
+# Body (optional)
 #
 # Footer (optional)
 #
 # Types: ✨feat, 🐛fix, 📝docs, 💄style, ♻️refactor, ⚡️perf, ✅test, 🔧chore, 🚀ci, 🔖release
-# Scopes: core, db, ui, screen, widget, provider, repo, i18n, router, dep
+# Scopes: frontend, parser, lexer, typecheck, types, middle, codegen,
+#         monomorphize, lifetime, backends, repl, shell, runtime,
+#         std, formatter, lsp, package, util, docs, design, plan,
+#         build, ci, test, release, meta
 #
 # Examples:
-# ✨ feat(db): 添加批量删除待办功能 (Add batch delete todo feature)
-# 🐛 fix(provider): 修复计时器后台恢复问题 (Fix timer background recovery issue)
+# ✨ feat(db): Add batch delete todo feature
+# 🐛 fix(provider): Fix timer background recovery issue
 #
-# Release format: 🔖 V1.0.0: Release Title
+# Release format: 🔖 V1.0.0: Release title
 ```
 
 ---
@@ -544,16 +556,16 @@ The `.gitmessage.txt` file in the project root directory has the following forma
 
 ### Q: How to choose a commit type?
 
-- **feat**: Changes that users can see
+- **feat**: Changes users can see
 - **fix**: Fix issues reported by users
 - **docs**: README, comments, etc.
 - **chore**: Dependency updates, configuration files
 - **refactor**: Code optimization without behavior changes
 
-### Q: When should commits be split?
+### Q: When should I split commits?
 
-- Each commit does **one thing**
-- Related features are committed together, unrelated ones are separated
+- Each commit should do **one thing**
+- Related features together, unrelated separately
 - Follow the Atomic Commits principle
 
 ---
@@ -562,9 +574,9 @@ The `.gitmessage.txt` file in the project root directory has the following forma
 
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gitmoji](https://gitmoji.carloscuesta.me/)
-- [emoji.md](emoji.md) - Complete emoji list
-- [release.md](release.md) - Release template
+- [emoji.md](emoji.md) - Complete Emoji List
+- [release.md](release.md) - Release Template
 
 ---
 
-> 💡 **Tip**: Keep commits atomic and descriptions clear to make code review and traceability more efficient!
+> 💡 **Tip**: Keep commits atomic and descriptions clear, making code review and tracing more efficient!

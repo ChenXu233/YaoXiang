@@ -126,7 +126,6 @@ fn test_check_gat_on_fn_type_with_concrete_params() {
     let ty = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::String],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
 
     // Act
@@ -146,7 +145,6 @@ fn test_check_gat_on_fn_type_with_type_var() {
     let ty = MonoType::Fn {
         params: vec![MonoType::TypeVar(TypeVar::new(0))],
         return_type: Box::new(MonoType::TypeVar(TypeVar::new(0))),
-        is_async: false,
     };
 
     // Act
@@ -273,7 +271,6 @@ fn test_contains_generic_params_on_fn_return_type_var() {
     let ty = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::TypeVar(TypeVar::new(3))),
-        is_async: false,
     };
 
     // Act
@@ -290,7 +287,6 @@ fn test_contains_generic_params_on_fn_all_concrete() {
     let ty = MonoType::Fn {
         params: vec![MonoType::String],
         return_type: Box::new(MonoType::Bool),
-        is_async: true,
     };
 
     // Act
@@ -550,7 +546,6 @@ fn test_check_gat_on_async_fn_type() {
     let ty = MonoType::Fn {
         params: vec![MonoType::String],
         return_type: Box::new(MonoType::Void),
-        is_async: true,
     };
 
     // Act

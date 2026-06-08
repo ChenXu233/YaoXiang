@@ -12,6 +12,7 @@ use crate::frontend::core::types::base::PolyType;
 pub struct VarInfo {
     pub poly: PolyType,
     pub is_mut: bool,
+    pub moved: bool,
 }
 
 /// 作用域管理器
@@ -55,10 +56,14 @@ impl ScopeManager {
         poly: PolyType,
         is_mut: bool,
     ) {
-        self.scopes
-            .last_mut()
-            .unwrap()
-            .insert(name, VarInfo { poly, is_mut });
+        self.scopes.last_mut().unwrap().insert(
+            name,
+            VarInfo {
+                poly,
+                is_mut,
+                moved: false,
+            },
+        );
     }
 
     /// 获取变量（从最内层作用域开始查找）
@@ -100,6 +105,40 @@ impl ScopeManager {
         None
     }
 
+    /// 标记变量为已移动（从内层到外层搜索）
+    pub fn mark_moved(
+        &mut self,
+        name: &str,
+    ) {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(info) = scope.get_mut(name) {
+                info.moved = true;
+                return;
+            }
+        }
+    }
+
+    /// 检查变量是否已移动（从内层到外层搜索）
+    pub fn var_is_moved(
+        &self,
+        name: &str,
+    ) -> Option<bool> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(info) = scope.get(name) {
+                return Some(info.moved);
+            }
+        }
+        None
+    }
+
+    /// 从当前作用域移除变量
+    pub fn remove_var(
+        &mut self,
+        name: &str,
+    ) -> bool {
+        self.scopes.last_mut().unwrap().remove(name).is_some()
+    }
+
     /// 在现有作用域中更新变量（从内层到外层搜索），保留已有的可变性
     pub fn update_var(
         &mut self,
@@ -118,6 +157,7 @@ impl ScopeManager {
             VarInfo {
                 poly,
                 is_mut: false,
+                moved: false,
             },
         );
     }

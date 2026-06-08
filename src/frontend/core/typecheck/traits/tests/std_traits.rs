@@ -303,12 +303,13 @@ fn test_std_trait_names_contains_all_traits() {
     let names = std_trait_names();
 
     // Assert
-    assert_eq!(names.len(), 5, "应有 5 个标准库 trait（RFC-011）");
+    assert_eq!(names.len(), 6, "应有 6 个标准库 trait（RFC-011 + RFC-024）");
     assert!(names.contains(&"Clone"), "应包含 Clone");
     assert!(names.contains(&"Dup"), "应包含 Dup");
     assert!(names.contains(&"Equal"), "应包含 Equal");
     assert!(names.contains(&"Debug"), "应包含 Debug");
     assert!(names.contains(&"Iterator"), "应包含 Iterator");
+    assert!(names.contains(&"Resource"), "应包含 Resource");
 }
 
 #[test]
@@ -427,10 +428,8 @@ fn test_int_clone_impl_method() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert_eq!(params.len(), 1, "clone 应有 1 个参数");
-            assert!(!is_async, "clone 不应是 async");
             match return_type.as_ref() {
                 MonoType::TypeRef(name) => assert_eq!(name, "Self", "返回类型应为 Self"),
                 other => panic!("返回类型应为 TypeRef，实际: {:?}", other),
@@ -460,10 +459,8 @@ fn test_int_equal_impl_method() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert_eq!(params.len(), 2, "equal 应有 2 个参数");
-            assert!(!is_async, "equal 不应是 async");
             match return_type.as_ref() {
                 MonoType::TypeRef(name) => assert_eq!(name, "Bool", "返回类型应为 Bool"),
                 other => panic!("返回类型应为 TypeRef，实际: {:?}", other),
@@ -571,9 +568,9 @@ fn test_init_std_traits_idempotent() {
         trait_table.has_trait("Clone"),
         "多次初始化后 Clone 仍应存在"
     );
-    // RFC-011: 应有 5 个标准库 trait
+    // RFC-011 + RFC-024: 应有 6 个标准库 trait
     let trait_count = trait_table.trait_names().count();
-    assert_eq!(trait_count, 5, "多次初始化后仍应只有 5 个 trait，不应重复");
+    assert_eq!(trait_count, 6, "多次初始化后仍应只有 6 个 trait，不应重复");
 }
 
 #[test]

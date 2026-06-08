@@ -20,9 +20,10 @@
 //! ```
 
 use super::consume_analysis::ConsumeAnalyzer;
-use super::error::{OwnershipCheck, OwnershipError, TypeId, ValueState, operand_to_string};
+use super::error::{OwnershipCheck, TypeId, ValueState, operand_to_string, codes};
 use super::ownership_flow::ConsumeMode;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// Move 检查器
@@ -42,7 +43,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct MoveChecker {
     pub state: HashMap<Operand, ValueState>,
-    pub errors: Vec<OwnershipError>,
+    pub errors: Vec<Diagnostic>,
     pub location: (usize, usize),
     /// 类型表：变量 -> 类型ID
     type_map: HashMap<Operand, TypeId>,
@@ -176,10 +177,8 @@ impl MoveChecker {
             match state {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
-                    self.errors.push(OwnershipError::ReassignNonEmpty {
-                        value: operand_to_string(dst),
-                        location: self.location,
-                    });
+                    self.errors
+                        .push(codes::reassign_non_empty(&operand_to_string(dst)));
                     return;
                 }
                 ValueState::Moved => {
@@ -191,12 +190,8 @@ impl MoveChecker {
                     if let Some(expected_type) = self.type_map.get(dst) {
                         if let Some(actual_type) = &src_type {
                             if expected_type != actual_type {
-                                self.errors.push(OwnershipError::EmptyStateTypeMismatch {
-                                    value: operand_to_string(dst),
-                                    expected_type: expected_type.0.clone(),
-                                    actual_type: actual_type.0.clone(),
-                                    location: self.location,
-                                });
+                                self.errors
+                                    .push(codes::immutable_assign(&operand_to_string(dst)));
                                 return;
                             }
                         }
@@ -330,10 +325,8 @@ impl MoveChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors.push(OwnershipError::UseAfterMove {
-            value: operand_to_string(operand),
-            location: self.location,
-        });
+        self.errors
+            .push(codes::use_after_move(&operand_to_string(operand)));
     }
 }
 
@@ -341,7 +334,7 @@ impl OwnershipCheck for MoveChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -354,7 +347,7 @@ impl OwnershipCheck for MoveChecker {
         &self.errors
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 
@@ -395,7 +388,6 @@ mod tests {
             name: "returns_param".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -429,7 +421,6 @@ mod tests {
             name: "consumes_param".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -455,7 +446,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -486,7 +476,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -510,9 +499,7 @@ mod tests {
         let errors = checker.check_function(&func);
 
         // 应该有 UseAfterMove 错误
-        let has_use_after_move = errors
-            .iter()
-            .any(|e| matches!(e, OwnershipError::UseAfterMove { .. }));
+        let has_use_after_move = errors.iter().any(|e| e.code == "E2014");
         assert!(has_use_after_move);
     }
 
@@ -525,7 +512,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -555,7 +541,6 @@ mod tests {
             name: "multi_param".to_string(),
             params: vec![MonoType::Int(0), MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,

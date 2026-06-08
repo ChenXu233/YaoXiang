@@ -12,7 +12,7 @@ pub fn format_expr(
     source_map: &SourceMap,
 ) -> String {
     match expr {
-        Expr::Lit(lit, _span) => format_literal(lit),
+        Expr::Lit(lit, _span) => format_literal(lit, ctx),
         Expr::Var(name, _span) => name.clone(),
         Expr::BinOp {
             op,
@@ -36,9 +36,8 @@ pub fn format_expr(
             params,
             return_type,
             body,
-            is_async,
             span: _,
-        } => format_fn_def(name, params, return_type, body, *is_async, ctx, source_map),
+        } => format_fn_def(name, params, return_type, body, ctx, source_map),
         Expr::If {
             condition,
             then_branch,
@@ -164,14 +163,6 @@ pub fn format_expr(
         Expr::Unsafe { body, span: _ } => {
             format!("unsafe {}", format_block(body, ctx, source_map))
         }
-        Expr::Eval { mode, body, .. } => {
-            let mode_str = match mode {
-                EvalMode::Block => "block",
-                EvalMode::Auto => "auto",
-                EvalMode::Eager => "eager",
-            };
-            format!("@{} {}", mode_str, format_block(body, ctx, source_map))
-        }
         Expr::Spawn { body, .. } => {
             format!("spawn {}", format_block(body, ctx, source_map))
         }
@@ -197,7 +188,10 @@ pub fn format_expr(
 }
 
 /// 格式化字面量
-pub(crate) fn format_literal(lit: &Literal) -> String {
+pub(crate) fn format_literal(
+    lit: &Literal,
+    ctx: &FormatContext,
+) -> String {
     match lit {
         Literal::Int(n) => n.to_string(),
         Literal::Float(f) => {
@@ -225,12 +219,17 @@ pub(crate) fn format_literal(lit: &Literal) -> String {
         Literal::String(s) => {
             let escaped = s
                 .replace('\\', "\\\\")
-                .replace('"', "\\\"")
                 .replace('\n', "\\n")
                 .replace('\r', "\\r")
                 .replace('\t', "\\t")
                 .replace('\0', "\\0");
-            format!("\"{}\"", escaped)
+            if ctx.options.single_quote {
+                let escaped = escaped.replace('\'', "\\'");
+                format!("'{}'", escaped)
+            } else {
+                let escaped = escaped.replace('"', "\\\"");
+                format!("\"{}\"", escaped)
+            }
         }
     }
 }
@@ -272,10 +271,28 @@ pub(crate) fn format_binop(
         return format!("{} {} {}", left_str, op_str, right_str);
     }
 
-    // 需要换行时，运算符放行首
+    // 需要换行时，根据运算符优先级决定换行位置
     let indent = ctx.indent_str();
     let inner_indent = format!("{}{}", indent, " ".repeat(ctx.options.indent_width));
-    format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str)
+
+    // §2.2 换行策略优先级：
+    // 1. 低优先级运算符后（+、-、||、&&、=）
+    // 2. 函数参数列表（已在 format_call 中实现）
+    // 3. 列表/字典元素（已在 format_list/format_dict 中实现）
+    // 4. 高优先级运算符后（*、/、%、==、!=）
+
+    let is_low_priority = matches!(
+        op,
+        BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::And | BinOp::Assign
+    );
+
+    if is_low_priority {
+        // 低优先级运算符：运算符放在新行行首
+        format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str)
+    } else {
+        // 高优先级运算符：运算符放在新行行首
+        format!("{}\n{}{} {}", left_str, inner_indent, op_str, right_str)
+    }
 }
 
 /// 格式化一元运算
@@ -318,20 +335,17 @@ fn format_fn_def(
     params: &[Param],
     return_type: &Option<Type>,
     body: &Block,
-    is_async: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let async_prefix = if is_async { "async " } else { "" };
-    let params_str = format_params(params, source_map);
+    let params_str = format_params(params, ctx, source_map);
     let ret_str = if let Some(ty) = return_type {
         format!(" -> {}", super::types::format_type(ty, source_map))
     } else {
         String::new()
     };
     format!(
-        "{}fn {}({}){} {}",
-        async_prefix,
+        "fn {}{}{} {}",
         name,
         params_str,
         ret_str,
@@ -342,6 +356,7 @@ fn format_fn_def(
 /// 格式化参数列表
 pub fn format_params(
     params: &[Param],
+    ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
     let items: Vec<String> = params
@@ -359,7 +374,7 @@ pub fn format_params(
             s
         })
         .collect();
-    items.join(", ")
+    super::delimited::format_delimited_list("(", ")", &items, None, ctx)
 }
 
 /// 格式化 match 表达式
@@ -377,14 +392,14 @@ fn format_match_expr(
     // 计算最长的 pattern 长度，用于对齐
     let max_pattern_len = arms
         .iter()
-        .map(|arm| format_pattern(&arm.pattern, source_map).len())
+        .map(|arm| format_pattern(&arm.pattern, ctx, source_map).len())
         .max()
         .unwrap_or(0);
 
     let mut result = format!("match {} {{\n", format_expr(match_expr, ctx, source_map));
 
     for arm in arms {
-        let pattern_str = format_pattern(&arm.pattern, source_map);
+        let pattern_str = format_pattern(&arm.pattern, ctx, source_map);
         let body_str = format_block_inline(&arm.body, &inner_ctx, source_map);
         let pattern_len = pattern_str.len();
 
@@ -414,14 +429,18 @@ fn format_match_expr(
 /// 格式化模式
 pub fn format_pattern(
     pat: &Pattern,
+    ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
     match pat {
         Pattern::Wildcard => "_".to_string(),
         Pattern::Identifier(name) => name.clone(),
-        Pattern::Literal(lit) => format_literal(lit),
+        Pattern::Literal(lit) => format_literal(lit, ctx),
         Pattern::Tuple(pats) => {
-            let items: Vec<String> = pats.iter().map(|p| format_pattern(p, source_map)).collect();
+            let items: Vec<String> = pats
+                .iter()
+                .map(|p| format_pattern(p, ctx, source_map))
+                .collect();
             format!("({})", items.join(", "))
         }
         Pattern::Struct { name, fields } => {
@@ -433,7 +452,7 @@ pub fn format_pattern(
                         "{}{}: {}",
                         mut_str,
                         field_name,
-                        format_pattern(pat, source_map)
+                        format_pattern(pat, ctx, source_map)
                     )
                 })
                 .collect();
@@ -449,22 +468,24 @@ pub fn format_pattern(
                     "{}::{} ({})",
                     name,
                     variant,
-                    format_pattern(pat, source_map)
+                    format_pattern(pat, ctx, source_map)
                 )
             } else {
                 format!("{}::{}", name, variant)
             }
         }
         Pattern::Or(pats) => {
-            let items: Vec<String> = pats.iter().map(|p| format_pattern(p, source_map)).collect();
+            let items: Vec<String> = pats
+                .iter()
+                .map(|p| format_pattern(p, ctx, source_map))
+                .collect();
             items.join(" | ")
         }
         Pattern::Guard { pattern, condition } => {
-            let ctx = FormatContext::new(super::super::options::FormatOptions::default());
             format!(
                 "{} if {}",
-                format_pattern(pattern, source_map),
-                format_expr(condition, &ctx, source_map)
+                format_pattern(pattern, ctx, source_map),
+                format_expr(condition, ctx, source_map)
             )
         }
     }
@@ -480,6 +501,32 @@ pub fn format_block(
     inner_ctx.indent();
     let inner_indent = inner_ctx.indent_str();
     let outer_indent = ctx.indent_str();
+
+    // §6.3 空代码块：输出 {}
+    if block.stmts.is_empty() && block.expr.is_none() {
+        return "{}".to_string();
+    }
+
+    // §6.2 单行代码块：检查是否可以使用单行格式
+    // 条件：只有一个语句，没有表达式，没有注释
+    if block.stmts.len() == 1 && block.expr.is_none() {
+        let stmt = &block.stmts[0];
+        // 检查是否有前导注释
+        let leading_comments =
+            source_map.comments_between_lines(block.span.start.line, stmt.span.start.line);
+        // 检查是否有行末注释
+        let trailing_comment = source_map.trailing_comment_on_line(stmt.span.end.line);
+
+        if leading_comments.is_empty() && trailing_comment.is_none() {
+            let stmt_str = super::stmt::format_stmt(&stmt.kind, &inner_ctx, source_map);
+            let single_line = format!("{{ {} }}", stmt_str);
+
+            // 检查单行格式是否超过行宽
+            if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
+                return single_line;
+            }
+        }
+    }
 
     let mut result = "{\n".to_string();
 
@@ -553,18 +600,14 @@ fn format_lambda(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let params_str = format_params(params, source_map);
+    let params_str = format_params(params, ctx, source_map);
     // 如果 body 只有一个表达式，使用简洁形式
     if body.stmts.is_empty() {
         if let Some(expr) = &body.expr {
-            return format!("({}) => {}", params_str, format_expr(expr, ctx, source_map));
+            return format!("{} => {}", params_str, format_expr(expr, ctx, source_map));
         }
     }
-    format!(
-        "({}) => {}",
-        params_str,
-        format_block(body, ctx, source_map)
-    )
+    format!("{} => {}", params_str, format_block(body, ctx, source_map))
 }
 
 /// 格式化 f-string

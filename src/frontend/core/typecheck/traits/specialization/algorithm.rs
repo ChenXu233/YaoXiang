@@ -101,11 +101,9 @@ impl SpecializationAlgorithm {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params.iter().map(|t| self.substitute_type(t)).collect(),
                 return_type: Box::new(self.substitute_type(return_type)),
-                is_async: *is_async,
             },
             MonoType::Range { elem_type } => MonoType::Range {
                 elem_type: Box::new(self.substitute_type(elem_type)),

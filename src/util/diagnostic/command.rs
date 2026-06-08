@@ -172,6 +172,7 @@ pub fn render_explain_output(
         example: None,
         error_output: None,
     });
+    let template = i18n.get_template(code).unwrap_or("");
 
     if json {
         #[derive(Serialize)]
@@ -179,16 +180,20 @@ pub fn render_explain_output(
             code: &'static str,
             category: String,
             title: &'a str,
-            template: &'static str,
+            template: &'a str,
             help: &'a str,
+            example: Option<&'a str>,
+            error_output: Option<&'a str>,
         }
 
         let output = ExplainOutput {
             code: definition.code,
             category: definition.category.to_string(),
             title: info.title,
-            template: definition.message_template,
+            template,
             help: info.help,
+            example: info.example,
+            error_output: info.error_output,
         };
 
         Ok(Some(serde_json::to_string_pretty(&output)?))
@@ -197,10 +202,16 @@ pub fn render_explain_output(
             format!("Error {}", definition.code),
             format!("Category: {}", definition.category),
             format!("Title: {}", info.title),
-            format!("Message Template: {}", definition.message_template),
+            format!("Message Template: {}", template),
         ];
         if !info.help.is_empty() {
             lines.push(format!("Help: {}", info.help));
+        }
+        if let Some(example) = info.example {
+            lines.push(format!("\nExample:\n{}", example));
+        }
+        if let Some(output) = info.error_output {
+            lines.push(format!("\nExpected Output:\n{}", output));
         }
         Ok(Some(lines.join("\n")))
     }

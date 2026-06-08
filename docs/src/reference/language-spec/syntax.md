@@ -204,6 +204,42 @@ Pattern     ::= Literal
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
+**统一语义**：所有 `{}` 块的 return 语义一致：
+
+| 块类型 | return 语义 | 默认返回 |
+|--------|------------|----------|
+| 普通 `{}` | 返回值 | Void |
+| `unsafe {}` | 返回类型定义 | Void |
+| `spawn {}` | 返回结果 | Void |
+
+**核心原则**：
+- `{}` 中的 `return` 总是将内容返回给上一作用域
+- 默认没有 `return` 为返回 `Void`
+- 表达式形式 `= expr` 直接返回值
+
+```yaoxiang
+# 普通 {} 块：return 返回值
+result = {
+    x = compute()
+    return x  # 返回值给上一作用域
+}
+
+# unsafe {} 块：return 返回类型定义
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void
+    }
+    return SqliteDb  # 返回类型定义给上一作用域
+}
+
+# spawn {} 块：return 返回结果
+(a, b) = spawn {
+    result1 = fetch("url1"),
+    result2 = fetch("url2")
+    return (result1, result2)  # 返回结果给上一作用域
+}
+```
+
 ### 2.10 Lambda 表达式
 
 ```
@@ -254,6 +290,63 @@ data = ref heavy_data
 spawn { use(data) }   // 跨任务：编译器自动选 Arc
 ```
 
+### 2.14 unsafe 表达式
+
+```
+UnsafeExpr  ::= 'unsafe' Block
+```
+
+`unsafe` 块用于定义不透明类型和操作裸指针。使用 `return` 将类型定义返回给上一作用域。
+
+**语义**：
+- `unsafe {}` 中可以定义类型和操作裸指针
+- 返回的类型在 `unsafe {}` 外可用
+- 类型的字段访问需要 unsafe 权限
+
+```yaoxiang
+# 在 unsafe 块中定义不透明类型
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void  # 裸指针
+    }
+    return SqliteDb
+}
+
+# SqliteDb 在 unsafe 块外可用
+db = sqlite3_open("test.db")
+```
+
+### 2.15 作用域
+
+**基本规则**：
+- 每个 `{}` 块创建一个作用域
+- 内层作用域可以访问外层作用域的变量
+- 外层作用域不能访问内层作用域的变量
+- 变量声明遵循"赋值优先"原则
+
+```yaoxiang
+# 块作用域
+{
+    x = 10
+    # x 在此作用域内可见
+}
+# x 在此作用域外不可见
+
+# 函数作用域
+add: (a: Int, b: Int) -> Int = {
+    result = a + b
+    return result
+}
+# result 在函数外不可见
+```
+
+**变量声明与遮蔽**：
+- `x = value`：沿作用域链向外查找 x，找到则赋值，找不到则新声明
+- `mut x = value`：显式新可变声明，禁止与外层同名
+- 同作用域内任何名字只能声明一次
+
+> **详细定义**：作用域的完整规则、变量声明和遮蔽机制详见 [模块系统规范](./modules.md#第四章作用域)。
+
 ---
 
 ## 第三章：语句
@@ -284,6 +377,8 @@ LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ```
 ReturnStmt  ::= 'return' Expr?
 ```
+
+**语义**：`return` 用于从代码块中返回值。若无 `return`，代码块默认返回 `Void`。
 
 ### 3.4 break 语句
 

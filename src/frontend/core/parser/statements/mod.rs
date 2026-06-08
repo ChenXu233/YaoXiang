@@ -59,8 +59,19 @@ impl StatementParser for ParserState<'_> {
                 // Identifier 语句解析
                 declarations::parse_identifier_stmt(self, start_span)
             }
+            // tuple destructuring with parens: (a, b) = expr
+            Some(TokenKind::LParen) => declarations::parse_paren_destructure_stmt(self, start_span),
             // Eof - no statement to parse
             Some(TokenKind::Eof) | None => None,
+            // Phase 1: @ 不再是有效的语句起始（eval block 已移除）
+            Some(TokenKind::At) => {
+                self.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
+                    found: TokenKind::At,
+                    span: start_span,
+                });
+                // 不 bump — 由主循环负责跳过
+                None
+            }
             // expression statement
             Some(_) => declarations::parse_expr_stmt(self, start_span),
         }

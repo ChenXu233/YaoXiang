@@ -176,10 +176,10 @@ fn skip_old_function_syntax(_state: &mut ParserState<'_>) {
 fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
-    // 检查是否是 Identifier (类型名)
+    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
     let has_type_name = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(_))
+        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
     );
 
     if has_type_name {
@@ -216,9 +216,10 @@ fn is_method_bind_syntax(state: &mut ParserState<'_>) -> bool {
 fn is_external_binding_syntax(state: &mut ParserState<'_>) -> bool {
     let saved = state.save_position();
 
+    // 检查是否是 Identifier (类型名) — 类型名必须以大写字母开头
     let has_type_name = matches!(
         state.current().map(|t| &t.kind),
-        Some(TokenKind::Identifier(_))
+        Some(TokenKind::Identifier(name)) if name.chars().next().is_some_and(|c| c.is_uppercase())
     );
 
     if has_type_name {
@@ -432,7 +433,7 @@ pub fn parse_method_bind_stmt(
             method_type: Some(method_type),
             generic_params: Vec::new(),
             type_annotation: None,
-            eval: None,
+
             params,
             body: (body_stmts, body_expr),
             is_pub: false,
@@ -673,33 +674,6 @@ fn parse_var_stmt_with_pub(
         }
     }
 
-    // Optional function eval annotation: `@block/@auto/@eager`
-    // Only allowed on function definitions (RFC-001/008).
-    let fn_eval = if state.at(&TokenKind::At) {
-        if fn_params.is_none() {
-            state.error(ParseError::Message(
-                "Eval annotation is only allowed on function definitions".to_string(),
-            ));
-            return None;
-        }
-        state.bump(); // consume '@'
-        let mode = match state.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(name)) if name == "block" => EvalMode::Block,
-            Some(TokenKind::Identifier(name)) if name == "auto" => EvalMode::Auto,
-            Some(TokenKind::Identifier(name)) if name == "eager" => EvalMode::Eager,
-            _ => {
-                state.error(ParseError::Message(
-                    "Expected eval annotation name after '@' (block/auto/eager)".to_string(),
-                ));
-                return None;
-            }
-        };
-        state.bump(); // consume annotation name
-        Some(mode)
-    } else {
-        None
-    };
-
     // Optional initializer
     if state.skip(&TokenKind::Eq) {
         // RFC-010 新语法: name: (a: Int, b: Int) -> Ret = body
@@ -728,7 +702,7 @@ fn parse_var_stmt_with_pub(
                         method_type: None,
                         generic_params: generic_params_for_type,
                         type_annotation: Some(definition),
-                        eval: None,
+
                         params: Vec::new(),
                         body: (Vec::new(), None),
                         is_pub: final_is_pub,
@@ -817,7 +791,6 @@ fn parse_var_stmt_with_pub(
                             method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
-                            eval: fn_eval,
                             params: merged,
                             body: (body.stmts.clone(), body.expr.clone()),
                             is_pub: final_is_pub,
@@ -844,7 +817,6 @@ fn parse_var_stmt_with_pub(
                             method_type: None,
                             generic_params,
                             type_annotation: type_annotation.clone(),
-                            eval: fn_eval,
                             params: extracted_params.clone(),
                             body,
                             is_pub: final_is_pub,
@@ -898,7 +870,7 @@ fn parse_var_stmt_with_pub(
                                     name_span: Span::dummy(),
                                     args: Vec::new(),
                                 }),
-                                eval: None,
+
                                 params: Vec::new(),
                                 body: (Vec::new(), None),
                                 is_pub: false,
@@ -930,7 +902,7 @@ fn parse_var_stmt_with_pub(
                     method_type: None,
                     generic_params: generic_params_for_type,
                     type_annotation: Some(definition),
-                    eval: None,
+
                     params: Vec::new(),
                     body: (Vec::new(), None),
                     is_pub: false,
@@ -965,7 +937,7 @@ fn parse_var_stmt_with_pub(
                         generic_params: Vec::new(),
                         // 保留变量的显式类型注解，供后续类型检查做 Void/Int 等一致性校验。
                         type_annotation: type_annotation.clone(),
-                        eval: None,
+
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub: final_is_pub,
@@ -1125,7 +1097,7 @@ pub fn parse_identifier_stmt(
                         method_type: None,
                         generic_params: Vec::new(),
                         type_annotation: None, // Will be inferred
-                        eval: None,
+
                         params: Vec::new(),
                         body: (block.stmts.clone(), block.expr.clone()),
                         is_pub,
@@ -1151,6 +1123,80 @@ pub fn parse_identifier_stmt(
 
         // Fallback to expression statement
         return parse_expr_stmt(state, span);
+    }
+
+    // Check for tuple destructuring: identifier, identifier, ... = expr
+    // This must be checked BEFORE the `:` check since `,` comes first
+    if matches!(next.map(|t| &t.kind), Some(TokenKind::Comma)) {
+        // Save position in case this turns out to not be destructuring
+        let saved = state.save_position();
+        let err_count = state.error_count();
+
+        let first_token = state.current().unwrap();
+        let first_name = SpannedIdent {
+            name: match &first_token.kind {
+                TokenKind::Identifier(n) => n.clone(),
+                _ => {
+                    state.restore_position(saved);
+                    state.truncate_errors(err_count);
+                    return parse_expr_stmt(state, span);
+                }
+            },
+            span: first_token.span,
+        };
+        state.bump(); // consume first identifier
+
+        let mut names = vec![first_name];
+
+        // Collect comma-separated identifiers
+        while state.skip(&TokenKind::Comma) {
+            let tok = match state.current() {
+                Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
+                _ => {
+                    state.restore_position(saved);
+                    state.truncate_errors(err_count);
+                    return parse_expr_stmt(state, span);
+                }
+            };
+            names.push(SpannedIdent {
+                name: match tok.kind {
+                    TokenKind::Identifier(n) => n,
+                    _ => unreachable!(),
+                },
+                span: tok.span,
+            });
+            state.bump(); // consume identifier
+        }
+
+        // Expect `=`
+        if !state.at(&TokenKind::Eq) {
+            state.restore_position(saved);
+            state.truncate_errors(err_count);
+            return parse_expr_stmt(state, span);
+        }
+        state.bump(); // consume `=`
+
+        // Parse RHS expression
+        let rhs = match state.parse_expression(BP_LOWEST) {
+            Some(expr) => expr,
+            None => {
+                state.error(ParseError::Message(
+                    "Expected expression after '=' in tuple destructuring".to_string(),
+                ));
+                return None;
+            }
+        };
+
+        state.skip(&TokenKind::Semicolon);
+
+        return Some(Stmt {
+            kind: StmtKind::DestructureAssign {
+                names,
+                rhs: Box::new(rhs),
+                span,
+            },
+            span,
+        });
     }
 
     // Check for variable declaration: identifier followed by :
@@ -1251,6 +1297,100 @@ fn parse_constructor_params(state: &mut ParserState<'_>) -> Option<Vec<(Option<S
     }
 
     Some(params)
+}
+
+/// Parse parenthesized tuple destructuring: `(a, b) = expr`
+/// Called when the current token is `(`.
+/// Falls back to expression statement if this is not a destructuring pattern.
+pub fn parse_paren_destructure_stmt(
+    state: &mut ParserState<'_>,
+    span: Span,
+) -> Option<Stmt> {
+    let saved = state.save_position();
+    let err_count = state.error_count();
+
+    state.bump(); // consume `(`
+
+    // Check if next token is an identifier (first name in destructuring)
+    let first_token = match state.current() {
+        Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
+        _ => {
+            // Not a destructuring pattern, fall back to expression
+            state.restore_position(saved);
+            state.truncate_errors(err_count);
+            return parse_expr_stmt(state, span);
+        }
+    };
+    let first_name = SpannedIdent {
+        name: match &first_token.kind {
+            TokenKind::Identifier(n) => n.clone(),
+            _ => unreachable!(),
+        },
+        span: first_token.span,
+    };
+    state.bump(); // consume first identifier
+
+    let mut names = vec![first_name];
+
+    // Collect remaining comma-separated identifiers
+    while state.at(&TokenKind::Comma) {
+        state.bump(); // consume `,`
+        let tok = match state.current() {
+            Some(t) if matches!(&t.kind, TokenKind::Identifier(_)) => t.clone(),
+            _ => {
+                // Not a destructuring pattern after comma
+                state.restore_position(saved);
+                state.truncate_errors(err_count);
+                return parse_expr_stmt(state, span);
+            }
+        };
+        names.push(SpannedIdent {
+            name: match tok.kind {
+                TokenKind::Identifier(n) => n,
+                _ => unreachable!(),
+            },
+            span: tok.span,
+        });
+        state.bump(); // consume identifier
+    }
+
+    // Expect `)`
+    if !state.at(&TokenKind::RParen) {
+        state.restore_position(saved);
+        state.truncate_errors(err_count);
+        return parse_expr_stmt(state, span);
+    }
+    state.bump(); // consume `)`
+
+    // Expect `=`
+    if !state.at(&TokenKind::Eq) {
+        state.restore_position(saved);
+        state.truncate_errors(err_count);
+        return parse_expr_stmt(state, span);
+    }
+    state.bump(); // consume `=`
+
+    // Parse RHS expression
+    let rhs = match state.parse_expression(BP_LOWEST) {
+        Some(expr) => expr,
+        None => {
+            state.error(ParseError::Message(
+                "Expected expression after '=' in tuple destructuring".to_string(),
+            ));
+            return None;
+        }
+    };
+
+    state.skip(&TokenKind::Semicolon);
+
+    Some(Stmt {
+        kind: StmtKind::DestructureAssign {
+            names,
+            rhs: Box::new(rhs),
+            span,
+        },
+        span,
+    })
 }
 
 /// Parse expression statement

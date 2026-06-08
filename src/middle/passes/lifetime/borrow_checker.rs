@@ -3,7 +3,6 @@
 //! 对借用令牌进行流敏感的活跃性分析，检测以下冲突：
 //! - 同一来源的多个 `&T` 令牌：允许（Dup）
 //! - `&mut T` 令牌活跃时，同一来源的 `&T` 令牌也活跃：错误
-//! - `&mut T` 令牌被冻结后使用：错误
 //! - 令牌来源已被移动后使用令牌：错误
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
@@ -14,8 +13,6 @@ use std::collections::HashMap;
 pub enum TokenState {
     /// 令牌活跃可用
     Active,
-    /// 令牌被冻结（来源的 &mut 被冻结以产生 &T）
-    Frozen,
     /// 令牌已被移动/消耗
     Moved,
 }
@@ -50,13 +47,6 @@ pub enum BorrowError {
         /// 尝试使用的令牌
         token: String,
     },
-    /// 冻结时使用：令牌被冻结后仍尝试使用
-    UseWhileFrozen {
-        /// 借用来源
-        source: String,
-        /// 被冻结的令牌
-        token: String,
-    },
 }
 
 impl std::fmt::Display for BorrowError {
@@ -83,13 +73,6 @@ impl std::fmt::Display for BorrowError {
                     token, source
                 )
             }
-            BorrowError::UseWhileFrozen { source, token } => {
-                write!(
-                    f,
-                    "UseWhileFrozen: cannot use borrow token '{}' because source '{}' is frozen",
-                    token, source
-                )
-            }
         }
     }
 }
@@ -99,14 +82,10 @@ impl std::fmt::Display for BorrowError {
 /// 追踪活跃的借用令牌并检测冲突：
 /// - `&T` 令牌：不可变借用，允许多个同时存在
 /// - `&mut T` 令牌：可变借用，同一来源只能有一个活跃
-/// - 冻结机制：当 &mut 被冻结为 &T 时，&mut 进入 Frozen 状态
 #[derive(Debug)]
 pub struct BorrowChecker {
     /// 令牌表：令牌名 -> 令牌信息
     tokens: HashMap<String, BorrowToken>,
-    /// 冻结来源映射：冻结的 &mut 令牌名 -> 源变量名
-    /// 用于在 &T 令牌释放时解冻对应的 &mut 令牌
-    frozen_sources: HashMap<String, String>,
     /// 收集的错误
     errors: Vec<BorrowError>,
     /// 当前检查位置 (block_idx, instr_idx)
@@ -118,7 +97,6 @@ impl BorrowChecker {
     pub fn new() -> Self {
         Self {
             tokens: HashMap::new(),
-            frozen_sources: HashMap::new(),
             errors: Vec::new(),
             location: (0, 0),
         }
@@ -186,7 +164,7 @@ impl BorrowChecker {
 
     /// 标记令牌被使用（验证仍然活跃）
     ///
-    /// 检查令牌是否处于 Active 状态（非 Frozen 或 Moved）
+    /// 检查令牌是否处于 Active 状态（非 Moved）
     pub fn use_token(
         &mut self,
         token_name: &str,
@@ -200,12 +178,6 @@ impl BorrowChecker {
             TokenState::Active => {
                 // 令牌活跃，正常使用
             }
-            TokenState::Frozen => {
-                self.errors.push(BorrowError::UseWhileFrozen {
-                    source: token.source.clone(),
-                    token: token_name.to_string(),
-                });
-            }
             TokenState::Moved => {
                 self.errors.push(BorrowError::BorrowAfterMove {
                     source: token.source.clone(),
@@ -215,66 +187,12 @@ impl BorrowChecker {
         }
     }
 
-    /// 冻结 &mut 令牌以产生 &T 视图
-    ///
-    /// 将 &mut 令牌标记为 Frozen，并创建一个同源的 &T 令牌
-    pub fn freeze(
-        &mut self,
-        mut_token_name: &str,
-        frozen_token_name: &str,
-    ) {
-        let source = match self.tokens.get_mut(mut_token_name) {
-            Some(token) if token.state == TokenState::Active && token.mutable => {
-                token.state = TokenState::Frozen;
-                token.source.clone()
-            }
-            _ => return,
-        };
-
-        // 记录冻结关系，用于后续解冻
-        self.frozen_sources
-            .insert(frozen_token_name.to_string(), mut_token_name.to_string());
-
-        // 创建新的 &T 令牌
-        self.tokens.insert(
-            frozen_token_name.to_string(),
-            BorrowToken {
-                source,
-                mutable: false,
-                state: TokenState::Active,
-            },
-        );
-    }
-
     /// 结束令牌的生命周期（当令牌离开作用域时）
-    ///
-    /// 如果释放的是从冻结的 &mut 派生的 &T，则解冻源 &mut 令牌
     pub fn release_token(
         &mut self,
         token_name: &str,
     ) {
-        if let Some(token) = self.tokens.remove(token_name) {
-            // 如果这个 &T 令牌是从冻结的 &mut 派生的，检查是否可以解冻
-            if !token.mutable && self.frozen_sources.remove(token_name).is_some() {
-                // 检查是否还有其他活跃的 &T 令牌来自同一冻结来源
-                let source = &token.source;
-                let has_other_active = self
-                    .tokens
-                    .values()
-                    .any(|t| t.source == *source && !t.mutable && t.state == TokenState::Active);
-
-                if !has_other_active {
-                    // 没有其他活跃的 &T 令牌，解冻 &mut 令牌
-                    // 找到同一来源的 Frozen &mut 令牌
-                    for t in self.tokens.values_mut() {
-                        if t.source == *source && t.mutable && t.state == TokenState::Frozen {
-                            t.state = TokenState::Active;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        self.tokens.remove(token_name);
     }
 
     /// 获取所有错误
@@ -285,7 +203,6 @@ impl BorrowChecker {
     /// 清除状态
     pub fn clear(&mut self) {
         self.tokens.clear();
-        self.frozen_sources.clear();
         self.errors.clear();
     }
 
@@ -449,34 +366,16 @@ impl BorrowChecker {
         }
     }
 
-    /// 将 BorrowError 转换为 OwnershipError
-    pub fn to_ownership_errors(
-        &self
-    ) -> Vec<crate::middle::passes::lifetime::error::OwnershipError> {
-        use crate::middle::passes::lifetime::error::OwnershipError;
+    /// 将 BorrowError 转换为 Diagnostic
+    pub fn to_diagnostics(&self) -> Vec<crate::util::diagnostic::Diagnostic> {
+        use crate::middle::passes::lifetime::error::codes;
         self.errors
             .iter()
             .map(|e| match e {
-                BorrowError::MutableBorrowConflict {
-                    source,
-                    existing,
-                    new,
-                } => OwnershipError::MutableBorrowConflict {
-                    source: source.clone(),
-                    existing: existing.clone(),
-                    new: new.clone(),
-                    location: self.location,
-                },
-                BorrowError::BorrowAfterMove { source, token } => OwnershipError::BorrowAfterMove {
-                    source: source.clone(),
-                    token: token.clone(),
-                    location: self.location,
-                },
-                BorrowError::UseWhileFrozen { source, token } => OwnershipError::UseWhileFrozen {
-                    source: source.clone(),
-                    token: token.clone(),
-                    location: self.location,
-                },
+                BorrowError::MutableBorrowConflict { source, .. } => {
+                    codes::mutable_borrow_conflict(source)
+                }
+                BorrowError::BorrowAfterMove { source, .. } => codes::borrow_after_move(source),
             })
             .collect()
     }
@@ -506,7 +405,7 @@ mod tests {
     //! 借用检查器单元与端到端测试
     //!
     //! 参考规范：RFC-009 v9 §4.1 借用令牌冲突检测。
-    //! 覆盖不可变/可变借用冲突、冻结/解冻、移动后使用等场景。
+    //! 覆盖不可变/可变借用冲突、移动后使用等场景。
 
     use super::*;
     use crate::middle::core::ir::BasicBlock;
@@ -518,7 +417,6 @@ mod tests {
             name: "test_fn".to_string(),
             params: vec![],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -644,28 +542,6 @@ mod tests {
     }
 
     #[test]
-    fn test_use_frozen_token() {
-        // Arrange
-        let mut checker = make_checker();
-        checker.create_borrow("ref_mut_a", "x", true);
-        checker.freeze("ref_mut_a", "ref_b");
-        // Act
-        checker.use_token("ref_mut_a");
-        // Assert
-        assert_eq!(
-            checker.errors().len(),
-            1,
-            "使用冻结令牌应产生 1 个错误，但得到: {:?}",
-            checker.errors()
-        );
-        assert!(
-            matches!(checker.errors()[0], BorrowError::UseWhileFrozen { .. }),
-            "错误类型应为 UseWhileFrozen，但得到: {:?}",
-            checker.errors()[0]
-        );
-    }
-
-    #[test]
     fn test_use_moved_token() {
         // Arrange
         let mut checker = make_checker();
@@ -686,56 +562,6 @@ mod tests {
             matches!(checker.errors()[0], BorrowError::BorrowAfterMove { .. }),
             "错误类型应为 BorrowAfterMove，但得到: {:?}",
             checker.errors()[0]
-        );
-    }
-
-    #[test]
-    fn test_freeze_and_unfreeze() {
-        // Arrange
-        let mut checker = make_checker();
-        checker.create_borrow("ref_mut_a", "x", true);
-        // Act: 冻结为不可变借用
-        checker.freeze("ref_mut_a", "ref_b");
-        // Assert: ref_mut_a 应该是 Frozen
-        assert_eq!(
-            checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Frozen,
-            "冻结后 ref_mut_a 应处于 Frozen 状态"
-        );
-        // Assert: ref_b 应该是 Active
-        assert_eq!(
-            checker.tokens.get("ref_b").unwrap().state,
-            TokenState::Active,
-            "新建的 ref_b 应处于 Active 状态"
-        );
-        // Act: 释放 ref_b，应解冻 ref_mut_a
-        checker.release_token("ref_b");
-        // Assert
-        assert_eq!(
-            checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Active,
-            "释放 ref_b 后 ref_mut_a 应恢复为 Active 状态"
-        );
-    }
-
-    #[test]
-    fn test_freeze_multiple_immutable() {
-        // Arrange
-        let mut checker = make_checker();
-        checker.create_borrow("ref_mut_a", "x", true);
-        checker.freeze("ref_mut_a", "ref_b");
-        // Act: 第二次冻结应失败（ref_mut_a 已经是 Frozen）
-        checker.freeze("ref_mut_a", "ref_c");
-        // Assert: ref_mut_a 仍应为 Frozen
-        assert_eq!(
-            checker.tokens.get("ref_mut_a").unwrap().state,
-            TokenState::Frozen,
-            "第二次冻结后 ref_mut_a 应仍为 Frozen"
-        );
-        // Assert: ref_c 不应被创建
-        assert!(
-            !checker.tokens.contains_key("ref_c"),
-            "对已 Frozen 的令牌再次冻结不应创建新令牌 ref_c"
         );
     }
 

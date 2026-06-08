@@ -7,7 +7,8 @@ use crate::middle::core::ir::{ConstValue, FunctionIR, Instruction, ModuleIR, Ope
 use crate::middle::core::Reg;
 use crate::middle::passes::codegen::emitter::Emitter;
 use crate::middle::passes::codegen::operand::OperandResolver;
-use crate::middle::passes::codegen::{BytecodeInstruction, CodegenError};
+use crate::middle::passes::codegen::{BytecodeInstruction};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::{HashMap, HashSet};
 
@@ -104,7 +105,7 @@ impl Translator {
     pub fn translate_module(
         &mut self,
         module: &ModuleIR,
-    ) -> Result<TranslatorOutput, CodegenError> {
+    ) -> Result<TranslatorOutput, Diagnostic> {
         // 注册用户声明的 native 函数绑定
         // 这些来自 `my_func: Type = Native("symbol")` 声明
         for binding in &module.native_bindings {
@@ -149,7 +150,7 @@ impl Translator {
     fn translate_function(
         &mut self,
         func: &FunctionIR,
-    ) -> Result<super::FunctionCode, CodegenError> {
+    ) -> Result<super::FunctionCode, Diagnostic> {
         self.current_function = Some(func.clone());
 
         let mut instructions = Vec::new();
@@ -265,7 +266,7 @@ impl Translator {
     fn translate_instruction(
         &mut self,
         instr: &Instruction,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         use Instruction::*;
 
         match instr {
@@ -338,12 +339,11 @@ impl Translator {
             Cast { dst, src, .. } => self.translate_cast(dst, src),
             TypeTest(_, _) => Ok(BytecodeInstruction::new(Opcode::TypeCheck, vec![0, 0, 0])),
 
-            Spawn { func, args, result } => self.translate_spawn(func, args, result),
-            EvalPush(mode) => Ok(BytecodeInstruction::new(
-                Opcode::EvalPush,
-                vec![*mode as u8],
-            )),
-            EvalPop => Ok(BytecodeInstruction::new(Opcode::EvalPop, vec![])),
+            Spawn {
+                closures,
+                plan,
+                result,
+            } => self.translate_spawn_multi(closures, plan, result),
             Yield => Ok(BytecodeInstruction::new(Opcode::Yield, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
@@ -392,7 +392,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -405,7 +405,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         match src {
             Operand::Const(const_val) => {
@@ -437,7 +437,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         if let Operand::Local(local_idx) = dst {
             let src_reg = self.operand_resolver.to_reg(src)?;
             Ok(BytecodeInstruction::new(
@@ -445,7 +445,7 @@ impl Translator {
                 vec![*local_idx as u8, src_reg],
             ))
         } else {
-            Err(CodegenError::InvalidOperand)
+            Err(ErrorCodeDefinition::codegen_invalid_operand("invalid operand").build())
         }
     }
 
@@ -455,7 +455,7 @@ impl Translator {
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let lhs_reg = self.operand_resolver.to_reg(lhs)?;
         let rhs_reg = self.operand_resolver.to_reg(rhs)?;
@@ -482,7 +482,7 @@ impl Translator {
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         // 统一使用整数比较指令，运行时通过 exec_compare 根据实际类型执行正确比较
         self.translate_binary_op(eq_opcode, dst, lhs, rhs)
     }
@@ -492,7 +492,7 @@ impl Translator {
         opcode: Opcode,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(opcode, vec![dst_reg, src_reg]))
@@ -501,7 +501,7 @@ impl Translator {
     fn translate_jmp(
         &mut self,
         _target: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         Ok(BytecodeInstruction::new(Opcode::Jmp, vec![0, 0, 0, 0]))
     }
 
@@ -509,7 +509,7 @@ impl Translator {
         &mut self,
         cond: &Operand,
         _target: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let cond_reg = self.operand_resolver.to_reg(cond)?;
         Ok(BytecodeInstruction::new(
             Opcode::JmpIf,
@@ -521,7 +521,7 @@ impl Translator {
         &mut self,
         cond: &Operand,
         _target: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let cond_reg = self.operand_resolver.to_reg(cond)?;
         Ok(BytecodeInstruction::new(
             Opcode::JmpIfNot,
@@ -532,7 +532,7 @@ impl Translator {
     fn translate_ret(
         &mut self,
         value: &Option<Operand>,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         match value {
             Some(v) => {
                 let reg = self.operand_resolver.to_reg(v)?;
@@ -547,7 +547,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
         } else {
@@ -599,19 +599,46 @@ impl Translator {
         Ok(BytecodeInstruction::new(opcode, operands))
     }
 
-    fn translate_spawn(
+    fn translate_spawn_multi(
         &mut self,
-        func: &Operand,
-        args: &[Operand],
+        closures: &[Operand],
+        plan: &crate::middle::core::ir::ExecutionPlan,
         result: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(result)?;
-        let func_reg = self.operand_resolver.to_reg(func)?;
 
-        let mut operands = vec![dst_reg, func_reg, args.len() as u8];
-        for arg in args {
-            let arg_reg = self.operand_resolver.to_reg(arg)?;
-            operands.push(arg_reg);
+        // 编码 closures
+        let closure_regs: Vec<u8> = closures
+            .iter()
+            .map(|c| self.operand_resolver.to_reg(c))
+            .collect::<Result<Vec<u8>, _>>()?;
+
+        // 编码 group_count
+        let group_count: Vec<u32> = plan
+            .groups
+            .iter()
+            .map(|g| g.task_indices.len() as u32)
+            .collect();
+
+        let mut operands = Vec::new();
+
+        // dst (2 bytes LE)
+        operands.extend_from_slice(&(dst_reg as u16).to_le_bytes());
+
+        // closures.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(closure_regs.len() as u32).to_le_bytes());
+
+        // each closure register (2 bytes LE each)
+        for reg in &closure_regs {
+            operands.extend_from_slice(&(*reg as u16).to_le_bytes());
+        }
+
+        // group_count.len() as u32 (4 bytes LE)
+        operands.extend_from_slice(&(group_count.len() as u32).to_le_bytes());
+
+        // each group's task count (4 bytes LE each)
+        for count in &group_count {
+            operands.extend_from_slice(&count.to_le_bytes());
         }
 
         Ok(BytecodeInstruction::new(Opcode::Spawn, operands))
@@ -623,7 +650,7 @@ impl Translator {
         obj: &Operand,
         method_name: &str,
         args: &[Operand],
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
         } else {
@@ -650,7 +677,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
         } else {
@@ -681,7 +708,7 @@ impl Translator {
         &mut self,
         func: &Operand,
         args: &[Operand],
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let func_id = match func {
             Operand::Const(ConstValue::Int(i)) => *i as u32,
             _ => 0,
@@ -701,7 +728,7 @@ impl Translator {
     fn translate_alloc(
         &mut self,
         dst: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(Opcode::StackAlloc, vec![dst_reg]))
     }
@@ -709,7 +736,7 @@ impl Translator {
     fn translate_alloc_array(
         &mut self,
         dst: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
             Opcode::NewListWithCap,
@@ -722,7 +749,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
         field: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         let field_offset = field as u16;
@@ -742,7 +769,7 @@ impl Translator {
         dst: &Operand,
         field: usize,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         let field_offset = field as u16;
@@ -762,7 +789,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
         index: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         let index_reg = self.operand_resolver.to_reg(index)?;
@@ -777,7 +804,7 @@ impl Translator {
         dst: &Operand,
         index: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let index_reg = self.operand_resolver.to_reg(index)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
@@ -791,7 +818,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -803,7 +830,7 @@ impl Translator {
     fn translate_heap_alloc(
         &mut self,
         dst: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
             Opcode::HeapAlloc,
@@ -818,7 +845,7 @@ impl Translator {
         dst: &Operand,
         type_name: &str,
         fields: &[Operand],
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let name_idx = self
             .emitter
@@ -837,7 +864,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
 
         // 通过函数名查找索引
@@ -857,7 +884,7 @@ impl Translator {
     fn translate_drop(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::Drop, vec![reg]))
     }
@@ -865,7 +892,7 @@ impl Translator {
     fn translate_push(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
     }
@@ -873,7 +900,7 @@ impl Translator {
     fn translate_pop(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::Mov, vec![reg]))
     }
@@ -882,7 +909,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -895,7 +922,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -907,7 +934,7 @@ impl Translator {
     fn translate_arc_drop(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::ArcDrop, vec![reg]))
     }
@@ -917,7 +944,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
         mutable: bool,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -935,7 +962,7 @@ impl Translator {
     fn translate_release(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(
             Opcode::Release,
@@ -947,7 +974,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         // ShareRef: 用于线程本地共享，需要类型是 Sync
         // TODO: 实现完整的 ShareRef 操作码支持
         let dst_reg = self.operand_resolver.to_reg(dst)?;
@@ -961,7 +988,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -975,7 +1002,7 @@ impl Translator {
         dst: &Operand,
         lhs: &Operand,
         rhs: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let lhs_reg = self.operand_resolver.to_reg(lhs)?;
         let rhs_reg = self.operand_resolver.to_reg(rhs)?;
@@ -990,7 +1017,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
         index: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         let index_reg = self.operand_resolver.to_reg(index)?;
@@ -1004,7 +1031,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -1017,7 +1044,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         src: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
@@ -1030,7 +1057,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         upvalue_idx: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         Ok(BytecodeInstruction::new(
             Opcode::LoadUpvalue,
@@ -1042,7 +1069,7 @@ impl Translator {
         &mut self,
         src: &Operand,
         upvalue_idx: usize,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let src_reg = self.operand_resolver.to_reg(src)?;
         Ok(BytecodeInstruction::new(
             Opcode::StoreUpvalue,
@@ -1053,7 +1080,7 @@ impl Translator {
     fn translate_close_upvalue(
         &mut self,
         operand: &Operand,
-    ) -> Result<BytecodeInstruction, CodegenError> {
+    ) -> Result<BytecodeInstruction, Diagnostic> {
         let reg = self.operand_resolver.to_reg(operand)?;
         Ok(BytecodeInstruction::new(Opcode::CloseUpvalue, vec![reg]))
     }

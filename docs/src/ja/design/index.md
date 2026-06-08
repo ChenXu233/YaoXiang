@@ -2,7 +2,7 @@
 
 > 道生一，一生二，二生三，三生万物。
 
-本ディレクトリには YaoXiang プログラミング言語の設計上の決定事項、提案、議論が含まれています。
+本ディレクトリには YaoXiang プログラミング言語の設計決定、提案、議論が含まれています。
 
 ## コア設計理念
 
@@ -10,88 +10,142 @@
 |------|------|
 | **すべてが型** | 値、関数、モジュールはすべて型であり、型は第一級市民である |
 | **自然な構文** | Python のような可読性、自然言語に近い |
-| **所有権モデル** | ゼロコスト抽象化、GC なし、高性能 |
-| **spawn モデル** | 同期的な構文、非同期の本質、自動並列化 |
+| **所有権モデル** | ゼロコスト抽象化、GC なし、高パフォーマンス |
+| **スポーン モデル** | 同期構文、非同期本質、自动並行処理 |
 | **AI フレンドリー** | 厳格な構造化、明確な AST |
 
-## 設計ドキュメントの構造
+## 設計ドキュメント構造
 
 ```
 design/
 ├── index.md              # 本インデックス
-├── accepted/             # 承認済み設計提案
+├── deprecated/           # 非推奨（新設計に置き換え）
 │   └── *.md
-├── rfc/                  # RFC 提案（審議中）
-│   ├── *.md
-│   └── RFC_TEMPLATE.md
-└── discussion/           # 設計議論エリア（オープン議論）
+├── rejected/             # 拒否済み
+│   └── *.md
+├── rfc/
+│   ├── draft/            # 草案（作業中）
+│   ├── review/           # レビュー中（議論開放）
+│   ├── accepted/         # 承認済み（設計通過）
+│   ├── deprecated/       # 非推奨（置き換え）
+│   └── rejected/         # 拒否済み（不採用）
+└── discussion/           # 設計議論エリア（議論開放）
     └── *.md
 ```
 
-## 承認済み設計提案
+## 承認済みの設計提案
 
 | ドキュメント | 状態 | 説明 |
 |------|------|------|
-| [008-並行処理モデル](./accepted/008-runtime-concurrency-model.md) | ✅ 正式 | spawn モデルとタスクスケジューラの設計 |
+| [RFC-001 並行モデルエラー処理](./rfc/accepted/001-concurrent-model-error-handling.md) | ✅ 承認済み | 並行モデルにおけるエラー処理設計 |
+| [RFC-008 ランタイム並行モデル](./rfc/accepted/008-runtime-concurrency-model.md) | ✅ 承認済み | スポーン モデルとタスクスケジューラ設計 |
+| [RFC-009 所有権モデル](./rfc/accepted/009-ownership-model.md) | ✅ 承認済み | 所有権と借用システム設計 |
+| [RFC-010 統合型構文](./rfc/accepted/010-unified-type-syntax.md) | ✅ 承認済み | 統合型定義構文 |
+| [RFC-011 ジェネリクス型システム](./rfc/accepted/011-generic-type-system.md) | ✅ 承認済み | ジェネリクス型システム設計 |
 
-> 完全なリストは [`accepted/`](./accepted/) ディレクトリを参照してください。
+> 完全なリストは [`rfc/accepted/`](./rfc/accepted/) ディレクトリを参照。
 
 ## RFC 提案
 
-> RFC（Request for Comments）は、新機能と重大な変更のための提案プロセスです。
+> RFC（Request for Comments）は、新機能および重大な変更の提案プロセスです。
 
 ### アクティブな提案
 
 | 番号 | タイトル | 状態 |
 |------|------|------|
-| RFC-003 | バージョン計画 | 審議待ち |
-| RFC-005 | 自動 CVE スキャン | 審議待ち |
-| RFC-006 | ドキュメントサイト最適化 | 審議待ち |
-| RFC-012 | f-string テンプレート文字列 | 審議待ち |
+| RFC-003 | バージョン計画 | レビュー中 |
+| RFC-016 | 量子ネイティブサポート | 草案 |
+| RFC-018 | LLVM AOT コンパイラ | レビュー中 |
+| RFC-019 | 型付き同像性 | 草案 |
+| RFC-020 | 動的モジュール FFI | 草案 |
+| RFC-021 | ライブラリ駆動 FFI 拡張 | レビュー中 |
+| RFC-022 | Hoare 論理静的検証 | レビュー中 |
+
+### 承認済み提案
+
+| 番号 | タイトル | 状態 |
+|------|------|------|
+| RFC-001 | 並行モデルエラー処理 | 承認済み |
+| RFC-004 | 柯里化多位置バインディング | 承認済み |
+| RFC-006 | ドキュメントサイト最適化 | 承認済み |
+| RFC-007 | 関数構文統合 | 承認済み |
+| RFC-008 | ランタイム並行モデル | 承認済み |
+| RFC-009 | 所有権モデル | 承認済み |
+| RFC-010 | 統合型構文 | 承認済み |
+| RFC-011 | ジェネリクス型システム | 承認済み |
+| RFC-012 | f-string テンプレート文字列 | 承認済み |
+| RFC-013 | エラーコード規範 | 承認済み |
+| RFC-014 | パッケージマネージャ | 承認済み |
+| RFC-015 | 設定システム | 承認済み |
+| RFC-017 | LSP サポート | 承認済み |
+| RFC-023 | クロージャ捕獲モデル | 承認済み |
+
+### 拒否済み提案
+
+| 番号 | タイトル | 状態 |
+|------|------|------|
+| RFC-002 | クロスプラットフォーム IO (libuv) | 拒否済み |
+| RFC-005 | 自動 CVE スキャン | 拒否済み |
 
 ### RFC テンプレート
 
 新規提案の提出前に、以下を参照してください：
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
-- [完全な例](./rfc/EXAMPLE_full_feature_proposal.md)
+- [完全示例](./rfc/EXAMPLE_full_feature_proposal.md)
 
 ## 設計議論への参加
+
+### RFC ライフサイクル
+
+RFC 提案には 5 つの状態があります：
+
+| 状態 | 意味 |
+|------|------|
+| 草案 | 作業進行中 |
+| レビュー中 | 議論開放 |
+| 承認済み | 設計通過 |
+| 非推奨 | かつて承認され、新設計に置き換え |
+| 拒否済み | 不採用 |
+
+完全なライフサイクル：
+```
+草案 → レビュー中 → 承認済み → 非推奨（置き換え）
+                    ↓
+                 拒否済み（不採用）
+```
 
 ### 提案プロセス
 
 ```
 1. 提案の起草（RFC テンプレートを使用）
-   → rfc/ ディレクトリに配置
+   → rfc/draft/ に配置
 
-2. コミュニティ議論
-   → rfc/REPO の対応する issue で議論
+2. レビュー提出
+   → rfc/review/ に移動、社区議論開放
 
 3. コアチームレビュー
-   → 承認 → accepted/ に移動
-   → 拒否 → archived/ に移動または削除
+   → 承認 → rfc/accepted/ に移動
+   → 拒否 → rfc/rejected/ に移動
+
+4. 継続的なメンテナンス
+   → 置き換え → rfc/deprecated/ に移動
 ```
 
 ### 設計原則
 
-- **明確な境界**：各設計決定には明確な適用範囲が必要
-- **実用優先**：实际问题解决优先，而非假想威胁
-- **漸進的透明性**：並行処理モデルの階層的設計（L1-L3）
-- **ユーザー可见動作不变**：Never break userspace
+- **明確な境界**: 各設計決定には明確な適用範囲が必要
+- **実用優先**: 实际问题を解決し、假设の脅威に対応しない
+- **ユーザー可視動作の不変性**: Never break userspace
 
-## コード例
+## コード示例
 
 ```yaoxiang
 // 型定義
 Point: Type = { x: Float, y: Float }
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: Type(T, E) = { ok(T) | err(E) }
 
 // 関数定義
 add: (a: Int, b: Int) -> Int = a + b
-
-// spawn 関数（自動並行処理）
-fetch_data: (url: String) -> JSON spawn = {
-    HTTP.get(url).json()
-}
 
 // main 関数
 main: () -> Void = {
@@ -99,43 +153,44 @@ main: () -> Void = {
 }
 ```
 
-## 重要な設計上の決定
+## 重要な設計決定
 
 ### 1. 型システム
 
-- **統一型構文**：`enum`、`struct`、`union` を廃止し、統一して `Name: Type = {...}` を使用
-- **コンストラクタは型である**：型と値の間の溝を消除
-- **generics サポート**：compile-time 単態化、ゼロ実行時オーバーヘッド
+- **統合型構文**: `enum`、`struct`、`union` を廃止し、統一して `Name: Type = {...}` を使用
+- **コンストラクタ即型**: 「型」と「値」の溝を消除
+- **ジェネリクス対応**: コンパイル時モノモルフィゼーション、ゼロランタイムオーバーヘッド
 
-### 2. spawn モデル
+### 2. スポーン モデル
 
 ```yaoxiang
-// 三層並行処理抽象化
+// スポーン モデル：デフォルトは順序実行、spawn でデータフロー並行処理を導入
 
-// L1: @blocking 同期（並行処理無効）
-fetch: (String) -> JSON @blocking = (url) => { ... }
-
-// L2: spawn 明示的並行処理
-process: () -> Void spawn = () => {
-    users = fetch_users()
-    posts = fetch_posts()  // 自動並行処理
+// デフォルトは順序実行
+compute: (Int) -> Int = (n) => {
+    a = heavy_calc(1)
+    b = heavy_calc(2)  // 順序実行、a の完了を待機
+    c = heavy_calc(3)  // 順序実行、b の完了を待機
+    a + b + c
 }
 
-// L3: 完全透過的（デフォルト）
-compute: (Int) -> Int = (n) => {
-    a = heavy_calc(1)  // システムが自動的に依存関係を分析
-    b = heavy_calc(2)
-    c = heavy_calc(3)
-    a + b + c
+// spawn ブロックでデータフロー並行処理を導入
+process: () -> Void = () => {
+    spawn {
+        users = fetch_users()   // 並行
+        posts = fetch_posts()   // 並行
+    }
+    // 呼び出し元が結果を同期的にブロックして待機
+    render(users, posts)
 }
 ```
 
 ### 3. エラー処理
 
 ```yaoxiang
-Result: Type[T, E] = { ok(T) | err(E) }
+Result: Type(T, E) = { ok(T) | err(E) }
 
-process: () -> Result[Data, Error] = {
+process: () -> Result(Data, Error) = {
     data = fetch_data()?      // ? 演算子は透過的に伝播
     transformed = transform(data)?
     save(transformed)?
@@ -144,7 +199,7 @@ process: () -> Result[Data, Error] = {
 
 ## 関連リソース
 
-- [チュートリアル](../tutorial/) - YaoXiang の使い方
+- [チュートリアル](../tutorial/) - YaoXiang の使い方学习
 - [リファレンスドキュメント](../reference/) - API と標準ライブラリ
 - [言語仕様](../reference/language-spec/index.md) - 完全な言語仕様
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
@@ -152,7 +207,7 @@ process: () -> Result[Data, Error] = {
 
 ## 歴史アーカイブ
 
-設計プロセスの歴史ドキュメントは [`docs/old/`](../../old/) ディレクトリに移動されました：
+設計プロセスの歴史ドキュメントは [`docs/old/`](../../old/) ディレクトリに移動されました、そこには：
 - 初期アーキテクチャ設計
 - 廃棄された提案
 - 時代遅れの実装計画

@@ -24,7 +24,6 @@ fn test_parse_signature_simple_function() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert!(params.is_empty(), "零参数函数签名的 params 应为空");
             assert!(
@@ -32,7 +31,6 @@ fn test_parse_signature_simple_function() {
                 "返回类型应为 Void，实际: {:?}",
                 return_type
             );
-            assert!(!is_async, "默认函数签名应为非异步");
         }
         other => panic!("期望 Fn 类型，实际得到: {:?}", other),
     }
@@ -51,7 +49,6 @@ fn test_parse_signature_with_params() {
         MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             assert_eq!(params.len(), 2, "应有 2 个参数，实际: {}", params.len());
             assert!(
@@ -69,7 +66,6 @@ fn test_parse_signature_with_params() {
                 "返回类型应为 String，实际: {:?}",
                 return_type
             );
-            assert!(!is_async, "默认函数签名应为非异步");
         }
         other => panic!("期望 Fn 类型，实际得到: {:?}", other),
     }
