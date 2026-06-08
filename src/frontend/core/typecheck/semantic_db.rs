@@ -34,6 +34,12 @@ pub struct FileSemanticInfo {
     pub tokens: Vec<SemanticToken>,
     /// 作用域信息
     pub scopes: Vec<ScopeInfo>,
+    /// 该文件中的定义条目
+    pub definitions: Vec<DefinitionInfo>,
+    /// 该文件中的引用条目
+    pub references: Vec<ReferenceInfo>,
+    /// 模块导入信息
+    pub imports: Vec<ImportInfo>,
 }
 
 /// 语义 Token
@@ -57,6 +63,64 @@ pub struct SymbolLocation {
     /// 文件路径
     pub file_path: String,
     /// 源码位置
+    pub span: Span,
+}
+
+// ============ 定义与引用条目（LSP 重构）============
+/// 后续任务（5-8）会把所有写入迁移到这些字段，Task 9 时统一清理旧字段。
+
+/// 全局唯一定义标识符
+///
+/// 由 (文件路径, 定义 span) 共同确定。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DefId {
+    pub file_path: String,
+    pub span: Span,
+}
+
+/// 定义种类
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefinitionKind {
+    Variable,
+    Function,
+    Type,
+    Parameter,
+    GenericParameter,
+    Interface,
+    Method,
+}
+
+/// 定义条目 — 包含完整类型信息
+#[derive(Debug, Clone)]
+pub struct DefinitionInfo {
+    pub def_id: DefId,
+    pub name: String,
+    pub kind: DefinitionKind,
+    pub span: Span,
+    pub file_path: String,
+    /// 推断类型，如 `"Int"`, `"(Int, Int) -> Int"`
+    pub type_info: Option<String>,
+    /// 函数签名，如 `"(a: Int, b: Int) -> Int"`
+    pub signature: Option<String>,
+}
+
+/// 引用条目 — 每个标识符出现，指向它的定义
+#[derive(Debug, Clone)]
+pub struct ReferenceInfo {
+    pub name: String,
+    pub span: Span,
+    pub file_path: String,
+    /// 指向的定义
+    pub resolves_to: DefId,
+}
+
+/// 模块导入信息
+#[derive(Debug, Clone)]
+pub struct ImportInfo {
+    /// 例如 `"std.io"`
+    pub module_path: String,
+    /// 例如 `["print", "println"]`
+    pub imported_names: Vec<String>,
     pub span: Span,
 }
 
@@ -383,6 +447,178 @@ impl SemanticDB {
             .push(scope);
     }
 
+    /// 添加一条定义条目，同时维护旧的 `symbol_defs` 索引。
+    ///
+    /// 在 Task 5-8 完成迁移后，所有调用方应改为直接写入 `definitions`，
+    /// `symbol_defs` 将在 Task 9 统一删除。
+    pub fn add_definition(
+        &mut self,
+        file_path: &str,
+        def: DefinitionInfo,
+    ) {
+        // 维护旧索引：以声明位置为符号定义点
+        self.symbol_defs
+            .entry(def.name.clone())
+            .or_default()
+            .push(SymbolLocation {
+                file_path: file_path.to_string(),
+                span: def.span,
+            });
+
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .definitions
+            .push(def);
+    }
+
+    /// 添加一条引用条目，同时维护旧的 `symbol_refs` 索引。
+    pub fn add_reference(
+        &mut self,
+        file_path: &str,
+        r#ref: ReferenceInfo,
+    ) {
+        self.symbol_refs
+            .entry(r#ref.name.clone())
+            .or_default()
+            .push(SymbolLocation {
+                file_path: file_path.to_string(),
+                span: r#ref.span,
+            });
+
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .references
+            .push(r#ref);
+    }
+
+    /// 添加一条模块导入信息
+    pub fn add_import(
+        &mut self,
+        file_path: &str,
+        import: ImportInfo,
+    ) {
+        self.by_file
+            .entry(file_path.to_string())
+            .or_insert_with(|| FileSemanticInfo {
+                file_path: file_path.to_string(),
+                ..Default::default()
+            })
+            .imports
+            .push(import);
+    }
+
+    /// 获取该文件中所有定义条目
+    pub fn get_definitions(
+        &self,
+        file_path: &str,
+    ) -> &[DefinitionInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.definitions.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 获取该文件中所有引用条目
+    pub fn get_references(
+        &self,
+        file_path: &str,
+    ) -> &[ReferenceInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.references.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 获取该文件中的模块导入信息
+    pub fn get_imports(
+        &self,
+        file_path: &str,
+    ) -> &[ImportInfo] {
+        self.by_file
+            .get(file_path)
+            .map(|info| info.imports.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// 根据位置精确解析引用（用于跳转定义）。
+    ///
+    /// 1. 在 `by_file[file].references` 中查找 `(line, col)` 处的引用；
+    /// 2. 通过 `resolves_to` 在所有文件中找到对应定义。
+    pub fn resolve_reference(
+        &self,
+        file: &str,
+        line: usize,
+        col: usize,
+    ) -> Option<&DefinitionInfo> {
+        let file_info = self.by_file.get(file)?;
+        let target_def_id = file_info
+            .references
+            .iter()
+            .find(|r| {
+                r.file_path == file
+                    && r.span.start.line == line
+                    && r.span.start.column == col
+            })
+            .map(|r| r.resolves_to.clone())?;
+
+        for info in self.by_file.values() {
+            if let Some(def) = info
+                .definitions
+                .iter()
+                .find(|d| d.def_id == target_def_id)
+            {
+                return Some(def);
+            }
+        }
+        None
+    }
+
+    /// 查找指向某个定义的所有引用（用于 find references / rename）。
+    ///
+    /// 先通过 `(file, span)` 匹配到 `DefId`，再遍历所有文件收集
+    /// `resolves_to` 等于该 `DefId` 的引用。
+    pub fn find_all_references_to(
+        &self,
+        file: &str,
+        span: &Span,
+    ) -> Vec<&ReferenceInfo> {
+        let target = DefId {
+            file_path: file.to_string(),
+            span: *span,
+        };
+
+        let mut out = Vec::new();
+        for info in self.by_file.values() {
+            for r in &info.references {
+                if r.resolves_to == target {
+                    out.push(r);
+                }
+            }
+        }
+        out
+    }
+
+    /// 获取文件（位置）处可见的所有符号（用于补全）。
+    ///
+    /// 完整实现需要沿作用域链向外查找并合并 `imports`。
+    /// 当前为占位实现，返回空列表，后续任务会补充。
+    pub fn visible_definitions(
+        &self,
+        _file: &str,
+        _line: usize,
+        _col: usize,
+    ) -> Vec<&DefinitionInfo> {
+        Vec::new()
+    }
+
     /// 查找包含给定位置的最内层作用域
     pub fn find_innermost_scope(
         &self,
@@ -492,6 +728,7 @@ mod tests {
                 make_span(1, 1, 4),
             )],
             scopes: vec![],
+            ..Default::default()
         };
 
         db.set_file_info("test.yx".to_string(), info);
@@ -523,6 +760,7 @@ mod tests {
                 symbols: vec!["x".to_string(), "y".to_string()],
                 kind: ScopeKind::Global,
             }],
+            ..Default::default()
         };
 
         db.set_file_info("test.yx".to_string(), info);
@@ -555,6 +793,7 @@ mod tests {
                 ),
             ],
             scopes: vec![],
+            ..Default::default()
         };
 
         db.set_file_info("main.yx".to_string(), info);
@@ -591,6 +830,7 @@ mod tests {
                     make_span(1, 1, 4),
                 )],
                 scopes: vec![],
+                ..Default::default()
             },
         );
         db.set_file_info(
@@ -604,6 +844,7 @@ mod tests {
                     make_span(1, 1, 4),
                 )],
                 scopes: vec![],
+                ..Default::default()
             },
         );
 
@@ -636,6 +877,7 @@ mod tests {
                     make_span(1, 1, 7),
                 )],
                 scopes: vec![],
+                ..Default::default()
             },
         );
         assert!(db.get_symbol_defs("old_fn").is_some());
@@ -652,6 +894,7 @@ mod tests {
                     make_span(1, 1, 7),
                 )],
                 scopes: vec![],
+                ..Default::default()
             },
         );
 
@@ -679,6 +922,7 @@ mod tests {
                     make_span(1, 1, 2),
                 )],
                 scopes: vec![],
+                ..Default::default()
             },
         );
 
@@ -814,5 +1058,174 @@ mod tests {
     fn test_modifier_legend() {
         let legend = SemanticTokenModifier::legend();
         assert_eq!(legend.len(), 5);
+    }
+
+    // ---- DefinitionInfo / ReferenceInfo / DefId 测试 ----
+
+    fn make_def(
+        name: &str,
+        kind: DefinitionKind,
+        span: Span,
+    ) -> DefinitionInfo {
+        DefinitionInfo {
+            def_id: DefId {
+                file_path: "test.yx".to_string(),
+                span,
+            },
+            name: name.to_string(),
+            kind,
+            span,
+            file_path: "test.yx".to_string(),
+            type_info: None,
+            signature: None,
+        }
+    }
+
+    #[test]
+    fn test_add_definition_and_reference() {
+        let mut db = SemanticDB::new();
+
+        let def_span = make_span(1, 1, 4);
+        let def = DefinitionInfo {
+            def_id: DefId {
+                file_path: "test.yx".to_string(),
+                span: def_span,
+            },
+            name: "foo".to_string(),
+            kind: DefinitionKind::Function,
+            span: def_span,
+            file_path: "test.yx".to_string(),
+            type_info: Some("(Int) -> Int".to_string()),
+            signature: Some("(x: Int) -> Int".to_string()),
+        };
+        db.add_definition("test.yx", def);
+
+        let r#ref = ReferenceInfo {
+            name: "foo".to_string(),
+            span: make_span(5, 1, 4),
+            file_path: "test.yx".to_string(),
+            resolves_to: DefId {
+                file_path: "test.yx".to_string(),
+                span: def_span,
+            },
+        };
+        db.add_reference("test.yx", r#ref);
+
+        // 新结构中确实有数据
+        let defs = db.get_definitions("test.yx");
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].name, "foo");
+        assert_eq!(defs[0].kind, DefinitionKind::Function);
+        assert_eq!(
+            defs[0].type_info.as_deref(),
+            Some("(Int) -> Int")
+        );
+
+        let refs = db.get_references("test.yx");
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].name, "foo");
+
+        // 旧索引仍然兼容
+        let old_defs = db.get_symbol_defs("foo").unwrap();
+        assert_eq!(old_defs.len(), 1);
+        let old_refs = db.get_symbol_refs("foo").unwrap();
+        assert_eq!(old_refs.len(), 1);
+    }
+
+    #[test]
+    fn test_resolve_reference() {
+        let mut db = SemanticDB::new();
+        let def_span = make_span(1, 1, 4);
+        let def = make_def("foo", DefinitionKind::Function, def_span);
+        let def_id = def.def_id.clone();
+        db.add_definition("test.yx", def);
+
+        let r#ref = ReferenceInfo {
+            name: "foo".to_string(),
+            span: make_span(2, 5, 8),
+            file_path: "test.yx".to_string(),
+            resolves_to: def_id,
+        };
+        db.add_reference("test.yx", r#ref);
+
+        let resolved = db
+            .resolve_reference("test.yx", 2, 5)
+            .expect("应能解析到定义");
+        assert_eq!(resolved.name, "foo");
+
+        // 错误位置返回 None
+        assert!(db.resolve_reference("test.yx", 100, 100).is_none());
+        assert!(db.resolve_reference("nope.yx", 2, 5).is_none());
+    }
+
+    #[test]
+    fn test_find_all_references_to() {
+        let mut db = SemanticDB::new();
+        let def_span = make_span(1, 1, 4);
+        let def = make_def("foo", DefinitionKind::Function, def_span);
+        let def_id = def.def_id.clone();
+        db.add_definition("test.yx", def);
+
+        // 在 test.yx 添加两个引用
+        for (line, col) in [(2usize, 1usize), (3, 10)] {
+            db.add_reference(
+                "test.yx",
+                ReferenceInfo {
+                    name: "foo".to_string(),
+                    span: make_span(line, col, col + 3),
+                    file_path: "test.yx".to_string(),
+                    resolves_to: def_id.clone(),
+                },
+            );
+        }
+        // 在 other.yx 添加一个引用
+        let other_def = DefinitionInfo {
+            def_id: DefId {
+                file_path: "other.yx".to_string(),
+                span: make_span(1, 1, 4),
+            },
+            name: "bar".to_string(),
+            kind: DefinitionKind::Function,
+            span: make_span(1, 1, 4),
+            file_path: "other.yx".to_string(),
+            type_info: None,
+            signature: None,
+        };
+        db.add_definition("other.yx", other_def);
+        db.add_reference(
+            "other.yx",
+            ReferenceInfo {
+                name: "foo".to_string(),
+                span: make_span(7, 1, 4),
+                file_path: "other.yx".to_string(),
+                resolves_to: def_id.clone(),
+            },
+        );
+
+        let refs =
+            db.find_all_references_to("test.yx", &def_span);
+        assert_eq!(refs.len(), 3, "应跨文件找到三个 foo 引用");
+    }
+
+    #[test]
+    fn test_add_import() {
+        let mut db = SemanticDB::new();
+        let import = ImportInfo {
+            module_path: "std.io".to_string(),
+            imported_names: vec!["print".to_string(), "println".to_string()],
+            span: make_span(1, 1, 20),
+        };
+        db.add_import("test.yx", import);
+
+        let imports = db.get_imports("test.yx");
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].module_path, "std.io");
+        assert_eq!(imports[0].imported_names.len(), 2);
+    }
+
+    #[test]
+    fn test_visible_definitions_stub() {
+        let db = SemanticDB::new();
+        assert!(db.visible_definitions("any.yx", 1, 1).is_empty());
     }
 }

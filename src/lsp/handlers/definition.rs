@@ -537,6 +537,7 @@ mod tests {
                 symbols: vec!["add".to_string()],
                 kind: ScopeKind::Global,
             }],
+            ..Default::default()
         };
 
         world
@@ -588,6 +589,7 @@ mod tests {
                 },
             }],
             scopes: vec![],
+            ..Default::default()
         };
         let info_b = FileSemanticInfo {
             file_path: "file:///test/b.yx".to_string(),
@@ -609,6 +611,7 @@ mod tests {
                 },
             }],
             scopes: vec![],
+            ..Default::default()
         };
 
         world
