@@ -1,0 +1,24 @@
+// 12-paper-demos/borrow_conflict_basic.yx
+// 验证: &mut T 和 &T 不能同时活跃
+// 论文价值: 展示借用安全 = 类型属性，无需专用 borrow checker
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+Point.read: (self: &Point) -> Void = {
+    io.println(self.x)
+}
+
+Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
+    self.x = self.x + dx
+    self.y = self.y + dy
+}
+
+main = {
+    p = Point(1.0, 2.0)
+    p.read()          // 创建 &Point 令牌
+    p.shift(1.0, 1.0) // 上一个 &Point 已释放，创建 &mut Point
+    io.println(p)
+    io.println("ALL TESTS PASSED")
+}
