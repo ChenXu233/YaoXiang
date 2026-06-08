@@ -625,6 +625,24 @@ impl TypeConstraintSolver {
                 Ok(())
             }
 
+            // 借用令牌 unify：&T 和 &T、&mut T 和 &mut T
+            (MonoType::Ref {
+                mutable: m1,
+                inner: i1,
+            }, MonoType::Ref {
+                mutable: m2,
+                inner: i2,
+            }) => {
+                if m1 != m2 {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    )
+                    .build());
+                }
+                self.unify(i1, i2)
+            }
+
             // 结构化子类型：Struct 声明实现了 TypeRef 接口，或类型名匹配
             (MonoType::Struct(s), MonoType::TypeRef(name))
             | (MonoType::TypeRef(name), MonoType::Struct(s)) => {
