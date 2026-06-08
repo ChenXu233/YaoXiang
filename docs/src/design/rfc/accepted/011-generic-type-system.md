@@ -377,7 +377,7 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,
+    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T),
 }
 
@@ -1275,7 +1275,9 @@ List: (T: Type) -> Type = {
 }
 
 # ======== 2. 实现泛型方法 ========
-# 使用 Type.method 语法糖：自动关联到 List 类型
+# 函数定义在 List 命名空间下（List. 前缀 = 命名空间归属）
+# 要让 list.push(item) 这种 . 调用语法生效，需要显式绑定：List.push = push[0]
+# self 只是约定参数名，编译器不看名字看类型
 
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {
