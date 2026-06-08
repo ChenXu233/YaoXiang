@@ -1425,6 +1425,38 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                     decoded_instructions.push(BytecodeInstr::Nop);
                                 }
                             }
+                            Opcode::GetField => {
+                                // GetField: dst(1) + src(1) + field_idx(2)
+                                if instr.operands.len() >= 4 {
+                                    let dst = instr.operands[0] as u16;
+                                    let src = instr.operands[1] as u16;
+                                    let field_idx =
+                                        u16::from_le_bytes([instr.operands[2], instr.operands[3]]);
+                                    decoded_instructions.push(BytecodeInstr::GetField {
+                                        dst: Reg(dst),
+                                        src: Reg(src),
+                                        field_idx,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::SetField => {
+                                // SetField: src(1) + field_idx(2) + value(1)
+                                if instr.operands.len() >= 4 {
+                                    let src = instr.operands[0] as u16;
+                                    let field_idx =
+                                        u16::from_le_bytes([instr.operands[1], instr.operands[2]]);
+                                    let value = instr.operands[3] as u16;
+                                    decoded_instructions.push(BytecodeInstr::SetField {
+                                        src: Reg(src),
+                                        field_idx,
+                                        value: Reg(value),
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
                             _ => {
                                 // For other opcodes, we need to implement decoding
                                 // For now, just use Nop as placeholder

@@ -87,6 +87,24 @@ pub fn operand_to_string(operand: &Operand) -> String {
     }
 }
 
+/// 获取操作数的用户可见名称
+///
+/// 优先使用源码变量名（local_names），回退到内部名（operand_to_string）。
+/// 这确保错误信息显示 `'p' has been moved` 而不是 `'local_0' has been moved`。
+pub fn operand_display_name(
+    operand: &Operand,
+    local_names: Option<&Vec<String>>,
+) -> String {
+    if let Operand::Local(idx) = operand {
+        if let Some(names) = local_names {
+            if *idx < names.len() && !names[*idx].is_empty() {
+                return names[*idx].clone();
+            }
+        }
+    }
+    operand_to_string(operand)
+}
+
 /// OwnershipError 变体到错误码的映射辅助函数
 ///
 /// 用于将旧的 OwnershipError 语义转换为统一的 Diagnostic 错误码。

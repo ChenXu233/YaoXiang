@@ -90,6 +90,8 @@ pub struct BorrowChecker {
     errors: Vec<BorrowError>,
     /// 当前检查位置 (block_idx, instr_idx)
     location: (usize, usize),
+    /// 局部变量名列表（用于错误报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl BorrowChecker {
@@ -99,7 +101,16 @@ impl BorrowChecker {
             tokens: HashMap::new(),
             errors: Vec::new(),
             location: (0, 0),
+            local_names: None,
         }
+    }
+
+    /// 设置局部变量名列表（用于生成友好的错误信息）
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
     }
 
     /// 注册一个新的借用令牌
@@ -373,11 +384,30 @@ impl BorrowChecker {
             .iter()
             .map(|e| match e {
                 BorrowError::MutableBorrowConflict { source, .. } => {
-                    codes::mutable_borrow_conflict(source)
+                    codes::mutable_borrow_conflict(&self.resolve_name(source))
                 }
-                BorrowError::BorrowAfterMove { source, .. } => codes::borrow_after_move(source),
+                BorrowError::BorrowAfterMove { source, .. } => {
+                    codes::borrow_after_move(&self.resolve_name(source))
+                }
             })
             .collect()
+    }
+
+    /// 将内部名（如 `local_0`）转换为源码变量名
+    fn resolve_name(
+        &self,
+        internal: &str,
+    ) -> String {
+        if let Some(idx_str) = internal.strip_prefix("local_") {
+            if let Ok(idx) = idx_str.parse::<usize>() {
+                if let Some(ref names) = self.local_names {
+                    if idx < names.len() && !names[idx].is_empty() {
+                        return names[idx].clone();
+                    }
+                }
+            }
+        }
+        internal.to_string()
     }
 }
 
