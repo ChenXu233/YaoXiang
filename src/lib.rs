@@ -24,6 +24,7 @@ pub mod frontend;
 pub mod lsp;
 pub mod middle;
 pub mod package;
+pub mod repl;
 pub mod std;
 
 pub mod util;
@@ -36,7 +37,7 @@ pub use thiserror::Error;
 pub use backends::{Executor, DebuggableExecutor, ExecutorError, ExecutorResult, ExecutorConfig};
 pub use backends::common::{RuntimeValue, Opcode, Heap, Handle, BumpAllocator};
 pub use backends::interpreter::Interpreter;
-pub use backends::dev::{DevShell, Debugger, SessionREPL};
+pub use repl::Repl;
 
 // Logging
 use crate::util::i18n::{t_cur, t_cur_simple, MSG};
