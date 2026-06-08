@@ -45,7 +45,12 @@ fn make_checker_with_var(
     ty: MonoType,
 ) -> StatementChecker {
     let mut checker = make_checker();
-    checker.add_var(name.to_string(), PolyType::mono(ty), false);
+    checker.add_var(
+        name.to_string(),
+        PolyType::mono(ty),
+        false,
+        crate::util::span::Span::default(),
+    );
     checker
 }
 
@@ -366,6 +371,7 @@ fn test_check_nested_scopes() {
         "inner_var".to_string(),
         PolyType::mono(MonoType::Int(32)),
         false,
+        crate::util::span::Span::default(),
     );
 
     // Assert — 内层变量存在
@@ -393,6 +399,7 @@ fn test_check_nested_scopes_outer_visible_in_inner() {
         "outer_var".to_string(),
         PolyType::mono(MonoType::Bool),
         false,
+        crate::util::span::Span::default(),
     );
 
     // Act — 进入内层作用域
@@ -423,6 +430,7 @@ fn test_check_scope_level_queries() {
         "global".to_string(),
         PolyType::mono(MonoType::String),
         false,
+        crate::util::span::Span::default(),
     );
 
     // Act — 进入内层
@@ -443,6 +451,7 @@ fn test_check_scope_level_queries() {
         "local".to_string(),
         PolyType::mono(MonoType::Float(64)),
         false,
+        crate::util::span::Span::default(),
     );
 
     // Assert

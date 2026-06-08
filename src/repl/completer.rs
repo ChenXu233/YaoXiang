@@ -25,7 +25,10 @@ pub struct ReplCompleter {
 }
 
 impl fmt::Debug for ReplCompleter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         f.debug_struct("ReplCompleter")
             .field("keywords", &self.keywords)
             .finish()

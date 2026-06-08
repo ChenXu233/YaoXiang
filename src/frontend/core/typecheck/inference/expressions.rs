@@ -190,7 +190,8 @@ impl<'a> ExpressionInferrer<'a> {
         poly: PolyType,
         is_mut: bool,
     ) {
-        self.scope.add_var(name, poly, is_mut);
+        self.scope
+            .add_var(name, poly, is_mut, crate::util::span::Span::default());
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -210,7 +211,8 @@ impl<'a> ExpressionInferrer<'a> {
         is_mut: bool,
     ) -> Result<()> {
         let _ = span;
-        self.scope.add_var(name, poly, is_mut);
+        self.scope
+            .add_var(name, poly, is_mut, crate::util::span::Span::default());
         Ok(())
     }
 
@@ -265,7 +267,12 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 将循环内声明的变量添加到外层 scope，保留可变性
         for (name, info) in current_scope_vars {
-            self.scope.add_var(name, info.poly, info.is_mut);
+            self.scope.add_var(
+                name,
+                info.poly,
+                info.is_mut,
+                crate::util::span::Span::default(),
+            );
         }
     }
 
@@ -1257,6 +1264,7 @@ impl<'a> ExpressionInferrer<'a> {
                             param.name.clone(),
                             PolyType::mono(param_ty),
                             param.is_mut,
+                            crate::util::span::Span::default(),
                         );
                     }
 
@@ -1306,8 +1314,12 @@ impl<'a> ExpressionInferrer<'a> {
                     params: param_types,
                     return_type: return_type_box,
                 };
-                self.scope
-                    .add_var(name.clone(), PolyType::mono(fn_type.clone()), false);
+                self.scope.add_var(
+                    name.clone(),
+                    PolyType::mono(fn_type.clone()),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 Ok(fn_type)
             }
@@ -1323,8 +1335,12 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.enter_scope();
                 for param in params {
                     let param_ty = self.solver.new_var();
-                    self.scope
-                        .add_var(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+                    self.scope.add_var(
+                        param.name.clone(),
+                        PolyType::mono(param_ty),
+                        param.is_mut,
+                        crate::util::span::Span::default(),
+                    );
                 }
 
                 // Lambda is a function boundary: it must not inherit outer `Result` context.
@@ -1432,8 +1448,12 @@ impl<'a> ExpressionInferrer<'a> {
                 let _iter_ty = self.infer_expr(iterable)?;
 
                 self.scope.enter_scope();
-                self.scope
-                    .add_var(var.clone(), PolyType::mono(MonoType::Char), false);
+                self.scope.add_var(
+                    var.clone(),
+                    PolyType::mono(MonoType::Char),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 let elem_ty = if let Some(cond) = condition {
                     let _cond_ty = self.infer_expr(cond)?;
@@ -1610,8 +1630,12 @@ impl<'a> ExpressionInferrer<'a> {
                     return_type: Box::new(return_type.clone()),
                 };
 
-                self.scope
-                    .add_var(name.clone(), PolyType::mono(fn_type), false);
+                self.scope.add_var(
+                    name.clone(),
+                    PolyType::mono(fn_type),
+                    false,
+                    crate::util::span::Span::default(),
+                );
 
                 self.scope.enter_scope();
                 let result: Result<()> = (|| {
@@ -1620,6 +1644,7 @@ impl<'a> ExpressionInferrer<'a> {
                             param.name.clone(),
                             PolyType::mono(param_ty.clone()),
                             param.is_mut,
+                            crate::util::span::Span::default(),
                         );
                     }
 

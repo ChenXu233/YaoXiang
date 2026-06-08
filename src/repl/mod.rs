@@ -236,7 +236,10 @@ impl Repl {
     // =========================================================================
 
     /// Handle a command
-    fn handle_command(&mut self, line: &str) -> CommandResult {
+    fn handle_command(
+        &mut self,
+        line: &str,
+    ) -> CommandResult {
         let cmd = line.trim_start_matches(':').trim();
         let parts: Vec<&str> = cmd.split_whitespace().collect();
 
@@ -408,7 +411,10 @@ impl Repl {
     // =========================================================================
 
     /// Run a file
-    fn run_file(&mut self, path: &str) -> CommandResult {
+    fn run_file(
+        &mut self,
+        path: &str,
+    ) -> CommandResult {
         let file_path = std::path::Path::new(path);
         if !file_path.exists() {
             return CommandResult::Output(format!("File not found: {}", file_path.display()));
@@ -432,7 +438,10 @@ impl Repl {
     }
 
     /// Load a file
-    fn load_file(&mut self, path: &str) -> CommandResult {
+    fn load_file(
+        &mut self,
+        path: &str,
+    ) -> CommandResult {
         let file_path = std::path::Path::new(path);
         if !file_path.exists() {
             return CommandResult::Output(format!("File not found: {}", file_path.display()));
@@ -451,7 +460,10 @@ impl Repl {
     }
 
     /// Debug a file
-    fn debug_file(&mut self, path: &str) -> CommandResult {
+    fn debug_file(
+        &mut self,
+        path: &str,
+    ) -> CommandResult {
         let file_path = std::path::Path::new(path);
         if !file_path.exists() {
             return CommandResult::Output(format!("File not found: {}", file_path.display()));

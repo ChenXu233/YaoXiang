@@ -259,7 +259,8 @@ impl TypeChecker {
 
         // 将环境中的变量同步到 body_checker
         for (name, poly) in self.env.vars.clone() {
-            self.body_checker_mut().add_var(name, poly, false);
+            self.body_checker_mut()
+                .add_var(name, poly, false, crate::util::span::Span::default());
         }
 
         // 第三遍：检查所有语句（包括函数体）
@@ -327,16 +328,14 @@ impl TypeChecker {
         // 所以这里直接使用 scope 中的类型即可，不需要额外 resolve。
         // （注：如果后续需要支持更复杂的泛型推导，可能需要重新设计 solver 的共享机制）
 
-        let result = TypeCheckResult {
+        TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
             bindings,
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
-        };
-
-        result
+        }
     }
 
     /// 获取 body_checker 的可变引用

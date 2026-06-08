@@ -480,8 +480,7 @@ impl Pipeline {
         let error_count = type_result.diagnostics.len();
         let has_errors = error_count > 0;
         let errors = std::mem::take(&mut type_result.diagnostics);
-        let error_messages: Vec<String> =
-            errors.iter().map(|e| e.message.clone()).collect();
+        let error_messages: Vec<String> = errors.iter().map(|e| e.message.clone()).collect();
 
         // 执行死代码分析（根据配置决定是否启用）
         let warnings = if self.config.dead_code.enabled && !has_errors {
@@ -505,11 +504,8 @@ impl Pipeline {
         }
 
         for err in &error_messages {
-            self.event_bus.emit(ErrorOccurred::new(
-                err.clone(),
-                "E0300",
-                ErrorLevel::Error,
-            ));
+            self.event_bus
+                .emit(ErrorOccurred::new(err.clone(), "E0300", ErrorLevel::Error));
         }
 
         TypecheckResult {
@@ -728,6 +724,7 @@ struct TypecheckResult {
     warnings: Vec<String>,
 }
 
+#[allow(dead_code)]
 impl TypecheckResult {
     fn success(
         type_result: typecheck::TypeCheckResult,
@@ -748,6 +745,7 @@ impl TypecheckResult {
         }
     }
 
+    #[allow(dead_code)]
     fn is_success(&self) -> bool {
         self.errors.is_empty()
     }
