@@ -11,7 +11,7 @@ use lsp_types::{Location, ReferenceParams, Uri};
 use std::str::FromStr;
 use tracing::debug;
 
-use crate::lsp::locate::{find_all_identifier_occurrences, find_identifier_at_position, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -19,7 +19,7 @@ use crate::lsp::world::World;
 ///
 /// 查找光标位置处标识符的所有引用位置：
 /// 1. 解析光标处的标识符名称
-/// 2. 在所有已打开文档中搜索该标识符的所有出现
+/// 2. 通过 SemanticDB 的引用链查找所有引用
 /// 3. 可选地包含定义位置
 pub fn handle_references(
     session: &Session,
@@ -43,34 +43,43 @@ pub fn handle_references(
     let ident = find_identifier_at_position(content, position)?;
     debug!("查找引用: {}", ident.name);
 
+    let db = world.semantic_db();
+    let line = position.line as usize + 1;
+    let col = position.character as usize + 1;
+
+    // 先尝试通过引用找到定义
+    let def = if let Some(def) = db.resolve_reference(&uri_str, line, col) {
+        def
+    } else {
+        // 光标可能在定义位置本身，查找 definitions
+        let defs = db.get_definitions(&uri_str);
+        defs.iter().find(|d| {
+            d.span.start.line == line && d.span.start.column <= col && d.span.end.column > col
+        })?
+    };
+
     let mut locations: Vec<Location> = Vec::new();
 
-    // 1. 如果 include_declaration 为 true，包含定义位置
+    // 如果 include_declaration 为 true，包含定义位置
     if include_declaration {
-        let definitions = world.symbol_index().find_by_name(&ident.name);
-        for sym in definitions {
-            if let Ok(uri) = Uri::from_str(&sym.location.file_path) {
-                let range = span_to_range(&sym.location.span);
-                locations.push(Location::new(uri, range));
-            }
+        if let Ok(uri) = Uri::from_str(&def.file_path) {
+            let range = span_to_range(&def.span);
+            locations.push(Location::new(uri, range));
         }
     }
 
-    // 2. 在所有已打开的文档中查找引用
-    for (doc_uri, doc) in session.document_store().all_documents() {
-        let occurrences = find_all_identifier_occurrences(doc.content(), &ident.name);
-        for span in occurrences {
-            let range = span_to_range(&span);
-            if let Ok(uri) = Uri::from_str(doc_uri) {
-                // 如果 include_declaration 为 true，定义位置已经加过了，
-                // 检查是否与已有位置重复
-                let loc = Location::new(uri, range);
-                if !locations
-                    .iter()
-                    .any(|l| l.uri == loc.uri && l.range == loc.range)
-                {
-                    locations.push(loc);
-                }
+    // 查找所有引用到该定义的位置
+    let refs = db.find_all_references_to(&def.file_path, &def.span);
+    for r in refs {
+        let range = span_to_range(&r.span);
+        if let Ok(uri) = Uri::from_str(&r.file_path) {
+            let loc = Location::new(uri, range);
+            // 去重
+            if !locations
+                .iter()
+                .any(|l| l.uri == loc.uri && l.range == loc.range)
+            {
+                locations.push(loc);
             }
         }
     }
@@ -87,7 +96,9 @@ pub fn handle_references(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
+    use crate::frontend::core::typecheck::semantic_db::{
+        DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
+    };
     use crate::lsp::session::Session;
     use crate::lsp::world::World;
     use crate::util::span::{Position, Span};
@@ -117,10 +128,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_references_in_single_file() {
+    fn setup() -> (Session, World) {
         let mut session = Session::new();
-        let world = World::new();
+        let mut world = World::new();
 
         let content = "x = 1\ny = x + x\n";
         session.document_store_mut().open(
@@ -129,153 +139,124 @@ mod tests {
             1,
         );
 
-        // 查找 'x' 的引用（不含定义）
+        let uri = "file:///test/main.yx";
+        let x_def_span = Span {
+            start: Position {
+                line: 1,
+                column: 1,
+                offset: 0,
+            },
+            end: Position {
+                line: 1,
+                column: 2,
+                offset: 1,
+            },
+        };
+
+        // x 的定义
+        world.semantic_db_mut().add_definition(
+            uri,
+            DefinitionInfo {
+                def_id: DefId {
+                    file_path: uri.to_string(),
+                    span: x_def_span,
+                },
+                name: "x".to_string(),
+                kind: DefinitionKind::Variable,
+                span: x_def_span,
+                file_path: uri.to_string(),
+                type_info: Some("Int".to_string()),
+                signature: None,
+            },
+        );
+
+        // x 的引用 1（第二行 y = x...）
+        world.semantic_db_mut().add_reference(
+            uri,
+            ReferenceInfo {
+                name: "x".to_string(),
+                span: Span {
+                    start: Position {
+                        line: 2,
+                        column: 5,
+                        offset: 10,
+                    },
+                    end: Position {
+                        line: 2,
+                        column: 6,
+                        offset: 11,
+                    },
+                },
+                file_path: uri.to_string(),
+                resolves_to: DefId {
+                    file_path: uri.to_string(),
+                    span: x_def_span,
+                },
+            },
+        );
+
+        // x 的引用 2（第二行 + x）
+        world.semantic_db_mut().add_reference(
+            uri,
+            ReferenceInfo {
+                name: "x".to_string(),
+                span: Span {
+                    start: Position {
+                        line: 2,
+                        column: 9,
+                        offset: 14,
+                    },
+                    end: Position {
+                        line: 2,
+                        column: 10,
+                        offset: 15,
+                    },
+                },
+                file_path: uri.to_string(),
+                resolves_to: DefId {
+                    file_path: uri.to_string(),
+                    span: x_def_span,
+                },
+            },
+        );
+
+        (session, world)
+    }
+
+    #[test]
+    fn test_references_excluding_declaration() {
+        let (session, world) = setup();
+
+        // 光标在第一行的 'x' 定义上
         let params = make_params("file:///test/main.yx", 0, 0, false);
         let result = handle_references(&session, &world, params);
         assert!(result.is_some());
 
         let locs = result.unwrap();
-        // 'x' 出现 3 次: 定义处 + 两次引用（全部在同一文件，都算引用出现）
-        assert_eq!(locs.len(), 3, "x 应出现 3 次（含定义位置的 token）");
+        // 应该只有 2 个引用（不含定义）
+        assert_eq!(locs.len(), 2, "x 应有 2 个引用（不含定义）");
     }
 
     #[test]
     fn test_references_include_declaration() {
-        let mut session = Session::new();
-        let mut world = World::new();
-
-        let content = "x = 1\ny = x\n";
-        session.document_store_mut().open(
-            "file:///test/main.yx".to_string(),
-            content.to_string(),
-            1,
-        );
-
-        // 在符号索引中注册 x
-        let module = Module {
-            items: vec![Stmt {
-                kind: StmtKind::Var {
-                    name: "x".to_string(),
-                    name_span: Span {
-                        start: Position {
-                            line: 1,
-                            column: 1,
-                            offset: 0,
-                        },
-                        end: Position {
-                            line: 1,
-                            column: 2,
-                            offset: 1,
-                        },
-                    },
-                    type_annotation: None,
-                    initializer: None,
-                    is_mut: false,
-                },
-                span: Span {
-                    start: Position {
-                        line: 1,
-                        column: 1,
-                        offset: 0,
-                    },
-                    end: Position {
-                        line: 1,
-                        column: 6,
-                        offset: 5,
-                    },
-                },
-            }],
-            span: Span::dummy(),
-        };
-        world.update_index_from_ast("file:///test/main.yx", &module);
+        let (session, world) = setup();
 
         let params = make_params("file:///test/main.yx", 0, 0, true);
         let result = handle_references(&session, &world, params);
         assert!(result.is_some());
 
         let locs = result.unwrap();
-        // include_declaration=true: 定义(1) + 引用(2) = 至少 2
-        assert!(locs.len() >= 2);
+        // include_declaration=true: 定义(1) + 引用(2) = 3
+        assert_eq!(locs.len(), 3, "应有 3 个位置（含定义）");
     }
 
     #[test]
     fn test_references_not_on_ident() {
-        let mut session = Session::new();
-        let world = World::new();
-
-        let content = "x = 1\n";
-        session.document_store_mut().open(
-            "file:///test/main.yx".to_string(),
-            content.to_string(),
-            1,
-        );
+        let (session, world) = setup();
 
         let params = make_params("file:///test/main.yx", 0, 2, false);
         let result = handle_references(&session, &world, params);
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_references_cross_file() {
-        let mut session = Session::new();
-        let mut world = World::new();
-
-        // 文件 A 定义了 foo
-        let content_a = "foo = () => 42\n";
-        session.document_store_mut().open(
-            "file:///test/a.yx".to_string(),
-            content_a.to_string(),
-            1,
-        );
-
-        let module_a = Module {
-            items: vec![Stmt {
-                kind: StmtKind::Binding {
-                    name: "foo".to_string(),
-                    type_name: None,
-                    method_type: None,
-                    generic_params: vec![],
-                    type_annotation: None,
-
-                    params: vec![],
-                    body: (vec![], None),
-                    is_pub: false,
-                },
-                span: Span {
-                    start: Position {
-                        line: 1,
-                        column: 1,
-                        offset: 0,
-                    },
-                    end: Position {
-                        line: 1,
-                        column: 15,
-                        offset: 14,
-                    },
-                },
-            }],
-            span: Span::dummy(),
-        };
-        world.update_index_from_ast("file:///test/a.yx", &module_a);
-
-        // 文件 B 引用 foo
-        let content_b = "result = foo()\n";
-        session.document_store_mut().open(
-            "file:///test/b.yx".to_string(),
-            content_b.to_string(),
-            1,
-        );
-
-        let params = make_params("file:///test/a.yx", 0, 0, false);
-        let result = handle_references(&session, &world, params);
-        assert!(result.is_some());
-
-        let locs = result.unwrap();
-        // foo 在 a.yx 出现 1 次，在 b.yx 出现 1 次
-        assert_eq!(locs.len(), 2, "foo 应在两个文件中各出现 1 次");
-        let uris: Vec<String> = locs.iter().map(|l| l.uri.to_string()).collect();
-        assert!(uris.contains(&"file:///test/a.yx".to_string()));
-        assert!(uris.contains(&"file:///test/b.yx".to_string()));
     }
 
     #[test]
