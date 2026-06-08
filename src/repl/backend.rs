@@ -3,6 +3,7 @@
 //! Defines the abstract interface for REPL backends.
 
 use std::time::Duration;
+
 use crate::backends::common::RuntimeValue;
 
 /// Evaluation result
@@ -41,29 +42,18 @@ pub struct ExecutionStats {
 /// REPL Backend Trait
 ///
 /// This trait defines the interface that all REPL backends must implement.
-/// It provides abstract methods for evaluation, completion, and state management.
 pub trait REPLBackend {
     /// Evaluate code and return result
-    fn eval(
-        &mut self,
-        code: &str,
-    ) -> EvalResult;
+    fn eval(&mut self, code: &str) -> EvalResult;
 
     /// Get completion candidates for a line
-    fn complete(
-        &self,
-        line: &str,
-        _pos: usize,
-    ) -> Vec<String>;
+    fn complete(&self, line: &str, pos: usize) -> Vec<String>;
 
     /// Get all available symbols
     fn get_symbols(&self) -> Vec<SymbolInfo>;
 
     /// Get type signature for a symbol
-    fn get_type(
-        &self,
-        name: &str,
-    ) -> Option<String>;
+    fn get_type(&self, name: &str) -> Option<String>;
 
     /// Clear all state
     fn clear(&mut self);
