@@ -289,8 +289,12 @@ impl StatementChecker {
         export: &Export,
     ) {
         let ty = self.export_type(export);
-        self.scope
-            .add_var(binding_name.to_string(), PolyType::mono(ty), false);
+        self.scope.add_var(
+            binding_name.to_string(),
+            PolyType::mono(ty),
+            false,
+            crate::util::span::Span::default(),
+        );
     }
 
     fn process_use_stmt(
@@ -316,15 +320,23 @@ impl StatementChecker {
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
-                self.scope
-                    .add_var(module_alias.to_string(), PolyType::mono(module_ty), false);
+                self.scope.add_var(
+                    module_alias.to_string(),
+                    PolyType::mono(module_ty),
+                    false,
+                    crate::util::span::Span::default(),
+                );
             }
             // use path as alias
             (None, Some(aliases)) if aliases.len() == 1 => {
                 let module_alias = &aliases[0];
                 let module_ty = self.module_as_struct_type(&module, module_alias);
-                self.scope
-                    .add_var(module_alias.to_string(), PolyType::mono(module_ty), false);
+                self.scope.add_var(
+                    module_alias.to_string(),
+                    PolyType::mono(module_ty),
+                    false,
+                    crate::util::span::Span::default(),
+                );
             }
             // use path.{a, b}
             (Some(item_names), None) => {
@@ -369,8 +381,9 @@ impl StatementChecker {
         name: String,
         poly: PolyType,
         is_mut: bool,
+        definition_span: crate::util::span::Span,
     ) {
-        self.scope.add_var(name, poly, is_mut);
+        self.scope.add_var(name, poly, is_mut, definition_span);
     }
 
     /// 获取变量（从最内层作用域开始查找）
@@ -467,8 +480,12 @@ impl StatementChecker {
                 .as_ref()
                 .map(|t| MonoType::from(t.clone()))
                 .unwrap_or_else(|| self.solver.new_var());
-            self.scope
-                .add_var(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+            self.scope.add_var(
+                param.name.clone(),
+                PolyType::mono(param_ty),
+                param.is_mut,
+                crate::util::span::Span::default(),
+            );
         }
 
         if self.collect_all_errors {
@@ -652,6 +669,7 @@ impl StatementChecker {
                             name.to_string(),
                             PolyType::mono(struct_ty.clone()),
                             false,
+                            crate::util::span::Span::default(),
                         );
 
                         // 类型级函数：注册到 generic_type_defs 用于泛型实例化
@@ -770,6 +788,7 @@ impl StatementChecker {
                                 name.name.clone(),
                                 PolyType::mono(elem_ty.clone()),
                                 false,
+                                crate::util::span::Span::default(),
                             );
                         }
                         Ok(())
@@ -778,8 +797,12 @@ impl StatementChecker {
                         // RHS 不是元组类型，为每个名称创建新类型变量
                         for name in names {
                             let ty = self.solver.new_var();
-                            self.scope
-                                .add_var(name.name.clone(), PolyType::mono(ty), false);
+                            self.scope.add_var(
+                                name.name.clone(),
+                                PolyType::mono(ty),
+                                false,
+                                crate::util::span::Span::default(),
+                            );
                         }
                         Ok(())
                     }
@@ -822,7 +845,12 @@ impl StatementChecker {
                         // 新变量：创建类型变量并统一
                         let ty = self.solver.new_var();
                         let _ = self.solver.unify(&ty, &right_ty);
-                        self.scope.add_var(name.clone(), PolyType::mono(ty), false);
+                        self.scope.add_var(
+                            name.clone(),
+                            PolyType::mono(ty),
+                            false,
+                            crate::util::span::Span::default(),
+                        );
                     }
                 }
                 Ok(())
@@ -908,8 +936,12 @@ impl StatementChecker {
                     params: final_params,
                     return_type: Box::new(final_ret),
                 };
-                self.scope
-                    .add_var(name.to_string(), PolyType::mono(fn_type), false);
+                self.scope.add_var(
+                    name.to_string(),
+                    PolyType::mono(fn_type),
+                    false,
+                    crate::util::span::Span::default(),
+                );
             }
         } else {
             let param_types: Vec<MonoType> = params
@@ -925,8 +957,12 @@ impl StatementChecker {
                 params: param_types,
                 return_type: Box::new(self.solver.new_var()),
             };
-            self.scope
-                .add_var(name.to_string(), PolyType::mono(fn_type), false);
+            self.scope.add_var(
+                name.to_string(),
+                PolyType::mono(fn_type),
+                false,
+                crate::util::span::Span::default(),
+            );
         }
 
         // 进入函数 Result 上下文（用于 `?` 运算符检查）
@@ -1252,8 +1288,12 @@ impl StatementChecker {
             return Ok(());
         }
 
-        self.scope
-            .add_var(name.to_string(), PolyType::mono(ty), is_mut);
+        self.scope.add_var(
+            name.to_string(),
+            PolyType::mono(ty),
+            is_mut,
+            crate::util::span::Span::default(),
+        );
         Ok(())
     }
 
@@ -1287,8 +1327,12 @@ impl StatementChecker {
             ));
         }
 
-        self.scope
-            .add_var(var.to_string(), PolyType::mono(elem_ty), var_mut);
+        self.scope.add_var(
+            var.to_string(),
+            PolyType::mono(elem_ty),
+            var_mut,
+            crate::util::span::Span::default(),
+        );
 
         if self.collect_all_errors {
             let mut first_err = None;

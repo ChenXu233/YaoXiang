@@ -60,7 +60,9 @@ main: () -> Void = {
     .expect("write file");
 
     let mut session = CheckSession::new();
-    session.check_all(&[file.clone()]).expect("initial check");
+    session
+        .check_all(std::slice::from_ref(&file))
+        .expect("initial check");
 
     // 修改文件后增量检查
     fs::write(

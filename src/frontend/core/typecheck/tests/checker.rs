@@ -76,7 +76,10 @@ fn test_type_checker_check_empty_module() {
     let result = checker.check_module(&module);
 
     // Assert
-    assert!(result.diagnostics.is_empty(), "empty module should pass type check");
+    assert!(
+        result.diagnostics.is_empty(),
+        "empty module should pass type check"
+    );
 }
 
 // ===================================================================

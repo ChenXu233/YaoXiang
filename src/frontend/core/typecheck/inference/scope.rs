@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::types::base::PolyType;
+use crate::util::span::Span;
 
 /// 作用域中存储的变量信息
 #[derive(Debug, Clone)]
@@ -13,7 +14,12 @@ pub struct VarInfo {
     pub poly: PolyType,
     pub is_mut: bool,
     pub moved: bool,
+    /// 变量定义位置的 span（用于 LSP 跳转定义）
+    pub definition_span: Span,
 }
+
+// Need to import Span
+// (already available via crate::util::span::Span)
 
 /// 作用域管理器
 ///
@@ -55,6 +61,7 @@ impl ScopeManager {
         name: String,
         poly: PolyType,
         is_mut: bool,
+        definition_span: Span,
     ) {
         self.scopes.last_mut().unwrap().insert(
             name,
@@ -62,6 +69,7 @@ impl ScopeManager {
                 poly,
                 is_mut,
                 moved: false,
+                definition_span,
             },
         );
     }
@@ -158,6 +166,7 @@ impl ScopeManager {
                 poly,
                 is_mut: false,
                 moved: false,
+                definition_span: Span::default(),
             },
         );
     }

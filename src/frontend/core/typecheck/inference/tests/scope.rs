@@ -23,7 +23,12 @@ fn test_scope_manager_add_var() {
     let mut scope = ScopeManager::new();
 
     // Act
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        false,
+        crate::util::span::Span::default(),
+    );
 
     // Assert
     let var = scope.get_var("x");
@@ -34,7 +39,12 @@ fn test_scope_manager_add_var() {
 fn test_scope_manager_get_var() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        false,
+        crate::util::span::Span::default(),
+    );
 
     // Act
     let var = scope.get_var("x");
@@ -75,6 +85,7 @@ fn test_scope_manager_with_many_vars() {
             format!("var_{}", i),
             PolyType::mono(MonoType::Int(32)),
             false,
+            crate::util::span::Span::default(),
         );
     }
 
@@ -91,7 +102,12 @@ fn test_add_var_with_mut_stores_mutability() {
     let mut scope = ScopeManager::new();
 
     // Act
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), true);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        true,
+        crate::util::span::Span::default(),
+    );
 
     // Assert
     assert!(
@@ -106,7 +122,12 @@ fn test_add_var_without_mut_stores_immutability() {
     let mut scope = ScopeManager::new();
 
     // Act
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        false,
+        crate::util::span::Span::default(),
+    );
 
     // Assert
     assert!(
@@ -134,9 +155,19 @@ fn test_var_is_mutable_returns_none_for_undefined() {
 fn test_var_is_mutable_searches_inner_to_outer() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), false);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        false,
+        crate::util::span::Span::default(),
+    );
     scope.enter_scope();
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Bool), true);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Bool),
+        true,
+        crate::util::span::Span::default(),
+    );
 
     // Act
     let is_mut = scope.var_is_mutable("x");
@@ -156,9 +187,15 @@ fn test_current_scope_vars_only_returns_innermost() {
         "outer".to_string(),
         PolyType::mono(MonoType::Int(32)),
         false,
+        crate::util::span::Span::default(),
     );
     scope.enter_scope();
-    scope.add_var("inner".to_string(), PolyType::mono(MonoType::Bool), true);
+    scope.add_var(
+        "inner".to_string(),
+        PolyType::mono(MonoType::Bool),
+        true,
+        crate::util::span::Span::default(),
+    );
 
     // Act
     let vars = scope.current_scope_vars();
@@ -180,7 +217,12 @@ fn test_current_scope_vars_only_returns_innermost() {
 fn test_update_var_preserves_is_mut() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("x".to_string(), PolyType::mono(MonoType::Int(32)), true);
+    scope.add_var(
+        "x".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        true,
+        crate::util::span::Span::default(),
+    );
 
     // Act
     scope.update_var("x", PolyType::mono(MonoType::String));
@@ -198,8 +240,18 @@ fn test_update_var_preserves_is_mut() {
 fn test_vars_with_mut_preserves_correct_info() {
     // Arrange
     let mut scope = ScopeManager::new();
-    scope.add_var("a".to_string(), PolyType::mono(MonoType::Int(32)), true);
-    scope.add_var("b".to_string(), PolyType::mono(MonoType::Bool), false);
+    scope.add_var(
+        "a".to_string(),
+        PolyType::mono(MonoType::Int(32)),
+        true,
+        crate::util::span::Span::default(),
+    );
+    scope.add_var(
+        "b".to_string(),
+        PolyType::mono(MonoType::Bool),
+        false,
+        crate::util::span::Span::default(),
+    );
 
     // Act
     let vars = scope.vars_with_mut();

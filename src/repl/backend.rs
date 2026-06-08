@@ -44,16 +44,26 @@ pub struct ExecutionStats {
 /// This trait defines the interface that all REPL backends must implement.
 pub trait REPLBackend {
     /// Evaluate code and return result
-    fn eval(&mut self, code: &str) -> EvalResult;
+    fn eval(
+        &mut self,
+        code: &str,
+    ) -> EvalResult;
 
     /// Get completion candidates for a line
-    fn complete(&self, line: &str, pos: usize) -> Vec<String>;
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+    ) -> Vec<String>;
 
     /// Get all available symbols
     fn get_symbols(&self) -> Vec<SymbolInfo>;
 
     /// Get type signature for a symbol
-    fn get_type(&self, name: &str) -> Option<String>;
+    fn get_type(
+        &self,
+        name: &str,
+    ) -> Option<String>;
 
     /// Clear all state
     fn clear(&mut self);

@@ -56,18 +56,29 @@ impl REPLContext {
     }
 
     /// Define a variable with runtime value
-    pub fn define_var(&mut self, name: String, value: RuntimeValue) {
+    pub fn define_var(
+        &mut self,
+        name: String,
+        value: RuntimeValue,
+    ) {
         self.variables.insert(name, VariableInfo::Value(value));
     }
 
     /// Define a variable by type only (for bytecode extraction)
-    pub fn define_variable(&mut self, name: String, type_signature: String) {
+    pub fn define_variable(
+        &mut self,
+        name: String,
+        type_signature: String,
+    ) {
         self.variables
             .insert(name, VariableInfo::TypeOnly(type_signature));
     }
 
     /// Get a variable
-    pub fn get_var(&self, name: &str) -> Option<&RuntimeValue> {
+    pub fn get_var(
+        &self,
+        name: &str,
+    ) -> Option<&RuntimeValue> {
         match self.variables.get(name) {
             Some(VariableInfo::Value(v)) => Some(v),
             _ => None,
@@ -75,7 +86,10 @@ impl REPLContext {
     }
 
     /// Get variable type
-    pub fn get_var_type(&self, name: &str) -> Option<String> {
+    pub fn get_var_type(
+        &self,
+        name: &str,
+    ) -> Option<String> {
         match self.variables.get(name) {
             Some(VariableInfo::Value(v)) => Some(format!("{:?}", v.value_type_simple())),
             Some(VariableInfo::TypeOnly(t)) => Some(t.clone()),
@@ -84,7 +98,12 @@ impl REPLContext {
     }
 
     /// Define a function
-    pub fn define_function(&mut self, name: String, signature: String, return_type: String) {
+    pub fn define_function(
+        &mut self,
+        name: String,
+        signature: String,
+        return_type: String,
+    ) {
         self.functions.insert(
             name,
             FunctionInfo {
@@ -122,7 +141,10 @@ impl REPLContext {
     }
 
     /// Get type of a symbol
-    pub fn get_symbol_type(&self, name: &str) -> Option<String> {
+    pub fn get_symbol_type(
+        &self,
+        name: &str,
+    ) -> Option<String> {
         if let Some(t) = self.get_var_type(name) {
             Some(t)
         } else {
@@ -133,7 +155,10 @@ impl REPLContext {
     }
 
     /// Increment eval count
-    pub fn increment_eval(&mut self, duration: Duration) {
+    pub fn increment_eval(
+        &mut self,
+        duration: Duration,
+    ) {
         self.stats.eval_count += 1;
         self.stats.total_time += duration;
     }
@@ -186,7 +211,10 @@ impl Evaluator {
     }
 
     /// Evaluate code
-    pub fn evaluate(&mut self, code: &str) -> EvalResult {
+    pub fn evaluate(
+        &mut self,
+        code: &str,
+    ) -> EvalResult {
         let start = Instant::now();
         let trimmed = code.trim();
 
@@ -232,7 +260,10 @@ impl Evaluator {
     }
 
     /// Check if input is complete
-    fn is_complete(&self, code: &str) -> bool {
+    fn is_complete(
+        &self,
+        code: &str,
+    ) -> bool {
         let mut braces = 0;
         let mut brackets = 0;
         let mut parens = 0;
@@ -277,7 +308,10 @@ impl Evaluator {
     }
 
     /// Wrap code for REPL evaluation
-    fn wrap_code(&self, code: &str) -> String {
+    fn wrap_code(
+        &self,
+        code: &str,
+    ) -> String {
         let trimmed = code.trim();
 
         if self.is_statement(trimmed) {
@@ -288,7 +322,10 @@ impl Evaluator {
     }
 
     /// Check if code is a statement
-    fn is_statement(&self, code: &str) -> bool {
+    fn is_statement(
+        &self,
+        code: &str,
+    ) -> bool {
         let first_word = code.split_whitespace().next();
         matches!(
             first_word,
@@ -309,7 +346,10 @@ impl Evaluator {
     }
 
     /// Extract defined variables and functions to context
-    fn extract_definitions(&mut self, module: &BytecodeModule) {
+    fn extract_definitions(
+        &mut self,
+        module: &BytecodeModule,
+    ) {
         for func in &module.functions {
             if func.name == "main" {
                 continue;
@@ -352,11 +392,18 @@ impl Evaluator {
 }
 
 impl REPLBackend for Evaluator {
-    fn eval(&mut self, code: &str) -> EvalResult {
+    fn eval(
+        &mut self,
+        code: &str,
+    ) -> EvalResult {
         self.evaluate(code)
     }
 
-    fn complete(&self, line: &str, _pos: usize) -> Vec<String> {
+    fn complete(
+        &self,
+        line: &str,
+        _pos: usize,
+    ) -> Vec<String> {
         self.context
             .get_all_symbols()
             .iter()
@@ -369,7 +416,10 @@ impl REPLBackend for Evaluator {
         self.context.get_all_symbols()
     }
 
-    fn get_type(&self, name: &str) -> Option<String> {
+    fn get_type(
+        &self,
+        name: &str,
+    ) -> Option<String> {
         self.context.get_symbol_type(name)
     }
 

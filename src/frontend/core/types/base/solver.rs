@@ -626,13 +626,16 @@ impl TypeConstraintSolver {
             }
 
             // 借用令牌 unify：&T 和 &T、&mut T 和 &mut T
-            (MonoType::Ref {
-                mutable: m1,
-                inner: i1,
-            }, MonoType::Ref {
-                mutable: m2,
-                inner: i2,
-            }) => {
+            (
+                MonoType::Ref {
+                    mutable: m1,
+                    inner: i1,
+                },
+                MonoType::Ref {
+                    mutable: m2,
+                    inner: i2,
+                },
+            ) => {
                 if m1 != m2 {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),

@@ -29,9 +29,9 @@ fn test_format_literal_int() {
 
 #[test]
 fn test_format_literal_float() {
-    let lit = Literal::Float(3.14);
+    let lit = Literal::Float(9.99);
     let ctx = default_ctx();
-    assert_eq!(format_literal(&lit, &ctx), "3.14");
+    assert_eq!(format_literal(&lit, &ctx), "9.99");
 }
 
 #[test]

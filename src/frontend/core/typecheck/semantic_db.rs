@@ -12,6 +12,19 @@ use crate::util::span::Span;
 
 // ============ 核心数据结构 ============
 
+/// 将 SemanticTokenType 映射为 DefinitionKind
+fn token_type_to_def_kind(token_type: SemanticTokenType) -> DefinitionKind {
+    match token_type {
+        SemanticTokenType::Function => DefinitionKind::Function,
+        SemanticTokenType::Type => DefinitionKind::Type,
+        SemanticTokenType::Variable => DefinitionKind::Variable,
+        SemanticTokenType::Parameter => DefinitionKind::Parameter,
+        SemanticTokenType::Method => DefinitionKind::Method,
+        SemanticTokenType::TypeParameter => DefinitionKind::GenericParameter,
+        _ => DefinitionKind::Variable,
+    }
+}
+
 /// 语义信息数据库
 ///
 /// 由 typecheck 阶段产出，LSP 和增量编译直接查询复用。
@@ -68,7 +81,6 @@ pub struct SymbolLocation {
 
 // ============ 定义与引用条目（LSP 重构）============
 /// 后续任务（5-8）会把所有写入迁移到这些字段，Task 9 时统一清理旧字段。
-
 /// 全局唯一定义标识符
 ///
 /// 由 (文件路径, 定义 span) 共同确定。
@@ -375,11 +387,51 @@ impl SemanticDB {
                     .entry(token.name.clone())
                     .or_default()
                     .push(location);
+
+                // 同时填充新的 definitions 结构
+                let file_info =
+                    self.by_file
+                        .entry(file_path.clone())
+                        .or_insert_with(|| FileSemanticInfo {
+                            file_path: file_path.clone(),
+                            ..Default::default()
+                        });
+                // 暂存：实际类型信息将在后续从 TypeChecker 同步
+                file_info.definitions.push(DefinitionInfo {
+                    def_id: DefId {
+                        file_path: file_path.clone(),
+                        span: token.span,
+                    },
+                    name: token.name.clone(),
+                    kind: token_type_to_def_kind(token.token_type),
+                    span: token.span,
+                    file_path: file_path.clone(),
+                    type_info: None,
+                    signature: None,
+                });
             } else {
                 self.symbol_refs
                     .entry(token.name.clone())
                     .or_default()
                     .push(location);
+
+                // 同时填充新的 references 结构
+                let file_info =
+                    self.by_file
+                        .entry(file_path.clone())
+                        .or_insert_with(|| FileSemanticInfo {
+                            file_path: file_path.clone(),
+                            ..Default::default()
+                        });
+                file_info.references.push(ReferenceInfo {
+                    name: token.name.clone(),
+                    span: token.span,
+                    file_path: file_path.clone(),
+                    resolves_to: DefId {
+                        file_path: String::new(),
+                        span: crate::util::span::Span::default(),
+                    },
+                });
             }
         }
 
@@ -563,18 +615,12 @@ impl SemanticDB {
             .references
             .iter()
             .find(|r| {
-                r.file_path == file
-                    && r.span.start.line == line
-                    && r.span.start.column == col
+                r.file_path == file && r.span.start.line == line && r.span.start.column == col
             })
             .map(|r| r.resolves_to.clone())?;
 
         for info in self.by_file.values() {
-            if let Some(def) = info
-                .definitions
-                .iter()
-                .find(|d| d.def_id == target_def_id)
-            {
+            if let Some(def) = info.definitions.iter().find(|d| d.def_id == target_def_id) {
                 return Some(def);
             }
         }
@@ -1116,10 +1162,7 @@ mod tests {
         assert_eq!(defs.len(), 1);
         assert_eq!(defs[0].name, "foo");
         assert_eq!(defs[0].kind, DefinitionKind::Function);
-        assert_eq!(
-            defs[0].type_info.as_deref(),
-            Some("(Int) -> Int")
-        );
+        assert_eq!(defs[0].type_info.as_deref(), Some("(Int) -> Int"));
 
         let refs = db.get_references("test.yx");
         assert_eq!(refs.len(), 1);
@@ -1202,8 +1245,7 @@ mod tests {
             },
         );
 
-        let refs =
-            db.find_all_references_to("test.yx", &def_span);
+        let refs = db.find_all_references_to("test.yx", &def_span);
         assert_eq!(refs.len(), 3, "应跨文件找到三个 foo 引用");
     }
 
