@@ -548,7 +548,10 @@ impl TypeConstraintSolver {
             }
 
             // 泛型类型 unify
-            (MonoType::Generic { name: n1, args: a1 }, MonoType::Generic { name: n2, args: a2 }) => {
+            (
+                MonoType::Generic { name: n1, args: a1 },
+                MonoType::Generic { name: n2, args: a2 },
+            ) => {
                 if n1 != n2 || a1.len() != a2.len() {
                     return Err(ErrorCodeDefinition::type_mismatch(
                         &t1.type_name(),

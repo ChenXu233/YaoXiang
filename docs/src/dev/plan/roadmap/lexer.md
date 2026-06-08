@@ -61,7 +61,7 @@ title: "词法分析器状态"
 |-----|----------|------|
 | RFC-004 绑定语法 | ✅ 已实现 | `[` `]` 正确识别，BindingValidator 实现完整 |
 | RFC-010 统一类型语法 | ⚠️ 部分实现 | 泛型用 `()` 而非 `<>`，但缺少 `where`, `trait`, `interface`, `impl`, `forall`, `exists` 关键字 |
-| RFC-011 泛型系统 | ⚠️ 验证器实现 | TypeSystemValidator 已实现，但缺少高阶类型相关的关键字支持 |
+| RFC-011 泛型系统 | ⚠️ 验证器实现 | `TypeSystemValidator` 已实现，但缺少高阶类型相关的关键字支持 |
 | RFC-012 F-String | ✅ 已实现 | 完整的 `f"..."` 词法分析 |
 
 ---
