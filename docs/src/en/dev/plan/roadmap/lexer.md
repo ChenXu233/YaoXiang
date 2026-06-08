@@ -31,7 +31,7 @@ The Lexer is responsible for converting source code strings into a Token stream.
 | **Character Literals** | ✅ | Single quotes, same escape sequences as strings |
 | **Boolean Literals** | ✅ | `true`, `false` |
 | **Void Literals** | ✅ | `void` |
-| **F-String** | ✅ | `f"..."`, support for `{expression}` interpolation, `{{`/`}}` escaping (RFC-012) |
+| **F-String** | ✅ | `f"..."`, support for `{expression}` interpolation, `\{\{`/`\}\}` escaping (RFC-012) |
 | **Operators** | ✅ | `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `!`, `&`, `&mut`, `::`, `...`, `..`, `->`, `=>`, `?` |
 | **Delimiters** | ✅ | `(`, `)`, `[`, `]`, `{`, `}`, `@`, `,`, `:`, `;`, `|`, `.` |
 | **Comments** | ✅ | Single-line `//`, nested multi-line `/* /* */ */` |
