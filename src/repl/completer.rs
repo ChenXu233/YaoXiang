@@ -11,34 +11,32 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 
-use crate::backends::dev::repl::backend_trait::REPLBackend;
+use super::backend::REPLBackend;
+use super::eval::Evaluator;
 
 /// REPL Completer
 ///
 /// Completes identifiers based on defined symbols in the REPL context.
-pub struct REPLCompleter<B: REPLBackend> {
-    /// Backend to get symbols from
-    backend: Rc<RefCell<B>>,
+pub struct ReplCompleter {
+    /// Evaluator to get symbols from
+    evaluator: Rc<RefCell<Evaluator>>,
     /// Keywords for YaoXiang
     keywords: Vec<&'static str>,
 }
 
-impl<B: REPLBackend> fmt::Debug for REPLCompleter<B> {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        f.debug_struct("REPLCompleter")
+impl fmt::Debug for ReplCompleter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReplCompleter")
             .field("keywords", &self.keywords)
             .finish()
     }
 }
 
-impl<B: REPLBackend> REPLCompleter<B> {
+impl ReplCompleter {
     /// Create a new completer
-    pub fn new(backend: Rc<RefCell<B>>) -> Self {
+    pub fn new(evaluator: Rc<RefCell<Evaluator>>) -> Self {
         Self {
-            backend,
+            evaluator,
             keywords: Self::yaoxiang_keywords(),
         }
     }
@@ -52,7 +50,7 @@ impl<B: REPLBackend> REPLCompleter<B> {
     }
 }
 
-impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
+impl Completer for ReplCompleter {
     type Candidate = Pair;
 
     fn complete(
@@ -74,10 +72,10 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
         }
 
         let mut candidates = Vec::new();
-        let backend = self.backend.borrow();
+        let evaluator = self.evaluator.borrow();
 
-        // Add symbol completions from backend
-        for sym in backend.get_symbols() {
+        // Add symbol completions from evaluator
+        for sym in evaluator.get_symbols() {
             if sym.name.starts_with(word) {
                 candidates.push(Pair {
                     display: format!("{}: {}", sym.name, sym.type_signature),
@@ -115,12 +113,12 @@ impl<B: REPLBackend + 'static> Completer for REPLCompleter<B> {
     }
 }
 
-impl<B: REPLBackend> Hinter for REPLCompleter<B> {
+impl Hinter for ReplCompleter {
     type Hint = String;
 }
 
-impl<B: REPLBackend> Highlighter for REPLCompleter<B> {}
+impl Highlighter for ReplCompleter {}
 
-impl<B: REPLBackend> Validator for REPLCompleter<B> {}
+impl Validator for ReplCompleter {}
 
-impl<B: REPLBackend + 'static> rustyline::Helper for REPLCompleter<B> {}
+impl rustyline::Helper for ReplCompleter {}
