@@ -153,14 +153,12 @@ pub fn run_diagnostics(
     }
 
     // 3. 类型检查（收集所有错误模式）
-    match check_module_collect_all(&parse_result.module, &mut None) {
-        Ok(_) => {
-            debug!("类型检查通过: {}", uri);
-        }
-        Err(type_errors) => {
-            debug!("类型错误 ({} 个): {}", type_errors.len(), uri);
-            all_diagnostics.extend(to_lsp_diagnostics(&type_errors));
-        }
+    let type_result = check_module_collect_all(&parse_result.module, &mut None);
+    if !type_result.diagnostics.is_empty() {
+        debug!("类型错误 ({} 个): {}", type_result.diagnostics.len(), uri);
+        all_diagnostics.extend(to_lsp_diagnostics(&type_result.diagnostics));
+    } else {
+        debug!("类型检查通过: {}", uri);
     }
 
     debug!("诊断完成: {} ({} 条诊断)", uri, all_diagnostics.len());

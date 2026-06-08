@@ -126,11 +126,6 @@ impl TypeChecker {
         &self.env.module_name
     }
 
-    /// 提取收集到的语义信息
-    pub fn take_semantic_db(&mut self) -> semantic_db::SemanticDB {
-        std::mem::take(&mut self.semantic_db)
-    }
-
     /// 添加错误
     fn add_error(
         &mut self,
@@ -172,7 +167,7 @@ impl TypeChecker {
     pub fn check_module(
         &mut self,
         module: &Module,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         self.check_module_impl(module, false)
     }
 
@@ -183,7 +178,7 @@ impl TypeChecker {
     pub fn check_module_collect_all(
         &mut self,
         module: &Module,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         self.check_module_impl(module, true)
     }
 
@@ -192,7 +187,7 @@ impl TypeChecker {
         &mut self,
         module: &Module,
         collect_all: bool,
-    ) -> Result<TypeCheckResult, Vec<Diagnostic>> {
+    ) -> TypeCheckResult {
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             if let crate::frontend::core::parser::ast::StmtKind::Binding {
@@ -295,10 +290,8 @@ impl TypeChecker {
         // 即便类型检查存在错误（如语法或类型错误），我们也要尽可能收集当前的语义 token，保证代码染色等功能
         self.collect_semantic_tokens(module);
 
-        // 如果有错误，返回所有错误
-        if self.has_errors() {
-            return Err(self.errors().to_vec());
-        }
+        // 收集错误（无论有无错误都收进 result.diagnostics）
+        let diagnostics = self.errors().to_vec();
 
         // 构建类型检查结果
         // 合并 StatementChecker 中的局部变量类型到 bindings
@@ -336,13 +329,14 @@ impl TypeChecker {
 
         let result = TypeCheckResult {
             module_name: self.env.module_name.clone(),
+            diagnostics,
             bindings,
             local_var_types,
             semantic_db: std::mem::take(&mut self.semantic_db),
             trait_table: self.env.trait_table.clone(),
         };
 
-        Ok(result)
+        result
     }
 
     /// 获取 body_checker 的可变引用

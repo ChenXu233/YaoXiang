@@ -81,7 +81,7 @@ pub type TypeErrorCollector = ErrorCollector<Diagnostic>;
 pub fn check_module(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     check_module_inner(ast, env, false)
 }
 
@@ -93,7 +93,7 @@ pub fn check_module(
 pub fn check_module_collect_all(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     check_module_inner(ast, env, true)
 }
 
@@ -103,7 +103,7 @@ fn check_module_inner(
     ast: &Module,
     env: &mut Option<environment::TypeEnvironment>,
     collect_all: bool,
-) -> Result<types::TypeCheckResult, Vec<Diagnostic>> {
+) -> types::TypeCheckResult {
     // 使用 TypeChecker 进行完整的模块检查
     let mut checker = checker::TypeChecker::new("main");
 
@@ -119,9 +119,9 @@ fn check_module_inner(
 
     // 执行模块检查
     let result = if collect_all {
-        checker.check_module_collect_all(ast)?
+        checker.check_module_collect_all(ast)
     } else {
-        checker.check_module(ast)?
+        checker.check_module(ast)
     };
 
     // 将 exports 和 method_bindings 导回传入的环境
@@ -130,7 +130,7 @@ fn check_module_inner(
         ext_env.method_bindings = checker.env().method_bindings.clone();
     }
 
-    Ok(result)
+    result
 }
 
 /// 检查单个表达式

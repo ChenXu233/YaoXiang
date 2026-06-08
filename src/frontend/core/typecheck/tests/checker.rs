@@ -76,7 +76,7 @@ fn test_type_checker_check_empty_module() {
     let result = checker.check_module(&module);
 
     // Assert
-    assert!(result.is_ok(), "empty module should pass type check");
+    assert!(result.diagnostics.is_empty(), "empty module should pass type check");
 }
 
 // ===================================================================
@@ -111,10 +111,10 @@ fn test_type_checker_reports_type_mismatch() {
 
     // Assert - 应该报告类型错误
     assert!(
-        result.is_err() || checker.has_errors(),
+        !result.diagnostics.is_empty() || checker.has_errors(),
         "x: String = 42 should report type mismatch error"
     );
-    let has_type_error = result.is_err()
+    let has_type_error = !result.diagnostics.is_empty()
         || checker.errors().iter().any(|e| {
             let msg = format!("{:?}", e);
             msg.contains("mismatch") || msg.contains("type")
@@ -142,7 +142,7 @@ fn test_type_checker_reports_undefined_variable() {
 
     // Assert - 使用未定义变量应该报错
     assert!(
-        result.is_err() || checker.has_errors(),
+        !result.diagnostics.is_empty() || checker.has_errors(),
         "using undefined variable should produce an error"
     );
 }
@@ -201,7 +201,7 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
 
     // Assert - 规范 §6.3: 函数参数类型必须匹配，传入 String 但参数期望 Int 应报错
     assert!(
-        result.is_err() || checker.has_errors(),
+        !result.diagnostics.is_empty() || checker.has_errors(),
         "add(\"hello\") with param type Int should report type mismatch"
     );
 }
@@ -235,7 +235,7 @@ fn test_type_checker_with_large_module() {
 
     // Assert - 100 个未定义变量的语句应报错（规范 §6.3: 使用未定义变量是编译错误）
     assert!(
-        result.is_err() || checker.has_errors(),
+        !result.diagnostics.is_empty() || checker.has_errors(),
         "100 undefined variables should produce errors"
     );
 }
@@ -285,7 +285,7 @@ fn test_type_checker_with_multiple_function_definitions() {
 
     // Assert - 多个函数定义应该正常处理
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "multiple function definitions should be accepted"
     );
 }
@@ -349,7 +349,7 @@ fn test_type_checker_with_nested_function_definition() {
 
     // Assert - 规范 §6.3: 嵌套函数定义应通过类型检查（所有变量已定义，类型一致）
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "nested function definition with correct types should pass type check"
     );
 }
@@ -415,7 +415,7 @@ fn test_type_checker_with_generic_type_binding() {
 
     // Assert - 规范 §3.8: 泛型类型定义和使用应通过类型检查（所有类型参数已提供）
     assert!(
-        result.is_ok(),
+        result.diagnostics.is_empty(),
         "generic type definition and usage with all type params provided should pass"
     );
 }
