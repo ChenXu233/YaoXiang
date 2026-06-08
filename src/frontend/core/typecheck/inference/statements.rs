@@ -1202,7 +1202,16 @@ impl StatementChecker {
                             (&resolved_init, &resolved_ann),
                             (MonoType::Struct(s), MonoType::TypeRef(iface)) if s.interfaces.contains(iface)
                         );
-                        if !is_structural_subtype {
+                        // 泛型类型构造：当 init 是泛型结构体（含 TypeRef 字段）且
+                        // annotation 是实例化后的结构体时，跳过 unify 直接使用 annotation 类型
+                        let is_generic_constructor = match (&resolved_init, &resolved_ann) {
+                            (MonoType::Struct(s_init), MonoType::Struct(s_ann)) => {
+                                s_init.name == s_ann.name
+                                    && self.generic_type_defs.contains_key(&s_init.name)
+                            }
+                            _ => false,
+                        };
+                        if !is_structural_subtype && !is_generic_constructor {
                             return Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
                                     &format!("{}", ann_ty),

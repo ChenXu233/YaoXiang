@@ -10,5 +10,5 @@ main = {
         return (t1, t2)
     }
     io.println(result)
-    io.println("SPAWN TUPLE TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

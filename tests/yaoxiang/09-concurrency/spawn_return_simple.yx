@@ -6,5 +6,5 @@ main = {
         return 10 + 20
     }
     io.println(result)
-    io.println("SPAWN RETURN SIMPLE PASSED")
+    io.println("ALL TESTS PASSED")
 }

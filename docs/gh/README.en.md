@@ -181,17 +181,17 @@ Send/Sync → Compile-Time Check → Data Race → Thread Safety
 | Feature | YaoXiang | Rust | Python | TypeScript | Go |
 |---------|----------|------|--------|------------|-----|
 | Everything is Type | Yes | No | No | No | No |
-| Auto Type Inference | Yes | Yes | Yes | Yes | No |
+| Auto Type Inference | Yes | Yes | Yes | Yes | Yes |
 | Default Immutable | Yes | Yes | No | No | No |
 | Ownership Model | Yes | Yes | No | No | No |
-| Concurrent Model | Yes | No | No | No | Partial |
+| Concurrent Model | Yes | No | No | No | No |
 | Zero-Cost Abstraction | Yes | Yes | No | No | No |
-| No GC | Yes | Yes | No | No | Yes |
+| No GC | Yes | Yes | No | No | No |
 | Compile-Time Thread Safety | Yes | Yes | No | No | No |
 | Value-Dependent Types | Yes | No | No | No | No |
 | Keyword Count | 17 | 51+ | 35 | 64+ | 25 |
 
-> **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Auto Parallel + Seamless Async
+> **Concurrent Model** = Synchronous Syntax + Lazy Evaluation + Implicit Parallel + Seamless Async (compiler auto-parallelizes, no manual thread management)
 
 ### Key RFCs
 

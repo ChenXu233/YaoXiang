@@ -145,12 +145,14 @@ pub fn infer_expression(
     }
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();
+    let generic_type_defs_clone = env.generic_type_defs.clone();
     let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
         &mut scope,
         env.solver(),
         &overload_candidates_clone,
         &native_signatures_clone,
     );
+    inferrer.set_generic_type_defs(&generic_type_defs_clone);
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 

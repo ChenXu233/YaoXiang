@@ -26,5 +26,5 @@ main = {
     )
     io.println(result)
 
-    io.println("CLOSURES TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

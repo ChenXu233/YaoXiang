@@ -20,5 +20,5 @@ main = {
     s = identity("hello")
     io.println(s)
 
-    io.println("GENERICS TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }
