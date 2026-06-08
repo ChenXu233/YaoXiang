@@ -208,6 +208,15 @@ impl OwnershipChecker {
     pub fn unsafe_bypasses(&self) -> &[Diagnostic] {
         self.cycle_checker.unsafe_bypasses()
     }
+
+    /// 设置局部变量名列表（传递给 MoveChecker 和 BorrowChecker，用于友好错误信息）
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.move_checker.set_local_names(local_names.clone());
+        self.borrow_checker.set_local_names(local_names);
+    }
 }
 
 impl Default for OwnershipChecker {
@@ -245,16 +254,17 @@ impl OwnershipPass {
             // OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
             // 过滤掉 MutChecker 已覆盖的错误类别，避免重复报告
             let mut ownership_checker = OwnershipChecker::new();
+            ownership_checker.set_local_names(local_names.cloned());
             let ownership_errors: Vec<Diagnostic> = ownership_checker
                 .check_function(func)
                 .into_iter()
                 .filter(|err| {
                     // E2016=不可变赋值, E2022=不可变变异, E2023=不可变字段赋值
-                    // E2025=重赋值非空, E2014=使用已移动的值
-                    // 这些已由 MutChecker 处理
+                    // E2025=重赋值非空
+                    // E2014(UseAfterMove) 保留 — 由 MoveChecker 处理
                     !matches!(
                         err.code.as_str(),
-                        "E2014" | "E2016" | "E2022" | "E2023" | "E2025"
+                        "E2016" | "E2022" | "E2023" | "E2025"
                     )
                 })
                 .collect();

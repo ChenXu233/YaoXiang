@@ -1,0 +1,13 @@
+// 错误检测: Move 后使用原变量
+// 预期: 编译错误
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+main = {
+    p = Point(1.0, 2.0)
+    p2 = p
+    io.println(p)
+    io.println("ALL TESTS PASSED")
+}

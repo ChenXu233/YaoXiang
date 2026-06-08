@@ -5,7 +5,7 @@
 //! - 只有标记 `mut` 的变量才能被修改
 //! - 编译期检查，无需运行时开销
 
-use super::error::{OwnershipCheck, operand_to_string, codes};
+use super::error::{OwnershipCheck, operand_display_name, codes};
 use crate::util::diagnostic::Diagnostic;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::span::Span;
@@ -126,20 +126,8 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
-        // 尝试获取变量名，如果失败则使用 operand_to_string 的结果
-        let value = if let Some(local_names) = &self.local_names {
-            if let Operand::Local(idx) = target {
-                if *idx < local_names.len() && !local_names[*idx].is_empty() {
-                    local_names[*idx].clone()
-                } else {
-                    operand_to_string(target)
-                }
-            } else {
-                operand_to_string(target)
-            }
-        } else {
-            operand_to_string(target)
-        };
+        // 使用源码变量名（优先）或内部名
+        let value = operand_display_name(target, self.local_names.as_ref());
         self.errors.push(codes::immutable_assign(&value));
     }
 
@@ -208,8 +196,9 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
+        let name = operand_display_name(target, self.local_names.as_ref());
         self.errors.push(codes::immutable_mutation(
-            &operand_to_string(target),
+            &name,
             method,
         ));
     }

@@ -20,7 +20,7 @@
 //! ```
 
 use super::consume_analysis::ConsumeAnalyzer;
-use super::error::{OwnershipCheck, TypeId, ValueState, operand_to_string, codes};
+use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name, codes};
 use super::ownership_flow::ConsumeMode;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
@@ -51,6 +51,8 @@ pub struct MoveChecker {
     type_table: Option<HashMap<String, TypeId>>,
     /// 消费分析器（Phase 4）
     consume_analyzer: ConsumeAnalyzer,
+    /// 局部变量名列表（用于错误报告，优先显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl MoveChecker {
@@ -62,6 +64,7 @@ impl MoveChecker {
             type_map: HashMap::new(),
             type_table: None,
             consume_analyzer: ConsumeAnalyzer::new(),
+            local_names: None,
         }
     }
 
@@ -83,12 +86,31 @@ impl MoveChecker {
         self
     }
 
+    /// 设置局部变量名列表（用于生成友好的错误信息）
+    pub fn with_local_names(
+        mut self,
+        local_names: Option<Vec<String>>,
+    ) -> Self {
+        self.local_names = local_names;
+        self
+    }
+
+    /// 设置局部变量名列表（可变引用版本，用于已构造的实例）
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
+    }
+
     fn check_instruction(
         &mut self,
         instr: &Instruction,
     ) {
         match instr {
-            Instruction::Move { dst, src } => self.check_move(dst, src),
+            Instruction::Move { dst, src } => {
+                self.check_move(dst, src)
+            }
             Instruction::Call {
                 dst, args, func, ..
             } => {
@@ -97,6 +119,19 @@ impl MoveChecker {
             }
             Instruction::Ret(Some(value)) => self.check_ret(value),
             Instruction::Store { dst, src, .. } => self.check_store(dst, src),
+            Instruction::Load { dst, src } => {
+                // Load 传播 src 的状态到 dst
+                if let Some(state) = self.state.get(src).cloned() {
+                    match state {
+                        ValueState::Moved | ValueState::Empty => {
+                            self.report_use_after_move(src);
+                        }
+                        _ => {
+                            self.state.insert(dst.clone(), state);
+                        }
+                    }
+                }
+            }
             Instruction::LoadIndex { src, .. }
             | Instruction::LoadField { src, .. }
             | Instruction::Neg { src, .. }
@@ -177,8 +212,9 @@ impl MoveChecker {
             match state {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
+                    let name = operand_display_name(dst, self.local_names.as_ref());
                     self.errors
-                        .push(codes::reassign_non_empty(&operand_to_string(dst)));
+                        .push(codes::reassign_non_empty(&name));
                     return;
                 }
                 ValueState::Moved => {
@@ -190,8 +226,9 @@ impl MoveChecker {
                     if let Some(expected_type) = self.type_map.get(dst) {
                         if let Some(actual_type) = &src_type {
                             if expected_type != actual_type {
+                                let name = operand_display_name(dst, self.local_names.as_ref());
                                 self.errors
-                                    .push(codes::immutable_assign(&operand_to_string(dst)));
+                                    .push(codes::immutable_assign(&name));
                                 return;
                             }
                         }
@@ -325,8 +362,9 @@ impl MoveChecker {
         &mut self,
         operand: &Operand,
     ) {
+        let name = operand_display_name(operand, self.local_names.as_ref());
         self.errors
-            .push(codes::use_after_move(&operand_to_string(operand)));
+            .push(codes::use_after_move(&name));
     }
 }
 
@@ -340,6 +378,8 @@ impl OwnershipCheck for MoveChecker {
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
                 self.location = (block_idx, instr_idx);
+                if matches!(instr, Instruction::Move { .. }) {
+                }
                 self.check_instruction(instr);
             }
         }

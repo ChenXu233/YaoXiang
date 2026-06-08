@@ -1,0 +1,18 @@
+// 简单借用冲突: &p + &mut p
+// 预期: 编译错误 (E2030)
+
+use std.io
+
+Point: Type = { x: Float, y: Float }
+
+main = {
+    p = Point(1.0, 2.0)
+
+    // 创建不可变借用
+    r1 = &p
+
+    // 创建可变借用 — 应与 r1 冲突
+    r2 = &mut p
+
+    io.println("ALL TESTS PASSED")
+}
