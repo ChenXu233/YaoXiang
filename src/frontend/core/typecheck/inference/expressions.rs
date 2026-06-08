@@ -19,6 +19,10 @@ use super::scope::ScopeManager;
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// 空的泛型类型定义表（默认值）
+static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// 表达式类型推断器
 ///
 /// 使用统一的 ScopeManager 管理变量作用域，
@@ -47,6 +51,9 @@ pub struct ExpressionInferrer<'a> {
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
+    /// 泛型类型定义表: type_name -> GenericTypeDef
+    /// 用于泛型类型实例化（如 List(Int)）
+    generic_type_defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -67,6 +74,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
             type_defs: &EMPTY_SIGNATURES,
+            generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
         }
     }
 
@@ -88,6 +96,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
             type_defs: &EMPTY_SIGNATURES,
+            generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
         }
     }
 
@@ -110,6 +119,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             capture_infos: HashMap::new(),
             type_defs: &EMPTY_SIGNATURES,
+            generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
         }
     }
 
@@ -134,6 +144,7 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings,
             capture_infos: HashMap::new(),
             type_defs: &EMPTY_SIGNATURES,
+            generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
         }
     }
 
@@ -161,6 +172,14 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, MonoType>,
     ) {
         self.type_defs = defs;
+    }
+
+    /// 设置泛型类型定义表
+    pub fn set_generic_type_defs(
+        &mut self,
+        defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    ) {
+        self.generic_type_defs = defs;
     }
 
     /// 添加变量到当前作用域
@@ -868,8 +887,21 @@ impl<'a> ExpressionInferrer<'a> {
                         let resolved_ret = self.solver.expand_type_shallow(&return_type);
                         return Ok(resolved_ret);
                     }
-                    MonoType::Struct(_) | MonoType::TypeRef(_) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果
+                    MonoType::Struct(ref st) => {
+                        // 类型构造器：Point(1.0, 2.0) 或 List(1, 2, 3) 单态化后的结果
+                        // 检查是否是泛型类型构造器
+                        if let Some(generic_def) = self.generic_type_defs.get(&st.name) {
+                            // 泛型构造器：从参数推导泛型参数并实例化
+                            let instantiated = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
+                                &mono_func_ty,
+                                &generic_def.param_names,
+                                &arg_types,
+                            );
+                            return Ok(instantiated);
+                        }
+                        return Ok(mono_func_ty);
+                    }
+                    MonoType::TypeRef(_) => {
                         return Ok(mono_func_ty);
                     }
                     _ => {}

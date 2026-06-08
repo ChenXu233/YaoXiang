@@ -583,20 +583,31 @@ impl StatementChecker {
                     // body 是结构体字段定义，不是函数体
                     // 例如：Point: Type = { x: Float, y: Float }
                     // Parser 把 Type = { ... } 整体解析为 Type::Struct
+                    //
+                    // 同时支持类型级函数定义：
+                    // List: (T: Type) -> Type = { data: Array(T), length: Int }
+                    // 当 type_annotation 是 Type::Fn { return_type: MetaType } 时
                     let is_type_def = type_annotation
                         .as_ref()
                         .map(|t| {
-                            matches!(t,
-                                crate::frontend::core::parser::ast::Type::Struct { .. }
-                                | crate::frontend::core::parser::ast::Type::MetaType { .. }
-                            )
+                            use crate::frontend::core::parser::ast::Type;
+                            let result = match t {
+                                Type::Struct { .. } | Type::MetaType { .. } => true,
+                                Type::Fn { return_type, .. } => {
+                                    matches!(return_type.as_ref(), Type::MetaType { .. })
+                                }
+                                _ => false,
+                            };
+                            result
                         })
                         .unwrap_or(false);
 
                     if is_type_def {
-                        // 从 type_annotation 提取结构体字段
+                        // 从 type_annotation 或 body 提取结构体字段
                         let mut fields = Vec::new();
                         let mut interfaces = Vec::new();
+
+                        // 情况 1：type_annotation 是 Type::Struct（直接结构体定义）
                         if let Some(crate::frontend::core::parser::ast::Type::Struct {
                             fields: ast_fields,
                             interfaces: ast_interfaces,
@@ -608,6 +619,23 @@ impl StatementChecker {
                                 fields.push((field.name.clone(), field_ty));
                             }
                             interfaces = ast_interfaces.clone();
+                        } else {
+                            // 情况 2：type_annotation 是 Type::Fn（类型级函数）
+                            // 从 body 的语句中提取字段
+                            for stmt in stmts {
+                                if let crate::frontend::core::parser::ast::StmtKind::Var {
+                                    name: field_name,
+                                    type_annotation: field_type,
+                                    ..
+                                } = &stmt.kind
+                                {
+                                    let field_ty = field_type
+                                        .as_ref()
+                                        .map(|t| MonoType::from(t.clone()))
+                                        .unwrap_or_else(|| self.solver.new_var());
+                                    fields.push((field_name.clone(), field_ty));
+                                }
+                            }
                         }
                         let field_count = fields.len();
                         let struct_ty = MonoType::Struct(
@@ -622,7 +650,38 @@ impl StatementChecker {
                         );
                         self.type_defs.insert(name.to_string(), struct_ty.clone());
                         self.scope
-                            .add_var(name.to_string(), PolyType::mono(struct_ty), false);
+                            .add_var(name.to_string(), PolyType::mono(struct_ty.clone()), false);
+
+                        // 类型级函数：注册到 generic_type_defs 用于泛型实例化
+                        // 当 generic_params 非空时（如 List: (T: Type) -> Type），
+                        // parser 已将 type_annotation 从 Type::Fn 改为 Type::Struct，
+                        // 所以检查 generic_params 而不是 type_annotation
+                        if !generic_params.is_empty() {
+                            let param_names: Vec<String> = generic_params
+                                .iter()
+                                .filter_map(|p| {
+                                    if matches!(
+                                        p.kind,
+                                        crate::frontend::core::parser::ast::GenericParamKind::Type
+                                    ) {
+                                        Some(p.name.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            if !param_names.is_empty() {
+                                use crate::frontend::core::typecheck::environment::GenericTypeDef;
+                                self.generic_type_defs.insert(
+                                    name.to_string(),
+                                    GenericTypeDef {
+                                        param_names,
+                                        template: struct_ty,
+                                    },
+                                );
+                            }
+                        }
+
                         return Ok(());
                     }
 
@@ -1467,6 +1526,7 @@ impl StatementChecker {
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
+                        inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.infer_expr(expr).map_err(Box::new)
                     }
                 }
@@ -1484,6 +1544,7 @@ impl StatementChecker {
                     &self.method_bindings,
                 );
                 inferrer.set_type_defs(&self.type_defs);
+                inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.infer_expr(expr).map_err(Box::new)
             }
         }
