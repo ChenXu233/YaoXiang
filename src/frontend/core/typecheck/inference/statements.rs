@@ -638,19 +638,21 @@ impl StatementChecker {
                             }
                         }
                         let field_count = fields.len();
-                        let struct_ty = MonoType::Struct(
-                            crate::frontend::core::types::base::StructType {
+                        let struct_ty =
+                            MonoType::Struct(crate::frontend::core::types::base::StructType {
                                 name: name.to_string(),
                                 fields,
                                 methods: HashMap::new(),
                                 field_mutability: vec![false; field_count],
                                 field_has_default: vec![false; field_count],
                                 interfaces,
-                            },
-                        );
+                            });
                         self.type_defs.insert(name.to_string(), struct_ty.clone());
-                        self.scope
-                            .add_var(name.to_string(), PolyType::mono(struct_ty.clone()), false);
+                        self.scope.add_var(
+                            name.to_string(),
+                            PolyType::mono(struct_ty.clone()),
+                            false,
+                        );
 
                         // 类型级函数：注册到 generic_type_defs 用于泛型实例化
                         // 当 generic_params 非空时（如 List: (T: Type) -> Type），
