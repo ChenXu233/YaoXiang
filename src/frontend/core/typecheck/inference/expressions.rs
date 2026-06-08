@@ -1026,9 +1026,22 @@ impl<'a> ExpressionInferrer<'a> {
                         // 值级函数调用
                         if arg_types.len() == params.len() {
                             for (arg_ty, param_ty) in arg_types.iter().zip(params.iter()) {
+                                // 自动借用：当参数签名要求 &T 且实参是值类型时，
+                                // 编译器自动创建令牌（RFC-009 §2.8）
+                                let actual_arg = match (param_ty, arg_ty) {
+                                    (MonoType::Ref { mutable, .. }, a)
+                                        if !matches!(a, MonoType::Ref { .. }) =>
+                                    {
+                                        MonoType::Ref {
+                                            mutable: *mutable,
+                                            inner: Box::new(a.clone()),
+                                        }
+                                    }
+                                    _ => arg_ty.clone(),
+                                };
                                 // Int -> Float 扩展转换是允许的
                                 if matches!(
-                                    (arg_ty, param_ty),
+                                    (&actual_arg, param_ty),
                                     (MonoType::Int(_), MonoType::Float(_))
                                 ) {
                                     continue;
@@ -1038,7 +1051,7 @@ impl<'a> ExpressionInferrer<'a> {
                                     continue;
                                 }
                                 // TypeVar 是泛型类型参数 —— 必须 unify 以推断具体类型
-                                if self.solver.unify(arg_ty, param_ty).is_err() {
+                                if self.solver.unify(&actual_arg, param_ty).is_err() {
                                     return Err(ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", param_ty),
                                         &format!("{}", arg_ty),

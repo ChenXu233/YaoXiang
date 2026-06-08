@@ -1,0 +1,18 @@
+// 12-paper-demos/tree_structure.yx
+// 验证: 树遍历 — 多个 &Tree 令牌共存
+// 论文价值: 不可变遍历天然安全，无需 Rc/RefCell
+
+use std.io
+
+Tree: Type = { value: Int, left: Int, right: Int }
+
+Tree.sum: (self: &Tree) -> Int = {
+    self.value + self.left + self.right
+}
+
+main = {
+    root = Tree(10, 5, 15)
+    total = root.sum()
+    io.println(total)
+    io.println("ALL TESTS PASSED")
+}
