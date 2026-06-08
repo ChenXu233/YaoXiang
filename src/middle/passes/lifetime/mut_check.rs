@@ -5,7 +5,8 @@
 //! - 只有标记 `mut` 的变量才能被修改
 //! - 编译期检查，无需运行时开销
 
-use super::error::{OwnershipCheck, OwnershipError, operand_to_string};
+use super::error::{OwnershipCheck, operand_to_string, codes};
+use crate::util::diagnostic::Diagnostic;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -23,7 +24,7 @@ pub struct MutChecker {
     /// 已初始化的变量集合（首次 Store 视为初始化，允许通过）
     initialized_vars: HashSet<Operand>,
     /// 可变变量修改错误
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     /// 当前检查位置
     location: (usize, usize),
     /// 符号表：变量名 -> 是否可变（从外部传入）
@@ -110,7 +111,7 @@ impl MutChecker {
     fn check_store(
         &mut self,
         target: &Operand,
-        span: Span,
+        _span: Span,
     ) {
         // 如果目标在循环绑定变量集合中，跳过检查
         // 这些变量的 Store 是"绑定"操作，不是"修改"
@@ -139,10 +140,7 @@ impl MutChecker {
         } else {
             operand_to_string(target)
         };
-        self.errors.push(OwnershipError::ImmutableAssign {
-            value,
-            span: Some(span),
-        });
+        self.errors.push(codes::immutable_assign(&value));
     }
 
     /// 检查字段赋值操作
@@ -185,11 +183,8 @@ impl MutChecker {
                         let field = field_name
                             .clone()
                             .unwrap_or_else(|| format!("field_{}", field_index));
-                        self.errors.push(OwnershipError::ImmutableFieldAssign {
-                            struct_name,
-                            field,
-                            location: self.location,
-                        });
+                        self.errors
+                            .push(codes::immutable_field_assign(&struct_name, &field));
                     }
 
                     // 字段可变，允许
@@ -213,11 +208,10 @@ impl MutChecker {
         if self.is_mutable(target) {
             return;
         }
-        self.errors.push(OwnershipError::ImmutableMutation {
-            value: operand_to_string(target),
-            method: method.to_string(),
-            location: self.location,
-        });
+        self.errors.push(codes::immutable_mutation(
+            &operand_to_string(target),
+            method,
+        ));
     }
 
     /// 检查变量是否可变（通用逻辑）
@@ -281,7 +275,7 @@ impl MutChecker {
         mut_locals: &HashSet<usize>,
         loop_binding_locals: Option<&HashSet<usize>>,
         local_names: Option<&Vec<String>>,
-    ) -> Vec<OwnershipError> {
+    ) -> Vec<Diagnostic> {
         // 清除状态
         self.mutable_vars.clear();
         self.initialized_vars.clear();
@@ -326,7 +320,7 @@ impl OwnershipCheck for MutChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -339,7 +333,7 @@ impl OwnershipCheck for MutChecker {
         &self.errors
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 

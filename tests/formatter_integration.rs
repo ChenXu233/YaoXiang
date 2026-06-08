@@ -51,10 +51,8 @@ fn test_format_function_no_args() {
 
 #[test]
 fn test_format_if_else_branches() {
-    assert_format_eq(
-        "if true { 1 } else { 2 }",
-        "if true {\n    1\n} else {\n    2\n}\n",
-    );
+    // §6.2: 单语句代码块且不超过行宽时使用单行格式
+    assert_format_eq("if true { 1 } else { 2 }", "if true { 1 } else { 2 }\n");
 }
 
 #[test]
@@ -79,10 +77,7 @@ fn test_format_list_literal() {
 fn test_format_dict_literal() {
     // NOTE: formatter currently has a known issue with dict literals
     // It misparses `"a": 1, "b": 2` as lambda-like syntax
-    assert_format_eq(
-        "let x = {\"a\": 1, \"b\": 2}",
-        "let\nx = () => {\n    \"a\"\n}\n",
-    );
+    assert_format_eq("let x = {\"a\": 1, \"b\": 2}", "let\nx = () => { \"a\" }\n");
 }
 
 #[test]

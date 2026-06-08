@@ -1,34 +1,34 @@
 ---
-title: "RFC-018：LLVM AOT 编译器与 L3 透明并发设计"
+title: "RFC-018：LLVM AOT 编译器设计"
+status: "审核中"
+author: "晨煦"
+created: "2026-02-15"
+updated: "2026-06-05"
 ---
 
-# RFC-018：LLVM AOT 编译器与 L3 透明并发设计
-
-> **状态**: 草案
-> **作者**: 晨煦
-> **创建日期**: 2026-02-15
-> **最后更新**: 2026-03-10
+# RFC-018：LLVM AOT 编译器设计
 
 > **参考**:
-> - [RFC-001: 并作模型与错误处理系统](./accepted/001-concurrent-model-error-handling.md)
+> - [RFC-024: 基于 spawn 块的并发模型](./accepted/024-concurrency-model.md)
 > - [RFC-008: Runtime 并发模型与调度器脱耦设计](./accepted/008-runtime-concurrency-model.md)
 > - [RFC-009: 所有权模型设计](./accepted/009-ownership-model.md)
 
 ## 摘要
 
-本文档设计 YaoXiang 语言的 LLVM AOT 编译器，目标是通过预先编译生成机器码 + DAG 元数据，由运行时**全局 DAG 调度器**根据**自底向上**依赖分析执行。
+本文档设计 YaoXiang 语言的 LLVM AOT 编译器，目标是通过预先编译生成机器码 + DAG 元数据，由运行时在 **spawn 块内进行 DAG 调度**，根据**自底向上**依赖分析执行。
 
 **核心创新**：
 - 不是"遇到函数调用就生成 Future"，而是**从"需要结果的地方"反向分析依赖**
 - **叶子节点优先并行执行**，依赖链按序向上遍历
 - **孤岛 DAG 独立并行**：没有消费者的节点不阻塞主流程
 - **无限循环作为后台 DAG**：调度器切片执行，不会卡死
+- **DAG 分析仅限 spawn 块内**：编译高效，行为可控
 
 此设计与 Rust async/await + tokio 运行时模式有本质区别：
 - Rust：用户写 `async fn`，编译器生成状态机
-- YaoXiang：用户写普通函数，**编译器自动分析 DAG**，调度器自底向上执行
+- YaoXiang：用户写普通函数，**编译器在 spawn 块内自动分析 DAG**，调度器自底向上执行
 
-遵循 RFC-001 的 L3 透明并发设计：默认 @auto（自动并行），@block 同步是特例，解决颜色函数问题。
+遵循 RFC-024 的 spawn 块并发模型：普通代码顺序执行，spawn 块内 DAG 调度并行。
 
 ## 动机
 
@@ -42,26 +42,26 @@ title: "RFC-018：LLVM AOT 编译器与 L3 透明并发设计"
 | 部署复杂 | 需要携带解释器和运行时 |
 | 颜色函数问题 | 同步函数不能调用并发函数 |
 
-### 颜色函数问题与 L3 透明并发
+### 颜色函数问题与 spawn 块并发
 
-**传统设计（当前）**：
+**传统设计**：
 - 同步函数（蓝色）→ 不能调用 → 并发函数（红色）
 - 同步是默认，并发需要 `spawn` 标记
 - 颜色会"传染"：一旦用了并发，同一调用链上都是并发
 
-**RFC-001 L3 透明并发（目标）**：
-- L3：默认透明并发（@auto）
-- L2：显式 spawn 并发
-- L1：@block 同步模式
+**RFC-024 spawn 块并发（目标）**：
+- 普通代码顺序执行，无函数着色
+- `spawn { ... }` 块内 DAG 分析，并行执行
+- 调用方同步阻塞，无回调和 `await`
 
 **翻转后的设计（RFC-018）**：
-- 默认 L3 透明并发，编译时自动分析 DAG 依赖
-- 解决颜色函数问题：同步函数可以直接调用"默认并发"的代码
-- @block 仅作为特例强制串行执行
+- 普通代码直接生成顺序机器码，无 DAG 开销
+- spawn 块内编译时自动分析 DAG 依赖，运行时自底向上执行
+- 解决颜色函数问题：所有函数统一，无需区分同步/并发
 
-### 核心创新：自底向上执行 + 全局 DAG
+### 核心创新：自底向上执行 + spawn 块内 DAG
 
-本设计的核心创新在于**自底向上执行模型**：
+本设计的核心创新在于**自底向上执行模型**（限定在 spawn 块内）：
 
 ```
 传统调用（自顶向下）：
@@ -98,17 +98,17 @@ title: "RFC-018：LLVM AOT 编译器与 L3 透明并发设计"
 │                      YaoXiang LLVM AOT 模式                    │
 ├─────────────────────────────────────────────────────────────────┤
 │  编译时：生成机器码 + DAG 元数据                               │
-│  运行时：全局 DAG 调度器，自底向上执行                         │
+│  运行时：spawn 块内 DAG 调度器，自底向上执行                    │
 │  特点：从"需要结果的地方"反向分析依赖，叶子节点并行            │
-│  粒度：函数块内 DAG + 跨函数 DAG                               │
+│  粒度：spawn 块内 DAG                                         │
 │  用户体验：普通函数，自动并行                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 全局 DAG 调度器
+### spawn 块内 DAG 调度器
 
 ```
-整个程序的 DAG 视图：
+spawn 块内的 DAG 视图：
 
         print(result) ─────────────────────────┐
            │                                    │
@@ -134,7 +134,7 @@ fetch(url0)  fetch(url1)  fetch(url2)          │
 1. 从"最终结果"反向分析：
    print(result) → 依赖 process → 依赖 fetch
 
-2. 构建全局 DAG：
+2. 构建 spawn 块内 DAG：
    - 叶子节点：fetch（无依赖）
    - 内部节点：process, compute
    - 根节点：print
@@ -240,7 +240,7 @@ Phase 1: 自底向上分析（编译时）
     "需要 page1" → 依赖 fetch(url1)
     ...
 
-构建全局 DAG：
+构建 spawn 块内 DAG：
     fetch(url0), fetch(url1), fetch(url2) ← 叶子节点
            ↓
     parse_page(page0), parse_page(page1)   ← 依赖叶子
@@ -470,11 +470,11 @@ extern "C" {
 
 ### 调度策略
 
-| 注解 | 场景 | 调度策略 |
-|------|------|----------|
-| `@auto`（默认，L3） | 透明并发 | DAG 延迟调度，无依赖并行执行 |
-| `@block`（L1） | 强制同步 | 无 DAG，纯串行执行 |
-| 循环依赖 | 运行时检测 | 报错 |
+| 场景 | 调度策略 |
+|------|----------|
+| 普通代码（非 spawn 块） | 顺序执行，无 DAG 开销 |
+| spawn 块内 | DAG 延迟调度，无依赖并行执行 |
+| 循环依赖 | 运行时检测，报错 |
 
 ### 副作用处理：隐式 Effect System
 
@@ -482,10 +482,10 @@ extern "C" {
 
 ```
 用户代码：
-  print("a");
-  print("b");
-  let x = compute(1);
-  let y = compute(2);
+  print("a")
+  print("b")
+  x = compute(1)
+  y = compute(2)
 
 编译器推断：
   print → @IO（外部调用）
@@ -494,33 +494,23 @@ extern "C" {
 调度器执行：
   print("a") ──→ 顺序（都是 @IO）
   print("b") ──→ 顺序
-  compute(1) ─┬─→ 并行（DAG 调度）
+  compute(1) ─┬─→ 并行（spawn 块内 DAG 调度）
   compute(2) ─┘
 ```
 
 ### 与三层运行时的关系
 
-RFC-008 定义了 Embedded / Standard / Full 三层运行时架构。LLVM AOT 编译器与三层运行时的对应关系：
+RFC-008 定义了 Embedded / Standard / Full 三层运行时架构。LLVM AOT 编译器与三层运行时的对应关系（对齐 RFC-024）：
 
 | 运行时 | LLVM AOT 行为 |
 |--------|---------------|
-| **Embedded** | 无 DAG 调度，直接生成顺序机器码 |
-| **Standard** | DAG + 单线程调度（num_workers=1） |
-| **Full** | DAG + 多线程调度（num_workers>1），支持 WorkStealing |
+| **Embedded** | 无 spawn 支持，直接生成顺序机器码 |
+| **Standard** | 支持 spawn 块，spawn 块内 DAG + 单线程调度（num_workers=1） |
+| **Full** | 支持 spawn 块，spawn 块内 DAG + 多线程调度（num_workers>1），支持 WorkStealing |
 
 ### 调度器接口设计
 
 ```rust
-/// 调度策略
-pub enum ScheduleStrategy {
-    /// @block：强制串行，无 DAG
-    Serial,
-    /// @eager：急切求值，等待依赖完成
-    Eager,
-    /// @auto（默认）：延迟调度，DAG 自动调度
-    Lazy,
-}
-
 /// 副作用标签
 pub enum EffectTag {
     /// 纯函数，无副作用
@@ -531,10 +521,10 @@ pub enum EffectTag {
 
 /// DAG 调度器 trait
 pub trait DAGScheduler: Send + Sync {
-    /// 调度执行（带策略参数）
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint], strategy: ScheduleStrategy) -> RuntimeValue;
+    /// 调度执行 spawn 块内的 DAG
+    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue;
 
-    /// 单函数执行
+    /// 单函数执行（普通代码，顺序执行）
     fn execute(&self, func: &CompiledFunction, args: &[RuntimeValue]) -> RuntimeValue;
 }
 ```
@@ -544,7 +534,7 @@ pub trait DAGScheduler: Send + Sync {
 ### 优点
 
 1. **性能提升**：AOT 编译比解释执行快 10-100x
-2. **解决颜色函数**：默认并发，同步是特例
+2. **解决颜色函数**：无函数着色，spawn 块内并行
 3. **统一运行时**：解释器和 LLVM 共享同一调度器
 5. **隐式副作用**：用户无感知，编译器自动处理
 6. **所有权安全**：依赖 Rust 风格的所有权模型，无数据竞争
@@ -559,7 +549,7 @@ pub trait DAGScheduler: Send + Sync {
 
 | RFC | 一致性 |
 |-----|--------|
-| RFC-001 并作模型 | ✅ DAG 依赖分析是核心 |
+| RFC-024 spawn 块并发模型 | ✅ DAG 分析限定在 spawn 块内 |
 | RFC-008 运行时架构 | ✅ 运行时调度器设计一致 |
 | RFC-009 所有权模型 | ✅ ARC 运行时正确实现 |
 
@@ -567,7 +557,7 @@ pub trait DAGScheduler: Send + Sync {
 
 | 方案 | 描述 | 为什么不选 |
 |------|------|-----------|
-| 仅用解释器 | 不需要 AOT | 性能不足，颜色函数问题 |
+| 仅用解释器 | 不需要 AOT | 性能不足，无 spawn 块并行支持 |
 | 纯静态编译 | 无运行时调度 | 延迟调度需要在运行时 |
 | 链接外部 LLVM runtime | 使用 LLVM 的 runtime | 需要额外依赖 |
 
@@ -597,10 +587,10 @@ pub trait DAGScheduler: Send + Sync {
 
 #### 阶段 4：DAG 收集（2-3 天）
 
-- [ ] 在代码生成时收集 DAG 信息
-- [ ] 记录函数依赖关系
+- [ ] 在代码生成时收集 spawn 块内的 DAG 信息
+- [ ] 记录 spawn 块内函数依赖关系
 - [ ] 副作用推断（@IO / @Pure）
-- [ ] 生成 DAG 元数据
+- [ ] 生成 spawn 块内 DAG 元数据
 
 #### 阶段 5：运行时库（3-5 天）
 
@@ -617,7 +607,7 @@ pub trait DAGScheduler: Send + Sync {
 
 ### 依赖关系
 
-- RFC-001：并作模型（已接受）
+- RFC-024：基于 spawn 块的并发模型（已接受）
 - RFC-008：Runtime 并发模型（已接受）
 - RFC-009：所有权模型（已接受）
 
@@ -685,9 +675,9 @@ pub trait DAGScheduler: Send + Sync {
 | Lazy Scheduling[^2] | ✅ | ❌ | ❌ | N/A |
 | SISAL[^3] | ✅ | ✅ (全局) | N/A (单赋值) | N/A |
 | Mul-T[^4] | ✅ | ❌ | ❌ | N/A |
-| **YaoXiang** | ✅ | ✅ (函数内) | ✅ (隐式) | ✅ (ARC) |
+| **YaoXiang** | ✅ | ✅ (spawn 块内) | ✅ (隐式) | ✅ (ARC) |
 
-**YaoXiang 的创新**：用现代语言特性（所有权 + 隐式副作用）简化传统设计，将 DAG 约束在函数块内降低复杂度。
+**YaoXiang 的创新**：用现代语言特性（所有权 + 隐式副作用）简化传统设计，将 DAG 约束在 spawn 块内降低复杂度。
 
 ## 与传统自动并行方法的对比
 
@@ -786,10 +776,10 @@ modify :: *Array Int -> *Array Int
 |------|-----------|-------------------|
 | 编译产物 | 状态机 + 机器码 | 机器码 + DAG |
 | 运行时 | tokio | DAG Scheduler |
-| 调度时机 | 编译期确定 await 点 | 运行时按需调度 |
+| 调度时机 | 编译期确定 await 点 | 运行时按需调度（spawn 块内） |
 | 并发控制 | 状态机状态 | DAG 依赖边 |
-| 颜色函数 | async 传染 | **L3 透明并发，@block 特例** |
-| 注解 | async/await | @auto/@eager/@block |
+| 颜色函数 | async 传染 | **无函数着色，spawn 块内并行** |
+| 注解 | async/await | 无（spawn 块是唯一并行原语） |
 
 ### 附录 B：调度器优化示例
 
@@ -808,9 +798,9 @@ modify :: *Array Int -> *Array Int
 **场景 2：依赖未被使用**
 
 ```
-let a = expensive_compute(); // 计算了
-let b = other_thing();       // 不需要 a
-print(b);                    // 直接返回 b，跳过 a
+a = expensive_compute()  // 计算了
+b = other_thing()        // 不需要 a
+print(b)                 // 直接返回 b，跳过 a
 ```
 
 ### 附录 C：设计讨论记录
@@ -818,14 +808,14 @@ print(b);                    // 直接返回 b，跳过 a
 | 决策 | 决定 | 日期 |
 |------|------|------|
 | 采用 LLVM AOT | 直接 Codegen，不过度抽象 | 2026-02-15 |
-| DAG 作用域 | 函数块内，不跨函数 | 2026-02-15 |
-
+| DAG 作用域 | spawn 块内，不跨 spawn 块 | 2026-06-05 |
 | 执行模型 | **自底向上**：从结果反向分析依赖，叶子并行 | 2026-03-10 |
 | 孤岛 DAG | 无人消费的节点独立并行 | 2026-03-10 |
 | 无限循环 | 后台 DAG，调度器切片执行 | 2026-03-10 |
 | 副作用处理 | 隐式 Effect System，用户无感知 | 2026-02-15 |
 | 粒度控制 | 并发数限制 + 自适应 | 2026-02-16 |
 | 论文引用 | 添加 Lazy Task Creation 等 | 2026-02-16 |
+| 并发模型对齐 | 对齐 RFC-024 spawn 块并发模型，移除旧注解 | 2026-06-05 |
 
 ---
 
@@ -848,7 +838,7 @@ print(b);                    // 直接返回 b，跳过 a
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [inkwell LLVM bindings](https://cranelift.dev/)
 - [tokio 运行时设计](https://tokio.rs/)
-- [RFC-001: 并作模型](./accepted/001-concurrent-model-error-handling.md)
+- [RFC-024: 基于 spawn 块的并发模型](./accepted/024-concurrency-model.md)
 - [RFC-008: Runtime 并发模型](./accepted/008-runtime-concurrency-model.md)
 - [RFC-009: 所有权模型](./accepted/009-ownership-model.md)
 - [Implicit Parallelism - Wikipedia](https://en.wikipedia.org/wiki/Implicit_parallelism)
@@ -861,5 +851,7 @@ print(b);                    // 直接返回 b，跳过 a
 |------|------|------|
 | **草案** | `docs/design/rfc/` | 作者草稿，等待提交审核 |
 | **审核中** | `docs/design/rfc/` | 开放社区讨论和反馈 |
-| **已接受** | `docs/design/accepted/` | 成为正式设计文档 |
+| **已接受** | `docs/design/rfc/accepted/` | 成为正式设计文档 |
 | **已拒绝** | `docs/design/rfc/` | 保留在 RFC 目录 |
+
+> 当前状态：**审核中** — 已对齐 RFC-024 spawn 块并发模型

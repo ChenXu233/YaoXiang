@@ -355,7 +355,6 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
         crate::frontend::core::typecheck::MonoType::Fn {
             params,
             return_type,
-            is_async,
         } => {
             let params_str = params
                 .iter()
@@ -363,8 +362,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .collect::<Vec<_>>()
                 .join(", ");
             let ret_str = dump_type_detail(return_type);
-            let async_str = if *is_async { "async " } else { "" };
-            format!("{}fn({}) -> {}", async_str, params_str, ret_str)
+            format!("fn({}) -> {}", params_str, ret_str)
         }
         crate::frontend::core::typecheck::MonoType::TypeRef(name) => name.clone(),
         crate::frontend::core::typecheck::MonoType::TypeVar(var) => format!("T{:?}", var),

@@ -375,8 +375,8 @@ impl LifecycleTracker {
             }
 
             // Spawn: 参数被消费
-            Instruction::Spawn { args, .. } => {
-                for arg in args {
+            Instruction::Spawn { closures, .. } => {
+                for arg in closures {
                     self.record_consume(arg, ConsumeType::CallArg, location);
                 }
             }
@@ -738,7 +738,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -768,7 +767,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -801,7 +799,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -839,7 +836,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -876,7 +872,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -916,7 +911,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -951,7 +945,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Void,
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -977,7 +970,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1003,7 +995,6 @@ mod tests {
             name: "test".to_string(),
             params: vec![MonoType::Int(0)],
             return_type: MonoType::Int(0),
-            is_async: false,
             locals: vec![],
             blocks: vec![BasicBlock {
                 label: 0,

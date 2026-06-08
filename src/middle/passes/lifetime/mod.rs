@@ -14,6 +14,7 @@
 //! - `clone.rs`: Clone 语义检查（CloneMovedValue、CloneDroppedValue 检测）
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -31,7 +32,6 @@ pub mod move_semantics;
 pub mod mut_check;
 pub mod ownership_flow;
 pub mod ref_semantics;
-pub mod send_sync;
 pub mod unsafe_check;
 
 pub use borrow_checker::*;
@@ -141,7 +141,7 @@ impl OwnershipChecker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> Vec<OwnershipError> {
+    ) -> Vec<Diagnostic> {
         let move_errors = self.move_checker.check_function(func);
         let drop_errors = self.drop_checker.check_function(func);
         let mut_errors = self.mut_checker.check_function(func);
@@ -151,7 +151,7 @@ impl OwnershipChecker {
 
         // 借用检查
         let _borrow_errors = self.borrow_checker.check_function(func);
-        let borrow_ownership_errors = self.borrow_checker.to_ownership_errors();
+        let borrow_diagnostics = self.borrow_checker.to_diagnostics();
 
         // 任务内循环追踪（警告模式，不计入错误）
         let _intra_task_warnings = self.intra_task_tracker.track_function(func);
@@ -165,47 +165,47 @@ impl OwnershipChecker {
             .chain(clone_errors)
             .chain(cycle_errors)
             .cloned()
-            .chain(borrow_ownership_errors)
+            .chain(borrow_diagnostics)
             .collect()
     }
 
     /// 获取 Move 检查器的错误
-    pub fn move_errors(&self) -> &[OwnershipError] {
+    pub fn move_errors(&self) -> &[Diagnostic] {
         &self.move_checker.errors
     }
 
     /// 获取 Drop 检查器的错误
-    pub fn drop_errors(&self) -> &[OwnershipError] {
+    pub fn drop_errors(&self) -> &[Diagnostic] {
         &self.drop_checker.errors
     }
 
     /// 获取 Mut 检查器的错误
-    pub fn mut_errors(&self) -> &[OwnershipError] {
+    pub fn mut_errors(&self) -> &[Diagnostic] {
         self.mut_checker.errors()
     }
 
     /// 获取 Ref 检查器的错误
-    pub fn ref_errors(&self) -> &[OwnershipError] {
+    pub fn ref_errors(&self) -> &[Diagnostic] {
         self.ref_checker.errors()
     }
 
     /// 获取 Clone 检查器的错误
-    pub fn clone_errors(&self) -> &[OwnershipError] {
+    pub fn clone_errors(&self) -> &[Diagnostic] {
         self.clone_checker.errors()
     }
 
     /// 获取跨 spawn 循环检查的错误
-    pub fn cycle_errors(&self) -> &[OwnershipError] {
+    pub fn cycle_errors(&self) -> &[Diagnostic] {
         self.cycle_checker.errors()
     }
 
     /// 获取任务内循环警告（不阻断编译）
-    pub fn intra_task_warnings(&self) -> &[OwnershipError] {
+    pub fn intra_task_warnings(&self) -> &[Diagnostic] {
         self.intra_task_tracker.warnings()
     }
 
     /// 获取 unsafe 绕过记录
-    pub fn unsafe_bypasses(&self) -> &[OwnershipError] {
+    pub fn unsafe_bypasses(&self) -> &[Diagnostic] {
         self.cycle_checker.unsafe_bypasses()
     }
 }
@@ -213,6 +213,55 @@ impl OwnershipChecker {
 impl Default for OwnershipChecker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// 统一所有权检查 Pass
+///
+/// 将 MutChecker（需要 mut_locals 上下文）和 OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
+/// 统一为单次调用，避免 diagnostic 层分别调用两个检查器并手动过滤重复错误。
+pub struct OwnershipPass;
+
+impl OwnershipPass {
+    /// 对整个模块执行所有权检查，返回所有错误
+    pub fn check_module(module: &crate::middle::core::ir::ModuleIR) -> Vec<Diagnostic> {
+        let mut all_errors = Vec::new();
+        let empty_set = HashSet::new();
+
+        for func in &module.functions {
+            // MutChecker（需要 mut_locals / loop_binding_locals / local_names 上下文）
+            let mut mut_checker = MutChecker::new();
+            let mut_locals = module.mut_locals.get(&func.name).unwrap_or(&empty_set);
+            let loop_binding_locals = module.loop_binding_locals.get(&func.name);
+            let local_names = module.local_names.get(&func.name);
+            let mut_errors = mut_checker.check_function_with_mut_locals(
+                func,
+                mut_locals,
+                loop_binding_locals,
+                local_names,
+            );
+            all_errors.extend(mut_errors);
+
+            // OwnershipChecker（Move/Drop/Ref/Clone/Borrow）
+            // 过滤掉 MutChecker 已覆盖的错误类别，避免重复报告
+            let mut ownership_checker = OwnershipChecker::new();
+            let ownership_errors: Vec<Diagnostic> = ownership_checker
+                .check_function(func)
+                .into_iter()
+                .filter(|err| {
+                    // E2016=不可变赋值, E2022=不可变变异, E2023=不可变字段赋值
+                    // E2025=重赋值非空, E2014=使用已移动的值
+                    // 这些已由 MutChecker 处理
+                    !matches!(
+                        err.code.as_str(),
+                        "E2014" | "E2016" | "E2022" | "E2023" | "E2025"
+                    )
+                })
+                .collect();
+            all_errors.extend(ownership_errors);
+        }
+
+        all_errors
     }
 }
 
@@ -330,9 +379,11 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         }
 
         //：result = spawn Spawn func(args...)
-        Instruction::Spawn { func, args, result } => {
-            let mut ops = vec![func.clone(), result.clone()];
-            ops.extend(args.iter().cloned());
+        Instruction::Spawn {
+            closures, result, ..
+        } => {
+            let mut ops = vec![result.clone()];
+            ops.extend(closures.iter().cloned());
             ops
         }
 
@@ -363,11 +414,7 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
         Instruction::Push(v) | Instruction::Pop(v) => vec![v.clone()],
 
         // 无操作数的指令
-        Instruction::Dup
-        | Instruction::Swap
-        | Instruction::Yield
-        | Instruction::EvalPush(_)
-        | Instruction::EvalPop => Vec::new(),
+        Instruction::Dup | Instruction::Swap | Instruction::Yield => Vec::new(),
 
         // 简单的跳转
         Instruction::Jmp(_) => Vec::new(),

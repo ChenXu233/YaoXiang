@@ -19,7 +19,6 @@ fn fn_type(
     MonoType::Fn {
         params,
         return_type: Box::new(return_type),
-        is_async: false,
     }
 }
 

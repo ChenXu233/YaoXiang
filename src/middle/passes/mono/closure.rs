@@ -172,7 +172,6 @@ impl ClosureMonomorphizer for super::Monomorphizer {
             name: format!("{}_mono", generic_body.name),
             params: new_params,
             return_type: new_return_type,
-            is_async: generic_body.is_async,
             locals: new_locals,
             blocks: new_blocks,
             entry: generic_body.entry,

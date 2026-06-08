@@ -4,7 +4,6 @@
 
 use crate::backends::common::RuntimeValue;
 use crate::backends::common::value::TaskId;
-use crate::backends::interpreter::EvalStrategy;
 use crate::middle::bytecode::{BytecodeFunction, Label};
 
 /// Maximum number of local variables
@@ -28,8 +27,6 @@ pub struct Frame {
     upvalues: Vec<RuntimeValue>,
     /// Entry IP (for stack unwinding)
     entry_ip: usize,
-    /// Evaluation strategy stack (for `@block/@auto/@eager`).
-    eval_stack: Vec<EvalStrategy>,
     /// Spawn task groups (only meaningful inside `@block` scopes).
     spawn_groups: Vec<Vec<TaskId>>,
 }
@@ -45,7 +42,6 @@ impl Frame {
             locals: vec![RuntimeValue::Unit; local_count],
             upvalues: Vec::new(),
             entry_ip: 0,
-            eval_stack: Vec::new(),
             spawn_groups: Vec::new(),
         }
     }
@@ -119,24 +115,6 @@ impl Frame {
             self.registers.resize(index + 1, RuntimeValue::Unit);
         }
         self.registers[index] = value;
-    }
-
-    pub fn current_eval(
-        &self,
-        fallback: EvalStrategy,
-    ) -> EvalStrategy {
-        self.eval_stack.last().copied().unwrap_or(fallback)
-    }
-
-    pub fn push_eval(
-        &mut self,
-        strategy: EvalStrategy,
-    ) {
-        self.eval_stack.push(strategy);
-    }
-
-    pub fn pop_eval(&mut self) -> Option<EvalStrategy> {
-        self.eval_stack.pop()
     }
 
     pub fn push_spawn_group(&mut self) {

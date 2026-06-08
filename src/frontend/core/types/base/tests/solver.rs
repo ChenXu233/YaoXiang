@@ -222,30 +222,12 @@ fn test_unify_fn_params() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(solver.unify(&f1, &f2).is_ok());
-}
-
-#[test]
-fn test_unify_fn_async_mismatch() {
-    let mut solver = s();
-    let f1 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Void),
-        is_async: false,
-    };
-    let f2 = MonoType::Fn {
-        params: vec![],
-        return_type: Box::new(MonoType::Void),
-        is_async: true,
-    };
-    assert!(solver.unify(&f1, &f2).is_err());
 }
 
 #[test]
@@ -254,12 +236,10 @@ fn test_unify_fn_return_mismatch() {
     let f1 = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Int(32)),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
     assert!(solver.unify(&f1, &f2).is_err());
 }
@@ -271,12 +251,10 @@ fn test_unify_fn_with_vars() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(v),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert!(solver.unify(&f1, &f2).is_ok());
 }
@@ -456,7 +434,6 @@ fn test_instantiate_poly_fresh_vars() {
         MonoType::Fn {
             params: vec![MonoType::TypeVar(tv(0))],
             return_type: Box::new(MonoType::TypeVar(tv(1))),
-            is_async: false,
         },
     );
     let inst = solver.instantiate(&poly);
@@ -484,7 +461,6 @@ fn test_generalize_captures_free_vars() {
     let body = MonoType::Fn {
         params: vec![MonoType::TypeVar(v0)],
         return_type: Box::new(MonoType::TypeVar(v1)),
-        is_async: false,
     };
     let poly = solver.generalize(&body);
     assert!(!poly.is_mono());
@@ -721,7 +697,6 @@ fn test_expand_type_through_all_containers() {
     let fn_t = MonoType::Fn {
         params: vec![MonoType::TypeVar(v)],
         return_type: Box::new(MonoType::TypeVar(v)),
-        is_async: false,
     };
     let f = solver.resolve_type(&fn_t);
     assert!(matches!(f, MonoType::Fn { .. }));
@@ -854,12 +829,10 @@ fn test_unify_fn_param_count_mismatch() {
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     let f2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     assert!(
         solver.unify(&f1, &f2).is_err(),
@@ -955,7 +928,6 @@ fn test_contains_var_in_fn_params() {
     let f = MonoType::Fn {
         params: vec![MonoType::TypeVar(v), MonoType::Int(32)],
         return_type: Box::new(MonoType::Void),
-        is_async: false,
     };
     assert!(
         solver.contains_var(&f, v),
@@ -1052,7 +1024,6 @@ fn test_generalize_collects_free_vars() {
             MonoType::TypeVar(v0),
             MonoType::TypeVar(v1),
         ])),
-        is_async: false,
     };
     let poly = solver.generalize(&body);
     // Should generalize both v0 and v1
@@ -1206,7 +1177,6 @@ fn test_expand_mut_fn_with_bound_var() {
     let f = MonoType::Fn {
         params: vec![MonoType::TypeVar(v)],
         return_type: Box::new(MonoType::TypeVar(v)),
-        is_async: false,
     };
     let resolved = solver.resolve(&f);
     assert!(matches!(resolved, MonoType::Fn { .. }));

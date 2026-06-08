@@ -116,7 +116,14 @@ fn test_all_yx_files_pass() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let code = output.status.code().unwrap_or(-1);
 
-        if !stdout.contains("ALL TESTS PASSED") {
+        let is_error_test = relative.contains("10-errors");
+
+        if is_error_test {
+            // Error test files should fail compilation
+            if code == 0 {
+                failed.push((relative, code, stdout, stderr));
+            }
+        } else if !stdout.contains("ALL TESTS PASSED") {
             failed.push((relative, code, stdout, stderr));
         }
     }

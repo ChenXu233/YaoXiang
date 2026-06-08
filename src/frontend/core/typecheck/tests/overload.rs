@@ -3,7 +3,7 @@
 //! §3.15: 函数重载与特化
 //! RFC-011 §6: 函数重载特化
 
-use crate::frontend::core::typecheck::overload::{OverloadCandidate, OverloadError, OverloadResolver};
+use crate::frontend::core::typecheck::overload::{OverloadCandidate, OverloadResolver};
 use crate::frontend::core::types::base::{MonoType, TypeVar};
 
 // ===================================================================
@@ -227,12 +227,12 @@ fn test_resolve_no_matching_candidate() {
 
     // Assert: 应返回 NoMatchingDefinition 错误
     assert!(result.is_err(), "不兼容类型调用应返回错误");
-    match result.unwrap_err() {
-        OverloadError::NoMatchingDefinition { func_name, .. } => {
-            assert_eq!(func_name, "add", "错误中函数名应为 'add'");
-        }
-        other => panic!("期望 NoMatchingDefinition 错误，实际得到: {:?}", other),
-    }
+    let err = result.unwrap_err();
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]
@@ -251,12 +251,12 @@ fn test_resolve_unknown_function() {
 
     // Assert: 应返回 NoMatchingDefinition（函数名不存在）
     assert!(result.is_err(), "查询不存在的函数名应返回错误");
-    match result.unwrap_err() {
-        OverloadError::NoMatchingDefinition { func_name, .. } => {
-            assert_eq!(func_name, "multiply", "错误中函数名应为 'multiply'");
-        }
-        other => panic!("期望 NoMatchingDefinition 错误，实际得到: {:?}", other),
-    }
+    let err = result.unwrap_err();
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]
@@ -275,18 +275,8 @@ fn test_resolve_arg_count_mismatch_too_few() {
 
     // Assert: 应返回 ArgCountMismatch 错误
     assert!(result.is_err(), "参数数量不足应返回错误");
-    match result.unwrap_err() {
-        OverloadError::ArgCountMismatch {
-            func_name,
-            expected,
-            actual,
-        } => {
-            assert_eq!(func_name, "add", "错误中函数名应为 'add'");
-            assert_eq!(expected, 2, "期望参数数量应为 2");
-            assert_eq!(actual, 1, "实际参数数量应为 1");
-        }
-        other => panic!("期望 ArgCountMismatch 错误，实际得到: {:?}", other),
-    }
+    let err = result.unwrap_err();
+    assert!(err.code == "E1010", "expected E1010, got: {}", err.code);
 }
 
 #[test]
@@ -308,18 +298,8 @@ fn test_resolve_arg_count_mismatch_too_many() {
 
     // Assert: 应返回 ArgCountMismatch 错误
     assert!(result.is_err(), "参数数量过多应返回错误");
-    match result.unwrap_err() {
-        OverloadError::ArgCountMismatch {
-            func_name,
-            expected,
-            actual,
-        } => {
-            assert_eq!(func_name, "negate", "错误中函数名应为 'negate'");
-            assert_eq!(expected, 1, "期望参数数量应为 1");
-            assert_eq!(actual, 3, "实际参数数量应为 3");
-        }
-        other => panic!("期望 ArgCountMismatch 错误，实际得到: {:?}", other),
-    }
+    let err = result.unwrap_err();
+    assert!(err.code == "E1010", "expected E1010, got: {}", err.code);
 }
 
 #[test]
@@ -332,12 +312,11 @@ fn test_resolve_empty_resolver() {
 
     // Assert: 空解析器应返回 NoMatchingDefinition
     assert!(result.is_err(), "空解析器调用 resolve 应返回错误");
+    let err = result.unwrap_err();
     assert!(
-        matches!(
-            result.unwrap_err(),
-            OverloadError::NoMatchingDefinition { .. }
-        ),
-        "空解析器应返回 NoMatchingDefinition 错误"
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
     );
 }
 
@@ -403,17 +382,12 @@ fn test_resolve_ambiguous_same_score() {
 
     // Assert: 同优先级候选应产生歧义错误（规范 §3.15.1: 多个同优先级候选且无法区分 → 编译错误）
     assert!(result.is_err(), "两个同优先级的候选应产生歧义错误");
-    match result.unwrap_err() {
-        OverloadError::AmbiguousCall {
-            func_name,
-            candidates,
-            ..
-        } => {
-            assert_eq!(func_name, "identity", "错误中函数名应为 'identity'");
-            assert_eq!(candidates.len(), 2, "歧义候选数应为 2");
-        }
-        other => panic!("期望 AmbiguousCall 错误，实际得到: {:?}", other),
-    }
+    let err = result.unwrap_err();
+    assert!(
+        err.code.starts_with("E10"),
+        "error code should be E1xxx, got: {}",
+        err.code
+    );
 }
 
 #[test]

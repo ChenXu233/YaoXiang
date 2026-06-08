@@ -118,6 +118,11 @@ Point: Type = {
 - 字段名后直接跟冒号和类型
 - 接口名写在类型体内表示实现该接口
 
+> **命名空间归属**：`Type.name` 前缀（如 `Point.draw`）表示函数属于 `Point` 的命名空间。
+> 它不触发任何隐式绑定。要让 `p.draw()` 这种 `.` 调用语法生效，必须显式绑定：
+> `Point.draw = draw[0]`。
+> 详见 RFC-004 和 RFC-010。
+
 #### 3.1.1 字段默认值
 
 类型字段可以指定默认值，构造时可选提供：
@@ -296,7 +301,7 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,
+    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T)
 }
 ```
@@ -734,53 +739,30 @@ filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
 
 ```yaoxiang
 p = Point(1.0, 2.0)
-p.print()          // print 声明 &self → 编译器创建 &Point 令牌
-p.shift(1.0, 1.0)  // shift 声明 &mut self → 编译器创建 &mut Point 令牌
+p.print()          // print 的参数类型为 &Point → 编译器创建 &Point 令牌
+p.shift(1.0, 1.0)  // shift 的参数类型为 &mut Point → 编译器创建 &mut Point 令牌
 p2 = p             // 后续不再使用 → Move
 ```
 
-### 12.5 冻结机制
+### 12.5 令牌冲突检测
 
-`&mut T` 令牌可以临时"冻结"以产生 `&T` 令牌：
-
-```yaoxiang
-modify_and_read: (p: &mut Point) -> Void = {
-    p.x = 10.0                   // 使用 &mut Point 修改
-    
-    // 冻结 &mut，获取只读视图
-    view: &Point = freeze(p)     // p 在此处被冻结
-    print(view.x)                // 通过 &Point 读取
-    print(view.y)
-    // view 离开作用域，冻结解除
-    
-    p.y = 20.0                   // &mut Point 恢复可用
-}
-```
-
-`freeze` 的语义：
-- 接受 `&mut T`，返回 `&T`
-- 在 `&T` 存活期间，原 `&mut T` 不可用
-- `&T` 离开作用域后，`&mut T` 自动恢复
-- 这是**流敏感活性分析**——编译器在函数体内追踪令牌状态
-
-### 12.6 令牌冲突检测
-
-编译器对令牌值做**流敏感活性分析**，追踪每个令牌的状态（活跃/冻结/已移动）：
+编译器对令牌值做**流敏感活性分析**，追踪每个令牌的状态（活跃/已移动）：
 
 ```yaoxiang
 // ❌ &mut 和派生的 &T 不能同时活跃
 bad_alias: (p: &mut Point) -> Void = {
-    view: &Point = freeze(p)     // p 被冻结
-    p.x = 10.0                   // ❌ 编译错误：WriteToken 在冻结状态
-    print(view.x)
+    p.x = 10.0                   // ✅ 正常使用 WriteToken
+    print(p.y)
 }
 
-// ✅ 冻结解除后可继续使用 &mut
+// ✅ 令牌作用域结束后自动释放
 good_seq: (p: &mut Point) -> Void = {
-    view: &Point = freeze(p)     // p 被冻结
-    print(view.x)                // 使用 &T
-    // view 离开作用域，冻结解除
-    p.x = 10.0                   // ✅ WriteToken 已恢复
+    {
+        // 内部作用域
+        print(p.x)               // 使用 &mut Point
+    }
+    // 内部作用域结束
+    p.x = 10.0                   // ✅ WriteToken 仍可用
 }
 
 // ❌ 同一实参不能同时创建 &mut 令牌和其他令牌
@@ -789,7 +771,7 @@ p = Point(1.0, 2.0)
 alias_bad(p, p)                  // ❌ p 同时派生 &mut 和 & 令牌
 ```
 
-### 12.7 编译器内部：品牌机制
+### 12.6 编译器内部：品牌机制
 
 用户从不接触品牌。编译器在内部为每个令牌分配编译期唯一标识：
 
@@ -801,20 +783,20 @@ alias_bad(p, p)                  // ❌ p 同时派生 &mut 和 & 令牌
 ```
 
 品牌的用途：
-- **防伪造**：令牌只能从所有者胶囊或 freeze 操作获得，不能凭空构造
+- **防伪造**：令牌只能从所有者胶囊获得，不能凭空构造
 - **关联追踪**：字段访问派生的 `&Float` 携带派生品牌（`#N.field_x`），编译器可追踪到父令牌
 - **冲突检测**：同源 WriteToken 和派生 ReadToken 不能同时活跃
 
 品牌在单态化和内联后完全消失，生成的机器码中不存在。**零运行时开销。**
 
-### 12.8 令牌 Sum 类型
+### 12.7 令牌 Sum 类型
 
 ```
 &BorrowToken ::= &T          // ReadToken（Dup，可复制）
                | &mut T      // WriteToken（Linear，独占）
 ```
 
-### 12.9 借用令牌 vs ref
+### 12.8 借用令牌 vs ref
 
 | | `&T` / `&mut T` | `ref` |
 |------|------|------|
@@ -922,7 +904,4 @@ value.clone()   // 创建独立副本，修改不影响原值
 // 令牌传播
 // ✅ 可返回、可存结构体、可被闭包捕获
 // ❌ 不可跨任务（未实现 Send）
-
-// 冻结
-view: &T = freeze(mut_ref)   // &mut T → &T（冻结期间 &mut T 不可用）
 ```

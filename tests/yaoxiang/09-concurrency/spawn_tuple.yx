@@ -1,0 +1,14 @@
+// 09-concurrency/spawn_tuple.yx
+// 验证: spawn {} 返回元组
+
+use std.io
+
+main = {
+    result = spawn {
+        t1 = 1 + 1
+        t2 = 2 + 2
+        return (t1, t2)
+    }
+    io.println(result)
+    io.println("ALL TESTS PASSED")
+}

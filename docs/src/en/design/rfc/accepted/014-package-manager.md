@@ -1,28 +1,28 @@
 ---
 title: "RFC-014: Package Management System Design"
+status: "Accepted"
+author: "Chen Xu"
+created: "2026-02-12"
+updated: "2026-02-14"
 ---
 
 # RFC-014: Package Management System Design
 
-> **Status**: Accepted
-> **Author**: Chen Xu
-> **Created**: 2026-02-12
-> **Last Updated**: 2026-02-14
+## Summary
 
-## Abstract
-
-Design a package management system for the YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration file and `yaoxiang.lock` lock file.
+Design a package management system for YaoXiang language, supporting semantic versioning, local and GitHub dependencies, unified import syntax, `yaoxiang.toml` configuration file and `yaoxiang.lock` lock file.
 
 ## Motivation
 
 ### Why is this feature/change needed?
 
-Package management is the foundation of modern programming language ecosystems. Currently, the YaoXiang language lacks:
+Package management is the infrastructure of modern programming language ecosystems. Currently, YaoXiang language lacks:
+
 - Dependency declaration mechanism
 - Version management capability
 - Standard distribution channel
 
-### Current Problems
+### Current Problem
 
 ```
 my-project/
@@ -41,12 +41,12 @@ my-project/
 **Layered Architecture**:
 ```
 ┌─────────────────────────────────────────────┐
-│           Resolution Engine                  │ ← Dependency resolution
+│           Resolution Engine                  │ ← Dependency Resolution
 └─────────────────┬───────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────┐
-│              Source Trait                   │ ← Extensible sources
+│              Source Trait                   │ ← Extensible Source
 ├─────────────┬─────────────┬─────────────────┤
 │   Local     │    Git      │   Registry     │
 │   (Local)   │  (GitHub)   │   (Reserved)   │
@@ -58,7 +58,7 @@ my-project/
 ### Example
 
 ```bash
-# 1. Create a project
+# 1. Create project
 yaoxiang init my-project
 
 # 2. Edit yaoxiang.toml to add dependencies
@@ -127,11 +127,11 @@ integrity = "sha256-xxxx"
 ```
 use foo.bar.baz;
 
-Lookup order:
+Lookup Order:
 1. ./.yaoxiang/vendor/*/src/foo/bar/baz.yx  (vendor/)
-2. ./src/foo/bar/baz.yx           (local modules)
-3. $YXPATH/foo/bar/baz.yx         (global path, reserved)
-4. $YXLIB/std/foo/bar/baz.yx      (standard library)
+2. ./src/foo/bar/baz.yx           (Local modules)
+3. $YXPATH/foo/bar/baz.yx         (Global path, reserved)
+4. $YXLIB/std/foo/bar/baz.yx      (Standard library)
 ```
 
 ### Core Data Structures
@@ -144,7 +144,7 @@ enum Source {
     Registry { registry: String, namespace: Option<String> }, // Reserved
 }
 
-// Dependency specification
+// Dependency declaration
 enum DependencySpec {
     Version(VersionConstraint),
     Git { url: Url, version: Option<VersionConstraint> },
@@ -162,26 +162,26 @@ struct ResolvedDependency {
 
 ### CLI Command Design
 
-Adopt a unified approach that integrates the compiler, package manager, and REPL into a single CLI tool:
+Adopt a unified approach, integrating the compiler, package manager, and REPL into a single CLI tool:
 
-#### Single-file Mode vs Project Mode
+#### Single File Mode vs Project Mode
 
 | Command | Single File | Project Mode | Description |
-|---------|-------------|--------------|-------------|
-| `yaoxiang run <file>` | ✅ | ✅ | Run file/project entry |
+|------|--------|---------|------|
+| `yaoxiang run <file>` | ✅ | ✅ | Run file/project entry point |
 | `yaoxiang build` | ❌ | ✅ | Build project |
 | `yaoxiang build <file>` | ✅ | ✅ | Build single file |
 | `yaoxiang init <name>` | ❌ | ✅ | Create project |
 | `yaoxiang add <dep>` | ❌ | ✅ | Add dependency |
 | `yaoxiang update` | ❌ | ✅ | Update dependencies |
-| `yaoxiang fmt` | ✅ | ✅ | Format |
+| `yaoxiang fmt` | ✅ | ✅ | Format code |
 | `yaoxiang check` | ✅ | ✅ | Type check |
-| `yaoxiang` (no args) | ✅ | ✅ | Enter REPL directly |
+| `yaoxiang` (no arguments) | ✅ | ✅ | Enter REPL directly |
 
 #### Command Details
 
 | Command | Function | Example |
-|---------|----------|---------|
+|------|------|------|
 | `yaoxiang` | Enter REPL directly | `yaoxiang` |
 | `yaoxiang run <file>` | Run single file/project | `yaoxiang run main.yx` |
 | `yaoxiang init <name>` | Create new project | `yaoxiang init my-app` |
@@ -200,16 +200,16 @@ Adopt a unified approach that integrates the compiler, package manager, and REPL
 | `yaoxiang clean` | Clean build artifacts | `yaoxiang clean` |
 | `yaoxiang task <name>` | Run custom task | `yaoxiang task lint` |
 
-#### Command Constraint Notes
+#### Command Constraint Description
 
 ```bash
-# Single-file mode: yaoxiang.toml not required
+# Single file mode: yaoxiang.toml not required
 yaoxiang run hello.yx   # ✅ Works normally
 yaoxiang add foo        # ❌ Error: not a project directory
 
 # Project mode: yaoxiang.toml required
 cd my-project
-yaoxiang run main.yx    # ✅ Run entry file
+yaoxiang run main.yx    # ✅ Run entry point
 yaoxiang build          # ✅ Build project
 yaoxiang add foo        # ✅ Add dependency
 ```
@@ -220,25 +220,25 @@ yaoxiang add foo        # ✅ Add dependency
 - ✅ Existing module resolution logic unchanged
 - ✅ New .yaoxiang/vendor directory does not affect existing projects
 
-## Trade-offs
+## Tradeoffs
 
 ### Advantages
 
-- Unified import syntax, users don't need to care about dependency sources
+- Unified import syntax, users don't need to care about dependency source
 - Deterministic builds, lock file ensures build consistency
 - Offline support, can develop offline after downloading locally
-- Source trait facilitates future extensions
+- Source trait facilitates future extension
 
 ### Disadvantages
 
 - Requires additional storage space (.yaoxiang/vendor directory)
-- Version conflicts require manual user resolution
+- Version conflicts require manual resolution by users
 
-## Alternative Solutions
+## Alternatives
 
-| Solution | Why Not Chosen |
-|----------|----------------|
-| Real-time GitHub access | Security and cache reuse are difficult to guarantee |
+| Alternative | Why Not Chosen |
+|------|-----------|
+| Real-time GitHub access | Security and cache reuse hard to guarantee |
 | Global cache ($HOME/.yaoxiang) | Poor isolation, complex version conflicts |
 | Registry-only support | GitHub is the current mainstream code hosting platform |
 
@@ -247,10 +247,10 @@ yaoxiang add foo        # ✅ Add dependency
 ### Phase Division
 
 | Phase | Content |
-|-------|---------|
+|------|------|
 | **Phase 1** | toml parsing, local dependencies, lock generation, basic algorithms |
-| **Phase 2** | GitHub support, .yaoxiang/vendor management, download utilities |
-| **Future Extensions** | Registry source, workspaces, integrity verification, dependency overrides |
+| **Phase 2** | GitHub support, .yaoxiang/vendor management, download tools |
+| **Future Extension** | Registry source, workspaces, integrity verification, dependency overrides |
 
 ### Dependencies
 
@@ -260,16 +260,16 @@ yaoxiang add foo        # ✅ Add dependency
 ### Risks
 
 | Risk | Mitigation |
-|------|------------|
-| Complex dependency resolution algorithm | Implement simple version first, add conflict detection later |
-| Unstable Git downloads | Retry and cache mechanism |
+|------|----------|
+| Dependency resolution algorithm complex | Implement simple version first, add conflict detection later |
+| Git download unstable | Retry and cache mechanism |
 | Performance issues | Lazy loading, incremental resolution |
 
 ## Open Questions
 
 - [ ] `dev-dependencies` conditional compilation syntax?
 - [ ] Integrity verification algorithm (SHA-256 / BLAKE3)?
-- [ ] `excludes` to exclude specific files from downloading?
+- [ ] `excludes` to exclude specific files from download?
 
 ---
 

@@ -62,19 +62,12 @@ impl SubtypeChecker {
                 MonoType::Fn {
                     params: a_params,
                     return_type: a_ret,
-                    is_async: a_async,
                 },
                 MonoType::Fn {
                     params: b_params,
                     return_type: b_ret,
-                    is_async: b_async,
                 },
             ) => {
-                // 异步属性必须匹配
-                if a_async != b_async {
-                    return false;
-                }
-
                 // 参数是逆变的：b_param是a_param的子类型
                 let params_ok = a_params.len() == b_params.len()
                     && a_params
@@ -138,19 +131,12 @@ impl SubtypeChecker {
                 MonoType::Fn {
                     params: a_params,
                     return_type: a_ret,
-                    is_async: a_async,
                 },
                 MonoType::Fn {
                     params: b_params,
                     return_type: b_ret,
-                    is_async: b_async,
                 },
             ) => {
-                // 异步属性必须匹配
-                if a_async != b_async {
-                    return false;
-                }
-
                 // 参数是逆变的：b_param是a_param的子类型
                 let params_ok = a_params.len() == b_params.len()
                     && a_params

@@ -510,7 +510,7 @@ impl AstToIrGenerator {
     pub fn generate_module_ir(
         &mut self,
         module: &ast::Module,
-    ) -> Result<ModuleIR, Vec<IrGenError>> {
+    ) -> Result<ModuleIR, Vec<Diagnostic>> {
         let mut functions = Vec::new();
         let mut errors = Vec::new();
         let mut constants = Vec::new();
@@ -549,7 +549,7 @@ impl AstToIrGenerator {
         &mut self,
         stmt: &ast::Stmt,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         match &stmt.kind {
             ast::StmtKind::Binding {
                 name,
@@ -557,7 +557,6 @@ impl AstToIrGenerator {
                 method_type,
                 generic_params: _,
                 type_annotation,
-                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -588,7 +587,6 @@ impl AstToIrGenerator {
                     self.generate_function_ir(
                         name,
                         type_annotation.as_ref(),
-                        *eval,
                         params,
                         stmts,
                         expr,
@@ -629,33 +627,43 @@ impl AstToIrGenerator {
     #[allow(clippy::too_many_arguments)]
     fn generate_method_ir(
         &mut self,
-        _type_name: &str,
+        type_name: &str,
         method_name: &str,
         method_type: &ast::Type,
         params: &[ast::Param],
         stmts: &[ast::Stmt],
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 重置当前函数的可变局部变量追踪
         self.current_mut_locals.clear();
         // 重置当前函数的局部变量名列表
         self.current_local_names.clear();
 
-        // 命名空间机制：方法函数名就是方法名，无复杂前缀
-        // 例如：Point.get_x 生成函数名 "get_x"
-        // 调用时：p.get_x() -> get_x(p)
-        let func_name = method_name.to_string();
+        // 命名空间机制：方法函数名 = Type.method
+        // 例如：Point.get_x 生成函数名 "Point.get_x"
+        // 调用时：p.get_x() -> Point.get_x(p)
+        let func_name = format!("{}.{}", type_name, method_name);
+
+        // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
+        let binding_entry = ast::TypeBodyBinding {
+            name: method_name.to_string(),
+            kind: ast::BindingKind::DefaultExternal {
+                function: func_name.clone(),
+            },
+        };
+        self.register_type_bindings(type_name, &[binding_entry]);
 
         // 解析返回类型
         let return_type = if let ast::Type::Fn { return_type, .. } = method_type {
             (**return_type).clone().into()
         } else {
             // 非函数类型，报错
-            return Err(IrGenError::InternalError {
-                message: format!("Method {} is not a function type", method_name),
-                span: Span::default(),
-            });
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "Method {} is not a function type",
+                method_name
+            ))
+            .build());
         };
 
         // 进入新作用域
@@ -704,7 +712,6 @@ impl AstToIrGenerator {
             name: func_name.clone(),
             params: param_types.clone(),
             return_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -742,12 +749,11 @@ impl AstToIrGenerator {
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
-        eval: Option<ast::EvalMode>,
         params: &[ast::Param],
         stmts: &[ast::Stmt],
         expr: &Option<Box<ast::Expr>>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 检测 native("symbol") 模式：函数体为空语句 + Native("...") 表达式
         // 形如: my_add: (a: Int, b: Int) -> Int = Native("my_add")
         //
@@ -785,11 +791,6 @@ impl AstToIrGenerator {
 
         // 生成函数体指令
         let mut instructions = Vec::new();
-
-        // Apply function-level eval strategy annotation (RFC-001/008).
-        if let Some(mode) = eval {
-            instructions.push(Instruction::EvalPush(mode));
-        }
 
         // 进入函数体作用域
         self.enter_scope();
@@ -833,16 +834,15 @@ impl AstToIrGenerator {
         }
 
         // 阶段3修复：简化返回值处理逻辑，明确表达式vs语句语义
-        // 表达式函数：直接返回表达式的值
-        // 语句函数：隐式返回Void或显式return
+        // 表达式形式 (a, b) => body：直接返回 body 的值
+        // 代码块形式 { ... }：必须显式 return，否则默认返回 Void
         if let Some(e) = expr {
             let result_reg = self.next_temp_reg();
             self.generate_expr_ir(e, result_reg, &mut instructions, constants)?;
-            // 隐式返回：函数体末尾表达式即返回值。
-            // 若表达式内包含显式 return，此 Ret 不可达但无害。
+            // 表达式形式：直接返回表达式的值
             instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
         } else {
-            // 纯语句块：隐式返回Void
+            // 代码块形式：隐式返回 Void（无 return 时）
             instructions.push(Instruction::Ret(None));
         }
 
@@ -865,13 +865,11 @@ impl AstToIrGenerator {
         let total_locals = self.next_temp;
         const MAX_LOCALS: usize = 65_535;
         if total_locals > MAX_LOCALS {
-            return Err(IrGenError::InternalError {
-                message: format!(
-                    "too many locals allocated in function '{}': {}",
-                    name, total_locals
-                ),
-                span: Span::dummy(),
-            });
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "too many locals allocated in function '{}': {}",
+                name, total_locals
+            ))
+            .build());
         }
         let locals_types: Vec<MonoType> = (0..total_locals)
             .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
@@ -886,7 +884,6 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -969,7 +966,7 @@ impl AstToIrGenerator {
         name: &str,
         type_annotation: Option<&ast::Type>,
         initializer: Option<&ast::Expr>,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         let var_type = type_annotation
             .map(|t| (*t).clone().into())
             .unwrap_or(MonoType::Int(64));
@@ -1005,7 +1002,6 @@ impl AstToIrGenerator {
             name: name.to_string(),
             params: Vec::new(),
             return_type: var_type,
-            is_async: false,
             locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1023,7 +1019,7 @@ impl AstToIrGenerator {
         &mut self,
         _name: &str,
         definition: &ast::Type,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 只为结构体类型生成构造函数
         match definition {
             ast::Type::NamedStruct {
@@ -1097,7 +1093,7 @@ impl AstToIrGenerator {
         return_type: &ast::Type,
         body: &ast::Expr,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
         let saved_local_names = std::mem::take(&mut self.current_local_names);
@@ -1157,7 +1153,6 @@ impl AstToIrGenerator {
                 .map(|t| t.into())
                 .collect(),
             return_type: ret_type,
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1181,7 +1176,8 @@ impl AstToIrGenerator {
     ) {
         use ast::BindingKind;
 
-        let mut binding_map = HashMap::new();
+        // 合并到已有的绑定映射中，而非覆盖
+        let mut binding_map = self.type_bindings.remove(type_name).unwrap_or_default();
 
         for binding in bindings {
             match &binding.kind {
@@ -1238,7 +1234,7 @@ impl AstToIrGenerator {
         &self,
         struct_name: &str,
         fields: &[ast::StructField],
-    ) -> Result<Option<FunctionIR>, IrGenError> {
+    ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 构造函数接受所有字段作为参数
         let mut param_types = Vec::new();
         for field in fields {
@@ -1277,7 +1273,6 @@ impl AstToIrGenerator {
             name: struct_name.to_string(),
             params: param_types,
             return_type: MonoType::TypeRef(struct_name.to_string()),
-            is_async: false,
             locals: locals_types,
             blocks: vec![BasicBlock {
                 label: 0,
@@ -1297,7 +1292,7 @@ impl AstToIrGenerator {
         stmt: &ast::Stmt,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
                 let result_reg = self.next_temp_reg();
@@ -1375,7 +1370,6 @@ impl AstToIrGenerator {
                 method_type: _,
                 generic_params: _,
                 type_annotation,
-                eval,
                 params,
                 body: (stmts, expr),
                 is_pub: _,
@@ -1384,7 +1378,6 @@ impl AstToIrGenerator {
                 match self.generate_function_ir(
                     name,
                     type_annotation.as_ref(),
-                    *eval,
                     params,
                     stmts,
                     expr,
@@ -1434,6 +1427,54 @@ impl AstToIrGenerator {
                     constants,
                 )?;
             }
+            ast::StmtKind::DestructureAssign { names, rhs, span } => {
+                // 优化：如果 RHS 是元组字面量 (1, 2)，直接提取每个元素赋值
+                // 否则通过 LoadIndex 索引
+                if let ast::Expr::Tuple(elems, _) = rhs.as_ref() {
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(&name.name, var_idx);
+
+                        if let Some(elem) = elems.get(i) {
+                            self.generate_expr_ir(elem, var_idx, instructions, constants)?;
+                        }
+
+                        instructions.push(Instruction::Store {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(var_idx),
+                            span: *span,
+                        });
+                    }
+                } else {
+                    // 非字面量元组：生成 RHS，然后通过 LoadIndex 提取
+                    let rhs_reg = self.next_temp_reg();
+                    self.generate_expr_ir(rhs, rhs_reg, instructions, constants)?;
+
+                    for (i, name) in names.iter().enumerate() {
+                        let var_idx = self.next_temp_reg();
+                        self.register_local(&name.name, var_idx);
+
+                        let index_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(index_reg),
+                            src: Operand::Const(ConstValue::Int(i as i128)),
+                        });
+
+                        instructions.push(Instruction::LoadIndex {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(rhs_reg),
+                            index: Operand::Local(index_reg),
+                            span: *span,
+                        });
+
+                        instructions.push(Instruction::Store {
+                            dst: Operand::Local(var_idx),
+                            src: Operand::Local(var_idx),
+                            span: *span,
+                        });
+                    }
+                }
+            }
             // 处理其他语句类型
             _ => {}
         }
@@ -1449,7 +1490,7 @@ impl AstToIrGenerator {
         else_branch: Option<&ast::Block>,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
@@ -1534,7 +1575,7 @@ impl AstToIrGenerator {
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
@@ -1618,7 +1659,7 @@ impl AstToIrGenerator {
         block: &ast::Block,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
@@ -1646,7 +1687,7 @@ impl AstToIrGenerator {
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // 进入新的作用域
         self.enter_scope();
 
@@ -1687,7 +1728,7 @@ impl AstToIrGenerator {
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // Label: condition_check
         let loop_start_idx = instructions.len();
 
@@ -1732,7 +1773,7 @@ impl AstToIrGenerator {
         for_span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         // Check for range loop: var in start..end
         if let ast::Expr::BinOp {
             op: ast::BinOp::Range,
@@ -1860,12 +1901,16 @@ impl AstToIrGenerator {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
-            Err(IrGenError::UnsupportedIterator { iter_type, span })
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
         } else {
             // 不支持的迭代器类型，返回错误（使用实际类型名称）
             let iter_type = self.get_expr_type_name(iterable);
             let span = Self::get_expr_span(iterable);
-            Err(IrGenError::UnsupportedIterator { iter_type, span })
+            Err(ErrorCodeDefinition::ir_unsupported_iterator(&iter_type)
+                .at(span)
+                .build())
         }
     }
 
@@ -1881,7 +1926,7 @@ impl AstToIrGenerator {
         for_span: Span,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         self.enter_scope();
 
         // 1. 计算可迭代对象
@@ -1988,7 +2033,6 @@ impl AstToIrGenerator {
             ast::Expr::Try { span, .. } => *span,
             ast::Expr::Ref { span, .. } => *span,
             ast::Expr::Unsafe { span, .. } => *span,
-            ast::Expr::Eval { span, .. } => *span,
             ast::Expr::Spawn { span, .. } => *span,
             ast::Expr::Lambda { span, .. } => *span,
             ast::Expr::FString { span, .. } => *span,
@@ -2101,7 +2145,7 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &ast::Block,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<LambdaBodyIR, IrGenError> {
+    ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的可变局部变量和局部变量名信息
         let saved_mut_locals = std::mem::take(&mut self.current_mut_locals);
         let saved_local_names = std::mem::take(&mut self.current_local_names);
@@ -2182,7 +2226,7 @@ impl AstToIrGenerator {
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
-    ) -> Result<(), IrGenError> {
+    ) -> Result<(), Diagnostic> {
         match expr {
             Expr::Lit(literal, _) => {
                 // 常量加载
@@ -3093,27 +3137,102 @@ impl AstToIrGenerator {
                     src: Operand::Const(ConstValue::Int(0)),
                 });
             }
-            Expr::Eval { mode, body, .. } => {
-                // Eval-annotated block: @block/@auto/@eager { ... }
-                instructions.push(Instruction::EvalPush(*mode));
-                self.generate_block_expr_ir(body, result_reg, instructions, constants)?;
-                instructions.push(Instruction::EvalPop);
-            }
             Expr::Spawn { body, span } => {
                 // Spawn block: spawn { ... }
-                // Lower to: spawn ((...) => { ... }) with no params for now.
-                let closure_reg = self.next_temp_reg();
-                let lambda = ast::Expr::Lambda {
-                    params: Vec::new(),
-                    body: body.clone(),
-                    span: *span,
+                // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
+
+                // 1. DAG 分析：识别直接子表达式，生成执行计划
+                let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result
+                {
+                    (&type_result.trait_table, &type_result.local_var_types)
+                } else {
+                    // 无类型信息时使用空表（向后兼容）
+                    static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
+                        crate::frontend::core::types::base::TraitTable,
+                    > = once_cell::sync::Lazy::new(
+                        crate::frontend::core::types::base::TraitTable::default,
+                    );
+                    static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
+                        std::collections::HashMap<
+                            String,
+                            crate::frontend::core::types::base::MonoType,
+                        >,
+                    > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
+                    (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
                 };
-                self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(
+                    body,
+                    trait_table,
+                    local_var_types,
+                );
+
+                // 2. 进入 spawn 作用域
+                self.enter_scope();
+
+                // 3. 为每个直接子表达式生成闭包
+                let mut closure_regs = Vec::new();
+                for (i, task_expr) in analysis.task_exprs.iter().enumerate() {
+                    // 如果是赋值，注册目标变量到 spawn 作用域
+                    if let Some(target) = &analysis.task_targets[i] {
+                        if self.lookup_local(target).is_none() {
+                            let reg = self.next_temp_reg();
+                            self.register_local(target, reg);
+                        }
+                    }
+
+                    // 将 RHS 包装为无参闭包：() => { rhs }
+                    let closure_reg = self.next_temp_reg();
+                    let lambda = ast::Expr::Lambda {
+                        params: Vec::new(),
+                        body: Box::new(ast::Block {
+                            stmts: Vec::new(),
+                            expr: Some(Box::new(task_expr.clone())),
+                            span: *span,
+                        }),
+                        span: *span,
+                    };
+                    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+                    closure_regs.push(Operand::Local(closure_reg));
+                }
+
+                // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
+                for stmt in &body.stmts {
+                    if !crate::middle::passes::dag_analysis::is_direct_child(stmt) {
+                        self.generate_local_stmt_ir(stmt, instructions, constants)?;
+                    }
+                }
+
+                // 5. 生成 Spawn 指令（多闭包 + 执行计划）
+                // Spawn 指令会等待所有闭包完成，之后 t1/t2 等变量才可用
                 instructions.push(Instruction::Spawn {
-                    func: Operand::Local(closure_reg),
-                    args: Vec::new(),
+                    closures: closure_regs,
+                    plan: analysis.plan,
                     result: Operand::Local(result_reg),
                 });
+
+                // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
+                // 必须在 Spawn 之后生成，因为 return 表达式可能引用闭包的结果变量
+                let mut has_return = false;
+                for stmt in &body.stmts {
+                    if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
+                        if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
+                            let ret_reg = self.next_temp_reg();
+                            self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
+                            instructions.push(Instruction::Move {
+                                dst: Operand::Local(result_reg),
+                                src: Operand::Local(ret_reg),
+                            });
+                            has_return = true;
+                            break;
+                        }
+                    }
+                }
+                if !has_return {
+                    // 无 return 语句，块值为 Void（result_reg 保持默认 0）
+                }
+
+                // 7. 退出 spawn 作用域
+                self.exit_scope();
             }
             Expr::UnOp { op, expr, span: _ } => {
                 // 一元运算符
@@ -3222,7 +3341,6 @@ impl AstToIrGenerator {
                     name: closure_name.clone(),
                     params: param_types,
                     return_type,
-                    is_async: false,
                     locals: closure_body.locals.clone(),
                     blocks: vec![BasicBlock {
                         label: 0,
@@ -3453,55 +3571,6 @@ impl AstToIrGenerator {
     }
 }
 
-/// IR 生成错误
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IrGenError {
-    /// 未实现的表达式类型
-    UnimplementedExpr { expr_type: String, span: Span },
-
-    /// 未实现的语句类型
-    UnimplementedStmt { stmt_type: String, span: Span },
-
-    /// 无效的操作数
-    InvalidOperand { span: Span },
-
-    /// 内部错误
-    InternalError { message: String, span: Span },
-
-    /// 不支持的迭代器类型
-    /// for 循环目前只支持 `start..end` 语法的 range 迭代
-    UnsupportedIterator { iter_type: String, span: Span },
-}
-
-impl std::fmt::Display for IrGenError {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            IrGenError::UnimplementedExpr { expr_type, span: _ } => {
-                write!(f, "未实现的表达式类型: {}", expr_type)
-            }
-            IrGenError::UnimplementedStmt { stmt_type, span: _ } => {
-                write!(f, "未实现的语句类型: {}", stmt_type)
-            }
-            IrGenError::InvalidOperand { span: _ } => write!(f, "无效的操作数"),
-            IrGenError::InternalError { message, span: _ } => write!(f, "内部错误: {}", message),
-            IrGenError::UnsupportedIterator { iter_type, span: _ } => {
-                write!(
-                    f,
-                    "不支持的迭代器类型: {}。for 循环目前只支持 `start..end` 语法，请使用如 `for i in 0..10` 的写法",
-                    iter_type
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for IrGenError {}
-
-/// 从 AST 模块生成 IR
-///
 /// 这是编译器流程中的关键入口点：
 /// 类型检查 → IR 生成 → 代码生成
 pub fn generate_ir(
@@ -3509,40 +3578,7 @@ pub fn generate_ir(
     result: &crate::frontend::core::typecheck::TypeCheckResult,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(result);
-    generator
-        .generate_module_ir(ast)
-        .map_err(|errors| errors.into_iter().map(convert_ir_gen_error).collect())
-}
-
-/// 将 IrGenError 转换为 Diagnostic
-fn convert_ir_gen_error(e: IrGenError) -> Diagnostic {
-    match e {
-        IrGenError::UnimplementedExpr { expr_type, span } => ErrorCodeDefinition::internal_error(
-            &format!("Unimplemented expression type: {}", expr_type),
-        )
-        .at(span)
-        .build(),
-        IrGenError::UnimplementedStmt { stmt_type, span } => ErrorCodeDefinition::internal_error(
-            &format!("Unimplemented statement type: {}", stmt_type),
-        )
-        .at(span)
-        .build(),
-        IrGenError::InvalidOperand { span } => {
-            ErrorCodeDefinition::internal_error("Invalid operand")
-                .at(span)
-                .build()
-        }
-        IrGenError::InternalError { message, span } => {
-            ErrorCodeDefinition::internal_error(&message)
-                .at(span)
-                .build()
-        }
-        IrGenError::UnsupportedIterator { iter_type, span } => {
-            ErrorCodeDefinition::unsupported_operation("iterate", &iter_type)
-                .at(span)
-                .build()
-        }
-    }
+    generator.generate_module_ir(ast)
 }
 
 #[cfg(test)]

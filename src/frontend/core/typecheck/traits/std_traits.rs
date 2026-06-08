@@ -32,6 +32,7 @@ pub const STD_TRAITS: &[&str] = &[
     "Equal",    // 可相等比较（合并了 PartialEq + Eq）
     "Debug",    // 可调试打印
     "Iterator", // 迭代器
+    "Resource", // 资源类型（标记 trait，表示 IO 副作用类型）
 ];
 
 /// 初始化标准库 traits 到 TraitTable
@@ -50,6 +51,12 @@ pub fn init_std_traits(trait_table: &mut TraitTable) {
 
     // 添加 Iterator trait 定义
     add_iterator_trait(trait_table);
+
+    // 添加 Resource marker trait 定义（RFC-024 副作用类型）
+    add_resource_trait(trait_table);
+
+    // 为内置资源类型注册 Resource 实现
+    add_builtin_resource_impls(trait_table);
 }
 
 /// 添加 Clone trait 定义
@@ -117,6 +124,31 @@ fn add_dup_trait(trait_table: &mut TraitTable) {
         span: None,
         is_marker: true,
     });
+}
+
+/// 添加 Resource marker trait 定义（RFC-024 副作用类型）
+fn add_resource_trait(trait_table: &mut TraitTable) {
+    // Resource 是标记 trait，表示类型代表外部 IO 资源
+    // DAG 分析时，同一 Resource 变量的操作自动串行化
+    trait_table.add_trait(TraitDefinition {
+        name: "Resource".to_string(),
+        methods: HashMap::new(),
+        parent_traits: Vec::new(),
+        generic_params: vec![],
+        span: None,
+        is_marker: true,
+    });
+}
+
+/// 为内置资源类型注册 Resource 实现
+fn add_builtin_resource_impls(trait_table: &mut TraitTable) {
+    for type_name in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
+        trait_table.add_impl(TraitImplementation {
+            trait_name: "Resource".to_string(),
+            for_type_name: type_name.to_string(),
+            methods: HashMap::new(),
+        });
+    }
 }
 
 /// 添加 Debug trait 定义
@@ -200,7 +232,6 @@ fn add_primitive_impl(
             let fn_type = MonoType::Fn {
                 params: vec![MonoType::TypeRef("Self".to_string())],
                 return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-                is_async: false,
             };
             methods.insert("clone".to_string(), fn_type);
         }
@@ -215,7 +246,6 @@ fn add_primitive_impl(
                     MonoType::TypeRef("Self".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Bool".to_string())),
-                is_async: false,
             };
             methods.insert("equal".to_string(), fn_type);
         }
@@ -227,7 +257,6 @@ fn add_primitive_impl(
                     MonoType::TypeRef("Formatter".to_string()),
                 ],
                 return_type: Box::new(MonoType::TypeRef("Void".to_string())),
-                is_async: false,
             };
             methods.insert("debug".to_string(), fn_type);
         }

@@ -312,6 +312,8 @@ eval(expr: &Expr, env: &mut EvalEnv) -> EvalResult<CTValue>:
 
         // 代码块
         Block(stmts) =>
+            if stmts.is_empty():
+                return CTValue::Void
             for stmt in stmts[..len-1]:
                 eval(stmt, env)?
             eval(stmts.last(), env)

@@ -3,8 +3,9 @@
 //! 检查 ref 表达式的所有权语义：
 //! - ref 只能应用于有效的所有者（不能是已移动或已释放的值）
 
-use super::error::{OwnershipCheck, OwnershipError, ValueState};
+use super::error::{OwnershipCheck, ValueState};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// Ref 检查器
@@ -18,7 +19,7 @@ pub struct RefChecker {
     /// 定义位置追踪
     definitions: HashMap<Operand, (usize, usize)>,
     /// 收集的错误
-    errors: Vec<OwnershipError>,
+    errors: Vec<Diagnostic>,
     /// 当前位置 (block_idx, instr_idx)
     location: (usize, usize),
 }
@@ -102,7 +103,7 @@ impl OwnershipCheck for RefChecker {
     fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[OwnershipError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -115,7 +116,7 @@ impl OwnershipCheck for RefChecker {
         &self.errors
     }
 
-    fn errors(&self) -> &[OwnershipError] {
+    fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 
@@ -138,7 +139,7 @@ impl Default for RefChecker {
 
 impl RefChecker {
     /// 获取收集的错误
-    pub fn errors(&self) -> &[OwnershipError] {
+    pub fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 }

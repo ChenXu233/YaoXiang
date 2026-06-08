@@ -7,7 +7,10 @@
     "docs:dev": "vitepress dev src",
     "docs:build": "node build.js",
     "docs:preview": "vitepress preview src",
-    "info": "vuepress info"
+    "info": "vuepress info",
+    "generate:rfc-index": "node scripts/generate-rfc-index.js",
+    "migrate:rfc-metadata": "node scripts/migrate-rfc-metadata.js",
+    "migrate:rfc-metadata:dry-run": "node scripts/migrate-rfc-metadata.js --dry-run"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.0",

@@ -192,7 +192,6 @@ fn test_compatibility_same_function_types() {
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act
@@ -214,12 +213,10 @@ fn test_compatibility_different_function_params() {
     let fn1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let fn2 = MonoType::Fn {
         params: vec![MonoType::Float(64)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act
@@ -242,12 +239,10 @@ fn test_compatibility_different_function_return_types() {
     let fn1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let fn2 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
 
     // Act
@@ -269,12 +264,10 @@ fn test_compatibility_different_function_arity() {
     let fn1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     let fn2 = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Bool],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
 
     // Act

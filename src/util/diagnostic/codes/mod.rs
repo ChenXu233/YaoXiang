@@ -5,6 +5,7 @@
 pub mod e0xxx;
 pub mod e1xxx;
 pub mod e2xxx;
+pub mod e3xxx;
 pub mod e4xxx;
 pub mod e5xxx;
 pub mod e6xxx;
@@ -15,6 +16,7 @@ pub mod w1xxx;
 pub use e0xxx::*;
 pub use e1xxx::*;
 pub use e2xxx::*;
+pub use e3xxx::*;
 pub use e4xxx::*;
 pub use e5xxx::*;
 pub use e6xxx::*;
@@ -34,6 +36,7 @@ pub enum ErrorCategory {
     Parser,    // E0xxx: 语法分析
     TypeCheck, // E1xxx: 类型检查
     Semantic,  // E2xxx: 语义分析
+    Codegen,   // E3xxx: 代码生成
     Generic,   // E4xxx: 泛型与特质
     Module,    // E5xxx: 模块与导入
     Runtime,   // E6xxx: 运行时错误
@@ -52,6 +55,7 @@ impl std::fmt::Display for ErrorCategory {
             ErrorCategory::Parser => write!(f, "Parser"),
             ErrorCategory::TypeCheck => write!(f, "Type Check"),
             ErrorCategory::Semantic => write!(f, "Semantic"),
+            ErrorCategory::Codegen => write!(f, "Codegen"),
             ErrorCategory::Generic => write!(f, "Generic"),
             ErrorCategory::Module => write!(f, "Module"),
             ErrorCategory::Runtime => write!(f, "Runtime"),
@@ -69,8 +73,6 @@ pub struct ErrorCodeDefinition {
     pub code: &'static str,
     /// 错误类别
     pub category: ErrorCategory,
-    /// 消息模板，支持 {param} 占位符
-    pub message_template: &'static str,
 }
 
 use once_cell::sync::Lazy;
@@ -85,6 +87,8 @@ static ERROR_CODES: Lazy<Vec<ErrorCodeDefinition>> = Lazy::new(|| {
     codes.extend_from_slice(e1xxx::E1XXX);
     // E2xxx: 语义分析
     codes.extend_from_slice(e2xxx::E2XXX);
+    // E3xxx: 代码生成
+    codes.extend_from_slice(e3xxx::E3XXX);
     // E4xxx: 泛型与特质
     codes.extend_from_slice(e4xxx::E4XXX);
     // E5xxx: 模块与导入
@@ -119,7 +123,7 @@ impl ErrorCodeDefinition {
 
     /// 创建 DiagnosticBuilder
     pub fn builder(&self) -> DiagnosticBuilder {
-        DiagnosticBuilder::new(self.code, self.message_template)
+        DiagnosticBuilder::new(self.code)
     }
 
     /// 使用 error_lang() 自动获取语言构建 Diagnostic

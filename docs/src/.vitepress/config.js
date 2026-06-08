@@ -267,6 +267,22 @@ export default defineConfig({
                 },
               ],
             },
+            {
+              text: '路线图',
+              items: [
+                { text: '路线图首页', link: '/dev/plan/roadmap' },
+                {
+                  text: '模块状态',
+                  collapsed: true,
+                  items: generateSidebar({
+                    scanStartPath: '/dev/plan/roadmap',
+                    useTitleFromFrontmatter: true,
+                    collapsed: true,
+                    hyphenToSpace: true,
+                  }),
+                },
+              ],
+            },
           ],
 
           '/guide/': [

@@ -1,13 +1,12 @@
 ---
-title: "RFC-007：函数定义语法统一方案"
+title: "RFC-007: 函数定义语法统一方案"
+status: "已接受"
+author: "沫郁酱"
+created: "2025-01-05"
+updated: "2026-03-21（对齐类型构造器规则与代码块返回语义）"
 ---
 
 # RFC-007: 函数定义语法统一方案
-
-> **状态**: 已接受
-> **作者**: 沫郁酱
-> **创建日期**: 2025-01-05
-> **最后更新**: 2026-03-21（对齐类型构造器规则与代码块返回语义）
 
 ## 摘要
 
@@ -15,7 +14,7 @@ title: "RFC-007：函数定义语法统一方案"
 
 为避免歧义：当函数存在输入参数时，参数类型必须在「签名」或「lambda 头」至少一处显式标注；两边都省略将被拒绝。
 
-代码块 `{ ... }` 的最后一个表达式作为返回值；空块 `{}` 返回 `Void`。
+代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值。
 
 ## 动机
 
@@ -73,7 +72,7 @@ identity = (x: T) => x                                  # 省略签名（lambda 
 
 # === 递归函数 ===
 factorial: (n: Int) -> Int = (n) => {
-    if n <= 1 { 1 } else { n * factorial(n - 1) }
+    if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 }
 ```
 
@@ -88,7 +87,7 @@ factorial: (n: Int) -> Int = (n) => {
 | **空参简写** | `name: () -> Void = { return ... }` | 省略 Lambda 头 |
 | **空参最简** | `name = { return ... }` | 无参无返最简 |
 
-**注意**：块 `{ ... }` 的最后一个表达式作为返回值；需要提前结束时使用 `return`。空块 `{}` 推断为 `Void`。
+**注意**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值。
 
 **注意**：`->` 是函数类型的标志，不能省略（否则会被解析为元组）。
 
@@ -137,23 +136,23 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 ### Lambda 表达式语法规则
 
-**重要规则**：代码块 `{ ... }` 返回其最后一个表达式的值；需要提前结束时使用 `return`。空块 `{}` 返回 `Void`。
+**重要规则**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr` 直接返回值。
 
 | 语法形式 | 语法 | 返回方式 |
 |---------|------|----------|
-| **代码块形式** | `{ statements }` | 最后一个表达式作为返回值；可用 `return` 提前返回 |
+| **代码块形式** | `{ statements }` | 必须使用 `return` 返回值；无 `return` 时默认 `Void` |
 | **表达式形式** | `expression` | 直接返回表达式值 |
 
 **示例**：
 ```yaoxiang
-main: () -> Void = { println("Hello") }         # 返回 Void（最后表达式为 println）
-add: (a: Int, b: Int) -> Int = { a + b }        # 返回 Int（最后表达式为 a + b）
-empty: () -> Void = {}                          # 空块返回 Void
+main: () -> Void = { println("Hello") }         # 返回 Void（无 return）
+add: (a: Int, b: Int) -> Int = { return a + b }  # 返回 Int（显式 return）
+empty: () -> Void = {}                          # 空块默认返回 Void
 
 # 提前返回：使用 return
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
-    n * factorial(n - 1)
+    return n * factorial(n - 1)
 }
 
 # 表达式形式：直接返回值（无需 return）
@@ -208,7 +207,7 @@ map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
 
 # 递归函数：通过HM算法和递归约束推断
 factorial: (n: Int) -> Int = {
-    if n <= 1 { 1 } else { n * factorial(n - 1) }
+    if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 }
 
 # === 变量赋值：HM算法类型推断 ===
@@ -309,8 +308,8 @@ statement ::= identifier ':' expression  # 赋值语句
            | expression                  # 表达式语句（执行但不返回）
            | 'return' expression         # 返回语句（返回指定值）
 
-# 注意：代码块返回其最后一个表达式的值；空块 {} 推断为 Void
-# 例如：{ 1 + 1 } 返回 Int；{ println("Hello") } 返回 Void
+# 注意：代码块内必须使用 return 返回值；无 return 时默认返回 Void
+# 例如：{ return 1 + 1 } 返回 Int；{ println("Hello") } 返回 Void
 # 注意：泛型参数使用 (T: Type) 语法，作为函数类型的一部分，无需独立 BNF 规则
 ```
 
@@ -321,9 +320,9 @@ statement ::= identifier ':' expression  # 赋值语句
 
 # 错误1：代码块返回类型不匹配
 add: (a: Int, b: Int) -> Int = { println(a + b) }
-// 错误：块的最后一个表达式是 println(...)，返回 Void，但签名期望 Int
+// 错误：块内无 return，默认返回 Void，但签名期望 Int
 // 正确：add: (a: Int, b: Int) -> Int = a + b
-// 或者：add: (a: Int, b: Int) -> Int = { a + b }
+// 或者：add: (a: Int, b: Int) -> Int = { return a + b }
 
 # 错误2：使用未声明的类型参数
 identity: (x: T) -> T = x

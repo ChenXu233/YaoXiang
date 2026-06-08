@@ -149,9 +149,10 @@ fn test_prefix_info_unsafe() {
 
 #[test]
 fn test_prefix_info_at() {
+    // Phase 1: @ 不再是前缀表达式（eval block 已移除）
     let tokens = tokenize("@").unwrap();
     let state = ParserState::new(&tokens);
-    assert!(state.prefix_info().is_some());
+    assert!(state.prefix_info().is_none(), "@ 不再是有效的前缀表达式");
 }
 
 #[test]

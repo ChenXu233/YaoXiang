@@ -1,0 +1,24 @@
+// 11-language-completeness/generics.yx
+// 验证: 泛型类型和函数
+// 状态: 待测试
+
+use std.io
+
+// 泛型类型定义
+// Container: (T: Type) -> Type = { value: T }
+
+// 泛型函数
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+// 泛型函数调用
+main = {
+    // 类型推断：T = Int
+    x = identity(42)
+    io.println(x)
+
+    // 类型推断：T = String
+    s = identity("hello")
+    io.println(s)
+
+    io.println("ALL TESTS PASSED")
+}

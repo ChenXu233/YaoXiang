@@ -297,7 +297,6 @@ impl TypeEnvironment {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => {
                 let new_params: Vec<MonoType> = params
                     .iter()
@@ -307,7 +306,6 @@ impl TypeEnvironment {
                 MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(new_ret),
-                    is_async: *is_async,
                 }
             }
             MonoType::Arc(elem) => {
@@ -382,14 +380,19 @@ impl TypeEnvironment {
                 Box::new(Self::resolve_type_refs(v)),
             ),
             MonoType::Set(elem) => MonoType::Set(Box::new(Self::resolve_type_refs(elem))),
+            MonoType::Generic { name, args } => {
+                let new_args = args.iter().map(Self::resolve_type_refs).collect();
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: new_args,
+                }
+            }
             MonoType::Fn {
                 params,
                 return_type,
-                is_async,
             } => MonoType::Fn {
                 params: params.iter().map(Self::resolve_type_refs).collect(),
                 return_type: Box::new(Self::resolve_type_refs(return_type)),
-                is_async: *is_async,
             },
             _ => ty.clone(),
         }

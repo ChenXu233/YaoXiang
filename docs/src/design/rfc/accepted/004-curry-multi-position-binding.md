@@ -1,13 +1,12 @@
 ---
-title: "RFC-004：柯里化方法的多位置联合绑定设计"
+title: "RFC-004: 柯里化方法的多位置联合绑定设计"
+status: "已接受"
+author: "晨煦"
+created: "2025-01-05"
+updated: "2026-02-18（新增内置绑定、后置绑定语法）"
 ---
 
 # RFC-004: 柯里化方法的多位置联合绑定设计
-
-> **状态**: 已接受
-> **作者**: 晨煦
-> **创建日期**: 2025-01-05
-> **最后更新**: 2026-02-18（新增内置绑定、后置绑定语法）
 
 ## 摘要
 
@@ -65,68 +64,54 @@ Point.distance = distance  # 等价于 distance[0]
 
 ## 提案
 
-### 核心设计：默认绑定 + 可选位置指定
+### 核心设计：显式位置指定
 
-#### 默认绑定到第一个类型匹配的位置
+**核心规则：不写 `[n]` = 不绑定。** `Point.name = func` 只是命名空间别名，不会触发任何隐式绑定。要让 `p.name(args)` 这种 `.` 调用语法生效，必须显式指定：`Point.name = func[n]`。
 
-**默认行为**：`Type.method = function` 自动查找第一个和该类型匹配的位置并绑定
+#### 单位置绑定
 
 ```yaoxiang
-# 默认绑定第一个类型匹配的位置
-Point.distance = distance           # 编译器自动查找第一个 Point 参数位置
+# 显式绑定到第一个 Point 参数位置（索引从 0 开始）
+Point.distance = distance[0]
 p1.distance(p2)                     # → distance(p1, p2)
 
-# 如果函数有两个 Point 参数，绑定到第一个匹配的位置
-distance: (a: Point, b: Point) -> Float = {
-    dx = a.x - b.x
-    dy = a.y - b.y
-    return (dx * dx + dy * dy).sqrt()
-}
-# 绑定：Point.distance = distance
-# 调用：p1.distance(p2) → distance(p1, p2) ✓
-
-# 只有需要特殊位置（不是第一个匹配）时才显式指定
-Point.compare = distance[1]        # 绑定到第二个 Point 参数
-p1.compare(p2)                    # → distance(p2, p1)
+# 绑定到第二个 Point 参数位置
+Point.compare = distance[1]         # 绑定到第二个 Point 参数
+p1.compare(p2)                      # → distance(p2, p1)
 ```
 
-**绑定失败处理**：
-- **找不到匹配类型**：如果函数参数中没有该类型，报错或警告
-- **工厂函数模式**：如果没有参数匹配，可能作为工厂函数使用
+**不写 `[n]` = 不绑定**：
 
 ```yaoxiang
-# 情况1：找不到匹配类型
+# 没有 [n] → 纯命名空间别名，没有 . 调用语法
+Point.distance = distance            # 只有 Point.distance(p1, p2)
+# p1.distance(p2)  ❌  没有绑定
+
+# 工厂函数自然合法，无需特殊处理
 create_point: () -> Point = { ... }
-Point.create = create_point        # 错误：没有 Point 类型参数
-
-# 情况2：工厂函数模式（可选）
-Point.create = create_point        # 作为工厂函数，调用：Point.create()
+Point.create = create_point          # Point.create()   ✅
 ```
-
-**好处**：
-- 智能绑定：根据类型自动匹配，符合直觉
 - 类型安全：只有类型匹配才绑定，避免错误
-- 灵活控制：当默认绑定不是期望行为时，可显式指定位置
+- 灵活控制：通过 `[n]` 精确控制绑定位置
 
-#### 自动柯里化绑定
+#### 柯里化绑定
 
-当函数参数数量 > 绑定位置数量时，自动生成柯里化函数：
+当函数参数数量 > 绑定位置数量时，自动生成柯里化函数。**绑定始终是显式操作。**
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-# 基础函数：3 个参数
+# 基础函数
 scale: (p: Point, factor: Float) -> Point = {
     return Point(p.x * factor, p.y * factor)
 }
 
-# 绑定时自动柯里化
-Point.scale = scale[0, 1]   # Point 绑定到第 0、1 位，第 2 位保留
+# 显式绑定到位置 0 → 柯里化：剩余参数 factor 由调用者提供
+Point.scale = scale[0]
 
-# 调用时自动部分应用
+# 调用
 p1 = Point(2.0, 3.0)
-scaled = p1.scale(2.0)       # → scale(p1, 2.0) 直接调用
-result = scaled              # → Point(4.0, 6.0)
+scaled = p1.scale(2.0)       # → scale(p1, 2.0)
 
 # 链式调用更优雅
 result = Point(2.0, 3.0).scale(2.0)  # → Point(4.0, 6.0)
@@ -330,24 +315,24 @@ fn check_binding_type_compatibility(
 
 | 场景 | 绑定语法 | 调用 | 转换为 |
 |------|---------|------|--------|
-| 默认绑定 | `Point.distance = distance` | `p1.distance(p2)` | `distance(p1, p2)` |
-| 自动匹配 | `Point.transform = transform` | `p.transform(v)` | `transform(p, v)` |
+| 不绑定 | `Point.distance = distance` | `Point.distance(p1, p2)` | `distance(p1, p2)` |
+| 单位置 | `Point.distance = distance[0]` | `p1.distance(p2)` | `distance(p1, p2)` |
 | 单位置 | `Point.distance = distance[1]` | `p1.distance(p2)` | `distance(p2, p1)` |
-| 单位置 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
-| 自动柯里化 | `Point.scale = scale[0, _]` | `p.scale(2.0)` | `scale(p, 2.0)` |
-| 占位符 | `Type.method = func[1, _]` | `obj.method(arg)` | `func(arg, obj)` |
+| 负数索引 | `Point.test = func[-1]` | `p.test(a, b)` | `func(a, b, p)` |
+| 多位置(柯里化) | `Point.scale = scale[0]` | `p.scale(2.0)` | `scale(p, 2.0)` |
+| 占位符 | `Type.method = func[1]` | `obj.method(arg)` | `func(arg, obj)` |
 
 **说明**：
-- **默认绑定**：自动查找第一个类型匹配的位置
-- `[0]`：this 绑定到第 0 位（第一个参数）
-- `[1]`：this 绑定到第 1 位（第二个参数）
-- `[-1]`：this 绑定到最后一位（从末尾计数）
+- **不绑定**：`Point.name = func` 只是命名空间别名，没有 `.` 调用语法
+- `[0]`：调用者绑定到第 0 位（第一个参数）
+- `[1]`：调用者绑定到第 1 位（第二个参数）
+- `[-1]`：调用者绑定到最后一位（从末尾计数）
 
 ## 权衡
 
 ### 优点
 
-- **智能默认绑定**：默认绑定第一个类型匹配的位置，无需显式指定 `[positions]`
+- **显式绑定**：`[n]` 是唯一的绑定机制，不写不绑，无隐式行为
 - **精确控制**：可以绑定到任意参数位置，灵活度高
 - **类型安全**：编译时完全类型检查，只有类型匹配才绑定
 - **语法简洁**：`[position]` 语法直观易懂
@@ -421,8 +406,8 @@ fn check_binding_type_compatibility(
 | 占位符 | `_` | 简洁，通用符号 |
 | 范围语法 | 实现 | 批量绑定，如 `[0..2]` |
 | 语法风格 | 中缀 `Type.method = func[positions]` | 与 RFC-010 统一 |
-| **默认绑定逻辑** | **绑定第一个类型匹配的位置** | **更智能、更安全，符合直觉** |
-| **绑定失败处理** | **找不到匹配时报错/警告/工厂函数** | **根据上下文灵活处理** |
+| **绑定规则** | **显式 `[n]` 才绑定，不写不绑** | **无隐式行为，函数定义与绑定正交** |
+| **命名空间** | **`Type.name` 只是命名空间归属，不触发绑定** | **定义与绑定分离** |
 | **函数语法** | **参数名在签名中 `name: (params) -> Return`** | **与 RFC-010 统一** |
 
 ### 附录B：术语表
@@ -433,8 +418,8 @@ fn check_binding_type_compatibility(
 | 联合绑定 | 将类型绑定到多个参数位置 |
 | 部分应用 | 只提供部分参数，返回待完成调用的函数 |
 | **统一语法** | **`name: (params) -> Return = body`，参数名在签名中声明** |
-| **类型匹配绑定** | **默认绑定逻辑：自动查找第一个与调用者类型匹配的位置** |
-| **工厂函数绑定** | **当函数参数中没有匹配类型时，作为构造器使用** |
+| **命名空间函数** | **`Type.name` 语法，函数属于 Type 的命名空间，不隐含绑定** |
+| **显式绑定** | **`Type.name = func[n]`，唯一的方法绑定机制** |
 
 ---
 

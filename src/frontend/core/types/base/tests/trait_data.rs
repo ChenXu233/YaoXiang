@@ -100,7 +100,6 @@ fn test_trait_table_get_method_impl() {
         MonoType::Fn {
             params: vec![MonoType::TypeRef("Self".to_string())],
             return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-            is_async: false,
         },
     );
     table.add_impl(TraitImplementation {
@@ -357,7 +356,6 @@ fn test_trait_implementation_creation() {
         MonoType::Fn {
             params: vec![],
             return_type: Box::new(MonoType::TypeRef("Self".to_string())),
-            is_async: false,
         },
     );
     let impl_ = TraitImplementation {

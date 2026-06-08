@@ -43,7 +43,6 @@ fn identity_fn_poly() -> PolyType {
         MonoType::Fn {
             params: vec![MonoType::TypeVar(TypeVar::new(0))],
             return_type: Box::new(MonoType::TypeVar(TypeVar::new(0))),
-            is_async: false,
         },
     )
 }
@@ -138,7 +137,6 @@ fn test_specialize_identity_fn() {
     let expected = MonoType::Fn {
         params: vec![MonoType::Bool],
         return_type: Box::new(MonoType::Bool),
-        is_async: false,
     };
     assert_eq!(result.unwrap(), expected, "特化结果应为 Fn(Bool) -> Bool");
 }
@@ -584,7 +582,6 @@ fn test_instantiator_instantiate_fn_type_var() {
     let generic = MonoType::Fn {
         params: vec![MonoType::TypeVar(TypeVar::new(0))],
         return_type: Box::new(MonoType::TypeVar(TypeVar::new(0))),
-        is_async: false,
     };
 
     // Act
@@ -595,7 +592,6 @@ fn test_instantiator_instantiate_fn_type_var() {
     let expected = MonoType::Fn {
         params: vec![MonoType::String],
         return_type: Box::new(MonoType::String),
-        is_async: false,
     };
     assert_eq!(
         result.unwrap().instance,

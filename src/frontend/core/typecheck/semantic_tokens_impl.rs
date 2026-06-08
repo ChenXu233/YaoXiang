@@ -731,6 +731,36 @@ impl TypeChecker {
                         );
                     }
                 }
+                StmtKind::DestructureAssign { names, rhs, .. } => {
+                    for name in names {
+                        let is_declaration = declared.entry(0).or_default().insert(name.name.clone());
+                        let modifiers = if is_declaration {
+                            vec![SemanticTokenModifier::Declaration]
+                        } else {
+                            vec![SemanticTokenModifier::Mutable]
+                        };
+                        self.semantic_db.add_token(
+                            &fp,
+                            SemanticToken {
+                                name: name.name.clone(),
+                                token_type: SemanticTokenType::Variable,
+                                modifiers,
+                                span: name.span,
+                            },
+                        );
+                        if is_declaration {
+                            global_symbols.push(name.name.clone());
+                        }
+                    }
+                    self.collect_expr_tokens(
+                        &fp,
+                        rhs,
+                        0,
+                        &mut declared,
+                        &constructor_names,
+                        &mut imported_module_roots,
+                    );
+                }
                 StmtKind::If { .. } | StmtKind::Error(_) | StmtKind::ExternalBindingStmt { .. } => {
                 }
             }
@@ -1014,6 +1044,33 @@ impl TypeChecker {
                         &mut fn_roots,
                     );
                 }
+            }
+            StmtKind::DestructureAssign { names, rhs, .. } => {
+                for name in names {
+                    let is_declaration = declared.entry(scope_idx).or_default().insert(name.name.clone());
+                    let modifiers = if is_declaration {
+                        vec![SemanticTokenModifier::Declaration]
+                    } else {
+                        vec![SemanticTokenModifier::Mutable]
+                    };
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: name.name.clone(),
+                            token_type: semantic_db::SemanticTokenType::LocalVariable,
+                            modifiers,
+                            span: name.span,
+                        },
+                    );
+                }
+                self.collect_expr_tokens(
+                    file_path,
+                    rhs,
+                    scope_idx,
+                    declared,
+                    constructor_names,
+                    imported_module_roots,
+                );
             }
             _ => {}
         }
@@ -1625,6 +1682,28 @@ impl TypeChecker {
                 }
             }
             Expr::Unsafe { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_stmt_tokens(
+                        file_path,
+                        s,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        imported_module_roots,
+                    );
+                }
+                if let Some(r) = &body.expr {
+                    self.collect_expr_tokens(
+                        file_path,
+                        r,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        imported_module_roots,
+                    );
+                }
+            }
+            Expr::Spawn { body, .. } => {
                 for s in &body.stmts {
                     self.collect_stmt_tokens(
                         file_path,

@@ -87,3 +87,26 @@ let x = value as Int;
 let x = value as Int;
 let x = value  as  Int;
 ```
+
+---
+
+## §17 Ref 关键字
+
+**§17.1 Ref 格式。** `ref` 关键字与表达式之间用空格分隔。
+
+```
+// ✅ 正确
+let x = ref value;
+let y = ref obj;
+
+// ❌ 错误
+let x = refvalue;  // 缺少空格
+let y = ref  value;  // 多余空格
+```
+
+**§17.2 Ref 语义。** `ref` 创建 Arc（原子引用计数）副本。
+
+```
+// 创建共享引用
+let shared = ref original;
+```

@@ -68,8 +68,6 @@ impl<'a> ParserState<'a> {
             Some(TokenKind::KwRef) => Some((BP_HIGHEST, Self::parse_ref)),
             // unsafe 块：系统级操作
             Some(TokenKind::KwUnsafe) => Some((BP_HIGHEST, Self::parse_unsafe)),
-            // Eval annotation: @block/@auto/@eager { ... }
-            Some(TokenKind::At) => Some((BP_HIGHEST, Self::parse_eval_block)),
             // Spawn block: spawn { ... }
             Some(TokenKind::KwSpawn) => Some((BP_HIGHEST, Self::parse_spawn_block)),
             // Control flow expressions (return, break, continue)
@@ -113,39 +111,6 @@ impl<'a> ParserState<'a> {
         };
 
         Some(Expr::Unsafe {
-            body: Box::new(body),
-            span,
-        })
-    }
-
-    /// Parse eval-annotated block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
-    fn parse_eval_block(&mut self) -> Option<Expr> {
-        let span = self.span();
-        self.bump(); // consume '@'
-
-        let mode = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Identifier(name)) if name == "block" => EvalMode::Block,
-            Some(TokenKind::Identifier(name)) if name == "auto" => EvalMode::Auto,
-            Some(TokenKind::Identifier(name)) if name == "eager" => EvalMode::Eager,
-            _ => {
-                self.error(crate::frontend::core::parser::ParseError::Message(
-                    "Expected eval annotation name after '@' (block/auto/eager)".to_string(),
-                ));
-                return None;
-            }
-        };
-        self.bump(); // consume annotation name
-
-        if !self.at(&TokenKind::LBrace) {
-            self.error(crate::frontend::core::parser::ParseError::Message(
-                "Expected block `{ ... }` after eval annotation".to_string(),
-            ));
-            return None;
-        }
-        let body = self.parse_block_expr()?;
-
-        Some(Expr::Eval {
-            mode,
             body: Box::new(body),
             span,
         })
@@ -704,24 +669,14 @@ impl<'a> ParserState<'a> {
 
         self.expect(&TokenKind::RBrace);
 
-        // Check if block ends with an expression (without semicolon)
-        let expr = if stmts
-            .last()
-            .is_some_and(|s| matches!(s.kind, StmtKind::Expr(_)))
-        {
-            // Last statement is an expression, extract it
-            stmts.pop().and_then(|stmt| {
-                if let StmtKind::Expr(expr) = stmt.kind {
-                    Some(expr)
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        };
-
-        Some(Expr::Block(Block { stmts, expr, span }))
+        // 不再自动剥离末尾表达式
+        // 代码块形式必须显式使用 return 返回值
+        // 否则默认返回 Void
+        Some(Expr::Block(Block {
+            stmts,
+            expr: None,
+            span,
+        }))
     }
 
     /// Parse if expression: `if cond { then } else { else }`

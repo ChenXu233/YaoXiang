@@ -9,16 +9,6 @@ pub struct SpannedIdent {
     pub span: Span,
 }
 
-/// Evaluation strategy annotation (RFC-001/008).
-///
-/// Used by `@block/@auto/@eager` on function signatures or blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EvalMode {
-    Block,
-    Auto,
-    Eager,
-}
-
 /// Semantic category for unified binding statements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindingSemanticKind {
@@ -58,7 +48,6 @@ pub enum Expr {
         params: Vec<Param>,
         return_type: Option<Type>,
         body: Box<Block>,
-        is_async: bool,
         span: Span,
     },
     If {
@@ -138,12 +127,6 @@ pub enum Expr {
     /// unsafe 块：允许系统级操作
     /// `unsafe { *ptr = ... }`
     Unsafe {
-        body: Box<Block>,
-        span: Span,
-    },
-    /// Evaluation strategy annotation for a block: `@block { ... }` / `@auto { ... }` / `@eager { ... }`
-    Eval {
-        mode: EvalMode,
         body: Box<Block>,
         span: Span,
     },
@@ -261,8 +244,6 @@ pub enum StmtKind {
         generic_params: Vec<GenericParam>,
         /// Type annotation / return type
         type_annotation: Option<Type>,
-        /// Evaluation strategy annotation (`@block/@auto/@eager`) on this function.
-        eval: Option<EvalMode>,
         /// Parameters (for functions and methods)
         params: Vec<Param>,
         /// Body: (prelude statements, optional tail expression)
@@ -293,6 +274,12 @@ pub enum StmtKind {
         type_name: String,
         method_name: String,
         binding: BindingKind,
+    },
+    /// 元组解构赋值: `a, b = (1, 2)` 或 `(a, b) = (1, 2)`
+    DestructureAssign {
+        names: Vec<SpannedIdent>,
+        rhs: Box<Expr>,
+        span: Span,
     },
     /// 错误恢复占位符：表示解析失败的语句
     ///

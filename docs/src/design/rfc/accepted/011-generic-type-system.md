@@ -1,13 +1,12 @@
 ---
-title: "RFC-011：泛型系统设计"
+title: "RFC-011: 泛型系统设计 - 零成本抽象与宏替代"
+status: "已接受"
+author: "晨煦"
+created: "2025-01-25"
+updated: "2026-04-22（更新为 Type 自描述机制，统一泛型调用语法）"
 ---
 
 # RFC-011: 泛型系统设计 - 零成本抽象与宏替代
-
-> **状态**: 已接受
-> **作者**: 晨煦
-> **创建日期**: 2025-01-25
-> **最后更新**: 2026-04-22（更新为 Type 自描述机制，统一泛型调用语法）
 
 ## 摘要
 
@@ -177,7 +176,7 @@ map: (T: Type, R: Type) -> (
     for x in list {
         result.push(f(x))
     }
-    result
+    return result
 }
 
 # 使用时完全透明，类型自动推导
@@ -378,7 +377,7 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,
+    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T),
 }
 
@@ -693,7 +692,7 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 # 编译期阶乘：N 必须是编译期已知的字面量
 factorial: (N: Int) -> (n: N) -> Int = {
-    match n {
+    return match n {
         0 => 1,
         _ => n * factorial(n - 1)
     }
@@ -1276,7 +1275,9 @@ List: (T: Type) -> Type = {
 }
 
 # ======== 2. 实现泛型方法 ========
-# 使用 Type.method 语法糖：自动关联到 List 类型
+# 函数定义在 List 命名空间下（List. 前缀 = 命名空间归属）
+# 要让 list.push(item) 这种 . 调用语法生效，需要显式绑定：List.push = push[0]
+# self 只是约定参数名，编译器不看名字看类型
 
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {

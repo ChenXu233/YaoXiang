@@ -4,13 +4,12 @@
 
 use std::sync::Arc;
 use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
-use crate::backends::common::{RuntimeValue, Heap, HeapValue};
+use crate::backends::common::{RuntimeValue, Heap, HeapValue, value::TaskId};
 use crate::middle::bytecode::{
-    BytecodeModule, BytecodeFunction, BytecodeInstr, FunctionRef, ConstValue,
+    BytecodeModule, BytecodeFunction, BytecodeInstr, FunctionRef, ConstValue, Reg,
 };
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
-use crate::backends::interpreter::EvalStrategy;
 use crate::backends::runtime::RuntimeMode;
 use crate::backends::runtime::engine::{LocalRuntime, ResourceKey, TaskMeta};
 use crate::util::i18n::MSG;
@@ -105,32 +104,6 @@ impl Executor for Interpreter {
                     // Reserved for cooperative scheduling; currently a no-op in the interpreter VM.
                     frame.advance();
                 }
-                BytecodeInstr::EvalPush { mode } => {
-                    // Dynamic scope override for evaluation strategy.
-                    let strategy = match mode {
-                        crate::frontend::core::parser::ast::EvalMode::Block => EvalStrategy::Block,
-                        crate::frontend::core::parser::ast::EvalMode::Auto => EvalStrategy::Auto,
-                        crate::frontend::core::parser::ast::EvalMode::Eager => EvalStrategy::Eager,
-                    };
-                    if matches!(strategy, EvalStrategy::Block) {
-                        frame.push_spawn_group();
-                    }
-                    frame.push_eval(strategy);
-                    frame.advance();
-                }
-                BytecodeInstr::EvalPop => {
-                    // Restore previous evaluation strategy.
-                    let popped = frame.pop_eval();
-                    if matches!(popped, Some(EvalStrategy::Block)) {
-                        if let Some(group) = frame.pop_spawn_group() {
-                            for task_id in group {
-                                let mut v = self.make_async_pending(task_id);
-                                self.force_value_in_place(&mut v)?;
-                            }
-                        }
-                    }
-                    frame.advance();
-                }
                 BytecodeInstr::Return => {
                     // Structured-concurrency safety net: ensure all spawned tasks complete.
                     for task_id in frame.take_all_spawned_tasks() {
@@ -154,50 +127,95 @@ impl Executor for Interpreter {
                     self.pop_frame();
                     return Ok(result);
                 }
-                BytecodeInstr::Spawn { dst, func, args } => {
-                    // Spawn a dynamic call as a runtime task; only valid in @block scopes.
-                    let dst = *dst;
-                    let func = *func;
-                    let args = args.clone();
+                BytecodeInstr::Spawn {
+                    dst: _,
+                    closures,
+                    group_count,
+                } => {
+                    // Spawn: 按编译期执行计划分组执行闭包
+                    // - group_count[i] 表示第 i 组有多少个闭包
+                    // - closures 按组顺序排列
+                    // - 组内并行（或串行），组间串行
+                    // 注意：dst (result_reg) 已由 trailing expression 在 Spawn 之前设置，
+                    // 此处不覆盖。若无 trailing expression，dst 保持默认 Unit。
+                    let closures = closures.clone();
+                    let group_count = group_count.clone();
 
-                    let eval = frame.current_eval(self.runtime_config.eval);
-                    if !matches!(eval, EvalStrategy::Block) {
-                        let stack = self.capture_stack();
-                        return Err(ExecutorError::runtime(
-                            "`spawn` is only allowed inside @block scope".to_string(),
-                            stack,
-                        ));
+                    let runtime = self.runtime_config.runtime;
+                    let mut closure_idx: usize = 0;
+
+                    for &group_size in &group_count {
+                        let group_end = closure_idx + group_size as usize;
+
+                        if matches!(runtime, RuntimeMode::Embedded) {
+                            // Embedded 模式：无 DAG 调度器，直接顺序执行闭包
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let func_reg = closures[closure_idx];
+                                let closure_val = self.force_register(&mut frame, func_reg)?;
+                                let RuntimeValue::Function(func_value) = closure_val else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn expects a function value".to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                // 闭包无参，环境变量作为参数传入
+                                let result =
+                                    self.call_function_by_id(func_value.func_id, &func_value.env)?;
+
+                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                                frame.set_register(func_reg.0 as usize, result);
+
+                                closure_idx += 1;
+                            }
+                        } else {
+                            // Standard/Full 模式：使用 DAG 调度器并行执行
+                            let mut group_tasks: Vec<(Reg, TaskId)> = Vec::new();
+
+                            while closure_idx < group_end && closure_idx < closures.len() {
+                                let func_reg = closures[closure_idx];
+                                let closure_val = self.force_register(&mut frame, func_reg)?;
+                                let RuntimeValue::Function(func_value) = closure_val else {
+                                    let stack = self.capture_stack();
+                                    return Err(ExecutorError::type_error(
+                                        "spawn expects a function value".to_string(),
+                                        stack,
+                                    ));
+                                };
+
+                                // 闭包无参，环境变量作为参数传入
+                                let call_args: Vec<RuntimeValue> = func_value.env.clone();
+                                let deps = self.deps_from_args(&call_args);
+                                let task_id = self.schedule_task(
+                                    InterpreterTask::Dyn {
+                                        func: func_value.clone(),
+                                        args: call_args,
+                                    },
+                                    TaskMeta {
+                                        deps,
+                                        label: Some(Arc::<str>::from("spawn")),
+                                        ..TaskMeta::default()
+                                    },
+                                )?;
+
+                                frame.record_spawned_task(task_id);
+                                group_tasks.push((func_reg, task_id));
+
+                                closure_idx += 1;
+                            }
+
+                            // 等待本组所有任务完成，收集结果
+                            for (func_reg, task_id) in &group_tasks {
+                                let mut v = self.make_async_pending(*task_id);
+                                self.force_value_in_place(&mut v)?;
+
+                                // 将闭包结果存回闭包寄存器（覆盖 lambda）
+                                frame.set_register(func_reg.0 as usize, v);
+                            }
+                        }
                     }
 
-                    let closure_val = self.force_register(&mut frame, func)?;
-                    let RuntimeValue::Function(func_value) = closure_val else {
-                        let stack = self.capture_stack();
-                        return Err(ExecutorError::type_error(
-                            "spawn expects a function value".to_string(),
-                            stack,
-                        ));
-                    };
-
-                    let mut call_args = Vec::with_capacity(args.len());
-                    for r in &args {
-                        call_args.push(self.force_register(&mut frame, *r)?);
-                    }
-
-                    let deps = self.deps_from_args(&call_args);
-                    let task_id = self.schedule_task(
-                        InterpreterTask::Dyn {
-                            func: func_value.clone(),
-                            args: call_args,
-                        },
-                        TaskMeta {
-                            deps,
-                            label: Some(Arc::<str>::from("spawn")),
-                            ..TaskMeta::default()
-                        },
-                    )?;
-
-                    frame.record_spawned_task(task_id);
-                    frame.set_register(dst.0 as usize, self.make_async_pending(task_id));
                     frame.advance();
                 }
                 BytecodeInstr::Jmp { target } => {
@@ -335,11 +353,27 @@ impl Executor for Interpreter {
                     self.exec_compare(*dst, *lhs, *rhs, *cmp, &mut frame)?;
                     frame.advance();
                 }
-                BytecodeInstr::UnaryOp { dst, src, op: _ } => {
+                BytecodeInstr::UnaryOp { dst, src, op } => {
                     let dst = *dst;
                     let src = *src;
-                    let val = self.force_register(&mut frame, src)?.to_int().unwrap_or(0);
-                    frame.set_register(dst.0 as usize, RuntimeValue::Int(-val));
+                    let op = *op;
+                    let val = self.force_register(&mut frame, src)?;
+                    let result = match (op, val) {
+                        (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Int(n)) => {
+                            RuntimeValue::Int(-n)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Float(f)) => {
+                            RuntimeValue::Float(-f)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Int(n)) => {
+                            RuntimeValue::Int(!n)
+                        }
+                        (crate::middle::bytecode::UnaryOp::Not, RuntimeValue::Bool(b)) => {
+                            RuntimeValue::Bool(!b)
+                        }
+                        _ => RuntimeValue::Unit,
+                    };
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::CallStatic {
@@ -376,12 +410,9 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
-                    if matches!(eval, EvalStrategy::Block)
-                        || matches!(runtime, RuntimeMode::Embedded)
-                    {
+                    if matches!(runtime, RuntimeMode::Embedded) {
                         let result = self.call_static_by_name(&func_name, &call_args)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
@@ -417,33 +448,11 @@ impl Executor for Interpreter {
                         },
                     )?;
 
-                    match eval {
-                        EvalStrategy::Auto => {
-                            if is_ffi {
-                                self.drive_dag_until(Some(task_id))?;
-                                let mut v = self.make_async_pending(task_id);
-                                self.force_value_in_place(&mut v)?;
-                                if let Some(dst_reg) = dst {
-                                    frame.set_register(dst_reg.index() as usize, v);
-                                }
-                            } else if let Some(dst_reg) = dst {
-                                frame.set_register(
-                                    dst_reg.index() as usize,
-                                    self.make_async_pending(task_id),
-                                );
-                            } else {
-                                self.drive_dag_until(Some(task_id))?;
-                            }
-                        }
-                        EvalStrategy::Eager => {
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Block => {}
+                    self.drive_dag_until(Some(task_id))?;
+                    let mut v = self.make_async_pending(task_id);
+                    self.force_value_in_place(&mut v)?;
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, v);
                     }
 
                     frame.advance();
@@ -469,12 +478,9 @@ impl Executor for Interpreter {
                         })
                         .collect();
 
-                    let eval = frame.current_eval(self.runtime_config.eval);
                     let runtime = self.runtime_config.runtime;
 
-                    if matches!(eval, EvalStrategy::Block)
-                        || matches!(runtime, RuntimeMode::Embedded)
-                    {
+                    if matches!(runtime, RuntimeMode::Embedded) {
                         let result = self.call_native_by_name(&func_name, &call_args)?;
                         if let Some(dst_reg) = dst {
                             frame.set_register(dst_reg.index() as usize, result);
@@ -496,25 +502,12 @@ impl Executor for Interpreter {
                         },
                     )?;
 
-                    match eval {
-                        EvalStrategy::Eager => {
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Auto => {
-                            // Native calls are treated as eager to preserve side effects.
-                            self.drive_dag_until(Some(task_id))?;
-                            let mut v = self.make_async_pending(task_id);
-                            self.force_value_in_place(&mut v)?;
-                            if let Some(dst_reg) = dst {
-                                frame.set_register(dst_reg.index() as usize, v);
-                            }
-                        }
-                        EvalStrategy::Block => {}
+                    // Native calls are always forced eagerly to preserve side effects.
+                    self.drive_dag_until(Some(task_id))?;
+                    let mut v = self.make_async_pending(task_id);
+                    self.force_value_in_place(&mut v)?;
+                    if let Some(dst_reg) = dst {
+                        frame.set_register(dst_reg.index() as usize, v);
                     }
 
                     frame.advance();
@@ -843,25 +836,51 @@ impl Executor for Interpreter {
                     frame.advance();
                 }
                 BytecodeInstr::TypeOf { dst, src } => {
-                    let _val = frame
-                        .registers
-                        .get(src.0 as usize)
-                        .cloned()
-                        .unwrap_or(RuntimeValue::Unit);
-                    let type_id = self.type_table.len() as u32;
-                    // Simplified: just push a placeholder
-                    frame.set_register(dst.0 as usize, RuntimeValue::Int(type_id as i64));
+                    let dst = *dst;
+                    let src = *src;
+                    let val = self.force_register(&mut frame, src)?;
+                    let type_name: &str = match &val {
+                        RuntimeValue::Unit => "Void",
+                        RuntimeValue::Bool(_) => "Bool",
+                        RuntimeValue::Int(_) => "Int",
+                        RuntimeValue::Float(_) => "Float",
+                        RuntimeValue::Char(_) => "Char",
+                        RuntimeValue::String(_) => "String",
+                        RuntimeValue::Bytes(_) => "Bytes",
+                        RuntimeValue::Tuple(_) => "Tuple",
+                        RuntimeValue::Array(_) => "Array",
+                        RuntimeValue::List(_) => "List",
+                        RuntimeValue::Dict(_) => "Dict",
+                        RuntimeValue::Struct { .. } => "Struct",
+                        RuntimeValue::Enum { .. } => "Enum",
+                        RuntimeValue::Function(_) => "Function",
+                        RuntimeValue::Arc(_) => "Arc",
+                        RuntimeValue::Weak(_) => "Weak",
+                        RuntimeValue::Async(_) => "Async",
+                        RuntimeValue::Ptr { .. } => "Ptr",
+                    };
+                    let result = RuntimeValue::String(Arc::from(type_name));
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::Cast {
                     dst,
                     src,
-                    target_type_id: _,
+                    target_type_id,
                 } => {
                     let dst = *dst;
                     let src = *src;
+                    let type_id = *target_type_id;
                     let val = self.force_register(&mut frame, src)?;
-                    frame.set_register(dst.0 as usize, val);
+                    // 基本类型转换：Int↔Float, 其他透传
+                    let result = match (val, type_id) {
+                        (RuntimeValue::Int(n), 1) => RuntimeValue::Float(n as f64), // Int → Float
+                        (RuntimeValue::Float(f), 0) => RuntimeValue::Int(f as i64), // Float → Int
+                        (RuntimeValue::Int(n), 2) => RuntimeValue::Bool(n != 0),    // Int → Bool
+                        (RuntimeValue::Bool(b), 0) => RuntimeValue::Int(if b { 1 } else { 0 }), // Bool → Int
+                        (v, _) => v, // 未知类型，透传
+                    };
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::StringFromInt { dst, src } => {
@@ -896,15 +915,57 @@ impl Executor for Interpreter {
                         stack,
                     ));
                 }
-                BytecodeInstr::BoundsCheck { array: _, index: _ } => {
-                    // In debug mode, this would check bounds
+                BytecodeInstr::BoundsCheck { array, index } => {
+                    let array = *array;
+                    let index = *index;
+                    let arr = self.force_register(&mut frame, array)?;
+                    let idx = self
+                        .force_register(&mut frame, index)?
+                        .to_int()
+                        .unwrap_or(-1);
+                    let len = match &arr {
+                        RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
+                            match self.heap.get(*h) {
+                                Some(HeapValue::List(list)) => list.len() as i64,
+                                Some(HeapValue::Tuple(t)) => t.len() as i64,
+                                _ => -1,
+                            }
+                        }
+                        _ => -1,
+                    };
+                    if idx < 0 || idx >= len {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
+                            format!("Index {} out of bounds for length {}", idx, len),
+                            stack,
+                        ));
+                    }
                     frame.advance();
                 }
-                BytecodeInstr::TypeCheck {
-                    value: _,
-                    type_id: _,
-                } => {
-                    // In debug mode, this would check types
+                BytecodeInstr::TypeCheck { value, type_id } => {
+                    let value = *value;
+                    let type_id = *type_id;
+                    let val = self.force_register(&mut frame, value)?;
+                    // 基本类型 ID 映射：0=Int, 1=Float, 2=Bool, 3=String, 4=Char
+                    let actual_id: u16 = match val {
+                        RuntimeValue::Int(_) => 0,
+                        RuntimeValue::Float(_) => 1,
+                        RuntimeValue::Bool(_) => 2,
+                        RuntimeValue::String(_) => 3,
+                        RuntimeValue::Char(_) => 4,
+                        RuntimeValue::Unit => 5,
+                        _ => u16::MAX,
+                    };
+                    if actual_id != type_id && type_id != u16::MAX {
+                        let stack = self.capture_stack();
+                        return Err(ExecutorError::runtime(
+                            format!(
+                                "Type mismatch: expected type_id {}, got {}",
+                                type_id, actual_id
+                            ),
+                            stack,
+                        ));
+                    }
                     frame.advance();
                 }
                 BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
@@ -930,12 +991,55 @@ impl Executor for Interpreter {
                 BytecodeInstr::CloseUpvalue { src: _ } => {
                     frame.advance();
                 }
-                BytecodeInstr::Switch {
-                    value: _,
-                    targets: _,
-                } => {
-                    // Simplified switch implementation
-                    frame.advance();
+                BytecodeInstr::Switch { value, targets } => {
+                    let value = *value;
+                    let targets = targets.clone();
+                    let val = self.force_register(&mut frame, value)?;
+                    let mut jumped = false;
+                    for (case_val, target) in &targets {
+                        if let Some(case_label) = case_val {
+                            // case 值编码为 Label，解码为 i32 常量
+                            let case_offset = i32::from_le_bytes([
+                                case_label.0 as u8,
+                                (case_label.0 >> 8) as u8,
+                                (case_label.0 >> 16) as u8,
+                                (case_label.0 >> 24) as u8,
+                            ]);
+                            let matches = match &val {
+                                RuntimeValue::Int(n) => *n == case_offset as i64,
+                                RuntimeValue::Bool(b) => *b == (case_offset != 0),
+                                _ => false,
+                            };
+                            if matches {
+                                let target_offset = i32::from_le_bytes([
+                                    target.0 as u8,
+                                    (target.0 >> 8) as u8,
+                                    (target.0 >> 16) as u8,
+                                    (target.0 >> 24) as u8,
+                                ]);
+                                let target_ip = ((frame.ip as i32) + target_offset) as usize;
+                                frame.ip = target_ip;
+                                jumped = true;
+                                break;
+                            }
+                        }
+                    }
+                    // 没有匹配的 case，跳转到 default（targets 最后一个 None 入口）
+                    if !jumped {
+                        if let Some((None, default_target)) = targets.last() {
+                            let offset = i32::from_le_bytes([
+                                default_target.0 as u8,
+                                (default_target.0 >> 8) as u8,
+                                (default_target.0 >> 16) as u8,
+                                (default_target.0 >> 24) as u8,
+                            ]);
+                            let target_ip = ((frame.ip as i32) + offset) as usize;
+                            frame.ip = target_ip;
+                        } else {
+                            frame.advance();
+                        }
+                    }
+                    continue;
                 }
                 BytecodeInstr::StackAlloc { dst: _, size: _ } => {
                     frame.advance();
@@ -959,21 +1063,21 @@ impl Executor for Interpreter {
                     );
                     frame.advance();
                 }
-                BytecodeInstr::StringGetChar { dst, src, index: _ } => {
+                BytecodeInstr::StringGetChar { dst, src, index } => {
                     let dst = *dst;
                     let src = *src;
+                    let idx = index.0 as usize;
                     let s: String = match self.force_register(&mut frame, src)? {
                         RuntimeValue::String(s) => s.as_ref().to_string(),
                         _ => String::new(),
                     };
 
-                    frame.set_register(
-                        dst.0 as usize,
-                        s.chars()
-                            .next()
-                            .map(|c| RuntimeValue::Char(c as u32))
-                            .unwrap_or(RuntimeValue::Unit),
-                    );
+                    let result = s
+                        .chars()
+                        .nth(idx)
+                        .map(|c| RuntimeValue::Char(c as u32))
+                        .unwrap_or(RuntimeValue::Unit);
+                    frame.set_register(dst.0 as usize, result);
                     frame.advance();
                 }
                 BytecodeInstr::CallVirt {

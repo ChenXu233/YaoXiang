@@ -339,6 +339,9 @@ fn extract_read_vars_from_stmt(
             }
             vars.extend(body_vars);
         }
+        StmtKind::DestructureAssign { rhs, .. } => {
+            extract_read_vars_from_expr(rhs, vars);
+        }
         StmtKind::Use { .. } => {
             // use 语句不产生变量读取
         }
@@ -513,9 +516,6 @@ fn extract_read_vars_from_expr(
         Expr::Unsafe { body, .. } => {
             extract_read_vars_from_block(body, vars);
         }
-        Expr::Eval { body, .. } => {
-            extract_read_vars_from_block(body, vars);
-        }
         Expr::Spawn { body, .. } => {
             extract_read_vars_from_block(body, vars);
         }
@@ -617,6 +617,9 @@ fn extract_written_vars_from_stmt(
             }
             vars.extend(body_vars);
         }
+        StmtKind::DestructureAssign { .. } => {
+            // 解构赋值中声明的变量是局部的，不在此收集
+        }
         StmtKind::Use { .. } | StmtKind::ExternalBindingStmt { .. } | StmtKind::Error(_) => {}
     }
 }
@@ -678,9 +681,6 @@ fn extract_written_vars_from_expr(
         Expr::Unsafe { body, .. } => {
             extract_written_vars_from_block(body, vars);
         }
-        Expr::Eval { body, .. } => {
-            extract_written_vars_from_block(body, vars);
-        }
         // 其他表达式类型不直接写入变量
         _ => {}
     }
@@ -733,7 +733,6 @@ mod tests {
         let fn_ty = MonoType::Fn {
             params: vec![MonoType::Int(64)],
             return_type: Box::new(MonoType::Void),
-            is_async: false,
         };
         MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
             name: "MyStruct".to_string(),

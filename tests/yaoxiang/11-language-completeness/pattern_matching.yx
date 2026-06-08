@@ -1,0 +1,49 @@
+// 11-language-completeness/pattern_matching.yx
+// 验证: match 表达式
+// 状态: 待测试
+
+use std.io
+
+main = {
+    // 匹配第一个 arm
+    r1 = match 1 {
+        1 => "one",
+        2 => "two",
+        _ => "other"
+    }
+    io.println(r1)
+
+    // 匹配第二个 arm
+    r2 = match 2 {
+        1 => "one",
+        2 => "two",
+        _ => "other"
+    }
+    io.println(r2)
+
+    // 匹配通配符
+    r3 = match 99 {
+        1 => "one",
+        2 => "two",
+        _ => "other"
+    }
+    io.println(r3)
+
+    // match 返回整数
+    r4 = match 42 {
+        10 => 100,
+        42 => 420,
+        _ => 0
+    }
+    io.println(r4)
+
+    // 字符串 match
+    r5 = match "hello" {
+        "world" => "a",
+        "hello" => "b",
+        _ => "c"
+    }
+    io.println(r5)
+
+    io.println("ALL TESTS PASSED")
+}

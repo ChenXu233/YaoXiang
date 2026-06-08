@@ -162,8 +162,6 @@ pub enum MonoType {
         params: Vec<MonoType>,
         /// 返回类型
         return_type: Box<MonoType>,
-        /// 是否异步
-        is_async: bool,
     },
     /// `Option[T]`（RFC-001）
     Option(Box<MonoType>),
@@ -311,7 +309,6 @@ impl MonoType {
             MonoType::Fn {
                 params,
                 return_type,
-                is_async: _,
             } => {
                 let params_str = params
                     .iter()
@@ -478,7 +475,6 @@ impl From<ast::Type> for MonoType {
             } => MonoType::Fn {
                 params: params.into_iter().map(MonoType::from).collect(),
                 return_type: Box::new(MonoType::from(*return_type)),
-                is_async: false,
             },
             ast::Type::Option(t) => MonoType::Option(Box::new(MonoType::from(*t))),
             ast::Type::Result(ok, err) => MonoType::Result(

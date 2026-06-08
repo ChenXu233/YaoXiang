@@ -598,5 +598,205 @@
         "help": "Consider removing the export or using the method",
         "example": "pub fn Foo.dead_method() { }",
         "error_output": "warning[W1005]: Unused exported method: 'dead_method'\n --> example.yx:1:1\n  |\n1 | pub fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: method is never used"
+    },
+    "E2014": {
+        "title": "Use after move",
+        "template": "'{name}' has been moved and cannot be used",
+        "help": "The value was moved to a new owner. Use a reference or clone if you need to use it again."
+    },
+    "E2015": {
+        "title": "Borrow after move",
+        "template": "cannot borrow '{name}' after move",
+        "help": "The value was moved. Use a reference before the move, or clone the value."
+    },
+    "E2016": {
+        "title": "Assign to immutable",
+        "template": "cannot assign to immutable variable '{name}'",
+        "help": "Declare the variable with `mut` to allow assignment."
+    },
+    "E2017": {
+        "title": "Multiple mutable borrows",
+        "template": "cannot borrow '{name}' as mutable more than once",
+        "help": "Ensure only one mutable reference exists at a time."
+    },
+    "E2018": {
+        "title": "Mutable/immutable borrow conflict",
+        "template": "cannot borrow '{name}' as mutable (already borrowed as immutable)",
+        "help": "Ensure no immutable references exist before creating a mutable reference."
+    },
+    "E2019": {
+        "title": "Double drop",
+        "template": "value '{name}' dropped twice",
+        "help": "Ensure the value is only dropped once."
+    },
+    "E2020": {
+        "title": "Use after drop",
+        "template": "'{name}' used after being dropped",
+        "help": "Use the value before it is dropped, or restructure the code."
+    },
+    "E2021": {
+        "title": "Drop moved value",
+        "template": "cannot drop '{name}': value has been moved",
+        "help": "The value was already moved and cannot be dropped."
+    },
+    "E2022": {
+        "title": "Immutable mutation",
+        "template": "cannot mutate immutable '{name}' via method '{method}'",
+        "help": "Declare the variable with `mut` to allow mutation."
+    },
+    "E2023": {
+        "title": "Immutable field assignment",
+        "template": "cannot assign to immutable field '{field}' of '{struct_name}'",
+        "help": "Declare the field with `mut` to allow assignment."
+    },
+    "E2024": {
+        "title": "Ref non-owner",
+        "template": "cannot create reference to '{name}': value is not owned",
+        "help": "The value has been moved or dropped. Ensure the value is still owned."
+    },
+    "E2025": {
+        "title": "Reassign non-empty",
+        "template": "cannot reassign '{name}': variable has not been moved",
+        "help": "Only moved variables can be reassigned."
+    },
+    "E2026": {
+        "title": "Consumed not returned",
+        "template": "parameter '{name}' is consumed but not returned",
+        "help": "Either return the consumed value or use a reference."
+    },
+    "E2027": {
+        "title": "Unsafe deref",
+        "template": "cannot dereference raw pointer outside unsafe block",
+        "help": "Wrap the dereference in an `unsafe` block."
+    },
+    "E2028": {
+        "title": "Clone moved value",
+        "template": "cannot clone '{name}': value has been moved",
+        "help": "The value was already moved. Clone before moving if needed."
+    },
+    "E3001": {
+        "title": "Unimplemented expression (IR)",
+        "template": "unimplemented expression type: {expr_type}",
+        "help": "This expression type is not yet supported in IR generation."
+    },
+    "E3002": {
+        "title": "Unimplemented statement (IR)",
+        "template": "unimplemented statement type: {stmt_type}",
+        "help": "This statement type is not yet supported in IR generation."
+    },
+    "E3003": {
+        "title": "Invalid operand (IR)",
+        "template": "invalid operand: {reason}",
+        "help": "Check the operand type and usage."
+    },
+    "E3004": {
+        "title": "Unsupported iterator",
+        "template": "unsupported iterator type: {iter_type}",
+        "help": "Only range and list iterators are currently supported."
+    },
+    "E3005": {
+        "title": "IR generation error",
+        "template": "IR generation error: {message}",
+        "help": "This is an internal error. Please report it."
+    },
+    "E3010": {
+        "title": "Unimplemented expression (codegen)",
+        "template": "codegen: unimplemented expression type: {expr_type}",
+        "help": "This expression type is not yet supported in code generation."
+    },
+    "E3011": {
+        "title": "Unimplemented statement (codegen)",
+        "template": "codegen: unimplemented statement type: {stmt_type}",
+        "help": "This statement type is not yet supported in code generation."
+    },
+    "E3012": {
+        "title": "Unimplemented call (codegen)",
+        "template": "codegen: unimplemented call type: {call_type}",
+        "help": "This call type is not yet supported in code generation."
+    },
+    "E3013": {
+        "title": "Symbol not found (codegen)",
+        "template": "codegen: symbol not found: '{name}'",
+        "help": "Ensure the symbol is defined and accessible."
+    },
+    "E3014": {
+        "title": "Register overflow",
+        "template": "register overflow: {id} exceeds limit {limit}",
+        "help": "Reduce the number of local variables or simplify expressions."
+    },
+    "E3015": {
+        "title": "Invalid assignment target",
+        "template": "invalid assignment target: {reason}",
+        "help": "Only variables and fields can be assigned to."
+    },
+    "E3016": {
+        "title": "Type mismatch (codegen)",
+        "template": "codegen type mismatch: expected {expected}, found {found}",
+        "help": "This is an internal error. Please report it."
+    },
+    "E3017": {
+        "title": "Invalid operand (codegen)",
+        "template": "codegen: invalid operand: {reason}",
+        "help": "Check the operand type and usage."
+    },
+    "E3018": {
+        "title": "Translation error",
+        "template": "translation error: {message}",
+        "help": "This is an internal error. Please report it."
+    },
+    "E4010": {
+        "title": "Constant division by zero",
+        "template": "constant expression division by zero",
+        "help": "Ensure the divisor is not zero in constant expressions."
+    },
+    "E4011": {
+        "title": "Constant overflow",
+        "template": "constant expression overflow",
+        "help": "The constant expression result is too large for the type."
+    },
+    "E4012": {
+        "title": "Constant recursion too deep",
+        "template": "constant evaluation exceeded maximum recursion depth {limit}",
+        "help": "Simplify the constant expression to reduce recursion."
+    },
+    "E4013": {
+        "title": "Non-constant function",
+        "template": "non-constant function '{func}' in constant context",
+        "help": "Only functions marked as constant can be used in constant expressions."
+    },
+    "E4014": {
+        "title": "Constant evaluation failed",
+        "template": "cannot evaluate constant expression: {reason}",
+        "help": "Ensure the expression can be evaluated at compile time."
+    },
+    "E5005": {
+        "title": "Invalid module path",
+        "template": "Invalid module path: '{path}'",
+        "help": "Check the module path format"
+    },
+    "E5006": {
+        "title": "Duplicate import",
+        "template": "Duplicate import: '{name}' is already imported",
+        "help": "Remove the duplicate import statement"
+    },
+    "E5007": {
+        "title": "Module exports",
+        "template": "Module '{module}' exports: {available}",
+        "help": "Available exports are listed in the error message"
+    },
+    "E6006": {
+        "title": "Function not found (runtime)",
+        "template": "Function not found: '{func}'",
+        "help": "Ensure the function is defined and spelled correctly"
+    },
+    "E6007": {
+        "title": "Runtime error",
+        "template": "Runtime error: {message}",
+        "help": "Check the error message for details"
+    },
+    "E8004": {
+        "title": "Unimplemented feature",
+        "template": "unimplemented feature: {feature}",
+        "help": "This feature is not yet implemented."
     }
 }

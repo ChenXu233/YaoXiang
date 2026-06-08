@@ -52,8 +52,8 @@ mod tests;
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
 pub use crate::frontend::core::types::base::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
-    TypeConstraintSolver, SendSyncConstraint, SendSyncSolver, TypeMismatch, TypeConstraintError,
-    ConstValue, ConstExpr, ConstKind, ConstVarDef, UniverseLevel,
+    TypeConstraintSolver, TypeConstraintError, ConstValue, ConstExpr, ConstKind, ConstVarDef,
+    UniverseLevel,
 };
 
 // 重新导出子模块
@@ -145,12 +145,14 @@ pub fn infer_expression(
     }
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();
+    let generic_type_defs_clone = env.generic_type_defs.clone();
     let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
         &mut scope,
         env.solver(),
         &overload_candidates_clone,
         &native_signatures_clone,
     );
+    inferrer.set_generic_type_defs(&generic_type_defs_clone);
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
@@ -168,6 +170,14 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
         .insert("void".to_string(), PolyType::mono(MonoType::Void));
     env.types
         .insert("char".to_string(), PolyType::mono(MonoType::Char));
+
+    // RFC-024: 内置资源类型
+    for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
+        env.types.insert(
+            resource_type.to_string(),
+            PolyType::mono(MonoType::TypeRef(resource_type.to_string())),
+        );
+    }
 }
 
 /// 注册标准库 native 函数类型签名到类型环境

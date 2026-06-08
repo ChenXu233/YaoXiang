@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use crate::frontend::core::types::base::MonoType;
 use crate::frontend::core::types::base::PolyType;
+use crate::frontend::core::types::base::TraitTable;
 
 use super::semantic_db;
 
@@ -19,6 +20,8 @@ pub struct TypeCheckResult {
     pub local_var_types: HashMap<String, MonoType>,
     /// 语义信息数据库（typecheck 阶段产出）
     pub semantic_db: semantic_db::SemanticDB,
+    /// Trait 表（用于 IR 生成阶段查询类型是否实现特定 trait）
+    pub trait_table: TraitTable,
 }
 
 /// 导入信息
