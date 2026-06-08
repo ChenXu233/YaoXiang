@@ -1,13 +1,14 @@
 // 12-paper-demos/linked_list.yx
-// 验证: 多个 &T 令牌共存 — Dup 类型属性
-// 论文价值: Rust 需要生命周期 'a，YaoXiang 不需要
+// 验证: 自由函数自动借用 — 多个 &T 同时活跃
+// 论文价值: Rust 需要生命周期，YaoXiang 编译器自动处理
 
 use std.io
 
 Node: Type = { value: Int }
 
-Node.is_greater: (self: &Node, other: &Node) -> Bool = {
-    self.value > other.value
+// 自由函数：两个 &Node 参数 — 编译器自动创建令牌
+compare: (a: &Node, b: &Node) -> Bool = {
+    a.value > b.value
 }
 
 main = {
@@ -15,9 +16,9 @@ main = {
     b = Node(20)
     c = Node(30)
 
-    // 三个 &Node 令牌同时活跃 — Dup 类型属性允许
-    io.println(b.is_greater(a))
-    io.println(c.is_greater(a))
+    // 自动借用：a, b, c 是 Node，函数需要 &Node
+    io.println(compare(b, a))
+    io.println(compare(c, a))
 
     io.println("ALL TESTS PASSED")
 }
