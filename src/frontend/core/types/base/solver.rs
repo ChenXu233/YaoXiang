@@ -547,6 +547,21 @@ impl TypeConstraintSolver {
                 Ok(())
             }
 
+            // 泛型类型 unify
+            (MonoType::Generic { name: n1, args: a1 }, MonoType::Generic { name: n2, args: a2 }) => {
+                if n1 != n2 || a1.len() != a2.len() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &t1.type_name(),
+                        &t2.type_name(),
+                    )
+                    .build());
+                }
+                for (arg1, arg2) in a1.iter().zip(a2.iter()) {
+                    self.unify(arg1, arg2)?;
+                }
+                Ok(())
+            }
+
             // 列表类型 unify
             (MonoType::List(t1), MonoType::List(t2)) => self.unify(t1, t2),
 

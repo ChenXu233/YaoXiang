@@ -380,6 +380,13 @@ impl TypeEnvironment {
                 Box::new(Self::resolve_type_refs(v)),
             ),
             MonoType::Set(elem) => MonoType::Set(Box::new(Self::resolve_type_refs(elem))),
+            MonoType::Generic { name, args } => {
+                let new_args = args.iter().map(Self::resolve_type_refs).collect();
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: new_args,
+                }
+            }
             MonoType::Fn {
                 params,
                 return_type,
