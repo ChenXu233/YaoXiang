@@ -32,10 +32,15 @@ identifier : type = expression
 | 接口       | `Drawable: Type = { draw: (Surface) -> Void }` |
 | 泛型类型   | `List: (T: Type) -> Type = { data: Array(T), length: Int }` |
 | 泛型类型   | `Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }` |
-| 方法       | `Point.draw: (self: Point, s: Surface) -> Void = ...` |
+| 方法       | `Point.draw: (p: Point, s: Surface) -> Void = ...`<br>`Point.draw = draw[0]` |
 | 泛型函数   | `map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))` |
 
 **`Type` 是语言中唯一的元类型关键字**。
+
+> **命名空间 vs 方法绑定**：`Type.name` 前缀表示**命名空间归属**，仅此而已。
+> 它不触发任何隐式绑定。要让 `p.draw(screen)` 这种 `.` 调用语法生效，
+> 必须显式绑定：`Point.draw = draw[0]`。
+> 详见下文"命名空间与方法绑定"一节。
 它用于标注类型层级，编译器自动处理 Type0、Type1、Type2... 的区分，对用户透明。
 
 ```yaoxiang
@@ -192,8 +197,9 @@ Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！
 ├── 泛型类型（多参数）
 │   └── Map: (K: Type, V: Type) -> Type = { keys: Array(K), values: Array(V) }  # 必须返回： Type
 │
-├── 方法
-│   └── Point.draw: (self: Point, surface: Surface) -> Void = ...
+├── 命名空间函数
+│   └── draw: (p: Point, surface: Surface) -> Void = ...
+│       Point.draw = draw[0]  # 显式绑定后才有点调用语法
 │
 └── 泛型函数
     └── map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R))  # 不返回 Type，HM 推断为函数
@@ -474,33 +480,51 @@ EmptyType: Type = {}
 Empty: Type = {}
 ```
 
-##### 方法定义（外部）
+##### 命名空间函数定义
 
-**类型方法**：关联到特定类型（使用 Type.method 语法）
-
-```yaoxiang
-Point.draw: (self: Point, surface: Surface) -> Void = {
-    surface.plot(self.x, self.y)
-}
-
-Point.serialize: (self: Point) -> String = {
-    return "Point(${self.x}, ${self.y})"
-}
-```
-
-##### 方法绑定（外部）
-
-普通方法可以通过 `[position]` 语法绑定到类型（详细语法见 RFC-004）。
-
-**手动绑定**：
+**`Type.name` 前缀表示命名空间归属**，仅此而已。它不触发任何隐式绑定。
 
 ```yaoxiang
-// 显式绑定
-Point.distance = distance[0]
+// 命名空间函数：在 Point 命名空间下的普通函数
+Point.draw: (p: &Point, surface: Surface) -> Void = {
+    surface.plot(p.x, p.y)
+}
 
-// 指定绑定位置
-Point.transform = transform[1]  // this 绑定到第 1 位
+Point.serialize: (p: &Point) -> String = {
+    return "Point(${p.x}, ${p.y})"
+}
+
+// 调用：就是普通函数调用
+Point.draw(p, screen)
+Point.serialize(p)
 ```
+
+> **注意**：`self` 不是关键字，只是参数名的约定俗成。写成 `p`、`this`、`x` 效果完全一样。
+> 编译器不看参数名，看类型。
+
+##### 方法绑定（唯一方式）
+
+要让 `p.draw(screen)` 这种 `.` 方法调用语法生效，**必须显式绑定**。
+`[position]` 语法是将函数绑定为"方法"的唯一机制（详细语法见 RFC-004）。
+
+```yaoxiang
+// 定义函数
+draw: (p: &Point, surface: Surface) -> Void = {
+    surface.plot(p.x, p.y)
+}
+
+// 显式绑定 — 这之后才有 p.draw(screen) 语法
+Point.draw = draw[0]   // 位置 0 的参数（&Point）由调用者填充
+
+// 使用
+p.draw(screen)          // 语法糖 → draw(&p, screen)
+Point.draw(p, screen)   // 两种调用方式等价
+
+// 不写 [0] = 不绑定。Point.draw 就是普通函数别名，没有 . 语法
+Point.draw = draw       // 不绑定：只能 Point.draw(p, screen)
+```
+
+**默认行为**：不写 `[n]` = 不绑定任何参数。用户必须显式决定哪些参数由调用者填充。
 
 **多位置绑定**：
 
@@ -510,11 +534,11 @@ Point.transform = transform_points[0, 1]
 // 调用：p1.transform(p2)(2.0) → transform_points(p1, p2, 2.0)
 ```
 
-**反向绑定**（类型方法转普通函数）：
+**反向操作**（方法转普通函数）：
 
 ```yaoxiang
-// 类型方法转普通函数
-draw_point: (p: Point, surface: Surface) -> Void = Point.draw
+// 从绑定中取出函数
+draw_point: (p: &Point, surface: Surface) -> Void = Point.draw
 ```
 
 #### 4. 接口组合
@@ -630,19 +654,21 @@ Matrix3x3: Type = Matrix(Float, 3, 3)
 
 ```yaoxiang
 // ======== 1. 接口定义 ========
+// 接口 = 字段全是函数类型的记录类型
+// 接口中不需要 self 参数 — 接口只定义"去掉调用者位置后的函数签名"
 
 Drawable: Type = {
-    draw: (self: Self, surface: Surface) -> Void,
-    bounding_box: (self: Self) -> Rect
+    draw: (surface: Surface) -> Void,
+    bounding_box: () -> Rect
 }
 
 Serializable: Type = {
-    serialize: (self: Self) -> String
+    serialize: () -> String
 }
 
 Transformable: Type = {
-    translate: (self: Self, dx: Float, dy: Float) -> Self,
-    scale: (self: Self, factor: Float) -> Self
+    translate: (dx: Float, dy: Float) -> Transformable,  // 返回接口类型，具体实现返回自己的类型
+    scale: (factor: Float) -> Transformable
 }
 
 // ======== 2. 类型定义 ========
@@ -665,64 +691,68 @@ Rect: Type = {
     Transformable
 }
 
-// ======== 3. 方法定义 ========
+// ======== 3. 方法实现（普通函数 + 显式绑定）========
 
-// Point 的方法
-draw: (self: Point, surface: Surface) -> Void = {
-    surface.plot(self.x, self.y)
+// 定义函数（self 只是约定名，不是关键字）
+draw: (p: &Point, surface: Surface) -> Void = {
+    surface.plot(p.x, p.y)
 }
 
-bounding_box: (self: Point) -> Rect = {
-    return Rect(self.x - 1, self.y - 1, 2, 2)
+bounding_box: (p: &Point) -> Rect = {
+    return Rect(p.x - 1, p.y - 1, 2, 2)
 }
 
-serialize: (self: Point) -> String = {
-    return "Point(${self.x}, ${self.y})"
+serialize: (p: &Point) -> String = {
+    return "Point(${p.x}, ${p.y})"
 }
 
-translate: (self: Point, dx: Float, dy: Float) -> Point = {
-    return Point(self.x + dx, self.y + dy)
+translate: (p: &Point, dx: Float, dy: Float) -> Point = {
+    return Point(p.x + dx, p.y + dy)
 }
 
-scale: (self: Point, factor: Float) -> Point = {
-    return Point(self.x * factor, self.y * factor)
+scale: (p: &Point, factor: Float) -> Point = {
+    return Point(p.x * factor, p.y * factor)
 }
 
-// 普通方法（pub，自动绑定到 Point.distance）
-distance: (p1: Point, p2: Point) -> Float = {
+distance: (p1: &Point, p2: &Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     return (dx * dx + dy * dy).sqrt()
 }
 
-// Rect 的方法
-draw: (self: Rect, surface: Surface) -> Void = {
-    surface.draw_rect(self.x, self.y, self.width, self.height)
+// 显式绑定 — 绑定后才有点调用语法
+Point.draw = draw[0]
+Point.bounding_box = bounding_box[0]
+Point.serialize = serialize[0]
+Point.translate = translate[0]
+Point.scale = scale[0]
+Point.distance = distance[0]
+
+// Rect 的方法也类似
+draw: (r: &Rect, surface: Surface) -> Void = {
+    surface.draw_rect(r.x, r.y, r.width, r.height)
 }
+Rect.draw = draw[0]
 
-bounding_box: (self: Rect) -> Rect = self
+bounding_box: (r: &Rect) -> Rect = r
+Rect.bounding_box = bounding_box[0]
 
-serialize: (self: Rect) -> String = {
-    return "Rect(${self.x}, ${self.y}, ${self.width}, ${self.height})"
+serialize: (r: &Rect) -> String = {
+    return "Rect(${r.x}, ${r.y}, ${r.width}, ${r.height})"
 }
+Rect.serialize = serialize[0]
 
-translate: (self: Rect, dx: Float, dy: Float) -> Rect = {
-    return Rect(self.x + dx, self.y + dy, self.width, self.height)
+translate: (r: &Rect, dx: Float, dy: Float) -> Rect = {
+    return Rect(r.x + dx, r.y + dy, r.width, r.height)
 }
+Rect.translate = translate[0]
 
-scale: (self: Rect, factor: Float) -> Rect = {
-    return Rect(self.x * factor, self.y * factor, self.width * factor, self.height * factor)
+scale: (r: &Rect, factor: Float) -> Rect = {
+    return Rect(r.x * factor, r.y * factor, r.width * factor, r.height * factor)
 }
+Rect.scale = scale[0]
 
-// ======== 4. 方法绑定 ========
-
-Point.distance = distance[0]  // 绑定到位置0，柯里化后 method: (p2: Point) -> Float
-Point.transform = transform[1]  // 绑定到位置1，柯里化后 method: (dx: Float, dy: Float) -> Point
-Rect.transform = transform[1]  // 绑定到位置1，柯里化后 method: (dx: Float, dy: Float) -> Rect
-
-// ...以此类推，绑定其他方法...
-
-// ======== 5. 使用 ========
+// ======== 4. 使用 ========
 
 // 创建实例
 p: Point = Point(1.0, 2.0)
@@ -845,7 +875,7 @@ custom: CustomPoint = CustomPoint(
 | 之前 | 之后 |
 |------|------|
 | `type Point = Point(x: Float, y: Float)` | `type Point = { x: Float, y: Float }` |
-| `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Self, err: (E) -> Self }` |
+| `type Result(T, E) = ok(T) \| err(E)` | `Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }` |
 | 需要 `impl` 关键字 | 无需关键字，接口名写在类型体后 |
 
 ## 语法设计说明：具名函数本质是 Lambda 的语法糖
@@ -1042,7 +1072,8 @@ block ::= expression | '{' expression* '}'
 | 记录类型 | 包含命名字段的 `{ ... }` 类型 |
 | 接口 | 字段全为函数类型的记录类型 |
 | 泛型类型 | 定义为 `Name: (T: Type) -> Type = { ... }` 的类型，接受类型参数 |
-| 类型方法 | `Type.method` 形式的方法，关联到特定类型 |
+| 命名空间函数 | `Type.name` 形式的函数，属于 Type 命名空间。不隐含任何绑定 |
+| 方法绑定 | `Type.name = func[n]`，将 func 的位置 n 绑定为调用者，使 `obj.name(args)` 语法可用 |
 | 泛型函数 | 使用 `(T: Type)` 语法的函数，类型参数作为第一个参数组 |
 | 元类型 | `Type`，语言中唯一的类型层级标记 |
 

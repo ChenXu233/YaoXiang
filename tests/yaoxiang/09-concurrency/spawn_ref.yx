@@ -14,5 +14,5 @@ main = {
         return (a, b)
     }
     io.println(result)
-    io.println("SPAWN REF TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

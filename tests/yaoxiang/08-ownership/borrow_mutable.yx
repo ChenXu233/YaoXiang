@@ -15,5 +15,5 @@ main = {
     p = Point(1.0, 2.0)
     p.shift(3.0, 4.0)
     io.println(p)
-    io.println("MUTABLE BORROW TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

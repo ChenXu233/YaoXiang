@@ -118,6 +118,11 @@ Point: Type = {
 - 字段名后直接跟冒号和类型
 - 接口名写在类型体内表示实现该接口
 
+> **命名空间归属**：`Type.name` 前缀（如 `Point.draw`）表示函数属于 `Point` 的命名空间。
+> 它不触发任何隐式绑定。要让 `p.draw()` 这种 `.` 调用语法生效，必须显式绑定：
+> `Point.draw = draw[0]`。
+> 详见 RFC-004 和 RFC-010。
+
 #### 3.1.1 字段默认值
 
 类型字段可以指定默认值，构造时可选提供：
@@ -296,7 +301,7 @@ Result: (T: Type, E: Type) -> Type = {
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
-    push: (self: List(T), item: T) -> Void,
+    push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T)
 }
 ```
@@ -734,8 +739,8 @@ filter_by_threshold: (items: List(Point), threshold: &Float) -> List(Point) = {
 
 ```yaoxiang
 p = Point(1.0, 2.0)
-p.print()          // print 声明 &self → 编译器创建 &Point 令牌
-p.shift(1.0, 1.0)  // shift 声明 &mut self → 编译器创建 &mut Point 令牌
+p.print()          // print 的参数类型为 &Point → 编译器创建 &Point 令牌
+p.shift(1.0, 1.0)  // shift 的参数类型为 &mut Point → 编译器创建 &mut Point 令牌
 p2 = p             // 后续不再使用 → Move
 ```
 

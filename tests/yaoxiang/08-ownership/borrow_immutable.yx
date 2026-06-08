@@ -13,5 +13,5 @@ Point.print: (self: &Point) -> Void = {
 main = {
     p = Point(1.0, 2.0)
     p.print()
-    io.println("IMMUTABLE BORROW TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

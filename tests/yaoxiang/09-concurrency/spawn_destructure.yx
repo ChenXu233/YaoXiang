@@ -11,5 +11,5 @@ main = {
     a, b = result
     io.println(a)
     io.println(b)
-    io.println("SPAWN DESTRUCTURE TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

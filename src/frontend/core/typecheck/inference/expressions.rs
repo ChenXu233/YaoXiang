@@ -19,7 +19,6 @@ use super::scope::ScopeManager;
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
-/// 空的泛型类型定义表（默认值）
 static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>> =
     std::sync::LazyLock::new(HashMap::new);
 
@@ -51,8 +50,8 @@ pub struct ExpressionInferrer<'a> {
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
-    /// 泛型类型定义表: type_name -> GenericTypeDef
-    /// 用于泛型类型实例化（如 List(Int)）
+    /// 泛型类型定义表
+    /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
 }
 
@@ -487,6 +486,58 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 将类型中的 TypeRef 替换为对应的 TypeVar
+    ///
+    /// 用于泛型类型构造时，将 struct fields 中的 TypeRef("T") 替换为 TypeVar，
+    /// 以便与实参类型 unify 推断具体类型。
+    fn replace_type_refs_with_vars(ty: &MonoType, subst: &HashMap<String, MonoType>) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => {
+                subst.get(name).cloned().unwrap_or_else(|| ty.clone())
+            }
+            MonoType::Struct(s) => {
+                let new_fields: Vec<(String, MonoType)> = s
+                    .fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), Self::replace_type_refs_with_vars(t, subst)))
+                    .collect();
+                MonoType::Struct(crate::frontend::core::types::base::StructType {
+                    name: s.name.clone(),
+                    fields: new_fields,
+                    methods: s.methods.clone(),
+                    field_mutability: s.field_mutability.clone(),
+                    field_has_default: s.field_has_default.clone(),
+                    interfaces: s.interfaces.clone(),
+                })
+            }
+            MonoType::List(elem) => {
+                MonoType::List(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
+            }
+            MonoType::Option(elem) => {
+                MonoType::Option(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
+            }
+            MonoType::Tuple(elems) => {
+                MonoType::Tuple(elems.iter().map(|e| Self::replace_type_refs_with_vars(e, subst)).collect())
+            }
+            MonoType::Fn { params, return_type } => {
+                MonoType::Fn {
+                    params: params.iter().map(|p| Self::replace_type_refs_with_vars(p, subst)).collect(),
+                    return_type: Box::new(Self::replace_type_refs_with_vars(return_type, subst)),
+                }
+            }
+            MonoType::Arc(elem) => {
+                MonoType::Arc(Box::new(Self::replace_type_refs_with_vars(elem, subst)))
+            }
+            MonoType::Generic { name, args } => {
+                MonoType::Generic {
+                    name: name.clone(),
+                    args: args.iter().map(|a| Self::replace_type_refs_with_vars(a, subst)).collect(),
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
     /// 将类型中的 TypeVar 根据替换映射替换为具体类型
     ///
     /// 递归遍历类型，将遇到的 TypeVar 在 `subst` 映射中查找，
@@ -515,52 +566,90 @@ impl<'a> ExpressionInferrer<'a> {
             return func_ty;
         };
 
-        // 检查参数中是否包含 MetaType（泛型占位符），
-        // 如果没有则不需要单态化
+        // 收集原始类型变量索引
+        let mut var_indices = HashSet::new();
+        Self::collect_type_var_indices(&func_ty, &mut var_indices);
+
+        if !var_indices.is_empty() {
+            // 泛型值级函数：创建新的 TypeVar 实例（每次调用独立）
+            let mut subst = HashMap::new();
+            for idx in var_indices {
+                let fresh = self.solver.new_var();
+                subst.insert(idx, fresh);
+            }
+
+            let new_params: Vec<MonoType> = params
+                .iter()
+                .map(|p| Self::substitute_type_vars(p, &subst))
+                .collect();
+            let new_return = Self::substitute_type_vars(return_type, &subst);
+
+            // Unify 新参数与实参以推断具体类型
+            if arg_types.len() == new_params.len() {
+                for (arg_ty, param_ty) in arg_types.iter().zip(new_params.iter()) {
+                    let _ = self.solver.unify(arg_ty, param_ty);
+                }
+            }
+
+            let resolved_return = self.solver.resolve_type(&new_return);
+            return MonoType::Fn {
+                params: new_params,
+                return_type: Box::new(resolved_return),
+            };
+        }
+
+        // 检查参数中是否包含 MetaType（泛型类型构造器）
         let has_meta = params.iter().any(|p| matches!(p, MonoType::MetaType { .. }));
         if !has_meta {
             return func_ty;
         }
 
-        // 收集原始类型变量索引
-        let mut var_indices = HashSet::new();
-        Self::collect_type_var_indices(&func_ty, &mut var_indices);
+        // 当没有 TypeVar 但有 MetaType 参数时，为 MetaType 创建新的 TypeVar
+        // 用于处理 List(1, 2, 3) 这样的情况
+        {
+                // 为每个 MetaType 参数创建新的 TypeVar
+                let mut subst = HashMap::new();
+                for (i, param) in params.iter().enumerate() {
+                    if matches!(param, MonoType::MetaType { .. }) && i < arg_types.len() {
+                        let fresh = self.solver.new_var();
+                        let fresh_clone = fresh.clone();
+                        subst.insert(i, fresh);
+                        // 将新 TypeVar 与实参类型统一，以推断具体类型
+                        let _ = self.solver.unify(&fresh_clone, &arg_types[i]);
+                    }
+                }
+                // 替换参数中的 MetaType 为推断出的具体类型
+                let new_params: Vec<MonoType> = params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        if let Some(fresh) = subst.get(&i) {
+                            self.solver.resolve_type(fresh)
+                        } else {
+                            p.clone()
+                        }
+                    })
+                    .collect();
+                let resolved_return = self.solver.resolve_type(&return_type);
 
-        if var_indices.is_empty() {
-            return func_ty;
+                // 如果返回类型是 MetaType，尝试从 generic_type_defs 中获取具体的类型
+                if matches!(resolved_return, MonoType::MetaType { .. }) {
+                    // 尝试从函数名中获取泛型类型定义
+                    // 这里我们需要从 func_ty 中获取函数名，但 func_ty 是 MonoType::Fn，
+                    // 没有函数名信息。因此我们需要在调用时传入函数名。
+                    // 暂时返回一个 TypeVar，让调用者处理
+                    return MonoType::Fn {
+                        params: new_params,
+                        return_type: Box::new(self.solver.new_var()),
+                    };
+                }
+
+                return MonoType::Fn {
+                    params: new_params,
+                    return_type: Box::new(resolved_return),
+                };
+            }
         }
-
-        // 为每个旧 TypeVar 创建全新的 TypeVar，构建替换映射
-        let mut subst = HashMap::new();
-        for idx in var_indices {
-            let fresh = self.solver.new_var();
-            subst.insert(idx, fresh);
-        }
-
-        // 替换参数和返回类型中的 TypeVar
-        let new_params: Vec<MonoType> = params
-            .iter()
-            .map(|p| Self::substitute_type_vars(p, &subst))
-            .collect();
-        let new_return = Self::substitute_type_vars(&return_type, &subst);
-
-        // 将替换后的参数类型与实参类型进行 unify，确定具体类型
-        for (param_ty, arg_ty) in new_params.iter().zip(arg_types.iter()) {
-            let _ = self.solver.unify(param_ty, arg_ty);
-        }
-
-        // 解析 unify 后的参数和返回类型
-        let resolved_params: Vec<MonoType> = new_params
-            .iter()
-            .map(|p| self.solver.resolve_type(p))
-            .collect();
-        let resolved_return = self.solver.resolve_type(&new_return);
-
-        MonoType::Fn {
-            params: resolved_params,
-            return_type: Box::new(resolved_return),
-        }
-    }
 
     /// 推断表达式的类型
     pub fn infer_expr(
@@ -850,7 +939,48 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 // 单态化：处理编译期泛型参数
-                let mono_func_ty = self.monomorphize(func_ty, &arg_types);
+                let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types);
+
+                // 泛型类型构造：当函数名在 generic_type_defs 中且 func_ty 是 Struct 时，
+                // 通过 unify arg_types 与 struct fields 推断泛型参数，返回实例化后的结构体
+                if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = **func {
+                    if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
+                        if let MonoType::Struct(ref s) = func_ty {
+                            if !generic_def.param_names.is_empty() && !s.fields.is_empty() {
+                                // 使用 struct fields 的类型作为参数类型，
+                                // 与 arg_types unify 以推断泛型参数的具体类型
+                                let field_types: Vec<MonoType> = s.fields.iter().map(|(_, t)| t.clone()).collect();
+                                if arg_types.len() == field_types.len() {
+                                    // 创建新的 TypeVar 用于每个泛型参数
+                                    let mut param_subst: HashMap<String, MonoType> = HashMap::new();
+                                    for param_name in &generic_def.param_names {
+                                        param_subst.insert(param_name.clone(), self.solver.new_var());
+                                    }
+                                    // 替换 field types 中的 TypeRef 为 TypeVar
+                                    let resolved_fields: Vec<MonoType> = field_types.iter().map(|ft| {
+                                        Self::replace_type_refs_with_vars(ft, &param_subst)
+                                    }).collect();
+                                    // Unify resolved field types with arg types
+                                    for (field_ty, arg_ty) in resolved_fields.iter().zip(arg_types.iter()) {
+                                        let _ = self.solver.unify(field_ty, arg_ty);
+                                    }
+                                    // 解析泛型参数的具体类型
+                                    let concrete_args: Vec<MonoType> = generic_def.param_names.iter().map(|name| {
+                                        let var = param_subst.get(name).unwrap();
+                                        self.solver.resolve_type(var)
+                                    }).collect();
+                                    // 实例化模板
+                                    let result = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
+                                        &generic_def.template,
+                                        &generic_def.param_names,
+                                        &concrete_args,
+                                    );
+                                    return Ok(result);
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // 分发
                 match mono_func_ty {
@@ -887,21 +1017,8 @@ impl<'a> ExpressionInferrer<'a> {
                         let resolved_ret = self.solver.expand_type_shallow(&return_type);
                         return Ok(resolved_ret);
                     }
-                    MonoType::Struct(ref st) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(1, 2, 3) 单态化后的结果
-                        // 检查是否是泛型类型构造器
-                        if let Some(generic_def) = self.generic_type_defs.get(&st.name) {
-                            // 泛型构造器：从参数推导泛型参数并实例化
-                            let instantiated = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type_static(
-                                &mono_func_ty,
-                                &generic_def.param_names,
-                                &arg_types,
-                            );
-                            return Ok(instantiated);
-                        }
-                        return Ok(mono_func_ty);
-                    }
-                    MonoType::TypeRef(_) => {
+                    MonoType::Struct(_) | MonoType::TypeRef(_) => {
+                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果
                         return Ok(mono_func_ty);
                     }
                     _ => {}

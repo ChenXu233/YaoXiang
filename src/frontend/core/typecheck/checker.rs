@@ -841,11 +841,12 @@ impl TypeChecker {
             }
             _ => poly.body.clone(),
         });
-        self.env.add_type(name.to_string(), poly);
+        self.env.add_type(name.to_string(), poly.clone());
 
         // 如果是泛型类型构造器（有泛型参数），存储模板信息用于类型实例化
         if !generic_params.is_empty() {
-            let template = MonoType::from(definition.clone());
+            // 使用已注入名称的 poly 作为模板，确保实例化后的类型名称正确
+            let template = poly.body;
             self.env
                 .add_generic_type_def(name.to_string(), generic_params.to_vec(), template);
         }

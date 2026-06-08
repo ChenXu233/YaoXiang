@@ -45,5 +45,5 @@ main = {
     }
     io.println(r5)
 
-    io.println("PATTERN MATCHING TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }

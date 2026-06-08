@@ -9,5 +9,5 @@ main = {
         return x
     }
     io.println(result)
-    io.println("SPAWN SIMPLE TEST PASSED")
+    io.println("ALL TESTS PASSED")
 }
