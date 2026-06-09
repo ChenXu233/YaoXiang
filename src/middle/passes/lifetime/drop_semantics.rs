@@ -79,6 +79,9 @@ impl DropChecker {
             Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
             }
+            Some(ValueState::Dup) => {
+                // Dup 类型（如 &T）不会被 Drop，保持 Dup 状态
+            }
             Some(ValueState::Empty) => {
                 // Empty 状态的值也可以被 Drop，保持 Empty
             }

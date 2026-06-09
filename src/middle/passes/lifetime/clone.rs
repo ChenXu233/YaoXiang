@@ -43,6 +43,14 @@ impl CloneChecker {
                 ValueState::Moved => self.error_clone_moved(receiver),
                 ValueState::Dropped => self.error_clone_dropped(receiver),
                 ValueState::Owned(_) => {}
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）clone 后保持 Dup 状态
+                    // dst 也变为 Dup 状态
+                    if let Some(d) = dst {
+                        self.state.insert(d.clone(), ValueState::Dup);
+                    }
+                    return;
+                }
                 ValueState::Empty => self.error_clone_moved(receiver), // 空状态不能 clone
             }
             self.state.insert(receiver.clone(), ValueState::Owned(None));
