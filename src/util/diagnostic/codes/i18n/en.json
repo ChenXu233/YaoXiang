@@ -798,5 +798,69 @@
         "title": "Unimplemented feature",
         "template": "unimplemented feature: {feature}",
         "help": "This feature is not yet implemented."
+    },
+    "E0015": {
+        "title": "Expected identifier",
+        "message": "Parser expected an identifier/name",
+        "template": "Expected identifier '{name}'",
+        "help": "Provide a valid identifier at this position",
+        "example": "fn () {}",
+        "error_output": "error[E0015]: Expected identifier\n --> example.yx:1:4\n  |\n1 | fn () {}\n  |    ^ expected function name"
+    },
+    "E0016": {
+        "title": "Expected expression",
+        "message": "Parser expected an expression",
+        "template": "Expected expression for {context}",
+        "help": "Provide a valid expression at this position",
+        "example": "x = ;",
+        "error_output": "error[E0016]: Expected expression\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ expected expression after '='"
+    },
+    "E0017": {
+        "title": "Old syntax rejected",
+        "message": "Old syntax is no longer supported",
+        "template": "Old syntax '{old}' is no longer supported. Use '{new}' instead",
+        "help": "Use the new syntax as shown in the suggestion",
+        "example": "Type[T]",
+        "error_output": "error[E0017]: Old syntax rejected\n --> example.yx:1:1\n  |\n1 | Type[T]\n  | ^^^^ old syntax; use 'Type' alone"
+    },
+    "E0018": {
+        "title": "Keyword as name",
+        "message": "Keyword cannot be used as a variable or expression name",
+        "template": "'{keyword}' is a keyword and cannot be used as a name",
+        "help": "Use a different identifier instead of the keyword",
+        "example": "if = 1;",
+        "error_output": "error[E0018]: Keyword as name\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' is a keyword"
+    },
+    "E0019": {
+        "title": "Parameter count mismatch",
+        "message": "Function parameter count does not match",
+        "template": "Parameter count mismatch: expected {expected}, found {found}",
+        "help": "Ensure the number of parameters matches the signature",
+        "example": "f: (a: Int) -> Int = (a, b) => a + b",
+        "error_output": "error[E0019]: Parameter count mismatch\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (a, b) => a + b\n  |                    ^ expected 1 parameter, found 2"
+    },
+    "E0020": {
+        "title": "Parameter name mismatch",
+        "message": "Parameter name does not match the signature",
+        "template": "Parameter name mismatch at position {position}: expected '{expected}', found '{found}'",
+        "help": "Use matching parameter names or omit the lambda head",
+        "example": "f: (a: Int) -> Int = (b) => b",
+        "error_output": "error[E0020]: Parameter name mismatch\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (b) => b\n  |                    ^ expected 'a', found 'b'"
+    },
+    "E0021": {
+        "title": "Expected token after",
+        "message": "Parser expected a specific token after a context",
+        "template": "Expected {token} after {context}",
+        "help": "Add the expected token in the correct position",
+        "example": "mut x Int",
+        "error_output": "error[E0021]: Expected token after\n --> example.yx:1:7\n  |\n1 | mut x Int\n  |       ^ expected ':' after 'mut'"
+    },
+    "E0022": {
+        "title": "Enum brace syntax required",
+        "message": "Enum variants must use brace syntax",
+        "template": "Enum variants must use brace syntax: {| variant1 | variant2 | ... }",
+        "help": "Wrap enum variants in braces with pipe separators",
+        "example": "Color = red | green | blue",
+        "error_output": "error[E0022]: Enum brace syntax required\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ use brace syntax: { red | green | blue }"
     }
 }

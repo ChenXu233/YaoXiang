@@ -798,5 +798,69 @@
         "title": "未实现功能",
         "template": "未实现功能：{feature}",
         "help": "此功能尚未实现。"
+    },
+    "E0015": {
+        "title": "期望标识符",
+        "message": "解析器期望一个标识符或名称",
+        "template": "期望标识符 '{name}'",
+        "help": "在此位置提供一个有效的标识符",
+        "example": "fn () {}",
+        "error_output": "error[E0015]: 期望标识符\n --> example.yx:1:4\n  |\n1 | fn () {}\n  |    ^ 期望函数名"
+    },
+    "E0016": {
+        "title": "期望表达式",
+        "message": "解析器期望一个表达式",
+        "template": "期望表达式：{context}",
+        "help": "在此位置提供一个有效的表达式",
+        "example": "x = ;",
+        "error_output": "error[E0016]: 期望表达式\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 期望 '=' 后的表达式"
+    },
+    "E0017": {
+        "title": "旧语法已弃用",
+        "message": "旧语法不再支持",
+        "template": "旧语法 '{old}' 已不再支持。请使用 '{new}'",
+        "help": "按照提示使用新语法",
+        "example": "Type[T]",
+        "error_output": "error[E0017]: 旧语法已弃用\n --> example.yx:1:1\n  |\n1 | Type[T]\n  | ^^^^ 旧语法；请单独使用 'Type'"
+    },
+    "E0018": {
+        "title": "关键字作名称",
+        "message": "关键字不能用作变量或表达式名称",
+        "template": "'{keyword}' 是关键字，不能用作名称",
+        "help": "换一个不同的标识符代替关键字",
+        "example": "if = 1;",
+        "error_output": "error[E0018]: 关键字作名称\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 是关键字"
+    },
+    "E0019": {
+        "title": "参数数量不匹配",
+        "message": "函数参数数量不匹配",
+        "template": "参数数量不匹配：期望 {expected} 个，找到 {found} 个",
+        "help": "确保参数数量与签名一致",
+        "example": "f: (a: Int) -> Int = (a, b) => a + b",
+        "error_output": "error[E0019]: 参数数量不匹配\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (a, b) => a + b\n  |                    ^ 期望 1 个参数，找到 2 个"
+    },
+    "E0020": {
+        "title": "参数名称不匹配",
+        "message": "参数名称与签名不一致",
+        "template": "参数名称不匹配（第 {position} 位）：期望 '{expected}'，找到 '{found}'",
+        "help": "使用匹配的参数名称，或省略 lambda 头部",
+        "example": "f: (a: Int) -> Int = (b) => b",
+        "error_output": "error[E0020]: 参数名称不匹配\n --> example.yx:1:20\n  |\n1 | f: (a: Int) -> Int = (b) => b\n  |                    ^ 期望 'a'，找到 'b'"
+    },
+    "E0021": {
+        "title": "期望 token",
+        "message": "解析器期望特定上下文后出现特定 token",
+        "template": "期望 {context} 后出现 {token}",
+        "help": "在正确位置添加期望的 token",
+        "example": "mut x Int",
+        "error_output": "error[E0021]: 期望 token\n --> example.yx:1:7\n  |\n1 | mut x Int\n  |       ^ 期望 'mut' 后出现 ':'"
+    },
+    "E0022": {
+        "title": "枚举必须使用花括号语法",
+        "message": "枚举变体必须使用花括号语法",
+        "template": "枚举变体必须使用花括号语法：{| variant1 | variant2 | ... }",
+        "help": "用花括号和管道分隔符包裹枚举变体",
+        "example": "Color = red | green | blue",
+        "error_output": "error[E0022]: 枚举必须使用花括号语法\n --> example.yx:1:9\n  |\n1 | Color = red | green | blue\n  |         ^ 使用花括号语法：{ red | green | blue }"
     }
 }
