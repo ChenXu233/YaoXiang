@@ -38,6 +38,7 @@ use std::collections::HashMap;
 /// - **Moved**: 值已被移动，所有者不可用。必须重新赋值才能使用。
 /// - **Empty**: 值处于空状态（仅在 Moved 后触发）。可以重新赋值复用变量。
 /// - **Dropped**: 值已被释放（仅 DropChecker 使用）。
+/// - **Dup**: 值是 Dup 类型（如 `&T`），可多次使用，不会被消费。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueState {
     /// 有效，所有者可用，可选携带类型信息用于重赋值检查
@@ -48,6 +49,8 @@ pub enum ValueState {
     Empty,
     /// 已被释放（仅 DropChecker 使用）
     Dropped,
+    /// Dup 类型（如 `&T`），可多次使用，不会被消费
+    Dup,
 }
 
 /// 类型标识符（用于空状态重赋值时的类型检查）

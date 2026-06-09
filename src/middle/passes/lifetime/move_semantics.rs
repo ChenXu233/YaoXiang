@@ -22,6 +22,7 @@
 use super::consume_analysis::ConsumeAnalyzer;
 use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name, codes};
 use super::ownership_flow::ConsumeMode;
+use crate::frontend::core::types::base::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
@@ -124,6 +125,10 @@ impl MoveChecker {
                         ValueState::Moved | ValueState::Empty => {
                             self.report_use_after_move(src);
                         }
+                        ValueState::Dup => {
+                            // Dup 类型（如 &T）传播 Dup 状态
+                            self.state.insert(dst.clone(), ValueState::Dup);
+                        }
                         _ => {
                             self.state.insert(dst.clone(), state);
                         }
@@ -175,6 +180,12 @@ impl MoveChecker {
                         self.type_map.insert(src.clone(), t);
                     }
                 }
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）不会被 Move，保持 Dup 状态
+                    // dst 也变为 Dup 状态
+                    self.state.insert(dst.clone(), ValueState::Dup);
+                    return;
+                }
                 ValueState::Moved => {
                     // 已移动的值再次被 Move，报错
                     self.report_use_after_move(src);
@@ -206,12 +217,19 @@ impl MoveChecker {
         let src_type = self.type_map.get(src).cloned();
 
         // 检查 dst 的当前状态
-        if let Some(state) = self.state.get(dst) {
+        if let Some(state) = self.state.get(dst).cloned() {
             match state {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
                     let name = operand_display_name(dst, self.local_names.as_ref());
                     self.errors.push(codes::reassign_non_empty(&name));
+                    return;
+                }
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）：Store 不改变状态
+                    // 函数开头的 Store { dst: Local(0), src: Local(0) } 是参数初始化
+                    // 保持 Dup 状态，允许字段访问等操作
+                    self.check_used(src);
                     return;
                 }
                 ValueState::Moved => {
@@ -276,10 +294,14 @@ impl MoveChecker {
                 }
                 Some(ConsumeMode::Consumes) | Some(ConsumeMode::Undetermined) | None => {
                     // Consumes/Undetermined/未知：保守处理，参数进入 Empty
+                    // 但 Dup 类型（如 &T）不会被消费
                     if let Some(state) = self.state.get(arg) {
                         match state {
                             ValueState::Empty => {
                                 self.report_use_after_move(arg);
+                            }
+                            ValueState::Dup => {
+                                // Dup 类型（如 &T）不会被消费，保持 Dup 状态
                             }
                             ValueState::Owned(_) => {
                                 self.state.insert(arg.clone(), ValueState::Empty);
@@ -310,6 +332,9 @@ impl MoveChecker {
                     // 返回值被移动，进入 Empty 状态
                     self.state.insert(value.clone(), ValueState::Empty);
                 }
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）返回时保持 Dup 状态
+                }
                 ValueState::Empty => {
                     // 空状态返回值是合法的
                 }
@@ -339,6 +364,9 @@ impl MoveChecker {
                     // 这里我们假设 check_used 主要用于读取场景
                     self.report_use_after_move(operand);
                 }
+                ValueState::Dup => {
+                    // Dup 类型（如 &T）可多次使用，不改变状态
+                }
                 ValueState::Owned(_) | ValueState::Dropped => {
                     // 正常使用
                 }
@@ -361,6 +389,16 @@ impl OwnershipCheck for MoveChecker {
         func: &FunctionIR,
     ) -> &[Diagnostic] {
         self.clear();
+
+        // 初始化函数参数的状态
+        for (idx, param_type) in func.params.iter().enumerate() {
+            let operand = Operand::Local(idx);
+            if matches!(param_type, MonoType::Ref { .. }) {
+                self.state.insert(operand, ValueState::Dup);
+            } else {
+                self.state.insert(operand, ValueState::Owned(None));
+            }
+        }
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {

@@ -279,8 +279,7 @@ impl AstToIrGenerator {
         args_with_originals: Vec<(Operand, Operand)>,
         instructions: &mut Vec<Instruction>,
     ) -> (Vec<Operand>, Vec<Operand>) {
-        let param_types: Option<Vec<MonoType>> =
-            self.function_param_types.get(func_name).cloned();
+        let param_types: Option<Vec<MonoType>> = self.function_param_types.get(func_name).cloned();
 
         let mut result_args = Vec::with_capacity(args_with_originals.len());
         let mut borrow_tokens = Vec::new();
@@ -742,6 +741,10 @@ impl AstToIrGenerator {
         // 记录函数参数类型（用于调用点发出 Borrow 指令）
         self.function_param_types
             .insert(func_name.clone(), param_types.clone());
+
+        // 记录局部变量起始位置（在参数之后）
+        let local_var_start = params.len();
+        self.next_temp = local_var_start;
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -2999,12 +3002,10 @@ impl AstToIrGenerator {
                             // ========== 默认函数调用处理 ==========
                             // 提取函数名字符串（用于查找参数类型）
                             let func_name_str = match func.as_ref() {
-                                Expr::Var(name, _) => {
-                                    SHORT_TO_QUALIFIED
-                                        .get(name)
-                                        .cloned()
-                                        .unwrap_or_else(|| name.clone())
-                                }
+                                Expr::Var(name, _) => SHORT_TO_QUALIFIED
+                                    .get(name)
+                                    .cloned()
+                                    .unwrap_or_else(|| name.clone()),
                                 _ => String::new(),
                             };
 

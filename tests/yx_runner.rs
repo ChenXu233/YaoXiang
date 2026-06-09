@@ -92,7 +92,7 @@ fn binary_name() -> String {
 // ============================================================================
 
 #[test]
-#[ignore] // 临时跳过：已有所有权检查失败，待修复后移除
+#[ignore] // 待修复: list_comp/for/closures 的循环变量 Move 语义
 fn test_all_yx_files_pass() {
     let files = discover_yx_tests();
     assert!(!files.is_empty(), "No .yx test files found!");
