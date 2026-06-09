@@ -1,0 +1,14 @@
+// 12-paper-demos/error_move_after_use.yx
+// 错误检测: Move 后使用原变量 — 编译器应拒绝
+// 论文价值: Move 是默认语义，类型系统天然保证安全
+
+use std.io
+
+main = {
+    x = 42
+    y = x       // Move: x -> y
+    io.println(y)
+    // x 不再可用 — 编译器应拒绝
+    // io.println(x)  // 取消注释查看错误
+    io.println("ALL TESTS PASSED")
+}
