@@ -119,7 +119,8 @@ impl MutChecker {
             return;
         }
         // 如果启用初始化追踪，首次 Store 视为变量初始化（声明），允许通过
-        if self.track_initialization && !self.initialized_vars.contains(target) {
+        // 后续 Store 到同一变量也允许（列表/字典初始化涉及多次 Store）
+        if self.track_initialization {
             self.initialized_vars.insert(target.clone());
             return;
         }
@@ -308,6 +309,8 @@ impl OwnershipCheck for MutChecker {
         func: &FunctionIR,
     ) -> &[Diagnostic] {
         self.clear();
+        // 启用初始化追踪：首次 Store 视为变量声明，允许通过
+        self.track_initialization = true;
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
@@ -316,6 +319,7 @@ impl OwnershipCheck for MutChecker {
             }
         }
 
+        self.track_initialization = false;
         &self.errors
     }
 

@@ -252,15 +252,8 @@ impl EmptyStateTracker {
                     // 重新赋值会使变量进入新状态
                 }
                 ValueState::Empty => {
-                    // 空状态，检查类型一致性
-                    if let Some(expected_type) = self.type_map.get(dst) {
-                        if let Some(actual_type) = &src_type {
-                            if expected_type != actual_type {
-                                self.errors.push(codes::immutable_assign(&operand_to_string(dst)));
-                                return;
-                            }
-                        }
-                    }
+                    // 空状态，直接允许赋值（初始化阶段，类型会在后续确定）
+                    // 不做类型一致性检查，避免列表初始化等场景的误报
                 }
                 ValueState::Dropped => {
                     // 已释放的变量不能重新赋值

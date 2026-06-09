@@ -50,10 +50,10 @@ pub fn run_lsp_server() -> Result<()> {
     let mut session = Session::new();
     let mut world = World::new();
 
-    // 加载标准库符号到索引
-    world.load_std_library_symbols(None);
-    // 加载内置类型到索引
-    world.load_builtin_types();
+    // 加载标准库符号到语义数据库
+    world.load_std_symbols_to_semantic_db();
+    // 加载内置类型到语义数据库
+    world.load_builtin_types_to_semantic_db();
 
     // 主消息循环
     main_loop(&connection, &mut session, &mut world)?;
@@ -408,7 +408,7 @@ fn handle_notification(
         m if m == <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
                 let uri = handlers::text_document::handle_did_open(session, params);
-                update_symbol_index(session, world, &uri);
+                update_semantic_db(session, world, &uri);
                 request_semantic_tokens_refresh(connection);
                 publish_diagnostics_for_uri(connection, session, &uri);
             }
@@ -418,7 +418,7 @@ fn handle_notification(
         m if m == <DidChangeTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
                 if let Some(uri) = handlers::text_document::handle_did_change(session, params) {
-                    update_symbol_index(session, world, &uri);
+                    update_semantic_db(session, world, &uri);
                     request_semantic_tokens_refresh(connection);
                     publish_diagnostics_for_uri(connection, session, &uri);
                 }
@@ -452,9 +452,8 @@ fn handle_notification(
 
 /// 更新指定文件的符号索引和语义数据库
 ///
-/// 从 DocumentStore 获取文件内容，解析后更新 World 的符号索引。
-/// 同时运行 typecheck 收集语义 token 并存入 SemanticDB。
-fn update_symbol_index(
+/// 从 DocumentStore 获取文件内容，解析后更新 World 的语义数据库。
+fn update_semantic_db(
     session: &Session,
     world: &mut World,
     uri: &str,
@@ -463,25 +462,20 @@ fn update_symbol_index(
         let tokens = match crate::frontend::core::lexer::tokenize(doc.content()) {
             Ok(t) => t,
             Err(_) => {
-                // 词法错误时移除旧索引
+                // 词法错误时移除旧语义信息
                 world.remove_file_symbols(uri);
                 return;
             }
         };
 
         let parse_result = crate::frontend::core::parser::parse_with_recovery(&tokens);
-        world.update_index_from_ast(uri, &parse_result.module);
 
         // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
         let mut tc = crate::frontend::core::typecheck::TypeChecker::new(uri);
         let result = tc.check_module_collect_all(&parse_result.module);
         world.update_semantic_db(result.semantic_db);
 
-        debug!(
-            "已更新符号索引和语义数据库: {} ({} 个符号)",
-            uri,
-            world.symbol_count()
-        );
+        debug!("已更新语义数据库: {}", uri);
     }
 }
 
@@ -813,14 +807,7 @@ mod tests {
 
         handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
-        // 符号索引应包含 x 和 add
-        assert!(
-            world.symbol_count() >= 2,
-            "应至少有 2 个符号，实际: {}",
-            world.symbol_count()
-        );
-
-        // 无语法错误时也应收集到 semantic tokens
+        // 语义数据库应包含符号
         let semantic_tokens = world
             .semantic_db()
             .get_tokens("file:///test/indexed.yx")
@@ -853,8 +840,13 @@ mod tests {
         };
         handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
-        let count_before = world.symbol_count();
-        assert!(count_before > 0);
+        // 检查语义数据库中有 tokens（表示文件被处理了）
+        let tokens_before = world
+            .semantic_db()
+            .get_tokens("file:///test/closing.yx")
+            .map(|t| t.len())
+            .unwrap_or(0);
+        assert!(tokens_before > 0, "打开文件后应有语义 tokens");
 
         // 关闭
         let close_params = lsp_types::DidCloseTextDocumentParams {
@@ -870,7 +862,14 @@ mod tests {
         };
         handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
-        assert_eq!(world.symbol_count(), 0, "关闭文档后符号应被移除");
+        // 关闭后语义信息应被移除
+        assert!(
+            world
+                .semantic_db()
+                .get_tokens("file:///test/closing.yx")
+                .is_none(),
+            "关闭文档后语义信息应被移除"
+        );
     }
 
     #[test]
@@ -884,45 +883,23 @@ mod tests {
         );
         let mut world = World::new();
 
-        // 注册符号
-        use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
-        use crate::util::span::{Position, Span};
-        let module = Module {
-            items: vec![Stmt {
-                kind: StmtKind::Var {
-                    name: "x".to_string(),
-                    name_span: Span {
-                        start: Position {
-                            line: 1,
-                            column: 1,
-                            offset: 0,
-                        },
-                        end: Position {
-                            line: 1,
-                            column: 2,
-                            offset: 1,
-                        },
-                    },
-                    type_annotation: None,
-                    initializer: None,
-                    is_mut: false,
+        // 注册符号到语义数据库
+        use crate::util::span::Span;
+        world.semantic_db_mut().add_definition(
+            "file:///test/main.yx",
+            crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
+                def_id: crate::frontend::core::typecheck::semantic_db::DefId {
+                    file_path: "file:///test/main.yx".to_string(),
+                    span: Span::dummy(),
                 },
-                span: Span {
-                    start: Position {
-                        line: 1,
-                        column: 1,
-                        offset: 0,
-                    },
-                    end: Position {
-                        line: 1,
-                        column: 7,
-                        offset: 6,
-                    },
-                },
-            }],
-            span: Span::dummy(),
-        };
-        world.update_index_from_ast("file:///test/main.yx", &module);
+                name: "x".to_string(),
+                kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
+                span: Span::dummy(),
+                file_path: "file:///test/main.yx".to_string(),
+                type_info: Some("Int".to_string()),
+                signature: None,
+            },
+        );
 
         let params = lsp_types::GotoDefinitionParams {
             text_document_position_params: lsp_types::TextDocumentPositionParams {
@@ -1002,45 +979,23 @@ mod tests {
         );
         let mut world = World::new();
 
-        // 注册符号以获得悬停信息
-        use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind};
-        use crate::util::span::{Position, Span};
-        let module = Module {
-            items: vec![Stmt {
-                kind: StmtKind::Var {
-                    name: "x".to_string(),
-                    name_span: Span {
-                        start: Position {
-                            line: 1,
-                            column: 1,
-                            offset: 0,
-                        },
-                        end: Position {
-                            line: 1,
-                            column: 2,
-                            offset: 1,
-                        },
-                    },
-                    type_annotation: None,
-                    initializer: None,
-                    is_mut: false,
+        // 注册符号到语义数据库
+        use crate::util::span::Span;
+        world.semantic_db_mut().add_definition(
+            "file:///test/main.yx",
+            crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
+                def_id: crate::frontend::core::typecheck::semantic_db::DefId {
+                    file_path: "file:///test/main.yx".to_string(),
+                    span: Span::dummy(),
                 },
-                span: Span {
-                    start: Position {
-                        line: 1,
-                        column: 1,
-                        offset: 0,
-                    },
-                    end: Position {
-                        line: 1,
-                        column: 7,
-                        offset: 6,
-                    },
-                },
-            }],
-            span: Span::dummy(),
-        };
-        world.update_index_from_ast("file:///test/main.yx", &module);
+                name: "x".to_string(),
+                kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
+                span: Span::dummy(),
+                file_path: "file:///test/main.yx".to_string(),
+                type_info: Some("Int".to_string()),
+                signature: None,
+            },
+        );
 
         let params = lsp_types::HoverParams {
             text_document_position_params: lsp_types::TextDocumentPositionParams {

@@ -1,100 +1,18 @@
 //! 工作区符号搜索处理
 //!
-//! **状态**：阶段 5 (v0.9) 实现
+//! **状态**：阶段 3 (v0.8) 实现
 //!
 //! 支持：
-//! - 模糊搜索工作区内所有符号
-//! - 按符号类型过滤
-//! - 按文件过滤
+//! - 空查询返回所有符号
+//! - 模糊匹配查询
+//! - 结果按匹配得分排序
 
-use lsp_types::{Location, SymbolInformation, SymbolKind as LspSymbolKind, Uri, WorkspaceSymbolParams};
-use std::str::FromStr;
+use lsp_types::{SymbolInformation, SymbolKind as LspSymbolKind, WorkspaceSymbolParams};
 use tracing::debug;
 
-use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolKind};
+use crate::frontend::core::typecheck::semantic_db::{DefinitionInfo, DefinitionKind};
 use crate::lsp::locate::span_to_range;
 use crate::lsp::world::World;
-
-/// 将 YaoXiang SymbolKind 转换为 LSP SymbolKind
-fn to_lsp_symbol_kind(kind: &SymbolKind) -> LspSymbolKind {
-    match kind {
-        SymbolKind::Variable => LspSymbolKind::VARIABLE,
-        SymbolKind::Function | SymbolKind::GenericFunction => LspSymbolKind::FUNCTION,
-        SymbolKind::Type | SymbolKind::GenericType => LspSymbolKind::CLASS,
-        SymbolKind::TypeClass | SymbolKind::Trait => LspSymbolKind::INTERFACE,
-        SymbolKind::ConstGeneric => LspSymbolKind::CONSTANT,
-        SymbolKind::HigherKindedType | SymbolKind::TypeFamily => LspSymbolKind::CLASS,
-        SymbolKind::Binding | SymbolKind::PositionBinding => LspSymbolKind::VARIABLE,
-    }
-}
-
-/// 模糊匹配：查询字符串中的所有字符是否按顺序出现在目标中
-///
-/// 例如："fib" 匹配 "fibonacci"、"find_by_id" 等
-fn fuzzy_match(
-    query: &str,
-    target: &str,
-) -> bool {
-    if query.is_empty() {
-        return true;
-    }
-
-    let query_lower = query.to_lowercase();
-    let target_lower = target.to_lowercase();
-
-    let mut query_chars = query_lower.chars().peekable();
-    for ch in target_lower.chars() {
-        if query_chars.peek() == Some(&ch) {
-            query_chars.next();
-        }
-        if query_chars.peek().is_none() {
-            return true;
-        }
-    }
-
-    query_chars.peek().is_none()
-}
-
-/// 计算模糊匹配得分，用于排序（越小越好）
-///
-/// 评分规则：
-/// - 完全匹配：0
-/// - 前缀匹配：1
-/// - 包含匹配：2
-/// - 模糊匹配：3
-fn match_score(
-    query: &str,
-    target: &str,
-) -> u32 {
-    let q = query.to_lowercase();
-    let t = target.to_lowercase();
-
-    if q == t {
-        0
-    } else if t.starts_with(&q) {
-        1
-    } else if t.contains(&q) {
-        2
-    } else {
-        3
-    }
-}
-
-/// 将 IndexedSymbol 转换为 LSP SymbolInformation
-fn symbol_to_info(symbol: &IndexedSymbol) -> Option<SymbolInformation> {
-    let uri = Uri::from_str(&symbol.location.file_path).ok()?;
-    let range = span_to_range(&symbol.location.span);
-
-    #[allow(deprecated)]
-    Some(SymbolInformation {
-        name: symbol.name.clone(),
-        kind: to_lsp_symbol_kind(&symbol.kind),
-        tags: None,
-        deprecated: None,
-        location: Location::new(uri, range),
-        container_name: None,
-    })
-}
 
 /// 处理 `workspace/symbol` 请求
 ///
@@ -109,34 +27,34 @@ pub fn handle_workspace_symbol(
     let query = &params.query;
     debug!("工作区符号搜索: {:?}", query);
 
-    let index = world.symbol_index();
-    let all_names = index.all_names();
+    let db = world.semantic_db();
 
     // 最大返回数量限制
     const MAX_RESULTS: usize = 256;
 
     let mut results: Vec<(u32, SymbolInformation)> = Vec::new();
 
-    for name in &all_names {
-        if !query.is_empty() && !fuzzy_match(query, name) {
-            continue;
-        }
+    // 收集所有文件的定义
+    for file_path in db.file_paths() {
+        let defs = db.get_definitions(file_path);
+        for def in defs {
+            if !query.is_empty() && !fuzzy_match(query, &def.name) {
+                continue;
+            }
 
-        let score = if query.is_empty() {
-            3
-        } else {
-            match_score(query, name)
-        };
-        let symbols = index.find_by_name(name);
+            let score = if query.is_empty() {
+                3
+            } else {
+                match_score(query, &def.name)
+            };
 
-        for sym in symbols {
-            if let Some(info) = symbol_to_info(sym) {
+            if let Some(info) = def_to_info(def) {
                 results.push((score, info));
             }
-        }
 
-        if results.len() >= MAX_RESULTS {
-            break;
+            if results.len() >= MAX_RESULTS {
+                break;
+            }
         }
     }
 
@@ -158,16 +76,91 @@ pub fn handle_workspace_symbol(
     }
 }
 
-// ─── 测试 ─────────────────────────────────────
+/// 将 DefinitionKind 转换为 LSP SymbolKind
+fn def_kind_to_symbol_kind(kind: DefinitionKind) -> LspSymbolKind {
+    match kind {
+        DefinitionKind::Function | DefinitionKind::Method => LspSymbolKind::FUNCTION,
+        DefinitionKind::Type | DefinitionKind::Interface => LspSymbolKind::CLASS,
+        DefinitionKind::Variable | DefinitionKind::Parameter => LspSymbolKind::VARIABLE,
+        DefinitionKind::GenericParameter => LspSymbolKind::TYPE_PARAMETER,
+    }
+}
+
+/// 将 DefinitionInfo 转换为 SymbolInformation
+fn def_to_info(def: &DefinitionInfo) -> Option<SymbolInformation> {
+    let uri = lsp_types::Uri::from_str(&def.file_path).ok()?;
+    let range = span_to_range(&def.span);
+
+    Some(SymbolInformation {
+        name: def.name.clone(),
+        kind: def_kind_to_symbol_kind(def.kind.clone()),
+        tags: None,
+        location: lsp_types::Location::new(uri, range),
+        container_name: None,
+        #[allow(deprecated)]
+        deprecated: None,
+    })
+}
+
+/// 模糊匹配：查询的每个字符按顺序出现在名称中
+fn fuzzy_match(
+    query: &str,
+    name: &str,
+) -> bool {
+    let query_lower = query.to_lowercase();
+    let name_lower = name.to_lowercase();
+
+    let mut qi = 0;
+    for ch in name_lower.chars() {
+        if qi < query_lower.len() && ch == query_lower.as_bytes()[qi] as char {
+            qi += 1;
+        }
+    }
+
+    qi == query_lower.len()
+}
+
+/// 匹配得分（越小越好）
+fn match_score(
+    query: &str,
+    name: &str,
+) -> u32 {
+    if query == name {
+        return 0;
+    }
+
+    let query_lower = query.to_lowercase();
+    let name_lower = name.to_lowercase();
+
+    if query_lower == name_lower {
+        return 1;
+    }
+
+    if name_lower.starts_with(&query_lower) {
+        return 2;
+    }
+
+    if name_lower.contains(&query_lower) {
+        return 3;
+    }
+
+    // 模糊匹配得分
+    4
+}
+
+use std::str::FromStr;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::core::lexer::symbols::{IndexedSymbol, SymbolKind, SymbolLocation};
+    use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
     use crate::util::span::{Position, Span};
 
-    fn dummy_span() -> Span {
-        Span {
+    fn make_world_with_symbols() -> World {
+        let mut world = World::new();
+
+        let uri = "file:///test.yx";
+        let span = Span {
             start: Position {
                 line: 1,
                 column: 1,
@@ -178,113 +171,57 @@ mod tests {
                 column: 10,
                 offset: 9,
             },
-        }
-    }
+        };
 
-    fn make_world_with_symbols() -> World {
-        let mut world = World::new();
-        let index = world.symbol_index_mut();
+        world.semantic_db_mut().add_definition(
+            uri,
+            DefinitionInfo {
+                def_id: DefId {
+                    file_path: uri.to_string(),
+                    span,
+                },
+                name: "fibonacci".to_string(),
+                kind: DefinitionKind::Function,
+                span,
+                file_path: uri.to_string(),
+                type_info: Some("(Int) -> Int".to_string()),
+                signature: Some("fibonacci: (n: Int) -> Int".to_string()),
+            },
+        );
 
-        index.add(IndexedSymbol {
-            name: "fibonacci".to_string(),
-            kind: SymbolKind::Function,
-            arity: Some(1),
-            location: SymbolLocation::new("file:///test.yx".to_string(), dummy_span()),
-        });
-        index.add(IndexedSymbol {
-            name: "find_by_id".to_string(),
-            kind: SymbolKind::Function,
-            arity: Some(1),
-            location: SymbolLocation::new("file:///test.yx".to_string(), dummy_span()),
-        });
-        index.add(IndexedSymbol {
-            name: "MyType".to_string(),
-            kind: SymbolKind::Type,
-            arity: None,
-            location: SymbolLocation::new("file:///types.yx".to_string(), dummy_span()),
-        });
-        index.add(IndexedSymbol {
-            name: "counter".to_string(),
-            kind: SymbolKind::Variable,
-            arity: None,
-            location: SymbolLocation::new("file:///test.yx".to_string(), dummy_span()),
-        });
-        index.add(IndexedSymbol {
-            name: "format_string".to_string(),
-            kind: SymbolKind::Function,
-            arity: Some(2),
-            location: SymbolLocation::new("file:///util.yx".to_string(), dummy_span()),
-        });
+        world.semantic_db_mut().add_definition(
+            uri,
+            DefinitionInfo {
+                def_id: DefId {
+                    file_path: uri.to_string(),
+                    span,
+                },
+                name: "find_by_id".to_string(),
+                kind: DefinitionKind::Function,
+                span,
+                file_path: uri.to_string(),
+                type_info: Some("(Int) -> Item".to_string()),
+                signature: Some("find_by_id: (id: Int) -> Item".to_string()),
+            },
+        );
+
+        world.semantic_db_mut().add_definition(
+            uri,
+            DefinitionInfo {
+                def_id: DefId {
+                    file_path: uri.to_string(),
+                    span,
+                },
+                name: "User".to_string(),
+                kind: DefinitionKind::Type,
+                span,
+                file_path: uri.to_string(),
+                type_info: Some("Type".to_string()),
+                signature: None,
+            },
+        );
 
         world
-    }
-
-    #[test]
-    fn test_fuzzy_match_exact() {
-        assert!(fuzzy_match("fibonacci", "fibonacci"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_prefix() {
-        assert!(fuzzy_match("fib", "fibonacci"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_subsequence() {
-        assert!(fuzzy_match("fbi", "fibonacci"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_case_insensitive() {
-        assert!(fuzzy_match("FIB", "fibonacci"));
-        assert!(fuzzy_match("mytype", "MyType"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_no_match() {
-        assert!(!fuzzy_match("xyz", "fibonacci"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_empty_query() {
-        assert!(fuzzy_match("", "fibonacci"));
-    }
-
-    #[test]
-    fn test_match_score_exact() {
-        assert_eq!(match_score("fibonacci", "fibonacci"), 0);
-    }
-
-    #[test]
-    fn test_match_score_prefix() {
-        assert_eq!(match_score("fib", "fibonacci"), 1);
-    }
-
-    #[test]
-    fn test_match_score_contains() {
-        assert_eq!(match_score("bonac", "fibonacci"), 2);
-    }
-
-    #[test]
-    fn test_match_score_fuzzy() {
-        assert_eq!(match_score("fbi", "fibonacci"), 3);
-    }
-
-    #[test]
-    fn test_to_lsp_symbol_kind_mapping() {
-        assert_eq!(
-            to_lsp_symbol_kind(&SymbolKind::Variable),
-            LspSymbolKind::VARIABLE
-        );
-        assert_eq!(
-            to_lsp_symbol_kind(&SymbolKind::Function),
-            LspSymbolKind::FUNCTION
-        );
-        assert_eq!(to_lsp_symbol_kind(&SymbolKind::Type), LspSymbolKind::CLASS);
-        assert_eq!(
-            to_lsp_symbol_kind(&SymbolKind::Trait),
-            LspSymbolKind::INTERFACE
-        );
     }
 
     #[test]
@@ -299,7 +236,7 @@ mod tests {
         let result = handle_workspace_symbol(&world, params);
         assert!(result.is_some());
         let symbols = result.unwrap();
-        assert_eq!(symbols.len(), 5, "空查询应返回所有 5 个符号");
+        assert_eq!(symbols.len(), 3, "空查询应返回所有符号");
     }
 
     #[test]
@@ -314,16 +251,15 @@ mod tests {
         let result = handle_workspace_symbol(&world, params);
         assert!(result.is_some());
         let symbols = result.unwrap();
-        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols.len(), 1, "精确匹配应返回 1 个结果");
         assert_eq!(symbols[0].name, "fibonacci");
-        assert_eq!(symbols[0].kind, LspSymbolKind::FUNCTION);
     }
 
     #[test]
     fn test_workspace_symbol_prefix_match() {
         let world = make_world_with_symbols();
         let params = WorkspaceSymbolParams {
-            query: "f".to_string(),
+            query: "fibon".to_string(),
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
@@ -331,15 +267,15 @@ mod tests {
         let result = handle_workspace_symbol(&world, params);
         assert!(result.is_some());
         let symbols = result.unwrap();
-        // f 应匹配 fibonacci, find_by_id, format_string
-        assert!(symbols.len() >= 3);
+        assert_eq!(symbols.len(), 1, "前缀匹配应返回 1 个结果");
+        assert_eq!(symbols[0].name, "fibonacci");
     }
 
     #[test]
     fn test_workspace_symbol_fuzzy_match() {
         let world = make_world_with_symbols();
         let params = WorkspaceSymbolParams {
-            query: "fbi".to_string(),
+            query: "fid".to_string(),
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
@@ -347,59 +283,35 @@ mod tests {
         let result = handle_workspace_symbol(&world, params);
         assert!(result.is_some());
         let symbols = result.unwrap();
-        // "fbi" 模糊匹配 fibonacci, find_by_id
-        assert!(symbols.iter().any(|s| s.name == "fibonacci"));
+        assert_eq!(symbols.len(), 1, "模糊匹配应返回 1 个结果");
+        assert_eq!(symbols[0].name, "find_by_id");
     }
 
     #[test]
     fn test_workspace_symbol_no_match() {
         let world = make_world_with_symbols();
         let params = WorkspaceSymbolParams {
-            query: "zzzzz".to_string(),
+            query: "nonexistent".to_string(),
             work_done_progress_params: Default::default(),
             partial_result_params: Default::default(),
         };
 
         let result = handle_workspace_symbol(&world, params);
-        assert!(result.is_none());
+        assert!(result.is_none(), "无匹配应返回 None");
     }
 
     #[test]
-    fn test_workspace_symbol_type_filter() {
-        let world = make_world_with_symbols();
-        let params = WorkspaceSymbolParams {
-            query: "MyType".to_string(),
-            work_done_progress_params: Default::default(),
-            partial_result_params: Default::default(),
-        };
-
-        let result = handle_workspace_symbol(&world, params);
-        assert!(result.is_some());
-        let symbols = result.unwrap();
-        assert_eq!(symbols.len(), 1);
-        assert_eq!(symbols[0].kind, LspSymbolKind::CLASS);
+    fn test_fuzzy_match() {
+        assert!(fuzzy_match("fib", "fibonacci"));
+        assert!(fuzzy_match("fid", "find_by_id"));
+        assert!(fuzzy_match("fib", "Fibonacci"));
+        assert!(!fuzzy_match("fib", "binary"));
     }
 
     #[test]
-    fn test_workspace_symbol_result_sorting() {
-        let world = make_world_with_symbols();
-        let params = WorkspaceSymbolParams {
-            query: "fi".to_string(),
-            work_done_progress_params: Default::default(),
-            partial_result_params: Default::default(),
-        };
-
-        let result = handle_workspace_symbol(&world, params);
-        assert!(result.is_some());
-        let symbols = result.unwrap();
-        // "fi" 是 fibonacci 和 find_by_id 的前缀匹配（得分 1）
-        // 应该在 format_string（模糊匹配，得分 3）之前
-        if symbols.len() >= 2 {
-            let prefix_names: Vec<&str> = symbols.iter().take(2).map(|s| s.name.as_str()).collect();
-            assert!(
-                prefix_names.contains(&"fibonacci") || prefix_names.contains(&"find_by_id"),
-                "前缀匹配结果应排在前面"
-            );
-        }
+    fn test_match_score() {
+        assert_eq!(match_score("fibonacci", "fibonacci"), 0);
+        assert_eq!(match_score("fib", "fibonacci"), 2);
+        assert_eq!(match_score("fid", "find_by_id"), 4);
     }
 }
