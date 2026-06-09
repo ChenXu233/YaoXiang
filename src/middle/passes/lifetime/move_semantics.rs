@@ -219,16 +219,8 @@ impl MoveChecker {
                     // 赋值后变为 Owned(新类型)
                 }
                 ValueState::Empty => {
-                    // 空状态，检查类型一致性
-                    if let Some(expected_type) = self.type_map.get(dst) {
-                        if let Some(actual_type) = &src_type {
-                            if expected_type != actual_type {
-                                let name = operand_display_name(dst, self.local_names.as_ref());
-                                self.errors.push(codes::immutable_assign(&name));
-                                return;
-                            }
-                        }
-                    }
+                    // 空状态，直接允许赋值（初始化阶段，类型会在后续确定）
+                    // 不做类型一致性检查，避免列表初始化等场景的误报
                 }
                 ValueState::Dropped => {
                     // 已释放的变量不能重新赋值
