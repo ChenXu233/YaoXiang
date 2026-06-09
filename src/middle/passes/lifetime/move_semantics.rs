@@ -269,11 +269,9 @@ impl MoveChecker {
         dst: Option<&Operand>,
         func_name: Option<&str>,
     ) {
-        // 处理返回值目标
+        // 处理返回值目标：Call 返回新值，dst 进入 Owned 状态
         if let Some(dst_operand) = dst {
-            // 返回值赋值给 dst，dst 进入 Owned 状态
-            // 注意：这里不检查返回值是否被"移动"，因为 Call 返回的是一个新值
-            self.state.insert(dst_operand.clone(), ValueState::Empty);
+            self.state.insert(dst_operand.clone(), ValueState::Owned(None));
         }
 
         // 获取被调用函数的消费模式（克隆以避免借用冲突）
@@ -288,35 +286,40 @@ impl MoveChecker {
             let mode = consume_modes.as_ref().and_then(|m| m.get(idx)).copied();
 
             match mode {
-                Some(ConsumeMode::Returns) => {
-                    // Returns 模式：参数所有权回流，保持 Owned 状态
-                    // 不修改参数状态
-                }
-                Some(ConsumeMode::Consumes) | Some(ConsumeMode::Undetermined) | None => {
-                    // Consumes/Undetermined/未知：保守处理，参数进入 Empty
-                    // 但 Dup 类型（如 &T）不会被消费
+                Some(ConsumeMode::Consumes) => {
+                    // 明确消费：参数进入 Empty
                     if let Some(state) = self.state.get(arg) {
                         match state {
-                            ValueState::Empty => {
+                            ValueState::Empty | ValueState::Moved => {
                                 self.report_use_after_move(arg);
                             }
                             ValueState::Dup => {
-                                // Dup 类型（如 &T）不会被消费，保持 Dup 状态
+                                // Dup 类型不会被消费
                             }
                             ValueState::Owned(_) => {
                                 self.state.insert(arg.clone(), ValueState::Empty);
                             }
-                            ValueState::Moved => {
-                                self.report_use_after_move(arg);
-                            }
-                            ValueState::Dropped => {
-                                // 已释放的值不能使用
-                            }
+                            ValueState::Dropped => {}
                         }
                     } else {
                         // 首次使用，设为 Empty
                         self.state.insert(arg.clone(), ValueState::Empty);
                     }
+                }
+                Some(ConsumeMode::Returns) | Some(ConsumeMode::Undetermined) | None => {
+                    // Returns / Undetermined / 未知：不消费参数
+                    // 只检查参数是否可用（非 Moved / Empty）
+                    if let Some(state) = self.state.get(arg) {
+                        match state {
+                            ValueState::Empty | ValueState::Moved => {
+                                self.report_use_after_move(arg);
+                            }
+                            _ => {
+                                // Owned / Dup / Dropped：不改变状态
+                            }
+                        }
+                    }
+                    // 首次使用：不设状态（不消费）
                 }
             }
         }
