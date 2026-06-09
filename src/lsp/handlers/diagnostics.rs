@@ -128,7 +128,7 @@ pub fn run_diagnostics(
         let parse_diags: Vec<Diagnostic> = parse_result
             .errors
             .iter()
-            .collect();
+            .cloned().collect();
         all_diagnostics.extend(to_lsp_diagnostics(&parse_diags));
     }
 

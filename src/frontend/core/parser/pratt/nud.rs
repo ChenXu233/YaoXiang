@@ -6,6 +6,7 @@ use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::parser::pratt::precedence::*;
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 /// Extension trait for prefix parsing
@@ -122,9 +123,7 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume 'spawn'
 
         if !self.at(&TokenKind::LBrace) {
-            self.error(ErrorCodeDefinition::expected_expression("block after spawn").at(self.span()).build()(
-                "Expected block `{ ... }` after `spawn`".to_string(),
-            ));
+            self.diag_error(ErrorCodeDefinition::expected_expression("block after spawn").at(self.span()).build());
             return None;
         }
         let body = self.parse_block_expr()?;
