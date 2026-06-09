@@ -7,7 +7,7 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState};
+use crate::frontend::core::parser::{ParserState, ParseError};
 use crate::util::span::Span;
 
 /// Parse use import statement: `use path;` or `use path.{item1, item2};`

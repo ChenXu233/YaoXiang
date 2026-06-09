@@ -15,7 +15,7 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, BP_LOWEST};
+use crate::frontend::core::parser::{ParserState, ParseError, BP_LOWEST};
 use crate::util::span::Span;
 
 // Import from sibling modules
