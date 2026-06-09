@@ -3167,6 +3167,24 @@ impl AstToIrGenerator {
                     });
                 }
             }
+            Expr::Dict(pairs, _span) => {
+                // 字典字面量：使用 NewDict 指令一次性创建
+                let mut keys = Vec::new();
+                let mut values = Vec::new();
+                for (key_expr, val_expr) in pairs {
+                    let key_reg = self.next_temp_reg();
+                    self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
+                    keys.push(Operand::Local(key_reg));
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
+                    values.push(Operand::Local(val_reg));
+                }
+                instructions.push(Instruction::NewDict {
+                    dst: Operand::Local(result_reg),
+                    keys,
+                    values,
+                });
+            }
             Expr::Index { expr, index, span } => {
                 let src_reg = self.next_temp_reg();
                 self.generate_expr_ir(expr, src_reg, instructions, constants)?;

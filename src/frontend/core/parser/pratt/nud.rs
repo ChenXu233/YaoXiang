@@ -649,6 +649,29 @@ impl<'a> ParserState<'a> {
         let span = self.span();
         self.bump(); // consume '{'
 
+        // Check for dict literal: {"key": value, ...}
+        // A dict literal starts with a string literal followed by ':'
+        if self.at(&TokenKind::RBrace) {
+            // Empty dict: {}
+            self.bump();
+            return Some(Expr::Dict(Vec::new(), span));
+        }
+
+        // Check if this looks like a dict literal
+        // Dict literal pattern: string_literal ':' expr
+        if let Some(TokenKind::StringLiteral(_)) = self.current().map(|t| &t.kind) {
+            // Save position in case this is not a dict
+            let saved = self.save_position();
+
+            // Try to parse as dict
+            if let Some(dict) = self.try_parse_dict(span) {
+                return Some(dict);
+            }
+
+            // Not a dict, restore position and parse as block
+            self.restore_position(saved);
+        }
+
         let mut stmts = Vec::new();
 
         while !self.at(&TokenKind::RBrace) && !self.at_end() {
@@ -677,6 +700,52 @@ impl<'a> ParserState<'a> {
             expr: None,
             span,
         }))
+    }
+
+    /// Try to parse a dict literal: {"key": value, "key2": value2, ...}
+    /// Returns None if the syntax doesn't match a dict literal.
+    fn try_parse_dict(&mut self, span: Span) -> Option<Expr> {
+        let mut pairs = Vec::new();
+
+        loop {
+            // Parse key (must be a string literal)
+            let key = match self.current().map(|t| &t.kind) {
+                Some(TokenKind::StringLiteral(_)) => {
+                    let key_expr = self.parse_expression(BP_LOWEST)?;
+                    key_expr
+                }
+                _ => return None,
+            };
+
+            // Expect ':'
+            if !self.skip(&TokenKind::Colon) {
+                return None;
+            }
+
+            // Parse value
+            let value = self.parse_expression(BP_LOWEST)?;
+
+            pairs.push((key, value));
+
+            // Check for comma or end
+            if self.skip(&TokenKind::Comma) {
+                // More pairs
+                if self.at(&TokenKind::RBrace) {
+                    break;
+                }
+            } else {
+                // No comma, must be end
+                break;
+            }
+        }
+
+        // Expect '}'
+        if !self.at(&TokenKind::RBrace) {
+            return None;
+        }
+        self.bump(); // consume '}'
+
+        Some(Expr::Dict(pairs, span))
     }
 
     /// Parse if expression: `if cond { then } else { else }`

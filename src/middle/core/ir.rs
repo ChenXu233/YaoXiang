@@ -260,6 +260,14 @@ pub enum Instruction {
         type_name: String,
         fields: Vec<Operand>,
     },
+    /// 创建字典实例
+    /// keys: 键的操作数列表
+    /// values: 值的操作数列表（与 keys 一一对应）
+    NewDict {
+        dst: Operand,
+        keys: Vec<Operand>,
+        values: Vec<Operand>,
+    },
     MakeClosure {
         dst: Operand,
         func: String,
