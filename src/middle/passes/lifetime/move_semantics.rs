@@ -108,9 +108,7 @@ impl MoveChecker {
         instr: &Instruction,
     ) {
         match instr {
-            Instruction::Move { dst, src } => {
-                self.check_move(dst, src)
-            }
+            Instruction::Move { dst, src } => self.check_move(dst, src),
             Instruction::Call {
                 dst, args, func, ..
             } => {
@@ -213,8 +211,7 @@ impl MoveChecker {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
                     let name = operand_display_name(dst, self.local_names.as_ref());
-                    self.errors
-                        .push(codes::reassign_non_empty(&name));
+                    self.errors.push(codes::reassign_non_empty(&name));
                     return;
                 }
                 ValueState::Moved => {
@@ -227,8 +224,7 @@ impl MoveChecker {
                         if let Some(actual_type) = &src_type {
                             if expected_type != actual_type {
                                 let name = operand_display_name(dst, self.local_names.as_ref());
-                                self.errors
-                                    .push(codes::immutable_assign(&name));
+                                self.errors.push(codes::immutable_assign(&name));
                                 return;
                             }
                         }
@@ -363,8 +359,7 @@ impl MoveChecker {
         operand: &Operand,
     ) {
         let name = operand_display_name(operand, self.local_names.as_ref());
-        self.errors
-            .push(codes::use_after_move(&name));
+        self.errors.push(codes::use_after_move(&name));
     }
 }
 
@@ -378,8 +373,7 @@ impl OwnershipCheck for MoveChecker {
         for (block_idx, block) in func.blocks.iter().enumerate() {
             for (instr_idx, instr) in block.instructions.iter().enumerate() {
                 self.location = (block_idx, instr_idx);
-                if matches!(instr, Instruction::Move { .. }) {
-                }
+                matches!(instr, Instruction::Move { .. });
                 self.check_instruction(instr);
             }
         }

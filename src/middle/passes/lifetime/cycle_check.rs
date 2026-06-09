@@ -15,7 +15,7 @@
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
-use super::error::codes;
+use super::error::{codes, operand_display_name};
 
 /// 检测深度限制：只检测直接边界，不递归进入嵌套 spawn
 /// 用于文档说明，实际通过 `find_spawn_result_direct` 实现深度限制
@@ -39,12 +39,22 @@ pub struct CycleChecker {
     pub(crate) unsafe_ranges: Vec<(usize, usize, usize)>,
     /// unsafe 绕过记录（信息级别）
     unsafe_bypasses: Vec<Diagnostic>,
+    /// 局部变量名列表（用于错误报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl CycleChecker {
     /// 创建新的循环检测器
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 设置局部变量名列表
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
     }
 
     /// 检查指令位置是否在 unsafe 块内
@@ -182,7 +192,7 @@ impl CycleChecker {
                     if let Instruction::Spawn { result, .. } = instr {
                         let details = format!(
                             "spawn {} in unsafe block, cycle detection bypassed",
-                            self.operand_to_string(result)
+                            operand_display_name(result, self.local_names.as_ref())
                         );
                         self.unsafe_bypasses
                             .push(codes::unsafe_bypass_cycle(&details));
@@ -350,7 +360,7 @@ impl CycleChecker {
 
         let cycle_strs: Vec<String> = cycle_nodes
             .iter()
-            .map(|p| self.operand_to_string(p))
+            .map(|p| operand_display_name(p, self.local_names.as_ref()))
             .collect();
 
         format!(
@@ -358,22 +368,6 @@ impl CycleChecker {
             cycle_strs.join(" → "),
             cycle_strs.first().unwrap_or(&"?".to_string())
         )
-    }
-
-    /// Operand 转字符串
-    fn operand_to_string(
-        &self,
-        op: &Operand,
-    ) -> String {
-        match op {
-            Operand::Local(idx) => format!("local_{}", idx),
-            Operand::Arg(idx) => format!("arg_{}", idx),
-            Operand::Temp(idx) => format!("temp_{}", idx),
-            Operand::Global(idx) => format!("global_{}", idx),
-            Operand::Const(c) => format!("{:?}", c),
-            Operand::Label(idx) => format!("label_{}", idx),
-            Operand::Register(idx) => format!("reg_{}", idx),
-        }
     }
 }
 

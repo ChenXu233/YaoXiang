@@ -352,11 +352,7 @@ impl Translator {
                 type_name,
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
-            NewDict {
-                dst,
-                keys,
-                values,
-            } => self.translate_new_dict(dst, keys, values),
+            NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
             MakeClosure { dst, func, .. } => self.translate_make_closure(dst, func),
             Drop(operand) => self.translate_drop(operand),
 

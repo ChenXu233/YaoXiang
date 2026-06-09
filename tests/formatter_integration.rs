@@ -76,7 +76,10 @@ fn test_format_list_literal() {
 #[test]
 fn test_format_dict_literal() {
     // Dict literals are now correctly parsed and formatted
-    assert_format_eq("let x = {\"a\": 1, \"b\": 2}", "let\nx = {\"a\": 1, \"b\": 2}\n");
+    assert_format_eq(
+        "let x = {\"a\": 1, \"b\": 2}",
+        "let\nx = {\"a\": 1, \"b\": 2}\n",
+    );
 }
 
 #[test]

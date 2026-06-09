@@ -234,6 +234,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::mutable_key_type)]
     fn test_rename_single_file() {
         let (session, world) = setup();
 
@@ -265,6 +266,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::mutable_key_type)]
     fn test_rename_preserves_new_name() {
         let (session, world) = setup();
 

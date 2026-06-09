@@ -4,7 +4,7 @@
 //! - clone() 只能用于有效状态的值（Owned，不能是 Moved 或 Dropped）
 //! - clone() 后原值仍保持 Owned 状态
 
-use super::error::{OwnershipCheck, ValueState, codes, operand_to_string};
+use super::error::{OwnershipCheck, ValueState, codes, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
@@ -19,9 +19,19 @@ pub struct CloneChecker {
     state: HashMap<Operand, ValueState>,
     errors: Vec<Diagnostic>,
     location: (usize, usize),
+    /// 局部变量名列表（用于错误报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 impl CloneChecker {
+    /// 设置局部变量名列表
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
+    }
+
     /// 检查 clone() 调用（核心逻辑）
     fn check_clone(
         &mut self,
@@ -46,16 +56,16 @@ impl CloneChecker {
         &mut self,
         operand: &Operand,
     ) {
-        self.errors
-            .push(codes::clone_moved_value(&operand_to_string(operand)));
+        let name = operand_display_name(operand, self.local_names.as_ref());
+        self.errors.push(codes::clone_moved_value(&name));
     }
 
     fn error_clone_dropped(
         &mut self,
         operand: &Operand,
     ) {
-        self.errors
-            .push(codes::use_after_drop(&operand_to_string(operand)));
+        let name = operand_display_name(operand, self.local_names.as_ref());
+        self.errors.push(codes::use_after_drop(&name));
     }
 
     fn set_owned(

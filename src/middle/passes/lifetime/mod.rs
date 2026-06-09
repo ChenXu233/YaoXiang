@@ -209,13 +209,17 @@ impl OwnershipChecker {
         self.cycle_checker.unsafe_bypasses()
     }
 
-    /// 设置局部变量名列表（传递给 MoveChecker 和 BorrowChecker，用于友好错误信息）
+    /// 设置局部变量名列表（传递给所有子 checker，用于友好错误信息）
     pub fn set_local_names(
         &mut self,
         local_names: Option<Vec<String>>,
     ) {
         self.move_checker.set_local_names(local_names.clone());
-        self.borrow_checker.set_local_names(local_names);
+        self.borrow_checker.set_local_names(local_names.clone());
+        self.drop_checker.set_local_names(local_names.clone());
+        self.clone_checker.set_local_names(local_names.clone());
+        self.cycle_checker.set_local_names(local_names.clone());
+        self.intra_task_tracker.set_local_names(local_names);
     }
 }
 
@@ -262,10 +266,7 @@ impl OwnershipPass {
                     // E2016=不可变赋值, E2022=不可变变异, E2023=不可变字段赋值
                     // E2025=重赋值非空
                     // E2014(UseAfterMove) 保留 — 由 MoveChecker 处理
-                    !matches!(
-                        err.code.as_str(),
-                        "E2016" | "E2022" | "E2023" | "E2025"
-                    )
+                    !matches!(err.code.as_str(), "E2016" | "E2022" | "E2023" | "E2025")
                 })
                 .collect();
             all_errors.extend(ownership_errors);

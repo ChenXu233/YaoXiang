@@ -704,16 +704,16 @@ impl<'a> ParserState<'a> {
 
     /// Try to parse a dict literal: {"key": value, "key2": value2, ...}
     /// Returns None if the syntax doesn't match a dict literal.
-    fn try_parse_dict(&mut self, span: Span) -> Option<Expr> {
+    fn try_parse_dict(
+        &mut self,
+        span: Span,
+    ) -> Option<Expr> {
         let mut pairs = Vec::new();
 
         loop {
             // Parse key (must be a string literal)
             let key = match self.current().map(|t| &t.kind) {
-                Some(TokenKind::StringLiteral(_)) => {
-                    let key_expr = self.parse_expression(BP_LOWEST)?;
-                    key_expr
-                }
+                Some(TokenKind::StringLiteral(_)) => self.parse_expression(BP_LOWEST)?,
                 _ => return None,
             };
 
