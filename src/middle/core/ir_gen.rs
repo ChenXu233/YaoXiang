@@ -200,11 +200,9 @@ pub struct AstToIrGenerator {
     constraint_var_concrete_types: HashMap<String, String>,
     /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
     anon_function_irs: Vec<FunctionIR>,
-    /// 方法 self 参数的引用类型记录（函数名 -> self 是否可变引用）
-    /// - Some(true): self 是 &mut T（可变引用）
-    /// - Some(false): self 是 &T（不可变引用）
-    /// - None: self 是 T（按值传递，无需借用检查）
-    method_self_mutability: HashMap<String, Option<bool>>,
+    /// 函数参数类型记录（函数名 -> 参数类型列表）
+    /// 用于在调用点决定是否需要发出 Borrow 指令（RFC-009 §2.8 自动借用）
+    function_param_types: HashMap<String, Vec<MonoType>>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -254,7 +252,7 @@ impl AstToIrGenerator {
             global_vars: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
-            method_self_mutability: HashMap::new(),
+            function_param_types: HashMap::new(),
         }
     }
 
@@ -266,38 +264,57 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 如果方法的 self 参数是引用类型，在调用前发出 Borrow 指令
+    /// 为函数调用的参数发出 Borrow 指令（RFC-009 §2.8 自动借用）
     ///
-    /// `self_temp` 是对象的临时寄存器（用于 Call 参数），
-    /// `original_var` 是原始变量操作数（用于 Borrow 的 src，使 BorrowChecker 正确追踪冲突）。
+    /// 当函数参数期望 `&T`/`&mut T` 而实际参数是值类型时，自动创建借用令牌。
     ///
-    /// 返回 `(self操作数, Option<token_reg>)`。
-    /// 如果发出了 Borrow，调用者应在 Call 指令后发出 `Release(token_reg)`。
-    fn emit_borrow_for_self(
+    /// `func_name` 用于查找函数参数类型。
+    /// `args_with_originals` 是 `(arg_reg, original_var)` 对，
+    /// 其中 `original_var` 是 Borrow 指令的 src（用于 BorrowChecker 追踪冲突）。
+    ///
+    /// 返回 `(修改后的参数列表, 需要释放的 borrow token 列表)`。
+    fn emit_borrow_for_args(
         &mut self,
         func_name: &str,
-        self_temp: Operand,
-        original_var: Operand,
+        args_with_originals: Vec<(Operand, Operand)>,
         instructions: &mut Vec<Instruction>,
-    ) -> (Operand, Option<usize>) {
-        let is_mutable = self
-            .method_self_mutability
-            .get(func_name)
-            .copied()
-            .flatten();
-        match is_mutable {
-            Some(mutable) => {
+    ) -> (Vec<Operand>, Vec<Operand>) {
+        let param_types: Option<Vec<MonoType>> =
+            self.function_param_types.get(func_name).cloned();
+
+        let mut result_args = Vec::with_capacity(args_with_originals.len());
+        let mut borrow_tokens = Vec::new();
+
+        for (i, (arg_reg, original_var)) in args_with_originals.into_iter().enumerate() {
+            let is_ref_param = param_types
+                .as_ref()
+                .and_then(|types| types.get(i))
+                .is_some_and(|ty| matches!(ty, MonoType::Ref { .. }));
+
+            if is_ref_param {
+                let mutable = param_types
+                    .as_ref()
+                    .and_then(|types| types.get(i))
+                    .and_then(|ty| match ty {
+                        MonoType::Ref { mutable, .. } => Some(*mutable),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
+
                 let token_reg = self.next_temp_reg();
-                // 使用原始变量作为 Borrow 源，确保 BorrowChecker 正确追踪同源冲突
                 instructions.push(Instruction::Borrow {
                     dst: Operand::Local(token_reg),
                     src: original_var,
                     mutable,
                 });
-                (Operand::Local(token_reg), Some(token_reg))
+                result_args.push(Operand::Local(token_reg));
+                borrow_tokens.push(Operand::Local(token_reg));
+            } else {
+                result_args.push(arg_reg);
             }
-            _ => (self_temp, None),
         }
+
+        (result_args, borrow_tokens)
     }
 
     /// 尝试将表达式解析为原始局部变量操作数
@@ -722,13 +739,9 @@ impl AstToIrGenerator {
             self.register_local(&param.name, i);
         }
 
-        // 记录 self 参数的引用类型（用于借用检查器追踪方法调用）
-        let self_mutability = param_types.first().and_then(|t| match t {
-            MonoType::Ref { mutable, .. } => Some(*mutable),
-            _ => None,
-        });
-        self.method_self_mutability
-            .insert(func_name.clone(), self_mutability);
+        // 记录函数参数类型（用于调用点发出 Borrow 指令）
+        self.function_param_types
+            .insert(func_name.clone(), param_types.clone());
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -938,6 +951,15 @@ impl AstToIrGenerator {
             }],
             entry: 0,
         };
+
+        // 记录函数参数类型（用于调用点发出 Borrow 指令）
+        let func_params: Vec<MonoType> = params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(|t| t.into())
+            .collect();
+        self.function_param_types
+            .insert(name.to_string(), func_params);
 
         // 保存当前函数的可变局部变量信息到模块级别映射
         if !self.current_mut_locals.is_empty() {
@@ -2527,31 +2549,36 @@ impl AstToIrGenerator {
                                 method_arg_regs.push(Operand::Local(arg_reg));
                             }
 
-                            // 按绑定位置重排参数
-                            // 总参数数 = 绑定位置数(obj填充) + 方法参数数
+                            // 收集方法参数的原始变量（用于 Borrow 指令的 src）
+                            let method_originals: Vec<Operand> = args
+                                .iter()
+                                .zip(method_arg_regs.iter())
+                                .map(|(arg, reg)| {
+                                    self.resolve_var_operand(arg).unwrap_or_else(|| reg.clone())
+                                })
+                                .collect();
+
+                            // 按绑定位置重排参数并记录原始变量
                             let total_params = binding.positions.len() + method_arg_regs.len();
-                            let mut final_args: Vec<Option<Operand>> = vec![None; total_params];
-
-                            // 将 obj 放入绑定位置
-                            for &pos in &binding.positions {
-                                if (pos as usize) < total_params {
-                                    final_args[pos as usize] = Some(Operand::Local(obj_reg));
-                                }
-                            }
-
-                            // 将方法参数填充到剩余位置
+                            let mut args_with_originals: Vec<(Operand, Operand)> =
+                                Vec::with_capacity(total_params);
                             let mut method_arg_iter = method_arg_regs.into_iter();
-                            for slot in final_args.iter_mut() {
-                                if slot.is_none() {
-                                    if let Some(arg) = method_arg_iter.next() {
-                                        *slot = Some(arg);
-                                    }
+                            let mut method_original_iter = method_originals.into_iter();
+                            let obj_original = self
+                                .resolve_var_operand(expr)
+                                .unwrap_or(Operand::Local(obj_reg));
+
+                            for pos in 0..total_params {
+                                if binding.positions.contains(&(pos as i64)) {
+                                    args_with_originals
+                                        .push((Operand::Local(obj_reg), obj_original.clone()));
+                                } else if let Some(arg_reg) = method_arg_iter.next() {
+                                    let original = method_original_iter
+                                        .next()
+                                        .unwrap_or_else(|| arg_reg.clone());
+                                    args_with_originals.push((arg_reg, original));
                                 }
                             }
-
-                            // 收集最终参数列表
-                            let final_arg_regs: Vec<Operand> =
-                                final_args.into_iter().flatten().collect();
 
                             // 解析函数名
                             let func_name = if let Some(qualified) =
@@ -2562,38 +2589,23 @@ impl AstToIrGenerator {
                                 binding.function.clone()
                             };
 
-                            // 如果 self 是引用类型，发 Borrow 并用 token 替换 obj
-                            // 使用原始变量作为 Borrow 源以确保冲突检测
-                            let original_var = self
-                                .resolve_var_operand(expr)
-                                .unwrap_or(Operand::Local(obj_reg));
-                            let (self_replacement, borrow_token) = self.emit_borrow_for_self(
+                            // 发出 Borrow 指令（RFC-009 §2.8 自动借用）
+                            let (final_args, borrow_tokens) = self.emit_borrow_for_args(
                                 &func_name,
-                                Operand::Local(obj_reg),
-                                original_var,
+                                args_with_originals,
                                 instructions,
                             );
-                            let final_arg_regs: Vec<Operand> = final_arg_regs
-                                .into_iter()
-                                .map(|arg| {
-                                    if arg == Operand::Local(obj_reg) {
-                                        self_replacement.clone()
-                                    } else {
-                                        arg
-                                    }
-                                })
-                                .collect();
 
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: Operand::Const(ConstValue::String(func_name)),
-                                args: final_arg_regs,
+                                args: final_args,
                                 span: *span,
                             });
 
                             // 借用令牌在此调用结束后失效
-                            if let Some(token) = borrow_token {
-                                instructions.push(Instruction::Release(Operand::Local(token)));
+                            for token in borrow_tokens {
+                                instructions.push(Instruction::Release(token));
                             }
                         } else {
                             // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
@@ -2627,26 +2639,38 @@ impl AstToIrGenerator {
                                 // 编译期可确定具体类型 → 直接调用（零开销）
                                 // d.draw(screen) → ConcreteType.draw(d, screen)
                                 let qualified_name = format!("{}.{}", concrete_type_name, field);
-                                let original_var = var_name
+
+                                // 收集所有参数的原始变量
+                                let obj_original = var_name
                                     .as_ref()
                                     .and_then(|n| self.lookup_local(n))
                                     .map(Operand::Local)
                                     .unwrap_or_else(|| arg_regs[0].clone());
-                                let (self_replacement, borrow_token) = self.emit_borrow_for_self(
+                                let args_with_originals: Vec<(Operand, Operand)> =
+                                    std::iter::once((arg_regs[0].clone(), obj_original))
+                                        .chain(arg_regs[1..].iter().zip(args.iter()).map(
+                                            |(reg, arg)| {
+                                                let original = self
+                                                    .resolve_var_operand(arg)
+                                                    .unwrap_or_else(|| reg.clone());
+                                                (reg.clone(), original)
+                                            },
+                                        ))
+                                        .collect();
+
+                                let (final_args, borrow_tokens) = self.emit_borrow_for_args(
                                     &qualified_name,
-                                    arg_regs[0].clone(),
-                                    original_var,
+                                    args_with_originals,
                                     instructions,
                                 );
-                                arg_regs[0] = self_replacement;
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: Operand::Const(ConstValue::String(qualified_name)),
-                                    args: arg_regs,
+                                    args: final_args,
                                     span: *span,
                                 });
-                                if let Some(token) = borrow_token {
-                                    instructions.push(Instruction::Release(Operand::Local(token)));
+                                for token in borrow_tokens {
+                                    instructions.push(Instruction::Release(token));
                                 }
                             } else if var_name.as_ref().is_some_and(|name| {
                                 // 检查变量的类型标注是否是约束类型（但具体类型未知）
@@ -2678,26 +2702,48 @@ impl AstToIrGenerator {
                                 });
                             } else {
                                 // 普通方法调用
-                                let method_function_name = extract_namespace_path(expr, field);
-                                let func_name = method_function_name.to_string();
-                                let original_var = self
+                                // 优先使用类型名（而非变量名）构建函数名
+                                // 例如：a.is_greater(b) 中 a 的类型是 Node
+                                // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
+                                let func_name = if let Expr::Var(name, _) = expr.as_ref() {
+                                    if let Some(type_name) = self.local_var_types.get(name) {
+                                        format!("{}.{}", type_name, field)
+                                    } else {
+                                        extract_namespace_path(expr, field)
+                                    }
+                                } else {
+                                    extract_namespace_path(expr, field)
+                                };
+
+                                // 收集所有参数的原始变量
+                                let obj_original = self
                                     .resolve_var_operand(expr)
                                     .unwrap_or_else(|| arg_regs[0].clone());
-                                let (self_replacement, borrow_token) = self.emit_borrow_for_self(
+                                let args_with_originals: Vec<(Operand, Operand)> =
+                                    std::iter::once((arg_regs[0].clone(), obj_original))
+                                        .chain(arg_regs[1..].iter().zip(args.iter()).map(
+                                            |(reg, arg)| {
+                                                let original = self
+                                                    .resolve_var_operand(arg)
+                                                    .unwrap_or_else(|| reg.clone());
+                                                (reg.clone(), original)
+                                            },
+                                        ))
+                                        .collect();
+
+                                let (final_args, borrow_tokens) = self.emit_borrow_for_args(
                                     &func_name,
-                                    arg_regs[0].clone(),
-                                    original_var,
+                                    args_with_originals,
                                     instructions,
                                 );
-                                arg_regs[0] = self_replacement;
                                 instructions.push(Instruction::Call {
                                     dst: Some(Operand::Local(result_reg)),
                                     func: Operand::Const(ConstValue::String(func_name)),
-                                    args: arg_regs,
+                                    args: final_args,
                                     span: *span,
                                 });
-                                if let Some(token) = borrow_token {
-                                    instructions.push(Instruction::Release(Operand::Local(token)));
+                                for token in borrow_tokens {
+                                    instructions.push(Instruction::Release(token));
                                 }
                             }
                         }
@@ -2951,13 +2997,45 @@ impl AstToIrGenerator {
                         } else {
                             // 非 print 调用或无参数，使用默认处理
                             // ========== 默认函数调用处理 ==========
+                            // 提取函数名字符串（用于查找参数类型）
+                            let func_name_str = match func.as_ref() {
+                                Expr::Var(name, _) => {
+                                    SHORT_TO_QUALIFIED
+                                        .get(name)
+                                        .cloned()
+                                        .unwrap_or_else(|| name.clone())
+                                }
+                                _ => String::new(),
+                            };
+
+                            // 收集参数的原始变量
+                            let args_with_originals: Vec<(Operand, Operand)> = arg_regs
+                                .iter()
+                                .zip(args.iter())
+                                .map(|(reg, arg)| {
+                                    let original = self
+                                        .resolve_var_operand(arg)
+                                        .unwrap_or_else(|| reg.clone());
+                                    (reg.clone(), original)
+                                })
+                                .collect();
+
+                            let (final_args, borrow_tokens) = self.emit_borrow_for_args(
+                                &func_name_str,
+                                args_with_originals,
+                                instructions,
+                            );
+
                             let func_operand = self.resolve_function_name(func);
                             instructions.push(Instruction::Call {
                                 dst: Some(Operand::Local(result_reg)),
                                 func: func_operand,
-                                args: arg_regs,
+                                args: final_args,
                                 span: *span,
                             });
+                            for token in borrow_tokens {
+                                instructions.push(Instruction::Release(token));
+                            }
                         }
                     }
                 }
