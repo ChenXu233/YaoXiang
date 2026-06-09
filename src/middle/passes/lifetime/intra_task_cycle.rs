@@ -9,9 +9,9 @@
 //! - 与 CycleChecker（跨任务检测）协同工作
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::{HashMap, HashSet};
-use super::error::{codes, operand_display_name};
+use super::error::{operand_display_name};
 
 /// 任务内循环追踪器
 #[derive(Debug, Default)]
@@ -164,7 +164,7 @@ impl IntraTaskCycleTracker {
                     // 找到任务内循环，记录警告
                     let cycle_path = self.format_cycle_path(path, neighbor);
                     let _span = self.find_cycle_span(neighbor);
-                    self.warnings.push(codes::intra_task_cycle(&cycle_path));
+                    self.warnings.push(ErrorCodeDefinition::ownership_violation(&cycle_path).build());
                     // 继续检测其他循环，不立即返回
                 }
             }

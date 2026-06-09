@@ -122,7 +122,7 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume 'spawn'
 
         if !self.at(&TokenKind::LBrace) {
-            self.error(crate::frontend::core::parser::ParseError::Message(
+            self.error(ErrorCodeDefinition::expected_expression("block after spawn").at(self.span()).build()(
                 "Expected block `{ ... }` after `spawn`".to_string(),
             ));
             return None;

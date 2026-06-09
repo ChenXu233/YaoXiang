@@ -6,6 +6,8 @@
 //! - 令牌来源已被移动后使用令牌：错误
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use super::error::operand_display_name;
 use std::collections::HashMap;
 
 /// 令牌状态
@@ -28,55 +30,6 @@ pub struct BorrowToken {
     pub state: TokenState,
 }
 
-/// 借用错误类型
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BorrowError {
-    /// 可变借用冲突：同一来源同时存在活跃的借用
-    MutableBorrowConflict {
-        /// 借用来源
-        source: String,
-        /// 已存在的借用令牌
-        existing: String,
-        /// 新的借用令牌
-        new: String,
-    },
-    /// 移动后借用：来源已被移动后尝试使用借用令牌
-    BorrowAfterMove {
-        /// 借用来源
-        source: String,
-        /// 尝试使用的令牌
-        token: String,
-    },
-}
-
-impl std::fmt::Display for BorrowError {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        match self {
-            BorrowError::MutableBorrowConflict {
-                source,
-                existing,
-                new,
-            } => {
-                write!(
-                    f,
-                    "MutableBorrowConflict: cannot create mutable borrow '{}' for '{}' while '{}' is still active",
-                    new, source, existing
-                )
-            }
-            BorrowError::BorrowAfterMove { source, token } => {
-                write!(
-                    f,
-                    "BorrowAfterMove: cannot use borrow token '{}' because source '{}' has been moved",
-                    token, source
-                )
-            }
-        }
-    }
-}
-
 /// 借用检查器
 ///
 /// 追踪活跃的借用令牌并检测冲突：
@@ -87,7 +40,7 @@ pub struct BorrowChecker {
     /// 令牌表：令牌名 -> 令牌信息
     tokens: HashMap<String, BorrowToken>,
     /// 收集的错误
-    errors: Vec<BorrowError>,
+    errors: Vec<Diagnostic>,
     /// 当前检查位置 (block_idx, instr_idx)
     location: (usize, usize),
     /// 局部变量名列表（用于错误报告中显示源码变量名）
@@ -134,33 +87,17 @@ impl BorrowChecker {
             }
 
             if mutable && existing.mutable {
-                // 可变借用冲突：已有可变借用
-                self.errors.push(BorrowError::MutableBorrowConflict {
-                    source: source.to_string(),
-                    existing: name.clone(),
-                    new: token_name.to_string(),
-                });
+                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
             if mutable && !existing.mutable {
-                // 可变借用冲突：已有不可变借用
-                self.errors.push(BorrowError::MutableBorrowConflict {
-                    source: source.to_string(),
-                    existing: name.clone(),
-                    new: token_name.to_string(),
-                });
+                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
             if !mutable && existing.mutable {
-                // 不可变借用冲突：已有可变借用
-                self.errors.push(BorrowError::MutableBorrowConflict {
-                    source: source.to_string(),
-                    existing: name.clone(),
-                    new: token_name.to_string(),
-                });
+                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
-            // 不可变借用 + 不可变借用：允许（Dup）
         }
 
         self.tokens.insert(
@@ -174,8 +111,6 @@ impl BorrowChecker {
     }
 
     /// 标记令牌被使用（验证仍然活跃）
-    ///
-    /// 检查令牌是否处于 Active 状态（非 Moved）
     pub fn use_token(
         &mut self,
         token_name: &str,
@@ -186,19 +121,14 @@ impl BorrowChecker {
         };
 
         match token.state {
-            TokenState::Active => {
-                // 令牌活跃，正常使用
-            }
+            TokenState::Active => {}
             TokenState::Moved => {
-                self.errors.push(BorrowError::BorrowAfterMove {
-                    source: token.source.clone(),
-                    token: token_name.to_string(),
-                });
+                self.errors.push(ErrorCodeDefinition::borrow_after_move(&token.source).build());
             }
         }
     }
 
-    /// 结束令牌的生命周期（当令牌离开作用域时）
+    /// 结束令牌的生命周期
     pub fn release_token(
         &mut self,
         token_name: &str,
@@ -207,7 +137,7 @@ impl BorrowChecker {
     }
 
     /// 获取所有错误
-    pub fn errors(&self) -> &[BorrowError] {
+    pub fn errors(&self) -> &[Diagnostic] {
         &self.errors
     }
 
@@ -221,7 +151,7 @@ impl BorrowChecker {
     pub fn check_function(
         &mut self,
         func: &FunctionIR,
-    ) -> &[BorrowError] {
+    ) -> &[Diagnostic] {
         self.clear();
 
         for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -240,174 +170,97 @@ impl BorrowChecker {
         instr: &Instruction,
     ) {
         match instr {
-            // ShareRef: 创建不可变借用（&T）
             Instruction::ShareRef { dst, src } => {
-                let token_name = operand_to_string(dst);
-                let source = operand_to_string(src);
+                let token_name = operand_display_name(dst, self.local_names.as_ref());
+                let source = operand_display_name(src, self.local_names.as_ref());
                 self.create_borrow(&token_name, &source, false);
             }
-            // Move: 令牌被移动，来源进入 Moved 状态
             Instruction::Move { dst, src } => {
-                let src_name = operand_to_string(src);
+                let src_name = operand_display_name(src, self.local_names.as_ref());
                 if self.tokens.contains_key(&src_name) {
-                    // 令牌被移动
                     if let Some(token) = self.tokens.get_mut(&src_name) {
                         token.state = TokenState::Moved;
                     }
-                    // dst 继承来源信息
                     if let Some(token) = self.tokens.get(&src_name) {
                         let source = token.source.clone();
                         let mutable = token.mutable;
-                        let dst_name = operand_to_string(dst);
+                        let dst_name = operand_display_name(dst, self.local_names.as_ref());
                         self.tokens.insert(
                             dst_name,
-                            BorrowToken {
-                                source,
-                                mutable,
-                                state: TokenState::Active,
-                            },
+                            BorrowToken { source, mutable, state: TokenState::Active },
                         );
                     }
                 }
             }
-            // Borrow: 创建借用令牌
             Instruction::Borrow { dst, src, mutable } => {
-                let token_name = operand_to_string(dst);
-                let source = operand_to_string(src);
+                let token_name = operand_display_name(dst, self.local_names.as_ref());
+                let source = operand_display_name(src, self.local_names.as_ref());
                 self.create_borrow(&token_name, &source, *mutable);
             }
-            // Release: 释放借用令牌
             Instruction::Release(operand) => {
-                let name = operand_to_string(operand);
+                let name = operand_display_name(operand, self.local_names.as_ref());
                 self.release_token(&name);
             }
-            // Drop: 令牌生命周期结束
             Instruction::Drop(operand) => {
-                let name = operand_to_string(operand);
+                let name = operand_display_name(operand, self.local_names.as_ref());
                 self.release_token(&name);
             }
-            // 使用令牌的指令
             Instruction::Load { src, .. }
             | Instruction::Neg { src, .. }
             | Instruction::Cast { src, .. } => {
-                let name = operand_to_string(src);
-                if self.tokens.contains_key(&name) {
-                    self.use_token(&name);
-                }
+                let name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&name) { self.use_token(&name); }
             }
             Instruction::LoadIndex { src, index, .. } => {
-                let name = operand_to_string(src);
-                if self.tokens.contains_key(&name) {
-                    self.use_token(&name);
-                }
-                let idx_name = operand_to_string(index);
-                if self.tokens.contains_key(&idx_name) {
-                    self.use_token(&idx_name);
-                }
+                let name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&name) { self.use_token(&name); }
+                let idx_name = operand_display_name(index, self.local_names.as_ref());
+                if self.tokens.contains_key(&idx_name) { self.use_token(&idx_name); }
             }
             Instruction::LoadField { src, .. } => {
-                let name = operand_to_string(src);
-                if self.tokens.contains_key(&name) {
-                    self.use_token(&name);
-                }
+                let name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&name) { self.use_token(&name); }
             }
             Instruction::Store { src, dst, .. } => {
-                let src_name = operand_to_string(src);
-                if self.tokens.contains_key(&src_name) {
-                    self.use_token(&src_name);
-                }
-                let dst_name = operand_to_string(dst);
-                if self.tokens.contains_key(&dst_name) {
-                    self.use_token(&dst_name);
-                }
+                let src_name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                let dst_name = operand_display_name(dst, self.local_names.as_ref());
+                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
             }
             Instruction::StoreField { src, dst, .. } => {
-                let src_name = operand_to_string(src);
-                if self.tokens.contains_key(&src_name) {
-                    self.use_token(&src_name);
-                }
-                let dst_name = operand_to_string(dst);
-                if self.tokens.contains_key(&dst_name) {
-                    self.use_token(&dst_name);
-                }
+                let src_name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                let dst_name = operand_display_name(dst, self.local_names.as_ref());
+                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
             }
-            Instruction::StoreIndex {
-                src, dst, index, ..
-            } => {
-                let src_name = operand_to_string(src);
-                if self.tokens.contains_key(&src_name) {
-                    self.use_token(&src_name);
-                }
-                let dst_name = operand_to_string(dst);
-                if self.tokens.contains_key(&dst_name) {
-                    self.use_token(&dst_name);
-                }
-                let idx_name = operand_to_string(index);
-                if self.tokens.contains_key(&idx_name) {
-                    self.use_token(&idx_name);
-                }
+            Instruction::StoreIndex { src, dst, index, .. } => {
+                let src_name = operand_display_name(src, self.local_names.as_ref());
+                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                let dst_name = operand_display_name(dst, self.local_names.as_ref());
+                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
+                let idx_name = operand_display_name(index, self.local_names.as_ref());
+                if self.tokens.contains_key(&idx_name) { self.use_token(&idx_name); }
             }
             Instruction::Ret(Some(value)) => {
-                let name = operand_to_string(value);
-                if self.tokens.contains_key(&name) {
-                    self.use_token(&name);
-                }
+                let name = operand_display_name(value, self.local_names.as_ref());
+                if self.tokens.contains_key(&name) { self.use_token(&name); }
             }
             Instruction::Call { args, .. } => {
                 for arg in args {
-                    let name = operand_to_string(arg);
-                    if self.tokens.contains_key(&name) {
-                        self.use_token(&name);
-                    }
+                    let name = operand_display_name(arg, self.local_names.as_ref());
+                    if self.tokens.contains_key(&name) { self.use_token(&name); }
                 }
             }
             Instruction::CallVirt { obj, args, .. } => {
-                let obj_name = operand_to_string(obj);
-                if self.tokens.contains_key(&obj_name) {
-                    self.use_token(&obj_name);
-                }
+                let obj_name = operand_display_name(obj, self.local_names.as_ref());
+                if self.tokens.contains_key(&obj_name) { self.use_token(&obj_name); }
                 for arg in args {
-                    let name = operand_to_string(arg);
-                    if self.tokens.contains_key(&name) {
-                        self.use_token(&name);
-                    }
+                    let name = operand_display_name(arg, self.local_names.as_ref());
+                    if self.tokens.contains_key(&name) { self.use_token(&name); }
                 }
             }
             _ => {}
         }
-    }
-
-    /// 将 BorrowError 转换为 Diagnostic
-    pub fn to_diagnostics(&self) -> Vec<crate::util::diagnostic::Diagnostic> {
-        use crate::middle::passes::lifetime::error::codes;
-        self.errors
-            .iter()
-            .map(|e| match e {
-                BorrowError::MutableBorrowConflict { source, .. } => {
-                    codes::mutable_borrow_conflict(&self.resolve_name(source))
-                }
-                BorrowError::BorrowAfterMove { source, .. } => {
-                    codes::borrow_after_move(&self.resolve_name(source))
-                }
-            })
-            .collect()
-    }
-
-    /// 将内部名（如 `local_0`）转换为源码变量名
-    fn resolve_name(
-        &self,
-        internal: &str,
-    ) -> String {
-        if let Some(idx_str) = internal.strip_prefix("local_") {
-            if let Ok(idx) = idx_str.parse::<usize>() {
-                if let Some(ref names) = self.local_names {
-                    if idx < names.len() && !names[idx].is_empty() {
-                        return names[idx].clone();
-                    }
-                }
-            }
-        }
-        internal.to_string()
     }
 }
 
@@ -417,53 +270,28 @@ impl Default for BorrowChecker {
     }
 }
 
-/// 将 Operand 转换为字符串标识
-fn operand_to_string(operand: &Operand) -> String {
-    match operand {
-        Operand::Local(idx) => format!("local_{}", idx),
-        Operand::Arg(idx) => format!("arg_{}", idx),
-        Operand::Temp(idx) => format!("temp_{}", idx),
-        Operand::Global(idx) => format!("global_{}", idx),
-        Operand::Const(c) => format!("const_{:?}", c),
-        Operand::Label(idx) => format!("label_{}", idx),
-        Operand::Register(idx) => format!("reg_{}", idx),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    //! 借用检查器单元与端到端测试
-    //!
-    //! 参考规范：RFC-009 v9 §4.1 借用令牌冲突检测。
-    //! 覆盖不可变/可变借用冲突、移动后使用等场景。
-
     use super::*;
     use crate::middle::core::ir::BasicBlock;
     use crate::frontend::core::typecheck::MonoType;
 
-    /// 辅助函数：构建包含给定指令的 FunctionIR
     fn make_func_ir(instructions: Vec<Instruction>) -> FunctionIR {
         FunctionIR {
             name: "test_fn".to_string(),
             params: vec![],
             return_type: MonoType::Void,
             locals: vec![],
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions,
-                successors: vec![],
-            }],
+            blocks: vec![BasicBlock { label: 0, instructions, successors: vec![] }],
             entry: 0,
         }
     }
 
-    /// 辅助函数：创建新的借用检查器
     fn make_checker() -> BorrowChecker {
         BorrowChecker::new()
     }
 
-    /// 辅助函数：对给定指令列表运行端到端借用检查
-    fn run_borrow_check(instructions: Vec<Instruction>) -> Vec<BorrowError> {
+    fn run_borrow_check(instructions: Vec<Instruction>) -> Vec<Diagnostic> {
         let func = make_func_ir(instructions);
         let mut checker = BorrowChecker::new();
         checker.check_function(&func).to_vec()
@@ -471,279 +299,116 @@ mod tests {
 
     #[test]
     fn test_multiple_immutable_borrows() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_b", "x", false);
-        // Assert
-        assert!(
-            checker.errors().is_empty(),
-            "同一来源的多个不可变借用应允许，但得到错误: {:?}",
-            checker.errors()
-        );
+        assert!(checker.errors().is_empty(), "多不可变借用应允许，得: {:?}", checker.errors());
     }
 
     #[test]
     fn test_mutable_borrow_conflict_with_immutable() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_mut_b", "x", true);
-        // Assert
-        assert_eq!(
-            checker.errors().len(),
-            1,
-            "不可变借用后创建可变借用应产生 1 个错误，但得到: {:?}",
-            checker.errors()
-        );
-        assert!(
-            matches!(
-                checker.errors()[0],
-                BorrowError::MutableBorrowConflict { .. }
-            ),
-            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
-            checker.errors()[0]
-        );
+        assert_eq!(checker.errors().len(), 1);
+        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
     }
 
     #[test]
     fn test_mutable_borrow_conflict_with_mutable() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_mut_b", "x", true);
-        // Assert
-        assert_eq!(
-            checker.errors().len(),
-            1,
-            "同一来源的两个可变借用应产生 1 个错误，但得到: {:?}",
-            checker.errors()
-        );
-        assert!(
-            matches!(
-                checker.errors()[0],
-                BorrowError::MutableBorrowConflict { .. }
-            ),
-            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
-            checker.errors()[0]
-        );
+        assert_eq!(checker.errors().len(), 1);
+        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
     }
 
     #[test]
     fn test_immutable_borrow_conflict_with_mutable() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_b", "x", false);
-        // Assert
-        assert_eq!(
-            checker.errors().len(),
-            1,
-            "可变借用后创建不可变借用应产生 1 个错误，但得到: {:?}",
-            checker.errors()
-        );
-        assert!(
-            matches!(
-                checker.errors()[0],
-                BorrowError::MutableBorrowConflict { .. }
-            ),
-            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
-            checker.errors()[0]
-        );
+        assert_eq!(checker.errors().len(), 1);
+        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
     }
 
     #[test]
     fn test_use_active_token() {
-        // Arrange
         let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
-        // Act
         checker.use_token("ref_a");
-        // Assert
-        assert!(
-            checker.errors().is_empty(),
-            "使用活跃令牌不应产生错误，但得到: {:?}",
-            checker.errors()
-        );
+        assert!(checker.errors().is_empty());
     }
 
     #[test]
     fn test_use_moved_token() {
-        // Arrange
         let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
-        if let Some(token) = checker.tokens.get_mut("ref_a") {
-            token.state = TokenState::Moved;
-        }
-        // Act
+        if let Some(token) = checker.tokens.get_mut("ref_a") { token.state = TokenState::Moved; }
         checker.use_token("ref_a");
-        // Assert
-        assert_eq!(
-            checker.errors().len(),
-            1,
-            "使用已移动令牌应产生 1 个错误，但得到: {:?}",
-            checker.errors()
-        );
-        assert!(
-            matches!(checker.errors()[0], BorrowError::BorrowAfterMove { .. }),
-            "错误类型应为 BorrowAfterMove，但得到: {:?}",
-            checker.errors()[0]
-        );
+        assert_eq!(checker.errors().len(), 1);
+        assert!(checker.errors()[0].code == "E2015");
     }
 
     #[test]
     fn test_different_sources_no_conflict() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.create_borrow("ref_a", "x", true);
         checker.create_borrow("ref_b", "y", true);
-        // Assert
-        assert!(
-            checker.errors().is_empty(),
-            "不同来源的借用不应冲突，但得到错误: {:?}",
-            checker.errors()
-        );
+        assert!(checker.errors().is_empty());
     }
 
     #[test]
     fn test_release_nonexistent_token() {
-        // Arrange
         let mut checker = make_checker();
-        // Act
         checker.release_token("nonexistent");
-        // Assert
-        assert!(
-            checker.errors().is_empty(),
-            "释放不存在的令牌不应产生错误，但得到: {:?}",
-            checker.errors()
-        );
+        assert!(checker.errors().is_empty());
     }
-
-    // ===== 端到端测试：通过 check_function + Instruction::Borrow/Release =====
 
     #[test]
     fn test_e2e_single_immutable_borrow() {
-        // Arrange + Act
         let errors = run_borrow_check(vec![Instruction::Borrow {
-            dst: Operand::Temp(0),
-            src: Operand::Local(0),
-            mutable: false,
+            dst: Operand::Temp(0), src: Operand::Local(0), mutable: false,
         }]);
-        // Assert
-        assert!(
-            errors.is_empty(),
-            "单个不可变借用不应产生错误，但得到: {:?}",
-            errors
-        );
+        assert!(errors.is_empty(), "单不可变借用应允许: {:?}", errors);
     }
 
     #[test]
     fn test_e2e_multiple_immutable_borrows() {
-        // Arrange + Act
         let errors = run_borrow_check(vec![
-            Instruction::Borrow {
-                dst: Operand::Temp(0),
-                src: Operand::Local(0),
-                mutable: false,
-            },
-            Instruction::Borrow {
-                dst: Operand::Temp(1),
-                src: Operand::Local(0),
-                mutable: false,
-            },
+            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: false },
+            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: false },
         ]);
-        // Assert
-        assert!(
-            errors.is_empty(),
-            "多个不可变借用不应产生错误，但得到: {:?}",
-            errors
-        );
+        assert!(errors.is_empty());
     }
 
     #[test]
     fn test_e2e_mutable_then_immutable_conflict() {
-        // Arrange + Act
         let errors = run_borrow_check(vec![
-            Instruction::Borrow {
-                dst: Operand::Temp(0),
-                src: Operand::Local(0),
-                mutable: true,
-            },
-            Instruction::Borrow {
-                dst: Operand::Temp(1),
-                src: Operand::Local(0),
-                mutable: false,
-            },
+            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
+            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: false },
         ]);
-        // Assert
-        assert_eq!(
-            errors.len(),
-            1,
-            "可变借用后不可变借用应产生 1 个错误，但得到: {:?}",
-            errors
-        );
-        assert!(
-            matches!(errors[0], BorrowError::MutableBorrowConflict { .. }),
-            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
-            errors[0]
-        );
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].code == "E2017");
     }
 
     #[test]
     fn test_e2e_mutable_then_mutable_conflict() {
-        // Arrange + Act
         let errors = run_borrow_check(vec![
-            Instruction::Borrow {
-                dst: Operand::Temp(0),
-                src: Operand::Local(0),
-                mutable: true,
-            },
-            Instruction::Borrow {
-                dst: Operand::Temp(1),
-                src: Operand::Local(0),
-                mutable: true,
-            },
+            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
+            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: true },
         ]);
-        // Assert
-        assert_eq!(
-            errors.len(),
-            1,
-            "两个可变借用应产生 1 个错误，但得到: {:?}",
-            errors
-        );
-        assert!(
-            matches!(errors[0], BorrowError::MutableBorrowConflict { .. }),
-            "错误类型应为 MutableBorrowConflict，但得到: {:?}",
-            errors[0]
-        );
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].code == "E2017");
     }
 
     #[test]
     fn test_e2e_mutable_release_reborrow() {
-        // Arrange + Act
         let errors = run_borrow_check(vec![
-            Instruction::Borrow {
-                dst: Operand::Temp(0),
-                src: Operand::Local(0),
-                mutable: true,
-            },
+            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
             Instruction::Release(Operand::Temp(0)),
-            Instruction::Borrow {
-                dst: Operand::Temp(1),
-                src: Operand::Local(0),
-                mutable: true,
-            },
+            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: true },
         ]);
-        // Assert
-        assert!(
-            errors.is_empty(),
-            "释放后重新借用不应产生错误，但得到: {:?}",
-            errors
-        );
+        assert!(errors.is_empty(), "释放后重新借用应允许: {:?}", errors);
     }
 }

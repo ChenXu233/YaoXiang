@@ -136,7 +136,7 @@ impl Compiler {
         &mut self,
         source: &str,
     ) -> Result<Vec<super::core::lexer::Token>, CompileError> {
-        super::core::lexer::tokenize(source).map_err(|e| CompileError::LexError(e.to_string()))
+        super::core::lexer::tokenize(source).map_err(|e| CompileError::Lex(e.to_diagnostic()))
     }
 
     /// 只进行语法分析
@@ -146,7 +146,7 @@ impl Compiler {
         &mut self,
         tokens: &[super::core::lexer::Token],
     ) -> Result<super::core::parser::Module, CompileError> {
-        super::core::parser::parse(tokens).map_err(|e| CompileError::ParseError(e.to_string()))
+        super::core::parser::parse(tokens).map_err(|e| CompileError::Parse(e))
     }
 
     /// 只进行类型检查
@@ -248,12 +248,12 @@ impl Compiler {
 #[derive(Debug, Error)]
 pub enum CompileError {
     /// 词法分析错误
-    #[error("Lexical error: {0}")]
-    LexError(String),
+    #[error("Lexical error: {0:?}")]
+    Lex(Diagnostic),
 
     /// 语法分析错误
-    #[error("Parse error: {0}")]
-    ParseError(String),
+    #[error("Parse error: {0:?}")]
+    Parse(Diagnostic),
 
     /// 类型错误
     #[error("Type error: {0}")]
@@ -281,8 +281,8 @@ impl CompileError {
     /// 获取错误消息
     pub fn message(&self) -> &str {
         match self {
-            CompileError::LexError(msg) => msg,
-            CompileError::ParseError(msg) => msg,
+            CompileError::Lex(d) => &d.message,
+            CompileError::Parse(d) => &d.message,
             CompileError::TypeError(msg, _) => msg,
             CompileError::IRError(msg) => msg,
             CompileError::Cancelled(msg) => msg,
@@ -293,6 +293,8 @@ impl CompileError {
     /// 获取诊断信息（如果有）
     pub fn diagnostic(&self) -> Option<&Diagnostic> {
         match self {
+            CompileError::Lex(d) => Some(d),
+            CompileError::Parse(d) => Some(d),
             CompileError::TypeError(_, diag) => diag.as_deref(),
             _ => None,
         }

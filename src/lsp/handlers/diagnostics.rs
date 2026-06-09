@@ -25,7 +25,6 @@ use lsp_types::{
 use tracing::{debug, warn};
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parser_state::ParseError;
 use crate::frontend::core::parser::parse_with_recovery;
 use crate::frontend::core::typecheck::check_module_collect_all;
 use crate::util::diagnostic::{Diagnostic, Severity};
@@ -86,24 +85,6 @@ pub fn to_lsp_diagnostics(diagnostics: &[Diagnostic]) -> Vec<LspDiagnostic> {
 }
 
 /// 将 ParseError 转换为 YaoXiang Diagnostic
-fn parse_error_to_diagnostic(err: &ParseError) -> Diagnostic {
-    let (message, span) = match err {
-        ParseError::ExpectedToken {
-            expected,
-            found,
-            span,
-        } => (
-            format!("期望 {:?}，实际为 {:?}", expected, found),
-            Some(*span),
-        ),
-        ParseError::UnexpectedToken { found, span } => {
-            (format!("意外的 token: {:?}", found), Some(*span))
-        }
-        ParseError::Message(msg) => (msg.clone(), None),
-    };
-
-    Diagnostic::error("E0100".to_string(), message, String::new(), span)
-}
 
 /// 对文档内容运行完整诊断管线
 ///
@@ -147,7 +128,6 @@ pub fn run_diagnostics(
         let parse_diags: Vec<Diagnostic> = parse_result
             .errors
             .iter()
-            .map(parse_error_to_diagnostic)
             .collect();
         all_diagnostics.extend(to_lsp_diagnostics(&parse_diags));
     }
@@ -270,29 +250,6 @@ mod tests {
     // --- 阶段 2 新增测试 ---
 
     #[test]
-    fn test_parse_error_to_diagnostic() {
-        let err = ParseError::UnexpectedToken {
-            found: crate::frontend::core::lexer::tokens::TokenKind::Plus,
-            span: Span {
-                start: YxPosition {
-                    line: 1,
-                    column: 5,
-                    offset: 4,
-                },
-                end: YxPosition {
-                    line: 1,
-                    column: 6,
-                    offset: 5,
-                },
-            },
-        };
-
-        let diag = parse_error_to_diagnostic(&err);
-        assert_eq!(diag.severity, Severity::Error);
-        assert_eq!(diag.code, "E0100");
-        assert!(diag.message.contains("意外的 token"));
-        assert!(diag.span.is_some());
-    }
 
     #[test]
     fn test_run_diagnostics_valid_code() {
