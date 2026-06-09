@@ -310,6 +310,13 @@ pub enum BytecodeInstr {
         fields: Vec<Reg>,
     },
 
+    /// 创建字典实例
+    NewDict {
+        dst: Reg,
+        keys: Vec<Reg>,
+        values: Vec<Reg>,
+    },
+
     // =====================
     // Arc Operations
     // =====================
@@ -528,6 +535,7 @@ impl BytecodeInstr {
             BytecodeInstr::StoreElement { .. } => Opcode::StoreElement,
             BytecodeInstr::NewListWithCap { .. } => Opcode::NewListWithCap,
             BytecodeInstr::CreateStruct { .. } => Opcode::CreateStruct,
+            BytecodeInstr::NewDict { .. } => Opcode::NewDict,
             BytecodeInstr::ArcNew { .. } => Opcode::ArcNew,
             BytecodeInstr::ArcClone { .. } => Opcode::ArcClone,
             BytecodeInstr::ArcDrop { .. } => Opcode::ArcDrop,
@@ -597,6 +605,10 @@ impl BytecodeInstr {
             BytecodeInstr::CreateStruct {
                 fields, type_name, ..
             } => 6 + type_name.len() + fields.len() * 2,
+            BytecodeInstr::NewDict { keys, .. } => {
+                // dst(2) + pair_count(4) + keys(2*count) + values(2*count)
+                6 + keys.len() * 4
+            }
             BytecodeInstr::ArcNew { .. } => 4,
             BytecodeInstr::ArcClone { .. } => 4,
             BytecodeInstr::ArcDrop { .. } => 2,
@@ -1345,6 +1357,48 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         dst: Reg(dst),
                                         type_name,
                                         fields,
+                                    });
+                                } else {
+                                    decoded_instructions.push(BytecodeInstr::Nop);
+                                }
+                            }
+                            Opcode::NewDict => {
+                                // NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count)
+                                if instr.operands.len() >= 6 {
+                                    let dst =
+                                        u16::from_le_bytes([instr.operands[0], instr.operands[1]]);
+                                    let pair_count = u32::from_le_bytes([
+                                        instr.operands[2],
+                                        instr.operands[3],
+                                        instr.operands[4],
+                                        instr.operands[5],
+                                    ]) as usize;
+
+                                    let mut keys = Vec::with_capacity(pair_count);
+                                    let mut values = Vec::with_capacity(pair_count);
+                                    for i in 0..pair_count {
+                                        let key_offset = 6 + i * 2;
+                                        let val_offset = 6 + pair_count * 2 + i * 2;
+                                        if key_offset + 1 < instr.operands.len() {
+                                            let key_reg = u16::from_le_bytes([
+                                                instr.operands[key_offset],
+                                                instr.operands[key_offset + 1],
+                                            ]);
+                                            keys.push(Reg(key_reg));
+                                        }
+                                        if val_offset + 1 < instr.operands.len() {
+                                            let val_reg = u16::from_le_bytes([
+                                                instr.operands[val_offset],
+                                                instr.operands[val_offset + 1],
+                                            ]);
+                                            values.push(Reg(val_reg));
+                                        }
+                                    }
+
+                                    decoded_instructions.push(BytecodeInstr::NewDict {
+                                        dst: Reg(dst),
+                                        keys,
+                                        values,
                                     });
                                 } else {
                                     decoded_instructions.push(BytecodeInstr::Nop);

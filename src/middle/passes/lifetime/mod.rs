@@ -461,6 +461,14 @@ fn extract_operands(instr: &Instruction) -> Vec<Operand> {
             ops
         }
 
+        // 字典创建
+        Instruction::NewDict { dst, keys, values } => {
+            let mut ops = vec![dst.clone()];
+            ops.extend(keys.iter().cloned());
+            ops.extend(values.iter().cloned());
+            ops
+        }
+
         // 借用令牌指令
         Instruction::Borrow { dst, src, .. } => vec![dst.clone(), src.clone()],
         Instruction::Release(operand) => vec![operand.clone()],

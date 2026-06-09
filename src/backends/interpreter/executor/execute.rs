@@ -712,6 +712,29 @@ impl Executor for Interpreter {
                     frame.set_register(dst_idx, struct_val);
                     frame.advance();
                 }
+                BytecodeInstr::NewDict {
+                    dst,
+                    keys,
+                    values,
+                } => {
+                    let mut map = std::collections::HashMap::new();
+                    for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
+                        let key = frame
+                            .registers
+                            .get(key_reg.0 as usize)
+                            .cloned()
+                            .unwrap_or(RuntimeValue::Unit);
+                        let val = frame
+                            .registers
+                            .get(val_reg.0 as usize)
+                            .cloned()
+                            .unwrap_or(RuntimeValue::Unit);
+                        map.insert(key, val);
+                    }
+                    let handle = self.heap.allocate(HeapValue::Dict(map));
+                    frame.set_register(dst.0 as usize, RuntimeValue::Dict(handle));
+                    frame.advance();
+                }
                 BytecodeInstr::ArcNew { dst, src } => {
                     let val = frame
                         .registers
