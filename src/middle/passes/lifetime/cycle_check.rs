@@ -13,9 +13,9 @@
 //! 单函数内循环和 spawn 内部循环由 IntraTaskCycleTracker 处理（警告模式）。
 
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::{HashMap, HashSet};
-use super::error::{codes, operand_display_name};
+use super::error::{operand_display_name};
 
 /// 检测深度限制：只检测直接边界，不递归进入嵌套 spawn
 /// 用于文档说明，实际通过 `find_spawn_result_direct` 实现深度限制
@@ -195,7 +195,7 @@ impl CycleChecker {
                             operand_display_name(result, self.local_names.as_ref())
                         );
                         self.unsafe_bypasses
-                            .push(codes::unsafe_bypass_cycle(&details));
+                            .push(ErrorCodeDefinition::ownership_violation(&details).build());
                     }
                     continue;
                 }
@@ -331,9 +331,9 @@ impl CycleChecker {
                     }
                 } else if recursion_stack.contains(neighbor) {
                     // 找到环！path 中从 neighbor 到末尾就是环
-                    self.errors.push(codes::cross_spawn_cycle(
+                    self.errors.push(ErrorCodeDefinition::ownership_violation(
                         &self.format_cycle_path(path, neighbor),
-                    ));
+                    ).build());
                     return true;
                 }
             }

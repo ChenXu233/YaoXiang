@@ -5,8 +5,8 @@
 //! - 只有标记 `mut` 的变量才能被修改
 //! - 编译期检查，无需运行时开销
 
-use super::error::{OwnershipCheck, operand_display_name, codes};
-use crate::util::diagnostic::Diagnostic;
+use super::error::{OwnershipCheck, operand_display_name};
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};
@@ -129,7 +129,7 @@ impl MutChecker {
         }
         // 使用源码变量名（优先）或内部名
         let value = operand_display_name(target, self.local_names.as_ref());
-        self.errors.push(codes::immutable_assign(&value));
+        self.errors.push(ErrorCodeDefinition::immutable_assign(&value).build());
     }
 
     /// 检查字段赋值操作
@@ -173,7 +173,7 @@ impl MutChecker {
                             .clone()
                             .unwrap_or_else(|| format!("field_{}", field_index));
                         self.errors
-                            .push(codes::immutable_field_assign(&struct_name, &field));
+                            .push(ErrorCodeDefinition::immutable_field_assign(&struct_name, &field).build());
                     }
 
                     // 字段可变，允许
@@ -198,7 +198,7 @@ impl MutChecker {
             return;
         }
         let name = operand_display_name(target, self.local_names.as_ref());
-        self.errors.push(codes::immutable_mutation(&name, method));
+        self.errors.push(ErrorCodeDefinition::immutable_mutation(&name, method).build());
     }
 
     /// 检查变量是否可变（通用逻辑）

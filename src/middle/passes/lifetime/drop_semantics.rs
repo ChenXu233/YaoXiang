@@ -2,9 +2,9 @@
 //!
 //! 检查 Drop 相关错误：UseAfterDrop、DropMovedValue、DoubleDrop。
 
-use super::error::{OwnershipCheck, ValueState, codes, operand_display_name};
+use super::error::{OwnershipCheck, ValueState, operand_display_name};
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
 
 /// Drop 检查器
@@ -70,11 +70,11 @@ impl DropChecker {
         match self.state.get(value) {
             Some(ValueState::Moved) => {
                 let name = operand_display_name(value, self.local_names.as_ref());
-                self.errors.push(codes::drop_moved_value(&name));
+                self.errors.push(ErrorCodeDefinition::drop_moved_value(&name).build());
             }
             Some(ValueState::Dropped) => {
                 let name = operand_display_name(value, self.local_names.as_ref());
-                self.errors.push(codes::double_drop(&name));
+                self.errors.push(ErrorCodeDefinition::double_drop(&name).build());
             }
             Some(ValueState::Owned(_)) => {
                 self.state.insert(value.clone(), ValueState::Dropped);
@@ -110,7 +110,7 @@ impl DropChecker {
     ) {
         if let Some(ValueState::Dropped) = self.state.get(operand) {
             let name = operand_display_name(operand, self.local_names.as_ref());
-            self.errors.push(codes::use_after_drop(&name));
+            self.errors.push(ErrorCodeDefinition::use_after_drop(&name).build());
         }
     }
 }

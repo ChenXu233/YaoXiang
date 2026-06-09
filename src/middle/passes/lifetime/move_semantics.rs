@@ -20,11 +20,11 @@
 //! ```
 
 use super::consume_analysis::ConsumeAnalyzer;
-use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name, codes};
+use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name};
 use super::ownership_flow::ConsumeMode;
 use crate::frontend::core::types::base::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;
 
 /// Move 检查器
@@ -222,7 +222,7 @@ impl MoveChecker {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
                     let name = operand_display_name(dst, self.local_names.as_ref());
-                    self.errors.push(codes::reassign_non_empty(&name));
+                    self.errors.push(ErrorCodeDefinition::reassign_non_empty(&name).build());
                     return;
                 }
                 ValueState::Dup => {
@@ -382,7 +382,7 @@ impl MoveChecker {
         operand: &Operand,
     ) {
         let name = operand_display_name(operand, self.local_names.as_ref());
-        self.errors.push(codes::use_after_move(&name));
+        self.errors.push(ErrorCodeDefinition::use_after_move(&name).build());
     }
 }
 

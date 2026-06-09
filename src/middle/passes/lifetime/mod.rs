@@ -150,8 +150,7 @@ impl OwnershipChecker {
         let cycle_errors = self.cycle_checker.check_function(func);
 
         // 借用检查
-        let _borrow_errors = self.borrow_checker.check_function(func);
-        let borrow_diagnostics = self.borrow_checker.to_diagnostics();
+        let borrow_diagnostics = self.borrow_checker.check_function(func);
 
         // 任务内循环追踪（警告模式，不计入错误）
         let _intra_task_warnings = self.intra_task_tracker.track_function(func);
@@ -165,7 +164,7 @@ impl OwnershipChecker {
             .chain(clone_errors)
             .chain(cycle_errors)
             .cloned()
-            .chain(borrow_diagnostics)
+            .chain(borrow_diagnostics.iter().cloned())
             .collect()
     }
 
