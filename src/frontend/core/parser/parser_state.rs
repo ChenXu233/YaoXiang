@@ -248,6 +248,29 @@ impl<'a> ParserState<'a> {
                 });
                 None
             }
+            // 关键字不能用作变量名或表达式的语句开头
+            Some(kw @ TokenKind::KwRef)
+            | Some(kw @ TokenKind::KwUnsafe)
+            | Some(kw @ TokenKind::KwElif)
+            | Some(kw @ TokenKind::KwElse)
+            | Some(kw @ TokenKind::KwIn)
+            | Some(kw @ TokenKind::KwAs) => {
+                let keyword = match kw {
+                    TokenKind::KwRef => "ref",
+                    TokenKind::KwUnsafe => "unsafe",
+                    TokenKind::KwElif => "elif",
+                    TokenKind::KwElse => "else",
+                    TokenKind::KwIn => "in",
+                    TokenKind::KwAs => "as",
+                    _ => "keyword",
+                };
+                self.error(ParseError::Message(format!(
+                    "'{}' 是关键字，不能用作变量名或表达式",
+                    keyword,
+                )));
+                self.bump();
+                None
+            }
             Some(_) => parse_expr_stmt(self, start_span),
         }
     }

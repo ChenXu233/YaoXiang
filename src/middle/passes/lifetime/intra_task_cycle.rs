@@ -11,7 +11,7 @@
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::Diagnostic;
 use std::collections::{HashMap, HashSet};
-use super::error::codes;
+use super::error::{codes, operand_display_name};
 
 /// 任务内循环追踪器
 #[derive(Debug, Default)]
@@ -25,6 +25,8 @@ pub struct IntraTaskCycleTracker {
     /// 值定义追踪（预留，用于更复杂的数据流分析）
     #[allow(dead_code)]
     value_defs: HashMap<Operand, Operand>,
+    /// 局部变量名列表（用于警告报告中显示源码变量名）
+    local_names: Option<Vec<String>>,
 }
 
 /// ref 边
@@ -40,6 +42,14 @@ impl IntraTaskCycleTracker {
     /// 创建新的追踪器
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 设置局部变量名列表
+    pub fn set_local_names(
+        &mut self,
+        local_names: Option<Vec<String>>,
+    ) {
+        self.local_names = local_names;
     }
 
     /// 追踪函数中的任务内循环
@@ -180,7 +190,7 @@ impl IntraTaskCycleTracker {
 
         let cycle_strs: Vec<String> = cycle_nodes
             .iter()
-            .map(|p| self.operand_to_string(p))
+            .map(|p| operand_display_name(p, self.local_names.as_ref()))
             .collect();
 
         format!(
@@ -196,22 +206,6 @@ impl IntraTaskCycleTracker {
         node: &Operand,
     ) -> (usize, usize) {
         self.arc_new_locations.get(node).copied().unwrap_or((0, 0))
-    }
-
-    /// Operand 转字符串
-    fn operand_to_string(
-        &self,
-        op: &Operand,
-    ) -> String {
-        match op {
-            Operand::Local(idx) => format!("local_{}", idx),
-            Operand::Arg(idx) => format!("arg_{}", idx),
-            Operand::Temp(idx) => format!("temp_{}", idx),
-            Operand::Global(idx) => format!("global_{}", idx),
-            Operand::Const(c) => format!("{:?}", c),
-            Operand::Label(idx) => format!("label_{}", idx),
-            Operand::Register(idx) => format!("reg_{}", idx),
-        }
     }
 
     /// 获取警告列表

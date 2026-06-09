@@ -712,11 +712,7 @@ impl Executor for Interpreter {
                     frame.set_register(dst_idx, struct_val);
                     frame.advance();
                 }
-                BytecodeInstr::NewDict {
-                    dst,
-                    keys,
-                    values,
-                } => {
+                BytecodeInstr::NewDict { dst, keys, values } => {
                     let mut map = std::collections::HashMap::new();
                     for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
                         let key = frame

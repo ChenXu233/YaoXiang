@@ -197,10 +197,7 @@ impl MutChecker {
             return;
         }
         let name = operand_display_name(target, self.local_names.as_ref());
-        self.errors.push(codes::immutable_mutation(
-            &name,
-            method,
-        ));
+        self.errors.push(codes::immutable_mutation(&name, method));
     }
 
     /// 检查变量是否可变（通用逻辑）

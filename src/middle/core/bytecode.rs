@@ -1372,7 +1372,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                                         instr.operands[3],
                                         instr.operands[4],
                                         instr.operands[5],
-                                    ]) as usize;
+                                    ])
+                                        as usize;
 
                                     let mut keys = Vec::with_capacity(pair_count);
                                     let mut values = Vec::with_capacity(pair_count);

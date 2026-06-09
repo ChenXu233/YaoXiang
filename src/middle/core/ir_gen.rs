@@ -280,7 +280,11 @@ impl AstToIrGenerator {
         original_var: Operand,
         instructions: &mut Vec<Instruction>,
     ) -> (Operand, Option<usize>) {
-        let is_mutable = self.method_self_mutability.get(func_name).copied().flatten();
+        let is_mutable = self
+            .method_self_mutability
+            .get(func_name)
+            .copied()
+            .flatten();
         match is_mutable {
             Some(mutable) => {
                 let token_reg = self.next_temp_reg();
@@ -611,10 +615,9 @@ impl AstToIrGenerator {
                         constants,
                     )
                 } else if type_annotation.as_ref().is_some_and(|t| {
-                        crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
-                            || matches!(t, ast::Type::Struct { .. })
-                    })
-                {
+                    crate::frontend::core::parser::ast::type_annotation_returns_meta_type(t)
+                        || matches!(t, ast::Type::Struct { .. })
+                }) {
                     // TypeDef: 类型标注返回 Type 或者是 Struct 类型
                     self.generate_constructor_ir(name, type_annotation.as_ref().unwrap())
                 } else {
@@ -1416,7 +1419,10 @@ impl AstToIrGenerator {
                 }
                 // 变量到变量的 Move 已经在上面处理，不需要额外的 Store
                 // 只有非 Move 的情况才需要 Store
-                if !matches!(initializer.as_ref().map(|e| e.as_ref()), Some(ast::Expr::Var(_, _))) {
+                if !matches!(
+                    initializer.as_ref().map(|e| e.as_ref()),
+                    Some(ast::Expr::Var(_, _))
+                ) {
                     // 生成 Store 指令将值存储到局部变量
                     instructions.push(Instruction::Store {
                         dst: Operand::Local(var_idx),
