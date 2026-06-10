@@ -123,7 +123,7 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume 'spawn'
 
         if !self.at(&TokenKind::LBrace) {
-            self.diag_error(ErrorCodeDefinition::expected_expression("block after spawn").at(self.span()).build());
+            self.error(ErrorCodeDefinition::expected_expression("block after spawn").at(self.span()).build());
             return None;
         }
         let body = self.parse_block_expr()?;

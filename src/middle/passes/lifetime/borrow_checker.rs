@@ -78,7 +78,7 @@ impl BorrowChecker {
         mutable: bool,
     ) {
         // 检查与已有借用的冲突
-        for (name, existing) in &self.tokens {
+        for (_name, existing) in &self.tokens {
             if existing.source != source {
                 continue;
             }

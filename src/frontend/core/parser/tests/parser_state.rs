@@ -1,8 +1,9 @@
 //! Tests for ParserState: helpers, error tracking, save/restore.
 
 use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::{ParserState, ParseError};
+use crate::frontend::core::parser::ParserState;
 use crate::frontend::core::lexer::tokens::TokenKind;
+use crate::frontend::core::parser::parse_msg;
 
 fn with_state<F>(
     source: &str,
@@ -105,7 +106,7 @@ fn test_skip_failure() {
 #[test]
 fn test_error_tracking() {
     with_state("x", |state| {
-        state.error(ParseError::Message("test error".into()));
+        state.error(parse_msg("test error"));
         assert!(state.has_errors());
         assert_eq!(state.error_count(), 1);
     });
@@ -114,8 +115,8 @@ fn test_error_tracking() {
 #[test]
 fn test_take_errors() {
     with_state("x", |state| {
-        state.error(ParseError::Message("err1".into()));
-        state.error(ParseError::Message("err2".into()));
+        state.error(parse_msg("err1"));
+        state.error(parse_msg("err2"));
         let errors = state.take_errors();
         assert_eq!(errors.len(), 2);
         assert!(!state.has_errors());

@@ -6,7 +6,6 @@
 //! 3. Send/Sync 安全 trait 检查
 
 use crate::middle::core::ir::{FunctionIR, Instruction};
-use crate::middle::passes::lifetime::error::operand_display_name;
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 
 /// unsafe 语义检查器

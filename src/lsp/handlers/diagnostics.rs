@@ -249,7 +249,6 @@ mod tests {
 
     // --- 阶段 2 新增测试 ---
 
-    #[test]
 
     #[test]
     fn test_run_diagnostics_valid_code() {
