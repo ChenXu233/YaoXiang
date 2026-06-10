@@ -1,9 +1,9 @@
 ---
 title: "RFC-027：编译期谓词与统一静态验证"
-status: "审核中"
+status: "已接受"
 author: "晨煦"
 created: "2026-06-07"
-updated: "2026-06-07"
+updated: "2026-06-10"
 ---
 
 # RFC-027：编译期谓词与统一静态验证
@@ -704,7 +704,7 @@ SumUpTo: (arr: Array(Int), i: Int) -> Type = { s: Int; s == sum(arr[0..i]) }
 UpTo: (n: Int) -> Type = { i: Int; 0 <= i <= n }
 
 sum: (arr: Array(Int)) -> Int = {
-    mut s: SumUpTo(arr, 0) = 0
+    mut s: SumUpTo(arr, i) = 0
     mut i: UpTo(arr.len) = 0
     while i < arr.len {
         s += arr[i]

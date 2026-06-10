@@ -41,7 +41,6 @@ title: "RFC 索引"
 |------|------|------|----------|------|
 | RFC-018 | [RFC-018：LLVM AOT 编译器设计](./review/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-026 | [RFC-026：FFI 核心机制](./review/026-ffi-core-mechanism.md) | 晨煦 | 2026-06-05 | 审核中 |
-| RFC-027 | [RFC-027：编译期求值类型与统一静态验证](./review/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 审核中 |
 
 ---
 
@@ -63,6 +62,7 @@ title: "RFC 索引"
 | RFC-017 | [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-023 | [RFC-023: 闭包捕获模型](./accepted/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已接受 |
 | RFC-024 | [RFC-024：基于 spawn 块的并发模型](./accepted/024-concurrency-model.md) | 晨煦 | 2026-06-05 | 已接受 |
+| RFC-027 | [RFC-027：编译期谓词与统一静态验证](./accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
 
 ---
 
