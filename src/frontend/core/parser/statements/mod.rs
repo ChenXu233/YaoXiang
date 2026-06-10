@@ -67,7 +67,11 @@ impl StatementParser for ParserState<'_> {
             Some(TokenKind::Eof) | None => None,
             // Phase 1: @ 不再是有效的语句起始（eval block 已移除）
             Some(TokenKind::At) => {
-                self.error(ErrorCodeDefinition::unexpected_token("@").at(start_span).build());
+                self.error(
+                    ErrorCodeDefinition::unexpected_token("@")
+                        .at(start_span)
+                        .build(),
+                );
                 None
             }
             // 关键字不能用作变量名或表达式的语句开头
@@ -86,7 +90,10 @@ impl StatementParser for ParserState<'_> {
                     TokenKind::KwAs => "as",
                     _ => "keyword",
                 };
-                self.error(parse_msg(format!("'{}' 是关键字，不能用作变量名或表达式", keyword)));
+                self.error(parse_msg(format!(
+                    "'{}' 是关键字，不能用作变量名或表达式",
+                    keyword
+                )));
                 self.bump();
                 None
             }

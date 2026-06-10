@@ -65,7 +65,8 @@ impl CloneChecker {
         operand: &Operand,
     ) {
         let name = operand_display_name(operand, self.local_names.as_ref());
-        self.errors.push(ErrorCodeDefinition::clone_moved_value(&name).build());
+        self.errors
+            .push(ErrorCodeDefinition::clone_moved_value(&name).build());
     }
 
     fn error_clone_dropped(
@@ -73,7 +74,8 @@ impl CloneChecker {
         operand: &Operand,
     ) {
         let name = operand_display_name(operand, self.local_names.as_ref());
-        self.errors.push(ErrorCodeDefinition::use_after_drop(&name).build());
+        self.errors
+            .push(ErrorCodeDefinition::use_after_drop(&name).build());
     }
 
     fn set_owned(

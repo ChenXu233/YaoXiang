@@ -100,32 +100,62 @@ impl BindingParser {
         let _type_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-                return Err(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(state.span()).build());
+                let found = state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof);
+                return Err(
+                    ErrorCodeDefinition::unexpected_token(&format!("{:?}", found))
+                        .at(state.span())
+                        .build(),
+                );
             }
         };
         state.bump();
 
         // Expect dot
         if !state.skip(&TokenKind::Dot) {
-            let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-            return Err(ErrorCodeDefinition::expected_token(&format!("{:?}", TokenKind::Dot), &format!("{:?}", found)).at(state.span()).build());
+            let found = state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof);
+            return Err(ErrorCodeDefinition::expected_token(
+                &format!("{:?}", TokenKind::Dot),
+                &format!("{:?}", found),
+            )
+            .at(state.span())
+            .build());
         }
 
         // Parse method name
         let _method_name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-                return Err(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(state.span()).build());
+                let found = state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof);
+                return Err(
+                    ErrorCodeDefinition::unexpected_token(&format!("{:?}", found))
+                        .at(state.span())
+                        .build(),
+                );
             }
         };
         state.bump();
 
         // Expect equals
         if !state.skip(&TokenKind::Eq) {
-            let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-            return Err(ErrorCodeDefinition::expected_token(&format!("{:?}", TokenKind::Eq), &format!("{:?}", found)).at(state.span()).build());
+            let found = state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof);
+            return Err(ErrorCodeDefinition::expected_token(
+                &format!("{:?}", TokenKind::Eq),
+                &format!("{:?}", found),
+            )
+            .at(state.span())
+            .build());
         }
 
         // Parse value expression

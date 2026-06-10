@@ -5,7 +5,7 @@
 //! - `&mut T` 令牌活跃时，同一来源的 `&T` 令牌也活跃：错误
 //! - 令牌来源已被移动后使用令牌：错误
 
-use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
+use crate::middle::core::ir::{FunctionIR, Instruction};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use super::error::operand_display_name;
 use std::collections::HashMap;
@@ -78,7 +78,7 @@ impl BorrowChecker {
         mutable: bool,
     ) {
         // 检查与已有借用的冲突
-        for (_name, existing) in &self.tokens {
+        for existing in self.tokens.values() {
             if existing.source != source {
                 continue;
             }
@@ -87,15 +87,18 @@ impl BorrowChecker {
             }
 
             if mutable && existing.mutable {
-                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
+                self.errors
+                    .push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
             if mutable && !existing.mutable {
-                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
+                self.errors
+                    .push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
             if !mutable && existing.mutable {
-                self.errors.push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
+                self.errors
+                    .push(ErrorCodeDefinition::mutable_borrow_conflict(source).build());
                 return;
             }
         }
@@ -123,7 +126,8 @@ impl BorrowChecker {
         match token.state {
             TokenState::Active => {}
             TokenState::Moved => {
-                self.errors.push(ErrorCodeDefinition::borrow_after_move(&token.source).build());
+                self.errors
+                    .push(ErrorCodeDefinition::borrow_after_move(&token.source).build());
             }
         }
     }
@@ -187,7 +191,11 @@ impl BorrowChecker {
                         let dst_name = operand_display_name(dst, self.local_names.as_ref());
                         self.tokens.insert(
                             dst_name,
-                            BorrowToken { source, mutable, state: TokenState::Active },
+                            BorrowToken {
+                                source,
+                                mutable,
+                                state: TokenState::Active,
+                            },
                         );
                     }
                 }
@@ -209,54 +217,86 @@ impl BorrowChecker {
             | Instruction::Neg { src, .. }
             | Instruction::Cast { src, .. } => {
                 let name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&name) { self.use_token(&name); }
+                if self.tokens.contains_key(&name) {
+                    self.use_token(&name);
+                }
             }
             Instruction::LoadIndex { src, index, .. } => {
                 let name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&name) { self.use_token(&name); }
+                if self.tokens.contains_key(&name) {
+                    self.use_token(&name);
+                }
                 let idx_name = operand_display_name(index, self.local_names.as_ref());
-                if self.tokens.contains_key(&idx_name) { self.use_token(&idx_name); }
+                if self.tokens.contains_key(&idx_name) {
+                    self.use_token(&idx_name);
+                }
             }
             Instruction::LoadField { src, .. } => {
                 let name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&name) { self.use_token(&name); }
+                if self.tokens.contains_key(&name) {
+                    self.use_token(&name);
+                }
             }
             Instruction::Store { src, dst, .. } => {
                 let src_name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                if self.tokens.contains_key(&src_name) {
+                    self.use_token(&src_name);
+                }
                 let dst_name = operand_display_name(dst, self.local_names.as_ref());
-                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
+                if self.tokens.contains_key(&dst_name) {
+                    self.use_token(&dst_name);
+                }
             }
             Instruction::StoreField { src, dst, .. } => {
                 let src_name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                if self.tokens.contains_key(&src_name) {
+                    self.use_token(&src_name);
+                }
                 let dst_name = operand_display_name(dst, self.local_names.as_ref());
-                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
+                if self.tokens.contains_key(&dst_name) {
+                    self.use_token(&dst_name);
+                }
             }
-            Instruction::StoreIndex { src, dst, index, .. } => {
+            Instruction::StoreIndex {
+                src, dst, index, ..
+            } => {
                 let src_name = operand_display_name(src, self.local_names.as_ref());
-                if self.tokens.contains_key(&src_name) { self.use_token(&src_name); }
+                if self.tokens.contains_key(&src_name) {
+                    self.use_token(&src_name);
+                }
                 let dst_name = operand_display_name(dst, self.local_names.as_ref());
-                if self.tokens.contains_key(&dst_name) { self.use_token(&dst_name); }
+                if self.tokens.contains_key(&dst_name) {
+                    self.use_token(&dst_name);
+                }
                 let idx_name = operand_display_name(index, self.local_names.as_ref());
-                if self.tokens.contains_key(&idx_name) { self.use_token(&idx_name); }
+                if self.tokens.contains_key(&idx_name) {
+                    self.use_token(&idx_name);
+                }
             }
             Instruction::Ret(Some(value)) => {
                 let name = operand_display_name(value, self.local_names.as_ref());
-                if self.tokens.contains_key(&name) { self.use_token(&name); }
+                if self.tokens.contains_key(&name) {
+                    self.use_token(&name);
+                }
             }
             Instruction::Call { args, .. } => {
                 for arg in args {
                     let name = operand_display_name(arg, self.local_names.as_ref());
-                    if self.tokens.contains_key(&name) { self.use_token(&name); }
+                    if self.tokens.contains_key(&name) {
+                        self.use_token(&name);
+                    }
                 }
             }
             Instruction::CallVirt { obj, args, .. } => {
                 let obj_name = operand_display_name(obj, self.local_names.as_ref());
-                if self.tokens.contains_key(&obj_name) { self.use_token(&obj_name); }
+                if self.tokens.contains_key(&obj_name) {
+                    self.use_token(&obj_name);
+                }
                 for arg in args {
                     let name = operand_display_name(arg, self.local_names.as_ref());
-                    if self.tokens.contains_key(&name) { self.use_token(&name); }
+                    if self.tokens.contains_key(&name) {
+                        self.use_token(&name);
+                    }
                 }
             }
             _ => {}
@@ -273,6 +313,7 @@ impl Default for BorrowChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::middle::Operand;
     use crate::middle::core::ir::BasicBlock;
     use crate::frontend::core::typecheck::MonoType;
 
@@ -282,7 +323,11 @@ mod tests {
             params: vec![],
             return_type: MonoType::Void,
             locals: vec![],
-            blocks: vec![BasicBlock { label: 0, instructions, successors: vec![] }],
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions,
+                successors: vec![],
+            }],
             entry: 0,
         }
     }
@@ -302,7 +347,11 @@ mod tests {
         let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_b", "x", false);
-        assert!(checker.errors().is_empty(), "多不可变借用应允许，得: {:?}", checker.errors());
+        assert!(
+            checker.errors().is_empty(),
+            "多不可变借用应允许，得: {:?}",
+            checker.errors()
+        );
     }
 
     #[test]
@@ -311,7 +360,11 @@ mod tests {
         checker.create_borrow("ref_a", "x", false);
         checker.create_borrow("ref_mut_b", "x", true);
         assert_eq!(checker.errors().len(), 1);
-        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
+        assert!(
+            checker.errors()[0].code == "E2017",
+            "应得 E2017, 得: {}",
+            checker.errors()[0].code
+        );
     }
 
     #[test]
@@ -320,7 +373,11 @@ mod tests {
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_mut_b", "x", true);
         assert_eq!(checker.errors().len(), 1);
-        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
+        assert!(
+            checker.errors()[0].code == "E2017",
+            "应得 E2017, 得: {}",
+            checker.errors()[0].code
+        );
     }
 
     #[test]
@@ -329,7 +386,11 @@ mod tests {
         checker.create_borrow("ref_mut_a", "x", true);
         checker.create_borrow("ref_b", "x", false);
         assert_eq!(checker.errors().len(), 1);
-        assert!(checker.errors()[0].code == "E2017", "应得 E2017, 得: {}", checker.errors()[0].code);
+        assert!(
+            checker.errors()[0].code == "E2017",
+            "应得 E2017, 得: {}",
+            checker.errors()[0].code
+        );
     }
 
     #[test]
@@ -344,7 +405,9 @@ mod tests {
     fn test_use_moved_token() {
         let mut checker = make_checker();
         checker.create_borrow("ref_a", "x", false);
-        if let Some(token) = checker.tokens.get_mut("ref_a") { token.state = TokenState::Moved; }
+        if let Some(token) = checker.tokens.get_mut("ref_a") {
+            token.state = TokenState::Moved;
+        }
         checker.use_token("ref_a");
         assert_eq!(checker.errors().len(), 1);
         assert!(checker.errors()[0].code == "E2015");
@@ -368,7 +431,9 @@ mod tests {
     #[test]
     fn test_e2e_single_immutable_borrow() {
         let errors = run_borrow_check(vec![Instruction::Borrow {
-            dst: Operand::Temp(0), src: Operand::Local(0), mutable: false,
+            dst: Operand::Temp(0),
+            src: Operand::Local(0),
+            mutable: false,
         }]);
         assert!(errors.is_empty(), "单不可变借用应允许: {:?}", errors);
     }
@@ -376,8 +441,16 @@ mod tests {
     #[test]
     fn test_e2e_multiple_immutable_borrows() {
         let errors = run_borrow_check(vec![
-            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: false },
-            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: false },
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: false,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: false,
+            },
         ]);
         assert!(errors.is_empty());
     }
@@ -385,8 +458,16 @@ mod tests {
     #[test]
     fn test_e2e_mutable_then_immutable_conflict() {
         let errors = run_borrow_check(vec![
-            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
-            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: false },
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: false,
+            },
         ]);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].code == "E2017");
@@ -395,8 +476,16 @@ mod tests {
     #[test]
     fn test_e2e_mutable_then_mutable_conflict() {
         let errors = run_borrow_check(vec![
-            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
-            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: true },
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: true,
+            },
         ]);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].code == "E2017");
@@ -405,9 +494,17 @@ mod tests {
     #[test]
     fn test_e2e_mutable_release_reborrow() {
         let errors = run_borrow_check(vec![
-            Instruction::Borrow { dst: Operand::Temp(0), src: Operand::Local(0), mutable: true },
+            Instruction::Borrow {
+                dst: Operand::Temp(0),
+                src: Operand::Local(0),
+                mutable: true,
+            },
             Instruction::Release(Operand::Temp(0)),
-            Instruction::Borrow { dst: Operand::Temp(1), src: Operand::Local(0), mutable: true },
+            Instruction::Borrow {
+                dst: Operand::Temp(1),
+                src: Operand::Local(0),
+                mutable: true,
+            },
         ]);
         assert!(errors.is_empty(), "释放后重新借用应允许: {:?}", errors);
     }

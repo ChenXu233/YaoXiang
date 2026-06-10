@@ -331,9 +331,12 @@ impl CycleChecker {
                     }
                 } else if recursion_stack.contains(neighbor) {
                     // 找到环！path 中从 neighbor 到末尾就是环
-                    self.errors.push(ErrorCodeDefinition::ownership_violation(
-                        &self.format_cycle_path(path, neighbor),
-                    ).build());
+                    self.errors.push(
+                        ErrorCodeDefinition::ownership_violation(
+                            &self.format_cycle_path(path, neighbor),
+                        )
+                        .build(),
+                    );
                     return true;
                 }
             }

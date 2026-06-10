@@ -222,7 +222,11 @@ impl<'a> ParserState<'a> {
                 span,
             })
         } else {
-            self.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", token.kind)).at(self.span()).build());
+            self.error(
+                ErrorCodeDefinition::unexpected_token(&format!("{:?}", token.kind))
+                    .at(self.span())
+                    .build(),
+            );
             None
         }
     }

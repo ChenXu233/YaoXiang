@@ -102,12 +102,17 @@ fn parse_use_path(state: &mut ParserState<'_>) -> Option<(String, Span, Vec<Span
     }
 
     if parts.is_empty() {
-        state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state
-            .current()
-            .map(|t| t.kind.clone())
-            .unwrap_or(TokenKind::Eof)))
-        .at(state.span())
-        .build());
+        state.error(
+            ErrorCodeDefinition::unexpected_token(&format!(
+                "{:?}",
+                state
+                    .current()
+                    .map(|t| t.kind.clone())
+                    .unwrap_or(TokenKind::Eof)
+            ))
+            .at(state.span())
+            .build(),
+        );
         None
     } else {
         let start = start.unwrap_or_else(|| Span::dummy().start);

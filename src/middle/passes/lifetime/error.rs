@@ -107,4 +107,3 @@ pub fn operand_display_name(
     }
     operand_to_string(operand)
 }
-

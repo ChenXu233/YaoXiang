@@ -222,7 +222,8 @@ impl MoveChecker {
                 ValueState::Owned(_) => {
                     // 非空状态变量的重新赋值，报错
                     let name = operand_display_name(dst, self.local_names.as_ref());
-                    self.errors.push(ErrorCodeDefinition::reassign_non_empty(&name).build());
+                    self.errors
+                        .push(ErrorCodeDefinition::reassign_non_empty(&name).build());
                     return;
                 }
                 ValueState::Dup => {
@@ -271,7 +272,8 @@ impl MoveChecker {
     ) {
         // 处理返回值目标：Call 返回新值，dst 进入 Owned 状态
         if let Some(dst_operand) = dst {
-            self.state.insert(dst_operand.clone(), ValueState::Owned(None));
+            self.state
+                .insert(dst_operand.clone(), ValueState::Owned(None));
         }
 
         // 获取被调用函数的消费模式（克隆以避免借用冲突）
@@ -309,15 +311,8 @@ impl MoveChecker {
                 Some(ConsumeMode::Returns) | Some(ConsumeMode::Undetermined) | None => {
                     // Returns / Undetermined / 未知：不消费参数
                     // 只检查参数是否可用（非 Moved / Empty）
-                    if let Some(state) = self.state.get(arg) {
-                        match state {
-                            ValueState::Empty | ValueState::Moved => {
-                                self.report_use_after_move(arg);
-                            }
-                            _ => {
-                                // Owned / Dup / Dropped：不改变状态
-                            }
-                        }
+                    if let Some(ValueState::Empty | ValueState::Moved) = self.state.get(arg) {
+                        self.report_use_after_move(arg);
                     }
                     // 首次使用：不设状态（不消费）
                 }
@@ -382,7 +377,8 @@ impl MoveChecker {
         operand: &Operand,
     ) {
         let name = operand_display_name(operand, self.local_names.as_ref());
-        self.errors.push(ErrorCodeDefinition::use_after_move(&name).build());
+        self.errors
+            .push(ErrorCodeDefinition::use_after_move(&name).build());
     }
 }
 

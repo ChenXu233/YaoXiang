@@ -101,12 +101,17 @@ pub fn parse_for_stmt(
     let var = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state
-                .current()
-                .map(|t| t.kind.clone())
-                .unwrap_or(TokenKind::Eof)))
-            .at(state.span())
-            .build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
