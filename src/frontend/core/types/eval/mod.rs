@@ -1,19 +1,21 @@
-//! 类型级计算（RFC-011）
+//! 类型代数操作
 //!
-//! 条件类型、Const泛型、类型级运算、类型族、模式匹配
+//! 对类型的纯函数操作。输入类型，输出归约后的类型或错误。
+//! 不涉及程序上下文、不涉及证明。
 
-pub mod conditional_types;
-pub mod const_generics;
+pub mod conditional;
+pub mod const_eval;
 pub mod dependent_types;
-pub mod evaluation;
+pub mod normalizer;
 pub mod operations;
+pub mod reducer;
 pub mod type_families;
-pub mod type_match;
 
 #[cfg(test)]
 mod tests;
 
-/// 高级类型错误
+// TypeLevelResult / TypeLevelError (从原 types/computation/mod.rs 迁移)
+
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum TypeLevelError {
     #[error("Type computation failed: {0}")]
@@ -26,7 +28,6 @@ pub enum TypeLevelError {
     UnsupportedOperation(String),
 }
 
-/// 类型级计算结果
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeLevelResult<T> {
     Normalized(T),
@@ -41,14 +42,12 @@ impl<T> TypeLevelResult<T> {
             Self::Error(_) => None,
         }
     }
-
     pub fn result(self) -> Result<T, TypeLevelError> {
         match self {
             Self::Normalized(t) | Self::Pending(t) => Ok(t),
             Self::Error(e) => Err(e),
         }
     }
-
     pub fn is_normalized(&self) -> bool {
         matches!(self, Self::Normalized(_))
     }

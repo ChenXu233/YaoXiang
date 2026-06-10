@@ -17,7 +17,7 @@
 //! ```
 
 use crate::frontend::core::types::MonoType;
-use super::TypeLevelResult;
+use crate::frontend::core::types::eval::TypeLevelResult;
 
 /// Bool 类型族的变体
 ///
