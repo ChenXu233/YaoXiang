@@ -1,11 +1,11 @@
 //! Trait 求解器测试 — 基于语言规范 §3.5.2 & §3.9 & RFC-011 §2
 //!
-//! §3.5.2: 标准库接口（Clone, Equal, Debug, Send, Sync, Iterator）
+//! §3.5.2: 标准库接口（Clone, Equal, Debug, Iterator）
 //! §3.9: 类型约束
 //! RFC-011 §2: 类型约束系统
 //!
 //! 测试范围：
-//! - 内置特质求解（Clone, Debug, Send, Sync）
+//! - 内置特质求解（Clone, Debug）
 //! - 用户定义特质求解（通过 TraitTable）
 //! - 批量求解与缓存
 //! - TraitSolverError 的 Display 输出

@@ -1004,7 +1004,7 @@ impl Translator {
         dst: &Operand,
         src: &Operand,
     ) -> Result<BytecodeInstruction, Diagnostic> {
-        // ShareRef: 用于线程本地共享，需要类型是 Sync
+        // ShareRef: 将值包装为 Arc 以支持跨任务共享
         // TODO: 实现完整的 ShareRef 操作码支持
         let dst_reg = self.operand_resolver.to_reg(dst)?;
         let src_reg = self.operand_resolver.to_reg(src)?;
