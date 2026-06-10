@@ -298,8 +298,8 @@ pub enum Instruction {
     /// 释放借用令牌，结束借用生命周期
     /// 借用检查器据此更新令牌状态。
     Release(Operand),
-    /// Share reference across threads (requires Sync)
-    /// Used for thread-local sharing, requires the type to be Sync
+    /// ShareRef: 将值包装为 Arc 以支持跨任务共享。
+    /// 由 `ref` 语法触发，运行时自动选择 Rc/Arc。
     ShareRef {
         dst: Operand,
         src: Operand,

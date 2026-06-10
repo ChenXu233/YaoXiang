@@ -3,7 +3,6 @@
 //! 实现以下检查：
 //! 1. unsafe 块外解引用报错
 //! 2. 裸指针类型检查
-//! 3. Send/Sync 安全 trait 检查
 
 use crate::middle::core::ir::{FunctionIR, Instruction};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
