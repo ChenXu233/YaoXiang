@@ -4,7 +4,7 @@
 //! 统一使用 Diagnostic 错误码系统。
 
 use crate::middle::core::ir::{FunctionIR, Operand};
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::diagnostic::Diagnostic;
 use std::collections::HashMap;
 
 /// 所有权状态（Move/Drop 检查器共用）

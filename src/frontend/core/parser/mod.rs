@@ -8,7 +8,7 @@ pub mod statements;
 #[cfg(test)]
 pub mod tests;
 
-pub use parser_state::{ParserState, ParseError, parse_msg};
+pub use parser_state::{ParserState, parse_msg};
 pub use statements::StatementParser;
 pub use pratt::*;
 pub use ast::*;
@@ -23,7 +23,7 @@ pub struct ParseResult {
     pub has_errors: bool,
 }
 
-fn find_first(state: &ParserState) -> Option<Diagnostic> {
+fn find_first(state: &ParserState<'_>) -> Option<Diagnostic> {
     state.errors().first().cloned()
 }
 
@@ -34,7 +34,7 @@ pub fn parse(tokens: &[Token]) -> Result<Module, Diagnostic> {
         if !state.can_start_stmt() {
             if state.at(&TokenKind::Semicolon) { state.bump(); continue; }
             let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-            state.diag_error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(state.span()).build());
+            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(state.span()).build());
             state.bump(); continue;
         }
         if let Some(stmt) = state.parse_statement() { items.push(stmt); }
@@ -61,7 +61,7 @@ pub fn parse_with_recovery(tokens: &[Token]) -> ParseResult {
             if state.at(&TokenKind::Semicolon) { state.bump(); continue; }
             let esp = state.span();
             let found = state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
-            state.diag_error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(esp).build());
+            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", found)).at(esp).build());
             items.push(Stmt { kind: StmtKind::Error(esp), span: esp });
             state.bump(); continue;
         }

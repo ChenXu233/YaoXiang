@@ -4,6 +4,7 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::util::span::Span;
+use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// Parse return statement: `return [expr];`
 pub fn parse_return_stmt(
@@ -100,13 +101,12 @@ pub fn parse_for_stmt(
     let var = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(crate::frontend::core::parser::ParseError::UnexpectedToken {
-                found: state
-                    .current()
-                    .map(|t| t.kind.clone())
-                    .unwrap_or(TokenKind::Eof),
-                span: state.span(),
-            });
+            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state
+                .current()
+                .map(|t| t.kind.clone())
+                .unwrap_or(TokenKind::Eof)))
+            .at(state.span())
+            .build());
             return None;
         }
     };

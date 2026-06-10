@@ -4,7 +4,8 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
-use crate::frontend::core::parser::{ParserState, ParseError};
+use crate::frontend::core::parser::{ParserState};
+use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::pratt::precedence::*;
 use crate::frontend::core::parser::statements::TypeStatementParser;
 
@@ -221,10 +222,7 @@ impl<'a> ParserState<'a> {
                 span,
             })
         } else {
-            self.error(ParseError::UnexpectedToken {
-                found: token.kind,
-                span: self.span(),
-            });
+            self.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", token.kind)).at(self.span()).build());
             None
         }
     }
