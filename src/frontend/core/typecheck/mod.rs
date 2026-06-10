@@ -31,6 +31,9 @@ pub mod dead_code;
 // spawn 放置检查
 pub mod spawn_placement;
 
+// 终止检查
+pub mod termination;
+
 // 类型环境
 pub mod environment;
 
