@@ -319,7 +319,17 @@ pub fn parse_method_bind_stmt(
     let type_name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof))).at(state.span()).build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
@@ -334,7 +344,17 @@ pub fn parse_method_bind_stmt(
     let method_name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof))).at(state.span()).build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };
@@ -466,12 +486,26 @@ fn parse_var_stmt_with_pub(
         Some(t) => match &t.kind {
             TokenKind::Identifier(n) => (n.clone(), t.span),
             _ => {
-                state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof))).at(state.span()).build());
+                state.error(
+                    ErrorCodeDefinition::unexpected_token(&format!(
+                        "{:?}",
+                        state
+                            .current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof)
+                    ))
+                    .at(state.span())
+                    .build(),
+                );
                 return None;
             }
         },
         None => {
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", TokenKind::Eof)).at(state.span()).build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!("{:?}", TokenKind::Eof))
+                    .at(state.span())
+                    .build(),
+            );
             return None;
         }
     };
@@ -644,12 +678,17 @@ fn parse_var_stmt_with_pub(
             );
         if is_invalid && !state.at(&TokenKind::Eq) {
             let span = state.current().map(|t| t.span).unwrap_or_else(Span::dummy);
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state
-                .current()
-                .map(|t| t.kind.clone())
-                .unwrap_or(TokenKind::Eof)))
-            .at(span)
-            .build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(span)
+                .build(),
+            );
             return None;
         }
     }
@@ -1022,7 +1061,17 @@ pub fn parse_identifier_stmt(
         let name = match state.current().map(|t| &t.kind) {
             Some(TokenKind::Identifier(n)) => n.clone(),
             _ => {
-                state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof))).at(state.span()).build());
+                state.error(
+                    ErrorCodeDefinition::unexpected_token(&format!(
+                        "{:?}",
+                        state
+                            .current()
+                            .map(|t| t.kind.clone())
+                            .unwrap_or(TokenKind::Eof)
+                    ))
+                    .at(state.span())
+                    .build(),
+                );
                 return None;
             }
         };
@@ -1187,7 +1236,17 @@ pub fn parse_constructor(state: &mut ParserState<'_>) -> Option<VariantDef> {
     let name = match state.current().map(|t| &t.kind) {
         Some(TokenKind::Identifier(n)) => n.clone(),
         _ => {
-            state.error(ErrorCodeDefinition::unexpected_token(&format!("{:?}", state.current().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof))).at(state.span()).build());
+            state.error(
+                ErrorCodeDefinition::unexpected_token(&format!(
+                    "{:?}",
+                    state
+                        .current()
+                        .map(|t| t.kind.clone())
+                        .unwrap_or(TokenKind::Eof)
+                ))
+                .at(state.span())
+                .build(),
+            );
             return None;
         }
     };

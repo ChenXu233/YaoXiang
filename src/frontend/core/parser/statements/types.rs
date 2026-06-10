@@ -17,7 +17,6 @@ use crate::frontend::core::lexer::tokens::*;
 use crate::frontend::core::parser::ast::*;
 use crate::frontend::core::parser::ast::StructField;
 use crate::frontend::core::parser::{ParserState, BP_LOWEST};
-use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::frontend::core::parser::parse_msg;
 use crate::util::span::Span;
 
@@ -677,9 +676,7 @@ fn parse_enum_variants_in_braces(state: &mut ParserState<'_>) -> Option<Type> {
                 });
             }
             _ => {
-                state.error(parse_msg(
-                    "Expected variant name after '|'".to_string(),
-                ));
+                state.error(parse_msg("Expected variant name after '|'".to_string()));
                 break;
             }
         }
@@ -717,9 +714,7 @@ fn parse_optional_binding_positions(state: &mut ParserState<'_>) -> Option<Vec<i
 /// 解析位置绑定: `[0]` 或 `[0, 1]` 或 `[-1]`（必须存在）
 pub(crate) fn parse_binding_positions(state: &mut ParserState<'_>) -> Result<Vec<i64>, ()> {
     if !state.at(&TokenKind::LBracket) {
-        state.error(parse_msg(
-            "Expected '[' for binding position".to_string(),
-        ));
+        state.error(parse_msg("Expected '[' for binding position".to_string()));
         return Err(());
     }
     state.bump(); // consume '['

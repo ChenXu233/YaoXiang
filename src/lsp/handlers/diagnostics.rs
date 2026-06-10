@@ -85,7 +85,7 @@ pub fn to_lsp_diagnostics(diagnostics: &[Diagnostic]) -> Vec<LspDiagnostic> {
 }
 
 /// 将 ParseError 转换为 YaoXiang Diagnostic
-
+///
 /// 对文档内容运行完整诊断管线
 ///
 /// 流程：tokenize → parse_with_recovery → check_module_collect_all
@@ -125,10 +125,7 @@ pub fn run_diagnostics(
 
     if parse_result.has_errors {
         debug!("解析错误 ({} 个): {}", parse_result.errors.len(), uri);
-        let parse_diags: Vec<Diagnostic> = parse_result
-            .errors
-            .iter()
-            .cloned().collect();
+        let parse_diags: Vec<Diagnostic> = parse_result.errors.to_vec();
         all_diagnostics.extend(to_lsp_diagnostics(&parse_diags));
     }
 
@@ -248,7 +245,6 @@ mod tests {
     }
 
     // --- 阶段 2 新增测试 ---
-
 
     #[test]
     fn test_run_diagnostics_valid_code() {

@@ -85,7 +85,8 @@ impl UnsafeChecker {
         );
 
         if is_unsafe_op && !in_unsafe {
-            self.errors.push(ErrorCodeDefinition::unsafe_deref().build());
+            self.errors
+                .push(ErrorCodeDefinition::unsafe_deref().build());
         }
     }
 

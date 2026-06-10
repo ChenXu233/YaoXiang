@@ -146,7 +146,7 @@ impl Compiler {
         &mut self,
         tokens: &[super::core::lexer::Token],
     ) -> Result<super::core::parser::Module, CompileError> {
-        super::core::parser::parse(tokens).map_err(|e| CompileError::Parse(e))
+        super::core::parser::parse(tokens).map_err(CompileError::Parse)
     }
 
     /// 只进行类型检查

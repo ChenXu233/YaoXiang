@@ -28,10 +28,12 @@ impl LexError {
                 ErrorCodeDefinition::invalid_syntax(message).build()
             }
             LexError::UnterminatedString { position, .. } => {
-                ErrorCodeDefinition::invalid_syntax(&format!("unterminated string at {}", position)).build()
+                ErrorCodeDefinition::invalid_syntax(&format!("unterminated string at {}", position))
+                    .build()
             }
             LexError::InvalidEscape { sequence, .. } => {
-                ErrorCodeDefinition::invalid_syntax(&format!("invalid escape: {}", sequence)).build()
+                ErrorCodeDefinition::invalid_syntax(&format!("invalid escape: {}", sequence))
+                    .build()
             }
             LexError::InvalidNumber(literal) => {
                 ErrorCodeDefinition::invalid_number_literal(literal).build()
@@ -40,7 +42,11 @@ impl LexError {
                 ErrorCodeDefinition::invalid_character(&ch.to_string()).build()
             }
             LexError::UnterminatedFStringInterpolation { position, .. } => {
-                ErrorCodeDefinition::invalid_syntax(&format!("unterminated f-string interpolation at {}", position)).build()
+                ErrorCodeDefinition::invalid_syntax(&format!(
+                    "unterminated f-string interpolation at {}",
+                    position
+                ))
+                .build()
             }
         }
     }

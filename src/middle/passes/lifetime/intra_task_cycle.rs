@@ -164,7 +164,8 @@ impl IntraTaskCycleTracker {
                     // 找到任务内循环，记录警告
                     let cycle_path = self.format_cycle_path(path, neighbor);
                     let _span = self.find_cycle_span(neighbor);
-                    self.warnings.push(ErrorCodeDefinition::ownership_violation(&cycle_path).build());
+                    self.warnings
+                        .push(ErrorCodeDefinition::ownership_violation(&cycle_path).build());
                     // 继续检测其他循环，不立即返回
                 }
             }
