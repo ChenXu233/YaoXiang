@@ -45,6 +45,13 @@ pub mod signature;
 // 类型定义
 pub mod types;
 
+// 证明管道基础设施
+pub mod proof;
+// 有序证明层
+pub mod layers;
+// 独立分析遍
+pub mod passes;
+
 // ============ 测试模块 ============
 
 #[cfg(test)]
