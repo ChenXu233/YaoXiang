@@ -6,7 +6,7 @@
 //! 支持鸭子类型：检查类型是否满足接口要求的所有方法（包括方法绑定）
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use crate::frontend::core::typecheck::traits::auto_derive::can_auto_derive_for_monotype;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;

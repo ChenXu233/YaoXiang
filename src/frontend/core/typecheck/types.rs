@@ -4,9 +4,9 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::PolyType;
-use crate::frontend::core::types::base::TraitTable;
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::PolyType;
+use crate::frontend::core::types::TraitTable;
 
 use super::semantic_db;
 

@@ -15,7 +15,7 @@
 //! ```
 
 // 重新导出主要类型
-use crate::frontend::core::types::base::ConstValue;
+use crate::frontend::core::types::ConstValue;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::diagnostic::codes::ErrorCodeDefinition;
 
@@ -709,7 +709,7 @@ pub mod functions {
 /// RFC-011 泛型尺寸计算
 ///
 /// 实现泛型类型的尺寸计算，用于Const泛型和数组类型。
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 /// 泛型尺寸计算器
 ///
@@ -962,7 +962,7 @@ pub mod predefined_sizes {
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
 use crate::frontend::core::parser::ast::{Type, GenericParam, GenericParamKind};
-use crate::frontend::core::types::base::ConstKind;
+use crate::frontend::core::types::ConstKind;
 
 /// Integer types for const parameters
 const INT_TYPES: &[&str] = &["Int", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64"];

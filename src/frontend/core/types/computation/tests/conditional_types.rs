@@ -4,7 +4,7 @@
 //! §5.1: If[C, T, E] 条件类型选择
 //! §5.2: 类型族 (TypeFamily, Nat, Bool)
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::computation::conditional_types::{conditions, If, TypeCondition};
 use crate::frontend::core::types::computation::TypeLevelResult;
 
@@ -289,7 +289,7 @@ fn test_conditional_match_type_add_arm() {
 #[test]
 fn test_conditional_match_type_var_pattern_no_match() {
     use crate::frontend::core::types::computation::conditional_types::MatchType;
-    use crate::frontend::core::types::base::TypeVar;
+    use crate::frontend::core::types::TypeVar;
     // TypeVar pattern returns false → no match → error
     let mt = MatchType::new(
         MonoType::Int(32),

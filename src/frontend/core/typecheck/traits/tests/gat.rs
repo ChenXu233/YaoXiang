@@ -4,7 +4,7 @@
 //! RFC-011 §3.2: 泛型关联类型
 
 use crate::frontend::core::typecheck::traits::gat::{GATChecker, HigherRankChecker};
-use crate::frontend::core::types::base::{MonoType, StructType, TypeVar};
+use crate::frontend::core::types::{MonoType, StructType, TypeVar};
 use std::collections::HashMap;
 
 // ===================================================================

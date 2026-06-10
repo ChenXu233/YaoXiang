@@ -244,8 +244,8 @@ impl TypeMonomorphizer for super::Monomorphizer {
                 name, base_type, ..
             } => {
                 let base = self.type_to_mono_type(base_type);
-                let value = crate::frontend::core::types::base::ConstValue::from_literal_name(name)
-                    .unwrap_or(crate::frontend::core::types::base::ConstValue::Int(0));
+                let value = crate::frontend::core::types::ConstValue::from_literal_name(name)
+                    .unwrap_or(crate::frontend::core::types::ConstValue::Int(0));
                 MonoType::Literal {
                     name: name.clone(),
                     base_type: Box::new(base),

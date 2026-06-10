@@ -6,7 +6,7 @@
 //! - 缺失方法错误报告
 //! - 方法绑定支持
 
-use crate::frontend::core::types::base::{MonoType, StructType};
+use crate::frontend::core::types::{MonoType, StructType};
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;

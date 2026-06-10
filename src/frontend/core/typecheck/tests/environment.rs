@@ -5,7 +5,7 @@
 //! RFC-011: 泛型系统设计
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 
 // ===================================================================
 // Happy path 测试

@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{Block, Expr, Stmt, StmtKind};
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 
 // ============================================================================
 // 数据结构
@@ -734,7 +734,7 @@ mod tests {
             params: vec![MonoType::Int(64)],
             return_type: Box::new(MonoType::Void),
         };
-        MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+        MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: "MyStruct".to_string(),
             fields: vec![("callback".to_string(), fn_ty)],
             methods: HashMap::new(),

@@ -5,7 +5,7 @@
 //! 实现 Generic Associated Types 检查
 
 use crate::util::diagnostic::Result;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 /// GAT 检查器
 pub struct GATChecker;

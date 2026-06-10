@@ -1,6 +1,6 @@
 //! 编译期常量数据测试 — 基于 RFC-011 §4
 
-use crate::frontend::core::types::base::{BinOp, ConstKind, ConstValue, ConstVarDef, UnOp};
+use crate::frontend::core::types::{BinOp, ConstKind, ConstValue, ConstVarDef, UnOp};
 
 #[test]
 fn test_const_value_int_creation() {

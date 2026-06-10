@@ -15,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::types::base::{MonoType, ConstValue};
+use crate::frontend::core::types::{MonoType, ConstValue};
 use crate::frontend::core::types::computation::TypeLevelError;
 use crate::frontend::core::types::computation::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;

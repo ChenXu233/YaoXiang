@@ -8,7 +8,7 @@
 //! 规范中没有独立的 "const bounds" 概念，因此不测试 const 边界。
 
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
-use crate::frontend::core::types::base::{MonoType, StructType};
+use crate::frontend::core::types::{MonoType, StructType};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::HashMap;

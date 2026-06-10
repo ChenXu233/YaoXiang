@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[allow(unused_imports)]
-use crate::frontend::core::types::base::{MonoType, TypeVar};
+use crate::frontend::core::types::{MonoType, TypeVar};
 use crate::middle::passes::mono::instance::{FunctionId, GenericFunctionId, SpecializationKey};
 
 /// 重载候选函数
@@ -581,7 +581,7 @@ pub fn instantiate_return_type(
 /// 简单的类型替换（针对返回类型）
 fn substitute_return_type(
     ty: &MonoType,
-    substitutions: &[(crate::frontend::core::types::base::TypeVar, MonoType)],
+    substitutions: &[(crate::frontend::core::types::TypeVar, MonoType)],
 ) -> MonoType {
     match ty {
         MonoType::TypeVar(tv) => {
@@ -618,7 +618,7 @@ fn substitute_return_type(
                 .collect(),
             return_type: Box::new(substitute_return_type(return_type, substitutions)),
         },
-        MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::base::StructType {
+        MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::StructType {
             name: s.name.clone(),
             fields: s
                 .fields

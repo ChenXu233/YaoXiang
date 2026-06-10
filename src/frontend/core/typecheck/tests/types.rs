@@ -4,7 +4,7 @@
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::types::{TypeCheckResult, ImportInfo};
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 
 // ===================================================================
 // Happy path 测试

@@ -156,7 +156,7 @@ pub struct InheritanceChecker<'a> {
     /// 已知 Trait 定义（用于验证父 Trait 是否存在）
     known_traits: HashSet<String>,
     /// Trait 定义引用
-    trait_definitions: HashMap<String, &'a crate::frontend::core::types::base::TraitDefinition>,
+    trait_definitions: HashMap<String, &'a crate::frontend::core::types::TraitDefinition>,
 }
 
 impl<'a> Default for InheritanceChecker<'a> {

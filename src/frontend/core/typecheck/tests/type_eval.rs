@@ -4,7 +4,7 @@
 //! RFC-011 §4: 编译期泛型
 
 use crate::frontend::core::typecheck::type_eval::{EvalConfig, EvalResult, TypeEvaluator};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 // ===================================================================
 // Happy path 测试

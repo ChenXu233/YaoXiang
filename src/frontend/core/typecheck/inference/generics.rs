@@ -5,7 +5,7 @@
 //! 实现泛型函数的类型推断
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::typecheck::inference::bounds::BoundsChecker;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::util::span::Span;
@@ -32,7 +32,7 @@ impl GenericInferrer {
     }
 
     fn fresh_type_var(&mut self) -> MonoType {
-        let var = crate::frontend::core::types::base::var::TypeVar::new(self.next_type_var);
+        let var = crate::frontend::core::types::var::TypeVar::new(self.next_type_var);
         self.next_type_var += 1;
         MonoType::TypeVar(var)
     }
@@ -97,7 +97,7 @@ impl GenericInferrer {
 #[cfg(test)]
 mod tests {
     use super::GenericInferrer;
-    use crate::frontend::core::types::base::MonoType;
+    use crate::frontend::core::types::MonoType;
 
     #[test]
     fn test_infer_generic_function_creates_fresh_vars() {

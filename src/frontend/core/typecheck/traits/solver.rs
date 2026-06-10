@@ -8,8 +8,8 @@
 //! - 约束传播
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::TraitTable;
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::TraitTable;
 use std::collections::{HashMap, HashSet};
 
 /// 特质约束

@@ -7,7 +7,7 @@
 //! §4.3: GenericSize 类型尺寸计算
 //! §4.3: SizeExpr 表达式
 
-use crate::frontend::core::types::base::{ConstValue, MonoType};
+use crate::frontend::core::types::{ConstValue, MonoType};
 use crate::frontend::core::types::computation::const_generics::{
     ConstBinOp, ConstExpr, ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize,
     SizeExpr, SizeResult,
@@ -473,7 +473,7 @@ fn test_generic_size_type_var_fails() {
     let gs = GenericSize::new();
     assert!(gs
         .size_of(&MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0)
+            crate::frontend::core::types::TypeVar::new(0)
         ))
         .is_err());
 }
@@ -837,7 +837,7 @@ fn test_eval_float_div_by_zero() {
 #[test]
 fn test_generic_size_struct() {
     let gs = GenericSize::new();
-    let s = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![
             ("x".to_string(), MonoType::Float(64)),

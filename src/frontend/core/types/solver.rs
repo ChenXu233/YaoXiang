@@ -3,9 +3,9 @@
 //! 实现类型系统的核心求解算法：
 //! - TypeConstraintSolver: 类型约束求解器（union-find 实现）
 
-use super::mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
-use super::constraint::TypeConstraint;
-use super::error::TypeConstraintError;
+use crate::frontend::core::types::mono::{TypeBinding, MonoType, StructType, EnumType, PolyType};
+use crate::frontend::core::types::constraint::TypeConstraint;
+use crate::frontend::core::types::error::TypeConstraintError;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 use std::collections::{HashMap, HashSet};

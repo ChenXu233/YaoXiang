@@ -1,4 +1,4 @@
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::computation::type_families::{
     Bool, IsFalse, IsTrue, IsZero, IsSucc, Nat, bool_family, nat_family, TypeFamilyOps,
 };

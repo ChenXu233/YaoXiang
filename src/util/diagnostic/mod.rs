@@ -341,7 +341,7 @@ fn register_module_exports(
     ast: &crate::frontend::core::parser::ast::Module,
 ) {
     use crate::frontend::core::parser::ast::StmtKind;
-    use crate::frontend::core::types::base::ast_type_to_poly_type;
+    use crate::frontend::core::types::ast_type_to_poly_type;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let mut module_info = ModuleInfo::new(module_id.name.clone(), ModuleSource::User);

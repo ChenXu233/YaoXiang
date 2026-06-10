@@ -3,9 +3,7 @@
 //! Substitution: bind, insert, get, contains_var, merge, len, is_empty, bound_vars
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
-use crate::frontend::core::types::base::{
-    EnumType, MonoType, StructType, Substitution, Substituter, TypeVar,
-};
+use crate::frontend::core::types::{EnumType, MonoType, StructType, Substitution, Substituter, TypeVar};
 use std::collections::HashMap;
 
 #[test]
@@ -391,7 +389,7 @@ fn test_substitute_struct_with_nested_list() {
 
 #[test]
 fn test_substitute_contains_type_vars() {
-    use crate::frontend::core::types::base::substitute::contains_type_vars;
+    use crate::frontend::core::types::substitute::contains_type_vars;
     assert!(
         contains_type_vars(&tv(0)),
         "TypeVar should contain type vars"

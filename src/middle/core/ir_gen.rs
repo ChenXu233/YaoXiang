@@ -3383,15 +3383,12 @@ impl AstToIrGenerator {
                 } else {
                     // 无类型信息时使用空表（向后兼容）
                     static EMPTY_TRAIT_TABLE: once_cell::sync::Lazy<
-                        crate::frontend::core::types::base::TraitTable,
+                        crate::frontend::core::types::TraitTable,
                     > = once_cell::sync::Lazy::new(
-                        crate::frontend::core::types::base::TraitTable::default,
+                        crate::frontend::core::types::TraitTable::default,
                     );
                     static EMPTY_VAR_TYPES: once_cell::sync::Lazy<
-                        std::collections::HashMap<
-                            String,
-                            crate::frontend::core::types::base::MonoType,
-                        >,
+                        std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
                     > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
                     (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
                 };

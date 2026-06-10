@@ -5,7 +5,7 @@
 //! TypeReducer: Delta 归约（类型别名展开）
 //! TypeUnifier: 带替换的类型统一
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::computation::evaluation::{
     ComputeConfig, NormalForm, NormalizationContext, ReductionConfig, ReductionResult,
     TypeComputer, TypeNormalizer, TypeReducer, TypeUnifier, UnificationResult,
@@ -166,7 +166,7 @@ fn test_normalization_context_substitute_var() {
     ctx.add_substitution(0, MonoType::Int(32));
     assert_eq!(
         ctx.apply_substitution(&MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0)
+            crate::frontend::core::types::TypeVar::new(0)
         )),
         MonoType::Int(32)
     );
@@ -177,9 +177,9 @@ fn test_normalization_context_substitute_unbound_var() {
     let ctx = NormalizationContext::new();
     assert_eq!(
         ctx.apply_substitution(&MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(99)
+            crate::frontend::core::types::TypeVar::new(99)
         )),
-        MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(99))
+        MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(99))
     );
 }
 
@@ -188,7 +188,7 @@ fn test_normalization_context_cache() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
     let result = ctx.apply_substitution(&MonoType::TypeVar(
-        crate::frontend::core::types::base::TypeVar::new(0),
+        crate::frontend::core::types::TypeVar::new(0),
     ));
     assert_eq!(result, MonoType::Bool);
 }
@@ -235,7 +235,7 @@ fn test_normalizer_with_config() {
 #[test]
 fn test_normalizer_normalize_struct() {
     let mut n = TypeNormalizer::new();
-    let s = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Float(64))],
         methods: std::collections::HashMap::new(),
@@ -400,13 +400,13 @@ fn test_normalization_context_add_substitutions() {
     ctx.add_substitutions(subs);
     assert_eq!(
         ctx.apply_substitution(&MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0)
+            crate::frontend::core::types::TypeVar::new(0)
         )),
         MonoType::Int(32)
     );
     assert_eq!(
         ctx.apply_substitution(&MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(1)
+            crate::frontend::core::types::TypeVar::new(1)
         )),
         MonoType::String
     );
@@ -416,11 +416,11 @@ fn test_normalization_context_add_substitutions() {
 fn test_normalization_context_apply_through_struct() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Int(32));
-    let s = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Wrapper".to_string(),
         fields: vec![(
             "v".to_string(),
-            MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0)),
+            MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
         )],
         methods: std::collections::HashMap::new(),
         field_mutability: vec![false],
@@ -439,7 +439,7 @@ fn test_normalization_context_apply_through_tuple() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
     let tuple = MonoType::Tuple(vec![
-        MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0)),
+        MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
         MonoType::Int(32),
     ]);
     let result = ctx.apply_substitution(&tuple);
@@ -455,10 +455,10 @@ fn test_normalization_context_apply_through_fn() {
     ctx.add_substitution(0, MonoType::String);
     let f = MonoType::Fn {
         params: vec![MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0),
+            crate::frontend::core::types::TypeVar::new(0),
         )],
         return_type: Box::new(MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0),
+            crate::frontend::core::types::TypeVar::new(0),
         )),
     };
     let result = ctx.apply_substitution(&f);
@@ -480,7 +480,7 @@ fn test_normalization_context_apply_through_list() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Float(64));
     let list = MonoType::List(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::base::TypeVar::new(0),
+        crate::frontend::core::types::TypeVar::new(0),
     )));
     let result = ctx.apply_substitution(&list);
     assert_eq!(result, MonoType::List(Box::new(MonoType::Float(64))));
@@ -492,7 +492,7 @@ fn test_normalization_context_apply_through_dict() {
     ctx.add_substitution(0, MonoType::String);
     let dict = MonoType::Dict(
         Box::new(MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0),
+            crate::frontend::core::types::TypeVar::new(0),
         )),
         Box::new(MonoType::Int(32)),
     );
@@ -508,7 +508,7 @@ fn test_normalization_context_apply_through_arc() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
     let arc = MonoType::Arc(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::base::TypeVar::new(0),
+        crate::frontend::core::types::TypeVar::new(0),
     )));
     let result = ctx.apply_substitution(&arc);
     assert_eq!(result, MonoType::Arc(Box::new(MonoType::Bool)));
@@ -519,7 +519,7 @@ fn test_normalization_context_apply_through_union() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Int(64));
     let union = MonoType::Union(vec![
-        MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0)),
+        MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
         MonoType::String,
     ]);
     let result = ctx.apply_substitution(&union);
@@ -558,7 +558,7 @@ fn test_reduction_config_custom() {
 #[test]
 fn test_normalizer_normalize_type_var() {
     let mut n = TypeNormalizer::new();
-    let tv = MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0));
+    let tv = MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0));
     assert_eq!(n.normalize(&tv), NormalForm::NeedsReduction);
 }
 
@@ -597,7 +597,7 @@ fn test_normalizer_normalize_fn_params() {
 #[test]
 fn test_normalizer_normalize_enum() {
     let mut n = TypeNormalizer::new();
-    let e = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let e = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
@@ -671,7 +671,7 @@ fn test_reducer_step_count_after_reduce() {
 #[test]
 fn test_unifier_unify_type_vars_same() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let result = u.unify(&MonoType::TypeVar(tv), &MonoType::TypeVar(tv));
     assert!(matches!(result, UnificationResult::Success(_)));
 }
@@ -679,8 +679,8 @@ fn test_unifier_unify_type_vars_same() {
 #[test]
 fn test_unifier_unify_type_vars_different() {
     let mut u = TypeUnifier::new();
-    let tv1 = crate::frontend::core::types::base::TypeVar::new(0);
-    let tv2 = crate::frontend::core::types::base::TypeVar::new(1);
+    let tv1 = crate::frontend::core::types::TypeVar::new(0);
+    let tv2 = crate::frontend::core::types::TypeVar::new(1);
     let result = u.unify(&MonoType::TypeVar(tv1), &MonoType::TypeVar(tv2));
     assert!(matches!(result, UnificationResult::Success(_)));
 }
@@ -688,7 +688,7 @@ fn test_unifier_unify_type_vars_different() {
 #[test]
 fn test_unifier_unify_var_with_concrete() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let result = u.unify(&MonoType::TypeVar(tv), &MonoType::Int(32));
     assert!(matches!(result, UnificationResult::Success(_)));
 }
@@ -696,7 +696,7 @@ fn test_unifier_unify_var_with_concrete() {
 #[test]
 fn test_unifier_unify_concrete_with_var() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let result = u.unify(&MonoType::Int(32), &MonoType::TypeVar(tv));
     assert!(matches!(result, UnificationResult::Success(_)));
 }
@@ -835,7 +835,7 @@ fn test_normalization_context_apply_through_weak() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Bool);
     let weak = MonoType::Weak(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::base::TypeVar::new(0),
+        crate::frontend::core::types::TypeVar::new(0),
     )));
     let result = ctx.apply_substitution(&weak);
     assert_eq!(result, MonoType::Weak(Box::new(MonoType::Bool)));
@@ -846,7 +846,7 @@ fn test_normalization_context_apply_through_set() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Int(32));
     let set = MonoType::Set(Box::new(MonoType::TypeVar(
-        crate::frontend::core::types::base::TypeVar::new(0),
+        crate::frontend::core::types::TypeVar::new(0),
     )));
     let result = ctx.apply_substitution(&set);
     assert_eq!(result, MonoType::Set(Box::new(MonoType::Int(32))));
@@ -858,7 +858,7 @@ fn test_normalization_context_apply_through_range() {
     ctx.add_substitution(0, MonoType::Float(64));
     let range = MonoType::Range {
         elem_type: Box::new(MonoType::TypeVar(
-            crate::frontend::core::types::base::TypeVar::new(0),
+            crate::frontend::core::types::TypeVar::new(0),
         )),
     };
     let result = ctx.apply_substitution(&range);
@@ -875,7 +875,7 @@ fn test_normalization_context_apply_through_intersection() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::TypeRef("Clone".to_string()));
     let inter = MonoType::Intersection(vec![
-        MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0)),
+        MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0)),
         MonoType::TypeRef("Display".to_string()),
     ]);
     let result = ctx.apply_substitution(&inter);
@@ -892,7 +892,7 @@ fn test_normalization_context_apply_through_intersection() {
 fn test_normalization_context_apply_through_enum() {
     let mut ctx = NormalizationContext::new();
     ctx.add_substitution(0, MonoType::Int(32));
-    let e = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let e = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
@@ -1003,7 +1003,7 @@ fn test_reducer_reduce_intersection_type() {
 #[test]
 fn test_reducer_reduce_enum_type() {
     let mut r = TypeReducer::new();
-    let e = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let e = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
@@ -1014,7 +1014,7 @@ fn test_reducer_reduce_enum_type() {
 #[test]
 fn test_reducer_reduce_struct_type() {
     let mut r = TypeReducer::new();
-    let s = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Float(64))],
         methods: std::collections::HashMap::new(),
@@ -1033,7 +1033,7 @@ fn test_reducer_reduce_struct_type() {
 #[test]
 fn test_unifier_unify_list_with_var() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let l1 = MonoType::List(Box::new(MonoType::Int(32)));
     let l2 = MonoType::List(Box::new(MonoType::TypeVar(tv)));
     assert!(matches!(u.unify(&l1, &l2), UnificationResult::Success(_)));
@@ -1042,7 +1042,7 @@ fn test_unifier_unify_list_with_var() {
 #[test]
 fn test_unifier_unify_tuple_with_var() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let t1 = MonoType::Tuple(vec![MonoType::Int(32), MonoType::String]);
     let t2 = MonoType::Tuple(vec![MonoType::TypeVar(tv), MonoType::String]);
     assert!(matches!(u.unify(&t1, &t2), UnificationResult::Success(_)));
@@ -1051,7 +1051,7 @@ fn test_unifier_unify_tuple_with_var() {
 #[test]
 fn test_unifier_unify_fn_with_var() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let f1 = MonoType::Fn {
         params: vec![MonoType::Int(32)],
         return_type: Box::new(MonoType::String),
@@ -1066,7 +1066,7 @@ fn test_unifier_unify_fn_with_var() {
 #[test]
 fn test_unifier_unify_var_with_list() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let l = MonoType::List(Box::new(MonoType::Int(32)));
     assert!(matches!(
         u.unify(&MonoType::TypeVar(tv), &l),
@@ -1077,7 +1077,7 @@ fn test_unifier_unify_var_with_list() {
 #[test]
 fn test_unifier_reset_clears_substitution() {
     let mut u = TypeUnifier::new();
-    let tv = crate::frontend::core::types::base::TypeVar::new(0);
+    let tv = crate::frontend::core::types::TypeVar::new(0);
     let _ = u.unify(&MonoType::TypeVar(tv), &MonoType::Int(32));
     assert!(!u.substitution().is_empty());
     u.reset();
@@ -1184,7 +1184,7 @@ fn test_normalizer_normalize_assoc_type() {
 fn test_normalizer_normalize_meta_type() {
     let mut n = TypeNormalizer::new();
     let meta = MonoType::MetaType {
-        universe_level: crate::frontend::core::types::base::UniverseLevel::type0(),
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
         type_params: vec![],
     };
     assert_eq!(n.normalize(&meta), NormalForm::Normalized);
@@ -1197,7 +1197,7 @@ fn test_normalizer_normalize_meta_type() {
 #[test]
 fn test_type_computer_compute_type_var() {
     let mut c = TypeComputer::new();
-    let tv = MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0));
+    let tv = MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0));
     let result = c.compute(&tv);
     let _ = result;
 }
@@ -1236,7 +1236,7 @@ fn test_type_computer_compute_fn() {
 #[test]
 fn test_reducer_reduce_type_var() {
     let mut r = TypeReducer::new();
-    let tv = MonoType::TypeVar(crate::frontend::core::types::base::TypeVar::new(0));
+    let tv = MonoType::TypeVar(crate::frontend::core::types::TypeVar::new(0));
     let result = r.reduce(&tv);
     // TypeVar should be Stuck
     assert!(matches!(result, ReductionResult::Stuck));
@@ -1335,11 +1335,11 @@ fn test_unifier_unify_weak_same() {
 #[test]
 fn test_unifier_unify_enum_same() {
     let mut u = TypeUnifier::new();
-    let e1 = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let e1 = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
-    let e2 = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let e2 = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
@@ -1350,7 +1350,7 @@ fn test_unifier_unify_enum_same() {
 #[test]
 fn test_unifier_unify_struct_same() {
     let mut u = TypeUnifier::new();
-    let s1 = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s1 = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Float(64))],
         methods: std::collections::HashMap::new(),
@@ -1358,7 +1358,7 @@ fn test_unifier_unify_struct_same() {
         field_has_default: vec![false],
         interfaces: vec![],
     });
-    let s2 = MonoType::Struct(crate::frontend::core::types::base::StructType {
+    let s2 = MonoType::Struct(crate::frontend::core::types::StructType {
         name: "Point".to_string(),
         fields: vec![("x".to_string(), MonoType::Float(64))],
         methods: std::collections::HashMap::new(),

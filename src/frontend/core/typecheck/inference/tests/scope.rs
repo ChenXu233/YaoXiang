@@ -3,7 +3,7 @@
 //! §5.2: 变量声明
 
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 
 // ===================================================================
 // Happy path 测试

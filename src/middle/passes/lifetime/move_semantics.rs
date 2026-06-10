@@ -22,7 +22,7 @@
 use super::consume_analysis::ConsumeAnalyzer;
 use super::error::{OwnershipCheck, TypeId, ValueState, operand_display_name};
 use super::ownership_flow::ConsumeMode;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::middle::core::ir::{FunctionIR, Instruction, Operand};
 use crate::util::diagnostic::{ErrorCodeDefinition, Diagnostic};
 use std::collections::HashMap;

@@ -1,7 +1,7 @@
 use crate::frontend::core::types::computation::operations::{
     ArithOp, BoolType, CmpOp, LogicOp, TypeArithmetic, TypeComparison, TypeLogic, TypeLevelValue,
 };
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 #[test]
 fn test_arithmetic() {
