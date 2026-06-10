@@ -1,623 +1,724 @@
+```markdown
 ---
 title: "RFC-018：LLVM AOT コンパイラ設計"
 status: "レビュー中"
 author: "晨煦"
 created: "2026-02-15"
-updated: "2026-06-05"
+updated: "2026-06-10（RFC-024 spawn ブロック並行モデル、RFC-009 v9 所有権モデル、RFC-026 FFI 機構に整合）"
 ---
 
 # RFC-018：LLVM AOT コンパイラ設計
 
 > **参考**:
-> - [RFC-024: spawn ブロックベースの並行モデル](./accepted/024-concurrency-model.md)
-> - [RFC-008: Runtime 並行モデルとスケジューラ分離設計](./accepted/008-runtime-concurrency-model.md)
-> - [RFC-009: 所有権モデル設計](./accepted/009-ownership-model.md)
+> - [RFC-024：spawn ブロックベースの並行モデル](../accepted/024-concurrency-model.md)
+> - [RFC-008：Runtime 並行モデルとスケジューラ疎結合設計](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-009：所有権モデル設計](../accepted/009-ownership-model.md)
+> - [RFC-026：FFI コア機構](./026-ffi-core-mechanism.md)
+> - [RFC-010：統一型構文](../accepted/010-unified-type-syntax.md)
+
+> **廃止**:
+> - 旧版「ボトムアップ自動 DAG 解析」モデル — RFC-024 spawn ブロック直接子式モデルに置き換え
+> - `@IO`/`@Pure` 暗黙副作用推論 — RFC-024 リソース型機構に置き換え
+> - `Arc(T)` 型マッピング — RFC-009 v9 `ref` キーワードに置き換え
 
 ## 概要
 
-このドキュメントは YaoXiang 言語の LLVM AOT コンパイラを設計するものであり、事前コンパイルによりマシンコード + DAG メタデータを生成し、runtime が **spawn ブロック内で DAG をスケジュール**し、**ボトムアップ**の依存関係解析に基づいて実行することを目標とする。
+本文書は YaoXiang 言語の LLVM AOT（Ahead-of-Time）コンパイラを設計する。LLVM バックエンドと VM バックエンド（インタプリタ）は同一のコンパイルフロントエンドを共有し、[RFC-008](../accepted/008-runtime-concurrency-model.md) で定義されるデュアルバックエンドアーキテクチャを構成する：VM は開発・デバッグ用、LLVM は本番リリース用。
 
-**コアイノベーション**：
-- 「関数呼び出しに遭遇したら Future を生成する」ではなく、**「結果が必要な場所」から逆方向に依存関係を解析**
-- **リーフノードを優先して並行実行**、依存チェーンは順序通りに上方へ辿る
-- **孤立 DAG は独立して並行**：コンシューマのないノードはメイン�フローをブロックしない
-- **無限ループはバックグラウンド DAG として**：スケジューラがスライス実行し、フリーズしない
-- **DAG 解析は spawn ブロック内に限定**：コンパイル効率向上、動作が制御可能
+**中核的な責務**：
 
-これは Rust async/await + tokio runtime パターンと本質的に異なる：
-- Rust：ユーザーが `async fn` を書き、コンパイラが状態機械を生成
-- YaoXiang：ユーザーが通常の関数を書き、**コンパイラが spawn ブロック内で自動的に DAG を解析**、スケジューラがボトムアップで実行
+```
+ソースコード → フロントエンド（共有）→ IR → LLVM Codegen → .o → スケジューラ静的ライブラリをリンク → exe
+```
 
-RFC-024 の spawn ブロック並行モデルに従う：通常のコードは順序実行、spawn ブロック内のみ DAG スケジュールで並行。
+コンパイラは YaoXiang ソースコードをネイティブマシンコードにコンパイルする。各言語機能に対して：
+
+| 言語機能 | コンパイル戦略 |
+|----------|----------------|
+| 通常コード | 逐次マシンコード、ゼロスケジューリングオーバーヘッド |
+| `spawn { }` ブロック | 直接子式 → タスクディスパッチ + 同期待機（[RFC-024](../accepted/024-concurrency-model.md) に整合） |
+| `native("symbol")` | LLVM `declare external` + 引数マーシャリング（[RFC-026](./026-ffi-core-mechanism.md) に整合） |
+| `.drop` デストラクタ | RAII クリーンアップコード挿入（[RFC-009](../accepted/009-ownership-model.md) に整合） |
+| `&T` / `&mut T` トークン | ゼロサイズ型、コンパイル後消失 |
+| `ref T` 共有 | `{ refcount_ptr, data_ptr }` ファットポインタ、コンパイラが自動的に Rc/Arc を選択 |
+
+**RFC-024 との関係**：RFC-024 は spawn ブロックの**ユーザセマンティクス**（直接子式によるタスク作成、同期ブロッキング待機）を定義する。本文書はこれらのセマンティクスが**マシンコードへコンパイルされる方法**を定義する。
+
+**RFC-026 との関係**：RFC-026 は FFI の**ユーザ構文**（`native()`、`[0]` メソッドバインディング、`.drop`）を定義する。本文書は FFI 呼び出しが**LLVM IR を生成する方法**を定義する。
+
+---
 
 ## 動機
 
-### なぜ LLVM AOT コンパイラが必要か？
+### なぜ LLVM AOT コンパイラが必要なのか？
 
-現在 YaoXiang はインタープリタのみを実行バックエンドとして持っており、以下の問題がある：
+現在 YaoXiang はインタプリタのみを実行バックエンドとしている：
 
 | 問題 | 影響 |
 |------|------|
-| パフォーマンスボトルネック | インタープリタ実行はマシンコードより 10-100 倍遅い |
-| デプロイが複雑 | インタープリタと runtime の携带が必要 |
-| カラー関数問題 | 同期関数が並行関数を呼び出せない |
+| 性能ボトルネック | インタプリタ実行はマシンコードより 10-100 倍遅い |
+| デプロイの複雑さ | インタプリタとランタイムの同梱が必要 |
+| 本番環境 | インタプリタは性能重視のシナリオに適さない |
 
-### カラー関数問題と spawn ブロック並行
+### デュアルバックエンドモデルにおける LLVM
 
-**従来の設計**：
-- 同期関数（青色）→ 呼び出せない → 並行関数（赤色）
-- 同期がデフォルト、並行には `spawn` マークが必要
-- 色が「伝染」する：一度並行を使うと、同じ呼び出しチェーンはすべて並行になる
-
-**RFC-024 spawn ブロック並行（目標）**：
-- 通常コードは順序実行、関数着色なし
-- `spawn { ... }` ブロック内で DAG 解析、並行実行
-- 呼び出し元は同期ブロック、コールバックも `await` もない
-
-**反転後の設計（RFC-018）**：
-- 通常コードは直接順序マシンコードを生成、DAG オーバーヘッドなし
-- spawn ブロック内でコンパイル時に DAG 依存関係を自動的に解析、runtime でボトムアップ実行
-- カラー関数問題を解決：すべての関数を統一、同期/並行の区別不要
-
-### コアイノベーション：ボトムアップ実行 + spawn ブロック内 DAG
-
-本設計のコアイノベーションは **ボトムアップ実行モデル**（spawn ブロック内に限定）にある：
+[RFC-008](../accepted/008-runtime-concurrency-model.md) §6 はデュアルバックエンドアーキテクチャを定義する：
 
 ```
-従来の呼び出し（トップダウン）：
-  call fetch(url) → 実行 → 結果を返す
-
-ボトムアップ実行：
-  print(a) ← 「結果が必要な場所」から開始
-       ↑
-  fetch(url0) ← 依存関係を解析、逆方向に検索
-
-  fetch(url1) ← 孤立 DAG、独立並行実行
+                    ┌─────────────────────┐
+                    │   コンパイルフロントエンド（統一） │
+                    │   Lexer → Parser     │
+                    │   → TypeCheck        │
+                    │   → spawn 解析       │
+                    │   → エスケープ解析    │
+                    └──────────┬──────────┘
+                               │
+                  ┌────────────┴────────────┐
+                  ▼                         ▼
+      ┌───────────────────┐     ┌───────────────────┐
+      │   VM バックエンド（開発）│     │  LLVM バックエンド（本番）│
+      │   IR → インタプリタ実行│     │  IR → ネイティブコード │
+      │   ステップデバッグ   │     │  スケジューラ静的ライブラリをリンク │
+      │   高速イテレーション │     │  .exe を出力       │
+      └───────────────────┘     └───────────────────┘
 ```
 
-**重要な違い**：
-- 「関数呼び出しに遭遇したら Future を生成する」ではない
-- 「最終的な結果が必要」から逆方向に依存関係を解析
-- コンシューマのないノード（孤立）は実行しないか独立して並行実行
-- 無限ループはバックグラウンド DAG として、スケジューラがスライス実行
+両バックエンドの**振る舞いは完全に一致**する — 違いは実行方式のみ。同一のソースコード、同一の型検査、同一の spawn 解析結果。
 
-### Rust async との比較
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Rust async モード                          │
-├─────────────────────────────────────────────────────────────────┤
-│  コンパイル時：状態機械 + マシンコードを生成                    │
-│  ランタイム時：tokio スケジューラが状態機械に応じてスケジュール  │
-│  特徴：await ポイントはコンパイル時に確定、状態機械が実行を管理  │
-│  粒度：関数レベル                                               │
-│  ユーザー体験：async/await キーワードを書く必要がある           │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                      YaoXiang LLVM AOT モード                   │
-├─────────────────────────────────────────────────────────────────┤
-│  コンパイル時：マシンコード + DAG メタデータを生成              │
-│  ランタイム時：spawn ブロック内の DAG スケジューラ、ボトムアップ実行│
-│  特徴：「結果が必要な場所」から逆方向に依存関係を解析、リーフノード並行│
-│  粒度：spawn ブロック内の DAG                                  │
-│  ユーザー体験：通常の関数、自動的に並行化                       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### spawn ブロック内の DAG スケジューラ
-
-```
-spawn ブロック内の DAG ビュー：
-
-        print(result) ─────────────────────────┐
-           │                                    │
-    ┌──────┴──────┐                             │
-    │             │                             │
-process(a)   process(b)                        │
-    │             │                             │
-compute(x)   compute(y)  ←── 孤立 DAG ──────────┤
-    │                                           │
-fetch(url0)  fetch(url1)  fetch(url2)          │
-    (実行済み)                                    │
-
-同時にバックグラウンド DAG（while True）もある：
-    ┌─────────────────────────────────────────┐ │
-    │  while True:                            │ │
-    │      update_ui()                        │ │
-    │      fetch_new() ──→ process(data)      │ │
-    └─────────────────────────────────────────┘ │
-```
-
-**スケジューラの動作方式**：
-```
-1. 「最終結果」から逆方向に解析：
-   print(result) → process に依存 → fetch に依存
-
-2. spawn ブロック内の DAG を構築：
-   - リーフノード：fetch（依存なし）
-   - 内部ノード：process, compute
-   - ルートノード：print
-
-3. 実行：
-   - fetch を並行実行
-   - process は fetch の完了を待機
-   - print は process の完了を待機
-   - 孤立 compute は独立して並行
-
-4. 実行済みはスキップ：
-   - あるノードが実行済みの場合、それらに依存する後続ノードは結果を再利用可
-```
-
-### 無限ループ処理
-
-```
-シナリオ 1：単一の while/for（スケジューリングオーバーヘッドなし）
-──────────────────────────────────────────────
-main: () -> () = {
-    while True {
-        update_ui()
-        fetch_data()
-    }
-}
-→ 無限ループは1つだけ
-→ 直接同期実行、通常のコードと同じ
-
-シナリオ 2：複数の while（自動スライス）
-──────────────────────────────────────────────
-main: () -> () = {
-    while True { update_ui() }      # バックグラウンドタスク1
-    while True { network_poll() }  # バックグラウンドタスク2
-    server_loop()                   # メインタスク
-}
-→ 3つの独立タスク
-→ スケジューラがスライス切り替え
-→ 真の並行実行
-
-スケジューラの自适应：
-──────────────────────────────────────────────
-if タスク数 == 1:
-    直接実行（同期）
-else:
-    スライススケジュール（並行）
-```
-
-**バックグラウンド DAG 処理**：
-```
-メイン DAG（終了あり）：
-    fetch → process → print → 終了
-
-バックグラウンド DAG（無限ループ）：
-    while True → update_ui → fetch_new → process → 最初に戻る
-
-スケジューラ：
-    - メイン DAG は実行完了後終了
-    - バックグラウンド DAG は常に実行だが、スケジューラは「スライス」方式で実行
-    - ループで凍りつかない
-```
+---
 
 ## 提案
 
-### コア設計
+### 1. コンパイラアーキテクチャ
+
+LLVM バックエンドはコンパイルパイプラインの最終段階に位置し、フロントエンドから IR を受け取り、ネイティブコードを生成する：
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  コンパイル時                                        │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│  │ Parser  │→│DAG解析  │→│LLVM Codegen│→ マシンコード│
-│  └─────────┘  └─────────┘  └─────────┘           │
-│                      ↓                           │
-│              生成：DAG メタデータ                      │
-└─────────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────────┐
-│  ランタイム                                          │
-│  ┌─────────────────────────────────────────────┐ │
-│  │  DAG スケジューラライブラリ                       │ │
-│  │  • マシンコードのロード                          │ │
-│  │  • DAG メタデータを読み取り                      │ │
-│  │  • 遅延スケジュール：呼び出しを停止、需要に応じて実行│ │
-│  │  • 並行/直列実行をサポート                       │ │
-│  └─────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+ソースコード
+  → Lexer / Parser（frontend/core/）
+  → TypeCheck + spawn 解析（frontend/core/typecheck/）
+  → IR 生成（middle/core/ir_gen.rs）
+  → LLVM Codegen（middle/passes/codegen/llvm/）
+      ├── 型マッピング：YaoXiang 型 → LLVM IR 型
+      ├── 関数翻訳：IR 命令 → LLVM IR 命令
+      ├── spawn 展開：直接子式 → タスク関数 + スケジューリング呼び出し
+      ├── FFI 展開：native() 呼び出し → declare + マーシャリング
+      └── デストラクタ挿入：スコープ終了 → .drop() 呼び出し
+  → LLVM 最適化 + ターゲットコード生成
+  → ランタイム静的ライブラリをリンク → 実行可能ファイル
 ```
 
-### ボトムアップ実行フロー
+### 2. コンパイルフロー
 
 ```
-ユーザーコード：
-    main: () -> () = {
-        pages = urls.map(|url| fetch(url))
-        results = pages.map(|page| parse_page(page))
-        save_results(results)
+Phase 1: フロントエンド（VM バックエンドと共有）
+  - 解析、型検査、spawn ブロック解析、エスケープ解析
+  - 出力：型注釈付き IR
+
+Phase 2: LLVM IR 生成
+  - 型マッピング、関数宣言、命令翻訳
+  - 出力：LLVM Module
+
+Phase 3: LLVM 最適化
+  - 標準 LLVM 最適化パイプライン（O0/O1/O2/O3）
+  - インライン化、定数畳み込み、デッドコード除去
+
+Phase 4: ターゲットコード生成
+  - LLVM TargetMachine → .o ファイル
+  - プラットフォーム：Linux (ELF)、macOS (Mach-O)、Windows (COFF)
+
+Phase 5: リンク
+  - ランタイム静的ライブラリ（スケジューラ、アロケータ）をリンク
+  - 出力：実行可能ファイル
+```
+
+### 3. 型マッピング
+
+#### 3.1 YaoXiang → LLVM IR 型マッピング
+
+| YaoXiang 型 | LLVM IR 型 | 説明 |
+|---------------|-------------|------|
+| `Int` | `i64` | デフォルト 64 ビット符号付き整数 |
+| `Int32` | `i32` | 明示的な 32 ビット整数（主に FFI 用） |
+| `Float` | `f64` | デフォルト 64 ビット浮動小数点 |
+| `Float32` | `f32` | 明示的な 32 ビット浮動小数点（主に FFI 用） |
+| `Bool` | `i1` | ブール値 |
+| `Char` | `i32` | Unicode コードポイント |
+| `String` | `{ i8*, i64 }` | ポインタ + バイト長 |
+| `Void` | `{}` | ゼロサイズ空型 |
+| `&T` | — | ゼロサイズトークン、コンパイル後消失、IR を一切生成しない |
+| `&mut T` | — | ゼロサイズトークン、コンパイル後消失、IR を一切生成しない |
+| `ref T` | `{ i32*, T* }` | ファットポインタ（参照カウントポインタ + データポインタ） |
+| `*T` | `T*` | 生ポインタ |
+| `[T; N]` | `[N x T]` | 固定長配列 |
+| `List(T)` | `{ T*, i64, i64 }` | データポインタ + 長さ + 容量 |
+| 構造体 | 対応する LLVM struct | フィールドは定義順にレイアウト |
+| 判別共用体（タグ付き enum） | `{ i64, [max_payload_size] }` | タグ + 最大 payload の union |
+| `?T` | `{ i1, T }` | 有値タグ + データ（汎用表現） |
+| FFI 不透明型 | `{ i8* }` | C ポインタのラッパ |
+| 関数ポインタ | `T (...)*` | 関数ポインタ型 |
+
+> **`&T` / `&mut T` ゼロランタイムオーバーヘッド**：[RFC-009](../accepted/009-ownership-model.md) §2.7 は、コンパイラが内部でトークンにブランド識別子（コンパイル時一意整数）を割り当て、モノモーフィゼーションとインライン化後にブランドが完全に消失することを定義する — 生成されるマシンコードにはトークンの痕跡は一切存在しない。
+
+#### 3.2 FFI 引数型マッピング
+
+[RFC-026](./026-ffi-core-mechanism.md) §2.2 に整合し、LLVM IR 列を補足する：
+
+| C 型 | YaoXiang 型 | LLVM IR | 説明 |
+|--------|---------------|---------|------|
+| `int` | `Int32` | `i32` | |
+| `long` | `Int64` | `i64` | |
+| `float` | `Float32` | `f32` | |
+| `double` | `Float64` | `f64` | |
+| `char` | `Char` | `i32` | C char → YaoXiang Char（Unicode 互換） |
+| `char*` | `String` | `{ i8*, i64 }` | マーシャリング：C string → YaoXiang String |
+| `bool` | `Bool` | `i1` | |
+| `size_t` | `Uint` | `i64` | |
+| `void*` | `*Void` | `i8*` | |
+| `struct T*` | `T`（透過型） | `T*` | ポインタ渡し |
+| `typedef struct T T` | `T`（不透明型） | `{ i8* }` | C ポインタのラッパ |
+
+### 4. 命令翻訳
+
+各 IR 命令は対応する LLVM IR 命令に直接マッピングされる。簡略マッピング表：
+
+| IR 命令 | LLVM IR |
+|---------|---------|
+| `BinaryOp { add }` | `add` |
+| `BinaryOp { sub }` | `sub` |
+| `BinaryOp { mul }` | `mul` |
+| `BinaryOp { div }` | `sdiv` / `fdiv` |
+| `Compare { eq }` | `icmp eq` / `fcmp oeq` |
+| `CallStatic` | `call` |
+| `CallIndirect` | `call`（関数ポインタ経由） |
+| `Load` | `load` |
+| `Store` | `store` |
+| `LoadElement` | `getelementptr` + `load` |
+| `Alloca` | `alloca` |
+| `Branch` | `br` |
+| `BranchCond` | `br i1` |
+| `Return` | `ret` |
+
+詳細な命令翻訳は `middle/passes/codegen/llvm/` の具体的実装を参照。
+
+### 5. spawn ブロックコード生成
+
+[RFC-024](../accepted/024-concurrency-model.md) に整合し、spawn ブロックのコンパイルは以下のステップに分けられる。
+
+#### 5.1 セマンティクスのおさらい
+
+```yaoxiang
+(r1, r2) = spawn {
+    t1 = fetch("url1"),   // 直接子式 → タスク 1
+    t2 = fetch("url2"),   // 直接子式 → タスク 2
+    return (t1, t2)       // 同期待機、結果を組み立て
+}
+```
+
+**ルール**（RFC-024 §2.1）：
+- spawn ブロックの**直接子式**（トップレベルのカンマ区切り文）は並列タスクを作成する
+- ネストされた `{}` 内の式は直接子式とみなされず、独立したタスクにはならない
+- spawn ブロック全体が同期ブロッキングし、全タスク完了後に return する
+
+#### 5.2 コンパイルステップ
+
+```
+Step 1: 直接子式の識別
+  spawn ブロック本体を走査し、トップレベル文を収集
+
+Step 2: 依存解析
+  各直接子式について、前のタスクが生成した変数を参照しているかを解析
+  依存なし → 即時並列スケジューリング可能
+  依存あり → 依存タスク完了を待つキューに挿入
+
+Step 3: リソース競合検出（RFC-024 §2.5）
+  同一リソース型のインスタンスが複数タスクで使用されていないか確認
+  同一インスタンス競合 → 逐次実行順序をマーク
+
+Step 4: タスク関数の生成
+  各直接子式に対して独立した LLVM 関数（クロージャ）を生成
+
+Step 5: スケジューリングコードの生成
+  ランタイム scheduler の task_spawn / task_wait を呼び出す
+
+Step 6: 結果組み立て
+  全タスクの出力を収集し、return タプルを組み立て
+```
+
+#### 5.3 LLVM IR 生成パターン
+
+```llvm
+; spawn ブロック入口
+%task_count = 2
+%tasks = alloca [2 x %TaskHandle]
+
+; タスク 1 作成：fetch("url1")
+%task1_fn = @spawn_closure_1
+call @runtime_task_spawn(%tasks[0], %task1_fn, ...)
+
+; タスク 2 作成：fetch("url2")
+%task2_fn = @spawn_closure_2
+call @runtime_task_spawn(%tasks[1], %task2_fn, ...)
+
+; 全タスクを同期待機
+call @runtime_task_wait_all(%tasks, %task_count)
+
+; 戻り値を組み立て
+%r1 = call @runtime_task_result(%tasks[0])
+%r2 = call @runtime_task_result(%tasks[1])
+ret { %r1, %r2 }
+```
+
+#### 5.4 依存タスク
+
+```yaoxiang
+result = spawn {
+    data = fetch("url"),       // タスク 1：依存なし
+    processed = parse(data),   // タスク 2：タスク 1 の data に依存
+    return processed
+}
+```
+
+コンパイラは `parse(data)` がタスク 1 が生成した `data` を参照していることを検出し、スケジューリングコード生成時に依存をマークする：
+
+```llvm
+; タスク 2 はタスク 1 への依存付きで作成
+call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
+;                                                              ↑
+;                                                 タスク 0（fetch）完了に依存
+```
+
+#### 5.5 リソース型の自動直列化
+
+[RFC-024 §2.5](../accepted/024-concurrency-model.md) で定義されるリソース型（`FilePath`、`HttpUrl`、`DBUrl`、`Console` およびユーザ定義リソース型）は spawn ブロック内で自動的に直列化される：
+
+```yaoxiang
+(a, b) = spawn {
+    r1 = db.exec("SELECT ..."),   // SqliteDb（リソース型）を使用
+    r2 = db.exec("INSERT ...")    // 同一インスタンス → 自動直列化
+}
+```
+
+コンパイラは同一リソースインスタンスが 2 つのタスクで使用されていることを検出し、直列依存を生成する：
+
+```llvm
+; タスク 2 はタスク 1 に依存（同リソース自動直列化）
+call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
+```
+
+#### 5.6 spawn for データ並列
+
+```yaoxiang
+results = spawn for item in items {
+    process(item)
+}
+```
+
+コンパイラは N 個の独立タスク（N = items の長さ）に展開し、最大並列数の制限を受ける。
+
+### 6. FFI コード生成
+
+[RFC-026](./026-ffi-core-mechanism.md) に整合し、本節は FFI 呼び出しの LLVM IR 生成戦略を定義する。
+
+#### 6.1 native() 関数宣言
+
+```yaoxiang
+sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
+```
+
+LLVM IR へのコンパイル結果：
+
+```llvm
+; 外部 C 関数を宣言
+declare i8* @sqlite3_open(i8*)
+
+; YaoXiang ラッパ関数（マーシャリング処理）
+define { i8* } @__yx_sqlite3_open({ i8*, i64 } %filename) {
+    ; マーシャリング：YaoXiang String → C string
+    %c_str = extractvalue { i8*, i64 } %filename, 0
+    ; C 関数を呼び出し
+    %raw = call i8* @sqlite3_open(i8* %c_str)
+    ; アンマーシャリング：C ポインタ → 不透明型
+    %result = insertvalue { i8* } undef, i8* %raw, 0
+    ret { i8* } %result
+}
+```
+
+**要点**：
+- `native("sqlite3_open")` → `declare external @sqlite3_open`
+- コンパイラが自動的にマーシャリングラッパ関数を生成
+- ラッパ関数のシグネチャは YaoXiang 型を使用し、内部で C 型に変換
+
+#### 6.2 引数マーシャリング
+
+| 方向 | 変換 |
+|------|------|
+| YaoXiang `String` → C `char*` | `.ptr` フィールドを抽出して渡す |
+| YaoXiang `Int32` → C `int` | 直接渡す（`i32`） |
+| YaoXiang `*Void` → C `void*` | 直接渡す（`i8*`） |
+| YaoXiang `T`（透過型） → C `struct T*` | アドレスを取って渡す |
+| YaoXiang `T`（不透明型） → C `struct T*` | `{ i8* }` 内のポインタを抽出して渡す |
+
+#### 6.3 不透明型の LLVM レイアウト
+
+[RFC-026](./026-ffi-core-mechanism.md) §4.1 で定義される不透明型：
+
+```yaoxiang
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void
     }
-
-Phase 1: ボトムアップ解析（コンパイル時）
-─────────────────────────────────────────
-save_results(results) から開始：
-    "results が必要" → parse_page(results) に依存
-    "page0 が必要" → fetch(url0) に依存
-    "page1 が必要" → fetch(url1) に依存
-    ...
-
-spawn ブロック内の DAG を構築：
-    fetch(url0), fetch(url1), fetch(url2) ← リーフノード
-           ↓
-    parse_page(page0), parse_page(page1)   ← リーフに依存
-           ↓
-    save_results                          ← ルートノード
-
-Phase 2: リーフの並行実行（ランタイム時）
-─────────────────────────────────────────
-スケジューラがすべてのリーフノードを見つける：
-    - fetch(url0), fetch(url1), fetch(url2) は依存なし → 並行実行
-    - 並行数を制御（例：最大 16 個）
-
-Phase 3: 上方へ辿る
-─────────────────────────────────────────
-parse_page が page0 を必要とする場合：
-    - page0 が準備完了かチェック
-    - 準備完了 → parse_page を実行
-    - 未完了 → 待機、完了後続行
-
-Phase 4: 孤立は独立して並行
-─────────────────────────────────────────
-ある fetch の結果を誰も必要としていない場合：
-    - 「孤立 DAG」として独立実行
-    - 別のコアを使用可能、メイン�フロー不影响
+    return SqliteDb
+}
 ```
 
-### コンパイル成果物構造
+LLVM レイアウト：`{ i8* }` — C ポインタを 1 つ含む構造体。
+
+**レイアウト最適化**：不透明型が `handle: *Void` フィールド 1 つだけの場合、直接 `i8*` を使用するよう最適化可能（外側 struct を省略）。最適化後の ABI は C ポインタと完全一致し、マーシャリングオーバーヘッドはゼロ。コンパイラはデフォルトでこの最適化を有効化し、ユーザは意識する必要がない。
+
+#### 6.4 ?T null 許容戻り値の LLVM 表現
+
+[RFC-026](./026-ffi-core-mechanism.md) §7.6 で定義される FFI null 許容戻り値：
+
+```yaoxiang
+sqlite3_open: (filename: String) -> ?SqliteDb = native("sqlite3_open")
+```
+
+汎用 LLVM 表現：`{ i1, { i8* } }` — 有値タグ + データ。
+
+**FFI null ポインタ向け最適化**：`?T` の `T` が不透明型（内部がポインタ）の場合、コンパイラは **null ポインタ = None** 最適化を使用：
+
+```llvm
+; 最適化後の LLVM 表現：null 許容ポインタを直接使用
+define i8* @__yx_sqlite3_open(...) {
+    %raw = call i8* @sqlite3_open(...)
+    ; null → None、non-null → Some（不透明型にラップ）
+    ret i8* %raw
+}
+```
+
+呼び出し側：
+```llvm
+%raw = call i8* @__yx_sqlite3_open(...)
+%is_null = icmp eq i8* %raw, null
+br i1 %is_null, label %none_branch, label %some_branch
+```
+
+この最適化により `?SqliteDb` の FFI 呼び出しは**追加オーバーヘッドゼロ** — C の null チェックと完全等価。
+
+#### 6.5 yx-bindgen 統合
+
+[yx-bindgen](./026-ffi-core-mechanism.md) §6 が自動生成するバインディングファイルは、コンパイル時に通常の YaoXiang ソースコードとして処理される。コンパイラはコードが bindgen 由来であることを認識する必要がない — `native()` 宣言と `unsafe {}` 型定義の処理方法は完全に同一。
+
+### 7. デストラクタコード生成
+
+[RFC-009](../accepted/009-ownership-model.md) の RAII セマンティクスと [RFC-026](./026-ffi-core-mechanism.md) §7 の `.drop` 規約に整合する。
+
+#### 7.1 .drop バインディング識別
+
+```yaoxiang
+SqliteDb.drop = sqlite3_close[0]
+```
+
+コンパイラは `.drop` バインディングを識別し、型メタデータにデストラクタ関数ポインタをマークする。
+
+#### 7.2 スコープ終了時のクリーンアップ挿入
+
+```
+ユーザコード：
+{
+    db = SqliteDb.open("test.db")
+    stmt = db.prepare("SELECT ...")
+    stmt.step()
+    // ← スコープ終了
+}
+
+コンパイラが挿入するクリーンアップ（逆順）：
+    call @sqlite3_finalize(%stmt)    // stmt.drop()
+    call @sqlite3_close(%db)          // db.drop()
+```
+
+**挿入位置**：
+- 通常のスコープ終了（`}`）
+- 早期 return（`return` の前）
+- `?` エラー伝播パス（`?` の前）
+- spawn ブロック終了（タスク内変数のデストラクタ）
+
+#### 7.3 Move とデストラクタ
+
+```yaoxiang
+db = SqliteDb.open("test.db")
+db2 = db                // Move：所有権を db2 に移転
+// db は無効、ここでは db に対する drop は挿入されない
+// ← スコープ終了：db2 に対してのみ drop を挿入
+```
+
+コンパイラは Move セマンティクス（[RFC-009](../accepted/009-ownership-model.md) §1）を追跡し、変数の最終保持者の位置にのみデストラクタ呼び出しを挿入する。
+
+#### 7.4 デストラクタ失敗処理
+
+```llvm
+; debug モード：デストラクタの戻り値をチェック
+%ret = call i32 @sqlite3_close(i8* %handle)
+%ok = icmp eq i32 %ret, 0
+br i1 %ok, label %done, label %panic
+panic:
+  call @__yx_panic("destructor failed")
+  unreachable
+done:
+  ret void
+
+; release モード：戻り値を無視
+call i32 @sqlite3_close(i8* %handle)
+ret void
+```
+
+### 8. コンパイル成果物構造
 
 ```rust
-/// コンパイル成果物：マシンコード + DAG メタデータ
+/// コンパイル成果物：マシンコード + メタデータ
 pub struct CompiledArtifact {
-    /// LLVM コンパイルのマシンコード（ELF/Mach-O/COFF）
+    /// LLVM コンパイル済みマシンコード（オブジェクトファイル）
     machine_code: Vec<u8>,
 
-    /// DAG メタデータ：関数依存関係を記述
-    dag: DAGMetadata,
+    /// spawn ブロックメタデータ：タスク関数ポインタ + 依存関係
+    spawn_metadata: SpawnMetadata,
 
-    /// エントリポイントテーブル
+    /// FFI シンボルテーブル：外部シンボル参照
+    ffi_symbols: Vec<FfiSymbol>,
+
+    /// エントリポイント表
     entries: Vec<EntryPoint>,
 
-    /// 型情報（FFI 用）
+    /// 型情報（リフレクションメタデータ、.reflect セクションに書き込まれ、必要に応じて mmap）
     type_info: TypeInfo,
 }
 
-/// DAG メタデータ
-pub struct DAGMetadata {
-    /// ノード：関数呼び出し
-    nodes: Vec<DAGNode>,
-    /// エッジ：依存関係 (from, to)
-    edges: Vec<(usize, usize)>,
+/// spawn ブロックメタデータ
+pub struct SpawnMetadata {
+    /// 各 spawn ブロックの記述
+    blocks: Vec<SpawnBlockInfo>,
 }
 
-/// 単一の DAG ノード
-pub struct DAGNode {
-    /// 関数 ID
-    pub function_id: usize,
-    /// 依存するノード ID
+pub struct SpawnBlockInfo {
+    /// spawn ブロック内各直接子式に対応するタスク関数
+    tasks: Vec<TaskInfo>,
+    /// リソース競合：直列化が必要なタスクペア
+    serialize_pairs: Vec<(usize, usize)>,
+}
+
+pub struct TaskInfo {
+    /// タスク関数の LLVM 関数ポインタ
+    pub func_ptr: usize,
+    /// 依存するタスクインデックス（空 = 依存なし、即時実行可能）
     pub deps: Vec<usize>,
-    /// 副作用タグ（@IO / @Pure）
-    pub effect: EffectTag,
+}
+
+/// FFI シンボル参照
+pub struct FfiSymbol {
+    /// C シンボル名
+    pub symbol_name: String,
+    /// 弱参照か否か（欠落を許容）
+    pub weak: bool,
 }
 ```
 
-### ランタイムスケジューラインターフェース
+### 9. ランタイムライブラリ
 
-```rust
-/// DAG スケジューラ trait
-pub trait DAGScheduler: Send + Sync {
-    /// スケジュール実行
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue;
-
-    /// 単一関数実行
-    fn execute(&self, func: &CompiledFunction, args: &[RuntimeValue]) -> RuntimeValue;
-}
-
-/// スケジューラ実装
-pub struct DefaultDAGScheduler {
-    /// スレッドプール
-    thread_pool: ThreadPool,
-    /// コンパイル成果物
-    artifact: CompiledArtifact,
-    /// 最大並行数
-    max_parallelism: usize,
-}
-
-impl DefaultDAGScheduler {
-    pub fn new(artifact: CompiledArtifact, num_workers: usize) -> Self {
-        Self {
-            thread_pool: ThreadPool::new(num_workers),
-            artifact,
-            max_parallelism: num_workers * 2, // 自適応粒度制御
-        }
-    }
-}
-
-impl DAGScheduler for DefaultDAGScheduler {
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue {
-        // 1. 関数体を辿り、すべての呼び出しを停止
-        // 2. 実行待ちタスクリストを構築
-        // 3. 依存順序でスケジュール実行（並行数を制御）
-        // 4. 値が必要になったら実行をトリガー
-        // 5. 結果を返す
-    }
-}
-```
-
-### DAG の例：Web クローラ
+[RFC-008 §6.2](../accepted/008-runtime-concurrency-model.md) に整合し、ランタイムは**静的ライブラリ**形式で最終 exe にリンクされる。
 
 ```
-main 関数 DAG：
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  fetch(url0) ──┐                                           │
-│  fetch(url1) ──┼──→ parse_page ──→ filter_links ──┐      │
-│  fetch(url2) ──┘                                       │      │
-│                                                          │      │
-│                     save_result ──→ print              │      │
-│                          ↑                              │      │
-│                          └──────────────────────────────┘      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+最終 exe の内部構造：
 
-ノード説明：
-┌──────────────────┬────────────┬────────────────────────────┐
-│ ノード              │ 副作用     │ 説明                        │
-├──────────────────┼────────────┼────────────────────────────┤
-│ fetch(url0)      │ @IO       │ 並行ダウンロード               │
-│ fetch(url1)      │ @IO       │ 並行ダウンロード               │
-│ fetch(url2)      │ @IO       │ 並行ダウンロード               │
-│ parse_page       │ @Pure     │ 並行解析                      │
-│ filter_links     │ @Pure     │ 並行フィルタリング             │
-│ save_result      │ @IO       │ 順序保存（I/Oが順序を保証）    │
-│ print            │ @IO       │ 最後に実行                    │
-└──────────────────┴────────────┴────────────────────────────┘
+┌────────────────────────────────────────────┐
+│  ユーザコード（ネイティブマシンコード）          │
+│  ├── 通常関数（逐次実行）                    │
+│  ├── spawn ブロック展開（タスク関数 + スケジューリング呼び出し） │
+│  ├── FFI マーシャリングラッパ関数              │
+│  └── RAII デストラクタコード                  │
+├────────────────────────────────────────────┤
+│  ランタイム静的ライブラリ（~200-500KB）         │
+│  ├── スレッドプール（num_workers）            │
+│  ├── イベントループ（libuv / io_uring）      │
+│  ├── ワークスティーリングキュー（Full Runtime のみ）│
+│  ├── メモリアロケータ（jemalloc / mimalloc）│
+│  └── リフレクションメタデータ（.reflect セクション、必要に応じて mmap）│
+│                                              │
+│  含まないもの：                                │
+│  ❌ バイトコードインタプリタ                    │
+│  ❌ JIT コンパイラ                            │
+│  ❌ GC                                       │
+│  ❌ 仮想マシン                                  │
+└────────────────────────────────────────────┘
 ```
 
-### スケジューラ実行フェーズ
+**重要な設計**：spawn ブロックのタスク識別と依存解析はコンパイル時に完了し、ランタイムは「タスク作成 → スレッドプールへのディスパッチ → 完了待機」のみを実行する — データ構造は固定で、振る舞いは予測可能。
 
-```
-Phase 1: 並行ダウンロード
-─────────────────────────────────────────
-スレッド1: fetch(url0) ──────────┐
-スレッド2: fetch(url1) ─────────┼──→ 3つの並行タスク（最大並行数を制限）
-スレッド3: fetch(url2) ──────────┘
+**3 層ランタイムと LLVM の関係**（RFC-008 §1 に整合）：
 
-Phase 2: 並行解析
-─────────────────────────────────────────
-スレッド1: parse_page(page0) ──┐
-スレッド2: parse_page(page1) ──┼──→ 3つの並行タスク
-スレッド3: parse_page(page2) ──┘
+| ランタイム | LLVM AOT の振る舞い |
+|-----------|---------------------|
+| **Embedded** | spawn サポートなし、直接逐次マシンコードを生成 |
+| **Standard** | spawn ブロックサポート、spawn ブロック内 DAG + シングルスレッドスケジューリング（num_workers=1） |
+| **Full** | spawn ブロックサポート、spawn ブロック内 DAG + マルチスレッドスケジューリング（num_workers>1）、WorkStealing サポート |
 
-Phase 3: 並行フィルタリング
-─────────────────────────────────────────
-スレッド1: filter_links(result0) ──┐
-スレッド2: filter_links(result1) ──┼──→ 3つの並行タスク
-スレッド3: filter_links(result2) ──┘
-
-Phase 4: 順序保存
-─────────────────────────────────────────
-スレッド1: save_result(result0) → 完了待機
-スレッド1: save_result(result1) → 完了待機
-スレッド1: save_result(result2) → 完了待機
-
-Phase 5: 出力
-─────────────────────────────────────────
-スレッド1: print("Fetched 3 pages")
-```
+---
 
 ## 詳細設計
 
-### モジュール構造
+### モジュールディレクトリ構造
+
+[RFC-008](../accepted/008-runtime-concurrency-model.md) §6 のディレクトリレイアウトに整合：
 
 ```
-src/backends/llvm/
-├── mod.rs           # モジュールエントリ + Executor 実装
-├── context.rs       # LLVM コンテキスト管理
-├── types.rs         # 型マッピング (YaoXiang → LLVM)
-├── values.rs        # 値マッピング (レジスタ → LLVM Value)
-├── codegen.rs       # コアコード生成
-├── dag.rs           # DAG 解析と生成
-├── scheduler.rs      # ランタイムスケジューラ
-└── tests.rs         # テスト
+src/
+├── frontend/                          # コンパイルフロントエンド（全バックエンド共有）
+│   └── core/typecheck/
+│       └── spawn_placement.rs         # spawn ブロック解析（タスク識別、依存解析、リソース競合検出）
+│
+├── middle/
+│   ├── core/
+│   │   ├── ir.rs                      # IR 定義（VM と LLVM 共有）
+│   │   └── ir_gen.rs                  # IR 生成
+│   └── passes/
+│       ├── codegen/
+│       │   ├── mod.rs
+│       │   ├── translator.rs          # IR → LLVM IR メイン翻訳
+│       │   └── llvm/
+│       │       ├── mod.rs             # LLVM バックエンドエントリ
+│       │       ├── context.rs         # LLVM コンテキスト管理
+│       │       ├── types.rs           # 型マッピング（YaoXiang → LLVM IR）
+│       │       ├── values.rs          # 値マッピング
+│       │       ├── func.rs            # 関数翻訳
+│       │       ├── spawn.rs           # spawn ブロック展開
+│       │       ├── ffi.rs             # FFI 呼び出しコード生成
+│       │       └── drop.rs            # デストラクタ挿入
+│       ├── lifetime/                  # ライフタイム / トークン活性解析
+│       └── mono/                      # モノモーフィゼーション
+│
+├── backends/
+│   ├── common/                        # 共有値 / ヒープ / オペコード
+│   ├── interpreter/                   # ツリーウォーキングインタプリタ（VM バックエンド）
+│   └── runtime/                       # コンパイル型ランタイム（静的ライブラリとして exe にリンク）
+│       ├── engine.rs                  # タスクスケジューリングエンジン
+│       ├── facade.rs                  # 外部インターフェース
+│       └── task.rs                    # タスク表現
+│
+└── util/
+    └── diagnostic/                    # エラー診断（共有）
 ```
 
-### 型マッピング
+> **重要な変更点**：spawn ブロック解析は `frontend/core/typecheck/spawn_placement.rs`（フロントエンド共有）にあり、LLVM バックエンドにはない。LLVM バックエンドは解析結果を消費して対応するスケジューリングコードを生成するのみ。
 
-| YaoXiang 型 | LLVM 型 |
-|---------------|----------|
-| `Int` | `i64` |
-| `Float` | `f64` |
-| `Bool` | `i1` |
-| `String` | `ptr` (構造体) |
-| `Arc(T)` | `{ i32, T }` (参照カウント構造体) |
-| `ref T` | `ptr` (Arc ポインタ) |
-| `List(T)` | `ptr` (動的配列) |
-| `Struct` | `struct` (対応する構造体) |
+### プラットフォーム ABI サポート
 
-### 命令翻訳
+| プラットフォーム | ターゲットトリプル | 出力フォーマット | 呼び出し規約（FFI デフォルト） |
+|------|-----------|----------|---------------------|
+| Linux x86_64 | `x86_64-unknown-linux-gnu` | ELF | System V AMD64 |
+| macOS x86_64 | `x86_64-apple-darwin` | Mach-O | System V AMD64 |
+| macOS ARM64 | `aarch64-apple-darwin` | Mach-O | ARM64 AAPCS |
+| Windows x86_64 | `x86_64-pc-windows-msvc` | COFF | Microsoft x64 |
 
-各 `BytecodeInstr` は対応する LLVM IR 命令に直接翻訳：
+FFI 呼び出しはデフォルトでプラットフォームの C 呼び出し規約を使用。ユーザは `native("symbol", cc = "stdcall")` 等のオプションで上書き可能（[RFC-026](./026-ffi-core-mechanism.md) の将来の拡張に整合）。
 
-| BytecodeInstr | LLVM IR |
-|---------------|---------|
-| `BinaryOp { add }` | `llvm.add` |
-| `CallStatic` | `llvm.call` |
-| `ArcNew` | `call @Arc_new` |
-| `LoadElement` | `llvm.getelementptr` + `llvm.load` |
-
-### ランタイムライブラリ
-
-```rust
-// コアランタイム関数
-extern "C" {
-    // 参照カウント
-    fn Arc_new(ptr: *mut u8) -> i32;
-    fn Arc_clone(ref_count: *mut i32) -> i32;
-    fn Arc_drop(ref_count: *mut i32);
-
-    // ヒープ割り当て
-    fn Alloc(size: usize) -> *mut u8;
-    fn Dealloc(ptr: *mut u8);
-
-    // DAG スケジュール
-    fn dag_schedule(dag: *const DAGMetadata, entry: usize) -> RuntimeValue;
-}
-```
-
-### スケジュール戦略
-
-| シナリオ | スケジュール戦略 |
-|------|----------|
-| 通常コード（spawn ブロック外） | 順序実行、DAG オーバーヘッドなし |
-| spawn ブロック内 | DAG 遅延スケジュール、依存なしで並行実行 |
-| 循環依存 | ランタイムで検出、エラー |
-
-### 副作用処理：暗黙 Effect System
-
-ユーザーは副作用処理を認識せず、コンパイラが自動的に推論：
-
-```
-ユーザーコード：
-  print("a")
-  print("b")
-  x = compute(1)
-  y = compute(2)
-
-コンパイラ推論：
-  print → @IO（外部呼び出し）
-  compute → @Pure（純粋関数）
-
-スケジューラ実行：
-  print("a") ──→ 順序（すべて @IO）
-  print("b") ──→ 順序
-  compute(1) ─┬─→ 並行（spawn ブロック内 DAG スケジュール）
-  compute(2) ─┘
-```
-
-### 三層ランタイムとの関係
-
-RFC-008 は Embedded / Standard / Full の三層ランタイムアーキテクチャを定義している。LLVM AOT コンパイラと三層ランタイムの対応関係（RFC-024 に整合）：
-
-| ランタイム | LLVM AOT の動作 |
-|--------|---------------|
-| **Embedded** | spawn サポートなし、直接順序マシンコードを生成 |
-| **Standard** | spawn ブロックをサポート、spawn ブロック内 DAG + 単一スレッドスケジュール（num_workers=1） |
-| **Full** | spawn ブロックをサポート、spawn ブロック内 DAG + マルチスレッドスケジュール（num_workers>1）、WorkStealing をサポート |
-
-### スケジューラインターフェース設計
-
-```rust
-/// 副作用タグ
-pub enum EffectTag {
-    /// 純粋関数、副作用なし
-    Pure,
-    /// I/O 副作用あり
-    IO,
-}
-
-/// DAG スケジューラ trait
-pub trait DAGScheduler: Send + Sync {
-    /// spawn ブロック内の DAG をスケジュール実行
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue;
-
-    /// 単一関数実行（通常コード、順序実行）
-    fn execute(&self, func: &CompiledFunction, args: &[RuntimeValue]) -> RuntimeValue;
-}
-```
+---
 
 ## トレードオフ
 
-### メリット
+### 利点
 
-1. **パフォーマンス向上**：AOT コンパイルはインタープリタ実行より 10-100 倍高速
-2. **カラー関数の解決**：関数着色なし、spawn ブロック内並行
-3. **統一ランタイム**：インタープリタと LLVM が同一スケジューラを共有
-5. **暗黙の副作用**：ユーザーは認識不要、コンパイラが自動処理
-6. **所有権の安全性**：Rust スタイル所有権モデルに依存、データ競合なし
+1. **性能**：AOT コンパイルはインタプリタ実行より 10-100 倍速い
+2. **統一フロントエンド**：VM と LLVM が同一フロントエンドを共有し、振る舞いが完全一致
+3. **ゼロスケジューリングオーバーヘッド**：通常コードは直接逐次マシンコードを生成、spawn ブロック外に DAG オーバーヘッドなし
+4. **静的リンク**：外部ランタイム依存なし、単一 exe でデプロイ可能
+5. **ゼロ GC**：RAII による決定論的デストラクタ、ポーズなし
+6. **FFI ゼロオーバーヘッド**：`?T` null ポインタ最適化、不透明型レイアウト最適化により、FFI 呼び出しコストは C と等価
+7. **コンパイル時解析**：spawn ブロックのタスク識別と依存解析はコンパイル時に完了、ランタイムは実行のみ
 
-### デメリット
+### 欠点
 
-1. **実装複雑度**：LLVM 統合経験が必要
-2. **コンパイル時間**：AOT コンパイルはインタープリタより遅い
-3. **デバッグ困難**：AOT コードのデバッグはインタープリタより複雑
+1. **LLVM 統合の複雑さ**：inkwell API と LLVM IR の深い理解が必要
+2. **コンパイル時間**：AOT コンパイルはインタプリタより遅い（一回限りのコスト）
+3. **デバッグ体験**：ネイティブコードのデバッグには DWARF/PDB シンボルサポートが必要（コンパイラがデバッグ情報を生成する必要がある）
+4. **インクリメンタルコンパイル**：大規模プロジェクトのインクリメンタルコンパイルには追加設計が必要
 
-### RFC 設計との整合性
+### 関連 RFC との一貫性
 
-| RFC | 整合性 |
+| RFC | 一貫性 |
 |-----|--------|
-| RFC-024 spawn ブロック並行モデル | ✅ DAG 解析は spawn ブロック内に限定 |
-| RFC-008 ランタイムアーキテクチャ | ✅ ランタイムスケジューラ設計が一致 |
-| RFC-009 所有権モデル | ✅ ARC ランタイムが正しく実装 |
+| RFC-024 spawn ブロック並行モデル | ✅ spawn ブロック直接子式 → タスクディスパッチ |
+| RFC-008 ランタイムアーキテクチャ | ✅ デュアルバックエンド + スケジューラ静的ライブラリ + モジュールディレクトリ構造 |
+| RFC-009 所有権モデル v9 | ✅ `&T`/`&mut T` トークン（ゼロサイズ）、`ref T`（ファットポインタ）、`?T`（Option） |
+| RFC-026 FFI コア機構 | ✅ `native()` → declare + マーシャリング、`.drop` → RAII クリーンアップ |
+
+---
 
 ## 代替案
 
-| 案 | 説明 | 選択しない理由 |
+| 案 | 説明 | 採用しない理由 |
 |------|------|-----------|
-| インタープリタのみ使用 | AOT が不要 | パフォーマンス不足、spawn ブロック並行サポートなし |
-| 純粋静的コンパイル | ランタイムスケジュールなし | 遅延スケジュールはランタイムで必要 |
-| 外部 LLVM runtime をリンク | LLVM の runtime を使用 | 追加の依存関係が必要 |
+| インタプリタのみ | AOT 不要 | 性能不足 |
+| 純粋静的コンパイル（ランタイムなし） | スケジューラをリンクしない | spawn ブロックにはランタイムタスクスケジューリングが必要 |
+| Cranelift バックエンド | より高速なコンパイル | ランタイム性能は LLVM に劣る、将来のオプションのバックエンドとして |
+| 外部 LLVM runtime のリンク | LLVM 内蔵ランタイムを使用 | 不要な依存を導入する |
+
+---
 
 ## 実装戦略
 
 ### フェーズ分け
 
-#### フェーズ 1：基本フレームワーク（1-2 日）
+#### フェーズ 1：基礎フレームワーク
+- [ ] inkwell 依存を追加
+- [ ] LLVM コンテキスト初期化実装（`context.rs`）
+- [ ] 基本型マッピング実装（`types.rs`）
 
-- [ ] `Cargo.toml` に inkwell 依存を追加
-- [ ] `src/backends/llvm/` モジュールを作成
-- [ ] LLVM コンテキスト初期化を実装
+#### フェーズ 2：関数翻訳
+- [ ] 関数宣言翻訳実装（`func.rs`）
+- [ ] 基本命令翻訳実装（算術、制御フロー、呼び出し）（`translator.rs`）
+- [ ] 値マッピング実装（`values.rs`）
 
-#### フェーズ 2：型マッピング（2-3 日）
+#### フェーズ 3：所有権型翻訳
+- [ ] `&T`/`&mut T` トークン実装（ゼロサイズ、コンパイル後消失）
+- [ ] `ref T` 実装（ファットポインタ `{ i32*, T* }`）
+- [ ] `?T` 実装（`{ i1, T }` タグ付き共用体）
+- [ ] `List(T)` 実装（`{ T*, i64, i64 }`）
+- [ ] Move セマンティクス追跡実装（デストラクタ挿入判定用）
 
-- [ ] `TypeMap` を実装：YaoXiang 型 → LLVM 型
-- [ ] 基本型：i32, i64, f32, f64, bool
-- [ ] 複合型：struct, array, tuple
-- [ ] 特殊型：Arc, ref, Option
+#### フェーズ 4：spawn ブロックコード生成
+- [ ] `spawn_placement.rs` の解析結果を消費
+- [ ] 直接子式 → タスク関数生成
+- [ ] 依存タスクのスケジューリングコード生成
+- [ ] リソース競合の直列化
+- [ ] spawn for 展開
 
-#### フェーズ 3：命令翻訳（3-5 日）
+#### フェーズ 5：FFI コード生成
+- [ ] `native()` → `declare external`（`ffi.rs`）
+- [ ] 引数マーシャリング / 戻り値アンマーシャリング
+- [ ] 不透明型レイアウト（単一フィールド最適化を含む）
+- [ ] `?T` null ポインタ最適化（FFI 専用）
 
-- [ ] `codegen_instruction()` を実装
-- [ ] 算術命令：add, sub, mul, div
-- [ ] 制御フロー：jmp, jmp_if, ret
-- [ ] 関数呼び出し：call, call_virt, call_dyn
+#### フェーズ 6：デストラクタコード生成
+- [ ] `.drop` バインディング識別
+- [ ] スコープ終了クリーンアップ挿入（逆順）（`drop.rs`）
+- [ ] 早期 return パスのクリーンアップ
+- [ ] `?` エラー伝播パスのクリーンアップ
 
-#### フェーズ 4：DAG 収集（2-3 日）
-
-- [ ] コード生成時に spawn ブロック内の DAG 情報を収集
-- [ ] spawn ブロック内の関数依存関係を記録
-- [ ] 副作用推論（@IO / @Pure）
-- [ ] spawn ブロック内 DAG メタデータを生成
-
-#### フェーズ 5：ランタイムライブラリ（3-5 日）
-
-- [ ] 遅延スケジュールを実装
-- [ ] DAG スケジューラを実装
-- [ ] 粒度制御を実装
-- [ ] ARC ランタイムを実装
-
-#### フェーズ 6：統合とテスト（2-3 日）
-
-- [ ] ランタイムライブラリをリンク
-- [ ] エンドツーエンドテスト
-- [ ] パフォーマンスベンチマーク
+#### フェーズ 7：ランタイムライブラリリンク
+- [ ] `runtime_task_spawn` / `runtime_task_wait_all` 等のランタイム関数実装
+- [ ] ランタイム静的ライブラリをリンク
+- [ ] エンドツーエンド統合テスト
 
 ### 依存関係
 
-- RFC-024：spawn ブロックベースの並行モデル（承認済み）
-- RFC-008：Runtime 並行モデル（承認済み）
-- RFC-009：所有権モデル（承認済み）
+- RFC-024（spawn ブロック並行）→ フェーズ 4 の入力
+- RFC-009 v9（所有権）→ フェーズ 3、6 の入力
+- RFC-008（ランタイムアーキテクチャ）→ フェーズ 7 の入力
+- RFC-026（FFI 機構）→ フェーズ 5 の入力
 
-### リスク
+---
 
-1. **LLVM 統合複雑度**：inkwell API の深い理解が必要
-2. **スケジューラと AOT コードの統合**：インターフェースを精心に設計する必要
-3. **ABI 互換性**：インタープリタランタイムとの ABI 互換性を確保する必要
-
-## 関連作業
+## 関連研究
 
 ### Lazy Task Creation (1990)[^1]
 
@@ -625,10 +726,10 @@ pub trait DAGScheduler: Send + Sync {
 |------|------|
 | 機関 | MIT |
 | 著者 | James R. Larus, Robert H. Halstead Jr. |
-| コア | 遅延で子タスクを作成、需要に応じて作成 |
-| 参考価値 | 技術的基盤、遅延スケジュール概念の起源 |
+| 核心 | 子タスクの遅延作成、オンデマンド作成 |
+| 参考価値 | spawn ブロック内タスクのオンデマンドスケジューリングの理論的基礎 |
 
-**コアアイデア**：タスクを即座に作成するのではなく、遅延作成する。親タスクが子タスクの値を必要とするときにだけ、子タスクを作成する。これは細粒度並行タスクのパフォーマンスオーバーヘッド問題を解決する[^1]。
+**核心思想**：タスクを即時作成せず、遅延作成する。親タスクが子タスクの値を必要とした時点で子タスクを作成する。これは細粒度並列タスクの性能オーバーヘッド問題を解決する[^1]。YaoXiang の spawn ブロックスケジューリングはこの思想を参考としている — タスクはコンパイル時に識別されるが、ランタイムでスレッドプールにオンデマンドでディスパッチされる。
 
 ### Lazy Scheduling (2014)[^2]
 
@@ -636,223 +737,100 @@ pub trait DAGScheduler: Send + Sync {
 |------|------|
 | 機関 | University of Maryland |
 | 著者 | Tzannes, Caragea |
-| コア | ランタイム自适应スケジュール、追加状態なし |
-| 参考価値 | スケジューラ設計、自適応粒度制御 |
-
-**コアアイデア**：「遅延実行」を通じて粒度を自動的に制御し、複雑な状態を維持する必要がない。システムが忙しい時はタスクが自動的にマージされ、暇な時は自動的に分割される[^2]。
+| 核心 | ランタイム適応スケジューリング、追加状態なし |
+| 参考価値 | Full Runtime WorkStealing スケジューラ設計の参考 |
 
 ### SISAL 言語[^3]
 
 | 属性 | 説明 |
 |------|------|
 | 機関 | Lawrence Livermore National Laboratory (LLNL) |
-| コア | 単一代入言語、Dataflow グラフ、暗黙の並行 |
-| 参考価値 | 可行性の証明、Fortran に匹敵するパフォーマンス |
+| 核心 | 単一代入言語、Dataflow グラフ、暗黙的並列 |
+| 参考価値 | Dataflow モデルの産業レベル応用での実現可能性の証明 |
 
-**コア貢献**：SISAL は Dataflow モデルがインダストリアルレベルのアプリケーションで Fortran に匹敵するパフォーマンスを達成できることを証明した[^3]。
+**重要な違い**：SISAL の並列性は**暗黙的** — 言語は単一代入セマンティクスで、コンパイラが全プログラムのデータ依存グラフを自動解析して並列性を決定する。YaoXiang の並列性は**明示的** — ユーザが `spawn {}` ブロックで並列領域をマークし、コンパイラは spawn ブロック内でのみ依存を解析する。これは SISAL の全プログラム解析の複雑さを回避しつつ、ユーザの並列挙動の制御を保持する。
 
 ### Mul-T 並列 Scheme[^4]
 
 | 属性 | 説明 |
 |------|------|
 | 機関 | MIT |
-| コア | Future 構築、Lazy Task Creation 実装 |
-| 参考価値 | 具体的な実装の参考 |
-
-**コアメカニズム**：
-```scheme
-;; Multilisp / Mul-T 構文
-(let ((a (future compute-a))      ;; 即座に future を返す
-      (b (future compute-b)))      ;; 即座に future を返す
-  (join a b))                      ;; 完了を待機
-```
+| 核心 | Future 構造、Lazy Task Creation 実装 |
+| 参考価値 | 具体的実装の参考 |
 
 ### 比較まとめ
 
-| 技術 | 遅延作成 | DAG 解析 | 副作用処理 | 所有権 |
-|------|----------|----------|------------|--------|
-| Lazy Task Creation[^1] | ✅ | ❌ | ❌ | N/A |
-| Lazy Scheduling[^2] | ✅ | ❌ | ❌ | N/A |
-| SISAL[^3] | ✅ | ✅ (グローバル) | N/A (単一代入) | N/A |
-| Mul-T[^4] | ✅ | ❌ | ❌ | N/A |
-| **YaoXiang** | ✅ | ✅ (spawn ブロック内) | ✅ (暗黙) | ✅ (ARC) |
+| 技術 | 遅延作成 | 並列マーク | 解析範囲 | 所有権 |
+|------|----------|----------|----------|--------|
+| Lazy Task Creation[^1] | ✅ | 暗黙 | 全プログラム | N/A |
+| Lazy Scheduling[^2] | ✅ | 暗黙 | 全プログラム | N/A |
+| SISAL[^3] | ✅ | 暗黙（単一代入） | 全プログラム | N/A |
+| Mul-T[^4] | ✅ | 明示（future） | 呼び出し点 | N/A |
+| **YaoXiang** | ✅ | **明示（spawn ブロック）** | **spawn ブロック内** | **✅（Move + トークン + ref）** |
 
-**YaoXiang のイノベーション**：モダンな言語機能（所有権 + 暗黙の副作用）を使用して従来設計を簡素化し、DAG を spawn ブロック内に制約して複雑度を低下。
-
-## 従来自動並行化手法との比較
-
-### 従来コンパイラ：ループレベル並列化
-
-商用コンパイラ（Intel Fortran、Oracle Fortran）は**ループレベル自動並列化**を採用[^5]：
-
-**コアフロー**：
-```
-1. 並行化可能なループを識別
-2. ループ内の配列アクセスに対して依存関係解析を実行
-3. ループ反復間に依存があるかを決定
-4. 依存がない場合、マルチスレッドコードを生成
-```
-
-**依存解析技術**：
-
-| 技術 | 説明 |
-|------|------|
-| **データ依存** | 2つのアクセスが同じメモリ位置にアクセスするか |
-| **Use-Def** | 変数の定義と使用の関係 |
-| **エイリアス解析** | ポインタが同じメモリを指しているか |
-
-**ループが並列化可能な条件**：
-```fortran
-! 並行化可能
-DO I = 1, N
-  A(I) = C(I)
-END DO
-
-! B(I) + は並列化不可（前の反復に依存）
-DO I = 2, N
-  A(I) = A(I-1) + B(I)
-END DO
-```
-
-### Haskell：Spark メカニズム
-
-GHC (Glasgow Haskell Compiler) は**Spark メカニズム**を使用して純粋関数の並列化を実現[^6]：
-
-```haskell
--- rpar: 並行実行、spark を作成
--- rseq: 直列実行、完了を待機
-
-example = do
-  a <- rpar (f x)   -- spark を作成、f x を並行実行
-  b <- rpar (g y)   -- spark を作成、g y を並行実行
-  rseq a            -- a の完了を待機
-  rseq b            -- b の完了を待機
-  return (a, b)
-```
-
-**Spark プールメカニズム**：
-- プールから spark を取り出し、空いている処理コアに分配
-- spark が使用されない場合（結果を待つ人がいない）、GC で回収される
-- これにより粒度問題を解決：小さすぎる spark は破棄される
-
-### Clean 言語：一意性型
-
-Clean 言語は**一意性型（Uniqueness Types）**を通じて並列安全性を実現[^7]：
-
-```clean
--- *Array は一意性を表す、安全に変更可能
-modify :: *Array Int -> *Array Int
-```
-
-**コアアイデア**：値が一意に参照されている場合、並行環境で安全に修改できる。他の参照が中間状態を見ることがないため。
-
-### プログラムスライシングと依存グラフ
-
-**プログラム依存グラフ (PDG)** は並列性検出の基盤：
-
-```
-ノード：文
-エッジ：データ依存 + 制御依存
-
-並列性検出：
-  2つのノード間に到達可能なパスがない場合 → 並行化可能
-```
-
-### 総合比較
-
-| 方法 | 依存解析 | 粒度 | 副作用処理 | 典型シナリオ |
-|------|----------|------|------------|----------|
-| Intel/Oracle Fortran[^5] | 複雑な配列解析 | ループ反復 | N/A | 科学計算 |
-| GHC Spark[^6] | 純粋関数の仮定 | 式 | N/A | 関数型プログラミング |
-| Clean[^7] | 一意性型 | グラフ書き換え | N/A | 関数型プログラミング |
-| **YaoXiang** | 所有権で保証 | 関数呼び出し | 暗黙推論 | 汎用 |
+**YaoXiang の革新点**：並列マークを「各関数呼び出し」（future）から「構造化ブロック」（spawn）へと昇格させた。ユーザは通常コードを書き、並列が必要な箇所に spawn ブロックを置く。解析範囲は spawn ブロック内に制約され、コンパイル効率が高く、振る舞いが制御可能。
 
 ---
 
 ## 付録
 
-### 付録 A：Rust async との比較詳細
+### 付録 A：Rust async との比較
 
 | 特性 | Rust async | YaoXiang LLVM AOT |
 |------|-----------|-------------------|
-| コンパイル成果物 | 状態機械 + マシンコード | マシンコード + DAG |
-| ランタイム | tokio | DAG Scheduler |
-| スケジュールタイミング | コンパイル時に await ポイントを確定 | ランタイムで需要に応じてスケジュール（spawn ブロック内） |
-| 並行制御 | 状態機械の状態 | DAG 依存エッジ |
-| カラー関数 | async の伝染 | **関数着色なし、spawn ブロック内並行** |
-| 注釈 | async/await | なし（spawn ブロックが唯一の並行プリミティブ） |
+| コンパイル成果物 | ステートマシン + マシンコード | マシンコード + spawn タスクメタデータ |
+| ランタイム | tokio | 静的リンクスケジューラ（~200-500KB） |
+| 並行マーク | async/await キーワード | `spawn { }` ブロック |
+| タスク作成 | コンパイル時にステートマシン生成 | コンパイル時に直接子式を識別 → タスク関数 |
+| カラー関数 | async 感染 | **関数カラーリングなし** |
+| 同期待機 | `.await` | spawn ブロックが自動同期ブロッキング |
+| メモリ管理 | GC（ランタイム） | **RAII（決定論的）** |
+| 共有機構 | `Arc::new()` + 手動 Weak | **`ref` キーワード（コンパイラが Rc/Arc を自動選択）** |
 
-### 付録 B：スケジューラ最適化例
+### 付録 B：設計決定記録
 
-**シナリオ 1：スケジューラが実行のマージ 가능を検出**
-
-```
-元の DAG:
-  compute_a() ──┐
-  compute_b() ──┼──→ compute_c()
-
-スケジューラ最適化後:
-  compute_a + compute_b を単一タスクにマージ
-  → スケジュールオーバーヘッドを削減
-```
-
-**シナリオ 2：依存が使用されていない**
-
-```
-a = expensive_compute()  // 計算済み
-b = other_thing()        // a は不要
-print(b)                 // b を直接返す、a をスキップ
-```
-
-### 付録 C：設計議論記録
-
-| 意思決定 | 決定 | 日付 |
+| 決定 | 内容 | 日付 |
 |------|------|------|
-| LLVM AOT を採用 | 直接 Codegen、過度な抽象化なし | 2026-02-15 |
-| DAG スコープ | spawn ブロック内、spawn ブロックをまたがない | 2026-06-05 |
-| 実行モデル | **ボottomアップ**：結果から逆方向に依存関係を解析、リーフを並行実行 | 2026-03-10 |
-| 孤立 DAG | コンシューマのないノードは独立して並行実行 | 2026-03-10 |
-| 無限ループ | バックグラウンド DAG、スケジューラがスライス実行 | 2026-03-10 |
-| 副作用処理 | 暗黙 Effect System、ユーザーは認識不要 | 2026-02-15 |
-| 粒度制御 | 並行数制限 + 自適応 | 2026-02-16 |
-| 論文引用 | Lazy Task Creation などを追加 | 2026-02-16 |
-| 並行モデルとの整合 | RFC-024 spawn ブロック並行モデルと整合、旧注釈を削除 | 2026-06-05 |
+| LLVM AOT 採用 | 直接 Codegen、過度な抽象化なし | 2026-02-15 |
+| 並行モデルの整合 | RFC-024 spawn ブロック直接子式モデルに整合 | 2026-06-10 |
+| DAG 解析範囲 | spawn ブロック内、spawn ブロックを跨がない（RFC-024 に整合） | 2026-06-05 |
+| 所有権モデルの整合 | RFC-009 v9 に整合：`&T`/`&mut T` トークン + `ref` キーワード | 2026-06-10 |
+| デュアルバックエンドモデル | VM（開発）+ LLVM（本番）、RFC-008 に整合 | 2026-05-11 |
+| スケジューラ形態 | 静的ライブラリを exe にリンク、~200-500KB、GC なし | 2026-05-11 |
+| FFI コード生成 | RFC-026 統合：`native()` declare + マーシャリング | 2026-06-10 |
+| デストラクタ | `.drop` → RAII クリーンアップ挿入、RFC-026 §7 に整合 | 2026-06-10 |
+| 副作用処理 | `@IO`/`@Pure` 推論を削除、RFC-024 リソース型に置換 | 2026-06-10 |
+| リフレクションメタデータ | exe の .reflect セクションにコンパイル、mmap でオンデマンドロード | 2026-05-11 |
+| 論文引用 | Lazy Task Creation 等を保持、YaoXiang との違いを明示 | 2026-02-16 |
 
 ---
 
 ## 参考文献
 
-[^1]: Larus, J. R., & Halstead, R. H. (1990). *Lazy Task Creation: A Technique for Increasing the Granularity of Parallel Programs*. MIT. Retrieved from https://people.csail.mit.edu/riastradh/t/halstead90lazy-task.pdf
+[^1]: Larus, J. R., & Halstead, R. H. (1990). *Lazy Task Creation: A Technique for Increasing the Granularity of Parallel Programs*. MIT.
 
-[^2]: Tzannes, A., & Caragea, G. (2014). *Lazy Scheduling: A Runtime Adaptive Scheduler for Declarative Parallelism*. University of Maryland. Retrieved from https://user.eng.umd.edu/~barua/tzannes-TOPLAS-2014.pdf
+[^2]: Tzannes, A., & Caragea, G. (2014). *Lazy Scheduling: A Runtime Adaptive Scheduler for Declarative Parallelism*. University of Maryland.
 
-[^3]: Feo, J. T., et al. (1990). *A report on the SISAL language project*. Lawrence Livermore National Laboratory. Retrieved from https://www.sciencedirect.com/science/article/abs/pii/074373159090035N
+[^3]: Feo, J. T., et al. (1990). *A report on the SISAL language project*. Lawrence Livermore National Laboratory.
 
-[^4]: Mohr, E., et al. (1991). *Mul-T: A high-performance parallel lisp*. MIT. Retrieved from https://link.springer.com/content/pdf/10.1007/bfb0024163.pdf
+[^4]: Mohr, E., et al. (1991). *Mul-T: A high-performance parallel lisp*. MIT.
 
-[^5]: Intel Corporation. *Automatic Parallelization with Intel Compilers*. Retrieved from https://www.intel.com/content/www/us/en/developer/articles/technical/automatic-parallelization-with-intel-compilers.html
-
-[^6]: Marlow, S. (2010). *Parallel and Concurrent Programming in Haskell*. Retrieved from https://www.cse.chalmers.se/edu/year/2015/course/pfp/Papers/strategies-tutorial-v2.pdf
-
-[^7]: Plasmeijer, R., & van Eekelen, M. (2011). *Clean Language Documentation*. University of Nijmegen. Retrieved from https://clean.cs.ru.nl/Documentation
-
-- [Rust async book](https://rust-lang.github.io/async-book/)
-- [inkwell LLVM bindings](https://cranelift.dev/)
-- [tokio ランタイム設計](https://tokio.rs/)
-- [RFC-024: spawn ブロックベースの並行モデル](./accepted/024-concurrency-model.md)
-- [RFC-008: Runtime 並行モデル](./accepted/008-runtime-concurrency-model.md)
-- [RFC-009: 所有権モデル](./accepted/009-ownership-model.md)
-- [Implicit Parallelism - Wikipedia](https://en.wikipedia.org/wiki/Implicit_parallelism)
+- [inkwell LLVM bindings](https://github.com/TheDan64/inkwell)
+- [RFC-024：spawn ブロックベースの並行モデル](../accepted/024-concurrency-model.md)
+- [RFC-008：Runtime 並行モデルとスケジューラ疎結合設計](../accepted/008-runtime-concurrency-model.md)
+- [RFC-009：所有権モデル設計](../accepted/009-ownership-model.md)
+- [RFC-026：FFI コア機構](./026-ffi-core-mechanism.md)
 
 ---
 
-## ライフサイクルと行き先
+## ライフサイクルと帰趣
 
-| 状態 | 場所 | 説明 |
+| 状態 | 位置 | 説明 |
 |------|------|------|
-| **草案** | `docs/design/rfc/` | 作成者草案、レビュー提出待ち |
-| **レビュー中** | `docs/design/rfc/` | コミュニティ議論とフィードバックを募集中 |
-| **承認済み** | `docs/design/rfc/accepted/` | 正式設計ドキュメントとして採用 |
-| **拒否済み** | `docs/design/rfc/` | RFC ディレクトリに保持 |
+| **ドラフト** | `docs/design/rfc/` | 著者の草稿、レビュー提出待ち |
+| **レビュー中** | `docs/design/rfc/review/` | コミュニティの議論とフィードバックを公開 |
+| **承認済み** | `docs/design/rfc/accepted/` | 正式な設計文書になる |
+| **拒否** | `docs/design/rfc/` | RFC ディレクトリに保持 |
 
-> 現在の状態：**レビュー中** — RFC-024 spawn ブロック並行モデルと整合済み
+> 現在の状態：**レビュー中** — RFC-024 spawn ブロック並行モデル、RFC-009 v9 所有権モデル、RFC-026 FFI 機構に整合済み
+```
