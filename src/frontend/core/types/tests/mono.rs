@@ -3,9 +3,9 @@
 //! §3.2-§3.17: From<ast::Type> 转换 — 覆盖所有 AST 类型到 MonoType 的转换路径
 //! + 补充 expand_type 各类容器变体的测试
 
-use crate::frontend::core::types::base::{MonoType, PolyType, StructType, TypeVar};
+use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::frontend::core::parser::ast;
-use crate::frontend::core::types::base::EnumType;
+use crate::frontend::core::types::EnumType;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -315,7 +315,7 @@ fn test_get_ast_type_universe_level_nested() {
             }],
         }],
     };
-    let level = crate::frontend::core::types::base::get_ast_type_universe_level(&t);
+    let level = crate::frontend::core::types::get_ast_type_universe_level(&t);
     assert_eq!(level, 2);
 }
 
@@ -326,7 +326,7 @@ fn test_get_ast_type_universe_level_plain() {
         span: Span::dummy(),
     };
     assert_eq!(
-        crate::frontend::core::types::base::get_ast_type_universe_level(&t),
+        crate::frontend::core::types::get_ast_type_universe_level(&t),
         0
     );
 }
@@ -334,7 +334,7 @@ fn test_get_ast_type_universe_level_plain() {
 #[test]
 fn test_calculate_meta_type_level_args() {
     use ast::Type;
-    assert!(crate::frontend::core::types::base::calculate_meta_type_level(&[]).is_type0());
+    assert!(crate::frontend::core::types::calculate_meta_type_level(&[]).is_type0());
     let args = vec![Type::MetaType {
         name_span: Span::dummy(),
         args: vec![Type::Name {
@@ -343,7 +343,7 @@ fn test_calculate_meta_type_level_args() {
         }],
     }];
     assert_eq!(
-        crate::frontend::core::types::base::calculate_meta_type_level(&args).level,
+        crate::frontend::core::types::calculate_meta_type_level(&args).level,
         "2"
     );
 }
@@ -467,7 +467,7 @@ fn test_enum_type_partial_eq() {
 
 #[test]
 fn test_universe_level_cmp() {
-    use crate::frontend::core::types::base::UniverseLevel;
+    use crate::frontend::core::types::UniverseLevel;
     assert_eq!(
         UniverseLevel::type0().cmp_level(&UniverseLevel::type1()),
         std::cmp::Ordering::Less

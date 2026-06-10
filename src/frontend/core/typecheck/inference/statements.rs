@@ -10,7 +10,7 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use std::collections::HashMap;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{Block, Expr, Param, Stmt};
 
 use super::scope::ScopeManager;
@@ -273,7 +273,7 @@ impl StatementChecker {
             fields.push((export.name.clone(), self.export_type(export)));
         }
 
-        MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+        MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: name.to_string(),
             fields,
             methods: HashMap::new(),
@@ -656,7 +656,7 @@ impl StatementChecker {
                         }
                         let field_count = fields.len();
                         let struct_ty =
-                            MonoType::Struct(crate::frontend::core::types::base::StructType {
+                            MonoType::Struct(crate::frontend::core::types::StructType {
                                 name: name.to_string(),
                                 fields,
                                 methods: HashMap::new(),

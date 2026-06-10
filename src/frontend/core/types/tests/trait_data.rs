@@ -3,7 +3,7 @@
 //! §3.5: 接口类型
 //! TraitTable 的添加、查询、方法查找、实现管理
 
-use crate::frontend::core::types::base::{
+use crate::frontend::core::types::{
     MonoType, TraitBound, TraitDefinition, TraitImplementation, TraitMethodSignature, TraitTable,
 };
 use std::collections::HashMap;

@@ -4,8 +4,8 @@
 //! RFC-011 §1: 基础泛型
 
 use crate::frontend::core::typecheck::inference::generics::GenericInferrer;
-use crate::frontend::core::types::base::mono::StructType;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::mono::StructType;
+use crate::frontend::core::types::MonoType;
 use crate::util::span::Span;
 use std::collections::HashMap;
 

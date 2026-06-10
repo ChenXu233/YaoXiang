@@ -7,7 +7,7 @@
 
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::overload;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::{HashMap, HashSet};
@@ -246,14 +246,12 @@ impl<'a> ExpressionInferrer<'a> {
     pub fn assign_var(
         &mut self,
         name: &str,
-        new_ty: crate::frontend::core::types::base::MonoType,
+        new_ty: crate::frontend::core::types::MonoType,
     ) {
         // 直接使用右侧表达式的类型更新变量
         // 注意：new_ty 已经是解析后的正确类型（如 List<Int>），不需要额外 resolve
-        self.scope.update_var(
-            name,
-            crate::frontend::core::types::base::PolyType::mono(new_ty),
-        );
+        self.scope
+            .update_var(name, crate::frontend::core::types::PolyType::mono(new_ty));
     }
 
     /// 退出循环作用域时，将内部声明的变量提升到外层作用域
@@ -514,7 +512,7 @@ impl<'a> ExpressionInferrer<'a> {
                     .iter()
                     .map(|(n, t)| (n.clone(), Self::replace_type_refs_with_vars(t, subst)))
                     .collect();
-                MonoType::Struct(crate::frontend::core::types::base::StructType {
+                MonoType::Struct(crate::frontend::core::types::StructType {
                     name: s.name.clone(),
                     fields: new_fields,
                     methods: s.methods.clone(),
@@ -567,7 +565,7 @@ impl<'a> ExpressionInferrer<'a> {
         ty: &MonoType,
         subst: &HashMap<usize, MonoType>,
     ) -> MonoType {
-        use crate::frontend::core::types::base::substitute::{Substituter, Substitution};
+        use crate::frontend::core::types::substitute::{Substituter, Substitution};
         let mut sub = Substitution::new();
         for (idx, replacement) in subst {
             sub.insert(*idx, replacement.clone());

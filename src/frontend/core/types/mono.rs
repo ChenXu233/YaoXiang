@@ -7,8 +7,8 @@
 //! - UniverseLevel: RFC-010 类型宇宙层级
 
 use crate::frontend::core::parser::ast;
-use super::var::TypeVar;
-use super::const_data::{ConstVarDef, ConstValue};
+use crate::frontend::core::types::var::TypeVar;
+use crate::frontend::core::types::const_data::{ConstVarDef, ConstValue};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;

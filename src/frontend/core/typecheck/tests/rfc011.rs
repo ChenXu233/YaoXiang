@@ -162,7 +162,7 @@ fn test_rfc011_type_description_resolves_return_type() {
     let mono = result_ty.body.clone();
     // 展开后应为 Int(64)，而非 TypeVar
     assert!(
-        matches!(mono, crate::frontend::core::types::base::MonoType::Int(_)),
+        matches!(mono, crate::frontend::core::types::MonoType::Int(_)),
         "id(42) should infer as Int, got: {:?}",
         mono
     );

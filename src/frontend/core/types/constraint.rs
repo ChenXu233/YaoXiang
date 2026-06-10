@@ -3,7 +3,7 @@
 //! 实现类型系统中的约束：
 //! - TypeConstraint: 类型约束
 
-use super::mono::MonoType;
+use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
 
 /// 类型约束

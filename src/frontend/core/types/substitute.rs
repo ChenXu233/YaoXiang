@@ -2,7 +2,7 @@
 //!
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
-use crate::frontend::core::types::base::{MonoType, TypeVar, StructType, EnumType};
+use crate::frontend::core::types::{MonoType, TypeVar, StructType, EnumType};
 use std::collections::HashMap;
 
 /// 类型替换映射（使用类型变量索引）
@@ -345,7 +345,7 @@ mod tests {
 #[cfg(test)]
 mod universe_level_tests {
     use super::*;
-    use crate::frontend::core::types::base::{
+    use crate::frontend::core::types::{
         UniverseLevel, calculate_meta_type_level, get_ast_type_universe_level,
     };
 

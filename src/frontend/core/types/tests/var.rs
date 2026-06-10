@@ -3,7 +3,7 @@
 //! TypeVar: 类型推断中的变量标识
 //! ConstVar: Const泛型参数变量标识
 
-use crate::frontend::core::types::base::{ConstVar, TypeVar};
+use crate::frontend::core::types::{ConstVar, TypeVar};
 
 #[test]
 fn test_type_var_new_and_index() {

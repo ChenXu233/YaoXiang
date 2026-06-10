@@ -6,7 +6,7 @@
 //! RFC-011: 泛型系统设计
 
 use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::parser::ast::{Module, Stmt, Expr, Type as AstType};
 use crate::util::span::Span;
 

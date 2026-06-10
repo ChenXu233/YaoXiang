@@ -3,7 +3,7 @@
 //! §3: 类型分类与错误定义
 //! TypeConstraintError 的创建、Display 格式
 
-use crate::frontend::core::types::base::TypeConstraintError;
+use crate::frontend::core::types::TypeConstraintError;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 

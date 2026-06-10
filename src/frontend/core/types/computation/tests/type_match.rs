@@ -1,4 +1,4 @@
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use crate::frontend::core::types::computation::type_match::{
     MatchArm, MatchBinding, MatchPattern, MatchType, PatternBuilder, PatternMatcher, nat_examples,
 };

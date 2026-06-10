@@ -91,7 +91,7 @@ impl Default for ReductionConfig {
 /// - 类型表达式求值
 /// - 条件类型求解
 /// - 类型级函数应用
-use crate::frontend::core::types::base::{MonoType, TypeVar, Substitution, Substituter};
+use crate::frontend::core::types::{MonoType, TypeVar, Substitution, Substituter};
 use std::collections::HashMap;
 
 /// 类型计算结果

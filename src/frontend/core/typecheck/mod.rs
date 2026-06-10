@@ -60,7 +60,7 @@ mod tests;
 // ============ 类型导出 ============
 
 // 使用 core 层的类型系统（显式导出以避免 ambiguous glob re-exports）
-pub use crate::frontend::core::types::base::{
+pub use crate::frontend::core::types::{
     MonoType, PolyType, TypeVar, TypeBinding, StructType, EnumType, TypeConstraint,
     TypeConstraintSolver, TypeConstraintError, ConstValue, ConstExpr, ConstKind, ConstVarDef,
     UniverseLevel,

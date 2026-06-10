@@ -7,7 +7,7 @@
 //! - 比较运算: Eq, Neq, Lt, Gt, Lte, Gte
 //! - 逻辑运算: And, Or, Not
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 // ============================================================================
 // 公共类型

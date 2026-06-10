@@ -9,8 +9,8 @@ use super::super::proof::verdict::ProofResult;
 #[allow(unused_variables)]
 pub fn check_type_equivalence(
     _ctx: &super::super::proof::context::ProofContext<'_>,
-    _lhs: &crate::frontend::core::types::base::mono::MonoType,
-    _rhs: &crate::frontend::core::types::base::mono::MonoType,
+    _lhs: &crate::frontend::core::types::mono::MonoType,
+    _rhs: &crate::frontend::core::types::mono::MonoType,
 ) -> ProofResult {
     ProofResult::Proved
 }

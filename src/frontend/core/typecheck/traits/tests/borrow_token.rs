@@ -7,8 +7,8 @@
 //! - Dup 蕴含 Clone（RFC-011 §2.4）
 
 use crate::frontend::core::typecheck::traits::solver::{TraitConstraint, TraitSolver};
-use crate::frontend::core::types::base::MonoType;
-use crate::frontend::core::types::base::trait_data::TraitTable;
+use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::trait_data::TraitTable;
 
 /// 创建预配置的 TraitSolver，设置空 TraitTable。
 fn make_solver() -> TraitSolver {

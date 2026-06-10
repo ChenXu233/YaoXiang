@@ -13,7 +13,7 @@
 //! }
 //! ```
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use super::{TypeLevelError, TypeLevelResult};
 
 /// 类型级模式
@@ -412,7 +412,7 @@ impl MatchPattern {
 ///
 /// 提供流式 API 构建复杂模式：
 /// ```rust,ignore
-/// use crate::frontend::core::types::base::MonoType;
+/// use crate::frontend::core::types::MonoType;
 ///
 /// let pattern = PatternBuilder::new()
 ///     .wildcard("x")

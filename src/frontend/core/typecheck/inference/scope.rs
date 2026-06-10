@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::frontend::core::types::base::PolyType;
+use crate::frontend::core::types::PolyType;
 use crate::util::span::Span;
 
 /// 作用域中存储的变量信息

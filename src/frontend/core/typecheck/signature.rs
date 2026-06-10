@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 
 use super::environment::TypeEnvironment;
 use crate::util::diagnostic::ErrorCodeDefinition;

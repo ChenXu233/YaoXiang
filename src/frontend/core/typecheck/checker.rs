@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::Module;
-use crate::frontend::core::types::base::{MonoType, PolyType};
+use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::typecheck::traits::auto_derive;
 use crate::frontend::core::types::computation::const_generics::{ConstFunction, ConstExpr};
 
@@ -324,10 +324,8 @@ impl TypeChecker {
         // 同时从 env.vars 收集非全局绑定（函数）的局部变量
         for (name, poly) in &self.env.vars {
             // 排除函数（函数名首字母小写或者是已知的函数）
-            let is_function = matches!(
-                poly.body,
-                crate::frontend::core::types::base::MonoType::Fn { .. }
-            );
+            let is_function =
+                matches!(poly.body, crate::frontend::core::types::MonoType::Fn { .. });
             if !is_function && !local_var_types.contains_key(name) {
                 local_var_types.insert(name.clone(), poly.body.clone());
             }
@@ -712,7 +710,7 @@ impl TypeChecker {
             };
             fields.push((field_name.clone(), field_ty));
         }
-        let module_ty = MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+        let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
             name: module_alias.to_string(),
             fields,
             methods: HashMap::new(),
@@ -752,15 +750,14 @@ impl TypeChecker {
                         fields.push((field_name.clone(), field_ty));
                     }
                 }
-                let module_ty =
-                    MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
-                        name: export.name.clone(),
-                        fields,
-                        methods: HashMap::new(),
-                        field_mutability: Vec::new(),
-                        field_has_default: Vec::new(),
-                        interfaces: vec![],
-                    });
+                let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
+                    name: export.name.clone(),
+                    fields,
+                    methods: HashMap::new(),
+                    field_mutability: Vec::new(),
+                    field_has_default: Vec::new(),
+                    interfaces: vec![],
+                });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
             }
             _ => {
@@ -833,7 +830,7 @@ impl TypeChecker {
         // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
         let poly = PolyType::mono(match &poly.body {
             MonoType::Struct(s) if s.name.is_empty() => {
-                MonoType::Struct(crate::frontend::core::types::base::mono::StructType {
+                MonoType::Struct(crate::frontend::core::types::mono::StructType {
                     name: name.to_string(),
                     fields: s.fields.clone(),
                     methods: s.methods.clone(),

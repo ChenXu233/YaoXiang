@@ -10,9 +10,7 @@
 //! §3.14: 交集类型统一 — 无序匹配
 //! §3.8: 泛型实例化
 
-use crate::frontend::core::types::base::{
-    MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar,
-};
+use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeConstraintSolver, TypeVar};
 use crate::util::span::Span;
 
 fn s() -> TypeConstraintSolver {
@@ -152,11 +150,11 @@ fn test_unify_struct_with_var_field() {
 #[test]
 fn test_unify_enum_same() {
     let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string(), "green".to_string(), "blue".to_string()],
     });
-    let b = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string(), "green".to_string(), "blue".to_string()],
     });
@@ -166,11 +164,11 @@ fn test_unify_enum_same() {
 #[test]
 fn test_unify_enum_different_name() {
     let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Color".to_string(),
         variants: vec!["red".to_string()],
     });
-    let b = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Status".to_string(),
         variants: vec!["red".to_string()],
     });
@@ -180,11 +178,11 @@ fn test_unify_enum_different_name() {
 #[test]
 fn test_unify_enum_different_variants() {
     let mut solver = s();
-    let a = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let a = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Opt".to_string(),
         variants: vec!["some".to_string(), "none".to_string()],
     });
-    let b = MonoType::Enum(crate::frontend::core::types::base::EnumType {
+    let b = MonoType::Enum(crate::frontend::core::types::EnumType {
         name: "Opt".to_string(),
         variants: vec!["some".to_string()],
     });
@@ -722,7 +720,7 @@ fn test_expand_type_through_all_containers() {
 
     // MetaType with var param
     let meta = MonoType::MetaType {
-        universe_level: crate::frontend::core::types::base::UniverseLevel::type0(),
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
         type_params: vec![MonoType::TypeVar(v)],
     };
     let m = solver.resolve_type(&meta);
@@ -811,7 +809,7 @@ fn test_contains_var_in_containers() {
     // Negative cases
     assert!(!solver.contains_var(&MonoType::Int(32), v));
     assert!(!solver.contains_var(
-        &MonoType::Enum(crate::frontend::core::types::base::EnumType {
+        &MonoType::Enum(crate::frontend::core::types::EnumType {
             name: "E".to_string(),
             variants: vec![],
         }),

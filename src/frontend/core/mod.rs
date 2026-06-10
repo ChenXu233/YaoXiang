@@ -10,4 +10,4 @@ pub use crate::frontend::core::parser::*;
 
 // Re-export commonly used items
 pub use lexer::tokenize;
-pub use types::base::MonoType;
+pub use types::MonoType;

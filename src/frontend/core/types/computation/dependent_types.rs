@@ -17,7 +17,7 @@
 //! }
 //! ```
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use std::collections::HashMap;
 
 /// 关联类型定义

@@ -12,4 +12,4 @@ pub use substitution::{Substituter, SubstitutionResult};
 pub use instantiate::{Instantiator, InstanceResult};
 
 pub use crate::util::diagnostic::Result;
-pub use crate::frontend::core::types::base::{MonoType, PolyType, TypeVar};
+pub use crate::frontend::core::types::{MonoType, PolyType, TypeVar};

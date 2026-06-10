@@ -4,7 +4,7 @@
 //! RFC-010: 统一类型语法
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
-use crate::frontend::core::types::base::{MonoType, PolyType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;

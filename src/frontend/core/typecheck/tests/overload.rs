@@ -4,7 +4,7 @@
 //! RFC-011 §6: 函数重载特化
 
 use crate::frontend::core::typecheck::overload::{OverloadCandidate, OverloadResolver};
-use crate::frontend::core::types::base::{MonoType, TypeVar};
+use crate::frontend::core::types::{MonoType, TypeVar};
 
 // ===================================================================
 // Happy path 测试

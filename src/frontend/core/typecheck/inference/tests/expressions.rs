@@ -6,7 +6,7 @@
 
 use crate::frontend::core::typecheck::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
-use crate::frontend::core::types::base::{MonoType, TypeConstraintSolver};
+use crate::frontend::core::types::{MonoType, TypeConstraintSolver};
 use crate::frontend::core::parser::ast::Expr;
 use crate::util::span::Span;
 

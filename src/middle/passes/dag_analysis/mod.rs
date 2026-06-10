@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::parser::ast::{BinOp, Expr, Stmt, StmtKind};
-use crate::frontend::core::types::base::{MonoType, TraitTable};
+use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::middle::core::ir::{ExecutionPlan, TaskGroup};
 
 /// spawn 块分析结果
@@ -597,7 +597,7 @@ mod tests {
     fn test_resource_aware_spawn_analysis() {
         // file 是 FilePath 类型（Resource），两个任务都使用 file → 串行
         let mut trait_table = TraitTable::default();
-        use crate::frontend::core::types::base::{TraitDefinition, TraitImplementation};
+        use crate::frontend::core::types::{TraitDefinition, TraitImplementation};
         trait_table.add_trait(TraitDefinition {
             name: "Resource".to_string(),
             methods: std::collections::HashMap::new(),

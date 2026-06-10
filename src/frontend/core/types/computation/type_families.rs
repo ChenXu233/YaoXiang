@@ -16,7 +16,7 @@
 //! type NatTwo = Succ(Succ(Zero))  // 二
 //! ```
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use super::TypeLevelResult;
 
 /// Bool 类型族的变体

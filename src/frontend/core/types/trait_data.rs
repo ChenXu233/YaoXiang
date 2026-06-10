@@ -4,7 +4,7 @@
 //! 求解器逻辑位于 `typecheck/traits/solver.rs`。
 
 use std::collections::HashMap;
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::mono::MonoType;
 
 /// Trait 方法签名
 #[derive(Debug, Clone)]

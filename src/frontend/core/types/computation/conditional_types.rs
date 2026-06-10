@@ -14,7 +14,7 @@
 //! type NonEmpty[T] = If[T != Void, T, Never]
 //! ```
 
-use crate::frontend::core::types::base::MonoType;
+use crate::frontend::core::types::MonoType;
 use super::{TypeLevelError, TypeLevelResult};
 
 /// 条件类型的布尔条件
