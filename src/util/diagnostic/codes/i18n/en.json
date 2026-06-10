@@ -769,6 +769,21 @@
         "template": "cannot evaluate constant expression: {reason}",
         "help": "Ensure the expression can be evaluated at compile time."
     },
+    "E4015": {
+        "title": "Loop may not terminate",
+        "template": "loop may not terminate: no strictly decreasing measure detected in the loop body",
+        "help": "Ensure the loop variable moves monotonically toward the termination condition, e.g. while i < n { i += 1 }."
+    },
+    "E4016": {
+        "title": "Recursion may not terminate",
+        "template": "recursion may not terminate: parameters of '{func}' do not strictly decrease in the recursive call",
+        "help": "Ensure the recursive call uses smaller arguments, e.g. factorial(n-1)."
+    },
+    "E4017": {
+        "title": "Measure not strictly decreasing",
+        "template": "measure '{measure}' does not strictly decrease on all loop paths",
+        "help": "Ensure the variable moves toward the termination condition in all branches of the loop body."
+    },
     "E5005": {
         "title": "Invalid module path",
         "template": "Invalid module path: '{path}'",
