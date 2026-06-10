@@ -1,865 +1,834 @@
-```markdown
 ---
 title: "RFC-018: LLVM AOT Compiler Design"
 status: "Under Review"
-author: "Chen Xu"
+author: "Chenxu"
 created: "2026-02-15"
-updated: "2026-06-05"
+updated: "2026-06-10 (aligned with RFC-024 spawn block concurrency model, RFC-009 v9 ownership model, RFC-026 FFI mechanism)"
 ---
 
 # RFC-018: LLVM AOT Compiler Design
 
 > **References**:
-> - [RFC-024: Concurrency Model Based on spawn Blocks](./accepted/024-concurrency-model.md)
-> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](./accepted/008-runtime-concurrency-model.md)
-> - [RFC-009: Ownership Model Design](./accepted/009-ownership-model.md)
+> - [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
+> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
+> - [RFC-026: FFI Core Mechanism](./026-ffi-core-mechanism.md)
+> - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
 
-## Abstract
+> **Deprecated**:
+> - Legacy "bottom-up automatic DAG analysis" model — replaced by the RFC-024 spawn block direct subexpression model
+> - `@IO`/`@Pure` implicit side-effect inference — replaced by the RFC-024 resource type mechanism
+> - `Arc(T)` type mapping — replaced by the RFC-009 v9 `ref` keyword
 
-This document designs the LLVM AOT compiler for YaoXiang language, with the goal of generating machine code + DAG metadata through ahead-of-time compilation, and the runtime performs DAG scheduling **within spawn blocks**, executing based on **bottom-up** dependency analysis.
+## Summary
 
-**Core Innovations**:
-- Not "generating a Future when encountering a function call", but **reverse analyzing dependencies from "where the result is needed"**
-- **Leaf nodes execute in parallel first**, dependency chains traverse upward sequentially
-- **Isolated DAGs execute independently in parallel**: nodes without consumers do not block the main flow
-- **Infinite loops as background DAGs**: Scheduler slices execution, no deadlock
-- **DAG analysis limited within spawn blocks**: Efficient compilation, controllable behavior
+This document designs the LLVM AOT (Ahead-of-Time) compiler for the YaoXiang language. The LLVM backend shares the same compilation frontend as the VM backend (interpreter), forming the dual-backend architecture defined in [RFC-008](../accepted/008-runtime-concurrency-model.md): the VM is used for development and debugging, while LLVM is used for production releases.
 
-This design is fundamentally different from the Rust async/await + tokio runtime model:
-- Rust: User writes `async fn`, compiler generates a state machine
-- YaoXiang: User writes ordinary functions, **compiler automatically analyzes DAG within spawn blocks**, scheduler executes bottom-up
+**Core Responsibilities**:
 
-Conforms to the spawn block concurrency model from RFC-024: Ordinary code executes sequentially, DAG scheduling parallelizes within spawn blocks.
+```
+Source Code → Frontend (shared) → IR → LLVM Codegen → .o → Link Scheduler Static Library → exe
+```
+
+The compiler translates YaoXiang source code into native machine code, where:
+
+| Language Feature | Compilation Strategy |
+|----------|----------|
+| Ordinary code | Sequential machine code, zero scheduling overhead |
+| `spawn { }` block | Direct subexpression → task dispatch + synchronous wait (aligned with [RFC-024](../accepted/024-concurrency-model.md)) |
+| `native("symbol")` | LLVM `declare external` + parameter marshalling (aligned with [RFC-026](./026-ffi-core-mechanism.md)) |
+| `.drop` destructor | RAII cleanup code insertion (aligned with [RFC-009](../accepted/009-ownership-model.md)) |
+| `&T` / `&mut T` tokens | Zero-sized types, disappear after compilation |
+| `ref T` shared | `{ refcount_ptr, data_ptr }` fat pointer, compiler automatically chooses Rc/Arc |
+
+**Relationship with RFC-024**: RFC-024 defines the **user semantics** of spawn blocks (direct subexpressions create tasks, synchronous blocking wait). This document defines **how these semantics are compiled into machine code**.
+
+**Relationship with RFC-026**: RFC-026 defines the **user syntax** for FFI (`native()`, `[0]` method binding, `.drop`). This document defines **how FFI calls generate LLVM IR**.
+
+---
 
 ## Motivation
 
 ### Why is an LLVM AOT Compiler Needed?
 
-Currently YaoXiang only has an interpreter as the execution backend, which has the following issues:
+Currently, YaoXiang has only the interpreter as its execution backend:
 
-| Issue | Impact |
-|-------|--------|
-| Performance bottleneck | Interpretive execution is 10-100x slower than machine code |
-| Complex deployment | Need to bundle interpreter and runtime |
-| Colored functions problem | Synchronous functions cannot call concurrent functions |
+| Problem | Impact |
+|------|------|
+| Performance bottleneck | Interpretation is 10-100x slower than machine code |
+| Deployment complexity | Requires carrying the interpreter and runtime |
+| Production environment | The interpreter is not suitable for performance-sensitive scenarios |
 
-### The Colored Functions Problem and spawn Block Concurrency
+### LLVM in the Dual-Backend Model
 
-**Traditional design**:
-- Synchronous functions (blue) → cannot call → concurrent functions (red)
-- Synchronous is the default, concurrency requires `spawn` annotation
-- Colors "spread": once concurrency is used, the entire call chain becomes concurrent
-
-**RFC-024 spawn block concurrency (goal)**:
-- Ordinary code executes sequentially, no function coloring
-- `spawn { ... }` block performs DAG analysis, executes in parallel
-- Caller blocks synchronously, no callbacks or `await`
-
-**Flipped design (RFC-018)**:
-- Ordinary code directly generates sequential machine code, no DAG overhead
-- Within spawn blocks, DAG dependencies are analyzed at compile time, executed bottom-up at runtime
-- Solves the colored functions problem: All functions are unified, no need to distinguish sync/concurrent
-
-### Core Innovation: Bottom-up Execution + DAG Within spawn Blocks
-
-The core innovation of this design is the **bottom-up execution model** (limited to within spawn blocks):
+[RFC-008](../accepted/008-runtime-concurrency-model.md) §6 defines the dual-backend architecture:
 
 ```
-Traditional calls (top-down):
-  call fetch(url) → execute → return result
-
-Bottom-up execution:
-  print(a) ← start from "where the result is needed"
-       ↑
-  fetch(url0) ← analyze dependencies, search backward
-
-  fetch(url1) ← isolated, executes in parallel independently
+                    ┌─────────────────────┐
+                    │  Compilation Frontend (unified)  │
+                    │  Lexer → Parser     │
+                    │  → TypeCheck        │
+                    │  → spawn analysis   │
+                    │  → escape analysis  │
+                    └──────────┬──────────┘
+                               │
+                  ┌────────────┴────────────┐
+                  ▼                         ▼
+      ┌───────────────────┐     ┌───────────────────┐
+      │  VM Backend (development) │  LLVM Backend (production)  │
+      │  IR → interpretation     │  IR → native code           │
+      │  step debugging          │  link scheduler static lib  │
+      │  rapid iteration         │  output .exe                │
+      └───────────────────┘     └───────────────────┘
 ```
 
-**Key differences**:
-- Not "generating a Future when encountering a function call"
-- But reverse analyzing dependencies from "where the final result is needed"
-- Nodes without consumers (isolated islands) are not executed or execute independently in parallel
-- Infinite loops as background DAGs, scheduler slices execution
+The two backends have **completely consistent behavior**—the only difference is the execution method. The same source code, the same type checking, the same spawn analysis results.
 
-### Comparison with Rust async
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Rust async Model                           │
-├─────────────────────────────────────────────────────────────────┤
-│  Compile-time: Generate state machine + machine code            │
-│  Runtime: tokio scheduler schedules based on state machine      │
-│  Features: await points determined at compile time, state       │
-│            machine manages execution                            │
-│  Granularity: Function level                                    │
-│  User experience: Need to write async/await keywords           │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                      YaoXiang LLVM AOT Model                    │
-├─────────────────────────────────────────────────────────────────┤
-│  Compile-time: Generate machine code + DAG metadata             │
-│  Runtime: DAG scheduler within spawn blocks, bottom-up exec     │
-│  Features: Reverse analyze dependencies from "where result is   │
-│            needed", leaf nodes execute in parallel              │
-│  Granularity: DAG within spawn block                            │
-│  User experience: Ordinary functions, automatic parallelism     │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### DAG Scheduler Within spawn Blocks
-
-```
-DAG view within a spawn block:
-
-        print(result) ─────────────────────────┐
-           │                                    │
-    ┌──────┴──────┐                             │
-    │             │                             │
-process(a)   process(b)                        │
-    │             │                             │
-compute(x)   compute(y)  ←── isolated DAG ─────┤
-    │                                           │
-fetch(url0)  fetch(url1)  fetch(url2)          │
-    (executed)                                   │
-
-Also has a background DAG (while True):
-    ┌─────────────────────────────────────────┐ │
-    │  while True:                            │ │
-    │      update_ui()                        │ │
-    │      fetch_new() ──→ process(data)      │ │
-    └─────────────────────────────────────────┘ │
-```
-
-**How the scheduler works**:
-```
-1. Reverse analyze from "final result":
-   print(result) → depends on process → depends on fetch
-
-2. Build DAG within spawn block:
-   - Leaf nodes: fetch (no dependencies)
-   - Internal nodes: process, compute
-   - Root node: print
-
-3. Execution:
-   - fetch executes in parallel
-   - process waits for fetch to complete
-   - print waits for process to complete
-   - isolated compute executes independently in parallel
-
-4. Skip already executed:
-   - If a node has already executed, subsequent nodes depending on it can reuse the result
-```
-
-### Infinite Loop Handling
-
-```
-Scenario 1: Single while/for (no scheduling overhead)
-─────────────────────────────────────────────────────────────
-main: () -> () = {
-    while True {
-        update_ui()
-        fetch_data()
-    }
-}
-→ Only one infinite loop
-→ Execute synchronously, no different from ordinary code
-
-Scenario 2: Multiple while loops (automatic slicing)
-─────────────────────────────────────────────────────────────
-main: () -> () = {
-    while True { update_ui() }      # background task 1
-    while True { network_poll() }  # background task 2
-    server_loop()                   # main task
-}
-→ 3 independent tasks
-→ Scheduler slices and switches
-→ True concurrency
-
-Adaptive scheduler:
-─────────────────────────────────────────────────────────────
-if task_count == 1:
-    Execute directly (synchronous)
-else:
-    Slice scheduling (concurrent)
-```
-
-**Background DAG handling**:
-```
-Main DAG (has end):
-    fetch → process → print → ends
-
-Background DAG (infinite loop):
-    while True → update_ui → fetch_new → process → back to start
-
-Scheduler:
-    - Main DAG ends after execution completes
-    - Background DAG runs forever, but scheduler executes in "slices"
-    - Won't get stuck in the loop
-```
+---
 
 ## Proposal
 
-### Core Design
+### 1. Compiler Architecture
+
+The LLVM backend sits at the final stage of the compilation pipeline, receiving IR from the frontend and generating native code:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Compile-time                                        │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐           │
-│  │ Parser  │→│DAG Analy│→│LLVM Code│→ machine   │
-│  └─────────┘  └─────────┘  │  gen    │   code    │
-│                            └─────────┘           │
-│                      ↓                           │
-│              Generates: DAG metadata              │
-└─────────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────────┐
-│  Runtime                                             │
-│  ┌─────────────────────────────────────────────┐ │
-│  │  DAG Scheduler Library                       │ │
-│  │  • Load machine code                         │ │
-│  │  • Read DAG metadata                         │ │
-│  │  • Lazy scheduling: suspend calls, exec on   │ │
-│  │    demand                                    │ │
-│  │  • Support parallel/sequential execution     │ │
-│  └─────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
+Source Code
+  → Lexer / Parser (frontend/core/)
+  → TypeCheck + spawn analysis (frontend/core/typecheck/)
+  → IR Generation (middle/core/ir_gen.rs)
+  → LLVM Codegen (middle/passes/codegen/llvm/)
+      ├── Type mapping: YaoXiang types → LLVM IR types
+      ├── Function translation: IR instructions → LLVM IR instructions
+      ├── spawn expansion: direct subexpressions → task functions + scheduling calls
+      ├── FFI expansion: native() calls → declare + marshalling
+      └── Destructor insertion: scope end → .drop() calls
+  → LLVM optimization + target code generation
+  → Link runtime static library → executable
 ```
 
-### Bottom-up Execution Flow
+### 2. Compilation Process
+
+```
+Phase 1: Frontend (shared with VM backend)
+  - Parsing, type checking, spawn block analysis, escape analysis
+  - Output: type-annotated IR
+
+Phase 2: LLVM IR Generation
+  - Type mapping, function declaration, instruction translation
+  - Output: LLVM Module
+
+Phase 3: LLVM Optimization
+  - Standard LLVM optimization pipeline (O0/O1/O2/O3)
+  - Inlining, constant folding, dead code elimination
+
+Phase 4: Target Code Generation
+  - LLVM TargetMachine → .o file
+  - Platforms: Linux (ELF), macOS (Mach-O), Windows (COFF)
+
+Phase 5: Linking
+  - Link runtime static library (scheduler, allocator)
+  - Output: executable
+```
+
+### 3. Type Mapping
+
+#### 3.1 YaoXiang → LLVM IR Type Mapping
+
+| YaoXiang Type | LLVM IR Type | Description |
+|---------------|-------------|------|
+| `Int` | `i64` | Default 64-bit signed integer |
+| `Int32` | `i32` | Explicit 32-bit integer (mainly for FFI) |
+| `Float` | `f64` | Default 64-bit float |
+| `Float32` | `f32` | Explicit 32-bit float (mainly for FFI) |
+| `Bool` | `i1` | Boolean value |
+| `Char` | `i32` | Unicode code point |
+| `String` | `{ i8*, i64 }` | Pointer + byte length |
+| `Void` | `{}` | Zero-sized empty type |
+| `&T` | — | Zero-sized token, disappears after compilation, produces no IR |
+| `&mut T` | — | Zero-sized token, disappears after compilation, produces no IR |
+| `ref T` | `{ i32*, T* }` | Fat pointer (reference count pointer + data pointer) |
+| `*T` | `T*` | Raw pointer |
+| `[T; N]` | `[N x T]` | Fixed-length array |
+| `List(T)` | `{ T*, i64, i64 }` | Data pointer + length + capacity |
+| Struct | Corresponding LLVM struct | Fields laid out in declaration order |
+| Tagged enum | `{ i64, [max_payload_size] }` | Tag + union of maximum payload size |
+| `?T` | `{ i1, T }` | Has-value flag + data (general representation) |
+| FFI opaque type | `{ i8* }` | Wrapped C pointer |
+| Function pointer | `T (...)*` | Function pointer type |
+
+> **`&T` / `&mut T` zero runtime overhead**: [RFC-009](../accepted/009-ownership-model.md) §2.7 defines that the compiler internally assigns brand identifiers to tokens (compile-time unique integers); after monomorphization and inlining, the brands disappear completely—no trace of tokens exists in the generated machine code.
+
+#### 3.2 FFI Parameter Type Mapping
+
+Aligned with [RFC-026](./026-ffi-core-mechanism.md) §2.2, with an additional LLVM IR column:
+
+| C Type | YaoXiang Type | LLVM IR | Description |
+|--------|---------------|---------|------|
+| `int` | `Int32` | `i32` | |
+| `long` | `Int64` | `i64` | |
+| `float` | `Float32` | `f32` | |
+| `double` | `Float64` | `f64` | |
+| `char` | `Char` | `i32` | C char → YaoXiang Char (Unicode compatible) |
+| `char*` | `String` | `{ i8*, i64 }` | marshalling: C string → YaoXiang String |
+| `bool` | `Bool` | `i1` | |
+| `size_t` | `Uint` | `i64` | |
+| `void*` | `*Void` | `i8*` | |
+| `struct T*` | `T` (transparent type) | `T*` | Pass pointer |
+| `typedef struct T T` | `T` (opaque type) | `{ i8* }` | Wrapped C pointer |
+
+### 4. Instruction Translation
+
+Each IR instruction directly maps to the corresponding LLVM IR instruction. Brief mapping table:
+
+| IR Instruction | LLVM IR |
+|---------|---------|
+| `BinaryOp { add }` | `add` |
+| `BinaryOp { sub }` | `sub` |
+| `BinaryOp { mul }` | `mul` |
+| `BinaryOp { div }` | `sdiv` / `fdiv` |
+| `Compare { eq }` | `icmp eq` / `fcmp oeq` |
+| `CallStatic` | `call` |
+| `CallIndirect` | `call` (via function pointer) |
+| `Load` | `load` |
+| `Store` | `store` |
+| `LoadElement` | `getelementptr` + `load` |
+| `Alloca` | `alloca` |
+| `Branch` | `br` |
+| `BranchCond` | `br i1` |
+| `Return` | `ret` |
+
+See the specific implementation in `middle/passes/codegen/llvm/` for detailed instruction translation.
+
+### 5. spawn Block Code Generation
+
+Aligned with [RFC-024](../accepted/024-concurrency-model.md), the compilation of spawn blocks is divided into the following steps.
+
+#### 5.1 Semantic Recap
+
+```yaoxiang
+(r1, r2) = spawn {
+    t1 = fetch("url1"),   // direct subexpression → task 1
+    t2 = fetch("url2"),   // direct subexpression → task 2
+    return (t1, t2)       // synchronous wait, assemble result
+}
+```
+
+**Rules** (RFC-024 §2.1):
+- **Direct subexpressions** of a spawn block (top-level comma-separated statements) create parallel tasks
+- Expressions inside nested `{}` are not direct subexpressions and do not become independent tasks
+- The entire spawn block synchronously blocks, waiting for all tasks to complete before returning
+
+#### 5.2 Compilation Steps
+
+```
+Step 1: Identify direct subexpressions
+  Iterate through the spawn block body, collect top-level statements
+
+Step 2: Dependency analysis
+  For each direct subexpression, analyze which variables produced by preceding tasks it references
+  No dependencies → can be scheduled immediately in parallel
+  Has dependencies → queue and wait for dependent tasks to complete
+
+Step 3: Resource conflict detection (RFC-024 §2.5)
+  Check whether the same resource type instance is used by multiple tasks
+  Same-instance conflict → mark serial execution order
+
+Step 4: Generate task functions
+  Each direct subexpression generates an independent LLVM function (closure)
+
+Step 5: Generate scheduling code
+  Call runtime scheduler's task_spawn / task_wait
+
+Step 6: Result assembly
+  Collect all task outputs, assemble return tuple
+```
+
+#### 5.3 LLVM IR Generation Pattern
+
+```llvm
+; spawn block entry
+%task_count = 2
+%tasks = alloca [2 x %TaskHandle]
+
+; Create task 1: fetch("url1")
+%task1_fn = @spawn_closure_1
+call @runtime_task_spawn(%tasks[0], %task1_fn, ...)
+
+; Create task 2: fetch("url2")
+%task2_fn = @spawn_closure_2
+call @runtime_task_spawn(%tasks[1], %task2_fn, ...)
+
+; Synchronously wait for all tasks
+call @runtime_task_wait_all(%tasks, %task_count)
+
+; Assemble return value
+%r1 = call @runtime_task_result(%tasks[0])
+%r2 = call @runtime_task_result(%tasks[1])
+ret { %r1, %r2 }
+```
+
+#### 5.4 Dependent Tasks
+
+```yaoxiang
+result = spawn {
+    data = fetch("url"),       // task 1: no dependencies
+    processed = parse(data),   // task 2: depends on task 1's data
+    return processed
+}
+```
+
+The compiler detects that `parse(data)` references `data` produced by task 1, and marks the dependency when generating scheduling code:
+
+```llvm
+; Task 2 is created with a dependency on task 1
+call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
+;                                                              ↑
+;                                                 depends on task 0 (fetch) completion
+```
+
+#### 5.5 Automatic Serialization for Resource Types
+
+Resource types defined in [RFC-024 §2.5](../accepted/024-concurrency-model.md) (`FilePath`, `HttpUrl`, `DBUrl`, `Console`, and user-defined resource types) are automatically serialized in spawn blocks:
+
+```yaoxiang
+(a, b) = spawn {
+    r1 = db.exec("SELECT ..."),   // uses SqliteDb (resource type)
+    r2 = db.exec("INSERT ...")    // same instance → automatically serialized
+}
+```
+
+The compiler detects that the same resource instance is used by two tasks and generates a serial dependency:
+
+```llvm
+; Task 2 depends on task 1 (same resource automatically serialized)
+call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
+```
+
+#### 5.6 spawn for Data Parallelism
+
+```yaoxiang
+results = spawn for item in items {
+    process(item)
+}
+```
+
+The compiler expands this into N independent tasks (N = length of items), limited by the maximum concurrency.
+
+### 6. FFI Code Generation
+
+Aligned with [RFC-026](./026-ffi-core-mechanism.md), this section defines the LLVM IR generation strategy for FFI calls.
+
+#### 6.1 native() Function Declaration
+
+```yaoxiang
+sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
+```
+
+Compiles to LLVM IR:
+
+```llvm
+; Declare external C function
+declare i8* @sqlite3_open(i8*)
+
+; YaoXiang wrapper function (handles marshalling)
+define { i8* } @__yx_sqlite3_open({ i8*, i64 } %filename) {
+    ; marshalling: YaoXiang String → C string
+    %c_str = extractvalue { i8*, i64 } %filename, 0
+    ; Call C function
+    %raw = call i8* @sqlite3_open(i8* %c_str)
+    ; unmarshalling: C pointer → opaque type
+    %result = insertvalue { i8* } undef, i8* %raw, 0
+    ret { i8* } %result
+}
+```
+
+**Key points**:
+- `native("sqlite3_open")` → `declare external @sqlite3_open`
+- The compiler automatically generates a marshalling wrapper function
+- The wrapper function's signature uses YaoXiang types, internally converting to C types
+
+#### 6.2 Parameter Marshalling
+
+| Direction | Conversion |
+|------|------|
+| YaoXiang `String` → C `char*` | Extract `.ptr` field and pass |
+| YaoXiang `Int32` → C `int` | Pass directly (`i32`) |
+| YaoXiang `*Void` → C `void*` | Pass directly (`i8*`) |
+| YaoXiang `T` (transparent type) → C `struct T*` | Take address and pass |
+| YaoXiang `T` (opaque type) → C `struct T*` | Extract pointer from `{ i8* }` and pass |
+
+#### 6.3 LLVM Layout of Opaque Types
+
+The opaque type defined in [RFC-026](./026-ffi-core-mechanism.md) §4.1:
+
+```yaoxiang
+SqliteDb = unsafe {
+    SqliteDb: Type = {
+        handle: *Void
+    }
+    return SqliteDb
+}
+```
+
+LLVM layout: `{ i8* }` — a struct containing a C pointer.
+
+**Layout optimization**: When the opaque type has only a single `handle: *Void` field, it can be optimized to use `i8*` directly (omitting the outer struct). The optimized ABI is completely consistent with the C pointer, with zero marshalling overhead. The compiler enables this optimization by default; users are unaware.
+
+#### 6.4 LLVM Representation of `?T` Nullable Return Values
+
+The FFI nullable return value defined in [RFC-026](./026-ffi-core-mechanism.md) §7.6:
+
+```yaoxiang
+sqlite3_open: (filename: String) -> ?SqliteDb = native("sqlite3_open")
+```
+
+General LLVM representation: `{ i1, { i8* } }` — has-value flag + data.
+
+**Optimization for FFI null pointers**: If the `T` in `?T` is an opaque type (internally a pointer), the compiler uses a **null pointer = None** optimization:
+
+```llvm
+; Optimized LLVM representation: directly use a nullable pointer
+define i8* @__yx_sqlite3_open(...) {
+    %raw = call i8* @sqlite3_open(...)
+    ; null → None, non-null → Some(wrapped as opaque type)
+    ret i8* %raw
+}
+```
+
+Caller:
+```llvm
+%raw = call i8* @__yx_sqlite3_open(...)
+%is_null = icmp eq i8* %raw, null
+br i1 %is_null, label %none_branch, label %some_branch
+```
+
+This optimization makes FFI calls of `?SqliteDb` have **zero additional overhead**—completely equivalent to a C null check.
+
+#### 6.5 yx-bindgen Integration
+
+The binding files automatically generated by [yx-bindgen](./026-ffi-core-mechanism.md) §6 are treated as ordinary YaoXiang source code during compilation. The compiler does not need to know the code comes from bindgen—the handling of `native()` declarations and `unsafe {}` type definitions is completely consistent.
+
+### 7. Destructor Code Generation
+
+Aligned with the RAII semantics of [RFC-009](../accepted/009-ownership-model.md) and the `.drop` convention of [RFC-026](./026-ffi-core-mechanism.md) §7.
+
+#### 7.1 .drop Binding Identification
+
+```yaoxiang
+SqliteDb.drop = sqlite3_close[0]
+```
+
+The compiler identifies the `.drop` binding and marks the destructor function pointer in the type metadata.
+
+#### 7.2 Cleanup Insertion at Scope End
 
 ```
 User code:
-    main: () -> () = {
-        pages = urls.map(|url| fetch(url))
-        results = pages.map(|page| parse_page(page))
-        save_results(results)
-    }
+{
+    db = SqliteDb.open("test.db")
+    stmt = db.prepare("SELECT ...")
+    stmt.step()
+    // ← scope end
+}
 
-Phase 1: Bottom-up analysis (compile-time)
-─────────────────────────────────────────
-Starting from save_results(results):
-    "need results" → depends on parse_page(results)
-    "need page0" → depends on fetch(url0)
-    "need page1" → depends on fetch(url1)
-    ...
-
-Build DAG within spawn block:
-    fetch(url0), fetch(url1), fetch(url2) ← leaf nodes
-           ↓
-    parse_page(page0), parse_page(page1)   ← depend on leaves
-           ↓
-    save_results                          ← root node
-
-Phase 2: Execute leaves in parallel (runtime)
-─────────────────────────────────────────
-Scheduler finds all leaf nodes:
-    - fetch(url0), fetch(url1), fetch(url2) have no dependencies → execute in parallel
-    - Control concurrency (e.g., 16 at a time)
-
-Phase 3: Traverse upward
-─────────────────────────────────────────
-When parse_page needs page0:
-    - Check if page0 is ready
-    - Ready → execute parse_page
-    - Not ready → wait, continue after completion
-
-Phase 4: Isolated islands execute independently in parallel
-─────────────────────────────────────────
-If some fetch result is not needed by anyone:
-    - Execute as "isolated DAG" independently
-    - Can use another core, doesn't affect main flow
+Cleanup inserted by the compiler (reverse order):
+    call @sqlite3_finalize(%stmt)    // stmt.drop()
+    call @sqlite3_close(%db)          // db.drop()
 ```
 
-### Compiled Artifact Structure
+**Insertion points**:
+- Normal scope end (`}`)
+- Early return (before `return`)
+- `?` error propagation path (before `?`)
+- End of spawn block (destructor of variables within a task)
+
+#### 7.3 Move and Destructor
+
+```yaoxiang
+db = SqliteDb.open("test.db")
+db2 = db                // Move: ownership transferred to db2
+// db is now invalid, no drop is inserted for db here
+// ← scope end: drop is only inserted for db2
+```
+
+The compiler tracks Move semantics ([RFC-009](../accepted/009-ownership-model.md) §1) and only inserts destructor calls at the final holder of a variable.
+
+#### 7.4 Destructor Failure Handling
+
+```llvm
+; debug mode: check the destructor return value
+%ret = call i32 @sqlite3_close(i8* %handle)
+%ok = icmp eq i32 %ret, 0
+br i1 %ok, label %done, label %panic
+panic:
+  call @__yx_panic("destructor failed")
+  unreachable
+done:
+  ret void
+
+; release mode: ignore the return value
+call i32 @sqlite3_close(i8* %handle)
+ret void
+```
+
+### 8. Compilation Artifact Structure
 
 ```rust
-/// Compiled artifact: machine code + DAG metadata
+/// Compilation artifact: machine code + metadata
 pub struct CompiledArtifact {
-    /// LLVM compiled machine code (ELF/Mach-O/COFF)
+    /// Machine code compiled by LLVM (object file)
     machine_code: Vec<u8>,
 
-    /// DAG metadata: describes function dependency relationships
-    dag: DAGMetadata,
+    /// spawn block metadata: task function pointers + dependency relations
+    spawn_metadata: SpawnMetadata,
+
+    /// FFI symbol table: external symbol references
+    ffi_symbols: Vec<FfiSymbol>,
 
     /// Entry point table
     entries: Vec<EntryPoint>,
 
-    /// Type information (for FFI)
+    /// Type information (reflection metadata, written into .reflect section, mmap on demand)
     type_info: TypeInfo,
 }
 
-/// DAG metadata
-pub struct DAGMetadata {
-    /// Nodes: function calls
-    nodes: Vec<DAGNode>,
-    /// Edges: dependency relationships (from, to)
-    edges: Vec<(usize, usize)>,
+/// spawn block metadata
+pub struct SpawnMetadata {
+    /// Description of each spawn block
+    blocks: Vec<SpawnBlockInfo>,
 }
 
-/// Single DAG node
-pub struct DAGNode {
-    /// Function ID
-    pub function_id: usize,
-    /// Dependent node IDs
+pub struct SpawnBlockInfo {
+    /// Task function corresponding to each direct subexpression within the spawn block
+    tasks: Vec<TaskInfo>,
+    /// Resource conflicts: which task pairs need to be serialized
+    serialize_pairs: Vec<(usize, usize)>,
+}
+
+pub struct TaskInfo {
+    /// LLVM function pointer of the task function
+    pub func_ptr: usize,
+    /// Dependent task indices (empty = no dependencies, can execute immediately)
     pub deps: Vec<usize>,
-    /// Effect tag (@IO / @Pure)
-    pub effect: EffectTag,
+}
+
+/// FFI symbol reference
+pub struct FfiSymbol {
+    /// C symbol name
+    pub symbol_name: String,
+    /// Whether it's a weak reference (missing is allowed)
+    pub weak: bool,
 }
 ```
 
-### Runtime Scheduler Interface
+### 9. Runtime Library
 
-```rust
-/// DAG scheduler trait
-pub trait DAGScheduler: Send + Sync {
-    /// Schedule and execute
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue;
-
-    /// Execute single function
-    fn execute(&self, func: &CompiledFunction, args: &[RuntimeValue]) -> RuntimeValue;
-}
-
-/// Scheduler implementation
-pub struct DefaultDAGScheduler {
-    /// Thread pool
-    thread_pool: ThreadPool,
-    /// Compiled artifact
-    artifact: CompiledArtifact,
-    /// Maximum parallelism
-    max_parallelism: usize,
-}
-
-impl DefaultDAGScheduler {
-    pub fn new(artifact: CompiledArtifact, num_workers: usize) -> Self {
-        Self {
-            thread_pool: ThreadPool::new(num_workers),
-            artifact,
-            max_parallelism: num_workers * 2, // Adaptive granularity control
-        }
-    }
-}
-
-impl DAGScheduler for DefaultDAGScheduler {
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue {
-        // 1. Traverse function body, suspend all calls
-        // 2. Build task list to execute
-        // 3. Schedule execution in dependency order (control concurrency)
-        // 4. Trigger execution when value is needed
-        // 5. Return result
-    }
-}
-```
-
-### DAG Example: Web Crawler
+Aligned with [RFC-008 §6.2](../accepted/008-runtime-concurrency-model.md), the runtime is linked as a **static library** into the final exe.
 
 ```
-main function DAG:
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  fetch(url0) ──┐                                           │
-│  fetch(url1) ──┼──→ parse_page ──→ filter_links ──┐      │
-│  fetch(url2) ──┘                                       │      │
-│                                                          │      │
-│                     save_result ──→ print              │      │
-│                          ↑                              │      │
-│                          └──────────────────────────────┘      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+Final exe internal structure:
 
-Node descriptions:
-┌──────────────────┬────────────┬────────────────────────────┐
-│ Node              │ Effect     │ Description               │
-├──────────────────┼────────────┼────────────────────────────┤
-│ fetch(url0)      │ @IO       │ Concurrent download         │
-│ fetch(url1)      │ @IO       │ Concurrent download         │
-│ fetch(url2)      │ @IO       │ Concurrent download         │
-│ parse_page       │ @Pure     │ Parallel parsing            │
-│ filter_links     │ @Pure     │ Parallel filtering          │
-│ save_result      │ @IO       │ Sequential save (I/O order  │
-│                  │            │ guaranteed)                │
-│ print            │ @IO       │ Execute last                │
-└──────────────────┴────────────┴────────────────────────────┘
+┌────────────────────────────────────────────┐
+│  User code (native machine code)            │
+│  ├── Ordinary functions (sequential exec)   │
+│  ├── spawn block expansion (task functions + scheduling calls) │
+│  ├── FFI marshalling wrapper functions      │
+│  └── RAII destructor code                   │
+├────────────────────────────────────────────┤
+│  Runtime static library (~200-500KB)        │
+│  ├── Thread pool (num_workers)              │
+│  ├── Event loop (libuv / io_uring)          │
+│  ├── Work-stealing queue (Full Runtime only)│
+│  ├── Memory allocator (jemalloc / mimalloc) │
+│  └── Reflection metadata (.reflect section, mmap on demand)│
+│                                              │
+│  Not included:                              │
+│  ❌ Bytecode interpreter                     │
+│  ❌ JIT compiler                             │
+│  ❌ GC                                       │
+│  ❌ Virtual machine                          │
+└────────────────────────────────────────────┘
 ```
 
-### Scheduler Execution Phases
+**Key design**: Task identification and dependency analysis for spawn blocks are done at compile time; the runtime only does "create task → dispatch to thread pool → wait for completion"—data structures are fixed and behavior is predictable.
 
-```
-Phase 1: Concurrent downloads
-─────────────────────────────────────────
-Thread 1: fetch(url0) ──────────┐
-Thread 2: fetch(url1) ─────────┼──→ 3 concurrent tasks (max concurrency limited)
-Thread 3: fetch(url2) ──────────┘
+**Relationship between the three-tier runtime and LLVM** (aligned with RFC-008 §1):
 
-Phase 2: Concurrent parsing
-─────────────────────────────────────────
-Thread 1: parse_page(page0) ──┐
-Thread 2: parse_page(page1) ──┼──→ 3 concurrent tasks
-Thread 3: parse_page(page2) ──┘
+| Runtime | LLVM AOT Behavior |
+|--------|---------------|
+| **Embedded** | No spawn support, directly generates sequential machine code |
+| **Standard** | Supports spawn blocks, DAG within spawn blocks + single-threaded scheduling (num_workers=1) |
+| **Full** | Supports spawn blocks, DAG within spawn blocks + multi-threaded scheduling (num_workers>1), supports WorkStealing |
 
-Phase 3: Concurrent filtering
-─────────────────────────────────────────
-Thread 1: filter_links(result0) ──┐
-Thread 2: filter_links(result1) ──┼──→ 3 concurrent tasks
-Thread 3: filter_links(result2) ──┘
-
-Phase 4: Sequential saving
-─────────────────────────────────────────
-Thread 1: save_result(result0) → wait for completion
-Thread 1: save_result(result1) → wait for completion
-Thread 1: save_result(result2) → wait for completion
-
-Phase 5: Output
-─────────────────────────────────────────
-Thread 1: print("Fetched 3 pages")
-```
+---
 
 ## Detailed Design
 
-### Module Structure
+### Module Directory Structure
+
+Aligned with the directory layout in [RFC-008](../accepted/008-runtime-concurrency-model.md) §6:
 
 ```
-src/backends/llvm/
-├── mod.rs           # Module entry + Executor implementation
-├── context.rs       # LLVM context management
-├── types.rs         # Type mapping (YaoXiang → LLVM)
-├── values.rs        # Value mapping (register → LLVM Value)
-├── codegen.rs       # Core code generation
-├── dag.rs           # DAG analysis and generation
-├── scheduler.rs      # Runtime scheduler
-└── tests.rs         # Tests
+src/
+├── frontend/                          # Compilation frontend (shared by all backends)
+│   └── core/typecheck/
+│       └── spawn_placement.rs         # spawn block analysis (task identification, dependency analysis, resource conflict detection)
+│
+├── middle/
+│   ├── core/
+│   │   ├── ir.rs                      # IR definition (shared by VM and LLVM)
+│   │   └── ir_gen.rs                  # IR generation
+│   └── passes/
+│       ├── codegen/
+│       │   ├── mod.rs
+│       │   ├── translator.rs          # IR → LLVM IR main translation
+│       │   └── llvm/
+│       │       ├── mod.rs             # LLVM backend entry
+│       │       ├── context.rs         # LLVM context management
+│       │       ├── types.rs           # Type mapping (YaoXiang → LLVM IR)
+│       │       ├── values.rs          # Value mapping
+│       │       ├── func.rs            # Function translation
+│       │       ├── spawn.rs           # spawn block expansion
+│       │       ├── ffi.rs             # FFI call code generation
+│       │       └── drop.rs            # Destructor function insertion
+│       ├── lifetime/                  # Lifetime / token liveness analysis
+│       └── mono/                      # Monomorphization
+│
+├── backends/
+│   ├── common/                        # Shared values/heap/opcodes
+│   ├── interpreter/                   # Tree-walking interpreter (VM backend)
+│   └── runtime/                       # Compiled runtime (static library linked into exe)
+│       ├── engine.rs                  # Task scheduling engine
+│       ├── facade.rs                  # External interface
+│       └── task.rs                    # Task representation
+│
+└── util/
+    └── diagnostic/                    # Error diagnostics (shared)
 ```
 
-### Type Mapping
+> **Key change**: spawn block analysis is in `frontend/core/typecheck/spawn_placement.rs` (shared frontend), not in the LLVM backend. The LLVM backend only consumes the analysis results and generates the corresponding scheduling code.
 
-| YaoXiang type | LLVM type |
-|---------------|----------|
-| `Int` | `i64` |
-| `Float` | `f64` |
-| `Bool` | `i1` |
-| `String` | `ptr` (struct) |
-| `Arc(T)` | `{ i32, T }` (reference-counted struct) |
-| `ref T` | `ptr` (Arc pointer) |
-| `List(T)` | `ptr` (dynamic array) |
-| `Struct` | `struct` (corresponding struct) |
+### Platform ABI Support
 
-### Instruction Translation
+| Platform | Target Triple | Output Format | Calling Convention (FFI default) |
+|------|-----------|----------|---------------------|
+| Linux x86_64 | `x86_64-unknown-linux-gnu` | ELF | System V AMD64 |
+| macOS x86_64 | `x86_64-apple-darwin` | Mach-O | System V AMD64 |
+| macOS ARM64 | `aarch64-apple-darwin` | Mach-O | ARM64 AAPCS |
+| Windows x86_64 | `x86_64-pc-windows-msvc` | COFF | Microsoft x64 |
 
-Each `BytecodeInstr` is directly translated to corresponding LLVM IR instruction:
+FFI calls use the platform's C calling convention by default. Users can override via options like `native("symbol", cc = "stdcall")` (aligned with future extensions of [RFC-026](./026-ffi-core-mechanism.md)).
 
-| BytecodeInstr | LLVM IR |
-|---------------|---------|
-| `BinaryOp { add }` | `llvm.add` |
-| `CallStatic` | `llvm.call` |
-| `ArcNew` | `call @Arc_new` |
-| `LoadElement` | `llvm.getelementptr` + `llvm.load` |
+---
 
-### Runtime Library
-
-```rust
-// Core runtime functions
-extern "C" {
-    // Reference counting
-    fn Arc_new(ptr: *mut u8) -> i32;
-    fn Arc_clone(ref_count: *mut i32) -> i32;
-    fn Arc_drop(ref_count: *mut i32);
-
-    // Heap allocation
-    fn Alloc(size: usize) -> *mut u8;
-    fn Dealloc(ptr: *mut u8);
-
-    // DAG scheduling
-    fn dag_schedule(dag: *const DAGMetadata, entry: usize) -> RuntimeValue;
-}
-```
-
-### Scheduling Strategies
-
-| Scenario | Scheduling Strategy |
-|----------|---------------------|
-| Ordinary code (not in spawn block) | Sequential execution, no DAG overhead |
-| Within spawn block | DAG lazy scheduling, execute in parallel when no dependencies |
-| Circular dependency | Runtime detection, report error |
-
-### Side Effect Handling: Implicit Effect System
-
-Users have no perception of side effect handling; the compiler infers automatically:
-
-```
-User code:
-  print("a")
-  print("b")
-  x = compute(1)
-  y = compute(2)
-
-Compiler inference:
-  print → @IO (external call)
-  compute → @Pure (pure function)
-
-Scheduler execution:
-  print("a") ──→ sequential (all @IO)
-  print("b") ──→ sequential
-  compute(1) ─┬─→ parallel (DAG scheduling within spawn block)
-  compute(2) ─┘
-```
-
-### Relationship with the Three-Layer Runtime
-
-RFC-008 defines Embedded / Standard / Full three-layer runtime architecture. The correspondence between LLVM AOT compiler and the three-layer runtime (aligned with RFC-024):
-
-| Runtime | LLVM AOT behavior |
-|---------|-------------------|
-| **Embedded** | No spawn support, generate sequential machine code directly |
-| **Standard** | Support spawn blocks, DAG within spawn blocks + single-threaded scheduling (num_workers=1) |
-| **Full** | Support spawn blocks, DAG within spawn blocks + multi-threaded scheduling (num_workers>1), supports WorkStealing |
-
-### Scheduler Interface Design
-
-```rust
-/// Effect tag
-pub enum EffectTag {
-    /// Pure function, no side effects
-    Pure,
-    /// Has I/O side effects
-    IO,
-}
-
-/// DAG scheduler trait
-pub trait DAGScheduler: Send + Sync {
-    /// Schedule and execute DAG within spawn block
-    fn schedule(&self, dag: &DAGMetadata, entries: &[EntryPoint]) -> RuntimeValue;
-
-    /// Execute single function (ordinary code, sequential execution)
-    fn execute(&self, func: &CompiledFunction, args: &[RuntimeValue]) -> RuntimeValue;
-}
-```
-
-## Tradeoffs
+## Trade-offs
 
 ### Advantages
 
-1. **Performance improvement**: AOT compilation is 10-100x faster than interpretive execution
-2. **Solves colored functions**: No function coloring, parallelism within spawn blocks
-3. **Unified runtime**: Interpreter and LLVM share the same scheduler
-5. **Implicit side effects**: Users have no perception, compiler handles automatically
-6. **Memory safety**: Relies on Rust-style ownership model, no data races
+1. **Performance**: AOT compilation is 10-100x faster than interpretation
+2. **Unified frontend**: VM and LLVM share the same frontend with completely consistent behavior
+3. **Zero scheduling overhead**: Ordinary code is directly generated as sequential machine code, with no DAG overhead outside spawn blocks
+4. **Static linking**: No external runtime dependencies, a single exe can be deployed
+5. **Zero GC**: RAII deterministic destruction, no pauses
+6. **Zero-overhead FFI**: `?T` null pointer optimization and opaque type layout optimization make FFI call cost equivalent to C
+7. **Compile-time analysis**: spawn block task identification and dependency analysis are done at compile time, runtime only executes
 
 ### Disadvantages
 
-1. **Implementation complexity**: Requires LLVM integration experience
-2. **Compilation time**: AOT compilation is slower than interpreter
-3. **Difficult debugging**: AOT code is harder to debug than interpreter
+1. **LLVM integration complexity**: Requires deep understanding of the inkwell API and LLVM IR
+2. **Compilation time**: AOT compilation is slower than the interpreter (a one-time cost)
+3. **Debugging experience**: Native code debugging requires DWARF/PDB symbol support (compiler must generate debug info)
+4. **Incremental compilation**: Incremental compilation for large projects requires additional design
 
-### Alignment with RFC Designs
+### Consistency with Related RFCs
 
-| RFC | Alignment |
-|-----|-----------|
-| RFC-024 spawn block concurrency model | ✅ DAG analysis limited within spawn blocks |
-| RFC-008 Runtime architecture | ✅ Runtime scheduler design is consistent |
-| RFC-009 Ownership model | ✅ ARC runtime correctly implemented |
+| RFC | Consistency |
+|-----|--------|
+| RFC-024 spawn block concurrency model | ✅ spawn block direct subexpressions → task dispatch |
+| RFC-008 runtime architecture | ✅ Dual backend + scheduler static library + module directory structure |
+| RFC-009 v9 ownership model | ✅ `&T`/`&mut T` tokens (zero size), `ref T` (fat pointer), `?T` (Option) |
+| RFC-026 FFI core mechanism | ✅ `native()` → declare + marshalling, `.drop` → RAII cleanup |
 
-## Alternative Approaches
+---
 
-| Approach | Description | Why Not Chosen |
-|----------|-------------|----------------|
-| Interpreter only | No AOT needed | Insufficient performance, no spawn block parallelism support |
-| Pure static compilation | No runtime scheduling | Lazy scheduling needs runtime |
-| Link external LLVM runtime | Use LLVM's runtime | Requires additional dependencies |
+## Alternatives
+
+| Alternative | Description | Why Not Chosen |
+|------|------|------|
+| Interpreter only | No AOT needed | Insufficient performance |
+| Pure static compilation (no runtime) | No scheduler linking | spawn blocks require runtime task scheduling |
+| Cranelift backend | Faster compilation speed | Runtime performance inferior to LLVM, can be a future optional backend |
+| Link external LLVM runtime | Use LLVM built-in runtime | Introduces unnecessary dependencies |
+
+---
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phases
 
-#### Phase 1: Basic Framework (1-2 days)
+#### Phase 1: Foundation Framework
+- [ ] Add inkwell dependency
+- [ ] Implement LLVM context initialization (`context.rs`)
+- [ ] Implement basic type mapping (`types.rs`)
 
-- [ ] Add inkwell dependency to `Cargo.toml`
-- [ ] Create `src/backends/llvm/` module
-- [ ] Implement LLVM context initialization
+#### Phase 2: Function Translation
+- [ ] Implement function declaration translation (`func.rs`)
+- [ ] Implement basic instruction translation (arithmetic, control flow, calls) (`translator.rs`)
+- [ ] Implement value mapping (`values.rs`)
 
-#### Phase 2: Type Mapping (2-3 days)
+#### Phase 3: Ownership Type Translation
+- [ ] Implement `&T`/`&mut T` tokens (zero size, disappear after compilation)
+- [ ] Implement `ref T` (fat pointer `{ i32*, T* }`)
+- [ ] Implement `?T` (`{ i1, T }` tagged union)
+- [ ] Implement `List(T)` (`{ T*, i64, i64 }`)
+- [ ] Implement Move semantics tracking (for destructor insertion decisions)
 
-- [ ] Implement `TypeMap`: YaoXiang types → LLVM types
-- [ ] Basic types: i32, i64, f32, f64, bool
-- [ ] Composite types: struct, array, tuple
-- [ ] Special types: Arc, ref, Option
+#### Phase 4: spawn Block Code Generation
+- [ ] Consume analysis results from `spawn_placement.rs`
+- [ ] Direct subexpression → task function generation
+- [ ] Dependent task scheduling code generation
+- [ ] Resource conflict serialization
+- [ ] spawn for expansion
 
-#### Phase 3: Instruction Translation (3-5 days)
+#### Phase 5: FFI Code Generation
+- [ ] `native()` → `declare external` (`ffi.rs`)
+- [ ] Parameter marshalling / return value unmarshalling
+- [ ] Opaque type layout (including single-field optimization)
+- [ ] `?T` null pointer optimization (FFI-specific)
 
-- [ ] Implement `codegen_instruction()`
-- [ ] Arithmetic instructions: add, sub, mul, div
-- [ ] Control flow: jmp, jmp_if, ret
-- [ ] Function calls: call, call_virt, call_dyn
+#### Phase 6: Destructor Code Generation
+- [ ] `.drop` binding identification
+- [ ] Scope-end cleanup insertion (reverse order) (`drop.rs`)
+- [ ] Early return path cleanup
+- [ ] `?` error propagation path cleanup
 
-#### Phase 4: DAG Collection (2-3 days)
-
-- [ ] Collect DAG information within spawn blocks during code generation
-- [ ] Record function dependency relationships within spawn blocks
-- [ ] Effect inference (@IO / @Pure)
-- [ ] Generate DAG metadata for spawn blocks
-
-#### Phase 5: Runtime Library (3-5 days)
-
-- [ ] Implement lazy scheduling
-- [ ] Implement DAG scheduler
-- [ ] Implement granularity control
-- [ ] Implement ARC runtime
-
-#### Phase 6: Integration and Testing (2-3 days)
-
-- [ ] Link runtime library
-- [ ] End-to-end testing
-- [ ] Performance benchmarks
+#### Phase 7: Runtime Library Linking
+- [ ] Implement `runtime_task_spawn` / `runtime_task_wait_all` and other runtime functions
+- [ ] Link runtime static library
+- [ ] End-to-end integration testing
 
 ### Dependencies
 
-- RFC-024: Spawn block concurrency model (accepted)
-- RFC-008: Runtime concurrency model (accepted)
-- RFC-009: Ownership model (accepted)
+- RFC-024 (spawn block concurrency) → input for Phase 4
+- RFC-009 v9 (ownership) → input for Phases 3 and 6
+- RFC-008 (runtime architecture) → input for Phase 7
+- RFC-026 (FFI mechanism) → input for Phase 5
 
-### Risks
-
-1. **LLVM integration complexity**: Requires deep understanding of inkwell API
-2. **Scheduler and AOT code integration**: Requires careful interface design
-3. **ABI compatibility**: Need to ensure compatibility with interpreter runtime ABI
+---
 
 ## Related Work
 
 ### Lazy Task Creation (1990)[^1]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | MIT |
 | Authors | James R. Larus, Robert H. Halstead Jr. |
-| Core | Lazy creation of subtasks, created on demand |
-| Reference value | Technical foundation, origin of lazy scheduling concept |
+| Core | Defer child task creation, create on demand |
+| Reference value | Theoretical basis for on-demand scheduling of tasks within spawn blocks |
 
-**Core idea**: Instead of creating tasks immediately, create them lazily. Only when a parent task needs the value of a child task is the child task created. This solves the performance overhead problem of fine-grained parallel tasks[^1].
+**Core idea**: Tasks are not created immediately but deferred. When the parent task needs the value of a child task, the child task is then created. This addresses the performance overhead problem of fine-grained parallel tasks[^1]. YaoXiang's spawn block scheduling draws on this idea—tasks are identified at compile time, but dispatched to the thread pool on demand at runtime.
 
 ### Lazy Scheduling (2014)[^2]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | University of Maryland |
 | Authors | Tzannes, Caragea |
-| Core | Runtime adaptive scheduling, no extra state |
-| Reference value | Scheduler design, adaptive granularity control |
-
-**Core idea**: Automatically control granularity through "lazy execution", without maintaining complex state. Tasks automatically merge when the system is busy and automatically split when idle[^2].
+| Core | Runtime adaptive scheduling, no additional state |
+| Reference value | Reference for Full Runtime WorkStealing scheduler design |
 
 ### SISAL Language[^3]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | Lawrence Livermore National Laboratory (LLNL) |
-| Core | Single-assignment language, Dataflow graphs, implicit parallelism |
-| Reference value | Feasibility proof, performance close to Fortran |
+| Core | Single-assignment language, Dataflow graph, implicit parallelism |
+| Reference value | Feasibility proof of the Dataflow model in industrial applications |
 
-**Core contribution**: SISAL proves that the Dataflow model can achieve performance close to Fortran in industrial applications[^3].
+**Key difference**: SISAL's parallelism is **implicit**—the language has single-assignment semantics, and the compiler automatically analyzes the data dependency graph of the entire program to decide parallelism. YaoXiang's parallelism is **explicit**—users mark parallel regions with `spawn {}` blocks, and the compiler analyzes dependencies only within spawn blocks. This avoids the complexity of SISAL's whole-program analysis while preserving user control over parallel behavior.
 
 ### Mul-T Parallel Scheme[^4]
 
 | Attribute | Description |
-|-----------|-------------|
+|------|------|
 | Institution | MIT |
 | Core | Future construct, Lazy Task Creation implementation |
-| Reference value | Specific implementation reference |
-
-**Core mechanism**:
-```scheme
-;; Multilisp / Mul-T syntax
-(let ((a (future compute-a))      ;; Return future immediately
-      (b (future compute-b)))      ;; Return future immediately
-  (join a b))                      ;; Wait for completion
-```
+| Reference value | Concrete implementation reference |
 
 ### Comparison Summary
 
-| Technique | Lazy Creation | DAG Analysis | Side Effect Handling | Ownership |
-|-----------|---------------|--------------|---------------------|-----------|
-| Lazy Task Creation[^1] | ✅ | ❌ | ❌ | N/A |
-| Lazy Scheduling[^2] | ✅ | ❌ | ❌ | N/A |
-| SISAL[^3] | ✅ | ✅ (global) | N/A (single assignment) | N/A |
-| Mul-T[^4] | ✅ | ❌ | ❌ | N/A |
-| **YaoXiang** | ✅ | ✅ (within spawn block) | ✅ (implicit) | ✅ (ARC) |
+| Technique | Lazy Creation | Parallelism Marker | Analysis Scope | Ownership |
+|------|----------|----------|----------|--------|
+| Lazy Task Creation[^1] | ✅ | Implicit | Whole program | N/A |
+| Lazy Scheduling[^2] | ✅ | Implicit | Whole program | N/A |
+| SISAL[^3] | ✅ | Implicit (single-assignment) | Whole program | N/A |
+| Mul-T[^4] | ✅ | Explicit (future) | Call site | N/A |
+| **YaoXiang** | ✅ | **Explicit (spawn block)** | **Within spawn block** | **✅ (Move + token + ref)** |
 
-**YaoXiang's innovation**: Simplifies traditional design with modern language features (ownership + implicit side effects), constrains DAG within spawn blocks to reduce complexity.
-
-## Comparison with Traditional Automatic Parallelization Methods
-
-### Traditional Compilers: Loop-level Parallelization
-
-Commercial compilers (like Intel Fortran, Oracle Fortran) use **loop-level automatic parallelization**[^5]:
-
-**Core flow**:
-```
-1. Identify loops that can be parallelized
-2. Perform dependency analysis on array accesses within the loop
-3. Determine if there are dependencies between loop iterations
-4. If no dependencies, generate multi-threaded code
-```
-
-**Dependency analysis techniques**:
-
-| Technique | Description |
-|-----------|-------------|
-| **Data dependence** | Whether two accesses reference the same memory location |
-| **Use-Def** | Definition and use relationships of variables |
-| **Alias analysis** | Whether pointers reference the same memory |
-
-**Conditions for loop parallelization**:
-```fortran
-! Can be parallelized
-DO I = 1, N
-  A(I) = C(I)
-END DO
-
-! Cannot be parallelized (depends on previous iteration)
-DO I = 2, N
-  A(I) = A(I-1) + B(I)
-END DO
-```
-
-### Haskell: Spark Mechanism
-
-GHC (Glasgow Haskell Compiler) uses the **Spark mechanism** to achieve pure function parallelism[^6]:
-
-```haskell
--- rpar: Execute in parallel, create spark
--- rseq: Execute sequentially, wait for completion
-
-example = do
-  a <- rpar (f x)   -- Create spark, execute f x in parallel
-  b <- rpar (g y)   -- Create spark, execute g y in parallel
-  rseq a            -- Wait for a to complete
-  rseq b            -- Wait for b to complete
-  return (a, b)
-```
-
-**Spark pool mechanism**:
-- Take sparks from the pool and assign to idle processing cores
-- If a spark is not used (no one is waiting for its result), it gets GC'd
-- This solves the granularity problem: Sparks that are too small get discarded
-
-### Clean Language: Uniqueness Types
-
-The Clean language achieves parallelism safety through **Uniqueness Types**[^7]:
-
-```clean
--- *Array means uniqueness, can be safely modified
-modify :: *Array Int -> *Array Int
-```
-
-**Core idea**: If a value has a unique reference, it can be safely modified in a parallel environment because no other references will see intermediate states.
-
-### Program Slicing and Dependency Graphs
-
-**Program Dependence Graph (PDG)** is the foundation for parallelism detection:
-
-```
-Nodes: statements
-Edges: data dependence + control dependence
-
-Parallelism detection:
-  If there is no reachable path between two nodes → can be parallelized
-```
-
-### Comprehensive Comparison
-
-| Method | Dependency Analysis | Granularity | Side Effect Handling | Typical Scenario |
-|--------|---------------------|-------------|---------------------|------------------|
-| Intel/Oracle Fortran[^5] | Complex array analysis | Loop iteration | N/A | Scientific computing |
-| GHC Spark[^6] | Pure function assumption | Expression | N/A | Functional programming |
-| Clean[^7] | Uniqueness types | Graph rewriting | N/A | Functional programming |
-| **YaoXiang** | Ownership guarantee | Function call | Implicit inference | General purpose |
+**YaoXiang's innovation**: It elevates the parallelism marker from "per function call" (future) to "structured block" (spawn). Users write ordinary code and place spawn blocks where parallelism is needed. Analysis scope is constrained within spawn blocks, making compilation efficient and behavior controllable.
 
 ---
 
 ## Appendix
 
-### Appendix A: Detailed Comparison with Rust async
+### Appendix A: Comparison with Rust async
 
 | Feature | Rust async | YaoXiang LLVM AOT |
-|---------|-----------|-------------------|
-| Compiled output | State machine + machine code | Machine code + DAG |
-| Runtime | tokio | DAG Scheduler |
-| Scheduling timing | Compile-time determined await points | Runtime on-demand scheduling (within spawn blocks) |
-| Concurrency control | State machine states | DAG dependency edges |
-| Colored functions | async spreads | **No function coloring, parallelism within spawn blocks** |
-| Annotations | async/await | None (spawn block is the only parallel primitive) |
+|------|-----------|-------------------|
+| Compilation artifact | State machine + machine code | Machine code + spawn task metadata |
+| Runtime | tokio | Statically linked scheduler (~200-500KB) |
+| Concurrency marker | async/await keywords | `spawn { }` block |
+| Task creation | State machine generated at compile time | Direct subexpressions identified at compile time → task functions |
+| Function coloring | async infection | **No function coloring** |
+| Synchronous wait | `.await` | spawn block auto synchronous blocking |
+| Memory management | GC (runtime) | **RAII (deterministic)** |
+| Sharing mechanism | `Arc::new()` + manual Weak | **`ref` keyword (compiler automatically chooses Rc/Arc)** |
 
-### Appendix B: Scheduler Optimization Examples
-
-**Scenario 1: Scheduler detects that execution can be merged**
-
-```
-Original DAG:
-  compute_a() ──┐
-  compute_b() ──┼──→ compute_c()
-
-After scheduler optimization:
-  Merge compute_a + compute_b into a single task
-  → Reduce scheduling overhead
-```
-
-**Scenario 2: Dependency is not used**
-
-```
-a = expensive_compute()  // computed
-b = other_thing()        // doesn't need a
-print(b)                 // directly return b, skip a
-```
-
-### Appendix C: Design Discussion Log
+### Appendix B: Design Decision Records
 
 | Decision | Resolution | Date |
-|----------|-----------|------|
-| Adopt LLVM AOT | Direct codegen, no excessive abstraction | 2026-02-15 |
-| DAG scope | Within spawn blocks, not across spawn blocks | 2026-06-05 |
-| Execution model | **Bottom-up**: Reverse analyze dependencies from result, leaf nodes parallel | 2026-03-10 |
-| Isolated DAGs | Nodes without consumers execute independently in parallel | 2026-03-10 |
-| Infinite loops | Background DAGs, scheduler slices execution | 2026-03-10 |
-| Side effect handling | Implicit Effect System, imperceptible to users | 2026-02-15 |
-| Granularity control | Concurrency limit + adaptive | 2026-02-16 |
-| Paper citations | Added Lazy Task Creation, etc. | 2026-02-16 |
-| Concurrency model alignment | Aligned with RFC-024 spawn block concurrency model, removed old annotations | 2026-06-05 |
+|------|------|------|
+| Adopt LLVM AOT | Direct Codegen, no excessive abstraction | 2026-02-15 |
+| Concurrency model alignment | Aligned with RFC-024 spawn block direct subexpression model | 2026-06-10 |
+| DAG analysis scope | Within spawn blocks, not across spawn blocks (aligned with RFC-024) | 2026-06-05 |
+| Ownership model alignment | Aligned with RFC-009 v9: `&T`/`&mut T` tokens + `ref` keyword | 2026-06-10 |
+| Dual-backend model | VM (development) + LLVM (production), aligned with RFC-008 | 2026-05-11 |
+| Scheduler form | Static library linked into exe, ~200-500KB, no GC | 2026-05-11 |
+| FFI code generation | Integrated with RFC-026: `native()` declare + marshalling | 2026-06-10 |
+| Destructor function | `.drop` → RAII cleanup insertion, aligned with RFC-026 §7 | 2026-06-10 |
+| Side-effect handling | Removed `@IO`/`@Pure` inference, replaced with RFC-024 resource types | 2026-06-10 |
+| Reflection metadata | Compiled into exe .reflect section, mmap on demand | 2026-05-11 |
+| Paper citations | Retained Lazy Task Creation et al., clarified differences with YaoXiang | 2026-02-16 |
 
 ---
 
 ## References
 
-[^1]: Larus, J. R., & Halstead, R. H. (1990). *Lazy Task Creation: A Technique for Increasing the Granularity of Parallel Programs*. MIT. Retrieved from https://people.csail.mit.edu/riastradh/t/halstead90lazy-task.pdf
+[^1]: Larus, J. R., & Halstead, R. H. (1990). *Lazy Task Creation: A Technique for Increasing the Granularity of Parallel Programs*. MIT.
 
-[^2]: Tzannes, A., & Caragea, G. (2014). *Lazy Scheduling: A Runtime Adaptive Scheduler for Declarative Parallelism*. University of Maryland. Retrieved from https://user.eng.umd.edu/~barua/tzannes-TOPLAS-2014.pdf
+[^2]: Tzannes, A., & Caragea, G. (2014). *Lazy Scheduling: A Runtime Adaptive Scheduler for Declarative Parallelism*. University of Maryland.
 
-[^3]: Feo, J. T., et al. (1990). *A report on the SISAL language project*. Lawrence Livermore National Laboratory. Retrieved from https://www.sciencedirect.com/science/article/abs/pii/074373159090035N
+[^3]: Feo, J. T., et al. (1990). *A report on the SISAL language project*. Lawrence Livermore National Laboratory.
 
-[^4]: Mohr, E., et al. (1991). *Mul-T: A high-performance parallel lisp*. MIT. Retrieved from https://link.springer.com/content/pdf/10.1007/bfb0024163.pdf
+[^4]: Mohr, E., et al. (1991). *Mul-T: A high-performance parallel lisp*. MIT.
 
-[^5]: Intel Corporation. *Automatic Parallelization with Intel Compilers*. Retrieved from https://www.intel.com/content/www/us/en/developer/articles/technical/automatic-parallelization-with-intel-compilers.html
-
-[^6]: Marlow, S. (2010). *Parallel and Concurrent Programming in Haskell*. Retrieved from https://www.cse.chalmers.se/edu/year/2015/course/pfp/Papers/strategies-tutorial-v2.pdf
-
-[^7]: Plasmeijer, R., & van Eekelen, M. (2011). *Clean Language Documentation*. University of Nijmegen. Retrieved from https://clean.cs.ru.nl/Documentation
-
-- [Rust async book](https://rust-lang.github.io/async-book/)
-- [inkwell LLVM bindings](https://cranelift.dev/)
-- [tokio runtime design](https://tokio.rs/)
-- [RFC-024: Concurrency Model Based on spawn Blocks](./accepted/024-concurrency-model.md)
-- [RFC-008: Runtime Concurrency Model](./accepted/008-runtime-concurrency-model.md)
-- [RFC-009: Ownership Model](./accepted/009-ownership-model.md)
-- [Implicit Parallelism - Wikipedia](https://en.wikipedia.org/wiki/Implicit_parallelism)
+- [inkwell LLVM bindings](https://github.com/TheDan64/inkwell)
+- [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
+- [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
+- [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
+- [RFC-026: FFI Core Mechanism](./026-ffi-core-mechanism.md)
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
 | Status | Location | Description |
-|--------|----------|-------------|
-| **Draft** | `docs/design/rfc/` | Author draft, awaiting review submission |
-| **Under Review** | `docs/design/rfc/` | Open for community discussion and feedback |
-| **Accepted** | `docs/design/rfc/accepted/` | Becomes a formal design document |
-| **Rejected** | `docs/design/rfc/` | Preserved in RFC directory |
+|------|------|------|
+| **Draft** | `docs/design/rfc/` | Author's draft, awaiting submission for review |
+| **Under Review** | `docs/design/rfc/review/` | Open for community discussion and feedback |
+| **Accepted** | `docs/design/rfc/accepted/` | Becomes an official design document |
+| **Rejected** | `docs/design/rfc/` | Retained in the RFC directory |
 
-> Current status: **Under Review** — Aligned with RFC-024 spawn block concurrency model
-```
+> Current status: **Under Review** — Aligned with RFC-024 spawn block concurrency model, RFC-009 v9 ownership model, and RFC-026 FFI mechanism
