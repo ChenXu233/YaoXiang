@@ -12,7 +12,7 @@ pub mod substitute;
 pub mod trait_data;
 pub mod var;
 
-pub mod computation; // 保留，computation 在后续步骤中迁移
+pub mod eval; // 替代原 computation 模块
 
 // 向后兼容：重新导出原 base/ 公开的类型
 pub use const_data::{BinOp, ConstExpr, ConstKind, ConstValue, ConstVarDef, UnOp};

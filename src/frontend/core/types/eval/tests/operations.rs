@@ -1,4 +1,4 @@
-use crate::frontend::core::types::computation::operations::{
+use crate::frontend::core::types::eval::operations::{
     ArithOp, BoolType, CmpOp, LogicOp, TypeArithmetic, TypeComparison, TypeLogic, TypeLevelValue,
 };
 use crate::frontend::core::types::MonoType;

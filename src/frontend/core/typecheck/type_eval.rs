@@ -16,8 +16,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::types::{MonoType, ConstValue};
-use crate::frontend::core::types::computation::TypeLevelError;
-use crate::frontend::core::types::computation::TypeLevelResult;
+use crate::frontend::core::types::eval::TypeLevelError;
+use crate::frontend::core::types::eval::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
 
 /// 求值结果
@@ -961,7 +961,7 @@ impl From<EvalResult<MonoType>> for TypeLevelResult<MonoType> {
 #[allow(dead_code)]
 pub fn integrate_evaluator(
     _evaluator: &mut TypeEvaluator,
-    _normalizer: &mut crate::frontend::core::types::computation::evaluation::TypeNormalizer,
+    _normalizer: &mut crate::frontend::core::types::eval::normalizer::TypeNormalizer,
 ) {
     // TypeNormalizer 现在内部包含 TypeEvaluator
     // 缓存同步由 TypeNormalizer 内部处理
@@ -975,9 +975,9 @@ pub fn integrate_evaluator(
 #[allow(dead_code)]
 pub fn sync_caches(
     evaluator: &TypeEvaluator,
-    context: &mut crate::frontend::core::types::computation::evaluation::NormalizationContext,
+    context: &mut crate::frontend::core::types::eval::normalizer::NormalizationContext,
 ) {
-    use crate::frontend::core::types::computation::evaluation::NormalForm;
+    use crate::frontend::core::types::eval::normalizer::NormalForm;
 
     let cache = context.cache_mut();
 
@@ -1141,8 +1141,7 @@ mod tests {
         // 测试 integrate_evaluator 函数存在且可调用
         // 当前实现是空的，因为 TypeNormalizer 已内置 TypeEvaluator
         let mut evaluator = TypeEvaluator::new();
-        let mut normalizer =
-            crate::frontend::core::types::computation::evaluation::TypeNormalizer::new();
+        let mut normalizer = crate::frontend::core::types::eval::normalizer::TypeNormalizer::new();
 
         // 函数应该可以编译和调用
         integrate_evaluator(&mut evaluator, &mut normalizer);
@@ -1154,7 +1153,7 @@ mod tests {
         // 测试 sync_caches 函数存在且可调用
         let evaluator = TypeEvaluator::new();
         let mut context =
-            crate::frontend::core::types::computation::evaluation::NormalizationContext::new();
+            crate::frontend::core::types::eval::normalizer::NormalizationContext::new();
 
         // 函数应该可以编译和调用
         sync_caches(&evaluator, &mut context);

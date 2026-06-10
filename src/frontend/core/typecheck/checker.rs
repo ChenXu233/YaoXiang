@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::core::parser::ast::Module;
 use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::typecheck::traits::auto_derive;
-use crate::frontend::core::types::computation::const_generics::{ConstFunction, ConstExpr};
+use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr};
 
 use super::inference;
 use super::semantic_db;
@@ -52,7 +52,7 @@ impl TypeChecker {
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
-        use crate::frontend::core::types::computation::const_generics::ConstBinOp;
+        use crate::frontend::core::types::eval::const_eval::ConstBinOp;
 
         // 注册 factorial 函数
         let factorial = ConstFunction::new(

@@ -1,5 +1,5 @@
 use crate::frontend::core::types::MonoType;
-use crate::frontend::core::types::computation::dependent_types::{
+use crate::frontend::core::types::eval::dependent_types::{
     AssociatedType, AssociatedTypeDef, DependentTypeEnv, TypeFamily,
 };
 use std::collections::HashMap;

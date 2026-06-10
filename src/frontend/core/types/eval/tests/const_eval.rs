@@ -8,7 +8,7 @@
 //! §4.3: SizeExpr 表达式
 
 use crate::frontend::core::types::{ConstValue, MonoType};
-use crate::frontend::core::types::computation::const_generics::{
+use crate::frontend::core::types::eval::const_eval::{
     ConstBinOp, ConstExpr, ConstFunction, ConstGenericEval, ConstGenericResult, GenericSize,
     SizeExpr, SizeResult,
 };
@@ -171,7 +171,7 @@ fn test_eval_float_compare() {
 #[test]
 fn test_eval_neg() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::computation::const_generics::ConstUnOp;
+    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
     let neg = |x| ConstExpr::UnOp {
         op: ConstUnOp::Neg,
         expr: Box::new(ConstExpr::Int(x)),
@@ -183,7 +183,7 @@ fn test_eval_neg() {
 #[test]
 fn test_eval_not() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::computation::const_generics::ConstUnOp;
+    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
     let not = |b| ConstExpr::UnOp {
         op: ConstUnOp::Not,
         expr: Box::new(ConstExpr::Bool(b)),
@@ -280,7 +280,7 @@ fn test_eval_factorial() {
     let mut e = ConstGenericEval::new();
     e.register_function(
         "factorial".to_string(),
-        crate::frontend::core::types::computation::const_generics::functions::factorial(),
+        crate::frontend::core::types::eval::const_eval::functions::factorial(),
     );
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
@@ -308,7 +308,7 @@ fn test_eval_factorial() {
 #[test]
 fn test_eval_fibonacci() {
     let mut e = ConstGenericEval::new();
-    let fib = crate::frontend::core::types::computation::const_generics::functions::fibonacci();
+    let fib = crate::frontend::core::types::eval::const_eval::functions::fibonacci();
     e.register_function(fib.name.clone(), fib);
     assert_eval_eq(
         e.eval(&ConstExpr::Call {
@@ -580,7 +580,7 @@ fn test_eval_bool_plus_int_unsupported() {
 #[test]
 fn test_eval_neg_zero() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::computation::const_generics::ConstUnOp;
+    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
     assert_eval_eq(
         e.eval(&ConstExpr::UnOp {
             op: ConstUnOp::Neg,
@@ -755,7 +755,7 @@ fn test_eval_builtin_max_same() {
 #[test]
 fn test_eval_neg_float() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::computation::const_generics::ConstUnOp;
+    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
     let neg = ConstExpr::UnOp {
         op: ConstUnOp::Neg,
         expr: Box::new(ConstExpr::Float(std::f32::consts::PI)),
@@ -767,7 +767,7 @@ fn test_eval_neg_float() {
 #[test]
 fn test_eval_not_int() {
     let e = ConstGenericEval::new();
-    use crate::frontend::core::types::computation::const_generics::ConstUnOp;
+    use crate::frontend::core::types::eval::const_eval::ConstUnOp;
     let not = ConstExpr::UnOp {
         op: ConstUnOp::Not,
         expr: Box::new(ConstExpr::Int(1)),
@@ -1149,7 +1149,7 @@ fn test_const_bin_op_debug() {
 
 #[test]
 fn test_const_un_op_debug() {
-    let op = crate::frontend::core::types::computation::const_generics::ConstUnOp::Neg;
+    let op = crate::frontend::core::types::eval::const_eval::ConstUnOp::Neg;
     let debug = format!("{:?}", op);
     assert!(debug.contains("Neg"));
 }
