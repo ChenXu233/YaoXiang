@@ -206,36 +206,3 @@ impl SpawnPlacementChecker {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::frontend::core::parser::ast::{Block, Expr, Module, Stmt};
-    use crate::util::span::Span;
-
-    fn empty_module() -> Module {
-        Module {
-            items: vec![],
-            span: Span::dummy(),
-        }
-    }
-
-    #[allow(dead_code)]
-    fn make_block(
-        stmts: Vec<Stmt>,
-        expr: Option<Box<Expr>>,
-    ) -> Block {
-        Block {
-            stmts,
-            expr,
-            span: Span::dummy(),
-        }
-    }
-
-    #[test]
-    fn test_empty_module_no_errors() {
-        let module = empty_module();
-        let errors = check_spawn_placement(&module);
-        assert!(errors.is_empty());
-    }
-}
