@@ -14,7 +14,10 @@ pub enum SMTSort {
 }
 
 impl fmt::Display for SMTSort {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             SMTSort::Bool => write!(f, "Bool"),
             SMTSort::Int => write!(f, "Int"),
@@ -43,7 +46,10 @@ pub enum SMTExpr {
 }
 
 impl fmt::Display for SMTExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             SMTExpr::Atom(s) => write!(f, "{}", s),
             SMTExpr::App(op, args) => {
@@ -87,7 +93,10 @@ pub enum SMTCommand {
 }
 
 impl fmt::Display for SMTCommand {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self {
             SMTCommand::DeclareConst(name, sort) => {
                 write!(f, "(declare-const {} {})", name, sort)
