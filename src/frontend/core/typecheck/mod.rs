@@ -34,9 +34,6 @@ pub mod signature;
 pub mod types;
 // 证明管道基础设施
 pub mod proof;
-
-// 证明管道基础设施
-pub mod proof;
 // 有序证明层
 pub mod layers;
 // 独立分析遍
