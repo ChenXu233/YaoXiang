@@ -8,7 +8,7 @@
 
 use crate::frontend::core::parser::ast;
 use crate::frontend::core::types::var::TypeVar;
-use crate::frontend::core::types::const_data::{ConstVarDef, ConstValue};
+use crate::frontend::core::types::const_data::{ConstExpr, ConstVarDef, ConstValue};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
@@ -125,6 +125,16 @@ pub enum TypeBinding {
     Link(TypeVar),
 }
 
+/// 依赖函数参数：名字 + 类型标注
+///
+/// 类型标注可引用前面已声明的参数名。例：
+/// `(a: Int, b: Refined { base: Int, constraint: BinOp { op: Gt, left: NamedVar("b"), right: Lit(Int(0)) } })`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DepParam {
+    pub name: String,
+    pub ty: MonoType,
+}
+
 /// 单态类型（具体类型）
 ///
 /// 不包含类型变量的具体类型，用于类型检查的最终结果
@@ -230,20 +240,45 @@ pub enum MonoType {
         /// 对应的 ConstValue
         value: ConstValue,
     },
+
+    /// 精化类型：基类型 + 编译期谓词约束
+    ///
+    /// 例：Positive(b) 正格化后 → Refined { base: Int, constraint: b > 0 }
+    /// 运行时擦除为 base，编译期由证明管道验证 constraint
+    Refined {
+        base: Box<MonoType>,
+        constraint: ConstExpr,
+    },
+
+    /// 依赖函数类型：参数的类型标注可引用之前声明的参数名
+    ///
+    /// 与 Fn 的区别：DepFn 的参数类型可形成依赖链（后面的参数类型可引用前面的参数名）
+    DepFn {
+        params: Vec<DepParam>,
+        return_type: Box<MonoType>,
+    },
 }
 
 impl MonoType {
     /// 检查是否是数值类型
     pub fn is_numeric(&self) -> bool {
-        matches!(self, MonoType::Int(_) | MonoType::Float(_))
+        match self {
+            MonoType::Int(_) | MonoType::Float(_) => true,
+            MonoType::Refined { base, .. } => base.is_numeric(),
+            _ => false,
+        }
     }
 
     /// 检查是否是可索引类型
     pub fn is_indexable(&self) -> bool {
-        matches!(
-            self,
-            MonoType::List(_) | MonoType::Dict(_, _) | MonoType::String | MonoType::Tuple(_)
-        )
+        match self {
+            MonoType::List(_)
+            | MonoType::Dict(_, _)
+            | MonoType::String
+            | MonoType::Tuple(_) => true,
+            MonoType::Refined { base, .. } => base.is_indexable(),
+            _ => false,
+        }
     }
 
     /// 判断是否是约束类型（所有字段都是函数类型）
@@ -395,6 +430,20 @@ impl MonoType {
             } => {
                 // RFC-010: Type is always just "Type", no [] syntax
                 "Type".to_string()
+            }
+            MonoType::Refined { base, constraint } => {
+                format!("{} {{{}}}", base.type_name(), constraint)
+            }
+            MonoType::DepFn {
+                params,
+                return_type,
+            } => {
+                let params_str = params
+                    .iter()
+                    .map(|p| format!("{}: {}", p.name, p.ty.type_name()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("({}) -> {}", params_str, return_type.type_name())
             }
         }
     }
@@ -807,5 +856,45 @@ mod tests {
         let poly = ast_type_to_poly_type(&ast_type);
         // Verify it produces a valid PolyType
         assert!(!format!("{:?}", poly).is_empty());
+    }
+
+    #[test]
+    fn test_refined_construction() {
+        use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+        let refined = MonoType::Refined {
+            base: Box::new(MonoType::Int(64)),
+            constraint: ConstExpr::BinOp {
+                op: BinOp::Gt,
+                left: Box::new(ConstExpr::NamedVar("b".into())),
+                right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+            },
+        };
+        assert!(refined.is_numeric()); // 委托给 base (Int)
+        let display = format!("{}", refined);
+        assert!(display.contains("int64"));
+        assert!(display.contains("b"));
+    }
+
+    #[test]
+    fn test_depfn_construction() {
+        let depfn = MonoType::DepFn {
+            params: vec![
+                DepParam {
+                    name: "a".into(),
+                    ty: MonoType::Int(64),
+                },
+                DepParam {
+                    name: "b".into(),
+                    ty: MonoType::Bool,
+                },
+            ],
+            return_type: Box::new(MonoType::Int(64)),
+        };
+        assert!(!depfn.is_numeric());
+        let display = format!("{}", depfn);
+        assert!(display.contains("a: int64"));
+        assert!(display.contains("b: bool"));
+        assert!(display.contains("int64"));
     }
 }

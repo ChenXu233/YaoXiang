@@ -116,7 +116,7 @@ impl fmt::Display for ConstValue {
 }
 
 /// Const表达式（编译期可求值的表达式）
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConstExpr {
     /// 字面量常量
     Lit(ConstValue),

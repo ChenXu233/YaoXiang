@@ -1027,6 +1027,19 @@ impl TypeConstraintSolver {
                     self.collect_generalizable_vars(a, seen, out);
                 }
             }
+            MonoType::Refined { base, .. } => {
+                self.collect_generalizable_vars(base, seen, out);
+            }
+            MonoType::DepFn {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    self.collect_generalizable_vars(&p.ty, seen, out);
+                }
+                self.collect_generalizable_vars(return_type, seen, out);
+            }
         }
     }
 }
