@@ -328,8 +328,7 @@ impl TypeNormalizer {
         // 解析参数为 MonoType（使用不可变求值器解析）
         let parsed_args: Vec<MonoType> = {
             let evaluator = Evaluator::new(&self.env, &self.budget);
-            args
-                .iter()
+            args.iter()
                 .filter_map(|arg| {
                     evaluator
                         .parse_type(arg)
@@ -351,8 +350,7 @@ impl TypeNormalizer {
                 // If(Condition, TrueBranch, FalseBranch)
                 if parsed_args.len() >= 3 {
                     let result =
-                        evaluator
-                            .eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
+                        evaluator.eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
                     match result {
                         Ok(_) => NormalForm::Normalized,
                         Err(_) => NormalForm::Normalized,

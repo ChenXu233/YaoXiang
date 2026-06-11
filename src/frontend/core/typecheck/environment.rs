@@ -72,7 +72,8 @@ pub struct TypeEnvironment {
     pub generic_type_defs: HashMap<String, GenericTypeDef>,
     /// 编译期谓词定义表
     /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
-    pub predicate_defs: HashMap<String, crate::frontend::core::typecheck::predicate_resolver::PredicateDef>,
+    pub predicate_defs:
+        HashMap<String, crate::frontend::core::typecheck::predicate_resolver::PredicateDef>,
 }
 
 impl TypeEnvironment {

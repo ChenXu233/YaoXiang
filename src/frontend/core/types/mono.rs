@@ -272,10 +272,9 @@ impl MonoType {
     /// 检查是否是可索引类型
     pub fn is_indexable(&self) -> bool {
         match self {
-            MonoType::List(_)
-            | MonoType::Dict(_, _)
-            | MonoType::String
-            | MonoType::Tuple(_) => true,
+            MonoType::List(_) | MonoType::Dict(_, _) | MonoType::String | MonoType::Tuple(_) => {
+                true
+            }
             MonoType::Refined { base, .. } => base.is_indexable(),
             _ => false,
         }

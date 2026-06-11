@@ -32,7 +32,7 @@ pub fn check_predicate(
     // 提取约束表达式
     let constraint = match refined {
         MonoType::Refined { constraint, .. } => constraint,
-        _ => return ProofResult::Proved,  // 不是精化类型，无事可证
+        _ => return ProofResult::Proved, // 不是精化类型，无事可证
     };
 
     // 求值约束
@@ -119,6 +119,6 @@ mod tests {
         let env = TypeEnvironment::new();
         let ctx = ProofContext::new(&env);
         let result = check_predicate(&ctx, &non_refined, &bindings);
-        assert!(result.is_proved());  // 非 Refined 类型直接通过
+        assert!(result.is_proved()); // 非 Refined 类型直接通过
     }
 }

@@ -12,7 +12,10 @@ use super::super::proof::context::ProofContext;
 ///
 /// 不调用 Evaluator，纯结构比较。在调用昂贵的归约求值之前，
 /// 先检查两个类型是否在结构上已经相同。
-pub fn structurally_equal(lhs: &MonoType, rhs: &MonoType) -> bool {
+pub fn structurally_equal(
+    lhs: &MonoType,
+    rhs: &MonoType,
+) -> bool {
     match (lhs, rhs) {
         // 基础类型
         (MonoType::Void, MonoType::Void) => true,
@@ -25,25 +28,45 @@ pub fn structurally_equal(lhs: &MonoType, rhs: &MonoType) -> bool {
         // 类型引用
         (MonoType::TypeRef(a), MonoType::TypeRef(b)) => a == b,
         // 函数类型
-        (MonoType::Fn { params: pa, return_type: ra },
-         MonoType::Fn { params: pb, return_type: rb }) => {
+        (
+            MonoType::Fn {
+                params: pa,
+                return_type: ra,
+            },
+            MonoType::Fn {
+                params: pb,
+                return_type: rb,
+            },
+        ) => {
             pa.len() == pb.len()
-                && pa.iter().zip(pb.iter()).all(|(a, b)| structurally_equal(a, b))
+                && pa
+                    .iter()
+                    .zip(pb.iter())
+                    .all(|(a, b)| structurally_equal(a, b))
                 && structurally_equal(ra, rb)
         }
         // 容器类型
         (MonoType::List(a), MonoType::List(b)) => structurally_equal(a, b),
         (MonoType::Option(a), MonoType::Option(b)) => structurally_equal(a, b),
         (MonoType::Tuple(a), MonoType::Tuple(b)) => {
-            a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| structurally_equal(x, y))
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(x, y)| structurally_equal(x, y))
         }
         // Refined 只比较基类型（约束可能不同但基类型相同的视为结构等价）
         (MonoType::Refined { base: ba, .. }, MonoType::Refined { base: bb, .. }) => {
             structurally_equal(ba, bb)
         }
         // MetaType
-        (MonoType::MetaType { universe_level: ua, .. },
-         MonoType::MetaType { universe_level: ub, .. }) => ua == ub,
+        (
+            MonoType::MetaType {
+                universe_level: ua, ..
+            },
+            MonoType::MetaType {
+                universe_level: ub, ..
+            },
+        ) => ua == ub,
         // Struct / Enum
         (MonoType::Struct(sa), MonoType::Struct(sb)) => sa == sb,
         (MonoType::Enum(ea), MonoType::Enum(eb)) => ea == eb,
