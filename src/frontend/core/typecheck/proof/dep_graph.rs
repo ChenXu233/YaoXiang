@@ -36,10 +36,10 @@ impl TypeDepGraph {
     pub fn affected_by(
         &self,
         var: &str,
-    ) -> Vec<&String> {
+    ) -> Vec<&str> {
         self.edges
             .get(var)
-            .map(|set| set.iter().collect())
+            .map(|set| set.iter().map(|s| s.as_str()).collect())
             .unwrap_or_default()
     }
 
@@ -65,8 +65,8 @@ mod tests {
         graph.add_dep("t", "i");
         let affected = graph.affected_by("i");
         assert_eq!(affected.len(), 2);
-        assert!(affected.iter().any(|s| s.as_str() == "s"));
-        assert!(affected.iter().any(|s| s.as_str() == "t"));
+        assert!(affected.contains(&"s"));
+        assert!(affected.contains(&"t"));
     }
 
     #[test]
@@ -83,6 +83,6 @@ mod tests {
         graph.remove_dependant("s");
         let affected = graph.affected_by("i");
         assert_eq!(affected.len(), 1);
-        assert!(affected.iter().any(|s| s.as_str() == "t"));
+        assert!(affected.contains(&"t"));
     }
 }
