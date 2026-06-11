@@ -15,7 +15,7 @@ use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 
 use super::inference;
 use super::semantic_db;
-use super::passes::spawn_placement;
+use crate::frontend::core::spawn;
 use super::types::TypeCheckResult;
 use super::environment::TypeEnvironment;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
@@ -232,8 +232,8 @@ impl TypeChecker {
         // 收集所有导出项
         self.collect_exports(module);
 
-        // RFC-001/008: `spawn` 仅允许在 `@block` 作用域内使用（编译期约束）
-        for err in spawn_placement::check_spawn_placement(module) {
+        // RFC-024: spawn 位置检查
+        for err in spawn::placement::check_spawn_placement(module) {
             self.add_error(err);
         }
 
