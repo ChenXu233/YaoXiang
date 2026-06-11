@@ -6,3 +6,6 @@
 pub mod dead_code;
 pub mod overload;
 pub mod spawn_placement;
+
+#[cfg(test)]
+mod tests;
