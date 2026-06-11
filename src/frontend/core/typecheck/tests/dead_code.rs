@@ -3,7 +3,7 @@
 //! §3: 类型系统
 //! RFC-011 §7: 死代码消除机制
 
-use crate::frontend::core::typecheck::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
+use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
 use crate::frontend::core::typecheck::semantic_db::{
     SemanticDB, SemanticToken, SemanticTokenType, SemanticTokenModifier,
 };

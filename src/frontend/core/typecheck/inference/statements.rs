@@ -36,7 +36,7 @@ pub struct StatementChecker {
     checked_functions: HashMap<String, bool>,
     /// 重载候选存储
     overload_candidates:
-        HashMap<String, Vec<crate::frontend::core::typecheck::overload::OverloadCandidate>>,
+        HashMap<String, Vec<crate::frontend::core::typecheck::passes::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）

@@ -522,7 +522,7 @@ impl Pipeline {
         ast: &super::core::parser::Module,
         semantic_db: &typecheck::semantic_db::SemanticDB,
     ) -> Vec<String> {
-        use crate::frontend::core::typecheck::dead_code::DeadCodeAnalyzer;
+        use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 
         let mut analyzer = DeadCodeAnalyzer::new();
         let warnings = analyzer.analyze(ast, semantic_db);

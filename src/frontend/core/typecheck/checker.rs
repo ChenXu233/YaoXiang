@@ -11,7 +11,7 @@ use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr};
 
 use super::inference;
 use super::semantic_db;
-use super::spawn_placement;
+use super::passes::spawn_placement;
 use super::types::TypeCheckResult;
 use super::environment::TypeEnvironment;
 use super::{add_builtin_types, add_std_traits, add_native_function_types};
@@ -280,7 +280,7 @@ impl TypeChecker {
         // RFC-027: 终止检查 — 在类型检查之后、约束求解之前运行
         // 分析循环和递归函数，自动证明终止性
         let term_diagnostics = {
-            let mut term_checker = super::termination::TerminationChecker::new();
+            let mut term_checker = super::layers::termination::TerminationChecker::new();
             term_checker.check_module(module, self.env())
         };
         for diag in term_diagnostics {

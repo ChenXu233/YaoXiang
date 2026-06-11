@@ -28,5 +28,6 @@ mod rfc010;
 mod rfc011;
 mod signature;
 mod spawn_placement;
+mod termination_tests;
 mod type_eval;
 mod types;

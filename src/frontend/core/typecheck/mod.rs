@@ -16,23 +16,8 @@ pub mod inference;
 // 导入特质模块
 pub mod traits;
 
-// 导入重载解析模块
-pub mod overload;
-
-// 导入类型求值器模块
-pub mod type_eval;
-
 // 语义信息数据库
 pub mod semantic_db;
-
-// 死代码分析器
-pub mod dead_code;
-
-// spawn 放置检查
-pub mod spawn_placement;
-
-// 终止检查
-pub mod termination;
 
 // 类型环境
 pub mod environment;
@@ -69,8 +54,7 @@ pub use crate::frontend::core::types::{
 // 重新导出子模块
 pub use environment::*;
 pub use inference::*;
-pub use overload::*;
-pub use type_eval::*;
+pub use crate::frontend::core::types::eval::evaluator::*;
 pub use checker::*;
 pub use signature::*;
 pub use types::*;

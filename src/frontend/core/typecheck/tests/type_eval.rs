@@ -3,7 +3,7 @@
 //! §3.11: 编译期泛型
 //! RFC-011 §4: 编译期泛型
 
-use crate::frontend::core::typecheck::type_eval::{EvalConfig, EvalResult, TypeEvaluator};
+use crate::frontend::core::types::eval::evaluator::{EvalConfig, EvalResult, TypeEvaluator};
 use crate::frontend::core::types::MonoType;
 
 // ===================================================================
