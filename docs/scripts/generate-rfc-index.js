@@ -236,6 +236,9 @@ function generateIndex(allRfcs) {
   lines.push('---')
   lines.push('')
 
+  // 收集所有已被归组的子 RFC
+  const groupedSubIds = new Set()
+
   // 各分类
   for (const [category, categoryName] of Object.entries(CATEGORIES)) {
     lines.push(`## ${categoryName}`)
@@ -263,21 +266,25 @@ function generateIndex(allRfcs) {
         const title = `[${rfc.title}](${rfc.relativePath})`
         lines.push(`| ${number} | ${title} | ${rfc.author} | ${rfc.created} | ${rfc.status} |`)
 
-        // 查找属于此父 RFC 的子 RFC
+        // 查找属于此父 RFC 的子 RFC（跨所有分类）
         const parentGroup = `rfc-${String(rfc.rfcInfo.number).padStart(3, '0')}`
-        const children = subs
-          .filter(s => s.group === parentGroup)
+        const children = allRfcs
+          .filter(s => s.rfcInfo.sub && s.group === parentGroup)
           .sort((a, b) => a.rfcInfo.sub.localeCompare(b.rfcInfo.sub))
 
         for (const child of children) {
           const childNumber = formatRfcNumber(child.rfcInfo)
           const childTitle = `[${child.title}](${child.relativePath})`
-          lines.push(`| ↳ ${childNumber} | ${childTitle} | ${child.author} | ${child.created} | ${child.status} |`)
+          const childStatus = child.category !== category
+            ? `${child.status}（${CATEGORIES[child.category]}）`
+            : child.status
+          lines.push(`| ↳ ${childNumber} | ${childTitle} | ${child.author} | ${child.created} | ${childStatus} |`)
+          groupedSubIds.add(`${child.rfcInfo.number}-${child.rfcInfo.sub}`)
         }
       }
 
-      // 没有 group 的子 RFC（不属于任何父 RFC）单独列出
-      const orphanSubs = subs.filter(s => !s.group)
+      // 本分类中未被归组的子 RFC
+      const orphanSubs = subs.filter(s => !groupedSubIds.has(`${s.rfcInfo.number}-${s.rfcInfo.sub}`))
       if (orphanSubs.length > 0) {
         orphanSubs.sort((a, b) => {
           const numDiff = a.rfcInfo.number - b.rfcInfo.number
