@@ -3,7 +3,7 @@
 **职责**：对类型的纯函数操作。输入类型，输出归约后的类型或错误。不涉及程序上下文、不涉及证明。
 
 **文件**：
-- `evaluator.rs` — TypeEvaluator：常量折叠、If/Match/Nat 归约
+- `evaluator.rs` — Evaluator：常量折叠、If/Match/Nat 归约、ConstExpr 求值、β-归约
 - `normalizer.rs` — TypeNormalizer：βδι-规约 + 范式化
 - `conditional.rs` — 条件类型 + MatchType
 - `const_eval.rs` — Const 泛型求值 + ConstFunction

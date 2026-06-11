@@ -10,7 +10,9 @@
 //! 复用 core/type_system/substitute.rs 中的公共替换实现
 
 use crate::frontend::core::types::{MonoType, Substitution, Substituter};
-use super::evaluator::TypeEvaluator;
+use crate::frontend::core::typecheck::TypeEnvironment;
+use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
+use super::evaluator::Evaluator;
 use std::collections::HashMap;
 
 /// 范式类型标记
@@ -130,6 +132,9 @@ impl NormalizationContext {
 /// 类型范式化器
 ///
 /// 将类型表达式转换为范式形式
+///
+/// 内部持有 TypeEnvironment 和 BudgetTracker 的所有权，
+/// 为内部 Evaluator 提供引用。
 #[derive(Debug)]
 pub struct TypeNormalizer {
     /// 范式化配置
@@ -138,8 +143,11 @@ pub struct TypeNormalizer {
     /// 上下文
     context: NormalizationContext,
 
-    /// 类型求值器（用于条件类型求值）
-    evaluator: TypeEvaluator,
+    /// 内部持有的类型环境（为 evaluator 提供引用）
+    env: TypeEnvironment,
+
+    /// 内部持有的预算追踪器（为 evaluator 提供引用）
+    budget: BudgetTracker,
 }
 
 impl Default for TypeNormalizer {
@@ -153,8 +161,8 @@ impl Clone for TypeNormalizer {
         Self {
             config: self.config.clone(),
             context: self.context.clone(),
-            // 重新创建 evaluator，因为原始指针不能克隆
-            evaluator: TypeEvaluator::new(),
+            env: TypeEnvironment::new(),
+            budget: BudgetTracker::new(),
         }
     }
 }
@@ -165,7 +173,8 @@ impl TypeNormalizer {
         Self {
             config: ReductionConfig::default(),
             context: NormalizationContext::new(),
-            evaluator: TypeEvaluator::new(),
+            env: TypeEnvironment::new(),
+            budget: BudgetTracker::new(),
         }
     }
 
@@ -174,7 +183,8 @@ impl TypeNormalizer {
         Self {
             config,
             context: NormalizationContext::new(),
-            evaluator: TypeEvaluator::new(),
+            env: TypeEnvironment::new(),
+            budget: BudgetTracker::new(),
         }
     }
 
@@ -315,19 +325,25 @@ impl TypeNormalizer {
         type_name: &str,
         args: &[String],
     ) -> NormalForm {
-        // 解析参数为 MonoType
-        let parsed_args: Vec<MonoType> = args
-            .iter()
-            .filter_map(|arg| {
-                self.evaluator
-                    .parse_type(arg)
-                    .or_else(|| Some(MonoType::TypeRef(arg.clone())))
-            })
-            .collect();
+        // 解析参数为 MonoType（使用不可变求值器解析）
+        let parsed_args: Vec<MonoType> = {
+            let evaluator = Evaluator::new(&self.env, &self.budget);
+            args
+                .iter()
+                .filter_map(|arg| {
+                    evaluator
+                        .parse_type(arg)
+                        .or_else(|| Some(MonoType::TypeRef(arg.clone())))
+                })
+                .collect()
+        };
 
         if parsed_args.len() < 2 {
             return NormalForm::Normalized;
         }
+
+        // 创建可变求值器进行实际求值
+        let mut evaluator = Evaluator::new(&self.env, &self.budget);
 
         // 根据类型名称调用对应的求值方法
         match type_name {
@@ -335,7 +351,7 @@ impl TypeNormalizer {
                 // If(Condition, TrueBranch, FalseBranch)
                 if parsed_args.len() >= 3 {
                     let result =
-                        self.evaluator
+                        evaluator
                             .eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
                     match result {
                         Ok(_) => NormalForm::Normalized,
@@ -359,7 +375,7 @@ impl TypeNormalizer {
                     })
                     .collect();
 
-                let result = self.evaluator.eval_match(target, arms);
+                let result = evaluator.eval_match(target, arms);
                 match result {
                     Ok(_) => NormalForm::Normalized,
                     Err(_) => NormalForm::Normalized,
@@ -370,8 +386,8 @@ impl TypeNormalizer {
     }
 
     /// 获取求值器（用于外部访问）
-    pub fn evaluator(&mut self) -> &mut TypeEvaluator {
-        &mut self.evaluator
+    pub fn evaluator(&mut self) -> Evaluator<'_> {
+        Evaluator::new(&self.env, &self.budget)
     }
 
     /// 获取上下文

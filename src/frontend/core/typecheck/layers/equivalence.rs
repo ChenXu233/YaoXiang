@@ -3,7 +3,7 @@
 //! 检查两个类型是否等价。调用 types/eval/ 做确定性归约，
 //! 将归约结果包装为 ProofResult。
 
-use crate::frontend::core::types::eval::evaluator::TypeEvaluator;
+use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::verdict::{BudgetReport, DisproofModel, ProofResult, UnprovenReason};
 use super::super::proof::context::ProofContext;
@@ -14,8 +14,7 @@ pub fn check_type_equivalence(
     lhs: &MonoType,
     rhs: &MonoType,
 ) -> ProofResult {
-    let mut evaluator = TypeEvaluator::new();
-    evaluator.set_env(ctx.env_ref());
+    let mut evaluator = Evaluator::new(ctx.env, &ctx.budget);
 
     match (evaluator.eval(lhs), evaluator.eval(rhs)) {
         (Ok(l), Ok(r)) if l == r => ProofResult::Proved,
