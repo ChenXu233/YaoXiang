@@ -7,4 +7,5 @@ pub mod assumptions;
 pub mod budget;
 pub mod context;
 pub mod dep_graph;
+pub mod smt;
 pub mod verdict;
