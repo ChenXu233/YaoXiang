@@ -55,15 +55,21 @@ impl fmt::Display for SMTExpr {
             }
             SMTExpr::Forall { vars, body } => {
                 write!(f, "(forall (")?;
-                for (name, sort) in vars {
-                    write!(f, "({} {}) ", name, sort)?;
+                for (i, (name, sort)) in vars.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "({} {})", name, sort)?;
                 }
                 write!(f, ") {})", body)
             }
             SMTExpr::Exists { vars, body } => {
                 write!(f, "(exists (")?;
-                for (name, sort) in vars {
-                    write!(f, "({} {}) ", name, sort)?;
+                for (i, (name, sort)) in vars.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "({} {})", name, sort)?;
                 }
                 write!(f, ") {})", body)
             }
@@ -170,6 +176,6 @@ mod tests {
                 vec![SMTExpr::Atom("i".into()), SMTExpr::Atom("0".into())],
             )),
         };
-        assert_eq!(expr.to_string(), "(forall ((i Int) ) (>= i 0))");
+        assert_eq!(expr.to_string(), "(forall ((i Int)) (>= i 0))");
     }
 }
