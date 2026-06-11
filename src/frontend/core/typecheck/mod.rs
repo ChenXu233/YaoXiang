@@ -10,6 +10,9 @@ use crate::frontend::core::parser::ast::{Module, Expr};
 
 // ============ 子模块声明 ============
 
+// 编译期谓词解析器
+pub mod predicate_resolver;
+
 // 导入推断模块
 pub mod inference;
 
