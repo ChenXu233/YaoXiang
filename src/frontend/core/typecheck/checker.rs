@@ -8,6 +8,10 @@ use crate::frontend::core::parser::ast::Module;
 use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::typecheck::traits::auto_derive;
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, ConstExpr};
+use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
+use crate::frontend::core::typecheck::proof::context::ProofContext;
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::typecheck::layers::predicate::check_predicate;
 
 use super::inference;
 use super::semantic_db;
@@ -393,6 +397,22 @@ impl TypeChecker {
                                 .unwrap_or_else(|| self.env.solver().new_var()),
                         ),
                     };
+
+                    // RFC-027: 解析类型标注中的编译期谓词
+                    let fn_ty = match fn_ty {
+                        MonoType::Fn {
+                            params,
+                            return_type,
+                        } => MonoType::Fn {
+                            params: params
+                                .into_iter()
+                                .map(|p| self.resolve_type_annotation(&p))
+                                .collect(),
+                            return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                        },
+                        other => other,
+                    };
+
                     self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                 }
                 // 处理 Lambda 赋值 (name = (params) => body)
@@ -418,6 +438,24 @@ impl TypeChecker {
                                     .collect(),
                                 return_type: Box::new(self.env.solver().new_var()),
                             };
+
+                            // RFC-027: 解析类型标注中的编译期谓词
+                            let fn_ty = match fn_ty {
+                                MonoType::Fn {
+                                    params,
+                                    return_type,
+                                } => MonoType::Fn {
+                                    params: params
+                                        .into_iter()
+                                        .map(|p| self.resolve_type_annotation(&p))
+                                        .collect(),
+                                    return_type: Box::new(
+                                        self.resolve_type_annotation(&return_type),
+                                    ),
+                                },
+                                other => other,
+                            };
+
                             self.env.add_var(name.clone(), PolyType::mono(fn_ty));
                         }
                     }
@@ -560,6 +598,21 @@ impl TypeChecker {
                 let fn_ty = MonoType::Fn {
                     params: final_param_types.clone(),
                     return_type: Box::new(final_return_type),
+                };
+
+                // RFC-027: 解析类型标注中的编译期谓词（如 Positive(5) -> Refined）
+                let fn_ty = match fn_ty {
+                    MonoType::Fn {
+                        params,
+                        return_type,
+                    } => MonoType::Fn {
+                        params: params
+                            .into_iter()
+                            .map(|p| self.resolve_type_annotation(&p))
+                            .collect(),
+                        return_type: Box::new(self.resolve_type_annotation(&return_type)),
+                    },
+                    other => other,
                 };
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
@@ -1100,6 +1153,49 @@ impl TypeChecker {
             // 其他类型（Int, Float, Bool, String, Void, Struct, Enum, TypeVar, TypeRef 等）保持不变
             other => other,
         }
+    }
+
+    // ============ RFC-027 阶段 1：编译期谓词集成 ============
+
+    /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined
+    ///
+    /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
+    /// 如果不是已知的编译期谓词，返回原类型
+    fn resolve_type_annotation(
+        &self,
+        ty: &MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::Generic { name, args } if !args.is_empty() => {
+                if let Some(refined) = PredicateResolver::try_resolve(&self.env, name, args) {
+                    return refined;
+                }
+                ty.clone()
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    /// 对绑定点的精化类型执行谓词检查
+    ///
+    /// 仅处理 Refined 类型，非 Refined 直接返回 Proved。
+    /// 构造 ProofContext 后调用 Layer 3 的 check_predicate。
+    #[allow(dead_code)] // 阶段 1：方法已就绪，变量绑定验证在后续阶段接入
+    fn check_refined_binding(
+        &self,
+        ty: &MonoType,
+        bindings: &std::collections::HashMap<String, crate::frontend::core::types::ConstValue>,
+    ) -> ProofResult {
+        // 只处理 Refined 类型
+        if !matches!(ty, MonoType::Refined { .. }) {
+            return ProofResult::Proved;
+        }
+
+        // 构造 ProofContext
+        let ctx = ProofContext::new(&self.env);
+
+        // 调用 Layer 3
+        check_predicate(&ctx, ty, bindings)
     }
 }
 include!("checker/semantic_tokens.rs");
