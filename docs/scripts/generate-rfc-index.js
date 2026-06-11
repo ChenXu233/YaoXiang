@@ -236,8 +236,20 @@ function generateIndex(allRfcs) {
   lines.push('---')
   lines.push('')
 
-  // 收集所有已被归组的子 RFC
+  // 预计算：哪些子 RFC 属于其他分类的父 RFC（需要从原分类中移除）
   const groupedSubIds = new Set()
+  for (const rfc of allRfcs) {
+    if (rfc.rfcInfo.sub || !rfc.group) continue
+    // 这是一个有 group 字段的父 RFC（不应该发生，但防御性编程）
+  }
+  for (const rfc of allRfcs) {
+    if (!rfc.rfcInfo.sub || !rfc.group) continue
+    // 找到这个子 RFC 的父 RFC
+    const parent = allRfcs.find(p => !p.rfcInfo.sub && `rfc-${String(p.rfcInfo.number).padStart(3, '0')}` === rfc.group)
+    if (parent && parent.category !== rfc.category) {
+      groupedSubIds.add(`${rfc.rfcInfo.number}-${rfc.rfcInfo.sub}`)
+    }
+  }
 
   // 各分类
   for (const [category, categoryName] of Object.entries(CATEGORIES)) {
@@ -276,7 +288,7 @@ function generateIndex(allRfcs) {
           const childNumber = formatRfcNumber(child.rfcInfo)
           const childTitle = `[${child.title}](${child.relativePath})`
           const childStatus = child.category !== category
-            ? `${child.status}（${CATEGORIES[child.category]}）`
+            ? CATEGORIES[child.category]
             : child.status
           lines.push(`| ↳ ${childNumber} | ${childTitle} | ${child.author} | ${child.created} | ${childStatus} |`)
           groupedSubIds.add(`${child.rfcInfo.number}-${child.rfcInfo.sub}`)

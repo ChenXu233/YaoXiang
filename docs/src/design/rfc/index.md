@@ -58,6 +58,9 @@ title: "RFC 索引"
 | RFC-012 | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | 已接受 |
 | RFC-013 | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md) | 晨煦 | 2026-02-02 | 已接受 |
 | RFC-014 | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
+| ↳ RFC-014a | [RFC-014a: Registry 协议规范](./draft/014a-registry-protocol.md) | 晨煦 | 2026-06-11 | 草案RFC |
+| ↳ RFC-014b | [RFC-014b: 构建系统与二进制分发](./draft/014b-build-system.md) | 晨煦 | 2026-06-11 | 草案RFC |
+| ↳ RFC-014c | [RFC-014c: 工作空间支持](./draft/014c-workspace.md) | 晨煦 | 2026-06-11 | 草案RFC |
 | RFC-015 | [RFC-015: YaoXiang 配置系统设计](./accepted/015-configuration-system.md) | 晨煦 | 2026-02-12 | 已接受 |
 | RFC-017 | [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md) | 晨煦 | 2026-02-15 | 审核中 |
 | RFC-018 | [RFC-018：LLVM AOT 编译器设计](./accepted/018-llvm-aot-compiler.md) | 晨煦 | 2026-02-15 | 已接受 |
