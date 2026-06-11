@@ -237,13 +237,13 @@ impl TypeComputer {
 
     /// 计算条件类型
     ///
-    /// 使用 TypeEvaluator 计算 If、Match 等条件类型的值
+    /// 使用 Evaluator 计算 If、Match 等条件类型的值
     fn compute_conditional(
         &mut self,
         ty: &MonoType,
     ) -> ComputeResult {
         // 使用 normalizer 中的 evaluator 计算条件类型
-        let evaluator = self.normalizer.evaluator();
+        let mut evaluator = self.normalizer.evaluator();
 
         // 计算类型
         let eval_result = evaluator.eval(ty);

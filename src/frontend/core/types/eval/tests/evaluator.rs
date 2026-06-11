@@ -3,8 +3,10 @@
 //! §3.11: 编译期泛型
 //! RFC-011 §4: 编译期泛型
 
-use crate::frontend::core::types::eval::evaluator::{EvalConfig, TypeEvaluator};
+use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
 use crate::frontend::core::types::MonoType;
+use crate::frontend::core::typecheck::TypeEnvironment;
+use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
 
 // ===================================================================
 // Happy path 测试
@@ -13,7 +15,9 @@ use crate::frontend::core::types::MonoType;
 #[test]
 fn test_type_evaluator_creation() {
     // Arrange & Act
-    let _evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let _evaluator = Evaluator::new(&env, &budget);
 
     // Assert - 应该成功创建
 }
@@ -21,7 +25,9 @@ fn test_type_evaluator_creation() {
 #[test]
 fn test_type_evaluator_eval_simple_type() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
 
     // Act
     let result = evaluator.eval(&MonoType::Int(32));
@@ -33,7 +39,9 @@ fn test_type_evaluator_eval_simple_type() {
 #[test]
 fn test_type_evaluator_eval_fn_type() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let fn_type = MonoType::Fn {
         params: vec![MonoType::Int(32), MonoType::Float(64)],
         return_type: Box::new(MonoType::String),
@@ -49,7 +57,9 @@ fn test_type_evaluator_eval_fn_type() {
 #[test]
 fn test_type_evaluator_eval_tuple_type() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let tuple_type = MonoType::Tuple(vec![MonoType::Int(32), MonoType::Bool, MonoType::String]);
 
     // Act
@@ -62,7 +72,9 @@ fn test_type_evaluator_eval_tuple_type() {
 #[test]
 fn test_type_evaluator_eval_list_type() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let list_type = MonoType::List(Box::new(MonoType::Float(64)));
 
     // Act
@@ -79,7 +91,9 @@ fn test_type_evaluator_eval_list_type() {
 #[test]
 fn test_type_evaluator_eval_nat_unknown_operation() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let a = MonoType::Int(5);
     let b = MonoType::Int(3);
 
@@ -96,7 +110,9 @@ fn test_type_evaluator_eval_nat_unknown_operation() {
 #[test]
 fn test_type_evaluator_eval_nat_underflow() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let a = MonoType::Int(3);
     let b = MonoType::Int(5);
 
@@ -113,7 +129,9 @@ fn test_type_evaluator_eval_nat_underflow() {
 #[test]
 fn test_type_evaluator_eval_nat_division_by_zero() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let a = MonoType::Int(10);
     let b = MonoType::Int(0);
 
@@ -127,7 +145,9 @@ fn test_type_evaluator_eval_nat_division_by_zero() {
 #[test]
 fn test_type_evaluator_eval_nat_modulo_by_zero() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let a = MonoType::Int(10);
     let b = MonoType::Int(0);
 
@@ -141,12 +161,14 @@ fn test_type_evaluator_eval_nat_modulo_by_zero() {
 #[test]
 fn test_type_evaluator_eval_max_depth_exceeded() {
     // Arrange - 设置 max_depth=0，使得任何递归都会触发深度限制
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
     let config = EvalConfig {
         max_depth: 0,
         enable_cache: true,
         cycle_detection: true,
     };
-    let mut evaluator = TypeEvaluator::with_config(config);
+    let mut evaluator = Evaluator::with_config(&env, &budget, config);
     // 嵌套 Fn 类型会递归求值参数和返回类型，触发深度检查
     let nested_fn = MonoType::Fn {
         params: vec![MonoType::Fn {
@@ -169,7 +191,9 @@ fn test_type_evaluator_eval_max_depth_exceeded() {
 #[test]
 fn test_type_evaluator_eval_match_no_matching_arm() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let target = MonoType::Int(32);
     let arms = vec![(MonoType::String, MonoType::Bool)];
 
@@ -190,7 +214,9 @@ fn test_type_evaluator_eval_match_no_matching_arm() {
 #[test]
 fn test_type_evaluator_eval_nested_type() {
     // Arrange - 构造深层嵌套类型：Fn[Tuple[List[Int], Fn[Bool -> String(async)]] -> List[Float]]
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
     let nested_type = MonoType::Fn {
         params: vec![MonoType::Tuple(vec![
             MonoType::List(Box::new(MonoType::Int(32))),
@@ -215,7 +241,9 @@ fn test_type_evaluator_eval_nested_type() {
 #[test]
 fn test_type_evaluator_eval_void_type() {
     // Arrange
-    let mut evaluator = TypeEvaluator::new();
+    let env = TypeEnvironment::new();
+    let budget = BudgetTracker::new();
+    let mut evaluator = Evaluator::new(&env, &budget);
 
     // Act
     let result = evaluator.eval(&MonoType::Void);

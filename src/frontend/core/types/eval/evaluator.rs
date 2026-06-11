@@ -1,9 +1,9 @@
-//! RFC-011 编译期类型求值器
+//! RFC-027 编译期求值器
 //!
-//! 实现条件类型的编译期求值：
-//! - `If[C, T, E]`: 基于布尔条件的类型选择
-//! - `Match[T]`: 模式匹配类型选择
-//! - `Nat`: 自然数算术运算
+//! 统一的编译期求值引擎，支持：
+//! - 类型归约（If/Match/Nat 条件类型）
+//! - ConstExpr 求值（编译期常量表达式）
+//! - β-归约（类型级函数应用）
 //!
 //! # 示例
 //! ```yaoxiang
@@ -16,9 +16,11 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::types::{MonoType, ConstValue};
+use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::typecheck::TypeEnvironment;
+use crate::frontend::core::typecheck::proof::budget::BudgetTracker;
 
 /// 类型求值错误
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,32 +29,6 @@ pub enum EvalError {
     CycleDetected(String),
     ArithmeticError(String),
     TypeMismatch(String),
-}
-
-/// 编译期类型求值器
-///
-/// 负责在编译期对条件类型进行求值：
-/// - If 条件类型：基于布尔条件选择类型
-/// - Match 类型：基于模式匹配选择类型
-/// - Nat 运算：自然数算术运算
-#[derive(Debug, Default)]
-pub struct TypeEvaluator {
-    /// 类型求值缓存
-    /// 避免重复求值相同类型
-    cache: HashMap<MonoType, Result<MonoType, EvalError>>,
-
-    /// 依赖追踪
-    /// 记录类型之间的依赖关系
-    dependencies: HashMap<MonoType, HashSet<MonoType>>,
-
-    /// 类型环境引用
-    env: Option<*const TypeEnvironment>,
-
-    /// 已访问类型（用于循环检测）
-    visiting: HashSet<MonoType>,
-
-    /// 求值配置
-    config: EvalConfig,
 }
 
 /// 求值配置
@@ -68,13 +44,44 @@ pub struct EvalConfig {
     pub cycle_detection: bool,
 }
 
-impl TypeEvaluator {
+/// 编译期求值器
+///
+/// 负责在编译期对条件类型进行求值：
+/// - If 条件类型：基于布尔条件选择类型
+/// - Match 类型：基于模式匹配选择类型
+/// - Nat 运算：自然数算术运算
+/// - ConstExpr 求值：编译期常量表达式
+/// - β-归约：类型级函数应用
+pub struct Evaluator<'a> {
+    /// 类型求值缓存
+    /// 避免重复求值相同类型
+    cache: HashMap<MonoType, Result<MonoType, EvalError>>,
+
+    /// 依赖追踪
+    /// 记录类型之间的依赖关系
+    dependencies: HashMap<MonoType, HashSet<MonoType>>,
+
+    /// 类型环境引用
+    env: &'a TypeEnvironment,
+
+    /// 求解预算追踪器
+    budget: &'a BudgetTracker,
+
+    /// 已访问类型（用于循环检测）
+    visiting: HashSet<MonoType>,
+
+    /// 求值配置
+    config: EvalConfig,
+}
+
+impl<'a> Evaluator<'a> {
     /// 创建新的求值器
-    pub fn new() -> Self {
+    pub fn new(env: &'a TypeEnvironment, budget: &'a BudgetTracker) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
-            env: None,
+            env,
+            budget,
             visiting: HashSet::new(),
             config: EvalConfig {
                 max_depth: 100, // 设置合理的默认深度
@@ -85,28 +92,74 @@ impl TypeEvaluator {
     }
 
     /// 创建带配置的求值器
-    pub fn with_config(config: EvalConfig) -> Self {
+    pub fn with_config(
+        env: &'a TypeEnvironment,
+        budget: &'a BudgetTracker,
+        config: EvalConfig,
+    ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
-            env: None,
+            env,
+            budget,
             visiting: HashSet::new(),
             config,
         }
     }
 
-    /// 设置类型环境
-    pub fn set_env(
+    // ============ ConstExpr 求值 ============
+
+    /// 求值编译期表达式
+    pub fn eval_expr(
         &mut self,
-        env: &TypeEnvironment,
-    ) {
-        self.env = Some(env);
+        expr: &ConstExpr,
+        bindings: &HashMap<String, ConstValue>,
+    ) -> Result<ConstValue, EvalError> {
+        // 消费预算
+        if !self.budget.spend() {
+            return Err(EvalError::MaxDepthExceeded);
+        }
+
+        match expr {
+            ConstExpr::Lit(val) => Ok(val.clone()),
+
+            ConstExpr::NamedVar(name) => {
+                bindings.get(name)
+                    .cloned()
+                    .ok_or_else(|| EvalError::TypeMismatch(format!("未绑定变量: {}", name)))
+            }
+
+            ConstExpr::Var(_const_var) => {
+                Err(EvalError::TypeMismatch("ConstVar 求值需要类型环境上下文".into()))
+            }
+
+            ConstExpr::BinOp { op, left, right } => {
+                let l = self.eval_expr(left, bindings)?;
+                let r = self.eval_expr(right, bindings)?;
+                eval_binop(*op, &l, &r)
+            }
+
+            ConstExpr::UnOp { op, expr: inner } => {
+                let v = self.eval_expr(inner, bindings)?;
+                eval_unop(*op, &v)
+            }
+
+            ConstExpr::If { condition, then_branch, else_branch } => {
+                let cond = self.eval_expr(condition, bindings)?;
+                match cond {
+                    ConstValue::Bool(true) => self.eval_expr(then_branch, bindings),
+                    ConstValue::Bool(false) => self.eval_expr(else_branch, bindings),
+                    _ => Err(EvalError::TypeMismatch("If 条件必须为 Bool".into())),
+                }
+            }
+
+            ConstExpr::Call { .. } | ConstExpr::Range { .. } => {
+                Err(EvalError::TypeMismatch("阶段 1 不支持的表达式".into()))
+            }
+        }
     }
 
-    /// 获取类型环境引用
-    pub fn env(&self) -> Option<&TypeEnvironment> {
-        self.env.map(|p| unsafe { &*p })
-    }
+    // ============ 类型求值 ============
 
     /// 求值类型
     pub fn eval(
@@ -174,6 +227,14 @@ impl TypeEvaluator {
 
             // 处理类型引用
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
+
+            // 精化类型：只归约基类型——约束由 Layer 3 处理
+            MonoType::Refined { base, .. } => {
+                self.eval_with_depth(base, depth + 1)
+            }
+
+            // DepFn 不参与类型归约
+            MonoType::DepFn { .. } => Ok(ty.clone()),
 
             // 其他类型直接返回
             _ => Ok(ty.clone()),
@@ -250,8 +311,14 @@ impl TypeEvaluator {
                     args.push(current.trim().to_string());
                     current = String::new();
                 }
-                '(' => depth += 1,
-                ')' if depth > 0 => depth -= 1,
+                '(' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                ')' if depth > 0 => {
+                    depth -= 1;
+                    current.push(c);
+                }
                 _ => current.push(c),
             }
         }
@@ -804,13 +871,9 @@ impl TypeEvaluator {
         name: &str,
         depth: usize,
     ) -> Result<MonoType, EvalError> {
-        // 检查是否是预定义的类型别名
-        if let Some(env_ptr) = self.env {
-            let env = unsafe { &*env_ptr };
-            if let Some(poly) = env.types.get(name) {
-                // 递归求值类型定义
-                return self.eval_with_depth(&poly.body, depth + 1);
-            }
+        // 检查类型环境中的类型定义
+        if let Some(poly) = self.env.types.get(name) {
+            return self.eval_with_depth(&poly.body, depth + 1);
         }
 
         // 类型引用本身
@@ -889,6 +952,102 @@ impl TypeEvaluator {
     }
 }
 
+// ============ ConstValue 辅助方法 ============
+
+impl ConstValue {
+    pub fn as_int(&self) -> Result<i128, EvalError> {
+        match self {
+            ConstValue::Int(n) => Ok(*n),
+            _ => Err(EvalError::TypeMismatch(format!("期望 Int，实际: {:?}", self))),
+        }
+    }
+
+    pub fn as_bool(&self) -> Result<bool, EvalError> {
+        match self {
+            ConstValue::Bool(b) => Ok(*b),
+            _ => Err(EvalError::TypeMismatch(format!("期望 Bool，实际: {:?}", self))),
+        }
+    }
+}
+
+// ============ 自由函数 ============
+
+/// 二元运算求值
+fn eval_binop(op: BinOp, left: &ConstValue, right: &ConstValue) -> Result<ConstValue, EvalError> {
+    match op {
+        BinOp::Add => Ok(ConstValue::Int(left.as_int()? + right.as_int()?)),
+        BinOp::Sub => Ok(ConstValue::Int(left.as_int()? - right.as_int()?)),
+        BinOp::Mul => Ok(ConstValue::Int(left.as_int()? * right.as_int()?)),
+        BinOp::Div => {
+            let r = right.as_int()?;
+            if r == 0 {
+                return Err(EvalError::ArithmeticError("除零".into()));
+            }
+            Ok(ConstValue::Int(left.as_int()? / r))
+        },
+        BinOp::Mod => {
+            let r = right.as_int()?;
+            if r == 0 {
+                return Err(EvalError::ArithmeticError("模零".into()));
+            }
+            Ok(ConstValue::Int(left.as_int()? % r))
+        },
+        BinOp::Gt => Ok(ConstValue::Bool(left.as_int()? > right.as_int()?)),
+        BinOp::Ge => Ok(ConstValue::Bool(left.as_int()? >= right.as_int()?)),
+        BinOp::Lt => Ok(ConstValue::Bool(left.as_int()? < right.as_int()?)),
+        BinOp::Le => Ok(ConstValue::Bool(left.as_int()? <= right.as_int()?)),
+        BinOp::Eq => Ok(ConstValue::Bool(left == right)),
+        BinOp::Ne => Ok(ConstValue::Bool(left != right)),
+        BinOp::And => Ok(ConstValue::Bool(left.as_bool()? && right.as_bool()?)),
+        BinOp::Or => Ok(ConstValue::Bool(left.as_bool()? || right.as_bool()?)),
+        _ => Err(EvalError::TypeMismatch(format!("不支持的二元运算: {:?}", op))),
+    }
+}
+
+/// 一元运算求值
+fn eval_unop(op: UnOp, val: &ConstValue) -> Result<ConstValue, EvalError> {
+    match op {
+        UnOp::Not => Ok(ConstValue::Bool(!val.as_bool()?)),
+        _ => Err(EvalError::TypeMismatch(format!("不支持的一元运算: {:?}", op))),
+    }
+}
+
+/// 替换类型中的类型引用：将 body 中所有 TypeRef(name) 替换为 replacement
+#[allow(dead_code)]
+fn substitute_type(body: &MonoType, param_name: &str, replacement: &MonoType) -> MonoType {
+    match body {
+        MonoType::TypeRef(name) if name == param_name => replacement.clone(),
+        MonoType::Fn { params, return_type } => MonoType::Fn {
+            params: params.iter().map(|p| substitute_type(p, param_name, replacement)).collect(),
+            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
+        },
+        MonoType::List(inner) => MonoType::List(Box::new(substitute_type(inner, param_name, replacement))),
+        MonoType::Option(inner) => MonoType::Option(Box::new(substitute_type(inner, param_name, replacement))),
+        MonoType::Tuple(elems) => MonoType::Tuple(
+            elems.iter().map(|e| substitute_type(e, param_name, replacement)).collect()
+        ),
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(substitute_type(inner, param_name, replacement)),
+        },
+        MonoType::Refined { base, constraint } => MonoType::Refined {
+            base: Box::new(substitute_type(base, param_name, replacement)),
+            constraint: constraint.clone(),  // ConstExpr 暂不替换
+        },
+        MonoType::DepFn { params, return_type } => MonoType::DepFn {
+            params: params.iter().map(|p| {
+                crate::frontend::core::types::mono::DepParam {
+                    name: p.name.clone(),
+                    ty: substitute_type(&p.ty, param_name, replacement),
+                }
+            }).collect(),
+            return_type: Box::new(substitute_type(return_type, param_name, replacement)),
+        },
+        // 叶子类型和不含类型参数的类型直接返回
+        _ => body.clone(),
+    }
+}
+
 // ============ 与类型归一化器集成 ============
 
 /// 类型求值结果转换
@@ -903,38 +1062,38 @@ impl From<Result<MonoType, EvalError>> for TypeLevelResult<MonoType> {
 
 /// 集成到现有类型归一化器的辅助函数
 ///
-/// 将 TypeEvaluator 与 TypeNormalizer 集成，确保：
+/// 将 Evaluator 与 TypeNormalizer 集成，确保：
 /// 1. 求值器的缓存与归一化器的缓存同步
 /// 2. 条件类型的求值结果被正确缓存
 /// 3. 避免重复求值相同类型
 ///
 /// **设计说明**：当前架构采用"嵌入式集成"模式，
-/// TypeNormalizer 内部包含 TypeEvaluator，共享生命周期。
+/// TypeNormalizer 内部包含 Evaluator，共享生命周期。
 /// 这种设计避免了需要手动同步两个独立缓存的问题。
 #[allow(dead_code)]
 pub fn integrate_evaluator(
-    _evaluator: &mut TypeEvaluator,
+    _evaluator: &mut Evaluator<'_>,
     _normalizer: &mut super::normalizer::TypeNormalizer,
 ) {
-    // TypeNormalizer 现在内部包含 TypeEvaluator
+    // TypeNormalizer 现在内部包含 Evaluator
     // 缓存同步由 TypeNormalizer 内部处理
     // 这个函数保留用于未来可能的外部集成需求
 }
 
 /// 同步两个缓存系统（备用方法，当前架构不需要）
 ///
-/// 如果未来需要分离 TypeEvaluator 和 TypeNormalizer，
+/// 如果未来需要分离 Evaluator 和 TypeNormalizer，
 /// 可以使用此函数同步缓存。
 #[allow(dead_code)]
 pub fn sync_caches(
-    evaluator: &TypeEvaluator,
+    evaluator: &Evaluator<'_>,
     context: &mut super::normalizer::NormalizationContext,
 ) {
     use super::normalizer::NormalForm;
 
     let cache = context.cache_mut();
 
-    // 将 TypeEvaluator 的缓存同步到 NormalizationContext
+    // 将 Evaluator 的缓存同步到 NormalizationContext
     // Result<MonoType, EvalError> -> NormalForm 转换
     for (ty, eval_result) in &evaluator.cache {
         match eval_result {
@@ -958,7 +1117,7 @@ mod tests {
     fn test_parse_generic_args() {
         // If 有 3 个参数
         assert_eq!(
-            TypeEvaluator::parse_generic_args("If(True, Int, String)"),
+            Evaluator::<'_>::parse_generic_args("If(True, Int, String)"),
             Some(
                 vec!["True", "Int", "String"]
                     .into_iter()
@@ -969,21 +1128,23 @@ mod tests {
 
         // Add 有 2 个参数
         assert_eq!(
-            TypeEvaluator::parse_generic_args("Add(1, 2)"),
+            Evaluator::<'_>::parse_generic_args("Add(1, 2)"),
             Some(vec!["1", "2"].into_iter().map(|s| s.to_string()).collect())
         );
     }
 
     #[test]
     fn test_extract_nat_literal() {
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(42)"), Some(42));
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(0)"), Some(0));
-        assert_eq!(TypeEvaluator::extract_nat_literal("Nat(abc)"), None);
+        assert_eq!(Evaluator::<'_>::extract_nat_literal("Nat(42)"), Some(42));
+        assert_eq!(Evaluator::<'_>::extract_nat_literal("Nat(0)"), Some(0));
+        assert_eq!(Evaluator::<'_>::extract_nat_literal("Nat(abc)"), None);
     }
 
     #[test]
     fn test_parse_type() {
-        let evaluator = TypeEvaluator::new();
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let evaluator = Evaluator::new(&env, &budget);
 
         assert_eq!(evaluator.parse_type("Void"), Some(MonoType::Void));
         assert_eq!(evaluator.parse_type("Bool"), Some(MonoType::Bool));
@@ -996,7 +1157,9 @@ mod tests {
 
     #[test]
     fn test_nat_operations() {
-        let mut evaluator = TypeEvaluator::new();
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let mut evaluator = Evaluator::new(&env, &budget);
 
         // 测试加法
         let a = MonoType::Literal {
@@ -1031,7 +1194,9 @@ mod tests {
 
     #[test]
     fn test_condition_evaluation() {
-        let mut evaluator = TypeEvaluator::new();
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let mut evaluator = Evaluator::new(&env, &budget);
 
         // 测试布尔条件
         let true_cond = MonoType::TypeRef("True".to_string());
@@ -1050,7 +1215,9 @@ mod tests {
 
     #[test]
     fn test_evaluator_cache() {
-        let mut evaluator = TypeEvaluator::new();
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let mut evaluator = Evaluator::new(&env, &budget);
         evaluator.config.enable_cache = true;
 
         let ty = MonoType::TypeRef("True".to_string());
@@ -1070,8 +1237,10 @@ mod tests {
     #[test]
     fn test_integrate_evaluator_function() {
         // 测试 integrate_evaluator 函数存在且可调用
-        // 当前实现是空的，因为 TypeNormalizer 已内置 TypeEvaluator
-        let mut evaluator = TypeEvaluator::new();
+        // 当前实现是空的，因为 TypeNormalizer 已内置 Evaluator
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let mut evaluator = Evaluator::new(&env, &budget);
         let mut normalizer = crate::frontend::core::types::eval::normalizer::TypeNormalizer::new();
 
         // 函数应该可以编译和调用
@@ -1082,7 +1251,9 @@ mod tests {
     #[test]
     fn test_sync_caches_function() {
         // 测试 sync_caches 函数存在且可调用
-        let evaluator = TypeEvaluator::new();
+        let env = TypeEnvironment::new();
+        let budget = BudgetTracker::new();
+        let evaluator = Evaluator::new(&env, &budget);
         let mut context =
             crate::frontend::core::types::eval::normalizer::NormalizationContext::new();
 
