@@ -3392,7 +3392,7 @@ impl AstToIrGenerator {
                     > = once_cell::sync::Lazy::new(std::collections::HashMap::new);
                     (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
                 };
-                let analysis = crate::middle::passes::dag_analysis::analyze_spawn_body(
+                let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(
                     body,
                     trait_table,
                     local_var_types,
@@ -3403,9 +3403,9 @@ impl AstToIrGenerator {
 
                 // 3. 为每个直接子表达式生成闭包
                 let mut closure_regs = Vec::new();
-                for (i, task_expr) in analysis.task_exprs.iter().enumerate() {
+                for task in &analysis.tasks {
                     // 如果是赋值，注册目标变量到 spawn 作用域
-                    if let Some(target) = &analysis.task_targets[i] {
+                    if let Some(target) = &task.target {
                         if self.lookup_local(target).is_none() {
                             let reg = self.next_temp_reg();
                             self.register_local(target, reg);
@@ -3418,7 +3418,7 @@ impl AstToIrGenerator {
                         params: Vec::new(),
                         body: Box::new(ast::Block {
                             stmts: Vec::new(),
-                            expr: Some(Box::new(task_expr.clone())),
+                            expr: Some(Box::new(task.expr.clone())),
                             span: *span,
                         }),
                         span: *span,
@@ -3429,7 +3429,7 @@ impl AstToIrGenerator {
 
                 // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
                 for stmt in &body.stmts {
-                    if !crate::middle::passes::dag_analysis::is_direct_child(stmt) {
+                    if !crate::frontend::core::spawn::analysis::is_direct_child(stmt) {
                         self.generate_local_stmt_ir(stmt, instructions, constants)?;
                     }
                 }
