@@ -117,18 +117,7 @@ impl LinearMeasure {
 
 use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
-
-/// 终止验证结论
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TerminationVerdict {
-    /// 已证明终止，附带度量描述
-    Terminates { measure: String },
-    /// 天然终止（for 循环等）
-    TriviallyTerminates { reason: String },
-    /// 无法证明终止
-    CannotProve { reason: String },
-}
+use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 
 /// 终止检查器
 ///
@@ -136,30 +125,31 @@ pub enum TerminationVerdict {
 /// 遍历 AST，为每个 `while` 循环和每个递归函数执行终止分析。
 #[derive(Debug, Default)]
 pub struct TerminationChecker {
-    /// 收集到的诊断
-    diagnostics: Vec<Diagnostic>,
+    /// 收集到的证明结果
+    results: Vec<ProofResult>,
 }
 
 impl TerminationChecker {
     /// 创建新的终止检查器
     pub fn new() -> Self {
         Self {
-            diagnostics: Vec::new(),
+            results: Vec::new(),
         }
     }
 
     /// 检查整个模块的终止性
     ///
-    /// 返回收集到的所有诊断。空 Vec 表示所有循环和递归都可证明终止。
+    /// 返回收集到的所有证明结果。空 Vec 表示所有循环和递归都可证明终止，
+    /// 或未发现需要检查的循环/递归。
     pub fn check_module(
         &mut self,
         module: &ast::Module,
         _env: &TypeEnvironment,
-    ) -> Vec<Diagnostic> {
+    ) -> Vec<ProofResult> {
         for stmt in &module.items {
             self.check_stmt(stmt);
         }
-        std::mem::take(&mut self.diagnostics)
+        std::mem::take(&mut self.results)
     }
 
     // ==================== 语句遍历 ====================
@@ -702,46 +692,62 @@ impl TerminationChecker {
     // ==================== 诊断输出 ====================
 
     fn emit_terminates(
-        &self,
+        &mut self,
         _span: crate::util::span::Span,
         _measure: &LinearMeasure,
     ) {
-        // 循环可证明终止——不产生诊断
-        // 在调试模式下可以记录度量信息
+        // 循环可证明终止——记录 Proved（不产生任何诊断）
+        self.results.push(ProofResult::Proved);
     }
 
     fn emit_loop_not_terminating(
         &mut self,
-        span: crate::util::span::Span,
+        _span: crate::util::span::Span,
     ) {
-        let diag = ErrorCodeDefinition::loop_may_not_terminate()
-            .at(span)
-            .build();
-        self.diagnostics.push(diag);
+        let reason =
+            UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
+        self.results.push(ProofResult::Unproven {
+            reason,
+            budget: BudgetReport {
+                steps_used: 0,
+                steps_limit: 0,
+            },
+        });
     }
 
     #[allow(dead_code)]
     fn emit_recursion_not_terminating(
         &mut self,
-        span: crate::util::span::Span,
+        _span: crate::util::span::Span,
         func_name: &str,
     ) {
-        let diag = ErrorCodeDefinition::recursion_may_not_terminate(func_name)
-            .at(span)
-            .build();
-        self.diagnostics.push(diag);
+        let reason = UnprovenReason::BeyondKernel(format!(
+            "递归函数 `{}` 无法证明终止：参数未严格递减",
+            func_name
+        ));
+        self.results.push(ProofResult::Unproven {
+            reason,
+            budget: BudgetReport {
+                steps_used: 0,
+                steps_limit: 0,
+            },
+        });
     }
 
     #[allow(dead_code)]
     fn emit_measure_not_decreasing(
         &mut self,
-        span: crate::util::span::Span,
+        _span: crate::util::span::Span,
         measure: &str,
     ) {
-        let diag = ErrorCodeDefinition::measure_not_decreasing(measure)
-            .at(span)
-            .build();
-        self.diagnostics.push(diag);
+        let reason = UnprovenReason::BeyondKernel(format!("度量 `{}` 未严格递减", measure));
+        self.results.push(ProofResult::Unproven {
+            reason,
+            budget: BudgetReport {
+                steps_used: 0,
+                steps_limit: 0,
+            },
+        });
     }
 }
 

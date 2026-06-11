@@ -279,12 +279,15 @@ impl TypeChecker {
 
         // RFC-027: 终止检查 — 在类型检查之后、约束求解之前运行
         // 分析循环和递归函数，自动证明终止性
-        let term_diagnostics = {
+        let term_results = {
             let mut term_checker = super::layers::termination::TerminationChecker::new();
             term_checker.check_module(module, self.env())
         };
-        for diag in term_diagnostics {
-            self.add_error(diag);
+        for result in term_results {
+            match result.into_result() {
+                Ok(()) => {} // 证明通过，无需诊断
+                Err(diag) => self.add_error(diag),
+            }
         }
 
         // 求解所有约束
