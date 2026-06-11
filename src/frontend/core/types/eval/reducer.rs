@@ -249,7 +249,7 @@ impl TypeComputer {
         let eval_result = evaluator.eval(ty);
 
         match eval_result {
-            crate::frontend::core::typecheck::type_eval::EvalResult::Value(result_ty) => {
+            super::evaluator::EvalResult::Value(result_ty) => {
                 // 进一步归一化结果
                 let normalized = self.normalizer.normalize(&result_ty);
                 if matches!(normalized, NormalForm::Normalized) {
@@ -259,12 +259,8 @@ impl TypeComputer {
                     ComputeResult::Pending(vec![result_ty])
                 }
             }
-            crate::frontend::core::typecheck::type_eval::EvalResult::Pending => {
-                ComputeResult::Pending(vec![ty.clone()])
-            }
-            crate::frontend::core::typecheck::type_eval::EvalResult::Error(msg) => {
-                ComputeResult::Error(msg)
-            }
+            super::evaluator::EvalResult::Pending => ComputeResult::Pending(vec![ty.clone()]),
+            super::evaluator::EvalResult::Error(msg) => ComputeResult::Error(msg),
         }
     }
 

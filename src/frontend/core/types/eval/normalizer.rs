@@ -10,7 +10,7 @@
 //! 复用 core/type_system/substitute.rs 中的公共替换实现
 
 use crate::frontend::core::types::{MonoType, Substitution, Substituter};
-use crate::frontend::core::typecheck::type_eval::TypeEvaluator;
+use super::evaluator::{TypeEvaluator, EvalResult};
 use std::collections::HashMap;
 
 /// 范式类型标记
@@ -338,15 +338,9 @@ impl TypeNormalizer {
                         self.evaluator
                             .eval_if(&parsed_args[0], &parsed_args[1], &parsed_args[2]);
                     match result {
-                        crate::frontend::core::typecheck::type_eval::EvalResult::Value(_) => {
-                            NormalForm::Normalized
-                        }
-                        crate::frontend::core::typecheck::type_eval::EvalResult::Pending => {
-                            NormalForm::NeedsReduction
-                        }
-                        crate::frontend::core::typecheck::type_eval::EvalResult::Error(_) => {
-                            NormalForm::Normalized
-                        }
+                        EvalResult::Value(_) => NormalForm::Normalized,
+                        EvalResult::Pending => NormalForm::NeedsReduction,
+                        EvalResult::Error(_) => NormalForm::Normalized,
                     }
                 } else {
                     NormalForm::Normalized
@@ -368,15 +362,9 @@ impl TypeNormalizer {
 
                 let result = self.evaluator.eval_match(target, arms);
                 match result {
-                    crate::frontend::core::typecheck::type_eval::EvalResult::Value(_) => {
-                        NormalForm::Normalized
-                    }
-                    crate::frontend::core::typecheck::type_eval::EvalResult::Pending => {
-                        NormalForm::NeedsReduction
-                    }
-                    crate::frontend::core::typecheck::type_eval::EvalResult::Error(_) => {
-                        NormalForm::Normalized
-                    }
+                    EvalResult::Value(_) => NormalForm::Normalized,
+                    EvalResult::Pending => NormalForm::NeedsReduction,
+                    EvalResult::Error(_) => NormalForm::Normalized,
                 }
             }
             _ => NormalForm::Normalized,
