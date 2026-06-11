@@ -174,11 +174,8 @@ mod tests {
         env.predicate_defs
             .insert("Positive".into(), make_positive_def());
 
-        let result = PredicateResolver::try_resolve(
-            &env,
-            "Positive",
-            &[MonoType::TypeRef("b".into())],
-        );
+        let result =
+            PredicateResolver::try_resolve(&env, "Positive", &[MonoType::TypeRef("b".into())]);
 
         assert!(result.is_some());
         match result.unwrap() {
@@ -199,11 +196,7 @@ mod tests {
     #[test]
     fn test_resolve_unknown_predicate_returns_none() {
         let env = TypeEnvironment::new();
-        let result = PredicateResolver::try_resolve(
-            &env,
-            "UnknownPredicate",
-            &[MonoType::Int(64)],
-        );
+        let result = PredicateResolver::try_resolve(&env, "UnknownPredicate", &[MonoType::Int(64)]);
         assert!(result.is_none());
     }
 }

@@ -456,7 +456,11 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                 .iter()
                 .map(|p| format!("{}: {}", p.name, dump_type_detail(&p.ty)))
                 .collect();
-            format!("({}) -> {}", params_str.join(", "), dump_type_detail(return_type))
+            format!(
+                "({}) -> {}",
+                params_str.join(", "),
+                dump_type_detail(return_type)
+            )
         }
     }
 }

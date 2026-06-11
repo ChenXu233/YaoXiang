@@ -76,7 +76,10 @@ pub struct Evaluator<'a> {
 
 impl<'a> Evaluator<'a> {
     /// 创建新的求值器
-    pub fn new(env: &'a TypeEnvironment, budget: &'a BudgetTracker) -> Self {
+    pub fn new(
+        env: &'a TypeEnvironment,
+        budget: &'a BudgetTracker,
+    ) -> Self {
         Self {
             cache: HashMap::new(),
             dependencies: HashMap::new(),
@@ -123,15 +126,14 @@ impl<'a> Evaluator<'a> {
         match expr {
             ConstExpr::Lit(val) => Ok(val.clone()),
 
-            ConstExpr::NamedVar(name) => {
-                bindings.get(name)
-                    .cloned()
-                    .ok_or_else(|| EvalError::TypeMismatch(format!("未绑定变量: {}", name)))
-            }
+            ConstExpr::NamedVar(name) => bindings
+                .get(name)
+                .cloned()
+                .ok_or_else(|| EvalError::TypeMismatch(format!("未绑定变量: {}", name))),
 
-            ConstExpr::Var(_const_var) => {
-                Err(EvalError::TypeMismatch("ConstVar 求值需要类型环境上下文".into()))
-            }
+            ConstExpr::Var(_const_var) => Err(EvalError::TypeMismatch(
+                "ConstVar 求值需要类型环境上下文".into(),
+            )),
 
             ConstExpr::BinOp { op, left, right } => {
                 let l = self.eval_expr(left, bindings)?;
@@ -144,7 +146,11 @@ impl<'a> Evaluator<'a> {
                 eval_unop(*op, &v)
             }
 
-            ConstExpr::If { condition, then_branch, else_branch } => {
+            ConstExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
                 let cond = self.eval_expr(condition, bindings)?;
                 match cond {
                     ConstValue::Bool(true) => self.eval_expr(then_branch, bindings),
@@ -229,9 +235,7 @@ impl<'a> Evaluator<'a> {
             MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
 
             // 精化类型：只归约基类型——约束由 Layer 3 处理
-            MonoType::Refined { base, .. } => {
-                self.eval_with_depth(base, depth + 1)
-            }
+            MonoType::Refined { base, .. } => self.eval_with_depth(base, depth + 1),
 
             // DepFn 不参与类型归约
             MonoType::DepFn { .. } => Ok(ty.clone()),
@@ -958,14 +962,20 @@ impl ConstValue {
     pub fn as_int(&self) -> Result<i128, EvalError> {
         match self {
             ConstValue::Int(n) => Ok(*n),
-            _ => Err(EvalError::TypeMismatch(format!("期望 Int，实际: {:?}", self))),
+            _ => Err(EvalError::TypeMismatch(format!(
+                "期望 Int，实际: {:?}",
+                self
+            ))),
         }
     }
 
     pub fn as_bool(&self) -> Result<bool, EvalError> {
         match self {
             ConstValue::Bool(b) => Ok(*b),
-            _ => Err(EvalError::TypeMismatch(format!("期望 Bool，实际: {:?}", self))),
+            _ => Err(EvalError::TypeMismatch(format!(
+                "期望 Bool，实际: {:?}",
+                self
+            ))),
         }
     }
 }
@@ -973,7 +983,11 @@ impl ConstValue {
 // ============ 自由函数 ============
 
 /// 二元运算求值
-fn eval_binop(op: BinOp, left: &ConstValue, right: &ConstValue) -> Result<ConstValue, EvalError> {
+fn eval_binop(
+    op: BinOp,
+    left: &ConstValue,
+    right: &ConstValue,
+) -> Result<ConstValue, EvalError> {
     match op {
         BinOp::Add => Ok(ConstValue::Int(left.as_int()? + right.as_int()?)),
         BinOp::Sub => Ok(ConstValue::Int(left.as_int()? - right.as_int()?)),
@@ -984,14 +998,14 @@ fn eval_binop(op: BinOp, left: &ConstValue, right: &ConstValue) -> Result<ConstV
                 return Err(EvalError::ArithmeticError("除零".into()));
             }
             Ok(ConstValue::Int(left.as_int()? / r))
-        },
+        }
         BinOp::Mod => {
             let r = right.as_int()?;
             if r == 0 {
                 return Err(EvalError::ArithmeticError("模零".into()));
             }
             Ok(ConstValue::Int(left.as_int()? % r))
-        },
+        }
         BinOp::Gt => Ok(ConstValue::Bool(left.as_int()? > right.as_int()?)),
         BinOp::Ge => Ok(ConstValue::Bool(left.as_int()? >= right.as_int()?)),
         BinOp::Lt => Ok(ConstValue::Bool(left.as_int()? < right.as_int()?)),
@@ -1000,31 +1014,57 @@ fn eval_binop(op: BinOp, left: &ConstValue, right: &ConstValue) -> Result<ConstV
         BinOp::Ne => Ok(ConstValue::Bool(left != right)),
         BinOp::And => Ok(ConstValue::Bool(left.as_bool()? && right.as_bool()?)),
         BinOp::Or => Ok(ConstValue::Bool(left.as_bool()? || right.as_bool()?)),
-        _ => Err(EvalError::TypeMismatch(format!("不支持的二元运算: {:?}", op))),
+        _ => Err(EvalError::TypeMismatch(format!(
+            "不支持的二元运算: {:?}",
+            op
+        ))),
     }
 }
 
 /// 一元运算求值
-fn eval_unop(op: UnOp, val: &ConstValue) -> Result<ConstValue, EvalError> {
+fn eval_unop(
+    op: UnOp,
+    val: &ConstValue,
+) -> Result<ConstValue, EvalError> {
     match op {
         UnOp::Not => Ok(ConstValue::Bool(!val.as_bool()?)),
-        _ => Err(EvalError::TypeMismatch(format!("不支持的一元运算: {:?}", op))),
+        _ => Err(EvalError::TypeMismatch(format!(
+            "不支持的一元运算: {:?}",
+            op
+        ))),
     }
 }
 
 /// 替换类型中的类型引用：将 body 中所有 TypeRef(name) 替换为 replacement
 #[allow(dead_code)]
-fn substitute_type(body: &MonoType, param_name: &str, replacement: &MonoType) -> MonoType {
+fn substitute_type(
+    body: &MonoType,
+    param_name: &str,
+    replacement: &MonoType,
+) -> MonoType {
     match body {
         MonoType::TypeRef(name) if name == param_name => replacement.clone(),
-        MonoType::Fn { params, return_type } => MonoType::Fn {
-            params: params.iter().map(|p| substitute_type(p, param_name, replacement)).collect(),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| substitute_type(p, param_name, replacement))
+                .collect(),
             return_type: Box::new(substitute_type(return_type, param_name, replacement)),
         },
-        MonoType::List(inner) => MonoType::List(Box::new(substitute_type(inner, param_name, replacement))),
-        MonoType::Option(inner) => MonoType::Option(Box::new(substitute_type(inner, param_name, replacement))),
+        MonoType::List(inner) => {
+            MonoType::List(Box::new(substitute_type(inner, param_name, replacement)))
+        }
+        MonoType::Option(inner) => {
+            MonoType::Option(Box::new(substitute_type(inner, param_name, replacement)))
+        }
         MonoType::Tuple(elems) => MonoType::Tuple(
-            elems.iter().map(|e| substitute_type(e, param_name, replacement)).collect()
+            elems
+                .iter()
+                .map(|e| substitute_type(e, param_name, replacement))
+                .collect(),
         ),
         MonoType::Ref { mutable, inner } => MonoType::Ref {
             mutable: *mutable,
@@ -1032,15 +1072,19 @@ fn substitute_type(body: &MonoType, param_name: &str, replacement: &MonoType) ->
         },
         MonoType::Refined { base, constraint } => MonoType::Refined {
             base: Box::new(substitute_type(base, param_name, replacement)),
-            constraint: constraint.clone(),  // ConstExpr 暂不替换
+            constraint: constraint.clone(), // ConstExpr 暂不替换
         },
-        MonoType::DepFn { params, return_type } => MonoType::DepFn {
-            params: params.iter().map(|p| {
-                crate::frontend::core::types::mono::DepParam {
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => MonoType::DepFn {
+            params: params
+                .iter()
+                .map(|p| crate::frontend::core::types::mono::DepParam {
                     name: p.name.clone(),
                     ty: substitute_type(&p.ty, param_name, replacement),
-                }
-            }).collect(),
+                })
+                .collect(),
             return_type: Box::new(substitute_type(return_type, param_name, replacement)),
         },
         // 叶子类型和不含类型参数的类型直接返回

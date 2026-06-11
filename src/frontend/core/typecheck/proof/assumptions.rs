@@ -19,7 +19,10 @@ impl AssumptionStack {
     }
 
     /// 进入 if 分支时压入条件
-    pub fn push(&mut self, cond: ConstExpr) {
+    pub fn push(
+        &mut self,
+        cond: ConstExpr,
+    ) {
         self.assumptions.push(cond);
     }
 
@@ -44,7 +47,10 @@ mod tests {
     use super::*;
     use crate::frontend::core::types::const_data::{BinOp, ConstValue};
 
-    fn make_gt(var: &str, n: i128) -> ConstExpr {
+    fn make_gt(
+        var: &str,
+        n: i128,
+    ) -> ConstExpr {
         ConstExpr::BinOp {
             op: BinOp::Gt,
             left: Box::new(ConstExpr::NamedVar(var.into())),

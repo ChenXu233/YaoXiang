@@ -17,6 +17,12 @@ pub struct BudgetTracker {
     time_ms_limit: u64,
 }
 
+impl Default for BudgetTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BudgetTracker {
     pub fn new() -> Self {
         Self {
