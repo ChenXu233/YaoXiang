@@ -811,6 +811,21 @@ impl TypeMonomorphizer for super::Monomorphizer {
                     self.collect_type_vars_from_mono_type(arg, type_params, seen);
                 }
             }
+            // 精化类型：委托给 base
+            MonoType::Refined { base, .. } => {
+                self.collect_type_vars_from_mono_type(base, type_params, seen);
+            }
+            // 依赖函数类型：从参数和返回类型中收集
+            MonoType::DepFn {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().for_each(|p| {
+                    self.collect_type_vars_from_mono_type(&p.ty, type_params, seen);
+                });
+                self.collect_type_vars_from_mono_type(return_type, type_params, seen);
+            }
         }
     }
 

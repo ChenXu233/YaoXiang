@@ -445,6 +445,19 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
             let args_str: Vec<String> = args.iter().map(dump_type_detail).collect();
             format!("{}({})", name, args_str.join(", "))
         }
+        crate::frontend::core::typecheck::MonoType::Refined { base, constraint } => {
+            format!("{} {{{}}}", dump_type_detail(base), constraint)
+        }
+        crate::frontend::core::typecheck::MonoType::DepFn {
+            params,
+            return_type,
+        } => {
+            let params_str: Vec<String> = params
+                .iter()
+                .map(|p| format!("{}: {}", p.name, dump_type_detail(&p.ty)))
+                .collect();
+            format!("({}) -> {}", params_str.join(", "), dump_type_detail(return_type))
+        }
     }
 }
 

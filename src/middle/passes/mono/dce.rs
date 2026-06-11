@@ -810,6 +810,21 @@ impl DcePass {
                 }
                 result
             }
+            // 精化类型：委托给 base
+            MonoType::Refined { base, .. } => self.extract_type_args(base),
+            // 依赖函数类型：从参数和返回类型中提取
+            MonoType::DepFn {
+                params,
+                return_type,
+                ..
+            } => {
+                let mut args: Vec<MonoType> = params
+                    .iter()
+                    .flat_map(|p| self.extract_type_args(&p.ty))
+                    .collect();
+                args.extend(self.extract_type_args(return_type));
+                args
+            }
         }
     }
 

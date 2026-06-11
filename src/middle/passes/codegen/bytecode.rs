@@ -415,6 +415,8 @@ impl MonoTypeExt for MonoType {
             MonoType::Literal { .. } => 48,   // 字面量类型
             MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
             MonoType::Generic { .. } => 47,   // 泛型实例化，使用结构体类型ID
+            MonoType::Refined { base, .. } => base.to_type_id(),
+            MonoType::DepFn { .. } => 30,      // 依赖函数类型，与普通函数同ID
         }
     }
 }
