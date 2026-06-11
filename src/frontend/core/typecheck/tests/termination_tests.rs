@@ -3,8 +3,8 @@
 //! RFC-027 Section 7: Termination Checker Tests
 
 use crate::frontend::core::typecheck::layers::termination::TerminationChecker;
+use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
-use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
 
 // ==================== 测试辅助函数 ====================
@@ -119,7 +119,7 @@ fn make_for(
 }
 
 /// 运行终止检查器
-fn run_check(expr: &Expr) -> Vec<Diagnostic> {
+fn run_check(expr: &Expr) -> Vec<ProofResult> {
     // 将表达式包装为模块语句
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
@@ -141,11 +141,13 @@ fn test_while_increment_to_bound_terminates() {
     // while i < n { i += 1 }
     let while_expr = make_while(make_lt_condition("i", "n"), vec![make_increment("i", 1)]);
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
+    // 所有结果应该都是 Proved（或者空——没有 while 循环外的其他检查）
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        diags.is_empty(),
-        "Expected no diagnostics, got: {:?}",
-        diags
+        unproven.is_empty(),
+        "Expected all Proved results, got unproven: {:?}",
+        unproven
     );
 }
 
@@ -154,11 +156,12 @@ fn test_while_decrement_to_lower_bound_terminates() {
     // while i > 0 { i -= 1 }
     let while_expr = make_while(make_gt_condition("i", 0), vec![make_decrement("i", 1)]);
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        diags.is_empty(),
-        "Expected no diagnostics, got: {:?}",
-        diags
+        unproven.is_empty(),
+        "Expected all Proved results, got unproven: {:?}",
+        unproven
     );
 }
 
@@ -185,12 +188,16 @@ fn test_while_constant_condition_fails() {
         span: dummy_span(),
     });
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
     assert!(
-        !diags.is_empty(),
-        "Expected diagnostic for non-terminating loop"
+        !results.is_empty(),
+        "Expected unproven result for non-terminating loop"
     );
-    assert_eq!(diags[0].code, "E4015");
+    assert!(
+        matches!(&results[0], ProofResult::Unproven { .. }),
+        "Expected Unproven, got: {:?}",
+        results[0]
+    );
 }
 
 #[test]
@@ -202,12 +209,16 @@ fn test_while_no_assignment_fails() {
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![body_stmt]);
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
     assert!(
-        !diags.is_empty(),
-        "Expected diagnostic for loop with no progress"
+        !results.is_empty(),
+        "Expected unproven result for loop with no progress"
     );
-    assert_eq!(diags[0].code, "E4015");
+    assert!(
+        matches!(&results[0], ProofResult::Unproven { .. }),
+        "Expected Unproven, got: {:?}",
+        results[0]
+    );
 }
 
 #[test]
@@ -215,12 +226,16 @@ fn test_while_decrement_wrong_direction_fails() {
     // while i < n { i -= 1 } — i 递减但上界是 n，方向错误
     let while_expr = make_while(make_lt_condition("i", "n"), vec![make_decrement("i", 1)]);
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
     assert!(
-        !diags.is_empty(),
-        "Expected diagnostic: i decreases when it should increase toward bound"
+        !results.is_empty(),
+        "Expected unproven result: i decreases when it should increase toward bound"
     );
-    assert_eq!(diags[0].code, "E4015");
+    assert!(
+        matches!(&results[0], ProofResult::Unproven { .. }),
+        "Expected Unproven, got: {:?}",
+        results[0]
+    );
 }
 
 #[test]
@@ -228,11 +243,12 @@ fn test_while_increment_by_two_terminates() {
     // while i < n { i += 2 }
     let while_expr = make_while(make_lt_condition("i", "n"), vec![make_increment("i", 2)]);
 
-    let diags = run_check(&while_expr);
+    let results = run_check(&while_expr);
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        diags.is_empty(),
-        "Expected no diagnostics for i += 2, got: {:?}",
-        diags
+        unproven.is_empty(),
+        "Expected all Proved results for i += 2, got unproven: {:?}",
+        unproven
     );
 }
 
@@ -251,11 +267,12 @@ fn test_for_loop_trivially_terminates() {
         vec![body_stmt],
     );
 
-    let diags = run_check(&for_expr);
+    let results = run_check(&for_expr);
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        diags.is_empty(),
-        "Expected no diagnostics for for-loop, got: {:?}",
-        diags
+        unproven.is_empty(),
+        "Expected all Proved results for for-loop, got unproven: {:?}",
+        unproven
     );
 }
 
@@ -272,11 +289,12 @@ fn test_nested_while_both_terminating() {
     let body_stmts = vec![make_increment("i", 1), inner_stmt];
     let outer_while = make_while(make_lt_condition("i", "n"), body_stmts);
 
-    let diags = run_check(&outer_while);
+    let results = run_check(&outer_while);
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        diags.is_empty(),
-        "Expected no diagnostics for nested terminating loops, got: {:?}",
-        diags
+        unproven.is_empty(),
+        "Expected all Proved results for nested terminating loops, got unproven: {:?}",
+        unproven
     );
 }
 
@@ -302,10 +320,11 @@ fn test_nested_while_inner_fails() {
         vec![make_increment("i", 1), inner_stmt],
     );
 
-    let diags = run_check(&outer_while);
-    // 外层终止但内层不终止 → 至少 1 个诊断
+    let results = run_check(&outer_while);
+    // 外层终止(Proved)但内层不终止(Unproven) → 至少 1 个 Unproven
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        !diags.is_empty(),
-        "Expected at least one diagnostic for inner non-terminating loop"
+        !unproven.is_empty(),
+        "Expected at least one Unproven result for inner non-terminating loop"
     );
 }
