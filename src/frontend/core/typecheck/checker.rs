@@ -1102,4 +1102,4 @@ impl TypeChecker {
         }
     }
 }
-include!("semantic_tokens_impl.rs");
+include!("checker/semantic_tokens.rs");

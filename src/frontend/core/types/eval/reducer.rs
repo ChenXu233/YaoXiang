@@ -39,7 +39,7 @@ pub enum ReductionStep {
 /// - 类型表达式求值
 /// - 条件类型求解
 /// - 类型级函数应用
-
+///
 /// 类型计算结果
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComputeResult {
