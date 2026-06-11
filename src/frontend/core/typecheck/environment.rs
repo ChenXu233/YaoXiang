@@ -70,6 +70,9 @@ pub struct TypeEnvironment {
     /// 泛型类型定义模板表
     /// 存储泛型类型构造器的模板，用于 List(Int) → { data: Array(Int), length: Int } 的展开
     pub generic_type_defs: HashMap<String, GenericTypeDef>,
+    /// 编译期谓词定义表
+    /// 存储已注册的编译期谓词模板，供 PredicateResolver 使用
+    pub predicate_defs: HashMap<String, crate::frontend::core::typecheck::predicate_resolver::PredicateDef>,
 }
 
 impl TypeEnvironment {
