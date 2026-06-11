@@ -7,3 +7,6 @@
 
 pub mod analysis;
 pub mod placement;
+
+#[cfg(test)]
+mod tests;
