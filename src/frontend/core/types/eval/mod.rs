@@ -6,6 +6,7 @@
 pub mod conditional;
 pub mod const_eval;
 pub mod dependent_types;
+pub mod evaluator;
 pub mod normalizer;
 pub mod operations;
 pub mod reducer;
