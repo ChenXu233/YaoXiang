@@ -20,5 +20,6 @@ mod checker;
 mod environment;
 mod rfc010;
 mod rfc011;
+mod rfc027_phase1_integration;
 mod signature;
 mod types;
