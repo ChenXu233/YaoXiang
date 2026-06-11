@@ -1,6 +1,6 @@
 ---
 title: "RFC-025: 可扩展原语类型机制"
-status: "草案"
+status: "审核中"
 author: "晨煦"
 created: "2026-06-05"
 updated: "2026-06-05"
