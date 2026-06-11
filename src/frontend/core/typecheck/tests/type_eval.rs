@@ -3,7 +3,7 @@
 //! §3.11: 编译期泛型
 //! RFC-011 §4: 编译期泛型
 
-use crate::frontend::core::types::eval::evaluator::{EvalConfig, EvalResult, TypeEvaluator};
+use crate::frontend::core::types::eval::evaluator::{EvalConfig, TypeEvaluator};
 use crate::frontend::core::types::MonoType;
 
 // ===================================================================
@@ -27,10 +27,7 @@ fn test_type_evaluator_eval_simple_type() {
     let result = evaluator.eval(&MonoType::Int(32));
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Value(_)),
-        "should eval simple type"
-    );
+    assert!(result.is_ok(), "should eval simple type");
 }
 
 #[test]
@@ -46,10 +43,7 @@ fn test_type_evaluator_eval_fn_type() {
     let result = evaluator.eval(&fn_type);
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Value(_)),
-        "eval Fn type should return Value"
-    );
+    assert!(result.is_ok(), "eval Fn type should return Value");
 }
 
 #[test]
@@ -62,10 +56,7 @@ fn test_type_evaluator_eval_tuple_type() {
     let result = evaluator.eval(&tuple_type);
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Value(_)),
-        "eval Tuple type should return Value"
-    );
+    assert!(result.is_ok(), "eval Tuple type should return Value");
 }
 
 #[test]
@@ -78,10 +69,7 @@ fn test_type_evaluator_eval_list_type() {
     let result = evaluator.eval(&list_type);
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Value(_)),
-        "eval List type should return Value"
-    );
+    assert!(result.is_ok(), "eval List type should return Value");
 }
 
 // ===================================================================
@@ -100,7 +88,7 @@ fn test_type_evaluator_eval_nat_unknown_operation() {
 
     // Assert
     assert!(
-        matches!(result, EvalResult::Error(_)),
+        result.is_err(),
         "eval Nat with unknown operation should return Error"
     );
 }
@@ -117,7 +105,7 @@ fn test_type_evaluator_eval_nat_underflow() {
 
     // Assert
     assert!(
-        matches!(result, EvalResult::Error(_)),
+        result.is_err(),
         "eval Nat Sub with b > a should return Error (underflow)"
     );
 }
@@ -133,10 +121,7 @@ fn test_type_evaluator_eval_nat_division_by_zero() {
     let result = evaluator.eval_nat("Div", &[a, b]);
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Error(_)),
-        "eval Nat Div by zero should return Error"
-    );
+    assert!(result.is_err(), "eval Nat Div by zero should return Error");
 }
 
 #[test]
@@ -150,10 +135,7 @@ fn test_type_evaluator_eval_nat_modulo_by_zero() {
     let result = evaluator.eval_nat("Mod", &[a, b]);
 
     // Assert
-    assert!(
-        matches!(result, EvalResult::Error(_)),
-        "eval Nat Mod by zero should return Error"
-    );
+    assert!(result.is_err(), "eval Nat Mod by zero should return Error");
 }
 
 #[test]
@@ -179,7 +161,7 @@ fn test_type_evaluator_eval_max_depth_exceeded() {
 
     // Assert - Fn 类型不是递归类型引用（TypeRef），不触发深度检查，应返回 Value
     assert!(
-        matches!(result, EvalResult::Value(_)),
+        result.is_ok(),
         "eval Fn type should return Value (Fn is not a recursive TypeRef)"
     );
 }
@@ -196,7 +178,7 @@ fn test_type_evaluator_eval_match_no_matching_arm() {
 
     // Assert
     assert!(
-        matches!(result, EvalResult::Error(_)),
+        result.is_err(),
         "eval Match with no matching arm should return Error"
     );
 }
@@ -225,7 +207,7 @@ fn test_type_evaluator_eval_nested_type() {
 
     // Assert
     assert!(
-        matches!(result, EvalResult::Value(_)),
+        result.is_ok(),
         "eval deeply nested type should return Value"
     );
 }
@@ -240,7 +222,7 @@ fn test_type_evaluator_eval_void_type() {
 
     // Assert
     assert!(
-        matches!(result, EvalResult::Value(MonoType::Void)),
+        matches!(result, Ok(MonoType::Void)),
         "eval Void type should return Value(Void)"
     );
 }
