@@ -143,6 +143,44 @@ pub enum ConstExpr {
         start: Box<ConstExpr>,
         end: Box<ConstExpr>,
     },
+    /// 命名变量引用（谓词体中引用程序变量，如 `{ x > 0 }` 中的 x）
+    /// 与 Var(ConstVar) 不同：ConstVar 是索引化的 const 泛型变量，NamedVar 是名字化的程序变量
+    NamedVar(String),
+}
+
+impl fmt::Display for ConstExpr {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            ConstExpr::Lit(v) => write!(f, "{}", v),
+            ConstExpr::Var(v) => write!(f, "{}", v),
+            ConstExpr::BinOp { op, left, right } => write!(f, "({} {} {})", left, op, right),
+            ConstExpr::UnOp { op, expr } => write!(f, "{}({})", op, expr),
+            ConstExpr::Call { func, args } => {
+                write!(f, "{}(", func)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            ConstExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => write!(
+                f,
+                "if {} {{ {} }} else {{ {} }}",
+                condition, then_branch, else_branch
+            ),
+            ConstExpr::Range { start, end } => write!(f, "{}..{}", start, end),
+            ConstExpr::NamedVar(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 /// 二元运算符
@@ -204,6 +242,34 @@ impl BinOp {
     }
 }
 
+impl fmt::Display for BinOp {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            BinOp::Add => write!(f, "+"),
+            BinOp::Sub => write!(f, "-"),
+            BinOp::Mul => write!(f, "*"),
+            BinOp::Div => write!(f, "/"),
+            BinOp::Mod => write!(f, "%"),
+            BinOp::Eq => write!(f, "=="),
+            BinOp::Ne => write!(f, "!="),
+            BinOp::Lt => write!(f, "<"),
+            BinOp::Le => write!(f, "<="),
+            BinOp::Gt => write!(f, ">"),
+            BinOp::Ge => write!(f, ">="),
+            BinOp::And => write!(f, "&&"),
+            BinOp::Or => write!(f, "||"),
+            BinOp::BitAnd => write!(f, "&"),
+            BinOp::BitOr => write!(f, "|"),
+            BinOp::BitXor => write!(f, "^"),
+            BinOp::Shl => write!(f, "<<"),
+            BinOp::Shr => write!(f, ">>"),
+        }
+    }
+}
+
 /// 一元运算符
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnOp {
@@ -231,6 +297,20 @@ impl UnOp {
     /// 检查是否是位运算
     pub fn is_bitwise(&self) -> bool {
         matches!(self, UnOp::BitNot)
+    }
+}
+
+impl fmt::Display for UnOp {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            UnOp::Pos => write!(f, "+"),
+            UnOp::Neg => write!(f, "-"),
+            UnOp::Not => write!(f, "!"),
+            UnOp::BitNot => write!(f, "~"),
+        }
     }
 }
 
@@ -297,5 +377,23 @@ impl fmt::Display for ConstVarDef {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_named_var_in_binop() {
+        let expr = ConstExpr::BinOp {
+            op: BinOp::Gt,
+            left: Box::new(ConstExpr::NamedVar("x".into())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        };
+        // 验证构造不 panic，且 Display 正常
+        let display = format!("{}", expr);
+        assert!(display.contains("x"));
+        assert!(display.contains("0"));
     }
 }
