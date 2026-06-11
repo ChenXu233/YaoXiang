@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
 
-use super::overload;
+use super::passes::overload;
 use super::types::ImportInfo;
 
 /// 类型错误收集器

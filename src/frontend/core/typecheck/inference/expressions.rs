@@ -8,7 +8,7 @@
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::core::typecheck::overload;
+use crate::frontend::core::typecheck::passes::overload;
 use crate::frontend::core::typecheck::traits::solver::TraitSolver;
 use std::collections::{HashMap, HashSet};
 

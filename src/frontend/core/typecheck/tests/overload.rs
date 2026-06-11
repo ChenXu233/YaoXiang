@@ -3,7 +3,7 @@
 //! §3.15: 函数重载与特化
 //! RFC-011 §6: 函数重载特化
 
-use crate::frontend::core::typecheck::overload::{OverloadCandidate, OverloadResolver};
+use crate::frontend::core::typecheck::passes::overload::{OverloadCandidate, OverloadResolver};
 use crate::frontend::core::types::{MonoType, TypeVar};
 
 // ===================================================================

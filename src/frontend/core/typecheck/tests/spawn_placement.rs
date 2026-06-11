@@ -6,7 +6,7 @@
 //! Phase 1: `@block` 限制已移除，spawn 现在可以出现在任何位置。
 
 use crate::frontend::core::parser::ast::{Block, Expr, Module, Stmt, StmtKind};
-use crate::frontend::core::typecheck::spawn_placement::check_spawn_placement;
+use crate::frontend::core::typecheck::passes::spawn_placement::check_spawn_placement;
 use crate::util::span::Span;
 
 // ---------------------------------------------------------------------------

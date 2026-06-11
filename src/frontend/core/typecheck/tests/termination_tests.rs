@@ -2,7 +2,7 @@
 //!
 //! RFC-027 Section 7: Termination Checker Tests
 
-use super::*;
+use crate::frontend::core::typecheck::layers::termination::TerminationChecker;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
 use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
